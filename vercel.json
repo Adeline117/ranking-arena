@@ -1,0 +1,9 @@
+{
+    "crons": [
+      {
+        "path": "/api/cron/fetch-traders",
+        "schedule": "*/1 * * * *"
+      }
+    ]
+  }
+  
