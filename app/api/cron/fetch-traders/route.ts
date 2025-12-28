@@ -1,80 +1,94 @@
-import { NextResponse } from "next/server"
-import { createClient } from "@supabase/supabase-js"
+import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 
-export const runtime = "nodejs"
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 /**
- * Health check / manual ping
+ * We support BOTH naming styles:
+ * - SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY (server-only)
+ * - NEXT_PUBLIC_SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY (your current Vercel setup)
  */
-export async function GET() {
-  return NextResponse.json({ ok: true, message: "cron endpoint alive" })
+function getSupabaseEnv() {
+  const url =
+    process.env.SUPABASE_URL ||
+    process.env.NEXT_PUBLIC_SUPABASE_URL ||
+    "";
+
+  const serviceKey =
+    process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+
+  return { url, serviceKey };
 }
 
-/**
- * Cron / secured trigger
- */
+function isAuthorized(req: Request) {
+  const header = req.headers.get("x-cron-secret") || "";
+  const secret = process.env.CRON_SECRET || "";
+  return Boolean(secret) && header === secret;
+}
+
+export async function GET() {
+  return NextResponse.json({ ok: true, message: "cron endpoint alive" });
+}
+
 export async function POST(req: Request) {
   try {
-    // 1️⃣ 校验 cron secret
-    const headerSecret = req.headers.get("x-cron-secret")
-    const envSecret = process.env.CRON_SECRET
+    // 1) auth
+    if (!isAuthorized(req)) {
+      return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    }
 
-    if (!envSecret) {
+    // 2) env
+    const { url, serviceKey } = getSupabaseEnv();
+    if (!url || !serviceKey) {
       return NextResponse.json(
-        { error: "CRON_SECRET not configured on server" },
+        {
+          error: "Supabase env missing",
+          missing: {
+            url: !url,
+            serviceKey: !serviceKey,
+          },
+          expected: [
+            "SUPABASE_URL or NEXT_PUBLIC_SUPABASE_URL",
+            "SUPABASE_SERVICE_ROLE_KEY",
+          ],
+          found: {
+            SUPABASE_URL: Boolean(process.env.SUPABASE_URL),
+            NEXT_PUBLIC_SUPABASE_URL: Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL),
+            SUPABASE_SERVICE_ROLE_KEY: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
+          },
+        },
         { status: 500 }
-      )
+      );
     }
 
-    if (headerSecret !== envSecret) {
-      return NextResponse.json(
-        { error: "unauthorized" },
-        { status: 401 }
-      )
-    }
+    // 3) client (service role)
+    const supabase = createClient(url, serviceKey, {
+      auth: { persistSession: false },
+    });
 
-    // 2️⃣ 校验 Supabase env
-    const supabaseUrl = process.env.SUPABASE_URL
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-
-    if (!supabaseUrl || !supabaseKey) {
-      return NextResponse.json(
-        { error: "Supabase env missing" },
-        { status: 500 }
-      )
-    }
-
-    // 3️⃣ 创建 Supabase client
-    const supabase = createClient(supabaseUrl, supabaseKey)
-
-    // ⚠️ 这里先只做一个最安全的测试查询
-    // 后面你再加真实 fetch / update 逻辑
-    const { data, error } = await supabase
-      .from("traders")
-      .select("id")
-      .limit(1)
+    /**
+     * TODO: 这里放你真正的“抓 traders + 写入 supabase”的逻辑
+     * 我先给你一个最小写入测试：写一条 heartbeat 到 cron_logs 表
+     * 你如果还没建表，会返回一个清晰的错误信息。
+     */
+    const now = new Date().toISOString();
+    const { error } = await supabase
+      .from("cron_logs")
+      .insert([{ name: "fetch-traders", ran_at: now }]);
 
     if (error) {
       return NextResponse.json(
-        { error: "supabase query failed", detail: error.message },
+        { ok: false, step: "insert cron_logs", supabaseError: error },
         { status: 500 }
-      )
+      );
     }
 
-    // 4️⃣ 成功返回
-    return NextResponse.json({
-      ok: true,
-      message: "cron executed successfully",
-      sample: data,
-    })
-  } catch (err: any) {
-    // 🚨 最外层兜底，防止 500 无信息
+    return NextResponse.json({ ok: true, inserted: 1, at: now });
+  } catch (e: any) {
     return NextResponse.json(
-      {
-        error: "unexpected crash",
-        detail: err?.message ?? String(err),
-      },
+      { ok: false, error: e?.message || String(e) },
       { status: 500 }
-    )
+    );
   }
 }
