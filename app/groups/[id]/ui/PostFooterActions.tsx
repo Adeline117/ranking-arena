@@ -7,6 +7,8 @@ type Post = {
   comment_count?: number | null
 }
 
+import React from "react";
+
 export default function PostFooterActions({ post }: { post: Post }) {
   return (
     <div className="mt-3 flex items-center gap-4 text-xs opacity-70">

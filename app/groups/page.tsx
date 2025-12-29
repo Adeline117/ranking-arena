@@ -1,70 +1,24 @@
-"use client";
-
-import Link from "next/link";
-import { useEffect, useState } from "react";
-import { supabase } from "../../lib/supabase/client";
-
-type Group = {
-  id: string;
-  name: string;
-  description: string | null;
-  visibility: "open" | "apply";
-};
+'use client'
+import TopNav from '../components/TopNav'
+import Leaderboard from '../components/Leaderboard'
+import MarketWatch from '../components/MarketWatch'
 
 export default function GroupsPage() {
-  const [groups, setGroups] = useState<Group[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState<string | null>(null);
-
-  useEffect(() => {
-    (async () => {
-      setLoading(true);
-      setErr(null);
-
-      const { data, error } = await supabase
-        .from("groups")
-        .select("id,name,description,visibility")
-        .order("created_at", { ascending: false });
-
-      if (error) setErr(error.message);
-      else setGroups((data as Group[]) ?? []);
-
-      setLoading(false);
-    })();
-  }, []);
-
   return (
-    <div style={{ padding: 20, maxWidth: 900, margin: "0 auto" }}>
-      <h1 style={{ fontSize: 28, fontWeight: 700 }}>Groups</h1>
-
-      {loading && <p>Loading…</p>}
-      {err && <p style={{ color: "tomato" }}>Error: {err}</p>}
-
-      <div style={{ marginTop: 16, display: "grid", gap: 12 }}>
-        {groups.map((g) => (
-          <Link
-            key={g.id}
-            href={`/groups/${g.id}`}
-            style={{
-              border: "1px solid rgba(255,255,255,0.12)",
-              borderRadius: 14,
-              padding: 14,
-              textDecoration: "none",
-              color: "inherit",
-            }}
-          >
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-              <div style={{ fontWeight: 650 }}>{g.name}</div>
-              <div style={{ opacity: 0.7, fontSize: 12 }}>
-                {g.visibility === "open" ? "Open" : "Apply"}
-              </div>
+    <div style={{ minHeight: '100vh', background: '#060606', color: '#f2f2f2' }}>
+      <TopNav />
+      <main style={{ maxWidth: 1200, margin: '0 auto', padding: '18px 16px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr 280px', gap: 16 }}>
+          <section><Leaderboard limitWhenLoggedOut={10} /></section>
+          <section>
+            <div style={{ border: '1px solid #1f1f1f', borderRadius: 16, background: '#0b0b0b', padding: 14 }}>
+              <div style={{ fontWeight: 950 }}>小组推荐帖子（下一步把你现有帖子流搬进来）</div>
+              <div style={{ marginTop: 8, color: '#a9a9a9' }}>未登录只看前10帖</div>
             </div>
-            <div style={{ opacity: 0.8, marginTop: 6 }}>
-              {g.description || "No description"}
-            </div>
-          </Link>
-        ))}
-      </div>
+          </section>
+          <section><MarketWatch /></section>
+        </div>
+      </main>
     </div>
-  );
+  )
 }
