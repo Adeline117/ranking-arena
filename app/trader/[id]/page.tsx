@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { supabase } from '../../../lib/supabaseClient';
+import { supabase } from '../../../lib/supabase/client';
 
 // 类型定义可以保留：
 type Trader = {
