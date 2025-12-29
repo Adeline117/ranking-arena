@@ -4,7 +4,7 @@ const ARENA_PURPLE = '#a855f7'
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { supabase } from '../lib/supabaseClient'
+import { supabase } from '../lib/supabase/client'
 
 type Trader = {
   id: string
@@ -551,7 +551,7 @@ useEffect(() => {
         <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr 280px', gap: 16 }}>
           {/* Left：排行榜 + 左下角快捷入口（4） */}
           <section style={{ display: 'flex', flexDirection: 'column', gap: 12, minHeight: 520 }}>
-            <Card title="🏆 当前赛季排行榜 (ROI)">
+            <Card title="赛季排行榜 (ROI)">
               {loadingTraders ? (
                 <div style={{ fontSize: 13, color: '#a9a9a9' }}>加载中…</div>
               ) : traders.length === 0 ? (
@@ -832,7 +832,7 @@ useEffect(() => {
 
           {/* Right：只要市场和小组（4） */}
           <section style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <Card title="📈 市场">
+            <Card title="市场">
   {marketLoading ? (
     <div style={{ fontSize: 13, color: '#a9a9a9' }}>加载实时行情…</div>
   ) : market.length === 0 ? (
@@ -867,7 +867,7 @@ useEffect(() => {
 </Card>
 
 
-            <Card title="👥 小组">
+            <Card title="小组">
               {groups.map((g) => (
                 <div
                 key={g.id}
