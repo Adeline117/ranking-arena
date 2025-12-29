@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { supabase } from '../../lib/supabase/client'
+import { supabase } from '@/lib/supabase/client'
 
 const ARENA_GRADIENT = 'linear-gradient(135deg,#7c3aed,#a855f7)'
 const ARENA_PURPLE = '#a855f7'

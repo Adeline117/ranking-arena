@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { supabase } from '../lib/supabase/client'
+import { supabase } from '@/lib/supabase/client'
 
 import TopNav from './components/TopNav'
 import RankingTable from './components/RankingTable'
