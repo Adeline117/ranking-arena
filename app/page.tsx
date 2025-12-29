@@ -105,6 +105,15 @@ export default function Home() {
   const [market, setMarket] = useState<MarketRow[]>([])
   const [marketLoading, setMarketLoading] = useState(true)
   const [marketError, setMarketError] = useState<string | null>(null)
+  const dataSources = useMemo(
+    () => [
+      { label: 'CEX 现货', detail: '中心化交易所', color: '#60a5fa' },
+      { label: 'DEX', detail: '链上撮合/AMM', color: '#34d399' },
+      { label: '链上现货', detail: '钱包可验证', color: '#f472b6' },
+      { label: '合约交易', detail: '永续/交割合约', color: '#fbbf24' },
+    ],
+    []
+  )
   // 1) 右上角：当前用户
   useEffect(() => {
     const run = async () => {
@@ -552,6 +561,84 @@ useEffect(() => {
           {/* Left：排行榜 + 左下角快捷入口（4） */}
           <section style={{ display: 'flex', flexDirection: 'column', gap: 12, minHeight: 520 }}>
             <Card title="🏆 当前赛季排行榜 (ROI)">
+              <div
+                style={{
+                  border: '1px solid #1f1f1f',
+                  borderRadius: 12,
+                  padding: 10,
+                  background: '#0b0b0b',
+                  marginBottom: 12,
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ fontSize: 12, color: '#a9a9a9' }}>用户合并</div>
+                  <span
+                    style={{
+                      fontSize: 11,
+                      color: email ? '#7CFFB2' : '#fbbf24',
+                      border: `1px solid ${email ? '#7CFFB2' : '#fbbf24'}`,
+                      padding: '2px 6px',
+                      borderRadius: 999,
+                    }}
+                  >
+                    {email ? '已合并' : '待合并'}
+                  </span>
+                </div>
+                <div style={{ marginTop: 6, fontSize: 13, color: '#d1d5db' }}>
+                  {email ? `当前账号：${email}` : '注册后将自动与排行榜合并，直接累积战绩。'}
+                </div>
+                <div style={{ marginTop: 8 }}>
+                  {email ? (
+                    <button
+                      onClick={() => alert('已提交同步请求：整合 CEX/DEX/链上现货与合约数据')}
+                      style={{
+                        padding: '6px 10px',
+                        borderRadius: 999,
+                        border: '1px solid #1f1f1f',
+                        background: '#141414',
+                        color: '#e5e7eb',
+                        fontSize: 12,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      同步交易数据
+                    </button>
+                  ) : (
+                    <Link href="/login" style={pillLink}>
+                      去登录合并
+                    </Link>
+                  )}
+                </div>
+              </div>
+
+              <div
+                style={{
+                  border: '1px solid #1f1f1f',
+                  borderRadius: 12,
+                  padding: 10,
+                  background: '#0b0b0b',
+                  marginBottom: 12,
+                }}
+              >
+                <div style={{ fontSize: 12, color: '#a9a9a9', marginBottom: 6 }}>交易数据覆盖</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  {dataSources.map((source) => (
+                    <div
+                      key={source.label}
+                      style={{
+                        border: '1px solid #1f1f1f',
+                        borderRadius: 10,
+                        padding: '6px 8px',
+                        minWidth: 100,
+                        background: '#111111',
+                      }}
+                    >
+                      <div style={{ fontSize: 12, color: source.color, fontWeight: 600 }}>{source.label}</div>
+                      <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>{source.detail}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
               {loadingTraders ? (
                 <div style={{ fontSize: 13, color: '#a9a9a9' }}>加载中…</div>
               ) : traders.length === 0 ? (
