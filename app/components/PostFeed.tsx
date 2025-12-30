@@ -43,7 +43,9 @@ function getPollWinner(poll?: { bull: number; bear: number; wait: number }): Pol
   return arr[0][0]
 }
 
-export default function PostFeed() {
+export default function PostFeed(props: { variant?: 'compact' | 'full' } = {}) {
+  const variant = props.variant ?? 'compact'
+
   const posts: Post[] = useMemo(
     () => [
       {
@@ -109,7 +111,10 @@ export default function PostFeed() {
     []
   )
 
-  const [expanded, setExpanded] = useState<Record<number, boolean>>({})
+  // Modal：点左侧帖子后展示正文
+  const [openPost, setOpenPost] = useState<Post | null>(null)
+
+  // 你原来的互动状态（保留）
   const [commentsOpen, setCommentsOpen] = useState<Record<number, boolean>>({})
   const [pollState, setPollState] = useState<Record<number, { bull: number; bear: number; wait: number }>>({})
   const [myVote, setMyVote] = useState<Record<number, PollChoice | null>>({})
@@ -139,7 +144,6 @@ export default function PostFeed() {
     })
   }, [posts])
 
-  const toggleExpand = (postId: number) => setExpanded((p) => ({ ...p, [postId]: !p[postId] }))
   const toggleComments = (postId: number) => setCommentsOpen((p) => ({ ...p, [postId]: !p[postId] }))
 
   const toggleVote = (postId: number, choice: PollChoice) => {
@@ -184,138 +188,166 @@ export default function PostFeed() {
   }
 
   return (
-    <div>
-      {posts.map((p) => {
-        const isOpen = !!expanded[p.id]
-        const showPoll = !!p.pollEnabled
-        const poll = pollState[p.id]
-        const winner = showPoll && poll ? getPollWinner(poll) : 'tie'
-        const label = pollLabel(winner)
-        const color = pollColor(winner)
+    <>
+      {/* 左侧紧凑列表：只显示小组/标题/互动数 */}
+      <div>
+        {posts.map((p) => {
+          const reacts = reactCounts[p.id] ?? { up: p.likes, down: Math.floor(p.likes * 0.08) }
+          const poll = pollState[p.id]
+          const winner = p.pollEnabled && poll ? getPollWinner(poll) : 'tie'
+          const label = pollLabel(winner)
+          const color = pollColor(winner)
 
-        const reacts = reactCounts[p.id] ?? { up: p.likes, down: Math.floor(p.likes * 0.08) }
-        const mine = myReact[p.id]
+          return (
+            <button
+              key={p.id}
+              onClick={() => setOpenPost(p)}
+              style={{
+                width: '100%',
+                textAlign: 'left',
+                border: 'none',
+                background: 'transparent',
+                padding: '10px 0',
+                borderBottom: '1px solid #141414',
+                cursor: 'pointer',
+                color: '#eaeaea',
+              }}
+            >
+              <div style={{ fontSize: 12, color: ARENA_PURPLE }}>{p.group}</div>
 
-        const previewLen = 72
-        const preview = p.body.length > previewLen ? p.body.slice(0, previewLen) + '…' : p.body
-
-        return (
-          <div key={p.id} style={{ padding: '10px 0', borderBottom: '1px solid #141414' }}>
-            <div style={{ fontSize: 12, color: ARENA_PURPLE }}>{p.group}</div>
-
-            <div style={{ marginTop: 6, fontWeight: 950, lineHeight: 1.25 }}>
-              {p.title}{' '}
-              <span
-                style={{
-                  fontSize: 11,
-                  color,
-                  fontWeight: 950,
-                  border: '1px solid #1f1f1f',
-                  padding: '2px 6px',
-                  borderRadius: 999,
-                  marginLeft: 6,
-                }}
-                title={showPoll ? '基于投票结果' : '该帖未开启投票，默认观望'}
-              >
-                {label}
-              </span>
-            </div>
-
-            <div style={{ marginTop: 8, fontSize: 12, color: '#cfcfcf', lineHeight: 1.5 }}>
-              {isOpen ? p.body : preview}
-            </div>
-
-            <div style={{ marginTop: 8, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-              <MiniBtn active={mine === 'up'} onClick={() => toggleReact(p.id, 'up')}>
-                👍 {reacts.up}
-              </MiniBtn>
-              <MiniBtn active={mine === 'down'} onClick={() => toggleReact(p.id, 'down')}>
-                👎 {reacts.down}
-              </MiniBtn>
-
-              <MiniBtn onClick={() => toggleComments(p.id)}>💬 评论 {p.comments}</MiniBtn>
-              <MiniBtn onClick={() => toggleExpand(p.id)}>{isOpen ? '收起' : '展开'}</MiniBtn>
-
-              {isOpen && showPoll && poll ? (
-                <>
-                  <MiniBtn active={myVote[p.id] === 'bull'} onClick={() => toggleVote(p.id, 'bull')}>
-                    看多 {poll.bull}
-                  </MiniBtn>
-                  <MiniBtn active={myVote[p.id] === 'bear'} onClick={() => toggleVote(p.id, 'bear')}>
-                    看空 {poll.bear}
-                  </MiniBtn>
-                  <MiniBtn active={myVote[p.id] === 'wait'} onClick={() => toggleVote(p.id, 'wait')}>
-                    观望 {poll.wait}
-                  </MiniBtn>
-                </>
-              ) : null}
-            </div>
-
-            {commentsOpen[p.id] ? (
-              <div style={{ marginTop: 10, borderTop: '1px solid #141414', paddingTop: 10 }}>
-                <div style={{ fontWeight: 950, marginBottom: 8 }}>评论区（mock）</div>
-                <textarea
-                  placeholder="写评论…"
+              <div style={{ marginTop: 6, fontWeight: 950, lineHeight: 1.25 }}>
+                {p.title}{' '}
+                <span
                   style={{
-                    width: '100%',
-                    minHeight: 86,
-                    resize: 'vertical',
-                    padding: 12,
-                    borderRadius: 14,
+                    fontSize: 11,
+                    color,
+                    fontWeight: 950,
                     border: '1px solid #1f1f1f',
-                    background: '#0c0c0c',
-                    color: '#eaeaea',
-                    outline: 'none',
-                    fontSize: 13,
-                    lineHeight: 1.6,
+                    padding: '2px 6px',
+                    borderRadius: 999,
+                    marginLeft: 6,
                   }}
-                />
-                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 10 }}>
-                  <button
-                    onClick={() => alert('下一关：发表评论写入数据库')}
-                    style={{
-                      padding: '10px 12px',
-                      borderRadius: 12,
-                      border: '1px solid #1f1f1f',
-                      background: 'linear-gradient(135deg,#7c3aed,#a855f7)',
-                      color: '#fff',
-                      fontWeight: 950,
-                      cursor: 'pointer',
-                      fontSize: 12,
-                    }}
-                  >
-                    发表评论
-                  </button>
-                </div>
+                  title={p.pollEnabled ? '基于投票结果' : '未开启投票，默认观望'}
+                >
+                  {label}
+                </span>
               </div>
-            ) : null}
 
-            <div style={{ marginTop: 8, fontSize: 12, color: '#777' }}>
-              {p.author} · {p.time}
-            </div>
+              <div style={{ marginTop: 8, display: 'flex', gap: 10, flexWrap: 'wrap', color: '#a9a9a9', fontSize: 12 }}>
+                <span>👍 {reacts.up}</span>
+                <span>👎 {reacts.down}</span>
+                <span>💬 {p.comments}</span>
+              </div>
+            </button>
+          )
+        })}
+      </div>
+
+      {/* 弹窗正文：点击左侧帖子出现 */}
+      {openPost ? (
+        <Modal onClose={() => setOpenPost(null)}>
+          <div style={{ fontSize: 12, color: ARENA_PURPLE }}>{openPost.group}</div>
+          <div style={{ marginTop: 6, fontSize: 20, fontWeight: 950, lineHeight: 1.25 }}>{openPost.title}</div>
+          <div style={{ marginTop: 8, fontSize: 12, color: '#777' }}>
+            {openPost.author} · {openPost.time} · 💬 {openPost.comments}
           </div>
-        )
-      })}
-    </div>
+
+          <div style={{ marginTop: 12, fontSize: 14, color: '#d6d6d6', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>
+            {openPost.body}
+          </div>
+
+          {/* 这里放你的“点赞/点踩/评论/投票”也可以；先最小可用只做显示 */}
+          <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid #141414', display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+            <Action text="👍 赞同" onClick={() => toggleReact(openPost.id, 'up')} active={myReact[openPost.id] === 'up'} />
+            <Action text="👎 反对" onClick={() => toggleReact(openPost.id, 'down')} active={myReact[openPost.id] === 'down'} />
+            <Action text="💬 评论" onClick={() => toggleComments(openPost.id)} />
+            {openPost.pollEnabled && pollState[openPost.id] ? (
+              <>
+                <Action text="📈 看多" onClick={() => toggleVote(openPost.id, 'bull')} active={myVote[openPost.id] === 'bull'} />
+                <Action text="📉 看空" onClick={() => toggleVote(openPost.id, 'bear')} active={myVote[openPost.id] === 'bear'} />
+                <Action text="⏸ 观望" onClick={() => toggleVote(openPost.id, 'wait')} active={myVote[openPost.id] === 'wait'} />
+              </>
+            ) : null}
+          </div>
+
+          {commentsOpen[openPost.id] ? (
+            <div style={{ marginTop: 12, borderTop: '1px solid #141414', paddingTop: 12 }}>
+              <div style={{ fontWeight: 950, marginBottom: 8 }}>评论区（mock）</div>
+              <textarea
+                placeholder="写评论…"
+                style={{
+                  width: '100%',
+                  minHeight: 86,
+                  resize: 'vertical',
+                  padding: 12,
+                  borderRadius: 14,
+                  border: '1px solid #1f1f1f',
+                  background: '#0c0c0c',
+                  color: '#eaeaea',
+                  outline: 'none',
+                  fontSize: 13,
+                  lineHeight: 1.6,
+                }}
+              />
+            </div>
+          ) : null}
+        </Modal>
+      ) : null}
+    </>
   )
 }
 
-function MiniBtn(props: { children: React.ReactNode; onClick: () => void; active?: boolean }) {
+function Action(props: { text: string; onClick: () => void; active?: boolean }) {
   return (
     <button
       onClick={props.onClick}
       style={{
-        border: '1px solid #1f1f1f',
-        background: props.active ? '#111111' : '#0c0c0c',
-        color: props.active ? '#eaeaea' : '#bdbdbd',
-        borderRadius: 999,
-        padding: '6px 10px',
-        fontSize: 12,
+        border: 'none',
+        background: 'transparent',
+        color: props.active ? '#eaeaea' : '#a9a9a9',
         cursor: 'pointer',
-        fontWeight: 900,
+        padding: 0,
+        fontSize: 13,
+        fontWeight: props.active ? 950 : 700,
       }}
     >
-      {props.children}
+      {props.text}
     </button>
   )
 }
+
+function Modal(props: { children: React.ReactNode; onClose: () => void }) {
+  return (
+    <div
+      onClick={props.onClose}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        background: 'rgba(0,0,0,0.65)',
+        display: 'grid',
+        placeItems: 'center',
+        padding: 16,
+        zIndex: 60,
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: 'min(760px, 100%)',
+          border: '1px solid #1f1f1f',
+          borderRadius: 16,
+          background: '#0b0b0b',
+          padding: 16,
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <button onClick={props.onClose} style={{ border: 'none', background: 'transparent', color: '#bdbdbd', cursor: 'pointer', fontSize: 20 }}>
+            ×
+          </button>
+        </div>
+        {props.children}
+      </div>
+    </div>
+  )
+}
+
