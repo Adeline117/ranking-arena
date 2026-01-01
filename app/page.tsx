@@ -8,6 +8,7 @@ import RankingTable from './components/RankingTable'
 import PostFeed from './components/PostFeed'
 import MarketPanel from './components/MarketPanel'
 import Card from './components/Card'
+import TraderDrawer from './components/TraderDrawer'
 
 /* =====================
    Types
@@ -62,9 +63,8 @@ export default function HomePage() {
     load()
   }, [email])
 
-  /* =====================
-     Layout
-  ===================== */
+  /* ---------- trader drawer ---------- */
+  const [selectedTrader, setSelectedTrader] = useState<Trader | null>(null)
 
   return (
     <div
@@ -106,6 +106,7 @@ export default function HomePage() {
               traders={traders}
               loading={loadingTraders}
               loggedIn={!!email}
+              onSelectTrader={(t) => setSelectedTrader(t)}
             />
           </section>
 
@@ -115,6 +116,13 @@ export default function HomePage() {
           </section>
         </div>
       </main>
+
+      {/* 右侧 Trader 抽屉：不影响你原来的三栏 UI */}
+      <TraderDrawer
+        open={!!selectedTrader}
+        trader={selectedTrader as any}
+        onClose={() => setSelectedTrader(null)}
+      />
     </div>
   )
 }

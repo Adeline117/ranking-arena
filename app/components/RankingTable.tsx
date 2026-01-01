@@ -1,6 +1,5 @@
 'use client'
 
-import Link from 'next/link'
 import React from 'react'
 
 export type Trader = {
@@ -11,86 +10,153 @@ export type Trader = {
   followers: number
 }
 
-const ARENA_PURPLE = '#a855f7'
-
-export default function RankingTable(props: {
+export default function RankingTable({
+  traders,
+  loading,
+  loggedIn,
+  onSelectTrader,
+}: {
   traders: Trader[]
   loading: boolean
   loggedIn: boolean
+  onSelectTrader?: (t: Trader) => void
 }) {
-  const { traders, loading, loggedIn } = props
-
   return (
-    <div>
-      <div style={{ marginBottom: 10, display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
-        <div style={{ fontWeight: 950, fontSize: 16 }}>赛季排行榜（ROI）</div>
-        <div style={{ fontSize: 12, color: '#777' }}>{loggedIn ? '已登录：展示前 50' : '未登录：仅前 10'}</div>
+    <div
+      style={{
+        background: 'rgba(255,255,255,0.03)',
+        border: '1px solid rgba(255,255,255,0.08)',
+        borderRadius: 18,
+        padding: 16,
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'baseline',
+          justifyContent: 'space-between',
+          marginBottom: 12,
+        }}
+      >
+        <div style={{ fontSize: 18, fontWeight: 900 }}>赛季排行榜（ROI）</div>
+        <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.55)' }}>
+          {loggedIn ? '已登录：展示前 50' : '未登录：展示前 10'}
+        </div>
       </div>
 
-      <div style={{ border: '1px solid #1f1f1f', borderRadius: 16, background: '#0b0b0b', padding: 14 }}>
+      <div
+        style={{
+          borderRadius: 14,
+          overflow: 'hidden',
+          border: '1px solid rgba(255,255,255,0.08)',
+        }}
+      >
+        {/* header */}
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: '52px 1.2fr 0.7fr 0.7fr 0.8fr 70px',
+            gap: 0,
+            padding: '10px 12px',
+            background: 'rgba(255,255,255,0.04)',
+            fontSize: 12,
+            color: 'rgba(255,255,255,0.6)',
+            fontWeight: 800,
+          }}
+        >
+          <div>#</div>
+          <div>Trader</div>
+          <div style={{ textAlign: 'right' }}>ROI</div>
+          <div style={{ textAlign: 'right' }}>Win</div>
+          <div style={{ textAlign: 'right' }}>Followers</div>
+          <div />
+        </div>
+
+        {/* body */}
         {loading ? (
-          <div style={{ fontSize: 13, color: '#a9a9a9' }}>加载中…</div>
+          <div style={{ padding: 16, color: 'rgba(255,255,255,0.6)' }}>Loading…</div>
         ) : traders.length === 0 ? (
-          <div style={{ fontSize: 13, color: '#a9a9a9' }}>
-            还没有数据（或 Supabase 权限/表名不对）。
-            <div style={{ marginTop: 6, fontSize: 12, color: '#777' }}>检查：public.traders 是否有数据</div>
+          <div style={{ padding: 16, color: 'rgba(255,255,255,0.6)' }}>
+            No traders found.
           </div>
         ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-            <thead>
-              <tr>
-                <th style={th}>#</th>
-                <th style={th}>Trader</th>
-                <th style={th}>ROI</th>
-                <th style={th}>Win</th>
-                <th style={th}>Followers</th>
-              </tr>
-            </thead>
-            <tbody>
-              {traders.map((t, idx) => (
-                <tr key={t.id}>
-                  <td style={td}>{idx + 1}</td>
-                  <td style={td}>
-                    <Link href={`/trader/${t.id}`} style={{ color: '#eaeaea', textDecoration: 'none', fontWeight: 900 }}>
-                      {t.handle}
-                    </Link>
-                  </td>
-                  <td style={td}>
-                    <span style={{ color: t.roi >= 0 ? '#7CFFB2' : '#FF7C7C', fontWeight: 950 }}>
-                      {Number(t.roi).toFixed(1)}%
-                    </span>
-                  </td>
-                  <td style={td}>{t.win_rate ?? 0}%</td>
-                  <td style={td}>{t.followers ?? 0}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          traders.map((t, idx) => (
+            <Row
+              key={t.id}
+              trader={t}
+              rank={idx + 1}
+              onClick={() => onSelectTrader?.(t)}
+            />
+          ))
         )}
+      </div>
 
-        {!loggedIn ? (
-          <div style={{ marginTop: 12, fontSize: 12, color: '#777' }}>
-            未登录仅展示前 10 名。{' '}
-            <Link href="/login" style={{ color: ARENA_PURPLE, textDecoration: 'none', fontWeight: 900 }}>
-              登录解锁完整榜单
-            </Link>
-          </div>
-        ) : null}
+      <div style={{ marginTop: 10, fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>
+        点击任意 Trader 查看详情（Overview / Stats / Portfolio / Chart）
       </div>
     </div>
   )
 }
 
-const th: React.CSSProperties = {
-  textAlign: 'left',
-  padding: '8px 6px',
-  borderBottom: '1px solid #1f1f1f',
-  color: '#a9a9a9',
-  fontWeight: 700,
-}
+function Row({
+  trader,
+  rank,
+  onClick,
+}: {
+  trader: Trader
+  rank: number
+  onClick: () => void
+}) {
+  const roiColor = trader.roi >= 0 ? '#2fe57d' : '#ff4d4d'
+  return (
+    <div
+      onClick={onClick}
+      style={{
+        display: 'grid',
+        gridTemplateColumns: '52px 1.2fr 0.7fr 0.7fr 0.8fr 70px',
+        padding: '12px 12px',
+        borderTop: '1px solid rgba(255,255,255,0.06)',
+        alignItems: 'center',
+        cursor: 'pointer',
+        background: 'transparent',
+        transition: 'background 120ms ease',
+      }}
+      onMouseEnter={(e) => ((e.currentTarget.style.background = 'rgba(255,255,255,0.03)'))}
+      onMouseLeave={(e) => ((e.currentTarget.style.background = 'transparent'))}
+      title="Open trader profile"
+    >
+      <div style={{ color: 'rgba(255,255,255,0.7)', fontWeight: 800 }}>{rank}</div>
 
-const td: React.CSSProperties = {
-  padding: '10px 6px',
-  borderBottom: '1px solid #141414',
-  verticalAlign: 'top',
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div
+          style={{
+            width: 28,
+            height: 28,
+            borderRadius: 999,
+            background: 'rgba(255,255,255,0.10)',
+            display: 'grid',
+            placeItems: 'center',
+            fontWeight: 900,
+          }}
+        >
+          {trader.handle?.[0]?.toUpperCase() ?? 'T'}
+        </div>
+        <div style={{ fontWeight: 800 }}>{trader.handle}</div>
+      </div>
+
+      <div style={{ textAlign: 'right', color: roiColor, fontWeight: 900 }}>
+        {trader.roi.toFixed(1)}%
+      </div>
+      <div style={{ textAlign: 'right', color: 'rgba(255,255,255,0.85)', fontWeight: 800 }}>
+        {trader.win_rate.toFixed(1)}%
+      </div>
+      <div style={{ textAlign: 'right', color: 'rgba(255,255,255,0.75)', fontWeight: 800 }}>
+        {trader.followers}
+      </div>
+
+      <div style={{ textAlign: 'right', color: 'rgba(255,255,255,0.45)', fontWeight: 800 }}>
+        View →
+      </div>
+    </div>
+  )
 }
