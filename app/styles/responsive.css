@@ -1,0 +1,39 @@
+/* 响应式布局 */
+@media (max-width: 1024px) {
+  .main-grid {
+    grid-template-columns: 280px 1fr 260px !important;
+    gap: 12px !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .main-grid {
+    grid-template-columns: 1fr !important;
+    gap: 16px !important;
+  }
+
+  .top-nav {
+    padding: 12px !important;
+  }
+
+  .top-nav-search {
+    display: none !important;
+  }
+
+  .ranking-table-grid {
+    grid-template-columns: 40px 1fr 70px 60px 80px !important;
+    font-size: 12px !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .ranking-table-grid {
+    grid-template-columns: 30px 1fr 60px !important;
+  }
+
+  .ranking-table-grid > div:nth-child(4),
+  .ranking-table-grid > div:nth-child(5) {
+    display: none;
+  }
+}
+

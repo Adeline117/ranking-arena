@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useState } from 'react'
+import { use, useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase/client'
 
 type Trader = {
@@ -23,10 +23,13 @@ type TraderSeason = {
 }
 
 type PageProps = {
-  params: { id: string }
+  params: { id: string } | Promise<{ id: string }>
 }
 
-export default function TraderPage({ params }: PageProps) {
+export default function TraderPage(props: PageProps) {
+  const resolvedParams = props.params && typeof props.params.then === 'function' ? use(props.params) : props.params
+  const routeId = String(resolvedParams?.id ?? '')
+  
   const [trader, setTrader] = useState<Trader | null>(null)
   const [seasons, setSeasons] = useState<TraderSeason[]>([])
   const [loading, setLoading] = useState(true)
@@ -37,11 +40,26 @@ export default function TraderPage({ params }: PageProps) {
       setLoading(true)
       setErr(null)
 
-      const { data: traderData, error: traderError } = await supabase
+      // Try to find by id first, then by handle
+      let { data: traderData, error: traderError } = await supabase
         .from('traders')
         .select('*')
-        .eq('id', params.id)
-        .single()
+        .eq('id', routeId)
+        .maybeSingle()
+
+      if (traderError || !traderData) {
+        // If not found by id, try by handle
+        const { data: traderByHandle, error: handleError } = await supabase
+          .from('traders')
+          .select('*')
+          .eq('handle', routeId)
+          .maybeSingle()
+        
+        if (!handleError && traderByHandle) {
+          traderData = traderByHandle
+          traderError = null
+        }
+      }
 
       if (traderError || !traderData) {
         setTrader(null)
@@ -55,7 +73,7 @@ export default function TraderPage({ params }: PageProps) {
       const { data: seasonsData, error: seasonsError } = await supabase
         .from('trader_seasons')
         .select('*')
-        .eq('trader_id', params.id)
+        .eq('trader_id', traderData.id)
         .order('season', { ascending: false })
 
       if (!seasonsError && seasonsData) setSeasons(seasonsData as TraderSeason[])
@@ -65,7 +83,7 @@ export default function TraderPage({ params }: PageProps) {
     }
 
     load()
-  }, [params.id])
+  }, [routeId])
 
   if (loading) {
     return (
@@ -123,21 +141,7 @@ export default function TraderPage({ params }: PageProps) {
               }}
               onClick={() => alert('Follow (mock)')}
             >
-              Follow
-            </button>
-            <button
-              style={{
-                border: 'none',
-                background: '#2fe57d',
-                color: '#04120a',
-                fontWeight: 900,
-                padding: '10px 14px',
-                borderRadius: 12,
-                cursor: 'pointer',
-              }}
-              onClick={() => alert('Copy (mock)')}
-            >
-              Copy
+              关注
             </button>
           </div>
         </div>

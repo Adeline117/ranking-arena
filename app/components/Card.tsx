@@ -1,9 +1,29 @@
-import React from 'react'
+'use client'
 
-export default function Card(props: { title: string; children: React.ReactNode }) {
+import React, { useState } from 'react'
+import { cardStyle, cardHoverStyle } from '@/lib/design-system-helpers'
+
+export default function Card(props: { 
+  title: string
+  children: React.ReactNode
+  hoverable?: boolean
+  className?: string
+}) {
+  const [isHovered, setIsHovered] = useState(false)
+  const { hoverable = false } = props
+
+  const style = hoverable && isHovered ? cardHoverStyle : cardStyle
+
   return (
-    <div style={{ border: '1px solid #1f1f1f', borderRadius: 16, background: '#0b0b0b', padding: 14 }}>
-      <div style={{ fontWeight: 950, marginBottom: 10 }}>{props.title}</div>
+    <div 
+      style={style}
+      className={props.className}
+      onMouseEnter={() => hoverable && setIsHovered(true)}
+      onMouseLeave={() => hoverable && setIsHovered(false)}
+    >
+      <div style={{ fontWeight: 950, fontSize: '16px', marginBottom: '12px', color: '#f2f2f2' }}>
+        {props.title}
+      </div>
       {props.children}
     </div>
   )
