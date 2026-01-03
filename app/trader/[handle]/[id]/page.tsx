@@ -27,7 +27,7 @@ type PageProps = {
 }
 
 export default function TraderPage(props: PageProps) {
-  const resolvedParams = props.params && typeof props.params.then === 'function' ? use(props.params) : props.params
+  const resolvedParams = props.params && 'then' in props.params ? use(props.params as Promise<{ id: string; handle: string }>) : props.params
   const routeId = String(resolvedParams?.id ?? '')
   
   const [trader, setTrader] = useState<Trader | null>(null)
