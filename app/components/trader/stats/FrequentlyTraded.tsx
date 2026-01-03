@@ -18,7 +18,7 @@ export default function FrequentlyTraded({ data }: FrequentlyTradedProps) {
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
-          mb: 4,
+          marginBottom: tokens.spacing[4],
         }}
       >
         <Text size="lg" weight="black">

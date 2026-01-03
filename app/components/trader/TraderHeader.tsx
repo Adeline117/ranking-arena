@@ -21,8 +21,8 @@ export default function TraderHeader({ handle, avatarUrl, isRegistered, follower
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'flex-start',
-        mb: 6,
-        pb: 6,
+        marginBottom: tokens.spacing[6],
+        paddingBottom: tokens.spacing[6],
         borderBottom: `1px solid ${tokens.colors.border.primary}`,
       }}
     >
