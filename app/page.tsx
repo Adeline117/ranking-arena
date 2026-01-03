@@ -103,6 +103,7 @@ export default function HomePage() {
         roi: item.roi || 0,
         win_rate: 0, // trader_snapshots 中没有 win_rate，暂时设为 0
         followers: item.followers || 0,
+        source: 'binance', // 数据来源
       }))
 
       setTraders(tradersData)

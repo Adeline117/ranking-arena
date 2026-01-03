@@ -12,6 +12,7 @@ export interface Trader {
   roi: number // 90天ROI（固定）
   win_rate: number
   followers: number
+  source?: string // 数据来源：binance, bybit, okx等
 }
 
 /**
@@ -98,7 +99,7 @@ export default function RankingTable(props: {
                 <Box
                   style={{
                     display: 'grid',
-                    gridTemplateColumns: '60px 1fr 100px 80px 100px',
+                    gridTemplateColumns: '60px 1fr 80px 100px 80px 100px',
                     alignItems: 'center',
                     gap: tokens.spacing[4],
                     padding: `${tokens.spacing[3]} ${tokens.spacing[3]}`,
@@ -128,6 +129,11 @@ export default function RankingTable(props: {
                   {/* 交易员ID - 唯一可点击的元素，视觉权重最高 */}
                   <Text size="sm" weight="black" style={{ color: tokens.colors.text.primary }}>
                     {traderHandle}
+                  </Text>
+
+                  {/* 数据来源 - 中性色，小字 */}
+                  <Text size="xs" weight="bold" style={{ textAlign: 'center', color: tokens.colors.text.tertiary, textTransform: 'uppercase' }}>
+                    {t.source || '—'}
                   </Text>
 
                   {/* ROI (90D) - 使用颜色表达，视觉权重高 */}

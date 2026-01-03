@@ -92,6 +92,7 @@ export default function HotPage() {
         roi: item.roi || 0,
         win_rate: 0,
         followers: item.followers || 0,
+        source: 'binance', // 数据来源
       }))
 
       setTraders(tradersData)

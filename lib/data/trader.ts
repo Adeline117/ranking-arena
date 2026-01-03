@@ -13,6 +13,7 @@ export interface TraderProfile {
   copiers?: number
   avatar_url?: string
   isRegistered?: boolean // 是否在平台注册
+  source?: string // 数据来源：binance, bybit, okx等
 }
 
 export interface TraderPerformance {
