@@ -35,14 +35,30 @@ export default function HomePage() {
     const load = async () => {
       setLoadingTraders(true)
 
+      // 从 trader_snapshots 获取最新的 ROI Top 100 数据
       const { data, error } = await supabase
-        .from('traders')
-        .select('id, handle, roi, win_rate, followers')
-        .order('roi', { ascending: false })
-        .limit(email ? 50 : 10)
+        .from('trader_snapshots')
+        .select(`
+          source_trader_id,
+          rank,
+          roi,
+          followers,
+          trader_sources!inner(handle)
+        `)
+        .eq('source', 'binance')
+        .order('rank', { ascending: true })
+        .limit(email ? 100 : 50)
 
       if (!error && data) {
-        setTraders(data as Trader[])
+        // 转换为 Trader 格式
+        const tradersData: Trader[] = data.map((item: any) => ({
+          id: item.source_trader_id,
+          handle: item.trader_sources?.handle || item.source_trader_id,
+          roi: item.roi || 0,
+          win_rate: 0, // trader_snapshots 中没有 win_rate，暂时设为 0
+          followers: item.followers || 0,
+        }))
+        setTraders(tradersData)
       } else {
         console.error('[ranking]', error)
         setTraders([])
