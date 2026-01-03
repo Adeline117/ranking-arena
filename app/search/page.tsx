@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import TopNav from '@/app/components/Layout/TopNav'
@@ -16,7 +16,7 @@ type SearchResult = {
   meta?: string
 }
 
-export default function SearchPage() {
+function SearchContent() {
   const searchParams = useSearchParams()
   const query = searchParams.get('q') || ''
   const [results, setResults] = useState<SearchResult[]>([])
@@ -241,6 +241,21 @@ export default function SearchPage() {
         )}
       </main>
     </div>
+  )
+}
+
+export default function SearchPage() {
+  return (
+    <Suspense fallback={
+      <div style={{ minHeight: '100vh', background: '#060606', color: '#f2f2f2' }}>
+        <TopNav email={null} />
+        <main style={{ maxWidth: 900, margin: '0 auto', padding: '24px 16px' }}>
+          <RankingSkeleton />
+        </main>
+      </div>
+    }>
+      <SearchContent />
+    </Suspense>
   )
 }
 
