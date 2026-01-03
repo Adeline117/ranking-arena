@@ -56,7 +56,6 @@ const snapshotsData = validData.map((item, index) => ({
   roi: Number(item.roi),
   pnl: item.pnl != null ? Number(item.pnl) : null,
   followers: item.followerCount != null ? Number(item.followerCount) : null,
-  source_updated_at: item.updateTime != null ? new Date(item.updateTime).toISOString() : null,
   captured_at: capturedAt
 }))
 
