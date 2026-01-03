@@ -52,35 +52,60 @@ export default function HomePage() {
         return
       }
 
-      // 查询该批次的数据
-      const { data, error } = await supabase
+      // 查询该批次的数据（先查询 snapshots，再查询 sources）
+      const { data: snapshots, error: snapshotsError } = await supabase
         .from('trader_snapshots')
-        .select(`
-          source_trader_id,
-          rank,
-          roi,
-          followers,
-          trader_sources!trader_snapshots_source_source_trader_id_fkey(handle)
-        `)
+        .select('source_trader_id, rank, roi, followers')
         .eq('source', 'binance')
         .eq('captured_at', latestSnapshot.captured_at)
         .order('rank', { ascending: true })
         .limit(email ? 100 : 50)
 
-      if (!error && data) {
-        // 转换为 Trader 格式
-        const tradersData: Trader[] = data.map((item: any) => ({
-          id: item.source_trader_id,
-          handle: item.trader_sources?.handle || item.source_trader_id,
-          roi: item.roi || 0,
-          win_rate: 0, // trader_snapshots 中没有 win_rate，暂时设为 0
-          followers: item.followers || 0,
-        }))
-        setTraders(tradersData)
-      } else {
-        console.error('[ranking]', error)
+      if (snapshotsError) {
+        console.error('[ranking] snapshots error:', snapshotsError)
         setTraders([])
+        setLoadingTraders(false)
+        return
       }
+
+      if (!snapshots || snapshots.length === 0) {
+        console.log('[ranking] No snapshots found')
+        setTraders([])
+        setLoadingTraders(false)
+        return
+      }
+
+      // 获取所有 source_trader_id 对应的 handle
+      const traderIds = snapshots.map((s: any) => s.source_trader_id)
+      const { data: sources, error: sourcesError } = await supabase
+        .from('trader_sources')
+        .select('source_trader_id, handle')
+        .eq('source', 'binance')
+        .in('source_trader_id', traderIds)
+
+      if (sourcesError) {
+        console.error('[ranking] sources error:', sourcesError)
+        // 即使 sources 查询失败，也使用 snapshots 数据，只是 handle 用 source_trader_id
+      }
+
+      // 创建 handle 映射
+      const handleMap = new Map<string, string>()
+      if (sources) {
+        sources.forEach((s: any) => {
+          handleMap.set(s.source_trader_id, s.handle)
+        })
+      }
+
+      // 转换为 Trader 格式
+      const tradersData: Trader[] = snapshots.map((item: any) => ({
+        id: item.source_trader_id,
+        handle: handleMap.get(item.source_trader_id) || item.source_trader_id,
+        roi: item.roi || 0,
+        win_rate: 0, // trader_snapshots 中没有 win_rate，暂时设为 0
+        followers: item.followers || 0,
+      }))
+
+      setTraders(tradersData)
 
       setLoadingTraders(false)
     }
