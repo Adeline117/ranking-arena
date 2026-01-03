@@ -1,6 +1,8 @@
 'use client'
 
+import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
+import { LikeIcon, CommentIcon } from '../Icons'
 
 type PollChoice = 'bull' | 'bear' | 'wait'
 
@@ -10,6 +12,7 @@ type Post = {
   group: string
   title: string
   author: string
+  authorTraderId?: string
   time: string
   body: string
   comments: number
@@ -19,7 +22,7 @@ type Post = {
   hotScore?: number
 }
 
-const ARENA_PURPLE = '#a855f7'
+const ARENA_PURPLE = '#8b6fa8'
 
 function pollLabel(choice: PollChoice | 'tie') {
   if (choice === 'bull') return '看多'
@@ -41,6 +44,41 @@ function getPollWinner(poll?: { bull: number; bear: number; wait: number }): Pol
   arr.sort((a, b) => b[1] - a[1])
   if (arr[0][1] === arr[1][1]) return 'tie'
   return arr[0][0]
+}
+
+function AvatarLink({ handle, traderId }: { handle: string; traderId?: string }) {
+  const href = traderId ? `/trader/${encodeURIComponent(traderId)}` : `/trader/${encodeURIComponent(handle)}`
+  return (
+    <Link
+      href={href}
+      onClick={(e) => e.stopPropagation()}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 8,
+        textDecoration: 'none',
+        color: '#eaeaea',
+      }}
+      title="进入交易者主页"
+    >
+      <span
+        style={{
+          width: 24,
+          height: 24,
+          borderRadius: 8,
+          display: 'grid',
+          placeItems: 'center',
+          background: 'rgba(255,255,255,0.08)',
+          border: '1px solid rgba(255,255,255,0.10)',
+          fontWeight: 950,
+          fontSize: 12,
+        }}
+      >
+        {(handle?.[0] || 'U').toUpperCase()}
+      </span>
+      <span style={{ fontWeight: 850, fontSize: 12, color: 'rgba(255,255,255,0.78)' }}>{handle}</span>
+    </Link>
+  )
 }
 
 export default function PostFeed(props: { variant?: 'compact' | 'full' } = {}) {
@@ -111,10 +149,8 @@ export default function PostFeed(props: { variant?: 'compact' | 'full' } = {}) {
     []
   )
 
-  // Modal：点左侧帖子后展示正文
   const [openPost, setOpenPost] = useState<Post | null>(null)
 
-  // 你原来的互动状态（保留）
   const [commentsOpen, setCommentsOpen] = useState<Record<number, boolean>>({})
   const [pollState, setPollState] = useState<Record<number, { bull: number; bear: number; wait: number }>>({})
   const [myVote, setMyVote] = useState<Record<number, PollChoice | null>>({})
@@ -189,7 +225,6 @@ export default function PostFeed(props: { variant?: 'compact' | 'full' } = {}) {
 
   return (
     <>
-      {/* 左侧紧凑列表：只显示小组/标题/互动数 */}
       <div>
         {posts.map((p) => {
           const reacts = reactCounts[p.id] ?? { up: p.likes, down: Math.floor(p.likes * 0.08) }
@@ -213,7 +248,11 @@ export default function PostFeed(props: { variant?: 'compact' | 'full' } = {}) {
                 color: '#eaeaea',
               }}
             >
-              <div style={{ fontSize: 12, color: ARENA_PURPLE }}>{p.group}</div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
+                <div style={{ fontSize: 12, color: ARENA_PURPLE }}>{p.group}</div>
+                {/* ✅ 这里就是"点头像进主页" */}
+                <AvatarLink handle={p.author} traderId={p.authorTraderId} />
+              </div>
 
               <div style={{ marginTop: 6, fontWeight: 950, lineHeight: 1.25 }}>
                 {p.title}{' '}
@@ -233,34 +272,44 @@ export default function PostFeed(props: { variant?: 'compact' | 'full' } = {}) {
                 </span>
               </div>
 
-              <div style={{ marginTop: 8, display: 'flex', gap: 10, flexWrap: 'wrap', color: '#a9a9a9', fontSize: 12 }}>
-                <span>👍 {reacts.up}</span>
-                <span>👎 {reacts.down}</span>
-                <span>💬 {p.comments}</span>
+              <div style={{ marginTop: 8, display: 'flex', gap: 10, flexWrap: 'wrap', color: '#a9a9a9', fontSize: 12, alignItems: 'center' }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <LikeIcon size={14} /> {reacts.up}
+                </span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <LikeIcon size={14} style={{ transform: 'rotate(180deg)' }} /> {reacts.down}
+                </span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <CommentIcon size={14} /> {p.comments}
+                </span>
               </div>
             </button>
           )
         })}
       </div>
 
-      {/* 弹窗正文：点击左侧帖子出现 */}
       {openPost ? (
         <Modal onClose={() => setOpenPost(null)}>
           <div style={{ fontSize: 12, color: ARENA_PURPLE }}>{openPost.group}</div>
-          <div style={{ marginTop: 6, fontSize: 20, fontWeight: 950, lineHeight: 1.25 }}>{openPost.title}</div>
-          <div style={{ marginTop: 8, fontSize: 12, color: '#777' }}>
-            {openPost.author} · {openPost.time} · 💬 {openPost.comments}
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, marginTop: 8 }}>
+            <div style={{ fontSize: 20, fontWeight: 950, lineHeight: 1.25 }}>{openPost.title}</div>
+            {/* ✅ 弹窗里也能点进主页 */}
+            <AvatarLink handle={openPost.author} traderId={openPost.authorTraderId} />
+          </div>
+
+          <div style={{ marginTop: 8, fontSize: 12, color: '#777', display: 'flex', alignItems: 'center', gap: 6 }}>
+            {openPost.author} · {openPost.time} · <CommentIcon size={12} /> {openPost.comments}
           </div>
 
           <div style={{ marginTop: 12, fontSize: 14, color: '#d6d6d6', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>
             {openPost.body}
           </div>
 
-          {/* 这里放你的“点赞/点踩/评论/投票”也可以；先最小可用只做显示 */}
           <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid #141414', display: 'flex', gap: 14, flexWrap: 'wrap' }}>
-            <Action text="👍 赞同" onClick={() => toggleReact(openPost.id, 'up')} active={myReact[openPost.id] === 'up'} />
-            <Action text="👎 反对" onClick={() => toggleReact(openPost.id, 'down')} active={myReact[openPost.id] === 'down'} />
-            <Action text="💬 评论" onClick={() => toggleComments(openPost.id)} />
+            <Action icon={<LikeIcon size={14} />} text="赞同" onClick={() => toggleReact(openPost.id, 'up')} active={myReact[openPost.id] === 'up'} />
+            <Action icon={<LikeIcon size={14} style={{ transform: 'rotate(180deg)' }} />} text="反对" onClick={() => toggleReact(openPost.id, 'down')} active={myReact[openPost.id] === 'down'} />
+            <Action icon={<CommentIcon size={14} />} text="评论" onClick={() => toggleComments(openPost.id)} />
             {openPost.pollEnabled && pollState[openPost.id] ? (
               <>
                 <Action text="📈 看多" onClick={() => toggleVote(openPost.id, 'bull')} active={myVote[openPost.id] === 'bull'} />
@@ -297,7 +346,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full' } = {}) {
   )
 }
 
-function Action(props: { text: string; onClick: () => void; active?: boolean }) {
+function Action(props: { icon?: React.ReactNode; text: string; onClick: () => void; active?: boolean }) {
   return (
     <button
       onClick={props.onClick}
@@ -309,8 +358,12 @@ function Action(props: { text: string; onClick: () => void; active?: boolean }) 
         padding: 0,
         fontSize: 13,
         fontWeight: props.active ? 950 : 700,
+        display: 'flex',
+        alignItems: 'center',
+        gap: 4,
       }}
     >
+      {props.icon}
       {props.text}
     </button>
   )
@@ -350,4 +403,3 @@ function Modal(props: { children: React.ReactNode; onClose: () => void }) {
     </div>
   )
 }
-

@@ -1,8 +1,12 @@
-// app/groups/[id]/page.tsx
-import Link from "next/link"
-import { createClient } from "@supabase/supabase-js"
-import GroupActions from "./ui/GroupActions"
-import PostFooterActions from "./ui/PostFooterActions"
+'use client'
+
+import Link from 'next/link'
+import { useEffect, useState } from 'react'
+import { supabase } from '@/lib/supabase/client'
+import TopNav from '@/app/components/Layout/TopNav'
+import Card from '@/app/components/UI/Card'
+import { useLanguage } from '@/app/components/Utils/LanguageProvider'
+import { LikeIcon, CommentIcon } from '@/app/components/Icons'
 
 type Group = {
   id: string
@@ -21,100 +25,261 @@ type Post = {
   comment_count?: number | null
 }
 
-function getServerSupabase() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-  if (!url || !anon) throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY")
-  return createClient(url, anon, { auth: { persistSession: false } })
-}
+export default function GroupDetailPage({ params }: { params: { id: string } | Promise<{ id: string }> }) {
+  const [groupId, setGroupId] = useState<string>('')
+  
+  useEffect(() => {
+    if (params && typeof params === 'object' && 'then' in params) {
+      (params as Promise<{ id: string }>).then(resolved => {
+        setGroupId(resolved.id)
+      })
+    } else {
+      setGroupId(String((params as { id: string })?.id ?? ''))
+    }
+  }, [params])
+  
+  const { t } = useLanguage()
+  const [email, setEmail] = useState<string | null>(null)
+  const [group, setGroup] = useState<Group | null>(null)
+  const [posts, setPosts] = useState<Post[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-export default async function GroupDetailPage({
-  params,
-}: {
-  params: { id: string }
-}) {
-  const groupId = params.id
-  const supabase = getServerSupabase()
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      setEmail(data.user?.email ?? null)
+    })
+  }, [])
 
-  // 1) 读 group
-  const { data: group, error: groupErr } = await supabase
-    .from("groups")
-    .select("id,name,subtitle")
-    .eq("id", groupId)
-    .single()
+  useEffect(() => {
+    if (groupId === 'loading') return
 
-  if (groupErr) {
+    const load = async () => {
+      setLoading(true)
+      setError(null)
+
+      try {
+        // 读取小组信息
+        const { data: groupData, error: groupErr } = await supabase
+          .from('groups')
+          .select('id, name, subtitle')
+          .eq('id', groupId)
+          .maybeSingle()
+
+        if (groupErr) {
+          setError(groupErr.message)
+          setLoading(false)
+          return
+        }
+
+        setGroup(groupData as Group | null)
+
+        // 读取帖子
+        const { data: postsData, error: postsErr } = await supabase
+          .from('posts')
+          .select('id, group_id, title, content, created_at, author_handle, like_count, comment_count')
+          .eq('group_id', groupId)
+          .order('created_at', { ascending: false })
+          .limit(50)
+
+        if (postsErr) {
+          setError(postsErr.message)
+        } else {
+          setPosts((postsData || []) as Post[])
+        }
+      } catch (err: any) {
+        setError(err?.message || '加载失败')
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    load()
+  }, [groupId])
+
+  if (loading) {
     return (
-      <div className="p-6">
-        <div className="text-red-500">Failed to load group: {groupErr.message}</div>
+      <div style={{ minHeight: '100vh', background: '#060606', color: '#f2f2f2' }}>
+        <TopNav email={email} />
+        <main style={{ maxWidth: 900, margin: '0 auto', padding: '40px 16px' }}>
+          <div style={{ color: '#9a9a9a', textAlign: 'center' }}>{t('loading')}</div>
+        </main>
       </div>
     )
   }
 
-  // 2) 读 posts
-  const { data: posts, error: postsErr } = await supabase
-    .from("posts")
-    .select("id,group_id,title,content,created_at,author_handle,like_count,comment_count")
-    .eq("group_id", groupId)
-    .order("created_at", { ascending: false })
-
-  if (postsErr) {
+  if (error || !group) {
     return (
-      <div className="p-6">
-        <div className="text-red-500">Failed to load posts: {postsErr.message}</div>
+      <div style={{ minHeight: '100vh', background: '#060606', color: '#f2f2f2' }}>
+        <TopNav email={email} />
+        <main style={{ maxWidth: 900, margin: '0 auto', padding: '40px 16px' }}>
+          <div style={{ color: '#ff7c7c' }}>错误: {error || '小组不存在'}</div>
+          <Link href="/groups" style={{ color: '#8b6fa8', textDecoration: 'none', marginTop: '12px', display: 'inline-block' }}>
+            ← 返回小组列表
+          </Link>
+        </main>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen p-6 space-y-6">
-      {/* Header */}
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <div className="text-2xl font-semibold">{group?.name}</div>
-          {group?.subtitle ? (
-            <div className="text-sm opacity-70 mt-1">{group.subtitle}</div>
-          ) : null}
+    <div style={{ minHeight: '100vh', background: '#060606', color: '#f2f2f2' }}>
+      <TopNav email={email} />
+
+      <main style={{ maxWidth: 900, margin: '0 auto', padding: '24px 16px' }}>
+        {/* Header */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px' }}>
+          <div>
+            <h1 style={{ fontSize: '28px', fontWeight: 950, marginBottom: '8px' }}>{group.name}</h1>
+            {group.subtitle && (
+              <div style={{ fontSize: '14px', color: 'rgba(255,255,255,0.7)' }}>{group.subtitle}</div>
+            )}
+          </div>
+
+          <Link 
+            href="/groups" 
+            style={{ 
+              color: '#8b6fa8', 
+              textDecoration: 'none',
+              fontSize: '14px',
+              fontWeight: 700,
+            }}
+          >
+            ← 返回小组
+          </Link>
         </div>
 
-        <Link href="/groups" className="text-sm underline opacity-80 hover:opacity-100">
-          Back to Groups
-        </Link>
-      </div>
+        {/* New Post Button */}
+        <div style={{ marginBottom: '24px' }}>
+          <Link
+            href={`/groups/${groupId}/new`}
+            style={{
+              display: 'inline-block',
+              padding: '12px 20px',
+              background: '#8b6fa8',
+              color: '#fff',
+              borderRadius: '12px',
+              textDecoration: 'none',
+              fontWeight: 900,
+              fontSize: '14px',
+              transition: 'all 200ms ease',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = '#a085b8'
+              e.currentTarget.style.transform = 'translateY(-1px)'
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = '#8b6fa8'
+              e.currentTarget.style.transform = 'translateY(0)'
+            }}
+          >
+            + 发新帖
+          </Link>
+        </div>
 
-      {/* ✅ 插入点 1：Posts 上方（你要的 Group Actions） */}
-      <GroupActions groupId={groupId} />
-
-      {/* Posts */}
-      <div className="space-y-3">
-        <div className="text-lg font-semibold">Posts</div>
-
-        {(!posts || posts.length === 0) && (
-          <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-sm opacity-75">
-            No posts yet.
-          </div>
-        )}
-
-        {posts?.map((post: Post) => (
-          <div key={post.id} className="rounded-xl border border-white/10 bg-white/5 p-4">
-            <div className="flex items-center justify-between gap-3">
-              <div className="font-medium">{post.title}</div>
-              <div className="text-xs opacity-60">
-                {new Date(post.created_at).toLocaleString()}
-              </div>
+        {/* Posts */}
+        <Card title={`帖子 (${posts.length})`}>
+          {posts.length === 0 ? (
+            <div style={{ 
+              color: 'rgba(255,255,255,0.6)', 
+              padding: '40px 20px',
+              textAlign: 'center',
+              fontSize: '14px',
+            }}>
+              还没有帖子，成为第一个发帖的人吧！
             </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              {posts.map((post) => (
+                <div
+                  key={post.id}
+                  style={{
+                    padding: '16px',
+                    borderRadius: '12px',
+                    background: 'rgba(255,255,255,0.03)',
+                    border: '1px solid rgba(255,255,255,0.08)',
+                    transition: 'all 200ms ease',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = 'rgba(255,255,255,0.05)'
+                    e.currentTarget.style.borderColor = 'rgba(255,255,255,0.12)'
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'rgba(255,255,255,0.03)'
+                    e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)'
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                    <div style={{ fontSize: '16px', fontWeight: 900 }}>{post.title}</div>
+                    <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)' }}>
+                      {new Date(post.created_at).toLocaleString('zh-CN')}
+                    </div>
+                  </div>
 
-            {post.content ? (
-              <div className="mt-2 text-sm opacity-80 whitespace-pre-wrap">
-                {post.content}
-              </div>
-            ) : null}
+                  {post.author_handle && (
+                    <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', marginBottom: '8px' }}>
+                      作者: <Link href={`/user/${post.author_handle}`} style={{ color: '#8b6fa8', textDecoration: 'none' }}>@{post.author_handle}</Link>
+                    </div>
+                  )}
 
-            {/* ✅ 插入点 2：posts 卡片底部追加（Tip / 互动） */}
-            <PostFooterActions post={post} />
-          </div>
-        ))}
-      </div>
+                  {post.content && (
+                    <div style={{ 
+                      marginTop: '12px', 
+                      fontSize: '14px', 
+                      color: 'rgba(255,255,255,0.8)', 
+                      lineHeight: 1.6,
+                      whiteSpace: 'pre-wrap',
+                    }}>
+                      {post.content}
+                    </div>
+                  )}
+
+                  <div style={{ 
+                    marginTop: '12px', 
+                    display: 'flex', 
+                    gap: '16px',
+                    paddingTop: '12px',
+                    borderTop: '1px solid rgba(255,255,255,0.06)',
+                  }}>
+                    <button
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        color: 'rgba(255,255,255,0.7)',
+                        fontSize: '13px',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                      }}
+                      onClick={() => alert('Like (mock)')}
+                    >
+                      <LikeIcon size={14} />
+                      <span>{post.like_count || 0}</span>
+                    </button>
+                    <button
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        color: 'rgba(255,255,255,0.7)',
+                        fontSize: '13px',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                      }}
+                      onClick={() => alert('Comment (mock)')}
+                    >
+                      <CommentIcon size={14} />
+                      <span>{post.comment_count || 0}</span>
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+      </main>
     </div>
   )
 }

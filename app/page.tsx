@@ -2,13 +2,16 @@
 
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase/client'
+import { tokens } from '@/lib/design-tokens'
 
-import TopNav from './components/TopNav'
-import RankingTable from './components/RankingTable'
-import PostFeed from './components/PostFeed'
-import MarketPanel from './components/MarketPanel'
-import Card from './components/Card'
-import TraderDrawer from './components/TraderDrawer'
+import TopNav from './components/Layout/TopNav'
+import RankingTable from './components/Features/RankingTable'
+import PostFeed from './components/Features/PostFeed'
+import MarketPanel from './components/Features/MarketPanel'
+import Card from './components/UI/Card'
+import TraderDrawer from './components/Features/TraderDrawer'
+import CompareTraders from './components/Features/CompareTraders'
+import { Box } from './components/Base'
 
 /* =====================
    Types
@@ -65,57 +68,59 @@ export default function HomePage() {
 
   /* ---------- trader drawer ---------- */
   const [selectedTrader, setSelectedTrader] = useState<Trader | null>(null)
+  const [compareTraders, setCompareTraders] = useState<Trader[]>([])
 
   return (
-    <div
+    <Box
       style={{
         minHeight: '100vh',
-        background: '#060606',
-        color: '#f2f2f2',
+        background: tokens.colors.bg.primary,
+        color: tokens.colors.text.primary,
       }}
     >
       {/* 顶部导航 */}
-      {/* @ts-expect-error: TopNav expects 'email' prop */}
       <TopNav email={email} />
 
       {/* 主体 */}
-      <main
+      <Box
+        as="main"
         style={{
           maxWidth: 1200,
           margin: '0 auto',
-          padding: '18px 16px',
+          px: 4,
+          py: 6,
         }}
       >
-        <div
+        <Box
           style={{
             display: 'grid',
             gridTemplateColumns: '320px 1fr 280px',
-            gap: 16,
+            gap: tokens.spacing[4],
           }}
         >
           {/* 左：热门讨论 */}
-          <section>
+          <Box as="section">
             <Card title="热门讨论">
               <PostFeed />
             </Card>
-          </section>
+          </Box>
 
           {/* 中：排名流（产品核心） */}
-          <section>
+          <Box as="section">
             <RankingTable
               traders={traders}
               loading={loadingTraders}
               loggedIn={!!email}
-              onSelectTrader={(t) => setSelectedTrader(t)}
+              onSelectTrader={setSelectedTrader}
             />
-          </section>
+          </Box>
 
           {/* 右：市场 */}
-          <section>
+          <Box as="section">
             <MarketPanel />
-          </section>
-        </div>
-      </main>
+          </Box>
+        </Box>
+      </Box>
 
       {/* 右侧 Trader 抽屉：不影响你原来的三栏 UI */}
       <TraderDrawer
@@ -123,6 +128,15 @@ export default function HomePage() {
         trader={selectedTrader as any}
         onClose={() => setSelectedTrader(null)}
       />
-    </div>
+
+      {/* 交易者对比面板 */}
+      {compareTraders.length > 0 && (
+        <CompareTraders
+          traders={compareTraders}
+          onRemove={(id) => setCompareTraders(compareTraders.filter((t) => t.id !== id))}
+          onClear={() => setCompareTraders([])}
+        />
+      )}
+    </Box>
   )
 }
