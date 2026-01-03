@@ -6,7 +6,7 @@ import { RankingSkeleton } from '../UI/Skeleton'
 import { RankingBadge } from '../Icons'
 import { Box, Text } from '../Base'
 
-interface Trader {
+export interface Trader {
   id: string
   handle: string | null
   roi: number // 90天ROI（固定）
