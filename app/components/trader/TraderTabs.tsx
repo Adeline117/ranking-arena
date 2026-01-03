@@ -23,8 +23,8 @@ export default function TraderTabs({ activeTab, onTabChange }: TraderTabsProps) 
       style={{
         display: 'flex',
         gap: tokens.spacing[6],
-        mb: 6,
-        pb: 4,
+        marginBottom: tokens.spacing[6],
+        paddingBottom: tokens.spacing[4],
         borderBottom: `1px solid ${tokens.colors.border.primary}`,
       }}
     >

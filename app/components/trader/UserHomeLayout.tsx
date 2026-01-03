@@ -59,7 +59,7 @@ export default function UserHomeLayout({
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'center',
-                mb: 4,
+                marginBottom: tokens.spacing[4],
               }}
             >
               <Text size="lg" weight="black">
