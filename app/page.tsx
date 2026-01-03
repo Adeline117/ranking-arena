@@ -5,25 +5,13 @@ import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
 
 import TopNav from './components/Layout/TopNav'
-import RankingTable from './components/Features/RankingTable'
+import RankingTable, { type Trader } from './components/Features/RankingTable'
 import PostFeed from './components/Features/PostFeed'
 import MarketPanel from './components/Features/MarketPanel'
 import Card from './components/UI/Card'
 import TraderDrawer from './components/Features/TraderDrawer'
 import CompareTraders from './components/Features/CompareTraders'
 import { Box } from './components/Base'
-
-/* =====================
-   Types
-===================== */
-
-export type Trader = {
-  id: string
-  handle: string
-  roi: number
-  win_rate: number
-  followers: number
-}
 
 /* =====================
    Page
@@ -111,7 +99,7 @@ export default function HomePage() {
               traders={traders}
               loading={loadingTraders}
               loggedIn={!!email}
-              onSelectTrader={setSelectedTrader}
+              onSelectTrader={(trader) => setSelectedTrader(trader)}
             />
           </Box>
 
