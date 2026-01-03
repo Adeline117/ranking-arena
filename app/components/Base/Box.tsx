@@ -4,7 +4,7 @@ import React from 'react'
 import { tokens } from '@/lib/design-tokens'
 
 export interface BoxProps extends React.HTMLAttributes<HTMLDivElement> {
-  as?: keyof JSX.IntrinsicElements
+  as?: React.ElementType
   p?: keyof typeof tokens.spacing
   px?: keyof typeof tokens.spacing
   py?: keyof typeof tokens.spacing
@@ -74,7 +74,7 @@ export function Box({
   }
 
   return (
-    <Component style={styles} {...props}>
+    <Component style={styles} {...(props as any)}>
       {children}
     </Component>
   )

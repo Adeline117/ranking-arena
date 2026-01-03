@@ -2,7 +2,14 @@
 
 import React from 'react'
 import Link from 'next/link'
-import { Trader } from './RankingTable'
+// Trader type - should match the type used in RankingTable
+type Trader = {
+  id: string
+  handle: string | null
+  roi: number
+  win_rate: number
+  followers: number
+}
 import { formatNumber, formatPercent } from '@/lib/design-system-helpers'
 
 type CompareTradersProps = {
