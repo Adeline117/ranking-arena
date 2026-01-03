@@ -9,7 +9,7 @@ import MarketPanel from '@/app/components/Features/MarketPanel'
 import PostFeed from '@/app/components/Features/PostFeed'
 import Card from '@/app/components/UI/Card'
 import { Box, Text } from '@/app/components/Base'
-import type { Trader } from '@/app/page'
+import type { Trader } from '@/app/components/Features/RankingTable'
 
 export default function GroupsPage() {
   const [email, setEmail] = useState<string | null>(null)
