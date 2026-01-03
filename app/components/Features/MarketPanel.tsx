@@ -73,7 +73,7 @@ export default function MarketPanel() {
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
-          mb: 3,
+          marginBottom: tokens.spacing[3],
         }}
       >
         <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
