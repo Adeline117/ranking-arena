@@ -111,7 +111,12 @@ export default function SearchPage() {
 
   const filteredResults = activeTab === 'all' 
     ? results 
-    : results.filter(r => r.type === activeTab || (activeTab === 'traders' && r.type === 'trader'))
+    : results.filter(r => {
+        if (activeTab === 'traders') return r.type === 'trader'
+        if (activeTab === 'groups') return r.type === 'group'
+        if (activeTab === 'posts') return r.type === 'post'
+        return false
+      })
 
   const getHref = (result: SearchResult) => {
     if (result.type === 'trader') return `/trader/${result.id}`
