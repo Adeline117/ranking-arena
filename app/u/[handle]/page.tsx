@@ -18,7 +18,7 @@ type Group = {
 }
 
 export default function UserHomePage(props: { params: { handle: string } | Promise<{ handle: string }> }) {
-  const resolvedParams = props.params && typeof props.params.then === 'function' ? use(props.params) : (props.params as { handle: string })
+  const resolvedParams = props.params && 'then' in props.params ? use(props.params as Promise<{ handle: string }>) : props.params
   const handle = resolvedParams?.handle ?? ''
 
   const [email, setEmail] = useState<string | null>(null)
