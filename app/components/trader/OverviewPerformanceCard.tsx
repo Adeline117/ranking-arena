@@ -79,7 +79,7 @@ export default function OverviewPerformanceCard({ performance }: OverviewPerform
       {/* ROI Display - 视觉权重最高 */}
       <Box style={{ marginBottom: tokens.spacing[8] }}>
         <Text
-          size="4xl"
+          size="3xl"
           weight="black"
           style={{
             color: roi >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error,
