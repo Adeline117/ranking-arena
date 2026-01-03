@@ -9,7 +9,7 @@ import MarketPanel from '@/app/components/Features/MarketPanel'
 import Card from '@/app/components/UI/Card'
 import RankingTableCompact from '@/app/components/Features/RankingTableCompact'
 import { Box, Text } from '@/app/components/Base'
-import type { Trader } from '@/app/page'
+import type { Trader } from '@/app/components/Features/RankingTable'
 
 type Post = {
   id: number
