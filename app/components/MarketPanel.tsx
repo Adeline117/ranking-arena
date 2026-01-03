@@ -78,7 +78,7 @@ export default function MarketPanel() {
           marginBottom: '12px',
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 950, fontSize: '16px', color: '#f2f2f2' }}>
-            <MarketIcon size={18} />
+            <ChartIcon size={18} />
             <span>市场行情</span>
           </div>
         {lastUpdate && !loading && !error && (
