@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { readFileSync } from 'fs'
+import { readFileSync } from 'fs'
 import { fileURLToPath } from 'url'
 import { dirname } from 'path'
 
