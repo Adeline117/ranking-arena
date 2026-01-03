@@ -36,6 +36,23 @@ export default function HomePage() {
       setLoadingTraders(true)
 
       // 从 trader_snapshots 获取最新的 ROI Top 100 数据
+      // 先获取最新的 captured_at，然后查询该批次的数据
+      const { data: latestSnapshot, error: latestError } = await supabase
+        .from('trader_snapshots')
+        .select('captured_at')
+        .eq('source', 'binance')
+        .order('captured_at', { ascending: false })
+        .limit(1)
+        .single()
+
+      if (latestError || !latestSnapshot) {
+        console.error('[ranking] latest snapshot error:', latestError)
+        setTraders([])
+        setLoadingTraders(false)
+        return
+      }
+
+      // 查询该批次的数据
       const { data, error } = await supabase
         .from('trader_snapshots')
         .select(`
@@ -43,9 +60,10 @@ export default function HomePage() {
           rank,
           roi,
           followers,
-          trader_sources!inner(handle)
+          trader_sources!trader_snapshots_source_source_trader_id_fkey(handle)
         `)
         .eq('source', 'binance')
+        .eq('captured_at', latestSnapshot.captured_at)
         .order('rank', { ascending: true })
         .limit(email ? 100 : 50)
 

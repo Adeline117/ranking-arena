@@ -27,32 +27,61 @@ export default function GroupsPage() {
   useEffect(() => {
     const load = async () => {
       setLoadingTraders(true)
-      const { data, error } = await supabase
+      
+      // 获取最新的 captured_at
+      const { data: latestSnapshot } = await supabase
         .from('trader_snapshots')
-        .select(`
-          source_trader_id,
-          rank,
-          roi,
-          followers,
-          trader_sources!inner(handle)
-        `)
+        .select('captured_at')
         .eq('source', 'binance')
+        .order('captured_at', { ascending: false })
+        .limit(1)
+        .single()
+
+      if (!latestSnapshot) {
+        setTraders([])
+        setLoadingTraders(false)
+        return
+      }
+
+      // 查询 snapshots
+      const { data: snapshots } = await supabase
+        .from('trader_snapshots')
+        .select('source_trader_id, rank, roi, followers')
+        .eq('source', 'binance')
+        .eq('captured_at', latestSnapshot.captured_at)
         .order('rank', { ascending: true })
         .limit(10)
 
-      if (!error && data) {
-        const tradersData: Trader[] = data.map((item: any) => ({
-          id: item.source_trader_id,
-          handle: item.trader_sources?.handle || item.source_trader_id,
-          roi: item.roi || 0,
-          win_rate: 0,
-          followers: item.followers || 0,
-        }))
-        setTraders(tradersData)
-      } else {
-        console.error('[groups ranking]', error)
+      if (!snapshots || snapshots.length === 0) {
         setTraders([])
+        setLoadingTraders(false)
+        return
       }
+
+      // 查询 handles
+      const traderIds = snapshots.map((s: any) => s.source_trader_id)
+      const { data: sources } = await supabase
+        .from('trader_sources')
+        .select('source_trader_id, handle')
+        .eq('source', 'binance')
+        .in('source_trader_id', traderIds)
+
+      const handleMap = new Map()
+      if (sources) {
+        sources.forEach((s: any) => {
+          handleMap.set(s.source_trader_id, s.handle)
+        })
+      }
+
+      const tradersData: Trader[] = snapshots.map((item: any) => ({
+        id: item.source_trader_id,
+        handle: handleMap.get(item.source_trader_id) || item.source_trader_id,
+        roi: item.roi || 0,
+        win_rate: 0,
+        followers: item.followers || 0,
+      }))
+
+      setTraders(tradersData)
       setLoadingTraders(false)
     }
     load()
