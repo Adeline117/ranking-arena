@@ -90,56 +90,71 @@ export async function getTraderByHandle(handle: string): Promise<TraderProfile |
   if (!handle) return null
 
   try {
-    // 先尝试从 traders 表获取
-    const { data: trader, error } = await supabase
-      .from('traders')
-      .select('id, handle, roi, win_rate, followers')
+    // 从 trader_sources 表获取交易员信息
+    const { data: source, error: sourceError } = await supabase
+      .from('trader_sources')
+      .select('source_trader_id, handle, profile_url')
+      .eq('source', 'binance')
       .eq('handle', handle)
       .maybeSingle()
 
-    if (error) {
-      console.error('Error fetching trader by handle:', error)
+    if (sourceError) {
+      console.error('Error fetching trader_source by handle:', sourceError)
       return null
     }
 
-    if (!trader) {
-      // 如果 traders 表中没有，尝试用 handle 作为 id 查询（向后兼容）
-      const { data: traderById, error: idError } = await supabase
-        .from('traders')
-        .select('id, handle, roi, win_rate, followers')
-        .eq('id', handle)
+    if (!source) {
+      // 如果 handle 匹配不到，尝试用 handle 作为 source_trader_id 查询
+      const { data: sourceById, error: idError } = await supabase
+        .from('trader_sources')
+        .select('source_trader_id, handle, profile_url')
+        .eq('source', 'binance')
+        .eq('source_trader_id', handle)
         .maybeSingle()
       
-      if (idError) {
-        console.error('Error fetching trader by id:', idError)
+      if (idError || !sourceById) {
         return null
       }
 
-      if (!traderById) {
-        return null
-      }
+      const foundSource = sourceById
       
-      // 使用找到的 trader
-      const foundTrader = traderById
-      const traderHandle = foundTrader.handle || foundTrader.id
-      
+      // 获取最新的 followers 数据
+      const { data: latestSnapshot } = await supabase
+        .from('trader_snapshots')
+        .select('followers')
+        .eq('source', 'binance')
+        .eq('source_trader_id', foundSource.source_trader_id)
+        .order('captured_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
       // 检查是否在平台注册（从 profiles 表）
       const { data: profile } = await supabase
         .from('profiles')
         .select('id, bio, avatar_url')
-        .eq('handle', traderHandle)
+        .eq('handle', foundSource.handle || foundSource.source_trader_id)
         .maybeSingle()
 
       return {
-        handle: traderHandle,
-        id: foundTrader.id,
-        bio: profile?.bio || `交易员 ${traderHandle} 的个人简介`,
-        followers: foundTrader.followers || 0,
+        handle: foundSource.handle || foundSource.source_trader_id,
+        id: foundSource.source_trader_id,
+        bio: profile?.bio || null,
+        followers: latestSnapshot?.followers || 0,
         copiers: 0,
-        avatar_url: profile?.avatar_url,
+        avatar_url: profile?.avatar_url || foundSource.profile_url || null,
         isRegistered: !!profile,
       }
     }
+
+    // 获取最新的 followers 数据
+    const { data: latestSnapshot } = await supabase
+      .from('trader_snapshots')
+      .select('followers')
+      .eq('source', 'binance')
+      .eq('source_trader_id', source.source_trader_id)
+      .order('captured_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
 
     // 检查是否在平台注册（从 profiles 表）
     const { data: profile } = await supabase
@@ -149,12 +164,12 @@ export async function getTraderByHandle(handle: string): Promise<TraderProfile |
       .maybeSingle()
 
     return {
-      handle: trader.handle,
-      id: trader.id,
-      bio: profile?.bio || `交易员 ${handle} 的个人简介`,
-      followers: trader.followers || 0,
-      copiers: 0, // TODO: 从 copiers 表获取
-      avatar_url: profile?.avatar_url,
+      handle: source.handle || source.source_trader_id,
+      id: source.source_trader_id,
+      bio: profile?.bio || null,
+      followers: latestSnapshot?.followers || 0,
+      copiers: 0,
+      avatar_url: profile?.avatar_url || source.profile_url || null,
       isRegistered: !!profile,
     }
   } catch (error) {
@@ -167,41 +182,45 @@ export async function getTraderByHandle(handle: string): Promise<TraderProfile |
  * 获取交易员绩效数据
  */
 export async function getTraderPerformance(handle: string, period: '7D' | '30D' | '90D' | '1Y' | '2Y' | 'All' = '90D'): Promise<TraderPerformance> {
-  // TODO: 从真实数据表获取
-  // 目前使用 mock 数据
-  return {
-    roi_7d: 2.5,
-    roi_30d: 8.3,
-    roi_90d: 15.7,
-    roi_1y: 45.2,
-    roi_2y: 120.5,
-    return_ytd: 12.3,
-    return_2y: 187.87,
-    risk_score_last_7d: 6,
-    profitable_weeks: 45.61,
-    monthlyPerformance: [
-      { month: 'Jan', value: 5.57 },
-      { month: 'Feb', value: -23.53 },
-      { month: 'Mar', value: -7.51 },
-      { month: 'Apr', value: 9.65 },
-      { month: 'May', value: 17.86 },
-      { month: 'Jun', value: 1.13 },
-      { month: 'Jul', value: 20.97 },
-      { month: 'Aug', value: 3.11 },
-      { month: 'Sep', value: 0.42 },
-      { month: 'Oct', value: -5.62 },
-      { month: 'Nov', value: -19.30 },
-      { month: 'Dec', value: -1.77 },
-    ],
-    yearlyPerformance: [
-      { year: 2019, value: 15.2 },
-      { year: 2020, value: 85.3 },
-      { year: 2021, value: 42.1 },
-      { year: 2022, value: -18.5 },
-      { year: 2023, value: 81.76 },
-      { year: 2024, value: 73.21 },
-      { year: 2025, value: -8.56 },
-    ],
+  try {
+    // 先获取 source_trader_id
+    const { data: source } = await supabase
+      .from('trader_sources')
+      .select('source_trader_id')
+      .eq('source', 'binance')
+      .or(`handle.eq.${handle},source_trader_id.eq.${handle}`)
+      .maybeSingle()
+
+    if (!source) {
+      // 如果没有找到，返回默认值
+      return {
+        roi_90d: 0,
+        return_ytd: 0,
+      }
+    }
+
+    // 获取最新的 ROI 数据（90天）
+    const { data: latestSnapshot } = await supabase
+      .from('trader_snapshots')
+      .select('roi')
+      .eq('source', 'binance')
+      .eq('source_trader_id', source.source_trader_id)
+      .order('captured_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    // 返回真实数据（目前只有 90D ROI，其他字段暂时使用默认值）
+    return {
+      roi_90d: latestSnapshot?.roi || 0,
+      return_ytd: latestSnapshot?.roi || 0,
+      // 其他字段暂时保持为空，等有真实数据源后再补充
+    }
+  } catch (error) {
+    console.error('Error in getTraderPerformance:', error)
+    return {
+      roi_90d: 0,
+      return_ytd: 0,
+    }
   }
 }
 
@@ -369,22 +388,61 @@ export async function getTraderFeed(handle: string): Promise<TraderFeedItem[]> {
  */
 export async function getSimilarTraders(handle: string, limit: number = 6): Promise<TraderProfile[]> {
   try {
-    // TODO: 根据算法获取相似交易员
-    // 目前随机返回一些交易员
-    const { data: traders } = await supabase
-      .from('traders')
-      .select('id, handle, followers')
-      .neq('handle', handle)
-      .order('followers', { ascending: false })
+    // 从 trader_sources 和 trader_snapshots 获取相似交易员（按 ROI 排名）
+    const { data: latestSnapshot } = await supabase
+      .from('trader_snapshots')
+      .select('captured_at')
+      .eq('source', 'binance')
+      .order('captured_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (!latestSnapshot) return []
+
+    // 获取当前交易员的 source_trader_id
+    const { data: currentSource } = await supabase
+      .from('trader_sources')
+      .select('source_trader_id')
+      .eq('source', 'binance')
+      .or(`handle.eq.${handle},source_trader_id.eq.${handle}`)
+      .maybeSingle()
+
+    // 获取最新的排名数据，排除当前交易员
+    const { data: snapshots } = await supabase
+      .from('trader_snapshots')
+      .select('source_trader_id, roi, followers')
+      .eq('source', 'binance')
+      .eq('captured_at', latestSnapshot.captured_at)
+      .neq('source_trader_id', currentSource?.source_trader_id || '')
+      .order('roi', { ascending: false })
       .limit(limit)
 
-    if (!traders) return []
+    if (!snapshots || snapshots.length === 0) return []
 
-    return traders.map((t) => ({
-      handle: t.handle,
-      id: t.id,
-      followers: t.followers || 0,
-    }))
+    // 获取对应的 handles
+    const traderIds = snapshots.map((s: any) => s.source_trader_id)
+    const { data: sources } = await supabase
+      .from('trader_sources')
+      .select('source_trader_id, handle, profile_url')
+      .eq('source', 'binance')
+      .in('source_trader_id', traderIds)
+
+    const handleMap = new Map()
+    if (sources) {
+      sources.forEach((s: any) => {
+        handleMap.set(s.source_trader_id, { handle: s.handle || s.source_trader_id, profile_url: s.profile_url })
+      })
+    }
+
+    return snapshots.map((s: any) => {
+      const sourceInfo = handleMap.get(s.source_trader_id) || { handle: s.source_trader_id, profile_url: null }
+      return {
+        handle: sourceInfo.handle,
+        id: s.source_trader_id,
+        followers: s.followers || 0,
+        avatar_url: sourceInfo.profile_url || null,
+      }
+    })
   } catch (error) {
     console.error('Error fetching similar traders:', error)
     return []
