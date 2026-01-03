@@ -28,13 +28,27 @@ export default function GroupsPage() {
     const load = async () => {
       setLoadingTraders(true)
       const { data, error } = await supabase
-        .from('traders')
-        .select('id, handle, roi, win_rate, followers')
-        .order('roi', { ascending: false })
-        .limit(10) // 只显示前10名
+        .from('trader_snapshots')
+        .select(`
+          source_trader_id,
+          rank,
+          roi,
+          followers,
+          trader_sources!inner(handle)
+        `)
+        .eq('source', 'binance')
+        .order('rank', { ascending: true })
+        .limit(10)
 
       if (!error && data) {
-        setTraders(data as Trader[])
+        const tradersData: Trader[] = data.map((item: any) => ({
+          id: item.source_trader_id,
+          handle: item.trader_sources?.handle || item.source_trader_id,
+          roi: item.roi || 0,
+          win_rate: 0,
+          followers: item.followers || 0,
+        }))
+        setTraders(tradersData)
       } else {
         console.error('[groups ranking]', error)
         setTraders([])
