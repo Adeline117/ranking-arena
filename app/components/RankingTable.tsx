@@ -119,7 +119,7 @@ export default function RankingTable(props: {
               >
                 {/* 排名 */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  {rank <= 3 && <RankingBadge rank={rank} />}
+                  {rank <= 3 && <RankingBadge rank={rank as 1 | 2 | 3} />}
                   <span style={{ 
                     color: rank <= 3 ? rankColors.text : '#8b8b8b', 
                     fontWeight: 950,
