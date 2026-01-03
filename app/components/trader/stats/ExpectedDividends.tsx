@@ -44,7 +44,7 @@ export default function ExpectedDividends({ data }: ExpectedDividendsProps) {
           display: 'grid',
           gridTemplateColumns: 'repeat(2, 1fr)',
           gap: tokens.spacing[4],
-          mb: 4,
+          marginBottom: tokens.spacing[4],
         }}
       >
         <Box>
