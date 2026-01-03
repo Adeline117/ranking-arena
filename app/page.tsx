@@ -84,11 +84,11 @@ export default function HomePage() {
       {/* 主体 */}
       <Box
         as="main"
+        px={4}
+        py={6}
         style={{
           maxWidth: 1200,
           margin: '0 auto',
-          px: 4,
-          py: 6,
         }}
       >
         <Box
