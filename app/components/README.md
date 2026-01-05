@@ -47,11 +47,14 @@ components/
     ├── TraderAboutCard.tsx        # 交易者信息卡片
     ├── OverviewPerformanceCard.tsx # 概览性能卡片
     ├── PortfolioTable.tsx          # 投资组合表格
-    ├── TraderFeed.tsx              # 交易者动态
+    ├── TraderFeed.tsx              # 交易者动态（支持All/Top排序）
+    ├── PinnedPost.tsx              # 置顶帖子组件
+    ├── ClaimTraderButton.tsx       # 交易员认领按钮
     ├── SimilarTraders.tsx          # 相似交易者
     ├── TradingViewShell.tsx        # 图表容器
     ├── UserHomeLayout.tsx          # 用户主页布局
     └── stats/                      # 统计相关组件
+        ├── StatsPage.tsx           # 统计页面（完整版，包含Performance、Risk、Compare、Trading、Breakdown等）
         ├── TrustStats.tsx          # 信任指标
         ├── TradingStats.tsx        # 交易统计
         ├── ExpectedDividends.tsx   # 预期股息
