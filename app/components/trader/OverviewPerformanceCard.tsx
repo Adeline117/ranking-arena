@@ -186,7 +186,6 @@ function InfoIcon({ tooltip }: { tooltip: string }) {
             borderRadius: tokens.radius.md,
             fontSize: tokens.typography.fontSize.xs,
             color: tokens.colors.text.primary,
-            whiteSpace: 'nowrap',
             zIndex: 1000,
             pointerEvents: 'none',
             maxWidth: 200,

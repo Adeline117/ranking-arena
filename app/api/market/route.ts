@@ -12,7 +12,13 @@ type MarketRow = {
 const TTL_MS = 60_000
 
 // ✅ 你想展示的币（你可以随时加）
-const PAIRS = [
+type Pair = {
+  symbol: string
+  cgId: string
+  cbProduct: string
+}
+
+const PAIRS: Pair[] = [
   { symbol: 'BTC-USD', cgId: 'bitcoin', cbProduct: 'BTC-USD' },
   { symbol: 'ETH-USD', cgId: 'ethereum', cbProduct: 'ETH-USD' },
   { symbol: 'SOL-USD', cgId: 'solana', cbProduct: 'SOL-USD' },
@@ -25,7 +31,7 @@ const PAIRS = [
   { symbol: 'LINK-USD', cgId: 'chainlink', cbProduct: 'LINK-USD' },
   { symbol: 'MATIC-USD', cgId: 'matic-network', cbProduct: 'MATIC-USD' },
   { symbol: 'DOT-USD', cgId: 'polkadot', cbProduct: 'DOT-USD' },
-] as const
+]
 
 // ---- 简单内存缓存（60s）----
 // 注意：在 Serverless 环境可能会被重置（但仍然能显著减少调用）。
@@ -161,7 +167,7 @@ export async function GET(request: Request) {
 }
 
 // 为特定pairs获取数据
-async function fetchFromCoinGeckoForPairs(pairs: typeof PAIRS): Promise<MarketRow[]> {
+async function fetchFromCoinGeckoForPairs(pairs: Pair[]): Promise<MarketRow[]> {
   const ids = pairs.map((p) => p.cgId).join(',')
   const url =
     'https://api.coingecko.com/api/v3/coins/markets' +
@@ -198,7 +204,7 @@ async function fetchFromCoinGeckoForPairs(pairs: typeof PAIRS): Promise<MarketRo
   return rows
 }
 
-async function fetchFromCoinbaseForPairs(pairs: typeof PAIRS): Promise<MarketRow[]> {
+async function fetchFromCoinbaseForPairs(pairs: Pair[]): Promise<MarketRow[]> {
   const base = 'https://api.exchange.coinbase.com'
 
   const rows = await Promise.all(
