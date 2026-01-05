@@ -22,6 +22,11 @@ export default function SettingsPage() {
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [avatarFile, setAvatarFile] = useState<File | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  
+  // Account bindings
+  const [binanceId, setBinanceId] = useState('')
+  const [bybitId, setBybitId] = useState('')
+  const [walletAddress, setWalletAddress] = useState('')
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -54,6 +59,20 @@ export default function SettingsPage() {
         setBio(profile.bio || '')
         setAvatarUrl(profile.avatar_url || null)
         setPreviewUrl(profile.avatar_url || null)
+        
+        // Load account bindings
+        const { data: bindings } = await supabase
+          .from('account_bindings')
+          .select('platform, account_id')
+          .eq('user_id', uid)
+        
+        if (bindings) {
+          bindings.forEach((binding: any) => {
+            if (binding.platform === 'binance') setBinanceId(binding.account_id || '')
+            if (binding.platform === 'bybit') setBybitId(binding.account_id || '')
+            if (binding.platform === 'wallet') setWalletAddress(binding.account_id || '')
+          })
+        }
       } else {
         // Try user_profiles table
         const { data: userProfile } = await supabase
@@ -154,8 +173,20 @@ export default function SettingsPage() {
         }
       }
       
-      // Redirect to user profile
-      router.push(`/user/${userId}`)
+      // Save account bindings
+      const bindings = []
+      if (binanceId) bindings.push({ user_id: userId, platform: 'binance', account_id: binanceId })
+      if (bybitId) bindings.push({ user_id: userId, platform: 'bybit', account_id: bybitId })
+      if (walletAddress) bindings.push({ user_id: userId, platform: 'wallet', account_id: walletAddress })
+      
+      if (bindings.length > 0) {
+        // Delete old bindings and insert new ones
+        await supabase.from('account_bindings').delete().eq('user_id', userId)
+        await supabase.from('account_bindings').insert(bindings)
+      }
+      
+      alert('保存成功！')
+      router.push(`/u/${handle || userId}`)
     } catch (error) {
       console.error('Error saving:', error)
       alert('保存失败，请重试')
@@ -312,6 +343,93 @@ export default function SettingsPage() {
           />
         </Box>
 
+        {/* Account Bindings Section */}
+        <Box
+          bg="secondary"
+          p={6}
+          radius="xl"
+          border="primary"
+          style={{ marginBottom: tokens.spacing[6] }}
+        >
+          <Text size="lg" weight="black" style={{ marginBottom: tokens.spacing[4] }}>
+            绑定交易账号
+          </Text>
+          <Text size="sm" color="tertiary" style={{ marginBottom: tokens.spacing[4] }}>
+            绑定您的交易账号后，如果该账号在排行榜上，系统将自动合并账号
+          </Text>
+          
+          <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
+            <Box>
+              <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[2], display: 'block' }}>
+                Binance 账号ID
+              </Text>
+              <input
+                type="text"
+                value={binanceId}
+                onChange={(e) => setBinanceId(e.target.value)}
+                placeholder="输入您的 Binance 账号ID"
+                style={{
+                  width: '100%',
+                  padding: tokens.spacing[3],
+                  borderRadius: tokens.radius.md,
+                  border: `1px solid ${tokens.colors.border.primary}`,
+                  background: tokens.colors.bg.primary,
+                  color: tokens.colors.text.primary,
+                  fontSize: tokens.typography.fontSize.base,
+                  fontFamily: tokens.typography.fontFamily.sans.join(', '),
+                  outline: 'none',
+                }}
+              />
+            </Box>
+            
+            <Box>
+              <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[2], display: 'block' }}>
+                Bybit 账号ID
+              </Text>
+              <input
+                type="text"
+                value={bybitId}
+                onChange={(e) => setBybitId(e.target.value)}
+                placeholder="输入您的 Bybit 账号ID"
+                style={{
+                  width: '100%',
+                  padding: tokens.spacing[3],
+                  borderRadius: tokens.radius.md,
+                  border: `1px solid ${tokens.colors.border.primary}`,
+                  background: tokens.colors.bg.primary,
+                  color: tokens.colors.text.primary,
+                  fontSize: tokens.typography.fontSize.base,
+                  fontFamily: tokens.typography.fontFamily.sans.join(', '),
+                  outline: 'none',
+                }}
+              />
+            </Box>
+            
+            <Box>
+              <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[2], display: 'block' }}>
+                钱包地址
+              </Text>
+              <input
+                type="text"
+                value={walletAddress}
+                onChange={(e) => setWalletAddress(e.target.value)}
+                placeholder="输入您的钱包地址（0x...）"
+                style={{
+                  width: '100%',
+                  padding: tokens.spacing[3],
+                  borderRadius: tokens.radius.md,
+                  border: `1px solid ${tokens.colors.border.primary}`,
+                  background: tokens.colors.bg.primary,
+                  color: tokens.colors.text.primary,
+                  fontSize: tokens.typography.fontSize.base,
+                  fontFamily: tokens.typography.fontFamily.sans.join(', '),
+                  outline: 'none',
+                }}
+              />
+            </Box>
+          </Box>
+        </Box>
+
         {/* Save Button */}
         <Box style={{ display: 'flex', justifyContent: 'flex-end', gap: tokens.spacing[3] }}>
           <Button
@@ -333,4 +451,5 @@ export default function SettingsPage() {
     </Box>
   )
 }
+
 

@@ -9,7 +9,6 @@ import RankingTable, { type Trader } from './components/Features/RankingTable'
 import PostFeed from './components/Features/PostFeed'
 import MarketPanel from './components/Features/MarketPanel'
 import Card from './components/UI/Card'
-import TraderDrawer from './components/Features/TraderDrawer'
 import CompareTraders from './components/Features/CompareTraders'
 import { Box } from './components/Base'
 
@@ -114,8 +113,7 @@ export default function HomePage() {
     load()
   }, [email])
 
-  /* ---------- trader drawer ---------- */
-  const [selectedTrader, setSelectedTrader] = useState<Trader | null>(null)
+  /* ---------- trader compare ---------- */
   const [compareTraders, setCompareTraders] = useState<Trader[]>([])
 
   return (
@@ -159,7 +157,6 @@ export default function HomePage() {
               traders={traders}
               loading={loadingTraders}
               loggedIn={!!email}
-              onSelectTrader={(trader) => setSelectedTrader(trader)}
             />
           </Box>
 
@@ -169,13 +166,6 @@ export default function HomePage() {
           </Box>
         </Box>
       </Box>
-
-      {/* 右侧 Trader 抽屉：不影响你原来的三栏 UI */}
-      <TraderDrawer
-        open={!!selectedTrader}
-        trader={selectedTrader as any}
-        onClose={() => setSelectedTrader(null)}
-      />
 
       {/* 交易者对比面板 */}
       {compareTraders.length > 0 && (

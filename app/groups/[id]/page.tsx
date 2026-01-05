@@ -40,14 +40,18 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
   
   const { t } = useLanguage()
   const [email, setEmail] = useState<string | null>(null)
+  const [userId, setUserId] = useState<string | null>(null)
   const [group, setGroup] = useState<Group | null>(null)
   const [posts, setPosts] = useState<Post[]>([])
+  const [isMember, setIsMember] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [joining, setJoining] = useState(false)
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
       setEmail(data.user?.email ?? null)
+      setUserId(data.user?.id ?? null)
     })
   }, [])
 
@@ -87,6 +91,17 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
         } else {
           setPosts((postsData || []) as Post[])
         }
+
+        // 检查用户是否是成员
+        if (userId) {
+          const { data: membership } = await supabase
+            .from('group_members')
+            .select('*')
+            .eq('group_id', groupId)
+            .eq('user_id', userId)
+            .maybeSingle()
+          setIsMember(!!membership)
+        }
       } catch (err: any) {
         setError(err?.message || '加载失败')
       } finally {
@@ -95,7 +110,7 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
     }
 
     load()
-  }, [groupId])
+  }, [groupId, userId])
 
   if (loading) {
     return (
@@ -149,32 +164,82 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
           </Link>
         </div>
 
-        {/* New Post Button */}
-        <div style={{ marginBottom: '24px' }}>
-          <Link
-            href={`/groups/${groupId}/new`}
-            style={{
-              display: 'inline-block',
-              padding: '12px 20px',
-              background: '#8b6fa8',
-              color: '#fff',
-              borderRadius: '12px',
-              textDecoration: 'none',
-              fontWeight: 900,
-              fontSize: '14px',
-              transition: 'all 200ms ease',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = '#a085b8'
-              e.currentTarget.style.transform = 'translateY(-1px)'
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = '#8b6fa8'
-              e.currentTarget.style.transform = 'translateY(0)'
-            }}
-          >
-            + 发新帖
-          </Link>
+        {/* Actions */}
+        <div style={{ marginBottom: '24px', display: 'flex', gap: '12px', alignItems: 'center' }}>
+          {userId ? (
+            <>
+              {isMember ? (
+                <Link
+                  href={`/groups/${groupId}/new`}
+                  style={{
+                    display: 'inline-block',
+                    padding: '12px 20px',
+                    background: '#8b6fa8',
+                    color: '#fff',
+                    borderRadius: '12px',
+                    textDecoration: 'none',
+                    fontWeight: 900,
+                    fontSize: '14px',
+                    transition: 'all 200ms ease',
+                  }}
+                >
+                  + 发新帖
+                </Link>
+              ) : (
+                <button
+                  onClick={async () => {
+                    if (!userId) {
+                      alert('请先登录')
+                      return
+                    }
+                    setJoining(true)
+                    try {
+                      const { error } = await supabase
+                        .from('group_members')
+                        .insert({ group_id: groupId, user_id: userId })
+                      if (error) throw error
+                      setIsMember(true)
+                      alert('成功加入小组！')
+                    } catch (err: any) {
+                      alert('加入失败: ' + err.message)
+                    } finally {
+                      setJoining(false)
+                    }
+                  }}
+                  disabled={joining}
+                  style={{
+                    padding: '12px 20px',
+                    background: '#8b6fa8',
+                    color: '#fff',
+                    borderRadius: '12px',
+                    border: 'none',
+                    fontWeight: 900,
+                    fontSize: '14px',
+                    cursor: joining ? 'not-allowed' : 'pointer',
+                    opacity: joining ? 0.6 : 1,
+                  }}
+                >
+                  {joining ? '加入中...' : '+ 加入小组'}
+                </button>
+              )}
+            </>
+          ) : (
+            <Link
+              href="/login"
+              style={{
+                display: 'inline-block',
+                padding: '12px 20px',
+                background: '#8b6fa8',
+                color: '#fff',
+                borderRadius: '12px',
+                textDecoration: 'none',
+                fontWeight: 900,
+                fontSize: '14px',
+              }}
+            >
+              登录后加入
+            </Link>
+          )}
         </div>
 
         {/* Posts */}
@@ -217,8 +282,27 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
                   </div>
 
                   {post.author_handle && (
-                    <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', marginBottom: '8px' }}>
-                      作者: <Link href={`/user/${post.author_handle}`} style={{ color: '#8b6fa8', textDecoration: 'none' }}>@{post.author_handle}</Link>
+                    <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span>作者: <Link href={`/trader/${encodeURIComponent(post.author_handle)}`} style={{ color: '#8b6fa8', textDecoration: 'none' }}>@{post.author_handle}</Link></span>
+                      {userId && userId !== post.author_handle && (
+                        <button
+                          onClick={async () => {
+                            // TODO: 实现关注作者功能
+                            alert('关注功能待实现')
+                          }}
+                          style={{
+                            padding: '4px 8px',
+                            background: 'rgba(139, 111, 168, 0.2)',
+                            color: '#8b6fa8',
+                            border: '1px solid #8b6fa8',
+                            borderRadius: '6px',
+                            fontSize: '11px',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          关注
+                        </button>
+                      )}
                     </div>
                   )}
 

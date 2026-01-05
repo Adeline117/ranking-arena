@@ -7,6 +7,7 @@ import type { TraderPerformance } from '@/lib/data/trader'
 
 interface OverviewPerformanceCardProps {
   performance: TraderPerformance
+  profitableWeeksPct?: number
 }
 
 type Period = '90D' | '7D' | '30D' | '1Y' | '2Y' | 'All'
@@ -16,7 +17,7 @@ type Period = '90D' | '7D' | '30D' | '1Y' | '2Y' | 'All'
  * ROI视觉权重最高，其他指标中性色
  * 时间选择弱化，默认90天
  */
-export default function OverviewPerformanceCard({ performance }: OverviewPerformanceCardProps) {
+export default function OverviewPerformanceCard({ performance, profitableWeeksPct }: OverviewPerformanceCardProps) {
   const [period, setPeriod] = useState<Period>('90D')
 
   const getROI = () => {
@@ -107,30 +108,95 @@ export default function OverviewPerformanceCard({ performance }: OverviewPerform
         }}
       >
         <Box>
-          <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[1] }}>
-            Return YTD
-          </Text>
+          <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1] }}>
+            <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[1] }}>
+              Return YTD
+            </Text>
+            <InfoIcon tooltip="年初至今的收益率，反映交易员今年的整体表现" />
+          </Box>
           <Text size="base" weight="bold" style={{ color: tokens.colors.text.secondary }}>
             {performance.return_ytd ? (performance.return_ytd >= 0 ? '+' : '') + performance.return_ytd.toFixed(2) + '%' : 'N/A'}
           </Text>
         </Box>
         <Box>
-          <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[1] }}>
-            Return 2Y
-          </Text>
+          <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1] }}>
+            <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[1] }}>
+              Return 2Y
+            </Text>
+            <InfoIcon tooltip="过去两年的收益率，反映交易员的长期盈利能力" />
+          </Box>
           <Text size="base" weight="bold" style={{ color: tokens.colors.text.secondary }}>
             {performance.return_2y ? (performance.return_2y >= 0 ? '+' : '') + performance.return_2y.toFixed(2) + '%' : 'N/A'}
           </Text>
         </Box>
         <Box>
-          <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[1] }}>
-            Risk Score
-          </Text>
+          <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1] }}>
+            <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[1] }}>
+              Profitable Weeks
+            </Text>
+            <InfoIcon tooltip="盈利周数占总周数的百分比，反映交易员盈利能力的稳定性" />
+          </Box>
           <Text size="base" weight="bold" style={{ color: tokens.colors.text.secondary }}>
-            {performance.risk_score_last_7d || 'N/A'}
+            {profitableWeeksPct !== undefined ? `${profitableWeeksPct.toFixed(2)}%` : 'N/A'}
           </Text>
         </Box>
       </Box>
+    </Box>
+  )
+}
+
+// Info Icon Component
+function InfoIcon({ tooltip }: { tooltip: string }) {
+  const [showTooltip, setShowTooltip] = useState(false)
+
+  return (
+    <Box
+      style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}
+      onMouseEnter={() => setShowTooltip(true)}
+      onMouseLeave={() => setShowTooltip(false)}
+    >
+      <Box
+        style={{
+          width: 14,
+          height: 14,
+          borderRadius: '50%',
+          border: `1px solid ${tokens.colors.text.tertiary}`,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          cursor: 'help',
+          fontSize: '10px',
+          color: tokens.colors.text.tertiary,
+          flexShrink: 0,
+        }}
+      >
+        i
+      </Box>
+      {showTooltip && (
+        <Box
+          style={{
+            position: 'absolute',
+            bottom: '100%',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            marginBottom: tokens.spacing[1],
+            padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+            background: tokens.colors.bg.tertiary,
+            border: `1px solid ${tokens.colors.border.primary}`,
+            borderRadius: tokens.radius.md,
+            fontSize: tokens.typography.fontSize.xs,
+            color: tokens.colors.text.primary,
+            whiteSpace: 'nowrap',
+            zIndex: 1000,
+            pointerEvents: 'none',
+            maxWidth: 200,
+            whiteSpace: 'normal',
+            textAlign: 'center',
+          }}
+        >
+          {tooltip}
+        </Box>
+      )}
     </Box>
   )
 }

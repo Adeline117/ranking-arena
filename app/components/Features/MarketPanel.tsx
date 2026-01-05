@@ -2,11 +2,12 @@
 
 import { useEffect, useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
+import { supabase } from '@/lib/supabase/client'
 import { SkeletonLine } from '../UI/Skeleton'
 import EmptyState from '../UI/EmptyState'
 import ErrorMessage from '../UI/ErrorMessage'
 import { ChartIcon } from '../Icons'
-import { Box, Text } from '../Base'
+import { Box, Text, Button } from '../Base'
 
 type MarketRow = {
   symbol: string
@@ -20,6 +21,49 @@ export default function MarketPanel() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null)
+  const [showCustomize, setShowCustomize] = useState(false)
+  const [customPairs, setCustomPairs] = useState<string[]>(['BTC-USD', 'ETH-USD', 'SOL-USD', 'ARB-USD'])
+  const [userId, setUserId] = useState<string | null>(null)
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      setUserId(data.user?.id ?? null)
+      if (data.user?.id) {
+        // 加载用户自定义的币种
+        loadCustomPairs(data.user.id)
+      }
+    })
+  }, [])
+
+  const loadCustomPairs = async (uid: string) => {
+    try {
+      const { data } = await supabase
+        .from('profiles')
+        .select('market_pairs')
+        .eq('id', uid)
+        .maybeSingle()
+      if (data?.market_pairs && Array.isArray(data.market_pairs)) {
+        setCustomPairs(data.market_pairs)
+      }
+    } catch (err) {
+      console.error('Load custom pairs error:', err)
+    }
+  }
+
+  const saveCustomPairs = async (pairs: string[]) => {
+    if (!userId) return
+    try {
+      await supabase
+        .from('profiles')
+        .update({ market_pairs: pairs })
+        .eq('id', userId)
+      setCustomPairs(pairs)
+      setShowCustomize(false)
+    } catch (err) {
+      console.error('Save custom pairs error:', err)
+      alert('保存失败，请重试')
+    }
+  }
 
   useEffect(() => {
     let alive = true
@@ -28,7 +72,8 @@ export default function MarketPanel() {
       try {
         setLoading(true)
         setError(null)
-        const res = await fetch('/api/market', { cache: 'no-store' })
+        const pairsParam = customPairs.join(',')
+        const res = await fetch(`/api/market?pairs=${encodeURIComponent(pairsParam)}`, { cache: 'no-store' })
         const json = await res.json()
         if (!alive) return
 
@@ -36,7 +81,11 @@ export default function MarketPanel() {
           setError(json.error)
           setMarket([])
         } else {
-          setMarket(json.rows ?? [])
+          // 过滤出用户自定义的币种
+          const filteredRows = (json.rows ?? []).filter((row: MarketRow) =>
+            customPairs.includes(row.symbol)
+          )
+          setMarket(filteredRows)
           setLastUpdate(new Date())
         }
       } catch (err: any) {
@@ -55,7 +104,7 @@ export default function MarketPanel() {
       alive = false
       clearInterval(t)
     }
-  }, [])
+  }, [customPairs])
 
   const formatTime = (date: Date) => {
     const now = new Date()
@@ -164,20 +213,137 @@ export default function MarketPanel() {
             ))}
           </Box>
           <Box
-            bg="primary"
-            p={2}
-            radius="md"
             style={{
               marginTop: tokens.spacing[3],
-              fontSize: tokens.typography.fontSize.xs,
-              color: tokens.colors.text.tertiary,
-              textAlign: 'center',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: tokens.spacing[2],
             }}
           >
-            每3秒自动刷新
+            <Box
+              bg="primary"
+              p={2}
+              radius="md"
+              style={{
+                fontSize: tokens.typography.fontSize.xs,
+                color: tokens.colors.text.tertiary,
+                textAlign: 'center',
+              }}
+            >
+              每3秒自动刷新
+            </Box>
+            {userId && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowCustomize(!showCustomize)}
+                style={{
+                  fontSize: tokens.typography.fontSize.xs,
+                  padding: tokens.spacing[2],
+                }}
+              >
+                {showCustomize ? '完成' : '自定义显示'}
+              </Button>
+            )}
+            {showCustomize && userId && (
+              <MarketCustomizePanel
+                currentPairs={customPairs}
+                onSave={saveCustomPairs}
+                onCancel={() => setShowCustomize(false)}
+              />
+            )}
           </Box>
         </>
       )}
+    </Box>
+  )
+}
+
+// 自定义币种面板
+function MarketCustomizePanel({
+  currentPairs,
+  onSave,
+  onCancel,
+}: {
+  currentPairs: string[]
+  onSave: (pairs: string[]) => void
+  onCancel: () => void
+}) {
+  const [selectedPairs, setSelectedPairs] = useState<string[]>(currentPairs)
+  const availablePairs = [
+    'BTC-USD', 'ETH-USD', 'SOL-USD', 'ARB-USD', 'BNB-USD', 'XRP-USD',
+    'ADA-USD', 'DOGE-USD', 'AVAX-USD', 'LINK-USD', 'MATIC-USD', 'DOT-USD',
+  ]
+
+  const togglePair = (pair: string) => {
+    setSelectedPairs((prev) =>
+      prev.includes(pair)
+        ? prev.filter((p) => p !== pair)
+        : [...prev, pair].slice(0, 6) // 最多选择6个
+    )
+  }
+
+  return (
+    <Box
+      bg="secondary"
+      p={4}
+      radius="lg"
+      border="primary"
+      style={{
+        marginTop: tokens.spacing[2],
+        display: 'flex',
+        flexDirection: 'column',
+        gap: tokens.spacing[3],
+      }}
+    >
+      <Text size="sm" weight="bold">
+        选择要显示的币种（最多6个）
+      </Text>
+      <Box
+        style={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: tokens.spacing[2],
+        }}
+      >
+        {availablePairs.map((pair) => (
+          <button
+            key={pair}
+            onClick={() => togglePair(pair)}
+            style={{
+              padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+              borderRadius: tokens.radius.md,
+              border: `1px solid ${
+                selectedPairs.includes(pair)
+                  ? tokens.colors.accent.primary
+                  : tokens.colors.border.secondary
+              }`,
+              background: selectedPairs.includes(pair)
+                ? tokens.colors.accent.primary + '20'
+                : tokens.colors.bg.primary,
+              color: tokens.colors.text.primary,
+              fontSize: tokens.typography.fontSize.xs,
+              cursor: 'pointer',
+              fontWeight: selectedPairs.includes(pair) ? 700 : 400,
+            }}
+          >
+            {pair.replace('-USD', '')}
+          </button>
+        ))}
+      </Box>
+      <Box style={{ display: 'flex', gap: tokens.spacing[2] }}>
+        <Button
+          variant="primary"
+          size="sm"
+          onClick={() => onSave(selectedPairs)}
+          disabled={selectedPairs.length === 0}
+        >
+          保存
+        </Button>
+        <Button variant="ghost" size="sm" onClick={onCancel}>
+          取消
+        </Button>
+      </Box>
     </Box>
   )
 }

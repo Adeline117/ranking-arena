@@ -1,19 +1,29 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
+import { supabase } from '@/lib/supabase/client'
 import { Box, Text, Button } from '../Base'
+import FollowButton from '../UI/FollowButton'
+import ClaimTraderButton from './ClaimTraderButton'
 
 interface TraderHeaderProps {
   handle: string
+  traderId: string
   avatarUrl?: string
   isRegistered?: boolean
   followers?: number
 }
 
-export default function TraderHeader({ handle, avatarUrl, isRegistered, followers = 0 }: TraderHeaderProps) {
-  const [isFollowing, setIsFollowing] = useState(false)
+export default function TraderHeader({ handle, traderId, avatarUrl, isRegistered, followers = 0 }: TraderHeaderProps) {
+  const [userId, setUserId] = useState<string | null>(null)
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      setUserId(data.user?.id ?? null)
+    })
+  }, [])
 
   return (
     <Box
@@ -62,7 +72,7 @@ export default function TraderHeader({ handle, avatarUrl, isRegistered, follower
         </Box>
       </Box>
 
-      {/* 右侧：Buttons - 最小化 */}
+      {/* 右侧：Buttons */}
       <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
         {isRegistered && (
           <Link href={`/u/${handle}`} style={{ textDecoration: 'none' }}>
@@ -78,6 +88,10 @@ export default function TraderHeader({ handle, avatarUrl, isRegistered, follower
             </Text>
           </Link>
         )}
+        {!isRegistered && userId && (
+          <ClaimTraderButton traderId={traderId} handle={handle} userId={userId} />
+        )}
+        {userId && <FollowButton traderId={traderId} userId={userId} />}
       </Box>
     </Box>
   )

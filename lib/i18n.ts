@@ -96,3 +96,4 @@ export function t(key: keyof typeof translations.zh): string {
   return translations[lang][key] || translations.zh[key] || key
 }
 
+
