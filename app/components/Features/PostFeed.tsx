@@ -10,6 +10,7 @@ type Post = {
   views?: number
   id: number
   group: string
+  groupId?: string // 添加小组ID字段
   title: string
   author: string
   authorTraderId?: string
@@ -47,7 +48,8 @@ function getPollWinner(poll?: { bull: number; bear: number; wait: number }): Pol
 }
 
 function AvatarLink({ handle, traderId }: { handle: string; traderId?: string }) {
-  const href = traderId ? `/trader/${encodeURIComponent(traderId)}` : `/trader/${encodeURIComponent(handle)}`
+  // 统一跳转到 /trader/[handle] 页面
+  const href = `/trader/${encodeURIComponent(handle)}`
   return (
     <Link
       href={href}
@@ -249,7 +251,29 @@ export default function PostFeed(props: { variant?: 'compact' | 'full' } = {}) {
               }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
-                <div style={{ fontSize: 12, color: ARENA_PURPLE }}>{p.group}</div>
+                {p.groupId ? (
+                  <Link
+                    href={`/groups/${p.groupId}`}
+                    onClick={(e) => e.stopPropagation()}
+                    style={{
+                      fontSize: 12,
+                      color: ARENA_PURPLE,
+                      textDecoration: 'none',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {p.group}
+                  </Link>
+                ) : (
+                  <div
+                    style={{
+                      fontSize: 12,
+                      color: ARENA_PURPLE,
+                    }}
+                  >
+                    {p.group}
+                  </div>
+                )}
                 {/* ✅ 这里就是"点头像进主页" */}
                 <AvatarLink handle={p.author} traderId={p.authorTraderId} />
               </div>

@@ -23,7 +23,6 @@ export default function RankingTable(props: {
   traders: Trader[]
   loading: boolean
   loggedIn: boolean
-  onSelectTrader?: (t: Trader) => void
 }) {
   const { traders, loading, loggedIn } = props
 
@@ -89,12 +88,6 @@ export default function RankingTable(props: {
                 key={t.id}
                 href={href}
                 style={{ textDecoration: 'none' }}
-                onClick={(e) => {
-                  if (props.onSelectTrader) {
-                    e.preventDefault()
-                    props.onSelectTrader(t)
-                  }
-                }}
               >
                 <Box
                   style={{

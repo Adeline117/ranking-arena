@@ -11,12 +11,8 @@ import OverviewPerformanceCard from '@/app/components/trader/OverviewPerformance
 import TraderAboutCard from '@/app/components/trader/TraderAboutCard'
 import SimilarTraders from '@/app/components/trader/SimilarTraders'
 import TraderFeed from '@/app/components/trader/TraderFeed'
-import ExpectedDividends from '@/app/components/trader/stats/ExpectedDividends'
-import TradingStats from '@/app/components/trader/stats/TradingStats'
-import TrustStats from '@/app/components/trader/stats/TrustStats'
-import FrequentlyTraded from '@/app/components/trader/stats/FrequentlyTraded'
-import AdditionalStats from '@/app/components/trader/stats/AdditionalStats'
-import PerformanceChart from '@/app/components/trader/stats/PerformanceChart'
+import StatsPage from '@/app/components/trader/stats/StatsPage'
+import PinnedPost from '@/app/components/trader/PinnedPost'
 import PortfolioTable from '@/app/components/trader/PortfolioTable'
 import TradingViewShell from '@/app/components/trader/TradingViewShell'
 import { Box, Text } from '@/app/components/Base'
@@ -145,6 +141,7 @@ export default function TraderPage(props: { params: { handle: string } | Promise
         {/* Header */}
         <TraderHeader
           handle={profile.handle}
+          traderId={profile.id}
           avatarUrl={profile.avatar_url}
           isRegistered={profile.isRegistered}
           followers={profile.followers}
@@ -162,11 +159,20 @@ export default function TraderPage(props: { params: { handle: string } | Promise
               gap: tokens.spacing[8],
             }}
           >
-            {/* Left Column - 核心绩效指标 */}
-            <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[8] }}>
-              {performance && <OverviewPerformanceCard performance={performance} />}
-              {/* 交易员动态 - 系统生成内容为主，标记为认证交易员 */}
-              <TraderFeed items={feed.filter((f) => f.type !== 'group_post')} title="交易员动态" />
+            {/* Left Column - 核心绩效指标和动态 */}
+            <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[6] }}>
+              {performance && (
+                <OverviewPerformanceCard
+                  performance={performance}
+                  profitableWeeksPct={stats?.additionalStats?.profitableWeeksPct}
+                />
+              )}
+              {/* 置顶帖子 - Performance和动态之间 */}
+              {feed.filter((f) => f.is_pinned && f.type !== 'group_post').length > 0 && (
+                <PinnedPost item={feed.filter((f) => f.is_pinned && f.type !== 'group_post')[0]} />
+              )}
+              {/* 交易员动态 - 紧跟在Performance后面 */}
+              <TraderFeed items={feed.filter((f) => f.type !== 'group_post' && !f.is_pinned)} title="动态" />
             </Box>
 
             {/* Right Column - 交易员卡片 */}
@@ -184,9 +190,7 @@ export default function TraderPage(props: { params: { handle: string } | Promise
         )}
 
         {activeTab === 'stats' && stats && (
-          <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[6] }}>
-            <TrustStats stats={stats} />
-          </Box>
+          <StatsPage stats={stats} traderHandle={profile.handle} />
         )}
 
         {activeTab === 'portfolio' && <PortfolioTable items={portfolio} />}

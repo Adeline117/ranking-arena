@@ -1,5 +1,6 @@
 'use client'
 
+import { useState, useMemo } from 'react'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../Base'
@@ -10,35 +11,69 @@ interface TraderFeedProps {
   title: string
 }
 
-export default function TraderFeed({ items, title }: TraderFeedProps) {
-  if (items.length === 0) return null
+type SortType = 'all' | 'top'
 
-  // 交易员动态 - 系统生成内容为主，标记为认证交易员
-  const isTraderActivity = title === '交易员动态'
+export default function TraderFeed({ items, title }: TraderFeedProps) {
+  const [sortType, setSortType] = useState<SortType>('all')
+
+  // 排序逻辑
+  const sortedItems = useMemo(() => {
+    if (sortType === 'top') {
+      return [...items].sort((a, b) => (b.like_count || 0) - (a.like_count || 0))
+    }
+    // all: 按时间最新排序
+    return [...items].sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime())
+  }, [items, sortType])
 
   return (
     <Box bg="secondary" p={6} radius="none" border="none">
-      <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], marginBottom: tokens.spacing[4] }}>
+      <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: tokens.spacing[4] }}>
         <Text size="lg" weight="black" style={{ color: tokens.colors.text.primary }}>
           {title}
         </Text>
-        {isTraderActivity && (
-          <Text
-            size="xs"
+        {/* 排序按钮 */}
+        <Box style={{ display: 'flex', gap: tokens.spacing[2] }}>
+          <button
+            onClick={() => setSortType('all')}
             style={{
-              padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
-              background: tokens.colors.bg.primary,
-              borderRadius: tokens.radius.sm,
-              color: tokens.colors.text.tertiary,
-              fontWeight: tokens.typography.fontWeight.normal,
+              padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
+              borderRadius: tokens.radius.md,
+              border: `1px solid ${sortType === 'all' ? tokens.colors.accent.primary : tokens.colors.border.primary}`,
+              background: sortType === 'all' ? tokens.colors.accent.primary + '20' : tokens.colors.bg.primary,
+              color: sortType === 'all' ? tokens.colors.text.primary : tokens.colors.text.secondary,
+              fontSize: tokens.typography.fontSize.xs,
+              fontWeight: sortType === 'all' ? tokens.typography.fontWeight.black : tokens.typography.fontWeight.normal,
+              cursor: 'pointer',
             }}
           >
-            认证交易员
-          </Text>
-        )}
+            All
+          </button>
+          <button
+            onClick={() => setSortType('top')}
+            style={{
+              padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
+              borderRadius: tokens.radius.md,
+              border: `1px solid ${sortType === 'top' ? tokens.colors.accent.primary : tokens.colors.border.primary}`,
+              background: sortType === 'top' ? tokens.colors.accent.primary + '20' : tokens.colors.bg.primary,
+              color: sortType === 'top' ? tokens.colors.text.primary : tokens.colors.text.secondary,
+              fontSize: tokens.typography.fontSize.xs,
+              fontWeight: sortType === 'top' ? tokens.typography.fontWeight.black : tokens.typography.fontWeight.normal,
+              cursor: 'pointer',
+            }}
+          >
+            Top
+          </button>
+        </Box>
       </Box>
-      <Box style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-        {items.map((item, idx) => (
+      {items.length === 0 ? (
+        <Box style={{ padding: tokens.spacing[6], textAlign: 'center' }}>
+          <Text size="sm" color="tertiary">
+            暂无动态
+          </Text>
+        </Box>
+      ) : (
+        <Box style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+        {sortedItems.map((item, idx) => (
           <Link
             key={item.id}
             href={item.groupId ? `/groups/${item.groupId}` : `/posts/${item.id}`}
@@ -59,9 +94,16 @@ export default function TraderFeed({ items, title }: TraderFeedProps) {
               }}
             >
               <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: tokens.spacing[2] }}>
-                <Text size="sm" weight="black" style={{ flex: 1, color: tokens.colors.text.primary }}>
-                  {item.title}
-                </Text>
+                <Box style={{ flex: 1, display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
+                  <Text size="sm" weight="black" style={{ color: tokens.colors.text.primary }}>
+                    {item.title}
+                  </Text>
+                  {sortType === 'top' && item.like_count !== undefined && item.like_count > 0 && (
+                    <Text size="xs" color="tertiary">
+                      ❤️ {item.like_count}
+                    </Text>
+                  )}
+                </Box>
                 <Text size="xs" color="tertiary" style={{ marginLeft: tokens.spacing[2], flexShrink: 0 }}>
                   {new Date(item.time).toLocaleDateString('zh-CN')}
                 </Text>
@@ -80,6 +122,7 @@ export default function TraderFeed({ items, title }: TraderFeedProps) {
           </Link>
         ))}
       </Box>
+      )}
     </Box>
   )
 }

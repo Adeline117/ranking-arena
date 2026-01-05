@@ -82,6 +82,8 @@ export interface TraderFeedItem {
   time: string
   groupId?: string
   groupName?: string
+  like_count?: number
+  is_pinned?: boolean
 }
 
 /**
@@ -362,10 +364,10 @@ export async function getTraderFeed(handle: string): Promise<TraderFeedItem[]> {
     // 从 posts 表获取交易员发布的帖子
     const { data: posts } = await supabase
       .from('posts')
-      .select('id, title, content, created_at, group_id, groups(name)')
+      .select('id, title, content, created_at, group_id, like_count, is_pinned, groups(name)')
       .eq('author_handle', handle)
       .order('created_at', { ascending: false })
-      .limit(10)
+      .limit(20)
 
     if (!posts) return []
 
@@ -377,6 +379,8 @@ export async function getTraderFeed(handle: string): Promise<TraderFeedItem[]> {
       time: post.created_at,
       groupId: post.group_id,
       groupName: post.groups?.name,
+      like_count: post.like_count || 0,
+      is_pinned: post.is_pinned || false,
     }))
   } catch (error) {
     console.error('Error fetching trader feed:', error)
