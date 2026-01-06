@@ -477,7 +477,6 @@ function Action(props: { icon?: React.ReactNode; text: string; onClick: () => vo
       onClick={handleClick}
       onMouseDown={() => setIsPressed(true)}
       onMouseUp={() => setIsPressed(false)}
-      onMouseLeave={() => setIsPressed(false)}
       style={{
         border: 'none',
         background: props.active ? 'rgba(139, 111, 168, 0.15)' : 'transparent',
@@ -501,6 +500,7 @@ function Action(props: { icon?: React.ReactNode; text: string; onClick: () => vo
         }
       }}
       onMouseLeave={(e) => {
+        setIsPressed(false)
         if (!props.active) {
           e.currentTarget.style.background = 'transparent'
           e.currentTarget.style.color = '#a9a9a9'
