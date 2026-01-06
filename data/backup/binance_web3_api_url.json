@@ -1,0 +1,275 @@
+{
+  "apiUrl": "https://web3.binance.com/bapi/defi/v1/public/wallet-direct/market/leaderboard/query?tag=ALL&pageNo=1&pageSize=25&sortBy=0&orderBy=0&period=7d&chainId=56",
+  "urlTemplate": "https://web3.binance.com/bapi/defi/v1/public/wallet-direct/market/leaderboard/query?tag=ALL&pageNo=1&pageSize={size}&sortBy=0&orderBy=0&period=7d&chainId=56",
+  "response": {
+    "pages": 13,
+    "current": 1,
+    "size": 25,
+    "totalItems": 25
+  },
+  "sampleData": [
+    {
+      "address": "0x5bff90cf40c92e2dca663654703ff568eb11d233",
+      "addressLogo": null,
+      "addressLabel": null,
+      "addressTwitterUrl": null,
+      "balance": "0.08832391642894849",
+      "tags": null,
+      "realizedPnl": "162096.957952207378925559",
+      "realizedPnlPercent": "2.323971966354319545",
+      "dailyPNL": [
+        {
+          "realizedPnl": "7260.859994949967660079",
+          "dt": "2025-12-31"
+        },
+        {
+          "realizedPnl": "154835.294362115977731713",
+          "dt": "2026-01-01"
+        },
+        {
+          "realizedPnl": "0.803595141433533767",
+          "dt": "2026-01-03"
+        },
+        {
+          "realizedPnl": "0",
+          "dt": "2026-01-05"
+        },
+        {
+          "realizedPnl": "0",
+          "dt": "2026-01-06"
+        }
+      ],
+      "winRate": "1",
+      "totalVolume": "990667.166849044068346994",
+      "buyVolume": "195905.452553446743925646",
+      "sellVolume": "794761.714295597324421348",
+      "avgBuyVolume": "1797.297729848135265373",
+      "totalTxCnt": 427,
+      "buyTxCnt": 109,
+      "sellTxCnt": 318,
+      "totalTradedTokens": 13,
+      "tokenDistribution": {
+        "gt500Cnt": 0,
+        "between0And500Cnt": 4,
+        "between0AndNegative50Cnt": 0,
+        "ltNegative50Cnt": 0
+      },
+      "lastActivity": 1767660970000,
+      "genericAddressTagList": [
+        {
+          "address": "0x5bff90cf40c92e2dca663654703ff568eb11d233",
+          "tagName": "Smart Money",
+          "appIconUrl": "wallet-filled-1c.svg",
+          "pcIconUrl": "wallet-filled-1c.svg",
+          "logoUrl": null,
+          "twitterUrl": null,
+          "languageKey": "wmp-label-address-smart-money",
+          "extraInfo": null
+        }
+      ],
+      "topEarningTokens": [
+        {
+          "tokenAddress": "0x477c2c0459004e3354ba427fa285d7c053203c0e",
+          "tokenSymbol": "LIGHT",
+          "tokenUrl": "/images/web3-data/public/token/logos/316b3084c05f40dfbe1d2dd5b6b7629f.png",
+          "realizedPnl": "154835.294362115977731713",
+          "profitRate": "4.048065177408696509"
+        },
+        {
+          "tokenAddress": "0x6d5ad1592ed9d6d1df9b93c793ab759573ed6714",
+          "tokenSymbol": "Broccoli",
+          "tokenUrl": "/images/web3-data/public/token/logos/567b535898034e35bfdcdff51b4c4e1c.png",
+          "realizedPnl": "7260.859994949967660079",
+          "profitRate": "4.911778499415134272"
+        }
+      ]
+    },
+    {
+      "address": "0x08efc5180926ac685586d6f5ce247f1e4b3dc258",
+      "addressLogo": null,
+      "addressLabel": null,
+      "addressTwitterUrl": null,
+      "balance": "0.05390372892409026",
+      "tags": null,
+      "realizedPnl": "125510.464751488725694668",
+      "realizedPnlPercent": "1.488511123127729044",
+      "dailyPNL": [
+        {
+          "realizedPnl": "22754.640345693261838723",
+          "dt": "2025-12-31"
+        },
+        {
+          "realizedPnl": "103018.598019727129076727",
+          "dt": "2026-01-01"
+        },
+        {
+          "realizedPnl": "0",
+          "dt": "2026-01-02"
+        },
+        {
+          "realizedPnl": "-73.218837638092645138",
+          "dt": "2026-01-03"
+        },
+        {
+          "realizedPnl": "0",
+          "dt": "2026-01-04"
+        },
+        {
+          "realizedPnl": "-189.554776293572575643",
+          "dt": "2026-01-05"
+        },
+        {
+          "realizedPnl": "0",
+          "dt": "2026-01-06"
+        }
+      ],
+      "winRate": "0.5",
+      "totalVolume": "924833.639093012739362384",
+      "buyVolume": "273229.00692079482932445",
+      "sellVolume": "651604.632172217910037933",
+      "avgBuyVolume": "3742.863108504038757869",
+      "totalTxCnt": 318,
+      "buyTxCnt": 73,
+      "sellTxCnt": 245,
+      "totalTradedTokens": 23,
+      "tokenDistribution": {
+        "gt500Cnt": 0,
+        "between0And500Cnt": 3,
+        "between0AndNegative50Cnt": 3,
+        "ltNegative50Cnt": 0
+      },
+      "lastActivity": 1767664152000,
+      "genericAddressTagList": [
+        {
+          "address": "0x08efc5180926ac685586d6f5ce247f1e4b3dc258",
+          "tagName": "Smart Money",
+          "appIconUrl": "wallet-filled-1c.svg",
+          "pcIconUrl": "wallet-filled-1c.svg",
+          "logoUrl": null,
+          "twitterUrl": null,
+          "languageKey": "wmp-label-address-smart-money",
+          "extraInfo": null
+        }
+      ],
+      "topEarningTokens": [
+        {
+          "tokenAddress": "0x477c2c0459004e3354ba427fa285d7c053203c0e",
+          "tokenSymbol": "LIGHT",
+          "tokenUrl": "/images/web3-data/public/token/logos/316b3084c05f40dfbe1d2dd5b6b7629f.png",
+          "realizedPnl": "103018.598019727129076727",
+          "profitRate": "2.583007936950909279"
+        },
+        {
+          "tokenAddress": "0x6d5ad1592ed9d6d1df9b93c793ab759573ed6714",
+          "tokenSymbol": "Broccoli",
+          "tokenUrl": "/images/web3-data/public/token/logos/567b535898034e35bfdcdff51b4c4e1c.png",
+          "realizedPnl": "22754.640345693261838723",
+          "profitRate": "1.17056527908422303"
+        }
+      ]
+    },
+    {
+      "address": "0xa83b73f5644cde337b61da79589f10ea15548811",
+      "addressLogo": "https://bin.bnbstatic.com/images/web3-data/public/social_tracker/user_images/984418367405670400_09df5bc29edb.jpg",
+      "addressLabel": "AntPositions(蚂蚁仓）☄️",
+      "addressTwitterUrl": "https://x.com/antpositions",
+      "balance": "55.47266601637935",
+      "tags": [
+        "KOL"
+      ],
+      "realizedPnl": "86214.62835979222214777",
+      "realizedPnlPercent": "0.115196959498543051",
+      "dailyPNL": [
+        {
+          "realizedPnl": "22045.322755506827195248",
+          "dt": "2025-12-31"
+        },
+        {
+          "realizedPnl": "27533.440507896042075783",
+          "dt": "2026-01-01"
+        },
+        {
+          "realizedPnl": "11640.501444973684143073",
+          "dt": "2026-01-02"
+        },
+        {
+          "realizedPnl": "7160.427250306079711812",
+          "dt": "2026-01-03"
+        },
+        {
+          "realizedPnl": "10428.913079356930264243",
+          "dt": "2026-01-04"
+        },
+        {
+          "realizedPnl": "7136.41546962200523961",
+          "dt": "2026-01-05"
+        },
+        {
+          "realizedPnl": "269.607852130653518001",
+          "dt": "2026-01-06"
+        }
+      ],
+      "winRate": "0.5012",
+      "totalVolume": "1587355.29883428113845709",
+      "buyVolume": "750927.986170526075690884",
+      "sellVolume": "836427.312663755062766206",
+      "avgBuyVolume": "444.336086491435547746",
+      "totalTxCnt": 3645,
+      "buyTxCnt": 1690,
+      "sellTxCnt": 1955,
+      "totalTradedTokens": 846,
+      "tokenDistribution": {
+        "gt500Cnt": 0,
+        "between0And500Cnt": 423,
+        "between0AndNegative50Cnt": 418,
+        "ltNegative50Cnt": 3
+      },
+      "lastActivity": 1767662171000,
+      "genericAddressTagList": [
+        {
+          "address": "0xa83b73f5644cde337b61da79589f10ea15548811",
+          "tagName": "KOL",
+          "appIconUrl": "certified-filled-1c.svg",
+          "pcIconUrl": "certified-filled-1c.svg",
+          "logoUrl": "https://bin.bnbstatic.com/images/web3-data/public/social_tracker/user_images/984418367405670400_09df5bc29edb.jpg",
+          "twitterUrl": null,
+          "languageKey": "",
+          "extraInfo": "AntPositions(蚂蚁仓）☄️"
+        },
+        {
+          "address": "0xa83b73f5644cde337b61da79589f10ea15548811",
+          "tagName": "Twitter",
+          "appIconUrl": "user-1c.svg",
+          "pcIconUrl": "user-1c.svg",
+          "logoUrl": "https://bin.bnbstatic.com/images/web3-data/public/social_tracker/user_images/984418367405670400_09df5bc29edb.jpg",
+          "twitterUrl": "https://x.com/antpositions",
+          "languageKey": "",
+          "extraInfo": "antpositions"
+        }
+      ],
+      "topEarningTokens": [
+        {
+          "tokenAddress": "0xd18a5074ebc89eabc358f98c89b621c1b1da4444",
+          "tokenSymbol": "我踏马来了",
+          "tokenUrl": "/images/web3-data/public/token/logos/E453100266232A6308D9F7250E847A9F.jpg",
+          "realizedPnl": "14407.069367449774965786",
+          "profitRate": "2.296160849192767359"
+        },
+        {
+          "tokenAddress": "0x3e17ee3b1895dd1a7cf993a89769c5e029584444",
+          "tokenSymbol": "Freedom of Money",
+          "tokenUrl": "/images/web3-data/public/token/logos/0A9D075644F806C3F5DF4AD880DBC88A.png",
+          "realizedPnl": "10053.684883516901012652",
+          "profitRate": "1.419695592480703666"
+        },
+        {
+          "tokenAddress": "0xc51a9250795c0186a6fb4a7d20a90330651e4444",
+          "tokenSymbol": "我踏马来了",
+          "tokenUrl": "/images/web3-data/public/token/logos/6E23D7799115438532A7981E7667AD1B.png",
+          "realizedPnl": "6064.477007615724539604",
+          "profitRate": "1.206209679766591557"
+        }
+      ]
+    }
+  ]
+}

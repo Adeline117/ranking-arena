@@ -5,6 +5,8 @@ export {
   ChartIcon,
   UserIcon,
   LikeIcon,
+  ThumbsUpIcon,
+  ThumbsDownIcon,
   CommentIcon,
   DashboardIcon,
   NotificationIcon,

@@ -14,6 +14,7 @@
     "dotenv": "^17.2.3",
     "next": "16.1.1",
     "node-fetch": "^3.3.2",
+    "puppeteer": "^24.34.0",
     "react": "19.2.3",
     "react-dom": "19.2.3"
   },

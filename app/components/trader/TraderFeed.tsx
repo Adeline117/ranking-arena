@@ -9,11 +9,13 @@ import type { TraderFeedItem } from '@/lib/data/trader'
 interface TraderFeedProps {
   items: TraderFeedItem[]
   title: string
+  showPostButton?: boolean
+  onPostClick?: () => void
 }
 
 type SortType = 'all' | 'top'
 
-export default function TraderFeed({ items, title }: TraderFeedProps) {
+export default function TraderFeed({ items, title, showPostButton = false, onPostClick }: TraderFeedProps) {
   const [sortType, setSortType] = useState<SortType>('all')
 
   // 排序逻辑
@@ -31,38 +33,66 @@ export default function TraderFeed({ items, title }: TraderFeedProps) {
         <Text size="lg" weight="black" style={{ color: tokens.colors.text.primary }}>
           {title}
         </Text>
-        {/* 排序按钮 */}
-        <Box style={{ display: 'flex', gap: tokens.spacing[2] }}>
-          <button
-            onClick={() => setSortType('all')}
-            style={{
-              padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
-              borderRadius: tokens.radius.md,
-              border: `1px solid ${sortType === 'all' ? tokens.colors.accent.primary : tokens.colors.border.primary}`,
-              background: sortType === 'all' ? tokens.colors.accent.primary + '20' : tokens.colors.bg.primary,
-              color: sortType === 'all' ? tokens.colors.text.primary : tokens.colors.text.secondary,
-              fontSize: tokens.typography.fontSize.xs,
-              fontWeight: sortType === 'all' ? tokens.typography.fontWeight.black : tokens.typography.fontWeight.normal,
-              cursor: 'pointer',
-            }}
-          >
-            All
-          </button>
-          <button
-            onClick={() => setSortType('top')}
-            style={{
-              padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
-              borderRadius: tokens.radius.md,
-              border: `1px solid ${sortType === 'top' ? tokens.colors.accent.primary : tokens.colors.border.primary}`,
-              background: sortType === 'top' ? tokens.colors.accent.primary + '20' : tokens.colors.bg.primary,
-              color: sortType === 'top' ? tokens.colors.text.primary : tokens.colors.text.secondary,
-              fontSize: tokens.typography.fontSize.xs,
-              fontWeight: sortType === 'top' ? tokens.typography.fontWeight.black : tokens.typography.fontWeight.normal,
-              cursor: 'pointer',
-            }}
-          >
-            Top
-          </button>
+        {/* 排序按钮和发动态按钮 */}
+        <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
+          {/* 排序按钮 */}
+          <Box style={{ display: 'flex', gap: tokens.spacing[2] }}>
+            <button
+              onClick={() => setSortType('all')}
+              style={{
+                padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
+                borderRadius: tokens.radius.md,
+                border: `1px solid ${sortType === 'all' ? tokens.colors.accent.primary : tokens.colors.border.primary}`,
+                background: sortType === 'all' ? tokens.colors.accent.primary + '20' : tokens.colors.bg.primary,
+                color: sortType === 'all' ? tokens.colors.text.primary : tokens.colors.text.secondary,
+                fontSize: tokens.typography.fontSize.xs,
+                fontWeight: sortType === 'all' ? tokens.typography.fontWeight.black : tokens.typography.fontWeight.normal,
+                cursor: 'pointer',
+              }}
+            >
+              All
+            </button>
+            <button
+              onClick={() => setSortType('top')}
+              style={{
+                padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
+                borderRadius: tokens.radius.md,
+                border: `1px solid ${sortType === 'top' ? tokens.colors.accent.primary : tokens.colors.border.primary}`,
+                background: sortType === 'top' ? tokens.colors.accent.primary + '20' : tokens.colors.bg.primary,
+                color: sortType === 'top' ? tokens.colors.text.primary : tokens.colors.text.secondary,
+                fontSize: tokens.typography.fontSize.xs,
+                fontWeight: sortType === 'top' ? tokens.typography.fontWeight.black : tokens.typography.fontWeight.normal,
+                cursor: 'pointer',
+              }}
+            >
+              Top
+            </button>
+          </Box>
+          {/* 发动态按钮 */}
+          {showPostButton && onPostClick && (
+            <button
+              onClick={onPostClick}
+              style={{
+                padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
+                borderRadius: tokens.radius.md,
+                border: 'none',
+                background: tokens.colors.accent.primary,
+                color: tokens.colors.black,
+                fontSize: tokens.typography.fontSize.sm,
+                fontWeight: tokens.typography.fontWeight.black,
+                cursor: 'pointer',
+                transition: `all ${tokens.transition.base}`,
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = tokens.colors.text.secondary
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = tokens.colors.accent.primary
+              }}
+            >
+              发动态
+            </button>
+          )}
         </Box>
       </Box>
       {items.length === 0 ? (

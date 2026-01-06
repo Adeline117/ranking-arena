@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
 import { supabase } from '@/lib/supabase/client'
 import { Box, Text, Button } from '../Base'
@@ -14,10 +15,12 @@ interface TraderHeaderProps {
   avatarUrl?: string
   isRegistered?: boolean
   followers?: number
+  isOwnProfile?: boolean
 }
 
-export default function TraderHeader({ handle, traderId, avatarUrl, isRegistered, followers = 0 }: TraderHeaderProps) {
+export default function TraderHeader({ handle, traderId, avatarUrl, isRegistered, followers = 0, isOwnProfile = false }: TraderHeaderProps) {
   const [userId, setUserId] = useState<string | null>(null)
+  const router = useRouter()
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -74,24 +77,36 @@ export default function TraderHeader({ handle, traderId, avatarUrl, isRegistered
 
       {/* 右侧：Buttons */}
       <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
-        {isRegistered && (
-          <Link href={`/u/${handle}`} style={{ textDecoration: 'none' }}>
-            <Text
-              size="sm"
-              weight="bold"
-              style={{
-                color: tokens.colors.text.secondary,
-                textDecoration: 'underline',
-              }}
-            >
-              主页
-            </Text>
-          </Link>
+        {isOwnProfile ? (
+          <Button
+            variant="ghost"
+            size="md"
+            onClick={() => router.push('/settings')}
+          >
+            编辑个人资料
+          </Button>
+        ) : (
+          <>
+            {isRegistered && (
+              <Link href={`/u/${handle}`} style={{ textDecoration: 'none' }}>
+                <Text
+                  size="sm"
+                  weight="bold"
+                  style={{
+                    color: tokens.colors.text.secondary,
+                    textDecoration: 'underline',
+                  }}
+                >
+                  主页
+                </Text>
+              </Link>
+            )}
+            {!isRegistered && userId && (
+              <ClaimTraderButton traderId={traderId} handle={handle} userId={userId} />
+            )}
+            {userId && <FollowButton traderId={traderId} userId={userId} />}
+          </>
         )}
-        {!isRegistered && userId && (
-          <ClaimTraderButton traderId={traderId} handle={handle} userId={userId} />
-        )}
-        {userId && <FollowButton traderId={traderId} userId={userId} />}
       </Box>
     </Box>
   )
