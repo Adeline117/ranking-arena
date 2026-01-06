@@ -16,6 +16,7 @@ export default function TopNav({ email }: { email: string | null }) {
   const { t } = useLanguage()
   const pathname = usePathname()
   const [myId, setMyId] = useState<string | null>(null)
+  const [myHandle, setMyHandle] = useState<string | null>(null)
   const [showUserMenu, setShowUserMenu] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [showSearchDropdown, setShowSearchDropdown] = useState(false)
@@ -26,7 +27,23 @@ export default function TopNav({ email }: { email: string | null }) {
     let alive = true
     supabase.auth.getUser().then(({ data }) => {
       if (!alive) return
-      setMyId(data.user?.id ?? null)
+      const userId = data.user?.id ?? null
+      setMyId(userId)
+      
+      // 获取用户的handle
+      if (userId) {
+        supabase
+          .from('profiles')
+          .select('handle')
+          .eq('id', userId)
+          .maybeSingle()
+          .then(({ data: profile }) => {
+            if (!alive) return
+            if (profile) {
+              setMyHandle(profile.handle)
+            }
+          })
+      }
     })
     return () => {
       alive = false
@@ -287,7 +304,7 @@ export default function TopNav({ email }: { email: string | null }) {
                   }}
                 >
                   <Link
-                    href={`/user/${myId}`}
+                    href={myHandle ? `/u/${myHandle}` : `/user/${myId}`}
                     style={{
                       display: 'flex',
                       alignItems: 'center',

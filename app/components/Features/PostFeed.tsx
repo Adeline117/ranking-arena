@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
-import { LikeIcon, CommentIcon } from '../Icons'
+import { ThumbsUpIcon, ThumbsDownIcon, CommentIcon } from '../Icons'
 
 type PollChoice = 'bull' | 'bear' | 'wait'
 
@@ -236,7 +236,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full' } = {}) {
           const color = pollColor(winner)
 
           return (
-            <button
+            <div
               key={p.id}
               onClick={() => setOpenPost(p)}
               style={{
@@ -297,17 +297,31 @@ export default function PostFeed(props: { variant?: 'compact' | 'full' } = {}) {
               </div>
 
               <div style={{ marginTop: 8, display: 'flex', gap: 10, flexWrap: 'wrap', color: '#a9a9a9', fontSize: 12, alignItems: 'center' }}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <LikeIcon size={14} /> {reacts.up}
-                </span>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <LikeIcon size={14} style={{ transform: 'rotate(180deg)' }} /> {reacts.down}
-                </span>
+                <ReactButton
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    toggleReact(p.id, 'up')
+                  }}
+                  active={myReact[p.id] === 'up'}
+                  icon={<ThumbsUpIcon size={14} />}
+                  count={reacts.up}
+                  showCount={true}
+                />
+                <ReactButton
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    toggleReact(p.id, 'down')
+                  }}
+                  active={myReact[p.id] === 'down'}
+                  icon={<ThumbsDownIcon size={14} />}
+                  count={reacts.down}
+                  showCount={false}
+                />
                 <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                   <CommentIcon size={14} /> {p.comments}
                 </span>
               </div>
-            </button>
+            </div>
           )
         })}
       </div>
@@ -331,8 +345,22 @@ export default function PostFeed(props: { variant?: 'compact' | 'full' } = {}) {
           </div>
 
           <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid #141414', display: 'flex', gap: 14, flexWrap: 'wrap' }}>
-            <Action icon={<LikeIcon size={14} />} text="赞同" onClick={() => toggleReact(openPost.id, 'up')} active={myReact[openPost.id] === 'up'} />
-            <Action icon={<LikeIcon size={14} style={{ transform: 'rotate(180deg)' }} />} text="反对" onClick={() => toggleReact(openPost.id, 'down')} active={myReact[openPost.id] === 'down'} />
+            <Action 
+              icon={<ThumbsUpIcon size={14} />} 
+              text="赞同" 
+              onClick={() => toggleReact(openPost.id, 'up')} 
+              active={myReact[openPost.id] === 'up'}
+              count={reactCounts[openPost.id]?.up ?? openPost.likes}
+              showCount={true}
+            />
+            <Action 
+              icon={<ThumbsDownIcon size={14} />} 
+              text="反对" 
+              onClick={() => toggleReact(openPost.id, 'down')} 
+              active={myReact[openPost.id] === 'down'}
+              count={reactCounts[openPost.id]?.down ?? Math.floor(openPost.likes * 0.08)}
+              showCount={false}
+            />
             <Action icon={<CommentIcon size={14} />} text="评论" onClick={() => toggleComments(openPost.id)} />
             {openPost.pollEnabled && pollState[openPost.id] ? (
               <>
@@ -370,25 +398,127 @@ export default function PostFeed(props: { variant?: 'compact' | 'full' } = {}) {
   )
 }
 
-function Action(props: { icon?: React.ReactNode; text: string; onClick: () => void; active?: boolean }) {
+function ReactButton({ onClick, active, icon, count, showCount = true }: { onClick: (e: React.MouseEvent) => void; active: boolean; icon: React.ReactNode; count: number; showCount?: boolean }) {
+  const [isPressed, setIsPressed] = useState(false)
+  const [isAnimating, setIsAnimating] = useState(false)
+
+  const handleClick = (e: React.MouseEvent) => {
+    setIsAnimating(true)
+    setTimeout(() => setIsAnimating(false), 300)
+    onClick(e)
+  }
+
+  // 如果已点赞，显示 count + 1；否则显示 count
+  const displayCount = active && showCount ? count + 1 : count
+
   return (
     <button
-      onClick={props.onClick}
+      onClick={handleClick}
+      onMouseDown={() => setIsPressed(true)}
+      onMouseUp={() => setIsPressed(false)}
+      onMouseLeave={() => setIsPressed(false)}
+      style={{
+        background: active ? 'rgba(139, 111, 168, 0.15)' : 'transparent',
+        border: 'none',
+        color: active ? '#8b6fa8' : '#a9a9a9',
+        cursor: 'pointer',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 4,
+        padding: '2px 6px',
+        borderRadius: 6,
+        transition: 'all 0.2s ease',
+        transform: isPressed ? 'scale(0.9)' : 'scale(1)',
+        fontWeight: active ? 900 : 400,
+        boxShadow: active ? '0 0 0 1px rgba(139, 111, 168, 0.2)' : 'none',
+      }}
+      onMouseEnter={(e) => {
+        if (!active) {
+          e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)'
+          e.currentTarget.style.color = '#d6d6d6'
+        }
+      }}
+      onMouseLeave={(e) => {
+        if (!active) {
+          e.currentTarget.style.background = 'transparent'
+          e.currentTarget.style.color = '#a9a9a9'
+        }
+      }}
+    >
+      <span
+        style={{
+          display: 'inline-flex',
+          transition: 'transform 0.2s ease',
+          transform: active ? 'scale(1.15)' : isAnimating ? 'scale(1.3)' : 'scale(1)',
+        }}
+      >
+        {icon}
+      </span>
+      {showCount && displayCount}
+    </button>
+  )
+}
+
+function Action(props: { icon?: React.ReactNode; text: string; onClick: () => void; active?: boolean; count?: number; showCount?: boolean }) {
+  const [isPressed, setIsPressed] = useState(false)
+  const [isAnimating, setIsAnimating] = useState(false)
+
+  const handleClick = () => {
+    setIsAnimating(true)
+    setTimeout(() => setIsAnimating(false), 300)
+    props.onClick()
+  }
+
+  // 如果已点赞，显示 count + 1；否则显示 count
+  const displayCount = props.active && props.showCount && props.count !== undefined ? props.count + 1 : props.count
+
+  return (
+    <button
+      onClick={handleClick}
+      onMouseDown={() => setIsPressed(true)}
+      onMouseUp={() => setIsPressed(false)}
+      onMouseLeave={() => setIsPressed(false)}
       style={{
         border: 'none',
-        background: 'transparent',
-        color: props.active ? '#eaeaea' : '#a9a9a9',
+        background: props.active ? 'rgba(139, 111, 168, 0.15)' : 'transparent',
+        color: props.active ? '#8b6fa8' : '#a9a9a9',
         cursor: 'pointer',
-        padding: 0,
+        padding: '6px 12px',
         fontSize: 13,
         fontWeight: props.active ? 950 : 700,
         display: 'flex',
         alignItems: 'center',
-        gap: 4,
+        gap: 6,
+        borderRadius: 8,
+        transition: 'all 0.2s ease',
+        transform: isPressed ? 'scale(0.95)' : 'scale(1)',
+        boxShadow: props.active ? '0 0 0 1px rgba(139, 111, 168, 0.3)' : 'none',
+      }}
+      onMouseEnter={(e) => {
+        if (!props.active) {
+          e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)'
+          e.currentTarget.style.color = '#d6d6d6'
+        }
+      }}
+      onMouseLeave={(e) => {
+        if (!props.active) {
+          e.currentTarget.style.background = 'transparent'
+          e.currentTarget.style.color = '#a9a9a9'
+        }
       }}
     >
-      {props.icon}
+      <span
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          transition: 'transform 0.2s ease',
+          transform: props.active ? 'scale(1.1)' : isAnimating ? 'scale(1.2)' : 'scale(1)',
+        }}
+      >
+        {props.icon}
+      </span>
       {props.text}
+      {props.showCount && props.count !== undefined && ` ${displayCount}`}
     </button>
   )
 }

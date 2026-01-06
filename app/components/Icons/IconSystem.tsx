@@ -109,6 +109,50 @@ export function LikeIcon({ size = 16, style, ...props }: IconProps) {
   )
 }
 
+// Thumbs Up Icon (upward triangle)
+export function ThumbsUpIcon({ size = 16, style, ...props }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="none"
+      style={{ display: 'inline-block', verticalAlign: 'middle', ...style }}
+      {...props}
+    >
+      <path
+        d="M8 4l-4 6h8L8 4z"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
+// Thumbs Down Icon (downward triangle)
+export function ThumbsDownIcon({ size = 16, style, ...props }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="none"
+      style={{ display: 'inline-block', verticalAlign: 'middle', ...style }}
+      {...props}
+    >
+      <path
+        d="M8 12l4-6H4l4 6z"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
 // Comment Icon
 export function CommentIcon({ size = 16, style, ...props }: IconProps) {
   return (

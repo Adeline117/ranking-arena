@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '../Base'
 
@@ -11,6 +12,7 @@ interface TraderAboutCardProps {
   bio?: string
   followers?: number
   isRegistered?: boolean
+  isOwnProfile?: boolean
 }
 
 /**
@@ -23,8 +25,10 @@ export default function TraderAboutCard({
   bio,
   followers = 0,
   isRegistered,
+  isOwnProfile = false,
 }: TraderAboutCardProps) {
   const [isFollowing, setIsFollowing] = useState(false)
+  const router = useRouter()
 
   return (
     <Box
@@ -74,19 +78,34 @@ export default function TraderAboutCard({
         </Text>
       )}
 
-      {/* 关注按钮 - 主要操作 */}
-      <Button
-        variant={isFollowing ? 'secondary' : 'primary'}
-        size="md"
-        fullWidth
-        onClick={() => setIsFollowing(!isFollowing)}
-        style={{
-          marginBottom: tokens.spacing[4],
-          fontWeight: tokens.typography.fontWeight.black,
-        }}
-      >
-        {isFollowing ? '已关注' : '关注'}
-      </Button>
+      {/* 关注按钮/编辑个人资料按钮 - 主要操作 */}
+      {isOwnProfile ? (
+        <Button
+          variant="primary"
+          size="md"
+          fullWidth
+          onClick={() => router.push('/settings')}
+          style={{
+            marginBottom: tokens.spacing[4],
+            fontWeight: tokens.typography.fontWeight.black,
+          }}
+        >
+          编辑个人资料
+        </Button>
+      ) : (
+        <Button
+          variant={isFollowing ? 'secondary' : 'primary'}
+          size="md"
+          fullWidth
+          onClick={() => setIsFollowing(!isFollowing)}
+          style={{
+            marginBottom: tokens.spacing[4],
+            fontWeight: tokens.typography.fontWeight.black,
+          }}
+        >
+          {isFollowing ? '已关注' : '关注'}
+        </Button>
+      )}
 
       {/* 次要信息 */}
       <Box

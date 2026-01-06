@@ -1,8 +1,12 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { exec } from "child_process";
+import { promisify } from "util";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+const execAsync = promisify(exec);
 
 /**
  * We support BOTH naming styles:
@@ -48,43 +52,73 @@ export async function POST(req: Request) {
             url: !url,
             serviceKey: !serviceKey,
           },
-          expected: [
-            "SUPABASE_URL or NEXT_PUBLIC_SUPABASE_URL",
-            "SUPABASE_SERVICE_ROLE_KEY",
-          ],
-          found: {
-            SUPABASE_URL: Boolean(process.env.SUPABASE_URL),
-            NEXT_PUBLIC_SUPABASE_URL: Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL),
-            SUPABASE_SERVICE_ROLE_KEY: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
-          },
         },
         { status: 500 }
       );
     }
 
-    // 3) client (service role)
     const supabase = createClient(url, serviceKey, {
       auth: { persistSession: false },
     });
 
-    /**
-     * TODO: 这里放你真正的“抓 traders + 写入 supabase”的逻辑
-     * 我先给你一个最小写入测试：写一条 heartbeat 到 cron_logs 表
-     * 你如果还没建表，会返回一个清晰的错误信息。
-     */
     const now = new Date().toISOString();
-    const { error } = await supabase
-      .from("cron_logs")
-      .insert([{ name: "fetch-traders", ran_at: now }]);
+    const results: any[] = [];
 
-    if (error) {
-      return NextResponse.json(
-        { ok: false, step: "insert cron_logs", supabaseError: error },
-        { status: 500 }
-      );
+    // 执行数据抓取脚本
+    const scripts = [
+      { name: "binance", script: "scripts/import_binance_copy_trading_90d.mjs" },
+      { name: "binance_web3", script: "scripts/fetch_binance_web3_all_pages.mjs" },
+      { name: "bybit", script: "scripts/import_bybit_90d_roi.mjs" },
+    ];
+
+    for (const { name, script } of scripts) {
+      try {
+        console.log(`开始执行 ${name} 数据抓取...`);
+        const { stdout, stderr } = await execAsync(
+          `node ${script}`,
+          {
+            cwd: process.cwd(),
+            timeout: 300000, // 5分钟超时
+            env: {
+              ...process.env,
+              SUPABASE_URL: url,
+              SUPABASE_SERVICE_ROLE_KEY: serviceKey,
+            },
+          }
+        );
+
+        results.push({
+          name,
+          success: true,
+          output: stdout.substring(0, 500), // 只保存前500字符
+        });
+        console.log(`${name} 数据抓取完成`);
+      } catch (error: any) {
+        results.push({
+          name,
+          success: false,
+          error: error.message || String(error),
+        });
+        console.error(`${name} 数据抓取失败:`, error.message);
+      }
     }
 
-    return NextResponse.json({ ok: true, inserted: 1, at: now });
+    // 记录执行日志
+    await supabase.from("cron_logs").insert([
+      {
+        name: "fetch-traders",
+        ran_at: now,
+        result: JSON.stringify(results),
+      },
+    ]).catch(() => {
+      // 如果 cron_logs 表不存在，忽略错误
+    });
+
+    return NextResponse.json({
+      ok: true,
+      ran_at: now,
+      results,
+    });
   } catch (e: any) {
     return NextResponse.json(
       { ok: false, error: e?.message || String(e) },

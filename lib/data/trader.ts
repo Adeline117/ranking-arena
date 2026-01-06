@@ -93,90 +93,139 @@ export async function getTraderByHandle(handle: string): Promise<TraderProfile |
   if (!handle) return null
 
   try {
-    // 从 trader_sources 表获取交易员信息
-    const { data: source, error: sourceError } = await supabase
-      .from('trader_sources')
-      .select('source_trader_id, handle, profile_url')
-      .eq('source', 'binance')
-      .eq('handle', handle)
-      .maybeSingle()
-
-    if (sourceError) {
-      console.error('Error fetching trader_source by handle:', sourceError)
-      return null
-    }
-
-    if (!source) {
-      // 如果 handle 匹配不到，尝试用 handle 作为 source_trader_id 查询
-      const { data: sourceById, error: idError } = await supabase
+    // 解码 URL 编码的 handle
+    const decodedHandle = decodeURIComponent(handle)
+    
+    // 优先尝试 binance_web3，如果找不到再尝试 binance
+    const sources = ['binance_web3', 'binance']
+    
+    for (const sourceType of sources) {
+      // 从 trader_sources 表获取交易员信息
+      // 先尝试原始 handle
+      let source = null
+      let sourceError = null
+      
+      // 尝试用原始 handle 查询
+      const { data: source1, error: error1 } = await supabase
         .from('trader_sources')
         .select('source_trader_id, handle, profile_url')
-        .eq('source', 'binance')
-        .eq('source_trader_id', handle)
+        .eq('source', sourceType)
+        .eq('handle', handle)
         .maybeSingle()
       
-      if (idError || !sourceById) {
-        return null
+      if (source1) {
+        source = source1
+      } else if (error1 && (error1.message || error1.code || error1.hint)) {
+        // 只在有实际错误内容时记录
+        sourceError = error1
+      }
+      
+      // 如果原始 handle 找不到，尝试解码后的 handle（如果不同）
+      if (!source && decodedHandle !== handle) {
+        const { data: source2, error: error2 } = await supabase
+          .from('trader_sources')
+          .select('source_trader_id, handle, profile_url')
+          .eq('source', sourceType)
+          .eq('handle', decodedHandle)
+          .maybeSingle()
+        
+        if (source2) {
+          source = source2
+        } else if (error2 && (error2.message || error2.code || error2.hint) && !sourceError) {
+          // 只在有实际错误内容时记录
+          sourceError = error2
+        }
       }
 
-      const foundSource = sourceById
+      // 只在有实际错误内容时记录和跳过
+      if (sourceError) {
+        console.error(`Error fetching trader_source by handle (${sourceType}):`, sourceError)
+        continue
+      }
+
+      if (!source) {
+        // 如果 handle 匹配不到，尝试用 handle 或 decodedHandle 作为 source_trader_id 查询
+        const { data: sourceById1 } = await supabase
+          .from('trader_sources')
+          .select('source_trader_id, handle, profile_url')
+          .eq('source', sourceType)
+          .eq('source_trader_id', handle)
+          .maybeSingle()
+        
+        if (sourceById1) {
+          source = sourceById1
+        } else if (decodedHandle !== handle) {
+          const { data: sourceById2 } = await supabase
+            .from('trader_sources')
+            .select('source_trader_id, handle, profile_url')
+            .eq('source', sourceType)
+            .eq('source_trader_id', decodedHandle)
+            .maybeSingle()
+          
+          if (sourceById2) {
+            source = sourceById2
+          }
+        }
+      }
       
+      if (!source) {
+        continue
+      }
+
       // 获取最新的 followers 数据
       const { data: latestSnapshot } = await supabase
         .from('trader_snapshots')
         .select('followers')
-        .eq('source', 'binance')
-        .eq('source_trader_id', foundSource.source_trader_id)
+        .eq('source', sourceType)
+        .eq('source_trader_id', source.source_trader_id)
         .order('captured_at', { ascending: false })
         .limit(1)
         .maybeSingle()
 
       // 检查是否在平台注册（从 profiles 表）
-      const { data: profile } = await supabase
+      const profileHandle = source.handle || source.source_trader_id
+      // 尝试多个可能的 handle 值
+      const { data: profile1 } = await supabase
         .from('profiles')
         .select('id, bio, avatar_url')
-        .eq('handle', foundSource.handle || foundSource.source_trader_id)
+        .eq('handle', profileHandle)
         .maybeSingle()
+      
+      let profile = profile1
+      if (!profile && decodedHandle !== handle) {
+        const { data: profile2 } = await supabase
+          .from('profiles')
+          .select('id, bio, avatar_url')
+          .eq('handle', decodedHandle)
+          .maybeSingle()
+        if (profile2) profile = profile2
+      }
+      if (!profile && handle !== profileHandle) {
+        const { data: profile3 } = await supabase
+          .from('profiles')
+          .select('id, bio, avatar_url')
+          .eq('handle', handle)
+          .maybeSingle()
+        if (profile3) profile = profile3
+      }
 
+      console.log(`[trader] Found trader: ${source.handle || source.source_trader_id} (source: ${sourceType})`)
       return {
-        handle: foundSource.handle || foundSource.source_trader_id,
-        id: foundSource.source_trader_id,
+        handle: source.handle || source.source_trader_id,
+        id: source.source_trader_id,
         bio: profile?.bio || null,
         followers: latestSnapshot?.followers || 0,
         copiers: 0,
-        avatar_url: profile?.avatar_url || foundSource.profile_url || null,
+        avatar_url: profile?.avatar_url || source.profile_url || null,
         isRegistered: !!profile,
+        source: sourceType,
       }
     }
 
-    // 获取最新的 followers 数据
-    const { data: latestSnapshot } = await supabase
-      .from('trader_snapshots')
-      .select('followers')
-      .eq('source', 'binance')
-      .eq('source_trader_id', source.source_trader_id)
-      .order('captured_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-
-    // 检查是否在平台注册（从 profiles 表）
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('id, bio, avatar_url')
-      .eq('handle', handle)
-      .maybeSingle()
-
-    return {
-      handle: source.handle || source.source_trader_id,
-      id: source.source_trader_id,
-      bio: profile?.bio || null,
-      followers: latestSnapshot?.followers || 0,
-      copiers: 0,
-      avatar_url: profile?.avatar_url || source.profile_url || null,
-      isRegistered: !!profile,
-    }
+    console.warn(`[trader] No trader found for handle: ${handle} (decoded: ${decodedHandle})`)
+    return null
   } catch (error) {
-    console.error('Error in getTraderByHandle:', error)
+    console.error('[trader] Error in getTraderByHandle:', error)
     return null
   }
 }
@@ -186,37 +235,81 @@ export async function getTraderByHandle(handle: string): Promise<TraderProfile |
  */
 export async function getTraderPerformance(handle: string, period: '7D' | '30D' | '90D' | '1Y' | '2Y' | 'All' = '90D'): Promise<TraderPerformance> {
   try {
-    // 先获取 source_trader_id
-    const { data: source } = await supabase
-      .from('trader_sources')
-      .select('source_trader_id')
-      .eq('source', 'binance')
-      .or(`handle.eq.${handle},source_trader_id.eq.${handle}`)
-      .maybeSingle()
+    // 解码 URL 编码的 handle
+    const decodedHandle = decodeURIComponent(handle)
+    
+    // 优先尝试 binance_web3，如果找不到再尝试 binance
+    const sources = ['binance_web3', 'binance']
+    
+    for (const sourceType of sources) {
+      // 先获取 source_trader_id - 尝试多个可能的 handle 值
+      let source = null
+      const { data: source1 } = await supabase
+        .from('trader_sources')
+        .select('source_trader_id')
+        .eq('source', sourceType)
+        .eq('handle', handle)
+        .maybeSingle()
+      
+      if (source1) {
+        source = source1
+      } else if (decodedHandle !== handle) {
+        const { data: source2 } = await supabase
+          .from('trader_sources')
+          .select('source_trader_id')
+          .eq('source', sourceType)
+          .eq('handle', decodedHandle)
+          .maybeSingle()
+        if (source2) source = source2
+      }
+      
+      // 如果 handle 找不到，尝试作为 source_trader_id
+      if (!source) {
+        const { data: source3 } = await supabase
+          .from('trader_sources')
+          .select('source_trader_id')
+          .eq('source', sourceType)
+          .eq('source_trader_id', handle)
+          .maybeSingle()
+        if (source3) source = source3
+      }
+      
+      if (!source && decodedHandle !== handle) {
+        const { data: source4 } = await supabase
+          .from('trader_sources')
+          .select('source_trader_id')
+          .eq('source', sourceType)
+          .eq('source_trader_id', decodedHandle)
+          .maybeSingle()
+        if (source4) source = source4
+      }
 
-    if (!source) {
-      // 如果没有找到，返回默认值
+      if (!source) {
+        continue
+      }
+
+      // 获取最新的 ROI 数据（90天）
+      const { data: latestSnapshot } = await supabase
+        .from('trader_snapshots')
+        .select('roi')
+        .eq('source', sourceType)
+        .eq('source_trader_id', source.source_trader_id)
+        .order('captured_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      // 返回真实数据（目前只有 90D ROI，其他字段暂时使用默认值）
       return {
-        roi_90d: 0,
-        return_ytd: 0,
+        roi_90d: latestSnapshot?.roi || 0,
+        return_ytd: latestSnapshot?.roi || 0,
+        // 其他字段暂时保持为空，等有真实数据源后再补充
       }
     }
 
-    // 获取最新的 ROI 数据（90天）
-    const { data: latestSnapshot } = await supabase
-      .from('trader_snapshots')
-      .select('roi')
-      .eq('source', 'binance')
-      .eq('source_trader_id', source.source_trader_id)
-      .order('captured_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-
-    // 返回真实数据（目前只有 90D ROI，其他字段暂时使用默认值）
+    // 如果没有找到，返回默认值
     return {
-      roi_90d: latestSnapshot?.roi || 0,
-      return_ytd: latestSnapshot?.roi || 0,
-      // 其他字段暂时保持为空，等有真实数据源后再补充
+      roi_90d: 0,
+      return_ytd: 0,
     }
   } catch (error) {
     console.error('Error in getTraderPerformance:', error)
@@ -361,13 +454,29 @@ export async function getTraderPortfolio(handle: string): Promise<PortfolioItem[
  */
 export async function getTraderFeed(handle: string): Promise<TraderFeedItem[]> {
   try {
-    // 从 posts 表获取交易员发布的帖子
-    const { data: posts } = await supabase
+    // 解码 URL 编码的 handle
+    const decodedHandle = decodeURIComponent(handle)
+    
+    // 从 posts 表获取交易员发布的帖子 - 尝试多个可能的 handle 值
+    let posts = null
+    const { data: posts1 } = await supabase
       .from('posts')
       .select('id, title, content, created_at, group_id, like_count, is_pinned, groups(name)')
       .eq('author_handle', handle)
       .order('created_at', { ascending: false })
       .limit(20)
+    
+    if (posts1 && posts1.length > 0) {
+      posts = posts1
+    } else if (decodedHandle !== handle) {
+      const { data: posts2 } = await supabase
+        .from('posts')
+        .select('id, title, content, created_at, group_id, like_count, is_pinned, groups(name)')
+        .eq('author_handle', decodedHandle)
+        .order('created_at', { ascending: false })
+        .limit(20)
+      if (posts2) posts = posts2
+    }
 
     if (!posts) return []
 
@@ -393,61 +502,106 @@ export async function getTraderFeed(handle: string): Promise<TraderFeedItem[]> {
  */
 export async function getSimilarTraders(handle: string, limit: number = 6): Promise<TraderProfile[]> {
   try {
-    // 从 trader_sources 和 trader_snapshots 获取相似交易员（按 ROI 排名）
-    const { data: latestSnapshot } = await supabase
-      .from('trader_snapshots')
-      .select('captured_at')
-      .eq('source', 'binance')
-      .order('captured_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
+    // 优先尝试 binance_web3，如果找不到再尝试 binance
+    const sources = ['binance_web3', 'binance']
+    
+    for (const sourceType of sources) {
+      // 从 trader_sources 和 trader_snapshots 获取相似交易员（按 ROI 排名）
+      const { data: latestSnapshot } = await supabase
+        .from('trader_snapshots')
+        .select('captured_at')
+        .eq('source', sourceType)
+        .order('captured_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
 
-    if (!latestSnapshot) return []
+      if (!latestSnapshot) continue
 
-    // 获取当前交易员的 source_trader_id
-    const { data: currentSource } = await supabase
-      .from('trader_sources')
-      .select('source_trader_id')
-      .eq('source', 'binance')
-      .or(`handle.eq.${handle},source_trader_id.eq.${handle}`)
-      .maybeSingle()
+      // 解码 URL 编码的 handle
+      const decodedHandle = decodeURIComponent(handle)
+      
+      // 获取当前交易员的 source_trader_id - 尝试多个可能的 handle 值
+      let currentSource = null
+      const { data: currentSource1 } = await supabase
+        .from('trader_sources')
+        .select('source_trader_id')
+        .eq('source', sourceType)
+        .eq('handle', handle)
+        .maybeSingle()
+      
+      if (currentSource1) {
+        currentSource = currentSource1
+      } else if (decodedHandle !== handle) {
+        const { data: currentSource2 } = await supabase
+          .from('trader_sources')
+          .select('source_trader_id')
+          .eq('source', sourceType)
+          .eq('handle', decodedHandle)
+          .maybeSingle()
+        if (currentSource2) currentSource = currentSource2
+      }
+      
+      // 如果 handle 找不到，尝试作为 source_trader_id
+      if (!currentSource) {
+        const { data: currentSource3 } = await supabase
+          .from('trader_sources')
+          .select('source_trader_id')
+          .eq('source', sourceType)
+          .eq('source_trader_id', handle)
+          .maybeSingle()
+        if (currentSource3) currentSource = currentSource3
+      }
+      
+      if (!currentSource && decodedHandle !== handle) {
+        const { data: currentSource4 } = await supabase
+          .from('trader_sources')
+          .select('source_trader_id')
+          .eq('source', sourceType)
+          .eq('source_trader_id', decodedHandle)
+          .maybeSingle()
+        if (currentSource4) currentSource = currentSource4
+      }
 
-    // 获取最新的排名数据，排除当前交易员
-    const { data: snapshots } = await supabase
-      .from('trader_snapshots')
-      .select('source_trader_id, roi, followers')
-      .eq('source', 'binance')
-      .eq('captured_at', latestSnapshot.captured_at)
-      .neq('source_trader_id', currentSource?.source_trader_id || '')
-      .order('roi', { ascending: false })
-      .limit(limit)
+      // 获取最新的排名数据，排除当前交易员
+      const { data: snapshots } = await supabase
+        .from('trader_snapshots')
+        .select('source_trader_id, roi, followers')
+        .eq('source', sourceType)
+        .eq('captured_at', latestSnapshot.captured_at)
+        .neq('source_trader_id', currentSource?.source_trader_id || '')
+        .order('roi', { ascending: false })
+        .limit(limit)
 
-    if (!snapshots || snapshots.length === 0) return []
+      if (!snapshots || snapshots.length === 0) continue
 
-    // 获取对应的 handles
-    const traderIds = snapshots.map((s: any) => s.source_trader_id)
-    const { data: sources } = await supabase
-      .from('trader_sources')
-      .select('source_trader_id, handle, profile_url')
-      .eq('source', 'binance')
-      .in('source_trader_id', traderIds)
+      // 获取对应的 handles
+      const traderIds = snapshots.map((s: any) => s.source_trader_id)
+      const { data: sourcesData } = await supabase
+        .from('trader_sources')
+        .select('source_trader_id, handle, profile_url')
+        .eq('source', sourceType)
+        .in('source_trader_id', traderIds)
 
-    const handleMap = new Map()
-    if (sources) {
-      sources.forEach((s: any) => {
-        handleMap.set(s.source_trader_id, { handle: s.handle || s.source_trader_id, profile_url: s.profile_url })
+      const handleMap = new Map()
+      if (sourcesData) {
+        sourcesData.forEach((s: any) => {
+          handleMap.set(s.source_trader_id, { handle: s.handle || s.source_trader_id, profile_url: s.profile_url })
+        })
+      }
+
+      return snapshots.map((s: any) => {
+        const sourceInfo = handleMap.get(s.source_trader_id) || { handle: s.source_trader_id, profile_url: null }
+        return {
+          handle: sourceInfo.handle,
+          id: s.source_trader_id,
+          followers: s.followers || 0,
+          avatar_url: sourceInfo.profile_url || null,
+          source: sourceType,
+        }
       })
     }
 
-    return snapshots.map((s: any) => {
-      const sourceInfo = handleMap.get(s.source_trader_id) || { handle: s.source_trader_id, profile_url: null }
-      return {
-        handle: sourceInfo.handle,
-        id: s.source_trader_id,
-        followers: s.followers || 0,
-        avatar_url: sourceInfo.profile_url || null,
-      }
-    })
+    return []
   } catch (error) {
     console.error('Error fetching similar traders:', error)
     return []

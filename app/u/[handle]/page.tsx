@@ -1,36 +1,65 @@
 'use client'
 
-import { useEffect, useState, use } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
 import { supabase } from '@/lib/supabase/client'
 import TopNav from '@/app/components/Layout/TopNav'
-import UserHomeLayout from '@/app/components/trader/UserHomeLayout'
-import { Box, Text, Button } from '@/app/components/Base'
+import TraderHeader from '@/app/components/trader/TraderHeader'
+import TraderTabs from '@/app/components/trader/TraderTabs'
+import OverviewPerformanceCard from '@/app/components/trader/OverviewPerformanceCard'
+import TraderAboutCard from '@/app/components/trader/TraderAboutCard'
+import SimilarTraders from '@/app/components/trader/SimilarTraders'
+import TraderFeed from '@/app/components/trader/TraderFeed'
+import StatsPage from '@/app/components/trader/stats/StatsPage'
+import PinnedPost from '@/app/components/trader/PinnedPost'
+import PortfolioTable from '@/app/components/trader/PortfolioTable'
+import TradingViewShell from '@/app/components/trader/TradingViewShell'
+import { Box, Text } from '@/app/components/Base'
 import { RankingSkeleton } from '@/app/components/UI/Skeleton'
-import { getTraderPerformance, getTraderFeed } from '@/lib/data/trader'
-import type { TraderPerformance, TraderFeedItem } from '@/lib/data/trader'
+import {
+  getTraderByHandle,
+  getTraderPerformance,
+  getTraderStats,
+  getTraderPortfolio,
+  getTraderFeed,
+  getSimilarTraders,
+  type TraderProfile,
+  type TraderPerformance,
+  type TraderStats,
+  type PortfolioItem,
+  type TraderFeedItem,
+} from '@/lib/data/trader'
 
-type Group = {
-  id: string
-  name: string
-  subtitle?: string | null
-}
+type TabKey = 'overview' | 'stats' | 'portfolio' | 'chart'
 
 export default function UserHomePage(props: { params: { handle: string } | Promise<{ handle: string }> }) {
-  const resolvedParams = props.params && 'then' in props.params ? use(props.params as Promise<{ handle: string }>) : props.params
-  const handle = resolvedParams?.handle ?? ''
-
+  const [handle, setHandle] = useState<string>('')
   const [email, setEmail] = useState<string | null>(null)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
-  const [profile, setProfile] = useState<any>(null)
-  const [groups, setGroups] = useState<Group[]>([])
+  const [profile, setProfile] = useState<TraderProfile | null>(null)
   const [performance, setPerformance] = useState<TraderPerformance | null>(null)
+  const [stats, setStats] = useState<TraderStats | null>(null)
+  const [portfolio, setPortfolio] = useState<PortfolioItem[]>([])
   const [feed, setFeed] = useState<TraderFeedItem[]>([])
+  const [similarTraders, setSimilarTraders] = useState<TraderProfile[]>([])
   const [loading, setLoading] = useState(true)
+  const [activeTab, setActiveTab] = useState<TabKey>('overview')
+  const router = useRouter()
+
+  // 解析 params
+  useEffect(() => {
+    if (props.params && typeof props.params === 'object' && 'then' in props.params) {
+      (props.params as Promise<{ handle: string }>).then((resolved) => {
+        setHandle(resolved?.handle ?? '')
+      })
+    } else {
+      setHandle(String((props.params as { handle: string })?.handle ?? ''))
+    }
+  }, [props.params])
 
   useEffect(() => {
-    // 获取当前用户
     supabase.auth.getUser().then(({ data }) => {
       setEmail(data.user?.email ?? null)
       setCurrentUserId(data.user?.id ?? null)
@@ -38,46 +67,102 @@ export default function UserHomePage(props: { params: { handle: string } | Promi
   }, [])
 
   useEffect(() => {
-    const load = async () => {
-      if (!handle) return
+    if (!handle) {
+      return
+    }
 
+    const load = async () => {
       setLoading(true)
 
       try {
-        // 获取用户资料
-        const { data: profileData } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('handle', handle)
-          .maybeSingle()
+        // 先尝试从 trader_sources 获取（如果用户也是交易员）
+        let profileData = await getTraderByHandle(handle)
 
-        setProfile(profileData)
+        // 如果找不到，从 profiles 表获取注册用户信息
+        if (!profileData) {
+          // 先尝试 profiles 表
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('handle', handle)
+            .maybeSingle()
+
+          if (profile) {
+            // 获取粉丝数
+            const { count } = await supabase
+              .from('follows')
+              .select('*', { count: 'exact', head: true })
+              .eq('trader_id', profile.id)
+
+            profileData = {
+              handle: profile.handle || handle,
+              id: profile.id,
+              bio: profile.bio || null,
+              followers: count || 0,
+              copiers: 0,
+              avatar_url: profile.avatar_url || null,
+              isRegistered: true,
+            }
+          } else {
+            // 再尝试 user_profiles 表
+            const { data: userProfile } = await supabase
+              .from('user_profiles')
+              .select('*')
+              .eq('handle', handle)
+              .maybeSingle()
+
+            if (userProfile) {
+              // 获取粉丝数
+              const { count } = await supabase
+                .from('follows')
+                .select('*', { count: 'exact', head: true })
+                .eq('trader_id', userProfile.id)
+
+              profileData = {
+                handle: userProfile.handle || handle,
+                id: userProfile.id,
+                bio: userProfile.bio || null,
+                followers: count || 0,
+                copiers: 0,
+                avatar_url: userProfile.avatar_url || null,
+                isRegistered: true,
+              }
+            }
+          }
+        } else {
+          // 如果从 trader_sources 找到了，确保获取正确的粉丝数
+          const { count } = await supabase
+            .from('follows')
+            .select('*', { count: 'exact', head: true })
+            .eq('trader_id', profileData.id)
+
+          if (count !== null) {
+            profileData.followers = count
+          }
+        }
 
         if (!profileData) {
           setLoading(false)
           return
         }
 
-        // 获取小组
-        const { data: groupMemberships } = await supabase
-          .from('group_members')
-          .select('group_id, groups(id, name, subtitle)')
-          .eq('user_id', profileData.id)
-
-        if (groupMemberships) {
-          setGroups(groupMemberships.map((gm: any) => gm.groups).filter(Boolean))
-        }
-
-        // 获取绩效和动态
-        const [perfData, feedData] = await Promise.all([
-          getTraderPerformance(handle),
+        const [performanceData, statsData, portfolioData, feedData, similarData] = await Promise.all([
+          getTraderPerformance(handle).catch(() => null),
+          getTraderStats(handle).catch(() => null),
+          getTraderPortfolio(handle).catch(() => []),
           getTraderFeed(handle),
+          getSimilarTraders(handle).catch(() => []),
         ])
 
-        setPerformance(perfData)
+        setProfile(profileData)
+        setPerformance(performanceData)
+        setStats(statsData)
+        setPortfolio(portfolioData)
         setFeed(feedData)
+        setSimilarTraders(similarData)
       } catch (error) {
         console.error('Error loading user data:', error)
+        setProfile(null)
       } finally {
         setLoading(false)
       }
@@ -105,6 +190,9 @@ export default function UserHomePage(props: { params: { handle: string } | Promi
           <Text size="lg" weight="bold">
             用户不存在
           </Text>
+          <Text size="sm" color="tertiary" style={{ marginTop: tokens.spacing[2] }}>
+            Handle: {handle || '(empty)'}
+          </Text>
           <Link href="/" style={{ color: tokens.colors.text.secondary, textDecoration: 'none', marginTop: tokens.spacing[2], display: 'inline-block' }}>
             ← 返回首页
           </Link>
@@ -120,93 +208,71 @@ export default function UserHomePage(props: { params: { handle: string } | Promi
       <TopNav email={email} />
 
       <Box style={{ maxWidth: 1200, margin: '0 auto', padding: tokens.spacing[6] }}>
-        {/* Profile Header */}
-        <Box
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'flex-start',
-            marginBottom: tokens.spacing[6],
-            paddingBottom: tokens.spacing[6],
-            borderBottom: `1px solid ${tokens.colors.border.primary}`,
-          }}
-        >
-          <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[4] }}>
-            <Box
-              style={{
-                width: 80,
-                height: 80,
-                borderRadius: tokens.radius.xl,
-                background: tokens.colors.bg.secondary,
-                border: `1px solid ${tokens.colors.border.primary}`,
-                display: 'grid',
-                placeItems: 'center',
-                fontWeight: tokens.typography.fontWeight.black,
-                fontSize: tokens.typography.fontSize['2xl'],
-                color: tokens.colors.text.primary,
-                overflow: 'hidden',
-              }}
-            >
-              {profile.avatar_url ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={profile.avatar_url} alt={handle} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-              ) : (
-                (handle?.[0] ?? 'U').toUpperCase()
-              )}
-            </Box>
-
-            <Box>
-              <Text size="2xl" weight="black" style={{ marginBottom: tokens.spacing[1] }}>
-                {profile.handle || handle}
-              </Text>
-              <Text size="sm" color="secondary" style={{ marginBottom: tokens.spacing[2] }}>
-                ID: {profile.id}
-              </Text>
-              <Box style={{ display: 'flex', gap: tokens.spacing[4] }}>
-                <Text size="sm" color="secondary">
-                  关注 <Text weight="bold" style={{ color: tokens.colors.text.primary }}>0</Text>
-                </Text>
-                <Text size="sm" color="secondary">
-                  粉丝 <Text weight="bold" style={{ color: tokens.colors.text.primary }}>0</Text>
-                </Text>
-              </Box>
-              {profile.bio && (
-                <Text size="base" color="secondary" style={{ marginTop: tokens.spacing[3], lineHeight: 1.6 }}>
-                  {profile.bio}
-                </Text>
-              )}
-            </Box>
-          </Box>
-
-          <Box style={{ display: 'flex', gap: tokens.spacing[2] }}>
-            {isOwnProfile ? (
-              <Button variant="ghost" size="md" onClick={() => alert('编辑个人资料')}>
-                编辑个人资料
-              </Button>
-            ) : (
-              <>
-                <Button variant="ghost" size="md" onClick={() => alert('关注')}>
-                  关注
-                </Button>
-                <Button variant="primary" size="md" onClick={() => alert('私信')}>
-                  私信
-                </Button>
-              </>
-            )}
-          </Box>
-        </Box>
-
-        {/* Main Content */}
-        <UserHomeLayout
-          userId={profile.id}
-          handle={handle}
+        {/* Header */}
+        <TraderHeader
+          handle={profile.handle}
+          traderId={profile.id}
           avatarUrl={profile.avatar_url}
-          bio={profile.bio}
-          performance={performance || undefined}
-          feed={feed}
-          groups={groups}
+          isRegistered={profile.isRegistered}
+          followers={profile.followers}
           isOwnProfile={isOwnProfile}
         />
+
+        {/* Tabs */}
+        <TraderTabs activeTab={activeTab} onTabChange={setActiveTab} />
+
+        {/* Tab Content */}
+        {activeTab === 'overview' && (
+          <Box
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr 320px',
+              gap: tokens.spacing[8],
+            }}
+          >
+            {/* Left Column - 核心绩效指标和动态 */}
+            <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[6] }}>
+              {performance && (
+                <OverviewPerformanceCard
+                  performance={performance}
+                  profitableWeeksPct={stats?.additionalStats?.profitableWeeksPct}
+                />
+              )}
+              {/* 置顶帖子 - Performance和动态之间 */}
+              {feed.filter((f) => f.is_pinned && f.type !== 'group_post').length > 0 && (
+                <PinnedPost item={feed.filter((f) => f.is_pinned && f.type !== 'group_post')[0]} />
+              )}
+              {/* 交易员动态 - 紧跟在Performance后面 */}
+              <TraderFeed
+                items={feed.filter((f) => f.type !== 'group_post' && !f.is_pinned)}
+                title="动态"
+                showPostButton={isOwnProfile}
+                onPostClick={() => router.push(`/u/${handle}/new`)}
+              />
+            </Box>
+
+            {/* Right Column - 交易员卡片 */}
+            <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[6] }}>
+              <TraderAboutCard
+                handle={profile.handle}
+                avatarUrl={profile.avatar_url}
+                bio={profile.bio}
+                followers={profile.followers}
+                isRegistered={profile.isRegistered}
+                isOwnProfile={isOwnProfile}
+              />
+              {similarTraders.length > 0 && <SimilarTraders traders={similarTraders} />}
+            </Box>
+          </Box>
+        )}
+
+        {activeTab === 'stats' && stats && (
+          <StatsPage stats={stats} traderHandle={profile.handle} />
+        )}
+
+        {activeTab === 'portfolio' && <PortfolioTable items={portfolio} />}
+
+        {activeTab === 'chart' && <TradingViewShell symbol={profile.handle} timeframe="1Y" />}
       </Box>
     </Box>
   )

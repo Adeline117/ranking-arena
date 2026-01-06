@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo, memo } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { supabase } from '@/lib/supabase/client'
 import { SkeletonLine } from '../UI/Skeleton'
@@ -70,7 +70,10 @@ export default function MarketPanel() {
 
     const load = async () => {
       try {
-        setLoading(true)
+        // 只在首次加载时显示 loading，后续更新不显示 loading，避免跳动
+        if (market.length === 0) {
+          setLoading(true)
+        }
         setError(null)
         const pairsParam = customPairs.join(',')
         const res = await fetch(`/api/market?pairs=${encodeURIComponent(pairsParam)}`, { cache: 'no-store' })
@@ -85,13 +88,39 @@ export default function MarketPanel() {
           const filteredRows = (json.rows ?? []).filter((row: MarketRow) =>
             customPairs.includes(row.symbol)
           )
-          setMarket(filteredRows)
-          setLastUpdate(new Date())
+          
+          // 只在数据真正变化时才更新，避免不必要的重新渲染
+          setMarket((prevMarket) => {
+            // 如果数据完全相同，不更新，避免跳动
+            if (prevMarket.length === filteredRows.length &&
+                prevMarket.every((prev, i) => 
+                  filteredRows[i] &&
+                  prev.symbol === filteredRows[i].symbol &&
+                  prev.price === filteredRows[i].price &&
+                  prev.changePct === filteredRows[i].changePct &&
+                  prev.direction === filteredRows[i].direction
+                )) {
+              return prevMarket // 返回原数组，避免重新渲染
+            }
+            return filteredRows
+          })
+          
+          // 只在数据真正变化时才更新时间戳
+          setLastUpdate((prevTime) => {
+            const now = new Date()
+            // 如果距离上次更新不到2秒，不更新时间戳，避免频繁更新
+            if (prevTime && now.getTime() - prevTime.getTime() < 2000) {
+              return prevTime
+            }
+            return now
+          })
         }
       } catch (err: any) {
         if (!alive) return
         setError(err?.message || '加载失败')
-        setMarket([])
+        if (market.length === 0) {
+          setMarket([])
+        }
       } finally {
         if (!alive) return
         setLoading(false)
@@ -99,7 +128,8 @@ export default function MarketPanel() {
     }
 
     load()
-    const t = setInterval(load, 3000)
+    // 增加刷新间隔到10秒，减少跳动频率
+    const t = setInterval(load, 10000)
     return () => {
       alive = false
       clearInterval(t)
@@ -169,47 +199,16 @@ export default function MarketPanel() {
         />
       ) : (
         <>
-          <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
+          <Box 
+            key="market-list"
+            style={{ 
+              display: 'flex', 
+              flexDirection: 'column', 
+              gap: tokens.spacing[2],
+            }}
+          >
             {market.map((m) => (
-              <Box
-                key={m.symbol}
-                bg="primary"
-                p={3}
-                radius="lg"
-                border="secondary"
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  transition: `all ${tokens.transition.base}`,
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = tokens.colors.bg.secondary
-                  e.currentTarget.style.borderColor = tokens.colors.border.primary
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = tokens.colors.bg.primary
-                  e.currentTarget.style.borderColor = tokens.colors.border.secondary
-                }}
-              >
-                <Text size="sm" weight="black">
-                  {m.symbol.replace('-USD', '')}
-                </Text>
-                <Box style={{ textAlign: 'right' }}>
-                  <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[1] }}>
-                    ${m.price}
-                  </Text>
-                  <Text
-                    size="xs"
-                    weight="bold"
-                    style={{
-                      color: m.direction === 'up' ? tokens.colors.accent.success : tokens.colors.accent.error,
-                    }}
-                  >
-                    {m.changePct}
-                  </Text>
-                </Box>
-              </Box>
+              <MarketRow key={m.symbol} data={m} />
             ))}
           </Box>
           <Box
@@ -230,7 +229,7 @@ export default function MarketPanel() {
                 textAlign: 'center',
               }}
             >
-              每3秒自动刷新
+              每10秒自动刷新
             </Box>
             {userId && (
               <Button
@@ -258,6 +257,68 @@ export default function MarketPanel() {
     </Box>
   )
 }
+
+// 市场行组件 - 使用 memo 防止不必要的重新渲染
+const MarketRow = memo(function MarketRow({ data }: { data: MarketRow }) {
+  return (
+    <Box
+      bg="primary"
+      p={3}
+      radius="lg"
+      border="secondary"
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        transition: `background ${tokens.transition.base}, border-color ${tokens.transition.base}`,
+        contain: 'layout style paint', // CSS containment 优化渲染性能
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.background = tokens.colors.bg.secondary
+        e.currentTarget.style.borderColor = tokens.colors.border.primary
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.background = tokens.colors.bg.primary
+        e.currentTarget.style.borderColor = tokens.colors.border.secondary
+      }}
+    >
+      <Text size="sm" weight="black">
+        {data.symbol.replace('-USD', '')}
+      </Text>
+      <Box style={{ textAlign: 'right', minWidth: '100px' }}>
+        <div
+          style={{
+            fontSize: tokens.typography.fontSize.sm,
+            fontWeight: 700,
+            marginBottom: tokens.spacing[1],
+            color: tokens.colors.text.primary,
+            lineHeight: 1.5,
+          }}
+        >
+          ${data.price}
+        </div>
+        <div
+          style={{
+            fontSize: tokens.typography.fontSize.xs,
+            fontWeight: 700,
+            color: data.direction === 'up' ? tokens.colors.accent.success : tokens.colors.accent.error,
+            lineHeight: 1.5,
+          }}
+        >
+          {data.changePct}
+        </div>
+      </Box>
+    </Box>
+  )
+}, (prevProps, nextProps) => {
+  // 自定义比较函数：只在价格或百分比真正变化时才重新渲染
+  return (
+    prevProps.data.symbol === nextProps.data.symbol &&
+    prevProps.data.price === nextProps.data.price &&
+    prevProps.data.changePct === nextProps.data.changePct &&
+    prevProps.data.direction === nextProps.data.direction
+  )
+})
 
 // 自定义币种面板
 function MarketCustomizePanel({

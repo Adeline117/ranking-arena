@@ -47,12 +47,21 @@ export default function TraderPage(props: { params: { handle: string } | Promise
 
   // 解析 params
   useEffect(() => {
+    const resolveHandle = (rawHandle: string) => {
+      // Next.js 会自动解码 URL，但为了安全，我们再次解码
+      try {
+        return decodeURIComponent(rawHandle)
+      } catch {
+        return rawHandle
+      }
+    }
+    
     if (props.params && typeof props.params === 'object' && 'then' in props.params) {
       (props.params as Promise<{ handle: string }>).then((resolved) => {
-        setHandle(resolved?.handle ?? '')
+        setHandle(resolveHandle(resolved?.handle ?? ''))
       })
     } else {
-      setHandle(String((props.params as { handle: string })?.handle ?? ''))
+      setHandle(resolveHandle(String((props.params as { handle: string })?.handle ?? '')))
     }
   }, [props.params])
 

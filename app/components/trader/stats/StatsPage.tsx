@@ -673,8 +673,8 @@ function BreakdownSection({ frequentlyTraded }: { frequentlyTraded: Array<{ symb
       </Box>
 
       <Box style={{ marginBottom: tokens.spacing[4] }}>
-        <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[2] }}>
-          This breakdown includes <Text weight="bold" style={{ color: tokens.colors.text.primary }}>{totalPct.toFixed(1)}%</Text> of this Portfolio
+        <Text as="span" size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[2] }}>
+          This breakdown includes <Text as="span" weight="bold" style={{ color: tokens.colors.text.primary }}>{totalPct.toFixed(1)}%</Text> of this Portfolio
         </Text>
       </Box>
 
