@@ -115,9 +115,12 @@ export async function getTraderByHandle(handle: string): Promise<TraderProfile |
       
       if (source1) {
         source = source1
-      } else if (error1 && (error1.message || error1.code || error1.hint)) {
-        // 只在有实际错误内容时记录
-        sourceError = error1
+      } else if (error1) {
+        // 检查是否有实际的错误内容
+        const hasErrorContent = error1.message || error1.code || error1.hint || error1.details
+        if (hasErrorContent) {
+          sourceError = error1
+        }
       }
       
       // 如果原始 handle 找不到，尝试解码后的 handle（如果不同）
@@ -131,16 +134,24 @@ export async function getTraderByHandle(handle: string): Promise<TraderProfile |
         
         if (source2) {
           source = source2
-        } else if (error2 && (error2.message || error2.code || error2.hint) && !sourceError) {
-          // 只在有实际错误内容时记录
-          sourceError = error2
+        } else if (error2 && !sourceError) {
+          // 检查是否有实际的错误内容
+          const hasErrorContent = error2.message || error2.code || error2.hint || error2.details
+          if (hasErrorContent) {
+            sourceError = error2
+          }
         }
       }
 
       // 只在有实际错误内容时记录和跳过
       if (sourceError) {
-        console.error(`Error fetching trader_source by handle (${sourceType}):`, sourceError)
-        continue
+        const hasErrorContent = sourceError.message || sourceError.code || sourceError.hint || sourceError.details
+        if (hasErrorContent) {
+          console.error(`Error fetching trader_source by handle (${sourceType}):`, sourceError)
+          continue
+        }
+        // 如果没有实际错误内容，清除 sourceError 继续处理
+        sourceError = null
       }
 
       if (!source) {

@@ -60,3 +60,4 @@ node scripts/import_binance_from_json.mjs path/to/data.json
 node scripts/cleanup_old_traders.mjs
 ```
 
+
