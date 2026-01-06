@@ -104,15 +104,18 @@ export async function POST(req: Request) {
     }
 
     // 记录执行日志
-    await supabase.from("cron_logs").insert([
-      {
-        name: "fetch-traders",
-        ran_at: now,
-        result: JSON.stringify(results),
-      },
-    ]).catch(() => {
+    try {
+      await supabase.from("cron_logs").insert([
+        {
+          name: "fetch-traders",
+          ran_at: now,
+          result: JSON.stringify(results),
+        },
+      ]);
+    } catch (error) {
       // 如果 cron_logs 表不存在，忽略错误
-    });
+      console.warn("Failed to log to cron_logs:", error);
+    }
 
     return NextResponse.json({
       ok: true,
