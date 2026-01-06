@@ -416,7 +416,6 @@ function ReactButton({ onClick, active, icon, count, showCount = true }: { onCli
       onClick={handleClick}
       onMouseDown={() => setIsPressed(true)}
       onMouseUp={() => setIsPressed(false)}
-      onMouseLeave={() => setIsPressed(false)}
       style={{
         background: active ? 'rgba(139, 111, 168, 0.15)' : 'transparent',
         border: 'none',
@@ -439,6 +438,7 @@ function ReactButton({ onClick, active, icon, count, showCount = true }: { onCli
         }
       }}
       onMouseLeave={(e) => {
+        setIsPressed(false)
         if (!active) {
           e.currentTarget.style.background = 'transparent'
           e.currentTarget.style.color = '#a9a9a9'
