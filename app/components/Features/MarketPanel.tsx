@@ -8,6 +8,7 @@ import EmptyState from '../UI/EmptyState'
 import ErrorMessage from '../UI/ErrorMessage'
 import { ChartIcon } from '../Icons'
 import { Box, Text, Button } from '../Base'
+import { useLanguage } from '../Utils/LanguageProvider'
 
 type MarketRow = {
   symbol: string
@@ -17,6 +18,7 @@ type MarketRow = {
 }
 
 export default function MarketPanel() {
+  const { t } = useLanguage()
   const [market, setMarket] = useState<MarketRow[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -61,7 +63,7 @@ export default function MarketPanel() {
       setShowCustomize(false)
     } catch (err) {
       console.error('Save custom pairs error:', err)
-      alert('保存失败，请重试')
+      alert(t('saveFailed'))
     }
   }
 
@@ -117,7 +119,7 @@ export default function MarketPanel() {
         }
       } catch (err: any) {
         if (!alive) return
-        setError(err?.message || '加载失败')
+        setError(err?.message || t('loadFailed'))
         if (market.length === 0) {
           setMarket([])
         }
@@ -129,19 +131,19 @@ export default function MarketPanel() {
 
     load()
     // 增加刷新间隔到10秒，减少跳动频率
-    const t = setInterval(load, 10000)
+    const interval = setInterval(load, 10000)
     return () => {
       alive = false
-      clearInterval(t)
+      clearInterval(interval)
     }
   }, [customPairs])
 
   const formatTime = (date: Date) => {
     const now = new Date()
     const diff = Math.floor((now.getTime() - date.getTime()) / 1000)
-    if (diff < 60) return `${diff}秒前`
-    if (diff < 3600) return `${Math.floor(diff / 60)}分钟前`
-    return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+    if (diff < 60) return `${diff} ${t('secondsAgo')}`
+    if (diff < 3600) return `${Math.floor(diff / 60)} ${t('minutesAgo')}`
+    return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
   }
 
   return (
@@ -158,7 +160,7 @@ export default function MarketPanel() {
         <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
           <ChartIcon size={18} style={{ color: tokens.colors.text.primary }} />
           <Text size="md" weight="black">
-            市场行情
+            {t('market')}
           </Text>
         </Box>
         {lastUpdate && !loading && !error && (
@@ -194,8 +196,8 @@ export default function MarketPanel() {
         <ErrorMessage message={error} onRetry={() => window.location.reload()} />
       ) : market.length === 0 ? (
         <EmptyState
-          title="暂无行情数据"
-          description="API可能暂时不可用，请稍后再试"
+          title={t('noData')}
+          description={t('loadFailed')}
         />
       ) : (
         <>
@@ -229,7 +231,7 @@ export default function MarketPanel() {
                 textAlign: 'center',
               }}
             >
-              每10秒自动刷新
+              Auto refresh every 10s
             </Box>
             {userId && (
               <Button
@@ -241,7 +243,7 @@ export default function MarketPanel() {
                   padding: tokens.spacing[2],
                 }}
               >
-                {showCustomize ? '完成' : '自定义显示'}
+                {showCustomize ? t('save') : t('customize')}
               </Button>
             )}
             {showCustomize && userId && (
@@ -330,6 +332,7 @@ function MarketCustomizePanel({
   onSave: (pairs: string[]) => void
   onCancel: () => void
 }) {
+  const { t } = useLanguage()
   const [selectedPairs, setSelectedPairs] = useState<string[]>(currentPairs)
   const availablePairs = [
     'BTC-USD', 'ETH-USD', 'SOL-USD', 'ARB-USD', 'BNB-USD', 'XRP-USD',
@@ -358,7 +361,7 @@ function MarketCustomizePanel({
       }}
     >
       <Text size="sm" weight="bold">
-        选择要显示的币种（最多6个）
+        Select coins to display (max 6)
       </Text>
       <Box
         style={{
@@ -402,7 +405,7 @@ function MarketCustomizePanel({
           保存
         </Button>
         <Button variant="ghost" size="sm" onClick={onCancel}>
-          取消
+          {t('cancel')}
         </Button>
       </Box>
     </Box>
