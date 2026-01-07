@@ -106,66 +106,54 @@ async function fetchBitget90dRoi() {
   
   page.on('response', async (response) => {
     const url = response.url()
-    // 监听 Bitget API
-    if (url.includes('leaderboard') || url.includes('ranking') || url.includes('copy-trading') || 
-        (url.includes('bitget') && (url.includes('api') || url.includes('v1') || url.includes('v2')))) {
+    // 只监听 traderRankingList API（不监听 topRankingList）
+    if (url.includes('traderRankingList') && !url.includes('topRankingList')) {
       try {
         const status = response.status()
         const data = await response.json().catch(() => null)
         
         if (!data) return
         
-        // 记录所有相关响应
+        // 记录响应信息
         capturedResponses.push({
           url: url.substring(0, 100),
           status,
           keys: Object.keys(data),
           code: data.code,
-          hasData: !!data.data,
-          dataKeys: data.data ? Object.keys(data.data) : [],
+          hasRows: !!(data.data && data.data.rows),
+          rowsCount: data.data && data.data.rows ? data.data.rows.length : 0,
         })
         
         // 检查响应是否成功
         const isSuccess = status === 200 && (data.code === '00000' || data.code === 0 || data.success === true)
         
-        if (isSuccess && data.data) {
-          const result = data.data
-          
-          // 尝试多种数据路径
-          let list = null
-          
-          if (Array.isArray(result)) {
-            list = result
-          } else if (result.list && Array.isArray(result.list)) {
-            list = result.list
-          } else if (result.leaderList && Array.isArray(result.leaderList)) {
-            list = result.leaderList
-          } else if (result.leaderboard && Array.isArray(result.leaderboard)) {
-            list = result.leaderboard
-          } else if (result.items && Array.isArray(result.items)) {
-            list = result.items
-          } else if (result.records && Array.isArray(result.records)) {
-            list = result.records
-          }
-          
-          // 如果 result 本身是对象，检查是否有嵌套的数组
-          if (!list && typeof result === 'object') {
-            for (const key in result) {
-              if (Array.isArray(result[key]) && result[key].length > 0) {
-                const firstItem = result[key][0]
-                if (firstItem && (firstItem.uid || firstItem.userId || firstItem.nickName || firstItem.roi != null)) {
-                  list = result[key]
-                  break
-                }
+        if (isSuccess && data.data && data.data.rows && Array.isArray(data.data.rows)) {
+          const rows = data.data.rows
+          if (rows.length > 0) {
+            console.log(`✅ 从页面响应捕获到 traderRankingList 数据: ${rows.length} 条`)
+            console.log(`   URL: ${url.substring(0, 120)}`)
+            
+            // 解析 URL 参数判断页码
+            const urlParams = new URLSearchParams(url.split('?')[1] || '')
+            const pageNo = parseInt(urlParams.get('pageNo') || '1')
+            
+            // 合并数据（去重，根据 traderId 或 rankingNo）
+            if (!capturedData || capturedData.length === 0) {
+              capturedData = rows
+              console.log(`   (第 ${pageNo} 页) 初始数据: ${rows.length} 条`)
+            } else {
+              const existingIds = new Set(capturedData.map((item) => item.traderId || item.uid || String(item.rankingNo)))
+              const newRows = rows.filter((item) => {
+                const id = item.traderId || item.uid || String(item.rankingNo)
+                return !existingIds.has(id)
+              })
+              if (newRows.length > 0) {
+                capturedData.push(...newRows)
+                console.log(`   (第 ${pageNo} 页) 新增 ${newRows.length} 条，累计: ${capturedData.length} 条`)
+              } else {
+                console.log(`   (第 ${pageNo} 页) 无新数据，可能重复`)
               }
             }
-          }
-          
-          if (list && list.length > 0) {
-            console.log(`✅ 捕获到数据: ${list.length} 条`)
-            console.log(`   URL: ${url.substring(0, 120)}`)
-            console.log(`   数据键: ${Object.keys(list[0] || {}).join(', ')}`)
-            capturedData = list
           }
         }
       } catch (e) {
@@ -175,6 +163,7 @@ async function fetchBitget90dRoi() {
   })
 
   try {
+    // 先访问页面，然后在页面上下文中调用 API
     console.log('正在访问 Bitget Copy Trading 页面...')
     const targetUrl = 'https://www.bitget.com/asia/copy-trading/leaderboard-ranking/futures-roi/1?dateType=90'
     await page.goto(targetUrl, {
@@ -182,104 +171,140 @@ async function fetchBitget90dRoi() {
       timeout: 90000,
     })
 
-    // 等待页面完全加载
+    // 等待页面加载
     console.log('等待页面加载...')
     await new Promise(resolve => setTimeout(resolve, 5000))
 
-    // 尝试滚动页面以触发更多 API 请求
-    await page.evaluate(() => {
-      window.scrollTo(0, document.body.scrollHeight)
-    })
-    await new Promise(resolve => setTimeout(resolve, 2000))
-
-    // 如果还没有捕获到数据，尝试直接调用API
-    if (!capturedData || capturedData.length === 0) {
-      console.log('')
-      console.log('=== 尝试直接调用 Bitget API ===')
+    // 在页面上下文中调用 API 获取多页数据
+    console.log('')
+    console.log('=== 在页面上下文中调用 Bitget API ===')
+    const apiUrl = 'https://www.bitget.com/v1/trigger/trace/public/traderRankingList'
       
-      // 打印已捕获的响应信息
+    // 获取多页数据（最多100条）
+    let allRows = []
+    let pageNo = 1
+    const pageSize = 50 // Bitget 每页最多50条
+    let hasMore = true
+    const maxPages = 2 // 最多2页（100条）
+    
+    // 尝试在页面上触发加载更多数据
+    console.log(`准备在页面上触发加载更多数据（最多 ${maxPages} 页，目标 100 条）...`)
+    
+    // 等待页面初始数据加载完成
+    await new Promise(resolve => setTimeout(resolve, 5000))
+    
+    // 在页面上下文中尝试多次请求不同页码的数据
+    console.log('尝试在页面上下文中模拟多次 API 请求...')
+    const fetchedData = await page.evaluate(async (apiUrl, maxPages, pageSize) => {
+      const logs = []
+      const allRows = []
+      
+      // 尝试直接调用 API（使用页面上下文，应该有正确的 Cookie 和 Headers）
+      for (let pageNo = 2; pageNo <= maxPages; pageNo++) {
+        try {
+          logs.push(`尝试获取第 ${pageNo} 页数据...`)
+          const fetchUrl = `${apiUrl}?pageNo=${pageNo}&pageSize=${pageSize}`
+          
+          // 使用 window.fetch，它应该有页面的上下文（Cookie、Headers等）
+          const res = await window.fetch(fetchUrl, {
+            method: 'GET',
+            headers: {
+              'Accept': 'application/json',
+              'Referer': window.location.href,
+              'Origin': window.location.origin,
+            },
+          })
+          
+          logs.push(`第 ${pageNo} 页响应: ${res.status} ${res.statusText}`)
+          
+          if (res.ok) {
+            const data = await res.json()
+            logs.push(`第 ${pageNo} 页 code: ${data.code}`)
+            
+            if (data.code === '00000' && data.data && data.data.rows && Array.isArray(data.data.rows)) {
+              const rowsCount = data.data.rows.length
+              allRows.push(...data.data.rows)
+              logs.push(`✅ 第 ${pageNo} 页: 获取到 ${rowsCount} 条，累计 ${allRows.length} 条`)
+              
+              // 如果没有更多数据，停止
+              if (!data.data.nextFlag || rowsCount < pageSize) {
+                logs.push(`没有更多数据了`)
+                break
+              }
+            }
+          } else {
+            logs.push(`⚠️ 第 ${pageNo} 页: HTTP ${res.status}`)
+          }
+          
+          // 延迟避免请求过快
+          await new Promise(resolve => setTimeout(resolve, 1000))
+        } catch (e) {
+          logs.push(`❌ 第 ${pageNo} 页异常: ${e.message}`)
+        }
+      }
+      
+      logs.push(`页面上下文请求完成，获取到 ${allRows.length} 条新数据`)
+      return { rows: allRows, logs }
+    }, apiUrl, maxPages, pageSize)
+    
+    // 显示日志
+    if (fetchedData && fetchedData.logs) {
+      console.log('')
+      console.log('=== 页面上下文 API 调用日志 ===')
+      fetchedData.logs.forEach(log => console.log(log))
+      console.log('')
+    }
+    
+    // 提取数据行
+    const apiRows = fetchedData && fetchedData.rows ? fetchedData.rows : (Array.isArray(fetchedData) ? fetchedData : [])
+    
+    // 如果页面操作没有获取到新数据，依赖响应监听器捕获的数据
+    // 响应监听器已经捕获了第一页的20条数据
+    if (apiRows && apiRows.length > 0) {
+      console.log(`✅ 从 API 获取到 ${apiRows.length} 条 Bitget 数据`)
+      
+      // 与已捕获的数据合并（去重）
+      if (capturedData && capturedData.length > 0) {
+        console.log(`已从页面响应捕获到 ${capturedData.length} 条数据，开始合并...`)
+        const existingIds = new Set(capturedData.map((item) => item.traderId || item.uid || String(item.rankingNo)))
+        const newRows = apiRows.filter((item) => {
+          const id = item.traderId || item.uid || String(item.rankingNo)
+          return !existingIds.has(id)
+        })
+        if (newRows.length > 0) {
+          capturedData.push(...newRows)
+          console.log(`✅ 合并后总共: ${capturedData.length} 条`)
+        } else {
+          console.log(`ℹ️ 所有 API 数据已存在于捕获数据中`)
+        }
+      } else {
+        capturedData = apiRows
+      }
+    } else {
+      // 如果通过页面上下文获取失败，尝试从捕获的响应中查找
+      console.log('')
+      console.log('=== 从页面捕获的响应中查找数据 ===')
       if (capturedResponses.length > 0) {
         console.log('已捕获的响应:')
         capturedResponses.forEach((resp, i) => {
           console.log(`  ${i + 1}. ${resp.url}`)
-          console.log(`     状态: ${resp.status}, 键: ${resp.keys.join(', ')}`)
+          if (resp.url.includes('traderRankingList')) {
+            console.log(`     ✅ 找到 traderRankingList 响应`)
+          }
         })
       }
+    }
+    
+    // 如果还是没有数据，尝试等待页面响应
+    if (!capturedData || capturedData.length === 0) {
+      console.log('等待页面响应...')
+      await new Promise(resolve => setTimeout(resolve, 3000))
       
-      // 使用正确的 Bitget API 端点
-      const apiUrl = 'https://www.bitget.com/v1/trigger/trace/public/traderRankingList'
-      console.log(`尝试 API: ${apiUrl}`)
-      
-      // 获取多页数据（最多100条）
-      let allRows = []
-      let pageNo = 1
-      const pageSize = 50 // Bitget 每页最多50条
-      let hasMore = true
-      
-      while (hasMore && pageNo <= 2) { // 最多获取2页（100条）
-        try {
-          const fetchUrl = `${apiUrl}?pageNo=${pageNo}&pageSize=${pageSize}`
-          console.log(`获取第 ${pageNo} 页数据...`)
-          
-          const response = await page.evaluate(async (fetchUrl) => {
-            try {
-              const res = await fetch(fetchUrl, {
-                method: 'GET',
-                headers: {
-                  'Accept': 'application/json',
-                  'Referer': 'https://www.bitget.com/',
-                  'Origin': 'https://www.bitget.com',
-                },
-              })
-              if (res.ok) {
-                const data = await res.json()
-                return { success: true, data }
-              }
-              return { success: false, status: res.status }
-            } catch (e) {
-              return { success: false, error: e.message }
-            }
-          }, fetchUrl)
-
-          if (response.success && response.data) {
-            const data = response.data
-            
-            if (data.code === '00000' || data.success === true) {
-              if (data.data && data.data.rows && Array.isArray(data.data.rows)) {
-                allRows.push(...data.data.rows)
-                console.log(`✅ 第 ${pageNo} 页: 获取到 ${data.data.rows.length} 条`)
-                
-                // 检查是否还有更多数据
-                hasMore = data.data.nextFlag === true && allRows.length < 100
-              } else {
-                console.log(`⚠️ 第 ${pageNo} 页: 数据格式不正确`)
-                hasMore = false
-              }
-            } else {
-              console.log(`⚠️ 第 ${pageNo} 页: API 返回错误 code=${data.code}, msg=${data.msg}`)
-              hasMore = false
-            }
-          } else {
-            console.log(`⚠️ 第 ${pageNo} 页: 请求失败 status=${response.status || 'unknown'}, error=${response.error || 'none'}`)
-            hasMore = false
-          }
-          
-          // 延迟避免请求过快
-          if (hasMore) {
-            await new Promise(resolve => setTimeout(resolve, 500))
-          }
-          
-          pageNo++
-        } catch (e) {
-          console.log(`⚠️ 第 ${pageNo} 页获取异常:`, e.message)
-          hasMore = false
-        }
+      // 如果从响应监听中已经捕获到数据，使用它
+      if (capturedData && capturedData.length > 0) {
+        console.log(`✅ 从页面响应捕获到 ${capturedData.length} 条数据`)
       }
-      
-      if (allRows.length > 0) {
-        console.log(`✅ 总共获取到 ${allRows.length} 条 Bitget 数据`)
-        capturedData = allRows
-      }
+    }
       
       // 如果上面的 API 都不行，尝试从页面DOM提取
       if (!capturedData || capturedData.length === 0) {
@@ -346,7 +371,6 @@ async function fetchBitget90dRoi() {
           console.log('⚠️ 无法从DOM提取数据:', e.message)
         }
       }
-    }
 
     await browser.close()
 
@@ -470,55 +494,153 @@ async function importToSupabase(normalizedData) {
 }
 
 /**
+ * 从 JSON 文件中提取数据行
+ */
+function extractRowsFromFile(fileData) {
+  let rawData = null
+  
+  // 支持多种 JSON 格式
+  if (Array.isArray(fileData)) {
+    rawData = fileData
+  } else if (fileData.data?.data?.rows && Array.isArray(fileData.data.data.rows)) {
+    // Bitget API 响应格式: { code: "00000", data: { data: { rows: [...] } } }
+    rawData = fileData.data.data.rows
+  } else if (fileData.data?.rows && Array.isArray(fileData.data.rows)) {
+    // Bitget API 响应格式: { code: "00000", data: { rows: [...] } }
+    rawData = fileData.data.rows
+  } else if (fileData.data?.list && Array.isArray(fileData.data.list)) {
+    rawData = fileData.data.list
+  } else if (fileData.data?.records && Array.isArray(fileData.data.records)) {
+        rawData = fileData.data.records
+      } else if (fileData.result?.list && Array.isArray(fileData.result.list)) {
+        rawData = fileData.result.list
+      } else if (fileData.list && Array.isArray(fileData.list)) {
+        rawData = fileData.list
+      } else if (fileData.data && Array.isArray(fileData.data)) {
+        rawData = fileData.data
+      } else if (fileData.rows && Array.isArray(fileData.rows)) {
+        rawData = fileData.rows
+      }
+      
+      return rawData
+    }
+
+/**
  * 主函数
  */
 async function main() {
   try {
+    const { readFileSync, readdirSync, existsSync } = await import('fs')
+    const { join } = await import('path')
+    
     // 支持从 JSON 文件导入（如果提供了文件路径）
     const jsonPath = process.argv[2]
     
-    let rawData = null
+    let allRawData = []
     
     if (jsonPath) {
+      // 如果提供了文件路径，加载该文件
       console.log(`从文件读取数据: ${jsonPath}`)
-      const { readFileSync } = await import('fs')
-      rawData = JSON.parse(readFileSync(jsonPath, 'utf-8'))
-      
-      // 支持多种 JSON 格式
-      if (Array.isArray(rawData)) {
-        rawData = rawData
-      } else if (rawData.data?.list) {
-        rawData = rawData.data.list
-      } else if (rawData.data?.records) {
-        rawData = rawData.data.records
-      } else if (rawData.result?.list) {
-        rawData = rawData.result.list
-      } else if (rawData.list) {
-        rawData = rawData.list
-      } else if (rawData.data) {
-        rawData = rawData.data
-      } else {
-        throw new Error('无法识别 JSON 文件格式')
+      if (!existsSync(jsonPath)) {
+        console.error(`文件不存在: ${jsonPath}`)
+        process.exit(1)
       }
       
-      console.log(`从文件读取到 ${rawData.length} 条数据`)
+      const fileData = JSON.parse(readFileSync(jsonPath, 'utf-8'))
+      const rawData = extractRowsFromFile(fileData)
+      
+      if (rawData && Array.isArray(rawData)) {
+        allRawData = rawData
+        console.log(`从文件读取到 ${allRawData.length} 条数据`)
+      } else {
+        console.error('无法识别 JSON 文件格式')
+        process.exit(1)
+      }
     } else {
-      // 使用 Puppeteer 抓取数据
-      rawData = await fetchBitget90dRoi()
-    }
-    
-    if (!rawData || rawData.length === 0) {
-      console.error('未获取到数据')
-      process.exit(1)
-    }
+      // 没有提供文件路径，尝试自动加载所有 bitget JSON 文件
+      const { readFileSync, readdirSync, existsSync } = await import('fs')
+      const { join } = await import('path')
+      
+      const backupDir = join(process.cwd(), 'data', 'backup')
+      console.log('自动查找 Bitget JSON 文件...')
+      
+      let allRawData = []
+      
+      if (existsSync(backupDir)) {
+        const files = readdirSync(backupDir)
+        const bitgetFiles = files.filter(f => 
+          f.includes('bitget') && f.endsWith('.json')
+        ).sort()
+        
+        console.log(`找到 ${bitgetFiles.length} 个 Bitget JSON 文件`)
+        
+        for (const file of bitgetFiles) {
+          const filePath = join(backupDir, file)
+          try {
+            console.log(`  加载: ${file}`)
+            const fileData = JSON.parse(readFileSync(filePath, 'utf-8'))
+            
+            // 提取数据
+            let fileRawData = null
+            if (Array.isArray(fileData)) {
+              fileRawData = fileData
+            } else if (fileData.data?.data?.rows && Array.isArray(fileData.data.data.rows)) {
+              fileRawData = fileData.data.data.rows
+            } else if (fileData.data?.rows && Array.isArray(fileData.data.rows)) {
+              fileRawData = fileData.data.rows
+            } else if (fileData.data?.list && Array.isArray(fileData.data.list)) {
+              fileRawData = fileData.data.list
+            } else if (fileData.rows && Array.isArray(fileData.rows)) {
+              fileRawData = fileData.rows
+            }
+            
+            if (fileRawData && Array.isArray(fileRawData)) {
+              allRawData.push(...fileRawData)
+              console.log(`    ✅ 提取到 ${fileRawData.length} 条数据`)
+            } else {
+              console.log(`    ⚠️ 无法提取数据`)
+            }
+          } catch (e) {
+            console.error(`    ❌ 读取文件失败: ${e.message}`)
+          }
+        }
+        
+        // 去重（根据 traderId）
+        if (allRawData.length > 0) {
+          const uniqueMap = new Map()
+          allRawData.forEach(item => {
+            const id = item.traderId || item.uid || String(item.rankingNo || '')
+            if (id && !uniqueMap.has(id)) {
+              uniqueMap.set(id, item)
+            }
+          })
+          allRawData = Array.from(uniqueMap.values())
+          console.log(`合并去重后: ${allRawData.length} 条数据`)
+        }
+      }
+      
+      // 如果从文件加载失败或没有文件，使用 Puppeteer 抓取
+      if (allRawData.length === 0) {
+        console.log('没有找到 JSON 文件，使用 Puppeteer 抓取...')
+        allRawData = await fetchBitget90dRoi()
+      }
+      
+      if (!allRawData || allRawData.length === 0) {
+        console.error('❌ 没有获取到数据')
+        console.error('   请提供 JSON 文件路径，或将 JSON 文件放到 data/backup/ 目录下')
+        process.exit(1)
+      }
+      
+      console.log(`\n=== 开始处理 ${allRawData.length} 条数据 ===`)
+      
+      // 标准化数据
+      const normalizedData = normalizeData(allRawData)
+      console.log(`标准化后数据: ${normalizedData.length} 条`)
+      console.log('示例数据:', JSON.stringify(normalizedData[0], null, 2))
 
-    // 标准化数据
-    const normalizedData = normalizeData(rawData)
-    console.log(`标准化后数据: ${normalizedData.length} 条`)
-    console.log('示例数据:', JSON.stringify(normalizedData[0], null, 2))
-
-    // 导入到 Supabase
-    await importToSupabase(normalizedData)
+      // 导入到 Supabase
+      await importToSupabase(normalizedData)
+    }
     
     console.log('')
     console.log('✅ 全部完成！')

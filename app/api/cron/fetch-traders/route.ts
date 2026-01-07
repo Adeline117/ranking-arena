@@ -70,6 +70,8 @@ export async function POST(req: Request) {
       { name: "binance_web3", script: "scripts/fetch_binance_web3_all_pages.mjs" },
       { name: "bybit", script: "scripts/import_bybit_90d_roi.mjs" },
       { name: "bitget", script: "scripts/import_bitget_90d_roi.mjs" },
+      { name: "mexc", script: "scripts/import_mexc_90d_roi.mjs" },
+      { name: "coinex", script: "scripts/import_coinex_90d_roi.mjs" },
     ];
 
     for (const { name, script } of scripts) {
