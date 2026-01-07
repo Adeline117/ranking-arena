@@ -75,6 +75,7 @@ export default function RankingTable(props: {
     'binance': 'Binance',
     'binance_web3': 'Binance Web3',
     'bybit': 'Bybit',
+    'bitget': 'Bitget',
     'okx': 'OKX',
   }
   

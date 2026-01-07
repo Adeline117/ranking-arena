@@ -42,7 +42,7 @@ export default function HomePage() {
       const startTime = performance.now()
       
       // 并行查询所有数据源的最新时间戳
-      const [binanceLatest, web3Latest, bybitLatest] = await Promise.all([
+      const [binanceLatest, web3Latest, bybitLatest, bitgetLatest] = await Promise.all([
         supabase
           .from('trader_snapshots')
           .select('captured_at')
@@ -64,14 +64,22 @@ export default function HomePage() {
           .order('captured_at', { ascending: false })
           .limit(1)
           .maybeSingle(),
+        supabase
+          .from('trader_snapshots')
+          .select('captured_at')
+          .eq('source', 'bitget')
+          .order('captured_at', { ascending: false })
+          .limit(1)
+          .maybeSingle(),
       ])
 
       const latestBinanceTime = binanceLatest.data?.captured_at
       const latestWeb3Time = web3Latest.data?.captured_at
       const latestBybitTime = bybitLatest.data?.captured_at
+      const latestBitgetTime = bitgetLatest.data?.captured_at
 
       // 并行查询所有数据源的最新快照数据（只查询最新时间戳的数据，限制100条）
-      const [binanceResult, web3Result, bybitResult] = await Promise.all([
+      const [binanceResult, web3Result, bybitResult, bitgetResult] = await Promise.all([
         latestBinanceTime
           ? supabase
               .from('trader_snapshots')
@@ -99,19 +107,30 @@ export default function HomePage() {
               .order('rank', { ascending: true })
               .limit(100)
           : Promise.resolve({ data: [], error: null }),
+        latestBitgetTime
+          ? supabase
+              .from('trader_snapshots')
+              .select('source_trader_id, rank, roi, followers, pnl, win_rate')
+              .eq('source', 'bitget')
+              .eq('captured_at', latestBitgetTime)
+              .order('rank', { ascending: true })
+              .limit(100)
+          : Promise.resolve({ data: [], error: null }),
       ])
 
       const finalBinanceSnapshots = (binanceResult.data || []) as any[]
       const finalWeb3Snapshots = (web3Result.data || []) as any[]
       const finalBybitSnapshots = (bybitResult.data || []) as any[]
+      const finalBitgetSnapshots = (bitgetResult.data || []) as any[]
 
-      console.log(`[ranking] ✅ 并行查询完成: binance=${finalBinanceSnapshots.length}, web3=${finalWeb3Snapshots.length}, bybit=${finalBybitSnapshots.length}`)
+      console.log(`[ranking] ✅ 并行查询完成: binance=${finalBinanceSnapshots.length}, web3=${finalWeb3Snapshots.length}, bybit=${finalBybitSnapshots.length}, bitget=${finalBitgetSnapshots.length}`)
 
       // 收集所有需要查询 handle 的交易员ID
       const allTraderIds = [
         ...finalBinanceSnapshots.map(s => ({ id: s.source_trader_id, source: 'binance' })),
         ...finalWeb3Snapshots.map(s => ({ id: s.source_trader_id, source: 'binance_web3' })),
         ...finalBybitSnapshots.map(s => ({ id: s.source_trader_id, source: 'bybit' })),
+        ...finalBitgetSnapshots.map(s => ({ id: s.source_trader_id, source: 'bitget' })),
       ]
 
       // 并行查询所有 handles（一次性查询所有数据源）
@@ -137,6 +156,13 @@ export default function HomePage() {
               .eq('source', 'bybit')
               .in('source_trader_id', finalBybitSnapshots.map(s => s.source_trader_id))
           : Promise.resolve({ data: [], error: null }),
+        finalBitgetSnapshots.length > 0
+          ? supabase
+              .from('trader_sources')
+              .select('source_trader_id, handle')
+              .eq('source', 'bitget')
+              .in('source_trader_id', finalBitgetSnapshots.map(s => s.source_trader_id))
+          : Promise.resolve({ data: [], error: null }),
       ])
 
       const binanceHandles = new Map<string, string>()
@@ -157,6 +183,13 @@ export default function HomePage() {
       handleQueries[2].data?.forEach((s: any) => {
         if (s.handle && s.handle.trim() !== '') {
           bybitHandles.set(s.source_trader_id, s.handle)
+        }
+      })
+
+      const bitgetHandles = new Map<string, string>()
+      handleQueries[3].data?.forEach((s: any) => {
+        if (s.handle && s.handle.trim() !== '') {
+          bitgetHandles.set(s.source_trader_id, s.handle)
         }
       })
 
@@ -211,6 +244,22 @@ export default function HomePage() {
         })
       })
 
+      finalBitgetSnapshots.forEach((item: any) => {
+        const handle = bitgetHandles.get(item.source_trader_id)
+        const displayHandle = handle && handle.trim() !== '' ? handle : item.source_trader_id
+        allTradersData.push({
+          id: item.source_trader_id,
+          handle: displayHandle,
+          roi: item.roi || 0,
+          pnl: item.pnl !== null && item.pnl !== undefined ? item.pnl : undefined,
+          win_rate: item.win_rate !== null && item.win_rate !== undefined ? item.win_rate : 0,
+          volume_90d: undefined,
+          avg_buy_90d: undefined,
+          followers: item.followers || 0,
+          source: 'bitget',
+        })
+      })
+
       // Deduplicate and sort all combined data
       // 如果同一个交易员在多个数据源都存在，保留 ROI 更高的那个
       const uniqueTradersMap = new Map<string, Trader>()
@@ -239,7 +288,7 @@ export default function HomePage() {
 
       const loadTime = performance.now() - startTime
       console.log(`[ranking] ⚡ 加载耗时: ${loadTime.toFixed(0)}ms`)
-      console.log(`[ranking] 📈 Total traders: ${tradersData.length} (binance: ${allTradersData.filter(t => t.source === 'binance').length}, web3: ${allTradersData.filter(t => t.source === 'binance_web3').length}, bybit: ${allTradersData.filter(t => t.source === 'bybit').length})`)
+            console.log(`[ranking] 📈 Total traders: ${tradersData.length} (binance: ${allTradersData.filter(t => t.source === 'binance').length}, web3: ${allTradersData.filter(t => t.source === 'binance_web3').length}, bybit: ${allTradersData.filter(t => t.source === 'bybit').length}, bitget: ${allTradersData.filter(t => t.source === 'bitget').length})`)
 
       if (tradersData.length === 0) {
         console.error('[ranking] ❌ ERROR: No traders data found!')
