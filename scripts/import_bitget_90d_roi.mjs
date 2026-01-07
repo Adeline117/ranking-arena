@@ -22,60 +22,51 @@ function normalizeData(rawData) {
   }
 
   return rawData.map((item) => {
-    // Bitget API 数据结构
-    const traderId = item.uid || item.userId || String(item.id || '')
-    const handle = item.nickName || item.nickname || item.name || null
+    // Bitget API 数据结构 (来自实际 API 响应)
+    // traderId: "bdb34c728fb53d56a090"
+    // nickName: "老枪"
+    // displayName: "老枪"
+    // roi: "12824.86" (字符串格式，已经是百分比数字，不是百分比)
+    // totalPnl: "25370.35" (字符串格式)
+    // followCount: 230 (数字)
+    // header 或 headPic: 头像URL
     
-    // ROI 可能是字符串格式如 "+13.46%" 或数字
+    const traderId = item.traderId || item.uid || String(item.id || '')
+    const handle = item.nickName || item.displayName || item.nickname || item.name || null
+    
+    // ROI 是字符串格式，直接转换为数字（已经是百分比数字，如 "12824.86" 表示 12824.86%）
     let roi = 0
     if (item.roi != null) {
       if (typeof item.roi === 'string') {
-        const roiNum = parseFloat(item.roi.replace(/[+%]/g, ''))
+        const roiNum = parseFloat(item.roi)
         if (!isNaN(roiNum)) {
           roi = roiNum
         }
       } else if (typeof item.roi === 'number') {
         roi = item.roi
       }
-    } else if (item.returnRate != null) {
-      // 可能字段名不同
-      if (typeof item.returnRate === 'string') {
-        const roiNum = parseFloat(item.returnRate.replace(/[+%]/g, ''))
-        if (!isNaN(roiNum)) {
-          roi = roiNum
-        }
-      } else if (typeof item.returnRate === 'number') {
-        roi = item.returnRate
-      }
     }
     
-    // PnL
+    // PnL (totalPnl)
     let pnl = null
-    if (item.totalProfit != null) {
-      pnl = typeof item.totalProfit === 'number' ? item.totalProfit : parseFloat(item.totalProfit) || null
-    } else if (item.profit != null) {
-      pnl = typeof item.profit === 'number' ? item.profit : parseFloat(item.profit) || null
+    if (item.totalPnl != null) {
+      if (typeof item.totalPnl === 'string') {
+        pnl = parseFloat(item.totalPnl)
+        if (isNaN(pnl)) pnl = null
+      } else if (typeof item.totalPnl === 'number') {
+        pnl = item.totalPnl
+      }
     }
     
     // 关注者数量
-    const followers = item.followerCount != null ? Number(item.followerCount) : 
+    const followers = item.followCount != null ? Number(item.followCount) : 
                      (item.followers != null ? Number(item.followers) : 0)
     
     // 头像
-    const avatarUrl = item.avatar || item.avatarUrl || item.profilePhoto || null
+    const avatarUrl = item.header || item.headPic || item.avatar || item.avatarUrl || item.profilePhoto || null
 
-    // 胜率
+    // 胜率 (Bitget API 中没有直接的胜率字段，设为 null)
     let winRate = null
-    if (item.winRate != null) {
-      if (typeof item.winRate === 'string') {
-        const winRateNum = parseFloat(item.winRate.replace(/[+%]/g, ''))
-        if (!isNaN(winRateNum)) {
-          winRate = winRateNum / 100 // 如果是百分比字符串，转换为小数
-        }
-      } else if (typeof item.winRate === 'number') {
-        winRate = item.winRate > 1 ? item.winRate / 100 : item.winRate // 如果是百分比数字，转换为小数
-      }
-    }
 
     return {
       traderId: String(traderId),
@@ -215,18 +206,20 @@ async function fetchBitget90dRoi() {
         })
       }
       
-      // 尝试常见的 Bitget API 端点
-      const apiEndpoints = [
-        'https://api.bitget.com/api/copy/v1/leaderboard/rankList',
-        'https://www.bitget.com/api/copy/v1/leaderboard/rankList',
-        'https://api.bitget.com/api/v2/copy/leaderboard/rankList',
-        'https://www.bitget.com/api/v2/copy/leaderboard/rankList',
-      ]
+      // 使用正确的 Bitget API 端点
+      const apiUrl = 'https://www.bitget.com/v1/trigger/trace/public/traderRankingList'
+      console.log(`尝试 API: ${apiUrl}`)
       
-      for (const endpoint of apiEndpoints) {
+      // 获取多页数据（最多100条）
+      let allRows = []
+      let pageNo = 1
+      const pageSize = 50 // Bitget 每页最多50条
+      let hasMore = true
+      
+      while (hasMore && pageNo <= 2) { // 最多获取2页（100条）
         try {
-          const apiUrl = `${endpoint}?dateType=90&pageNo=1&pageSize=100&sortType=desc`
-          console.log(`尝试 API: ${endpoint}`)
+          const fetchUrl = `${apiUrl}?pageNo=${pageNo}&pageSize=${pageSize}`
+          console.log(`获取第 ${pageNo} 页数据...`)
           
           const response = await page.evaluate(async (fetchUrl) => {
             try {
@@ -246,34 +239,46 @@ async function fetchBitget90dRoi() {
             } catch (e) {
               return { success: false, error: e.message }
             }
-          }, apiUrl)
+          }, fetchUrl)
 
           if (response.success && response.data) {
             const data = response.data
             
-            if (data.code === '00000' || data.code === 0 || data.success === true) {
-              let list = null
-              
-              if (data.data) {
-                if (Array.isArray(data.data)) {
-                  list = data.data
-                } else if (data.data.list && Array.isArray(data.data.list)) {
-                  list = data.data.list
-                } else if (data.data.records && Array.isArray(data.data.records)) {
-                  list = data.data.records
-                }
+            if (data.code === '00000' || data.success === true) {
+              if (data.data && data.data.rows && Array.isArray(data.data.rows)) {
+                allRows.push(...data.data.rows)
+                console.log(`✅ 第 ${pageNo} 页: 获取到 ${data.data.rows.length} 条`)
+                
+                // 检查是否还有更多数据
+                hasMore = data.data.nextFlag === true && allRows.length < 100
+              } else {
+                console.log(`⚠️ 第 ${pageNo} 页: 数据格式不正确`)
+                hasMore = false
               }
-              
-              if (list && list.length > 0) {
-                console.log(`✅ 成功获取数据: ${list.length} 条`)
-                capturedData = list
-                break
-              }
+            } else {
+              console.log(`⚠️ 第 ${pageNo} 页: API 返回错误 code=${data.code}, msg=${data.msg}`)
+              hasMore = false
             }
+          } else {
+            console.log(`⚠️ 第 ${pageNo} 页: 请求失败 status=${response.status || 'unknown'}, error=${response.error || 'none'}`)
+            hasMore = false
           }
+          
+          // 延迟避免请求过快
+          if (hasMore) {
+            await new Promise(resolve => setTimeout(resolve, 500))
+          }
+          
+          pageNo++
         } catch (e) {
-          console.log(`⚠️ API 调用失败: ${endpoint}`, e.message)
+          console.log(`⚠️ 第 ${pageNo} 页获取异常:`, e.message)
+          hasMore = false
         }
+      }
+      
+      if (allRows.length > 0) {
+        console.log(`✅ 总共获取到 ${allRows.length} 条 Bitget 数据`)
+        capturedData = allRows
       }
       
       // 如果上面的 API 都不行，尝试从页面DOM提取
