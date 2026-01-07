@@ -10,6 +10,7 @@ import Card from '@/app/components/UI/Card'
 import RankingTableCompact from '@/app/components/Features/RankingTableCompact'
 import { Box, Text } from '@/app/components/Base'
 import type { Trader } from '@/app/components/Features/RankingTable'
+import { useLanguage } from '@/app/components/Utils/LanguageProvider'
 
 type Post = {
   id: number
@@ -25,6 +26,7 @@ type Post = {
 }
 
 export default function HotPage() {
+  const { t } = useLanguage()
   const [loggedIn, setLoggedIn] = useState(false)
   const [email, setEmail] = useState<string | null>(null)
   const [traders, setTraders] = useState<Trader[]>([])
@@ -161,16 +163,16 @@ export default function HotPage() {
         <Box style={{ display: 'grid', gridTemplateColumns: '260px 1fr 280px', gap: tokens.spacing[4] }}>
           {/* 左：排名前十 */}
           <Box as="section">
-            <Card title="排名前十">
+            <Card title={t('top10')}>
               <RankingTableCompact traders={traders} loading={loadingTraders} loggedIn={loggedIn} />
             </Card>
           </Box>
 
           {/* 中：热榜 */}
           <Box as="section">
-            <Card title="热榜">
+            <Card title={t('hotList')}>
               <Text size="sm" color="secondary" style={{ marginBottom: tokens.spacing[3] }}>
-                {loggedIn ? '已登录：显示全部' : '未登录：仅显示前3条'}
+                {loggedIn ? t('loggedInShowAllHot') : t('notLoggedInShowLimitedHot')}
               </Text>
               <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
                 {visibleHot.map((p, idx) => {
@@ -201,7 +203,7 @@ export default function HotPage() {
                             #{rank}
                           </Text>
                           <Text size="xs" color="secondary">{p.group}</Text>
-                          <Text size="xs" color="tertiary">{(p.views ?? 0).toLocaleString()} 浏览</Text>
+                          <Text size="xs" color="tertiary">{(p.views ?? 0).toLocaleString()} {t('views')}</Text>
                         </Box>
                         <Text size="base" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>
                           {p.title}
@@ -223,9 +225,9 @@ export default function HotPage() {
               {!loggedIn && (
                 <Box style={{ marginTop: tokens.spacing[4], padding: tokens.spacing[3], textAlign: 'center' }}>
                   <Text size="sm" color="secondary">
-                    想看全部热榜？
+                    {t('wantToSeeAllHotList')}
                     <Link href="/login" style={{ color: tokens.colors.accent.primary, textDecoration: 'none', marginLeft: tokens.spacing[1] }}>
-                      登录 →
+                      {t('loginArrow')} →
                     </Link>
                   </Text>
                 </Box>
