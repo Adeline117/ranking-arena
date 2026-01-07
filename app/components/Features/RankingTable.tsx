@@ -6,6 +6,7 @@ import { tokens } from '@/lib/design-tokens'
 import { RankingSkeleton } from '../UI/Skeleton'
 import { RankingBadge } from '../Icons'
 import { Box, Text } from '../Base'
+import { useLanguage } from '../Utils/LanguageProvider'
 
 // 格式化 PnL 显示
 function formatPnL(pnl: number): string {
@@ -54,6 +55,7 @@ export default function RankingTable(props: {
   source?: string // 数据来源
 }) {
   const { traders, loading, loggedIn, source } = props
+  const { t } = useLanguage()
   
   // 分页状态
   const [currentPage, setCurrentPage] = useState(1)
@@ -76,7 +78,7 @@ export default function RankingTable(props: {
     'okx': 'OKX',
   }
   
-  const sourceLabel = source ? sourceLabels[source] || source : '未知来源'
+  const sourceLabel = source ? sourceLabels[source] || source : t('unknownSource')
 
   return (
     <Box
@@ -96,22 +98,22 @@ export default function RankingTable(props: {
         }}
       >
         <Text size="xs" weight="bold" color="tertiary" style={{ textAlign: 'center' }}>
-          排名
+          {t('rank')}
         </Text>
         <Text size="xs" weight="bold" color="tertiary">
-          交易员
+          {t('trader')}
         </Text>
         <Text size="xs" weight="bold" color="tertiary" style={{ textAlign: 'right' }}>
-          ROI (90D)
+          {t('roi90d')}
         </Text>
         <Text size="xs" weight="bold" color="tertiary" style={{ textAlign: 'right' }}>
-          胜率 (90D)
+          {t('winRate90d')}
         </Text>
         <Text size="xs" weight="bold" color="tertiary" style={{ textAlign: 'right' }}>
-          交易量 (90D)
+          {t('volume90d')}
         </Text>
         <Text size="xs" weight="bold" color="tertiary" style={{ textAlign: 'right' }}>
-          平均买入 (90D)
+          {t('avgBuy90d')}
         </Text>
       </Box>
 
@@ -126,7 +128,7 @@ export default function RankingTable(props: {
             fontSize: tokens.typography.fontSize.sm,
           }}
         >
-          暂无交易者数据
+          {t('noTraderData')}
         </Box>
       ) : (
         <>
@@ -294,7 +296,7 @@ export default function RankingTable(props: {
                   }
                 }}
               >
-                上一页
+                {t('prevPage')}
               </button>
               
               {/* 页码数字按钮 */}
@@ -410,7 +412,7 @@ export default function RankingTable(props: {
                   }
                 }}
               >
-                下一页
+                {t('nextPage')}
               </button>
             </Box>
           )}

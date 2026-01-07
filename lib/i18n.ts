@@ -34,6 +34,17 @@ export const translations = {
     dashboard: '仪表盘',
     notifications: '通知',
     market: '市场',
+    searchPlaceholder: '搜索交易者、帖子、小组...',
+    rank: '排名',
+    trader: '交易员',
+    roi90d: 'ROI (90D)',
+    winRate90d: '胜率 (90D)',
+    volume90d: '交易量 (90D)',
+    avgBuy90d: '平均买入 (90D)',
+    noTraderData: '暂无交易者数据',
+    prevPage: '上一页',
+    nextPage: '下一页',
+    unknownSource: '未知来源',
   },
   en: {
     home: 'Home',
@@ -67,6 +78,17 @@ export const translations = {
     dashboard: 'Dashboard',
     notifications: 'Notifications',
     market: 'Market',
+    searchPlaceholder: 'Search traders, posts, groups...',
+    rank: 'Rank',
+    trader: 'Trader',
+    roi90d: 'ROI (90D)',
+    winRate90d: 'Win Rate (90D)',
+    volume90d: 'Volume (90D)',
+    avgBuy90d: 'Avg Buy (90D)',
+    noTraderData: 'No trader data',
+    prevPage: 'Previous',
+    nextPage: 'Next',
+    unknownSource: 'Unknown Source',
   },
 }
 
@@ -95,6 +117,7 @@ export function t(key: keyof typeof translations.zh): string {
   const lang = getLanguage()
   return translations[lang][key] || translations.zh[key] || key
 }
+
 
 
 

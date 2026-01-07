@@ -149,10 +149,11 @@ export default function TopNav({ email }: { email: string | null }) {
           {/* 导航链接 */}
           <Box as="nav" style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1] }}>
             {[
-              { href: '/', label: '首页' },
-              { href: '/groups', label: '小组' },
-              { href: '/hot', label: '热榜' },
+              { href: '/', labelKey: 'home' as const },
+              { href: '/groups', labelKey: 'groups' as const },
+              { href: '/hot', labelKey: 'hot' as const },
             ].map((item) => {
+              const label = t(item.labelKey)
               const isActive = pathname === item.href || (item.href === '/' && pathname === '/')
               return (
                 <Link
@@ -178,7 +179,7 @@ export default function TopNav({ email }: { email: string | null }) {
                     }
                   }}
                 >
-                  {item.label}
+                  {label}
                 </Link>
               )
             })}
@@ -199,7 +200,7 @@ export default function TopNav({ email }: { email: string | null }) {
           <form onSubmit={handleSearch} style={{ width: '100%', position: 'relative' }}>
             <input
               type="text"
-              placeholder={t('search') + '交易者、帖子、小组...'}
+              placeholder={t('searchPlaceholder')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               style={{
