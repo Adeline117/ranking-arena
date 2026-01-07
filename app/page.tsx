@@ -124,6 +124,35 @@ export default function HomePage() {
       const finalBitgetSnapshots = (bitgetResult.data || []) as any[]
 
       console.log(`[ranking] ✅ 并行查询完成: binance=${finalBinanceSnapshots.length}, web3=${finalWeb3Snapshots.length}, bybit=${finalBybitSnapshots.length}, bitget=${finalBitgetSnapshots.length}`)
+      
+      // 调试信息：检查 Bitget 数据
+      if (finalBitgetSnapshots.length === 0) {
+        console.log(`[ranking] ⚠️ Bitget: 没有数据`)
+        if (bitgetLatest.data) {
+          console.log(`[ranking] ⚠️ Bitget: 最新时间戳存在: ${latestBitgetTime}, 但查询结果为空`)
+          if (bitgetResult.error) {
+            console.error(`[ranking] ❌ Bitget 查询错误:`, bitgetResult.error)
+          }
+        } else {
+          console.log(`[ranking] ⚠️ Bitget: 数据库中没有 Bitget 数据，需要先运行脚本导入数据`)
+          console.log(`[ranking] 💡 提示: 运行 node scripts/import_bitget_90d_roi.mjs 来导入 Bitget 数据`)
+        }
+      } else {
+        console.log(`[ranking] ✅ Bitget: 找到 ${finalBitgetSnapshots.length} 条数据`)
+        console.log(`[ranking] 📋 Bitget 前5条:`, finalBitgetSnapshots.slice(0, 5).map(s => ({ id: s.source_trader_id, roi: s.roi, rank: s.rank })))
+      }
+      
+      // 调试信息：检查 Bitget 数据
+      if (finalBitgetSnapshots.length === 0) {
+        console.log(`[ranking] ⚠️ Bitget: 没有数据`)
+        if (bitgetLatest.data) {
+          console.log(`[ranking] ⚠️ Bitget: 最新时间戳存在: ${latestBitgetTime}, 但查询结果为空`)
+        } else {
+          console.log(`[ranking] ⚠️ Bitget: 数据库中没有 Bitget 数据，需要先运行脚本导入数据`)
+        }
+      } else {
+        console.log(`[ranking] ✅ Bitget: 找到 ${finalBitgetSnapshots.length} 条数据`)
+      }
 
       // 收集所有需要查询 handle 的交易员ID
       const allTraderIds = [
@@ -283,6 +312,9 @@ export default function HomePage() {
         binanceCount: allTradersData.filter(t => t.source === 'binance').length,
         web3Count: allTradersData.filter(t => t.source === 'binance_web3').length,
         bybitCount: allTradersData.filter(t => t.source === 'bybit').length,
+        bitgetCount: allTradersData.filter(t => t.source === 'bitget').length,
+        bitgetSnapshotsCount: finalBitgetSnapshots.length,
+        bitgetHandlesCount: bitgetHandles.size,
         top5: tradersData.slice(0, 5).map(t => ({ id: t.id, handle: t.handle, roi: t.roi, source: t.source }))
       })
 
