@@ -10,8 +10,10 @@ import PostFeed from '@/app/components/Features/PostFeed'
 import Card from '@/app/components/UI/Card'
 import { Box, Text } from '@/app/components/Base'
 import type { Trader } from '@/app/components/Features/RankingTable'
+import { useLanguage } from '@/app/components/Utils/LanguageProvider'
 
 export default function GroupsPage() {
+  const { t } = useLanguage()
   const [email, setEmail] = useState<string | null>(null)
   const [loggedIn, setLoggedIn] = useState(false)
   const [traders, setTraders] = useState<Trader[]>([])
@@ -96,16 +98,16 @@ export default function GroupsPage() {
         <Box style={{ display: 'grid', gridTemplateColumns: '260px 1fr 280px', gap: tokens.spacing[4] }}>
           {/* 左：排名前十 */}
           <Box as="section">
-            <Card title="排名前十">
+            <Card title={t('top10')}>
               <RankingTableCompact traders={traders} loading={loadingTraders} loggedIn={loggedIn} />
             </Card>
           </Box>
 
           {/* 中：算法推荐帖子 */}
           <Box as="section">
-            <Card title="推荐帖子">
+            <Card title={t('recommendedPosts')}>
               <Text size="sm" color="secondary" style={{ marginBottom: tokens.spacing[3] }}>
-                {loggedIn ? '已登录：显示全部推荐' : '未登录：仅显示前10条'}
+                {loggedIn ? t('loggedInShowAll') : t('notLoggedInShowLimited')}
               </Text>
               <PostFeed variant={loggedIn ? 'full' : 'compact'} />
             </Card>
@@ -113,14 +115,14 @@ export default function GroupsPage() {
 
           {/* 右：小组推荐 */}
           <Box as="section">
-            <Card title="小组推荐">
+            <Card title={t('groupRecommendations')}>
               <Text size="sm" color="secondary" style={{ marginBottom: tokens.spacing[3] }}>
-                热门小组
+                {t('hotGroups')}
               </Text>
               <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
                 {/* TODO: 从 groups 表获取推荐小组 */}
                 <Text size="sm" color="tertiary" style={{ padding: tokens.spacing[4], textAlign: 'center' }}>
-                  小组推荐功能待实现
+                  {t('groupRecommendationsComingSoon')}
                 </Text>
               </Box>
             </Card>
