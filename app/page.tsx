@@ -12,12 +12,15 @@ import MarketPanel from './components/Features/MarketPanel'
 import Card from './components/UI/Card'
 import CompareTraders from './components/Features/CompareTraders'
 import { Box } from './components/Base'
+import { useLanguage } from './components/Utils/LanguageProvider'
 
 /* =====================
    Page
 ===================== */
 
 export default function HomePage() {
+  const { t } = useLanguage()
+  
   /* ---------- auth ---------- */
   const [email, setEmail] = useState<string | null>(null)
 
@@ -291,7 +294,7 @@ export default function HomePage() {
         >
           {/* 左：热门讨论 */}
           <Box as="section">
-            <Card title="热门讨论">
+            <Card title={t('hotDiscussion')}>
               <PostFeed />
             </Card>
             <Link
@@ -319,7 +322,7 @@ export default function HomePage() {
                 e.currentTarget.style.borderColor = 'rgba(139, 111, 168, 0.3)'
               }}
             >
-              更多 →
+              {t('more')} →
             </Link>
           </Box>
 

@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { ThumbsUpIcon, ThumbsDownIcon, CommentIcon } from '../Icons'
+import { useLanguage } from '../Utils/LanguageProvider'
 
 type PollChoice = 'bull' | 'bear' | 'wait'
 
@@ -25,10 +26,10 @@ type Post = {
 
 const ARENA_PURPLE = '#8b6fa8'
 
-function pollLabel(choice: PollChoice | 'tie') {
-  if (choice === 'bull') return '看多'
-  if (choice === 'bear') return '看空'
-  return '观望'
+function pollLabel(choice: PollChoice | 'tie', t: (key: keyof typeof import('@/lib/i18n').translations.zh) => string) {
+  if (choice === 'bull') return t('bullish')
+  if (choice === 'bear') return t('bearish')
+  return t('wait')
 }
 function pollColor(choice: PollChoice | 'tie') {
   if (choice === 'bull') return '#7CFFB2'
@@ -151,6 +152,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full' } = {}) {
     []
   )
 
+  const { t } = useLanguage()
   const [openPost, setOpenPost] = useState<Post | null>(null)
 
   const [commentsOpen, setCommentsOpen] = useState<Record<number, boolean>>({})
@@ -232,7 +234,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full' } = {}) {
           const reacts = reactCounts[p.id] ?? { up: p.likes, down: Math.floor(p.likes * 0.08) }
           const poll = pollState[p.id]
           const winner = p.pollEnabled && poll ? getPollWinner(poll) : 'tie'
-          const label = pollLabel(winner)
+          const label = pollLabel(winner, t)
           const color = pollColor(winner)
 
           return (
@@ -290,7 +292,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full' } = {}) {
                     borderRadius: 999,
                     marginLeft: 6,
                   }}
-                  title={p.pollEnabled ? '基于投票结果' : '未开启投票，默认观望'}
+                  title={p.pollEnabled ? t('wait') : t('wait')}
                 >
                   {label}
                 </span>
@@ -347,7 +349,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full' } = {}) {
           <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid #141414', display: 'flex', gap: 14, flexWrap: 'wrap' }}>
             <Action 
               icon={<ThumbsUpIcon size={14} />} 
-              text="赞同" 
+              text={t('upvote')} 
               onClick={() => toggleReact(openPost.id, 'up')} 
               active={myReact[openPost.id] === 'up'}
               count={reactCounts[openPost.id]?.up ?? openPost.likes}
@@ -355,18 +357,18 @@ export default function PostFeed(props: { variant?: 'compact' | 'full' } = {}) {
             />
             <Action 
               icon={<ThumbsDownIcon size={14} />} 
-              text="反对" 
+              text={t('downvote')} 
               onClick={() => toggleReact(openPost.id, 'down')} 
               active={myReact[openPost.id] === 'down'}
               count={reactCounts[openPost.id]?.down ?? Math.floor(openPost.likes * 0.08)}
               showCount={false}
             />
-            <Action icon={<CommentIcon size={14} />} text="评论" onClick={() => toggleComments(openPost.id)} />
+            <Action icon={<CommentIcon size={14} />} text={t('comment')} onClick={() => toggleComments(openPost.id)} />
             {openPost.pollEnabled && pollState[openPost.id] ? (
               <>
-                <Action text="📈 看多" onClick={() => toggleVote(openPost.id, 'bull')} active={myVote[openPost.id] === 'bull'} />
-                <Action text="📉 看空" onClick={() => toggleVote(openPost.id, 'bear')} active={myVote[openPost.id] === 'bear'} />
-                <Action text="⏸ 观望" onClick={() => toggleVote(openPost.id, 'wait')} active={myVote[openPost.id] === 'wait'} />
+                <Action text={`📈 ${t('bullish')}`} onClick={() => toggleVote(openPost.id, 'bull')} active={myVote[openPost.id] === 'bull'} />
+                <Action text={`📉 ${t('bearish')}`} onClick={() => toggleVote(openPost.id, 'bear')} active={myVote[openPost.id] === 'bear'} />
+                <Action text={`⏸ ${t('wait')}`} onClick={() => toggleVote(openPost.id, 'wait')} active={myVote[openPost.id] === 'wait'} />
               </>
             ) : null}
           </div>
