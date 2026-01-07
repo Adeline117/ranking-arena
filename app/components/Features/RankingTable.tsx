@@ -70,14 +70,16 @@ export default function RankingTable(props: {
   const endIndex = startIndex + itemsPerPage
   const paginatedTraders = sortedTraders.slice(startIndex, endIndex)
   
-  // 数据来源标签映射
-  const sourceLabels: Record<string, string> = {
-    'binance': 'Binance',
-    'binance_web3': 'Binance Web3',
-    'bybit': 'Bybit',
-    'bitget': 'Bitget',
-    'okx': 'OKX',
-  }
+          // 数据来源标签映射
+          const sourceLabels: Record<string, string> = {
+            'binance': 'Binance',
+            'binance_web3': 'Binance Web3',
+            'bybit': 'Bybit',
+            'bitget': 'Bitget',
+            'mexc': 'MEXC',
+            'coinex': 'CoinEx',
+            'okx': 'OKX',
+          }
   
   const sourceLabel = source ? sourceLabels[source] || source : t('unknownSource')
 
