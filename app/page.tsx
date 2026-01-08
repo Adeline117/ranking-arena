@@ -94,6 +94,14 @@ export default function HomePage() {
       const latestMexcTime = mexcLatest.data?.captured_at
       const latestCoinexTime = coinexLatest.data?.captured_at
 
+      // 检查查询错误
+      if (binanceLatest.error) console.error('[ranking] ❌ Binance 时间戳查询错误:', binanceLatest.error)
+      if (web3Latest.error) console.error('[ranking] ❌ Web3 时间戳查询错误:', web3Latest.error)
+      if (bybitLatest.error) console.error('[ranking] ❌ Bybit 时间戳查询错误:', bybitLatest.error)
+      if (bitgetLatest.error) console.error('[ranking] ❌ Bitget 时间戳查询错误:', bitgetLatest.error)
+      if (mexcLatest.error) console.error('[ranking] ❌ MEXC 时间戳查询错误:', mexcLatest.error)
+      if (coinexLatest.error) console.error('[ranking] ❌ CoinEx 时间戳查询错误:', coinexLatest.error)
+
       // 并行查询所有数据源的最新快照数据（只查询最新时间戳的数据，限制100条）
       const [binanceResult, web3Result, bybitResult, bitgetResult, mexcResult, coinexResult] = await Promise.all([
         latestBinanceTime
@@ -418,6 +426,37 @@ export default function HomePage() {
 
       if (tradersData.length === 0) {
         console.error('[ranking] ❌ ERROR: No traders data found!')
+        console.error('[ranking] 📊 数据源详情:', {
+          binance: { hasLatest: !!latestBinanceTime, count: finalBinanceSnapshots.length, error: binanceResult.error?.message },
+          web3: { hasLatest: !!latestWeb3Time, count: finalWeb3Snapshots.length, error: web3Result.error?.message },
+          bybit: { hasLatest: !!latestBybitTime, count: finalBybitSnapshots.length, error: bybitResult.error?.message },
+          bitget: { hasLatest: !!latestBitgetTime, count: finalBitgetSnapshots.length, error: bitgetResult.error?.message },
+          mexc: { hasLatest: !!latestMexcTime, count: finalMexcSnapshots.length, error: mexcResult.error?.message },
+          coinex: { hasLatest: !!latestCoinexTime, count: finalCoinexSnapshots.length, error: coinexResult.error?.message },
+        })
+        
+        // 检查是否有查询错误
+        const errors = [
+          binanceResult.error,
+          web3Result.error,
+          bybitResult.error,
+          bitgetResult.error,
+          mexcResult.error,
+          coinexResult.error,
+        ].filter(Boolean)
+        
+        if (errors.length > 0) {
+          console.error('[ranking] ❌ 查询错误:', errors)
+        } else {
+          console.warn('[ranking] ⚠️ 数据库中没有交易员数据，请运行数据导入脚本')
+          console.warn('[ranking] 💡 提示: 运行以下命令导入数据:')
+          console.warn('[ranking]   - node scripts/import_binance_copy_trading_90d.mjs')
+          console.warn('[ranking]   - node scripts/fetch_binance_web3_all_pages.mjs')
+          console.warn('[ranking]   - node scripts/import_bybit_90d_roi.mjs')
+          console.warn('[ranking]   - node scripts/import_bitget_90d_roi.mjs')
+          console.warn('[ranking]   - node scripts/import_mexc_90d_roi.mjs')
+          console.warn('[ranking]   - node scripts/import_coinex_90d_roi.mjs')
+        }
       } else {
         console.log(`[ranking] ✅ Successfully loaded ${tradersData.length} traders`)
       }
