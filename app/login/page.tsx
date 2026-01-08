@@ -149,24 +149,30 @@ export default function LoginPage() {
     setSendingCode(true)
 
     try {
-      // 重要：不设置 emailRedirectTo，这样会发送 OTP 验证码而不是 Magic Link
-      // 如果设置了 emailRedirectTo，Supabase 会发送包含链接的邮件
+      // 关键：确保发送 OTP 验证码而不是 Magic Link
+      // 1. 不设置 emailRedirectTo
+      // 2. 明确指定 type 为 'email'（虽然这是默认值）
+      // 3. 确保 shouldCreateUser 为 true（注册模式）
+      console.log('[OTP] 发送验证码到:', email)
+      
       const { data, error: otpError } = await supabase.auth.signInWithOtp({
         email,
         options: {
           shouldCreateUser: true, // 如果用户不存在则创建
-          // 关键：不设置 emailRedirectTo，确保发送 6 位数字验证码
-          // 如果设置了 emailRedirectTo，会发送 Magic Link 而不是验证码
+          // 关键：绝对不要设置 emailRedirectTo
+          // 如果设置了 emailRedirectTo，Supabase 会发送 Magic Link 而不是 OTP 验证码
         },
       })
 
       if (otpError) {
-        console.error('OTP 发送错误:', otpError)
+        console.error('[OTP] 发送错误:', otpError)
+        console.error('[OTP] 错误详情:', JSON.stringify(otpError, null, 2))
+        
         // 检查是否是配置问题
         if (otpError.message.includes('redirect') || otpError.message.includes('link')) {
-          setError('配置错误：请检查 Supabase 设置，确保 OTP 模式已启用。如果仍然收到链接，请在 Supabase Dashboard 中检查 Email Auth 配置。')
+          setError('配置错误：Supabase 可能配置为发送 Magic Link。请检查 Supabase Dashboard → Authentication → Settings → Site URL 是否正确设置为 https://www.arenafi.org，并确保 Email Templates 配置为发送验证码。')
         } else {
-          setError(otpError.message)
+          setError(otpError.message || '发送失败，请重试')
         }
         setSendingCode(false)
         return
@@ -174,14 +180,16 @@ export default function LoginPage() {
 
       // 验证是否成功发送
       if (data) {
+        console.log('[OTP] 发送成功:', data)
         setCodeSent(true)
         setCountdown(60) // 开始60秒倒计时（重发限制）
         alert(t.codeSent)
       } else {
-        setError('发送失败，请重试')
+        console.warn('[OTP] 发送返回空数据')
+        setError('发送失败，请重试。如果仍然收到链接而不是验证码，请检查 Supabase Dashboard 中的 Email Auth 配置。')
       }
     } catch (err: any) {
-      console.error('发送验证码异常:', err)
+      console.error('[OTP] 发送验证码异常:', err)
       setError(err?.message || '发送失败，请检查网络连接')
     } finally {
       setSendingCode(false)
@@ -206,26 +214,34 @@ export default function LoginPage() {
 
     try {
       // 登录时发送验证码，不创建新用户
+      console.log('[OTP Login] 发送验证码到:', email)
+      
       const { data, error: otpError } = await supabase.auth.signInWithOtp({
         email,
         options: {
           shouldCreateUser: false, // 登录时不创建新用户
-          // 不设置 emailRedirectTo，发送验证码
+          // 关键：绝对不要设置 emailRedirectTo，否则会发送 Magic Link
         },
       })
 
       if (otpError) {
-        setError(otpError.message)
+        console.error('[OTP Login] 发送错误:', otpError)
+        setError(otpError.message || '发送失败，请重试')
         setSendingCode(false)
         return
       }
 
       if (data) {
+        console.log('[OTP Login] 发送成功:', data)
         setCodeSent(true)
         setCountdown(60)
         alert(t.codeSent)
+      } else {
+        console.warn('[OTP Login] 发送返回空数据')
+        setError('发送失败，请重试')
       }
     } catch (err: any) {
+      console.error('[OTP Login] 发送验证码异常:', err)
       setError(err?.message || '发送失败')
     } finally {
       setSendingCode(false)

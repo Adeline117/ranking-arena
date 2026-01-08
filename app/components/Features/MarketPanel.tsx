@@ -92,11 +92,28 @@ export default function MarketPanel() {
         }
         setError(null)
         const pairsParam = customPairs.join(',')
+        console.log('[MarketPanel] 请求市场数据, pairs:', pairsParam)
+        
         const res = await fetch(`/api/market?pairs=${encodeURIComponent(pairsParam)}`, { cache: 'no-store' })
+        
+        if (!res.ok) {
+          const errorText = await res.text().catch(() => 'Unknown error')
+          console.error('[MarketPanel] API 请求失败:', res.status, errorText)
+          throw new Error(`API 请求失败: ${res.status} ${errorText}`)
+        }
+        
         const json = await res.json()
         if (!alive) return
 
+        console.log('[MarketPanel] API 响应:', { 
+          rows: json.rows?.length || 0, 
+          source: json.source, 
+          error: json.error,
+          warning: json.warning 
+        })
+
         if (json.error) {
+          console.error('[MarketPanel] API 返回错误:', json.error)
           setError(json.error)
           setMarket([])
         } else {
@@ -104,6 +121,12 @@ export default function MarketPanel() {
           const filteredRows = (json.rows ?? []).filter((row: MarketRow) =>
             customPairs.includes(row.symbol)
           )
+          
+          console.log('[MarketPanel] 过滤后数据:', filteredRows.length, '条')
+          
+          if (filteredRows.length === 0 && json.rows && json.rows.length > 0) {
+            console.warn('[MarketPanel] 警告: API 返回了数据但过滤后为空, 自定义币种:', customPairs)
+          }
           
           // 只在数据真正变化时才更新，避免不必要的重新渲染
           setMarket((prevMarket) => {
@@ -133,6 +156,7 @@ export default function MarketPanel() {
         }
       } catch (err: any) {
         if (!alive) return
+        console.error('[MarketPanel] 加载市场数据异常:', err)
         setError(err?.message || t('loadFailed'))
         if (market.length === 0) {
           setMarket([])
