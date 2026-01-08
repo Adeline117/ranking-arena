@@ -39,7 +39,7 @@ export default function NewPostPage() {
 
     // 获取用户的handle
     const { data: profile } = await supabase
-      .from('profiles')
+      .from('user_profiles')
       .select('handle')
       .eq('id', userId)
       .maybeSingle()
@@ -56,6 +56,7 @@ export default function NewPostPage() {
         content,
         author_handle: handle,
         // group_id 为 null，表示这是个人动态
+        author_id: userId,
       })
 
       if (error) {

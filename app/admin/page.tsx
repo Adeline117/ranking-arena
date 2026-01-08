@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase/client'
 
 export default function AdminPage() {
-  const [traders, setTraders] = useState<any[]>([])
+  const [rows, setRows] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -15,21 +15,13 @@ export default function AdminPage() {
     setLoading(true)
 
     const { data } = await supabase
-      .from('traders')
-      .select('*')
+      .from('trader_snapshots')
+      .select('source, source_trader_id, roi, win_rate, followers, captured_at')
       .order('roi', { ascending: false })
+      .limit(50)
 
-    setTraders(data || [])
+    setRows(data || [])
     setLoading(false)
-  }
-
-  async function updateROI(id: string, roi: number) {
-    await supabase
-      .from('traders')
-      .update({ roi })
-      .eq('id', id)
-
-    await load()
   }
 
   return (
@@ -42,22 +34,22 @@ export default function AdminPage() {
         <table style={{ marginTop: 10 }}>
           <thead>
             <tr>
-              <th>Trader</th>
-              <th>ROI %</th>
-              <th>Update</th>
+              <th>Source</th>
+              <th>Trader ID</th>
+              <th>ROI (90D)</th>
+              <th>WinRate</th>
+              <th>Followers</th>
             </tr>
           </thead>
 
           <tbody>
-            {traders.map(t => (
-              <tr key={t.id}>
-                <td>{t.handle}</td>
-                <td>{t.roi}</td>
-                <td>
-                  <button onClick={() => updateROI(t.id, t.roi + 10)}>
-                    +10%
-                  </button>
-                </td>
+            {rows.map((r) => (
+              <tr key={`${r.source}-${r.source_trader_id}`}>
+                <td>{String(r.source || '').toUpperCase()}</td>
+                <td>{r.source_trader_id}</td>
+                <td>{r.roi}</td>
+                <td>{r.win_rate}</td>
+                <td>{r.followers}</td>
               </tr>
             ))}
           </tbody>

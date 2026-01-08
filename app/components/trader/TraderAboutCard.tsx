@@ -1,16 +1,20 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
+import { supabase } from '@/lib/supabase/client'
 import { Box, Text, Button } from '../Base'
+import FollowButton from '../UI/FollowButton'
 
 interface TraderAboutCardProps {
   handle: string
+  traderId?: string // 交易员ID，用于关注功能
   avatarUrl?: string
   bio?: string
-  followers?: number
+  followers?: number // 关注他的人数量（粉丝数）
+  following?: number // 他关注的人数量
   isRegistered?: boolean
   isOwnProfile?: boolean
 }
@@ -21,14 +25,22 @@ interface TraderAboutCardProps {
  */
 export default function TraderAboutCard({
   handle,
+  traderId,
   avatarUrl,
   bio,
   followers = 0,
+  following = 0,
   isRegistered,
   isOwnProfile = false,
 }: TraderAboutCardProps) {
-  const [isFollowing, setIsFollowing] = useState(false)
+  const [userId, setUserId] = useState<string | null>(null)
   const router = useRouter()
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      setUserId(data.user?.id ?? null)
+    })
+  }, [])
 
   return (
     <Box
@@ -57,7 +69,6 @@ export default function TraderAboutCard({
         }}
       >
         {avatarUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
           <img src={avatarUrl} alt={handle} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
         ) : (
           <Text size="2xl" weight="black" style={{ color: tokens.colors.text.primary }}>
@@ -92,34 +103,39 @@ export default function TraderAboutCard({
         >
           编辑个人资料
         </Button>
-      ) : (
-        <Button
-          variant={isFollowing ? 'secondary' : 'primary'}
-          size="md"
-          fullWidth
-          onClick={() => setIsFollowing(!isFollowing)}
-          style={{
-            marginBottom: tokens.spacing[4],
-            fontWeight: tokens.typography.fontWeight.black,
-          }}
-        >
-          {isFollowing ? '已关注' : '关注'}
-        </Button>
-      )}
+      ) : traderId && userId ? (
+        <Box style={{ marginBottom: tokens.spacing[4] }}>
+          <FollowButton traderId={traderId} userId={userId} />
+        </Box>
+      ) : null}
 
       {/* 次要信息 */}
       <Box
         style={{
           paddingTop: tokens.spacing[3],
           borderTop: `1px solid ${tokens.colors.border.primary}`,
+          display: 'flex',
+          gap: tokens.spacing[4],
         }}
       >
-        <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[1] }}>
-          关注者
-        </Text>
-        <Text size="base" weight="bold" style={{ color: tokens.colors.text.secondary }}>
-          {followers.toLocaleString()}
-        </Text>
+        <Box>
+          <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[1] }}>
+            关注者
+          </Text>
+          <Text size="base" weight="bold" style={{ color: tokens.colors.text.secondary }}>
+            {followers.toLocaleString()}
+          </Text>
+        </Box>
+        {following !== undefined && (
+          <Box>
+            <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[1] }}>
+              关注中
+            </Text>
+            <Text size="base" weight="bold" style={{ color: tokens.colors.text.secondary }}>
+              {following.toLocaleString()}
+            </Text>
+          </Box>
+        )}
       </Box>
 
       {/* 如果是注册用户，显示主页链接 */}

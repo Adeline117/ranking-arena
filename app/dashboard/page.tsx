@@ -29,14 +29,54 @@ export default function DashboardPage() {
   }, [])
 
   const loadStats = async (uid: string) => {
-    // 这里应该从数据库加载真实数据
-    // 暂时使用mock数据
-    setStats({
-      following: 12,
-      followers: 156,
-      posts: 8,
-      favorites: 24,
-    })
+    try {
+      // 从数据库加载真实数据
+      // 获取关注的人数量（他关注的人）
+      const { count: followingCount } = await supabase
+        .from('follows')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', uid)
+      
+      // 获取粉丝数（关注他的人）
+      const { count: followersCount } = await supabase
+        .from('follows')
+        .select('*', { count: 'exact', head: true })
+        .eq('trader_id', uid)
+      
+      // 获取帖子数量
+      const { count: postsCount } = await supabase
+        .from('posts')
+        .select('*', { count: 'exact', head: true })
+        .eq('author_id', uid)
+      
+      // 获取收藏数量（如果有收藏表）
+      let favoritesCount = 0
+      try {
+        const { count, error } = await supabase
+          .from('favorites')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', uid)
+        if (!error && typeof count === 'number') favoritesCount = count
+      } catch {
+        favoritesCount = 0 // favorites 表不存在或权限不足时，安全降级
+      }
+      
+      setStats({
+        following: followingCount || 0,
+        followers: followersCount || 0,
+        posts: postsCount || 0,
+        favorites: favoritesCount || 0,
+      })
+    } catch (error) {
+      console.error('Error loading stats:', error)
+      // 如果出错，设置为0
+      setStats({
+        following: 0,
+        followers: 0,
+        posts: 0,
+        favorites: 0,
+      })
+    }
   }
 
   if (!userId) {

@@ -58,7 +58,6 @@ export default function TraderHeader({ handle, traderId, avatarUrl, isRegistered
           }}
         >
           {avatarUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
             <img src={avatarUrl} alt={handle} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           ) : (
             (handle?.[0] ?? 'T').toUpperCase()
@@ -77,6 +76,19 @@ export default function TraderHeader({ handle, traderId, avatarUrl, isRegistered
 
       {/* 右侧：Buttons */}
       <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
+        {/* 退出按钮 */}
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => router.push('/')}
+          style={{
+            color: tokens.colors.text.tertiary,
+            fontSize: tokens.typography.fontSize.sm,
+          }}
+        >
+          ← 返回
+        </Button>
+        
         {isOwnProfile ? (
           <Button
             variant="ghost"

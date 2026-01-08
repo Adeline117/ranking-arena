@@ -48,7 +48,7 @@ function getPollWinner(poll?: { bull: number; bear: number; wait: number }): Pol
   return arr[0][0]
 }
 
-function AvatarLink({ handle, traderId }: { handle: string; traderId?: string }) {
+function AvatarLink({ handle }: { handle: string }) {
   // 统一跳转到 /trader/[handle] 页面
   const href = `/trader/${encodeURIComponent(handle)}`
   return (
@@ -85,7 +85,7 @@ function AvatarLink({ handle, traderId }: { handle: string; traderId?: string })
 }
 
 export default function PostFeed(props: { variant?: 'compact' | 'full' } = {}) {
-  const variant = props.variant ?? 'compact'
+  void props
 
   const posts: Post[] = useMemo(
     () => [
@@ -277,7 +277,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full' } = {}) {
                   </div>
                 )}
                 {/* ✅ 这里就是"点头像进主页" */}
-                <AvatarLink handle={p.author} traderId={p.authorTraderId} />
+                <AvatarLink handle={p.author} />
               </div>
 
               <div style={{ marginTop: 6, fontWeight: 950, lineHeight: 1.25 }}>
@@ -301,6 +301,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full' } = {}) {
               <div style={{ marginTop: 8, display: 'flex', gap: 10, flexWrap: 'wrap', color: '#a9a9a9', fontSize: 12, alignItems: 'center' }}>
                 <ReactButton
                   onClick={(e) => {
+                    e.preventDefault()
                     e.stopPropagation()
                     toggleReact(p.id, 'up')
                   }}
@@ -311,6 +312,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full' } = {}) {
                 />
                 <ReactButton
                   onClick={(e) => {
+                    e.preventDefault()
                     e.stopPropagation()
                     toggleReact(p.id, 'down')
                   }}
@@ -335,7 +337,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full' } = {}) {
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, marginTop: 8 }}>
             <div style={{ fontSize: 20, fontWeight: 950, lineHeight: 1.25 }}>{openPost.title}</div>
             {/* ✅ 弹窗里也能点进主页 */}
-            <AvatarLink handle={openPost.author} traderId={openPost.authorTraderId} />
+            <AvatarLink handle={openPost.author} />
           </div>
 
           <div style={{ marginTop: 8, fontSize: 12, color: '#777', display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -350,7 +352,13 @@ export default function PostFeed(props: { variant?: 'compact' | 'full' } = {}) {
             <Action 
               icon={<ThumbsUpIcon size={14} />} 
               text={t('upvote')} 
-              onClick={() => toggleReact(openPost.id, 'up')} 
+              onClick={(e) => {
+                if (e) {
+                  e.preventDefault()
+                  e.stopPropagation()
+                }
+                toggleReact(openPost.id, 'up')
+              }} 
               active={myReact[openPost.id] === 'up'}
               count={reactCounts[openPost.id]?.up ?? openPost.likes}
               showCount={true}
@@ -358,7 +366,13 @@ export default function PostFeed(props: { variant?: 'compact' | 'full' } = {}) {
             <Action 
               icon={<ThumbsDownIcon size={14} />} 
               text={t('downvote')} 
-              onClick={() => toggleReact(openPost.id, 'down')} 
+              onClick={(e) => {
+                if (e) {
+                  e.preventDefault()
+                  e.stopPropagation()
+                }
+                toggleReact(openPost.id, 'down')
+              }} 
               active={myReact[openPost.id] === 'down'}
               count={reactCounts[openPost.id]?.down ?? Math.floor(openPost.likes * 0.08)}
               showCount={false}
@@ -461,14 +475,16 @@ function ReactButton({ onClick, active, icon, count, showCount = true }: { onCli
   )
 }
 
-function Action(props: { icon?: React.ReactNode; text: string; onClick: () => void; active?: boolean; count?: number; showCount?: boolean }) {
+function Action(props: { icon?: React.ReactNode; text: string; onClick: (e?: React.MouseEvent) => void; active?: boolean; count?: number; showCount?: boolean }) {
   const [isPressed, setIsPressed] = useState(false)
   const [isAnimating, setIsAnimating] = useState(false)
 
-  const handleClick = () => {
+  const handleClick = (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
     setIsAnimating(true)
     setTimeout(() => setIsAnimating(false), 300)
-    props.onClick()
+    props.onClick(e)
   }
 
   // 如果已点赞，显示 count + 1；否则显示 count

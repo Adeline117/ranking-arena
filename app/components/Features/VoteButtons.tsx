@@ -3,7 +3,6 @@
 import { useState } from 'react'
 import { ThumbsUpIcon, ThumbsDownIcon } from '../Icons'
 import { tokens } from '@/lib/design-tokens'
-import { useLanguage } from '../Utils/LanguageProvider'
 
 export interface VoteData {
   upvotes: number
@@ -35,7 +34,6 @@ export default function VoteButtons({
   disabled = false,
   style,
 }: VoteButtonsProps) {
-  const { t } = useLanguage()
   const [voteData, setVoteData] = useState<VoteData>(
     initialData || {
       upvotes: 0,

@@ -6,11 +6,10 @@ import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/Layout/TopNav'
 import { Box, Text, Button } from '@/app/components/Base'
-import { useLanguage } from '@/app/components/Utils/LanguageProvider'
+import Avatar from '@/app/components/UI/Avatar'
 
 export default function SettingsPage() {
   const router = useRouter()
-  const { t } = useLanguage()
   const [email, setEmail] = useState<string | null>(null)
   const [userId, setUserId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -47,46 +46,32 @@ export default function SettingsPage() {
     try {
       setLoading(true)
       
-      // Try to get from profiles table first
-      const { data: profile } = await supabase
-        .from('profiles')
+      // 只使用 user_profiles（避免访问不存在的 profiles 表）
+      const { data: userProfile } = await supabase
+        .from('user_profiles')
         .select('handle, bio, avatar_url')
         .eq('id', uid)
         .maybeSingle()
       
-      if (profile) {
-        setHandle(profile.handle || '')
-        setBio(profile.bio || '')
-        setAvatarUrl(profile.avatar_url || null)
-        setPreviewUrl(profile.avatar_url || null)
-        
-        // Load account bindings
-        const { data: bindings } = await supabase
-          .from('account_bindings')
-          .select('platform, account_id')
-          .eq('user_id', uid)
-        
-        if (bindings) {
-          bindings.forEach((binding: any) => {
-            if (binding.platform === 'binance') setBinanceId(binding.account_id || '')
-            if (binding.platform === 'bybit') setBybitId(binding.account_id || '')
-            if (binding.platform === 'wallet') setWalletAddress(binding.account_id || '')
-          })
-        }
-      } else {
-        // Try user_profiles table
-        const { data: userProfile } = await supabase
-          .from('user_profiles')
-          .select('handle, bio, avatar_url')
-          .eq('id', uid)
-          .maybeSingle()
-        
-        if (userProfile) {
-          setHandle(userProfile.handle || '')
-          setBio(userProfile.bio || '')
-          setAvatarUrl(userProfile.avatar_url || null)
-          setPreviewUrl(userProfile.avatar_url || null)
-        }
+      if (userProfile) {
+        setHandle(userProfile.handle || '')
+        setBio(userProfile.bio || '')
+        setAvatarUrl(userProfile.avatar_url || null)
+        setPreviewUrl(userProfile.avatar_url || null)
+      }
+
+      // Load account bindings
+      const { data: bindings } = await supabase
+        .from('account_bindings')
+        .select('platform, account_id')
+        .eq('user_id', uid)
+      
+      if (bindings) {
+        bindings.forEach((binding: any) => {
+          if (binding.platform === 'binance') setBinanceId(binding.account_id || '')
+          if (binding.platform === 'bybit') setBybitId(binding.account_id || '')
+          if (binding.platform === 'wallet') setWalletAddress(binding.account_id || '')
+        })
       }
     } catch (error) {
       console.error('Error loading profile:', error)
@@ -145,32 +130,23 @@ export default function SettingsPage() {
         }
       }
       
-      // Update profile in profiles table
-      const { error: profilesError } = await supabase
-        .from('profiles')
-        .upsert({
-          id: userId,
-          handle: handle || null,
-          bio: bio || null,
-          avatar_url: finalAvatarUrl || null,
-        }, { onConflict: 'id' })
-      
-      if (profilesError) {
-        // Try user_profiles table
-        const { error: userProfilesError } = await supabase
-          .from('user_profiles')
-          .upsert({
+      // Update profile in user_profiles
+      const { error: userProfilesError } = await supabase
+        .from('user_profiles')
+        .upsert(
+          {
             id: userId,
             handle: handle || null,
             bio: bio || null,
             avatar_url: finalAvatarUrl || null,
-          }, { onConflict: 'id' })
-        
-        if (userProfilesError) {
-          console.error('Error saving profile:', userProfilesError)
-          alert('保存失败，请重试')
-          return
-        }
+          },
+          { onConflict: 'id' }
+        )
+      
+      if (userProfilesError) {
+        console.error('Error saving profile:', userProfilesError)
+        alert('保存失败，请重试')
+        return
       }
       
       // Save account bindings
@@ -228,28 +204,36 @@ export default function SettingsPage() {
           </Text>
           
           <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[4] }}>
-            <Box
-              style={{
-                width: 100,
-                height: 100,
-                borderRadius: tokens.radius.xl,
-                background: tokens.colors.bg.tertiary,
-                border: `1px solid ${tokens.colors.border.primary}`,
-                display: 'grid',
-                placeItems: 'center',
-                overflow: 'hidden',
-                flexShrink: 0,
-              }}
-            >
-              {previewUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={previewUrl} alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-              ) : (
+            {userId ? (
+              <Avatar
+                userId={userId}
+                name={handle || email}
+                avatarUrl={previewUrl}
+                size={100}
+                style={{
+                  borderRadius: tokens.radius.xl,
+                  border: `1px solid ${tokens.colors.border.primary}`,
+                }}
+              />
+            ) : (
+              <Box
+                style={{
+                  width: 100,
+                  height: 100,
+                  borderRadius: tokens.radius.xl,
+                  background: tokens.colors.bg.tertiary,
+                  border: `1px solid ${tokens.colors.border.primary}`,
+                  display: 'grid',
+                  placeItems: 'center',
+                  overflow: 'hidden',
+                  flexShrink: 0,
+                }}
+              >
                 <Text size="3xl" weight="black" style={{ color: tokens.colors.text.secondary }}>
                   {(handle?.[0] || email?.[0] || 'U').toUpperCase()}
                 </Text>
-              )}
-            </Box>
+              </Box>
+            )}
             
             <Box>
               <input

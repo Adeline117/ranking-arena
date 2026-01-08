@@ -76,74 +76,181 @@ export default function UserHomePage(props: { params: { handle: string } | Promi
 
       try {
         // 先尝试从 trader_sources 获取（如果用户也是交易员）
-        let profileData = await getTraderByHandle(handle)
+        let profileData: TraderProfile | null = await getTraderByHandle(handle)
 
-        // 如果找不到，从 profiles 表获取注册用户信息
+        // 如果找不到，从 user_profiles 表获取注册用户信息（profiles 表不存在）
         if (!profileData) {
-          // 先尝试 profiles 表
-          const { data: profile } = await supabase
-            .from('profiles')
+          // 直接使用 user_profiles 表（因为 profiles 表不存在）
+          const { data: userProfile } = await supabase
+            .from('user_profiles')
             .select('*')
             .eq('handle', handle)
             .maybeSingle()
 
-          if (profile) {
-            // 获取粉丝数
-            const { count } = await supabase
+          if (userProfile && userProfile.handle) {
+            // 获取粉丝数（关注他的人）
+            const { count: followersCount } = await supabase
               .from('follows')
               .select('*', { count: 'exact', head: true })
-              .eq('trader_id', profile.id)
+              .eq('trader_id', userProfile.id)
+            
+            // 获取关注的人数量（他关注的人）
+            const { count: followingCount } = await supabase
+              .from('follows')
+              .select('*', { count: 'exact', head: true })
+              .eq('user_id', userProfile.id)
 
             profileData = {
-              handle: profile.handle || handle,
-              id: profile.id,
-              bio: profile.bio || null,
-              followers: count || 0,
+              handle: userProfile.handle || handle,
+              id: userProfile.id,
+              bio: userProfile.bio || null,
+              followers: followersCount || 0,
+              following: followingCount || 0,
               copiers: 0,
-              avatar_url: profile.avatar_url || null,
+              avatar_url: userProfile.avatar_url || null,
               isRegistered: true,
-            }
-          } else {
-            // 再尝试 user_profiles 表
-            const { data: userProfile } = await supabase
-              .from('user_profiles')
-              .select('*')
-              .eq('handle', handle)
-              .maybeSingle()
-
-            if (userProfile) {
-              // 获取粉丝数
-              const { count } = await supabase
-                .from('follows')
-                .select('*', { count: 'exact', head: true })
-                .eq('trader_id', userProfile.id)
-
-              profileData = {
-                handle: userProfile.handle || handle,
-                id: userProfile.id,
-                bio: userProfile.bio || null,
-                followers: count || 0,
-                copiers: 0,
-                avatar_url: userProfile.avatar_url || null,
-                isRegistered: true,
-              }
             }
           }
         } else {
-          // 如果从 trader_sources 找到了，确保获取正确的粉丝数
-          const { count } = await supabase
+          // 如果从 trader_sources 找到了，确保获取正确的粉丝数和关注数
+          const { count: followersCount } = await supabase
             .from('follows')
             .select('*', { count: 'exact', head: true })
             .eq('trader_id', profileData.id)
+          
+          const { count: followingCount } = await supabase
+            .from('follows')
+            .select('*', { count: 'exact', head: true })
+            .eq('user_id', profileData.id)
 
-          if (count !== null) {
-            profileData.followers = count
+          if (followersCount !== null) {
+            profileData.followers = followersCount
+          }
+          if (followingCount !== null) {
+            profileData.following = followingCount
           }
         }
 
         if (!profileData) {
-          setLoading(false)
-          return
+          // 如果找不到用户，尝试从当前登录用户创建 profile
+          const { data: { user } } = await supabase.auth.getUser()
+          console.log('[UserPage] No profileData found, checking user:', user?.id, 'handle:', handle)
+          
+          if (user && user.email) {
+            const emailHandle = user.email.split('@')[0]
+            console.log('[UserPage] Email handle:', emailHandle, 'current handle:', handle)
+            
+            // 如果 handle 匹配邮箱前缀，尝试创建 profile
+            if (handle === emailHandle || handle === user.id.slice(0, 8)) {
+              console.log('[UserPage] Handle matches, creating profile...')
+              const defaultHandle = emailHandle
+              try {
+                // 尝试创建 profile（只使用 user_profiles 表，因为 profiles 表不存在）
+                let newProfile = null
+                
+                // 先尝试插入包含 handle 的数据
+                const { data: userProfileData, error: userProfileError } = await supabase
+                  .from('user_profiles')
+                  .upsert({
+                    id: user.id,
+                    handle: defaultHandle,
+                  }, { onConflict: 'id' })
+                  .select()
+                  .single()
+                
+                if (userProfileData) {
+                  console.log('[UserPage] Profile created in user_profiles table:', userProfileData)
+                  newProfile = userProfileData
+                } else if (userProfileError) {
+                  console.log('[UserPage] Error creating in user_profiles table:', userProfileError)
+                  console.log('[UserPage] Error details:', JSON.stringify(userProfileError, null, 2))
+                  
+                  // 如果错误是因为缺少 handle 列，提示用户运行修复脚本
+                  if (userProfileError.message?.includes('handle') || userProfileError.code === 'PGRST204') {
+                    console.error('[UserPage] ❌ user_profiles 表缺少 handle 列！')
+                    console.error('[UserPage] 请运行 scripts/fix_user_profiles_complete.sql 来修复表结构')
+                    alert('数据库表结构不完整，请运行 scripts/fix_user_profiles_complete.sql 来修复')
+                  }
+                }
+
+                if (newProfile) {
+                  console.log('[UserPage] Profile created successfully:', newProfile.handle)
+                  // 获取粉丝数和关注数
+                  const { count: followersCount } = await supabase
+                    .from('follows')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('trader_id', newProfile.id)
+                  
+                  const { count: followingCount } = await supabase
+                    .from('follows')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('user_id', newProfile.id)
+
+                  // 使用新创建的 profile
+                  profileData = {
+                    handle: newProfile.handle || defaultHandle,
+                    id: newProfile.id,
+                    bio: newProfile.bio || null,
+                    followers: followersCount || 0,
+                    following: followingCount || 0,
+                    copiers: 0,
+                    avatar_url: newProfile.avatar_url || null,
+                    isRegistered: true,
+                  }
+                  console.log('[UserPage] profileData set:', profileData.handle)
+                } else {
+                  console.log('[UserPage] Failed to create profile')
+                }
+              } catch (error) {
+                console.error('[UserPage] Exception creating profile:', error)
+                console.error('[UserPage] Exception details:', JSON.stringify(error, null, 2))
+              }
+            } else {
+              console.log('[UserPage] Handle does not match, trying to find or create by ID...')
+              // 如果 handle 不匹配，尝试通过 ID 查找
+              // 直接使用 user_profiles 表（因为 profiles 表不存在）
+              const { data: profileById } = await supabase
+                .from('user_profiles')
+                .select('*')
+                .eq('id', user.id)
+                .maybeSingle()
+              
+              if (profileById) {
+                console.log('[UserPage] Found profile by ID, redirecting to:', profileById.handle)
+                // 如果找到用户但 handle 不匹配，重定向到正确的 handle
+                window.location.href = `/u/${profileById.handle}`
+                return
+              } else {
+                console.log('[UserPage] No profile found by ID, creating new profile...')
+                // 如果找不到，尝试创建新的 profile（不包含 email，因为 user_profiles 表没有这个列）
+                try {
+                  const { data: userProfileData, error: insertError } = await supabase
+                    .from('user_profiles')
+                    .upsert({
+                      id: user.id,
+                      handle: emailHandle,
+                    }, { onConflict: 'id' })
+                    .select()
+                    .single()
+
+                  if (userProfileData) {
+                    console.log('[UserPage] User profile created, redirecting to:', emailHandle)
+                    window.location.href = `/u/${emailHandle}`
+                    return
+                  } else if (insertError) {
+                    console.log('[UserPage] Error creating user profile:', insertError)
+                  }
+                } catch (error) {
+                  console.error('[UserPage] Error creating profile:', error)
+                }
+              }
+            }
+          }
+          
+          if (!profileData) {
+            setLoading(false)
+            return
+          }
         }
 
         const [performanceData, statsData, portfolioData, feedData, similarData] = await Promise.all([
@@ -255,9 +362,11 @@ export default function UserHomePage(props: { params: { handle: string } | Promi
             <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[6] }}>
               <TraderAboutCard
                 handle={profile.handle}
+                traderId={profile.id}
                 avatarUrl={profile.avatar_url}
                 bio={profile.bio}
                 followers={profile.followers}
+                following={profile.following}
                 isRegistered={profile.isRegistered}
                 isOwnProfile={isOwnProfile}
               />

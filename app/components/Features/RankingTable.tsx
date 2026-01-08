@@ -7,6 +7,7 @@ import { RankingSkeleton } from '../UI/Skeleton'
 import { RankingBadge } from '../Icons'
 import { Box, Text } from '../Base'
 import { useLanguage } from '../Utils/LanguageProvider'
+import Avatar from '../UI/Avatar'
 
 // 格式化 PnL 显示
 function formatPnL(pnl: number): string {
@@ -42,6 +43,7 @@ export interface Trader {
   avg_buy_90d?: number // 90天平均买入
   followers: number
   source?: string // 数据来源：binance, bybit, okx等
+  avatar_url?: string // 头像URL
 }
 
 /**
@@ -54,7 +56,7 @@ export default function RankingTable(props: {
   loggedIn: boolean
   source?: string // 数据来源
 }) {
-  const { traders, loading, loggedIn, source } = props
+  const { traders, loading, source } = props
   const { t } = useLanguage()
   
   // 分页状态
@@ -192,7 +194,15 @@ export default function RankingTable(props: {
                     </Box>
 
                   {/* 交易员ID - 唯一可点击的元素，视觉权重最高 */}
-                  <Box style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                  <Box style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'nowrap' }}>
+                    {/* 头像 - 放在名字左边 */}
+                    <Avatar
+                      userId={t.id}
+                      name={displayName}
+                      avatarUrl={t.avatar_url}
+                      size={32}
+                    />
+                    {/* 名字 - 在头像右边 */}
                     <Text size="sm" weight="black" style={{ color: tokens.colors.text.primary }}>
                       {displayName}
                     </Text>

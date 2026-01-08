@@ -190,110 +190,100 @@ export default function HomePage() {
         console.log(`[ranking] ✅ Bitget: 找到 ${finalBitgetSnapshots.length} 条数据`)
       }
 
-      // 收集所有需要查询 handle 的交易员ID
-      const allTraderIds = [
-        ...finalBinanceSnapshots.map(s => ({ id: s.source_trader_id, source: 'binance' })),
-        ...finalWeb3Snapshots.map(s => ({ id: s.source_trader_id, source: 'binance_web3' })),
-        ...finalBybitSnapshots.map(s => ({ id: s.source_trader_id, source: 'bybit' })),
-        ...finalBitgetSnapshots.map(s => ({ id: s.source_trader_id, source: 'bitget' })),
-        ...finalMexcSnapshots.map(s => ({ id: s.source_trader_id, source: 'mexc' })),
-        ...finalCoinexSnapshots.map(s => ({ id: s.source_trader_id, source: 'coinex' })),
-      ]
-
       // 并行查询所有 handles（一次性查询所有数据源）
       const handleQueries = await Promise.all([
         finalBinanceSnapshots.length > 0
           ? supabase
               .from('trader_sources')
-              .select('source_trader_id, handle')
+              .select('source_trader_id, handle, profile_url')
               .eq('source', 'binance')
               .in('source_trader_id', finalBinanceSnapshots.map(s => s.source_trader_id))
           : Promise.resolve({ data: [], error: null }),
         finalWeb3Snapshots.length > 0
           ? supabase
               .from('trader_sources')
-              .select('source_trader_id, handle')
+              .select('source_trader_id, handle, profile_url')
               .eq('source', 'binance_web3')
               .in('source_trader_id', finalWeb3Snapshots.map(s => s.source_trader_id))
           : Promise.resolve({ data: [], error: null }),
         finalBybitSnapshots.length > 0
           ? supabase
               .from('trader_sources')
-              .select('source_trader_id, handle')
+              .select('source_trader_id, handle, profile_url')
               .eq('source', 'bybit')
               .in('source_trader_id', finalBybitSnapshots.map(s => s.source_trader_id))
           : Promise.resolve({ data: [], error: null }),
         finalBitgetSnapshots.length > 0
           ? supabase
               .from('trader_sources')
-              .select('source_trader_id, handle')
+              .select('source_trader_id, handle, profile_url')
               .eq('source', 'bitget')
               .in('source_trader_id', finalBitgetSnapshots.map(s => s.source_trader_id))
           : Promise.resolve({ data: [], error: null }),
         finalMexcSnapshots.length > 0
           ? supabase
               .from('trader_sources')
-              .select('source_trader_id, handle')
+              .select('source_trader_id, handle, profile_url')
               .eq('source', 'mexc')
               .in('source_trader_id', finalMexcSnapshots.map(s => s.source_trader_id))
           : Promise.resolve({ data: [], error: null }),
         finalCoinexSnapshots.length > 0
           ? supabase
               .from('trader_sources')
-              .select('source_trader_id, handle')
+              .select('source_trader_id, handle, profile_url')
               .eq('source', 'coinex')
               .in('source_trader_id', finalCoinexSnapshots.map(s => s.source_trader_id))
           : Promise.resolve({ data: [], error: null }),
       ])
 
-      const binanceHandles = new Map<string, string>()
+      const binanceHandles = new Map<string, { handle: string; avatar_url?: string }>()
       handleQueries[0].data?.forEach((s: any) => {
         if (s.handle && s.handle.trim() !== '') {
-          binanceHandles.set(s.source_trader_id, s.handle)
+          binanceHandles.set(s.source_trader_id, { handle: s.handle, avatar_url: s.profile_url })
         }
       })
 
-      const web3Handles = new Map<string, string>()
+      const web3Handles = new Map<string, { handle: string; avatar_url?: string }>()
       handleQueries[1].data?.forEach((s: any) => {
         if (s.handle && s.handle.trim() !== '') {
-          web3Handles.set(s.source_trader_id, s.handle)
+          web3Handles.set(s.source_trader_id, { handle: s.handle, avatar_url: s.profile_url })
         }
       })
 
-      const bybitHandles = new Map<string, string>()
+      const bybitHandles = new Map<string, { handle: string; avatar_url?: string }>()
       handleQueries[2].data?.forEach((s: any) => {
         if (s.handle && s.handle.trim() !== '') {
-          bybitHandles.set(s.source_trader_id, s.handle)
+          bybitHandles.set(s.source_trader_id, { handle: s.handle, avatar_url: s.profile_url })
         }
       })
 
-      const bitgetHandles = new Map<string, string>()
+      const bitgetHandles = new Map<string, { handle: string; avatar_url?: string }>()
       handleQueries[3].data?.forEach((s: any) => {
         if (s.handle && s.handle.trim() !== '') {
-          bitgetHandles.set(s.source_trader_id, s.handle)
+          bitgetHandles.set(s.source_trader_id, { handle: s.handle, avatar_url: s.profile_url })
         }
       })
 
-      const mexcHandles = new Map<string, string>()
+      const mexcHandles = new Map<string, { handle: string; avatar_url?: string }>()
       handleQueries[4].data?.forEach((s: any) => {
         if (s.handle && s.handle.trim() !== '') {
-          mexcHandles.set(s.source_trader_id, s.handle)
+          mexcHandles.set(s.source_trader_id, { handle: s.handle, avatar_url: s.profile_url })
         }
       })
 
-      const coinexHandles = new Map<string, string>()
+      const coinexHandles = new Map<string, { handle: string; avatar_url?: string }>()
       handleQueries[5].data?.forEach((s: any) => {
         if (s.handle && s.handle.trim() !== '') {
-          coinexHandles.set(s.source_trader_id, s.handle)
+          coinexHandles.set(s.source_trader_id, { handle: s.handle, avatar_url: s.profile_url })
         }
       })
 
       // 合并所有数据
-      let allTradersData: Trader[] = []
+      const allTradersData: Trader[] = []
 
       finalBinanceSnapshots.forEach((item: any) => {
-        const handle = binanceHandles.get(item.source_trader_id)
-        const displayHandle = handle && handle.trim() !== '' ? handle : item.source_trader_id
+        const handleData = binanceHandles.get(item.source_trader_id)
+        const displayHandle = handleData && handleData.handle && handleData.handle.trim() !== '' ? handleData.handle : item.source_trader_id
         allTradersData.push({
           id: item.source_trader_id,
           handle: displayHandle,
@@ -304,12 +294,13 @@ export default function HomePage() {
           avg_buy_90d: undefined,
           followers: item.followers || 0,
           source: 'binance',
+          avatar_url: handleData?.avatar_url,
         })
       })
 
       finalWeb3Snapshots.forEach((item: any) => {
-        const handle = web3Handles.get(item.source_trader_id)
-        const displayHandle = handle && handle.trim() !== '' ? handle : item.source_trader_id
+        const handleData = web3Handles.get(item.source_trader_id)
+        const displayHandle = handleData && handleData.handle && handleData.handle.trim() !== '' ? handleData.handle : item.source_trader_id
         allTradersData.push({
           id: item.source_trader_id,
           handle: displayHandle,
@@ -320,12 +311,13 @@ export default function HomePage() {
           avg_buy_90d: undefined,
           followers: item.followers || 0,
           source: 'binance_web3',
+          avatar_url: handleData?.avatar_url,
         })
       })
 
       finalBybitSnapshots.forEach((item: any) => {
-        const handle = bybitHandles.get(item.source_trader_id)
-        const displayHandle = handle && handle.trim() !== '' ? handle : item.source_trader_id
+        const handleData = bybitHandles.get(item.source_trader_id)
+        const displayHandle = handleData && handleData.handle && handleData.handle.trim() !== '' ? handleData.handle : item.source_trader_id
         allTradersData.push({
           id: item.source_trader_id,
           handle: displayHandle,
@@ -336,12 +328,13 @@ export default function HomePage() {
           avg_buy_90d: undefined,
           followers: item.followers || 0,
           source: 'bybit',
+          avatar_url: handleData?.avatar_url,
         })
       })
 
       finalBitgetSnapshots.forEach((item: any) => {
-        const handle = bitgetHandles.get(item.source_trader_id)
-        const displayHandle = handle && handle.trim() !== '' ? handle : item.source_trader_id
+        const handleData = bitgetHandles.get(item.source_trader_id)
+        const displayHandle = handleData && handleData.handle && handleData.handle.trim() !== '' ? handleData.handle : item.source_trader_id
         allTradersData.push({
           id: item.source_trader_id,
           handle: displayHandle,
@@ -352,12 +345,13 @@ export default function HomePage() {
           avg_buy_90d: undefined,
           followers: item.followers || 0,
           source: 'bitget',
+          avatar_url: handleData?.avatar_url,
         })
       })
 
       finalMexcSnapshots.forEach((item: any) => {
-        const handle = mexcHandles.get(item.source_trader_id)
-        const displayHandle = handle && handle.trim() !== '' ? handle : item.source_trader_id
+        const handleData = mexcHandles.get(item.source_trader_id)
+        const displayHandle = handleData && handleData.handle && handleData.handle.trim() !== '' ? handleData.handle : item.source_trader_id
         allTradersData.push({
           id: item.source_trader_id,
           handle: displayHandle,
@@ -368,12 +362,13 @@ export default function HomePage() {
           avg_buy_90d: undefined,
           followers: item.followers || 0,
           source: 'mexc',
+          avatar_url: handleData?.avatar_url,
         })
       })
 
       finalCoinexSnapshots.forEach((item: any) => {
-        const handle = coinexHandles.get(item.source_trader_id)
-        const displayHandle = handle && handle.trim() !== '' ? handle : item.source_trader_id
+        const handleData = coinexHandles.get(item.source_trader_id)
+        const displayHandle = handleData && handleData.handle && handleData.handle.trim() !== '' ? handleData.handle : item.source_trader_id
         allTradersData.push({
           id: item.source_trader_id,
           handle: displayHandle,
@@ -384,6 +379,7 @@ export default function HomePage() {
           avg_buy_90d: undefined,
           followers: item.followers || 0,
           source: 'coinex',
+          avatar_url: handleData?.avatar_url,
         })
       })
 

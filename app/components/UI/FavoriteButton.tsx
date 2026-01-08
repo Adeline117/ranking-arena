@@ -15,23 +15,20 @@ export default function FavoriteButton({ traderId, userId, initialFavorited = fa
 
   useEffect(() => {
     if (!userId) return
-    checkFavorited()
+    ;(async () => {
+      try {
+        const { data } = await supabase
+          .from('favorites')
+          .select('*')
+          .eq('user_id', userId)
+          .eq('trader_id', traderId)
+          .maybeSingle()
+        setFavorited(!!data)
+      } catch (error) {
+        console.error('Check favorite error:', error)
+      }
+    })()
   }, [userId, traderId])
-
-  const checkFavorited = async () => {
-    if (!userId) return
-    try {
-      const { data } = await supabase
-        .from('favorites')
-        .select('*')
-        .eq('user_id', userId)
-        .eq('trader_id', traderId)
-        .maybeSingle()
-      setFavorited(!!data)
-    } catch (error) {
-      console.error('Check favorite error:', error)
-    }
-  }
 
   const handleToggle = async () => {
     if (!userId) {

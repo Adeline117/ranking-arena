@@ -30,7 +30,7 @@ interface HotPost {
  * - 显示搜索历史记录（可删除）
  * - 显示热榜帖子前十（前三标橙）
  */
-export default function SearchDropdown({ open, query, onClose }: SearchDropdownProps) {
+export default function SearchDropdown({ open, onClose }: SearchDropdownProps) {
   const [searchHistory, setSearchHistory] = useState<SearchHistoryItem[]>([])
   const [hotPosts, setHotPosts] = useState<HotPost[]>([])
 

@@ -25,12 +25,7 @@ interface UserHomeLayoutProps {
 }
 
 export default function UserHomeLayout({
-  userId,
   handle,
-  avatarUrl,
-  bio,
-  followers = 0,
-  following = 0,
   performance,
   feed = [],
   groups = [],
