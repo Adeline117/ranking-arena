@@ -509,7 +509,7 @@ export default function HomePage() {
           }}
         >
           {/* 左：热门讨论 */}
-          <Box as="section">
+          <Box as="section" className="home-left-section">
             <Card title={t('hotDiscussion')}>
               <PostFeed />
             </Card>
@@ -543,7 +543,7 @@ export default function HomePage() {
           </Box>
 
           {/* 中：排名流（产品核心） */}
-          <Box as="section">
+          <Box as="section" className="home-ranking-section">
             <RankingTable
               traders={traders}
               loading={loadingTraders}
@@ -553,7 +553,7 @@ export default function HomePage() {
           </Box>
 
           {/* 右：市场 */}
-          <Box as="section">
+          <Box as="section" className="home-right-section">
             <MarketPanel />
           </Box>
         </Box>

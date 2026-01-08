@@ -72,13 +72,14 @@
     gap: 16px !important;
   }
 
-  .main-grid > section:nth-child(1),
-  .main-grid > section:nth-child(3) {
-    order: 2;
+  /* 确保排行榜在最上面 */
+  .home-left-section,
+  .home-right-section {
+    order: 2 !important;
   }
 
-  .main-grid > section:nth-child(2) {
-    order: 1;
+  .home-ranking-section {
+    order: 1 !important; /* 排行榜显示在最上面 */
   }
 }
 
@@ -87,6 +88,16 @@
   .main-grid {
     grid-template-columns: 1fr !important;
     gap: 12px !important;
+  }
+
+  /* 确保排行榜在最上面 */
+  .home-left-section,
+  .home-right-section {
+    order: 2 !important;
+  }
+
+  .home-ranking-section {
+    order: 1 !important; /* 排行榜显示在最上面 */
   }
 
   body {
@@ -397,13 +408,14 @@
     gap: 20px !important;
   }
 
-  .main-grid > section:nth-child(1),
-  .main-grid > section:nth-child(3) {
-    order: 2;
+  /* 确保排行榜在最上面 */
+  .home-left-section,
+  .home-right-section {
+    order: 2 !important;
   }
 
-  .main-grid > section:nth-child(2) {
-    order: 1;
+  .home-ranking-section {
+    order: 1 !important; /* 排行榜显示在最上面 */
   }
 }
 
