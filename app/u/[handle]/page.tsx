@@ -331,6 +331,7 @@ export default function UserHomePage(props: { params: { handle: string } | Promi
         {/* Tab Content */}
         {activeTab === 'overview' && (
           <Box
+            className="profile-grid"
             style={{
               display: 'grid',
               gridTemplateColumns: '1fr 320px',

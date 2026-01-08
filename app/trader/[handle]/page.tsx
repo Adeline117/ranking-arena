@@ -156,6 +156,7 @@ export default function TraderPage(props: { params: { handle: string } | Promise
         {/* Tab Content */}
         {activeTab === 'overview' && (
           <Box
+            className="profile-grid"
             style={{
               display: 'grid',
               gridTemplateColumns: '1fr 320px',
