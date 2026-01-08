@@ -55,6 +55,8 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url)
     const pairsParam = searchParams.get('pairs')
     
+    console.log('[Market API] 请求市场数据, pairs:', pairsParam || 'default')
+    
     // 如果提供了自定义pairs，使用它们；否则使用默认PAIRS
     let targetPairs = PAIRS
     if (pairsParam) {
@@ -69,30 +71,49 @@ export async function GET(request: Request) {
     // 1) 命中缓存直接返回（如果请求的pairs与缓存一致）
     const now = Date.now()
     if (cache && now - cache.ts < TTL_MS && !pairsParam) {
+      console.log('[Market API] 返回缓存数据, source:', cache.source)
       return NextResponse.json({ rows: cache.rows, source: cache.source, cached: true })
     }
 
     // 2) 先主源 CoinGecko
     try {
+      console.log('[Market API] 尝试从 CoinGecko 获取数据...')
       const rows = await fetchFromCoinGeckoForPairs(targetPairs)
+      console.log('[Market API] CoinGecko 成功, 返回', rows.length, '条数据')
+      
       if (!pairsParam) {
         cache = { ts: now, rows, source: 'coingecko' }
       }
       return NextResponse.json({ rows, source: 'coingecko', cached: false })
     } catch (e1: any) {
       // 3) fallback 到 Coinbase
-      const rows = await fetchFromCoinbaseForPairs(targetPairs)
-      if (!pairsParam) {
-        cache = { ts: now, rows, source: 'coinbase' }
+      console.warn('[Market API] CoinGecko 失败:', e1?.message, '尝试 Coinbase...')
+      try {
+        const rows = await fetchFromCoinbaseForPairs(targetPairs)
+        console.log('[Market API] Coinbase 成功, 返回', rows.length, '条数据')
+        
+        if (!pairsParam) {
+          cache = { ts: now, rows, source: 'coinbase' }
+        }
+        return NextResponse.json({
+          rows,
+          source: 'coinbase',
+          cached: false,
+          warning: `Primary failed: ${e1?.message ?? 'unknown'}`,
+        })
+      } catch (e2: any) {
+        console.error('[Market API] Coinbase 也失败:', e2?.message)
+        return NextResponse.json(
+          { 
+            rows: [], 
+            error: `Both sources failed. CoinGecko: ${e1?.message ?? 'unknown'}, Coinbase: ${e2?.message ?? 'unknown'}` 
+          },
+          { status: 500 }
+        )
       }
-      return NextResponse.json({
-        rows,
-        source: 'coinbase',
-        cached: false,
-        warning: `Primary failed: ${e1?.message ?? 'unknown'}`,
-      })
     }
   } catch (e: any) {
+    console.error('[Market API] 请求异常:', e)
     return NextResponse.json(
       { rows: [], error: e?.message ?? 'unknown error' },
       { status: 500 }
