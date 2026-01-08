@@ -94,6 +94,7 @@ export default function RankingTable(props: {
     >
       {/* Header - 最小化 */}
       <Box
+        className="ranking-table-header ranking-table-grid"
         style={{
           display: 'grid',
           gridTemplateColumns: '60px 1fr 120px 80px 100px 100px', // Rank | ID | ROI (90D) | Win Rate (90D) | Volume (90D) | Avg Buy (90D)
@@ -164,6 +165,7 @@ export default function RankingTable(props: {
                   style={{ textDecoration: 'none' }}
                 >
                   <Box
+                    className="ranking-table-grid"
                     style={{
                       display: 'grid',
                       gridTemplateColumns: '60px 1fr 120px 80px 100px 100px',

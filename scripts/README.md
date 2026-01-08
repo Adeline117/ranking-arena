@@ -14,6 +14,7 @@
 
 ### 工具脚本
 - **`setup_supabase_tables.sql`** - 数据库表结构和 RLS 策略配置
+- **`remove_handle_unique_constraint.sql`** - 移除用户名唯一性约束（允许用户名重复）
 - **`test_auth_and_posts.mjs`** - 测试认证和发帖功能
 - **`verify_supabase_setup.mjs`** - 验证 Supabase 配置是否正确
 

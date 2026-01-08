@@ -101,6 +101,7 @@ export default function TopNav({ email }: { email: string | null }) {
   return (
     <Box
       as="header"
+      className="top-nav"
       style={{
         position: 'sticky',
         top: 0,
@@ -111,6 +112,7 @@ export default function TopNav({ email }: { email: string | null }) {
       }}
     >
       <Box
+        className="top-nav-container"
         style={{
           maxWidth: 1200,
           margin: '0 auto',
@@ -125,7 +127,7 @@ export default function TopNav({ email }: { email: string | null }) {
       >
         {/* 左：Logo + Nav */}
         <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[4] }}>
-          <Link href="/" style={{ display: 'flex', alignItems: 'center', textDecoration: 'none' }}>
+          <Link href="/" className="top-nav-logo" style={{ display: 'flex', alignItems: 'center', textDecoration: 'none' }}>
             <Box
               style={{
                 width: 32,
@@ -186,6 +188,7 @@ export default function TopNav({ email }: { email: string | null }) {
         {/* 中：搜索 */}
         <div
           ref={searchRef}
+          className="top-nav-search"
           style={{
             flex: 1,
             display: 'flex',
@@ -244,6 +247,7 @@ export default function TopNav({ email }: { email: string | null }) {
         {/* 右：语言切换 + 主题切换 + 用户 */}
         <div
           ref={menuRef}
+          className="top-nav-actions"
           style={{
             display: 'flex',
             alignItems: 'center',

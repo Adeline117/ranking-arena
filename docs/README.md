@@ -14,7 +14,9 @@
 ### 🔐 认证与登录
 
 - **[登录流程说明](./LOGIN_FLOW.md)** - 用户登录和认证流程详解
+- **[注册流程配置](./REGISTRATION_SETUP.md)** - 注册流程配置和用户名规则说明
 - **[OTP vs Magic Link](./OTP_VS_MAGIC_LINK.md)** - OTP 和 Magic Link 的对比与选择
+- **[OTP 验证码配置修复](./SUPABASE_OTP_FIX.md)** - 解决收到链接而不是验证码的问题
 
 ### 📊 数据与导入
 
@@ -25,6 +27,7 @@
 
 - **[头像系统](./AVATAR_SYSTEM.md)** - 用户头像系统实现说明
 - **[项目结构](./PROJECT_STRUCTURE.md)** - 项目目录结构和代码组织
+- **[响应式设计](./RESPONSIVE_DESIGN.md)** - 响应式设计实现和设备适配说明
 
 ## 📖 快速开始
 

@@ -453,6 +453,7 @@ export default function HomePage() {
       {/* 主体 */}
       <Box
         as="main"
+        className="container-padding"
         px={4}
         py={6}
         style={{
@@ -461,6 +462,7 @@ export default function HomePage() {
         }}
       >
         <Box
+          className="main-grid"
           style={{
             display: 'grid',
             gridTemplateColumns: '320px 1fr 280px',
