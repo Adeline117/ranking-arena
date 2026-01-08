@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../Base'
+import Avatar from '../UI/Avatar'
 import type { TraderProfile } from '@/lib/data/trader'
 
 interface SimilarTradersProps {
@@ -38,24 +39,22 @@ export default function SimilarTraders({ traders }: SimilarTradersProps) {
                 e.currentTarget.style.background = tokens.colors.bg.primary
               }}
             >
-              <Box
-                style={{
-                  width: 40,
-                  height: 40,
-                  borderRadius: tokens.radius.full,
-                  background: tokens.colors.bg.secondary,
-                  display: 'grid',
-                  placeItems: 'center',
-                  fontWeight: tokens.typography.fontWeight.black,
-                  fontSize: tokens.typography.fontSize.base,
-                  color: tokens.colors.text.primary,
-                }}
-              >
-                {(trader.handle?.[0] ?? 'T').toUpperCase()}
-              </Box>
+              <Avatar
+                userId={trader.id}
+                name={trader.handle}
+                avatarUrl={trader.avatar_url}
+                size={40}
+              />
               <Box style={{ flex: 1 }}>
                 <Text size="sm" weight="bold">
-                  {trader.handle}
+                  {(() => {
+                    // 如果是钱包地址（0x开头且长度>20），则缩写
+                    const handle = trader.handle || ''
+                    if (handle.startsWith('0x') && handle.length > 20) {
+                      return `${handle.substring(0, 6)}...${handle.substring(handle.length - 4)}`
+                    }
+                    return handle
+                  })()}
                 </Text>
                 <Text size="xs" color="tertiary">
                   {trader.followers?.toLocaleString() || 0} 粉丝

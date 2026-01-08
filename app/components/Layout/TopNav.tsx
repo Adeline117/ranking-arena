@@ -9,8 +9,8 @@ import ThemeToggle from '../Utils/ThemeToggle'
 import LanguageSwitcher from '../Utils/LanguageSwitcher'
 import SearchDropdown from '../Features/SearchDropdown'
 import { useLanguage } from '../Utils/LanguageProvider'
-import { SearchIcon, UserIcon, DashboardIcon, NotificationIcon, SettingsIcon } from '../Icons'
-import { Box, Text } from '../Base'
+import { SearchIcon, UserIcon, DashboardIcon, NotificationIcon } from '../Icons'
+import { Box } from '../Base'
 
 export default function TopNav({ email }: { email: string | null }) {
   const { t } = useLanguage()
@@ -32,15 +32,22 @@ export default function TopNav({ email }: { email: string | null }) {
       
       // 获取用户的handle
       if (userId) {
+        // 直接使用 user_profiles 表（profiles 表不存在）
         supabase
-          .from('profiles')
+          .from('user_profiles')
           .select('handle')
           .eq('id', userId)
           .maybeSingle()
-          .then(({ data: profile }) => {
+          .then(({ data: userProfile }) => {
             if (!alive) return
-            if (profile) {
-              setMyHandle(profile.handle)
+            if (userProfile && userProfile.handle) {
+              setMyHandle(userProfile.handle)
+            } else {
+              // 如果都没有 handle，尝试从邮箱创建默认 handle
+              if (data.user?.email) {
+                const defaultHandle = data.user.email.split('@')[0]
+                setMyHandle(defaultHandle)
+              }
             }
           })
       }
@@ -89,16 +96,6 @@ export default function TopNav({ email }: { email: string | null }) {
       }
       window.location.href = `/search?q=${encodeURIComponent(trimmedQuery)}`
     }
-  }
-
-  const navLinkStyle: React.CSSProperties = {
-    color: tokens.colors.text.secondary,
-    textDecoration: 'none',
-    padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
-    borderRadius: tokens.radius.md,
-    transition: `all ${tokens.transition.base}`,
-    fontWeight: tokens.typography.fontWeight.bold,
-    fontSize: tokens.typography.fontSize.sm,
   }
 
   return (
@@ -305,7 +302,16 @@ export default function TopNav({ email }: { email: string | null }) {
                   }}
                 >
                   <Link
-                    href={myHandle ? `/u/${myHandle}` : `/user/${myId}`}
+                    href={myHandle ? `/u/${encodeURIComponent(myHandle)}` : '/'}
+                    onClick={(e) => {
+                      if (!myHandle) {
+                        e.preventDefault()
+                        // 如果没有 handle，跳转到设置页面
+                        window.location.href = '/settings'
+                      } else {
+                        setShowUserMenu(false)
+                      }
+                    }}
                     style={{
                       display: 'flex',
                       alignItems: 'center',
@@ -317,6 +323,7 @@ export default function TopNav({ email }: { email: string | null }) {
                       fontSize: tokens.typography.fontSize.base,
                       fontWeight: tokens.typography.fontWeight.bold,
                       transition: `all ${tokens.transition.base}`,
+                      cursor: 'pointer',
                     }}
                     onMouseEnter={(e) => {
                       e.currentTarget.style.background = tokens.colors.bg.secondary
@@ -324,7 +331,6 @@ export default function TopNav({ email }: { email: string | null }) {
                     onMouseLeave={(e) => {
                       e.currentTarget.style.background = 'transparent'
                     }}
-                    onClick={() => setShowUserMenu(false)}
                   >
                     <UserIcon size={16} />
                     <span>{t('myHome')}</span>

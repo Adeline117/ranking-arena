@@ -23,7 +23,7 @@ export default function RankingTableCompact(props: {
   loading: boolean
   loggedIn: boolean
 }) {
-  const { traders, loading, loggedIn } = props
+  const { traders, loading } = props
 
   // 按90天ROI排序（固定）
   const sortedTraders = [...traders].sort((a, b) => b.roi - a.roi)

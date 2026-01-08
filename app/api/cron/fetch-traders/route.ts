@@ -77,7 +77,7 @@ export async function POST(req: Request) {
     for (const { name, script } of scripts) {
       try {
         console.log(`开始执行 ${name} 数据抓取...`);
-        const { stdout, stderr } = await execAsync(
+        const { stdout } = await execAsync(
           `node ${script}`,
           {
             cwd: process.cwd(),

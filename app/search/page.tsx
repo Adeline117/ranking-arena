@@ -42,9 +42,10 @@ function SearchContent() {
 
       try {
         // 搜索交易者
+        // 交易员数据来自 trader_sources（避免不存在的 traders 表）
         const { data: traders } = await supabase
-          .from('traders')
-          .select('id, handle, roi, followers')
+          .from('trader_sources')
+          .select('source_trader_id, handle, source')
           .ilike('handle', `%${query}%`)
           .limit(10)
 
@@ -52,10 +53,9 @@ function SearchContent() {
           traders.forEach((t: any) => {
             results.push({
               type: 'trader',
-              id: t.id,
+              id: t.source_trader_id,
               title: t.handle,
-              subtitle: `ROI: ${t.roi.toFixed(2)}%`,
-              meta: `${t.followers} 粉丝`,
+              subtitle: `来源: ${String(t.source || '').toUpperCase()}`,
             })
           })
         }
@@ -119,7 +119,7 @@ function SearchContent() {
       })
 
   const getHref = (result: SearchResult) => {
-    if (result.type === 'trader') return `/trader/${result.id}`
+    if (result.type === 'trader') return `/trader/${encodeURIComponent(result.title)}`
     if (result.type === 'post') return `/post/${result.id}`
     if (result.type === 'group') return `/groups/${result.id}`
     return '#'

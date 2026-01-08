@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useMemo, memo } from 'react'
+import { useEffect, useState, memo } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { supabase } from '@/lib/supabase/client'
 import { SkeletonLine } from '../UI/Skeleton'
@@ -40,7 +40,7 @@ export default function MarketPanel() {
   const loadCustomPairs = async (uid: string) => {
     try {
       const { data } = await supabase
-        .from('profiles')
+        .from('user_profiles')
         .select('market_pairs')
         .eq('id', uid)
         .maybeSingle()
@@ -49,6 +49,14 @@ export default function MarketPanel() {
       }
     } catch (err) {
       console.error('Load custom pairs error:', err)
+      // fallback: localStorage
+      try {
+        const raw = localStorage.getItem('market_pairs')
+        if (raw) {
+          const parsed = JSON.parse(raw)
+          if (Array.isArray(parsed)) setCustomPairs(parsed)
+        }
+      } catch {}
     }
   }
 
@@ -56,13 +64,19 @@ export default function MarketPanel() {
     if (!userId) return
     try {
       await supabase
-        .from('profiles')
-        .update({ market_pairs: pairs })
-        .eq('id', userId)
+        .from('user_profiles')
+        .upsert({ id: userId, market_pairs: pairs }, { onConflict: 'id' })
       setCustomPairs(pairs)
       setShowCustomize(false)
     } catch (err) {
       console.error('Save custom pairs error:', err)
+      // fallback: localStorage
+      try {
+        localStorage.setItem('market_pairs', JSON.stringify(pairs))
+        setCustomPairs(pairs)
+        setShowCustomize(false)
+        return
+      } catch {}
       alert(t('saveFailed'))
     }
   }
@@ -136,7 +150,7 @@ export default function MarketPanel() {
       alive = false
       clearInterval(interval)
     }
-  }, [customPairs])
+  }, [customPairs, market.length, t])
 
   const formatTime = (date: Date) => {
     const now = new Date()

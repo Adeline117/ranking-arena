@@ -106,12 +106,6 @@ export default function TraderPage(props: { params: { handle: string } | Promise
     load()
   }, [handle])
 
-  const handleViewPerformance = () => {
-    // View 按钮点击后，在当前页面展开 Performance 详情
-    // 这里可以滚动到 Performance 区域或展开更多详情
-    // 暂时不做特殊处理，保持在同一页面
-  }
-
   if (loading) {
     return (
       <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
@@ -188,6 +182,7 @@ export default function TraderPage(props: { params: { handle: string } | Promise
             <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[6] }}>
               <TraderAboutCard
                 handle={profile.handle}
+                traderId={profile.id}
                 avatarUrl={profile.avatar_url}
                 bio={profile.bio}
                 followers={profile.followers}

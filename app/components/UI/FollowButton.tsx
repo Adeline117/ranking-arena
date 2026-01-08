@@ -15,23 +15,20 @@ export default function FollowButton({ traderId, userId, initialFollowing = fals
 
   useEffect(() => {
     if (!userId) return
-    checkFollowing()
+    ;(async () => {
+      try {
+        const { data } = await supabase
+          .from('follows')
+          .select('*')
+          .eq('user_id', userId)
+          .eq('trader_id', traderId)
+          .maybeSingle()
+        setFollowing(!!data)
+      } catch (error) {
+        console.error('Check following error:', error)
+      }
+    })()
   }, [userId, traderId])
-
-  const checkFollowing = async () => {
-    if (!userId) return
-    try {
-      const { data } = await supabase
-        .from('follows')
-        .select('*')
-        .eq('user_id', userId)
-        .eq('trader_id', traderId)
-        .maybeSingle()
-      setFollowing(!!data)
-    } catch (error) {
-      console.error('Check following error:', error)
-    }
-  }
 
   const handleToggle = async () => {
     if (!userId) {
@@ -87,13 +84,14 @@ export default function FollowButton({ traderId, userId, initialFollowing = fals
       onClick={handleToggle}
       disabled={loading}
       style={{
-        padding: '8px 16px',
-        borderRadius: '8px',
+        width: '100%',
+        padding: '12px 16px',
+        borderRadius: '12px',
         border: following ? '1px solid rgba(255,255,255,0.2)' : 'none',
         background: following ? 'rgba(255,255,255,0.05)' : '#8b6fa8',
-        color: '#eaeaea',
-        fontWeight: 700,
-        fontSize: '13px',
+        color: '#fff',
+        fontWeight: 900,
+        fontSize: '14px',
         cursor: loading ? 'not-allowed' : 'pointer',
         opacity: loading ? 0.6 : 1,
         transition: 'all 200ms ease',

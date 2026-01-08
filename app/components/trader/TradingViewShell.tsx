@@ -15,6 +15,7 @@ interface TradingViewShellProps {
  */
 export default function TradingViewShell({ symbol, timeframe = '1Y' }: TradingViewShellProps) {
   const [selectedTimeframe, setSelectedTimeframe] = useState(timeframe)
+  const displaySymbol = symbol || 'BTC-USD'
 
   const timeframes = ['1D', '1W', '1M', '3M', '1Y', 'All']
 
@@ -64,7 +65,7 @@ export default function TradingViewShell({ symbol, timeframe = '1Y' }: TradingVi
       >
         <Box style={{ textAlign: 'center' }}>
           <Text size="base" color="tertiary" style={{ marginBottom: tokens.spacing[2], fontWeight: tokens.typography.fontWeight.normal }}>
-            图表占位
+            图表占位（{displaySymbol}）
           </Text>
           <Text size="xs" color="tertiary" style={{ fontWeight: tokens.typography.fontWeight.normal }}>
             默认只显示价格和进出场标记

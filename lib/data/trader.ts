@@ -9,7 +9,8 @@ export interface TraderProfile {
   handle: string
   id: string
   bio?: string
-  followers?: number
+  followers?: number // 关注他的人数量（粉丝数）
+  following?: number // 他关注的人数量
   copiers?: number
   avatar_url?: string
   isRegistered?: boolean // 是否在平台注册
@@ -96,8 +97,8 @@ export async function getTraderByHandle(handle: string): Promise<TraderProfile |
     // 解码 URL 编码的 handle
     const decodedHandle = decodeURIComponent(handle)
     
-    // 优先尝试 binance_web3，如果找不到再尝试 binance
-    const sources = ['binance_web3', 'binance']
+    // 尝试所有数据源：binance_web3, binance, bybit, bitget, mexc, coinex
+    const sources = ['binance_web3', 'binance', 'bybit', 'bitget', 'mexc', 'coinex']
     
     for (const sourceType of sources) {
       // 从 trader_sources 表获取交易员信息
@@ -246,11 +247,12 @@ export async function getTraderByHandle(handle: string): Promise<TraderProfile |
  */
 export async function getTraderPerformance(handle: string, period: '7D' | '30D' | '90D' | '1Y' | '2Y' | 'All' = '90D'): Promise<TraderPerformance> {
   try {
+    void period
     // 解码 URL 编码的 handle
     const decodedHandle = decodeURIComponent(handle)
     
-    // 优先尝试 binance_web3，如果找不到再尝试 binance
-    const sources = ['binance_web3', 'binance']
+    // 尝试所有数据源：binance_web3, binance, bybit, bitget, mexc, coinex
+    const sources = ['binance_web3', 'binance', 'bybit', 'bitget', 'mexc', 'coinex']
     
     for (const sourceType of sources) {
       // 先获取 source_trader_id - 尝试多个可能的 handle 值
@@ -336,6 +338,7 @@ export async function getTraderPerformance(handle: string, period: '7D' | '30D' 
  */
 export async function getTraderStats(handle: string): Promise<TraderStats> {
   // TODO: 从真实数据表获取
+  void handle
   return {
     expectedDividends: {
       dividendYield: 0.05,
@@ -406,6 +409,7 @@ export async function getTraderStats(handle: string): Promise<TraderStats> {
  */
 export async function getTraderPortfolio(handle: string): Promise<PortfolioItem[]> {
   // TODO: 从真实数据表获取
+  void handle
   return [
     {
       market: 'NIO',
@@ -513,8 +517,8 @@ export async function getTraderFeed(handle: string): Promise<TraderFeedItem[]> {
  */
 export async function getSimilarTraders(handle: string, limit: number = 6): Promise<TraderProfile[]> {
   try {
-    // 优先尝试 binance_web3，如果找不到再尝试 binance
-    const sources = ['binance_web3', 'binance']
+    // 尝试所有数据源：binance_web3, binance, bybit, bitget, mexc, coinex
+    const sources = ['binance_web3', 'binance', 'bybit', 'bitget', 'mexc', 'coinex']
     
     for (const sourceType of sources) {
       // 从 trader_sources 和 trader_snapshots 获取相似交易员（按 ROI 排名）
