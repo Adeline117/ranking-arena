@@ -23,19 +23,21 @@ const translations = {
     sendingCode: '发送中...',
     verifying: '验证中...',
     switchToRegister: '还没有账号？使用验证码注册',
-    switchToLogin: '已有账号？使用密码登录',
-    switchToPasswordRegister: '使用密码注册',
+    switchToLogin: '已有账号？使用密码或验证码登录',
     language: '语言',
     loginSuccess: '登录成功',
     registerSuccess: '注册成功，请登录',
-    codeSent: '验证码已发送，请查收邮箱',
+    codeSent: '验证码已发送，请查收邮箱（10分钟内有效）',
     codeVerified: '验证成功，请设置密码和用户名',
     setPassword: '完成注册',
+    codeExpired: '验证码已过期，请重新获取',
+    codeValidFor: '验证码10分钟内有效',
     passwordRequired: '请设置密码',
     passwordMinLength: '密码至少6位',
     handleRequired: '请输入用户名',
     handleMinLength: '用户名至少3个字符',
     countdown: '秒后重发',
+    loginWithCode: '或使用验证码登录',
     loginWithLink: '或使用邮箱链接登录',
     sendLink: '发送登录链接',
     linkSent: '登录链接已发送，请查收邮箱',
@@ -56,31 +58,30 @@ const translations = {
     sendingCode: 'Sending...',
     verifying: 'Verifying...',
     switchToRegister: 'No account? Register with code',
-    switchToLogin: 'Have an account? Login with password',
-    switchToPasswordRegister: 'Register with password',
+    switchToLogin: 'Have an account? Login with password or code',
     language: 'Language',
     loginSuccess: 'Login successful',
     registerSuccess: 'Registration successful, please login',
-    codeSent: 'Code sent, please check your email',
+    codeSent: 'Code sent, please check your email (valid for 10 minutes)',
     codeVerified: 'Verification successful, please set password and username',
     setPassword: 'Complete Registration',
+    codeExpired: 'Code expired, please request a new one',
+    codeValidFor: 'Code is valid for 10 minutes',
     passwordRequired: 'Please set password',
     passwordMinLength: 'Password must be at least 6 characters',
     handleRequired: 'Please enter username',
     handleMinLength: 'Username must be at least 3 characters',
     countdown: 's to resend',
+    loginWithCode: 'Or login with verification code',
     loginWithLink: 'Or login with email link',
     sendLink: 'Send Login Link',
     linkSent: 'Login link sent, please check your email',
   },
 }
 
-type RegisterMode = 'otp' | 'password'
-
 export default function LoginPage() {
   const [lang, setLang] = useState<Language>('zh')
   const [isRegister, setIsRegister] = useState(false)
-  const [registerMode, setRegisterMode] = useState<RegisterMode>('otp')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [handle, setHandle] = useState('')
@@ -92,6 +93,7 @@ export default function LoginPage() {
   const [sendingCode, setSendingCode] = useState(false)
   const [countdown, setCountdown] = useState(0)
   const [sendingLink, setSendingLink] = useState(false)
+  const [loginWithCode, setLoginWithCode] = useState(false) // 登录时是否使用验证码
   const router = useRouter()
 
   const t = translations[lang]
@@ -147,26 +149,40 @@ export default function LoginPage() {
     setSendingCode(true)
 
     try {
-      // 不设置 emailRedirectTo，这样会发送 OTP 验证码而不是 Magic Link
-      const { error: otpError } = await supabase.auth.signInWithOtp({
+      // 重要：不设置 emailRedirectTo，这样会发送 OTP 验证码而不是 Magic Link
+      // 如果设置了 emailRedirectTo，Supabase 会发送包含链接的邮件
+      const { data, error: otpError } = await supabase.auth.signInWithOtp({
         email,
         options: {
           shouldCreateUser: true, // 如果用户不存在则创建
-          // 不设置 emailRedirectTo，这样会发送 6 位数字验证码
+          // 关键：不设置 emailRedirectTo，确保发送 6 位数字验证码
+          // 如果设置了 emailRedirectTo，会发送 Magic Link 而不是验证码
         },
       })
 
       if (otpError) {
-        setError(otpError.message)
+        console.error('OTP 发送错误:', otpError)
+        // 检查是否是配置问题
+        if (otpError.message.includes('redirect') || otpError.message.includes('link')) {
+          setError('配置错误：请检查 Supabase 设置，确保 OTP 模式已启用。如果仍然收到链接，请在 Supabase Dashboard 中检查 Email Auth 配置。')
+        } else {
+          setError(otpError.message)
+        }
         setSendingCode(false)
         return
       }
 
-      setCodeSent(true)
-      setCountdown(60) // 开始60秒倒计时
-      alert(t.codeSent)
+      // 验证是否成功发送
+      if (data) {
+        setCodeSent(true)
+        setCountdown(60) // 开始60秒倒计时（重发限制）
+        alert(t.codeSent)
+      } else {
+        setError('发送失败，请重试')
+      }
     } catch (err: any) {
-      setError(err?.message || '发送失败')
+      console.error('发送验证码异常:', err)
+      setError(err?.message || '发送失败，请检查网络连接')
     } finally {
       setSendingCode(false)
     }
@@ -176,6 +192,44 @@ export default function LoginPage() {
   const handleResendCode = async () => {
     if (countdown > 0) return // 倒计时未结束，不允许重发
     await handleSendCode()
+  }
+
+  // 发送登录验证码（OTP）
+  const handleSendLoginCode = async () => {
+    if (!email) {
+      setError('请输入邮箱')
+      return
+    }
+
+    setError(null)
+    setSendingCode(true)
+
+    try {
+      // 登录时发送验证码，不创建新用户
+      const { data, error: otpError } = await supabase.auth.signInWithOtp({
+        email,
+        options: {
+          shouldCreateUser: false, // 登录时不创建新用户
+          // 不设置 emailRedirectTo，发送验证码
+        },
+      })
+
+      if (otpError) {
+        setError(otpError.message)
+        setSendingCode(false)
+        return
+      }
+
+      if (data) {
+        setCodeSent(true)
+        setCountdown(60)
+        alert(t.codeSent)
+      }
+    } catch (err: any) {
+      setError(err?.message || '发送失败')
+    } finally {
+      setSendingCode(false)
+    }
   }
 
   // 发送登录链接（Magic Link）
@@ -189,13 +243,15 @@ export default function LoginPage() {
     setSendingLink(true)
 
     try {
-      const redirectTo = `${window.location.origin}/login`
+      // 使用环境变量或当前域名，确保生产环境使用正确的域名
+      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || window.location.origin
+      const redirectTo = `${baseUrl}/login`
       
       const { error: linkError } = await supabase.auth.signInWithOtp({
         email,
         options: {
           shouldCreateUser: false, // 登录时不创建新用户
-          emailRedirectTo: redirectTo,
+          emailRedirectTo: redirectTo, // 只有登录链接才设置这个
         },
       })
 
@@ -232,19 +288,29 @@ export default function LoginPage() {
       })
 
       if (verifyError) {
-        setError(verifyError.message)
+        // 检查是否是验证码过期错误
+        if (verifyError.message.includes('expired') || verifyError.message.includes('过期')) {
+          setError(t.codeExpired)
+        } else {
+          setError(verifyError.message)
+        }
         setLoading(false)
         return
       }
 
       if (data.user) {
         setCodeVerified(true)
-        // 创建用户 profile
+        // 创建用户 profile（用户名稍后设置）
         await createUserProfile(data.user.id, email)
         alert(t.codeVerified)
       }
     } catch (err: any) {
-      setError(err?.message || '验证失败')
+      // 检查是否是验证码过期错误
+      if (err?.message?.includes('expired') || err?.message?.includes('过期')) {
+        setError(t.codeExpired)
+      } else {
+        setError(err?.message || '验证失败')
+      }
     } finally {
       setLoading(false)
     }
@@ -288,18 +354,8 @@ export default function LoginPage() {
     setLoading(true)
 
     try {
-      // 检查用户名是否已存在
-      const { data: existingUserProfile } = await supabase
-        .from('user_profiles')
-        .select('id')
-        .eq('handle', handle)
-        .maybeSingle()
-
-      if (existingUserProfile) {
-        setError('用户名已被使用，请选择其他用户名')
-        setLoading(false)
-        return
-      }
+      // 用户名可以重复，不需要检查唯一性
+      // 用户ID由Supabase自动生成，保证唯一性
 
       // 更新密码
       const { data: { user }, error: updateError } = await supabase.auth.updateUser({
@@ -313,10 +369,10 @@ export default function LoginPage() {
       }
 
       if (user) {
-        // 创建/更新用户 profile
+        // 创建/更新用户 profile（用户名可以重复）
         await createUserProfile(user.id, email, handle)
         
-        // 注册完成，直接使用设置的 handle 跳转到用户主页
+        // 注册完成，使用用户ID跳转到用户主页（因为用户名可能重复）
         router.push(`/u/${handle}`)
       } else {
         router.push('/')
@@ -328,44 +384,6 @@ export default function LoginPage() {
     }
   }
 
-  // 密码注册
-  const handlePasswordRegister = async () => {
-    if (!password || password.length < 6) {
-      setError(t.passwordMinLength)
-      setLoading(false)
-      return
-    }
-
-    setError(null)
-    setLoading(true)
-
-    try {
-      const { data, error: signUpError } = await supabase.auth.signUp({
-          email,
-          password,
-        })
-
-        if (signUpError) {
-          setError(signUpError.message)
-          setLoading(false)
-          return
-        }
-
-      if (data.user) {
-        // 创建用户 profile
-        await createUserProfile(data.user.id, email)
-      }
-
-        // 注册成功，切换到登录模式
-        setIsRegister(false)
-        setError(null)
-        alert(t.registerSuccess)
-    } catch (err: any) {
-      setError(err?.message || '注册失败')
-    } finally {
-      setLoading(false)
-    }
-  }
 
   // 登录
   const handleLogin = async () => {
@@ -419,6 +437,7 @@ export default function LoginPage() {
     setHandle('')
     setCountdown(0)
     setError(null)
+    setLoginWithCode(false)
   }
 
   return (
@@ -431,14 +450,17 @@ export default function LoginPage() {
       justifyContent: 'center',
       padding: 20,
     }}>
-      <div style={{ 
-        maxWidth: 420, 
-        width: '100%',
-        background: 'rgba(255,255,255,0.03)',
-        border: '1px solid #1f1f1f',
-        borderRadius: 16,
-        padding: 32,
-      }}>
+      <div 
+        className="login-container"
+        style={{ 
+          maxWidth: 420, 
+          width: '100%',
+          background: 'rgba(255,255,255,0.03)',
+          border: '1px solid #1f1f1f',
+          borderRadius: 16,
+          padding: 32,
+        }}
+      >
         {/* 语言选择 */}
         <div style={{ 
           display: 'flex', 
@@ -478,7 +500,7 @@ export default function LoginPage() {
           </button>
         </div>
 
-        <h1 style={{ fontSize: 24, marginBottom: 24, fontWeight: 950 }}>
+        <h1 className="login-title" style={{ fontSize: 24, marginBottom: 24, fontWeight: 950 }}>
           {t.title}
         </h1>
 
@@ -488,6 +510,7 @@ export default function LoginPage() {
           </label>
           <input
             type="email"
+            className="login-input"
             style={{ 
               width: '100%', 
               padding: 12, 
@@ -509,7 +532,7 @@ export default function LoginPage() {
         </div>
 
         {/* 注册模式：验证码流程 */}
-        {isRegister && registerMode === 'otp' && (
+        {isRegister && (
           <>
             {!codeSent ? (
               <button
@@ -557,6 +580,9 @@ export default function LoginPage() {
                       }
                     }}
                   />
+                  <div style={{ marginTop: 6, fontSize: 11, color: '#9a9a9a' }}>
+                    {t.codeValidFor}
+                  </div>
                 </div>
                 <button
                   onClick={handleVerifyCode}
@@ -620,7 +646,7 @@ export default function LoginPage() {
                       fontSize: 14,
                       outline: 'none',
                     }}
-                    placeholder="用户名（至少3个字符）"
+                    placeholder="用户名（至少3个字符，可重复）"
                     value={handle}
                     onChange={(e) => setHandle(e.target.value)}
                     onKeyDown={(e) => {
@@ -679,143 +705,247 @@ export default function LoginPage() {
           </>
         )}
 
-        {/* 注册模式：密码注册 */}
-        {isRegister && registerMode === 'password' && (
-          <>
-            <div style={{ marginBottom: 16 }}>
-              <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 800 }}>
-                {t.password}
-              </label>
-              <input
-                type="password"
-                style={{ 
-                  width: '100%', 
-                  padding: 12, 
-                  borderRadius: 12,
-                  border: '1px solid #1f1f1f',
-                  background: '#0b0b0b',
-                  color: '#eaeaea',
-                  fontSize: 14,
-                  outline: 'none',
-                }}
-                placeholder="密码（至少6位）"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !loading && email && password && password.length >= 6) {
-                    handlePasswordRegister()
-                  }
-                }}
-              />
-            </div>
-            <button
-              onClick={handlePasswordRegister}
-              disabled={loading || !email || !password || password.length < 6}
-              style={{ 
-                width: '100%',
-                padding: '12px 16px', 
-                borderRadius: 12,
-                border: 'none',
-                background: loading || !email || !password || password.length < 6 ? 'rgba(139,111,168,0.3)' : '#8b6fa8',
-                color: '#fff',
-                fontWeight: 900,
-                fontSize: 14,
-                cursor: loading || !email || !password || password.length < 6 ? 'not-allowed' : 'pointer',
-                marginBottom: 16,
-              }}
-            >
-              {loading ? t.registering : t.register}
-            </button>
-          </>
-        )}
 
         {/* 登录模式 */}
         {!isRegister && (
           <>
-            <div style={{ marginBottom: 16 }}>
-          <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 800 }}>
-            {t.password}
-          </label>
-          <input
-            type="password"
-            style={{ 
-              width: '100%', 
-              padding: 12, 
-              borderRadius: 12,
-              border: '1px solid #1f1f1f',
-              background: '#0b0b0b',
-              color: '#eaeaea',
-              fontSize: 14,
-              outline: 'none',
-            }}
-            placeholder="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !loading && email && password) {
-                    handleLogin()
-              }
-            }}
-          />
-        </div>
-        <button
-              onClick={handleLogin}
-          disabled={loading || !email || !password}
-          style={{ 
-            width: '100%',
-            padding: '12px 16px', 
-            borderRadius: 12,
-            border: 'none',
-            background: loading || !email || !password ? 'rgba(139,111,168,0.3)' : '#8b6fa8',
-            color: '#fff',
-            fontWeight: 900,
-            fontSize: 14,
-            cursor: loading || !email || !password ? 'not-allowed' : 'pointer',
-                marginBottom: 12,
-              }}
-            >
-              {loading ? t.loggingIn : t.login}
-            </button>
-            {/* 邮箱链接登录 */}
-            <div style={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: 12, 
-            marginBottom: 16,
-              padding: '12px',
-              background: 'rgba(255,255,255,0.02)',
-              borderRadius: 12,
-              border: '1px solid rgba(255,255,255,0.05)',
-            }}>
-              <div style={{ flex: 1, fontSize: 12, color: '#9a9a9a' }}>
-                {t.loginWithLink}
-              </div>
-              <button
-                onClick={handleSendLoginLink}
-                disabled={sendingLink || !email || countdown > 0}
-                style={{
-                  padding: '8px 16px',
-                  borderRadius: 8,
-                  border: 'none',
-                  background: sendingLink || !email || countdown > 0 ? 'rgba(139,111,168,0.3)' : 'rgba(139,111,168,0.2)',
-                  color: '#8b6fa8',
-                  fontWeight: 800,
-                  fontSize: 12,
-                  cursor: sendingLink || !email || countdown > 0 ? 'not-allowed' : 'pointer',
-                }}
-              >
-                {sendingLink ? t.sendingCode : countdown > 0 ? `${countdown}s` : t.sendLink}
-        </button>
-            </div>
+            {!loginWithCode ? (
+              <>
+                {/* 密码登录 */}
+                <div style={{ marginBottom: 16 }}>
+                  <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 800 }}>
+                    {t.password}
+                  </label>
+                  <input
+                    type="password"
+                    className="login-input"
+                    style={{ 
+                      width: '100%', 
+                      padding: 12, 
+                      borderRadius: 12,
+                      border: '1px solid #1f1f1f',
+                      background: '#0b0b0b',
+                      color: '#eaeaea',
+                      fontSize: 14,
+                      outline: 'none',
+                    }}
+                    placeholder="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !loading && email && password) {
+                        handleLogin()
+                      }
+                    }}
+                  />
+                </div>
+                <button
+                  onClick={handleLogin}
+                  disabled={loading || !email || !password}
+                  className="login-button"
+                  style={{ 
+                    width: '100%',
+                    padding: '12px 16px', 
+                    borderRadius: 12,
+                    border: 'none',
+                    background: loading || !email || !password ? 'rgba(139,111,168,0.3)' : '#8b6fa8',
+                    color: '#fff',
+                    fontWeight: 900,
+                    fontSize: 14,
+                    cursor: loading || !email || !password ? 'not-allowed' : 'pointer',
+                    marginBottom: 12,
+                  }}
+                >
+                  {loading ? t.loggingIn : t.login}
+                </button>
+                {/* 切换到验证码登录 */}
+                <button
+                  onClick={() => {
+                    setLoginWithCode(true)
+                    setCodeSent(false)
+                    setCode('')
+                    setError(null)
+                  }}
+                  style={{
+                    width: '100%',
+                    padding: '8px',
+                    border: 'none',
+                    background: 'transparent',
+                    color: '#8b6fa8',
+                    fontWeight: 800,
+                    fontSize: 13,
+                    cursor: 'pointer',
+                    textDecoration: 'underline',
+                    marginBottom: 12,
+                  }}
+                >
+                  {t.loginWithCode}
+                </button>
+                {/* 邮箱链接登录 */}
+                <div style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: 12, 
+                  marginBottom: 16,
+                  padding: '12px',
+                  background: 'rgba(255,255,255,0.02)',
+                  borderRadius: 12,
+                  border: '1px solid rgba(255,255,255,0.05)',
+                }}>
+                  <div style={{ flex: 1, fontSize: 12, color: '#9a9a9a' }}>
+                    {t.loginWithLink}
+                  </div>
+                  <button
+                    onClick={handleSendLoginLink}
+                    disabled={sendingLink || !email || countdown > 0}
+                    style={{
+                      padding: '8px 16px',
+                      borderRadius: 8,
+                      border: 'none',
+                      background: sendingLink || !email || countdown > 0 ? 'rgba(139,111,168,0.3)' : 'rgba(139,111,168,0.2)',
+                      color: '#8b6fa8',
+                      fontWeight: 800,
+                      fontSize: 12,
+                      cursor: sendingLink || !email || countdown > 0 ? 'not-allowed' : 'pointer',
+                    }}
+                  >
+                    {sendingLink ? t.sendingCode : countdown > 0 ? `${countdown}s` : t.sendLink}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                {/* 验证码登录 */}
+                {!codeSent ? (
+                  <button
+                    onClick={handleSendLoginCode}
+                    disabled={sendingCode || !email || countdown > 0}
+                    style={{ 
+                      width: '100%',
+                      padding: '12px 16px', 
+                      borderRadius: 12,
+                      border: 'none',
+                      background: sendingCode || !email || countdown > 0 ? 'rgba(139,111,168,0.3)' : '#8b6fa8',
+                      color: '#fff',
+                      fontWeight: 900,
+                      fontSize: 14,
+                      cursor: sendingCode || !email || countdown > 0 ? 'not-allowed' : 'pointer',
+                      marginBottom: 16,
+                    }}
+                  >
+                    {sendingCode ? t.sendingCode : t.sendCode}
+                  </button>
+                ) : (
+                  <>
+                    <div style={{ marginBottom: 16 }}>
+                      <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 800 }}>
+                        {t.code}
+                      </label>
+                      <input
+                        type="text"
+                        className="login-input"
+                        style={{ 
+                          width: '100%', 
+                          padding: 12, 
+                          borderRadius: 12,
+                          border: '1px solid #1f1f1f',
+                          background: '#0b0b0b',
+                          color: '#eaeaea',
+                          fontSize: 14,
+                          outline: 'none',
+                        }}
+                        placeholder="输入验证码"
+                        value={code}
+                        onChange={(e) => setCode(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && !loading && code) {
+                            handleVerifyCode()
+                          }
+                        }}
+                      />
+                      <div style={{ marginTop: 6, fontSize: 11, color: '#9a9a9a' }}>
+                        {t.codeValidFor}
+                      </div>
+                    </div>
+                    <button
+                      onClick={handleVerifyCode}
+                      disabled={loading || !code}
+                      className="login-button"
+                      style={{ 
+                        width: '100%',
+                        padding: '12px 16px', 
+                        borderRadius: 12,
+                        border: 'none',
+                        background: loading || !code ? 'rgba(139,111,168,0.3)' : '#8b6fa8',
+                        color: '#fff',
+                        fontWeight: 900,
+                        fontSize: 14,
+                        cursor: loading || !code ? 'not-allowed' : 'pointer',
+                        marginBottom: 12,
+                      }}
+                    >
+                      {loading ? t.verifying : t.verifyCode}
+                    </button>
+                    {/* 重新发送验证码 */}
+                    <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginBottom: 12 }}>
+                      {countdown > 0 ? (
+                        <span style={{ fontSize: 12, color: '#9a9a9a' }}>
+                          {countdown} {t.countdown}
+                        </span>
+                      ) : (
+                        <button
+                          onClick={handleSendLoginCode}
+                          disabled={!email}
+                          style={{
+                            background: 'transparent',
+                            border: 'none',
+                            color: '#8b6fa8',
+                            fontSize: 12,
+                            fontWeight: 800,
+                            cursor: !email ? 'not-allowed' : 'pointer',
+                            textDecoration: 'underline',
+                            padding: 0,
+                          }}
+                        >
+                          {t.resendCode}
+                        </button>
+                      )}
+                    </div>
+                    {/* 切换回密码登录 */}
+                    <button
+                      onClick={() => {
+                        setLoginWithCode(false)
+                        setCodeSent(false)
+                        setCode('')
+                        setError(null)
+                      }}
+                      style={{
+                        width: '100%',
+                        padding: '8px',
+                        border: 'none',
+                        background: 'transparent',
+                        color: '#8b6fa8',
+                        fontWeight: 800,
+                        fontSize: 13,
+                        cursor: 'pointer',
+                        textDecoration: 'underline',
+                        marginBottom: 12,
+                      }}
+                    >
+                      使用密码登录
+                    </button>
+                  </>
+                )}
+              </>
+            )}
           </>
         )}
 
         {/* 切换登录/注册 */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
         <button
           onClick={() => {
             setIsRegister(!isRegister)
-              resetForm()
+            resetForm()
           }}
           style={{
             width: '100%',
@@ -827,34 +957,11 @@ export default function LoginPage() {
             fontSize: 13,
             cursor: 'pointer',
             textDecoration: 'underline',
+            marginBottom: 16,
           }}
         >
           {isRegister ? t.switchToLogin : t.switchToRegister}
         </button>
-          
-          {/* 注册时切换注册方式 */}
-          {isRegister && (
-            <button
-              onClick={() => {
-                setRegisterMode(registerMode === 'otp' ? 'password' : 'otp')
-                resetForm()
-              }}
-              style={{
-                width: '100%',
-                padding: '8px',
-                border: 'none',
-                background: 'transparent',
-                color: '#8b6fa8',
-                fontWeight: 800,
-                fontSize: 13,
-                cursor: 'pointer',
-                textDecoration: 'underline',
-              }}
-            >
-              {registerMode === 'otp' ? t.switchToPasswordRegister : t.switchToRegister}
-            </button>
-          )}
-        </div>
 
         {error && (
           <div style={{ 
