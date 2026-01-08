@@ -43,13 +43,20 @@ ranking-arena/
 │   └── verify_supabase_setup.mjs            # 验证脚本
 │
 ├── docs/                         # 文档
+│   ├── README.md                 # 文档索引（从这里开始）
 │   ├── AVATAR_SYSTEM.md          # 头像系统说明
+│   ├── BINANCE_WEB3_IMPORT_GUIDE.md  # Binance Web3 导入指南
+│   ├── DATA_REQUIREMENTS.md      # 数据要求说明
+│   ├── DEPLOY_CHECKLIST.md       # 部署检查清单
+│   ├── DOMAIN_SETUP.md           # 域名配置指南
+│   ├── LOGIN_FLOW.md             # 登录流程说明
+│   ├── OTP_VS_MAGIC_LINK.md      # OTP vs Magic Link
+│   ├── PROJECT_STRUCTURE.md      # 本文件
 │   ├── SUPABASE_SETUP.md        # Supabase 配置指南
-│   ├── SUPABASE_EMAIL_CONFIG.md  # 邮箱配置说明
-│   └── PROJECT_STRUCTURE.md      # 本文件
+│   └── SUPABASE_EMAIL_CONFIG.md  # 邮箱配置说明
 │
 └── data/                         # 数据文件
-    └── backup/                   # 备份数据（自动清理30天前的）
+    └── backup/                   # 备份数据（已加入 .gitignore，不提交到仓库）
 ```
 
 ## 🔧 主要脚本
@@ -102,9 +109,15 @@ ranking-arena/
 
 ## 📝 文档
 
-- `docs/AVATAR_SYSTEM.md` - 头像系统实现说明
-- `docs/SUPABASE_SETUP.md` - Supabase 完整配置指南
-- `docs/SUPABASE_EMAIL_CONFIG.md` - 邮箱配置详细步骤
+所有文档位于 `docs/` 目录，请从 [docs/README.md](./README.md) 开始查看完整的文档索引。
+
+主要文档包括：
+- **部署相关**: [域名配置指南](./DOMAIN_SETUP.md)、[部署检查清单](./DEPLOY_CHECKLIST.md)
+- **认证相关**: [登录流程说明](./LOGIN_FLOW.md)、[OTP vs Magic Link](./OTP_VS_MAGIC_LINK.md)
+- **数据相关**: [数据要求说明](./DATA_REQUIREMENTS.md)、[Binance Web3 导入指南](./BINANCE_WEB3_IMPORT_GUIDE.md)
+- **系统相关**: [头像系统](./AVATAR_SYSTEM.md)、[Supabase 设置](./SUPABASE_SETUP.md)
+
+其他文档：
 - `app/components/README.md` - 组件目录结构说明
 - `scripts/README.md` - 脚本使用说明
 
