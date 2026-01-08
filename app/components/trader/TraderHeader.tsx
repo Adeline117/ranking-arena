@@ -30,6 +30,7 @@ export default function TraderHeader({ handle, traderId, avatarUrl, isRegistered
 
   return (
     <Box
+      className="profile-header"
       style={{
         display: 'flex',
         justifyContent: 'space-between',
@@ -40,8 +41,9 @@ export default function TraderHeader({ handle, traderId, avatarUrl, isRegistered
       }}
     >
       {/* 左侧：Avatar + Handle */}
-      <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[4] }}>
+      <Box className="profile-header-info" style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[4], flex: 1 }}>
         <Box
+          className="profile-header-avatar"
           style={{
             width: 64,
             height: 64,
@@ -75,7 +77,7 @@ export default function TraderHeader({ handle, traderId, avatarUrl, isRegistered
       </Box>
 
       {/* 右侧：Buttons */}
-      <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
+      <Box className="profile-header-actions" style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], flexShrink: 0 }}>
         {/* 退出按钮 */}
         <Button
           variant="ghost"

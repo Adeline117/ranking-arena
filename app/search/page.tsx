@@ -138,7 +138,7 @@ function SearchContent() {
       
       <main style={{ maxWidth: 900, margin: '0 auto', padding: '24px 16px' }}>
         <div style={{ marginBottom: '24px' }}>
-          <h1 style={{ fontSize: '24px', fontWeight: 950, marginBottom: '8px' }}>
+          <h1 className="search-title" style={{ fontSize: '24px', fontWeight: 950, marginBottom: '8px' }}>
             搜索结果
           </h1>
           <div style={{ fontSize: '14px', color: '#9a9a9a' }}>
@@ -147,7 +147,7 @@ function SearchContent() {
         </div>
 
         {query && (
-          <div style={{ 
+          <div className="search-tabs" style={{ 
             display: 'flex', 
             gap: '8px', 
             marginBottom: '20px',
@@ -157,6 +157,7 @@ function SearchContent() {
             {(['all', 'traders', 'posts', 'groups'] as const).map((tab) => (
               <button
                 key={tab}
+                className="search-tab-button"
                 onClick={() => setActiveTab(tab)}
                 style={{
                   padding: '8px 16px',
@@ -196,6 +197,7 @@ function SearchContent() {
               <Link
                 key={`${result.type}-${result.id}`}
                 href={getHref(result)}
+                className="search-result-item"
                 style={{
                   display: 'block',
                   padding: '16px',
@@ -220,16 +222,16 @@ function SearchContent() {
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
                   <div style={{ fontSize: '24px' }}>{getIcon(result.type)}</div>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: '16px', fontWeight: 900, marginBottom: '4px', color: '#eaeaea' }}>
+                    <div className="search-result-title" style={{ fontSize: '16px', fontWeight: 900, marginBottom: '4px', color: '#eaeaea' }}>
                       {result.title}
                     </div>
                     {result.subtitle && (
-                      <div style={{ fontSize: '13px', color: '#9a9a9a', marginBottom: '4px' }}>
+                      <div className="search-result-subtitle" style={{ fontSize: '13px', color: '#9a9a9a', marginBottom: '4px' }}>
                         {result.subtitle}
                       </div>
                     )}
                     {result.meta && (
-                      <div style={{ fontSize: '12px', color: '#777' }}>
+                      <div className="search-result-meta" style={{ fontSize: '12px', color: '#777' }}>
                         {result.meta}
                       </div>
                     )}

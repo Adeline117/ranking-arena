@@ -93,8 +93,8 @@ export default function GroupsPage() {
     <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
       <TopNav email={email} />
       
-      <Box as="main" px={4} py={6} style={{ maxWidth: 1200, margin: '0 auto' }}>
-        <Box style={{ display: 'grid', gridTemplateColumns: '260px 1fr 280px', gap: tokens.spacing[4] }}>
+      <Box as="main" className="container-padding" px={4} py={6} style={{ maxWidth: 1200, margin: '0 auto' }}>
+        <Box className="groups-grid" style={{ display: 'grid', gridTemplateColumns: '260px 1fr 280px', gap: tokens.spacing[4] }}>
           {/* 左：排名前十 */}
           <Box as="section">
             <Card title={t('top10')}>

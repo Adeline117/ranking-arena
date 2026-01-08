@@ -159,8 +159,8 @@ export default function HotPage() {
     <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
       <TopNav email={email} />
 
-      <Box as="main" px={4} py={6} style={{ maxWidth: 1200, margin: '0 auto' }}>
-        <Box style={{ display: 'grid', gridTemplateColumns: '260px 1fr 280px', gap: tokens.spacing[4] }}>
+      <Box as="main" className="container-padding" px={4} py={6} style={{ maxWidth: 1200, margin: '0 auto' }}>
+        <Box className="hot-grid" style={{ display: 'grid', gridTemplateColumns: '260px 1fr 280px', gap: tokens.spacing[4] }}>
           {/* 左：排名前十 */}
           <Box as="section">
             <Card title={t('top10')}>
@@ -184,6 +184,7 @@ export default function HotPage() {
                       style={{ textDecoration: 'none' }}
                     >
                       <Box
+                        className="hot-post-item"
                         bg="primary"
                         p={4}
                         radius="md"
@@ -198,20 +199,20 @@ export default function HotPage() {
                           e.currentTarget.style.background = tokens.colors.bg.primary
                         }}
                       >
-                        <Box style={{ display: 'flex', gap: tokens.spacing[2], marginBottom: tokens.spacing[2] }}>
-                          <Text size="sm" weight="black" style={{ color: rank <= 3 ? tokens.colors.accent.warning : tokens.colors.text.secondary }}>
+                        <Box className="hot-post-meta" style={{ display: 'flex', gap: tokens.spacing[2], marginBottom: tokens.spacing[2], flexWrap: 'wrap' }}>
+                          <Text className="hot-post-rank" size="sm" weight="black" style={{ color: rank <= 3 ? tokens.colors.accent.warning : tokens.colors.text.secondary }}>
                             #{rank}
                           </Text>
                           <Text size="xs" color="secondary">{p.group}</Text>
                           <Text size="xs" color="tertiary">{(p.views ?? 0).toLocaleString()} {t('views')}</Text>
                         </Box>
-                        <Text size="base" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>
+                        <Text className="hot-post-title" size="base" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>
                           {p.title}
                         </Text>
-                        <Text size="sm" color="secondary" style={{ marginBottom: tokens.spacing[2], lineHeight: 1.5 }}>
+                        <Text className="hot-post-body" size="sm" color="secondary" style={{ marginBottom: tokens.spacing[2], lineHeight: 1.5 }}>
                           {p.body.slice(0, 100)}...
                         </Text>
-                        <Box style={{ display: 'flex', gap: tokens.spacing[3], fontSize: tokens.typography.fontSize.xs, color: tokens.colors.text.tertiary }}>
+                        <Box className="hot-post-footer" style={{ display: 'flex', gap: tokens.spacing[3], fontSize: tokens.typography.fontSize.xs, color: tokens.colors.text.tertiary, flexWrap: 'wrap' }}>
                           <Text size="xs" color="tertiary">{p.author}</Text>
                           <Text size="xs" color="tertiary">{p.time}</Text>
                           <Text size="xs" color="tertiary">💬 {p.comments}</Text>

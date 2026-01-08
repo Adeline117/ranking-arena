@@ -20,6 +20,7 @@ export default function TraderTabs({ activeTab, onTabChange }: TraderTabsProps) 
 
   return (
     <Box
+      className="profile-tabs"
       style={{
         display: 'flex',
         gap: tokens.spacing[6],
@@ -31,6 +32,7 @@ export default function TraderTabs({ activeTab, onTabChange }: TraderTabsProps) 
       {tabs.map((tab) => (
         <button
           key={tab.key}
+          className="profile-tab-button"
           onClick={() => onTabChange(tab.key)}
           style={{
             background: 'transparent',
