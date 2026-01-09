@@ -11,6 +11,7 @@ import PostFeed from './components/Features/PostFeed'
 import MarketPanel from './components/Features/MarketPanel'
 import Card from './components/UI/Card'
 import CompareTraders from './components/Features/CompareTraders'
+import ExchangeQuickConnect from './components/ExchangeQuickConnect'
 import { Box } from './components/Base'
 import { useLanguage } from './components/Utils/LanguageProvider'
 
@@ -500,6 +501,8 @@ export default function HomePage() {
           margin: '0 auto',
         }}
       >
+        {/* 快速绑定交易所 */}
+        <ExchangeQuickConnect />
         <Box
           className="main-grid"
           style={{
