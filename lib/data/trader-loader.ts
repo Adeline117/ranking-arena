@@ -68,11 +68,16 @@ function snapshotToTrader(
       profile_url: handleData?.profile_url || '(空)',
       profile_url_type: typeof handleData?.profile_url,
       profile_url_length: handleData?.profile_url?.length || 0,
-      profile_url_preview: handleData?.profile_url ? handleData.profile_url.substring(0, 50) + '...' : '(空)',
+      profile_url_preview: handleData?.profile_url ? handleData.profile_url.substring(0, 100) : '(空)',
       avatar_url: handleData?.avatar_url || '(空)',
+      avatar_url_type: typeof handleData?.avatar_url,
+      avatar_url_length: handleData?.avatar_url?.length || 0,
+      avatar_url_preview: handleData?.avatar_url ? handleData.avatar_url.substring(0, 100) : '(空)',
       final_avatar_url: avatarUrl || '(未获取)',
       final_avatar_url_type: typeof avatarUrl,
-      final_avatar_url_preview: avatarUrl ? avatarUrl.substring(0, 50) + '...' : '(未获取)',
+      final_avatar_url_preview: avatarUrl ? avatarUrl.substring(0, 100) : '(未获取)',
+      // 显示最终使用的字段
+      used_field: avatarUrl ? (handleData?.profile_url && handleData.profile_url.trim() === avatarUrl.trim() ? 'profile_url' : 'avatar_url') : 'none',
     })
   }
 
