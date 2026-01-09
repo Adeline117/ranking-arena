@@ -77,9 +77,31 @@ export default function UserHomePage(props: { params: { handle: string } | Promi
       try {
         // 先尝试从 trader_sources 获取（如果用户也是交易员）
         let profileData: TraderProfile | null = await getTraderByHandle(handle)
+        let isTraderInRanking = !!profileData // 标记是否在排行榜上
 
         // 如果找不到，从 user_profiles 表获取注册用户信息（profiles 表不存在）
         if (!profileData) {
+          // 检查是否在排行榜上（即使不是trader，也可能在trader_sources中）
+          // 尝试所有数据源查找
+          const sources = ['binance_web3', 'binance', 'bybit', 'bitget', 'mexc', 'coinex']
+          let foundInRanking = false
+          
+          for (const sourceType of sources) {
+            const { data: sourceData } = await supabase
+              .from('trader_sources')
+              .select('source_trader_id')
+              .eq('source', sourceType)
+              .eq('handle', handle)
+              .maybeSingle()
+            
+            if (sourceData) {
+              foundInRanking = true
+              break
+            }
+          }
+          
+          isTraderInRanking = foundInRanking
+          
           // 直接使用 user_profiles 表（因为 profiles 表不存在）
           const { data: userProfile } = await supabase
             .from('user_profiles')
@@ -107,13 +129,18 @@ export default function UserHomePage(props: { params: { handle: string } | Promi
               followers: followersCount || 0,
               following: followingCount || 0,
               copiers: 0,
-              avatar_url: userProfile.avatar_url || null,
+              // 如果用户在排行榜上但没有设置头像，不生成头像（avatar_url为null）
+              // 如果用户不在排行榜上且没有设置头像，在Avatar组件中会生成头像
+              avatar_url: userProfile.avatar_url || (foundInRanking ? null : undefined),
               isRegistered: true,
             }
           }
         } else {
-          // 如果从 trader_sources 找到了，确保获取正确的粉丝数和关注数
+          // 如果从 trader_sources 找到了（是trader），确保获取正确的粉丝数和关注数
           // 但保留 trader 的原始头像（avatar_url 已经由 getTraderByHandle 设置）
+          // 重要：保存 trader 的原始头像，防止被覆盖
+          const traderOriginalAvatarUrl = profileData.avatar_url
+          
           const { count: followersCount } = await supabase
             .from('follows')
             .select('*', { count: 'exact', head: true })
@@ -130,8 +157,9 @@ export default function UserHomePage(props: { params: { handle: string } | Promi
           if (followingCount !== null) {
             profileData.following = followingCount
           }
-          // 确保 avatar_url 不被覆盖，永远使用 trader 的原始头像
-          // profileData.avatar_url 已经由 getTraderByHandle 设置为 trader 的原始头像
+          // 确保 avatar_url 永远使用 trader 的原始头像，即使 trader 也在平台注册了
+          // 永远不使用 user_profiles 中的 avatar_url 覆盖 trader 的原始头像
+          profileData.avatar_url = traderOriginalAvatarUrl
         }
 
         if (!profileData) {
@@ -189,6 +217,23 @@ export default function UserHomePage(props: { params: { handle: string } | Promi
                     .select('*', { count: 'exact', head: true })
                     .eq('user_id', newProfile.id)
 
+                  // 检查新创建的用户是否在排行榜上
+                  let foundInRankingForNewProfile = false
+                  const sources = ['binance_web3', 'binance', 'bybit', 'bitget', 'mexc', 'coinex']
+                  for (const sourceType of sources) {
+                    const { data: sourceData } = await supabase
+                      .from('trader_sources')
+                      .select('source_trader_id')
+                      .eq('source', sourceType)
+                      .eq('handle', newProfile.handle || defaultHandle)
+                      .maybeSingle()
+                    
+                    if (sourceData) {
+                      foundInRankingForNewProfile = true
+                      break
+                    }
+                  }
+                  
                   // 使用新创建的 profile
                   profileData = {
                     handle: newProfile.handle || defaultHandle,
@@ -197,7 +242,8 @@ export default function UserHomePage(props: { params: { handle: string } | Promi
                     followers: followersCount || 0,
                     following: followingCount || 0,
                     copiers: 0,
-                    avatar_url: newProfile.avatar_url || null,
+                    // 如果设置了头像使用设置的头像，否则根据是否在排行榜上决定是否生成头像
+                    avatar_url: newProfile.avatar_url || (foundInRankingForNewProfile ? null : undefined),
                     isRegistered: true,
                   }
                   console.log('[UserPage] profileData set:', profileData.handle)

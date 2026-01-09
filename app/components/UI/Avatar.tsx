@@ -14,7 +14,11 @@ import {
  * Avatar 组件
  * 显示用户头像
  * - 如果是 trader：有 avatarUrl 则使用，没有则显示首字母头像（不生成）
- * - 如果是普通用户：有 avatarUrl 则使用，没有则生成默认头像
+ * - 如果是普通用户：
+ *   - 如果设置了头像（avatarUrl），使用设置的头像
+ *   - 如果没有设置头像：
+ *     - 如果 avatarUrl 是 null（在排行榜上），显示首字母头像（不生成）
+ *     - 如果 avatarUrl 是 undefined（不在排行榜上），生成默认头像
  */
 export default function Avatar({
   userId,
@@ -32,17 +36,30 @@ export default function Avatar({
   const backgroundGradient = getAvatarGradient(userId)
   
   // 对于 trader：如果有 avatarUrl 则使用，否则显示首字母头像（不生成）
-  // 对于普通用户：如果有 avatarUrl 则使用，否则生成默认头像
-  let finalAvatarUrl: string | null = null
-  if (avatarUrl && avatarUrl.trim() !== '') {
-    finalAvatarUrl = avatarUrl
-  } else if (!isTrader) {
-    // 只有普通用户才生成默认头像
-    finalAvatarUrl = getUserAvatarUrl(userId, null, name)
+  // 对于普通用户：
+  // - avatarUrl 有值且不为空：使用设置的头像
+  // - avatarUrl 为 null：在排行榜上但没有设置头像，显示首字母（不生成）
+  // - avatarUrl 为 undefined：不在排行榜上，生成默认头像
+  let finalAvatarUrl: string | null | undefined = avatarUrl
+  if (isTrader) {
+    // trader：如果有 avatarUrl 则使用，否则显示首字母头像（不生成）
+    finalAvatarUrl = avatarUrl && avatarUrl.trim() !== '' ? avatarUrl : null
+  } else {
+    // 普通用户
+    if (avatarUrl && avatarUrl.trim() !== '') {
+      // 设置了头像，使用设置的头像
+      finalAvatarUrl = avatarUrl
+    } else if (avatarUrl === null) {
+      // avatarUrl 为 null 表示在排行榜上但没有设置头像，不生成头像
+      finalAvatarUrl = null
+    } else {
+      // avatarUrl 为 undefined 表示不在排行榜上，生成默认头像
+      finalAvatarUrl = getUserAvatarUrl(userId, null, name)
+    }
   }
   
   // 如果图片加载失败或没有URL，显示默认头像
-  const showDefault = imageError || !finalAvatarUrl
+  const showDefault = imageError || !finalAvatarUrl || finalAvatarUrl === null
 
   return (
     <Box
