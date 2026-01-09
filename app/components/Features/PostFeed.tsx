@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useRef } from 'react'
 import { ThumbsUpIcon, ThumbsDownIcon, CommentIcon } from '../Icons'
 import { useLanguage } from '../Utils/LanguageProvider'
 
@@ -160,6 +160,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full' } = {}) {
   const [myVote, setMyVote] = useState<Record<number, PollChoice | null>>({})
   const [myReact, setMyReact] = useState<Record<number, 'up' | 'down' | null>>({})
   const [reactCounts, setReactCounts] = useState<Record<number, { up: number; down: number }>>({})
+  const processingRef = useRef<Set<string>>(new Set())
 
   useEffect(() => {
     setPollState((prev) => {
@@ -208,22 +209,47 @@ export default function PostFeed(props: { variant?: 'compact' | 'full' } = {}) {
   }
 
   const toggleReact = (postId: number, dir: 'up' | 'down') => {
-    setReactCounts((prev) => {
-      const cur = prev[postId] ?? { up: 0, down: 0 }
-      const mine = myReact[postId]
-      let next = { ...cur }
+    // 防止重复调用
+    const key = `${postId}-${dir}`
+    if (processingRef.current.has(key)) {
+      return
+    }
+    processingRef.current.add(key)
 
-      if (mine === dir) next = { ...next, [dir]: Math.max(0, next[dir] - 1) }
-      else {
-        if (mine) next = { ...next, [mine]: Math.max(0, next[mine] - 1) }
-        next = { ...next, [dir]: next[dir] + 1 }
-      }
-      return { ...prev, [postId]: next }
-    })
+    // 使用函数式更新，确保使用最新的状态值
+    // 先获取当前投票状态
+    setMyReact((prevMyReact) => {
+      const currentVote = prevMyReact[postId]
+      const newVote = currentVote === dir ? null : dir
+      
+      // 更新点赞数
+      setReactCounts((prevCounts) => {
+        const cur = prevCounts[postId] ?? { up: 0, down: 0 }
+        let next = { ...cur }
 
-    setMyReact((prev) => {
-      const mine = prev[postId]
-      return { ...prev, [postId]: mine === dir ? null : dir }
+        if (currentVote === dir) {
+          // 取消投票
+          next = { ...next, [dir]: Math.max(0, next[dir] - 1) }
+        } else {
+          // 切换投票
+          if (currentVote) {
+            // 先取消之前的投票
+            next = { ...next, [currentVote]: Math.max(0, next[currentVote] - 1) }
+          }
+          // 添加新投票
+          next = { ...next, [dir]: next[dir] + 1 }
+        }
+        
+        // 清除处理标记
+        setTimeout(() => {
+          processingRef.current.delete(key)
+        }, 100)
+        
+        return { ...prevCounts, [postId]: next }
+      })
+      
+      // 更新用户投票状态
+      return { ...prevMyReact, [postId]: newVote }
     })
   }
 
