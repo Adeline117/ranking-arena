@@ -27,13 +27,25 @@ function snapshotToTrader(
       ? handleData.handle
       : snapshot.source_trader_id
 
-  // 优先使用 avatar_url，如果没有或为 null 则使用 profile_url（某些交易所可能将头像URL存储在 profile_url 中）
-  // 使用 ?? 运算符确保 null 值也会回退到 profile_url
-  const avatarUrl = (handleData?.avatar_url != null && handleData.avatar_url !== '') 
-    ? handleData.avatar_url 
-    : (handleData?.profile_url != null && handleData.profile_url !== '') 
-      ? handleData.profile_url 
-      : undefined
+  // 优先使用 avatar_url，如果没有或为 null/空字符串 则使用 profile_url（某些交易所可能将头像URL存储在 profile_url 中）
+  // 明确的检查逻辑：avatar_url 优先，如果不为空则使用，否则使用 profile_url
+  let avatarUrl: string | undefined = undefined
+  if (handleData) {
+    if (handleData.avatar_url && handleData.avatar_url.trim() !== '') {
+      avatarUrl = handleData.avatar_url
+    } else if (handleData.profile_url && handleData.profile_url.trim() !== '') {
+      avatarUrl = handleData.profile_url
+    }
+  }
+  
+  // 调试日志：检查头像URL是否正确获取
+  if (snapshot.source_trader_id && (!avatarUrl || avatarUrl === '')) {
+    console.debug(`[trader-loader] ⚠️ Trader ${snapshot.source_trader_id} (${source}) 没有头像URL:`, {
+      hasHandleData: !!handleData,
+      avatar_url: handleData?.avatar_url,
+      profile_url: handleData?.profile_url,
+    })
+  }
 
   return {
     id: snapshot.source_trader_id,
