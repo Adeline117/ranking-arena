@@ -66,6 +66,7 @@ export default function ExchangeConnectionManager({ userId }: ExchangeConnection
       }
 
       // 直接跳转到交易所登录/授权页面（当前窗口）
+      // 用户登录并创建API Key后，可以返回 /exchange/callback?exchange=binance 完成绑定
       window.location.href = result.authUrl
     } catch (err: any) {
       console.error('[ExchangeConnection] 启动授权失败:', err)
