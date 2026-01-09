@@ -478,8 +478,8 @@ export default function TraderDrawer({
                         alignItems: 'center',
                         padding: 12,
                         borderRadius: 12,
-                        background: 'rgba(255,255,255,0.04)',
-                        border: '1px solid rgba(255,255,255,0.06)',
+        background: tokens.colors.bg.secondary,
+        border: `1px solid ${tokens.colors.border.primary}`,
                       }}
                     >
                       <div style={{ display: 'flex', flexDirection: 'column' }}>
@@ -718,7 +718,7 @@ function CompareRow({ name, pct }: { name: string; pct: number }) {
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
       <div style={{ color: tokens.colors.text.primary, fontWeight: 900 }}>{name}</div>
-      <div style={{ color: pct >= 0 ? '#2fe57d' : '#ff4d4d', fontWeight: 900 }}>
+      <div style={{ color: pct >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error, fontWeight: 900 }}>
         {fmtPct(pct)}
       </div>
     </div>
