@@ -424,8 +424,8 @@ function ReactButton({ onClick, active, icon, count, showCount = true }: { onCli
     onClick(e)
   }
 
-  // 如果已点赞，显示 count + 1；否则显示 count
-  const displayCount = active && showCount ? count + 1 : count
+  // 直接显示 count，因为 reactCounts 已经包含了用户的点赞
+  const displayCount = showCount ? count : null
 
   return (
     <button
@@ -487,8 +487,8 @@ function Action(props: { icon?: React.ReactNode; text: string; onClick: (e?: Rea
     props.onClick(e)
   }
 
-  // 如果已点赞，显示 count + 1；否则显示 count
-  const displayCount = props.active && props.showCount && props.count !== undefined ? props.count + 1 : props.count
+  // 直接显示 count，因为 reactCounts 已经包含了用户的点赞
+  const displayCount = props.showCount && props.count !== undefined ? props.count : null
 
   return (
     <button
