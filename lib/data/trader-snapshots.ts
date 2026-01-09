@@ -148,17 +148,16 @@ export async function getTraderHandles(
         const batchNum = Math.floor(i / BATCH_SIZE) + 1
         if (batchNum === 1) {
           const profileUrlCount = data.filter((item: any) => item.profile_url && item.profile_url.trim() !== '').length
-          const avatarUrlCount = data.filter((item: any) => item.avatar_url && item.avatar_url.trim() !== '').length
           
           console.log(`[trader-snapshots] ✅ ${source} 查询成功 (batch ${batchNum}):`, {
             total: data.length,
             hasProfileUrl: profileUrlCount > 0 ? `是 (${profileUrlCount}/${data.length})` : '否',
-            hasAvatarUrl: avatarUrlCount > 0 ? `是 (${avatarUrlCount}/${data.length})` : '否',
+            profileUrlCount,
             sampleData: data[0] ? {
               source_trader_id: data[0].source_trader_id,
               handle: data[0].handle || '(空)',
               profile_url: data[0].profile_url || '(空)',
-              avatar_url: data[0].avatar_url || '(空)',
+              profile_url_length: data[0].profile_url?.length || 0,
             } : '无数据',
           })
         }
