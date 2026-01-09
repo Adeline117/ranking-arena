@@ -212,23 +212,11 @@ export default function PostFeed(props: { variant?: 'compact' | 'full' } = {}) {
     // 防止重复调用
     const key = `${postId}-${dir}`
     if (processingRef.current.has(key)) {
-      console.log('[toggleReact] 防抖：跳过重复调用', key)
       return
     }
     processingRef.current.add(key)
-    console.log('[toggleReact] 开始处理', key)
 
     // 使用函数式更新，确保使用最新的状态值
-    // 先更新点赞数，再更新用户投票状态（避免嵌套 setState）
-    setReactCounts((prevCounts) => {
-      const cur = prevCounts[postId] ?? { up: 0, down: 0 }
-      let next = { ...cur }
-      
-      // 获取当前投票状态（需要从 myReact 中获取，但这里无法直接访问）
-      // 所以我们需要先更新 myReact，然后在回调中更新 reactCounts
-      return prevCounts
-    })
-    
     // 先获取当前投票状态，然后同时更新两个状态
     setMyReact((prevMyReact) => {
       const currentVote = prevMyReact[postId]
@@ -258,8 +246,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full' } = {}) {
       // 清除处理标记
       setTimeout(() => {
         processingRef.current.delete(key)
-        console.log('[toggleReact] 清除处理标记', key)
-      }, 300)
+      }, 500)
       
       // 更新用户投票状态
       return { ...prevMyReact, [postId]: newVote }
