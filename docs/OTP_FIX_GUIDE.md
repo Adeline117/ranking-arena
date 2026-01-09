@@ -117,26 +117,78 @@ Supabase 的 `signInWithOtp` 方法的行为取决于：
 - 最关键的是 **Site URL** 配置（步骤 1.1）
 - 代码已经正确配置（没有设置 `emailRedirectTo`），这才是确保发送验证码的关键
 
-#### 1.4 检查 Email Templates（可选）
+#### 1.4 配置 Email Templates（重要）
 
-**注意**：如果找不到 Email Templates 设置，可以跳过这一步。Supabase 会使用默认模板。
+**如果你看到的是代码配置，这就是 Email Templates！**
 
-如果界面中有 Email Templates：
+你看到的代码是 Supabase 的邮件模板配置。关键是要理解：
 
-1. 在 **Authentication** 菜单下查找：
-   - **Email Templates**
-   - **Templates**
-   - **Email Configuration**
-   - 或者在 **Settings** 页面中查找 **Templates** 部分
+1. **Magic Link 模板** - 用于两种模式：
+   - 如果代码中**设置了 `emailRedirectTo`**：使用 `{{ .ConfirmationURL }}` 发送链接
+   - 如果代码中**没有设置 `emailRedirectTo`**：使用 `{{ .Token }}` 发送 6 位数字验证码
 
-2. 如果找到，查找 **Magic Link** 或 **OTP** 模板（名称可能不同）
+2. **当前模板问题**：
+   - 你的 Magic Link 模板使用的是 `{{ .ConfirmationURL }}`（链接）
+   - 但这不影响，因为 Supabase 会根据代码是否设置 `emailRedirectTo` 来决定使用哪个变量
 
-3. 模板应该包含变量 `{{ .Token }}`，这会被替换为验证码
+3. **可选优化**：如果你想自定义 OTP 验证码的邮件内容，可以修改 Magic Link 模板：
 
-**如果找不到 Email Templates**：
-- Supabase 使用默认模板，通常会自动处理 OTP 验证码
-- 只要代码中没有设置 `emailRedirectTo`，Supabase 会发送验证码而不是链接
-- 重点是确保 **Site URL** 配置正确（步骤 1.1）
+**推荐修改 Magic Link 模板**：
+
+基于你提供的模板，当前 Magic Link 模板是：
+```html
+<h2>Magic Link</h2>
+
+<p>Follow this link to login:</p>
+<p><a href="{{ .ConfirmationURL }}">Log In</a></p>
+```
+
+**方案 1：直接使用 Token（推荐）**
+
+如果你只想使用验证码（不发送 Magic Link），将模板修改为：
+```html
+<h2>验证码登录</h2>
+
+<p>您的验证码是：<strong>{{ .Token }}</strong></p>
+<p>验证码有效期为 10 分钟。</p>
+<p>如果这不是您的操作，请忽略此邮件。</p>
+```
+
+**方案 2：同时支持 Token 和 ConfirmationURL（灵活）**
+
+如果你既想支持验证码也想支持 Magic Link，使用条件判断：
+```html
+{{ if .Token }}
+  <h2>验证码登录</h2>
+  <p>您的验证码是：<strong>{{ .Token }}</strong></p>
+  <p>验证码有效期为 10 分钟。</p>
+  <p>如果这不是您的操作，请忽略此邮件。</p>
+{{ else if .ConfirmationURL }}
+  <h2>Magic Link 登录</h2>
+  <p>点击链接登录：<a href="{{ .ConfirmationURL }}">Log In</a></p>
+{{ end }}
+```
+
+**重要**：使用方案 1 更简单，因为你已经在代码中确保了不设置 `emailRedirectTo`，所以只会发送验证码。
+
+**重要说明**：
+- `{{ .Token }}` 是 6 位数字验证码
+- `{{ .ConfirmationURL }}` 是登录链接
+- Supabase 会根据代码中的 `emailRedirectTo` 参数自动选择使用哪个变量
+- 如果代码中**没有设置 `emailRedirectTo`**，会使用 `{{ .Token }}` 发送验证码
+- 如果代码中**设置了 `emailRedirectTo`**，会使用 `{{ .ConfirmationURL }}` 发送链接
+
+**如何修改模板**：
+
+1. 在 **Authentication** → **Settings** 页面
+2. 向下滚动找到 **Email Templates** 部分
+3. 找到并点击 **Magic Link** 模板
+4. 将模板内容替换为方案 1 或方案 2 的内容
+5. 点击 **Save**（保存）
+
+**但最重要的是**：确保代码中**没有设置 `emailRedirectTo`**（已确认正确 ✅）
+
+**注意**：即使不修改模板，只要代码中**没有设置 `emailRedirectTo`**，Supabase 会自动使用 `{{ .Token }}` 发送验证码。但是当前的模板使用的是 `{{ .ConfirmationURL }}`，这可能会导致模板显示错误（虽然验证码仍然会通过 `{{ .Token }}` 发送）。所以建议修改模板使用 `{{ .Token }}`。
 
 ### 步骤 2：验证代码配置（已确认正确）
 
