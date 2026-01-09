@@ -147,6 +147,7 @@ export default function TraderPage(props: { params: { handle: string } | Promise
           avatarUrl={profile.avatar_url}
           isRegistered={profile.isRegistered}
           followers={profile.followers}
+          source={profile.source || 'binance'}
         />
 
         {/* Tabs */}

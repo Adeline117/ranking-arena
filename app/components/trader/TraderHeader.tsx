@@ -16,9 +16,10 @@ interface TraderHeaderProps {
   isRegistered?: boolean
   followers?: number
   isOwnProfile?: boolean
+  source?: string // 'binance', 'bybit', etc.
 }
 
-export default function TraderHeader({ handle, traderId, avatarUrl, isRegistered, followers = 0, isOwnProfile = false }: TraderHeaderProps) {
+export default function TraderHeader({ handle, traderId, avatarUrl, isRegistered, followers = 0, isOwnProfile = false, source = 'binance' }: TraderHeaderProps) {
   const [userId, setUserId] = useState<string | null>(null)
   const router = useRouter()
 
@@ -116,7 +117,7 @@ export default function TraderHeader({ handle, traderId, avatarUrl, isRegistered
               </Link>
             )}
             {!isRegistered && userId && (
-              <ClaimTraderButton traderId={traderId} handle={handle} userId={userId} />
+              <ClaimTraderButton traderId={traderId} handle={handle} userId={userId} source={source} />
             )}
             {userId && <FollowButton traderId={traderId} userId={userId} />}
           </>

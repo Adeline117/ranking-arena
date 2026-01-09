@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import { Button } from '../Base'
 
@@ -8,43 +9,134 @@ interface ClaimTraderButtonProps {
   traderId: string
   handle: string
   userId: string
+  source?: string // 'binance', 'bybit', etc.
 }
 
-export default function ClaimTraderButton({ traderId, handle, userId }: ClaimTraderButtonProps) {
+export default function ClaimTraderButton({ traderId, handle, userId, source = 'binance' }: ClaimTraderButtonProps) {
+  const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [claimed, setClaimed] = useState(false)
+  const [hasConnection, setHasConnection] = useState(false)
+  const [checking, setChecking] = useState(true)
+
+  // 检查用户是否已绑定交易所账号
+  useEffect(() => {
+    checkConnection()
+  }, [userId, source])
+
+  const checkConnection = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('user_exchange_connections')
+        .select('id, exchange, is_active')
+        .eq('user_id', userId)
+        .eq('exchange', source)
+        .eq('is_active', true)
+        .maybeSingle()
+
+      if (error) {
+        console.error('[ClaimTrader] 检查连接失败:', error)
+      } else {
+        setHasConnection(!!data)
+      }
+    } catch (err) {
+      console.error('[ClaimTrader] 检查连接异常:', err)
+    } finally {
+      setChecking(false)
+    }
+  }
 
   const handleClaim = async () => {
-    if (!confirm(`确认认领交易员 "@${handle}"？\n\n认领后，此交易员账号将与您的账户合并。`)) {
+    // 1. 检查是否已绑定交易所账号
+    if (!hasConnection) {
+      const goToSettings = confirm(
+        `认领交易员账号需要先绑定您的交易所账号。\n\n` +
+        `请先在设置页面绑定您的 ${source.toUpperCase()} 账号，然后才能认领。\n\n` +
+        `是否前往设置页面？`
+      )
+      if (goToSettings) {
+        router.push('/settings')
+      }
+      return
+    }
+
+    // 2. 确认认领
+    if (!confirm(`确认认领交易员 "@${handle}"？\n\n系统将验证您是否真的拥有此账号，验证通过后才会完成认领。`)) {
       return
     }
 
     setLoading(true)
     try {
-      // 创建认领申请
+      // 3. 获取用户token
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) {
+        alert('请先登录')
+        return
+      }
+
+      // 4. 验证账号所有权
+      const verifyResponse = await fetch('/api/exchange/verify-ownership', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          exchange: source,
+          traderId,
+          source,
+        }),
+      })
+
+      const verifyResult = await verifyResponse.json()
+
+      if (!verifyResponse.ok) {
+        if (verifyResult.needConnect) {
+          const goToSettings = confirm(
+            verifyResult.message + '\n\n是否前往设置页面绑定账号？'
+          )
+          if (goToSettings) {
+            router.push('/settings')
+          }
+        } else {
+          alert(verifyResult.message || '账号验证失败，请确保您拥有此交易员账号。')
+        }
+        return
+      }
+
+      if (!verifyResult.verified) {
+        alert('账号验证失败：您可能不拥有此交易员账号，或者API凭证无效。')
+        return
+      }
+
+      // 5. 验证通过，创建认领记录（自动批准）
       const { error } = await supabase
         .from('trader_claims')
         .insert({
           trader_id: traderId,
           user_id: userId,
           handle: handle,
-          status: 'pending', // pending, approved, rejected
+          source: source,
+          status: 'approved', // 验证通过后自动批准
+          verified_at: new Date().toISOString(),
         })
 
       if (error) {
         if (error.code === '23505') {
           // 已存在认领申请
-          alert('您已经提交过认领申请，请等待审核。')
+          alert('您已经认领过此交易员账号。')
         } else {
           throw error
         }
       } else {
         setClaimed(true)
-        alert('认领申请已提交！管理员审核通过后，您的账号将与交易员账号合并。')
+        alert('认领成功！您的账号已与此交易员账号合并。')
+        // 刷新页面
+        window.location.reload()
       }
     } catch (err: any) {
       console.error('Claim trader error:', err)
-      alert('申请失败：' + (err.message || '未知错误'))
+      alert('认领失败：' + (err.message || '未知错误'))
     } finally {
       setLoading(false)
     }
