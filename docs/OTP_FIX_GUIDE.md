@@ -4,6 +4,23 @@
 
 新用户注册时点击"发送验证码"，但邮箱收到的是 Magic Link（链接）而不是 6 位数字验证码。
 
+## 🚀 快速修复（最重要的步骤）
+
+如果找不到文档中提到的某些设置，**只需要完成这一步**：
+
+1. 登录 [Supabase Dashboard](https://supabase.com/dashboard)
+2. 选择你的项目
+3. 点击左侧边栏的 **Authentication** → **Settings**
+4. 找到 **URL Configuration** 部分（向下滚动查找）
+5. 将 **Site URL** 设置为：`https://www.arenafi.org`
+6. 点击 **Save**
+
+**这就是最关键的步骤！** 其他设置如果找不到可以跳过。
+
+---
+
+## 详细说明
+
 ## 根本原因
 
 Supabase 的 `signInWithOtp` 方法的行为取决于：
@@ -17,48 +34,88 @@ Supabase 的 `signInWithOtp` 方法的行为取决于：
 
 ### 步骤 1：检查 Supabase Dashboard 配置
 
-#### 1.1 检查 Site URL
+**⚠️ 最重要的一步**：检查 **Site URL** 配置。这是确保发送验证码而不是链接的关键。
+
+#### 1.1 检查 Site URL（必须）
 
 1. 登录 [Supabase Dashboard](https://supabase.com/dashboard)
-2. 选择你的项目
-3. 进入 **Authentication** → **Settings**
-4. 找到 **URL Configuration** 部分
-5. **Site URL** 必须设置为：`https://www.arenafi.org`
+2. 选择你的项目（左上角下拉菜单）
+3. 在左侧边栏找到并点击 **Authentication**（认证）
+4. 点击 **Settings**（设置）标签页
+5. 在页面中找到 **URL Configuration**（URL 配置）部分
+   - 可能在不同位置：顶部、中间或底部
+   - 如果找不到，尝试向下滚动
+6. 找到 **Site URL** 输入框
+7. **Site URL** 必须设置为：`https://www.arenafi.org`
    - ❌ 不要设置为 `http://localhost:3000`
-   - ❌ 不要设置为空
+   - ❌ 不要设置为空或默认值
    - ✅ 必须设置为 `https://www.arenafi.org`
+8. 点击 **Save**（保存）按钮
 
-#### 1.2 检查 Redirect URLs
+**如果找不到 Site URL 设置**：
+- 尝试在 **Authentication** → **Settings** 页面中搜索 "Site URL"
+- 或者查看页面顶部的 **Configuration** 部分
+- 如果仍然找不到，请截图并联系 Supabase 支持
 
-在 **Redirect URLs** 中添加：
-- `https://www.arenafi.org/login`
-- `https://www.arenafi.org/**`
-- `http://localhost:3000/login`（仅开发环境）
+#### 1.2 检查 Redirect URLs（推荐）
 
-#### 1.3 检查 Email Auth 设置
+在 **URL Configuration** 同一部分，找到 **Redirect URLs**：
 
-1. 在 **Authentication** → **Settings** → **Auth Providers** → **Email**
-2. 确保：
+1. 点击 **Redirect URLs** 输入框或"添加"按钮
+2. 添加以下 URL（每行一个）：
+   - `https://www.arenafi.org/login`
+   - `https://www.arenafi.org/**`
+   - `http://localhost:3000/login`（仅开发环境，可选）
+3. 点击 **Save**（保存）按钮
+
+**如果找不到 Redirect URLs**：
+- 这不是必需的，但建议添加
+- 如果找不到，可以跳过这一步
+
+#### 1.3 检查 Email Auth 设置（可选）
+
+**注意**：如果找不到这些设置，可以跳过这一步。最重要的配置是 **Site URL**（步骤 1.1）。
+
+如果界面中有这些设置，按以下步骤：
+
+1. 在 **Authentication** → **Settings** 页面
+2. 查找以下任一选项（界面可能不同）：
+   - **Auth Providers** → **Email**
+   - **Email Auth**
+   - **Email Settings**
+   - 或者直接向下滚动查找 Email 相关设置
+
+3. 如果找到，确保：
    - ✅ **Enable Email provider**: 已启用
    - ✅ **Confirm email**: **关闭**（OTP 不需要邮箱确认）
    - ✅ **Secure email change**: 关闭（可选）
 
-#### 1.4 检查 Email Templates
+**如果找不到这些设置**：
+- 不要担心，这些可能是默认启用的
+- 重点检查 **Site URL** 配置（步骤 1.1），这是最关键的部分
 
-1. 进入 **Authentication** → **Email Templates**
-2. 找到 **Magic Link** 模板（这个模板实际上用于两种模式）
-3. 确保模板中包含验证码变量：
-   ```
-   您的验证码是：{{ .Token }}
-   
-   验证码有效期为 10 分钟。
-   
-   如果这不是您的操作，请忽略此邮件。
-   ```
+#### 1.4 检查 Email Templates（可选）
 
-**重要**：即使模板名称是 "Magic Link"，如果不设置 `emailRedirectTo`，Supabase 会使用这个模板发送 OTP 验证码。
+**注意**：如果找不到 Email Templates 设置，可以跳过这一步。Supabase 会使用默认模板。
 
-### 步骤 2：验证代码配置
+如果界面中有 Email Templates：
+
+1. 在 **Authentication** 菜单下查找：
+   - **Email Templates**
+   - **Templates**
+   - **Email Configuration**
+   - 或者在 **Settings** 页面中查找 **Templates** 部分
+
+2. 如果找到，查找 **Magic Link** 或 **OTP** 模板（名称可能不同）
+
+3. 模板应该包含变量 `{{ .Token }}`，这会被替换为验证码
+
+**如果找不到 Email Templates**：
+- Supabase 使用默认模板，通常会自动处理 OTP 验证码
+- 只要代码中没有设置 `emailRedirectTo`，Supabase 会发送验证码而不是链接
+- 重点是确保 **Site URL** 配置正确（步骤 1.1）
+
+### 步骤 2：验证代码配置（已确认正确）
 
 代码已经正确配置，确保：
 
@@ -66,15 +123,23 @@ Supabase 的 `signInWithOtp` 方法的行为取决于：
 2. ✅ `handleSendLoginCode` 函数中**没有设置** `emailRedirectTo`
 3. ✅ 只有 `handleSendLoginLink` 函数设置了 `emailRedirectTo`（这是正确的，因为这是发送 Magic Link）
 
-### 步骤 3：检查环境变量
+**代码已经正确，无需修改。**
+
+### 步骤 3：检查环境变量（推荐）
 
 确保 Vercel 环境变量正确设置：
 
-```bash
-NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
-NEXT_PUBLIC_APP_URL=https://www.arenafi.org
-```
+1. 登录 [Vercel Dashboard](https://vercel.com/dashboard)
+2. 选择你的项目
+3. 进入 **Settings** → **Environment Variables**
+4. 确保以下变量已设置：
+   - `NEXT_PUBLIC_SUPABASE_URL` = `https://your-project.supabase.co`
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY` = `your-anon-key`
+   - `NEXT_PUBLIC_APP_URL` = `https://www.arenafi.org`
+
+**如果环境变量未设置或错误**：
+- 添加或更新环境变量
+- 重新部署项目（Vercel 会自动触发）
 
 ### 步骤 4：测试
 
@@ -161,12 +226,24 @@ A:
 
 在修复后，请确认：
 
-- [ ] Supabase Dashboard → Authentication → Settings → Site URL = `https://www.arenafi.org`
-- [ ] 代码中 `signInWithOtp` 没有设置 `emailRedirectTo`（注册和登录验证码）
-- [ ] 环境变量 `NEXT_PUBLIC_APP_URL` 正确设置
-- [ ] Email Templates 中包含 `{{ .Token }}` 变量
-- [ ] 测试时收到的是 6 位数字验证码，而不是链接
-- [ ] 浏览器控制台没有错误日志
+### 必须检查的项目：
+
+- [ ] **Site URL 已设置**：Supabase Dashboard → Authentication → Settings → URL Configuration → Site URL = `https://www.arenafi.org`
+- [ ] **代码正确**：代码中 `signInWithOtp` 没有设置 `emailRedirectTo`（注册和登录验证码）- ✅ 已确认正确
+- [ ] **测试通过**：测试时收到的是 6 位数字验证码，而不是链接
+- [ ] **浏览器控制台无错误**：打开 F12 查看控制台，应该看到 `[OTP] 发送成功` 日志
+
+### 推荐检查的项目：
+
+- [ ] **Redirect URLs 已添加**：在 URL Configuration 中添加了 `https://www.arenafi.org/login`
+- [ ] **环境变量正确**：Vercel 环境变量 `NEXT_PUBLIC_APP_URL` = `https://www.arenafi.org`
+
+### 可选检查的项目：
+
+- [ ] Email Auth 设置（如果界面中有）
+- [ ] Email Templates（如果界面中有）
+
+**最重要的检查**：Site URL 是否正确设置为 `https://www.arenafi.org`
 
 ## 相关文档
 
