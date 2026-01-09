@@ -54,24 +54,9 @@ export default function ExchangeConnectionManager({ userId }: ExchangeConnection
     }
   }
 
-  const handleStartAuth = async (exchange: string) => {
-    try {
-      // 获取授权URL
-      const response = await fetch(`/api/exchange/authorize?exchange=${exchange}`)
-      const result = await response.json()
-
-      if (!response.ok) {
-        alert(result.error || '获取授权页面失败')
-        return
-      }
-
-      // 直接跳转到交易所登录/授权页面（当前窗口）
-      // 用户登录并创建API Key后，可以返回 /exchange/callback?exchange=binance 完成绑定
-      window.location.href = result.authUrl
-    } catch (err: any) {
-      console.error('[ExchangeConnection] 启动授权失败:', err)
-      alert('启动授权失败，请重试')
-    }
+  const handleStartAuth = (exchange: string) => {
+    // 跳转到授权引导页面
+    window.location.href = `/exchange/auth?exchange=${exchange}`
   }
 
   const handleConnect = async (exchange: string) => {
