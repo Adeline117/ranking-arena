@@ -3,7 +3,7 @@
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../Base'
 
-type TabKey = 'overview' | 'stats' | 'portfolio' | 'chart'
+type TabKey = 'overview' | 'stats' | 'portfolio'
 
 interface TraderTabsProps {
   activeTab: TabKey
@@ -15,7 +15,6 @@ export default function TraderTabs({ activeTab, onTabChange }: TraderTabsProps) 
     { key: 'overview', label: '概览' },
     { key: 'stats', label: '统计' },
     { key: 'portfolio', label: '投资组合' },
-    { key: 'chart', label: '图表' },
   ]
 
   return (

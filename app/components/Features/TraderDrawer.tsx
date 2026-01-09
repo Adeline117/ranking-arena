@@ -47,7 +47,7 @@ export default function TraderDrawer({
   trader: Trader | null
   onClose: () => void
 }) {
-  const [tab, setTab] = useState<'overview' | 'stats' | 'portfolio' | 'chart'>(
+  const [tab, setTab] = useState<'overview' | 'stats' | 'portfolio'>(
     'overview'
   )
   const [perfRange, setPerfRange] = useState<'90D' | '7D' | '30D' | 'Years'>('90D')
@@ -231,9 +231,6 @@ export default function TraderDrawer({
           </Tab>
           <Tab active={tab === 'portfolio'} onClick={() => setTab('portfolio')}>
             Portfolio
-          </Tab>
-          <Tab active={tab === 'chart'} onClick={() => setTab('chart')}>
-            Chart
           </Tab>
         </div>
 
@@ -583,93 +580,9 @@ export default function TraderDrawer({
               </div>
             </div>
           )}
-
-          {tab === 'chart' && <ChartTab />}
         </div>
       </aside>
     </>
-  )
-}
-
-/* -------- chart tab -------- */
-function ChartTab() {
-  return (
-    <div style={panel}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div style={{ color: 'rgba(255,255,255,0.65)', fontSize: 13 }}>Current Year ▾</div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <button style={btnGhost}>ProCharts</button>
-          <div style={{ width: 1, height: 18, background: 'rgba(255,255,255,0.12)' }} />
-          <div style={{ display: 'flex', gap: 10, color: 'rgba(255,255,255,0.55)', fontSize: 12 }}>
-            <span>✎</span><span>⤓</span><span>📈</span><span>⚙</span><span>⤴</span>
-          </div>
-        </div>
-      </div>
-
-      <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: '54px 1fr', gap: 12 }}>
-        {/* left toolbar */}
-        <div
-          style={{
-            borderRadius: 12,
-            border: '1px solid rgba(255,255,255,0.08)',
-            background: 'rgba(255,255,255,0.02)',
-            padding: 10,
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 10,
-            alignItems: 'center',
-            color: 'rgba(255,255,255,0.55)',
-            fontSize: 12,
-          }}
-        >
-          <span>＋</span><span>／</span><span>≡</span><span>⟂</span><span>⌁</span>
-          <span>✎</span><span>T</span><span>☺</span><span>⌗</span><span>🔍</span><span>🧲</span>
-        </div>
-
-        {/* chart canvas */}
-        <div
-          style={{
-            height: 420,
-            borderRadius: 16,
-            border: '1px solid rgba(255,255,255,0.08)',
-            background:
-              'radial-gradient(1200px 500px at 30% 10%, rgba(255,255,255,0.06), transparent 55%), linear-gradient(180deg, rgba(255,255,255,0.03), rgba(0,0,0,0))',
-            position: 'relative',
-            overflow: 'hidden',
-          }}
-        >
-          <div
-            style={{
-              position: 'absolute',
-              inset: 0,
-              opacity: 0.16,
-              backgroundImage:
-                'linear-gradient(rgba(255,255,255,0.12) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.12) 1px, transparent 1px)',
-              backgroundSize: '60px 60px',
-            }}
-          />
-          <div
-            style={{
-              position: 'absolute',
-              inset: 0,
-              display: 'grid',
-              placeItems: 'center',
-              color: 'rgba(255,255,255,0.45)',
-              fontSize: 14,
-            }}
-          >
-            <div style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: 44, marginBottom: 10 }}>👻</div>
-              <div>No data here</div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div style={{ marginTop: 12, fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>
-        Chart 做成 TradingView 风格骨架。后续你要接真实图再换库即可。
-      </div>
-    </div>
   )
 }
 
