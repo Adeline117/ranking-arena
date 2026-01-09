@@ -171,12 +171,20 @@ export async function getTraderHandles(
           // 回退查询成功，使用回退数据（不添加 avatar_url，让它保持 undefined，这样会使用 profile_url）
           data = fallbackResult.data || null
           error = null
-          console.log(`[trader-snapshots] ✅ ${source} 回退查询成功 (batch ${Math.floor(i / BATCH_SIZE) + 1}):`, fallbackResult.data?.length || 0, '条记录')
-          console.log(`[trader-snapshots] 📝 回退查询示例数据:`, fallbackResult.data?.[0] ? {
-            source_trader_id: fallbackResult.data[0].source_trader_id,
-            handle: fallbackResult.data[0].handle,
-            profile_url: fallbackResult.data[0].profile_url ? '有值' : '无值',
-          } : '无数据')
+          const batchNum = Math.floor(i / BATCH_SIZE) + 1
+          console.log(`[trader-snapshots] ✅ ${source} 回退查询成功 (batch ${batchNum}):`, fallbackResult.data?.length || 0, '条记录')
+          
+          // 检查是否有 profile_url 数据
+          const hasProfileUrl = fallbackResult.data?.some((item: any) => item.profile_url && item.profile_url.trim() !== '')
+          console.log(`[trader-snapshots] 📝 ${source} batch ${batchNum} profile_url 统计:`, {
+            total: fallbackResult.data?.length || 0,
+            hasProfileUrl: hasProfileUrl ? '是' : '否',
+            sampleData: fallbackResult.data?.[0] ? {
+              source_trader_id: fallbackResult.data[0].source_trader_id,
+              handle: fallbackResult.data[0].handle,
+              profile_url: fallbackResult.data[0].profile_url || '(空)',
+            } : '无数据',
+          })
         } else {
           // 其他类型的错误，记录详细信息
           const errorInfo: any = {
