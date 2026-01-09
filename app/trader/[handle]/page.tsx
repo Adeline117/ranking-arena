@@ -14,7 +14,6 @@ import TraderFeed from '@/app/components/trader/TraderFeed'
 import StatsPage from '@/app/components/trader/stats/StatsPage'
 import PinnedPost from '@/app/components/trader/PinnedPost'
 import PortfolioTable from '@/app/components/trader/PortfolioTable'
-import TradingViewShell from '@/app/components/trader/TradingViewShell'
 import { Box, Text } from '@/app/components/Base'
 import { RankingSkeleton } from '@/app/components/UI/Skeleton'
 import {
@@ -31,7 +30,7 @@ import {
   type TraderFeedItem,
 } from '@/lib/data/trader'
 
-type TabKey = 'overview' | 'stats' | 'portfolio' | 'chart'
+type TabKey = 'overview' | 'stats' | 'portfolio'
 
 export default function TraderPage(props: { params: { handle: string } | Promise<{ handle: string }> }) {
   const [handle, setHandle] = useState<string>('')
@@ -199,8 +198,6 @@ export default function TraderPage(props: { params: { handle: string } | Promise
         )}
 
         {activeTab === 'portfolio' && <PortfolioTable items={portfolio} />}
-
-        {activeTab === 'chart' && <TradingViewShell symbol={profile.handle} timeframe="1Y" />}
       </Box>
     </Box>
   )

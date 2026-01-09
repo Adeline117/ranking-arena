@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../../Base'
 import type { TraderStats } from '@/lib/data/trader'
+import TradingViewShell from '../TradingViewShell'
 
 interface StatsPageProps {
   stats: TraderStats
@@ -28,11 +29,6 @@ export default function StatsPage({ stats, traderHandle }: StatsPageProps) {
       { month: 'Dec', value: 3.88 },
     ]
   }, [stats.monthlyPerformance])
-
-  // 风险评分数据
-  const riskMonthly = useMemo(() => {
-    return Array.from({ length: 12 }).map(() => 3 + Math.random() * 6.5)
-  }, [])
 
   // 常用交易币种
   const frequentlyTraded = stats.frequentlyTraded || [
@@ -78,10 +74,6 @@ export default function StatsPage({ stats, traderHandle }: StatsPageProps) {
     profitableWeeksPct: 54.39,
   }
 
-  const avgRiskScore = 5
-  const weeklyMaxDrawdown = -22.5
-  const dailyMaxDrawdown = -7.4
-  const yearlyMaxDrawdown = -18.88
   const traderReturn = 55.07
   const spx500Return = 16.42
 
@@ -169,71 +161,11 @@ export default function StatsPage({ stats, traderHandle }: StatsPageProps) {
       {/* Breakdown Section */}
       <BreakdownSection frequentlyTraded={frequentlyTraded} />
 
-      {/* Risk + Compare Two Columns */}
+      {/* Chart + Compare Two Columns */}
       <Box style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: tokens.spacing[6] }}>
-        {/* Portfolio Risk */}
-        <Box bg="secondary" p={6} radius="xl" border="primary">
-          <Box
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              marginBottom: tokens.spacing[4],
-            }}
-          >
-            <Text size="lg" weight="black">
-              Portfolio Risk (1Y)
-            </Text>
-            <Box style={{ display: 'flex', gap: tokens.spacing[2] }}>
-              <button
-                style={{
-                  padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
-                  borderRadius: tokens.radius.full,
-                  border: `1px solid ${tokens.colors.border.primary}`,
-                  background: tokens.colors.bg.secondary,
-                  color: tokens.colors.text.primary,
-                  fontSize: tokens.typography.fontSize.xs,
-                  fontWeight: tokens.typography.fontWeight.black,
-                  cursor: 'pointer',
-                }}
-              >
-                Risk Score
-              </button>
-              <button
-                style={{
-                  padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
-                  borderRadius: tokens.radius.full,
-                  border: `1px solid ${tokens.colors.border.primary}`,
-                  background: tokens.colors.bg.primary,
-                  color: tokens.colors.text.secondary,
-                  fontSize: tokens.typography.fontSize.xs,
-                  fontWeight: tokens.typography.fontWeight.bold,
-                  cursor: 'pointer',
-                }}
-              >
-                Risk Contribution
-              </button>
-            </Box>
-          </Box>
-
-          {/* Risk Chart */}
-          <Box style={{ marginTop: tokens.spacing[4], marginBottom: tokens.spacing[4] }}>
-            <RiskChart scores={riskMonthly} height={160} />
-          </Box>
-
-          {/* Risk Stats */}
-          <Box
-            style={{
-              display: 'grid',
-              gridTemplateColumns: '1fr 1fr',
-              gap: tokens.spacing[3],
-            }}
-          >
-            <MiniKpi label="Avg. Risk Score (7D)" value={String(avgRiskScore)} />
-            <MiniKpi label="Weekly Max. Drawdown" value={`${weeklyMaxDrawdown.toFixed(2)}%`} />
-            <MiniKpi label="Daily Max. Drawdown" value={`${dailyMaxDrawdown.toFixed(2)}%`} />
-            <MiniKpi label="Yearly Max. Drawdown" value={`${yearlyMaxDrawdown.toFixed(2)}%`} />
-          </Box>
+        {/* Chart */}
+        <Box bg="secondary" p={0} radius="xl" border="primary" style={{ overflow: 'hidden' }}>
+          <TradingViewShell symbol={traderHandle} timeframe="1Y" />
         </Box>
 
         {/* Compare Portfolio */}
@@ -504,45 +436,6 @@ function PerformanceBarChart({ data }: { data: Array<{ month: string; value: num
                 {item.value.toFixed(2)}%
               </Box>
             )}
-          </Box>
-        )
-      })}
-    </Box>
-  )
-}
-
-function RiskChart({ scores, height }: { scores: number[]; height: number }) {
-  const max = 10
-
-  return (
-    <Box
-      style={{
-        height,
-        display: 'flex',
-        alignItems: 'flex-end',
-        gap: tokens.spacing[2],
-      }}
-    >
-      {scores.map((v, i) => {
-        const h = Math.round((v / max) * (height - 16))
-        const color =
-          v >= 7
-            ? 'rgba(255, 165, 0, 0.75)'
-            : v >= 5
-            ? 'rgba(255, 215, 0, 0.70)'
-            : 'rgba(255, 255, 255, 0.45)'
-
-        return (
-          <Box key={i} style={{ flex: 1 }}>
-            <Box
-              style={{
-                height: h,
-                borderRadius: tokens.radius.md,
-                background: color,
-                border: `1px solid ${tokens.colors.border.primary}`,
-              }}
-              title={`Risk ${v.toFixed(1)}`}
-            />
           </Box>
         )
       })}

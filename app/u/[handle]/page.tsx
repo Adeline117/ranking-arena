@@ -32,7 +32,7 @@ import {
   type TraderFeedItem,
 } from '@/lib/data/trader'
 
-type TabKey = 'overview' | 'stats' | 'portfolio' | 'chart'
+type TabKey = 'overview' | 'stats' | 'portfolio'
 
 export default function UserHomePage(props: { params: { handle: string } | Promise<{ handle: string }> }) {
   const [handle, setHandle] = useState<string>('')
@@ -381,8 +381,6 @@ export default function UserHomePage(props: { params: { handle: string } | Promi
         )}
 
         {activeTab === 'portfolio' && <PortfolioTable items={portfolio} />}
-
-        {activeTab === 'chart' && <TradingViewShell symbol={profile.handle} timeframe="1Y" />}
       </Box>
     </Box>
   )
