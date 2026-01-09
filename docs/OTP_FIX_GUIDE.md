@@ -6,7 +6,9 @@
 
 ## 🚀 快速修复（最重要的步骤）
 
-如果找不到文档中提到的某些设置，**只需要完成这一步**：
+**必须完成以下两步**：
+
+### 步骤 A：设置 Site URL（最关键）
 
 1. 登录 [Supabase Dashboard](https://supabase.com/dashboard)
 2. 选择你的项目
@@ -15,7 +17,16 @@
 5. 将 **Site URL** 设置为：`https://www.arenafi.org`
 6. 点击 **Save**
 
-**这就是最关键的步骤！** 其他设置如果找不到可以跳过。
+### 步骤 B：关闭 Confirm sign up
+
+1. 在同一个 **Authentication** → **Settings** 页面
+2. 找到 **Confirm sign up** 选项（在页面顶部的列表中）
+3. 点击 **Confirm sign up** 进入详细设置
+4. 确保这个选项是 **关闭**（OFF/Disabled）
+5. 如果开启，请关闭它（OTP 验证码注册不需要邮箱确认）
+6. 保存设置
+
+**完成这两步后，重新测试发送验证码。**
 
 ---
 
@@ -72,27 +83,33 @@ Supabase 的 `signInWithOtp` 方法的行为取决于：
 - 这不是必需的，但建议添加
 - 如果找不到，可以跳过这一步
 
-#### 1.3 检查 Email Auth 设置（可选）
+#### 1.3 检查 Email Auth 设置
 
-**注意**：如果找不到这些设置，可以跳过这一步。最重要的配置是 **Site URL**（步骤 1.1）。
+在 **Authentication** → **Settings** 页面，你会看到以下选项列表：
 
-如果界面中有这些设置，按以下步骤：
+1. **Confirm sign up** - 点击进入
+   - **关键设置**：确保这个选项是 **关闭**（OFF/Disabled）
+   - OTP 验证码注册不需要邮箱确认，如果开启这个选项，可能会导致问题
+   - 描述：`Ask users to confirm their email address after signing up`
 
-1. 在 **Authentication** → **Settings** 页面
-2. 查找以下任一选项（界面可能不同）：
-   - **Auth Providers** → **Email**
-   - **Email Auth**
-   - **Email Settings**
-   - 或者直接向下滚动查找 Email 相关设置
+2. **Magic link** - 点击进入
+   - 这是控制 Magic Link 行为的关键设置
+   - **重要**：即使这个选项是开启的，只要代码中**没有设置 `emailRedirectTo`**，Supabase 仍然会发送 OTP 验证码而不是 Magic Link
+   - 描述：`Allow users to sign in via a one-time link sent to their email`
+   - **建议**：如果你想完全禁用 Magic Link，可以关闭这个选项；但通常不需要关闭，因为代码已经正确处理了
 
-3. 如果找到，确保：
-   - ✅ **Enable Email provider**: 已启用
-   - ✅ **Confirm email**: **关闭**（OTP 不需要邮箱确认）
-   - ✅ **Secure email change**: 关闭（可选）
+3. **Change email address** - 可选
+   - 这个与 OTP 验证码注册无关，可以保持默认设置
 
-**如果找不到这些设置**：
-- 不要担心，这些可能是默认启用的
-- 重点检查 **Site URL** 配置（步骤 1.1），这是最关键的部分
+4. **Reset password** - 可选
+   - 这个与 OTP 验证码注册无关，可以保持默认设置
+
+5. **Reauthentication** - 可选
+   - 这个与 OTP 验证码注册无关，可以保持默认设置
+
+**最关键的操作**：
+- ✅ 确保 **Confirm sign up** 是 **关闭** 的（OFF）
+- ✅ 重点检查 **Site URL** 配置（步骤 1.1），这是最关键的部分
 
 #### 1.4 检查 Email Templates（可选）
 
@@ -229,6 +246,7 @@ A:
 ### 必须检查的项目：
 
 - [ ] **Site URL 已设置**：Supabase Dashboard → Authentication → Settings → URL Configuration → Site URL = `https://www.arenafi.org`
+- [ ] **Confirm sign up 已关闭**：在 Authentication → Settings 页面，点击 Confirm sign up，确保是关闭（OFF）状态
 - [ ] **代码正确**：代码中 `signInWithOtp` 没有设置 `emailRedirectTo`（注册和登录验证码）- ✅ 已确认正确
 - [ ] **测试通过**：测试时收到的是 6 位数字验证码，而不是链接
 - [ ] **浏览器控制台无错误**：打开 F12 查看控制台，应该看到 `[OTP] 发送成功` 日志
