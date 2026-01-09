@@ -19,14 +19,7 @@ const EXCHANGES = [
 export default function ExchangeConnectionManager({ userId }: ExchangeConnectionProps) {
   const [connections, setConnections] = useState<ExchangeConnection[]>([])
   const [loading, setLoading] = useState(true)
-  const [connecting, setConnecting] = useState<string | null>(null)
   const [syncing, setSyncing] = useState<string | null>(null)
-
-  // 连接表单状态
-  const [showForm, setShowForm] = useState<string | null>(null)
-  const [apiKey, setApiKey] = useState('')
-  const [apiSecret, setApiSecret] = useState('')
-  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     loadConnections()
@@ -59,59 +52,6 @@ export default function ExchangeConnectionManager({ userId }: ExchangeConnection
     window.location.href = `/exchange/auth?exchange=${exchange}`
   }
 
-  const handleConnect = async (exchange: string) => {
-    if (!apiKey || !apiSecret) {
-      setError('请输入API Key和Secret')
-      return
-    }
-
-    setError(null)
-    setConnecting(exchange)
-
-    try {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session) {
-        setError('请先登录')
-        return
-      }
-
-      const response = await fetch('/api/exchange/connect', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({
-          exchange,
-          apiKey,
-          apiSecret,
-        }),
-      })
-
-      const result = await response.json()
-
-      if (!response.ok) {
-        setError(result.error || '连接失败')
-        return
-      }
-
-      // 连接成功，刷新列表
-      await loadConnections()
-      setShowForm(null)
-      setApiKey('')
-      setApiSecret('')
-      alert('连接成功！正在同步数据...')
-
-      // 自动触发同步
-      setTimeout(() => {
-        handleSync(exchange)
-      }, 1000)
-    } catch (err: any) {
-      setError(err.message || '连接失败')
-    } finally {
-      setConnecting(null)
-    }
-  }
 
   const handleSync = async (exchange: string) => {
     setSyncing(exchange)
@@ -202,9 +142,7 @@ export default function ExchangeConnectionManager({ userId }: ExchangeConnection
 
       {EXCHANGES.map((exchange) => {
         const connection = connections.find(c => c.exchange === exchange.id && c.is_active)
-        const isConnecting = connecting === exchange.id
         const isSyncing = syncing === exchange.id
-        const showConnectForm = showForm === exchange.id
 
         return (
           <Box
