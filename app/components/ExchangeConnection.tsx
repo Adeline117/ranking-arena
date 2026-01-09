@@ -221,7 +221,7 @@ export default function ExchangeConnectionManager({ userId }: ExchangeConnection
                   marginBottom: tokens.spacing[2],
                 }}
               >
-                <Text size="xs" style={{ color: '#ff6b6b' }}>
+                <Text size="xs" style={{ color: tokens.colors.accent.error }}>
                   同步错误：{connection.last_sync_error}
                 </Text>
               </Box>
