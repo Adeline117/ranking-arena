@@ -93,10 +93,23 @@ export async function GET(request: Request) {
       if (!pairsParam) {
         cache = { ts: now, rows, source: 'coingecko' }
       }
-      return NextResponse.json({ rows, source: 'coingecko', cached: false })
+      return NextResponse.json(
+        { rows, source: 'coingecko', cached: false },
+        {
+          headers: {
+            'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300',
+          },
+        }
+      )
     } catch (e1: any) {
-      // 3) fallback 到 Coinbase
-      console.warn('[Market API] CoinGecko 失败:', e1?.message, '尝试 Coinbase...')
+      // 3) fallback 到 Coinbase（包括 429 速率限制错误）
+      const isRateLimit = e1?.message?.includes('429') || e1?.message?.includes('Rate limit')
+      if (isRateLimit) {
+        console.warn('[Market API] CoinGecko 速率限制 (429), 自动切换到 Coinbase...')
+      } else {
+        console.warn('[Market API] CoinGecko 失败:', e1?.message, '尝试 Coinbase...')
+      }
+      
       try {
         const rows = await fetchFromCoinbaseForPairs(targetPairs)
         console.log('[Market API] Coinbase 成功, 返回', rows.length, '条数据')
@@ -109,7 +122,9 @@ export async function GET(request: Request) {
             rows,
             source: 'coinbase',
             cached: false,
-            warning: `Primary failed: ${e1?.message ?? 'unknown'}`,
+            warning: isRateLimit 
+              ? 'CoinGecko rate limit exceeded, using Coinbase' 
+              : `Primary failed: ${e1?.message ?? 'unknown'}`,
           },
           {
             headers: {
@@ -152,14 +167,23 @@ async function fetchFromCoinGeckoForPairs(pairs: Pair[]): Promise<MarketRow[]> {
 
   try {
     const res = await fetch(url, {
-      cache: 'no-store',
-      headers: { accept: 'application/json' },
+      cache: 'default', // 使用默认缓存以减少API调用
+      headers: { 
+        accept: 'application/json',
+        // 添加 User-Agent 以减少被限流的风险
+        'User-Agent': 'Mozilla/5.0 (compatible; RankingArena/1.0)',
+      },
       signal: controller.signal,
     })
     
     clearTimeout(timeoutId)
 
     if (!res.ok) {
+      // 429 速率限制错误：直接抛出，让上层处理回退到 Coinbase
+      if (res.status === 429) {
+        const txt = await res.text().catch(() => '')
+        throw new Error(`CoinGecko HTTP 429: Rate limit exceeded. ${txt.slice(0, 100)}`)
+      }
       const txt = await res.text().catch(() => '')
       throw new Error(`CoinGecko HTTP ${res.status}: ${txt.slice(0, 160)}`)
     }
