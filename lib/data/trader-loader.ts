@@ -27,25 +27,25 @@ function snapshotToTrader(
       ? handleData.handle
       : snapshot.source_trader_id
 
-  // 重要：头像URL可能存储在 avatar_url 或 profile_url 字段中
+  // 重要：根据导入脚本，头像URL存储在 profile_url 字段中
   // 导入脚本使用：
   // - Bitget: profile_url: item.avatarUrl
   // - Binance: profile_url: item.userPhotoUrl  
   // - 其他交易所: profile_url: item.avatarUrl
-  // 但如果 avatar_url 列存在且有数据，优先使用它（可能是单独的头像URL字段）
+  // 所以我们应该直接使用 profile_url 作为头像URL（这是trader在交易所网页上的原始头像）
   let avatarUrl: string | undefined = undefined
   if (handleData) {
-    // 优先使用 avatar_url（如果存在且有值）
-    if (handleData.avatar_url && handleData.avatar_url.trim() !== '') {
-      avatarUrl = handleData.avatar_url.trim()
-    }
-    // 否则使用 profile_url（导入脚本将头像URL存储在这里）
-    else if (handleData.profile_url && handleData.profile_url.trim() !== '') {
+    // 直接使用 profile_url（导入脚本将头像URL存储在这里，这是交易所网页上的原始头像）
+    if (handleData.profile_url && handleData.profile_url.trim() !== '') {
       avatarUrl = handleData.profile_url.trim()
+    }
+    // 如果 profile_url 为空，尝试使用 avatar_url（作为备用）
+    else if (handleData.avatar_url && handleData.avatar_url.trim() !== '') {
+      avatarUrl = handleData.avatar_url.trim()
     }
   }
   
-  // 调试日志：输出前几个trader的详细信息（仅前10个，避免日志过多）
+  // 调试日志：输出前几个trader的详细信息
   // 注意：这里不能使用 rank，因为 rank 是在排序后才知道的，这里还没有排序
   const shouldLogDetail = snapshot.source_trader_id && (
     displayHandle.includes('老') || 
@@ -54,6 +54,7 @@ function snapshotToTrader(
     displayHandle.includes('Encryption') ||
     displayHandle.includes('Gain') ||
     displayHandle.includes('Bedrock') ||
+    displayHandle.includes('Iron') ||
     snapshot.source_trader_id.includes('老') ||
     snapshot.source_trader_id === 'East-Wind' ||
     (!avatarUrl && handleMap.size > 0) // 前几个没有头像的trader也记录
@@ -66,9 +67,11 @@ function snapshotToTrader(
       profile_url: handleData?.profile_url || '(空)',
       profile_url_type: typeof handleData?.profile_url,
       profile_url_length: handleData?.profile_url?.length || 0,
+      profile_url_preview: handleData?.profile_url ? handleData.profile_url.substring(0, 50) + '...' : '(空)',
       avatar_url: handleData?.avatar_url || '(空)',
       final_avatar_url: avatarUrl || '(未获取)',
       final_avatar_url_type: typeof avatarUrl,
+      final_avatar_url_preview: avatarUrl ? avatarUrl.substring(0, 50) + '...' : '(未获取)',
     })
   }
 
