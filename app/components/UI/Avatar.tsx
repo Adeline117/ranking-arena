@@ -12,7 +12,9 @@ import {
 
 /**
  * Avatar 组件
- * 显示用户头像，如果没有真实头像则显示基于用户ID生成的默认头像
+ * 显示用户头像
+ * - 如果是 trader：有 avatarUrl 则使用，没有则显示首字母头像（不生成）
+ * - 如果是普通用户：有 avatarUrl 则使用，没有则生成默认头像
  */
 export default function Avatar({
   userId,
@@ -21,17 +23,26 @@ export default function Avatar({
   size = 40,
   className,
   style,
+  isTrader = false,
 }: AvatarProps) {
   const [imageError, setImageError] = useState(false)
   const [imageLoading, setImageLoading] = useState(true)
   
-  // 获取最终头像URL
-  const finalAvatarUrl = getUserAvatarUrl(userId, avatarUrl, name)
   const initial = getAvatarInitial(name || userId)
   const backgroundGradient = getAvatarGradient(userId)
   
-  // 如果图片加载失败或没有URL，显示默认头像（使用渐变背景+首字母）
-  const showDefault = imageError || !avatarUrl || !finalAvatarUrl
+  // 对于 trader：如果有 avatarUrl 则使用，否则显示首字母头像（不生成）
+  // 对于普通用户：如果有 avatarUrl 则使用，否则生成默认头像
+  let finalAvatarUrl: string | null = null
+  if (avatarUrl && avatarUrl.trim() !== '') {
+    finalAvatarUrl = avatarUrl
+  } else if (!isTrader) {
+    // 只有普通用户才生成默认头像
+    finalAvatarUrl = getUserAvatarUrl(userId, null, name)
+  }
+  
+  // 如果图片加载失败或没有URL，显示默认头像
+  const showDefault = imageError || !finalAvatarUrl
 
   return (
     <Box
