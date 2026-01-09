@@ -130,19 +130,38 @@ export default function Avatar({
             alt={name || userId || 'Avatar'}
             loading="lazy"
             decoding="async"
+            crossOrigin="anonymous"
+            referrerPolicy="no-referrer"
             style={{
               width: '100%',
               height: '100%',
               objectFit: 'cover',
               display: imageLoading ? 'none' : 'block',
             }}
-            onLoad={() => setImageLoading(false)}
+            onLoad={() => {
+              console.log(`[Avatar] ✅ 图片加载成功: "${finalAvatarUrl}"`, {
+                name,
+                userId,
+                isTrader,
+              })
+              setImageLoading(false)
+            }}
             onError={(e) => {
               console.error(`[Avatar] ❌ 图片加载失败: "${finalAvatarUrl}"`, {
                 name,
                 userId,
                 isTrader,
                 error: e,
+                url_type: typeof finalAvatarUrl,
+                url_length: finalAvatarUrl?.length || 0,
+                url_preview: finalAvatarUrl ? finalAvatarUrl.substring(0, 80) : '(空)',
+                // 尝试添加扩展名后的URL（用于调试）
+                url_with_jpg: finalAvatarUrl && !finalAvatarUrl.match(/\.(jpg|jpeg|png|gif|webp|svg)(\?|$|#)/i) 
+                  ? `${finalAvatarUrl}.jpg` 
+                  : null,
+                url_with_png: finalAvatarUrl && !finalAvatarUrl.match(/\.(jpg|jpeg|png|gif|webp|svg)(\?|$|#)/i) 
+                  ? `${finalAvatarUrl}.png` 
+                  : null,
               })
               setImageError(true)
               setImageLoading(false)
