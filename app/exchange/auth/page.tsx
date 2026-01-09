@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import { Box, Text, Button } from '@/app/components/Base'
@@ -76,7 +76,7 @@ const EXCHANGE_INFO: Record<string, { name: string; authUrl: string; steps: stri
   },
 }
 
-export default function ExchangeAuthPage() {
+function ExchangeAuthPageContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const [exchange, setExchange] = useState<string | null>(null)
@@ -424,6 +424,21 @@ export default function ExchangeAuthPage() {
         )}
       </Box>
     </Box>
+  )
+}
+
+export default function ExchangeAuthPage() {
+  return (
+    <Suspense fallback={
+      <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
+        <TopNav email={null} />
+        <Box style={{ maxWidth: 600, margin: '0 auto', padding: tokens.spacing[6] }}>
+          <Text size="lg">加载中...</Text>
+        </Box>
+      </Box>
+    }>
+      <ExchangeAuthPageContent />
+    </Suspense>
   )
 }
 
