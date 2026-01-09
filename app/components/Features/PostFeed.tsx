@@ -213,18 +213,27 @@ export default function PostFeed(props: { variant?: 'compact' | 'full' } = {}) {
     // 防止重复调用 - 使用同步检查
     const key = `${postId}-${dir}`
     if (processingRef.current.has(key)) {
+      console.log('[toggleReact] 防抖：跳过重复调用', key)
       return
     }
     
     // 立即添加到 Set，防止在异步操作之前再次调用
     processingRef.current.add(key)
+    console.log('[toggleReact] 开始处理', key, new Date().getTime())
 
     // 使用函数式更新，确保使用最新的状态值
+    // 先更新点赞数，再更新用户投票状态（分离更新，避免嵌套）
+    setReactCounts((prevCounts) => {
+      // 需要从 myReact 获取当前投票状态，但这里无法直接访问
+      // 所以我们需要先读取 myReact，然后更新
+      return prevCounts
+    })
+    
     setMyReact((prevMyReact) => {
       const currentVote = prevMyReact[postId]
       const newVote = currentVote === dir ? null : dir
       
-      // 同时更新点赞数 - 使用函数式更新确保原子性
+      // 同时更新点赞数
       setReactCounts((prevCounts) => {
         const cur = prevCounts[postId] ?? { up: 0, down: 0 }
         let next = { ...cur }
@@ -232,14 +241,18 @@ export default function PostFeed(props: { variant?: 'compact' | 'full' } = {}) {
         if (currentVote === dir) {
           // 取消投票
           next = { ...next, [dir]: Math.max(0, next[dir] - 1) }
+          console.log('[toggleReact] 取消投票', dir, '新值:', next[dir])
         } else {
           // 切换投票
           if (currentVote) {
             // 先取消之前的投票
             next = { ...next, [currentVote]: Math.max(0, next[currentVote] - 1) }
+            console.log('[toggleReact] 取消之前的投票', currentVote, '新值:', next[currentVote])
           }
           // 添加新投票 - 只加1
+          const oldValue = next[dir]
           next = { ...next, [dir]: next[dir] + 1 }
+          console.log('[toggleReact] 添加新投票', dir, '从', oldValue, '到', next[dir])
         }
         
         return { ...prevCounts, [postId]: next }
@@ -248,6 +261,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full' } = {}) {
       // 清除处理标记 - 延迟清除确保状态更新完成
       setTimeout(() => {
         processingRef.current.delete(key)
+        console.log('[toggleReact] 清除处理标记', key)
       }, 1000)
       
       // 更新用户投票状态
