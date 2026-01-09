@@ -175,24 +175,6 @@ async function fetchFromCoinGeckoForPairs(pairs: Pair[]): Promise<MarketRow[]> {
     }
     throw error
   }
-
-  const data = (await res.json()) as any[]
-  const byId = new Map<string, any>()
-  for (const c of data) byId.set(String(c.id), c)
-
-  const rows: MarketRow[] = []
-  for (const p of pairs) {
-    const c = byId.get(p.cgId)
-    if (!c) continue // 跳过缺失的币种
-
-    const price = Number(c.current_price ?? NaN)
-    const pct = Number(c.price_change_percentage_24h ?? c.price_change_percentage_24h_in_currency ?? 0)
-
-    if (!Number.isFinite(price)) continue
-    rows.push(formatRow(p.symbol, price, Number.isFinite(pct) ? pct : 0))
-  }
-
-  return rows
 }
 
 async function fetchFromCoinbaseForPairs(pairs: Pair[]): Promise<MarketRow[]> {
