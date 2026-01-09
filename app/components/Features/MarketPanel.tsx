@@ -175,7 +175,7 @@ export default function MarketPanel() {
           console.log('[MarketPanel] 过滤后数据:', filteredRows.length, '条', {
             totalRows: json.rows?.length || 0,
             customPairs: pairsToFilter,
-            filteredSymbols: filteredRows.map(r => r.symbol),
+            filteredSymbols: filteredRows.map((r: MarketRow) => r.symbol),
             allSymbols: json.rows?.map((r: MarketRow) => r.symbol) || [],
           })
           
