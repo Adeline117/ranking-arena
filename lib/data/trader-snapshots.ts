@@ -20,6 +20,7 @@ export interface TraderHandle {
   source_trader_id: string
   handle: string | null
   profile_url: string | null
+  avatar_url?: string | null
 }
 
 /**
@@ -88,7 +89,7 @@ export async function getTraderHandles(
 
   const { data, error } = await supabase
     .from('trader_sources')
-    .select('source_trader_id, handle, profile_url')
+    .select('source_trader_id, handle, profile_url, avatar_url')
     .eq('source', source)
     .in('source_trader_id', traderIds)
 

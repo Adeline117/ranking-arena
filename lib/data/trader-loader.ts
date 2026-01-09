@@ -19,13 +19,16 @@ import type { Trader } from '@/app/components/Features/RankingTable'
 function snapshotToTrader(
   snapshot: { source_trader_id: string; roi: number; followers: number; pnl: number | null; win_rate: number | null },
   source: TraderSource,
-  handleMap: Map<string, { handle: string; avatar_url?: string }>
+  handleMap: Map<string, { handle: string; avatar_url?: string | null; profile_url?: string | null }>
 ): Trader {
   const handleData = handleMap.get(snapshot.source_trader_id)
   const displayHandle =
     handleData && handleData.handle && handleData.handle.trim() !== ''
       ? handleData.handle
       : snapshot.source_trader_id
+
+  // 优先使用 avatar_url，如果没有则使用 profile_url（某些交易所可能将头像URL存储在 profile_url 中）
+  const avatarUrl = handleData?.avatar_url || handleData?.profile_url || undefined
 
   return {
     id: snapshot.source_trader_id,
@@ -37,7 +40,7 @@ function snapshotToTrader(
     avg_buy_90d: undefined,
     followers: snapshot.followers || 0,
     source,
-    avatar_url: handleData?.avatar_url,
+    avatar_url: avatarUrl,
   }
 }
 
