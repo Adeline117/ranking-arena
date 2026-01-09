@@ -27,26 +27,34 @@ function snapshotToTrader(
       ? handleData.handle
       : snapshot.source_trader_id
 
-  // 优先使用 avatar_url，如果没有或为 null/空字符串 则使用 profile_url（某些交易所可能将头像URL存储在 profile_url 中）
-  // 明确的检查逻辑：avatar_url 优先，如果不为空则使用，否则使用 profile_url
+  // 重要：根据导入脚本的实际情况，头像URL存储在 profile_url 字段中，而不是 avatar_url
+  // 导入脚本使用：profile_url: item.avatarUrl 或 profile_url: item.userPhotoUrl
+  // 所以我们应该直接使用 profile_url 作为头像URL
   let avatarUrl: string | undefined = undefined
   if (handleData) {
+    // 优先使用 avatar_url（如果存在且不为空）
     if (handleData.avatar_url && handleData.avatar_url.trim() !== '') {
       avatarUrl = handleData.avatar_url
-    } else if (handleData.profile_url && handleData.profile_url.trim() !== '') {
-      // profile_url 可能是完整的用户主页URL，需要从中提取头像URL
-      // 对于某些交易所，profile_url 可能包含头像URL信息
+    } 
+    // 否则使用 profile_url（导入脚本将头像URL存储在这里）
+    else if (handleData.profile_url && handleData.profile_url.trim() !== '') {
       const profileUrlStr = handleData.profile_url.trim()
       
-      // 如果 profile_url 看起来像是头像URL（包含图片扩展名），直接使用
-      if (/\.(jpg|jpeg|png|gif|webp|svg)(\?|$)/i.test(profileUrlStr)) {
+      // 如果 profile_url 看起来像是图片URL（包含图片扩展名或图片相关的路径），直接使用
+      // 例如：https://cdn.example.com/avatar.png 或 https://example.com/user/photo.jpg
+      if (/\.(jpg|jpeg|png|gif|webp|svg|ico)(\?|$|#)/i.test(profileUrlStr) ||
+          /\/avatar|\/photo|\/image|\/pic|\/profile.*\.(jpg|jpeg|png|gif|webp)/i.test(profileUrlStr) ||
+          /userPhotoUrl|avatarUrl/i.test(profileUrlStr)) {
         avatarUrl = profileUrlStr
-      } else {
-        // 否则，尝试从 profile_url 构造头像URL（某些交易所的模式）
-        // 例如：Binance 的头像URL可能是 https://www.binance.com/bapi/composite/v1/public/cms/article/list/query
-        // 但通常交易所的头像URL是独立的，不能从 profile_url 构造
-        // 这里暂时不处理，因为需要知道每个交易所的头像URL格式
-        avatarUrl = undefined
+      } 
+      // 对于 Binance/Bitget/Bybit/MEXC/CoinEx，导入脚本直接将头像URL存储在 profile_url
+      // 所以即使不包含图片扩展名，如果 profile_url 存在，也应该尝试使用（可能是CDN URL）
+      // 但为了安全，我们只在使用明确的图片扩展名时使用，或者对特定交易所放宽限制
+      else if (source === 'binance' || source === 'binance_web3' || 
+               source === 'bitget' || source === 'bybit' || 
+               source === 'mexc' || source === 'coinex') {
+        // 对于这些交易所，profile_url 可能就是头像URL（根据导入脚本）
+        avatarUrl = profileUrlStr
       }
     }
   }
