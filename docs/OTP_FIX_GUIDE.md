@@ -6,27 +6,34 @@
 
 ## 🚀 快速修复（最重要的步骤）
 
-**必须完成以下两步**：
+**只需要完成这一步**：
 
 ### 步骤 A：设置 Site URL（最关键）
 
 1. 登录 [Supabase Dashboard](https://supabase.com/dashboard)
 2. 选择你的项目
 3. 点击左侧边栏的 **Authentication** → **Settings**
-4. 找到 **URL Configuration** 部分（向下滚动查找）
+4. 向下滚动找到 **URL Configuration** 部分
 5. 将 **Site URL** 设置为：`https://www.arenafi.org`
-6. 点击 **Save**
+6. 点击 **Save**（保存）
 
-### 步骤 B：关闭 Confirm sign up
+**这就是最关键的一步！** 
 
-1. 在同一个 **Authentication** → **Settings** 页面
-2. 找到 **Confirm sign up** 选项（在页面顶部的列表中）
-3. 点击 **Confirm sign up** 进入详细设置
-4. 确保这个选项是 **关闭**（OFF/Disabled）
-5. 如果开启，请关闭它（OTP 验证码注册不需要邮箱确认）
-6. 保存设置
+### 关于其他选项（如果看到代码配置）
 
-**完成这两步后，重新测试发送验证码。**
+如果你点击其他选项（如 Confirm sign up、Magic link）后看到的是代码或配置文件，而不是开关按钮：
+
+- ✅ **这是正常的**，说明这些设置是通过代码控制的
+- ✅ **不需要修改**这些代码配置
+- ✅ **关键是**：确保你的应用代码中**没有设置 `emailRedirectTo`**（已确认正确 ✅）
+- ✅ 即使这些选项显示的是代码，只要你的代码正确（不设置 `emailRedirectTo`），就会发送验证码而不是链接
+
+**重要理解**：
+- 如果你看到的是代码而不是开关按钮，**不要担心，可以忽略**
+- **最关键的是 Site URL 配置**（步骤 A）
+- 代码已经正确配置（没有设置 `emailRedirectTo`），这才是确保发送验证码的关键
+
+**完成步骤 A（设置 Site URL）后，就可以重新测试发送验证码了。**
 
 ---
 
@@ -83,33 +90,32 @@ Supabase 的 `signInWithOtp` 方法的行为取决于：
 - 这不是必需的，但建议添加
 - 如果找不到，可以跳过这一步
 
-#### 1.3 检查 Email Auth 设置
+#### 1.3 检查 Email Auth 设置（如果看到代码配置）
 
-在 **Authentication** → **Settings** 页面，你会看到以下选项列表：
+**注意**：如果你点击这些选项后看到的是代码或配置文件，而不是开关按钮，这是正常的。这些设置可以通过代码控制。
+
+在这些选项的详细页面中：
 
 1. **Confirm sign up** - 点击进入
-   - **关键设置**：确保这个选项是 **关闭**（OFF/Disabled）
-   - OTP 验证码注册不需要邮箱确认，如果开启这个选项，可能会导致问题
-   - 描述：`Ask users to confirm their email address after signing up`
+   - 如果看到代码配置，说明这是通过代码控制的
+   - **重要**：OTP 验证码注册不需要邮箱确认
+   - 如果代码中显示了 `enable_confirmations: true` 或类似配置，可以尝试修改为 `false`
+   - **但实际上**：最重要的是确保代码中**没有设置 `emailRedirectTo`**（已确认正确），这样即使这个设置开启，也不会影响 OTP 验证码的发送
 
 2. **Magic link** - 点击进入
-   - 这是控制 Magic Link 行为的关键设置
-   - **重要**：即使这个选项是开启的，只要代码中**没有设置 `emailRedirectTo`**，Supabase 仍然会发送 OTP 验证码而不是 Magic Link
-   - 描述：`Allow users to sign in via a one-time link sent to their email`
-   - **建议**：如果你想完全禁用 Magic Link，可以关闭这个选项；但通常不需要关闭，因为代码已经正确处理了
+   - 如果看到代码配置，说明这是通过代码控制的
+   - **关键理解**：只要代码中**没有设置 `emailRedirectTo`**，Supabase 会发送 OTP 验证码而不是 Magic Link
+   - 即使 Magic Link 选项是开启的，只要代码正确（不设置 `emailRedirectTo`），仍然会发送验证码
+   - **建议**：可以保持默认设置，代码已经正确处理了
 
-3. **Change email address** - 可选
-   - 这个与 OTP 验证码注册无关，可以保持默认设置
+3. **其他选项**（Change email address, Reset password, Reauthentication）
+   - 这些与 OTP 验证码注册无关，可以保持默认设置
+   - 如果看到代码配置，不需要修改
 
-4. **Reset password** - 可选
-   - 这个与 OTP 验证码注册无关，可以保持默认设置
-
-5. **Reauthentication** - 可选
-   - 这个与 OTP 验证码注册无关，可以保持默认设置
-
-**最关键的操作**：
-- ✅ 确保 **Confirm sign up** 是 **关闭** 的（OFF）
-- ✅ 重点检查 **Site URL** 配置（步骤 1.1），这是最关键的部分
+**重要提醒**：
+- 如果你看到的是代码配置而不是简单的开关，**不要担心**
+- 最关键的是 **Site URL** 配置（步骤 1.1）
+- 代码已经正确配置（没有设置 `emailRedirectTo`），这才是确保发送验证码的关键
 
 #### 1.4 检查 Email Templates（可选）
 
@@ -245,11 +251,15 @@ A:
 
 ### 必须检查的项目：
 
-- [ ] **Site URL 已设置**：Supabase Dashboard → Authentication → Settings → URL Configuration → Site URL = `https://www.arenafi.org`
-- [ ] **Confirm sign up 已关闭**：在 Authentication → Settings 页面，点击 Confirm sign up，确保是关闭（OFF）状态
+- [ ] **Site URL 已设置**：Supabase Dashboard → Authentication → Settings → URL Configuration → Site URL = `https://www.arenafi.org` ⭐ **最关键**
 - [ ] **代码正确**：代码中 `signInWithOtp` 没有设置 `emailRedirectTo`（注册和登录验证码）- ✅ 已确认正确
 - [ ] **测试通过**：测试时收到的是 6 位数字验证码，而不是链接
 - [ ] **浏览器控制台无错误**：打开 F12 查看控制台，应该看到 `[OTP] 发送成功` 日志
+
+### 可选检查的项目：
+
+- [ ] **Confirm sign up 设置**：如果看到代码配置而不是开关，不需要修改（代码已正确处理）
+- [ ] **Magic link 设置**：如果看到代码配置而不是开关，不需要修改（代码已正确处理）
 
 ### 推荐检查的项目：
 
