@@ -117,12 +117,17 @@ export async function getTraderByHandle(handle: string): Promise<TraderProfile |
       if (source1) {
         source = source1
       } else if (error1) {
-        // 检查是否有实际的错误内容（错误对象不为空且至少有一个属性）
+        // 检查是否有实际的错误内容（错误对象不为空且至少有一个有值的属性）
         const errorKeys = Object.keys(error1 || {})
-        const hasErrorContent = errorKeys.length > 0 && (error1.message || error1.code || error1.hint || error1.details)
-        if (hasErrorContent) {
-          sourceError = error1
+        // 空对象 {} 的 Object.keys 返回 []，所以 errorKeys.length 为 0
+        // 只有当错误对象有属性且有实际的错误信息（message/code/hint/details）时，才认为是真正的错误
+        if (errorKeys.length > 0) {
+          const hasErrorContent = !!(error1.message || error1.code || error1.hint || error1.details)
+          if (hasErrorContent) {
+            sourceError = error1
+          }
         }
+        // 如果 errorKeys.length === 0（空对象 {}），则不设置 sourceError，这是正常的"没找到记录"情况
       }
       
       // 如果原始 handle 找不到，尝试解码后的 handle（如果不同）
@@ -137,24 +142,35 @@ export async function getTraderByHandle(handle: string): Promise<TraderProfile |
         if (source2) {
           source = source2
         } else if (error2 && !sourceError) {
-          // 检查是否有实际的错误内容（错误对象不为空且至少有一个属性）
+          // 检查是否有实际的错误内容（错误对象不为空且至少有一个有值的属性）
           const errorKeys = Object.keys(error2 || {})
-          const hasErrorContent = errorKeys.length > 0 && (error2.message || error2.code || error2.hint || error2.details)
-          if (hasErrorContent) {
-            sourceError = error2
+          // 空对象 {} 的 Object.keys 返回 []，所以 errorKeys.length 为 0
+          // 只有当错误对象有属性且有实际的错误信息（message/code/hint/details）时，才认为是真正的错误
+          if (errorKeys.length > 0) {
+            const hasErrorContent = !!(error2.message || error2.code || error2.hint || error2.details)
+            if (hasErrorContent) {
+              sourceError = error2
+            }
           }
+          // 如果 errorKeys.length === 0（空对象 {}），则不设置 sourceError，这是正常的"没找到记录"情况
         }
       }
 
       // 只在有实际错误内容时记录和跳过（查询失败且有明确的错误信息）
+      // 注意：sourceError 只在之前检测到有实际错误内容时才会被设置
+      // 如果 sourceError 存在，说明确实有错误，应该记录并跳过
       if (sourceError) {
+        // 再次确认：只有当错误对象有属性且有实际的错误信息时，才记录错误
         const errorKeys = Object.keys(sourceError || {})
-        const hasErrorContent = errorKeys.length > 0 && (sourceError.message || sourceError.code || sourceError.hint || sourceError.details)
-        if (hasErrorContent) {
-          console.error(`Error fetching trader_source by handle (${sourceType}):`, sourceError)
-          continue
+        if (errorKeys.length > 0) {
+          const hasErrorContent = !!(sourceError.message || sourceError.code || sourceError.hint || sourceError.details)
+          if (hasErrorContent) {
+            console.error(`Error fetching trader_source by handle (${sourceType}):`, sourceError)
+            continue
+          }
         }
         // 如果没有实际错误内容（空对象{}），清除 sourceError 继续处理（这是正常的，表示没找到记录）
+        // 这种情况理论上不应该发生，因为我们在设置 sourceError 时已经检查过了
         sourceError = null
       }
 
