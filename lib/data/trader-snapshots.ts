@@ -214,7 +214,7 @@ export async function getTraderHandles(
       }
     })
     
-    // 调试日志：输出前几个trader的数据（仅第一个source，避免日志过多）
+    // 调试日志：输出前几个trader的数据（仅bitget，避免日志过多）
     if (handleMap.size > 0 && source === 'bitget') {
       const sampleEntries = Array.from(handleMap.entries()).slice(0, 5)
       console.log(`[trader-snapshots] 📊 ${source} handleMap 样本 (前5个):`, 
@@ -224,8 +224,22 @@ export async function getTraderHandles(
           profile_url: data.profile_url || '(空)',
           profile_url_length: data.profile_url?.length || 0,
           profile_url_type: typeof data.profile_url,
+          profile_url_preview: data.profile_url ? data.profile_url.substring(0, 100) : '(空)',
+          avatar_url: data.avatar_url || '(空)',
+          avatar_url_length: data.avatar_url?.length || 0,
+          avatar_url_type: typeof data.avatar_url,
         }))
       )
+      
+      // 统计有多少trader有头像URL
+      const withProfileUrl = Array.from(handleMap.values()).filter(d => d.profile_url && d.profile_url.trim() !== '').length
+      const withAvatarUrl = Array.from(handleMap.values()).filter(d => d.avatar_url && d.avatar_url.trim() !== '').length
+      console.log(`[trader-snapshots] 📈 ${source} 头像URL统计:`, {
+        total: handleMap.size,
+        with_profile_url: withProfileUrl,
+        with_avatar_url: withAvatarUrl,
+        with_any_avatar: Array.from(handleMap.values()).filter(d => (d.profile_url && d.profile_url.trim() !== '') || (d.avatar_url && d.avatar_url.trim() !== '')).length,
+      })
     }
 
     return handleMap
