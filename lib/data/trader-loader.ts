@@ -28,34 +28,21 @@ function snapshotToTrader(
       : snapshot.source_trader_id
 
   // 重要：根据导入脚本的实际情况，头像URL存储在 profile_url 字段中，而不是 avatar_url
-  // 导入脚本使用：profile_url: item.avatarUrl 或 profile_url: item.userPhotoUrl
+  // 导入脚本使用：
+  // - Bitget: profile_url: item.avatarUrl
+  // - Binance: profile_url: item.userPhotoUrl  
+  // - 其他交易所: profile_url: item.avatarUrl
   // 所以我们应该直接使用 profile_url 作为头像URL
   let avatarUrl: string | undefined = undefined
   if (handleData) {
     // 优先使用 avatar_url（如果存在且不为空）
     if (handleData.avatar_url && handleData.avatar_url.trim() !== '') {
-      avatarUrl = handleData.avatar_url
+      avatarUrl = handleData.avatar_url.trim()
     } 
-    // 否则使用 profile_url（导入脚本将头像URL存储在这里）
+    // 否则直接使用 profile_url（导入脚本将头像URL存储在这里）
+    // 对于所有已知的交易所，profile_url 就是头像URL
     else if (handleData.profile_url && handleData.profile_url.trim() !== '') {
-      const profileUrlStr = handleData.profile_url.trim()
-      
-      // 如果 profile_url 看起来像是图片URL（包含图片扩展名或图片相关的路径），直接使用
-      // 例如：https://cdn.example.com/avatar.png 或 https://example.com/user/photo.jpg
-      if (/\.(jpg|jpeg|png|gif|webp|svg|ico)(\?|$|#)/i.test(profileUrlStr) ||
-          /\/avatar|\/photo|\/image|\/pic|\/profile.*\.(jpg|jpeg|png|gif|webp)/i.test(profileUrlStr) ||
-          /userPhotoUrl|avatarUrl/i.test(profileUrlStr)) {
-        avatarUrl = profileUrlStr
-      } 
-      // 对于 Binance/Bitget/Bybit/MEXC/CoinEx，导入脚本直接将头像URL存储在 profile_url
-      // 所以即使不包含图片扩展名，如果 profile_url 存在，也应该尝试使用（可能是CDN URL）
-      // 但为了安全，我们只在使用明确的图片扩展名时使用，或者对特定交易所放宽限制
-      else if (source === 'binance' || source === 'binance_web3' || 
-               source === 'bitget' || source === 'bybit' || 
-               source === 'mexc' || source === 'coinex') {
-        // 对于这些交易所，profile_url 可能就是头像URL（根据导入脚本）
-        avatarUrl = profileUrlStr
-      }
+      avatarUrl = handleData.profile_url.trim()
     }
   }
   
