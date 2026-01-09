@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import { supabase } from '@/lib/supabase/client'
+import { useLanguage } from '@/app/components/Utils/LanguageProvider'
 import TopNav from '@/app/components/Layout/TopNav'
 import TraderHeader from '@/app/components/trader/TraderHeader'
 import TraderTabs from '@/app/components/trader/TraderTabs'
@@ -33,6 +34,7 @@ import {
 type TabKey = 'overview' | 'stats' | 'portfolio'
 
 export default function TraderPage(props: { params: { handle: string } | Promise<{ handle: string }> }) {
+  const { t } = useLanguage()
   const [handle, setHandle] = useState<string>('')
   const [email, setEmail] = useState<string | null>(null)
   const [profile, setProfile] = useState<TraderProfile | null>(null)
@@ -122,13 +124,13 @@ export default function TraderPage(props: { params: { handle: string } | Promise
         <TopNav email={email} />
         <Box style={{ maxWidth: 1200, margin: '0 auto', padding: tokens.spacing[6] }}>
           <Text size="lg" weight="bold">
-            交易员不存在
+            {t('noTraderData')}
           </Text>
           <Text size="sm" color="tertiary" style={{ marginTop: tokens.spacing[2] }}>
             Handle: {handle || '(empty)'}
           </Text>
           <Link href="/" style={{ color: tokens.colors.text.secondary, textDecoration: 'none', marginTop: tokens.spacing[2], display: 'inline-block' }}>
-            ← 返回首页
+            ← {t('home')}
           </Link>
         </Box>
       </Box>
@@ -176,7 +178,7 @@ export default function TraderPage(props: { params: { handle: string } | Promise
                 <PinnedPost item={feed.filter((f) => f.is_pinned && f.type !== 'group_post')[0]} />
               )}
               {/* 交易员动态 - 紧跟在Performance后面 */}
-              <TraderFeed items={feed.filter((f) => f.type !== 'group_post' && !f.is_pinned)} title="动态" />
+              <TraderFeed items={feed.filter((f) => f.type !== 'group_post' && !f.is_pinned)} title={t('activities')} />
             </Box>
 
             {/* Right Column - 交易员卡片 */}

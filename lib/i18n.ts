@@ -74,6 +74,10 @@ export const translations = {
     views: '浏览',
     wantToSeeAllHotList: '想看全部热榜？',
     loginArrow: '登录',
+    traderNotFound: '交易员不存在',
+    backToHome: '返回首页',
+    activities: '动态',
+    overview: '概览',
   },
   en: {
     home: 'Home',
@@ -147,6 +151,10 @@ export const translations = {
     views: 'views',
     wantToSeeAllHotList: 'Want to see all hot list?',
     loginArrow: 'Login',
+    traderNotFound: 'Trader not found',
+    backToHome: 'Back to Home',
+    activities: 'Activities',
+    overview: 'Overview',
   },
 }
 
