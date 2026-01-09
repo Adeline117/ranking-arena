@@ -23,10 +23,6 @@ export default function SettingsPage() {
   const [avatarFile, setAvatarFile] = useState<File | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   
-  // Account bindings
-  const [binanceId, setBinanceId] = useState('')
-  const [bybitId, setBybitId] = useState('')
-  const [walletAddress, setWalletAddress] = useState('')
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -61,19 +57,6 @@ export default function SettingsPage() {
         setPreviewUrl(userProfile.avatar_url || null)
       }
 
-      // Load account bindings
-      const { data: bindings } = await supabase
-        .from('account_bindings')
-        .select('platform, account_id')
-        .eq('user_id', uid)
-      
-      if (bindings) {
-        bindings.forEach((binding: any) => {
-          if (binding.platform === 'binance') setBinanceId(binding.account_id || '')
-          if (binding.platform === 'bybit') setBybitId(binding.account_id || '')
-          if (binding.platform === 'wallet') setWalletAddress(binding.account_id || '')
-        })
-      }
     } catch (error) {
       console.error('Error loading profile:', error)
     } finally {
@@ -150,17 +133,6 @@ export default function SettingsPage() {
         return
       }
       
-      // Save account bindings
-      const bindings = []
-      if (binanceId) bindings.push({ user_id: userId, platform: 'binance', account_id: binanceId })
-      if (bybitId) bindings.push({ user_id: userId, platform: 'bybit', account_id: bybitId })
-      if (walletAddress) bindings.push({ user_id: userId, platform: 'wallet', account_id: walletAddress })
-      
-      if (bindings.length > 0) {
-        // Delete old bindings and insert new ones
-        await supabase.from('account_bindings').delete().eq('user_id', userId)
-        await supabase.from('account_bindings').insert(bindings)
-      }
       
       alert('保存成功！')
       router.push(`/u/${handle || userId}`)
