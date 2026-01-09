@@ -39,22 +39,45 @@ export default function MarketPanel() {
 
   const loadCustomPairs = async (uid: string) => {
     try {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('user_profiles')
         .select('market_pairs')
         .eq('id', uid)
         .maybeSingle()
-      if (data?.market_pairs && Array.isArray(data.market_pairs)) {
+      
+      if (error) {
+        // 如果列不存在或其他错误，使用默认值
+        console.warn('[MarketPanel] 加载自定义币种失败:', error.message)
+        // fallback: localStorage
+        try {
+          const raw = localStorage.getItem('market_pairs')
+          if (raw) {
+            const parsed = JSON.parse(raw)
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setCustomPairs(parsed)
+            }
+          }
+        } catch {}
+        return
+      }
+      
+      if (data?.market_pairs && Array.isArray(data.market_pairs) && data.market_pairs.length > 0) {
         setCustomPairs(data.market_pairs)
+      } else {
+        // 如果没有自定义币种，使用默认值
+        const defaultPairs = ['BTC-USD', 'ETH-USD', 'SOL-USD', 'ARB-USD']
+        setCustomPairs(defaultPairs)
       }
     } catch (err) {
-      console.error('Load custom pairs error:', err)
+      console.error('[MarketPanel] Load custom pairs error:', err)
       // fallback: localStorage
       try {
         const raw = localStorage.getItem('market_pairs')
         if (raw) {
           const parsed = JSON.parse(raw)
-          if (Array.isArray(parsed)) setCustomPairs(parsed)
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setCustomPairs(parsed)
+          }
         }
       } catch {}
     }
@@ -117,15 +140,27 @@ export default function MarketPanel() {
           setError(json.error)
           setMarket([])
         } else {
+          // 如果 customPairs 为空，使用默认币种
+          const pairsToFilter = customPairs.length > 0 ? customPairs : ['BTC-USD', 'ETH-USD', 'SOL-USD', 'ARB-USD']
+          
           // 过滤出用户自定义的币种
           const filteredRows = (json.rows ?? []).filter((row: MarketRow) =>
-            customPairs.includes(row.symbol)
+            pairsToFilter.includes(row.symbol)
           )
           
-          console.log('[MarketPanel] 过滤后数据:', filteredRows.length, '条')
+          console.log('[MarketPanel] 过滤后数据:', filteredRows.length, '条', {
+            totalRows: json.rows?.length || 0,
+            customPairs: pairsToFilter,
+            filteredSymbols: filteredRows.map(r => r.symbol),
+            allSymbols: json.rows?.map((r: MarketRow) => r.symbol) || [],
+          })
           
           if (filteredRows.length === 0 && json.rows && json.rows.length > 0) {
-            console.warn('[MarketPanel] 警告: API 返回了数据但过滤后为空, 自定义币种:', customPairs)
+            console.warn('[MarketPanel] 警告: API 返回了数据但过滤后为空', {
+              customPairs: pairsToFilter,
+              apiSymbols: json.rows.map((r: MarketRow) => r.symbol),
+              mismatch: pairsToFilter.filter(p => !json.rows.some((r: MarketRow) => r.symbol === p)),
+            })
           }
           
           // 只在数据真正变化时才更新，避免不必要的重新渲染
