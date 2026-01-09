@@ -94,7 +94,17 @@ export async function getTraderHandles(
     .in('source_trader_id', traderIds)
 
   if (error) {
-    console.error(`[trader-snapshots] ❌ ${source} handle 查询错误:`, error)
+    console.error(`[trader-snapshots] ❌ ${source} handle 查询错误:`, {
+      error,
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
+      code: error.code,
+      source,
+      traderIdsCount: traderIds.length,
+      traderIdsSample: traderIds.slice(0, 5),
+    })
+    // 即使出错也返回空 Map，避免阻塞整个流程
     return new Map()
   }
 
