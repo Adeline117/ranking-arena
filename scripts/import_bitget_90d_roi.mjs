@@ -335,6 +335,100 @@ async function fetchBitget90dRoi() {
         console.log(`✅ 从页面响应捕获到 ${capturedData.length} 条数据`)
       }
     }
+    
+    // 从页面DOM提取头像URL：补充API返回的头像数据
+    if (capturedData && Array.isArray(capturedData) && capturedData.length > 0) {
+      console.log('')
+      console.log('=== 从页面DOM提取头像URL ===')
+      try {
+        // 等待页面完全加载
+        await new Promise(resolve => setTimeout(resolve, 3000))
+        
+        const avatarMap = await page.evaluate(() => {
+          const avatarMap = {}
+          
+          // 查找所有头像图片元素
+          const avatarImages = Array.from(document.querySelectorAll('img[src*="bgstatic"], img[src*="avatar"], img[src*="headPic"], img[src*="header"], [class*="avatar"] img, [class*="headPic"] img'))
+          
+          avatarImages.forEach((img) => {
+            const src = img.src || img.getAttribute('src') || ''
+            if (src && (src.includes('bgstatic') || src.includes('avatar') || src.includes('headPic') || src.includes('header'))) {
+              // 查找包含trader ID或名字的父元素
+              const row = img.closest('tr, .leaderboard-item, [class*="leaderboard"], [class*="trader"], [class*="row"], [class*="item"]')
+              if (row) {
+                // 尝试从行元素中提取trader ID或名字
+                const nameElement = row.querySelector('.name, [class*="name"], [class*="nickName"], [class*="displayName"]') || row
+                const name = nameElement.textContent?.trim() || ''
+                
+                // 尝试提取traderId（从链接、data属性等）
+                const link = row.querySelector('a[href*="trader"], a[href*="user"], a[href*="copy-trading"]')
+                let traderId = null
+                if (link) {
+                  const href = link.getAttribute('href') || ''
+                  const match = href.match(/trader[\/=]([^\/\?&]+)|user[\/=]([^\/\?&]+)|copy-trading[\/=]([^\/\?&]+)/)
+                  traderId = match?.[1] || match?.[2] || match?.[3]
+                }
+                
+                traderId = traderId || 
+                          row.getAttribute('data-trader-id') || 
+                          row.getAttribute('data-uid') ||
+                          row.getAttribute('data-id') ||
+                          name
+                
+                if (traderId && src) {
+                  // 存储完整的头像URL（包括协议和域名）
+                  avatarMap[traderId] = src
+                }
+              }
+            }
+          })
+          
+          return avatarMap
+        })
+        
+        if (Object.keys(avatarMap).length > 0) {
+          console.log(`✅ 从DOM提取到 ${Object.keys(avatarMap).length} 个头像URL`)
+          console.log('头像URL样本（前5个）:')
+          Object.entries(avatarMap).slice(0, 5).forEach(([id, url]) => {
+            console.log(`  ${id}: ${url.substring(0, 80)}${url.length > 80 ? '...' : ''}`)
+          })
+          
+          // 将DOM提取的头像URL合并到API数据中
+          let updatedCount = 0
+          capturedData.forEach(item => {
+            const traderId = item.traderId || item.uid || String(item.rankingNo || '')
+            const name = item.nickName || item.displayName || item.name || ''
+            
+            // 尝试匹配trader ID或名字
+            const matchedUrl = avatarMap[traderId] || avatarMap[name] || 
+                               Object.values(avatarMap).find(url => url.includes(traderId))
+            
+            if (matchedUrl) {
+              // 如果API返回的头像URL为空或不完整，使用DOM提取的完整URL
+              const apiAvatar = item.header || item.headPic || item.avatar || item.avatarUrl || item.profilePhoto
+              if (!apiAvatar || apiAvatar.length < 50) {
+                item.header = matchedUrl // 设置header字段，normalizeData优先使用header
+                item.avatarUrl = matchedUrl
+                updatedCount++
+              } else if (matchedUrl.length > apiAvatar.length) {
+                // 如果DOM提取的URL更长（可能更完整），使用它
+                item.header = matchedUrl
+                item.avatarUrl = matchedUrl
+                updatedCount++
+              }
+            }
+          })
+          
+          if (updatedCount > 0) {
+            console.log(`✅ 更新了 ${updatedCount} 个头像URL`)
+          }
+        } else {
+          console.log('⚠️ 未能从DOM提取到头像URL')
+        }
+      } catch (e) {
+        console.warn('从DOM提取头像URL失败:', e.message)
+      }
+    }
       
       // 如果上面的 API 都不行，尝试从页面DOM提取
       if (!capturedData || capturedData.length === 0) {
