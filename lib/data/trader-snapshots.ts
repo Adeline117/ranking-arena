@@ -96,47 +96,111 @@ export async function getTraderHandles(
     for (let i = 0; i < traderIds.length; i += BATCH_SIZE) {
       const batch = traderIds.slice(i, i + BATCH_SIZE)
       
-      // 先尝试查询，如果失败则尝试不包含 avatar_url（可能列不存在）
-      // 查询 trader_sources 表，包含 avatar_url 字段
-      // 如果 avatar_url 列不存在，Supabase 会忽略它
-      const { data, error } = await supabase
+      // 先尝试查询包含 avatar_url 的完整字段
+      let query = supabase
         .from('trader_sources')
         .select('source_trader_id, handle, profile_url, avatar_url')
         .eq('source', source)
         .in('source_trader_id', batch)
-
+      
+      let { data, error } = await query
+      
+      // 如果错误且错误信息中包含 avatar_url 或 column 相关，尝试不包含 avatar_url 的查询
       if (error) {
-        // 检查错误对象的实际结构
-        const errorInfo: any = {
-          source,
-          batchNumber: Math.floor(i / BATCH_SIZE) + 1,
-          batchSize: batch.length,
-          batchSample: batch.slice(0, 3),
-        }
+        const errorStr = JSON.stringify(error).toLowerCase()
+        const errorMessage = (error as any)?.message?.toLowerCase() || ''
+        const errorCode = (error as any)?.code || ''
         
-        // 尝试获取错误信息
-        if (error && typeof error === 'object') {
-          errorInfo.errorType = typeof error
-          errorInfo.errorKeys = Object.keys(error)
-          errorInfo.errorString = JSON.stringify(error)
+        // 检查是否是列不存在的错误
+        if (
+          errorStr.includes('avatar_url') ||
+          errorStr.includes('column') ||
+          errorStr.includes('does not exist') ||
+          errorMessage.includes('avatar_url') ||
+          errorMessage.includes('column') ||
+          errorMessage.includes('does not exist') ||
+          errorCode === 'PGRST204' ||
+          errorCode === '42703'
+        ) {
+          // 回退到不包含 avatar_url 的查询
+          console.warn(`[trader-snapshots] ⚠️ ${source} avatar_url 列不存在，使用回退查询 (batch ${Math.floor(i / BATCH_SIZE) + 1})`)
+          const fallbackQuery = supabase
+            .from('trader_sources')
+            .select('source_trader_id, handle, profile_url')
+            .eq('source', source)
+            .in('source_trader_id', batch)
           
-          // 尝试访问常见属性
-          if ('message' in error) errorInfo.message = (error as any).message
-          if ('details' in error) errorInfo.details = (error as any).details
-          if ('hint' in error) errorInfo.hint = (error as any).hint
-          if ('code' in error) errorInfo.code = (error as any).code
+          const fallbackResult = await fallbackQuery
+          
+          if (fallbackResult.error) {
+            // 回退查询也失败，记录详细错误信息
+            const errorInfo: any = {
+              source,
+              batchNumber: Math.floor(i / BATCH_SIZE) + 1,
+              batchSize: batch.length,
+              batchSample: batch.slice(0, 3),
+              originalError: error,
+              fallbackError: fallbackResult.error,
+            }
+            
+            // 尝试获取错误信息
+            if (fallbackResult.error && typeof fallbackResult.error === 'object') {
+              errorInfo.errorType = typeof fallbackResult.error
+              errorInfo.errorKeys = Object.keys(fallbackResult.error)
+              errorInfo.errorString = JSON.stringify(fallbackResult.error)
+              
+              // 尝试访问常见属性
+              if ('message' in fallbackResult.error) errorInfo.message = (fallbackResult.error as any).message
+              if ('details' in fallbackResult.error) errorInfo.details = (fallbackResult.error as any).details
+              if ('hint' in fallbackResult.error) errorInfo.hint = (fallbackResult.error as any).hint
+              if ('code' in fallbackResult.error) errorInfo.code = (fallbackResult.error as any).code
+            }
+            
+            console.error(`[trader-snapshots] ❌ ${source} handle 查询错误 (batch ${errorInfo.batchNumber}):`, errorInfo)
+            continue
+          }
+          
+          // 回退查询成功，使用回退数据（添加 avatar_url: null）
+          data = fallbackResult.data?.map((item: any) => ({
+            ...item,
+            avatar_url: null,
+          })) || null
+          error = null
         } else {
-          errorInfo.errorValue = error
+          // 其他类型的错误，记录详细信息
+          const errorInfo: any = {
+            source,
+            batchNumber: Math.floor(i / BATCH_SIZE) + 1,
+            batchSize: batch.length,
+            batchSample: batch.slice(0, 3),
+          }
+          
+          // 尝试获取错误信息
+          if (error && typeof error === 'object') {
+            errorInfo.errorType = typeof error
+            errorInfo.errorKeys = Object.keys(error)
+            errorInfo.errorString = JSON.stringify(error)
+            
+            // 尝试访问常见属性
+            if ('message' in error) errorInfo.message = (error as any).message
+            if ('details' in error) errorInfo.details = (error as any).details
+            if ('hint' in error) errorInfo.hint = (error as any).hint
+            if ('code' in error) errorInfo.code = (error as any).code
+          } else {
+            errorInfo.errorValue = error
+          }
+          
+          console.error(`[trader-snapshots] ❌ ${source} handle 查询错误 (batch ${errorInfo.batchNumber}):`, errorInfo)
+          continue
         }
-        
-        console.error(`[trader-snapshots] ❌ ${source} handle 查询错误 (batch ${errorInfo.batchNumber}):`, errorInfo)
-        
-        // 继续处理下一批，不中断整个流程
-        continue
       }
 
+      // 处理查询成功的情况
       if (data && Array.isArray(data)) {
         allResults.push(...data)
+      } else if (!error && (!data || data.length === 0)) {
+        // 查询成功但没有数据，这是正常的（可能该批次没有匹配的记录）
+        console.debug(`[trader-snapshots] ℹ️ ${source} batch ${Math.floor(i / BATCH_SIZE) + 1} 没有匹配的记录`)
       }
     }
 
