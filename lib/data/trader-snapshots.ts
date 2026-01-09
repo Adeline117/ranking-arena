@@ -97,14 +97,13 @@ export async function getTraderHandles(
       const batch = traderIds.slice(i, i + BATCH_SIZE)
       
       // 先尝试查询，如果失败则尝试不包含 avatar_url（可能列不存在）
-      let query = supabase
+      // 查询 trader_sources 表，包含 avatar_url 字段
+      // 如果 avatar_url 列不存在，Supabase 会忽略它
+      const { data, error } = await supabase
         .from('trader_sources')
-        .select('source_trader_id, handle, profile_url')
+        .select('source_trader_id, handle, profile_url, avatar_url')
         .eq('source', source)
         .in('source_trader_id', batch)
-      
-      // 尝试添加 avatar_url（如果列存在）
-      const { data, error } = await query
 
       if (error) {
         // 检查错误对象的实际结构

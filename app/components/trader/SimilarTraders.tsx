@@ -44,6 +44,7 @@ export default function SimilarTraders({ traders }: SimilarTradersProps) {
                 name={trader.handle}
                 avatarUrl={trader.avatar_url}
                 size={40}
+                isTrader={true}
               />
               <Box style={{ flex: 1 }}>
                 <Text size="sm" weight="bold">

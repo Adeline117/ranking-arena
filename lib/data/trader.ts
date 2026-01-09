@@ -101,15 +101,15 @@ export async function getTraderByHandle(handle: string): Promise<TraderProfile |
     const sources = ['binance_web3', 'binance', 'bybit', 'bitget', 'mexc', 'coinex']
     
     for (const sourceType of sources) {
-      // 从 trader_sources 表获取交易员信息
+      // 从 trader_sources 表获取交易员信息（包含 avatar_url）
       // 先尝试原始 handle
       let source = null
       let sourceError = null
       
-      // 尝试用原始 handle 查询
+      // 尝试用原始 handle 查询（包含 avatar_url）
       const { data: source1, error: error1 } = await supabase
         .from('trader_sources')
-        .select('source_trader_id, handle, profile_url')
+        .select('source_trader_id, handle, profile_url, avatar_url')
         .eq('source', sourceType)
         .eq('handle', handle)
         .maybeSingle()
@@ -128,7 +128,7 @@ export async function getTraderByHandle(handle: string): Promise<TraderProfile |
       if (!source && decodedHandle !== handle) {
         const { data: source2, error: error2 } = await supabase
           .from('trader_sources')
-          .select('source_trader_id, handle, profile_url')
+          .select('source_trader_id, handle, profile_url, avatar_url')
           .eq('source', sourceType)
           .eq('handle', decodedHandle)
           .maybeSingle()
@@ -159,7 +159,7 @@ export async function getTraderByHandle(handle: string): Promise<TraderProfile |
         // 如果 handle 匹配不到，尝试用 handle 或 decodedHandle 作为 source_trader_id 查询
         const { data: sourceById1 } = await supabase
           .from('trader_sources')
-          .select('source_trader_id, handle, profile_url')
+          .select('source_trader_id, handle, profile_url, avatar_url')
           .eq('source', sourceType)
           .eq('source_trader_id', handle)
           .maybeSingle()
@@ -169,7 +169,7 @@ export async function getTraderByHandle(handle: string): Promise<TraderProfile |
         } else if (decodedHandle !== handle) {
           const { data: sourceById2 } = await supabase
             .from('trader_sources')
-            .select('source_trader_id, handle, profile_url')
+            .select('source_trader_id, handle, profile_url, avatar_url')
             .eq('source', sourceType)
             .eq('source_trader_id', decodedHandle)
             .maybeSingle()
@@ -222,13 +222,15 @@ export async function getTraderByHandle(handle: string): Promise<TraderProfile |
       }
 
       console.log(`[trader] Found trader: ${source.handle || source.source_trader_id} (source: ${sourceType})`)
+      // 优先使用 trader_sources 中的 avatar_url，如果没有则使用 profile_url，最后使用用户设置的 avatar_url
+      const traderAvatarUrl = (source as any).avatar_url || source.profile_url || null
       return {
         handle: source.handle || source.source_trader_id,
         id: source.source_trader_id,
         bio: profile?.bio || null,
         followers: latestSnapshot?.followers || 0,
         copiers: 0,
-        avatar_url: profile?.avatar_url || source.profile_url || null,
+        avatar_url: traderAvatarUrl || profile?.avatar_url || null,
         isRegistered: !!profile,
         source: sourceType,
       }
@@ -589,28 +591,32 @@ export async function getSimilarTraders(handle: string, limit: number = 6): Prom
 
       if (!snapshots || snapshots.length === 0) continue
 
-      // 获取对应的 handles
+      // 获取对应的 handles（包含 avatar_url）
       const traderIds = snapshots.map((s: any) => s.source_trader_id)
       const { data: sourcesData } = await supabase
         .from('trader_sources')
-        .select('source_trader_id, handle, profile_url')
+        .select('source_trader_id, handle, profile_url, avatar_url')
         .eq('source', sourceType)
         .in('source_trader_id', traderIds)
 
       const handleMap = new Map()
       if (sourcesData) {
         sourcesData.forEach((s: any) => {
-          handleMap.set(s.source_trader_id, { handle: s.handle || s.source_trader_id, profile_url: s.profile_url })
+          handleMap.set(s.source_trader_id, { 
+            handle: s.handle || s.source_trader_id, 
+            profile_url: s.profile_url,
+            avatar_url: s.avatar_url || s.profile_url || null,
+          })
         })
       }
 
       return snapshots.map((s: any) => {
-        const sourceInfo = handleMap.get(s.source_trader_id) || { handle: s.source_trader_id, profile_url: null }
+        const sourceInfo = handleMap.get(s.source_trader_id) || { handle: s.source_trader_id, profile_url: null, avatar_url: null }
         return {
           handle: sourceInfo.handle,
           id: s.source_trader_id,
           followers: s.followers || 0,
-          avatar_url: sourceInfo.profile_url || null,
+          avatar_url: sourceInfo.avatar_url || sourceInfo.profile_url || null,
           source: sourceType,
         }
       })

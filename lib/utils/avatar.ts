@@ -159,5 +159,6 @@ export interface AvatarProps {
   size?: number
   className?: string
   style?: React.CSSProperties
+  isTrader?: boolean // 是否是 trader，如果是 trader 且没有头像，只显示首字母，不生成头像
 }
 

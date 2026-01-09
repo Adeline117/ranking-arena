@@ -208,6 +208,7 @@ export default function RankingTable(props: {
                       name={displayName}
                       avatarUrl={t.avatar_url}
                       size={32}
+                      isTrader={true}
                     />
                     {/* 名字 - 在头像右边 */}
                     <Text size="sm" weight="black" style={{ color: tokens.colors.text.primary }}>
