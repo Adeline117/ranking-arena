@@ -430,33 +430,49 @@ async function fetchBitget90dRoi() {
           })
           
           // 将DOM提取的头像URL合并到API数据中
+          // 优先使用DOM提取的完整URL（这是Bitget网页上实际显示的头像URL）
           let updatedCount = 0
+          let replacedCount = 0
           capturedData.forEach(item => {
             const traderId = item.traderId || item.uid || String(item.rankingNo || '')
             const name = item.nickName || item.displayName || item.name || ''
             
-            // 尝试匹配trader ID或名字
-            const matchedUrl = avatarMap[traderId] || avatarMap[name] || 
-                               Object.values(avatarMap).find(url => url.includes(traderId))
+            // 尝试匹配trader ID或名字（优先使用traderId，然后才是name）
+            let matchedUrl = avatarMap[traderId] || avatarMap[name]
+            // 如果直接匹配失败，尝试部分匹配（URL中包含traderId）
+            if (!matchedUrl) {
+              const foundEntry = Object.entries(avatarMap).find(([id, url]) => 
+                url.includes(traderId) || traderId.includes(id) || (name && url.includes(name))
+              )
+              matchedUrl = foundEntry?.[1]
+            }
             
             if (matchedUrl) {
-              // 如果API返回的头像URL为空或不完整，使用DOM提取的完整URL
+              // 获取API返回的头像URL
               const apiAvatar = item.header || item.headPic || item.avatar || item.avatarUrl || item.profilePhoto
-              if (!apiAvatar || apiAvatar.length < 50) {
+              
+              // 如果DOM提取的URL与API返回的不同，或者API返回的URL为空/不完整，使用DOM提取的完整URL
+              if (!apiAvatar || apiAvatar.length < 50 || apiAvatar !== matchedUrl) {
+                const oldAvatar = apiAvatar || '(空)'
                 item.header = matchedUrl // 设置header字段，normalizeData优先使用header
                 item.avatarUrl = matchedUrl
-                updatedCount++
-              } else if (matchedUrl.length > apiAvatar.length) {
-                // 如果DOM提取的URL更长（可能更完整），使用它
-                item.header = matchedUrl
-                item.avatarUrl = matchedUrl
-                updatedCount++
+                item.headPic = matchedUrl // 也设置headPic字段
+                
+                if (apiAvatar && apiAvatar !== matchedUrl) {
+                  replacedCount++
+                  console.log(`[Bitget DOM提取] 替换头像URL: traderId="${traderId}", name="${name}"`, {
+                    old_url: oldAvatar.substring(0, 100),
+                    new_url: matchedUrl.substring(0, 100),
+                  })
+                } else {
+                  updatedCount++
+                }
               }
             }
           })
           
-          if (updatedCount > 0) {
-            console.log(`✅ 更新了 ${updatedCount} 个头像URL`)
+          if (updatedCount > 0 || replacedCount > 0) {
+            console.log(`✅ 头像URL更新统计: 新增 ${updatedCount} 个, 替换 ${replacedCount} 个, 总计 ${updatedCount + replacedCount} 个`)
           }
         } else {
           console.log('⚠️ 未能从DOM提取到头像URL')
