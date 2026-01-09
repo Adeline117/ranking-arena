@@ -113,6 +113,7 @@ export default function UserHomePage(props: { params: { handle: string } | Promi
           }
         } else {
           // 如果从 trader_sources 找到了，确保获取正确的粉丝数和关注数
+          // 但保留 trader 的原始头像（avatar_url 已经由 getTraderByHandle 设置）
           const { count: followersCount } = await supabase
             .from('follows')
             .select('*', { count: 'exact', head: true })
@@ -129,6 +130,8 @@ export default function UserHomePage(props: { params: { handle: string } | Promi
           if (followingCount !== null) {
             profileData.following = followingCount
           }
+          // 确保 avatar_url 不被覆盖，永远使用 trader 的原始头像
+          // profileData.avatar_url 已经由 getTraderByHandle 设置为 trader 的原始头像
         }
 
         if (!profileData) {
