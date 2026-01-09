@@ -172,19 +172,31 @@ export async function getTraderHandles(
           data = fallbackResult.data || null
           error = null
           const batchNum = Math.floor(i / BATCH_SIZE) + 1
-          console.log(`[trader-snapshots] ✅ ${source} 回退查询成功 (batch ${batchNum}):`, fallbackResult.data?.length || 0, '条记录')
+          const recordCount = fallbackResult.data?.length || 0
+          console.log(`[trader-snapshots] ✅ ${source} 回退查询成功 (batch ${batchNum}):`, recordCount, '条记录')
           
-          // 检查是否有 profile_url 数据
+          // 检查是否有 profile_url 数据，并输出前几条数据样本
           const hasProfileUrl = fallbackResult.data?.some((item: any) => item.profile_url && item.profile_url.trim() !== '')
+          const profileUrlCount = fallbackResult.data?.filter((item: any) => item.profile_url && item.profile_url.trim() !== '').length || 0
+          
           console.log(`[trader-snapshots] 📝 ${source} batch ${batchNum} profile_url 统计:`, {
-            total: fallbackResult.data?.length || 0,
-            hasProfileUrl: hasProfileUrl ? '是' : '否',
-            sampleData: fallbackResult.data?.[0] ? {
-              source_trader_id: fallbackResult.data[0].source_trader_id,
-              handle: fallbackResult.data[0].handle,
-              profile_url: fallbackResult.data[0].profile_url || '(空)',
-            } : '无数据',
+            total: recordCount,
+            hasProfileUrl: hasProfileUrl ? `是 (${profileUrlCount}/${recordCount})` : '否',
+            profileUrlCount,
+            emptyProfileUrlCount: recordCount - profileUrlCount,
           })
+          
+          // 输出前3条数据的详细信息
+          if (fallbackResult.data && fallbackResult.data.length > 0) {
+            console.log(`[trader-snapshots] 📋 ${source} batch ${batchNum} 数据样本 (前3条):`, 
+              fallbackResult.data.slice(0, 3).map((item: any) => ({
+                source_trader_id: item.source_trader_id,
+                handle: item.handle || '(空)',
+                profile_url: item.profile_url || '(空)',
+                profile_url_length: item.profile_url?.length || 0,
+              }))
+            )
+          }
         } else {
           // 其他类型的错误，记录详细信息
           const errorInfo: any = {
