@@ -222,7 +222,8 @@ export async function getTraderByHandle(handle: string): Promise<TraderProfile |
       }
 
       console.log(`[trader] Found trader: ${source.handle || source.source_trader_id} (source: ${sourceType})`)
-      // 优先使用 trader_sources 中的 avatar_url，如果没有则使用 profile_url，最后使用用户设置的 avatar_url
+      // 永远只使用 trader_sources 中的原始头像（avatar_url 或 profile_url）
+      // 不使用用户设置的 avatar_url，确保显示 trader 在交易所的原始头像
       const traderAvatarUrl = (source as any).avatar_url || source.profile_url || null
       return {
         handle: source.handle || source.source_trader_id,
@@ -230,7 +231,7 @@ export async function getTraderByHandle(handle: string): Promise<TraderProfile |
         bio: profile?.bio || null,
         followers: latestSnapshot?.followers || 0,
         copiers: 0,
-        avatar_url: traderAvatarUrl || profile?.avatar_url || null,
+        avatar_url: traderAvatarUrl, // 只使用 trader 的原始头像，不使用 profile?.avatar_url
         isRegistered: !!profile,
         source: sourceType,
       }
