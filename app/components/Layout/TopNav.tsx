@@ -430,17 +430,25 @@ export default function TopNav({ email }: { email: string | null }) {
                 padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
                 borderRadius: tokens.radius.md,
                 background: tokens.colors.accent.primary,
-                color: tokens.colors.black,
+                color: tokens.colors.black || '#000000',
                 textDecoration: 'none',
                 fontWeight: tokens.typography.fontWeight.black,
-                fontSize: tokens.typography.fontSize.sm,
+                fontSize: tokens.typography.fontSize.base,
                 transition: `all ${tokens.transition.base}`,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                minWidth: 80,
+                height: 36,
+                border: `1px solid ${tokens.colors.accent.primary}`,
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.background = tokens.colors.text.secondary
+                e.currentTarget.style.background = tokens.colors.text.secondary || '#ffffff'
+                e.currentTarget.style.opacity = '0.9'
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.background = tokens.colors.accent.primary
+                e.currentTarget.style.opacity = '1'
               }}
             >
               {t('login')}
