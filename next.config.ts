@@ -22,10 +22,7 @@ const nextConfig: NextConfig = {
     optimizePackageImports: ['@supabase/supabase-js'],
   },
   
-  // 生产环境优化
-  ...(process.env.NODE_ENV === 'production' && {
-    swcMinify: true,
-  }),
+  // Next.js 16 默认启用 SWC 压缩，无需配置
 };
 
 export default nextConfig;

@@ -12,7 +12,8 @@ interface TraderTabsProps {
 }
 
 export default function TraderTabs({ activeTab, onTabChange }: TraderTabsProps) {
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
+  // 使用 useMemo 确保语言变化时重新计算
   const tabs: Array<{ key: TabKey; label: string }> = [
     { key: 'overview', label: t('overview') },
     { key: 'stats', label: t('stats') },

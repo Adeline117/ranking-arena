@@ -69,7 +69,6 @@ export async function POST(req: NextRequest) {
     }
 
     // 4. 加密存储凭证
-    const adminSupabase = getSupabaseAdmin()
     const encryptedApiKey = encrypt(apiKey)
     const encryptedSecret = encrypt(apiSecret)
 

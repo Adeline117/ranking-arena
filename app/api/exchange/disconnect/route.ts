@@ -49,7 +49,6 @@ export async function DELETE(req: NextRequest) {
     }
 
     // 3. 删除连接（软删除：设置为非活跃）
-    const adminSupabase = getSupabaseAdmin()
     const { error: updateError } = await adminSupabase
       .from('user_exchange_connections')
       .update({
