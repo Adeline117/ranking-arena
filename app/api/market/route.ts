@@ -131,13 +131,30 @@ async function fetchFromCoinGeckoForPairs(pairs: Pair[]): Promise<MarketRow[]> {
     encodeURIComponent(ids) +
     '&price_change_percentage=24h'
 
-  const res = await fetch(url, {
-    cache: 'no-store',
-    headers: { accept: 'application/json' },
-  })
-  if (!res.ok) {
-    const txt = await res.text().catch(() => '')
-    throw new Error(`CoinGecko HTTP ${res.status}: ${txt.slice(0, 160)}`)
+  try {
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 10000) // 10秒超时
+
+    const res = await fetch(url, {
+      cache: 'no-store',
+      headers: { accept: 'application/json' },
+      signal: controller.signal,
+    })
+    
+    clearTimeout(timeoutId)
+
+    if (!res.ok) {
+      const txt = await res.text().catch(() => '')
+      throw new Error(`CoinGecko HTTP ${res.status}: ${txt.slice(0, 160)}`)
+    }
+  } catch (error: any) {
+    if (error.name === 'AbortError') {
+      throw new Error('CoinGecko request timeout')
+    }
+    if (error.message?.includes('fetch failed') || error.message?.includes('Failed to fetch')) {
+      throw new Error('CoinGecko network error: unable to connect')
+    }
+    throw error
   }
 
   const data = (await res.json()) as any[]
@@ -164,25 +181,46 @@ async function fetchFromCoinbaseForPairs(pairs: Pair[]): Promise<MarketRow[]> {
 
   const rows = await Promise.all(
     pairs.map(async (p) => {
-      const url = `${base}/products/${encodeURIComponent(p.cbProduct)}/stats`
-      const res = await fetch(url, {
-        cache: 'no-store',
-        headers: { accept: 'application/json' },
-      })
-      if (!res.ok) {
-        return null // 返回null表示失败
-      }
-      const s = (await res.json()) as any
+      try {
+        const url = `${base}/products/${encodeURIComponent(p.cbProduct)}/stats`
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 8000) // 8秒超时
 
-      const open = Number(s.open ?? NaN)
-      const last = Number(s.last ?? NaN)
-      if (!Number.isFinite(open) || !Number.isFinite(last) || open <= 0) {
-        return null
+        const res = await fetch(url, {
+          cache: 'no-store',
+          headers: { accept: 'application/json' },
+          signal: controller.signal,
+        })
+        
+        clearTimeout(timeoutId)
+
+        if (!res.ok) {
+          return null // 返回null表示失败
+        }
+        const s = (await res.json()) as any
+
+        const open = Number(s.open ?? NaN)
+        const last = Number(s.last ?? NaN)
+        if (!Number.isFinite(open) || !Number.isFinite(last) || open <= 0) {
+          return null
+        }
+        const pct = ((last - open) / open) * 100
+        return formatRow(p.symbol, last, pct)
+      } catch (error: any) {
+        if (error.name === 'AbortError') {
+          return null // 超时返回null
+        }
+        if (error.message?.includes('fetch failed') || error.message?.includes('Failed to fetch')) {
+          return null // 网络错误返回null
+        }
+        return null // 其他错误也返回null
       }
-      const pct = ((last - open) / open) * 100
-      return formatRow(p.symbol, last, pct)
     })
   )
 
-  return rows.filter((r): r is MarketRow => r !== null)
+  const validRows = rows.filter((r): r is MarketRow => r !== null)
+  if (validRows.length === 0) {
+    throw new Error('Coinbase: all requests failed or timed out')
+  }
+  return validRows
 }
