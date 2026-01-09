@@ -131,10 +131,10 @@ async function fetchFromCoinGeckoForPairs(pairs: Pair[]): Promise<MarketRow[]> {
     encodeURIComponent(ids) +
     '&price_change_percentage=24h'
 
-  try {
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 10000) // 10秒超时
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 10000) // 10秒超时
 
+  try {
     const res = await fetch(url, {
       cache: 'no-store',
       headers: { accept: 'application/json' },
@@ -147,7 +147,26 @@ async function fetchFromCoinGeckoForPairs(pairs: Pair[]): Promise<MarketRow[]> {
       const txt = await res.text().catch(() => '')
       throw new Error(`CoinGecko HTTP ${res.status}: ${txt.slice(0, 160)}`)
     }
+
+    const data = (await res.json()) as any[]
+    const byId = new Map<string, any>()
+    for (const c of data) byId.set(String(c.id), c)
+
+    const rows: MarketRow[] = []
+    for (const p of pairs) {
+      const c = byId.get(p.cgId)
+      if (!c) continue // 跳过缺失的币种
+
+      const price = Number(c.current_price ?? NaN)
+      const pct = Number(c.price_change_percentage_24h ?? c.price_change_percentage_24h_in_currency ?? 0)
+
+      if (!Number.isFinite(price)) continue
+      rows.push(formatRow(p.symbol, price, Number.isFinite(pct) ? pct : 0))
+    }
+
+    return rows
   } catch (error: any) {
+    clearTimeout(timeoutId)
     if (error.name === 'AbortError') {
       throw new Error('CoinGecko request timeout')
     }
