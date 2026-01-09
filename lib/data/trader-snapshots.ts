@@ -168,12 +168,32 @@ export async function getTraderHandles(
     }
 
     const handleMap = new Map<string, TraderHandle>()
-    allResults.forEach((item: TraderHandle) => {
-      // 即使没有 handle，也保存数据（可能只有 avatar_url）
-      if (item.source_trader_id) {
-        handleMap.set(item.source_trader_id, item)
+    allResults.forEach((item: any) => {
+      // 即使没有 handle，也保存数据（可能只有 profile_url）
+      if (item && item.source_trader_id) {
+        // 确保数据格式正确，匹配 TraderHandle 接口
+        handleMap.set(item.source_trader_id, {
+          source_trader_id: item.source_trader_id,
+          handle: item.handle || null,
+          profile_url: item.profile_url || null,
+          avatar_url: item.avatar_url || null, // 如果查询时包含此字段
+        })
       }
     })
+    
+    // 调试日志：输出前几个trader的数据（仅第一个source，避免日志过多）
+    if (handleMap.size > 0 && source === 'bitget') {
+      const sampleEntries = Array.from(handleMap.entries()).slice(0, 5)
+      console.log(`[trader-snapshots] 📊 ${source} handleMap 样本 (前5个):`, 
+        sampleEntries.map(([id, data]) => ({
+          source_trader_id: id,
+          handle: data.handle || '(空)',
+          profile_url: data.profile_url || '(空)',
+          profile_url_length: data.profile_url?.length || 0,
+          profile_url_type: typeof data.profile_url,
+        }))
+      )
+    }
 
     return handleMap
   } catch (err: any) {
