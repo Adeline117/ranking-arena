@@ -330,5 +330,5 @@ A:
 - [登录流程说明](./LOGIN_FLOW.md)
 - [OTP vs Magic Link](./OTP_VS_MAGIC_LINK.md)
 - [Supabase 设置指南](./SUPABASE_SETUP.md)
-- [Supabase OTP 修复](./SUPABASE_OTP_FIX.md)
+- [邮件模板代码](./EMAIL_TEMPLATES_CODE.md)
 
