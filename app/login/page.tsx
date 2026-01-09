@@ -38,9 +38,6 @@ const translations = {
     handleMinLength: '用户名至少3个字符',
     countdown: '秒后重发',
     loginWithCode: '或使用验证码登录',
-    loginWithLink: '或使用邮箱链接登录',
-    sendLink: '发送登录链接',
-    linkSent: '登录链接已发送，请查收邮箱',
   },
   en: {
     title: 'Login / Register',
@@ -73,9 +70,6 @@ const translations = {
     handleMinLength: 'Username must be at least 3 characters',
     countdown: 's to resend',
     loginWithCode: 'Or login with verification code',
-    loginWithLink: 'Or login with email link',
-    sendLink: 'Send Login Link',
-    linkSent: 'Login link sent, please check your email',
   },
 }
 
@@ -92,41 +86,46 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   const [sendingCode, setSendingCode] = useState(false)
   const [countdown, setCountdown] = useState(0)
-  const [sendingLink, setSendingLink] = useState(false)
   const [loginWithCode, setLoginWithCode] = useState(false) // 登录时是否使用验证码
   const router = useRouter()
 
   const t = translations[lang]
 
-  // 处理邮箱链接登录（Magic Link）
+  // 处理认证状态变化（但不自动跳转，等待用户完成注册流程）
   useEffect(() => {
-    const handleAuthStateChange = async () => {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (session) {
-        router.push('/')
-      }
-    }
-
-    // 检查URL中的token（Magic Link）
-    const hashParams = new URLSearchParams(window.location.hash.substring(1))
-    const accessToken = hashParams.get('access_token')
-    const type = hashParams.get('type')
-
-    if (accessToken && type === 'magiclink') {
-      handleAuthStateChange()
-    }
-
     // 监听认证状态变化
+    // 注意：在注册流程中（codeVerified 为 true），不自动跳转，需要等待用户设置密码和用户名
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_IN' && session) {
-        router.push('/')
+      // 只有在登录模式下（不是注册模式），且不是注册流程中，才自动跳转
+      if (event === 'SIGNED_IN' && session && !isRegister && !codeVerified) {
+        // 登录成功，获取用户 handle 并跳转到用户主页
+        supabase.auth.getUser().then(({ data: { user } }) => {
+          if (user) {
+            supabase
+              .from('user_profiles')
+              .select('handle')
+              .eq('id', user.id)
+              .maybeSingle()
+              .then(({ data: userProfile }) => {
+                if (userProfile?.handle) {
+                  router.push(`/u/${userProfile.handle}`)
+                } else if (user.email) {
+                  router.push(`/u/${user.email.split('@')[0]}`)
+                } else {
+                  router.push('/')
+                }
+              })
+          } else {
+            router.push('/')
+          }
+        })
       }
     })
 
     return () => {
       subscription.unsubscribe()
     }
-  }, [router])
+  }, [router, isRegister, codeVerified])
 
   // 倒计时
   useEffect(() => {
@@ -248,45 +247,8 @@ export default function LoginPage() {
     }
   }
 
-  // 发送登录链接（Magic Link）
-  const handleSendLoginLink = async () => {
-    if (!email) {
-      setError('请输入邮箱')
-      return
-    }
 
-    setError(null)
-    setSendingLink(true)
-
-    try {
-      // 使用环境变量或当前域名，确保生产环境使用正确的域名
-      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || window.location.origin
-      const redirectTo = `${baseUrl}/login`
-      
-      const { error: linkError } = await supabase.auth.signInWithOtp({
-        email,
-        options: {
-          shouldCreateUser: false, // 登录时不创建新用户
-          emailRedirectTo: redirectTo, // 只有登录链接才设置这个
-        },
-      })
-
-      if (linkError) {
-        setError(linkError.message)
-        setSendingLink(false)
-        return
-      }
-
-      setCountdown(60) // 开始60秒倒计时
-      alert(t.linkSent)
-    } catch (err: any) {
-      setError(err?.message || '发送失败')
-    } finally {
-      setSendingLink(false)
-    }
-  }
-
-  // 验证验证码并注册
+  // 验证验证码（注册或登录）
   const handleVerifyCode = async () => {
     if (!code) {
       setError('请输入验证码')
@@ -315,10 +277,29 @@ export default function LoginPage() {
       }
 
       if (data.user) {
-        setCodeVerified(true)
-        // 创建用户 profile（用户名稍后设置）
-        await createUserProfile(data.user.id, email)
-        alert(t.codeVerified)
+        if (isRegister) {
+          // 注册模式：验证成功，但不立即跳转，需要等待用户设置密码和用户名
+          setCodeVerified(true)
+          // 创建临时用户 profile（用户名稍后设置）
+          await createUserProfile(data.user.id, email)
+          alert(t.codeVerified)
+          // 不在这里跳转，等待用户完成设置密码和用户名
+        } else {
+          // 登录模式：验证成功，立即登录并跳转
+          const { data: userProfile } = await supabase
+            .from('user_profiles')
+            .select('handle')
+            .eq('id', data.user.id)
+            .maybeSingle()
+
+          if (userProfile?.handle) {
+            router.push(`/u/${userProfile.handle}`)
+          } else if (data.user.email) {
+            router.push(`/u/${data.user.email.split('@')[0]}`)
+          } else {
+            router.push('/')
+          }
+        }
       }
     } catch (err: any) {
       // 检查是否是验证码过期错误
@@ -797,37 +778,6 @@ export default function LoginPage() {
                 >
                   {t.loginWithCode}
                 </button>
-                {/* 邮箱链接登录 */}
-                <div style={{ 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  gap: 12, 
-                  marginBottom: 16,
-                  padding: '12px',
-                  background: 'rgba(255,255,255,0.02)',
-                  borderRadius: 12,
-                  border: '1px solid rgba(255,255,255,0.05)',
-                }}>
-                  <div style={{ flex: 1, fontSize: 12, color: '#9a9a9a' }}>
-                    {t.loginWithLink}
-                  </div>
-                  <button
-                    onClick={handleSendLoginLink}
-                    disabled={sendingLink || !email || countdown > 0}
-                    style={{
-                      padding: '8px 16px',
-                      borderRadius: 8,
-                      border: 'none',
-                      background: sendingLink || !email || countdown > 0 ? 'rgba(139,111,168,0.3)' : 'rgba(139,111,168,0.2)',
-                      color: '#8b6fa8',
-                      fontWeight: 800,
-                      fontSize: 12,
-                      cursor: sendingLink || !email || countdown > 0 ? 'not-allowed' : 'pointer',
-                    }}
-                  >
-                    {sendingLink ? t.sendingCode : countdown > 0 ? `${countdown}s` : t.sendLink}
-                  </button>
-                </div>
               </>
             ) : (
               <>
