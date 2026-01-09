@@ -504,6 +504,33 @@ async function fetchBitget90dRoi() {
 
     console.log(`✅ 获取到 ${capturedData.length} 条原始数据`)
     
+    // 调试：输出前几条原始数据，查看实际API返回的字段
+    if (capturedData && capturedData.length > 0) {
+      console.log('')
+      console.log('=== Bitget API 原始数据样本（前3条）===')
+      capturedData.slice(0, 3).forEach((item, idx) => {
+        console.log(`\n第 ${idx + 1} 条数据:`)
+        console.log('  traderId:', item.traderId || item.uid || '(空)')
+        console.log('  nickName:', item.nickName || item.displayName || '(空)')
+        console.log('  头像相关字段:')
+        console.log('    header:', item.header || '(空)')
+        console.log('    headPic:', item.headPic || '(空)')
+        console.log('    avatar:', item.avatar || '(空)')
+        console.log('    avatarUrl:', item.avatarUrl || '(空)')
+        console.log('    profilePhoto:', item.profilePhoto || '(空)')
+        console.log('  所有字段:', Object.keys(item).join(', '))
+        // 如果有原始数据，输出完整的头像相关字段
+        if (item._raw) {
+          console.log('  _raw 中的头像字段:')
+          const raw = item._raw
+          Object.keys(raw).filter(k => k.toLowerCase().includes('head') || k.toLowerCase().includes('avatar') || k.toLowerCase().includes('pic') || k.toLowerCase().includes('photo')).forEach(k => {
+            console.log(`    ${k}:`, raw[k] || '(空)')
+          })
+        }
+      })
+      console.log('')
+    }
+    
     // 保存原始数据到文件（用于调试）
     try {
       const fs = await import('fs')
