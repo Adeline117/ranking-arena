@@ -28,6 +28,7 @@ function snapshotToTrader(
       : snapshot.source_trader_id
 
   // 优先使用 avatar_url，如果没有则使用 profile_url（某些交易所可能将头像URL存储在 profile_url 中）
+  // 注意：如果查询时没有包含 avatar_url 列，这里会是 undefined，使用 profile_url 作为后备
   const avatarUrl = handleData?.avatar_url || handleData?.profile_url || undefined
 
   return {
