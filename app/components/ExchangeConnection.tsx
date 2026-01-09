@@ -28,20 +28,50 @@ export default function ExchangeConnectionManager({ userId }: ExchangeConnection
   const loadConnections = async () => {
     try {
       setLoading(true)
+      
+      // 检查用户是否已登录
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        console.warn('[ExchangeConnection] 用户未登录')
+        setConnections([])
+        return
+      }
+
+      // 确保使用正确的用户ID
+      const actualUserId = user.id
+      if (userId !== actualUserId) {
+        console.warn('[ExchangeConnection] 用户ID不匹配:', { provided: userId, actual: actualUserId })
+      }
+
       const { data, error: fetchError } = await supabase
         .from('user_exchange_connections')
         .select('*')
-        .eq('user_id', userId)
+        .eq('user_id', actualUserId)
         .order('created_at', { ascending: false })
 
       if (fetchError) {
-        console.error('[ExchangeConnection] 加载连接失败:', fetchError)
+        console.error('[ExchangeConnection] 加载连接失败:', {
+          error: fetchError,
+          message: fetchError.message,
+          details: fetchError.details,
+          hint: fetchError.hint,
+          code: fetchError.code,
+          userId: actualUserId,
+        })
+        // 即使出错也设置空数组，避免显示错误状态
+        setConnections([])
         return
       }
 
       setConnections(data || [])
-    } catch (err) {
-      console.error('[ExchangeConnection] 加载连接异常:', err)
+    } catch (err: any) {
+      console.error('[ExchangeConnection] 加载连接异常:', {
+        error: err,
+        message: err?.message,
+        stack: err?.stack,
+        userId,
+      })
+      setConnections([])
     } finally {
       setLoading(false)
     }
