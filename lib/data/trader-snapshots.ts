@@ -96,134 +96,48 @@ export async function getTraderHandles(
     for (let i = 0; i < traderIds.length; i += BATCH_SIZE) {
       const batch = traderIds.slice(i, i + BATCH_SIZE)
       
-      // 先尝试查询包含 avatar_url 的完整字段
+      // 直接查询 profile_url（根据导入脚本，头像URL存储在这里）
+      // 如果 avatar_url 列存在，也一起查询；如果不存在，回退到只查询 profile_url
+      // 但为了简化，我们先直接查询 profile_url，因为导入脚本将头像URL存储在这里
       let query = supabase
         .from('trader_sources')
-        .select('source_trader_id, handle, profile_url, avatar_url')
+        .select('source_trader_id, handle, profile_url')
         .eq('source', source)
         .in('source_trader_id', batch)
       
       let { data, error } = await query
       
-      // 如果错误，尝试回退查询（可能是 avatar_url 列不存在）
+      // 如果查询失败，记录详细错误信息
       if (error) {
         const errorKeys = Object.keys(error || {})
-        const isEmptyError = errorKeys.length === 0
         const errorStr = JSON.stringify(error || {}).toLowerCase()
         const errorMessage = (error as any)?.message?.toLowerCase() || ''
         const errorCode = (error as any)?.code || ''
         
-        // 检查是否是列不存在的错误（包括空错误对象）
-        // 空错误对象通常表示查询时列不存在或 RLS 策略问题
-        const isColumnError = isEmptyError || 
-          errorStr.includes('avatar_url') ||
-          errorStr.includes('column') ||
-          errorStr.includes('does not exist') ||
-          errorMessage.includes('avatar_url') ||
-          errorMessage.includes('column') ||
-          errorMessage.includes('does not exist') ||
-          errorCode === 'PGRST204' ||
-          errorCode === '42703'
-        
-        // 如果错误对象为空，或者包含列相关错误，尝试回退查询
-        if (isColumnError) {
-          // 回退到不包含 avatar_url 的查询
-          console.warn(`[trader-snapshots] ⚠️ ${source} avatar_url 列可能不存在（空错误对象或列错误），使用回退查询 (batch ${Math.floor(i / BATCH_SIZE) + 1})`)
-          const fallbackQuery = supabase
-            .from('trader_sources')
-            .select('source_trader_id, handle, profile_url')
-            .eq('source', source)
-            .in('source_trader_id', batch)
-          
-          const fallbackResult = await fallbackQuery
-          
-          if (fallbackResult.error) {
-            // 回退查询也失败，记录详细错误信息
-            const errorInfo: any = {
-              source,
-              batchNumber: Math.floor(i / BATCH_SIZE) + 1,
-              batchSize: batch.length,
-              batchSample: batch.slice(0, 3),
-              isEmptyError,
-              originalError: error,
-              originalErrorKeys: errorKeys,
-              originalErrorString: JSON.stringify(error),
-              originalErrorCode: errorCode,
-              originalErrorMessage: errorMessage,
-              fallbackError: fallbackResult.error,
-              fallbackErrorKeys: Object.keys(fallbackResult.error || {}),
-              fallbackErrorString: JSON.stringify(fallbackResult.error),
-            }
-            
-            // 尝试获取错误信息
-            if (fallbackResult.error && typeof fallbackResult.error === 'object') {
-              errorInfo.fallbackErrorType = typeof fallbackResult.error
-              if ('message' in fallbackResult.error) errorInfo.fallbackMessage = (fallbackResult.error as any).message
-              if ('details' in fallbackResult.error) errorInfo.fallbackDetails = (fallbackResult.error as any).details
-              if ('hint' in fallbackResult.error) errorInfo.fallbackHint = (fallbackResult.error as any).hint
-              if ('code' in fallbackResult.error) errorInfo.fallbackCode = (fallbackResult.error as any).code
-            }
-            
-            console.error(`[trader-snapshots] ❌ ${source} handle 查询错误（包含回退）(batch ${errorInfo.batchNumber}):`, errorInfo)
-            continue
-          }
-          
-          // 回退查询成功，使用回退数据（不添加 avatar_url，让它保持 undefined，这样会使用 profile_url）
-          data = fallbackResult.data || null
-          error = null
-          const batchNum = Math.floor(i / BATCH_SIZE) + 1
-          const recordCount = fallbackResult.data?.length || 0
-          console.log(`[trader-snapshots] ✅ ${source} 回退查询成功 (batch ${batchNum}):`, recordCount, '条记录')
-          
-          // 检查是否有 profile_url 数据，并输出前几条数据样本
-          const hasProfileUrl = fallbackResult.data?.some((item: any) => item.profile_url && item.profile_url.trim() !== '')
-          const profileUrlCount = fallbackResult.data?.filter((item: any) => item.profile_url && item.profile_url.trim() !== '').length || 0
-          
-          console.log(`[trader-snapshots] 📝 ${source} batch ${batchNum} profile_url 统计:`, {
-            total: recordCount,
-            hasProfileUrl: hasProfileUrl ? `是 (${profileUrlCount}/${recordCount})` : '否',
-            profileUrlCount,
-            emptyProfileUrlCount: recordCount - profileUrlCount,
-          })
-          
-          // 输出前3条数据的详细信息
-          if (fallbackResult.data && fallbackResult.data.length > 0) {
-            console.log(`[trader-snapshots] 📋 ${source} batch ${batchNum} 数据样本 (前3条):`, 
-              fallbackResult.data.slice(0, 3).map((item: any) => ({
-                source_trader_id: item.source_trader_id,
-                handle: item.handle || '(空)',
-                profile_url: item.profile_url || '(空)',
-                profile_url_length: item.profile_url?.length || 0,
-              }))
-            )
-          }
-        } else {
-          // 其他类型的错误，记录详细信息
-          const errorInfo: any = {
-            source,
-            batchNumber: Math.floor(i / BATCH_SIZE) + 1,
-            batchSize: batch.length,
-            batchSample: batch.slice(0, 3),
-            errorKeys,
-            errorString: JSON.stringify(error),
-            errorCode,
-            errorMessage,
-          }
-          
-          // 尝试获取错误信息
-          if (error && typeof error === 'object') {
-            errorInfo.errorType = typeof error
-            if ('message' in error) errorInfo.message = (error as any).message
-            if ('details' in error) errorInfo.details = (error as any).details
-            if ('hint' in error) errorInfo.hint = (error as any).hint
-            if ('code' in error) errorInfo.code = (error as any).code
-          } else {
-            errorInfo.errorValue = error
-          }
-          
-          console.error(`[trader-snapshots] ❌ ${source} handle 查询错误 (batch ${errorInfo.batchNumber}):`, errorInfo)
-          continue
+        const errorInfo: any = {
+          source,
+          batchNumber: Math.floor(i / BATCH_SIZE) + 1,
+          batchSize: batch.length,
+          batchSample: batch.slice(0, 3),
+          errorKeys,
+          errorString: JSON.stringify(error),
+          errorCode,
+          errorMessage,
         }
+        
+        // 尝试获取错误信息
+        if (error && typeof error === 'object') {
+          errorInfo.errorType = typeof error
+          if ('message' in error) errorInfo.message = (error as any).message
+          if ('details' in error) errorInfo.details = (error as any).details
+          if ('hint' in error) errorInfo.hint = (error as any).hint
+          if ('code' in error) errorInfo.code = (error as any).code
+        } else {
+          errorInfo.errorValue = error
+        }
+        
+        console.error(`[trader-snapshots] ❌ ${source} handle 查询错误 (batch ${errorInfo.batchNumber}):`, errorInfo)
+        continue
       }
 
       // 处理查询成功的情况
