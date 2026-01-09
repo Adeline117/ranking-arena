@@ -392,7 +392,9 @@ export default function PostFeed(props: { variant?: 'compact' | 'full' } = {}) {
                   e.preventDefault()
                   e.stopPropagation()
                 }
-                toggleReact(openPost.id, 'up')
+                if (toggleReactRef.current) {
+                  toggleReactRef.current(openPost.id, 'up')
+                }
               }} 
               active={myReact[openPost.id] === 'up'}
               count={reactCounts[openPost.id]?.up ?? openPost.likes}
