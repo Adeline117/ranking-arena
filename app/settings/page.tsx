@@ -7,6 +7,7 @@ import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/Layout/TopNav'
 import { Box, Text, Button } from '@/app/components/Base'
 import Avatar from '@/app/components/UI/Avatar'
+import ExchangeConnectionManager from '@/app/components/ExchangeConnection'
 
 export default function SettingsPage() {
   const router = useRouter()
@@ -327,7 +328,7 @@ export default function SettingsPage() {
           />
         </Box>
 
-        {/* Account Bindings Section */}
+        {/* Exchange Connection Section */}
         <Box
           bg="secondary"
           p={6}
@@ -335,83 +336,9 @@ export default function SettingsPage() {
           border="primary"
           style={{ marginBottom: tokens.spacing[6] }}
         >
-          <Text size="lg" weight="black" style={{ marginBottom: tokens.spacing[4] }}>
-            绑定交易账号
-          </Text>
-          <Text size="sm" color="tertiary" style={{ marginBottom: tokens.spacing[4] }}>
-            绑定您的交易账号后，如果该账号在排行榜上，系统将自动合并账号
-          </Text>
-          
-          <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
-            <Box>
-              <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[2], display: 'block' }}>
-                Binance 账号ID
-              </Text>
-              <input
-                type="text"
-                value={binanceId}
-                onChange={(e) => setBinanceId(e.target.value)}
-                placeholder="输入您的 Binance 账号ID"
-                style={{
-                  width: '100%',
-                  padding: tokens.spacing[3],
-                  borderRadius: tokens.radius.md,
-                  border: `1px solid ${tokens.colors.border.primary}`,
-                  background: tokens.colors.bg.primary,
-                  color: tokens.colors.text.primary,
-                  fontSize: tokens.typography.fontSize.base,
-                  fontFamily: tokens.typography.fontFamily.sans.join(', '),
-                  outline: 'none',
-                }}
-              />
-            </Box>
-            
-            <Box>
-              <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[2], display: 'block' }}>
-                Bybit 账号ID
-              </Text>
-              <input
-                type="text"
-                value={bybitId}
-                onChange={(e) => setBybitId(e.target.value)}
-                placeholder="输入您的 Bybit 账号ID"
-                style={{
-                  width: '100%',
-                  padding: tokens.spacing[3],
-                  borderRadius: tokens.radius.md,
-                  border: `1px solid ${tokens.colors.border.primary}`,
-                  background: tokens.colors.bg.primary,
-                  color: tokens.colors.text.primary,
-                  fontSize: tokens.typography.fontSize.base,
-                  fontFamily: tokens.typography.fontFamily.sans.join(', '),
-                  outline: 'none',
-                }}
-              />
-            </Box>
-            
-            <Box>
-              <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[2], display: 'block' }}>
-                钱包地址
-              </Text>
-              <input
-                type="text"
-                value={walletAddress}
-                onChange={(e) => setWalletAddress(e.target.value)}
-                placeholder="输入您的钱包地址（0x...）"
-                style={{
-                  width: '100%',
-                  padding: tokens.spacing[3],
-                  borderRadius: tokens.radius.md,
-                  border: `1px solid ${tokens.colors.border.primary}`,
-                  background: tokens.colors.bg.primary,
-                  color: tokens.colors.text.primary,
-                  fontSize: tokens.typography.fontSize.base,
-                  fontFamily: tokens.typography.fontFamily.sans.join(', '),
-                  outline: 'none',
-                }}
-              />
-            </Box>
-          </Box>
+          {userId && (
+            <ExchangeConnectionManager userId={userId} />
+          )}
         </Box>
 
         {/* Save Button */}
