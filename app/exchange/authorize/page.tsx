@@ -1,13 +1,13 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import { Box, Text, Button } from '@/app/components/Base'
 import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/Layout/TopNav'
 
-export default function ExchangeAuthorizePage() {
+function ExchangeAuthorizePageContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const [exchange, setExchange] = useState<string | null>(null)
@@ -166,6 +166,21 @@ export default function ExchangeAuthorizePage() {
         </Box>
       </Box>
     </Box>
+  )
+}
+
+export default function ExchangeAuthorizePage() {
+  return (
+    <Suspense fallback={
+      <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
+        <TopNav email={null} />
+        <Box style={{ maxWidth: 800, margin: '0 auto', padding: tokens.spacing[6] }}>
+          <Text size="lg">加载中...</Text>
+        </Box>
+      </Box>
+    }>
+      <ExchangeAuthorizePageContent />
+    </Suspense>
   )
 }
 
