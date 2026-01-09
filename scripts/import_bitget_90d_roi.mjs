@@ -64,7 +64,21 @@ function normalizeData(rawData) {
     
     // 头像：Bitget API 可能返回的字段有 header、headPic、avatar 等
     // 这些应该是完整的头像URL（Bitget网页上显示的头像）
-    const avatarUrl = item.header || item.headPic || item.avatar || item.avatarUrl || item.profilePhoto || null
+    // 优先使用 header（Bitget API的主要头像字段），然后是其他字段
+    let avatarUrl = item.header || item.headPic || item.avatar || item.avatarUrl || item.profilePhoto || null
+    
+    // 如果头像URL看起来不完整（太短或没有http/https），尝试处理
+    if (avatarUrl && typeof avatarUrl === 'string') {
+      avatarUrl = avatarUrl.trim()
+      // 如果URL不完整（没有协议），尝试添加
+      if (avatarUrl && !avatarUrl.startsWith('http')) {
+        if (avatarUrl.startsWith('//')) {
+          avatarUrl = 'https:' + avatarUrl
+        } else if (avatarUrl.startsWith('/')) {
+          avatarUrl = 'https://www.bitget.com' + avatarUrl
+        }
+      }
+    }
     
     // 调试：输出前几个trader的头像URL，确认格式
     if (avatarUrl && (handle && (handle.includes('老') || handle.includes('East') || handle.includes('Rock') || handle.includes('Encryption')))) {
@@ -77,6 +91,7 @@ function normalizeData(rawData) {
         final_avatarUrl: avatarUrl,
         avatarUrl_type: typeof avatarUrl,
         avatarUrl_length: avatarUrl?.length || 0,
+        has_extension: /\.(jpg|jpeg|png|gif|webp|svg|ico)(\?|$|#)/i.test(avatarUrl),
       })
     }
 
