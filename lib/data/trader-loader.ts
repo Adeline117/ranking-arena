@@ -29,27 +29,19 @@ function snapshotToTrader(
 
   // 重要：根据导入脚本，头像URL存储在 profile_url 字段中
   // 导入脚本使用：
-  // - Bitget: profile_url: item.avatarUrl
+  // - Bitget: profile_url: item.avatarUrl (来自 item.header || item.headPic || item.avatar || item.avatarUrl || item.profilePhoto)
   // - Binance: profile_url: item.userPhotoUrl  
   // - 其他交易所: profile_url: item.avatarUrl
-  // 所以我们应该直接使用 profile_url 作为头像URL（这是trader在交易所网页上的原始头像）
+  // 这些就是trader在交易所网页上的原始头像URL，应该直接使用
   let avatarUrl: string | undefined = undefined
   if (handleData) {
-    // 直接使用 profile_url（导入脚本将头像URL存储在这里，这是交易所网页上的原始头像）
+    // 直接使用 profile_url（这是trader在交易所网页上的原始头像URL）
     if (handleData.profile_url && handleData.profile_url.trim() !== '') {
-      let url = handleData.profile_url.trim()
+      avatarUrl = handleData.profile_url.trim()
       
-      // 修复不完整的URL：如果URL没有扩展名且看起来像Bitget的URL，尝试添加常见扩展名
-      // Bitget的URL格式：https://qrc.bgstatic.com/otc/images/20251219/1766158080640
-      // 这些URL可能缺少扩展名，需要尝试访问或添加默认扩展名
-      if (url.includes('bgstatic.com') && !url.match(/\.(jpg|jpeg|png|gif|webp|svg)(\?|$|#)/i)) {
-        // Bitget的URL可能需要添加参数或使用默认扩展名
-        // 但为了安全，先直接使用原URL，让浏览器尝试加载
-        // 如果加载失败，Avatar组件会fallback到首字母头像
-        avatarUrl = url
-      } else {
-        avatarUrl = url
-      }
+      // Bitget的URL格式可能是：https://qrc.bgstatic.com/otc/images/20251219/1766158080640
+      // 这个URL可能没有扩展名，但Bitget CDN可能支持直接访问
+      // 如果URL无效，Avatar组件会fallback到首字母头像
     }
     // 如果 profile_url 为空，尝试使用 avatar_url（作为备用）
     else if (handleData.avatar_url && handleData.avatar_url.trim() !== '') {

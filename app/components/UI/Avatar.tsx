@@ -130,7 +130,6 @@ export default function Avatar({
             alt={name || userId || 'Avatar'}
             loading="lazy"
             decoding="async"
-            crossOrigin="anonymous"
             referrerPolicy="no-referrer"
             style={{
               width: '100%',
@@ -139,30 +138,35 @@ export default function Avatar({
               display: imageLoading ? 'none' : 'block',
             }}
             onLoad={() => {
-              console.log(`[Avatar] ✅ 图片加载成功: "${finalAvatarUrl}"`, {
-                name,
-                userId,
-                isTrader,
-              })
               setImageLoading(false)
             }}
             onError={(e) => {
+              // Bitget的URL可能没有扩展名，尝试添加常见扩展名
+              const urlWithExt = finalAvatarUrl && !finalAvatarUrl.match(/\.(jpg|jpeg|png|gif|webp|svg|ico)(\?|$|#)/i)
+                ? `${finalAvatarUrl}.jpg`
+                : null
+              
               console.error(`[Avatar] ❌ 图片加载失败: "${finalAvatarUrl}"`, {
                 name,
                 userId,
                 isTrader,
-                error: e,
                 url_type: typeof finalAvatarUrl,
                 url_length: finalAvatarUrl?.length || 0,
-                url_preview: finalAvatarUrl ? finalAvatarUrl.substring(0, 80) : '(空)',
-                // 尝试添加扩展名后的URL（用于调试）
-                url_with_jpg: finalAvatarUrl && !finalAvatarUrl.match(/\.(jpg|jpeg|png|gif|webp|svg)(\?|$|#)/i) 
-                  ? `${finalAvatarUrl}.jpg` 
-                  : null,
-                url_with_png: finalAvatarUrl && !finalAvatarUrl.match(/\.(jpg|jpeg|png|gif|webp|svg)(\?|$|#)/i) 
-                  ? `${finalAvatarUrl}.png` 
-                  : null,
+                url_preview: finalAvatarUrl ? finalAvatarUrl.substring(0, 100) : '(空)',
+                url_with_jpg: urlWithExt,
+                error_target: (e.target as HTMLImageElement)?.src || '(空)',
               })
+              
+              // 如果URL没有扩展名，尝试添加.jpg后重新加载
+              if (urlWithExt && finalAvatarUrl) {
+                const img = e.target as HTMLImageElement
+                if (img && img.src === finalAvatarUrl) {
+                  console.log(`[Avatar] 🔄 尝试使用 .jpg 扩展名: "${urlWithExt}"`)
+                  img.src = urlWithExt
+                  return // 不设置error，让新URL尝试加载
+                }
+              }
+              
               setImageError(true)
               setImageLoading(false)
             }}
