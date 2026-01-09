@@ -26,21 +26,53 @@ export default function ClaimTraderButton({ traderId, handle, userId, source = '
 
   const checkConnection = async () => {
     try {
+      // 检查用户是否已登录
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        console.warn('[ClaimTrader] 用户未登录')
+        setHasConnection(false)
+        setChecking(false)
+        return
+      }
+
+      // 确保使用正确的用户ID
+      const actualUserId = user.id
+      if (userId !== actualUserId) {
+        console.warn('[ClaimTrader] 用户ID不匹配:', { provided: userId, actual: actualUserId })
+      }
+
       const { data, error } = await supabase
         .from('user_exchange_connections')
         .select('id, exchange, is_active')
-        .eq('user_id', userId)
+        .eq('user_id', actualUserId)
         .eq('exchange', source)
         .eq('is_active', true)
         .maybeSingle()
 
       if (error) {
-        console.error('[ClaimTrader] 检查连接失败:', error)
+        console.error('[ClaimTrader] 检查连接失败:', {
+          error,
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code,
+          userId: actualUserId,
+          source,
+        })
+        // 即使出错也设置连接状态为false，避免显示错误状态
+        setHasConnection(false)
       } else {
         setHasConnection(!!data)
       }
-    } catch (err) {
-      console.error('[ClaimTrader] 检查连接异常:', err)
+    } catch (err: any) {
+      console.error('[ClaimTrader] 检查连接异常:', {
+        error: err,
+        message: err?.message,
+        stack: err?.stack,
+        userId,
+        source,
+      })
+      setHasConnection(false)
     } finally {
       setChecking(false)
     }
