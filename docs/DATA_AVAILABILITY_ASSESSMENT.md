@@ -339,10 +339,336 @@ CREATE INDEX idx_trading_stats_source_trader ON trader_trading_stats(source, sou
 
 ## 推荐实施路线
 
+### 方案 A：仅从公开API获取（当前方案）
 1. **第一步**：扩展ROI和Win Rate到多个时间周期（7D, 30D, 1Y）
 2. **第二步**：实现历史快照存储（周/月）
 3. **第三步**：计算Return YTD和Return 2Y
 4. **第四步**：集成对比图表（SPX500和BTC）
 5. **第五步**：尝试获取交易统计数据（如果API支持）
 6. **最后**：考虑是否实现Frequently Traded和Portfolio Breakdown（按需加载）
+
+### 方案 B：用户绑定交易所账号后显示（推荐）
+
+**优势**：
+- ✅ 可以获取到所有用户自己账号的数据
+- ✅ 不受公开API限制
+- ✅ 数据更准确和完整
+- ✅ 可以为用户提供个性化分析
+
+**技术难度评估**：
+
+#### 1. OAuth授权流程 ⭐⭐⭐ 中高难度
+- **Binance**: 支持 OAuth 2.0，需要申请API Key和Secret
+- **Bybit**: 支持 OAuth 2.0，需要申请API Key
+- **Bitget**: 支持 API Key认证，需要申请
+- **MEXC**: 支持 API Key认证，需要申请
+- **CoinEx**: 支持 API Key认证，需要申请
+
+**实现步骤**：
+1. 用户在设置页面选择"绑定交易所账号"
+2. 跳转到交易所授权页面（OAuth）
+3. 用户授权后，交易所回调到我们的应用
+4. 保存用户的授权token（加密存储）
+5. 使用token定期同步用户数据
+
+**实现难度**: ⭐⭐⭐ 中高（每个交易所需要单独实现）
+
+#### 2. 数据获取 ⭐⭐ 中等难度
+- **已授权用户的数据**：
+  - ✅ Total Trades (12M) - 可以从用户交易历史获取
+  - ✅ Avg Profit/Loss - 可以从交易历史计算
+  - ✅ Profitable Trades Pct - 可以从交易历史计算
+  - ✅ Frequently Traded - 可以从交易历史统计
+  - ✅ Portfolio Breakdown - 可以从持仓数据获取
+  - ✅ Avg Holding Time - 可以从交易历史计算
+  - ✅ Profitable Holding Time - 可以从盈利交易历史计算
+  - ✅ Trading History - 完整交易历史数据
+
+**实现难度**: ⭐⭐ 中（需要调用每个交易所的用户API）
+
+#### 3. 数据存储和安全 ⭐⭐⭐⭐ 高难度
+- **需要存储**：
+  - 用户授权token（需要加密存储）
+  - API Key和Secret（需要加密存储）
+  - 用户的交易数据（需要加密存储）
+
+**安全要求**：
+- ⚠️ Token必须加密存储（使用Supabase Vault或类似服务）
+- ⚠️ 数据传输必须使用HTTPS
+- ⚠️ 需要实现token刷新机制
+- ⚠️ 需要处理token过期的情况
+- ⚠️ 需要实现权限控制（用户只能访问自己的数据）
+
+**实现难度**: ⭐⭐⭐⭐ 高（安全要求高）
+
+#### 4. 数据同步 ⭐⭐⭐ 中高难度
+- **同步频率**：
+  - 实时数据：每次用户查看时同步
+  - 历史数据：每天同步一次（后台任务）
+  - 统计数据：每周同步一次
+
+**实现方式**：
+- 使用 Vercel Cron Job 定期同步用户数据
+- 或者使用 Supabase Edge Functions + pg_cron
+- 需要处理大量用户的并发同步
+
+**实现难度**: ⭐⭐⭐ 中高（需要实现后台同步任务）
+
+#### 5. 用户体验 ⭐⭐ 中等难度
+- **授权流程**：
+  - 提供清晰的授权指引
+  - 说明为什么需要授权
+  - 展示授权后可以获得的数据
+  - 提供取消授权的选项
+
+**数据展示**：
+- 绑定前：显示"绑定账号以查看详细数据"
+- 绑定后：显示完整的数据分析
+- 同步状态：显示"数据同步中"或"最后同步时间"
+
+**实现难度**: ⭐⭐ 中（主要是UI/UX设计）
+
+### 方案对比
+
+| 方案 | 数据完整性 | 技术难度 | 开发时间 | 维护成本 | 用户体验 |
+|------|-----------|---------|---------|---------|---------|
+| **方案A（公开API）** | ⭐⭐⭐ 70% | ⭐⭐ 中 | 2-3周 | ⭐⭐ 中 | ⭐⭐⭐ 好 |
+| **方案B（用户绑定）** | ⭐⭐⭐⭐⭐ 100% | ⭐⭐⭐⭐ 高 | 4-6周 | ⭐⭐⭐ 中高 | ⭐⭐⭐⭐⭐ 优秀 |
+
+### 推荐方案：混合方案
+
+**最佳实践**：结合两种方案
+
+1. **基础数据**（公开API，无需绑定）：
+   - ✅ ROI (7D, 30D, 90D, 1Y)
+   - ✅ Win Rate (7D, 30D, 90D)
+   - ✅ Volume 90D
+   - ✅ Avg Buy 90D
+   - ✅ Monthly Performance
+   - ✅ Comparison Charts
+
+2. **详细数据**（需要绑定账号）：
+   - 🔒 Total Trades (12M)
+   - 🔒 Avg Profit/Loss
+   - 🔒 Profitable Trades Pct
+   - 🔒 Frequently Traded
+   - 🔒 Portfolio Breakdown
+   - 🔒 Avg Holding Time
+   - 🔒 Trading History
+
+**实现策略**：
+- 未绑定用户：显示基础数据 + "绑定账号以查看详细分析"提示
+- 已绑定用户：显示完整数据 + 个性化分析
+
+**技术实现优先级**：
+
+#### 阶段 1：基础数据扩展（2-3周）
+1. 扩展ROI和Win Rate到多个时间周期
+2. 实现历史快照存储
+3. 集成对比图表
+
+#### 阶段 2：用户绑定功能（4-6周）
+1. 实现OAuth授权流程（Binance优先，其他逐步添加）
+2. 实现数据加密存储
+3. 实现数据同步任务
+4. 实现用户数据展示页面
+
+#### 阶段 3：高级功能（2-3周）
+1. 个性化数据分析
+2. 交易策略建议
+3. 风险评估
+
+## 数据表结构建议（用户绑定方案）
+
+### 新增表：user_exchange_connections（用户交易所连接）
+```sql
+CREATE TABLE user_exchange_connections (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  exchange TEXT NOT NULL, -- 'binance', 'bybit', 'bitget', etc.
+  exchange_user_id TEXT NOT NULL, -- 用户在交易所的ID
+  access_token_encrypted TEXT NOT NULL, -- 加密的access token
+  refresh_token_encrypted TEXT, -- 加密的refresh token（如果有）
+  api_key_encrypted TEXT, -- 加密的API Key（如果使用API Key方式）
+  api_secret_encrypted TEXT, -- 加密的API Secret（如果使用API Key方式）
+  expires_at TIMESTAMPTZ, -- token过期时间
+  is_active BOOLEAN DEFAULT true,
+  last_sync_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(user_id, exchange)
+);
+
+CREATE INDEX idx_user_exchange_user ON user_exchange_connections(user_id);
+CREATE INDEX idx_user_exchange_active ON user_exchange_connections(user_id, is_active) WHERE is_active = true;
+```
+
+### 新增表：user_trading_data（用户交易数据）
+```sql
+CREATE TABLE user_trading_data (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  exchange TEXT NOT NULL,
+  period_start DATE NOT NULL,
+  period_end DATE NOT NULL,
+  total_trades INTEGER,
+  avg_profit NUMERIC,
+  avg_loss NUMERIC,
+  profitable_trades_pct NUMERIC,
+  trades_per_week NUMERIC,
+  avg_holding_time_days NUMERIC,
+  profitable_holding_time_days NUMERIC,
+  active_since DATE,
+  profitable_weeks INTEGER,
+  profitable_weeks_pct NUMERIC,
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(user_id, exchange, period_start, period_end)
+);
+
+CREATE INDEX idx_user_trading_user ON user_trading_data(user_id, exchange, period_end DESC);
+```
+
+### 新增表：user_frequently_traded（用户常用交易币种）
+```sql
+CREATE TABLE user_frequently_traded (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  exchange TEXT NOT NULL,
+  symbol TEXT NOT NULL,
+  period_start DATE NOT NULL,
+  period_end DATE NOT NULL,
+  trade_count INTEGER,
+  weight_pct NUMERIC,
+  avg_profit NUMERIC,
+  avg_loss NUMERIC,
+  profitable_pct NUMERIC,
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(user_id, exchange, symbol, period_start, period_end)
+);
+
+CREATE INDEX idx_user_frequently_user ON user_frequently_traded(user_id, exchange, period_end DESC, weight_pct DESC);
+```
+
+### 新增表：user_portfolio_breakdown（用户投资组合分解）
+```sql
+CREATE TABLE user_portfolio_breakdown (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  exchange TEXT NOT NULL,
+  symbol TEXT NOT NULL,
+  direction TEXT NOT NULL, -- 'long' or 'short'
+  weight_pct NUMERIC,
+  value_usd NUMERIC,
+  pnl_pct NUMERIC,
+  current_price NUMERIC,
+  snapshot_at TIMESTAMPTZ NOT NULL,
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(user_id, exchange, symbol, snapshot_at)
+);
+
+CREATE INDEX idx_user_portfolio_user ON user_portfolio_breakdown(user_id, exchange, snapshot_at DESC);
+```
+
+## 技术实现步骤（用户绑定方案）
+
+### 步骤 1：OAuth授权流程实现
+
+1. **创建授权页面** (`app/settings/connect-exchange/page.tsx`)
+   - 显示支持的交易所列表
+   - 提供"连接"按钮
+   - 显示连接状态（已连接/未连接）
+
+2. **实现OAuth回调处理** (`app/api/auth/exchange/callback/route.ts`)
+   - 接收交易所回调
+   - 验证授权码
+   - 获取access token
+   - 加密存储token
+
+3. **实现token刷新机制** (`lib/exchange/auth.ts`)
+   - 检查token是否过期
+   - 自动刷新token
+   - 更新存储的token
+
+**技术难度**: ⭐⭐⭐ 中高
+**开发时间**: 2-3周
+
+### 步骤 2：数据同步实现
+
+1. **实现数据同步API** (`app/api/sync/exchange-data/route.ts`)
+   - 使用用户token获取交易数据
+   - 解析和标准化数据
+   - 存储到数据库
+
+2. **实现后台同步任务** (`app/api/cron/sync-user-data/route.ts`)
+   - Vercel Cron Job定期运行
+   - 同步所有已连接用户的数据
+   - 处理同步错误和重试
+
+**技术难度**: ⭐⭐⭐ 中高
+**开发时间**: 1-2周
+
+### 步骤 3：数据展示实现
+
+1. **更新数据获取函数** (`lib/data/trader.ts`)
+   - 检查用户是否绑定账号
+   - 如果绑定，从user_trading_data获取数据
+   - 如果未绑定，从公开API获取基础数据
+
+2. **更新UI组件** (`app/components/trader/stats/StatsPage.tsx`)
+   - 显示"绑定账号"提示（如果未绑定）
+   - 显示完整数据（如果已绑定）
+
+**技术难度**: ⭐⭐ 中
+**开发时间**: 1周
+
+### 步骤 4：安全实现
+
+1. **实现加密存储** (`lib/encryption.ts`)
+   - 使用Supabase Vault或类似服务
+   - 加密存储API Key和Secret
+   - 加密存储Access Token
+
+2. **实现权限控制**
+   - RLS (Row Level Security) 确保用户只能访问自己的数据
+   - API路由权限验证
+   - 前端权限检查
+
+**技术难度**: ⭐⭐⭐⭐ 高
+**开发时间**: 1-2周
+
+## 总评估
+
+### 方案 B（用户绑定账号）的技术难度总结
+
+| 功能模块 | 技术难度 | 开发时间 | 备注 |
+|---------|---------|---------|------|
+| OAuth授权流程 | ⭐⭐⭐ 中高 | 2-3周 | 每个交易所需要单独实现 |
+| 数据获取 | ⭐⭐ 中 | 1-2周 | 需要调用交易所用户API |
+| 数据存储和安全 | ⭐⭐⭐⭐ 高 | 1-2周 | 加密存储和安全要求高 |
+| 数据同步 | ⭐⭐⭐ 中高 | 1-2周 | 后台任务和错误处理 |
+| 数据展示 | ⭐⭐ 中 | 1周 | UI/UX设计 |
+| **总计** | **⭐⭐⭐ 中高** | **6-10周** | 需要安全专家审核 |
+
+### 推荐实施方案
+
+**最佳方案：混合方案**
+
+1. **第一阶段（3-4周）**：实现基础数据扩展（方案A）
+   - 扩展ROI和Win Rate到多个时间周期
+   - 实现历史快照存储
+   - 集成对比图表
+   - 用户可以查看完整的基础数据
+
+2. **第二阶段（6-10周）**：实现用户绑定功能（方案B）
+   - 实现OAuth授权流程
+   - 实现数据加密存储
+   - 实现数据同步任务
+   - 实现详细数据展示
+   - 用户可以绑定账号查看详细分析
+
+**优势**：
+- ✅ 用户可以先使用基础功能，不需要立即绑定
+- ✅ 绑定后的用户体验更好，数据更完整
+- ✅ 可以逐步开发，降低风险
+- ✅ 未绑定用户仍然可以使用大部分功能
 
