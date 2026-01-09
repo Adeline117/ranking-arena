@@ -158,14 +158,25 @@ export default function RankingTable(props: {
               const displayName = formatDisplayName(traderHandle)
               const sourceLabelText = t.source ? (sourceLabels[t.source] || t.source) : sourceLabel
 
+              const ariaLabel = `排名 ${rank}，交易员 ${displayName}，90天ROI ${t.roi >= 0 ? '+' : ''}${t.roi.toFixed(2)}%，胜率 ${(t.win_rate * 100).toFixed(1)}%，粉丝 ${t.followers.toLocaleString()}`
+              
               return (
                 <Link
                   key={uniqueKey}
                   href={href}
                   style={{ textDecoration: 'none' }}
+                  aria-label={ariaLabel}
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      window.location.href = href
+                    }
+                  }}
                 >
                   <Box
                     className="ranking-table-grid"
+                    role="row"
                     style={{
                       display: 'grid',
                       gridTemplateColumns: '60px 1fr 120px 80px 100px 100px',

@@ -9,6 +9,7 @@ import ErrorMessage from '../UI/ErrorMessage'
 import { ChartIcon } from '../Icons'
 import { Box, Text, Button } from '../Base'
 import { useLanguage } from '../Utils/LanguageProvider'
+import { getCache, setCache } from '@/lib/utils/cache'
 
 type MarketRow = {
   symbol: string
@@ -115,12 +116,25 @@ export default function MarketPanel() {
         }
         setError(null)
         const pairsParam = customPairs.join(',')
+        const cacheKey = `market_${pairsParam}`
+        
+        // 先检查客户端缓存（仅首次加载时使用）
+        if (market.length === 0) {
+          const cachedData = getCache<MarketRow[]>(cacheKey)
+          if (cachedData && cachedData.length > 0) {
+            console.log('[MarketPanel] 使用客户端缓存数据')
+            setMarket(cachedData)
+            setLastUpdate(new Date())
+            setLoading(false)
+          }
+        }
+        
         console.log('[MarketPanel] 请求市场数据, pairs:', pairsParam)
         
         let res: Response
         try {
           res = await fetch(`/api/market?pairs=${encodeURIComponent(pairsParam)}`, { 
-            cache: 'no-store',
+            cache: 'default',
             signal: AbortSignal.timeout(15000), // 15秒超时
           })
         } catch (fetchError: any) {
@@ -200,6 +214,8 @@ export default function MarketPanel() {
                 )) {
               return prevMarket // 返回原数组，避免重新渲染
             }
+            // 更新客户端缓存
+            setCache(cacheKey, filteredRows, 5 * 60 * 1000) // 缓存5分钟
             return filteredRows
           })
           

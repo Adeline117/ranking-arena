@@ -131,7 +131,9 @@ export default function TopNav({ email }: { email: string | null }) {
         <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[4] }}>
           <Link 
             href="/" 
-            className="top-nav-logo" 
+            className="top-nav-logo"
+            aria-label="返回首页"
+            tabIndex={0}
             style={{ 
               display: 'flex', 
               alignItems: 'center', 
@@ -143,6 +145,12 @@ export default function TopNav({ email }: { email: string | null }) {
             }}
             onMouseLeave={(e) => {
               e.currentTarget.style.transform = 'scale(1)'
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                window.location.href = '/'
+              }
             }}
           >
             <Box
@@ -177,6 +185,10 @@ export default function TopNav({ email }: { email: string | null }) {
                 <Link
                   key={item.href}
                   href={item.href}
+                  aria-label={label}
+                  aria-current={isActive ? 'page' : undefined}
+                  tabIndex={0}
+                  role="menuitem"
                   style={{
                     padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
                     borderRadius: tokens.radius.md,
@@ -199,6 +211,12 @@ export default function TopNav({ email }: { email: string | null }) {
                       e.currentTarget.style.color = tokens.colors.text.secondary
                       e.currentTarget.style.background = 'transparent'
                       e.currentTarget.style.transform = 'translateY(0)'
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      window.location.href = item.href
                     }
                   }}
                 >
@@ -227,6 +245,9 @@ export default function TopNav({ email }: { email: string | null }) {
               placeholder={t('searchPlaceholder')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
+              aria-label="搜索交易员"
+              role="searchbox"
+              tabIndex={0}
               style={{
                 width: '100%',
                 height: 40,
@@ -245,6 +266,15 @@ export default function TopNav({ email }: { email: string | null }) {
                 setShowSearchDropdown(true)
                 e.currentTarget.style.borderColor = tokens.colors.border.focus
                 e.currentTarget.style.background = tokens.colors.bg.tertiary
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  handleSearch(e)
+                } else if (e.key === 'Escape') {
+                  setShowSearchDropdown(false)
+                  e.currentTarget.blur()
+                }
               }}
               onBlur={(e) => {
                 e.currentTarget.style.borderColor = tokens.colors.border.primary

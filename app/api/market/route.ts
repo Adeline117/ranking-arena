@@ -50,12 +50,21 @@ function formatRow(symbol: string, priceNum: number, pctNum: number): MarketRow 
 // 说明：早期版本有 “默认 pairs” 的 CoinGecko/Coinbase 抓取函数。
 // 现在统一使用 *ForPairs 版本，支持自定义 pairs，因此移除旧函数以避免未使用告警。
 
+// Next.js 缓存配置：revalidate 60秒（1分钟）
+export const revalidate = 60
+
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
     const pairsParam = searchParams.get('pairs')
     
     console.log('[Market API] 请求市场数据, pairs:', pairsParam || 'default')
+    
+    // 检查内存缓存（如果存在且未过期）
+    if (cache && Date.now() - cache.ts < TTL_MS) {
+      console.log('[Market API] ✅ 使用缓存数据, source:', cache.source)
+      return NextResponse.json({ rows: cache.rows })
+    }
     
     // 如果提供了自定义pairs，使用它们；否则使用默认PAIRS
     let targetPairs = PAIRS
@@ -95,12 +104,19 @@ export async function GET(request: Request) {
         if (!pairsParam) {
           cache = { ts: now, rows, source: 'coinbase' }
         }
-        return NextResponse.json({
-          rows,
-          source: 'coinbase',
-          cached: false,
-          warning: `Primary failed: ${e1?.message ?? 'unknown'}`,
-        })
+        return NextResponse.json(
+          {
+            rows,
+            source: 'coinbase',
+            cached: false,
+            warning: `Primary failed: ${e1?.message ?? 'unknown'}`,
+          },
+          {
+            headers: {
+              'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300',
+            },
+          }
+        )
       } catch (e2: any) {
         console.error('[Market API] Coinbase 也失败:', e2?.message)
         return NextResponse.json(

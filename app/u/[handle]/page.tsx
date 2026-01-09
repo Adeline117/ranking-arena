@@ -310,8 +310,34 @@ export default function UserHomePage(props: { params: { handle: string } | Promi
 
   const isOwnProfile = currentUserId === profile.id
 
+  // 结构化数据（JSON-LD）
+  const structuredData = profile ? {
+    '@context': 'https://schema.org',
+    '@type': 'Person',
+    name: profile.handle,
+    description: profile.bio || `用户 ${profile.handle}`,
+    url: `${process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'}/u/${encodeURIComponent(handle)}`,
+    image: profile.avatar_url || undefined,
+    identifier: profile.id,
+    ...(performance?.roi_90d !== undefined && {
+      mainEntity: {
+        '@type': 'FinancialProduct',
+        name: 'Trading Performance',
+        description: `90天ROI: ${performance.roi_90d}%`,
+      },
+    }),
+  } : null
+
   return (
     <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
+      {/* 结构化数据（JSON-LD） */}
+      {structuredData && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
+        />
+      )}
+      
       <TopNav email={email} />
 
       <Box style={{ maxWidth: 1200, margin: '0 auto', padding: tokens.spacing[6] }}>
