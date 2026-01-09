@@ -16,11 +16,13 @@
 - **[登录流程说明](./LOGIN_FLOW.md)** - 用户登录和认证流程详解
 - **[注册流程配置](./REGISTRATION_SETUP.md)** - 注册流程配置和用户名规则说明
 - **[OTP vs Magic Link](./OTP_VS_MAGIC_LINK.md)** - OTP 和 Magic Link 的对比与选择
-- **[OTP 验证码配置修复](./SUPABASE_OTP_FIX.md)** - 解决收到链接而不是验证码的问题
+- **[OTP 验证码配置修复指南](./OTP_FIX_GUIDE.md)** - 解决收到链接而不是验证码的问题
 
 ### 📊 数据与导入
 
 - **[数据要求说明](./DATA_REQUIREMENTS.md)** - 数据结构和导入要求
+- **[数据可用性评估](./DATA_AVAILABILITY_ASSESSMENT.md)** - 交易员数据字段可行性评估
+- **[数据绑定前后对比](./DATA_BINDING_COMPARISON.md)** - 绑定前后可获取的数据对比
 - **[Binance Web3 导入指南](./BINANCE_WEB3_IMPORT_GUIDE.md)** - Binance Web3 数据导入教程
 
 ### 🎨 功能与系统
@@ -28,6 +30,11 @@
 - **[头像系统](./AVATAR_SYSTEM.md)** - 用户头像系统实现说明
 - **[项目结构](./PROJECT_STRUCTURE.md)** - 项目目录结构和代码组织
 - **[响应式设计](./RESPONSIVE_DESIGN.md)** - 响应式设计实现和设备适配说明
+- **[用户绑定交易所账号技术方案](./USER_EXCHANGE_CONNECTION_TECH.md)** - 用户绑定交易所账号的完整技术方案
+
+### 📧 邮件模板
+
+- **[邮件模板代码](./EMAIL_TEMPLATES_CODE.md)** - Supabase 邮件模板的双语代码
 
 ## 📖 快速开始
 
@@ -57,6 +64,8 @@
 
 ### 数据相关
 - [数据要求说明](./DATA_REQUIREMENTS.md)
+- [数据可用性评估](./DATA_AVAILABILITY_ASSESSMENT.md)
+- [数据绑定前后对比](./DATA_BINDING_COMPARISON.md)
 - [Binance Web3 导入指南](./BINANCE_WEB3_IMPORT_GUIDE.md)
 
 ### 开发相关
