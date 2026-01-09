@@ -152,7 +152,6 @@ export const translations = {
     loginArrow: 'Login',
     traderNotFound: 'Trader not found',
     backToHome: 'Back to Home',
-    activities: 'Activities',
     overview: 'Overview',
   },
 }
