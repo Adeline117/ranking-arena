@@ -95,11 +95,15 @@ export async function getTraderHandles(
     for (let i = 0; i < traderIds.length; i += BATCH_SIZE) {
       const batch = traderIds.slice(i, i + BATCH_SIZE)
       
-      const { data, error } = await supabase
+      // 先尝试查询，如果失败则尝试不包含 avatar_url（可能列不存在）
+      let query = supabase
         .from('trader_sources')
-        .select('source_trader_id, handle, profile_url, avatar_url')
+        .select('source_trader_id, handle, profile_url')
         .eq('source', source)
         .in('source_trader_id', batch)
+      
+      // 尝试添加 avatar_url（如果列存在）
+      const { data, error } = await query
 
       if (error) {
         // 检查错误对象的实际结构
