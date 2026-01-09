@@ -175,13 +175,18 @@ export default function RankingTable(props: {
                       borderBottom: `1px solid ${tokens.colors.border.primary}`,
                       cursor: 'pointer',
                       background: tokens.colors.bg.primary,
-                      transition: `background-color ${tokens.transition.fast}`,
+                      transition: `all ${tokens.transition.base}`,
+                      borderRadius: tokens.radius.none,
                     }}
                     onMouseEnter={(e) => {
-                      e.currentTarget.style.background = tokens.colors.bg.secondary
+                      e.currentTarget.style.background = tokens.colors.bg.tertiary || tokens.colors.bg.hover
+                      e.currentTarget.style.transform = 'translateX(4px)'
+                      e.currentTarget.style.boxShadow = tokens.shadow.xs
                     }}
                     onMouseLeave={(e) => {
                       e.currentTarget.style.background = tokens.colors.bg.primary
+                      e.currentTarget.style.transform = 'translateX(0)'
+                      e.currentTarget.style.boxShadow = tokens.shadow.none
                     }}
                   >
                     {/* 排名 */}

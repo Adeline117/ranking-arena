@@ -2,6 +2,10 @@
 
 import React from 'react'
 import Link from 'next/link'
+import { tokens } from '@/lib/design-tokens'
+import { formatNumber, formatPercent } from '@/lib/design-system-helpers'
+import { Box, Text, Button } from '../Base'
+
 // Trader type - should match the type used in RankingTable
 type Trader = {
   id: string
@@ -10,7 +14,6 @@ type Trader = {
   win_rate: number
   followers: number
 }
-import { formatNumber, formatPercent } from '@/lib/design-system-helpers'
 
 type CompareTradersProps = {
   traders: Trader[]
@@ -22,85 +25,120 @@ export default function CompareTraders({ traders, onRemove, onClear }: CompareTr
   if (traders.length === 0) return null
 
   return (
-    <div
+    <Box
       style={{
         position: 'fixed',
-        bottom: '20px',
-        right: '20px',
-        background: '#0b0b0b',
-        border: '1px solid rgba(255,255,255,0.1)',
-        borderRadius: '16px',
-        padding: '16px',
-        boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
-        zIndex: 400,
+        bottom: tokens.spacing[5],
+        right: tokens.spacing[5],
+        background: tokens.colors.bg.secondary,
+        border: `1px solid ${tokens.colors.border.primary}`,
+        borderRadius: tokens.radius.xl,
+        padding: tokens.spacing[4],
+        boxShadow: tokens.shadow.lg,
+        zIndex: tokens.zIndex.modal,
         maxWidth: '600px',
         maxHeight: '400px',
         overflow: 'auto',
+        backdropFilter: 'blur(10px)',
+        transition: `all ${tokens.transition.base}`,
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.boxShadow = tokens.shadow.xl
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.boxShadow = tokens.shadow.lg
       }}
     >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-        <div style={{ fontWeight: 900, fontSize: '16px' }}>对比交易者 ({traders.length})</div>
-        <button
+      <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: tokens.spacing[3] }}>
+        <Text size="md" weight="bold">
+          对比交易者 ({traders.length})
+        </Text>
+        <Button
+          variant="text"
+          size="sm"
           onClick={onClear}
           style={{
-            padding: '4px 8px',
-            background: 'transparent',
-            border: 'none',
-            color: '#9a9a9a',
-            cursor: 'pointer',
-            fontSize: '12px',
+            color: tokens.colors.text.secondary,
+            fontSize: tokens.typography.fontSize.xs,
+            padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
           }}
         >
           清空
-        </button>
-      </div>
+        </Button>
+      </Box>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
+      <Box style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: tokens.spacing[3] }}>
         {traders.map((trader) => (
-          <div
+          <Box
             key={trader.id}
             style={{
-              padding: '12px',
-              borderRadius: '10px',
-              background: 'rgba(255,255,255,0.03)',
-              border: '1px solid rgba(255,255,255,0.08)',
+              padding: tokens.spacing[3],
+              borderRadius: tokens.radius.lg,
+              background: tokens.colors.bg.primary,
+              border: `1px solid ${tokens.colors.border.primary}`,
               position: 'relative',
+              transition: `all ${tokens.transition.base}`,
+              cursor: 'pointer',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = 'translateY(-2px)'
+              e.currentTarget.style.boxShadow = tokens.shadow.md
+              e.currentTarget.style.borderColor = tokens.colors.border.secondary || tokens.colors.border.primary
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = 'translateY(0)'
+              e.currentTarget.style.boxShadow = tokens.shadow.none
+              e.currentTarget.style.borderColor = tokens.colors.border.primary
             }}
           >
-            <button
-              onClick={() => onRemove(trader.id)}
+            <Button
+              variant="text"
+              size="sm"
+              onClick={(e) => {
+                e.stopPropagation()
+                onRemove(trader.id)
+              }}
               style={{
                 position: 'absolute',
-                top: '8px',
-                right: '8px',
-                width: '20px',
-                height: '20px',
-                borderRadius: '50%',
-                background: 'rgba(255,77,77,0.2)',
+                top: tokens.spacing[2],
+                right: tokens.spacing[2],
+                width: '24px',
+                height: '24px',
+                borderRadius: tokens.radius.full,
+                background: tokens.colors.accent?.error ? `${tokens.colors.accent.error}20` : 'rgba(255, 77, 77, 0.2)',
                 border: 'none',
-                color: '#ff4d4d',
-                cursor: 'pointer',
-                fontSize: '12px',
+                color: tokens.colors.accent?.error || '#ff4d4d',
+                fontSize: tokens.typography.fontSize.sm,
                 display: 'grid',
                 placeItems: 'center',
+                padding: 0,
+                minWidth: '24px',
               }}
             >
               ×
-            </button>
-            <Link href={`/trader/${trader.id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
-              <div style={{ fontWeight: 900, marginBottom: '8px', fontSize: '14px' }}>{trader.handle}</div>
-              <div style={{ fontSize: '12px', color: '#9a9a9a' }}>
-                <div>ROI: <span style={{ color: trader.roi >= 0 ? '#2fe57d' : '#ff4d4d' }}>
-                  {formatPercent(trader.roi)}
-                </span></div>
-                <div>胜率: {Math.round(trader.win_rate)}%</div>
-                <div>粉丝: {formatNumber(trader.followers)}</div>
-              </div>
+            </Button>
+            <Link href={`/trader/${trader.handle || trader.id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
+              <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>
+                {trader.handle || trader.id}
+              </Text>
+              <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[1] }}>
+                <Text size="xs" color="secondary">
+                  ROI: <span style={{ color: trader.roi >= 0 ? (tokens.colors.accent?.success || '#2fe57d') : (tokens.colors.accent?.error || '#ff4d4d') }}>
+                    {formatPercent(trader.roi)}
+                  </span>
+                </Text>
+                <Text size="xs" color="secondary">
+                  胜率: {Math.round(trader.win_rate)}%
+                </Text>
+                <Text size="xs" color="secondary">
+                  粉丝: {formatNumber(trader.followers)}
+                </Text>
+              </Box>
             </Link>
-          </div>
+          </Box>
         ))}
-      </div>
-    </div>
+      </Box>
+    </Box>
   )
 }
 

@@ -69,13 +69,22 @@ function AvatarLink({ handle }: { handle: string }) {
         style={{
           width: 24,
           height: 24,
-          borderRadius: 8,
+          borderRadius: tokens.radius.md,
           display: 'grid',
           placeItems: 'center',
-          background: 'rgba(255,255,255,0.08)',
-          border: '1px solid rgba(255,255,255,0.10)',
-          fontWeight: 950,
-          fontSize: 12,
+          background: tokens.colors.bg.secondary,
+          border: `1px solid ${tokens.colors.border.primary}`,
+          fontWeight: tokens.typography.fontWeight.black,
+          fontSize: tokens.typography.fontSize.xs,
+          transition: `all ${tokens.transition.base}`,
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.transform = 'scale(1.1)'
+          e.currentTarget.style.boxShadow = tokens.shadow.sm
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.transform = 'scale(1)'
+          e.currentTarget.style.boxShadow = tokens.shadow.none
         }}
       >
         {(handle?.[0] || 'U').toUpperCase()}
@@ -303,10 +312,17 @@ export default function PostFeed(props: { variant?: 'compact' | 'full' } = {}) {
                 textAlign: 'left',
                 border: 'none',
                 background: 'transparent',
-                padding: '10px 0',
+                padding: `${tokens.spacing[3]} 0`,
                 borderBottom: `1px solid ${tokens.colors.border.primary}`,
                 cursor: 'pointer',
                 color: tokens.colors.text.primary,
+                transition: `background-color ${tokens.transition.base}`,
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = tokens.colors.bg.secondary
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'transparent'
               }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>

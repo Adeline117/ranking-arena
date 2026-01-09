@@ -24,23 +24,27 @@ export function Button({
     gap: tokens.spacing[2],
     border: 'none',
     borderRadius: tokens.radius.md,
-    fontWeight: tokens.typography.fontWeight.bold,
+    fontWeight: tokens.typography.fontWeight.semibold,
     cursor: props.disabled ? 'not-allowed' : 'pointer',
-    transition: `background-color ${tokens.transition.fast}`,
+    transition: `all ${tokens.transition.base}`,
     fontFamily: tokens.typography.fontFamily.sans.join(', '),
+    position: 'relative',
+    overflow: 'hidden',
     ...(fullWidth && { width: '100%' }),
   }
 
   const variantStyles: Record<typeof variant, React.CSSProperties> = {
     primary: {
-      background: tokens.colors.bg.secondary,
-      color: tokens.colors.text.primary,
+      background: tokens.colors.accent?.primary || tokens.colors.bg.secondary,
+      color: tokens.colors.black || tokens.colors.text.primary,
       border: `1px solid ${tokens.colors.border.primary}`,
+      boxShadow: tokens.shadow.sm,
     },
     secondary: {
       background: tokens.colors.bg.secondary,
       color: tokens.colors.text.primary,
       border: `1px solid ${tokens.colors.border.primary}`,
+      boxShadow: tokens.shadow.xs,
     },
     ghost: {
       background: 'transparent',
@@ -71,8 +75,9 @@ export function Button({
 
   const disabledStyle: React.CSSProperties = props.disabled
     ? {
-        opacity: 0.4,
+        opacity: 0.5,
         cursor: 'not-allowed',
+        transform: 'none',
       }
     : {}
 
@@ -84,6 +89,22 @@ export function Button({
         ...sizeStyles[size],
         ...disabledStyle,
         ...style,
+      }}
+      onMouseEnter={(e) => {
+        if (!props.disabled && !props.onMouseEnter) {
+          e.currentTarget.style.transform = 'translateY(-1px)'
+          if (variant === 'primary') {
+            e.currentTarget.style.boxShadow = tokens.shadow.md
+          } else if (variant === 'secondary') {
+            e.currentTarget.style.boxShadow = tokens.shadow.sm
+          }
+        }
+      }}
+      onMouseLeave={(e) => {
+        if (!props.disabled && !props.onMouseLeave) {
+          e.currentTarget.style.transform = 'translateY(0)'
+          e.currentTarget.style.boxShadow = variantStyles[variant].boxShadow || tokens.shadow.xs
+        }
       }}
       {...props}
     >

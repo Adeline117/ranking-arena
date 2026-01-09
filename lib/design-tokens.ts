@@ -87,20 +87,24 @@ export const tokens = {
     full: '9999px',
   },
   
-  // Shadows (very subtle, minimal)
+  // Shadows (enhanced for better depth)
   shadow: {
     none: 'none',
-    sm: '0 1px 2px rgba(0, 0, 0, 0.1)',
-    md: '0 4px 8px rgba(0, 0, 0, 0.15)',
-    lg: '0 8px 16px rgba(0, 0, 0, 0.2)',
+    xs: '0 1px 2px rgba(0, 0, 0, 0.05)',
+    sm: '0 2px 4px rgba(0, 0, 0, 0.1)',
+    md: '0 4px 12px rgba(0, 0, 0, 0.15)',
+    lg: '0 8px 24px rgba(0, 0, 0, 0.2)',
+    xl: '0 16px 48px rgba(0, 0, 0, 0.25)',
     inner: 'inset 0 1px 2px rgba(0, 0, 0, 0.1)',
+    glow: '0 0 20px rgba(139, 111, 168, 0.3)',
   },
   
-  // Transitions
+  // Transitions (enhanced for smoother animations)
   transition: {
-    fast: '150ms ease',
-    base: '200ms ease',
-    slow: '300ms ease',
+    fast: '150ms cubic-bezier(0.4, 0, 0.2, 1)',
+    base: '200ms cubic-bezier(0.4, 0, 0.2, 1)',
+    slow: '300ms cubic-bezier(0.4, 0, 0.2, 1)',
+    bounce: '300ms cubic-bezier(0.68, -0.55, 0.265, 1.55)',
   },
   
   // Z-index scale
