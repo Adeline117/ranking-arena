@@ -1,6 +1,7 @@
 'use client'
 
 import { tokens } from '@/lib/design-tokens'
+import { useLanguage } from '../Utils/LanguageProvider'
 import { Box, Text } from '../Base'
 
 type TabKey = 'overview' | 'stats' | 'portfolio'
@@ -11,10 +12,11 @@ interface TraderTabsProps {
 }
 
 export default function TraderTabs({ activeTab, onTabChange }: TraderTabsProps) {
+  const { t } = useLanguage()
   const tabs: Array<{ key: TabKey; label: string }> = [
-    { key: 'overview', label: '概览' },
-    { key: 'stats', label: '统计' },
-    { key: 'portfolio', label: '投资组合' },
+    { key: 'overview', label: t('overview') },
+    { key: 'stats', label: t('stats') },
+    { key: 'portfolio', label: t('portfolio') },
   ]
 
   return (
