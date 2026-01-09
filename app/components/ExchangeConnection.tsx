@@ -12,8 +12,10 @@ interface ExchangeConnectionProps {
 
 const EXCHANGES = [
   { id: 'binance', name: 'Binance', icon: '🟡' },
-  // { id: 'bybit', name: 'Bybit', icon: '🔵' },
-  // { id: 'bitget', name: 'Bitget', icon: '🟢' },
+  { id: 'bybit', name: 'Bybit', icon: '🔵' },
+  { id: 'bitget', name: 'Bitget', icon: '🟢' },
+  { id: 'mexc', name: 'MEXC', icon: '🟠' },
+  { id: 'coinex', name: 'CoinEx', icon: '🟣' },
 ] as const
 
 export default function ExchangeConnectionManager({ userId }: ExchangeConnectionProps) {
