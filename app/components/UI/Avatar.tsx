@@ -138,35 +138,73 @@ export default function Avatar({
               display: imageLoading ? 'none' : 'block',
             }}
             onLoad={() => {
+              console.log(`[Avatar] ✅ 图片加载成功: "${finalAvatarUrl?.substring(0, 80)}${finalAvatarUrl && finalAvatarUrl.length > 80 ? '...' : ''}"`, {
+                name,
+                userId,
+                isTrader,
+              })
               setImageLoading(false)
             }}
             onError={(e) => {
-              // Bitget的URL可能没有扩展名，尝试添加常见扩展名
-              const urlWithExt = finalAvatarUrl && !finalAvatarUrl.match(/\.(jpg|jpeg|png|gif|webp|svg|ico)(\?|$|#)/i)
-                ? `${finalAvatarUrl}.jpg`
-                : null
+              const img = e.target as HTMLImageElement
+              const currentSrc = img?.src || finalAvatarUrl || ''
               
-              console.error(`[Avatar] ❌ 图片加载失败: "${finalAvatarUrl}"`, {
+              // Bitget的URL格式可能是：https://qrc.bgstatic.com/otc/images/20251219/1766158080640
+              // 这个URL可能没有扩展名，但Bitget CDN可能支持直接访问（通过Content-Type判断）
+              // 如果加载失败，尝试添加常见扩展名
+              const hasExtension = currentSrc && /\.(jpg|jpeg|png|gif|webp|svg|ico)(\?|$|#)/i.test(currentSrc)
+              
+              console.error(`[Avatar] ❌ 图片加载失败: "${currentSrc.substring(0, 100)}${currentSrc.length > 100 ? '...' : ''}"`, {
                 name,
                 userId,
                 isTrader,
                 url_type: typeof finalAvatarUrl,
-                url_length: finalAvatarUrl?.length || 0,
-                url_preview: finalAvatarUrl ? finalAvatarUrl.substring(0, 100) : '(空)',
-                url_with_jpg: urlWithExt,
-                error_target: (e.target as HTMLImageElement)?.src || '(空)',
+                url_length: currentSrc?.length || 0,
+                url_has_extension: hasExtension,
+                error_target: img?.src || '(空)',
               })
               
-              // 如果URL没有扩展名，尝试添加.jpg后重新加载
-              if (urlWithExt && finalAvatarUrl) {
-                const img = e.target as HTMLImageElement
-                if (img && img.src === finalAvatarUrl) {
-                  console.log(`[Avatar] 🔄 尝试使用 .jpg 扩展名: "${urlWithExt}"`)
-                  img.src = urlWithExt
-                  return // 不设置error，让新URL尝试加载
+              // 如果URL没有扩展名且还没尝试过添加扩展名，尝试添加.jpg
+              if (!hasExtension && currentSrc && !currentSrc.endsWith('.jpg') && !currentSrc.endsWith('.png')) {
+                // 尝试添加 .jpg 扩展名
+                const urlWithJpg = `${currentSrc}.jpg`
+                console.log(`[Avatar] 🔄 尝试使用 .jpg 扩展名: "${urlWithJpg.substring(0, 100)}${urlWithJpg.length > 100 ? '...' : ''}"`)
+                
+                // 创建一个新的Image对象测试这个URL是否有效
+                const testImg = new Image()
+                testImg.onload = () => {
+                  console.log(`[Avatar] ✅ .jpg 扩展名有效，更新src`)
+                  if (img) {
+                    img.src = urlWithJpg
+                  }
+                  setImageLoading(false)
+                  // 不设置error，让新URL尝试加载
                 }
+                testImg.onerror = () => {
+                  // .jpg 也失败，尝试 .png
+                  const urlWithPng = `${currentSrc}.png`
+                  console.log(`[Avatar] 🔄 .jpg 失败，尝试 .png: "${urlWithPng.substring(0, 100)}${urlWithPng.length > 100 ? '...' : ''}"`)
+                  
+                  const testImg2 = new Image()
+                  testImg2.onload = () => {
+                    console.log(`[Avatar] ✅ .png 扩展名有效，更新src`)
+                    if (img) {
+                      img.src = urlWithPng
+                    }
+                    setImageLoading(false)
+                  }
+                  testImg2.onerror = () => {
+                    console.error(`[Avatar] ❌ .jpg 和 .png 都失败，使用fallback头像`)
+                    setImageError(true)
+                    setImageLoading(false)
+                  }
+                  testImg2.src = urlWithPng
+                }
+                testImg.src = urlWithJpg
+                return // 不设置error，等待测试结果
               }
               
+              // 如果已经尝试过扩展名或URL本身有问题，使用fallback
               setImageError(true)
               setImageLoading(false)
             }}
