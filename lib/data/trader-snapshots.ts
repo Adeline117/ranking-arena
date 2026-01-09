@@ -96,48 +96,81 @@ export async function getTraderHandles(
     for (let i = 0; i < traderIds.length; i += BATCH_SIZE) {
       const batch = traderIds.slice(i, i + BATCH_SIZE)
       
-      // 直接查询 profile_url（根据导入脚本，头像URL存储在这里）
-      // 如果 avatar_url 列存在，也一起查询；如果不存在，回退到只查询 profile_url
-      // 但为了简化，我们先直接查询 profile_url，因为导入脚本将头像URL存储在这里
+      // 尝试查询 avatar_url 和 profile_url（如果 avatar_url 列不存在，会报错，然后回退）
+      // 优先尝试包含 avatar_url 的查询，如果失败则只查询 profile_url
       let query = supabase
         .from('trader_sources')
-        .select('source_trader_id, handle, profile_url')
+        .select('source_trader_id, handle, profile_url, avatar_url')
         .eq('source', source)
         .in('source_trader_id', batch)
       
       let { data, error } = await query
       
-      // 如果查询失败，记录详细错误信息
+      // 如果查询失败，可能是 avatar_url 列不存在，回退到只查询 profile_url
       if (error) {
         const errorKeys = Object.keys(error || {})
+        const isEmptyError = errorKeys.length === 0
         const errorStr = JSON.stringify(error || {}).toLowerCase()
         const errorMessage = (error as any)?.message?.toLowerCase() || ''
         const errorCode = (error as any)?.code || ''
         
-        const errorInfo: any = {
-          source,
-          batchNumber: Math.floor(i / BATCH_SIZE) + 1,
-          batchSize: batch.length,
-          batchSample: batch.slice(0, 3),
-          errorKeys,
-          errorString: JSON.stringify(error),
-          errorCode,
-          errorMessage,
-        }
+        // 检查是否是列不存在的错误
+        const isColumnError = isEmptyError || 
+          errorStr.includes('avatar_url') ||
+          errorStr.includes('column') ||
+          errorStr.includes('does not exist') ||
+          errorMessage.includes('avatar_url') ||
+          errorMessage.includes('column') ||
+          errorMessage.includes('does not exist') ||
+          errorCode === 'PGRST204' ||
+          errorCode === '42703'
         
-        // 尝试获取错误信息
-        if (error && typeof error === 'object') {
-          errorInfo.errorType = typeof error
-          if ('message' in error) errorInfo.message = (error as any).message
-          if ('details' in error) errorInfo.details = (error as any).details
-          if ('hint' in error) errorInfo.hint = (error as any).hint
-          if ('code' in error) errorInfo.code = (error as any).code
+        if (isColumnError) {
+          // avatar_url 列不存在，回退到只查询 profile_url
+          console.warn(`[trader-snapshots] ⚠️ ${source} avatar_url 列不存在，使用回退查询 (batch ${Math.floor(i / BATCH_SIZE) + 1})`)
+          const fallbackQuery = supabase
+            .from('trader_sources')
+            .select('source_trader_id, handle, profile_url')
+            .eq('source', source)
+            .in('source_trader_id', batch)
+          
+          const fallbackResult = await fallbackQuery
+          
+          if (fallbackResult.error) {
+            // 回退查询也失败
+            console.error(`[trader-snapshots] ❌ ${source} 回退查询也失败 (batch ${Math.floor(i / BATCH_SIZE) + 1}):`, fallbackResult.error)
+            continue
+          }
+          
+          // 回退查询成功
+          data = fallbackResult.data || null
+          error = null
         } else {
-          errorInfo.errorValue = error
+          // 其他类型的错误，记录并跳过
+          const errorInfo: any = {
+            source,
+            batchNumber: Math.floor(i / BATCH_SIZE) + 1,
+            batchSize: batch.length,
+            batchSample: batch.slice(0, 3),
+            errorKeys,
+            errorString: JSON.stringify(error),
+            errorCode,
+            errorMessage,
+          }
+          
+          if (error && typeof error === 'object') {
+            errorInfo.errorType = typeof error
+            if ('message' in error) errorInfo.message = (error as any).message
+            if ('details' in error) errorInfo.details = (error as any).details
+            if ('hint' in error) errorInfo.hint = (error as any).hint
+            if ('code' in error) errorInfo.code = (error as any).code
+          } else {
+            errorInfo.errorValue = error
+          }
+          
+          console.error(`[trader-snapshots] ❌ ${source} handle 查询错误 (batch ${errorInfo.batchNumber}):`, errorInfo)
+          continue
         }
-        
-        console.error(`[trader-snapshots] ❌ ${source} handle 查询错误 (batch ${errorInfo.batchNumber}):`, errorInfo)
-        continue
       }
 
       // 处理查询成功的情况
