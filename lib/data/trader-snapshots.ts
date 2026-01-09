@@ -87,35 +87,59 @@ export async function getTraderHandles(
     return new Map()
   }
 
-  const { data, error } = await supabase
-    .from('trader_sources')
-    .select('source_trader_id, handle, profile_url, avatar_url')
-    .eq('source', source)
-    .in('source_trader_id', traderIds)
+  try {
+    // 如果 traderIds 太多，分批查询（Supabase 的 in 查询可能有数量限制）
+    const BATCH_SIZE = 100
+    const allResults: TraderHandle[] = []
 
-  if (error) {
-    console.error(`[trader-snapshots] ❌ ${source} handle 查询错误:`, {
-      error,
-      message: error.message,
-      details: error.details,
-      hint: error.hint,
-      code: error.code,
+    for (let i = 0; i < traderIds.length; i += BATCH_SIZE) {
+      const batch = traderIds.slice(i, i + BATCH_SIZE)
+      
+      const { data, error } = await supabase
+        .from('trader_sources')
+        .select('source_trader_id, handle, profile_url, avatar_url')
+        .eq('source', source)
+        .in('source_trader_id', batch)
+
+      if (error) {
+        console.error(`[trader-snapshots] ❌ ${source} handle 查询错误 (batch ${Math.floor(i / BATCH_SIZE) + 1}):`, {
+          error,
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code,
+          source,
+          batchSize: batch.length,
+          batchSample: batch.slice(0, 3),
+        })
+        // 继续处理下一批，不中断整个流程
+        continue
+      }
+
+      if (data && Array.isArray(data)) {
+        allResults.push(...data)
+      }
+    }
+
+    const handleMap = new Map<string, TraderHandle>()
+    allResults.forEach((item: TraderHandle) => {
+      // 即使没有 handle，也保存数据（可能只有 avatar_url）
+      if (item.source_trader_id) {
+        handleMap.set(item.source_trader_id, item)
+      }
+    })
+
+    return handleMap
+  } catch (err: any) {
+    console.error(`[trader-snapshots] ❌ ${source} handle 查询异常:`, {
+      error: err,
+      message: err?.message,
+      stack: err?.stack,
       source,
       traderIdsCount: traderIds.length,
-      traderIdsSample: traderIds.slice(0, 5),
     })
-    // 即使出错也返回空 Map，避免阻塞整个流程
     return new Map()
   }
-
-  const handleMap = new Map<string, TraderHandle>()
-  ;(data || []).forEach((item: TraderHandle) => {
-    if (item.handle && item.handle.trim() !== '') {
-      handleMap.set(item.source_trader_id, item)
-    }
-  })
-
-  return handleMap
 }
 
 /**
