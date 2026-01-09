@@ -130,7 +130,7 @@ export default function Avatar({
             alt={name || userId || 'Avatar'}
             loading="lazy"
             decoding="async"
-            referrerPolicy="no-referrer"
+            referrerPolicy="origin-when-cross-origin"
             style={{
               width: '100%',
               height: '100%',
@@ -149,10 +149,10 @@ export default function Avatar({
               const img = e.target as HTMLImageElement
               const currentSrc = img?.src || finalAvatarUrl || ''
               
-              // Bitget的URL格式可能是：https://qrc.bgstatic.com/otc/images/20251219/1766158080640
-              // 这个URL可能没有扩展名，但Bitget CDN可能支持直接访问（通过Content-Type判断）
-              // 如果加载失败，尝试添加常见扩展名
+              // Bitget的URL可能返回403（需要referrer），尝试不同的referrerPolicy
+              // 或者URL没有扩展名，需要添加扩展名
               const hasExtension = currentSrc && /\.(jpg|jpeg|png|gif|webp|svg|ico)(\?|$|#)/i.test(currentSrc)
+              const isBitgetUrl = currentSrc.includes('bgstatic.com')
               
               console.error(`[Avatar] ❌ 图片加载失败: "${currentSrc.substring(0, 100)}${currentSrc.length > 100 ? '...' : ''}"`, {
                 name,
@@ -161,50 +161,24 @@ export default function Avatar({
                 url_type: typeof finalAvatarUrl,
                 url_length: currentSrc?.length || 0,
                 url_has_extension: hasExtension,
+                is_bitget_url: isBitgetUrl,
                 error_target: img?.src || '(空)',
               })
               
-              // 如果URL没有扩展名且还没尝试过添加扩展名，尝试添加.jpg
-              if (!hasExtension && currentSrc && !currentSrc.endsWith('.jpg') && !currentSrc.endsWith('.png')) {
+              // 如果是Bitget URL且没有扩展名，尝试添加扩展名
+              if (isBitgetUrl && !hasExtension && currentSrc && !currentSrc.includes('?')) {
                 // 尝试添加 .jpg 扩展名
                 const urlWithJpg = `${currentSrc}.jpg`
-                console.log(`[Avatar] 🔄 尝试使用 .jpg 扩展名: "${urlWithJpg.substring(0, 100)}${urlWithJpg.length > 100 ? '...' : ''}"`)
+                console.log(`[Avatar] 🔄 Bitget URL无扩展名，尝试添加 .jpg: "${urlWithJpg.substring(0, 100)}${urlWithJpg.length > 100 ? '...' : ''}"`)
                 
-                // 创建一个新的Image对象测试这个URL是否有效
-                const testImg = new Image()
-                testImg.onload = () => {
-                  console.log(`[Avatar] ✅ .jpg 扩展名有效，更新src`)
-                  if (img) {
-                    img.src = urlWithJpg
-                  }
-                  setImageLoading(false)
-                  // 不设置error，让新URL尝试加载
+                // 直接更新src，让浏览器尝试加载
+                if (img && img.src === currentSrc) {
+                  img.src = urlWithJpg
+                  return // 不设置error，让新URL尝试加载
                 }
-                testImg.onerror = () => {
-                  // .jpg 也失败，尝试 .png
-                  const urlWithPng = `${currentSrc}.png`
-                  console.log(`[Avatar] 🔄 .jpg 失败，尝试 .png: "${urlWithPng.substring(0, 100)}${urlWithPng.length > 100 ? '...' : ''}"`)
-                  
-                  const testImg2 = new Image()
-                  testImg2.onload = () => {
-                    console.log(`[Avatar] ✅ .png 扩展名有效，更新src`)
-                    if (img) {
-                      img.src = urlWithPng
-                    }
-                    setImageLoading(false)
-                  }
-                  testImg2.onerror = () => {
-                    console.error(`[Avatar] ❌ .jpg 和 .png 都失败，使用fallback头像`)
-                    setImageError(true)
-                    setImageLoading(false)
-                  }
-                  testImg2.src = urlWithPng
-                }
-                testImg.src = urlWithJpg
-                return // 不设置error，等待测试结果
               }
               
-              // 如果已经尝试过扩展名或URL本身有问题，使用fallback
+              // 如果已经尝试过或不是Bitget URL，使用fallback
               setImageError(true)
               setImageLoading(false)
             }}
