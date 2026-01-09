@@ -314,7 +314,13 @@ export default function TopNav({ email }: { email: string | null }) {
           {myId ? (
             <>
               <Box
+                as="button"
                 onClick={() => setShowUserMenu(!showUserMenu)}
+                aria-label="用户菜单"
+                aria-expanded={showUserMenu}
+                aria-haspopup="true"
+                role="button"
+                tabIndex={0}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -324,6 +330,18 @@ export default function TopNav({ email }: { email: string | null }) {
                   borderRadius: tokens.radius.md,
                   transition: `all ${tokens.transition.base}`,
                   background: showUserMenu ? tokens.colors.bg.secondary : 'transparent',
+                  border: 'none',
+                  fontFamily: 'inherit',
+                  color: 'inherit',
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    setShowUserMenu(!showUserMenu)
+                  } else if (e.key === 'Escape' && showUserMenu) {
+                    e.preventDefault()
+                    setShowUserMenu(false)
+                  }
                 }}
               >
                 <Box
@@ -346,6 +364,8 @@ export default function TopNav({ email }: { email: string | null }) {
 
               {showUserMenu && (
                 <Box
+                  role="menu"
+                  aria-label="用户菜单选项"
                   style={{
                     position: 'absolute',
                     top: `calc(100% + ${tokens.spacing[2]})`,
@@ -480,6 +500,9 @@ export default function TopNav({ email }: { email: string | null }) {
           ) : (
             <Link
               href="/login"
+              aria-label={t('login')}
+              tabIndex={0}
+              role="button"
               style={{
                 padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
                 borderRadius: tokens.radius.md,
