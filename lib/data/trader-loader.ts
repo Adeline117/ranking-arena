@@ -27,7 +27,7 @@ function snapshotToTrader(
       ? handleData.handle
       : snapshot.source_trader_id
 
-  // 重要：根据导入脚本的实际情况，头像URL存储在 profile_url 字段中，而不是 avatar_url
+  // 重要：根据导入脚本的实际情况，头像URL存储在 profile_url 字段中
   // 导入脚本使用：
   // - Bitget: profile_url: item.avatarUrl
   // - Binance: profile_url: item.userPhotoUrl  
@@ -35,36 +35,38 @@ function snapshotToTrader(
   // 所以我们应该直接使用 profile_url 作为头像URL
   let avatarUrl: string | undefined = undefined
   if (handleData) {
-    // 优先使用 avatar_url（如果存在且不为空）
-    if (handleData.avatar_url && handleData.avatar_url.trim() !== '') {
-      avatarUrl = handleData.avatar_url.trim()
-    } 
-    // 否则直接使用 profile_url（导入脚本将头像URL存储在这里）
-    // 对于所有已知的交易所，profile_url 就是头像URL
-    else if (handleData.profile_url && handleData.profile_url.trim() !== '') {
+    // 直接使用 profile_url 作为头像URL（导入脚本将头像URL存储在这里）
+    if (handleData.profile_url && handleData.profile_url.trim() !== '') {
       avatarUrl = handleData.profile_url.trim()
+    }
+    // 如果 profile_url 为空，尝试使用 avatar_url（作为备用，虽然这个字段可能不存在）
+    else if (handleData.avatar_url && handleData.avatar_url.trim() !== '') {
+      avatarUrl = handleData.avatar_url.trim()
     }
   }
   
-  // 调试日志：输出前几个trader的详细信息
+  // 调试日志：输出前几个trader的详细信息（仅前10个，避免日志过多）
+  // 注意：这里不能使用 rank，因为 rank 是在排序后才知道的，这里还没有排序
   const shouldLogDetail = snapshot.source_trader_id && (
     displayHandle.includes('老') || 
     displayHandle.includes('East') || 
     displayHandle.includes('Rock') ||
     displayHandle.includes('Encryption') ||
+    displayHandle.includes('Gain') ||
+    displayHandle.includes('Bedrock') ||
     snapshot.source_trader_id.includes('老') ||
     snapshot.source_trader_id === 'East-Wind' ||
-    !avatarUrl // 没有头像的trader也记录
+    (!avatarUrl && handleMap.size > 0) // 前几个没有头像的trader也记录
   )
   
   if (shouldLogDetail) {
     console.log(`[trader-loader] 🔍 Trader "${displayHandle}" (${snapshot.source_trader_id}, ${source}):`, {
       hasHandleData: !!handleData,
       handle: handleData?.handle || '(空)',
-      avatar_url: handleData?.avatar_url || '(空)',
       profile_url: handleData?.profile_url || '(空)',
       profile_url_type: typeof handleData?.profile_url,
       profile_url_length: handleData?.profile_url?.length || 0,
+      avatar_url: handleData?.avatar_url || '(空)',
       final_avatar_url: avatarUrl || '(未获取)',
       final_avatar_url_type: typeof avatarUrl,
     })
@@ -104,6 +106,13 @@ export async function loadAllTraders(supabase: SupabaseClient): Promise<Trader[]
     const allTradersData: Trader[] = []
     const sources: TraderSource[] = ['binance', 'binance_web3', 'bybit', 'bitget', 'mexc', 'coinex']
 
+    // 调试：输出每个source的handleMap大小
+    sources.forEach((source) => {
+      const handleMapSize = handleMaps[source]?.size || 0
+      const snapshotCount = snapshots[source]?.length || 0
+      console.log(`[trader-loader] 📊 ${source}: handleMap=${handleMapSize} 条, snapshots=${snapshotCount} 条`)
+    })
+
     sources.forEach((source) => {
       snapshots[source].forEach((snapshot) => {
         const trader = snapshotToTrader(snapshot, source, handleMaps[source])
@@ -126,8 +135,23 @@ export async function loadAllTraders(supabase: SupabaseClient): Promise<Trader[]
       .slice(0, 100) // 只保留前100名
 
     const loadTime = performance.now() - startTime
+    
+    // 调试：统计有多少trader有头像URL
+    const withAvatarCount = tradersData.filter(t => t.avatar_url && t.avatar_url.trim() !== '').length
     console.log(`[trader-loader] ⚡ 加载耗时: ${loadTime.toFixed(0)}ms`)
-    console.log(`[trader-loader] 📈 加载了 ${tradersData.length} 个交易员`)
+    console.log(`[trader-loader] 📈 加载了 ${tradersData.length} 个交易员，其中 ${withAvatarCount} 个有头像URL`)
+    
+    // 输出前5名trader的头像URL（用于调试）
+    if (tradersData.length > 0) {
+      console.log(`[trader-loader] 🏆 前5名trader头像URL:`, 
+        tradersData.slice(0, 5).map((t, idx) => ({
+          rank: idx + 1,
+          handle: t.handle,
+          avatar_url: t.avatar_url || '(无)',
+          source: t.source,
+        }))
+      )
+    }
 
     return tradersData
   } catch (error) {
