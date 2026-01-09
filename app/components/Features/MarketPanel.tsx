@@ -369,16 +369,21 @@ const MarketRow = memo(function MarketRow({ data }: { data: MarketRow }) {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        transition: `background ${tokens.transition.base}, border-color ${tokens.transition.base}`,
-        contain: 'layout style paint', // CSS containment 优化渲染性能
+        transition: `all ${tokens.transition.base}`,
+        contain: 'layout style paint',
+        cursor: 'pointer',
       }}
       onMouseEnter={(e) => {
         e.currentTarget.style.background = tokens.colors.bg.secondary
         e.currentTarget.style.borderColor = tokens.colors.border.primary
+        e.currentTarget.style.transform = 'translateY(-1px)'
+        e.currentTarget.style.boxShadow = tokens.shadow.sm
       }}
       onMouseLeave={(e) => {
         e.currentTarget.style.background = tokens.colors.bg.primary
         e.currentTarget.style.borderColor = tokens.colors.border.secondary
+        e.currentTarget.style.transform = 'translateY(0)'
+        e.currentTarget.style.boxShadow = tokens.shadow.none
       }}
     >
       <Text size="sm" weight="black">

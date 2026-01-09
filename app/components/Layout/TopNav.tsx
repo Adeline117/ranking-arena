@@ -108,7 +108,9 @@ export default function TopNav({ email }: { email: string | null }) {
         zIndex: tokens.zIndex.sticky,
         background: tokens.colors.bg.primary,
         borderBottom: `1px solid ${tokens.colors.border.primary}`,
-        height: 56, // Fixed height for trader-focused UI
+        height: 64,
+        backdropFilter: 'blur(10px)',
+        boxShadow: tokens.shadow.xs,
       }}
     >
       <Box
@@ -127,18 +129,35 @@ export default function TopNav({ email }: { email: string | null }) {
       >
         {/* 左：Logo + Nav */}
         <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[4] }}>
-          <Link href="/" className="top-nav-logo" style={{ display: 'flex', alignItems: 'center', textDecoration: 'none' }}>
+          <Link 
+            href="/" 
+            className="top-nav-logo" 
+            style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              textDecoration: 'none',
+              transition: `transform ${tokens.transition.base}`,
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = 'scale(1.05)'
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = 'scale(1)'
+            }}
+          >
             <Box
               style={{
-                width: 32,
-                height: 32,
-                borderRadius: tokens.radius.md,
-                background: tokens.colors.text.primary,
+                width: 36,
+                height: 36,
+                borderRadius: tokens.radius.lg,
+                background: `linear-gradient(135deg, ${tokens.colors.accent?.primary || tokens.colors.text.primary} 0%, ${tokens.colors.accent?.primary || tokens.colors.text.primary}80 100%)`,
                 display: 'grid',
                 placeItems: 'center',
                 fontWeight: tokens.typography.fontWeight.black,
                 color: tokens.colors.bg.primary,
-                fontSize: tokens.typography.fontSize.base,
+                fontSize: tokens.typography.fontSize.md,
+                boxShadow: tokens.shadow.sm,
+                transition: `all ${tokens.transition.base}`,
               }}
             >
               A
@@ -159,22 +178,27 @@ export default function TopNav({ email }: { email: string | null }) {
                   key={item.href}
                   href={item.href}
                   style={{
-                    padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
+                    padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
                     borderRadius: tokens.radius.md,
                     color: isActive ? tokens.colors.text.primary : tokens.colors.text.secondary,
                     textDecoration: 'none',
-                    fontWeight: isActive ? tokens.typography.fontWeight.black : tokens.typography.fontWeight.bold,
+                    fontWeight: isActive ? tokens.typography.fontWeight.black : tokens.typography.fontWeight.semibold,
                     fontSize: tokens.typography.fontSize.sm,
                     background: isActive ? tokens.colors.bg.secondary : 'transparent',
+                    transition: `all ${tokens.transition.base}`,
                   }}
                   onMouseEnter={(e) => {
                     if (!isActive) {
                       e.currentTarget.style.color = tokens.colors.text.primary
+                      e.currentTarget.style.background = tokens.colors.bg.secondary
+                      e.currentTarget.style.transform = 'translateY(-1px)'
                     }
                   }}
                   onMouseLeave={(e) => {
                     if (!isActive) {
                       e.currentTarget.style.color = tokens.colors.text.secondary
+                      e.currentTarget.style.background = 'transparent'
+                      e.currentTarget.style.transform = 'translateY(0)'
                     }
                   }}
                 >

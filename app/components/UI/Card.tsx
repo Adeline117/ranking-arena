@@ -18,7 +18,15 @@ export default function Card({ title, children, style }: CardProps) {
       radius="xl"
       border="primary"
       style={{
+        boxShadow: tokens.shadow.sm,
+        transition: `box-shadow ${tokens.transition.base}`,
         ...style,
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.boxShadow = tokens.shadow.md
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.boxShadow = tokens.shadow.sm
       }}
     >
       {title && (
