@@ -37,7 +37,19 @@ function snapshotToTrader(
   if (handleData) {
     // 直接使用 profile_url（导入脚本将头像URL存储在这里，这是交易所网页上的原始头像）
     if (handleData.profile_url && handleData.profile_url.trim() !== '') {
-      avatarUrl = handleData.profile_url.trim()
+      let url = handleData.profile_url.trim()
+      
+      // 修复不完整的URL：如果URL没有扩展名且看起来像Bitget的URL，尝试添加常见扩展名
+      // Bitget的URL格式：https://qrc.bgstatic.com/otc/images/20251219/1766158080640
+      // 这些URL可能缺少扩展名，需要尝试访问或添加默认扩展名
+      if (url.includes('bgstatic.com') && !url.match(/\.(jpg|jpeg|png|gif|webp|svg)(\?|$|#)/i)) {
+        // Bitget的URL可能需要添加参数或使用默认扩展名
+        // 但为了安全，先直接使用原URL，让浏览器尝试加载
+        // 如果加载失败，Avatar组件会fallback到首字母头像
+        avatarUrl = url
+      } else {
+        avatarUrl = url
+      }
     }
     // 如果 profile_url 为空，尝试使用 avatar_url（作为备用）
     else if (handleData.avatar_url && handleData.avatar_url.trim() !== '') {
