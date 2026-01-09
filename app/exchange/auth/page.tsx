@@ -36,6 +36,48 @@ const EXCHANGE_INFO: Record<string, { name: string; icon: string; authUrl: strin
       '返回此页面完成绑定',
     ],
   },
+  bitget: {
+    name: 'Bitget',
+    icon: '🟢',
+    authUrl: 'https://www.bitget.com/zh-CN/user/api',
+    steps: [
+      '登录您的Bitget账号',
+      '进入API管理页面',
+      '点击"创建API"按钮',
+      '设置API权限（仅选择"读取"权限）',
+      '完成安全验证',
+      '创建成功后，复制API Key和Secret',
+      '返回此页面完成绑定',
+    ],
+  },
+  mexc: {
+    name: 'MEXC',
+    icon: '🟠',
+    authUrl: 'https://www.mexc.com/user/api',
+    steps: [
+      '登录您的MEXC账号',
+      '进入API管理页面',
+      '点击"创建API Key"',
+      '设置API权限（仅选择"读取"权限）',
+      '完成安全验证',
+      '创建成功后，复制API Key和Secret',
+      '返回此页面完成绑定',
+    ],
+  },
+  coinex: {
+    name: 'CoinEx',
+    icon: '🟣',
+    authUrl: 'https://www.coinex.com/api',
+    steps: [
+      '登录您的CoinEx账号',
+      '进入API管理页面',
+      '点击"创建API"',
+      '设置API权限（仅选择"读取"权限）',
+      '完成安全验证',
+      '创建成功后，复制API Key和Secret',
+      '返回此页面完成绑定',
+    ],
+  },
 }
 
 export default function ExchangeAuthPage() {
