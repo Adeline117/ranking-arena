@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, lazy, Suspense } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
@@ -14,13 +14,17 @@ import { logError } from '@/lib/utils/error-handler'
 
 import TopNav from './components/Layout/TopNav'
 import RankingTable, { type Trader } from './components/Features/RankingTable'
-import PostFeed from './components/Features/PostFeed'
-import MarketPanel from './components/Features/MarketPanel'
 import Card from './components/UI/Card'
-import CompareTraders from './components/Features/CompareTraders'
 import ExchangeQuickConnect from './components/ExchangeQuickConnect'
 import { Box } from './components/Base'
 import { useLanguage } from './components/Utils/LanguageProvider'
+import { ErrorBoundary } from './components/UI/ErrorBoundary'
+import { SkeletonCard } from './components/UI/Skeleton'
+
+// 懒加载非关键组件
+const PostFeed = lazy(() => import('./components/Features/PostFeed'))
+const MarketPanel = lazy(() => import('./components/Features/MarketPanel'))
+const CompareTraders = lazy(() => import('./components/Features/CompareTraders'))
 
 /* =====================
    Page
@@ -104,7 +108,11 @@ export default function HomePage() {
           {/* 左：热门讨论 */}
           <Box as="section" className="home-left-section">
             <Card title={t('hotDiscussion')}>
-              <PostFeed />
+              <ErrorBoundary>
+                <Suspense fallback={<SkeletonCard />}>
+                  <PostFeed />
+                </Suspense>
+              </ErrorBoundary>
             </Card>
             <Link
               href="/groups"
@@ -152,18 +160,26 @@ export default function HomePage() {
 
           {/* 右：市场 */}
           <Box as="section" className="home-right-section">
-            <MarketPanel />
+            <ErrorBoundary>
+              <Suspense fallback={<SkeletonCard />}>
+                <MarketPanel />
+              </Suspense>
+            </ErrorBoundary>
           </Box>
         </Box>
       </Box>
 
       {/* 交易者对比面板 */}
       {compareTraders.length > 0 && (
-        <CompareTraders
-          traders={compareTraders}
-          onRemove={(id) => setCompareTraders(compareTraders.filter((t) => t.id !== id))}
-          onClear={() => setCompareTraders([])}
-        />
+        <ErrorBoundary>
+          <Suspense fallback={null}>
+            <CompareTraders
+              traders={compareTraders}
+              onRemove={(id) => setCompareTraders(compareTraders.filter((t) => t.id !== id))}
+              onClear={() => setCompareTraders([])}
+            />
+          </Suspense>
+        </ErrorBoundary>
       )}
     </Box>
   )

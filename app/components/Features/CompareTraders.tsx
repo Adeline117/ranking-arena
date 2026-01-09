@@ -1,6 +1,6 @@
 'use client'
 
-import React from 'react'
+import React, { memo } from 'react'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import { formatNumber, formatPercent } from '@/lib/design-system-helpers'
@@ -21,7 +21,7 @@ type CompareTradersProps = {
   onClear: () => void
 }
 
-export default function CompareTraders({ traders, onRemove, onClear }: CompareTradersProps) {
+function CompareTraders({ traders, onRemove, onClear }: CompareTradersProps) {
   if (traders.length === 0) return null
 
   return (
@@ -141,4 +141,6 @@ export default function CompareTraders({ traders, onRemove, onClear }: CompareTr
     </Box>
   )
 }
+
+export default memo(CompareTraders)
 
