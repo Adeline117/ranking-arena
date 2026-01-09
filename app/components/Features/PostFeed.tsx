@@ -158,8 +158,69 @@ export default function PostFeed(props: { variant?: 'compact' | 'full' } = {}) {
   const [commentsOpen, setCommentsOpen] = useState<Record<number, boolean>>({})
   const [pollState, setPollState] = useState<Record<number, { bull: number; bear: number; wait: number }>>({})
   const [myVote, setMyVote] = useState<Record<number, PollChoice | null>>({})
-  const [myReact, setMyReact] = useState<Record<number, 'up' | 'down' | null>>({})
-  const [reactCounts, setReactCounts] = useState<Record<number, { up: number; down: number }>>({})
+  
+  // 使用 reducer 管理点赞状态，确保原子性更新
+  type ReactState = {
+    myReact: Record<number, 'up' | 'down' | null>
+    reactCounts: Record<number, { up: number; down: number }>
+  }
+  
+  type ReactAction = 
+    | { type: 'TOGGLE_REACT'; postId: number; dir: 'up' | 'down' }
+    | { type: 'INIT_REACTS'; posts: Post[] }
+  
+  const reactReducer = (state: ReactState, action: ReactAction): ReactState => {
+    switch (action.type) {
+      case 'TOGGLE_REACT': {
+        const { postId, dir } = action
+        const currentVote = state.myReact[postId]
+        const newVote = currentVote === dir ? null : dir
+        const cur = state.reactCounts[postId] ?? { up: 0, down: 0 }
+        let next = { ...cur }
+
+        if (currentVote === dir) {
+          // 取消投票
+          next = { ...next, [dir]: Math.max(0, next[dir] - 1) }
+        } else {
+          // 切换投票
+          if (currentVote) {
+            // 先取消之前的投票
+            next = { ...next, [currentVote]: Math.max(0, next[currentVote] - 1) }
+          }
+          // 添加新投票 - 只加1
+          next = { ...next, [dir]: next[dir] + 1 }
+        }
+
+        return {
+          myReact: { ...state.myReact, [postId]: newVote },
+          reactCounts: { ...state.reactCounts, [postId]: next }
+        }
+      }
+      case 'INIT_REACTS': {
+        const reactCounts = { ...state.reactCounts }
+        const myReact = { ...state.myReact }
+        for (const p of action.posts) {
+          if (!reactCounts[p.id]) {
+            reactCounts[p.id] = { up: p.likes, down: Math.floor(p.likes * 0.08) }
+          }
+          if (myReact[p.id] === undefined) {
+            myReact[p.id] = null
+          }
+        }
+        return { myReact, reactCounts }
+      }
+      default:
+        return state
+    }
+  }
+  
+  const [reactState, dispatchReact] = useReducer(reactReducer, {
+    myReact: {},
+    reactCounts: {}
+  })
+  
+  const myReact = reactState.myReact
+  const reactCounts = reactState.reactCounts
   const processingRef = useRef<Set<string>>(new Set())
   const toggleReactRef = useRef<((postId: number, dir: 'up' | 'down') => void) | null>(null)
 
