@@ -229,6 +229,25 @@ export async function getTraderHandles(
       // 处理查询成功的情况
       if (data && Array.isArray(data)) {
         allResults.push(...data)
+        
+        // 记录成功查询的统计信息（仅在第一个batch记录，避免日志过多）
+        const batchNum = Math.floor(i / BATCH_SIZE) + 1
+        if (batchNum === 1) {
+          const profileUrlCount = data.filter((item: any) => item.profile_url && item.profile_url.trim() !== '').length
+          const avatarUrlCount = data.filter((item: any) => item.avatar_url && item.avatar_url.trim() !== '').length
+          
+          console.log(`[trader-snapshots] ✅ ${source} 查询成功 (batch ${batchNum}):`, {
+            total: data.length,
+            hasProfileUrl: profileUrlCount > 0 ? `是 (${profileUrlCount}/${data.length})` : '否',
+            hasAvatarUrl: avatarUrlCount > 0 ? `是 (${avatarUrlCount}/${data.length})` : '否',
+            sampleData: data[0] ? {
+              source_trader_id: data[0].source_trader_id,
+              handle: data[0].handle || '(空)',
+              profile_url: data[0].profile_url || '(空)',
+              avatar_url: data[0].avatar_url || '(空)',
+            } : '无数据',
+          })
+        }
       } else if (!error && (!data || data.length === 0)) {
         // 查询成功但没有数据，这是正常的（可能该批次没有匹配的记录）
         console.debug(`[trader-snapshots] ℹ️ ${source} batch ${Math.floor(i / BATCH_SIZE) + 1} 没有匹配的记录`)
