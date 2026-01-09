@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useMemo, useState, useRef } from 'react'
+import { useEffect, useMemo, useState, useRef, useCallback } from 'react'
 import { ThumbsUpIcon, ThumbsDownIcon, CommentIcon } from '../Icons'
 import { useLanguage } from '../Utils/LanguageProvider'
 
@@ -161,6 +161,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full' } = {}) {
   const [myReact, setMyReact] = useState<Record<number, 'up' | 'down' | null>>({})
   const [reactCounts, setReactCounts] = useState<Record<number, { up: number; down: number }>>({})
   const processingRef = useRef<Set<string>>(new Set())
+  const toggleReactRef = useRef<((postId: number, dir: 'up' | 'down') => void) | null>(null)
 
   useEffect(() => {
     setPollState((prev) => {
@@ -208,21 +209,22 @@ export default function PostFeed(props: { variant?: 'compact' | 'full' } = {}) {
     })
   }
 
-  const toggleReact = (postId: number, dir: 'up' | 'down') => {
-    // 防止重复调用
+  const toggleReact = useCallback((postId: number, dir: 'up' | 'down') => {
+    // 防止重复调用 - 使用同步检查
     const key = `${postId}-${dir}`
     if (processingRef.current.has(key)) {
       return
     }
+    
+    // 立即添加到 Set，防止在异步操作之前再次调用
     processingRef.current.add(key)
 
     // 使用函数式更新，确保使用最新的状态值
-    // 先获取当前投票状态，然后同时更新两个状态
     setMyReact((prevMyReact) => {
       const currentVote = prevMyReact[postId]
       const newVote = currentVote === dir ? null : dir
       
-      // 同时更新点赞数
+      // 同时更新点赞数 - 使用函数式更新确保原子性
       setReactCounts((prevCounts) => {
         const cur = prevCounts[postId] ?? { up: 0, down: 0 }
         let next = { ...cur }
@@ -236,22 +238,25 @@ export default function PostFeed(props: { variant?: 'compact' | 'full' } = {}) {
             // 先取消之前的投票
             next = { ...next, [currentVote]: Math.max(0, next[currentVote] - 1) }
           }
-          // 添加新投票
+          // 添加新投票 - 只加1
           next = { ...next, [dir]: next[dir] + 1 }
         }
         
         return { ...prevCounts, [postId]: next }
       })
       
-      // 清除处理标记
+      // 清除处理标记 - 延迟清除确保状态更新完成
       setTimeout(() => {
         processingRef.current.delete(key)
-      }, 500)
+      }, 1000)
       
       // 更新用户投票状态
       return { ...prevMyReact, [postId]: newVote }
     })
-  }
+  }, [])
+  
+  // 保存到 ref 以便在组件重新渲染时保持引用
+  toggleReactRef.current = toggleReact
 
   return (
     <>
@@ -329,7 +334,9 @@ export default function PostFeed(props: { variant?: 'compact' | 'full' } = {}) {
                   onClick={(e) => {
                     e.preventDefault()
                     e.stopPropagation()
-                    toggleReact(p.id, 'up')
+                    if (toggleReactRef.current) {
+                      toggleReactRef.current(p.id, 'up')
+                    }
                   }}
                   active={myReact[p.id] === 'up'}
                   icon={<ThumbsUpIcon size={14} />}
@@ -340,7 +347,9 @@ export default function PostFeed(props: { variant?: 'compact' | 'full' } = {}) {
                   onClick={(e) => {
                     e.preventDefault()
                     e.stopPropagation()
-                    toggleReact(p.id, 'down')
+                    if (toggleReactRef.current) {
+                      toggleReactRef.current(p.id, 'down')
+                    }
                   }}
                   active={myReact[p.id] === 'down'}
                   icon={<ThumbsDownIcon size={14} />}
@@ -397,7 +406,9 @@ export default function PostFeed(props: { variant?: 'compact' | 'full' } = {}) {
                   e.preventDefault()
                   e.stopPropagation()
                 }
-                toggleReact(openPost.id, 'down')
+                if (toggleReactRef.current) {
+                  toggleReactRef.current(openPost.id, 'down')
+                }
               }} 
               active={myReact[openPost.id] === 'down'}
               count={reactCounts[openPost.id]?.down ?? Math.floor(openPost.likes * 0.08)}
