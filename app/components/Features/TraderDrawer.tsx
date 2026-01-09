@@ -614,11 +614,11 @@ function MiniKpi({ label, value }: { label: string; value: string }) {
       style={{
         padding: 12,
         borderRadius: 14,
-        background: 'rgba(255,255,255,0.04)',
-        border: '1px solid rgba(255,255,255,0.06)',
+        background: tokens.colors.bg.secondary,
+        border: `1px solid ${tokens.colors.border.primary}`,
       }}
     >
-      <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.55)', fontWeight: 800 }}>{label}</div>
+      <div style={{ fontSize: 12, color: tokens.colors.text.secondary, fontWeight: 800 }}>{label}</div>
       <div style={{ marginTop: 6, fontSize: 18, fontWeight: 900 }}>{value}</div>
     </div>
   )
@@ -703,8 +703,8 @@ function CompareChart({ height }: { height: number }) {
           backgroundSize: '70px 70px',
         }}
       />
-      <div style={{ position: 'absolute', left: 12, bottom: 12, display: 'flex', gap: 10, color: 'rgba(255,255,255,0.55)', fontSize: 12 }}>
-        <span>1W</span><span>1M</span><span>6M</span><span style={{ color: '#fff' }}>1Y</span><span>5Y</span>
+      <div style={{ position: 'absolute', left: 12, bottom: 12, display: 'flex', gap: 10, color: tokens.colors.text.secondary, fontSize: 12 }}>
+        <span>1W</span><span>1M</span><span>6M</span><span style={{ color: tokens.colors.text.primary }}>1Y</span><span>5Y</span>
       </div>
 
       <svg width="100%" height="100%" viewBox="0 0 600 260" preserveAspectRatio="none" style={{ position: 'absolute', inset: 0 }}>
