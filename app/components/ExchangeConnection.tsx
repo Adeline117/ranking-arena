@@ -54,6 +54,48 @@ export default function ExchangeConnectionManager({ userId }: ExchangeConnection
     }
   }
 
+  const handleStartAuth = async (exchange: string) => {
+    try {
+      // 获取授权URL
+      const response = await fetch(`/api/exchange/authorize?exchange=${exchange}`)
+      const result = await response.json()
+
+      if (!response.ok) {
+        alert(result.error || '获取授权页面失败')
+        return
+      }
+
+      // 直接在新窗口中打开交易所登录/授权页面
+      const authWindow = window.open(
+        result.authUrl,
+        '_blank',
+        'width=1000,height=700,scrollbars=yes,resizable=yes'
+      )
+
+      if (!authWindow) {
+        alert('无法打开新窗口，请检查浏览器弹窗设置')
+        return
+      }
+
+      // 显示提示信息
+      alert(
+        `已打开 ${exchange.toUpperCase()} 授权页面\n\n` +
+        `请在新窗口中：\n` +
+        `1. 登录您的账号\n` +
+        `2. 创建API Key（如果还没有）\n` +
+        `3. 复制API Key和Secret\n` +
+        `4. 返回此页面，点击"手动输入"按钮\n` +
+        `5. 粘贴API Key和Secret完成绑定`
+      )
+
+      // 自动显示输入表单
+      setShowForm(exchange)
+    } catch (err: any) {
+      console.error('[ExchangeConnection] 启动授权失败:', err)
+      alert('启动授权失败，请重试')
+    }
+  }
+
   const handleConnect = async (exchange: string) => {
     if (!apiKey || !apiSecret) {
       setError('请输入API Key和Secret')
@@ -249,13 +291,33 @@ export default function ExchangeConnectionManager({ userId }: ExchangeConnection
                   </Button>
                 </Box>
               ) : (
-                <Button
-                  variant="primary"
-                  size="sm"
-                  onClick={() => setShowForm(showConnectForm ? null : exchange.id)}
-                >
-                  {showConnectForm ? '取消' : '连接'}
-                </Button>
+                <Box style={{ display: 'flex', gap: tokens.spacing[2] }}>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={() => handleStartAuth(exchange.id)}
+                  >
+                    登录授权
+                  </Button>
+                  {showConnectForm && (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => setShowForm(null)}
+                    >
+                      取消
+                    </Button>
+                  )}
+                  {!showConnectForm && (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => setShowForm(exchange.id)}
+                    >
+                      手动输入
+                    </Button>
+                  )}
+                </Box>
               )}
             </Box>
 
