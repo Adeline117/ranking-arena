@@ -102,16 +102,31 @@ export async function getTraderHandles(
         .in('source_trader_id', batch)
 
       if (error) {
-        console.error(`[trader-snapshots] ❌ ${source} handle 查询错误 (batch ${Math.floor(i / BATCH_SIZE) + 1}):`, {
-          error,
-          message: error.message,
-          details: error.details,
-          hint: error.hint,
-          code: error.code,
+        // 检查错误对象的实际结构
+        const errorInfo: any = {
           source,
+          batchNumber: Math.floor(i / BATCH_SIZE) + 1,
           batchSize: batch.length,
           batchSample: batch.slice(0, 3),
-        })
+        }
+        
+        // 尝试获取错误信息
+        if (error && typeof error === 'object') {
+          errorInfo.errorType = typeof error
+          errorInfo.errorKeys = Object.keys(error)
+          errorInfo.errorString = JSON.stringify(error)
+          
+          // 尝试访问常见属性
+          if ('message' in error) errorInfo.message = (error as any).message
+          if ('details' in error) errorInfo.details = (error as any).details
+          if ('hint' in error) errorInfo.hint = (error as any).hint
+          if ('code' in error) errorInfo.code = (error as any).code
+        } else {
+          errorInfo.errorValue = error
+        }
+        
+        console.error(`[trader-snapshots] ❌ ${source} handle 查询错误 (batch ${errorInfo.batchNumber}):`, errorInfo)
+        
         // 继续处理下一批，不中断整个流程
         continue
       }
