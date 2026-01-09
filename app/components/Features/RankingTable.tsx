@@ -217,15 +217,17 @@ export default function RankingTable(props: {
                     <Avatar
                       userId={t.id}
                       name={displayName}
-                      avatarUrl={t.avatar_url || undefined}
+                      avatarUrl={t.avatar_url}
                       size={32}
                       isTrader={true}
                     />
-                    {/* 调试日志：记录前几个trader的avatar_url */}
-                    {rank <= 3 && console.log(`[RankingTable] Trader #${rank} "${displayName}":`, {
+                    {/* 调试日志：记录前5名trader的avatar_url */}
+                    {rank <= 5 && console.log(`[RankingTable] Trader #${rank} "${displayName}":`, {
                       id: t.id,
+                      handle: t.handle,
                       avatar_url: t.avatar_url || '(空)',
                       avatar_url_type: typeof t.avatar_url,
+                      avatar_url_length: t.avatar_url?.length || 0,
                       source: t.source,
                     })}
                     {/* 名字 - 在头像右边 */}

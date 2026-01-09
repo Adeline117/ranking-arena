@@ -40,25 +40,33 @@ export default function Avatar({
   // - avatarUrl 有值且不为空：使用设置的头像
   // - avatarUrl 为 null：在排行榜上但没有设置头像，显示首字母（不生成）
   // - avatarUrl 为 undefined：不在排行榜上，生成默认头像
-  let finalAvatarUrl: string | null | undefined = avatarUrl
+  let finalAvatarUrl: string | null | undefined = null
   
   // 调试日志：记录前几个trader的头像URL
-  if (isTrader && avatarUrl && (name?.includes('老') || name?.includes('East') || name?.includes('Rock'))) {
+  if (isTrader && (name?.includes('老') || name?.includes('East') || name?.includes('Rock') || name?.includes('Encryption'))) {
     console.log(`[Avatar] Trader "${name}" (${userId}):`, {
       avatarUrl,
-      finalAvatarUrl,
-      type: typeof avatarUrl,
+      avatarUrl_type: typeof avatarUrl,
+      avatarUrl_value: avatarUrl,
       isTrader,
     })
   }
   
   if (isTrader) {
-    // trader：如果有 avatarUrl 则使用，否则显示首字母头像（不生成）
-    finalAvatarUrl = avatarUrl && avatarUrl.trim() !== '' ? avatarUrl : null
-    
-    // 调试日志：如果没有头像URL，输出警告
-    if (!finalAvatarUrl && name && (name.includes('老') || name.includes('East') || name.includes('Rock'))) {
-      console.warn(`[Avatar] ⚠️ Trader "${name}" 没有头像URL，将显示首字母头像`)
+    // trader：如果有 avatarUrl 且不为空，则使用；否则显示首字母头像（不生成）
+    if (avatarUrl && typeof avatarUrl === 'string' && avatarUrl.trim() !== '') {
+      finalAvatarUrl = avatarUrl.trim()
+    } else {
+      finalAvatarUrl = null // 没有头像URL，显示首字母头像
+      
+      // 调试日志：如果没有头像URL，输出警告
+      if (name && (name.includes('老') || name.includes('East') || name.includes('Rock') || name.includes('Encryption'))) {
+        console.warn(`[Avatar] ⚠️ Trader "${name}" 没有头像URL:`, {
+          avatarUrl,
+          avatarUrl_type: typeof avatarUrl,
+          avatarUrl_length: avatarUrl?.length || 0,
+        })
+      }
     }
   } else {
     // 普通用户
