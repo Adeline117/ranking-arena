@@ -65,31 +65,8 @@ export default function ExchangeConnectionManager({ userId }: ExchangeConnection
         return
       }
 
-      // 直接在新窗口中打开交易所登录/授权页面
-      const authWindow = window.open(
-        result.authUrl,
-        '_blank',
-        'width=1000,height=700,scrollbars=yes,resizable=yes'
-      )
-
-      if (!authWindow) {
-        alert('无法打开新窗口，请检查浏览器弹窗设置')
-        return
-      }
-
-      // 显示提示信息
-      alert(
-        `已打开 ${exchange.toUpperCase()} 授权页面\n\n` +
-        `请在新窗口中：\n` +
-        `1. 登录您的账号\n` +
-        `2. 创建API Key（如果还没有）\n` +
-        `3. 复制API Key和Secret\n` +
-        `4. 返回此页面，点击"手动输入"按钮\n` +
-        `5. 粘贴API Key和Secret完成绑定`
-      )
-
-      // 自动显示输入表单
-      setShowForm(exchange)
+      // 直接跳转到交易所登录/授权页面（当前窗口）
+      window.location.href = result.authUrl
     } catch (err: any) {
       console.error('[ExchangeConnection] 启动授权失败:', err)
       alert('启动授权失败，请重试')
@@ -291,33 +268,16 @@ export default function ExchangeConnectionManager({ userId }: ExchangeConnection
                   </Button>
                 </Box>
               ) : (
-                <Box style={{ display: 'flex', gap: tokens.spacing[2] }}>
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    onClick={() => handleStartAuth(exchange.id)}
-                  >
-                    登录授权
-                  </Button>
-                  {showConnectForm && (
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => setShowForm(null)}
-                    >
-                      取消
-                    </Button>
-                  )}
-                  {!showConnectForm && (
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => setShowForm(exchange.id)}
-                    >
-                      手动输入
-                    </Button>
-                  )}
-                </Box>
+                <Button
+                  variant="primary"
+                  size="md"
+                  onClick={() => handleStartAuth(exchange.id)}
+                  style={{
+                    minWidth: 120,
+                  }}
+                >
+                  {exchange.icon} 绑定 {exchange.name}
+                </Button>
               )}
             </Box>
 
@@ -343,94 +303,19 @@ export default function ExchangeConnectionManager({ userId }: ExchangeConnection
               </Box>
             )}
 
-            {showConnectForm && (
+            {!connection && (
               <Box
                 style={{
-                  padding: tokens.spacing[4],
+                  padding: tokens.spacing[3],
                   borderRadius: tokens.radius.md,
                   background: tokens.colors.bg.primary,
                   border: `1px solid ${tokens.colors.border.primary}`,
-                  marginTop: tokens.spacing[4],
+                  marginTop: tokens.spacing[3],
                 }}
               >
-                <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[3] }}>
-                  输入API凭证
+                <Text size="sm" color="tertiary" style={{ marginBottom: tokens.spacing[3] }}>
+                  点击按钮将跳转到 {exchange.name} 登录页面，登录成功后系统将自动获取您的交易数据。
                 </Text>
-                <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[4] }}>
-                  您的API Key和Secret将被加密存储，仅用于获取您的交易数据。
-                  <br />
-                  请在 {exchange.name} 创建API Key时，仅授予"读取"权限。
-                </Text>
-
-                {error && (
-                  <Box
-                    style={{
-                      padding: tokens.spacing[2],
-                      borderRadius: tokens.radius.md,
-                      background: 'rgba(255, 0, 0, 0.1)',
-                      border: '1px solid rgba(255, 0, 0, 0.3)',
-                      marginBottom: tokens.spacing[3],
-                    }}
-                  >
-                    <Text size="xs" style={{ color: '#ff6b6b' }}>{error}</Text>
-                  </Box>
-                )}
-
-                <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
-                  <Box>
-                    <Text size="xs" weight="bold" style={{ marginBottom: tokens.spacing[1], display: 'block' }}>
-                      API Key
-                    </Text>
-                    <input
-                      type="text"
-                      value={apiKey}
-                      onChange={(e) => setApiKey(e.target.value)}
-                      placeholder="输入您的 API Key"
-                      style={{
-                        width: '100%',
-                        padding: tokens.spacing[2],
-                        borderRadius: tokens.radius.md,
-                        border: `1px solid ${tokens.colors.border.primary}`,
-                        background: tokens.colors.bg.secondary,
-                        color: tokens.colors.text.primary,
-                        fontSize: tokens.typography.fontSize.sm,
-                        fontFamily: tokens.typography.fontFamily.sans.join(', '),
-                        outline: 'none',
-                      }}
-                    />
-                  </Box>
-
-                  <Box>
-                    <Text size="xs" weight="bold" style={{ marginBottom: tokens.spacing[1], display: 'block' }}>
-                      API Secret
-                    </Text>
-                    <input
-                      type="password"
-                      value={apiSecret}
-                      onChange={(e) => setApiSecret(e.target.value)}
-                      placeholder="输入您的 API Secret"
-                      style={{
-                        width: '100%',
-                        padding: tokens.spacing[2],
-                        borderRadius: tokens.radius.md,
-                        border: `1px solid ${tokens.colors.border.primary}`,
-                        background: tokens.colors.bg.secondary,
-                        color: tokens.colors.text.primary,
-                        fontSize: tokens.typography.fontSize.sm,
-                        fontFamily: tokens.typography.fontFamily.sans.join(', '),
-                        outline: 'none',
-                      }}
-                    />
-                  </Box>
-
-                  <Button
-                    variant="primary"
-                    onClick={() => handleConnect(exchange.id)}
-                    disabled={isConnecting || !apiKey || !apiSecret}
-                  >
-                    {isConnecting ? '连接中...' : '确认连接'}
-                  </Button>
-                </Box>
               </Box>
             )}
           </Box>
