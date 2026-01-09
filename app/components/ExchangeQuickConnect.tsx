@@ -5,13 +5,14 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import { Box, Text, Button } from '@/app/components/Base'
 import { tokens } from '@/lib/design-tokens'
+import ExchangeLogo from './UI/ExchangeLogo'
 
 const EXCHANGES = [
-  { id: 'binance', name: 'Binance', icon: '🟡' },
-  { id: 'bybit', name: 'Bybit', icon: '🔵' },
-  { id: 'bitget', name: 'Bitget', icon: '🟢' },
-  { id: 'mexc', name: 'MEXC', icon: '🟠' },
-  { id: 'coinex', name: 'CoinEx', icon: '🟣' },
+  { id: 'binance', name: 'Binance' },
+  { id: 'bybit', name: 'Bybit' },
+  { id: 'bitget', name: 'Bitget' },
+  { id: 'mexc', name: 'MEXC' },
+  { id: 'coinex', name: 'CoinEx' },
 ] as const
 
 export default function ExchangeQuickConnect() {
@@ -91,8 +92,14 @@ export default function ExchangeQuickConnect() {
                 variant="primary"
                 size="sm"
                 onClick={() => handleConnect(exchange.id)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: tokens.spacing[2],
+                }}
               >
-                {exchange.icon} 绑定 {exchange.name}
+                <ExchangeLogo exchange={exchange.id as any} size={18} />
+                绑定 {exchange.name}
               </Button>
             ))}
             <Button

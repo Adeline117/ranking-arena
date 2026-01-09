@@ -5,17 +5,18 @@ import { supabase } from '@/lib/supabase/client'
 import { Box, Text, Button } from '@/app/components/Base'
 import { tokens } from '@/lib/design-tokens'
 import type { ExchangeConnection } from '@/lib/exchange'
+import ExchangeLogo from './UI/ExchangeLogo'
 
 interface ExchangeConnectionProps {
   userId: string
 }
 
 const EXCHANGES = [
-  { id: 'binance', name: 'Binance', icon: '🟡' },
-  { id: 'bybit', name: 'Bybit', icon: '🔵' },
-  { id: 'bitget', name: 'Bitget', icon: '🟢' },
-  { id: 'mexc', name: 'MEXC', icon: '🟠' },
-  { id: 'coinex', name: 'CoinEx', icon: '🟣' },
+  { id: 'binance', name: 'Binance' },
+  { id: 'bybit', name: 'Bybit' },
+  { id: 'bitget', name: 'Bitget' },
+  { id: 'mexc', name: 'MEXC' },
+  { id: 'coinex', name: 'CoinEx' },
 ] as const
 
 export default function ExchangeConnectionManager({ userId }: ExchangeConnectionProps) {
@@ -186,7 +187,7 @@ export default function ExchangeConnectionManager({ userId }: ExchangeConnection
           >
             <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: tokens.spacing[4] }}>
               <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3] }}>
-                <Text size="xl">{exchange.icon}</Text>
+                <ExchangeLogo exchange={exchange.id as any} size={32} />
                 <Text size="lg" weight="bold">{exchange.name}</Text>
                 {connection && (
                   <Box
@@ -230,9 +231,13 @@ export default function ExchangeConnectionManager({ userId }: ExchangeConnection
                   onClick={() => handleStartAuth(exchange.id)}
                   style={{
                     minWidth: 120,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: tokens.spacing[2],
                   }}
                 >
-                  {exchange.icon} 绑定 {exchange.name}
+                  <ExchangeLogo exchange={exchange.id as any} size={20} />
+                  绑定 {exchange.name}
                 </Button>
               )}
             </Box>
