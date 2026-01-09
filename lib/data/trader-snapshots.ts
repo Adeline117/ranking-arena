@@ -105,14 +105,17 @@ export async function getTraderHandles(
       
       let { data, error } = await query
       
-      // 如果错误且错误信息中包含 avatar_url 或 column 相关，尝试不包含 avatar_url 的查询
+      // 如果错误，尝试回退查询（可能是 avatar_url 列不存在）
       if (error) {
-        const errorStr = JSON.stringify(error).toLowerCase()
+        const errorKeys = Object.keys(error || {})
+        const isEmptyError = errorKeys.length === 0
+        const errorStr = JSON.stringify(error || {}).toLowerCase()
         const errorMessage = (error as any)?.message?.toLowerCase() || ''
         const errorCode = (error as any)?.code || ''
         
-        // 检查是否是列不存在的错误
-        if (
+        // 检查是否是列不存在的错误（包括空错误对象）
+        // 空错误对象通常表示查询时列不存在或 RLS 策略问题
+        const isColumnError = isEmptyError || 
           errorStr.includes('avatar_url') ||
           errorStr.includes('column') ||
           errorStr.includes('does not exist') ||
@@ -121,9 +124,11 @@ export async function getTraderHandles(
           errorMessage.includes('does not exist') ||
           errorCode === 'PGRST204' ||
           errorCode === '42703'
-        ) {
+        
+        // 如果错误对象为空，或者包含列相关错误，尝试回退查询
+        if (isColumnError) {
           // 回退到不包含 avatar_url 的查询
-          console.warn(`[trader-snapshots] ⚠️ ${source} avatar_url 列不存在，使用回退查询 (batch ${Math.floor(i / BATCH_SIZE) + 1})`)
+          console.warn(`[trader-snapshots] ⚠️ ${source} avatar_url 列可能不存在（空错误对象或列错误），使用回退查询 (batch ${Math.floor(i / BATCH_SIZE) + 1})`)
           const fallbackQuery = supabase
             .from('trader_sources')
             .select('source_trader_id, handle, profile_url')
@@ -139,24 +144,27 @@ export async function getTraderHandles(
               batchNumber: Math.floor(i / BATCH_SIZE) + 1,
               batchSize: batch.length,
               batchSample: batch.slice(0, 3),
+              isEmptyError,
               originalError: error,
+              originalErrorKeys: errorKeys,
+              originalErrorString: JSON.stringify(error),
+              originalErrorCode: errorCode,
+              originalErrorMessage: errorMessage,
               fallbackError: fallbackResult.error,
+              fallbackErrorKeys: Object.keys(fallbackResult.error || {}),
+              fallbackErrorString: JSON.stringify(fallbackResult.error),
             }
             
             // 尝试获取错误信息
             if (fallbackResult.error && typeof fallbackResult.error === 'object') {
-              errorInfo.errorType = typeof fallbackResult.error
-              errorInfo.errorKeys = Object.keys(fallbackResult.error)
-              errorInfo.errorString = JSON.stringify(fallbackResult.error)
-              
-              // 尝试访问常见属性
-              if ('message' in fallbackResult.error) errorInfo.message = (fallbackResult.error as any).message
-              if ('details' in fallbackResult.error) errorInfo.details = (fallbackResult.error as any).details
-              if ('hint' in fallbackResult.error) errorInfo.hint = (fallbackResult.error as any).hint
-              if ('code' in fallbackResult.error) errorInfo.code = (fallbackResult.error as any).code
+              errorInfo.fallbackErrorType = typeof fallbackResult.error
+              if ('message' in fallbackResult.error) errorInfo.fallbackMessage = (fallbackResult.error as any).message
+              if ('details' in fallbackResult.error) errorInfo.fallbackDetails = (fallbackResult.error as any).details
+              if ('hint' in fallbackResult.error) errorInfo.fallbackHint = (fallbackResult.error as any).hint
+              if ('code' in fallbackResult.error) errorInfo.fallbackCode = (fallbackResult.error as any).code
             }
             
-            console.error(`[trader-snapshots] ❌ ${source} handle 查询错误 (batch ${errorInfo.batchNumber}):`, errorInfo)
+            console.error(`[trader-snapshots] ❌ ${source} handle 查询错误（包含回退）(batch ${errorInfo.batchNumber}):`, errorInfo)
             continue
           }
           
@@ -166,6 +174,7 @@ export async function getTraderHandles(
             avatar_url: null,
           })) || null
           error = null
+          console.log(`[trader-snapshots] ✅ ${source} 回退查询成功 (batch ${Math.floor(i / BATCH_SIZE) + 1}):`, fallbackResult.data?.length || 0, '条记录')
         } else {
           // 其他类型的错误，记录详细信息
           const errorInfo: any = {
@@ -173,15 +182,15 @@ export async function getTraderHandles(
             batchNumber: Math.floor(i / BATCH_SIZE) + 1,
             batchSize: batch.length,
             batchSample: batch.slice(0, 3),
+            errorKeys,
+            errorString: JSON.stringify(error),
+            errorCode,
+            errorMessage,
           }
           
           // 尝试获取错误信息
           if (error && typeof error === 'object') {
             errorInfo.errorType = typeof error
-            errorInfo.errorKeys = Object.keys(error)
-            errorInfo.errorString = JSON.stringify(error)
-            
-            // 尝试访问常见属性
             if ('message' in error) errorInfo.message = (error as any).message
             if ('details' in error) errorInfo.details = (error as any).details
             if ('hint' in error) errorInfo.hint = (error as any).hint
