@@ -27,21 +27,21 @@ function snapshotToTrader(
       ? handleData.handle
       : snapshot.source_trader_id
 
-  // 重要：根据导入脚本的实际情况，头像URL存储在 profile_url 字段中
+  // 重要：头像URL可能存储在 avatar_url 或 profile_url 字段中
   // 导入脚本使用：
   // - Bitget: profile_url: item.avatarUrl
   // - Binance: profile_url: item.userPhotoUrl  
   // - 其他交易所: profile_url: item.avatarUrl
-  // 所以我们应该直接使用 profile_url 作为头像URL
+  // 但如果 avatar_url 列存在且有数据，优先使用它（可能是单独的头像URL字段）
   let avatarUrl: string | undefined = undefined
   if (handleData) {
-    // 直接使用 profile_url 作为头像URL（导入脚本将头像URL存储在这里）
-    if (handleData.profile_url && handleData.profile_url.trim() !== '') {
-      avatarUrl = handleData.profile_url.trim()
-    }
-    // 如果 profile_url 为空，尝试使用 avatar_url（作为备用，虽然这个字段可能不存在）
-    else if (handleData.avatar_url && handleData.avatar_url.trim() !== '') {
+    // 优先使用 avatar_url（如果存在且有值）
+    if (handleData.avatar_url && handleData.avatar_url.trim() !== '') {
       avatarUrl = handleData.avatar_url.trim()
+    }
+    // 否则使用 profile_url（导入脚本将头像URL存储在这里）
+    else if (handleData.profile_url && handleData.profile_url.trim() !== '') {
+      avatarUrl = handleData.profile_url.trim()
     }
   }
   
