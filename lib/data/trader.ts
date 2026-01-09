@@ -194,28 +194,28 @@ export async function getTraderByHandle(handle: string): Promise<TraderProfile |
         .limit(1)
         .maybeSingle()
 
-      // 检查是否在平台注册（从 profiles 表）
+      // 检查是否在平台注册（从 user_profiles 表，不查询 avatar_url，因为永远使用 trader 的原始头像）
       const profileHandle = source.handle || source.source_trader_id
-      // 尝试多个可能的 handle 值
+      // 尝试多个可能的 handle 值，只查询 bio 用于显示，不查询 avatar_url
       const { data: profile1 } = await supabase
-        .from('profiles')
-        .select('id, bio, avatar_url')
+        .from('user_profiles')
+        .select('id, bio')
         .eq('handle', profileHandle)
         .maybeSingle()
       
       let profile = profile1
       if (!profile && decodedHandle !== handle) {
         const { data: profile2 } = await supabase
-          .from('profiles')
-          .select('id, bio, avatar_url')
+          .from('user_profiles')
+          .select('id, bio')
           .eq('handle', decodedHandle)
           .maybeSingle()
         if (profile2) profile = profile2
       }
       if (!profile && handle !== profileHandle) {
         const { data: profile3 } = await supabase
-          .from('profiles')
-          .select('id, bio, avatar_url')
+          .from('user_profiles')
+          .select('id, bio')
           .eq('handle', handle)
           .maybeSingle()
         if (profile3) profile = profile3
@@ -223,7 +223,7 @@ export async function getTraderByHandle(handle: string): Promise<TraderProfile |
 
       console.log(`[trader] Found trader: ${source.handle || source.source_trader_id} (source: ${sourceType})`)
       // 永远只使用 trader_sources 中的原始头像（avatar_url 或 profile_url）
-      // 不使用用户设置的 avatar_url，确保显示 trader 在交易所的原始头像
+      // 不使用用户设置的 avatar_url，确保永远显示 trader 在交易所的原始头像
       const traderAvatarUrl = (source as any).avatar_url || source.profile_url || null
       return {
         handle: source.handle || source.source_trader_id,
@@ -231,7 +231,7 @@ export async function getTraderByHandle(handle: string): Promise<TraderProfile |
         bio: profile?.bio || null,
         followers: latestSnapshot?.followers || 0,
         copiers: 0,
-        avatar_url: traderAvatarUrl, // 只使用 trader 的原始头像，不使用 profile?.avatar_url
+        avatar_url: traderAvatarUrl, // 永远只使用 trader 的原始头像，不使用 profile?.avatar_url
         isRegistered: !!profile,
         source: sourceType,
       }
