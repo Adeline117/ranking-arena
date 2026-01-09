@@ -62,8 +62,23 @@ function normalizeData(rawData) {
     const followers = item.followCount != null ? Number(item.followCount) : 
                      (item.followers != null ? Number(item.followers) : 0)
     
-    // 头像
+    // 头像：Bitget API 可能返回的字段有 header、headPic、avatar 等
+    // 这些应该是完整的头像URL（Bitget网页上显示的头像）
     const avatarUrl = item.header || item.headPic || item.avatar || item.avatarUrl || item.profilePhoto || null
+    
+    // 调试：输出前几个trader的头像URL，确认格式
+    if (avatarUrl && (handle && (handle.includes('老') || handle.includes('East') || handle.includes('Rock') || handle.includes('Encryption')))) {
+      console.log(`[Bitget导入] Trader "${handle}" (${traderId}) 头像URL:`, {
+        header: item.header || '(空)',
+        headPic: item.headPic || '(空)',
+        avatar: item.avatar || '(空)',
+        avatarUrl: item.avatarUrl || '(空)',
+        profilePhoto: item.profilePhoto || '(空)',
+        final_avatarUrl: avatarUrl,
+        avatarUrl_type: typeof avatarUrl,
+        avatarUrl_length: avatarUrl?.length || 0,
+      })
+    }
 
     // 胜率 (Bitget API 中没有直接的胜率字段，设为 null)
     let winRate = null
