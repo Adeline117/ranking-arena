@@ -81,6 +81,9 @@ export function Button({
       }
     : {}
 
+  // 自动生成aria-label（如果未提供）
+  const ariaLabel = props['aria-label'] || (typeof children === 'string' ? children : undefined) || 'Button'
+  
   return (
     <button
       style={{
@@ -106,7 +109,17 @@ export function Button({
           e.currentTarget.style.boxShadow = variantStyles[variant].boxShadow || tokens.shadow.xs
         }
       }}
-      aria-label={props['aria-label'] || (typeof children === 'string' ? children : 'Button')}
+      onKeyDown={(e) => {
+        // 键盘导航支持：Enter和Space触发点击
+        if ((e.key === 'Enter' || e.key === ' ') && !props.disabled) {
+          e.preventDefault()
+          e.currentTarget.click()
+        }
+        props.onKeyDown?.(e)
+      }}
+      aria-label={ariaLabel}
+      role={props.role || 'button'}
+      tabIndex={props.disabled ? -1 : 0}
       {...props}
     >
       {children}

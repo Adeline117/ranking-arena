@@ -23,6 +23,8 @@ export default function TraderTabs({ activeTab, onTabChange }: TraderTabsProps) 
   return (
     <Box
       className="profile-tabs"
+      role="tablist"
+      aria-label="交易员资料标签页"
       style={{
         display: 'flex',
         gap: tokens.spacing[6],
@@ -36,6 +38,22 @@ export default function TraderTabs({ activeTab, onTabChange }: TraderTabsProps) 
           key={tab.key}
           className="profile-tab-button"
           onClick={() => onTabChange(tab.key)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault()
+              onTabChange(tab.key)
+            } else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+              e.preventDefault()
+              const currentIndex = tabs.findIndex((t) => t.key === activeTab)
+              const direction = e.key === 'ArrowLeft' ? -1 : 1
+              const newIndex = (currentIndex + direction + tabs.length) % tabs.length
+              onTabChange(tabs[newIndex].key)
+            }
+          }}
+          aria-label={tab.label}
+          aria-selected={activeTab === tab.key}
+          role="tab"
+          tabIndex={activeTab === tab.key ? 0 : -1}
           style={{
             background: 'transparent',
             border: 'none',
