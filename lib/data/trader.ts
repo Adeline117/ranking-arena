@@ -117,18 +117,17 @@ export async function getTraderByHandle(handle: string): Promise<TraderProfile |
       if (source1) {
         source = source1
       } else if (error1) {
-        // 检查是否有实际的错误内容（错误对象不为空且至少有一个有值的属性）
-        // 空对象 {} 的 Object.keys({}) 返回 []，所以 errorKeys.length 为 0
-        const errorKeys = Object.keys(error1 || {})
-        // 只有当错误对象有属性（errorKeys.length > 0）且有实际的错误信息时，才认为是真正的错误
-        // 如果 errorKeys.length === 0（空对象 {}），则不设置 sourceError，这是正常的"没找到记录"情况
-        if (errorKeys.length > 0) {
-          const hasErrorContent = !!(error1.message || error1.code || error1.hint || error1.details)
-          if (hasErrorContent) {
-            sourceError = error1
-          }
+        // 检查是否有实际的错误内容
+        // 空对象 {} 的 error1.message 是 undefined，所以 hasErrorContent 是 false
+        // 只有当错误对象有实际有值的属性（message/code/hint/details）时，才认为是真正的错误
+        const hasErrorContent = !!(error1.message || error1.code || error1.hint || error1.details)
+        // 如果错误对象有实际错误内容，才设置 sourceError
+        // 注意：即使是 {message: undefined} 这种，hasErrorContent 也会是 false，因为 !!undefined 是 false
+        if (hasErrorContent) {
+          sourceError = error1
         }
-        // 如果 errorKeys.length === 0，说明 error1 是空对象 {}，不设置 sourceError
+        // 如果 hasErrorContent 是 false（空对象 {} 或所有属性都是 undefined），则不设置 sourceError
+        // 这是正常的"没找到记录"情况，不应该记录为错误
       }
       
       // 如果原始 handle 找不到，尝试解码后的 handle（如果不同）
