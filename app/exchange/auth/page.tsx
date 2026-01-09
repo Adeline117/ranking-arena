@@ -6,11 +6,11 @@ import { supabase } from '@/lib/supabase/client'
 import { Box, Text, Button } from '@/app/components/Base'
 import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/Layout/TopNav'
+import ExchangeLogo from '@/app/components/UI/ExchangeLogo'
 
-const EXCHANGE_INFO: Record<string, { name: string; icon: string; authUrl: string; steps: string[] }> = {
+const EXCHANGE_INFO: Record<string, { name: string; authUrl: string; steps: string[] }> = {
   binance: {
     name: 'Binance',
-    icon: '🟡',
     authUrl: 'https://www.binance.com/en/my/settings/api-management',
     steps: [
       '登录您的Binance账号',
@@ -24,7 +24,6 @@ const EXCHANGE_INFO: Record<string, { name: string; icon: string; authUrl: strin
   },
   bybit: {
     name: 'Bybit',
-    icon: '🔵',
     authUrl: 'https://www.bybit.com/app/user/api-management',
     steps: [
       '登录您的Bybit账号',
@@ -38,7 +37,6 @@ const EXCHANGE_INFO: Record<string, { name: string; icon: string; authUrl: strin
   },
   bitget: {
     name: 'Bitget',
-    icon: '🟢',
     authUrl: 'https://www.bitget.com/zh-CN/user/api',
     steps: [
       '登录您的Bitget账号',
@@ -52,7 +50,6 @@ const EXCHANGE_INFO: Record<string, { name: string; icon: string; authUrl: strin
   },
   mexc: {
     name: 'MEXC',
-    icon: '🟠',
     authUrl: 'https://www.mexc.com/user/api',
     steps: [
       '登录您的MEXC账号',
@@ -66,7 +63,6 @@ const EXCHANGE_INFO: Record<string, { name: string; icon: string; authUrl: strin
   },
   coinex: {
     name: 'CoinEx',
-    icon: '🟣',
     authUrl: 'https://www.coinex.com/api',
     steps: [
       '登录您的CoinEx账号',
@@ -232,9 +228,12 @@ export default function ExchangeAuthPage() {
         {step === 'auth' ? (
           <>
             <Box style={{ marginBottom: tokens.spacing[6] }}>
-              <Text size="2xl" weight="black" style={{ marginBottom: tokens.spacing[2] }}>
-                {info.icon} 绑定 {info.name} 账号
-              </Text>
+              <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3], marginBottom: tokens.spacing[2] }}>
+                <ExchangeLogo exchange={exchange.toLowerCase() as any} size={32} />
+                <Text size="2xl" weight="black">
+                  绑定 {info.name} 账号
+                </Text>
+              </Box>
               <Text size="sm" color="tertiary">
                 点击按钮将在新窗口中打开 {info.name} 登录页面
               </Text>
@@ -291,9 +290,15 @@ export default function ExchangeAuthPage() {
               <Button
                 variant="primary"
                 onClick={handleOpenAuth}
-                style={{ flex: 1 }}
+                style={{ 
+                  flex: 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: tokens.spacing[2],
+                }}
               >
-                {info.icon} 打开 {info.name} 登录页面
+                <ExchangeLogo exchange={exchange.toLowerCase() as any} size={20} />
+                打开 {info.name} 登录页面
               </Button>
               <Button
                 variant="secondary"
