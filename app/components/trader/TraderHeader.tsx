@@ -61,7 +61,30 @@ export default function TraderHeader({ handle, traderId, avatarUrl, isRegistered
           }}
         >
           {avatarUrl ? (
-            <img src={avatarUrl} alt={handle} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            <img 
+              src={avatarUrl} 
+              alt={handle} 
+              referrerPolicy="origin-when-cross-origin"
+              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+              onError={(e) => {
+                console.error(`[TraderHeader] ❌ 头像加载失败: "${avatarUrl}"`, {
+                  handle,
+                  traderId,
+                  avatarUrl,
+                  error: e,
+                })
+                // 隐藏图片，显示首字母
+                if (e.target) {
+                  (e.target as HTMLImageElement).style.display = 'none'
+                }
+              }}
+              onLoad={() => {
+                console.log(`[TraderHeader] ✅ 头像加载成功: "${avatarUrl?.substring(0, 80)}${avatarUrl && avatarUrl.length > 80 ? '...' : ''}"`, {
+                  handle,
+                  traderId,
+                })
+              }}
+            />
           ) : (
             (handle?.[0] ?? 'T').toUpperCase()
           )}
