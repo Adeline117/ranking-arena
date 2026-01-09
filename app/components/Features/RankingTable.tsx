@@ -217,10 +217,17 @@ export default function RankingTable(props: {
                     <Avatar
                       userId={t.id}
                       name={displayName}
-                      avatarUrl={t.avatar_url}
+                      avatarUrl={t.avatar_url || undefined}
                       size={32}
                       isTrader={true}
                     />
+                    {/* 调试日志：记录前几个trader的avatar_url */}
+                    {rank <= 3 && console.log(`[RankingTable] Trader #${rank} "${displayName}":`, {
+                      id: t.id,
+                      avatar_url: t.avatar_url || '(空)',
+                      avatar_url_type: typeof t.avatar_url,
+                      source: t.source,
+                    })}
                     {/* 名字 - 在头像右边 */}
                     <Text size="sm" weight="black" style={{ color: tokens.colors.text.primary }}>
                       {displayName}

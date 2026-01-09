@@ -59,21 +59,27 @@ function snapshotToTrader(
     }
   }
   
-  // 调试日志：前几个 trader 输出详细信息，其他只在没有头像时输出警告
+  // 调试日志：输出前几个trader的详细信息
   const shouldLogDetail = snapshot.source_trader_id && (
-    !avatarUrl || 
-    snapshot.source_trader_id.includes('老') || // 测试中文名字
-    snapshot.source_trader_id === 'East-Wind' || // 测试英文名字
-    snapshot.source_trader_id.startsWith('0x') // 测试钱包地址
+    displayHandle.includes('老') || 
+    displayHandle.includes('East') || 
+    displayHandle.includes('Rock') ||
+    displayHandle.includes('Encryption') ||
+    snapshot.source_trader_id.includes('老') ||
+    snapshot.source_trader_id === 'East-Wind' ||
+    !avatarUrl // 没有头像的trader也记录
   )
   
   if (shouldLogDetail) {
-    console.log(`[trader-loader] 🔍 Trader ${snapshot.source_trader_id} (${source}) 头像URL获取:`, {
+    console.log(`[trader-loader] 🔍 Trader "${displayHandle}" (${snapshot.source_trader_id}, ${source}):`, {
       hasHandleData: !!handleData,
-      handle: handleData?.handle,
+      handle: handleData?.handle || '(空)',
       avatar_url: handleData?.avatar_url || '(空)',
       profile_url: handleData?.profile_url || '(空)',
+      profile_url_type: typeof handleData?.profile_url,
+      profile_url_length: handleData?.profile_url?.length || 0,
       final_avatar_url: avatarUrl || '(未获取)',
+      final_avatar_url_type: typeof avatarUrl,
     })
   }
 
