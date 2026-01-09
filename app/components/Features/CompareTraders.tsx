@@ -143,4 +143,3 @@ function CompareTraders({ traders, onRemove, onClear }: CompareTradersProps) {
 }
 
 export default memo(CompareTraders)
-
