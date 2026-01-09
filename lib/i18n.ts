@@ -76,7 +76,6 @@ export const translations = {
     loginArrow: '登录',
     traderNotFound: '交易员不存在',
     backToHome: '返回首页',
-    activities: '动态',
     overview: '概览',
   },
   en: {
