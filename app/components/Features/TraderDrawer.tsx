@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
+import { tokens } from '@/lib/design-tokens'
 
 export type Trader = {
   id: string
@@ -140,8 +141,8 @@ export default function TraderDrawer({
           right: 0,
           height: '100vh',
           width: 'min(980px, 92vw)',
-          background: '#0b0b0b',
-          borderLeft: '1px solid rgba(255,255,255,0.08)',
+          background: tokens.colors.bg.primary,
+          borderLeft: `1px solid ${tokens.colors.border.primary}`,
           zIndex: 1001,
           overflow: 'hidden',
           display: 'flex',
@@ -155,7 +156,7 @@ export default function TraderDrawer({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            borderBottom: '1px solid rgba(255,255,255,0.08)',
+            borderBottom: `1px solid ${tokens.colors.border.primary}`,
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -164,7 +165,7 @@ export default function TraderDrawer({
                 width: 40,
                 height: 40,
                 borderRadius: 999,
-                background: 'rgba(255,255,255,0.12)',
+                background: tokens.colors.bg.secondary,
                 display: 'grid',
                 placeItems: 'center',
                 fontWeight: 900,
@@ -181,8 +182,8 @@ export default function TraderDrawer({
                     fontSize: 12,
                     padding: '2px 8px',
                     borderRadius: 999,
-                    background: 'rgba(255,255,255,0.08)',
-                    color: 'rgba(255,255,255,0.78)',
+                    background: tokens.colors.bg.secondary,
+                    color: tokens.colors.text.primary,
                     fontWeight: 800,
                   }}
                 >
@@ -190,7 +191,7 @@ export default function TraderDrawer({
                 </span>
               </div>
 
-              <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.55)' }}>
+              <div style={{ fontSize: 12, color: tokens.colors.text.secondary }}>
                 ROI {trader.roi.toFixed(1)}% · Win {trader.win_rate.toFixed(1)}% · Followers{' '}
                 {compact(trader.followers)}
               </div>
@@ -220,7 +221,7 @@ export default function TraderDrawer({
             display: 'flex',
             gap: 18,
             alignItems: 'center',
-            borderBottom: '1px solid rgba(255,255,255,0.08)',
+            borderBottom: `1px solid ${tokens.colors.border.primary}`,
           }}
         >
           <Tab active={tab === 'overview'} onClick={() => setTab('overview')}>
@@ -265,7 +266,7 @@ export default function TraderDrawer({
                       display: 'grid',
                       gridTemplateColumns: '1fr 1fr',
                       gap: 12,
-                      color: 'rgba(255,255,255,0.75)',
+                      color: tokens.colors.text.primary,
                       fontSize: 13,
                     }}
                   >
@@ -286,13 +287,13 @@ export default function TraderDrawer({
                         style={{
                           padding: 12,
                           borderRadius: 12,
-                          background: 'rgba(255,255,255,0.04)',
-                          border: '1px solid rgba(255,255,255,0.06)',
+                          background: tokens.colors.bg.secondary,
+                          border: `1px solid ${tokens.colors.border.primary}`,
                         }}
                       >
-                        <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.82)' }}>
+                        <div style={{ fontSize: 13, color: tokens.colors.text.primary }}>
                           {trader.handle} ·{' '}
-                          <span style={{ color: 'rgba(255,255,255,0.55)' }}>{i + 1}d ago</span>
+                          <span style={{ color: tokens.colors.text.secondary }}>{i + 1}d ago</span>
                         </div>
                         <div style={{ marginTop: 8, fontSize: 14, lineHeight: 1.4 }}>
                           {i === 0
@@ -311,7 +312,7 @@ export default function TraderDrawer({
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                 <div style={panel}>
                   <div style={{ fontSize: 14, fontWeight: 900 }}>About</div>
-                  <div style={{ marginTop: 10, fontSize: 13, lineHeight: 1.5, color: 'rgba(255,255,255,0.75)' }}>
+                  <div style={{ marginTop: 10, fontSize: 13, lineHeight: 1.5, color: tokens.colors.text.primary }}>
                     {trader.bio || '这个 Trader 还没有写个人简介。'}
                   </div>
 
@@ -335,8 +336,8 @@ export default function TraderDrawer({
                           alignItems: 'center',
                           padding: '10px 12px',
                           borderRadius: 12,
-                          background: 'rgba(255,255,255,0.04)',
-                          border: '1px solid rgba(255,255,255,0.06)',
+                          background: tokens.colors.bg.secondary,
+                          border: `1px solid ${tokens.colors.border.primary}`,
                           marginBottom: 10,
                         }}
                       >
@@ -374,10 +375,10 @@ export default function TraderDrawer({
                     gap: 8,
                     alignItems: 'center',
                     fontSize: 12,
-                    color: 'rgba(255,255,255,0.7)',
+                    color: tokens.colors.text.secondary,
                   }}
                 >
-                  <div style={{ color: 'rgba(255,255,255,0.5)' }}>2025</div>
+                  <div style={{ color: tokens.colors.text.tertiary }}>2025</div>
                   {statsMonthly.map((m, i) => (
                     <div
                       key={i}
@@ -395,7 +396,7 @@ export default function TraderDrawer({
                   ))}
                 </div>
 
-                <div style={{ marginTop: 10, fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>
+                <div style={{ marginTop: 10, fontSize: 12, color: tokens.colors.text.tertiary }}>
                   Past performance is not indicative of future results.
                 </div>
               </div>
@@ -483,20 +484,20 @@ export default function TraderDrawer({
                     >
                       <div style={{ display: 'flex', flexDirection: 'column' }}>
                         <div style={{ fontWeight: 900 }}>{x.sym}</div>
-                        <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>
+                        <div style={{ fontSize: 12, color: tokens.colors.text.tertiary }}>
                           {x.weight.toFixed(2)}%
                         </div>
                       </div>
 
-                      <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)' }}>
+                      <div style={{ fontSize: 12, color: tokens.colors.text.secondary }}>
                         <div>
-                          <span style={{ color: '#2fe57d', fontWeight: 900 }}>
+                          <span style={{ color: tokens.colors.accent.success, fontWeight: 900 }}>
                             {fmtPct(x.avgProfit)}
                           </span>{' '}
                           Avg. Profit
                         </div>
                         <div>
-                          <span style={{ color: '#ff4d4d', fontWeight: 900 }}>
+                          <span style={{ color: tokens.colors.accent.error, fontWeight: 900 }}>
                             {fmtPct(x.avgLoss)}
                           </span>{' '}
                           Avg. Loss
@@ -505,7 +506,7 @@ export default function TraderDrawer({
 
                       <div style={{ textAlign: 'right' }}>
                         <div style={{ fontWeight: 900 }}>{x.profitable.toFixed(2)}%</div>
-                        <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>Profitable</div>
+                        <div style={{ fontSize: 12, color: tokens.colors.text.tertiary }}>Profitable</div>
                       </div>
                     </div>
                   ))}
@@ -528,7 +529,7 @@ export default function TraderDrawer({
             <div style={panel}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div style={{ fontSize: 14, fontWeight: 900 }}>Portfolio</div>
-                <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>Last updated: (mock)</div>
+                <div style={{ fontSize: 12, color: tokens.colors.text.tertiary }}>Last updated: (mock)</div>
               </div>
 
               <div style={{ marginTop: 14, borderRadius: 14, overflow: 'hidden', border: '1px solid rgba(255,255,255,0.08)' }}>
@@ -539,7 +540,7 @@ export default function TraderDrawer({
                     padding: '10px 12px',
                     background: 'rgba(255,255,255,0.04)',
                     fontSize: 12,
-                    color: 'rgba(255,255,255,0.6)',
+                    color: tokens.colors.text.secondary,
                     fontWeight: 900,
                   }}
                 >
@@ -564,13 +565,13 @@ export default function TraderDrawer({
                     }}
                   >
                     <div style={{ fontWeight: 900 }}>{r.m}</div>
-                    <div style={{ color: 'rgba(255,255,255,0.75)' }}>{r.dir}</div>
-                    <div style={{ color: 'rgba(255,255,255,0.75)' }}>{r.invested.toFixed(2)}%</div>
+                    <div style={{ color: tokens.colors.text.primary }}>{r.dir}</div>
+                    <div style={{ color: tokens.colors.text.primary }}>{r.invested.toFixed(2)}%</div>
                     <div style={{ color: r.pl >= 0 ? '#2fe57d' : '#ff4d4d', fontWeight: 900 }}>
                       {r.pl.toFixed(2)}%
                     </div>
-                    <div style={{ color: 'rgba(255,255,255,0.75)' }}>{r.value.toFixed(2)}%</div>
-                    <div style={{ color: 'rgba(255,255,255,0.75)' }}>{r.price.toFixed(2)}</div>
+                    <div style={{ color: tokens.colors.text.primary }}>{r.value.toFixed(2)}%</div>
+                    <div style={{ color: tokens.colors.text.primary }}>{r.price.toFixed(2)}</div>
                   </div>
                 ))}
               </div>
@@ -625,7 +626,7 @@ function MiniKpi({ label, value }: { label: string; value: string }) {
 function StatRow({ label, value }: { label: string; value: string }) {
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-      <span style={{ color: 'rgba(255,255,255,0.55)' }}>{label}</span>
+      <span style={{ color: tokens.colors.text.secondary }}>{label}</span>
       <span style={{ fontWeight: 900 }}>{value}</span>
     </div>
   )
@@ -716,7 +717,7 @@ function CompareChart({ height }: { height: number }) {
 function CompareRow({ name, pct }: { name: string; pct: number }) {
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-      <div style={{ color: 'rgba(255,255,255,0.75)', fontWeight: 900 }}>{name}</div>
+      <div style={{ color: tokens.colors.text.primary, fontWeight: 900 }}>{name}</div>
       <div style={{ color: pct >= 0 ? '#2fe57d' : '#ff4d4d', fontWeight: 900 }}>
         {fmtPct(pct)}
       </div>
@@ -743,7 +744,7 @@ const btnPrimary: React.CSSProperties = {
 const btnGhost: React.CSSProperties = {
   border: '1px solid rgba(255,255,255,0.14)',
   background: 'rgba(255,255,255,0.05)',
-  color: 'rgba(255,255,255,0.86)',
+  color: tokens.colors.text.primary,
   fontWeight: 900,
   padding: '10px 14px',
   borderRadius: 12,
@@ -755,12 +756,12 @@ const iconBtn: React.CSSProperties = {
   borderRadius: 12,
   border: '1px solid rgba(255,255,255,0.14)',
   background: 'rgba(255,255,255,0.05)',
-  color: 'rgba(255,255,255,0.86)',
+  color: tokens.colors.text.primary,
   cursor: 'pointer',
 }
 const select: React.CSSProperties = {
   background: 'rgba(255,255,255,0.05)',
-  color: 'rgba(255,255,255,0.85)',
+  color: tokens.colors.text.primary,
   border: '1px solid rgba(255,255,255,0.14)',
   borderRadius: 12,
   padding: '8px 10px',
@@ -771,7 +772,7 @@ const select: React.CSSProperties = {
 const pill: React.CSSProperties = {
   border: '1px solid rgba(255,255,255,0.14)',
   background: 'rgba(255,255,255,0.04)',
-  color: 'rgba(255,255,255,0.7)',
+  color: tokens.colors.text.secondary,
   padding: '8px 10px',
   borderRadius: 999,
   fontWeight: 900,
@@ -780,5 +781,5 @@ const pill: React.CSSProperties = {
 const pillActive: React.CSSProperties = {
   ...pill,
   background: 'rgba(255,255,255,0.10)',
-  color: '#fff',
+  color: tokens.colors.text.primary,
 }

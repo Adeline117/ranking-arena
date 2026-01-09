@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { useEffect, useMemo, useState, useRef, useCallback, useReducer } from 'react'
+import { tokens } from '@/lib/design-tokens'
 import { ThumbsUpIcon, ThumbsDownIcon, CommentIcon } from '../Icons'
 import { useLanguage } from '../Utils/LanguageProvider'
 
@@ -60,7 +61,7 @@ function AvatarLink({ handle }: { handle: string }) {
         alignItems: 'center',
         gap: 8,
         textDecoration: 'none',
-        color: '#eaeaea',
+        color: tokens.colors.text.primary,
       }}
       title="进入交易者主页"
     >
@@ -79,7 +80,7 @@ function AvatarLink({ handle }: { handle: string }) {
       >
         {(handle?.[0] || 'U').toUpperCase()}
       </span>
-      <span style={{ fontWeight: 850, fontSize: 12, color: 'rgba(255,255,255,0.78)' }}>{handle}</span>
+      <span style={{ fontWeight: 850, fontSize: 12, color: tokens.colors.text.secondary }}>{handle}</span>
     </Link>
   )
 }
@@ -303,9 +304,9 @@ export default function PostFeed(props: { variant?: 'compact' | 'full' } = {}) {
                 border: 'none',
                 background: 'transparent',
                 padding: '10px 0',
-                borderBottom: '1px solid #141414',
+                borderBottom: `1px solid ${tokens.colors.border.primary}`,
                 cursor: 'pointer',
-                color: '#eaeaea',
+                color: tokens.colors.text.primary,
               }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
@@ -354,7 +355,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full' } = {}) {
                 </span>
               </div>
 
-              <div style={{ marginTop: 8, display: 'flex', gap: 10, flexWrap: 'wrap', color: '#a9a9a9', fontSize: 12, alignItems: 'center' }}>
+              <div style={{ marginTop: 8, display: 'flex', gap: 10, flexWrap: 'wrap', color: tokens.colors.text.secondary, fontSize: 12, alignItems: 'center' }}>
                 <ReactButton
                   onClick={(e) => {
                     e.preventDefault()
@@ -400,11 +401,11 @@ export default function PostFeed(props: { variant?: 'compact' | 'full' } = {}) {
             <AvatarLink handle={openPost.author} />
           </div>
 
-          <div style={{ marginTop: 8, fontSize: 12, color: '#777', display: 'flex', alignItems: 'center', gap: 6 }}>
+          <div style={{ marginTop: 8, fontSize: 12, color: tokens.colors.text.tertiary, display: 'flex', alignItems: 'center', gap: 6 }}>
             {openPost.author} · {openPost.time} · <CommentIcon size={12} /> {openPost.comments}
           </div>
 
-          <div style={{ marginTop: 12, fontSize: 14, color: '#d6d6d6', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>
+          <div style={{ marginTop: 12, fontSize: 14, color: tokens.colors.text.primary, lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>
             {openPost.body}
           </div>
 
@@ -462,9 +463,9 @@ export default function PostFeed(props: { variant?: 'compact' | 'full' } = {}) {
                   resize: 'vertical',
                   padding: 12,
                   borderRadius: 14,
-                  border: '1px solid #1f1f1f',
-                  background: '#0c0c0c',
-                  color: '#eaeaea',
+                  border: `1px solid ${tokens.colors.border.primary}`,
+                  background: tokens.colors.bg.secondary,
+                  color: tokens.colors.text.primary,
                   outline: 'none',
                   fontSize: 13,
                   lineHeight: 1.6,
@@ -514,7 +515,7 @@ function ReactButton({ onClick, active, icon, count, showCount = true }: { onCli
       style={{
         background: active ? 'rgba(139, 111, 168, 0.15)' : 'transparent',
         border: 'none',
-        color: active ? '#8b6fa8' : '#a9a9a9',
+        color: active ? tokens.colors.accent.primary : tokens.colors.text.secondary,
         cursor: 'pointer',
         display: 'flex',
         alignItems: 'center',
@@ -645,7 +646,7 @@ function Modal(props: { children: React.ReactNode; onClose: () => void }) {
         }}
       >
         <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-          <button onClick={props.onClose} style={{ border: 'none', background: 'transparent', color: '#bdbdbd', cursor: 'pointer', fontSize: 20 }}>
+          <button onClick={props.onClose} style={{ border: 'none', background: 'transparent', color: tokens.colors.text.secondary, cursor: 'pointer', fontSize: 20 }}>
             ×
           </button>
         </div>
