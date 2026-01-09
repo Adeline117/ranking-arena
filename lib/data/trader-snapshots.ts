@@ -168,13 +168,15 @@ export async function getTraderHandles(
             continue
           }
           
-          // 回退查询成功，使用回退数据（添加 avatar_url: null）
-          data = fallbackResult.data?.map((item: any) => ({
-            ...item,
-            avatar_url: null,
-          })) || null
+          // 回退查询成功，使用回退数据（不添加 avatar_url，让它保持 undefined，这样会使用 profile_url）
+          data = fallbackResult.data || null
           error = null
           console.log(`[trader-snapshots] ✅ ${source} 回退查询成功 (batch ${Math.floor(i / BATCH_SIZE) + 1}):`, fallbackResult.data?.length || 0, '条记录')
+          console.log(`[trader-snapshots] 📝 回退查询示例数据:`, fallbackResult.data?.[0] ? {
+            source_trader_id: fallbackResult.data[0].source_trader_id,
+            handle: fallbackResult.data[0].handle,
+            profile_url: fallbackResult.data[0].profile_url ? '有值' : '无值',
+          } : '无数据')
         } else {
           // 其他类型的错误，记录详细信息
           const errorInfo: any = {
