@@ -347,42 +347,78 @@ async function fetchBitget90dRoi() {
         const avatarMap = await page.evaluate(() => {
           const avatarMap = {}
           
-          // 查找所有头像图片元素
-          const avatarImages = Array.from(document.querySelectorAll('img[src*="bgstatic"], img[src*="avatar"], img[src*="headPic"], img[src*="header"], [class*="avatar"] img, [class*="headPic"] img'))
+          // 方法1: 查找所有头像图片元素（通过src属性）
+          const avatarImages = Array.from(document.querySelectorAll('img[src*="bgstatic"], img[src*="avatar"], img[src*="headPic"], img[src*="header"], img[src*="photo"], [class*="avatar"] img, [class*="headPic"] img, [class*="header"] img'))
           
-          avatarImages.forEach((img) => {
-            const src = img.src || img.getAttribute('src') || ''
-            if (src && (src.includes('bgstatic') || src.includes('avatar') || src.includes('headPic') || src.includes('header'))) {
+          console.log(`[Bitget DOM提取] 找到 ${avatarImages.length} 个头像图片元素`)
+          
+          avatarImages.forEach((img, idx) => {
+            const src = img.src || img.getAttribute('src') || img.getAttribute('data-src') || ''
+            if (src && (src.includes('bgstatic') || src.includes('avatar') || src.includes('headPic') || src.includes('header') || src.includes('photo'))) {
               // 查找包含trader ID或名字的父元素
-              const row = img.closest('tr, .leaderboard-item, [class*="leaderboard"], [class*="trader"], [class*="row"], [class*="item"]')
+              const row = img.closest('tr, .leaderboard-item, [class*="leaderboard"], [class*="trader"], [class*="row"], [class*="item"], li, div[class*="rank"], div[class*="item"]')
               if (row) {
                 // 尝试从行元素中提取trader ID或名字
-                const nameElement = row.querySelector('.name, [class*="name"], [class*="nickName"], [class*="displayName"]') || row
+                const nameElement = row.querySelector('.name, [class*="name"], [class*="nickName"], [class*="displayName"], span[class*="name"]') || row
                 const name = nameElement.textContent?.trim() || ''
                 
                 // 尝试提取traderId（从链接、data属性等）
-                const link = row.querySelector('a[href*="trader"], a[href*="user"], a[href*="copy-trading"]')
+                const link = row.querySelector('a[href*="trader"], a[href*="user"], a[href*="copy-trading"], a[href*="profile"]')
                 let traderId = null
                 if (link) {
                   const href = link.getAttribute('href') || ''
-                  const match = href.match(/trader[\/=]([^\/\?&]+)|user[\/=]([^\/\?&]+)|copy-trading[\/=]([^\/\?&]+)/)
-                  traderId = match?.[1] || match?.[2] || match?.[3]
+                  const match = href.match(/trader[\/=]([^\/\?&]+)|user[\/=]([^\/\?&]+)|copy-trading[\/=]([^\/\?&]+)|profile[\/=]([^\/\?&]+)/)
+                  traderId = match?.[1] || match?.[2] || match?.[3] || match?.[4]
                 }
                 
                 traderId = traderId || 
                           row.getAttribute('data-trader-id') || 
                           row.getAttribute('data-uid') ||
                           row.getAttribute('data-id') ||
+                          row.getAttribute('data-trader') ||
                           name
                 
+                // 也尝试从图片本身的数据属性获取
+                if (!traderId) {
+                  traderId = img.getAttribute('data-trader-id') || 
+                            img.getAttribute('data-uid') ||
+                            img.getAttribute('alt')
+                }
+                
                 if (traderId && src) {
-                  // 存储完整的头像URL（包括协议和域名）
+                  // 存储完整的头像URL（包括协议和域名，这是Bitget网页上实际显示的头像URL）
                   avatarMap[traderId] = src
+                  
+                  // 调试：输出前几个提取的头像URL
+                  if (idx < 5) {
+                    console.log(`[Bitget DOM提取] 头像 ${idx + 1}: traderId="${traderId}", name="${name}", url="${src.substring(0, 100)}${src.length > 100 ? '...' : ''}"`)
+                  }
                 }
               }
             }
           })
           
+          // 方法2: 尝试从API响应数据中提取（如果DOM中没有找到）
+          // 检查window对象中是否有排行榜数据
+          if (Object.keys(avatarMap).length === 0) {
+            try {
+              // 尝试从全局变量或window对象中获取数据
+              const windowData = (window as any).__INITIAL_STATE__ || (window as any).__NEXT_DATA__ || (window as any).leaderboardData
+              if (windowData && windowData.traders && Array.isArray(windowData.traders)) {
+                windowData.traders.forEach((trader: any) => {
+                  const traderId = trader.traderId || trader.uid || trader.id
+                  const avatarUrl = trader.header || trader.headPic || trader.avatar || trader.avatarUrl || trader.profilePhoto
+                  if (traderId && avatarUrl) {
+                    avatarMap[traderId] = avatarUrl
+                  }
+                })
+              }
+            } catch (e) {
+              // 忽略错误
+            }
+          }
+          
+          console.log(`[Bitget DOM提取] 总共提取到 ${Object.keys(avatarMap).length} 个头像URL`)
           return avatarMap
         })
         
