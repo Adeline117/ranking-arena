@@ -61,7 +61,55 @@ export default function ExchangeQuickConnect() {
   }
 
   if (loading) {
-    return null
+    return (
+      <Box
+        style={{
+          padding: tokens.spacing[4],
+          borderRadius: tokens.radius.xl,
+          background: tokens.colors.bg.secondary,
+          border: `1px solid ${tokens.colors.border.primary}`,
+          marginBottom: tokens.spacing[6],
+        }}
+      >
+        <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: tokens.spacing[3] }}>
+          <Box>
+            <Box
+              style={{
+                width: '200px',
+                height: '20px',
+                background: tokens.colors.bg.primary,
+                borderRadius: tokens.radius.md,
+                marginBottom: tokens.spacing[1],
+                animation: 'pulse 1.5s ease-in-out infinite',
+              }}
+            />
+            <Box
+              style={{
+                width: '150px',
+                height: '16px',
+                background: tokens.colors.bg.primary,
+                borderRadius: tokens.radius.md,
+                animation: 'pulse 1.5s ease-in-out infinite',
+              }}
+            />
+          </Box>
+          <Box style={{ display: 'flex', gap: tokens.spacing[2], flexWrap: 'wrap' }}>
+            {Array.from({ length: 3 }).map((_, i) => (
+              <Box
+                key={i}
+                style={{
+                  width: '100px',
+                  height: '32px',
+                  background: tokens.colors.bg.primary,
+                  borderRadius: tokens.radius.md,
+                  animation: 'pulse 1.5s ease-in-out infinite',
+                }}
+              />
+            ))}
+          </Box>
+        </Box>
+      </Box>
+    )
   }
 
   // 如果已登录但未绑定，显示快速绑定按钮

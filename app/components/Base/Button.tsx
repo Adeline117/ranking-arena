@@ -91,7 +91,7 @@ export function Button({
         ...style,
       }}
       onMouseEnter={(e) => {
-        if (!props.disabled && !props.onMouseEnter) {
+        if (!props.disabled) {
           e.currentTarget.style.transform = 'translateY(-1px)'
           if (variant === 'primary') {
             e.currentTarget.style.boxShadow = tokens.shadow.md
@@ -101,11 +101,12 @@ export function Button({
         }
       }}
       onMouseLeave={(e) => {
-        if (!props.disabled && !props.onMouseLeave) {
+        if (!props.disabled) {
           e.currentTarget.style.transform = 'translateY(0)'
           e.currentTarget.style.boxShadow = variantStyles[variant].boxShadow || tokens.shadow.xs
         }
       }}
+      aria-label={props['aria-label'] || (typeof children === 'string' ? children : 'Button')}
       {...props}
     >
       {children}

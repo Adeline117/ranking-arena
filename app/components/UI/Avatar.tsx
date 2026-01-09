@@ -75,7 +75,9 @@ export default function Avatar({
           )}
           <img
             src={finalAvatarUrl}
-            alt={name || userId}
+            alt={name || userId || 'Avatar'}
+            loading="lazy"
+            decoding="async"
             style={{
               width: '100%',
               height: '100%',
