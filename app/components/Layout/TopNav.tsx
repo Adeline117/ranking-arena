@@ -20,8 +20,30 @@ export default function TopNav({ email }: { email: string | null }) {
   const [showUserMenu, setShowUserMenu] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [showSearchDropdown, setShowSearchDropdown] = useState(false)
+  const [theme, setTheme] = useState<'light' | 'dark'>('dark')
   const menuRef = useRef<HTMLDivElement>(null)
   const searchRef = useRef<HTMLDivElement>(null)
+
+  // 检测主题变化
+  useEffect(() => {
+    const updateTheme = () => {
+      if (typeof document !== 'undefined') {
+        const currentTheme = document.documentElement.getAttribute('data-theme') as 'light' | 'dark'
+        setTheme(currentTheme === 'light' ? 'light' : 'dark')
+      }
+    }
+    
+    updateTheme()
+    const observer = new MutationObserver(updateTheme)
+    if (typeof document !== 'undefined') {
+      observer.observe(document.documentElement, {
+        attributes: true,
+        attributeFilter: ['data-theme'],
+      })
+    }
+    
+    return () => observer.disconnect()
+  }, [])
 
   useEffect(() => {
     let alive = true
@@ -164,7 +186,7 @@ export default function TopNav({ email }: { email: string | null }) {
               }
             }}
           >
-            {/* Logo Icon - 现代设计 */}
+            {/* Logo Icon - 紫色系现代设计 */}
             <Box
               data-logo-box
               style={{
@@ -172,19 +194,24 @@ export default function TopNav({ email }: { email: string | null }) {
                 width: 40,
                 height: 40,
                 borderRadius: tokens.radius.lg,
-                background: `linear-gradient(135deg, ${tokens.colors.accent.primary} 0%, ${tokens.colors.accent.success} 100%)`,
+                // 紫色系渐变：深紫到浅紫（适配主题）
+                background: theme === 'light'
+                  ? 'linear-gradient(135deg, #7C3AED 0%, #A855F7 50%, #C084FC 100%)' // 亮色主题：深紫到浅紫
+                  : 'linear-gradient(135deg, #8B5CF6 0%, #A78BFA 50%, #C4B5FD 100%)', // 暗色主题：稍亮紫色
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 fontWeight: tokens.typography.fontWeight.black,
-                color: tokens.colors.bg.primary,
+                color: '#FFFFFF', // 白色文字确保在紫色背景上清晰可见
                 fontSize: tokens.typography.fontSize.lg,
-                boxShadow: tokens.shadow.sm,
+                boxShadow: theme === 'light'
+                  ? '0 2px 8px rgba(124, 58, 237, 0.3)' // 亮色主题：紫色阴影
+                  : '0 2px 8px rgba(139, 92, 246, 0.4), 0 0 16px rgba(139, 92, 246, 0.2)', // 暗色主题：紫色光晕
                 transition: `all ${tokens.transition.base}`,
                 overflow: 'hidden',
               }}
             >
-              {/* 内部装饰光效 */}
+              {/* 内部装饰光效 - 紫色光效 */}
               <Box
                 style={{
                   position: 'absolute',
@@ -192,8 +219,8 @@ export default function TopNav({ email }: { email: string | null }) {
                   left: '-50%',
                   width: '200%',
                   height: '200%',
-                  background: `radial-gradient(circle, rgba(255,255,255,0.2) 0%, transparent 70%)`,
-                  opacity: 0.6,
+                  background: `radial-gradient(circle, rgba(255,255,255,0.25) 0%, rgba(167, 139, 250, 0.3) 50%, transparent 70%)`,
+                  opacity: 0.7,
                   transition: `opacity ${tokens.transition.base}`,
                 }}
               />
@@ -209,6 +236,7 @@ export default function TopNav({ email }: { email: string | null }) {
                   height: '100%',
                   fontFamily: tokens.typography.fontFamily.sans.join(', '),
                   letterSpacing: '-0.5px',
+                  textShadow: '0 1px 2px rgba(0, 0, 0, 0.2)', // 添加文字阴影增强可读性
                 }}
               >
                 RA
