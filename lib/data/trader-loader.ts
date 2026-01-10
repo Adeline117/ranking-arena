@@ -33,17 +33,15 @@ function snapshotToTrader(
   // - Binance: profile_url: item.userPhotoUrl  
   // - 其他交易所: profile_url: item.avatarUrl
   // 这些就是trader在交易所网页上的原始头像URL，应该直接使用
-  // 注意：avatar_url 列可能不存在，所以优先使用 profile_url
+  // 注意：avatar_url 列不存在，只使用 profile_url
   let avatarUrl: string | undefined = undefined
   if (handleData) {
-    // 优先使用 profile_url（导入脚本将头像URL存储在这里，这是交易所网页上的原始头像）
+    // 只使用 profile_url（导入脚本将头像URL存储在这里，这是交易所网页上的原始头像）
+    // avatar_url 列不存在，所以不使用它
     if (handleData.profile_url && handleData.profile_url.trim() !== '') {
       avatarUrl = handleData.profile_url.trim()
     }
-    // 如果 profile_url 为空，尝试使用 avatar_url（作为备用，虽然这个字段可能不存在）
-    else if (handleData.avatar_url && handleData.avatar_url.trim() !== '') {
-      avatarUrl = handleData.avatar_url.trim()
-    }
+    // 如果 profile_url 为空，则不设置头像URL（显示首字母头像）
   }
   
   // 调试日志：输出前几个trader的详细信息
@@ -69,15 +67,11 @@ function snapshotToTrader(
       profile_url_type: typeof handleData?.profile_url,
       profile_url_length: handleData?.profile_url?.length || 0,
       profile_url_preview: handleData?.profile_url ? handleData.profile_url.substring(0, 100) : '(空)',
-      avatar_url: handleData?.avatar_url || '(空)',
-      avatar_url_type: typeof handleData?.avatar_url,
-      avatar_url_length: handleData?.avatar_url?.length || 0,
-      avatar_url_preview: handleData?.avatar_url ? handleData.avatar_url.substring(0, 100) : '(空)',
       final_avatar_url: avatarUrl || '(未获取)',
       final_avatar_url_type: typeof avatarUrl,
       final_avatar_url_preview: avatarUrl ? avatarUrl.substring(0, 100) : '(未获取)',
-      // 显示最终使用的字段
-      used_field: avatarUrl ? (handleData?.profile_url && handleData.profile_url.trim() === avatarUrl.trim() ? 'profile_url' : 'avatar_url') : 'none',
+      // 显示最终使用的字段（只使用 profile_url，因为 avatar_url 列不存在）
+      used_field: avatarUrl ? 'profile_url' : 'none',
     })
   }
 
