@@ -50,15 +50,20 @@ export default function ClaimTraderButton({ traderId, handle, userId, source = '
         .maybeSingle()
 
       if (error) {
-        console.error('[ClaimTrader] 检查连接失败:', {
-          error,
-          message: error.message,
-          details: error.details,
-          hint: error.hint,
-          code: error.code,
-          userId: actualUserId,
-          source,
-        })
+        // 检查是否有实际的错误内容（空对象 {} 表示正常情况，不应该记录为错误）
+        const hasErrorContent = !!(error.message || error.code || error.hint || error.details)
+        if (hasErrorContent) {
+          // 只有在真正的错误（如权限错误、网络错误等）时才记录错误
+          console.error('[ClaimTrader] 检查连接失败:', {
+            error,
+            message: error.message,
+            details: error.details,
+            hint: error.hint,
+            code: error.code,
+            userId: actualUserId,
+            source,
+          })
+        }
         // 即使出错也设置连接状态为false，避免显示错误状态
         setHasConnection(false)
       } else {
