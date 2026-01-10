@@ -64,9 +64,11 @@ export default function ClaimTraderButton({ traderId, handle, userId, source = '
             source,
           })
         }
-        // 即使出错也设置连接状态为false，避免显示错误状态
+        // 无论是否有错误内容，都设置连接状态为false（没找到连接或查询失败）
+        // 注意：空错误对象 {} 表示正常情况（没找到记录），不应该记录为错误
         setHasConnection(false)
       } else {
+        // 查询成功，设置连接状态
         setHasConnection(!!data)
       }
     } catch (err: any) {
