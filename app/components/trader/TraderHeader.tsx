@@ -15,7 +15,7 @@ interface TraderHeaderProps {
   traderId: string
   avatarUrl?: string
   isRegistered?: boolean
-  followers?: number
+  followers?: number // 粉丝数 - 仅来自 Arena 注册用户的关注（trader_follows 表统计）
   isOwnProfile?: boolean
   source?: string // 'binance', 'bybit', etc.
 }

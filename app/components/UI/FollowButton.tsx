@@ -17,8 +17,9 @@ export default function FollowButton({ traderId, userId, initialFollowing = fals
     if (!userId) return
     ;(async () => {
       try {
+        // 使用 trader_follows 表（所有 trader 的粉丝数只能来源 Arena 注册用户的关注）
         const { data } = await supabase
-          .from('follows')
+          .from('trader_follows')
           .select('*')
           .eq('user_id', userId)
           .eq('trader_id', traderId)
@@ -39,16 +40,22 @@ export default function FollowButton({ traderId, userId, initialFollowing = fals
     setLoading(true)
     try {
       if (following) {
-        await supabase
-          .from('follows')
+        // 取消关注：从 trader_follows 表删除
+        const { error } = await supabase
+          .from('trader_follows')
           .delete()
           .eq('user_id', userId)
           .eq('trader_id', traderId)
+        
+        if (error) throw error
         setFollowing(false)
       } else {
-        await supabase
-          .from('follows')
+        // 关注：插入到 trader_follows 表
+        const { error } = await supabase
+          .from('trader_follows')
           .insert({ user_id: userId, trader_id: traderId })
+        
+        if (error) throw error
         setFollowing(true)
       }
     } catch (error) {

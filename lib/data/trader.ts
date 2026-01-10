@@ -210,15 +210,10 @@ export async function getTraderByHandle(handle: string): Promise<TraderProfile |
         continue
       }
 
-      // 获取最新的 followers 数据
-      const { data: latestSnapshot } = await supabase
-        .from('trader_snapshots')
-        .select('followers')
-        .eq('source', sourceType)
-        .eq('source_trader_id', source.source_trader_id)
-        .order('captured_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()
+      // 获取 Arena 粉丝数（从 trader_follows 表统计）
+      // 注意：不再从 trader_snapshots 获取 followers，所有 trader 的粉丝数只能来源 Arena 注册用户的关注
+      const { getTraderArenaFollowersCount } = await import('./trader-followers')
+      const arenaFollowersCount = await getTraderArenaFollowersCount(supabase, source.source_trader_id)
 
       // 检查是否在平台注册（从 user_profiles 表，不查询 avatar_url，因为永远使用 trader 的原始头像）
       const profileHandle = source.handle || source.source_trader_id
@@ -247,7 +242,7 @@ export async function getTraderByHandle(handle: string): Promise<TraderProfile |
         if (profile3) profile = profile3
       }
 
-      console.log(`[trader] Found trader: ${source.handle || source.source_trader_id} (source: ${sourceType})`)
+      console.log(`[trader] Found trader: ${source.handle || source.source_trader_id} (source: ${sourceType}, arena followers: ${arenaFollowersCount})`)
       // 永远只使用 trader_sources 中的 profile_url（这是trader在交易所的原始头像URL）
       // 注意：avatar_url 列不存在，所以只使用 profile_url
       // 不使用用户设置的 avatar_url，确保永远显示 trader 在交易所的原始头像
@@ -256,7 +251,7 @@ export async function getTraderByHandle(handle: string): Promise<TraderProfile |
         handle: source.handle || source.source_trader_id,
         id: source.source_trader_id,
         bio: profile?.bio || null,
-        followers: latestSnapshot?.followers || 0,
+        followers: arenaFollowersCount, // 使用 Arena 粉丝数（从 trader_follows 表统计）
         copiers: 0,
         avatar_url: traderAvatarUrl, // 永远只使用 trader 的原始头像，不使用 profile?.avatar_url
         isRegistered: !!profile,
@@ -610,7 +605,7 @@ export async function getSimilarTraders(handle: string, limit: number = 6): Prom
       // 获取最新的排名数据，排除当前交易员
       const { data: snapshots } = await supabase
         .from('trader_snapshots')
-        .select('source_trader_id, roi, followers')
+        .select('source_trader_id, roi')
         .eq('source', sourceType)
         .eq('captured_at', latestSnapshot.captured_at)
         .neq('source_trader_id', currentSource?.source_trader_id || '')
@@ -638,12 +633,17 @@ export async function getSimilarTraders(handle: string, limit: number = 6): Prom
         })
       }
 
+      // 批量获取 Arena 粉丝数（从 trader_follows 表统计）
+      const { getTradersArenaFollowersCount } = await import('./trader-followers')
+      const arenaFollowersMap = await getTradersArenaFollowersCount(supabase, traderIds)
+
       return snapshots.map((s: any) => {
         const sourceInfo = handleMap.get(s.source_trader_id) || { handle: s.source_trader_id, profile_url: null }
+        const arenaFollowersCount = arenaFollowersMap.get(s.source_trader_id) || 0
         return {
           handle: sourceInfo.handle,
           id: s.source_trader_id,
-          followers: s.followers || 0,
+          followers: arenaFollowersCount, // 使用 Arena 粉丝数（从 trader_follows 表统计）
           avatar_url: sourceInfo.profile_url || null,
           source: sourceType,
         }
