@@ -7,7 +7,6 @@ import { RankingSkeleton } from '../UI/Skeleton'
 import { RankingBadge } from '../Icons'
 import { Box, Text } from '../Base'
 import { useLanguage } from '../Utils/LanguageProvider'
-import Avatar from '../UI/Avatar'
 
 // 格式化 PnL 显示
 function formatPnL(pnl: number): string {
@@ -214,13 +213,41 @@ export default function RankingTable(props: {
                   {/* 交易员ID - 唯一可点击的元素，视觉权重最高 */}
                   <Box style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'nowrap' }}>
                     {/* 头像 - 放在名字左边 */}
-                    <Avatar
-                      userId={t.id}
-                      name={displayName}
-                      avatarUrl={t.avatar_url}
-                      size={32}
-                      isTrader={true}
-                    />
+                    <Box
+                      style={{
+                        width: 32,
+                        height: 32,
+                        borderRadius: tokens.radius.full,
+                        background: tokens.colors.bg.secondary,
+                        border: `1px solid ${tokens.colors.border.primary}`,
+                        display: 'grid',
+                        placeItems: 'center',
+                        fontWeight: tokens.typography.fontWeight.black,
+                        fontSize: tokens.typography.fontSize.sm,
+                        color: tokens.colors.text.primary,
+                        overflow: 'hidden',
+                        flexShrink: 0,
+                      }}
+                    >
+                      {t.avatar_url ? (
+                        <img 
+                          src={t.avatar_url} 
+                          alt={displayName} 
+                          referrerPolicy="origin-when-cross-origin"
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                          onError={(e) => {
+                            // 隐藏图片，显示首字母
+                            if (e.target) {
+                              (e.target as HTMLImageElement).style.display = 'none'
+                            }
+                          }}
+                        />
+                      ) : (
+                        <Text size="xs" weight="black" style={{ color: tokens.colors.text.primary }}>
+                          {(displayName?.[0] ?? 'T').toUpperCase()}
+                        </Text>
+                      )}
+                    </Box>
                     {/* 名字 - 在头像右边 */}
                     <Text size="sm" weight="black" style={{ color: tokens.colors.text.primary }}>
                       {displayName}
