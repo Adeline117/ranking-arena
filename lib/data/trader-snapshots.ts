@@ -20,8 +20,7 @@ export interface TraderHandle {
   source_trader_id: string
   handle: string | null
   profile_url: string | null
-  // 注意：avatar_url 列可能不存在，使用 profile_url 作为头像URL
-  avatar_url?: string | null
+  // 注意：avatar_url 列不存在，只使用 profile_url 作为头像URL
 }
 
 /**
