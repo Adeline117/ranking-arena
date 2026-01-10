@@ -23,12 +23,40 @@ export async function getTraderArenaFollowersCount(
 
     if (error) {
       // 检查是否有实际的错误内容，避免记录空错误对象 {}
-      const hasErrorContent = !!(error.message || error.code || error.hint || error.details)
+      // 严格检查每个字段，确保它们不是空值
+      const hasMessage = error.message && typeof error.message === 'string' && error.message.trim() !== ''
+      const hasCode = error.code && (typeof error.code === 'string' || typeof error.code === 'number')
+      const hasHint = error.hint && typeof error.hint === 'string' && error.hint.trim() !== ''
+      
+      // details 可能是对象，需要检查是否为空对象
+      let hasDetails = false
+      if (error.details) {
+        if (typeof error.details === 'string' && error.details.trim() !== '') {
+          hasDetails = true
+        } else if (typeof error.details === 'object' && error.details !== null) {
+          const detailsKeys = Object.keys(error.details)
+          if (detailsKeys.length > 0) {
+            // 检查对象中是否有非空值
+            hasDetails = detailsKeys.some(key => {
+              const value = (error.details as any)[key]
+              if (value === null || value === undefined || value === '') {
+                return false
+              }
+              if (typeof value === 'object') {
+                return Object.keys(value).length > 0
+              }
+              return true
+            })
+          }
+          // 如果 detailsKeys.length === 0，hasDetails 保持为 false（空对象）
+        }
+      }
+      
+      const hasErrorContent = hasMessage || hasCode || hasHint || hasDetails
       
       // 特殊处理：如果是表不存在错误（code 42P01 或 relation does not exist），这是真正的错误
       const isTableNotFound = error.code === '42P01' || 
-                                (error.message && typeof error.message === 'string' && 
-                                 error.message.toLowerCase().includes('does not exist'))
+                                (hasMessage && error.message.toLowerCase().includes('does not exist'))
       
       if (hasErrorContent || isTableNotFound) {
         console.error(`[trader-followers] 获取 trader ${traderId} 粉丝数失败:`, {
@@ -44,7 +72,8 @@ export async function getTraderArenaFollowersCount(
           console.warn(`[trader-followers] trader_follows 表不存在，请运行 scripts/setup_trader_follows.sql 创建表`)
         }
       } else {
-        // 空错误对象 {}，不记录错误，可能是正常的数据库响应
+        // 空错误对象 {}，不记录错误，可能是正常的数据库响应（例如查询无结果）
+        // 这是正常的，不需要记录
       }
       return 0
     }
@@ -110,12 +139,40 @@ export async function getTradersArenaFollowersCount(
 
       if (error) {
         // 检查是否有实际的错误内容，避免记录空错误对象 {}
-        const hasErrorContent = !!(error.message || error.code || error.hint || error.details)
+        // 严格检查每个字段，确保它们不是空值
+        const hasMessage = error.message && typeof error.message === 'string' && error.message.trim() !== ''
+        const hasCode = error.code && (typeof error.code === 'string' || typeof error.code === 'number')
+        const hasHint = error.hint && typeof error.hint === 'string' && error.hint.trim() !== ''
+        
+        // details 可能是对象，需要检查是否为空对象
+        let hasDetails = false
+        if (error.details) {
+          if (typeof error.details === 'string' && error.details.trim() !== '') {
+            hasDetails = true
+          } else if (typeof error.details === 'object' && error.details !== null) {
+            const detailsKeys = Object.keys(error.details)
+            if (detailsKeys.length > 0) {
+              // 检查对象中是否有非空值
+              hasDetails = detailsKeys.some(key => {
+                const value = (error.details as any)[key]
+                if (value === null || value === undefined || value === '') {
+                  return false
+                }
+                if (typeof value === 'object') {
+                  return Object.keys(value).length > 0
+                }
+                return true
+              })
+            }
+            // 如果 detailsKeys.length === 0，hasDetails 保持为 false（空对象）
+          }
+        }
+        
+        const hasErrorContent = hasMessage || hasCode || hasHint || hasDetails
         
         // 特殊处理：如果是表不存在错误（code 42P01 或 relation does not exist），这是真正的错误
         const isTableNotFound = error.code === '42P01' || 
-                                (error.message && typeof error.message === 'string' && 
-                                 error.message.toLowerCase().includes('does not exist'))
+                                (hasMessage && error.message.toLowerCase().includes('does not exist'))
         
         if (hasErrorContent || isTableNotFound) {
           const batchNum = Math.floor(i / BATCH_SIZE) + 1
@@ -133,7 +190,8 @@ export async function getTradersArenaFollowersCount(
             console.warn(`[trader-followers] trader_follows 表不存在，请运行 scripts/setup_trader_follows.sql 创建表`)
           }
         } else {
-          // 空错误对象 {}，不记录错误，可能是正常的数据库响应
+          // 空错误对象 {}，不记录错误，可能是正常的数据库响应（例如查询无结果）
+          // 这是正常的，不需要记录
         }
         // 初始化这批 trader 的粉丝数为 0（无论是否有错误）
         batch.forEach(id => resultMap.set(id, 0))
