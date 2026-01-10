@@ -470,9 +470,9 @@ export default function PostFeed(props: { variant?: 'compact' | 'full' } = {}) {
 
           {commentsOpen[openPost.id] ? (
             <div style={{ marginTop: 12, borderTop: '1px solid #141414', paddingTop: 12 }}>
-              <div style={{ fontWeight: 950, marginBottom: 8 }}>评论区（mock）</div>
+              <div style={{ fontWeight: 950, marginBottom: 8 }}>{t('commentsMock')}</div>
               <textarea
-                placeholder="写评论…"
+                placeholder={t('writeComment')}
                 style={{
                   width: '100%',
                   minHeight: 86,

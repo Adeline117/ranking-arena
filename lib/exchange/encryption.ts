@@ -49,3 +49,4 @@ export function isEncryptionConfigured(): boolean {
   return ENCRYPTION_KEY !== 'default-key-change-in-production'
 }
 
+

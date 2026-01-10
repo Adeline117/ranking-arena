@@ -94,3 +94,4 @@ export async function hasExchangeConnection(userId: string): Promise<boolean> {
   return connections.length > 0
 }
 
+

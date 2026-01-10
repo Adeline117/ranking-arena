@@ -175,3 +175,4 @@ export function calculateTradingStats(trades: BinanceTrade[]) {
   }
 }
 
+
