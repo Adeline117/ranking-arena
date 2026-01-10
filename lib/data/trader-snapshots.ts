@@ -110,31 +110,21 @@ export async function getTraderHandles(
       if (error) {
         const hasErrorContent = !!(error.message || error.code || error.hint || error.details)
         if (hasErrorContent) {
-          // 其他类型的错误，记录并跳过
-          const errorInfo: any = {
+          // 只有在真正的错误（如权限错误、网络错误等）时才记录错误
+          console.error(`[trader-snapshots] ❌ ${source} handle 查询错误 (batch ${Math.floor(i / BATCH_SIZE) + 1}):`, {
+            error,
+            message: error.message,
+            details: error.details,
+            hint: error.hint,
+            code: error.code,
             source,
             batchNumber: Math.floor(i / BATCH_SIZE) + 1,
             batchSize: batch.length,
-            batchSample: batch.slice(0, 3),
-            errorKeys,
-            errorString: JSON.stringify(error),
-            errorCode,
-            errorMessage,
-          }
-          
-          if (error && typeof error === 'object') {
-            errorInfo.errorType = typeof error
-            if ('message' in error) errorInfo.message = (error as any).message
-            if ('details' in error) errorInfo.details = (error as any).details
-            if ('hint' in error) errorInfo.hint = (error as any).hint
-            if ('code' in error) errorInfo.code = (error as any).code
-          } else {
-            errorInfo.errorValue = error
-          }
-          
-          console.error(`[trader-snapshots] ❌ ${source} handle 查询错误 (batch ${errorInfo.batchNumber}):`, errorInfo)
-          continue
+            sampleIds: batch.slice(0, 5),
+          })
         }
+        // 无论是否有错误内容，都跳过这个batch
+        continue
       }
 
       // 处理查询成功的情况
