@@ -139,9 +139,8 @@ export async function getTradersArenaFollowersCount(
 
       if (error) {
         // 综合检查错误对象是否为空（使用多种方法确保可靠性）
+        // 最直接的方法：先检查 JSON.stringify 是否等于 '{}'
         let isEmpty = false
-        
-        // 方法1: 检查 JSON.stringify 是否等于 '{}'
         try {
           const errorJson = JSON.stringify(error)
           if (errorJson === '{}') {
@@ -151,7 +150,7 @@ export async function getTradersArenaFollowersCount(
           // JSON.stringify 可能失败（如果对象包含不可序列化的属性），继续使用其他方法
         }
         
-        // 方法2: 检查所有可枚举属性是否都是空的
+        // 如果 JSON.stringify 检查没有确定为空，再检查所有可枚举属性是否都是空的
         if (!isEmpty) {
           const errorKeys = Object.keys(error || {})
           if (errorKeys.length === 0) {
@@ -185,15 +184,7 @@ export async function getTradersArenaFollowersCount(
           }
         }
         
-        // 如果是空对象，直接跳过，不记录错误
-        if (isEmpty) {
-          // 完全空对象 {}，不是真正的错误，继续处理（可能是正常的查询无结果）
-          // 初始化这批 trader 的粉丝数为 0
-          batch.forEach(id => resultMap.set(id, 0))
-          continue
-        }
-        
-        // 检查错误对象是否真的有有效内容（标准 Supabase 错误字段）
+        // 检查标准 Supabase 错误字段（即使 isEmpty 为 false，也要确保这些字段真的存在）
         const hasMessage = error.message && typeof error.message === 'string' && error.message.trim() !== ''
         const hasCode = error.code !== undefined && error.code !== null && error.code !== '' && 
                        (typeof error.code === 'string' || typeof error.code === 'number')
@@ -235,12 +226,13 @@ export async function getTradersArenaFollowersCount(
         const hasErrorContent = hasMessage || hasCode || hasHint || hasDetails
         
         // 特殊处理：如果是表不存在错误（code 42P01 或 relation does not exist），这是真正的错误
+        // 但要确保 code 或 message 确实存在且非空
         const isTableNotFound = (hasCode && error.code === '42P01') || 
                                 (hasMessage && typeof error.message === 'string' && error.message.toLowerCase().includes('does not exist'))
         
-        // 如果没有任何错误内容（包括表不存在错误），说明是空错误对象 {}，不记录
-        if (!hasErrorContent && !isTableNotFound) {
-          // 虽然有非空属性但都不是标准错误字段，不记录错误
+        // 关键修复：如果 isEmpty 为 true，或者既没有错误内容也不是表不存在错误，则不记录错误
+        if (isEmpty || (!hasErrorContent && !isTableNotFound)) {
+          // 空错误对象 {}，不是真正的错误，继续处理（可能是正常的查询无结果）
           // 初始化这批 trader 的粉丝数为 0
           batch.forEach(id => resultMap.set(id, 0))
           continue
