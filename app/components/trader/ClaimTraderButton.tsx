@@ -52,7 +52,23 @@ export default function ClaimTraderButton({ traderId, handle, userId, source = '
       // 检查是否有实际的错误内容（空对象 {} 表示正常情况，不应该记录为错误）
       // 只有当 error 对象有实际的错误属性（message/code/hint/details）时，才是真正的错误
       if (error) {
+        // 详细检查错误对象的结构
+        const errorKeys = Object.keys(error || {})
+        const errorValues = Object.values(error || {})
         const hasErrorContent = !!(error.message || error.code || error.hint || error.details)
+        
+        // 调试：查看错误对象的实际结构
+        if (!hasErrorContent && errorKeys.length > 0) {
+          // 如果错误对象有属性但没有有效的错误内容，记录调试信息（不是错误）
+          console.debug('[ClaimTrader] 调试：错误对象有属性但无有效内容:', {
+            errorKeys,
+            errorValues,
+            error,
+            userId: actualUserId,
+            source,
+          })
+        }
+        
         if (hasErrorContent) {
           // 只有在真正的错误（如权限错误、网络错误等）时才记录错误
           console.error('[ClaimTrader] 检查连接失败:', {
