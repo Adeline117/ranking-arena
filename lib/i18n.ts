@@ -119,6 +119,17 @@ export const translations = {
     pasteApiKey: '粘贴您的 API Key',
     pasteApiSecret: '粘贴您的 API Secret',
     back: '返回',
+    // 数据分层相关
+    trackedSince: 'Tracked since (first seen in Arena)',
+    trackedSinceCn: '跟踪自（首次在 Arena 发现）',
+    derivedTooltip: 'Derived from public leaderboard snapshots',
+    derivedTooltipCn: '基于公开榜单快照计算',
+    unlockByConnecting: 'Unlock by connecting exchange account',
+    unlockByConnectingCn: '绑定交易所账号后解锁',
+    roiTrendTitle: 'ROI Trend vs BTC / SPX (indexed)',
+    roiTrendTitleCn: 'ROI 趋势对比 vs BTC / SPX (指数化)',
+    roiTrendTooltip: 'Based on public ROI snapshots, not net value curve',
+    roiTrendTooltipCn: '基于公开 ROI 快照，不是净值曲线',
   },
   en: {
     home: 'Home',
@@ -237,6 +248,17 @@ export const translations = {
     pasteApiKey: 'Paste your API Key',
     pasteApiSecret: 'Paste your API Secret',
     back: 'Back',
+    // Data tiering related
+    trackedSince: 'Tracked since (first seen in Arena)',
+    trackedSinceCn: '跟踪自（首次在 Arena 发现）',
+    derivedTooltip: 'Derived from public leaderboard snapshots',
+    derivedTooltipCn: '基于公开榜单快照计算',
+    unlockByConnecting: 'Unlock by connecting exchange account',
+    unlockByConnectingCn: '绑定交易所账号后解锁',
+    roiTrendTitle: 'ROI Trend vs BTC / SPX (indexed)',
+    roiTrendTitleCn: 'ROI 趋势对比 vs BTC / SPX (指数化)',
+    roiTrendTooltip: 'Based on public ROI snapshots, not net value curve',
+    roiTrendTooltipCn: '基于公开 ROI 快照，不是净值曲线',
   },
 }
 

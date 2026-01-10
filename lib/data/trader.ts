@@ -18,21 +18,25 @@ export interface TraderProfile {
 }
 
 export interface TraderPerformance {
-  roi_7d?: number
-  roi_30d?: number
-  roi_90d?: number
-  roi_1y?: number
-  roi_2y?: number
-  return_ytd?: number
-  return_2y?: number
-  risk_score_last_7d?: number
-  profitable_weeks?: number
-  monthlyPerformance?: Array<{ month: string; value: number }>
-  yearlyPerformance?: Array<{ year: number; value: number }>
+  // public_snapshot_*: 公开榜单快照数据（直接从交易所公开 API 抓取）
+  roi_7d?: number // public_snapshot_roi_7d
+  roi_30d?: number // public_snapshot_roi_30d
+  roi_90d?: number // public_snapshot_roi_90d
+  roi_1y?: number // public_snapshot_roi_1y
+  roi_2y?: number // public_snapshot_roi_2y
+  return_ytd?: number // public_snapshot_return_ytd
+  return_2y?: number // public_snapshot_return_2y
+  
+  // derived_from_snapshot_*: 基于快照计算的数据（从公开快照派生）
+  risk_score_last_7d?: number // derived_from_snapshot_risk_score
+  profitable_weeks?: number // derived_from_snapshot_profitable_weeks
+  monthlyPerformance?: Array<{ month: string; value: number }> // derived_from_snapshot_monthly_performance
+  yearlyPerformance?: Array<{ year: number; value: number }> // derived_from_snapshot_yearly_performance
 }
 
 export interface TraderStats {
-  expectedDividends?: {
+  // account_required_*: 绑定账户后解锁的数据（需要用户授权访问私有交易数据）
+  expectedDividends?: { // account_required_expected_dividends
     dividendYield: number
     assets: number
     trendingStocks: Array<{
@@ -41,13 +45,13 @@ export interface TraderStats {
       icon?: string
     }>
   }
-  trading?: {
+  trading?: { // account_required_trading_stats
     totalTrades12M: number
     avgProfit: number
     avgLoss: number
     profitableTradesPct: number
   }
-  frequentlyTraded?: Array<{
+  frequentlyTraded?: Array<{ // account_required_frequently_traded
     symbol: string
     weightPct: number
     count: number
@@ -55,13 +59,15 @@ export interface TraderStats {
     avgLoss: number
     profitablePct: number
   }>
-  additionalStats?: {
-    tradesPerWeek: number
-    avgHoldingTime: string
-    activeSince: string
-    profitableWeeksPct: number
+  
+  // derived_from_snapshot_*: 基于快照计算的数据（从公开快照派生）
+  additionalStats?: { // derived_from_snapshot_additional_stats
+    tradesPerWeek: number // derived_from_snapshot_trades_per_week
+    avgHoldingTime: string // derived_from_snapshot_avg_holding_time
+    activeSince: string // public_snapshot_first_seen_at (首次在 Arena 发现的时间)
+    profitableWeeksPct: number // derived_from_snapshot_profitable_weeks_pct
   }
-  monthlyPerformance?: Array<{ month: string; value: number }>
+  monthlyPerformance?: Array<{ month: string; value: number }> // derived_from_snapshot_monthly_performance
 }
 
 export interface PortfolioItem {
