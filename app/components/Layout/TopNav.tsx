@@ -224,7 +224,7 @@ export default function TopNav({ email }: { email: string | null }) {
                   transition: `opacity ${tokens.transition.base}`,
                 }}
               />
-              {/* Logo文字 - 字母A设计 */}
+              {/* Logo文字 - 字母A设计（现代字体样式） */}
               <Box
                 style={{
                   position: 'relative',
@@ -234,12 +234,17 @@ export default function TopNav({ email }: { email: string | null }) {
                   justifyContent: 'center',
                   width: '100%',
                   height: '100%',
-                  fontFamily: tokens.typography.fontFamily.sans.join(', '),
-                  letterSpacing: '0',
-                  fontSize: '26px',
-                  fontWeight: tokens.typography.fontWeight.black,
+                  fontFamily: 'var(--font-geist-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+                  fontSize: '28px',
+                  fontWeight: 700, // 使用bold而不是black，更加优雅
+                  letterSpacing: '-1px', // 负字间距让字母更紧凑
                   lineHeight: '1',
-                  textShadow: '0 2px 6px rgba(0, 0, 0, 0.4)', // 增强文字阴影和深度
+                  color: '#FFFFFF',
+                  textShadow: '0 2px 8px rgba(0, 0, 0, 0.5), 0 0 20px rgba(255, 255, 255, 0.1)', // 更强的阴影和微光
+                  fontFeatureSettings: '"liga" 1, "kern" 1', // 启用连字和字距调整
+                  WebkitFontSmoothing: 'antialiased',
+                  MozOsxFontSmoothing: 'grayscale',
+                  transform: 'translateY(-1px)', // 微调垂直位置，视觉上更居中
                 }}
               >
                 A
