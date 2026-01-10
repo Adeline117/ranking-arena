@@ -54,22 +54,36 @@ export default function ClaimTraderButton({ traderId, handle, userId, source = '
       if (error) {
         // 详细检查错误对象的结构，确保只有真实的值才被认为是错误内容
         const errorKeys = Object.keys(error || {})
-        const errorValues = Object.values(error || {})
         
         // 严格检查：只有非空、非 undefined、非 null 的值才被认为是错误内容
         const hasMessage = error.message && typeof error.message === 'string' && error.message.trim() !== ''
         const hasCode = error.code && (typeof error.code === 'string' || typeof error.code === 'number')
         const hasHint = error.hint && typeof error.hint === 'string' && error.hint.trim() !== ''
-        const hasDetails = error.details && (typeof error.details === 'string' || typeof error.details === 'object')
+        
+        // details 可能是对象，需要检查是否为空对象
+        let hasDetails = false
+        if (error.details) {
+          if (typeof error.details === 'string' && error.details.trim() !== '') {
+            hasDetails = true
+          } else if (typeof error.details === 'object') {
+            // 检查对象是否为空对象或只有空值的属性
+            const detailsKeys = Object.keys(error.details)
+            const hasNonEmptyValue = detailsKeys.some(key => {
+              const value = (error.details as any)[key]
+              return value !== null && value !== undefined && value !== '' && 
+                     (typeof value !== 'object' || (typeof value === 'object' && Object.keys(value).length > 0))
+            })
+            hasDetails = hasNonEmptyValue
+          }
+        }
         
         const hasErrorContent = hasMessage || hasCode || hasHint || hasDetails
         
         // 调试：查看错误对象的实际结构（仅在开发环境）
         if (process.env.NODE_ENV === 'development' && !hasErrorContent && errorKeys.length > 0) {
           // 如果错误对象有属性但没有有效的错误内容，记录调试信息（不是错误）
-          console.debug('[ClaimTrader] 调试：错误对象有属性但无有效内容:', {
+          console.debug('[ClaimTrader] 调试：错误对象有属性但无有效内容（这是正常的，表示没找到连接）:', {
             errorKeys,
-            errorValues,
             error,
             hasMessage,
             hasCode,
@@ -92,7 +106,7 @@ export default function ClaimTraderButton({ traderId, handle, userId, source = '
             source,
           })
         }
-        // 如果 hasErrorContent 是 false（空对象 {} 或所有属性都是 undefined/null/空字符串），则不记录错误
+        // 如果 hasErrorContent 是 false（空对象 {} 或所有属性都是 undefined/null/空字符串/空对象），则不记录错误
         // 这是正常的"没找到连接"情况，不应该记录为错误
       }
       
