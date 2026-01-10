@@ -284,9 +284,30 @@ async function importToSupabase(normalizedData, sourceType = 'binance') {
   })
   console.log('')
 
+  // 使用统一的 captured_at 时间戳
+  // 这样可以在内存中 merge 完所有周期后再 upsert，提高稳定性
+  // 注意：如果数据库中有 run_id 列，可以添加 run_id 来追踪每次抓取批次
   const capturedAt = new Date().toISOString()
+  
+  console.log(`统一 captured_at: ${capturedAt}`)
+  console.log('')
 
-  const sourcesData = validData.map(item => ({
+  // 在内存中 merge 数据：按 source_trader_id 合并，保留最新数据
+  const mergedDataMap = new Map()
+  validData.forEach(item => {
+    const key = `${sourceType}_${item.encryptedUid}`
+    const existing = mergedDataMap.get(key)
+    // 如果已存在，保留 ROI 更高的记录（或者可以根据其他逻辑选择）
+    if (!existing || Number(item.roi) > Number(existing.roi)) {
+      mergedDataMap.set(key, item)
+    }
+  })
+  const mergedData = Array.from(mergedDataMap.values())
+  
+  console.log(`Merge 后数据量: ${mergedData.length} (原始: ${validData.length})`)
+  console.log('')
+
+  const sourcesData = mergedData.map(item => ({
     source: sourceType,
     source_type: 'leaderboard',
     source_trader_id: item.encryptedUid,
@@ -298,7 +319,12 @@ async function importToSupabase(normalizedData, sourceType = 'binance') {
     identity_type: 'trader',
   }))
 
-  const snapshotsData = validData.map((item, index) => ({
+  // 重新排序合并后的数据
+  const sortedMergedData = mergedData
+    .sort((a, b) => Number(b.roi) - Number(a.roi))
+    .slice(0, 100) // 确保不超过 Top 100
+
+  const snapshotsData = sortedMergedData.map((item, index) => ({
     source: sourceType,
     source_trader_id: item.encryptedUid,
     rank: index + 1,
@@ -306,7 +332,9 @@ async function importToSupabase(normalizedData, sourceType = 'binance') {
     pnl: item.pnl != null ? Number(item.pnl) : null,
     followers: item.followerCount != null ? Number(item.followerCount) : null,
     win_rate: item.winRate != null ? Number(item.winRate) : null,
-    captured_at: capturedAt,
+    captured_at: capturedAt, // 统一的 captured_at（所有周期使用相同时间戳，便于在内存中 merge 后再 upsert）
+    // 注意：如果数据库中有 run_id 列，可以添加 run_id 字段来追踪本次抓取批次
+    // run_id: `run_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
   }))
 
   const BATCH_SIZE = 100
@@ -357,7 +385,8 @@ async function importToSupabase(normalizedData, sourceType = 'binance') {
   console.log('')
   console.log(`✅ trader_sources: ${sourcesSuccess} 条`)
   console.log(`✅ trader_snapshots: ${snapshotsSuccess} 条`)
-  console.log(`✅ 完成！共导入 ${validData.length} 条币安跟单交易数据（ROI Top 100）`)
+  console.log(`✅ 完成！共导入 ${sortedMergedData.length} 条币安跟单交易数据（ROI Top 100）`)
+  console.log(`✅ 统一 captured_at: ${capturedAt}`)
 }
 
 /**

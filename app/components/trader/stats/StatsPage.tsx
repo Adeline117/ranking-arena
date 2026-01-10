@@ -5,6 +5,7 @@ import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../../Base'
 import type { TraderStats } from '@/lib/data/trader'
 import TradingViewShell from '../TradingViewShell'
+import { useLanguage } from '../../Utils/LanguageProvider'
 
 interface StatsPageProps {
   stats: TraderStats
@@ -12,6 +13,8 @@ interface StatsPageProps {
 }
 
 export default function StatsPage({ stats, traderHandle }: StatsPageProps) {
+  const { t } = useLanguage()
+  
   // Performance月度数据
   const monthlyData = useMemo(() => {
     return stats.monthlyPerformance || [
@@ -339,10 +342,26 @@ export default function StatsPage({ stats, traderHandle }: StatsPageProps) {
             Additional stats
           </Text>
           <Box style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: tokens.spacing[4] }}>
-            <MiniKpi label="Trades per week" value={additionalStats.tradesPerWeek.toFixed(2)} />
-            <MiniKpi label="Avg. holdings time" value={additionalStats.avgHoldingTime} />
-            <MiniKpi label="Active since" value="—" />
-            <MiniKpi label="Profitable weeks" value={`${additionalStats.profitableWeeksPct.toFixed(2)}%`} />
+            <MiniKpi 
+              label="Trades per week" 
+              value={additionalStats.tradesPerWeek.toFixed(2)} 
+              tooltip="Derived from public leaderboard snapshots"
+            />
+            <MiniKpi 
+              label="Avg. holdings time" 
+              value={additionalStats.avgHoldingTime} 
+              tooltip="Derived from public leaderboard snapshots"
+            />
+            <MiniKpi 
+              label="Tracked since (first seen in Arena)" 
+              value="—" 
+              isPlaceholder={true}
+            />
+            <MiniKpi 
+              label="Profitable weeks" 
+              value={`${additionalStats.profitableWeeksPct.toFixed(2)}%`} 
+              tooltip="Derived from public leaderboard snapshots"
+            />
           </Box>
         </Box>
       </Box>
@@ -351,19 +370,88 @@ export default function StatsPage({ stats, traderHandle }: StatsPageProps) {
 }
 
 // Helper Components
-function MiniKpi({ label, value }: { label: string; value: string }) {
+function MiniKpi({ 
+  label, 
+  value, 
+  tooltip, 
+  isPlaceholder = false 
+}: { 
+  label: string
+  value: string
+  tooltip?: string
+  isPlaceholder?: boolean
+}) {
+  const [showTooltip, setShowTooltip] = useState(false)
+  
   return (
     <Box
       bg="primary"
       p={3}
       radius="lg"
       border="secondary"
+      style={{ position: 'relative' }}
     >
-      <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[1], fontWeight: tokens.typography.fontWeight.normal }}>
-        {label}
-      </Text>
-      <Text size="lg" weight="black">
-        {value}
+      <Box 
+        style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          gap: tokens.spacing[1],
+          marginBottom: tokens.spacing[1],
+        }}
+      >
+        <Text 
+          size="xs" 
+          color="tertiary" 
+          style={{ fontWeight: tokens.typography.fontWeight.normal }}
+        >
+          {label}
+        </Text>
+        {tooltip && (
+          <Box
+            style={{
+              position: 'relative',
+              cursor: 'help',
+            }}
+            onMouseEnter={() => setShowTooltip(true)}
+            onMouseLeave={() => setShowTooltip(false)}
+          >
+            <Text size="xs" color="tertiary" style={{ fontSize: '12px' }}>
+              ℹ️
+            </Text>
+            {showTooltip && (
+              <Box
+                style={{
+                  position: 'absolute',
+                  bottom: '100%',
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  marginBottom: tokens.spacing[2],
+                  padding: tokens.spacing[2],
+                  background: tokens.colors.bg.secondary,
+                  border: `1px solid ${tokens.colors.border.primary}`,
+                  borderRadius: tokens.radius.md,
+                  boxShadow: tokens.shadow.md,
+                  fontSize: tokens.typography.fontSize.xs,
+                  color: tokens.colors.text.secondary,
+                  whiteSpace: 'nowrap',
+                  zIndex: 1000,
+                  maxWidth: '250px',
+                }}
+              >
+                {tooltip}
+              </Box>
+            )}
+          </Box>
+        )}
+      </Box>
+      <Text 
+        size="lg" 
+        weight="black"
+        style={{
+          color: isPlaceholder ? tokens.colors.text.tertiary : tokens.colors.text.primary,
+        }}
+      >
+        {isPlaceholder && value === '—' ? 'Unlock by connecting exchange account' : value}
       </Text>
     </Box>
   )

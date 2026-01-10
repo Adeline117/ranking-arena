@@ -519,7 +519,7 @@ export default function TraderDrawer({
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
                     <MiniKpi label="Trades per week" value={(2 + rng() * 10).toFixed(2)} />
                     <MiniKpi label="Avg. holdings time" value={(3 + rng() * 60).toFixed(1) + ' days'} />
-                    <MiniKpi label="Active since" value="—" />
+                    <MiniKpi label="Tracked since (first seen in Arena)" value="—" />
                     <MiniKpi label="Profitable weeks" value={(35 + rng() * 30).toFixed(2) + '%'} />
                   </div>
                 </div>

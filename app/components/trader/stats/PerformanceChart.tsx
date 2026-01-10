@@ -4,13 +4,16 @@ import { useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../../Base'
 import type { TraderStats } from '@/lib/data/trader'
+import { useLanguage } from '../../Utils/LanguageProvider'
 
 interface PerformanceChartProps {
   monthlyData?: TraderStats['monthlyPerformance']
 }
 
 export default function PerformanceChart({ monthlyData }: PerformanceChartProps) {
+  const { t } = useLanguage()
   const [selectedYear, setSelectedYear] = useState('Current Year')
+  const [showTooltip, setShowTooltip] = useState(false)
 
   if (!monthlyData || monthlyData.length === 0) return null
 
@@ -24,11 +27,49 @@ export default function PerformanceChart({ monthlyData }: PerformanceChartProps)
           justifyContent: 'space-between',
           alignItems: 'center',
           marginBottom: tokens.spacing[4],
+          position: 'relative',
         }}
       >
-        <Text size="lg" weight="black">
-          Performance
-        </Text>
+        <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
+          <Text size="lg" weight="black">
+            {t('roiTrendTitle')}
+          </Text>
+          <Box
+            style={{
+              position: 'relative',
+              cursor: 'help',
+            }}
+            onMouseEnter={() => setShowTooltip(true)}
+            onMouseLeave={() => setShowTooltip(false)}
+          >
+            <Text size="xs" color="tertiary" style={{ fontSize: '16px' }}>
+              ℹ️
+            </Text>
+            {showTooltip && (
+              <Box
+                style={{
+                  position: 'absolute',
+                  bottom: '100%',
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  marginBottom: tokens.spacing[2],
+                  padding: tokens.spacing[2],
+                  background: tokens.colors.bg.primary,
+                  border: `1px solid ${tokens.colors.border.primary}`,
+                  borderRadius: tokens.radius.md,
+                  boxShadow: tokens.shadow.md,
+                  fontSize: tokens.typography.fontSize.xs,
+                  color: tokens.colors.text.secondary,
+                  whiteSpace: 'nowrap',
+                  zIndex: 1000,
+                  maxWidth: '300px',
+                }}
+              >
+                {t('roiTrendTooltip')}
+              </Box>
+            )}
+          </Box>
+        </Box>
         <select
           value={selectedYear}
           onChange={(e) => setSelectedYear(e.target.value)}

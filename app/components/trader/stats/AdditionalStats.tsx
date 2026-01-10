@@ -41,7 +41,7 @@ export default function AdditionalStats({ data }: AdditionalStatsProps) {
         </Box>
         <Box>
           <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[1] }}>
-            Active since
+            Tracked since (first seen in Arena)
           </Text>
           <Text size="lg" weight="bold">
             {data.activeSince}
