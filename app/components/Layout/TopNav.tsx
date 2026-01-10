@@ -137,14 +137,25 @@ export default function TopNav({ email }: { email: string | null }) {
             style={{ 
               display: 'flex', 
               alignItems: 'center', 
+              gap: tokens.spacing[2],
               textDecoration: 'none',
-              transition: `transform ${tokens.transition.base}`,
+              transition: `all ${tokens.transition.base}`,
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.transform = 'scale(1.05)'
+              e.currentTarget.style.transform = 'translateY(-1px)'
+              const logoBox = e.currentTarget.querySelector('[data-logo-box]') as HTMLElement
+              if (logoBox) {
+                logoBox.style.transform = 'scale(1.05) rotate(2deg)'
+                logoBox.style.boxShadow = tokens.shadow.md
+              }
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.transform = 'scale(1)'
+              e.currentTarget.style.transform = 'translateY(0)'
+              const logoBox = e.currentTarget.querySelector('[data-logo-box]') as HTMLElement
+              if (logoBox) {
+                logoBox.style.transform = 'scale(1) rotate(0deg)'
+                logoBox.style.boxShadow = tokens.shadow.sm
+              }
             }}
             onKeyDown={(e) => {
               if (e.key === 'Enter' || e.key === ' ') {
@@ -153,22 +164,86 @@ export default function TopNav({ email }: { email: string | null }) {
               }
             }}
           >
+            {/* Logo Icon - 现代设计 */}
             <Box
+              data-logo-box
               style={{
-                width: 36,
-                height: 36,
+                position: 'relative',
+                width: 40,
+                height: 40,
                 borderRadius: tokens.radius.lg,
-                background: `linear-gradient(135deg, ${tokens.colors.accent?.primary || tokens.colors.text.primary} 0%, ${tokens.colors.accent?.primary || tokens.colors.text.primary}80 100%)`,
-                display: 'grid',
-                placeItems: 'center',
+                background: `linear-gradient(135deg, ${tokens.colors.accent.primary} 0%, ${tokens.colors.accent.success} 100%)`,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
                 fontWeight: tokens.typography.fontWeight.black,
                 color: tokens.colors.bg.primary,
-                fontSize: tokens.typography.fontSize.md,
+                fontSize: tokens.typography.fontSize.lg,
                 boxShadow: tokens.shadow.sm,
                 transition: `all ${tokens.transition.base}`,
+                overflow: 'hidden',
               }}
             >
-              A
+              {/* 内部装饰光效 */}
+              <Box
+                style={{
+                  position: 'absolute',
+                  top: '-50%',
+                  left: '-50%',
+                  width: '200%',
+                  height: '200%',
+                  background: `radial-gradient(circle, rgba(255,255,255,0.2) 0%, transparent 70%)`,
+                  opacity: 0.6,
+                  transition: `opacity ${tokens.transition.base}`,
+                }}
+              />
+              {/* Logo文字 - 使用更现代的设计 */}
+              <Box
+                style={{
+                  position: 'relative',
+                  zIndex: 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: '100%',
+                  height: '100%',
+                  fontFamily: tokens.typography.fontFamily.sans.join(', '),
+                  letterSpacing: '-0.5px',
+                }}
+              >
+                RA
+              </Box>
+            </Box>
+            {/* Logo文字 - 可选：如果需要显示完整品牌名 */}
+            <Box
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'center',
+                lineHeight: tokens.typography.lineHeight.tight,
+              }}
+            >
+              <Box
+                style={{
+                  fontSize: tokens.typography.fontSize.sm,
+                  fontWeight: tokens.typography.fontWeight.black,
+                  color: tokens.colors.text.primary,
+                  letterSpacing: '-0.3px',
+                }}
+              >
+                Ranking
+              </Box>
+              <Box
+                style={{
+                  fontSize: tokens.typography.fontSize.xs,
+                  fontWeight: tokens.typography.fontWeight.semibold,
+                  color: tokens.colors.text.secondary,
+                  letterSpacing: '0.5px',
+                  marginTop: '-2px',
+                }}
+              >
+                Arena
+              </Box>
             </Box>
           </Link>
           

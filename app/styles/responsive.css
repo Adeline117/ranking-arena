@@ -100,6 +100,17 @@
     order: 1 !important; /* 排行榜显示在最上面 */
   }
 
+  /* Logo响应式：小屏幕隐藏文字，只显示图标 */
+  .top-nav-logo > div:last-child {
+    display: none !important;
+  }
+
+  .top-nav-logo [data-logo-box] {
+    width: 36px !important;
+    height: 36px !important;
+    font-size: 14px !important;
+  }
+
   body {
     font-size: 13px;
   }
@@ -158,8 +169,11 @@
     padding: 10px 12px !important;
   }
 
-  .top-nav-logo {
-    font-size: 16px !important;
+  /* Logo进一步缩小 */
+  .top-nav-logo [data-logo-box] {
+    width: 32px !important;
+    height: 32px !important;
+    font-size: 12px !important;
   }
 }
 
