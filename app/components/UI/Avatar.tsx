@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, type ReactElement } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../Base'
 import { 
@@ -28,7 +28,7 @@ export default function Avatar({
   className,
   style,
   isTrader = false,
-}: AvatarProps) {
+}: AvatarProps): ReactElement {
   const [imageError, setImageError] = useState(false)
   const [imageLoading, setImageLoading] = useState(true)
   
