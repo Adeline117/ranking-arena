@@ -7,6 +7,7 @@ import { tokens } from '@/lib/design-tokens'
 import { supabase } from '@/lib/supabase/client'
 import { Box, Text, Button } from '../Base'
 import FollowButton from '../UI/FollowButton'
+import Avatar from '../UI/Avatar'
 
 interface TraderAboutCardProps {
   handle: string
@@ -53,28 +54,15 @@ export default function TraderAboutCard({
         top: 80, // 在TopNav下方
       }}
     >
-      {/* 头像 */}
-      <Box
-        style={{
-          width: 72,
-          height: 72,
-          borderRadius: tokens.radius.full,
-          background: tokens.colors.bg.primary,
-          border: `1px solid ${tokens.colors.border.primary}`,
-          display: 'grid',
-          placeItems: 'center',
-          marginBottom: tokens.spacing[4],
-          overflow: 'hidden',
-          flexShrink: 0,
-        }}
-      >
-        {avatarUrl ? (
-          <img src={avatarUrl} alt={handle} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-        ) : (
-          <Text size="2xl" weight="black" style={{ color: tokens.colors.text.primary }}>
-            {(handle?.[0] ?? 'T').toUpperCase()}
-          </Text>
-        )}
+      {/* 头像 - 统一使用 Avatar 组件 */}
+      <Box style={{ marginBottom: tokens.spacing[4] }}>
+        <Avatar
+          userId={traderId || handle}
+          name={handle}
+          avatarUrl={avatarUrl}
+          size={72}
+          isTrader={true}
+        />
       </Box>
 
       {/* 交易员ID */}
