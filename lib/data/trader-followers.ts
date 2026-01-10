@@ -22,13 +22,59 @@ export async function getTraderArenaFollowersCount(
       .eq('trader_id', traderId)
 
     if (error) {
-      console.error(`[trader-followers] 获取 trader ${traderId} 粉丝数失败:`, error)
+      // 检查是否有实际的错误内容，避免记录空错误对象 {}
+      const hasErrorContent = !!(error.message || error.code || error.hint || error.details)
+      
+      // 特殊处理：如果是表不存在错误（code 42P01 或 relation does not exist），这是真正的错误
+      const isTableNotFound = error.code === '42P01' || 
+                                (error.message && typeof error.message === 'string' && 
+                                 error.message.toLowerCase().includes('does not exist'))
+      
+      if (hasErrorContent || isTableNotFound) {
+        console.error(`[trader-followers] 获取 trader ${traderId} 粉丝数失败:`, {
+          error,
+          message: error.message,
+          code: error.code,
+          hint: error.hint,
+          details: error.details,
+        })
+        
+        // 如果是表不存在，提示需要运行 SQL 脚本
+        if (isTableNotFound) {
+          console.warn(`[trader-followers] trader_follows 表不存在，请运行 scripts/setup_trader_follows.sql 创建表`)
+        }
+      } else {
+        // 空错误对象 {}，不记录错误，可能是正常的数据库响应
+      }
       return 0
     }
 
     return count || 0
-  } catch (error) {
-    console.error(`[trader-followers] 获取 trader ${traderId} 粉丝数异常:`, error)
+  } catch (error: any) {
+    // 检查是否有实际的错误内容，避免记录空错误对象 {}
+    const hasErrorContent = !!(error?.message || error?.code || error?.hint || error?.details)
+    
+    // 特殊处理：如果是表不存在错误（code 42P01 或 relation does not exist），这是真正的错误
+    const isTableNotFound = error?.code === '42P01' || 
+                            (error?.message && typeof error.message === 'string' && 
+                             error.message.toLowerCase().includes('does not exist'))
+    
+    if (hasErrorContent || isTableNotFound) {
+      console.error(`[trader-followers] 获取 trader ${traderId} 粉丝数异常:`, {
+        error,
+        message: error?.message,
+        code: error?.code,
+        hint: error?.hint,
+        details: error?.details,
+      })
+      
+      // 如果是表不存在，提示需要运行 SQL 脚本
+      if (isTableNotFound) {
+        console.warn(`[trader-followers] trader_follows 表不存在，请运行 scripts/setup_trader_follows.sql 创建表`)
+      }
+    } else {
+      // 空错误对象 {}，不记录错误，可能是正常的异常情况
+    }
     return 0
   }
 }
@@ -63,8 +109,33 @@ export async function getTradersArenaFollowersCount(
         .in('trader_id', batch)
 
       if (error) {
-        console.error(`[trader-followers] 批量获取粉丝数失败 (batch ${Math.floor(i / BATCH_SIZE) + 1}):`, error)
-        // 初始化这批 trader 的粉丝数为 0
+        // 检查是否有实际的错误内容，避免记录空错误对象 {}
+        const hasErrorContent = !!(error.message || error.code || error.hint || error.details)
+        
+        // 特殊处理：如果是表不存在错误（code 42P01 或 relation does not exist），这是真正的错误
+        const isTableNotFound = error.code === '42P01' || 
+                                (error.message && typeof error.message === 'string' && 
+                                 error.message.toLowerCase().includes('does not exist'))
+        
+        if (hasErrorContent || isTableNotFound) {
+          const batchNum = Math.floor(i / BATCH_SIZE) + 1
+          console.error(`[trader-followers] 批量获取粉丝数失败 (batch ${batchNum}):`, {
+            error,
+            message: error.message,
+            code: error.code,
+            hint: error.hint,
+            details: error.details,
+            batchNum,
+          })
+          
+          // 如果是表不存在，提示需要运行 SQL 脚本（只提示一次）
+          if (isTableNotFound && i === 0) {
+            console.warn(`[trader-followers] trader_follows 表不存在，请运行 scripts/setup_trader_follows.sql 创建表`)
+          }
+        } else {
+          // 空错误对象 {}，不记录错误，可能是正常的数据库响应
+        }
+        // 初始化这批 trader 的粉丝数为 0（无论是否有错误）
         batch.forEach(id => resultMap.set(id, 0))
         continue
       }
@@ -83,9 +154,15 @@ export async function getTradersArenaFollowersCount(
         resultMap.set(id, counts.get(id) || 0)
       })
     }
-  } catch (error) {
-    console.error('[trader-followers] 批量获取粉丝数异常:', error)
-    // 初始化所有 trader 的粉丝数为 0
+  } catch (error: any) {
+    // 检查是否有实际的错误内容，避免记录空错误对象 {}
+    const hasErrorContent = !!(error?.message || error?.code || error?.hint || error?.details)
+    if (hasErrorContent) {
+      console.error('[trader-followers] 批量获取粉丝数异常:', error)
+    } else {
+      // 空错误对象 {}，不记录错误，可能是正常的异常情况
+    }
+    // 初始化所有 trader 的粉丝数为 0（无论是否有错误）
     traderIds.forEach(id => resultMap.set(id, 0))
   }
 
