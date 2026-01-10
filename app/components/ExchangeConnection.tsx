@@ -6,6 +6,7 @@ import { Box, Text, Button } from '@/app/components/Base'
 import { tokens } from '@/lib/design-tokens'
 import type { ExchangeConnection } from '@/lib/exchange'
 import ExchangeLogo from './UI/ExchangeLogo'
+import { useLanguage } from './Utils/LanguageProvider'
 
 interface ExchangeConnectionProps {
   userId: string
@@ -20,6 +21,7 @@ const EXCHANGES = [
 ] as const
 
 export default function ExchangeConnectionManager({ userId }: ExchangeConnectionProps) {
+  const { t } = useLanguage()
   const [connections, setConnections] = useState<ExchangeConnection[]>([])
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState<string | null>(null)
@@ -108,28 +110,28 @@ export default function ExchangeConnectionManager({ userId }: ExchangeConnection
       const result = await response.json()
 
       if (!response.ok) {
-        alert(result.error || '同步失败')
+        alert(result.error || t('syncError'))
         return
       }
 
-      alert('数据同步成功！')
+      alert(t('syncSuccess'))
       await loadConnections()
     } catch (err: any) {
-      alert(err.message || '同步失败')
+      alert(err.message || t('syncError'))
     } finally {
       setSyncing(null)
     }
   }
 
   const handleDisconnect = async (exchange: string) => {
-    if (!confirm(`确定要断开 ${exchange} 的连接吗？`)) {
+    if (!confirm(t('confirmDisconnect').replace('{exchange}', exchange))) {
       return
     }
 
     try {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) {
-        alert('请先登录')
+        alert(t('pleaseLogin'))
         return
       }
 
@@ -145,21 +147,21 @@ export default function ExchangeConnectionManager({ userId }: ExchangeConnection
       const result = await response.json()
 
       if (!response.ok) {
-        alert(result.error || '断开连接失败')
+        alert(result.error || t('disconnectFailed'))
         return
       }
 
-      alert('已断开连接')
+      alert(t('disconnected'))
       await loadConnections()
     } catch (err: any) {
-      alert(err.message || '断开连接失败')
+      alert(err.message || t('disconnectFailed'))
     }
   }
 
   if (loading) {
     return (
       <Box style={{ padding: tokens.spacing[4] }}>
-        <Text color="tertiary">加载中...</Text>
+        <Text color="tertiary">{t('loading')}</Text>
       </Box>
     )
   }
@@ -167,10 +169,10 @@ export default function ExchangeConnectionManager({ userId }: ExchangeConnection
   return (
     <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}>
       <Text size="lg" weight="black">
-        绑定交易所账号
+        {t('bindExchangeAccount')}
       </Text>
       <Text size="sm" color="tertiary">
-        绑定您的交易所账号后，可以查看详细的交易统计数据
+        {t('bindExchangeAccountFull')}
       </Text>
 
       {EXCHANGES.map((exchange) => {
@@ -199,9 +201,9 @@ export default function ExchangeConnectionManager({ userId }: ExchangeConnection
                       color: tokens.colors.text.secondary,
                     }}
                   >
-                    {connection.last_sync_status === 'success' ? '✅ 已连接' : 
-                     connection.last_sync_status === 'error' ? '❌ 同步失败' : 
-                     connection.last_sync_status === 'pending' ? '⏳ 同步中' : '已连接'}
+                    {connection.last_sync_status === 'success' ? `✅ ${t('connected')}` : 
+                     connection.last_sync_status === 'error' ? `❌ ${t('syncFailed')}` : 
+                     connection.last_sync_status === 'pending' ? `⏳ ${t('syncing')}` : t('connected')}
                   </Box>
                 )}
               </Box>
@@ -214,14 +216,14 @@ export default function ExchangeConnectionManager({ userId }: ExchangeConnection
                     onClick={() => handleSync(exchange.id)}
                     disabled={isSyncing}
                   >
-                    {isSyncing ? '同步中...' : '刷新数据'}
+                    {isSyncing ? t('syncing') : t('refreshData')}
                   </Button>
                   <Button
                     variant="secondary"
                     size="sm"
                     onClick={() => handleDisconnect(exchange.id)}
                   >
-                    断开
+                    {t('disconnect')}
                   </Button>
                 </Box>
               ) : (
@@ -237,14 +239,14 @@ export default function ExchangeConnectionManager({ userId }: ExchangeConnection
                   }}
                 >
                   <ExchangeLogo exchange={exchange.id as any} size={20} />
-                  绑定 {exchange.name}
+                  {t('bindExchange')} {exchange.name}
                 </Button>
               )}
             </Box>
 
             {connection && connection.last_sync_at && (
               <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[2] }}>
-                最后同步：{new Date(connection.last_sync_at).toLocaleString('zh-CN')}
+                {t('lastSync')}{new Date(connection.last_sync_at).toLocaleString()}
               </Text>
             )}
 
@@ -259,7 +261,7 @@ export default function ExchangeConnectionManager({ userId }: ExchangeConnection
                 }}
               >
                 <Text size="xs" style={{ color: tokens.colors.accent.error }}>
-                  同步错误：{connection.last_sync_error}
+                  {t('syncErrorMsg')}{connection.last_sync_error}
                 </Text>
               </Box>
             )}
@@ -275,7 +277,7 @@ export default function ExchangeConnectionManager({ userId }: ExchangeConnection
                 }}
               >
                 <Text size="sm" color="tertiary" style={{ marginBottom: tokens.spacing[3] }}>
-                  点击按钮将跳转到 {exchange.name} 登录页面，登录成功后系统将自动获取您的交易数据。
+                  {t('clickToBind').replace('{exchange}', exchange.name)}
                 </Text>
               </Box>
             )}

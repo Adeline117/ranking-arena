@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
+import { useLanguage } from '../Utils/LanguageProvider'
 
 export type Trader = {
   id: string
@@ -48,6 +49,7 @@ export default function TraderDrawer({
   trader: Trader | null
   onClose: () => void
 }) {
+  const { t } = useLanguage()
   const [tab, setTab] = useState<'overview' | 'stats' | 'portfolio'>(
     'overview'
   )
@@ -203,10 +205,10 @@ export default function TraderDrawer({
               Open page
             </Link>
             <button style={btnGhost} onClick={() => alert('Follow (mock)')}>
-              Follow
+              {t('followMock')}
             </button>
             <button style={btnPrimary} onClick={() => alert('Copy (mock)')}>
-              Copy
+              {t('copyMock')}
             </button>
             <button onClick={onClose} style={iconBtn} aria-label="Close">
               ✕

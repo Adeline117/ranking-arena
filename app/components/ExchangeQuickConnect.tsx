@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase/client'
 import { Box, Text, Button } from '@/app/components/Base'
 import { tokens } from '@/lib/design-tokens'
 import ExchangeLogo from './UI/ExchangeLogo'
+import { useLanguage } from './Utils/LanguageProvider'
 
 const EXCHANGES = [
   { id: 'binance', name: 'Binance' },
@@ -17,6 +18,7 @@ const EXCHANGES = [
 
 export default function ExchangeQuickConnect() {
   const router = useRouter()
+  const { t } = useLanguage()
   const [userId, setUserId] = useState<string | null>(null)
   const [hasConnection, setHasConnection] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -127,10 +129,10 @@ export default function ExchangeQuickConnect() {
         <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: tokens.spacing[3] }}>
           <Box>
             <Text size="lg" weight="bold" style={{ marginBottom: tokens.spacing[1] }}>
-              绑定交易所账号
+              {t('bindExchangeAccount')}
             </Text>
             <Text size="sm" color="tertiary">
-              绑定后可以查看详细的交易统计数据
+              {t('bindExchangeDescription')}
             </Text>
           </Box>
           <Box style={{ display: 'flex', gap: tokens.spacing[2], flexWrap: 'wrap' }}>
@@ -147,7 +149,7 @@ export default function ExchangeQuickConnect() {
                 }}
               >
                 <ExchangeLogo exchange={exchange.id as any} size={18} />
-                绑定 {exchange.name}
+                {t('bindExchange')} {exchange.name}
               </Button>
             ))}
             <Button
@@ -155,7 +157,7 @@ export default function ExchangeQuickConnect() {
               size="sm"
               onClick={() => router.push('/settings')}
             >
-              前往设置
+              {t('goToSettings')}
             </Button>
           </Box>
         </Box>

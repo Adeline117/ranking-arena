@@ -7,6 +7,7 @@ import { Box, Text, Button } from '@/app/components/Base'
 import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/Layout/TopNav'
 import ExchangeLogo from '@/app/components/UI/ExchangeLogo'
+import { useLanguage } from '@/app/components/Utils/LanguageProvider'
 
 const EXCHANGE_INFO: Record<string, { name: string; authUrl: string; steps: string[] }> = {
   binance: {
@@ -79,6 +80,7 @@ const EXCHANGE_INFO: Record<string, { name: string; authUrl: string; steps: stri
 function ExchangeAuthPageContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
+  const { t } = useLanguage()
   const [exchange, setExchange] = useState<string | null>(null)
   const [email, setEmail] = useState<string | null>(null)
   const [userId, setUserId] = useState<string | null>(null)
@@ -180,15 +182,15 @@ function ExchangeAuthPageContent() {
       })
 
       if (syncResponse.ok) {
-        alert('绑定成功！数据已同步。')
+        alert(t('bindSuccess'))
       } else {
-        alert('绑定成功！数据同步中...')
+        alert(t('bindSuccessSyncing'))
       }
 
       // 跳转到设置页面
       router.push('/settings')
     } catch (err: any) {
-      setError(err.message || '连接失败')
+      setError(err.message || t('syncError'))
     } finally {
       setConnecting(false)
     }
@@ -211,9 +213,9 @@ function ExchangeAuthPageContent() {
       <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
         <TopNav email={email} />
         <Box style={{ maxWidth: 600, margin: '0 auto', padding: tokens.spacing[6] }}>
-          <Text size="lg" weight="bold">不支持的交易所</Text>
+          <Text size="lg" weight="bold">{t('unsupportedExchange')}</Text>
           <Button variant="secondary" onClick={() => router.push('/settings')} style={{ marginTop: tokens.spacing[4] }}>
-            返回设置
+            {t('returnToSettings')}
           </Button>
         </Box>
       </Box>
@@ -231,11 +233,11 @@ function ExchangeAuthPageContent() {
               <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3], marginBottom: tokens.spacing[2] }}>
                 <ExchangeLogo exchange={exchange.toLowerCase() as any} size={32} />
                 <Text size="2xl" weight="black">
-                  绑定 {info.name} 账号
+                  {t('bindExchange')} {info.name} {t('account')}
                 </Text>
               </Box>
               <Text size="sm" color="tertiary">
-                点击按钮将在新窗口中打开 {info.name} 登录页面
+                {t('clickToOpenLogin')?.replace('{exchange}', info.name) || `点击按钮将在新窗口中打开 ${info.name} 登录页面`}
               </Text>
             </Box>
 
@@ -247,7 +249,7 @@ function ExchangeAuthPageContent() {
               style={{ marginBottom: tokens.spacing[6] }}
             >
               <Text size="lg" weight="bold" style={{ marginBottom: tokens.spacing[4] }}>
-                操作步骤
+                {t('operationSteps')}
               </Text>
               <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
                 {info.steps.map((stepText, index) => (
@@ -298,13 +300,13 @@ function ExchangeAuthPageContent() {
                 }}
               >
                 <ExchangeLogo exchange={exchange.toLowerCase() as any} size={20} />
-                打开 {info.name} 登录页面
+                {t('openLoginPage').replace('{exchange}', info.name)}
               </Button>
               <Button
                 variant="secondary"
                 onClick={() => router.push('/settings')}
               >
-                取消
+                {t('cancel')}
               </Button>
             </Box>
           </>
@@ -312,10 +314,10 @@ function ExchangeAuthPageContent() {
           <>
             <Box style={{ marginBottom: tokens.spacing[6] }}>
               <Text size="2xl" weight="black" style={{ marginBottom: tokens.spacing[2] }}>
-                完成 {info.name} 绑定
+                {t('completeBindTitle').replace('{exchange}', info.name)}
               </Text>
               <Text size="sm" color="tertiary">
-                请在新窗口中完成登录和API Key创建，然后在此输入API Key和Secret
+                {t('completeBindDescription')}
               </Text>
             </Box>
 
@@ -348,7 +350,7 @@ function ExchangeAuthPageContent() {
                     type="text"
                     value={apiKey}
                     onChange={(e) => setApiKey(e.target.value)}
-                    placeholder="粘贴您的 API Key"
+                    placeholder={t('pasteApiKey')}
                     style={{
                       width: '100%',
                       padding: tokens.spacing[3],
@@ -372,7 +374,7 @@ function ExchangeAuthPageContent() {
                     type="password"
                     value={apiSecret}
                     onChange={(e) => setApiSecret(e.target.value)}
-                    placeholder="粘贴您的 API Secret"
+                    placeholder={t('pasteApiSecret')}
                     style={{
                       width: '100%',
                       padding: tokens.spacing[3],
@@ -394,14 +396,14 @@ function ExchangeAuthPageContent() {
                     disabled={connecting || !apiKey || !apiSecret}
                     style={{ flex: 1 }}
                   >
-                    {connecting ? '绑定中...' : '完成绑定'}
+                    {connecting ? t('binding') : t('completeBind')}
                   </Button>
                   <Button
                     variant="secondary"
                     onClick={() => setStep('auth')}
                     disabled={connecting}
                   >
-                    返回
+                    {t('back')}
                   </Button>
                 </Box>
               </Box>
