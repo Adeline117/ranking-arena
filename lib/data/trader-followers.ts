@@ -138,53 +138,58 @@ export async function getTradersArenaFollowersCount(
         .in('trader_id', batch)
 
       if (error) {
-        // 综合检查错误对象是否为空（使用多种方法确保可靠性）
-        // 最直接的方法：先检查 JSON.stringify 是否等于 '{}'
-        let isEmpty = false
+        // 最直接的方法：先检查错误对象是否为空对象 {}
+        // 使用 JSON.stringify 检查（最可靠的方法）
         try {
           const errorJson = JSON.stringify(error)
           if (errorJson === '{}') {
-            isEmpty = true
+            // 完全空对象 {}，不是真正的错误，继续处理（可能是正常的查询无结果）
+            // 初始化这批 trader 的粉丝数为 0
+            batch.forEach(id => resultMap.set(id, 0))
+            continue
           }
         } catch (e) {
           // JSON.stringify 可能失败（如果对象包含不可序列化的属性），继续使用其他方法
         }
         
-        // 如果 JSON.stringify 检查没有确定为空，再检查所有可枚举属性是否都是空的
-        if (!isEmpty) {
-          const errorKeys = Object.keys(error || {})
-          if (errorKeys.length === 0) {
-            isEmpty = true
-          } else {
-            // 检查所有属性值是否都是空的
-            const hasAnyValue = errorKeys.some(key => {
-              const value = (error as any)[key]
-              // 跳过函数、Symbol 等不可序列化的值
-              if (typeof value === 'function' || typeof value === 'symbol') {
-                return false
-              }
-              // 检查基本类型值
-              if (value === null || value === undefined || value === '') {
-                return false
-              }
-              // 检查对象值
-              if (typeof value === 'object') {
-                try {
-                  const valueJson = JSON.stringify(value)
-                  return valueJson !== '{}' && valueJson !== 'null'
-                } catch (e) {
-                  return false
-                }
-              }
-              return true
-            })
-            if (!hasAnyValue) {
-              isEmpty = true
-            }
-          }
+        // 如果 JSON.stringify 检查失败或结果不是 '{}'，检查是否有任何可枚举属性
+        const errorKeys = Object.keys(error || {})
+        if (errorKeys.length === 0) {
+          // 没有可枚举属性，等同于空对象 {}，不是真正的错误
+          batch.forEach(id => resultMap.set(id, 0))
+          continue
         }
         
-        // 检查标准 Supabase 错误字段（即使 isEmpty 为 false，也要确保这些字段真的存在）
+        // 检查所有属性值是否都是空的（null, undefined, '', 或空对象）
+        const hasAnyNonEmptyValue = errorKeys.some(key => {
+          const value = (error as any)[key]
+          // 跳过函数、Symbol 等不可序列化的值
+          if (typeof value === 'function' || typeof value === 'symbol') {
+            return false
+          }
+          // 检查基本类型值
+          if (value === null || value === undefined || value === '') {
+            return false
+          }
+          // 检查对象值
+          if (typeof value === 'object') {
+            try {
+              const valueJson = JSON.stringify(value)
+              return valueJson !== '{}' && valueJson !== 'null'
+            } catch (e) {
+              return false
+            }
+          }
+          return true
+        })
+        
+        // 如果所有属性值都是空的，等同于空对象 {}，不记录错误
+        if (!hasAnyNonEmptyValue) {
+          batch.forEach(id => resultMap.set(id, 0))
+          continue
+        }
+        
+        // 检查标准 Supabase 错误字段（确保这些字段真的存在且非空）
         const hasMessage = error.message && typeof error.message === 'string' && error.message.trim() !== ''
         const hasCode = error.code !== undefined && error.code !== null && error.code !== '' && 
                        (typeof error.code === 'string' || typeof error.code === 'number')
@@ -230,10 +235,9 @@ export async function getTradersArenaFollowersCount(
         const isTableNotFound = (hasCode && error.code === '42P01') || 
                                 (hasMessage && typeof error.message === 'string' && error.message.toLowerCase().includes('does not exist'))
         
-        // 关键修复：如果 isEmpty 为 true，或者既没有错误内容也不是表不存在错误，则不记录错误
-        if (isEmpty || (!hasErrorContent && !isTableNotFound)) {
-          // 空错误对象 {}，不是真正的错误，继续处理（可能是正常的查询无结果）
-          // 初始化这批 trader 的粉丝数为 0
+        // 如果既没有错误内容也不是表不存在错误，不记录错误
+        if (!hasErrorContent && !isTableNotFound) {
+          // 虽然有非空属性但都不是标准错误字段，不记录错误（可能是正常的数据库响应）
           batch.forEach(id => resultMap.set(id, 0))
           continue
         }
