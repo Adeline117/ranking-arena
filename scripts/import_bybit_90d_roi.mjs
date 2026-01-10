@@ -45,8 +45,8 @@ function normalizeData(rawData) {
       pnl = Number(item.followerYieldE8) / 1e8
     }
     
-    // 关注者数量
-    const followers = item.currentFollowerCount != null ? Number(item.currentFollowerCount) : 0
+    // 注意：不再获取 followers，因为所有 trader 的粉丝数只能来源 Arena 注册用户的关注
+    // const followers = item.currentFollowerCount != null ? Number(item.currentFollowerCount) : 0
     
     // 头像
     const avatarUrl = item.profilePhoto || null
@@ -68,7 +68,7 @@ function normalizeData(rawData) {
       handle: handle,
       roi: roi,
       pnl: pnl,
-      followerCount: Number(followers),
+      followerCount: null, // 已废弃，不再从交易所 API 获取
       avatarUrl: avatarUrl,
       winRate: winRate,
       _raw: item,
@@ -507,16 +507,22 @@ async function importToSupabase(normalizedData) {
   }))
 
   // 转换为 trader_snapshots 数据（rank 重新计算为 1-100）
-  const snapshotsData = validData.map((item, index) => ({
-    source: 'bybit',
-    source_trader_id: item.traderId,
-    rank: index + 1,
-    roi: item.roi,
-    pnl: item.pnl,
-    win_rate: item.winRate,
-    followers: item.followerCount != null ? Number(item.followerCount) : null,
-    captured_at: capturedAt
-  }))
+  // 注意：不再保存 followers 字段，因为所有 trader 的粉丝数只能来源 Arena 注册用户的关注
+  // 如果数据库表中有 followers 列且不允许 NULL，可以设置为 0，但代码中不再使用此值
+  const snapshotsData = validData.map((item, index) => {
+    const snapshot = {
+      source: 'bybit',
+      source_trader_id: item.traderId,
+      rank: index + 1,
+      roi: item.roi,
+      pnl: item.pnl,
+      win_rate: item.winRate,
+      captured_at: capturedAt,
+    }
+    // 如果数据库表中有 followers 列且不允许 NULL，设置为 0（但代码中不再使用此值）
+    // snapshot.followers = 0
+    return snapshot
+  })
 
   // 分批写入 trader_sources（upsert）
   const BATCH_SIZE = 100

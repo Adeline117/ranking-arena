@@ -165,6 +165,7 @@ export default function SimilarTraders({ traders }: SimilarTradersProps) {
                     fontWeight: tokens.typography.fontWeight.medium,
                   }}
                 >
+                  {/* 粉丝数来自 Arena 注册用户的关注（trader_follows 表统计） */}
                   {trader.followers?.toLocaleString() || 0} 粉丝
                 </Text>
               </Box>

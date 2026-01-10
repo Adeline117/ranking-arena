@@ -41,7 +41,7 @@ export interface Trader {
   win_rate: number // 90天胜率
   volume_90d?: number // 90天交易量
   avg_buy_90d?: number // 90天平均买入
-  followers: number
+  followers: number // 粉丝数 - 仅来自 Arena 注册用户的关注（trader_follows 表统计）
   source?: string // 数据来源：binance, bybit, okx等
   avatar_url?: string // 头像URL
 }

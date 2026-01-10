@@ -230,7 +230,8 @@ function normalizeData(rawData) {
     }
     
     const pnl = item.realizedPnl != null ? Number(item.realizedPnl) : (item.pnl != null ? Number(item.pnl) : (item.profit != null ? Number(item.profit) : null))
-    const followers = item.followerCount != null ? Number(item.followerCount) : (item.followers != null ? Number(item.followers) : null)
+    // 注意：不再获取 followers，因为所有 trader 的粉丝数只能来源 Arena 注册用户的关注
+    // const followers = item.followerCount != null ? Number(item.followerCount) : (item.followers != null ? Number(item.followers) : null)
     const avatarUrl = item.addressLogo || item.userPhotoUrl || item.avatar || item.avatarUrl || item.profilePicture || null
     
     // 提取额外字段
@@ -244,7 +245,7 @@ function normalizeData(rawData) {
       nickName: handle,
       roi: roi,
       pnl: pnl,
-      followerCount: followers,
+      followerCount: null, // 已废弃，不再从交易所 API 获取
       userPhotoUrl: avatarUrl,
       winRate: winRate,
       volume_90d: totalVolume,
@@ -308,18 +309,24 @@ async function importToSupabase(normalizedData, sourceType = 'binance_web3') {
   }))
 
   // 转换为 trader_snapshots 数据（按 ROI 排序后分配排名）
-  const snapshotsData = validData.map((item, index) => ({
-    source: sourceType,
-    source_trader_id: item.encryptedUid,
-    rank: index + 1,
-    roi: Number(item.roi),
-    pnl: item.pnl != null ? Number(item.pnl) : null,
-    followers: item.followerCount != null ? Number(item.followerCount) : null,
-    win_rate: item.winRate != null ? Number(item.winRate) : null,
-    volume_90d: item.volume_90d != null ? Number(item.volume_90d) : null,
-    avg_buy_90d: item.avg_buy_90d != null ? Number(item.avg_buy_90d) : null,
-    captured_at: capturedAt,
-  }))
+  // 注意：不再保存 followers 字段，因为所有 trader 的粉丝数只能来源 Arena 注册用户的关注
+  // 如果数据库表中有 followers 列且不允许 NULL，可以设置为 0，但代码中不再使用此值
+  const snapshotsData = validData.map((item, index) => {
+    const snapshot = {
+      source: sourceType,
+      source_trader_id: item.encryptedUid,
+      rank: index + 1,
+      roi: Number(item.roi),
+      pnl: item.pnl != null ? Number(item.pnl) : null,
+      win_rate: item.winRate != null ? Number(item.winRate) : null,
+      volume_90d: item.volume_90d != null ? Number(item.volume_90d) : null,
+      avg_buy_90d: item.avg_buy_90d != null ? Number(item.avg_buy_90d) : null,
+      captured_at: capturedAt,
+    }
+    // 如果数据库表中有 followers 列且不允许 NULL，设置为 0（但代码中不再使用此值）
+    // snapshot.followers = 0
+    return snapshot
+  })
 
   // 分批写入 trader_sources（upsert）
   const BATCH_SIZE = 100

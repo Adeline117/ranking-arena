@@ -14,7 +14,7 @@ interface TraderAboutCardProps {
   traderId?: string // 交易员ID，用于关注功能
   avatarUrl?: string
   bio?: string
-  followers?: number // 关注他的人数量（粉丝数）
+  followers?: number // 关注他的人数量（粉丝数）- 仅来自 Arena 注册用户的关注（trader_follows 表统计）
   following?: number // 他关注的人数量
   isRegistered?: boolean
   isOwnProfile?: boolean

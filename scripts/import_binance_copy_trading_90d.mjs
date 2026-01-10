@@ -34,8 +34,8 @@ function normalizeData(rawData) {
     // PnL 字段
     const pnl = item.pnl != null ? Number(item.pnl) : null
     
-    // 关注者
-    const followers = item.currentCopyCount || 0
+    // 注意：不再获取 followers，因为所有 trader 的粉丝数只能来源 Arena 注册用户的关注
+    // const followers = item.currentCopyCount || 0
     
     // 头像
     const avatarUrl = item.avatarUrl || null
@@ -48,7 +48,7 @@ function normalizeData(rawData) {
       nickName: handle,
       roi: roi,
       pnl: pnl,
-      followerCount: Number(followers),
+      followerCount: null, // 已废弃，不再从交易所 API 获取
       userPhotoUrl: avatarUrl,
       winRate: winRate,
       _raw: item,
@@ -324,18 +324,24 @@ async function importToSupabase(normalizedData, sourceType = 'binance') {
     .sort((a, b) => Number(b.roi) - Number(a.roi))
     .slice(0, 100) // 确保不超过 Top 100
 
-  const snapshotsData = sortedMergedData.map((item, index) => ({
-    source: sourceType,
-    source_trader_id: item.encryptedUid,
-    rank: index + 1,
-    roi: Number(item.roi),
-    pnl: item.pnl != null ? Number(item.pnl) : null,
-    followers: item.followerCount != null ? Number(item.followerCount) : null,
-    win_rate: item.winRate != null ? Number(item.winRate) : null,
-    captured_at: capturedAt, // 统一的 captured_at（所有周期使用相同时间戳，便于在内存中 merge 后再 upsert）
-    // 注意：如果数据库中有 run_id 列，可以添加 run_id 字段来追踪本次抓取批次
-    // run_id: `run_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-  }))
+  // 注意：不再保存 followers 字段，因为所有 trader 的粉丝数只能来源 Arena 注册用户的关注
+  // 如果数据库表中有 followers 列且不允许 NULL，可以设置为 0，但代码中不再使用此值
+  const snapshotsData = sortedMergedData.map((item, index) => {
+    const snapshot = {
+      source: sourceType,
+      source_trader_id: item.encryptedUid,
+      rank: index + 1,
+      roi: Number(item.roi),
+      pnl: item.pnl != null ? Number(item.pnl) : null,
+      win_rate: item.winRate != null ? Number(item.winRate) : null,
+      captured_at: capturedAt, // 统一的 captured_at（所有周期使用相同时间戳，便于在内存中 merge 后再 upsert）
+      // 注意：如果数据库中有 run_id 列，可以添加 run_id 字段来追踪本次抓取批次
+      // run_id: `run_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+    }
+    // 如果数据库表中有 followers 列且不允许 NULL，设置为 0（但代码中不再使用此值）
+    // snapshot.followers = 0
+    return snapshot
+  })
 
   const BATCH_SIZE = 100
   let sourcesSuccess = 0

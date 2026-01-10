@@ -12,14 +12,17 @@ import {
 } from './trader-snapshots'
 import { logError } from '@/lib/utils/error-handler'
 import type { Trader } from '@/app/components/Features/RankingTable'
+import { getTradersArenaFollowersCount } from './trader-followers'
 
 /**
  * 将快照数据转换为 Trader 对象
+ * 注意：followers 参数已废弃，不再使用，实际粉丝数从 arena 关注关系获取
  */
 function snapshotToTrader(
   snapshot: { source_trader_id: string; roi: number; followers: number; pnl: number | null; win_rate: number | null },
   source: TraderSource,
-  handleMap: Map<string, { handle: string | null; profile_url?: string | null }>
+  handleMap: Map<string, { handle: string | null; profile_url?: string | null }>,
+  arenaFollowersCount: number = 0 // Arena 粉丝数（从 trader_follows 表统计）
 ): Trader {
   const handleData = handleMap.get(snapshot.source_trader_id)
   const displayHandle =
@@ -83,7 +86,7 @@ function snapshotToTrader(
     win_rate: snapshot.win_rate !== null && snapshot.win_rate !== undefined ? snapshot.win_rate : 0,
     volume_90d: undefined,
     avg_buy_90d: undefined,
-    followers: snapshot.followers || 0,
+    followers: arenaFollowersCount, // 使用 Arena 粉丝数（从 trader_follows 表统计）
     source,
     avatar_url: avatarUrl,
   }
@@ -116,9 +119,24 @@ export async function loadAllTraders(supabase: SupabaseClient): Promise<Trader[]
       console.log(`[trader-loader] 📊 ${source}: handleMap=${handleMapSize} 条, snapshots=${snapshotCount} 条`)
     })
 
+    // 4.5. 批量获取所有 trader 的 Arena 粉丝数
+    // 收集所有 trader IDs（去重）
+    const allTraderIdsSet = new Set<string>()
     sources.forEach((source) => {
       snapshots[source].forEach((snapshot) => {
-        const trader = snapshotToTrader(snapshot, source, handleMaps[source])
+        allTraderIdsSet.add(snapshot.source_trader_id)
+      })
+    })
+    const uniqueTraderIds = Array.from(allTraderIdsSet)
+    
+    const arenaFollowersMap = await getTradersArenaFollowersCount(supabase, uniqueTraderIds)
+    console.log(`[trader-loader] 📊 获取了 ${arenaFollowersMap.size} 个 trader 的 Arena 粉丝数`)
+
+    // 4.6. 转换数据（使用 Arena 粉丝数）
+    sources.forEach((source) => {
+      snapshots[source].forEach((snapshot) => {
+        const arenaFollowersCount = arenaFollowersMap.get(snapshot.source_trader_id) || 0
+        const trader = snapshotToTrader(snapshot, source, handleMaps[source], arenaFollowersCount)
         allTradersData.push(trader)
       })
     })

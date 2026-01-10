@@ -11,7 +11,9 @@ export interface TraderSnapshot {
   source_trader_id: string
   rank: number
   roi: number
-  followers: number
+  // 注意：followers 字段已废弃，不再从交易所API获取
+  // 所有 trader 的粉丝数只能来源 Arena 注册用户的关注（使用 trader_follows 表统计）
+  followers: number // 已废弃，保留仅为向后兼容，实际值不再使用
   pnl: number | null
   win_rate: number | null
 }
@@ -59,9 +61,11 @@ export async function getLatestSnapshots(
     return []
   }
 
+  // 注意：不再查询 followers 字段，因为所有 trader 的粉丝数只能来源 Arena 注册用户的关注
+  // 保留 followers 字段在查询中仅为了向后兼容（如果数据库表中有此列），但实际值不再使用
   const { data, error } = await supabase
     .from('trader_snapshots')
-    .select('source_trader_id, rank, roi, followers, pnl, win_rate')
+    .select('source_trader_id, rank, roi, followers, pnl, win_rate') // followers 字段已废弃，不再使用
     .eq('source', source)
     .eq('captured_at', timestamp)
     .order('rank', { ascending: true })
