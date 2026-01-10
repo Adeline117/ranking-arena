@@ -426,16 +426,18 @@ export default function RankingTable(props: {
           })}
         </Box>
           
-          {/* 分页控件 */}
+          {/* 分页控件 - 优化UI */}
           {totalPages > 1 && (
             <Box
               style={{
-                padding: tokens.spacing[4],
-                borderTop: `1px solid ${tokens.colors.border.primary}`,
+                padding: `${tokens.spacing[4]} ${tokens.spacing[4]}`,
+                borderTop: `2px solid ${tokens.colors.border.primary}`,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 gap: tokens.spacing[2],
+                background: tokens.colors.bg.primary,
+                borderRadius: `0 0 ${tokens.radius.lg} ${tokens.radius.lg}`,
               }}
             >
               <button
