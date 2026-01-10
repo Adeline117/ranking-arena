@@ -19,7 +19,7 @@ import type { Trader } from '@/app/components/Features/RankingTable'
 function snapshotToTrader(
   snapshot: { source_trader_id: string; roi: number; followers: number; pnl: number | null; win_rate: number | null },
   source: TraderSource,
-  handleMap: Map<string, { handle: string | null; avatar_url?: string | null; profile_url?: string | null }>
+  handleMap: Map<string, { handle: string | null; profile_url?: string | null }>
 ): Trader {
   const handleData = handleMap.get(snapshot.source_trader_id)
   const displayHandle =
