@@ -49,8 +49,9 @@ export default function ClaimTraderButton({ traderId, handle, userId, source = '
         .eq('is_active', true)
         .maybeSingle()
 
+      // 检查是否有实际的错误内容（空对象 {} 表示正常情况，不应该记录为错误）
+      // 只有当 error 对象有实际的错误属性（message/code/hint/details）时，才是真正的错误
       if (error) {
-        // 检查是否有实际的错误内容（空对象 {} 表示正常情况，不应该记录为错误）
         const hasErrorContent = !!(error.message || error.code || error.hint || error.details)
         if (hasErrorContent) {
           // 只有在真正的错误（如权限错误、网络错误等）时才记录错误
@@ -64,13 +65,13 @@ export default function ClaimTraderButton({ traderId, handle, userId, source = '
             source,
           })
         }
-        // 无论是否有错误内容，都设置连接状态为false（没找到连接或查询失败）
-        // 注意：空错误对象 {} 表示正常情况（没找到记录），不应该记录为错误
-        setHasConnection(false)
-      } else {
-        // 查询成功，设置连接状态
-        setHasConnection(!!data)
+        // 如果 hasErrorContent 是 false（空对象 {} 或所有属性都是 undefined），则不记录错误
+        // 这是正常的"没找到连接"情况，不应该记录为错误
       }
+      
+      // 无论是否有错误，都设置连接状态（没找到连接或查询失败都是 false）
+      // 注意：即使是空错误对象 {}（正常的"没找到记录"情况），也应该设置连接状态为 false
+      setHasConnection(!!data)
     } catch (err: any) {
       console.error('[ClaimTrader] 检查连接异常:', {
         error: err,
