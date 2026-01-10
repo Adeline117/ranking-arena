@@ -60,42 +60,58 @@ export default function ClaimTraderButton({ traderId, handle, userId, source = '
         const hasCode = error.code && (typeof error.code === 'string' || typeof error.code === 'number')
         const hasHint = error.hint && typeof error.hint === 'string' && error.hint.trim() !== ''
         
-        // details 可能是对象，需要检查是否为空对象
+        // details 可能是对象，需要检查是否为空对象或只有空值的属性
         let hasDetails = false
         if (error.details) {
           if (typeof error.details === 'string' && error.details.trim() !== '') {
             hasDetails = true
-          } else if (typeof error.details === 'object') {
+          } else if (typeof error.details === 'object' && error.details !== null) {
             // 检查对象是否为空对象或只有空值的属性
             const detailsKeys = Object.keys(error.details)
-            const hasNonEmptyValue = detailsKeys.some(key => {
-              const value = (error.details as any)[key]
-              return value !== null && value !== undefined && value !== '' && 
-                     (typeof value !== 'object' || (typeof value === 'object' && Object.keys(value).length > 0))
-            })
-            hasDetails = hasNonEmptyValue
+            if (detailsKeys.length > 0) {
+              const hasNonEmptyValue = detailsKeys.some(key => {
+                const value = (error.details as any)[key]
+                if (value === null || value === undefined || value === '') {
+                  return false
+                }
+                if (typeof value === 'object') {
+                  return Object.keys(value).length > 0
+                }
+                return true
+              })
+              hasDetails = hasNonEmptyValue
+            }
+            // 如果 detailsKeys.length === 0，hasDetails 保持为 false（空对象）
           }
         }
         
         const hasErrorContent = hasMessage || hasCode || hasHint || hasDetails
         
-        // 调试：查看错误对象的实际结构（仅在开发环境）
-        if (process.env.NODE_ENV === 'development' && !hasErrorContent && errorKeys.length > 0) {
-          // 如果错误对象有属性但没有有效的错误内容，记录调试信息（不是错误）
-          console.debug('[ClaimTrader] 调试：错误对象有属性但无有效内容（这是正常的，表示没找到连接）:', {
-            errorKeys,
-            error,
-            hasMessage,
-            hasCode,
-            hasHint,
-            hasDetails,
-            userId: actualUserId,
-            source,
-          })
+        // 调试：查看错误对象的实际结构（仅在开发环境且是空对象时）
+        if (process.env.NODE_ENV === 'development' && !hasErrorContent) {
+          // 如果错误对象存在但没有有效的错误内容，记录调试信息（不是错误）
+          // 这是正常的"没找到连接"情况
+          if (errorKeys.length === 0) {
+            // 完全空对象 {}
+            // 不记录，因为这是正常的 Supabase maybeSingle() 响应
+          } else {
+            // 有属性但都是空值，记录调试信息
+            console.debug('[ClaimTrader] 调试：错误对象有属性但无有效内容（这是正常的，表示没找到连接）:', {
+              errorKeys,
+              error,
+              hasMessage,
+              hasCode,
+              hasHint,
+              hasDetails,
+              userId: actualUserId,
+              source,
+            })
+          }
         }
         
+        // 只有在真正的错误（如权限错误、网络错误等）时才记录错误
+        // 空错误对象 {} 不应该记录为错误
         if (hasErrorContent) {
-          // 只有在真正的错误（如权限错误、网络错误等）时才记录错误
           console.error('[ClaimTrader] 检查连接失败:', {
             error,
             message: error.message,

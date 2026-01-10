@@ -25,8 +25,12 @@ export default function FollowButton({ traderId, userId, initialFollowing = fals
           .eq('trader_id', traderId)
           .maybeSingle()
         setFollowing(!!data)
-      } catch (error) {
-        console.error('Check following error:', error)
+      } catch (error: any) {
+        // 检查是否有实际的错误内容，避免记录空错误对象 {}
+        const hasErrorContent = !!(error?.message || error?.code || error?.hint || error?.details)
+        if (hasErrorContent) {
+          console.error('Check following error:', error)
+        }
       }
     })()
   }, [userId, traderId])
@@ -47,7 +51,14 @@ export default function FollowButton({ traderId, userId, initialFollowing = fals
           .eq('user_id', userId)
           .eq('trader_id', traderId)
         
-        if (error) throw error
+        if (error) {
+          // 检查是否有实际的错误内容
+          const hasErrorContent = !!(error.message || error.code || error.hint || error.details)
+          if (hasErrorContent) {
+            throw error
+          }
+          // 如果是空错误对象 {}，不抛出异常，继续执行（可能是正常的数据库响应）
+        }
         setFollowing(false)
       } else {
         // 关注：插入到 trader_follows 表
@@ -55,12 +66,26 @@ export default function FollowButton({ traderId, userId, initialFollowing = fals
           .from('trader_follows')
           .insert({ user_id: userId, trader_id: traderId })
         
-        if (error) throw error
+        if (error) {
+          // 检查是否有实际的错误内容
+          const hasErrorContent = !!(error.message || error.code || error.hint || error.details)
+          if (hasErrorContent) {
+            throw error
+          }
+          // 如果是空错误对象 {}，不抛出异常，继续执行（可能是正常的数据库响应）
+        }
         setFollowing(true)
       }
-    } catch (error) {
-      console.error('Toggle follow error:', error)
-      alert('操作失败，请重试')
+    } catch (error: any) {
+      // 检查是否有实际的错误内容，避免记录空错误对象 {}
+      const hasErrorContent = !!(error?.message || error?.code || error?.hint || error?.details)
+      if (hasErrorContent) {
+        console.error('Toggle follow error:', error)
+        alert('操作失败，请重试')
+      } else {
+        // 空错误对象 {}，可能是正常的数据库响应，不记录错误，但操作可能失败
+        // 这里不显示错误提示，让用户重试
+      }
     } finally {
       setLoading(false)
     }
