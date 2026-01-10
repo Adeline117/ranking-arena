@@ -8,7 +8,6 @@ import { supabase } from '@/lib/supabase/client'
 import { Box, Text, Button } from '../Base'
 import FollowButton from '../UI/FollowButton'
 import ClaimTraderButton from './ClaimTraderButton'
-import Avatar from '../UI/Avatar'
 
 interface TraderHeaderProps {
   handle: string
@@ -44,14 +43,42 @@ export default function TraderHeader({ handle, traderId, avatarUrl, isRegistered
     >
       {/* 左侧：Avatar + Handle */}
       <Box className="profile-header-info" style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[4], flex: 1 }}>
-        {/* 统一使用 Avatar 组件，确保与排行榜显示一致 */}
-        <Avatar
-          userId={traderId}
-          name={handle}
-          avatarUrl={avatarUrl}
-          size={64}
-          isTrader={true}
-        />
+        <Box
+          className="profile-header-avatar"
+          style={{
+            width: 64,
+            height: 64,
+            borderRadius: tokens.radius.full,
+            background: tokens.colors.bg.secondary,
+            border: `1px solid ${tokens.colors.border.primary}`,
+            display: 'grid',
+            placeItems: 'center',
+            fontWeight: tokens.typography.fontWeight.black,
+            fontSize: tokens.typography.fontSize.xl,
+            color: tokens.colors.text.primary,
+            overflow: 'hidden',
+            flexShrink: 0,
+          }}
+        >
+          {avatarUrl ? (
+            <img 
+              src={avatarUrl} 
+              alt={handle} 
+              referrerPolicy="origin-when-cross-origin"
+              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+              onError={(e) => {
+                // 隐藏图片，显示首字母
+                if (e.target) {
+                  (e.target as HTMLImageElement).style.display = 'none'
+                }
+              }}
+            />
+          ) : (
+            <Text size="2xl" weight="black" style={{ color: tokens.colors.text.primary }}>
+              {(handle?.[0] ?? 'T').toUpperCase()}
+            </Text>
+          )}
+        </Box>
 
         <Box>
           <Text size="2xl" weight="black" style={{ marginBottom: tokens.spacing[1] }}>
