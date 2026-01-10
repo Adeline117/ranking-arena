@@ -96,56 +96,20 @@ export async function getTraderHandles(
     for (let i = 0; i < traderIds.length; i += BATCH_SIZE) {
       const batch = traderIds.slice(i, i + BATCH_SIZE)
       
-      // 尝试查询 avatar_url 和 profile_url（如果 avatar_url 列不存在，会报错，然后回退）
-      // 优先尝试包含 avatar_url 的查询，如果失败则只查询 profile_url
+      // 直接查询 profile_url（头像URL存储在这里，avatar_url 列不存在）
+      // 这是导入脚本存储头像URL的位置，不需要回退逻辑
       let query = supabase
         .from('trader_sources')
-        .select('source_trader_id, handle, profile_url, avatar_url')
+        .select('source_trader_id, handle, profile_url')
         .eq('source', source)
         .in('source_trader_id', batch)
       
       let { data, error } = await query
       
-      // 如果查询失败，可能是 avatar_url 列不存在，回退到只查询 profile_url
+      // 如果查询失败，记录错误并跳过这个batch
       if (error) {
-        const errorKeys = Object.keys(error || {})
-        const isEmptyError = errorKeys.length === 0
-        const errorStr = JSON.stringify(error || {}).toLowerCase()
-        const errorMessage = (error as any)?.message?.toLowerCase() || ''
-        const errorCode = (error as any)?.code || ''
-        
-        // 检查是否是列不存在的错误
-        const isColumnError = isEmptyError || 
-          errorStr.includes('avatar_url') ||
-          errorStr.includes('column') ||
-          errorStr.includes('does not exist') ||
-          errorMessage.includes('avatar_url') ||
-          errorMessage.includes('column') ||
-          errorMessage.includes('does not exist') ||
-          errorCode === 'PGRST204' ||
-          errorCode === '42703'
-        
-        if (isColumnError) {
-          // avatar_url 列不存在，回退到只查询 profile_url
-          console.warn(`[trader-snapshots] ⚠️ ${source} avatar_url 列不存在，使用回退查询 (batch ${Math.floor(i / BATCH_SIZE) + 1})`)
-          const fallbackQuery = supabase
-            .from('trader_sources')
-            .select('source_trader_id, handle, profile_url')
-            .eq('source', source)
-            .in('source_trader_id', batch)
-          
-          const fallbackResult = await fallbackQuery
-          
-          if (fallbackResult.error) {
-            // 回退查询也失败
-            console.error(`[trader-snapshots] ❌ ${source} 回退查询也失败 (batch ${Math.floor(i / BATCH_SIZE) + 1}):`, fallbackResult.error)
-            continue
-          }
-          
-          // 回退查询成功
-          data = fallbackResult.data || null
-          error = null
-        } else {
+        const hasErrorContent = !!(error.message || error.code || error.hint || error.details)
+        if (hasErrorContent) {
           // 其他类型的错误，记录并跳过
           const errorInfo: any = {
             source,
@@ -200,47 +164,43 @@ export async function getTraderHandles(
       }
     }
 
-    const handleMap = new Map<string, TraderHandle>()
-    allResults.forEach((item: any) => {
-      // 即使没有 handle，也保存数据（可能只有 profile_url）
-      if (item && item.source_trader_id) {
-        // 确保数据格式正确，匹配 TraderHandle 接口
-        handleMap.set(item.source_trader_id, {
-          source_trader_id: item.source_trader_id,
-          handle: item.handle || null,
-          profile_url: item.profile_url || null,
-          avatar_url: item.avatar_url || null, // 如果查询时包含此字段
+        const handleMap = new Map<string, TraderHandle>()
+        allResults.forEach((item: any) => {
+          // 即使没有 handle，也保存数据（可能只有 profile_url）
+          if (item && item.source_trader_id) {
+            // 确保数据格式正确，匹配 TraderHandle 接口
+            // 注意：只使用 profile_url（头像URL存储在这里），avatar_url 列不存在
+            handleMap.set(item.source_trader_id, {
+              source_trader_id: item.source_trader_id,
+              handle: item.handle || null,
+              profile_url: item.profile_url || null,
+              // avatar_url 列不存在，所以不设置此字段
+            })
+          }
+        })
+    
+      // 调试日志：输出前几个trader的数据（仅bitget，避免日志过多）
+      if (handleMap.size > 0 && source === 'bitget') {
+        const sampleEntries = Array.from(handleMap.entries()).slice(0, 5)
+        console.log(`[trader-snapshots] 📊 ${source} handleMap 样本 (前5个):`, 
+          sampleEntries.map(([id, data]) => ({
+            source_trader_id: id,
+            handle: data.handle || '(空)',
+            profile_url: data.profile_url || '(空)',
+            profile_url_length: data.profile_url?.length || 0,
+            profile_url_type: typeof data.profile_url,
+            profile_url_preview: data.profile_url ? data.profile_url.substring(0, 100) : '(空)',
+          }))
+        )
+        
+        // 统计有多少trader有头像URL
+        const withProfileUrl = Array.from(handleMap.values()).filter(d => d.profile_url && d.profile_url.trim() !== '').length
+        console.log(`[trader-snapshots] 📈 ${source} 头像URL统计:`, {
+          total: handleMap.size,
+          with_profile_url: withProfileUrl,
+          with_profile_url_percentage: `${((withProfileUrl / handleMap.size) * 100).toFixed(1)}%`,
         })
       }
-    })
-    
-    // 调试日志：输出前几个trader的数据（仅bitget，避免日志过多）
-    if (handleMap.size > 0 && source === 'bitget') {
-      const sampleEntries = Array.from(handleMap.entries()).slice(0, 5)
-      console.log(`[trader-snapshots] 📊 ${source} handleMap 样本 (前5个):`, 
-        sampleEntries.map(([id, data]) => ({
-          source_trader_id: id,
-          handle: data.handle || '(空)',
-          profile_url: data.profile_url || '(空)',
-          profile_url_length: data.profile_url?.length || 0,
-          profile_url_type: typeof data.profile_url,
-          profile_url_preview: data.profile_url ? data.profile_url.substring(0, 100) : '(空)',
-          avatar_url: data.avatar_url || '(空)',
-          avatar_url_length: data.avatar_url?.length || 0,
-          avatar_url_type: typeof data.avatar_url,
-        }))
-      )
-      
-      // 统计有多少trader有头像URL
-      const withProfileUrl = Array.from(handleMap.values()).filter(d => d.profile_url && d.profile_url.trim() !== '').length
-      const withAvatarUrl = Array.from(handleMap.values()).filter(d => d.avatar_url && d.avatar_url.trim() !== '').length
-      console.log(`[trader-snapshots] 📈 ${source} 头像URL统计:`, {
-        total: handleMap.size,
-        with_profile_url: withProfileUrl,
-        with_avatar_url: withAvatarUrl,
-        with_any_avatar: Array.from(handleMap.values()).filter(d => (d.profile_url && d.profile_url.trim() !== '') || (d.avatar_url && d.avatar_url.trim() !== '')).length,
-      })
-    }
 
     return handleMap
   } catch (err: any) {
