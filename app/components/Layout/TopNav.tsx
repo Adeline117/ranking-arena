@@ -203,7 +203,7 @@ export default function TopNav({ email }: { email: string | null }) {
                 justifyContent: 'center',
                 fontWeight: tokens.typography.fontWeight.black,
                 color: '#FFFFFF', // 白色文字确保在紫色背景上清晰可见
-                fontSize: tokens.typography.fontSize.lg,
+                fontSize: '24px',
                 boxShadow: theme === 'light'
                   ? '0 2px 8px rgba(124, 58, 237, 0.3)' // 亮色主题：紫色阴影
                   : '0 2px 8px rgba(139, 92, 246, 0.4), 0 0 16px rgba(139, 92, 246, 0.2)', // 暗色主题：紫色光晕
@@ -224,7 +224,7 @@ export default function TopNav({ email }: { email: string | null }) {
                   transition: `opacity ${tokens.transition.base}`,
                 }}
               />
-              {/* Logo文字 - 使用更现代的设计 */}
+              {/* Logo文字 - 字母A设计 */}
               <Box
                 style={{
                   position: 'relative',
@@ -235,11 +235,14 @@ export default function TopNav({ email }: { email: string | null }) {
                   width: '100%',
                   height: '100%',
                   fontFamily: tokens.typography.fontFamily.sans.join(', '),
-                  letterSpacing: '-0.5px',
-                  textShadow: '0 1px 2px rgba(0, 0, 0, 0.2)', // 添加文字阴影增强可读性
+                  letterSpacing: '0',
+                  fontSize: '26px',
+                  fontWeight: tokens.typography.fontWeight.black,
+                  lineHeight: '1',
+                  textShadow: '0 2px 6px rgba(0, 0, 0, 0.4)', // 增强文字阴影和深度
                 }}
               >
-                RA
+                A
               </Box>
             </Box>
             {/* Logo文字 - 可选：如果需要显示完整品牌名 */}
