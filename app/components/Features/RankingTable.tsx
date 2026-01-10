@@ -7,6 +7,7 @@ import { RankingSkeleton } from '../UI/Skeleton'
 import { RankingBadge } from '../Icons'
 import { Box, Text } from '../Base'
 import { useLanguage } from '../Utils/LanguageProvider'
+import { getAvatarFallbackGradient, getAvatarInitial } from '@/lib/utils/avatar'
 
 // 格式化 PnL 显示
 function formatPnL(pnl: number): string {
@@ -88,36 +89,43 @@ export default function RankingTable(props: {
     <Box
       bg="secondary"
       p={0}
-      radius="none"
-      border="none"
+      radius="lg"
+      border="primary"
+      style={{
+        boxShadow: tokens.shadow.md,
+        overflow: 'hidden',
+      }}
     >
-      {/* Header - 最小化 */}
+      {/* Header - 优化UI */}
       <Box
         className="ranking-table-header ranking-table-grid"
         style={{
           display: 'grid',
           gridTemplateColumns: '60px 1fr 120px 80px 100px 100px', // Rank | ID | ROI (90D) | Win Rate (90D) | Volume (90D) | Avg Buy (90D)
           gap: tokens.spacing[4],
-          padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
-          borderBottom: `1px solid ${tokens.colors.border.primary}`,
+          padding: `${tokens.spacing[4]} ${tokens.spacing[4]}`,
+          borderBottom: `2px solid ${tokens.colors.border.primary}`,
+          background: tokens.colors.bg.secondary,
+          borderRadius: `${tokens.radius.lg} ${tokens.radius.lg} 0 0`,
+          boxShadow: tokens.shadow.xs,
         }}
       >
-        <Text size="xs" weight="bold" color="tertiary" style={{ textAlign: 'center' }}>
+        <Text size="xs" weight="bold" color="tertiary" style={{ textAlign: 'center', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
           {t('rank')}
         </Text>
-        <Text size="xs" weight="bold" color="tertiary">
+        <Text size="xs" weight="bold" color="tertiary" style={{ textTransform: 'uppercase', letterSpacing: '0.5px' }}>
           {t('trader')}
         </Text>
-        <Text size="xs" weight="bold" color="tertiary" style={{ textAlign: 'right' }}>
+        <Text size="xs" weight="bold" color="tertiary" style={{ textAlign: 'right', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
           {t('roi90d')}
         </Text>
-        <Text size="xs" weight="bold" color="tertiary" style={{ textAlign: 'right' }}>
+        <Text size="xs" weight="bold" color="tertiary" style={{ textAlign: 'right', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
           {t('winRate90d')}
         </Text>
-        <Text size="xs" weight="bold" color="tertiary" style={{ textAlign: 'right' }}>
+        <Text size="xs" weight="bold" color="tertiary" style={{ textAlign: 'right', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
           {t('volume90d')}
         </Text>
-        <Text size="xs" weight="bold" color="tertiary" style={{ textAlign: 'right' }}>
+        <Text size="xs" weight="bold" color="tertiary" style={{ textAlign: 'right', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
           {t('avgBuy90d')}
         </Text>
       </Box>
@@ -181,22 +189,25 @@ export default function RankingTable(props: {
                       gridTemplateColumns: '60px 1fr 120px 80px 100px 100px',
                       alignItems: 'center',
                       gap: tokens.spacing[4],
-                      padding: `${tokens.spacing[3]} ${tokens.spacing[3]}`,
+                      padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
                       borderBottom: `1px solid ${tokens.colors.border.primary}`,
                       cursor: 'pointer',
-                      background: tokens.colors.bg.primary,
+                      background: rank <= 3 ? `${tokens.colors.bg.secondary}80` : tokens.colors.bg.primary,
                       transition: `all ${tokens.transition.base}`,
                       borderRadius: tokens.radius.none,
+                      position: 'relative',
                     }}
                     onMouseEnter={(e) => {
-                      e.currentTarget.style.background = tokens.colors.bg.tertiary || tokens.colors.bg.hover
+                      e.currentTarget.style.background = tokens.colors.bg.tertiary || tokens.colors.bg.hover || `${tokens.colors.bg.secondary}CC`
                       e.currentTarget.style.transform = 'translateX(4px)'
-                      e.currentTarget.style.boxShadow = tokens.shadow.xs
+                      e.currentTarget.style.boxShadow = tokens.shadow.sm
+                      e.currentTarget.style.borderLeft = `3px solid ${tokens.colors.accent.primary}`
                     }}
                     onMouseLeave={(e) => {
-                      e.currentTarget.style.background = tokens.colors.bg.primary
+                      e.currentTarget.style.background = rank <= 3 ? `${tokens.colors.bg.secondary}80` : tokens.colors.bg.primary
                       e.currentTarget.style.transform = 'translateX(0)'
                       e.currentTarget.style.boxShadow = tokens.shadow.none
+                      e.currentTarget.style.borderLeft = 'none'
                     }}
                   >
                     {/* 排名 */}
@@ -212,21 +223,35 @@ export default function RankingTable(props: {
 
                   {/* 交易员ID - 唯一可点击的元素，视觉权重最高 */}
                   <Box style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'nowrap' }}>
-                    {/* 头像 - 放在名字左边 */}
+                    {/* 头像 - 放在名字左边，优化UI */}
                     <Box
                       style={{
                         width: 32,
                         height: 32,
                         borderRadius: tokens.radius.full,
-                        background: tokens.colors.bg.secondary,
-                        border: `1px solid ${tokens.colors.border.primary}`,
+                        background: t.avatar_url ? tokens.colors.bg.secondary : getAvatarFallbackGradient(t.id),
+                        border: `1.5px solid ${tokens.colors.border.primary}`,
                         display: 'grid',
                         placeItems: 'center',
                         fontWeight: tokens.typography.fontWeight.black,
-                        fontSize: tokens.typography.fontSize.sm,
-                        color: tokens.colors.text.primary,
+                        fontSize: tokens.typography.fontSize.xs,
+                        color: '#ffffff',
                         overflow: 'hidden',
                         flexShrink: 0,
+                        boxShadow: tokens.shadow.sm,
+                        transition: `all ${tokens.transition.base}`,
+                        cursor: 'pointer',
+                        position: 'relative',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.transform = 'scale(1.08)'
+                        e.currentTarget.style.boxShadow = tokens.shadow.md
+                        e.currentTarget.style.borderColor = tokens.colors.accent.primary
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.transform = 'scale(1)'
+                        e.currentTarget.style.boxShadow = tokens.shadow.sm
+                        e.currentTarget.style.borderColor = tokens.colors.border.primary
                       }}
                     >
                       {t.avatar_url ? (
@@ -234,48 +259,102 @@ export default function RankingTable(props: {
                           src={t.avatar_url} 
                           alt={displayName} 
                           referrerPolicy="origin-when-cross-origin"
-                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                          loading="lazy"
+                          style={{ 
+                            width: '100%', 
+                            height: '100%', 
+                            objectFit: 'cover',
+                            transition: `opacity ${tokens.transition.base}`,
+                            opacity: 0,
+                          }}
+                          onLoad={(e) => {
+                            // 图片加载成功，平滑显示
+                            e.currentTarget.style.opacity = '1'
+                          }}
                           onError={(e) => {
                             // 隐藏图片，显示首字母
                             if (e.target) {
                               (e.target as HTMLImageElement).style.display = 'none'
+                              // 确保容器显示渐变背景
+                              const container = e.currentTarget.parentElement
+                              if (container) {
+                                container.style.background = getAvatarFallbackGradient(t.id)
+                              }
                             }
                           }}
                         />
-                      ) : (
-                        <Text size="xs" weight="black" style={{ color: tokens.colors.text.primary }}>
-                          {(displayName?.[0] ?? 'T').toUpperCase()}
+                      ) : null}
+                      {/* 首字母 - 如果没有头像或头像加载失败时显示 */}
+                      {!t.avatar_url && (
+                        <Text 
+                          size="xs" 
+                          weight="black" 
+                          style={{ 
+                            color: '#ffffff',
+                            textShadow: '0 1px 2px rgba(0, 0, 0, 0.3)',
+                            fontSize: '12px',
+                            lineHeight: '1',
+                          }}
+                        >
+                          {getAvatarInitial(displayName)}
                         </Text>
                       )}
                     </Box>
                     {/* 名字 - 在头像右边 */}
-                    <Text size="sm" weight="black" style={{ color: tokens.colors.text.primary }}>
-                      {displayName}
-                    </Text>
-                    <Text
-                      size="xs"
-                      weight="medium"
-                      style={{
-                        color: tokens.colors.text.tertiary,
-                        padding: '2px 6px',
-                        background: 'rgba(139, 111, 168, 0.1)',
-                        borderRadius: 4,
-                        border: '1px solid rgba(139, 111, 168, 0.2)',
-                        fontSize: '10px',
-                      }}
-                    >
-                      {sourceLabelText}
-                    </Text>
+                    <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[1], minWidth: 0, flex: 1 }}>
+                      <Text 
+                        size="sm" 
+                        weight="black" 
+                        style={{ 
+                          color: tokens.colors.text.primary,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {displayName}
+                      </Text>
+                      <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
+                        <Box
+                          style={{
+                            padding: `2px ${tokens.spacing[2]}`,
+                            background: `${tokens.colors.accent.primary}20`,
+                            borderRadius: tokens.radius.sm,
+                            border: `1px solid ${tokens.colors.accent.primary}40`,
+                          }}
+                        >
+                          <Text
+                            size="xs"
+                            weight="bold"
+                            style={{
+                              color: tokens.colors.accent.primary,
+                              fontSize: '10px',
+                              textTransform: 'uppercase',
+                              letterSpacing: '0.5px',
+                            }}
+                          >
+                            {sourceLabelText}
+                          </Text>
+                        </Box>
+                        {t.followers > 0 && (
+                          <Text size="xs" color="tertiary" style={{ fontSize: '10px' }}>
+                            {t.followers.toLocaleString()} 粉丝
+                          </Text>
+                        )}
+                      </Box>
+                    </Box>
                   </Box>
 
-                  {/* ROI (90D) - 上面显示百分比，下面小字显示 PnL */}
-                  <Box style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                  {/* ROI (90D) - 上面显示百分比，下面小字显示 PnL，优化UI */}
+                  <Box style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: tokens.spacing[1] }}>
                     <Text
                       size="sm"
                       weight="black"
                       style={{
                         color: t.roi >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error,
-                        lineHeight: 1.2,
+                        lineHeight: tokens.typography.lineHeight.tight,
+                        fontSize: tokens.typography.fontSize.base,
+                        textShadow: rank <= 3 ? `0 1px 2px ${t.roi >= 0 ? tokens.colors.accent.success + '40' : tokens.colors.accent.error + '40'}` : 'none',
                       }}
                     >
                       {t.roi >= 0 ? '+' : ''}
@@ -284,11 +363,11 @@ export default function RankingTable(props: {
                     {t.pnl !== undefined && (
                       <Text
                         size="xs"
-                        weight="normal"
+                        weight="semibold"
                         style={{
-                          color: tokens.colors.text.tertiary,
-                          marginTop: '2px',
-                          lineHeight: 1.2,
+                          color: tokens.colors.text.secondary,
+                          lineHeight: tokens.typography.lineHeight.tight,
+                          opacity: 0.8,
                         }}
                       >
                         {t.pnl >= 0 ? '+' : ''}
@@ -297,20 +376,49 @@ export default function RankingTable(props: {
                     )}
                   </Box>
 
-                  {/* 胜率 (90D) - 中性色 */}
-                  <Text size="sm" weight="bold" style={{ textAlign: 'right', color: tokens.colors.text.secondary }}>
-                    {(t.win_rate * 100).toFixed(1)}%
-                  </Text>
+                  {/* 胜率 (90D) - 优化显示 */}
+                  <Box style={{ textAlign: 'right' }}>
+                    <Text 
+                      size="sm" 
+                      weight="bold" 
+                      style={{ 
+                        color: t.win_rate > 0.5 ? tokens.colors.accent.success : tokens.colors.text.secondary,
+                        lineHeight: tokens.typography.lineHeight.tight,
+                      }}
+                    >
+                      {(t.win_rate * 100).toFixed(1)}%
+                    </Text>
+                  </Box>
 
-                  {/* 交易量 (90D) - 中性色 */}
-                  <Text size="sm" weight="bold" style={{ textAlign: 'right', color: tokens.colors.text.secondary }}>
-                    {t.volume_90d !== undefined ? formatAmount(t.volume_90d) : '—'}
-                  </Text>
+                  {/* 交易量 (90D) - 优化显示 */}
+                  <Box style={{ textAlign: 'right' }}>
+                    <Text 
+                      size="sm" 
+                      weight="semibold" 
+                      style={{ 
+                        color: t.volume_90d !== undefined ? tokens.colors.text.secondary : tokens.colors.text.tertiary,
+                        lineHeight: tokens.typography.lineHeight.tight,
+                        opacity: t.volume_90d !== undefined ? 1 : 0.5,
+                      }}
+                    >
+                      {t.volume_90d !== undefined ? formatAmount(t.volume_90d) : '—'}
+                    </Text>
+                  </Box>
 
-                  {/* 平均买入 (90D) - 中性色 */}
-                  <Text size="sm" weight="bold" style={{ textAlign: 'right', color: tokens.colors.text.secondary }}>
-                    {t.avg_buy_90d !== undefined ? formatAmount(t.avg_buy_90d) : '—'}
-                  </Text>
+                  {/* 平均买入 (90D) - 优化显示 */}
+                  <Box style={{ textAlign: 'right' }}>
+                    <Text 
+                      size="sm" 
+                      weight="semibold" 
+                      style={{ 
+                        color: t.avg_buy_90d !== undefined ? tokens.colors.text.secondary : tokens.colors.text.tertiary,
+                        lineHeight: tokens.typography.lineHeight.tight,
+                        opacity: t.avg_buy_90d !== undefined ? 1 : 0.5,
+                      }}
+                    >
+                      {t.avg_buy_90d !== undefined ? formatAmount(t.avg_buy_90d) : '—'}
+                    </Text>
+                  </Box>
 
                 </Box>
               </Link>
@@ -334,24 +442,29 @@ export default function RankingTable(props: {
                 onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
                 disabled={currentPage === 1}
                 style={{
-                  padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-                  background: currentPage === 1 ? 'transparent' : 'rgba(139, 111, 168, 0.1)',
-                  border: `1px solid ${currentPage === 1 ? 'rgba(139, 111, 168, 0.2)' : 'rgba(139, 111, 168, 0.3)'}`,
+                  padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
+                  background: currentPage === 1 ? tokens.colors.bg.secondary : `${tokens.colors.accent.primary}20`,
+                  border: `1px solid ${currentPage === 1 ? tokens.colors.border.primary : tokens.colors.accent.primary}40`,
                   borderRadius: tokens.radius.md,
-                  color: currentPage === 1 ? tokens.colors.text.tertiary : tokens.colors.text.secondary,
+                  color: currentPage === 1 ? tokens.colors.text.tertiary : tokens.colors.text.primary,
                   cursor: currentPage === 1 ? 'not-allowed' : 'pointer',
                   fontSize: tokens.typography.fontSize.sm,
-                  fontWeight: 600,
-                  transition: 'all 0.2s ease',
+                  fontWeight: tokens.typography.fontWeight.semibold,
+                  transition: `all ${tokens.transition.base}`,
+                  opacity: currentPage === 1 ? 0.5 : 1,
                 }}
                 onMouseEnter={(e) => {
                   if (currentPage > 1) {
-                    e.currentTarget.style.background = 'rgba(139, 111, 168, 0.2)'
+                    e.currentTarget.style.background = `${tokens.colors.accent.primary}30`
+                    e.currentTarget.style.transform = 'translateY(-1px)'
+                    e.currentTarget.style.boxShadow = tokens.shadow.sm
                   }
                 }}
                 onMouseLeave={(e) => {
                   if (currentPage > 1) {
-                    e.currentTarget.style.background = 'rgba(139, 111, 168, 0.1)'
+                    e.currentTarget.style.background = `${tokens.colors.accent.primary}20`
+                    e.currentTarget.style.transform = 'translateY(0)'
+                    e.currentTarget.style.boxShadow = tokens.shadow.none
                   }
                 }}
               >
@@ -414,28 +527,33 @@ export default function RankingTable(props: {
                         key={pageNum}
                         onClick={() => setCurrentPage(pageNum)}
                         style={{
-                          minWidth: '32px',
-                          height: '32px',
+                          minWidth: '36px',
+                          height: '36px',
                           padding: `0 ${tokens.spacing[2]}`,
-                          background: isActive ? 'rgba(139, 111, 168, 0.3)' : 'rgba(139, 111, 168, 0.1)',
-                          border: `1px solid ${isActive ? 'rgba(139, 111, 168, 0.5)' : 'rgba(139, 111, 168, 0.3)'}`,
+                          background: isActive ? `${tokens.colors.accent.primary}30` : `${tokens.colors.accent.primary}10`,
+                          border: `1.5px solid ${isActive ? tokens.colors.accent.primary : tokens.colors.border.primary}`,
                           borderRadius: tokens.radius.md,
-                          color: isActive ? tokens.colors.text.primary : tokens.colors.text.secondary,
+                          color: isActive ? tokens.colors.accent.primary : tokens.colors.text.secondary,
                           cursor: 'pointer',
                           fontSize: tokens.typography.fontSize.sm,
-                          fontWeight: isActive ? 700 : 600,
-                          transition: 'all 0.2s ease',
+                          fontWeight: isActive ? tokens.typography.fontWeight.bold : tokens.typography.fontWeight.semibold,
+                          transition: `all ${tokens.transition.base}`,
+                          boxShadow: isActive ? tokens.shadow.sm : tokens.shadow.none,
                         }}
                         onMouseEnter={(e) => {
                           if (!isActive) {
-                            e.currentTarget.style.background = 'rgba(139, 111, 168, 0.2)'
-                            e.currentTarget.style.borderColor = 'rgba(139, 111, 168, 0.4)'
+                            e.currentTarget.style.background = `${tokens.colors.accent.primary}20`
+                            e.currentTarget.style.borderColor = tokens.colors.accent.primary
+                            e.currentTarget.style.transform = 'translateY(-1px)'
+                            e.currentTarget.style.boxShadow = tokens.shadow.sm
                           }
                         }}
                         onMouseLeave={(e) => {
                           if (!isActive) {
-                            e.currentTarget.style.background = 'rgba(139, 111, 168, 0.1)'
-                            e.currentTarget.style.borderColor = 'rgba(139, 111, 168, 0.3)'
+                            e.currentTarget.style.background = `${tokens.colors.accent.primary}10`
+                            e.currentTarget.style.borderColor = tokens.colors.border.primary
+                            e.currentTarget.style.transform = 'translateY(0)'
+                            e.currentTarget.style.boxShadow = tokens.shadow.none
                           }
                         }}
                       >
@@ -450,24 +568,29 @@ export default function RankingTable(props: {
                 onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
                 disabled={currentPage === totalPages}
                 style={{
-                  padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-                  background: currentPage === totalPages ? 'transparent' : 'rgba(139, 111, 168, 0.1)',
-                  border: `1px solid ${currentPage === totalPages ? 'rgba(139, 111, 168, 0.2)' : 'rgba(139, 111, 168, 0.3)'}`,
+                  padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
+                  background: currentPage === totalPages ? tokens.colors.bg.secondary : `${tokens.colors.accent.primary}20`,
+                  border: `1px solid ${currentPage === totalPages ? tokens.colors.border.primary : tokens.colors.accent.primary}40`,
                   borderRadius: tokens.radius.md,
-                  color: currentPage === totalPages ? tokens.colors.text.tertiary : tokens.colors.text.secondary,
+                  color: currentPage === totalPages ? tokens.colors.text.tertiary : tokens.colors.text.primary,
                   cursor: currentPage === totalPages ? 'not-allowed' : 'pointer',
                   fontSize: tokens.typography.fontSize.sm,
-                  fontWeight: 600,
-                  transition: 'all 0.2s ease',
+                  fontWeight: tokens.typography.fontWeight.semibold,
+                  transition: `all ${tokens.transition.base}`,
+                  opacity: currentPage === totalPages ? 0.5 : 1,
                 }}
                 onMouseEnter={(e) => {
                   if (currentPage < totalPages) {
-                    e.currentTarget.style.background = 'rgba(139, 111, 168, 0.2)'
+                    e.currentTarget.style.background = `${tokens.colors.accent.primary}30`
+                    e.currentTarget.style.transform = 'translateY(-1px)'
+                    e.currentTarget.style.boxShadow = tokens.shadow.sm
                   }
                 }}
                 onMouseLeave={(e) => {
                   if (currentPage < totalPages) {
-                    e.currentTarget.style.background = 'rgba(139, 111, 168, 0.1)'
+                    e.currentTarget.style.background = `${tokens.colors.accent.primary}20`
+                    e.currentTarget.style.transform = 'translateY(0)'
+                    e.currentTarget.style.boxShadow = tokens.shadow.none
                   }
                 }}
               >

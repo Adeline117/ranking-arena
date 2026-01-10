@@ -7,6 +7,7 @@ import { tokens } from '@/lib/design-tokens'
 import { supabase } from '@/lib/supabase/client'
 import { Box, Text, Button } from '../Base'
 import FollowButton from '../UI/FollowButton'
+import { getAvatarFallbackGradient, getAvatarInitial } from '@/lib/utils/avatar'
 
 interface TraderAboutCardProps {
   handle: string
@@ -46,26 +47,49 @@ export default function TraderAboutCard({
     <Box
       bg="secondary"
       p={6}
-      radius="none"
-      border="none"
+      radius="lg"
+      border="primary"
       style={{
         position: 'sticky',
         top: 80, // 在TopNav下方
+        boxShadow: tokens.shadow.md,
+        transition: `all ${tokens.transition.base}`,
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.boxShadow = tokens.shadow.lg
+        e.currentTarget.style.transform = 'translateY(-2px)'
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.boxShadow = tokens.shadow.md
+        e.currentTarget.style.transform = 'translateY(0)'
       }}
     >
-      {/* 头像 */}
+      {/* 头像 - 优化UI */}
       <Box
         style={{
           width: 72,
           height: 72,
           borderRadius: tokens.radius.full,
-          background: tokens.colors.bg.primary,
-          border: `1px solid ${tokens.colors.border.primary}`,
+          background: avatarUrl ? tokens.colors.bg.secondary : getAvatarFallbackGradient(traderId || handle),
+          border: `2px solid ${tokens.colors.border.primary}`,
           display: 'grid',
           placeItems: 'center',
           marginBottom: tokens.spacing[4],
           overflow: 'hidden',
           flexShrink: 0,
+          boxShadow: tokens.shadow.md,
+          transition: `all ${tokens.transition.base}`,
+          position: 'relative',
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.transform = 'scale(1.05)'
+          e.currentTarget.style.boxShadow = tokens.shadow.lg
+          e.currentTarget.style.borderColor = tokens.colors.accent.primary
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.transform = 'scale(1)'
+          e.currentTarget.style.boxShadow = tokens.shadow.md
+          e.currentTarget.style.borderColor = tokens.colors.border.primary
         }}
       >
         {avatarUrl ? (
@@ -73,29 +97,72 @@ export default function TraderAboutCard({
             src={avatarUrl} 
             alt={handle} 
             referrerPolicy="origin-when-cross-origin"
-            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+            loading="lazy"
+            style={{ 
+              width: '100%', 
+              height: '100%', 
+              objectFit: 'cover',
+              transition: `opacity ${tokens.transition.base}`,
+              opacity: 0,
+            }}
+            onLoad={(e) => {
+              e.currentTarget.style.opacity = '1'
+            }}
             onError={(e) => {
               // 隐藏图片，显示首字母
               if (e.target) {
                 (e.target as HTMLImageElement).style.display = 'none'
+                const container = e.currentTarget.parentElement
+                if (container) {
+                  container.style.background = getAvatarFallbackGradient(traderId || handle)
+                }
               }
             }}
           />
-        ) : (
-          <Text size="2xl" weight="black" style={{ color: tokens.colors.text.primary }}>
-            {(handle?.[0] ?? 'T').toUpperCase()}
+        ) : null}
+        {!avatarUrl && (
+          <Text 
+            size="2xl" 
+            weight="black" 
+            style={{ 
+              color: '#ffffff',
+              textShadow: '0 2px 4px rgba(0, 0, 0, 0.4)',
+              fontSize: '32px',
+              lineHeight: '1',
+            }}
+          >
+            {getAvatarInitial(handle)}
           </Text>
         )}
       </Box>
 
       {/* 交易员ID */}
-      <Text size="lg" weight="black" style={{ marginBottom: tokens.spacing[3], color: tokens.colors.text.primary }}>
+      <Text 
+        size="lg" 
+        weight="black" 
+        style={{ 
+          marginBottom: tokens.spacing[2], 
+          color: tokens.colors.text.primary,
+          lineHeight: tokens.typography.lineHeight.tight,
+        }}
+      >
         {handle}
       </Text>
 
       {/* 一句话定位（bio截取前50字符） */}
       {bio && (
-        <Text size="sm" color="secondary" style={{ marginBottom: tokens.spacing[4], lineHeight: 1.5 }}>
+        <Text 
+          size="sm" 
+          color="secondary" 
+          style={{ 
+            marginBottom: tokens.spacing[4], 
+            lineHeight: tokens.typography.lineHeight.relaxed,
+            padding: tokens.spacing[3],
+            background: tokens.colors.bg.primary,
+            borderRadius: tokens.radius.md,
+            border: `1px solid ${tokens.colors.border.primary}`,
+          }}
+        >
           {bio.length > 50 ? bio.slice(0, 50) + '...' : bio}
         </Text>
       )}
@@ -123,26 +190,26 @@ export default function TraderAboutCard({
       {/* 次要信息 */}
       <Box
         style={{
-          paddingTop: tokens.spacing[3],
+          paddingTop: tokens.spacing[4],
           borderTop: `1px solid ${tokens.colors.border.primary}`,
           display: 'flex',
-          gap: tokens.spacing[4],
+          gap: tokens.spacing[6],
         }}
       >
-        <Box>
-          <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[1] }}>
+        <Box style={{ flex: 1 }}>
+          <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[1], fontWeight: tokens.typography.fontWeight.medium }}>
             关注者
           </Text>
-          <Text size="base" weight="bold" style={{ color: tokens.colors.text.secondary }}>
+          <Text size="base" weight="bold" style={{ color: tokens.colors.text.primary, fontSize: tokens.typography.fontSize.lg }}>
             {followers.toLocaleString()}
           </Text>
         </Box>
         {following !== undefined && (
-          <Box>
-            <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[1] }}>
+          <Box style={{ flex: 1 }}>
+            <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[1], fontWeight: tokens.typography.fontWeight.medium }}>
               关注中
             </Text>
-            <Text size="base" weight="bold" style={{ color: tokens.colors.text.secondary }}>
+            <Text size="base" weight="bold" style={{ color: tokens.colors.text.primary, fontSize: tokens.typography.fontSize.lg }}>
               {following.toLocaleString()}
             </Text>
           </Box>
