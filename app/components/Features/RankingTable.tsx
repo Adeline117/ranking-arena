@@ -221,15 +221,6 @@ export default function RankingTable(props: {
                       size={32}
                       isTrader={true}
                     />
-                    {/* 调试日志：记录前5名trader的avatar_url */}
-                    {rank <= 5 && console.log(`[RankingTable] Trader #${rank} "${displayName}":`, {
-                      id: t.id,
-                      handle: t.handle,
-                      avatar_url: t.avatar_url || '(空)',
-                      avatar_url_type: typeof t.avatar_url,
-                      avatar_url_length: t.avatar_url?.length || 0,
-                      source: t.source,
-                    })}
                     {/* 名字 - 在头像右边 */}
                     <Text size="sm" weight="black" style={{ color: tokens.colors.text.primary }}>
                       {displayName}
