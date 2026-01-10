@@ -138,7 +138,20 @@ export async function getTradersArenaFollowersCount(
         .in('trader_id', batch)
 
       if (error) {
-        // 检查错误对象是否真的是空的（没有任何有效内容）
+        // 直接检查错误对象是否为空对象 {}（最可靠的方法）
+        try {
+          const errorJson = JSON.stringify(error)
+          if (errorJson === '{}') {
+            // 完全空对象 {}，不是真正的错误，继续处理（可能是正常的查询无结果）
+            // 初始化这批 trader 的粉丝数为 0
+            batch.forEach(id => resultMap.set(id, 0))
+            continue
+          }
+        } catch (e) {
+          // JSON.stringify 失败，继续检查其他属性
+        }
+        
+        // 检查错误对象是否真的有有效内容
         // 首先检查是否有任何非空的属性值
         const hasMessage = error.message && typeof error.message === 'string' && error.message.trim() !== ''
         const hasCode = error.code !== undefined && error.code !== null && error.code !== '' && 
@@ -151,21 +164,28 @@ export async function getTradersArenaFollowersCount(
           if (typeof error.details === 'string' && error.details.trim() !== '') {
             hasDetails = true
           } else if (typeof error.details === 'object') {
-            const detailsKeys = Object.keys(error.details)
-            if (detailsKeys.length > 0) {
-              // 检查对象中是否有非空值
-              hasDetails = detailsKeys.some(key => {
-                const value = (error.details as any)[key]
-                if (value === null || value === undefined || value === '') {
-                  return false
+            try {
+              const detailsJson = JSON.stringify(error.details)
+              if (detailsJson !== '{}') {
+                // details 不是空对象，检查是否有非空值
+                const detailsKeys = Object.keys(error.details)
+                if (detailsKeys.length > 0) {
+                  hasDetails = detailsKeys.some(key => {
+                    const value = (error.details as any)[key]
+                    if (value === null || value === undefined || value === '') {
+                      return false
+                    }
+                    if (typeof value === 'object') {
+                      return Object.keys(value).length > 0
+                    }
+                    return true
+                  })
                 }
-                if (typeof value === 'object') {
-                  return Object.keys(value).length > 0
-                }
-                return true
-              })
+              }
+              // 如果 detailsJson === '{}'，hasDetails 保持为 false（空对象）
+            } catch (e) {
+              // JSON.stringify 失败，继续检查
             }
-            // 如果 detailsKeys.length === 0，hasDetails 保持为 false（空对象）
           }
         }
         
