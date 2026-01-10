@@ -8,6 +8,7 @@ import { supabase } from '@/lib/supabase/client'
 import { Box, Text, Button } from '../Base'
 import FollowButton from '../UI/FollowButton'
 import ClaimTraderButton from './ClaimTraderButton'
+import { getAvatarFallbackGradient, getAvatarInitial } from '@/lib/utils/avatar'
 
 interface TraderHeaderProps {
   handle: string
@@ -36,9 +37,14 @@ export default function TraderHeader({ handle, traderId, avatarUrl, isRegistered
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'flex-start',
-        marginBottom: tokens.spacing[6],
+        marginBottom: tokens.spacing[8],
         paddingBottom: tokens.spacing[6],
-        borderBottom: `1px solid ${tokens.colors.border.primary}`,
+        paddingTop: tokens.spacing[4],
+        borderBottom: `2px solid ${tokens.colors.border.primary}`,
+        background: tokens.colors.bg.secondary,
+        borderRadius: tokens.radius.lg,
+        padding: tokens.spacing[6],
+        boxShadow: tokens.shadow.sm,
       }}
     >
       {/* 左侧：Avatar + Handle */}
@@ -49,15 +55,28 @@ export default function TraderHeader({ handle, traderId, avatarUrl, isRegistered
             width: 64,
             height: 64,
             borderRadius: tokens.radius.full,
-            background: tokens.colors.bg.secondary,
-            border: `1px solid ${tokens.colors.border.primary}`,
+            background: avatarUrl ? tokens.colors.bg.secondary : getAvatarFallbackGradient(traderId),
+            border: `2px solid ${tokens.colors.border.primary}`,
             display: 'grid',
             placeItems: 'center',
             fontWeight: tokens.typography.fontWeight.black,
             fontSize: tokens.typography.fontSize.xl,
-            color: tokens.colors.text.primary,
+            color: '#ffffff',
             overflow: 'hidden',
             flexShrink: 0,
+            boxShadow: tokens.shadow.md,
+            transition: `all ${tokens.transition.base}`,
+            position: 'relative',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.transform = 'scale(1.05)'
+            e.currentTarget.style.boxShadow = tokens.shadow.lg
+            e.currentTarget.style.borderColor = tokens.colors.accent.primary
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.transform = 'scale(1)'
+            e.currentTarget.style.boxShadow = tokens.shadow.md
+            e.currentTarget.style.borderColor = tokens.colors.border.primary
           }}
         >
           {avatarUrl ? (
@@ -65,28 +84,76 @@ export default function TraderHeader({ handle, traderId, avatarUrl, isRegistered
               src={avatarUrl} 
               alt={handle} 
               referrerPolicy="origin-when-cross-origin"
-              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+              loading="lazy"
+              style={{ 
+                width: '100%', 
+                height: '100%', 
+                objectFit: 'cover',
+                transition: `opacity ${tokens.transition.base}`,
+                opacity: 0,
+              }}
+              onLoad={(e) => {
+                e.currentTarget.style.opacity = '1'
+              }}
               onError={(e) => {
                 // 隐藏图片，显示首字母
                 if (e.target) {
                   (e.target as HTMLImageElement).style.display = 'none'
+                  const container = e.currentTarget.parentElement
+                  if (container) {
+                    container.style.background = getAvatarFallbackGradient(traderId)
+                  }
                 }
               }}
             />
-          ) : (
-            <Text size="2xl" weight="black" style={{ color: tokens.colors.text.primary }}>
-              {(handle?.[0] ?? 'T').toUpperCase()}
+          ) : null}
+          {!avatarUrl && (
+            <Text 
+              size="2xl" 
+              weight="black" 
+              style={{ 
+                color: '#ffffff',
+                textShadow: '0 2px 4px rgba(0, 0, 0, 0.4)',
+                fontSize: '28px',
+                lineHeight: '1',
+              }}
+            >
+              {getAvatarInitial(handle)}
             </Text>
           )}
         </Box>
 
-        <Box>
-          <Text size="2xl" weight="black" style={{ marginBottom: tokens.spacing[1] }}>
+        <Box style={{ flex: 1, minWidth: 0 }}>
+          <Text 
+            size="2xl" 
+            weight="black" 
+            style={{ 
+              marginBottom: tokens.spacing[2],
+              color: tokens.colors.text.primary,
+              lineHeight: tokens.typography.lineHeight.tight,
+            }}
+          >
             {handle}
           </Text>
-          <Text size="sm" color="secondary">
-            {followers.toLocaleString()} 粉丝
-          </Text>
+          <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3] }}>
+            <Text size="sm" color="secondary" style={{ fontWeight: tokens.typography.fontWeight.semibold }}>
+              {followers.toLocaleString()} 粉丝
+            </Text>
+            {source && (
+              <Box
+                style={{
+                  padding: `2px ${tokens.spacing[2]}`,
+                  background: `${tokens.colors.accent.primary}20`,
+                  borderRadius: tokens.radius.sm,
+                  border: `1px solid ${tokens.colors.accent.primary}40`,
+                }}
+              >
+                <Text size="xs" weight="bold" style={{ color: tokens.colors.accent.primary, textTransform: 'uppercase' }}>
+                  {source}
+                </Text>
+              </Box>
+            )}
+          </Box>
         </Box>
       </Box>
 
