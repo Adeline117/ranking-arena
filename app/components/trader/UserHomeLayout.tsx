@@ -115,9 +115,20 @@ export default function UserHomeLayout({
                         {item.content.slice(0, 150)}...
                       </Text>
                     )}
-                    <Text size="xs" color="tertiary">
+                    <Text size="xs" color="tertiary" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                       {new Date(item.time).toLocaleDateString('zh-CN')}
-                      {item.groupName && ` · ${item.groupName}`}
+                      {item.groupId && item.groupName && (
+                        <>
+                          {' · '}
+                          <Link
+                            href={`/groups/${item.groupId}`}
+                            onClick={(e) => e.stopPropagation()}
+                            style={{ color: '#8b6fa8', textDecoration: 'none' }}
+                          >
+                            {item.groupName}
+                          </Link>
+                        </>
+                      )}
                     </Text>
                   </Box>
                 </Link>

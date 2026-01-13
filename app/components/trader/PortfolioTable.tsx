@@ -3,64 +3,21 @@
 import { useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../Base'
-import type { PortfolioItem } from '@/lib/data/trader'
+import type { PortfolioItem, PositionHistoryItem } from '@/lib/data/trader'
 
 interface PortfolioTableProps {
   items: PortfolioItem[]
+  history?: PositionHistoryItem[]
 }
 
-type SortField = 'market' | 'invested' | 'pnl' | 'value' | 'price'
-type SortOrder = 'asc' | 'desc'
+type ViewMode = 'current' | 'history'
 
 /**
- * Portfolio页面 - 严格展示，无操作按钮
- * 只显示：交易对、方向、入场价格、当前盈亏百分比
+ * Portfolio页面 - 显示当前持仓和历史仓位
  */
-export default function PortfolioTable({ items }: PortfolioTableProps) {
-  const [sortField, setSortField] = useState<SortField>('invested')
-  const [sortOrder, setSortOrder] = useState<SortOrder>('desc')
+export default function PortfolioTable({ items, history = [] }: PortfolioTableProps) {
+  const [viewMode, setViewMode] = useState<ViewMode>('current')
   const [selectedMarket, setSelectedMarket] = useState<string | null>(null)
-
-  const handleSort = (field: SortField) => {
-    if (sortField === field) {
-      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')
-    } else {
-      setSortField(field)
-      setSortOrder('desc')
-    }
-  }
-
-  const sortedItems = [...items].sort((a, b) => {
-    let aVal: number
-    let bVal: number
-
-    switch (sortField) {
-      case 'market':
-        aVal = a.market.localeCompare(b.market)
-        bVal = 0
-        return sortOrder === 'asc' ? aVal : -aVal
-      case 'invested':
-        aVal = a.invested
-        bVal = b.invested
-        break
-      case 'pnl':
-        aVal = a.pnl
-        bVal = b.pnl
-        break
-      case 'value':
-        aVal = a.value
-        bVal = b.value
-        break
-      case 'price':
-        aVal = a.price
-        bVal = b.price
-        break
-      default:
-        return 0
-    }
-
-    return sortOrder === 'asc' ? aVal - bVal : bVal - aVal
-  })
 
   return (
     <>
@@ -76,139 +33,167 @@ export default function PortfolioTable({ items }: PortfolioTableProps) {
           <Text size="lg" weight="black" style={{ color: tokens.colors.text.primary }}>
             Portfolio
           </Text>
-          <Text size="xs" color="tertiary" style={{ fontWeight: tokens.typography.fontWeight.normal }}>
-            Last updated: {new Date().toLocaleDateString('zh-CN')}
-          </Text>
-        </Box>
-
-        {items.length > 0 ? (
-          <Box style={{ overflowX: 'auto' }}>
-            <table
+          <Box style={{ display: 'flex', gap: tokens.spacing[2] }}>
+            <button
+              onClick={() => setViewMode('current')}
               style={{
-                width: '100%',
-                borderCollapse: 'collapse',
+                padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
+                borderRadius: tokens.radius.md,
+                border: `1px solid ${viewMode === 'current' ? tokens.colors.accent.primary : tokens.colors.border.primary}`,
+                background: viewMode === 'current' ? tokens.colors.accent.primary : 'transparent',
+                color: viewMode === 'current' ? '#fff' : tokens.colors.text.secondary,
+                fontSize: tokens.typography.fontSize.xs,
+                fontWeight: tokens.typography.fontWeight.bold,
+                cursor: 'pointer',
               }}
             >
-              <thead>
-                <tr style={{ borderBottom: `1px solid ${tokens.colors.border.primary}` }}>
-                  <th
-                    style={{
-                      padding: tokens.spacing[3],
-                      textAlign: 'left',
-                      fontSize: tokens.typography.fontSize.xs,
-                      color: tokens.colors.text.tertiary,
-                      fontWeight: tokens.typography.fontWeight.bold,
-                      cursor: 'pointer',
-                    }}
-                    onClick={() => handleSort('market')}
-                  >
-                    Market
-                  </th>
-                  <th
-                    style={{
-                      padding: tokens.spacing[3],
-                      textAlign: 'left',
-                      fontSize: tokens.typography.fontSize.xs,
-                      color: tokens.colors.text.tertiary,
-                      fontWeight: tokens.typography.fontWeight.bold,
-                    }}
-                  >
-                    Direction
-                  </th>
-                  <th
-                    style={{
-                      padding: tokens.spacing[3],
-                      textAlign: 'right',
-                      fontSize: tokens.typography.fontSize.xs,
-                      color: tokens.colors.text.tertiary,
-                      fontWeight: tokens.typography.fontWeight.bold,
-                      cursor: 'pointer',
-                    }}
-                    onClick={() => handleSort('price')}
-                  >
-                    Entry Price
-                  </th>
-                  <th
-                    style={{
-                      padding: tokens.spacing[3],
-                      textAlign: 'right',
-                      fontSize: tokens.typography.fontSize.xs,
-                      color: tokens.colors.text.tertiary,
-                      fontWeight: tokens.typography.fontWeight.bold,
-                      cursor: 'pointer',
-                    }}
-                    onClick={() => handleSort('pnl')}
-                  >
-                    P/L(%)
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {sortedItems.map((item, idx) => (
-                <tr
-                  key={idx}
-                  style={{
-                    borderBottom: `1px solid ${tokens.colors.border.primary}`,
-                    cursor: selectedMarket === item.market ? 'default' : 'pointer',
-                    background: selectedMarket === item.market ? tokens.colors.bg.tertiary : 'transparent',
-                  }}
-                  onMouseEnter={(e) => {
-                    if (selectedMarket !== item.market) {
-                      e.currentTarget.style.background = tokens.colors.bg.secondary
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (selectedMarket !== item.market) {
-                      e.currentTarget.style.background = 'transparent'
-                    }
-                  }}
-                  onClick={() => setSelectedMarket(selectedMarket === item.market ? null : item.market)}
-                >
-                  <td style={{ padding: tokens.spacing[3] }}>
-                    <Text size="sm" weight="bold" style={{ color: tokens.colors.text.primary }}>
-                      {item.market}
-                    </Text>
-                  </td>
-                  <td style={{ padding: tokens.spacing[3] }}>
-                    <Text size="sm" style={{ color: tokens.colors.text.secondary }}>
-                      {item.direction === 'long' ? 'Long' : 'Short'}
-                    </Text>
-                  </td>
-                  <td style={{ padding: tokens.spacing[3], textAlign: 'right' }}>
-                    <Text size="sm" weight="bold" style={{ color: tokens.colors.text.secondary }}>
-                      ${item.price.toLocaleString()}
-                    </Text>
-                  </td>
-                  <td style={{ padding: tokens.spacing[3], textAlign: 'right' }}>
-                    <Text
-                      size="sm"
-                      weight="bold"
+              Current
+            </button>
+            <button
+              onClick={() => setViewMode('history')}
+              style={{
+                padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
+                borderRadius: tokens.radius.md,
+                border: `1px solid ${viewMode === 'history' ? tokens.colors.accent.primary : tokens.colors.border.primary}`,
+                background: viewMode === 'history' ? tokens.colors.accent.primary : 'transparent',
+                color: viewMode === 'history' ? '#fff' : tokens.colors.text.secondary,
+                fontSize: tokens.typography.fontSize.xs,
+                fontWeight: tokens.typography.fontWeight.bold,
+                cursor: 'pointer',
+              }}
+            >
+              History
+            </button>
+          </Box>
+        </Box>
+
+        {viewMode === 'current' ? (
+          // Current Holdings
+          items.length > 0 ? (
+            <Box style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ borderBottom: `1px solid ${tokens.colors.border.primary}` }}>
+                    <th style={{ ...thStyle, textAlign: 'left' }}>Market</th>
+                    <th style={{ ...thStyle, textAlign: 'left' }}>Direction</th>
+                    <th style={{ ...thStyle, textAlign: 'right' }}>Weight %</th>
+                    <th style={{ ...thStyle, textAlign: 'right' }}>P/L (%)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.map((item, idx) => (
+                    <tr
+                      key={idx}
                       style={{
-                        color: item.pnl >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error,
+                        borderBottom: `1px solid ${tokens.colors.border.primary}`,
+                        cursor: 'pointer',
+                        background: selectedMarket === item.market ? tokens.colors.bg.tertiary : 'transparent',
                       }}
+                      onClick={() => setSelectedMarket(selectedMarket === item.market ? null : item.market)}
                     >
-                      {item.pnl >= 0 ? '+' : ''}
-                      {item.pnl.toFixed(2)}%
-                    </Text>
-                  </td>
-                </tr>
-              ))}
-              </tbody>
-            </table>
-          </Box>
+                      <td style={{ padding: tokens.spacing[3] }}>
+                        <Text size="sm" weight="bold" style={{ color: tokens.colors.text.primary }}>
+                          {item.market}
+                        </Text>
+                      </td>
+                      <td style={{ padding: tokens.spacing[3] }}>
+                        <Text size="sm" style={{ 
+                          color: item.direction === 'long' ? tokens.colors.accent.success : tokens.colors.accent.error 
+                        }}>
+                          {item.direction === 'long' ? 'Long' : 'Short'}
+                        </Text>
+                      </td>
+                      <td style={{ padding: tokens.spacing[3], textAlign: 'right' }}>
+                        <Text size="sm" weight="bold" style={{ color: tokens.colors.text.secondary }}>
+                          {item.invested.toFixed(1)}%
+                        </Text>
+                      </td>
+                      <td style={{ padding: tokens.spacing[3], textAlign: 'right' }}>
+                        <Text
+                          size="sm"
+                          weight="bold"
+                          style={{ color: item.pnl >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error }}
+                        >
+                          {item.pnl >= 0 ? '+' : ''}{item.pnl.toFixed(2)}%
+                        </Text>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </Box>
+          ) : (
+            <EmptyState message="当前持仓数据暂不可用" subMessage="交易员目前可能没有公开持仓" />
+          )
         ) : (
-          <Box style={{ padding: tokens.spacing[8], textAlign: 'center' }}>
-            <Text size="sm" color="tertiary" style={{ marginBottom: tokens.spacing[2] }}>
-              投资组合数据需要绑定账户解锁
-            </Text>
-            <Text size="xs" color="tertiary">
-              连接交易所账户后可查看详细的持仓信息
-            </Text>
-          </Box>
+          // Position History
+          history.length > 0 ? (
+            <Box style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ borderBottom: `1px solid ${tokens.colors.border.primary}` }}>
+                    <th style={{ ...thStyle, textAlign: 'left' }}>Symbol</th>
+                    <th style={{ ...thStyle, textAlign: 'left' }}>Direction</th>
+                    <th style={{ ...thStyle, textAlign: 'right' }}>Entry</th>
+                    <th style={{ ...thStyle, textAlign: 'right' }}>Exit</th>
+                    <th style={{ ...thStyle, textAlign: 'right' }}>P/L</th>
+                    <th style={{ ...thStyle, textAlign: 'right' }}>Closed</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {history.map((item, idx) => (
+                    <tr
+                      key={idx}
+                      style={{ borderBottom: `1px solid ${tokens.colors.border.primary}` }}
+                    >
+                      <td style={{ padding: tokens.spacing[3] }}>
+                        <Text size="sm" weight="bold" style={{ color: tokens.colors.text.primary }}>
+                          {item.symbol}
+                        </Text>
+                      </td>
+                      <td style={{ padding: tokens.spacing[3] }}>
+                        <Text size="sm" style={{ 
+                          color: item.direction === 'long' ? tokens.colors.accent.success : tokens.colors.accent.error 
+                        }}>
+                          {item.direction === 'long' ? 'Long' : 'Short'}
+                        </Text>
+                      </td>
+                      <td style={{ padding: tokens.spacing[3], textAlign: 'right' }}>
+                        <Text size="sm" style={{ color: tokens.colors.text.secondary }}>
+                          ${item.entryPrice.toLocaleString()}
+                        </Text>
+                      </td>
+                      <td style={{ padding: tokens.spacing[3], textAlign: 'right' }}>
+                        <Text size="sm" style={{ color: tokens.colors.text.secondary }}>
+                          ${item.exitPrice.toLocaleString()}
+                        </Text>
+                      </td>
+                      <td style={{ padding: tokens.spacing[3], textAlign: 'right' }}>
+                        <Text
+                          size="sm"
+                          weight="bold"
+                          style={{ color: item.pnlPct >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error }}
+                        >
+                          {item.pnlPct >= 0 ? '+' : ''}{item.pnlPct.toFixed(2)}%
+                        </Text>
+                      </td>
+                      <td style={{ padding: tokens.spacing[3], textAlign: 'right' }}>
+                        <Text size="xs" style={{ color: tokens.colors.text.tertiary }}>
+                          {item.closeTime ? new Date(item.closeTime).toLocaleDateString() : '-'}
+                        </Text>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </Box>
+          ) : (
+            <EmptyState message="历史仓位数据暂不可用" subMessage="Position History 数据将在下次数据同步后显示" />
+          )
         )}
       </Box>
 
-      {/* Market Detail Drawer - 仅展示，无操作 */}
+      {/* Market Detail Drawer */}
       {selectedMarket && (
         <Box
           style={{
@@ -225,17 +210,8 @@ export default function PortfolioTable({ items }: PortfolioTableProps) {
           }}
           onClick={(e) => e.stopPropagation()}
         >
-          <Box
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              marginBottom: tokens.spacing[4],
-            }}
-          >
-            <Text size="lg" weight="black">
-              {selectedMarket}
-            </Text>
+          <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: tokens.spacing[4] }}>
+            <Text size="lg" weight="black">{selectedMarket}</Text>
             <button
               onClick={() => setSelectedMarket(null)}
               style={{
@@ -250,10 +226,30 @@ export default function PortfolioTable({ items }: PortfolioTableProps) {
             </button>
           </Box>
           <Text size="sm" color="secondary">
-            详情占位（待实现）
+            详细数据加载中...
           </Text>
         </Box>
       )}
     </>
+  )
+}
+
+const thStyle = {
+  padding: tokens.spacing[3],
+  fontSize: tokens.typography.fontSize.xs,
+  color: tokens.colors.text.tertiary,
+  fontWeight: tokens.typography.fontWeight.bold,
+}
+
+function EmptyState({ message, subMessage }: { message: string; subMessage: string }) {
+  return (
+    <Box style={{ padding: tokens.spacing[8], textAlign: 'center' }}>
+      <Text size="sm" color="tertiary" style={{ marginBottom: tokens.spacing[2] }}>
+        {message}
+      </Text>
+      <Text size="xs" color="tertiary">
+        {subMessage}
+      </Text>
+    </Box>
   )
 }

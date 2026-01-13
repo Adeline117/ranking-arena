@@ -7,37 +7,48 @@ import type { TraderPerformance } from '@/lib/data/trader'
 
 interface OverviewPerformanceCardProps {
   performance: TraderPerformance
-  profitableWeeksPct?: number
 }
 
-type Period = '90D' | '7D' | '30D' | '1Y' | '2Y' | 'All'
+type Period = '7D' | '30D' | '90D'
 
 /**
  * Performance卡片 - 交易员主页核心指标
  * ROI视觉权重最高，其他指标中性色
- * 时间选择弱化，默认90天
+ * 只显示 7D/30D/90D（Binance提供的时间段）
  */
-export default function OverviewPerformanceCard({ performance, profitableWeeksPct }: OverviewPerformanceCardProps) {
+export default function OverviewPerformanceCard({ performance }: OverviewPerformanceCardProps) {
   const [period, setPeriod] = useState<Period>('90D')
 
-  const getROI = () => {
+  // 根据时间段获取对应数据
+  const getData = () => {
     switch (period) {
       case '7D':
-        return performance.roi_7d || 0
+        return {
+          roi: performance.roi_7d,
+          pnl: performance.pnl_7d,
+          winRate: performance.win_rate_7d,
+          maxDrawdown: performance.max_drawdown_7d,
+        }
       case '30D':
-        return performance.roi_30d || 0
+        return {
+          roi: performance.roi_30d,
+          pnl: performance.pnl_30d,
+          winRate: performance.win_rate_30d,
+          maxDrawdown: performance.max_drawdown_30d,
+        }
       case '90D':
-        return performance.roi_90d || 0
-      case '1Y':
-        return performance.roi_1y || 0
-      case '2Y':
-        return performance.roi_2y || 0
       default:
-        return performance.roi_90d || 0
+        return {
+          roi: performance.roi_90d,
+          pnl: performance.pnl,
+          winRate: performance.win_rate,
+          maxDrawdown: performance.max_drawdown,
+        }
     }
   }
 
-  const roi = getROI()
+  const data = getData()
+  const { roi, pnl, winRate, maxDrawdown } = data
 
   return (
     <Box bg="secondary" p={6} radius="none" border="none">
@@ -53,7 +64,7 @@ export default function OverviewPerformanceCard({ performance, profitableWeeksPc
         <Text size="lg" weight="black" style={{ color: tokens.colors.text.primary }}>
           Performance
         </Text>
-        {/* 时间选择 - 弱化，放在小下拉菜单 */}
+        {/* 时间选择 - 只显示 7D/30D/90D */}
         <select
           value={period}
           onChange={(e) => setPeriod(e.target.value as Period)}
@@ -68,12 +79,9 @@ export default function OverviewPerformanceCard({ performance, profitableWeeksPc
             fontFamily: tokens.typography.fontFamily.sans.join(', '),
           }}
         >
-          <option value="90D">90D</option>
           <option value="7D">7D</option>
           <option value="30D">30D</option>
-          <option value="1Y">1Y</option>
-          <option value="2Y">2Y</option>
-          <option value="All">All</option>
+          <option value="90D">90D</option>
         </select>
       </Box>
 
@@ -83,21 +91,22 @@ export default function OverviewPerformanceCard({ performance, profitableWeeksPc
           size="3xl"
           weight="black"
           style={{
-            color: roi >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error,
+            color: roi !== undefined 
+              ? (roi >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error)
+              : tokens.colors.text.tertiary,
             lineHeight: 1.1,
             marginBottom: tokens.spacing[2],
             letterSpacing: '-0.02em',
           }}
         >
-          {roi >= 0 ? '+' : ''}
-          {roi.toFixed(2)}%
+          {roi !== undefined ? `${roi >= 0 ? '+' : ''}${roi.toFixed(2)}%` : 'N/A'}
         </Text>
         <Text size="xs" color="tertiary" style={{ fontWeight: tokens.typography.fontWeight.normal }}>
           ROI ({period})
         </Text>
       </Box>
 
-      {/* 辅助指标 - 中性色，视觉权重低 */}
+      {/* 辅助指标 - 显示关键数据（只显示有真实数据的指标） */}
       <Box
         style={{
           display: 'grid',
@@ -110,34 +119,42 @@ export default function OverviewPerformanceCard({ performance, profitableWeeksPc
         <Box>
           <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1] }}>
             <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[1] }}>
-              Return YTD
+              盈亏 (PnL)
             </Text>
-            <InfoIcon tooltip="年初至今的收益率，反映交易员今年的整体表现" />
+            <InfoIcon tooltip="选定时间段内的总盈亏金额" />
           </Box>
-          <Text size="base" weight="bold" style={{ color: tokens.colors.text.secondary }}>
-            {performance.return_ytd ? (performance.return_ytd >= 0 ? '+' : '') + performance.return_ytd.toFixed(2) + '%' : 'N/A'}
+          <Text size="base" weight="bold" style={{ 
+            color: pnl !== undefined 
+              ? (pnl >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error)
+              : tokens.colors.text.secondary 
+          }}>
+            {pnl !== undefined ? `${pnl >= 0 ? '+' : ''}$${Math.abs(pnl) >= 1000000 ? (pnl / 1000000).toFixed(2) + 'M' : Math.abs(pnl) >= 1000 ? (pnl / 1000).toFixed(2) + 'K' : pnl.toFixed(2)}` : 'N/A'}
           </Text>
         </Box>
         <Box>
           <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1] }}>
             <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[1] }}>
-              Return 2Y
+              胜率
             </Text>
-            <InfoIcon tooltip="过去两年的收益率，反映交易员的长期盈利能力" />
+            <InfoIcon tooltip="盈利交易占总交易次数的百分比" />
           </Box>
-          <Text size="base" weight="bold" style={{ color: tokens.colors.text.secondary }}>
-            {performance.return_2y ? (performance.return_2y >= 0 ? '+' : '') + performance.return_2y.toFixed(2) + '%' : 'N/A'}
+          <Text size="base" weight="bold" style={{ 
+            color: winRate !== undefined && winRate > 50 ? tokens.colors.accent.success : tokens.colors.text.secondary 
+          }}>
+            {winRate !== undefined ? `${winRate.toFixed(1)}%` : 'N/A'}
           </Text>
         </Box>
         <Box>
           <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1] }}>
             <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[1] }}>
-              Profitable Weeks
+              最大回撤
             </Text>
-            <InfoIcon tooltip="盈利周数占总周数的百分比，反映交易员盈利能力的稳定性" />
+            <InfoIcon tooltip="从最高点到最低点的最大跌幅" />
           </Box>
-          <Text size="base" weight="bold" style={{ color: tokens.colors.text.secondary }}>
-            {profitableWeeksPct !== undefined ? `${profitableWeeksPct.toFixed(2)}%` : 'N/A'}
+          <Text size="base" weight="bold" style={{ 
+            color: maxDrawdown !== undefined ? tokens.colors.accent.error : tokens.colors.text.secondary 
+          }}>
+            {maxDrawdown !== undefined ? `-${maxDrawdown.toFixed(2)}%` : 'N/A'}
           </Text>
         </Box>
       </Box>

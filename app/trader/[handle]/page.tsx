@@ -22,12 +22,14 @@ import {
   getTraderPerformance,
   getTraderStats,
   getTraderPortfolio,
+  getTraderPositionHistory,
   getTraderFeed,
   getSimilarTraders,
   type TraderProfile,
   type TraderPerformance,
   type TraderStats,
   type PortfolioItem,
+  type PositionHistoryItem,
   type TraderFeedItem,
 } from '@/lib/data/trader'
 
@@ -41,6 +43,7 @@ export default function TraderPage(props: { params: { handle: string } | Promise
   const [performance, setPerformance] = useState<TraderPerformance | null>(null)
   const [stats, setStats] = useState<TraderStats | null>(null)
   const [portfolio, setPortfolio] = useState<PortfolioItem[]>([])
+  const [positionHistory, setPositionHistory] = useState<PositionHistoryItem[]>([])
   const [feed, setFeed] = useState<TraderFeedItem[]>([])
   const [similarTraders, setSimilarTraders] = useState<TraderProfile[]>([])
   const [loading, setLoading] = useState(true)
@@ -81,11 +84,12 @@ export default function TraderPage(props: { params: { handle: string } | Promise
       setLoading(true)
 
       try {
-        const [profileData, performanceData, statsData, portfolioData, feedData, similarData] = await Promise.all([
+        const [profileData, performanceData, statsData, portfolioData, historyData, feedData, similarData] = await Promise.all([
           getTraderByHandle(handle),
           getTraderPerformance(handle),
           getTraderStats(handle),
           getTraderPortfolio(handle),
+          getTraderPositionHistory(handle),
           getTraderFeed(handle),
           getSimilarTraders(handle),
         ])
@@ -94,6 +98,7 @@ export default function TraderPage(props: { params: { handle: string } | Promise
         setPerformance(performanceData)
         setStats(statsData)
         setPortfolio(portfolioData)
+        setPositionHistory(historyData)
         setFeed(feedData)
         setSimilarTraders(similarData)
       } catch (error) {
@@ -195,10 +200,7 @@ export default function TraderPage(props: { params: { handle: string } | Promise
             {/* Left Column - 核心绩效指标和动态 */}
             <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[6] }}>
               {performance && (
-                <OverviewPerformanceCard
-                  performance={performance}
-                  profitableWeeksPct={stats?.additionalStats?.profitableWeeksPct}
-                />
+                <OverviewPerformanceCard performance={performance} />
               )}
               {/* 置顶帖子 - Performance和动态之间 */}
               {feed.filter((f) => f.is_pinned && f.type !== 'group_post').length > 0 && (
@@ -227,7 +229,7 @@ export default function TraderPage(props: { params: { handle: string } | Promise
           <StatsPage stats={stats} traderHandle={profile.handle} />
         )}
 
-        {activeTab === 'portfolio' && <PortfolioTable items={portfolio} />}
+        {activeTab === 'portfolio' && <PortfolioTable items={portfolio} history={positionHistory} />}
       </Box>
     </Box>
   )

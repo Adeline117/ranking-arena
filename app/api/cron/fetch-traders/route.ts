@@ -66,25 +66,42 @@ export async function POST(req: Request) {
 
     // 执行数据抓取脚本
     const scripts = [
-      { name: "binance", script: "scripts/import_binance_copy_trading_90d.mjs" },
-      { name: "binance_web3", script: "scripts/fetch_binance_web3_all_pages.mjs" },
-      { name: "bybit", script: "scripts/import_bybit_90d_roi.mjs" },
-      { name: "bitget", script: "scripts/import_bitget_90d_roi.mjs" },
-      { name: "mexc", script: "scripts/import_mexc_90d_roi.mjs" },
-      { name: "coinex", script: "scripts/import_coinex_90d_roi.mjs" },
-      { name: "okx", script: "scripts/import_okx_90d_roi.mjs" },
-      { name: "kucoin", script: "scripts/import_kucoin_90d_roi.mjs" },
-      { name: "gate", script: "scripts/import_gate_90d_roi.mjs" },
+      // Binance 多时间段排行榜抓取
+      { name: "binance_7d", script: "scripts/import_binance_copy_trading_90d.mjs", args: ["7D"] },
+      { name: "binance_30d", script: "scripts/import_binance_copy_trading_90d.mjs", args: ["30D"] },
+      { name: "binance_90d", script: "scripts/import_binance_copy_trading_90d.mjs", args: ["90D"] },
+      // Binance 交易员详情页抓取
+      { name: "binance_details", script: "scripts/fetch_binance_trader_details.mjs", args: [] },
+      // Binance Web3 多时间段排行榜抓取
+      { name: "binance_web3_7d", script: "scripts/fetch_binance_web3_all_pages.mjs", args: ["7D"] },
+      { name: "binance_web3_30d", script: "scripts/fetch_binance_web3_all_pages.mjs", args: ["30D"] },
+      { name: "binance_web3_90d", script: "scripts/fetch_binance_web3_all_pages.mjs", args: ["90D"] },
+      // Binance Web3 交易员详情页抓取
+      { name: "binance_web3_details", script: "scripts/fetch_binance_web3_trader_details.mjs", args: [] },
+      // Bybit 多时间段排行榜抓取
+      { name: "bybit_7d", script: "scripts/import_bybit_90d_roi.mjs", args: ["7D"] },
+      { name: "bybit_30d", script: "scripts/import_bybit_90d_roi.mjs", args: ["30D"] },
+      { name: "bybit_90d", script: "scripts/import_bybit_90d_roi.mjs", args: ["90D"] },
+      // Bybit 交易员详情页抓取
+      { name: "bybit_details", script: "scripts/fetch_bybit_trader_details.mjs", args: [] },
+      // 其他数据源
+      { name: "bitget", script: "scripts/import_bitget_90d_roi.mjs", args: [] },
+      { name: "mexc", script: "scripts/import_mexc_90d_roi.mjs", args: [] },
+      { name: "coinex", script: "scripts/import_coinex_90d_roi.mjs", args: [] },
+      { name: "okx", script: "scripts/import_okx_90d_roi.mjs", args: [] },
+      { name: "kucoin", script: "scripts/import_kucoin_90d_roi.mjs", args: [] },
+      { name: "gate", script: "scripts/import_gate_90d_roi.mjs", args: [] },
     ];
 
-    for (const { name, script } of scripts) {
+    for (const { name, script, args = [] } of scripts) {
       try {
         console.log(`开始执行 ${name} 数据抓取...`);
+        const command = `node ${script}${args.length > 0 ? ` ${args.join(' ')}` : ''}`
         const { stdout } = await execAsync(
-          `node ${script}`,
+          command,
           {
             cwd: process.cwd(),
-            timeout: 300000, // 5分钟超时
+            timeout: 300000, // 5分钟超时（详情页抓取可能需要更长时间）
             env: {
               ...process.env,
               SUPABASE_URL: url,

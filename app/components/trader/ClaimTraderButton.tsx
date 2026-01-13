@@ -41,7 +41,10 @@ export default function ClaimTraderButton({ traderId, handle, userId, source = '
         console.warn('[ClaimTrader] 用户ID不匹配:', { provided: userId, actual: actualUserId })
       }
 
-      const { data, error } = await supabase
+      // 使用 maybeSingle() 查询连接状态
+      // 注意：maybeSingle() 在没有找到记录时会返回 { data: null, error: {} }
+      // 这是正常行为，不需要记录错误
+      const { data } = await supabase
         .from('user_exchange_connections')
         .select('id, exchange, is_active')
         .eq('user_id', actualUserId)
@@ -49,68 +52,7 @@ export default function ClaimTraderButton({ traderId, handle, userId, source = '
         .eq('is_active', true)
         .maybeSingle()
 
-      // 检查是否有实际的错误内容（空对象 {} 表示正常情况，不应该记录为错误）
-      // 只有当 error 对象有实际的错误属性（message/code/hint/details）时，才是真正的错误
-      if (error) {
-        // 使用 JSON.stringify 检查是否为空对象（最可靠的方法）
-        let hasErrorContent = false
-        try {
-          const errorJson = JSON.stringify(error)
-          if (errorJson !== '{}' && errorJson !== 'null') {
-            // 不是空对象，检查是否有有效的错误字段
-            const hasMessage = !!(error.message && typeof error.message === 'string' && error.message.trim() !== '')
-            const hasCode = !!(error.code !== undefined && error.code !== null && error.code !== '' && 
-                           (typeof error.code === 'string' || typeof error.code === 'number'))
-            const hasHint = !!(error.hint && typeof error.hint === 'string' && error.hint.trim() !== '')
-            
-            // details 可能是对象，需要检查是否为空对象
-            let hasDetails = false
-            if (error.details !== undefined && error.details !== null) {
-              if (typeof error.details === 'string' && error.details.trim() !== '') {
-                hasDetails = true
-              } else if (typeof error.details === 'object') {
-                try {
-                  const detailsJson = JSON.stringify(error.details)
-                  hasDetails = detailsJson !== '{}' && detailsJson !== 'null'
-                } catch (e) {
-                  // JSON.stringify 失败，忽略
-                }
-              }
-            }
-            
-            hasErrorContent = hasMessage || hasCode || hasHint || hasDetails
-          }
-          // 如果 errorJson === '{}'，hasErrorContent 保持为 false
-        } catch (e) {
-          // JSON.stringify 失败，使用备用方法
-          const errorKeys = Object.keys(error || {})
-          if (errorKeys.length > 0) {
-            const hasMessage = !!(error.message && typeof error.message === 'string' && error.message.trim() !== '')
-            const hasCode = !!(error.code !== undefined && error.code !== null && error.code !== '')
-            const hasHint = !!(error.hint && typeof error.hint === 'string' && error.hint.trim() !== '')
-            hasErrorContent = hasMessage || hasCode || hasHint
-          }
-        }
-        
-        // 只有在真正的错误（如权限错误、网络错误等）时才记录错误
-        // 空错误对象 {} 不应该记录为错误
-        if (hasErrorContent) {
-          console.error('[ClaimTrader] 检查连接失败:', {
-            error,
-            message: error.message,
-            details: error.details,
-            hint: error.hint,
-            code: error.code,
-            userId: actualUserId,
-            source,
-          })
-        }
-        // 如果 hasErrorContent 是 false（空对象 {}），则不记录错误
-        // 这是正常的"没找到连接"情况，不应该记录为错误
-      }
-      
-      // 无论是否有错误，都设置连接状态（没找到连接或查询失败都是 false）
-      // 注意：即使是空错误对象 {}（正常的"没找到记录"情况），也应该设置连接状态为 false
+      // 设置连接状态：有数据则已连接，无数据则未连接
       setHasConnection(!!data)
     } catch (err: any) {
       // 检查是否有实际的错误内容

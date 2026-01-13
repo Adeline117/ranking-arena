@@ -42,25 +42,41 @@ export default function HomePage() {
     })
   }, [])
 
-  /* ---------- ranking flow ---------- */
-  const [traders, setTraders] = useState<Trader[]>([])
+  /* ---------- ranking flow (多时间段) ---------- */
+  const [traders90D, setTraders90D] = useState<Trader[]>([])
+  const [traders30D, setTraders30D] = useState<Trader[]>([])
+  const [traders7D, setTraders7D] = useState<Trader[]>([])
   const [loadingTraders, setLoadingTraders] = useState(true)
+  const [activeTimeRange, setActiveTimeRange] = useState<'90D' | '30D' | '7D'>('90D')
 
   useEffect(() => {
     const load = async () => {
       setLoadingTraders(true)
       try {
         const { loadAllTraders } = await import('@/lib/data/trader-loader')
-        const tradersData = await loadAllTraders(supabase)
+        
+        // 并行加载三个时间段的数据
+        const [data90D, data30D, data7D] = await Promise.all([
+          loadAllTraders(supabase, '90D'),
+          loadAllTraders(supabase, '30D'),
+          loadAllTraders(supabase, '7D'),
+        ])
+        
         console.log('[HomePage] 加载到的交易者数据:', {
-          count: tradersData.length,
-          sample: tradersData.slice(0, 3).map(t => ({ id: t.id, handle: t.handle, roi: t.roi })),
+          '90D': data90D.length,
+          '30D': data30D.length,
+          '7D': data7D.length,
         })
-        setTraders(tradersData)
+        
+        setTraders90D(data90D)
+        setTraders30D(data30D)
+        setTraders7D(data7D)
       } catch (error) {
         console.error('[HomePage] 加载交易者数据失败:', error)
         logError(error, 'HomePage')
-        setTraders([]) // 确保在错误时设置为空数组
+        setTraders90D([])
+        setTraders30D([])
+        setTraders7D([])
       } finally {
         setLoadingTraders(false)
       }
@@ -71,10 +87,13 @@ export default function HomePage() {
     // 每5分钟自动刷新一次数据
     const interval = setInterval(() => {
       load()
-    }, 5 * 60 * 1000) // 5分钟 = 300000毫秒
+    }, 5 * 60 * 1000)
     
     return () => clearInterval(interval)
   }, [email])
+  
+  // 根据当前选择的时间段返回对应的数据
+  const currentTraders = activeTimeRange === '90D' ? traders90D : activeTimeRange === '30D' ? traders30D : traders7D
 
   /* ---------- trader compare ---------- */
   const [compareTraders, setCompareTraders] = useState<Trader[]>([])
@@ -156,11 +175,46 @@ export default function HomePage() {
 
           {/* 中：排名流（产品核心） */}
           <Box as="section" className="home-ranking-section">
+            {/* 时间段切换按钮 */}
+            <Box
+              style={{
+                display: 'flex',
+                gap: tokens.spacing[2],
+                marginBottom: tokens.spacing[3],
+                padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+                background: tokens.colors.bg.secondary,
+                borderRadius: tokens.radius.lg,
+                border: `1px solid ${tokens.colors.border.primary}`,
+              }}
+            >
+              {(['90D', '30D', '7D'] as const).map((range) => (
+                <button
+                  key={range}
+                  onClick={() => setActiveTimeRange(range)}
+                  style={{
+                    flex: 1,
+                    padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
+                    background: activeTimeRange === range ? tokens.colors.accent.primary : 'transparent',
+                    color: activeTimeRange === range ? '#fff' : tokens.colors.text.secondary,
+                    border: 'none',
+                    borderRadius: tokens.radius.md,
+                    fontSize: tokens.typography.fontSize.sm,
+                    fontWeight: tokens.typography.fontWeight.bold,
+                    cursor: 'pointer',
+                    transition: `all ${tokens.transition.base}`,
+                  }}
+                >
+                  {range === '90D' ? '90天' : range === '30D' ? '30天' : '7天'}
+                </button>
+              ))}
+            </Box>
+            
             <RankingTable
-              traders={traders}
+              traders={currentTraders}
               loading={loadingTraders}
               loggedIn={!!email}
-              source={traders.length > 0 ? traders[0].source : 'binance_web3'}
+              source={currentTraders.length > 0 ? currentTraders[0].source : 'binance'}
+              timeRange={activeTimeRange}
             />
           </Box>
 

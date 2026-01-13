@@ -1,11 +1,10 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../../Base'
 import type { TraderStats } from '@/lib/data/trader'
 import TradingViewShell from '../TradingViewShell'
-import { useLanguage } from '../../Utils/LanguageProvider'
 
 interface StatsPageProps {
   stats: TraderStats
@@ -13,170 +12,29 @@ interface StatsPageProps {
 }
 
 export default function StatsPage({ stats, traderHandle }: StatsPageProps) {
-  const { t } = useLanguage()
-  
-  // Performance月度数据 - 如果没有数据，显示空状态
-  const monthlyData = useMemo(() => {
-    return stats.monthlyPerformance || []
-  }, [stats.monthlyPerformance])
-
-  // 常用交易币种 - 如果没有数据，显示空状态
+  // 常用交易币种
   const frequentlyTraded = stats.frequentlyTraded || []
-
-  // 交易统计 - 如果没有数据，显示空状态
+  
+  // 交易统计
   const trading = stats.trading
-
-  // 额外统计 - 使用实际数据，如果没有则显示undefined
+  
+  // 额外统计
   const additionalStats = stats.additionalStats
-
-  // 这些数据需要绑定账户才能获取，暂时使用占位符
-  const traderReturn = undefined
-  const spx500Return = undefined
 
   return (
     <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[6] }}>
-      {/* Performance Section */}
-      <Box bg="secondary" p={6} radius="xl" border="primary">
-        <Text size="lg" weight="black" style={{ marginBottom: tokens.spacing[4] }}>
-          Performance
-        </Text>
-
-        {monthlyData.length > 0 ? (
-          <>
-            {/* Bar Chart */}
-            <Box style={{ marginTop: tokens.spacing[4], marginBottom: tokens.spacing[4] }}>
-              <PerformanceBarChart data={monthlyData} />
-            </Box>
-
-            {/* Month Labels */}
-            <Box
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(12, 1fr)',
-                gap: tokens.spacing[2],
-                marginTop: tokens.spacing[2],
-              }}
-            >
-              {monthlyData.map((item, i) => (
-                <Text
-                  key={i}
-                  size="xs"
-                  color="tertiary"
-                  style={{ textAlign: 'center', fontWeight: tokens.typography.fontWeight.normal }}
-                >
-                  {item.month}
-                </Text>
-              ))}
-            </Box>
-
-            {/* Monthly Grid */}
-            <Box
-              bg="primary"
-              p={3}
-              radius="lg"
-              border="secondary"
-              style={{
-                marginTop: tokens.spacing[3],
-                display: 'grid',
-                gridTemplateColumns: '60px repeat(12, 1fr)',
-                gap: tokens.spacing[2],
-                alignItems: 'center',
-                fontSize: tokens.typography.fontSize.xs,
-              }}
-            >
-              <Text size="xs" color="tertiary" style={{ fontWeight: tokens.typography.fontWeight.normal }}>
-                2025
-              </Text>
-              {monthlyData.map((item, i) => (
-                <Box
-                  key={i}
-                  style={{
-                    textAlign: 'center',
-                    padding: `${tokens.spacing[1]} 0`,
-                    borderRadius: tokens.radius.md,
-                    background: item.value >= 0
-                      ? 'rgba(47, 229, 125, 0.12)'
-                      : 'rgba(255, 77, 77, 0.12)',
-                    color: item.value >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error,
-                    fontWeight: tokens.typography.fontWeight.black,
-                  }}
-                >
-                  {item.value >= 0 ? '+' : ''}
-                  {item.value.toFixed(2)}%
-                </Box>
-              ))}
-            </Box>
-
-            <Text
-              size="xs"
-              color="tertiary"
-              style={{ marginTop: tokens.spacing[3], fontStyle: 'italic' }}
-            >
-              Past performance is not indicative of future results.
-            </Text>
-          </>
-        ) : (
-          <Box style={{ padding: tokens.spacing[8], textAlign: 'center' }}>
-            <Text size="sm" color="tertiary">
-              月度绩效数据暂不可用
-            </Text>
-          </Box>
-        )}
-      </Box>
-
-      {/* Breakdown Section */}
+      {/* Asset Breakdown (Frequently Traded) */}
       <BreakdownSection frequentlyTraded={frequentlyTraded} />
 
       {/* Chart + Compare Two Columns */}
       <Box style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: tokens.spacing[6] }}>
-        {/* Chart */}
+        {/* Chart - 7D/30D/90D */}
         <Box bg="secondary" p={0} radius="xl" border="primary" style={{ overflow: 'hidden' }}>
-          <TradingViewShell symbol={traderHandle} timeframe="1Y" />
+          <TradingViewShell symbol={traderHandle} timeframe="90D" />
         </Box>
 
         {/* Compare Portfolio */}
-        <Box bg="secondary" p={6} radius="xl" border="primary">
-          <Box
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              marginBottom: tokens.spacing[4],
-            }}
-          >
-            <Text size="lg" weight="black">
-              Compare portfolio
-            </Text>
-            <select
-              style={{
-                padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
-                borderRadius: tokens.radius.md,
-                border: `1px solid ${tokens.colors.border.primary}`,
-                background: tokens.colors.bg.primary,
-                color: tokens.colors.text.primary,
-                fontSize: tokens.typography.fontSize.xs,
-                fontWeight: tokens.typography.fontWeight.bold,
-                cursor: 'pointer',
-                outline: 'none',
-              }}
-            >
-              <option>SPX500</option>
-              <option>BTC</option>
-              <option>ETH</option>
-            </select>
-          </Box>
-
-          {/* Compare Chart */}
-          <Box style={{ marginTop: tokens.spacing[4], marginBottom: tokens.spacing[3] }}>
-            <CompareChart height={220} />
-          </Box>
-
-          {/* Compare Rows */}
-          <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
-            <CompareRow name={traderHandle} pct={traderReturn} />
-            <CompareRow name="SPX500" pct={spx500Return} />
-          </Box>
-        </Box>
+        <ComparePortfolioSection traderHandle={traderHandle} />
       </Box>
 
       {/* Trading Section */}
@@ -185,165 +43,99 @@ export default function StatsPage({ stats, traderHandle }: StatsPageProps) {
           Trading
         </Text>
 
-        {trading ? (
-          <>
-            {/* Trading Stats */}
-            <Box
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(3, 1fr)',
-                gap: tokens.spacing[4],
-                marginBottom: tokens.spacing[6],
-              }}
-            >
-              <MiniKpi label="Total Trades (12M)" value={String(trading.totalTrades12M)} />
-              <MiniKpi
-                label="Avg. Profit / Loss"
-                value={`${trading.avgProfit.toFixed(2)} / ${trading.avgLoss.toFixed(2)}`}
-              />
-              <MiniKpi label="Profitable Trades" value={`${trading.profitableTradesPct.toFixed(2)}%`} />
-            </Box>
-          </>
+        {trading && (trading.totalTrades12M > 0 || trading.profitableTradesPct > 0) ? (
+          <Box
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(3, 1fr)',
+              gap: tokens.spacing[4],
+              marginBottom: tokens.spacing[6],
+            }}
+          >
+            <MiniKpi label="Total Trades (90D)" value={trading.totalTrades12M > 0 ? String(trading.totalTrades12M) : 'N/A'} />
+            <MiniKpi
+              label="Avg. Profit / Loss"
+              value={trading.avgProfit > 0 || trading.avgLoss < 0 
+                ? `${trading.avgProfit.toFixed(2)}% / ${trading.avgLoss.toFixed(2)}%`
+                : 'N/A'
+              }
+            />
+            <MiniKpi label="Profitable Trades" value={trading.profitableTradesPct > 0 ? `${trading.profitableTradesPct.toFixed(2)}%` : 'N/A'} />
+          </Box>
         ) : (
           <Box style={{ padding: tokens.spacing[4], textAlign: 'center', marginBottom: tokens.spacing[6] }}>
             <Text size="sm" color="tertiary">
-              交易统计数据需要绑定账户解锁
+              交易统计数据暂不可用
             </Text>
           </Box>
         )}
 
         {/* Frequently Traded */}
-        {frequentlyTraded.length > 0 ? (
+        {frequentlyTraded.length > 0 && (
           <>
-            <Box
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                marginBottom: tokens.spacing[4],
-              }}
-            >
-              <Text size="lg" weight="black">
-                Frequently traded
-              </Text>
-              <button
-                style={{
-                  padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
-                  borderRadius: tokens.radius.md,
-                  border: `1px solid ${tokens.colors.border.primary}`,
-                  background: 'transparent',
-                  color: tokens.colors.text.secondary,
-                  fontSize: tokens.typography.fontSize.xs,
-                  fontWeight: tokens.typography.fontWeight.bold,
-                  cursor: 'pointer',
-                }}
-              >
-                View all
-              </button>
-            </Box>
-
+            <Text size="lg" weight="black" style={{ marginBottom: tokens.spacing[4] }}>
+              Frequently traded
+            </Text>
             <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3], marginBottom: tokens.spacing[6] }}>
-              {frequentlyTraded.map((item, idx) => (
-            <Box
-              key={idx}
-              bg="primary"
-              p={4}
-              radius="lg"
-              border="secondary"
-              style={{
-                display: 'grid',
-                gridTemplateColumns: '140px 1fr 120px',
-                gap: tokens.spacing[3],
-                alignItems: 'center',
-              }}
-            >
-              <Box>
-                <Text size="sm" weight="black">
-                  {item.symbol}
-                </Text>
-                <Text size="xs" color="tertiary">
-                  {item.weightPct.toFixed(2)}%
-                </Text>
-              </Box>
-
-              <Box style={{ fontSize: tokens.typography.fontSize.xs }}>
-                <Box style={{ marginBottom: tokens.spacing[1] }}>
-                  <Text
-                    size="xs"
-                    weight="black"
-                    style={{
-                      color: tokens.colors.accent.success,
-                      marginRight: tokens.spacing[1],
-                    }}
-                  >
-                    +{item.avgProfit.toFixed(2)}%
-                  </Text>
-                  <Text size="xs" color="secondary">
-                    Avg. Profit
-                  </Text>
+              {frequentlyTraded.slice(0, 5).map((item, idx) => (
+                <Box
+                  key={idx}
+                  bg="primary"
+                  p={4}
+                  radius="lg"
+                  border="secondary"
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: '140px 1fr 120px',
+                    gap: tokens.spacing[3],
+                    alignItems: 'center',
+                  }}
+                >
+                  <Box>
+                    <Text size="sm" weight="black">{item.symbol}</Text>
+                    <Text size="xs" color="tertiary">{item.weightPct.toFixed(2)}%</Text>
+                  </Box>
+                  <Box style={{ fontSize: tokens.typography.fontSize.xs }}>
+                    <Box style={{ marginBottom: tokens.spacing[1] }}>
+                      <Text size="xs" weight="black" style={{ color: tokens.colors.accent.success, marginRight: tokens.spacing[1] }}>
+                        +{item.avgProfit.toFixed(2)}%
+                      </Text>
+                      <Text size="xs" color="secondary">Avg. Profit</Text>
+                    </Box>
+                    <Box>
+                      <Text size="xs" weight="black" style={{ color: tokens.colors.accent.error, marginRight: tokens.spacing[1] }}>
+                        {item.avgLoss.toFixed(2)}%
+                      </Text>
+                      <Text size="xs" color="secondary">Avg. Loss</Text>
+                    </Box>
+                  </Box>
+                  <Box style={{ textAlign: 'right' }}>
+                    <Text size="sm" weight="black">{item.profitablePct.toFixed(2)}%</Text>
+                    <Text size="xs" color="tertiary">Profitable</Text>
+                  </Box>
                 </Box>
-                <Box>
-                  <Text
-                    size="xs"
-                    weight="black"
-                    style={{
-                      color: tokens.colors.accent.error,
-                      marginRight: tokens.spacing[1],
-                    }}
-                  >
-                    {item.avgLoss.toFixed(2)}%
-                  </Text>
-                  <Text size="xs" color="secondary">
-                    Avg. Loss
-                  </Text>
-                </Box>
-              </Box>
-
-              <Box style={{ textAlign: 'right' }}>
-                <Text size="sm" weight="black">
-                  {item.profitablePct.toFixed(2)}%
-                </Text>
-                <Text size="xs" color="tertiary">
-                  Profitable
-                </Text>
-              </Box>
-            </Box>
-          ))}
+              ))}
             </Box>
           </>
-        ) : (
-          <Box style={{ padding: tokens.spacing[4], textAlign: 'center', marginBottom: tokens.spacing[6] }}>
-            <Text size="sm" color="tertiary">
-              常用交易币种数据需要绑定账户解锁
-            </Text>
-          </Box>
         )}
 
-        {/* Additional Stats */}
+        {/* Additional Stats - 只显示有数据的字段 */}
         <Box>
           <Text size="lg" weight="black" style={{ marginBottom: tokens.spacing[4] }}>
             Additional stats
           </Text>
-          <Box style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: tokens.spacing[4] }}>
-            <MiniKpi 
-              label="Trades per week" 
-              value={additionalStats?.tradesPerWeek !== undefined ? additionalStats.tradesPerWeek.toFixed(2) : 'N/A'} 
-              tooltip="Derived from public leaderboard snapshots"
-            />
+          <Box style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: tokens.spacing[4] }}>
             <MiniKpi 
               label="Avg. holdings time" 
               value={additionalStats?.avgHoldingTime || 'N/A'} 
-              tooltip="Derived from public leaderboard snapshots"
             />
             <MiniKpi 
-              label="Tracked since (first seen in Arena)" 
-              value={additionalStats?.activeSince || '—'} 
-              isPlaceholder={!additionalStats?.activeSince}
+              label="最大回撤" 
+              value={additionalStats?.maxDrawdown !== undefined ? `${additionalStats.maxDrawdown.toFixed(2)}%` : 'N/A'} 
             />
             <MiniKpi 
-              label="Profitable weeks" 
-              value={additionalStats?.profitableWeeksPct !== undefined ? `${additionalStats.profitableWeeksPct.toFixed(2)}%` : 'N/A'} 
-              tooltip="Derived from public leaderboard snapshots"
+              label="Tracked since" 
+              value={additionalStats?.activeSince || 'N/A'} 
             />
           </Box>
         </Box>
@@ -353,168 +145,87 @@ export default function StatsPage({ stats, traderHandle }: StatsPageProps) {
 }
 
 // Helper Components
-function MiniKpi({ 
-  label, 
-  value, 
-  tooltip, 
-  isPlaceholder = false 
-}: { 
-  label: string
-  value: string
-  tooltip?: string
-  isPlaceholder?: boolean
-}) {
-  const [showTooltip, setShowTooltip] = useState(false)
-  
+function MiniKpi({ label, value }: { label: string; value: string }) {
   return (
-    <Box
-      bg="primary"
-      p={3}
-      radius="lg"
-      border="secondary"
-      style={{ position: 'relative' }}
-    >
-      <Box 
-        style={{ 
-          display: 'flex', 
-          alignItems: 'center', 
-          gap: tokens.spacing[1],
-          marginBottom: tokens.spacing[1],
-        }}
-      >
-        <Text 
-          size="xs" 
-          color="tertiary" 
-          style={{ fontWeight: tokens.typography.fontWeight.normal }}
-        >
-          {label}
-        </Text>
-        {tooltip && (
-          <Box
-            style={{
-              position: 'relative',
-              cursor: 'help',
-            }}
-            onMouseEnter={() => setShowTooltip(true)}
-            onMouseLeave={() => setShowTooltip(false)}
-          >
-            <Text size="xs" color="tertiary" style={{ fontSize: '12px' }}>
-              ℹ️
-            </Text>
-            {showTooltip && (
-              <Box
-                style={{
-                  position: 'absolute',
-                  bottom: '100%',
-                  left: '50%',
-                  transform: 'translateX(-50%)',
-                  marginBottom: tokens.spacing[2],
-                  padding: tokens.spacing[2],
-                  background: tokens.colors.bg.secondary,
-                  border: `1px solid ${tokens.colors.border.primary}`,
-                  borderRadius: tokens.radius.md,
-                  boxShadow: tokens.shadow.md,
-                  fontSize: tokens.typography.fontSize.xs,
-                  color: tokens.colors.text.secondary,
-                  whiteSpace: 'nowrap',
-                  zIndex: 1000,
-                  maxWidth: '250px',
-                }}
-              >
-                {tooltip}
-              </Box>
-            )}
-          </Box>
-        )}
-      </Box>
-      <Text 
-        size="lg" 
-        weight="black"
-        style={{
-          color: isPlaceholder ? tokens.colors.text.tertiary : tokens.colors.text.primary,
-        }}
-      >
-        {isPlaceholder && value === '—' ? 'Unlock by connecting exchange account' : value}
+    <Box bg="primary" p={3} radius="lg" border="secondary">
+      <Text size="xs" color="tertiary" style={{ fontWeight: tokens.typography.fontWeight.normal, marginBottom: tokens.spacing[1] }}>
+        {label}
+      </Text>
+      <Text size="lg" weight="black" style={{ color: value === 'N/A' ? tokens.colors.text.tertiary : tokens.colors.text.primary }}>
+        {value}
       </Text>
     </Box>
   )
 }
 
-function PerformanceBarChart({ data }: { data: Array<{ month: string; value: number }> }) {
-  const maxValue = Math.max(...data.map((d) => Math.abs(d.value)), 1)
-  const height = 180
-  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null)
+// Compare Portfolio Section with 7D/30D/90D selector
+function ComparePortfolioSection({ traderHandle }: { traderHandle: string }) {
+  const [period, setPeriod] = useState<'7D' | '30D' | '90D'>('90D')
+  const [compareWith, setCompareWith] = useState<'BTC' | 'ETH' | 'SPX500'>('BTC')
 
   return (
-    <Box
-      style={{
-        height,
-        display: 'flex',
-        alignItems: 'flex-end',
-        gap: tokens.spacing[2],
-        position: 'relative',
-      }}
-    >
-      {data.map((item, i) => {
-        const barHeight = Math.round((Math.abs(item.value) / maxValue) * (height - 20))
-        const isPos = item.value >= 0
-        const isHovered = hoveredIndex === i
-
-        return (
-          <Box
-            key={i}
+    <Box bg="secondary" p={6} radius="xl" border="primary">
+      <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: tokens.spacing[4] }}>
+        <Text size="lg" weight="black">Compare portfolio</Text>
+        <Box style={{ display: 'flex', gap: tokens.spacing[2] }}>
+          <select
+            value={period}
+            onChange={(e) => setPeriod(e.target.value as '7D' | '30D' | '90D')}
             style={{
-              flex: 1,
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'flex-end',
-              position: 'relative',
+              padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
+              borderRadius: tokens.radius.md,
+              border: `1px solid ${tokens.colors.border.primary}`,
+              background: tokens.colors.bg.primary,
+              color: tokens.colors.text.primary,
+              fontSize: tokens.typography.fontSize.xs,
+              fontWeight: tokens.typography.fontWeight.bold,
+              cursor: 'pointer',
             }}
-            onMouseEnter={() => setHoveredIndex(i)}
-            onMouseLeave={() => setHoveredIndex(null)}
           >
-            <Box
-              style={{
-                height: barHeight,
-                borderRadius: tokens.radius.md,
-                background: isPos
-                  ? 'rgba(47, 229, 125, 0.55)'
-                  : 'rgba(255, 77, 77, 0.55)',
-                border: `1px solid ${tokens.colors.border.primary}`,
-                minHeight: 4,
-                cursor: 'pointer',
-              }}
-            />
-            {isHovered && (
-              <Box
-                style={{
-                  position: 'absolute',
-                  bottom: barHeight + tokens.spacing[2],
-                  left: '50%',
-                  transform: 'translateX(-50%)',
-                  padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
-                  background: tokens.colors.bg.tertiary,
-                  border: `1px solid ${tokens.colors.border.primary}`,
-                  borderRadius: tokens.radius.md,
-                  fontSize: tokens.typography.fontSize.xs,
-                  color: tokens.colors.text.primary,
-                  whiteSpace: 'nowrap',
-                  zIndex: 1000,
-                  pointerEvents: 'none',
-                }}
-              >
-                {item.month} 2025: {item.value >= 0 ? '+' : ''}
-                {item.value.toFixed(2)}%
-              </Box>
-            )}
-          </Box>
-        )
-      })}
+            <option value="7D">7D</option>
+            <option value="30D">30D</option>
+            <option value="90D">90D</option>
+          </select>
+          <select
+            value={compareWith}
+            onChange={(e) => setCompareWith(e.target.value as 'BTC' | 'ETH' | 'SPX500')}
+            style={{
+              padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
+              borderRadius: tokens.radius.md,
+              border: `1px solid ${tokens.colors.border.primary}`,
+              background: tokens.colors.bg.primary,
+              color: tokens.colors.text.primary,
+              fontSize: tokens.typography.fontSize.xs,
+              fontWeight: tokens.typography.fontWeight.bold,
+              cursor: 'pointer',
+            }}
+          >
+            <option value="BTC">BTC</option>
+            <option value="ETH">ETH</option>
+            <option value="SPX500">SPX500</option>
+          </select>
+        </Box>
+      </Box>
+
+      {/* Compare Chart Placeholder */}
+      <Box style={{ marginTop: tokens.spacing[4], marginBottom: tokens.spacing[3] }}>
+        <CompareChart height={220} period={period} />
+      </Box>
+
+      {/* Compare Rows */}
+      <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
+        <CompareRow name={traderHandle} pct={undefined} />
+        <CompareRow name={compareWith} pct={undefined} />
+      </Box>
+      
+      <Text size="xs" color="tertiary" style={{ marginTop: tokens.spacing[3], fontStyle: 'italic' }}>
+        对比数据需要更多历史数据支持
+      </Text>
     </Box>
   )
 }
 
-function CompareChart({ height }: { height: number }) {
+function CompareChart({ height, period }: { height: number; period: string }) {
   return (
     <Box
       style={{
@@ -524,6 +235,9 @@ function CompareChart({ height }: { height: number }) {
         background: `radial-gradient(700px 260px at 50% 20%, rgba(139, 111, 168, 0.1), transparent 55%), ${tokens.colors.bg.primary}`,
         position: 'relative',
         overflow: 'hidden',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
       }}
     >
       <Box
@@ -536,44 +250,9 @@ function CompareChart({ height }: { height: number }) {
           backgroundSize: '70px 70px',
         }}
       />
-      <Box
-        style={{
-          position: 'absolute',
-          left: tokens.spacing[3],
-          bottom: tokens.spacing[3],
-          display: 'flex',
-          gap: tokens.spacing[3],
-          color: tokens.colors.text.tertiary,
-          fontSize: tokens.typography.fontSize.xs,
-        }}
-      >
-        <span>1W</span>
-        <span>1M</span>
-        <span>6M</span>
-        <span style={{ color: tokens.colors.text.primary }}>1Y</span>
-        <span>5Y</span>
-      </Box>
-
-      <svg
-        width="100%"
-        height="100%"
-        viewBox="0 0 600 260"
-        preserveAspectRatio="none"
-        style={{ position: 'absolute', inset: 0 }}
-      >
-        <path
-          d="M0,180 C80,120 140,210 220,160 C300,110 340,140 420,90 C500,70 540,130 600,100"
-          fill="none"
-          stroke="rgba(139, 111, 168, 0.85)"
-          strokeWidth="2"
-        />
-        <path
-          d="M0,190 C120,180 180,200 260,185 C340,170 420,175 520,165 C560,160 590,158 600,156"
-          fill="none"
-          stroke="rgba(255,255,255,0.45)"
-          strokeWidth="2"
-        />
-      </svg>
+      <Text size="sm" color="tertiary">
+        {period} 对比图表（数据加载中...）
+      </Text>
     </Box>
   )
 }
@@ -599,75 +278,59 @@ function CompareRow({ name, pct }: { name: string; pct?: number }) {
   )
 }
 
-// Breakdown Section
+// Breakdown Section (Asset Preference)
 function BreakdownSection({ frequentlyTraded }: { frequentlyTraded: Array<{ symbol: string; weightPct: number }> }) {
   if (frequentlyTraded.length === 0) {
     return (
       <Box bg="secondary" p={6} radius="xl" border="primary">
         <Text size="lg" weight="black" style={{ marginBottom: tokens.spacing[4] }}>
-          Breakdown
+          Asset Breakdown
         </Text>
         <Box style={{ padding: tokens.spacing[4], textAlign: 'center' }}>
           <Text size="sm" color="tertiary">
-            投资组合明细数据需要绑定账户解锁
+            资产分布数据暂不可用
           </Text>
         </Box>
       </Box>
     )
   }
 
-  // 计算Stocks和Crypto的比例（这里简化处理，实际应该从portfolio数据获取）
-  // 由于没有真实数据，暂时不显示比例图
   const totalPct = frequentlyTraded.reduce((sum, item) => sum + item.weightPct, 0)
 
   return (
     <Box bg="secondary" p={6} radius="xl" border="primary">
-      <Box
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: tokens.spacing[4],
-        }}
-      >
-        <Text size="lg" weight="black">
-          Breakdown
-        </Text>
-        <select
-          style={{
-            padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
-            borderRadius: tokens.radius.md,
-            border: `1px solid ${tokens.colors.border.primary}`,
-            background: tokens.colors.bg.primary,
-            color: tokens.colors.text.primary,
-            fontSize: tokens.typography.fontSize.xs,
-            fontWeight: tokens.typography.fontWeight.bold,
-            cursor: 'pointer',
-            outline: 'none',
-          }}
-        >
-          <option>Asset Type</option>
-          <option>Symbol</option>
-        </select>
+      <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: tokens.spacing[4] }}>
+        <Text size="lg" weight="black">Asset Breakdown</Text>
       </Box>
 
-      {totalPct > 0 && (
-        <Box style={{ marginBottom: tokens.spacing[4] }}>
-          <Text as="span" size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[2] }}>
-            This breakdown includes <Text as="span" weight="bold" style={{ color: tokens.colors.text.primary }}>{totalPct.toFixed(1)}%</Text> of this Portfolio
-          </Text>
+      {/* 横条图 */}
+      <Box style={{ marginBottom: tokens.spacing[4] }}>
+        <Box style={{ display: 'flex', height: 24, borderRadius: tokens.radius.lg, overflow: 'hidden' }}>
+          {frequentlyTraded.slice(0, 5).map((item, idx) => (
+            <Box
+              key={idx}
+              style={{
+                width: `${(item.weightPct / totalPct) * 100}%`,
+                background: getColorForIndex(idx),
+                minWidth: 4,
+              }}
+            />
+          ))}
         </Box>
-      )}
+      </Box>
 
       {/* Asset List */}
       <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
         <Box style={{ display: 'flex', justifyContent: 'space-between', padding: `${tokens.spacing[2]} 0`, borderBottom: `1px solid ${tokens.colors.border.primary}` }}>
           <Text size="xs" color="tertiary">Asset ({frequentlyTraded.length})</Text>
-          <Text size="xs" color="tertiary">Portfolio Weight</Text>
+          <Text size="xs" color="tertiary">Weight</Text>
         </Box>
         {frequentlyTraded.slice(0, 5).map((item, idx) => (
-          <Box key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: `${tokens.spacing[2]} 0` }}>
-            <Text size="sm" weight="bold">{item.symbol}</Text>
+          <Box key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: `${tokens.spacing[2]} 0` }}>
+            <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
+              <Box style={{ width: 12, height: 12, borderRadius: 2, background: getColorForIndex(idx) }} />
+              <Text size="sm" weight="bold">{item.symbol}</Text>
+            </Box>
             <Text size="sm" color="secondary">{item.weightPct.toFixed(2)}%</Text>
           </Box>
         ))}
@@ -676,3 +339,13 @@ function BreakdownSection({ frequentlyTraded }: { frequentlyTraded: Array<{ symb
   )
 }
 
+function getColorForIndex(idx: number): string {
+  const colors = [
+    'rgba(139, 111, 168, 0.85)',
+    'rgba(47, 229, 125, 0.85)',
+    'rgba(255, 193, 7, 0.85)',
+    'rgba(33, 150, 243, 0.85)',
+    'rgba(255, 77, 77, 0.85)',
+  ]
+  return colors[idx % colors.length]
+}

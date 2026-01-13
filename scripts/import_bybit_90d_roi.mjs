@@ -97,10 +97,35 @@ function normalizeData(rawData) {
 }
 
 /**
- * 使用 Puppeteer 获取 Bybit 90天ROI排行榜数据
+ * 获取时间段对应的API参数
  */
-async function fetchBybit90dRoi() {
-  console.log('=== Bybit 90天ROI排行榜数据抓取 ===')
+function getDurationParam(period) {
+  const periodMap = {
+    '7D': 'DATA_DURATION_SEVEN_DAY',
+    '30D': 'DATA_DURATION_THIRTY_DAY',
+    '90D': 'DATA_DURATION_NINETY_DAY',
+  }
+  return periodMap[period] || 'DATA_DURATION_NINETY_DAY'
+}
+
+/**
+ * 获取时间段显示名称
+ */
+function getPeriodName(period) {
+  const nameMap = {
+    '7D': '7天',
+    '30D': '30天',
+    '90D': '90天',
+  }
+  return nameMap[period] || '90天'
+}
+
+/**
+ * 使用 Puppeteer 获取 Bybit ROI排行榜数据
+ */
+async function fetchBybitRoi(period = '90D') {
+  const periodName = getPeriodName(period)
+  console.log(`=== Bybit ${periodName}ROI排行榜数据抓取 ===`)
   console.log('')
   console.log('正在启动浏览器...')
   
@@ -271,11 +296,13 @@ async function fetchBybit90dRoi() {
         })
       }
       
-      // 使用正确的 API 端点获取90天ROI数据
+      // 使用正确的 API 端点获取ROI数据
       const apiUrl = 'https://www.bybit.com/x-api/fapi/beehive/public/v1/common/dynamic-leader-list'
       const pageSize = 100 // 每页大小
+      const durationParam = getDurationParam(period)
       
-      console.log('\n=== 开始获取 Bybit 90天ROI排行榜数据 ===')
+      console.log(`\n=== 开始获取 Bybit ${periodName}ROI排行榜数据 ===`)
+      console.log(`使用时间段参数: ${durationParam}`)
       
       // 先获取第一页，了解总页数
       let allLeaders = []
@@ -283,7 +310,7 @@ async function fetchBybit90dRoi() {
       let currentPage = 1
       
       try {
-        const firstPageUrl = `${apiUrl}?pageNo=1&pageSize=${pageSize}&dataDuration=DATA_DURATION_NINETY_DAY&sortField=LEADER_SORT_FIELD_SORT_ROI&sortType=SORT_TYPE_DESC`
+        const firstPageUrl = `${apiUrl}?pageNo=1&pageSize=${pageSize}&dataDuration=${durationParam}&sortField=LEADER_SORT_FIELD_SORT_ROI&sortType=SORT_TYPE_DESC`
         console.log(`获取第 1 页数据...`)
         
         const firstResponse = await page.evaluate(async (fetchUrl) => {
@@ -322,7 +349,7 @@ async function fetchBybit90dRoi() {
             for (let pageNum = 2; pageNum <= totalPages; pageNum++) {
               await new Promise(resolve => setTimeout(resolve, 500)) // 延迟避免请求过快
               
-              const pageUrl = `${apiUrl}?pageNo=${pageNum}&pageSize=${pageSize}&dataDuration=DATA_DURATION_NINETY_DAY&sortField=LEADER_SORT_FIELD_SORT_ROI&sortType=SORT_TYPE_DESC`
+              const pageUrl = `${apiUrl}?pageNo=${pageNum}&pageSize=${pageSize}&dataDuration=${durationParam}&sortField=LEADER_SORT_FIELD_SORT_ROI&sortType=SORT_TYPE_DESC`
               console.log(`获取第 ${pageNum} 页数据...`)
               
               try {
@@ -481,8 +508,9 @@ async function fetchBybit90dRoi() {
     console.log(`✅ 获取到 ${capturedData.length} 条原始数据`)
     
     // 保存原始数据到文件（用于调试）
-    writeFileSync('data/backup/bybit_90d_raw.json', JSON.stringify(capturedData, null, 2))
-    console.log('原始数据已保存到: data/backup/bybit_90d_raw.json')
+    const backupFileName = `data/backup/bybit_${period.toLowerCase()}_raw.json`
+    writeFileSync(backupFileName, JSON.stringify(capturedData, null, 2))
+    console.log(`原始数据已保存到: ${backupFileName}`)
 
     return capturedData
   } catch (error) {
@@ -494,9 +522,10 @@ async function fetchBybit90dRoi() {
 /**
  * 导入数据到 Supabase
  */
-async function importToSupabase(normalizedData) {
+async function importToSupabase(normalizedData, period = '90D') {
+  const periodName = getPeriodName(period)
   console.log('')
-  console.log('=== 开始导入数据到 Supabase ===')
+  console.log(`=== 开始导入 ${periodName}ROI数据到 Supabase ===`)
   
   // 过滤并排序：只保留有效的 ROI 数据，取前100
   const validData = normalizedData
@@ -526,27 +555,64 @@ async function importToSupabase(normalizedData) {
     identity_type: 'trader'
   }))
 
+  // 获取所有交易员的最新快照数据（用于合并其他时间段的数据）
+  const traderIds = validData.map(item => item.traderId)
+  console.log('查询现有快照数据以合并其他时间段...')
+  const { data: existingSnapshots } = await supabase
+    .from('trader_snapshots')
+    .select('source_trader_id, roi, roi_7d, roi_30d, roi_1y, roi_2y, pnl, win_rate, total_trades, avg_profit, avg_loss, profitable_trades_pct')
+    .eq('source', 'bybit')
+    .in('source_trader_id', traderIds)
+    .order('captured_at', { ascending: false })
+
+  // 创建交易员ID到最新快照的映射
+  const latestSnapshotMap = new Map()
+  if (existingSnapshots) {
+    for (const snap of existingSnapshots) {
+      if (!latestSnapshotMap.has(snap.source_trader_id)) {
+        latestSnapshotMap.set(snap.source_trader_id, snap)
+      }
+    }
+  }
+
   // 转换为 trader_snapshots 数据（rank 重新计算为 1-100）
   // 注意：不再保存 followers 字段，因为所有 trader 的粉丝数只能来源 Arena 注册用户的关注
   // 如果数据库表中有 followers 列且不允许 NULL，可以设置为 0，但代码中不再使用此值
   const snapshotsData = validData.map((item, index) => {
+    const latestSnapshot = latestSnapshotMap.get(item.traderId) || {}
+    
     const snapshot = {
       source: 'bybit',
       source_trader_id: item.traderId,
       rank: index + 1,
-      roi: item.roi,
-      pnl: item.pnl,
-      win_rate: item.winRate,
-      roi_7d: item.roi_7d != null && !isNaN(item.roi_7d) ? Number(item.roi_7d) : null,
-      roi_30d: item.roi_30d != null && !isNaN(item.roi_30d) ? Number(item.roi_30d) : null,
-      roi_1y: item.roi_1y != null && !isNaN(item.roi_1y) ? Number(item.roi_1y) : null,
-      roi_2y: item.roi_2y != null && !isNaN(item.roi_2y) ? Number(item.roi_2y) : null,
-      total_trades: item.totalTrades != null && !isNaN(item.totalTrades) ? Number(item.totalTrades) : null,
-      avg_profit: item.avgProfit != null && !isNaN(item.avgProfit) ? Number(item.avgProfit) : null,
-      avg_loss: item.avgLoss != null && !isNaN(item.avgLoss) ? Number(item.avgLoss) : null,
-      profitable_trades_pct: item.profitableTradesPct != null && !isNaN(item.profitableTradesPct) ? Number(item.profitableTradesPct) : null,
+      // 优先使用新数据，如果没有则使用最新快照的数据
+      pnl: item.pnl != null ? item.pnl : (latestSnapshot.pnl != null ? latestSnapshot.pnl : null),
+      win_rate: item.winRate != null ? item.winRate : (latestSnapshot.win_rate != null ? latestSnapshot.win_rate : null),
+      roi_1y: item.roi_1y != null && !isNaN(item.roi_1y) ? Number(item.roi_1y) : (latestSnapshot.roi_1y != null ? latestSnapshot.roi_1y : null),
+      roi_2y: item.roi_2y != null && !isNaN(item.roi_2y) ? Number(item.roi_2y) : (latestSnapshot.roi_2y != null ? latestSnapshot.roi_2y : null),
+      total_trades: item.totalTrades != null && !isNaN(item.totalTrades) ? Number(item.totalTrades) : (latestSnapshot.total_trades != null ? latestSnapshot.total_trades : null),
+      avg_profit: item.avgProfit != null && !isNaN(item.avgProfit) ? Number(item.avgProfit) : (latestSnapshot.avg_profit != null ? latestSnapshot.avg_profit : null),
+      avg_loss: item.avgLoss != null && !isNaN(item.avgLoss) ? Number(item.avgLoss) : (latestSnapshot.avg_loss != null ? latestSnapshot.avg_loss : null),
+      profitable_trades_pct: item.profitableTradesPct != null && !isNaN(item.profitableTradesPct) ? Number(item.profitableTradesPct) : (latestSnapshot.profitable_trades_pct != null ? latestSnapshot.profitable_trades_pct : null),
       captured_at: capturedAt,
     }
+    
+    // 根据时间段将ROI存储到对应字段，其他时间段从最新快照获取
+    if (period === '7D') {
+      snapshot.roi_7d = item.roi
+      snapshot.roi_30d = latestSnapshot.roi_30d != null ? latestSnapshot.roi_30d : null
+      snapshot.roi = latestSnapshot.roi != null ? latestSnapshot.roi : null
+    } else if (period === '30D') {
+      snapshot.roi_7d = latestSnapshot.roi_7d != null ? latestSnapshot.roi_7d : null
+      snapshot.roi_30d = item.roi
+      snapshot.roi = latestSnapshot.roi != null ? latestSnapshot.roi : null
+    } else {
+      // 90D 或默认
+      snapshot.roi = item.roi
+      snapshot.roi_7d = latestSnapshot.roi_7d != null ? latestSnapshot.roi_7d : (item.roi_7d != null && !isNaN(item.roi_7d) ? Number(item.roi_7d) : null)
+      snapshot.roi_30d = latestSnapshot.roi_30d != null ? latestSnapshot.roi_30d : (item.roi_30d != null && !isNaN(item.roi_30d) ? Number(item.roi_30d) : null)
+    }
+    
     // 如果数据库表中有 followers 列且不允许 NULL，设置为 0（但代码中不再使用此值）
     // snapshot.followers = 0
     return snapshot
@@ -594,7 +660,7 @@ async function importToSupabase(normalizedData) {
   }
 
   console.log(`trader_snapshots 导入: 成功 ${snapshotsSuccess}, 失败 ${snapshotsError}`)
-  console.log(`完成！共导入 ${validData.length} 条 Bybit 90天ROI Top 100 交易员数据`)
+  console.log(`完成！共导入 ${validData.length} 条 Bybit ${periodName}ROI Top 100 交易员数据`)
 }
 
 /**
@@ -602,8 +668,25 @@ async function importToSupabase(normalizedData) {
  */
 async function main() {
   try {
-    // 支持从 JSON 文件导入（如果提供了文件路径）
-    const jsonPath = process.argv[2]
+    // 解析命令行参数：时间段（7D, 30D, 90D）或JSON文件路径
+    const args = process.argv.slice(2)
+    let period = '90D' // 默认90天
+    let jsonPath = null
+    
+    // 检查第一个参数是否是时间段
+    if (args.length > 0) {
+      const firstArg = args[0].toUpperCase()
+      if (firstArg === '7D' || firstArg === '30D' || firstArg === '90D') {
+        period = firstArg
+        // 如果有第二个参数，可能是JSON文件路径
+        if (args.length > 1) {
+          jsonPath = args[1]
+        }
+      } else {
+        // 第一个参数是JSON文件路径
+        jsonPath = args[0]
+      }
+    }
     
     let rawData = null
     
@@ -630,7 +713,7 @@ async function main() {
       console.log(`从文件读取到 ${rawData.length} 条数据`)
     } else {
       // 使用 Puppeteer 抓取数据
-      rawData = await fetchBybit90dRoi()
+      rawData = await fetchBybitRoi(period)
     }
     
     if (!rawData || rawData.length === 0) {
@@ -644,7 +727,7 @@ async function main() {
     console.log('示例数据:', JSON.stringify(normalizedData[0], null, 2))
 
     // 导入到 Supabase
-    await importToSupabase(normalizedData)
+    await importToSupabase(normalizedData, period)
     
     console.log('')
     console.log('✅ 全部完成！')

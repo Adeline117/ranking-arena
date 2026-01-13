@@ -16,10 +16,18 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 const API_URL = 'https://www.binance.com/bapi/futures/v1/friendly/future/copy-trade/home-page/query-list'
 const PAGE_SIZE = 50 // 每页大小
 
+// 从命令行参数获取时间段，默认为 90D
+const timeRange = process.argv[2] || '90D'
+const validTimeRanges = ['7D', '30D', '90D']
+if (!validTimeRanges.includes(timeRange)) {
+  console.error(`错误: 无效的时间段 ${timeRange}，有效值: ${validTimeRanges.join(', ')}`)
+  process.exit(1)
+}
+
 /**
  * 标准化数据格式
  */
-function normalizeData(rawData) {
+function normalizeData(rawData, currentTimeRange) {
   if (!Array.isArray(rawData)) {
     throw new Error('数据必须是数组格式')
   }
@@ -28,7 +36,7 @@ function normalizeData(rawData) {
     const traderId = item.leadPortfolioId
     const handle = item.nickname || null
     
-    // roi 字段已经是90天ROI（百分比形式）
+    // roi 字段根据时间段不同（7D、30D、90D）
     const roi = item.roi != null ? Number(item.roi) : 0
     
     // PnL 字段
@@ -79,8 +87,8 @@ function normalizeData(rawData) {
 /**
  * 使用 Puppeteer 获取所有页面的数据
  */
-async function fetchAllPages() {
-  console.log('=== 币安90天ROI排行榜数据抓取 ===')
+async function fetchAllPages(timeRangeParam) {
+  console.log(`=== 币安 ${timeRangeParam} ROI排行榜数据抓取 ===`)
   console.log('')
   console.log('正在启动浏览器...')
   
@@ -148,11 +156,11 @@ async function fetchAllPages() {
     }
   }
   
-  // 构建90天ROI请求参数
+  // 构建请求参数
   const requestBody = {
     pageNumber: 1,
     pageSize: 50,
-    timeRange: '90D',  // 90天
+    timeRange: timeRangeParam,  // 时间段: 7D, 30D, 90D
     dataType: 'ROI',    // ROI类型
     favoriteOnly: false,
     hideFull: false,
@@ -163,7 +171,7 @@ async function fetchAllPages() {
     useAiRecommended: false,
   }
   
-  console.log('使用90天ROI参数获取数据...')
+  console.log(`使用 ${timeRangeParam} ROI参数获取数据...`)
   console.log('请求参数:', JSON.stringify(requestBody, null, 2))
   console.log('')
   
@@ -280,7 +288,7 @@ async function fetchAllPages() {
 /**
  * 导入数据到 Supabase
  */
-async function importToSupabase(normalizedData, sourceType = 'binance') {
+async function importToSupabase(normalizedData, sourceType = 'binance', timeRangeParam = '90D') {
   // 过滤并排序：只保留有效的 ROI 数据，只保留前 100 条
   const validData = normalizedData
     .filter(item => {
@@ -344,31 +352,23 @@ async function importToSupabase(normalizedData, sourceType = 'binance') {
     .sort((a, b) => Number(b.roi) - Number(a.roi))
     .slice(0, 100) // 确保不超过 Top 100
 
-  // 注意：不再保存 followers 字段，因为所有 trader 的粉丝数只能来源 Arena 注册用户的关注
-  // 如果数据库表中有 followers 列且不允许 NULL，可以设置为 0，但代码中不再使用此值
+  // 使用数据库中存在的所有列：
+  // captured_at, followers, holding_days, max_drawdown, pnl, rank, roi, season_id, source, source_trader_id, trades_count, win_rate
+  // 使用 season_id 存储时间段：'7D', '30D', '90D'
   const snapshotsData = sortedMergedData.map((item, index) => {
-    const snapshot = {
+    const rawData = item._raw || {}
+    return {
       source: sourceType,
       source_trader_id: item.encryptedUid,
       rank: index + 1,
-      roi: Number(item.roi),
+      roi: Number(item.roi), // 当前时间段的 ROI
       pnl: item.pnl != null ? Number(item.pnl) : null,
       win_rate: item.winRate != null ? Number(item.winRate) : null,
-      roi_7d: item.roi_7d != null && !isNaN(item.roi_7d) ? Number(item.roi_7d) : null,
-      roi_30d: item.roi_30d != null && !isNaN(item.roi_30d) ? Number(item.roi_30d) : null,
-      roi_1y: item.roi_1y != null && !isNaN(item.roi_1y) ? Number(item.roi_1y) : null,
-      roi_2y: item.roi_2y != null && !isNaN(item.roi_2y) ? Number(item.roi_2y) : null,
-      total_trades: item.totalTrades != null && !isNaN(item.totalTrades) ? Number(item.totalTrades) : null,
-      avg_profit: item.avgProfit != null && !isNaN(item.avgProfit) ? Number(item.avgProfit) : null,
-      avg_loss: item.avgLoss != null && !isNaN(item.avgLoss) ? Number(item.avgLoss) : null,
-      profitable_trades_pct: item.profitableTradesPct != null && !isNaN(item.profitableTradesPct) ? Number(item.profitableTradesPct) : null,
-      captured_at: capturedAt, // 统一的 captured_at（所有周期使用相同时间戳，便于在内存中 merge 后再 upsert）
-      // 注意：如果数据库中有 run_id 列，可以添加 run_id 字段来追踪本次抓取批次
-      // run_id: `run_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      max_drawdown: rawData.mdd != null ? Number(rawData.mdd) : null, // 最大回撤
+      followers: 0, // 设置为 0，实际粉丝数从 Arena 用户关注统计
+      season_id: timeRangeParam, // 存储时间段：'7D', '30D', '90D'
+      captured_at: capturedAt,
     }
-    // 如果数据库表中有 followers 列且不允许 NULL，设置为 0（但代码中不再使用此值）
-    // snapshot.followers = 0
-    return snapshot
   })
 
   const BATCH_SIZE = 100
@@ -402,8 +402,15 @@ async function importToSupabase(normalizedData, sourceType = 'binance') {
 
   console.log('')
   console.log('导入 trader_snapshots...')
+  // 对于多时间段数据，我们使用 insert 插入新记录
+  // 查询时会使用最新的 captured_at 记录，该记录包含对应时间段的 ROI
+  // 如果需要合并多个时间段，可以在查询时合并多个记录
   for (let i = 0; i < snapshotsData.length; i += BATCH_SIZE) {
     const batch = snapshotsData.slice(i, i + BATCH_SIZE)
+    
+    // 使用 insert 插入新记录（每个时间段一个记录）
+    // 注意：由于不同时间段的 captured_at 可能不同，每个时间段会创建单独的记录
+    // 查询时使用 order('captured_at', { ascending: false }).limit(1) 获取最新记录
     const { error } = await supabase
       .from('trader_snapshots')
       .insert(batch)
@@ -419,7 +426,7 @@ async function importToSupabase(normalizedData, sourceType = 'binance') {
   console.log('')
   console.log(`✅ trader_sources: ${sourcesSuccess} 条`)
   console.log(`✅ trader_snapshots: ${snapshotsSuccess} 条`)
-  console.log(`✅ 完成！共导入 ${sortedMergedData.length} 条币安跟单交易数据（ROI Top 100）`)
+  console.log(`✅ 完成！共导入 ${sortedMergedData.length} 条币安跟单交易数据（${timeRangeParam} ROI Top 100）`)
   console.log(`✅ 统一 captured_at: ${capturedAt}`)
 }
 
@@ -428,27 +435,30 @@ async function importToSupabase(normalizedData, sourceType = 'binance') {
  */
 async function main() {
   try {
+    console.log(`时间段: ${timeRange}`)
+    console.log('')
+    
     // 获取所有数据
-    const rawData = await fetchAllPages()
+    const rawData = await fetchAllPages(timeRange)
     
     // 保存原始数据
-    const outputPath = `binance_copy_trading_90d_${Date.now()}.json`
+    const outputPath = `binance_copy_trading_${timeRange.toLowerCase()}_${Date.now()}.json`
     writeFileSync(outputPath, JSON.stringify(rawData, null, 2))
     console.log(`原始数据已保存到: ${outputPath}`)
     console.log('')
     
     // 标准化数据
     console.log('标准化数据...')
-    const normalizedData = normalizeData(rawData)
+    const normalizedData = normalizeData(rawData, timeRange)
     console.log(`✓ 标准化后: ${normalizedData.length} 条`)
     console.log('')
 
     // 导入到 Supabase
     console.log('导入到 Supabase...')
-    await importToSupabase(normalizedData, 'binance')
+    await importToSupabase(normalizedData, 'binance', timeRange)
     
     console.log('')
-    console.log('✅ 全部完成！')
+    console.log(`✅ 全部完成！(${timeRange})`)
   } catch (error) {
     console.error('执行失败:', error)
     process.exit(1)

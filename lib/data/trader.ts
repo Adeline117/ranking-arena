@@ -27,6 +27,19 @@ export interface TraderPerformance {
   return_ytd?: number // public_snapshot_return_ytd
   return_2y?: number // public_snapshot_return_2y
   
+  // 关键指标 (90D)
+  pnl?: number // 盈亏金额 (90D)
+  win_rate?: number // 胜率（百分比）(90D)
+  max_drawdown?: number // 最大回撤（百分比）(90D)
+  
+  // 7D/30D 详细数据
+  pnl_7d?: number
+  pnl_30d?: number
+  win_rate_7d?: number
+  win_rate_30d?: number
+  max_drawdown_7d?: number
+  max_drawdown_30d?: number
+  
   // derived_from_snapshot_*: 基于快照计算的数据（从公开快照派生）
   risk_score_last_7d?: number // derived_from_snapshot_risk_score
   profitable_weeks?: number // derived_from_snapshot_profitable_weeks
@@ -108,107 +121,83 @@ export async function getTraderByHandle(handle: string): Promise<TraderProfile |
     // 解码 URL 编码的 handle
     const decodedHandle = decodeURIComponent(handle)
     
-    // 尝试所有数据源：binance_web3, binance, bybit, bitget, mexc, coinex, okx, kucoin, gate
-    const sources = ['binance_web3', 'binance', 'bybit', 'bitget', 'mexc', 'coinex', 'okx', 'kucoin', 'gate']
+    // 检查所有数据源
+    const sources = ['binance', 'bybit', 'bitget', 'okx', 'kucoin', 'gate', 'mexc', 'coinex']
     
     for (const sourceType of sources) {
       // 从 trader_sources 表获取交易员信息（只查询 profile_url，因为 avatar_url 列不存在）
-      // 先尝试原始 handle
+      // 注意：可能有多条匹配记录，需要找到有快照数据的那条
       let source = null
-      let sourceError = null
+      let candidateSources: Array<{ source_trader_id: string; handle: string | null; profile_url: string | null }> = []
       
-      // 尝试用原始 handle 查询（只查询 profile_url）
-      const { data: source1, error: error1 } = await supabase
+      // 尝试用原始 handle 查询
+      const { data: sources1 } = await supabase
         .from('trader_sources')
         .select('source_trader_id, handle, profile_url')
         .eq('source', sourceType)
         .eq('handle', handle)
-        .maybeSingle()
       
-      if (source1) {
-        source = source1
-      } else if (error1) {
-        // 检查是否有实际的错误内容
-        // 空对象 {} 的 error1.message 是 undefined，所以 hasErrorContent 是 false
-        // 只有当错误对象有实际有值的属性（message/code/hint/details）时，才认为是真正的错误
-        const hasErrorContent = !!(error1.message || error1.code || error1.hint || error1.details)
-        // 如果错误对象有实际错误内容，才设置 sourceError
-        // 注意：即使是 {message: undefined} 这种，hasErrorContent 也会是 false，因为 !!undefined 是 false
-        if (hasErrorContent) {
-          sourceError = error1
-        }
-        // 如果 hasErrorContent 是 false（空对象 {} 或所有属性都是 undefined），则不设置 sourceError
-        // 这是正常的"没找到记录"情况，不应该记录为错误
+      if (sources1 && sources1.length > 0) {
+        candidateSources = sources1
       }
       
       // 如果原始 handle 找不到，尝试解码后的 handle（如果不同）
-      if (!source && decodedHandle !== handle) {
-        const { data: source2, error: error2 } = await supabase
+      if (candidateSources.length === 0 && decodedHandle !== handle) {
+        const { data: sources2 } = await supabase
           .from('trader_sources')
           .select('source_trader_id, handle, profile_url')
           .eq('source', sourceType)
           .eq('handle', decodedHandle)
-          .maybeSingle()
         
-        if (source2) {
-          source = source2
-        } else if (error2 && !sourceError) {
-          // 检查是否有实际的错误内容
-          // 空对象 {} 的 Object.keys({}) 返回 []，但更重要的是检查属性值
-          // 只有当错误对象有实际有值的属性（message/code/hint/details）时，才认为是真正的错误
-          const hasErrorContent = !!(error2.message || error2.code || error2.hint || error2.details)
-          // 如果错误对象有实际错误内容，才设置 sourceError
-          // 注意：即使是 {message: undefined} 这种，hasErrorContent 也会是 false，因为 !!undefined 是 false
-          if (hasErrorContent) {
-            sourceError = error2
-          }
-          // 如果 hasErrorContent 是 false（空对象 {} 或所有属性都是 undefined），则不设置 sourceError
-          // 这是正常的"没找到记录"情况，不应该记录为错误
+        if (sources2 && sources2.length > 0) {
+          candidateSources = sources2
         }
       }
 
-      // 只在有实际错误内容时记录和跳过（查询失败且有明确的错误信息）
-      // 注意：sourceError 只在之前检测到有实际错误内容时才会被设置
-      // 如果 sourceError 存在，说明确实有错误，应该记录并跳过
-      // 但是为了安全起见，我们再次确认错误对象确实有错误内容
-      if (sourceError) {
-        // 再次确认：只有当错误对象有实际的错误信息时，才记录错误
-        const hasErrorContent = !!(sourceError.message || sourceError.code || sourceError.hint || sourceError.details)
-        if (hasErrorContent) {
-          // 确认是真正的错误，记录并跳过
-          console.error(`Error fetching trader_source by handle (${sourceType}):`, sourceError)
-          continue
-        } else {
-          // 如果没有实际错误内容（空对象{}或所有属性都是undefined），清除 sourceError 继续处理
-          // 这是正常的"没找到记录"情况，不应该记录为错误
-          // 这种情况理论上不应该发生，因为我们在设置 sourceError 时已经检查过了
-          sourceError = null
-        }
-      }
-
-      if (!source) {
+      if (candidateSources.length === 0) {
         // 如果 handle 匹配不到，尝试用 handle 或 decodedHandle 作为 source_trader_id 查询
-        const { data: sourceById1 } = await supabase
+        const { data: sourcesById1 } = await supabase
           .from('trader_sources')
           .select('source_trader_id, handle, profile_url')
           .eq('source', sourceType)
           .eq('source_trader_id', handle)
-          .maybeSingle()
         
-        if (sourceById1) {
-          source = sourceById1
+        if (sourcesById1 && sourcesById1.length > 0) {
+          candidateSources = sourcesById1
         } else if (decodedHandle !== handle) {
-          const { data: sourceById2 } = await supabase
+          const { data: sourcesById2 } = await supabase
             .from('trader_sources')
             .select('source_trader_id, handle, profile_url')
             .eq('source', sourceType)
             .eq('source_trader_id', decodedHandle)
-            .maybeSingle()
           
-          if (sourceById2) {
-            source = sourceById2
+          if (sourcesById2 && sourcesById2.length > 0) {
+            candidateSources = sourcesById2
           }
         }
+      }
+      
+      // 如果有多个候选记录，找到有快照数据的那条
+      if (candidateSources.length > 1) {
+        for (const candidate of candidateSources) {
+          const { data: snapshot } = await supabase
+            .from('trader_snapshots')
+            .select('id')
+            .eq('source', sourceType)
+            .eq('source_trader_id', candidate.source_trader_id)
+            .limit(1)
+          
+          if (snapshot && snapshot.length > 0) {
+            source = candidate
+            break
+          }
+        }
+        // 如果没有找到有快照的，使用第一个
+        if (!source) {
+          source = candidateSources[0]
+        }
+      } else if (candidateSources.length === 1) {
+        source = candidateSources[0]
       }
       
       if (!source) {
@@ -251,11 +240,11 @@ export async function getTraderByHandle(handle: string): Promise<TraderProfile |
       // 永远只使用 trader_sources 中的 profile_url（这是trader在交易所的原始头像URL）
       // 注意：avatar_url 列不存在，所以只使用 profile_url
       // 不使用用户设置的 avatar_url，确保永远显示 trader 在交易所的原始头像
-      const traderAvatarUrl = source.profile_url || null
+      const traderAvatarUrl = source.profile_url || undefined
       return {
         handle: source.handle || source.source_trader_id,
         id: source.source_trader_id,
-        bio: profile?.bio || null,
+        bio: profile?.bio || undefined,
         followers: arenaFollowersCount, // 使用 Arena 粉丝数（从 trader_follows 表统计）
         copiers: 0,
         avatar_url: traderAvatarUrl, // 永远只使用 trader 的原始头像，不使用 profile?.avatar_url
@@ -285,69 +274,131 @@ export async function getTraderPerformance(handle: string, period: '7D' | '30D' 
     const sources = ['binance_web3', 'binance', 'bybit', 'bitget', 'mexc', 'coinex', 'okx', 'kucoin', 'gate']
     
     for (const sourceType of sources) {
-      // 先获取 source_trader_id - 尝试多个可能的 handle 值
-      let source = null
-      const { data: source1 } = await supabase
+      // 先获取所有匹配的 source_trader_id（可能有多条）
+      let candidateSources: Array<{ source_trader_id: string }> = []
+      
+      const { data: sources1 } = await supabase
         .from('trader_sources')
         .select('source_trader_id')
         .eq('source', sourceType)
         .eq('handle', handle)
-        .maybeSingle()
+        .limit(10)
       
-      if (source1) {
-        source = source1
-      } else if (decodedHandle !== handle) {
-        const { data: source2 } = await supabase
+      if (sources1 && sources1.length > 0) {
+        candidateSources = sources1
+      }
+      
+      // 如果原始 handle 找不到，尝试解码后的 handle
+      if (candidateSources.length === 0 && decodedHandle !== handle) {
+        const { data: sources2 } = await supabase
           .from('trader_sources')
           .select('source_trader_id')
           .eq('source', sourceType)
           .eq('handle', decodedHandle)
-          .maybeSingle()
-        if (source2) source = source2
+          .limit(10)
+        if (sources2 && sources2.length > 0) {
+          candidateSources = sources2
+        }
       }
       
       // 如果 handle 找不到，尝试作为 source_trader_id
-      if (!source) {
-        const { data: source3 } = await supabase
+      if (candidateSources.length === 0) {
+        const { data: sources3 } = await supabase
           .from('trader_sources')
           .select('source_trader_id')
           .eq('source', sourceType)
           .eq('source_trader_id', handle)
-          .maybeSingle()
-        if (source3) source = source3
-      }
-      
-      if (!source && decodedHandle !== handle) {
-        const { data: source4 } = await supabase
-          .from('trader_sources')
-          .select('source_trader_id')
-          .eq('source', sourceType)
-          .eq('source_trader_id', decodedHandle)
-          .maybeSingle()
-        if (source4) source = source4
+          .limit(10)
+        if (sources3 && sources3.length > 0) {
+          candidateSources = sources3
+        }
       }
 
-      if (!source) {
+      if (candidateSources.length === 0) {
         continue
       }
 
-      // 获取最新的 ROI 数据（包括多时间段）
-      const { data: latestSnapshot } = await supabase
-        .from('trader_snapshots')
-        .select('roi, roi_7d, roi_30d, roi_1y, roi_2y')
-        .eq('source', sourceType)
-        .eq('source_trader_id', source.source_trader_id)
-        .order('captured_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()
+      // 遍历所有候选记录，找到有快照数据的那条
+      for (const candidate of candidateSources) {
+        // 获取最新快照（可能包含 roi_7d, roi_30d 列）
+        const { data: latestSnapshot } = await supabase
+          .from('trader_snapshots')
+          .select('roi, pnl, win_rate, max_drawdown, roi_7d, roi_30d, pnl_7d, pnl_30d, win_rate_7d, win_rate_30d, max_drawdown_7d, max_drawdown_30d, season_id')
+          .eq('source', sourceType)
+          .eq('source_trader_id', candidate.source_trader_id)
+          .or('season_id.is.null,season_id.eq.90D')
+          .order('captured_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
 
-      // 返回真实数据（包括多时间段ROI）
-      return {
-        roi_7d: latestSnapshot?.roi_7d ?? undefined,
-        roi_30d: latestSnapshot?.roi_30d ?? undefined,
-        roi_90d: latestSnapshot?.roi || 0,
-        roi_1y: latestSnapshot?.roi_1y ?? undefined,
-        roi_2y: latestSnapshot?.roi_2y ?? undefined,
+        // 如果没有数据，尝试下一个候选
+        if (!latestSnapshot || latestSnapshot.roi === null) {
+          continue
+        }
+
+        // 检查是否有新列的数据（roi_7d, roi_30d）
+        const hasNewColumns = latestSnapshot.roi_7d !== undefined || latestSnapshot.roi_30d !== undefined
+
+        let roi_7d = latestSnapshot.roi_7d ?? undefined
+        let roi_30d = latestSnapshot.roi_30d ?? undefined
+        let pnl_7d = latestSnapshot.pnl_7d ?? undefined
+        let pnl_30d = latestSnapshot.pnl_30d ?? undefined
+        let win_rate_7d = latestSnapshot.win_rate_7d ?? undefined
+        let win_rate_30d = latestSnapshot.win_rate_30d ?? undefined
+        let max_drawdown_7d = latestSnapshot.max_drawdown_7d ?? undefined
+        let max_drawdown_30d = latestSnapshot.max_drawdown_30d ?? undefined
+
+        // 如果没有新列数据，尝试从旧的 season_id 行获取
+        if (!hasNewColumns) {
+          // 获取7D数据
+          const { data: snapshot7d } = await supabase
+            .from('trader_snapshots')
+            .select('roi, pnl, win_rate, max_drawdown')
+            .eq('source', sourceType)
+            .eq('source_trader_id', candidate.source_trader_id)
+            .eq('season_id', '7D')
+            .order('captured_at', { ascending: false })
+            .limit(1)
+            .maybeSingle()
+
+          // 获取30D数据
+          const { data: snapshot30d } = await supabase
+            .from('trader_snapshots')
+            .select('roi, pnl, win_rate, max_drawdown')
+            .eq('source', sourceType)
+            .eq('source_trader_id', candidate.source_trader_id)
+            .eq('season_id', '30D')
+            .order('captured_at', { ascending: false })
+            .limit(1)
+            .maybeSingle()
+
+          roi_7d = snapshot7d?.roi ?? undefined
+          roi_30d = snapshot30d?.roi ?? undefined
+          pnl_7d = snapshot7d?.pnl ?? undefined
+          pnl_30d = snapshot30d?.pnl ?? undefined
+          win_rate_7d = snapshot7d?.win_rate ?? undefined
+          win_rate_30d = snapshot30d?.win_rate ?? undefined
+          max_drawdown_7d = snapshot7d?.max_drawdown ?? undefined
+          max_drawdown_30d = snapshot30d?.max_drawdown ?? undefined
+        }
+
+        // 返回所有时间段的数据
+        return {
+          roi_90d: latestSnapshot.roi || 0,
+          roi_7d,
+          roi_30d,
+          pnl: latestSnapshot.pnl ?? undefined,
+          win_rate: latestSnapshot.win_rate ?? undefined,
+          max_drawdown: latestSnapshot.max_drawdown ?? undefined,
+          pnl_7d,
+          pnl_30d,
+          win_rate_7d,
+          win_rate_30d,
+          max_drawdown_7d,
+          max_drawdown_30d,
+          roi_1y: undefined,
+          roi_2y: undefined,
+        }
       }
     }
 
@@ -375,121 +426,125 @@ export async function getTraderStats(handle: string): Promise<TraderStats> {
     const sources = ['binance_web3', 'binance', 'bybit', 'bitget', 'mexc', 'coinex', 'okx', 'kucoin', 'gate']
     
     for (const sourceType of sources) {
-      // 先获取 source_trader_id - 尝试多个可能的 handle 值
-      let source = null
-      const { data: source1 } = await supabase
+      // 先获取所有匹配的 source_trader_id（可能有多条）
+      let candidateSources: Array<{ source_trader_id: string }> = []
+      
+      const { data: sources1 } = await supabase
         .from('trader_sources')
         .select('source_trader_id')
         .eq('source', sourceType)
         .eq('handle', handle)
-        .maybeSingle()
+        .limit(10)
       
-      if (source1) {
-        source = source1
-      } else if (decodedHandle !== handle) {
-        const { data: source2 } = await supabase
+      if (sources1 && sources1.length > 0) {
+        candidateSources = sources1
+      }
+      
+      // 如果原始 handle 找不到，尝试解码后的 handle
+      if (candidateSources.length === 0 && decodedHandle !== handle) {
+        const { data: sources2 } = await supabase
           .from('trader_sources')
           .select('source_trader_id')
           .eq('source', sourceType)
           .eq('handle', decodedHandle)
-          .maybeSingle()
-        if (source2) source = source2
+          .limit(10)
+        if (sources2 && sources2.length > 0) {
+          candidateSources = sources2
+        }
       }
       
       // 如果 handle 找不到，尝试作为 source_trader_id
-      if (!source) {
-        const { data: source3 } = await supabase
+      if (candidateSources.length === 0) {
+        const { data: sources3 } = await supabase
           .from('trader_sources')
           .select('source_trader_id')
           .eq('source', sourceType)
           .eq('source_trader_id', handle)
-          .maybeSingle()
-        if (source3) source = source3
+          .limit(10)
+        if (sources3 && sources3.length > 0) {
+          candidateSources = sources3
+        }
       }
-      
-      if (!source && decodedHandle !== handle) {
-        const { data: source4 } = await supabase
-          .from('trader_sources')
-          .select('source_trader_id')
+
+      if (candidateSources.length === 0) {
+        continue
+      }
+
+      // 遍历所有候选记录，找到有快照数据的那条
+      for (const candidate of candidateSources) {
+        // 获取最新的快照数据
+        const { data: latestSnapshot } = await supabase
+          .from('trader_snapshots')
+          .select('roi, captured_at, pnl, win_rate, max_drawdown, trades_count, holding_days')
           .eq('source', sourceType)
-          .eq('source_trader_id', decodedHandle)
+          .eq('source_trader_id', candidate.source_trader_id)
+          .order('captured_at', { ascending: false })
+          .limit(1)
           .maybeSingle()
-        if (source4) source = source4
-      }
 
-      if (!source) {
-        continue
-      }
+        // 获取历史快照数据用于计算
+        const { data: snapshots } = await supabase
+          .from('trader_snapshots')
+          .select('roi, captured_at')
+          .eq('source', sourceType)
+          .eq('source_trader_id', candidate.source_trader_id)
+          .order('captured_at', { ascending: true })
 
-      // 获取最新的快照数据（包含新字段）
-      const { data: latestSnapshot } = await supabase
-        .from('trader_snapshots')
-        .select('roi, captured_at, total_trades, avg_profit, avg_loss, profitable_trades_pct, risk_score, avg_holding_time_days, trades_per_week, volume_90d, max_drawdown, sharpe_ratio')
-        .eq('source', sourceType)
-        .eq('source_trader_id', source.source_trader_id)
-        .order('captured_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()
+        if (!snapshots || snapshots.length === 0) {
+          continue // 尝试下一个候选记录
+        }
+        
+        // 找到有数据的记录，继续处理
 
-      // 获取历史快照数据用于计算
-      const { data: snapshots } = await supabase
-        .from('trader_snapshots')
-        .select('roi, captured_at')
-        .eq('source', sourceType)
-        .eq('source_trader_id', source.source_trader_id)
-        .order('captured_at', { ascending: true })
+        // 计算 activeSince（最早的 captured_at）
+        const earliestSnapshot = snapshots[0]
+        const activeSinceDate = new Date(earliestSnapshot.captured_at)
+        const activeSince = `${activeSinceDate.getMonth() + 1}/${activeSinceDate.getDate()}/${activeSinceDate.getFullYear().toString().slice(-2)}`
 
-      if (!snapshots || snapshots.length === 0) {
-        continue
-      }
+        // 计算 profitableWeeksPct（如果有多个时间点的数据）
+        let profitableWeeksPct: number | undefined = undefined
+        if (snapshots.length > 1) {
+          const profitableWeeks = snapshots.filter(s => (s.roi || 0) > 0).length
+          profitableWeeksPct = (profitableWeeks / snapshots.length) * 100
+        }
 
-      // 计算 activeSince（最早的 captured_at）
-      const earliestSnapshot = snapshots[0]
-      const activeSinceDate = new Date(earliestSnapshot.captured_at)
-      const activeSince = `${activeSinceDate.getMonth() + 1}/${activeSinceDate.getDate()}/${activeSinceDate.getFullYear().toString().slice(-2)}`
+        // 获取频繁交易资产
+        const frequentlyTraded = await getTraderFrequentlyTraded(handle)
 
-      // 计算 profitableWeeksPct（如果有多个时间点的数据）
-      let profitableWeeksPct: number | undefined = undefined
-      if (snapshots.length > 1) {
-        const profitableWeeks = snapshots.filter(s => (s.roi || 0) > 0).length
-        profitableWeeksPct = (profitableWeeks / snapshots.length) * 100
-      }
+        // 获取月度表现
+        const monthlyPerformance = await getTraderMonthlyPerformance(handle)
 
-      // 获取频繁交易资产
-      const frequentlyTraded = await getTraderFrequentlyTraded(handle)
+        // 获取年度表现
+        const yearlyPerformance = await getTraderYearlyPerformance(handle)
 
-      // 获取月度表现
-      const monthlyPerformance = await getTraderMonthlyPerformance(handle)
-
-      // 获取年度表现
-      const yearlyPerformance = await getTraderYearlyPerformance(handle)
-
-      // 返回可计算的数据
-      return {
-        // account_required_* 字段需要绑定账户，返回undefined
-        expectedDividends: undefined,
-        trading: latestSnapshot ? {
-          totalTrades12M: latestSnapshot.total_trades ?? 0,
-          avgProfit: latestSnapshot.avg_profit ?? 0,
-          avgLoss: latestSnapshot.avg_loss ?? 0,
-          profitableTradesPct: latestSnapshot.profitable_trades_pct ?? 0,
-        } : undefined,
-        frequentlyTraded: frequentlyTraded.length > 0 ? frequentlyTraded : undefined,
-        // derived_from_snapshot_* 字段
-        additionalStats: {
-          tradesPerWeek: latestSnapshot?.trades_per_week ?? undefined,
-          avgHoldingTime: latestSnapshot?.avg_holding_time_days ? `${latestSnapshot.avg_holding_time_days}天` : undefined,
-          activeSince, // 可以从最早快照计算
-          profitableWeeksPct, // 可以从历史快照计算
-          riskScore: latestSnapshot?.risk_score ?? undefined,
-          volume90d: latestSnapshot?.volume_90d ?? undefined,
-          maxDrawdown: latestSnapshot?.max_drawdown ?? undefined,
-          sharpeRatio: latestSnapshot?.sharpe_ratio ?? undefined,
-        },
-        monthlyPerformance: monthlyPerformance.length > 0 ? monthlyPerformance : undefined,
-        yearlyPerformance: yearlyPerformance.length > 0 ? yearlyPerformance : undefined,
-      }
-    }
+        // 返回可计算的数据
+        // 使用数据库中实际存在的列
+        return {
+          // account_required_* 字段需要绑定账户，返回undefined
+          expectedDividends: undefined,
+          trading: latestSnapshot ? {
+            totalTrades12M: latestSnapshot.trades_count ?? 0,
+            avgProfit: 0, // 数据库中没有此列
+            avgLoss: 0, // 数据库中没有此列
+            profitableTradesPct: latestSnapshot.win_rate ?? 0, // 使用 win_rate 作为替代
+          } : undefined,
+          frequentlyTraded: frequentlyTraded.length > 0 ? frequentlyTraded : undefined,
+          // derived_from_snapshot_* 字段
+          additionalStats: {
+            tradesPerWeek: undefined, // 数据库中没有此列
+            avgHoldingTime: latestSnapshot?.holding_days ? `${latestSnapshot.holding_days}天` : undefined,
+            activeSince, // 可以从最早快照计算
+            profitableWeeksPct, // 可以从历史快照计算
+            riskScore: undefined, // 数据库中没有此列
+            volume90d: undefined, // 数据库中没有此列
+            maxDrawdown: latestSnapshot?.max_drawdown ?? undefined, // 已有此列
+            sharpeRatio: undefined, // 数据库中没有此列
+          },
+          monthlyPerformance: monthlyPerformance.length > 0 ? monthlyPerformance : undefined,
+          yearlyPerformance: yearlyPerformance.length > 0 ? yearlyPerformance : undefined,
+        }
+      } // end of for (const candidate of candidateSources)
+    } // end of for (const sourceType of sources)
 
     // 如果没有找到，返回空对象
     return {
@@ -734,13 +789,149 @@ export async function getTraderYearlyPerformance(handle: string): Promise<Array<
 
 /**
  * 获取交易员投资组合
- * 注意：Portfolio数据需要绑定账户才能获取，目前返回空数组
  */
 export async function getTraderPortfolio(handle: string): Promise<PortfolioItem[]> {
-  // Portfolio数据需要用户授权访问私有交易数据，目前无法获取
-  // 返回空数组，UI会显示空状态提示
-  void handle
-  return []
+  try {
+    // 解码 URL 编码的 handle
+    const decodedHandle = decodeURIComponent(handle)
+    
+    // 尝试所有数据源：binance_web3, binance, bybit, bitget, mexc, coinex, okx, kucoin, gate
+    const sources = ['binance_web3', 'binance', 'bybit', 'bitget', 'mexc', 'coinex', 'okx', 'kucoin', 'gate']
+    
+    for (const sourceType of sources) {
+      // 先获取 source_trader_id - 尝试多个可能的 handle 值
+      let source = null
+      const { data: source1 } = await supabase
+        .from('trader_sources')
+        .select('source_trader_id')
+        .eq('source', sourceType)
+        .eq('handle', handle)
+        .maybeSingle()
+      
+      if (source1) {
+        source = source1
+      } else if (decodedHandle !== handle) {
+        const { data: source2 } = await supabase
+          .from('trader_sources')
+          .select('source_trader_id')
+          .eq('source', sourceType)
+          .eq('handle', decodedHandle)
+          .maybeSingle()
+        if (source2) source = source2
+      }
+      
+      // 如果 handle 找不到，尝试作为 source_trader_id
+      if (!source) {
+        const { data: source3 } = await supabase
+          .from('trader_sources')
+          .select('source_trader_id')
+          .eq('source', sourceType)
+          .eq('source_trader_id', handle)
+          .maybeSingle()
+        if (source3) source = source3
+      }
+      
+      if (!source && decodedHandle !== handle) {
+        const { data: source4 } = await supabase
+          .from('trader_sources')
+          .select('source_trader_id')
+          .eq('source', sourceType)
+          .eq('source_trader_id', decodedHandle)
+          .maybeSingle()
+        if (source4) source = source4
+      }
+
+      if (!source) {
+        continue
+      }
+
+      // 获取最新的持仓数据
+      const { data: portfolioData } = await supabase
+        .from('trader_portfolio')
+        .select('symbol, direction, weight_pct, entry_price, pnl_pct')
+        .eq('source', sourceType)
+        .eq('source_trader_id', source.source_trader_id)
+        .order('updated_at', { ascending: false })
+        .limit(100)
+
+      if (portfolioData && portfolioData.length > 0) {
+        return portfolioData.map((item: any) => ({
+          market: item.symbol || '',
+          direction: (item.direction === 'long' || item.direction === 'short') ? item.direction : 'long',
+          invested: item.weight_pct ?? 0,
+          pnl: item.pnl_pct ?? 0,
+          value: item.weight_pct ?? 0,
+          price: item.entry_price ?? 0,
+          priceChange: undefined,
+        }))
+      }
+    }
+
+    // 如果没有找到，返回空数组
+    return []
+  } catch (error) {
+    console.error('Error in getTraderPortfolio:', error)
+    return []
+  }
+}
+
+export interface PositionHistoryItem {
+  symbol: string
+  direction: 'long' | 'short'
+  entryPrice: number
+  exitPrice: number
+  pnlPct: number
+  openTime: string
+  closeTime: string
+}
+
+/**
+ * 获取交易员历史订单
+ */
+export async function getTraderPositionHistory(handle: string): Promise<PositionHistoryItem[]> {
+  try {
+    const decodedHandle = decodeURIComponent(handle)
+    const sources = ['binance', 'bybit', 'bitget', 'okx', 'kucoin', 'gate', 'mexc', 'coinex']
+    
+    for (const sourceType of sources) {
+      // 获取 source_trader_id
+      const { data: source } = await supabase
+        .from('trader_sources')
+        .select('source_trader_id')
+        .eq('source', sourceType)
+        .or(`handle.eq.${handle},handle.eq.${decodedHandle},source_trader_id.eq.${handle}`)
+        .limit(1)
+        .maybeSingle()
+
+      if (!source) continue
+
+      // 获取历史订单
+      const { data: history } = await supabase
+        .from('trader_position_history')
+        .select('symbol, direction, entry_price, exit_price, pnl_pct, open_time, close_time')
+        .eq('source', sourceType)
+        .eq('source_trader_id', source.source_trader_id)
+        .order('close_time', { ascending: false })
+        .limit(50)
+
+      if (history && history.length > 0) {
+        return history.map((item: any) => ({
+          symbol: item.symbol || '',
+          direction: item.direction === 'short' ? 'short' : 'long',
+          entryPrice: item.entry_price || 0,
+          exitPrice: item.exit_price || 0,
+          pnlPct: item.pnl_pct || 0,
+          openTime: item.open_time || '',
+          closeTime: item.close_time || '',
+        }))
+      }
+    }
+
+    return []
+  } catch (error) {
+    console.error('Error in getTraderPositionHistory:', error)
+    return []
+  }
 }
 
 /**
@@ -793,14 +984,64 @@ export async function getTraderFeed(handle: string): Promise<TraderFeedItem[]> {
 
 /**
  * 获取相似交易员
+ * 基于 ROI 范围匹配真正相似的交易员（ROI ±30% 范围内）
+ * 如果当前交易员没有快照数据，则返回同数据源 ROI 最高的交易员
  */
 export async function getSimilarTraders(handle: string, limit: number = 6): Promise<TraderProfile[]> {
   try {
+    // 解码 URL 编码的 handle
+    const decodedHandle = decodeURIComponent(handle)
+    
     // 尝试所有数据源：binance_web3, binance, bybit, bitget, mexc, coinex, okx, kucoin, gate
     const sources = ['binance_web3', 'binance', 'bybit', 'bitget', 'mexc', 'coinex', 'okx', 'kucoin', 'gate']
     
+    // 辅助函数：获取并返回交易员列表
+    const buildTraderProfiles = async (
+      snapshots: Array<{ source_trader_id: string; roi: number | null }>,
+      sourceType: string,
+      excludeId?: string
+    ): Promise<TraderProfile[]> => {
+      const filteredSnapshots = excludeId 
+        ? snapshots.filter(s => s.source_trader_id !== excludeId)
+        : snapshots
+      
+      if (filteredSnapshots.length === 0) return []
+      
+      const traderIds = filteredSnapshots.slice(0, limit).map(s => s.source_trader_id)
+      const { data: sourcesData } = await supabase
+        .from('trader_sources')
+        .select('source_trader_id, handle, profile_url')
+        .eq('source', sourceType)
+        .in('source_trader_id', traderIds)
+
+      const handleMap = new Map()
+      if (sourcesData) {
+        sourcesData.forEach((s: any) => {
+          handleMap.set(s.source_trader_id, { 
+            handle: s.handle || s.source_trader_id, 
+            profile_url: s.profile_url,
+          })
+        })
+      }
+
+      const { getTradersArenaFollowersCount } = await import('./trader-followers')
+      const arenaFollowersMap = await getTradersArenaFollowersCount(supabase, traderIds)
+
+      return filteredSnapshots.slice(0, limit).map(s => {
+        const sourceInfo = handleMap.get(s.source_trader_id) || { handle: s.source_trader_id, profile_url: null }
+        const arenaFollowersCount = arenaFollowersMap.get(s.source_trader_id) || 0
+        return {
+          handle: sourceInfo.handle,
+          id: s.source_trader_id,
+          followers: arenaFollowersCount,
+          avatar_url: sourceInfo.profile_url || undefined,
+          source: sourceType,
+        }
+      })
+    }
+    
     for (const sourceType of sources) {
-      // 从 trader_sources 和 trader_snapshots 获取相似交易员（按 ROI 排名）
+      // 获取最新快照时间
       const { data: latestSnapshot } = await supabase
         .from('trader_snapshots')
         .select('captured_at')
@@ -810,11 +1051,8 @@ export async function getSimilarTraders(handle: string, limit: number = 6): Prom
         .maybeSingle()
 
       if (!latestSnapshot) continue
-
-      // 解码 URL 编码的 handle
-      const decodedHandle = decodeURIComponent(handle)
       
-      // 获取当前交易员的 source_trader_id - 尝试多个可能的 handle 值
+      // 获取当前交易员的 source_trader_id
       let currentSource = null
       const { data: currentSource1 } = await supabase
         .from('trader_sources')
@@ -835,7 +1073,6 @@ export async function getSimilarTraders(handle: string, limit: number = 6): Prom
         if (currentSource2) currentSource = currentSource2
       }
       
-      // 如果 handle 找不到，尝试作为 source_trader_id
       if (!currentSource) {
         const { data: currentSource3 } = await supabase
           .from('trader_sources')
@@ -856,52 +1093,61 @@ export async function getSimilarTraders(handle: string, limit: number = 6): Prom
         if (currentSource4) currentSource = currentSource4
       }
 
-      // 获取最新的排名数据，排除当前交易员
+      // 如果找不到当前交易员，尝试下一个数据源
+      if (!currentSource) continue
+
+      // 获取当前交易员的 ROI（可能没有最新快照数据）
+      const { data: currentTraderSnapshot } = await supabase
+        .from('trader_snapshots')
+        .select('roi')
+        .eq('source', sourceType)
+        .eq('source_trader_id', currentSource.source_trader_id)
+        .order('captured_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      const currentRoi = currentTraderSnapshot?.roi ?? 0
+      
+      // 计算 ROI 范围（±30%，最小范围 ±20）
+      const roiRange = Math.max(Math.abs(currentRoi) * 0.3, 20)
+      const minRoi = currentRoi - roiRange
+      const maxRoi = currentRoi + roiRange
+
+      // 获取 ROI 相似范围内的交易员
       const { data: snapshots } = await supabase
         .from('trader_snapshots')
         .select('source_trader_id, roi')
         .eq('source', sourceType)
         .eq('captured_at', latestSnapshot.captured_at)
-        .neq('source_trader_id', currentSource?.source_trader_id || '')
-        .order('roi', { ascending: false })
-        .limit(limit)
+        .neq('source_trader_id', currentSource.source_trader_id)
+        .gte('roi', minRoi)
+        .lte('roi', maxRoi)
+        .limit(50)
 
-      if (!snapshots || snapshots.length === 0) continue
-
-      // 获取对应的 handles（只查询 profile_url，因为 avatar_url 列不存在）
-      const traderIds = snapshots.map((s: any) => s.source_trader_id)
-      const { data: sourcesData } = await supabase
-        .from('trader_sources')
-        .select('source_trader_id, handle, profile_url')
-        .eq('source', sourceType)
-        .in('source_trader_id', traderIds)
-
-      const handleMap = new Map()
-      if (sourcesData) {
-        sourcesData.forEach((s: any) => {
-          handleMap.set(s.source_trader_id, { 
-            handle: s.handle || s.source_trader_id, 
-            profile_url: s.profile_url,
-            // 注意：avatar_url 列不存在，所以只使用 profile_url
-          })
-        })
+      if (snapshots && snapshots.length > 0) {
+        // 按 ROI 差距排序，选择最相似的
+        const sortedByDiff = snapshots
+          .map(s => ({ ...s, diff: Math.abs((s.roi || 0) - currentRoi) }))
+          .sort((a, b) => a.diff - b.diff)
+        
+        const result = await buildTraderProfiles(sortedByDiff, sourceType)
+        if (result.length > 0) return result
       }
 
-      // 批量获取 Arena 粉丝数（从 trader_follows 表统计）
-      const { getTradersArenaFollowersCount } = await import('./trader-followers')
-      const arenaFollowersMap = await getTradersArenaFollowersCount(supabase, traderIds)
-
-      return snapshots.map((s: any) => {
-        const sourceInfo = handleMap.get(s.source_trader_id) || { handle: s.source_trader_id, profile_url: null }
-        const arenaFollowersCount = arenaFollowersMap.get(s.source_trader_id) || 0
-        return {
-          handle: sourceInfo.handle,
-          id: s.source_trader_id,
-          followers: arenaFollowersCount, // 使用 Arena 粉丝数（从 trader_follows 表统计）
-          avatar_url: sourceInfo.profile_url || null,
-          source: sourceType,
-        }
-      })
+      // 降级：获取 ROI 最高的交易员（排除当前交易员）
+      const { data: fallbackSnapshots } = await supabase
+        .from('trader_snapshots')
+        .select('source_trader_id, roi')
+        .eq('source', sourceType)
+        .eq('captured_at', latestSnapshot.captured_at)
+        .neq('source_trader_id', currentSource.source_trader_id)
+        .order('roi', { ascending: false })
+        .limit(limit)
+      
+      if (fallbackSnapshots && fallbackSnapshots.length > 0) {
+        const result = await buildTraderProfiles(fallbackSnapshots, sourceType)
+        if (result.length > 0) return result
+      }
     }
 
     return []

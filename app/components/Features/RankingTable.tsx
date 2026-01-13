@@ -36,11 +36,12 @@ function formatAmount(amount: number): string {
 export interface Trader {
   id: string
   handle: string | null
-  roi: number // 90天ROI（固定）
+  roi: number // ROI（百分比）
   pnl?: number // 盈亏金额
-  win_rate: number // 90天胜率
-  volume_90d?: number // 90天交易量
-  avg_buy_90d?: number // 90天平均买入
+  win_rate: number // 胜率（百分比，如 85.71）
+  max_drawdown?: number // 最大回撤（百分比）
+  volume_90d?: number // 交易量
+  avg_buy_90d?: number // 平均买入
   followers: number // 粉丝数 - 仅来自 Arena 注册用户的关注（trader_follows 表统计）
   source?: string // 数据来源：binance, bybit, okx等
   avatar_url?: string // 头像URL
@@ -48,15 +49,16 @@ export interface Trader {
 
 /**
  * 排行榜页面 - 极度克制，只解决"谁最强"的问题
- * 只保留：排名、交易员ID、90天ROI、胜率、交易量、平均买入
+ * 只保留：排名、交易员ID、ROI、PnL、胜率、最大回撤
  */
 export default function RankingTable(props: {
   traders: Trader[]
   loading: boolean
   loggedIn: boolean
   source?: string // 数据来源
+  timeRange?: '7D' | '30D' | '90D' // 时间段
 }) {
-  const { traders, loading, source } = props
+  const { traders, loading, source, timeRange = '90D' } = props
   const { t } = useLanguage()
   
   // 分页状态
@@ -101,9 +103,9 @@ export default function RankingTable(props: {
         className="ranking-table-header ranking-table-grid"
         style={{
           display: 'grid',
-          gridTemplateColumns: '60px 1fr 120px 80px 100px 100px', // Rank | ID | ROI (90D) | Win Rate (90D) | Volume (90D) | Avg Buy (90D)
-          gap: tokens.spacing[4],
-          padding: `${tokens.spacing[4]} ${tokens.spacing[4]}`,
+          gridTemplateColumns: '50px 1fr 110px 80px 80px', // Rank | Trader | ROI+PnL | Win Rate | MDD
+          gap: tokens.spacing[3],
+          padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
           borderBottom: `2px solid ${tokens.colors.border.primary}`,
           background: tokens.colors.bg.secondary,
           borderRadius: `${tokens.radius.lg} ${tokens.radius.lg} 0 0`,
@@ -117,16 +119,13 @@ export default function RankingTable(props: {
           {t('trader')}
         </Text>
         <Text size="xs" weight="bold" color="tertiary" style={{ textAlign: 'right', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-          {t('roi90d')}
+          ROI ({timeRange})
         </Text>
         <Text size="xs" weight="bold" color="tertiary" style={{ textAlign: 'right', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-          {t('winRate90d')}
+          胜率
         </Text>
         <Text size="xs" weight="bold" color="tertiary" style={{ textAlign: 'right', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-          {t('volume90d')}
-        </Text>
-        <Text size="xs" weight="bold" color="tertiary" style={{ textAlign: 'right', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-          {t('avgBuy90d')}
+          回撤
         </Text>
       </Box>
 
@@ -186,9 +185,9 @@ export default function RankingTable(props: {
                     role="row"
                     style={{
                       display: 'grid',
-                      gridTemplateColumns: '60px 1fr 120px 80px 100px 100px',
+                      gridTemplateColumns: '50px 1fr 110px 80px 80px', // Rank | Trader | ROI+PnL | Win Rate | MDD
                       alignItems: 'center',
-                      gap: tokens.spacing[4],
+                      gap: tokens.spacing[3],
                       padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
                       borderBottom: `1px solid ${tokens.colors.border.primary}`,
                       cursor: 'pointer',
@@ -376,47 +375,32 @@ export default function RankingTable(props: {
                     )}
                   </Box>
 
-                  {/* 胜率 (90D) - 优化显示 */}
+                  {/* 胜率 - 已经是百分比，不需要乘100 */}
                   <Box style={{ textAlign: 'right' }}>
                     <Text 
                       size="sm" 
                       weight="bold" 
                       style={{ 
-                        color: t.win_rate > 0.5 ? tokens.colors.accent.success : tokens.colors.text.secondary,
+                        color: t.win_rate > 50 ? tokens.colors.accent.success : tokens.colors.text.secondary,
                         lineHeight: tokens.typography.lineHeight.tight,
                       }}
                     >
-                      {(t.win_rate * 100).toFixed(1)}%
+                      {t.win_rate.toFixed(1)}%
                     </Text>
                   </Box>
 
-                  {/* 交易量 (90D) - 优化显示 */}
+                  {/* 最大回撤 */}
                   <Box style={{ textAlign: 'right' }}>
                     <Text 
                       size="sm" 
                       weight="semibold" 
                       style={{ 
-                        color: t.volume_90d !== undefined ? tokens.colors.text.secondary : tokens.colors.text.tertiary,
+                        color: t.max_drawdown !== undefined ? tokens.colors.accent.error : tokens.colors.text.tertiary,
                         lineHeight: tokens.typography.lineHeight.tight,
-                        opacity: t.volume_90d !== undefined ? 1 : 0.5,
+                        opacity: t.max_drawdown !== undefined ? 1 : 0.5,
                       }}
                     >
-                      {t.volume_90d !== undefined ? formatAmount(t.volume_90d) : '—'}
-                    </Text>
-                  </Box>
-
-                  {/* 平均买入 (90D) - 优化显示 */}
-                  <Box style={{ textAlign: 'right' }}>
-                    <Text 
-                      size="sm" 
-                      weight="semibold" 
-                      style={{ 
-                        color: t.avg_buy_90d !== undefined ? tokens.colors.text.secondary : tokens.colors.text.tertiary,
-                        lineHeight: tokens.typography.lineHeight.tight,
-                        opacity: t.avg_buy_90d !== undefined ? 1 : 0.5,
-                      }}
-                    >
-                      {t.avg_buy_90d !== undefined ? formatAmount(t.avg_buy_90d) : '—'}
+                      {t.max_drawdown !== undefined ? `-${t.max_drawdown.toFixed(2)}%` : '—'}
                     </Text>
                   </Box>
 
@@ -605,3 +589,4 @@ export default function RankingTable(props: {
     </Box>
   )
 }
+

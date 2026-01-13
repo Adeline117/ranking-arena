@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../Base'
@@ -8,6 +9,95 @@ import type { TraderProfile } from '@/lib/data/trader'
 
 interface SimilarTradersProps {
   traders: TraderProfile[]
+}
+
+/**
+ * 带 fallback 的头像组件
+ * 解决头像图片加载时首字母和图片同时显示的问题
+ */
+function AvatarWithFallback({ 
+  avatarUrl, 
+  handle, 
+  traderId, 
+  size = 40 
+}: { 
+  avatarUrl?: string
+  handle: string
+  traderId: string
+  size?: number
+}) {
+  const [imageLoaded, setImageLoaded] = useState(false)
+  const [imageError, setImageError] = useState(false)
+  
+  const showFallback = !avatarUrl || imageError || !imageLoaded
+  
+  return (
+    <Box
+      style={{
+        width: size,
+        height: size,
+        borderRadius: tokens.radius.full,
+        background: getAvatarFallbackGradient(traderId),
+        border: `1.5px solid ${tokens.colors.border.primary}`,
+        display: 'grid',
+        placeItems: 'center',
+        overflow: 'hidden',
+        flexShrink: 0,
+        boxShadow: tokens.shadow.sm,
+        transition: `all ${tokens.transition.base}`,
+        position: 'relative',
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.transform = 'scale(1.08)'
+        e.currentTarget.style.boxShadow = tokens.shadow.md
+        e.currentTarget.style.borderColor = tokens.colors.accent.primary
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.transform = 'scale(1)'
+        e.currentTarget.style.boxShadow = tokens.shadow.sm
+        e.currentTarget.style.borderColor = tokens.colors.border.primary
+      }}
+    >
+      {/* 头像图片 - 始终渲染但根据状态显示/隐藏 */}
+      {avatarUrl && !imageError && (
+        <img 
+          src={avatarUrl} 
+          alt={handle} 
+          referrerPolicy="origin-when-cross-origin"
+          loading="lazy"
+          style={{ 
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: '100%', 
+            height: '100%', 
+            objectFit: 'cover',
+            opacity: imageLoaded ? 1 : 0,
+            transition: `opacity ${tokens.transition.base}`,
+          }}
+          onLoad={() => setImageLoaded(true)}
+          onError={() => setImageError(true)}
+        />
+      )}
+      {/* 首字母 fallback - 只在需要时显示 */}
+      {showFallback && (
+        <Text 
+          size="sm" 
+          weight="black" 
+          style={{ 
+            color: '#ffffff',
+            textShadow: '0 1px 2px rgba(0, 0, 0, 0.3)',
+            fontSize: `${Math.round(size * 0.4)}px`,
+            lineHeight: '1',
+            position: 'relative',
+            zIndex: 1,
+          }}
+        >
+          {getAvatarInitial(handle)}
+        </Text>
+      )}
+    </Box>
+  )
 }
 
 export default function SimilarTraders({ traders }: SimilarTradersProps) {
@@ -65,78 +155,13 @@ export default function SimilarTraders({ traders }: SimilarTradersProps) {
                 e.currentTarget.style.borderColor = tokens.colors.border.primary
               }}
             >
-              {/* 头像 - 优化UI，使用img标签 */}
-              <Box
-                style={{
-                  width: 40,
-                  height: 40,
-                  borderRadius: tokens.radius.full,
-                  background: trader.avatar_url ? tokens.colors.bg.secondary : getAvatarFallbackGradient(trader.id),
-                  border: `1.5px solid ${tokens.colors.border.primary}`,
-                  display: 'grid',
-                  placeItems: 'center',
-                  fontWeight: tokens.typography.fontWeight.black,
-                  fontSize: tokens.typography.fontSize.sm,
-                  color: '#ffffff',
-                  overflow: 'hidden',
-                  flexShrink: 0,
-                  boxShadow: tokens.shadow.sm,
-                  transition: `all ${tokens.transition.base}`,
-                  position: 'relative',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = 'scale(1.08)'
-                  e.currentTarget.style.boxShadow = tokens.shadow.md
-                  e.currentTarget.style.borderColor = tokens.colors.accent.primary
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = 'scale(1)'
-                  e.currentTarget.style.boxShadow = tokens.shadow.sm
-                  e.currentTarget.style.borderColor = tokens.colors.border.primary
-                }}
-              >
-                {trader.avatar_url ? (
-                  <img 
-                    src={trader.avatar_url} 
-                    alt={trader.handle} 
-                    referrerPolicy="origin-when-cross-origin"
-                    loading="lazy"
-                    style={{ 
-                      width: '100%', 
-                      height: '100%', 
-                      objectFit: 'cover',
-                      transition: `opacity ${tokens.transition.base}`,
-                      opacity: 0,
-                    }}
-                    onLoad={(e) => {
-                      e.currentTarget.style.opacity = '1'
-                    }}
-                    onError={(e) => {
-                      if (e.target) {
-                        (e.target as HTMLImageElement).style.display = 'none'
-                        const container = e.currentTarget.parentElement
-                        if (container) {
-                          container.style.background = getAvatarFallbackGradient(trader.id)
-                        }
-                      }
-                    }}
-                  />
-                ) : null}
-                {!trader.avatar_url && (
-                  <Text 
-                    size="sm" 
-                    weight="black" 
-                    style={{ 
-                      color: '#ffffff',
-                      textShadow: '0 1px 2px rgba(0, 0, 0, 0.3)',
-                      fontSize: '16px',
-                      lineHeight: '1',
-                    }}
-                  >
-                    {getAvatarInitial(trader.handle)}
-                  </Text>
-                )}
-              </Box>
+              {/* 头像 */}
+              <AvatarWithFallback 
+                avatarUrl={trader.avatar_url}
+                handle={trader.handle}
+                traderId={trader.id}
+                size={40}
+              />
               <Box style={{ flex: 1, minWidth: 0 }}>
                 <Text 
                   size="sm" 
