@@ -143,10 +143,20 @@ export default function TraderFeed({ items, title, showPostButton = false, onPos
                   {item.content.slice(0, 120)}...
                 </Text>
               )}
-              {item.groupName && (
-                <Text size="xs" color="tertiary" style={{ marginTop: tokens.spacing[2] }}>
+              {item.groupId && item.groupName && (
+                <Link
+                  href={`/groups/${item.groupId}`}
+                  onClick={(e) => e.stopPropagation()}
+                  style={{
+                    display: 'block',
+                    marginTop: tokens.spacing[2],
+                    fontSize: tokens.typography.fontSize.xs,
+                    color: '#8b6fa8',
+                    textDecoration: 'none',
+                  }}
+                >
                   {item.groupName}
-                </Text>
+                </Link>
               )}
             </Box>
           </Link>

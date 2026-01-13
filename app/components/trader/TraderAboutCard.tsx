@@ -9,6 +9,96 @@ import { Box, Text, Button } from '../Base'
 import FollowButton from '../UI/FollowButton'
 import { getAvatarFallbackGradient, getAvatarInitial } from '@/lib/utils/avatar'
 
+/**
+ * 带 fallback 的头像组件
+ * 解决头像图片加载时首字母和图片同时显示的问题
+ */
+function AvatarWithFallback({ 
+  avatarUrl, 
+  handle, 
+  traderId, 
+  size = 72 
+}: { 
+  avatarUrl?: string
+  handle: string
+  traderId: string
+  size?: number
+}) {
+  const [imageLoaded, setImageLoaded] = useState(false)
+  const [imageError, setImageError] = useState(false)
+  
+  const showFallback = !avatarUrl || imageError || !imageLoaded
+  
+  return (
+    <Box
+      style={{
+        width: size,
+        height: size,
+        borderRadius: tokens.radius.full,
+        background: getAvatarFallbackGradient(traderId),
+        border: `2px solid ${tokens.colors.border.primary}`,
+        display: 'grid',
+        placeItems: 'center',
+        marginBottom: tokens.spacing[4],
+        overflow: 'hidden',
+        flexShrink: 0,
+        boxShadow: tokens.shadow.md,
+        transition: `all ${tokens.transition.base}`,
+        position: 'relative',
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.transform = 'scale(1.05)'
+        e.currentTarget.style.boxShadow = tokens.shadow.lg
+        e.currentTarget.style.borderColor = tokens.colors.accent.primary
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.transform = 'scale(1)'
+        e.currentTarget.style.boxShadow = tokens.shadow.md
+        e.currentTarget.style.borderColor = tokens.colors.border.primary
+      }}
+    >
+      {/* 头像图片 */}
+      {avatarUrl && !imageError && (
+        <img 
+          src={avatarUrl} 
+          alt={handle} 
+          referrerPolicy="origin-when-cross-origin"
+          loading="lazy"
+          style={{ 
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: '100%', 
+            height: '100%', 
+            objectFit: 'cover',
+            opacity: imageLoaded ? 1 : 0,
+            transition: `opacity ${tokens.transition.base}`,
+          }}
+          onLoad={() => setImageLoaded(true)}
+          onError={() => setImageError(true)}
+        />
+      )}
+      {/* 首字母 fallback */}
+      {showFallback && (
+        <Text 
+          size="2xl" 
+          weight="black" 
+          style={{ 
+            color: '#ffffff',
+            textShadow: '0 2px 4px rgba(0, 0, 0, 0.4)',
+            fontSize: `${Math.round(size * 0.44)}px`,
+            lineHeight: '1',
+            position: 'relative',
+            zIndex: 1,
+          }}
+        >
+          {getAvatarInitial(handle)}
+        </Text>
+      )}
+    </Box>
+  )
+}
+
 interface TraderAboutCardProps {
   handle: string
   traderId?: string // 交易员ID，用于关注功能
@@ -64,77 +154,13 @@ export default function TraderAboutCard({
         e.currentTarget.style.transform = 'translateY(0)'
       }}
     >
-      {/* 头像 - 优化UI */}
-      <Box
-        style={{
-          width: 72,
-          height: 72,
-          borderRadius: tokens.radius.full,
-          background: avatarUrl ? tokens.colors.bg.secondary : getAvatarFallbackGradient(traderId || handle),
-          border: `2px solid ${tokens.colors.border.primary}`,
-          display: 'grid',
-          placeItems: 'center',
-          marginBottom: tokens.spacing[4],
-          overflow: 'hidden',
-          flexShrink: 0,
-          boxShadow: tokens.shadow.md,
-          transition: `all ${tokens.transition.base}`,
-          position: 'relative',
-        }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.transform = 'scale(1.05)'
-          e.currentTarget.style.boxShadow = tokens.shadow.lg
-          e.currentTarget.style.borderColor = tokens.colors.accent.primary
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.transform = 'scale(1)'
-          e.currentTarget.style.boxShadow = tokens.shadow.md
-          e.currentTarget.style.borderColor = tokens.colors.border.primary
-        }}
-      >
-        {avatarUrl ? (
-          <img 
-            src={avatarUrl} 
-            alt={handle} 
-            referrerPolicy="origin-when-cross-origin"
-            loading="lazy"
-            style={{ 
-              width: '100%', 
-              height: '100%', 
-              objectFit: 'cover',
-              transition: `opacity ${tokens.transition.base}`,
-              opacity: 0,
-            }}
-            onLoad={(e) => {
-              e.currentTarget.style.opacity = '1'
-            }}
-            onError={(e) => {
-              // 隐藏图片，显示首字母
-              if (e.target) {
-                (e.target as HTMLImageElement).style.display = 'none'
-                const container = e.currentTarget.parentElement
-                if (container) {
-                  container.style.background = getAvatarFallbackGradient(traderId || handle)
-                }
-              }
-            }}
-          />
-        ) : null}
-        {!avatarUrl && (
-          <Text 
-            size="2xl" 
-            weight="black" 
-            style={{ 
-              color: '#ffffff',
-              textShadow: '0 2px 4px rgba(0, 0, 0, 0.4)',
-              fontSize: '32px',
-              lineHeight: '1',
-            }}
-          >
-            {getAvatarInitial(handle)}
-          </Text>
-        )}
-      </Box>
+      {/* 头像 */}
+      <AvatarWithFallback 
+        avatarUrl={avatarUrl}
+        handle={handle}
+        traderId={traderId || handle}
+        size={72}
+      />
 
       {/* 交易员ID */}
       <Text 

@@ -33,11 +33,12 @@ function GroupsList() {
           .order('member_count', { ascending: false, nullsFirst: false })
           .limit(10)
 
-        if (error) {
+        // 检查是否是真正的错误（空对象 {} 不是错误）
+        const hasRealError = error && (error.message || error.code || error.details)
+        if (hasRealError) {
           console.error('Error loading groups:', error)
-        } else {
-          setGroups(data || [])
         }
+        setGroups(data || [])
       } catch (err) {
         console.error('Error:', err)
       } finally {
