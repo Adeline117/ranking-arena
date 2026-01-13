@@ -81,69 +81,70 @@ export default function PortfolioTable({ items }: PortfolioTableProps) {
           </Text>
         </Box>
 
-        <Box style={{ overflowX: 'auto' }}>
-          <table
-            style={{
-              width: '100%',
-              borderCollapse: 'collapse',
-            }}
-          >
-            <thead>
-              <tr style={{ borderBottom: `1px solid ${tokens.colors.border.primary}` }}>
-                <th
-                  style={{
-                    padding: tokens.spacing[3],
-                    textAlign: 'left',
-                    fontSize: tokens.typography.fontSize.xs,
-                    color: tokens.colors.text.tertiary,
-                    fontWeight: tokens.typography.fontWeight.bold,
-                    cursor: 'pointer',
-                  }}
-                  onClick={() => handleSort('market')}
-                >
-                  Market
-                </th>
-                <th
-                  style={{
-                    padding: tokens.spacing[3],
-                    textAlign: 'left',
-                    fontSize: tokens.typography.fontSize.xs,
-                    color: tokens.colors.text.tertiary,
-                    fontWeight: tokens.typography.fontWeight.bold,
-                  }}
-                >
-                  Direction
-                </th>
-                <th
-                  style={{
-                    padding: tokens.spacing[3],
-                    textAlign: 'right',
-                    fontSize: tokens.typography.fontSize.xs,
-                    color: tokens.colors.text.tertiary,
-                    fontWeight: tokens.typography.fontWeight.bold,
-                    cursor: 'pointer',
-                  }}
-                  onClick={() => handleSort('price')}
-                >
-                  Entry Price
-                </th>
-                <th
-                  style={{
-                    padding: tokens.spacing[3],
-                    textAlign: 'right',
-                    fontSize: tokens.typography.fontSize.xs,
-                    color: tokens.colors.text.tertiary,
-                    fontWeight: tokens.typography.fontWeight.bold,
-                    cursor: 'pointer',
-                  }}
-                  onClick={() => handleSort('pnl')}
-                >
-                  P/L(%)
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {sortedItems.map((item, idx) => (
+        {items.length > 0 ? (
+          <Box style={{ overflowX: 'auto' }}>
+            <table
+              style={{
+                width: '100%',
+                borderCollapse: 'collapse',
+              }}
+            >
+              <thead>
+                <tr style={{ borderBottom: `1px solid ${tokens.colors.border.primary}` }}>
+                  <th
+                    style={{
+                      padding: tokens.spacing[3],
+                      textAlign: 'left',
+                      fontSize: tokens.typography.fontSize.xs,
+                      color: tokens.colors.text.tertiary,
+                      fontWeight: tokens.typography.fontWeight.bold,
+                      cursor: 'pointer',
+                    }}
+                    onClick={() => handleSort('market')}
+                  >
+                    Market
+                  </th>
+                  <th
+                    style={{
+                      padding: tokens.spacing[3],
+                      textAlign: 'left',
+                      fontSize: tokens.typography.fontSize.xs,
+                      color: tokens.colors.text.tertiary,
+                      fontWeight: tokens.typography.fontWeight.bold,
+                    }}
+                  >
+                    Direction
+                  </th>
+                  <th
+                    style={{
+                      padding: tokens.spacing[3],
+                      textAlign: 'right',
+                      fontSize: tokens.typography.fontSize.xs,
+                      color: tokens.colors.text.tertiary,
+                      fontWeight: tokens.typography.fontWeight.bold,
+                      cursor: 'pointer',
+                    }}
+                    onClick={() => handleSort('price')}
+                  >
+                    Entry Price
+                  </th>
+                  <th
+                    style={{
+                      padding: tokens.spacing[3],
+                      textAlign: 'right',
+                      fontSize: tokens.typography.fontSize.xs,
+                      color: tokens.colors.text.tertiary,
+                      fontWeight: tokens.typography.fontWeight.bold,
+                      cursor: 'pointer',
+                    }}
+                    onClick={() => handleSort('pnl')}
+                  >
+                    P/L(%)
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {sortedItems.map((item, idx) => (
                 <tr
                   key={idx}
                   style={{
@@ -192,9 +193,19 @@ export default function PortfolioTable({ items }: PortfolioTableProps) {
                   </td>
                 </tr>
               ))}
-            </tbody>
-          </table>
-        </Box>
+              </tbody>
+            </table>
+          </Box>
+        ) : (
+          <Box style={{ padding: tokens.spacing[8], textAlign: 'center' }}>
+            <Text size="sm" color="tertiary" style={{ marginBottom: tokens.spacing[2] }}>
+              投资组合数据需要绑定账户解锁
+            </Text>
+            <Text size="xs" color="tertiary">
+              连接交易所账户后可查看详细的持仓信息
+            </Text>
+          </Box>
+        )}
       </Box>
 
       {/* Market Detail Drawer - 仅展示，无操作 */}

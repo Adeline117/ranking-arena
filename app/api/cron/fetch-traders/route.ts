@@ -72,6 +72,9 @@ export async function POST(req: Request) {
       { name: "bitget", script: "scripts/import_bitget_90d_roi.mjs" },
       { name: "mexc", script: "scripts/import_mexc_90d_roi.mjs" },
       { name: "coinex", script: "scripts/import_coinex_90d_roi.mjs" },
+      { name: "okx", script: "scripts/import_okx_90d_roi.mjs" },
+      { name: "kucoin", script: "scripts/import_kucoin_90d_roi.mjs" },
+      { name: "gate", script: "scripts/import_gate_90d_roi.mjs" },
     ];
 
     for (const { name, script } of scripts) {

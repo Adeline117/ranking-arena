@@ -15,70 +15,23 @@ interface StatsPageProps {
 export default function StatsPage({ stats, traderHandle }: StatsPageProps) {
   const { t } = useLanguage()
   
-  // Performance月度数据
+  // Performance月度数据 - 如果没有数据，显示空状态
   const monthlyData = useMemo(() => {
-    return stats.monthlyPerformance || [
-      { month: 'Jan', value: -7.68 },
-      { month: 'Feb', value: -0.78 },
-      { month: 'Mar', value: 6.31 },
-      { month: 'Apr', value: 6.19 },
-      { month: 'May', value: 13.15 },
-      { month: 'Jun', value: -7.63 },
-      { month: 'Jul', value: -7.03 },
-      { month: 'Aug', value: 7.69 },
-      { month: 'Sep', value: -1.36 },
-      { month: 'Oct', value: -4.01 },
-      { month: 'Nov', value: -7.65 },
-      { month: 'Dec', value: 3.88 },
-    ]
+    return stats.monthlyPerformance || []
   }, [stats.monthlyPerformance])
 
-  // 常用交易币种
-  const frequentlyTraded = stats.frequentlyTraded || [
-    {
-      symbol: 'AVAX',
-      weightPct: 8.13,
-      count: 0,
-      avgProfit: 74.02,
-      avgLoss: -16.58,
-      profitablePct: 78.31,
-    },
-    {
-      symbol: 'LINK',
-      weightPct: 11.01,
-      count: 0,
-      avgProfit: 103.85,
-      avgLoss: -38.93,
-      profitablePct: 43.0,
-    },
-    {
-      symbol: 'BTC',
-      weightPct: 11.78,
-      count: 0,
-      avgProfit: 4.72,
-      avgLoss: -39.29,
-      profitablePct: 88.27,
-    },
-  ]
+  // 常用交易币种 - 如果没有数据，显示空状态
+  const frequentlyTraded = stats.frequentlyTraded || []
 
-  // 交易统计
-  const trading = stats.trading || {
-    totalTrades12M: 269,
-    avgProfit: 279.16,
-    avgLoss: -113.74,
-    profitableTradesPct: 54.8,
-  }
+  // 交易统计 - 如果没有数据，显示空状态
+  const trading = stats.trading
 
-  // 额外统计
-  const additionalStats = stats.additionalStats || {
-    tradesPerWeek: 2.19,
-    avgHoldingTime: '31.5 Days',
-    activeSince: '2022-02-08',
-    profitableWeeksPct: 54.39,
-  }
+  // 额外统计 - 使用实际数据，如果没有则显示undefined
+  const additionalStats = stats.additionalStats
 
-  const traderReturn = 55.07
-  const spx500Return = 16.42
+  // 这些数据需要绑定账户才能获取，暂时使用占位符
+  const traderReturn = undefined
+  const spx500Return = undefined
 
   return (
     <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[6] }}>
@@ -88,77 +41,87 @@ export default function StatsPage({ stats, traderHandle }: StatsPageProps) {
           Performance
         </Text>
 
-        {/* Bar Chart */}
-        <Box style={{ marginTop: tokens.spacing[4], marginBottom: tokens.spacing[4] }}>
-          <PerformanceBarChart data={monthlyData} />
-        </Box>
+        {monthlyData.length > 0 ? (
+          <>
+            {/* Bar Chart */}
+            <Box style={{ marginTop: tokens.spacing[4], marginBottom: tokens.spacing[4] }}>
+              <PerformanceBarChart data={monthlyData} />
+            </Box>
 
-        {/* Month Labels */}
-        <Box
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(12, 1fr)',
-            gap: tokens.spacing[2],
-            marginTop: tokens.spacing[2],
-          }}
-        >
-          {monthlyData.map((item, i) => (
-            <Text
-              key={i}
-              size="xs"
-              color="tertiary"
-              style={{ textAlign: 'center', fontWeight: tokens.typography.fontWeight.normal }}
-            >
-              {item.month}
-            </Text>
-          ))}
-        </Box>
-
-        {/* Monthly Grid */}
-        <Box
-          bg="primary"
-          p={3}
-          radius="lg"
-          border="secondary"
-          style={{
-            marginTop: tokens.spacing[3],
-            display: 'grid',
-            gridTemplateColumns: '60px repeat(12, 1fr)',
-            gap: tokens.spacing[2],
-            alignItems: 'center',
-            fontSize: tokens.typography.fontSize.xs,
-          }}
-        >
-          <Text size="xs" color="tertiary" style={{ fontWeight: tokens.typography.fontWeight.normal }}>
-            2025
-          </Text>
-          {monthlyData.map((item, i) => (
+            {/* Month Labels */}
             <Box
-              key={i}
               style={{
-                textAlign: 'center',
-                padding: `${tokens.spacing[1]} 0`,
-                borderRadius: tokens.radius.md,
-                background: item.value >= 0
-                  ? 'rgba(47, 229, 125, 0.12)'
-                  : 'rgba(255, 77, 77, 0.12)',
-                color: item.value >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error,
-                fontWeight: tokens.typography.fontWeight.black,
+                display: 'grid',
+                gridTemplateColumns: 'repeat(12, 1fr)',
+                gap: tokens.spacing[2],
+                marginTop: tokens.spacing[2],
               }}
             >
-              {item.value >= 0 ? '+' : ''}
-              {item.value.toFixed(2)}%
+              {monthlyData.map((item, i) => (
+                <Text
+                  key={i}
+                  size="xs"
+                  color="tertiary"
+                  style={{ textAlign: 'center', fontWeight: tokens.typography.fontWeight.normal }}
+                >
+                  {item.month}
+                </Text>
+              ))}
             </Box>
-          ))}
-        </Box>
 
-        <Text
-          size="xs"
-          color="tertiary"
-          style={{ marginTop: tokens.spacing[3], fontStyle: 'italic' }}
-        >
-          Past performance is not indicative of future results.
-        </Text>
+            {/* Monthly Grid */}
+            <Box
+              bg="primary"
+              p={3}
+              radius="lg"
+              border="secondary"
+              style={{
+                marginTop: tokens.spacing[3],
+                display: 'grid',
+                gridTemplateColumns: '60px repeat(12, 1fr)',
+                gap: tokens.spacing[2],
+                alignItems: 'center',
+                fontSize: tokens.typography.fontSize.xs,
+              }}
+            >
+              <Text size="xs" color="tertiary" style={{ fontWeight: tokens.typography.fontWeight.normal }}>
+                2025
+              </Text>
+              {monthlyData.map((item, i) => (
+                <Box
+                  key={i}
+                  style={{
+                    textAlign: 'center',
+                    padding: `${tokens.spacing[1]} 0`,
+                    borderRadius: tokens.radius.md,
+                    background: item.value >= 0
+                      ? 'rgba(47, 229, 125, 0.12)'
+                      : 'rgba(255, 77, 77, 0.12)',
+                    color: item.value >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error,
+                    fontWeight: tokens.typography.fontWeight.black,
+                  }}
+                >
+                  {item.value >= 0 ? '+' : ''}
+                  {item.value.toFixed(2)}%
+                </Box>
+              ))}
+            </Box>
+
+            <Text
+              size="xs"
+              color="tertiary"
+              style={{ marginTop: tokens.spacing[3], fontStyle: 'italic' }}
+            >
+              Past performance is not indicative of future results.
+            </Text>
+          </>
+        ) : (
+          <Box style={{ padding: tokens.spacing[8], textAlign: 'center' }}>
+            <Text size="sm" color="tertiary">
+              月度绩效数据暂不可用
+            </Text>
+          </Box>
+        )}
       </Box>
 
       {/* Breakdown Section */}
@@ -222,53 +185,65 @@ export default function StatsPage({ stats, traderHandle }: StatsPageProps) {
           Trading
         </Text>
 
-        {/* Trading Stats */}
-        <Box
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(3, 1fr)',
-            gap: tokens.spacing[4],
-            marginBottom: tokens.spacing[6],
-          }}
-        >
-          <MiniKpi label="Total Trades (12M)" value={String(trading.totalTrades12M)} />
-          <MiniKpi
-            label="Avg. Profit / Loss"
-            value={`${trading.avgProfit.toFixed(2)} / ${trading.avgLoss.toFixed(2)}`}
-          />
-          <MiniKpi label="Profitable Trades" value={`${trading.profitableTradesPct.toFixed(2)}%`} />
-        </Box>
+        {trading ? (
+          <>
+            {/* Trading Stats */}
+            <Box
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(3, 1fr)',
+                gap: tokens.spacing[4],
+                marginBottom: tokens.spacing[6],
+              }}
+            >
+              <MiniKpi label="Total Trades (12M)" value={String(trading.totalTrades12M)} />
+              <MiniKpi
+                label="Avg. Profit / Loss"
+                value={`${trading.avgProfit.toFixed(2)} / ${trading.avgLoss.toFixed(2)}`}
+              />
+              <MiniKpi label="Profitable Trades" value={`${trading.profitableTradesPct.toFixed(2)}%`} />
+            </Box>
+          </>
+        ) : (
+          <Box style={{ padding: tokens.spacing[4], textAlign: 'center', marginBottom: tokens.spacing[6] }}>
+            <Text size="sm" color="tertiary">
+              交易统计数据需要绑定账户解锁
+            </Text>
+          </Box>
+        )}
 
         {/* Frequently Traded */}
-        <Box
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginBottom: tokens.spacing[4],
-          }}
-        >
-          <Text size="lg" weight="black">
-            Frequently traded
-          </Text>
-          <button
-            style={{
-              padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
-              borderRadius: tokens.radius.md,
-              border: `1px solid ${tokens.colors.border.primary}`,
-              background: 'transparent',
-              color: tokens.colors.text.secondary,
-              fontSize: tokens.typography.fontSize.xs,
-              fontWeight: tokens.typography.fontWeight.bold,
-              cursor: 'pointer',
-            }}
-          >
-            View all
-          </button>
-        </Box>
+        {frequentlyTraded.length > 0 ? (
+          <>
+            <Box
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: tokens.spacing[4],
+              }}
+            >
+              <Text size="lg" weight="black">
+                Frequently traded
+              </Text>
+              <button
+                style={{
+                  padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
+                  borderRadius: tokens.radius.md,
+                  border: `1px solid ${tokens.colors.border.primary}`,
+                  background: 'transparent',
+                  color: tokens.colors.text.secondary,
+                  fontSize: tokens.typography.fontSize.xs,
+                  fontWeight: tokens.typography.fontWeight.bold,
+                  cursor: 'pointer',
+                }}
+              >
+                View all
+              </button>
+            </Box>
 
-        <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3], marginBottom: tokens.spacing[6] }}>
-          {frequentlyTraded.map((item, idx) => (
+            <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3], marginBottom: tokens.spacing[6] }}>
+              {frequentlyTraded.map((item, idx) => (
             <Box
               key={idx}
               bg="primary"
@@ -334,7 +309,15 @@ export default function StatsPage({ stats, traderHandle }: StatsPageProps) {
               </Box>
             </Box>
           ))}
-        </Box>
+            </Box>
+          </>
+        ) : (
+          <Box style={{ padding: tokens.spacing[4], textAlign: 'center', marginBottom: tokens.spacing[6] }}>
+            <Text size="sm" color="tertiary">
+              常用交易币种数据需要绑定账户解锁
+            </Text>
+          </Box>
+        )}
 
         {/* Additional Stats */}
         <Box>
@@ -344,22 +327,22 @@ export default function StatsPage({ stats, traderHandle }: StatsPageProps) {
           <Box style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: tokens.spacing[4] }}>
             <MiniKpi 
               label="Trades per week" 
-              value={additionalStats.tradesPerWeek.toFixed(2)} 
+              value={additionalStats?.tradesPerWeek !== undefined ? additionalStats.tradesPerWeek.toFixed(2) : 'N/A'} 
               tooltip="Derived from public leaderboard snapshots"
             />
             <MiniKpi 
               label="Avg. holdings time" 
-              value={additionalStats.avgHoldingTime} 
+              value={additionalStats?.avgHoldingTime || 'N/A'} 
               tooltip="Derived from public leaderboard snapshots"
             />
             <MiniKpi 
               label="Tracked since (first seen in Arena)" 
-              value="—" 
-              isPlaceholder={true}
+              value={additionalStats?.activeSince || '—'} 
+              isPlaceholder={!additionalStats?.activeSince}
             />
             <MiniKpi 
               label="Profitable weeks" 
-              value={`${additionalStats.profitableWeeksPct.toFixed(2)}%`} 
+              value={additionalStats?.profitableWeeksPct !== undefined ? `${additionalStats.profitableWeeksPct.toFixed(2)}%` : 'N/A'} 
               tooltip="Derived from public leaderboard snapshots"
             />
           </Box>
@@ -595,7 +578,7 @@ function CompareChart({ height }: { height: number }) {
   )
 }
 
-function CompareRow({ name, pct }: { name: string; pct: number }) {
+function CompareRow({ name, pct }: { name: string; pct?: number }) {
   return (
     <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
       <Text size="sm" weight="black" style={{ color: tokens.colors.text.secondary }}>
@@ -605,11 +588,12 @@ function CompareRow({ name, pct }: { name: string; pct: number }) {
         size="sm"
         weight="black"
         style={{
-          color: pct >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error,
+          color: pct !== undefined 
+            ? (pct >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error)
+            : tokens.colors.text.tertiary,
         }}
       >
-        {pct >= 0 ? '+' : ''}
-        {pct.toFixed(2)}%
+        {pct !== undefined ? `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%` : 'N/A'}
       </Text>
     </Box>
   )
@@ -617,10 +601,24 @@ function CompareRow({ name, pct }: { name: string; pct: number }) {
 
 // Breakdown Section
 function BreakdownSection({ frequentlyTraded }: { frequentlyTraded: Array<{ symbol: string; weightPct: number }> }) {
+  if (frequentlyTraded.length === 0) {
+    return (
+      <Box bg="secondary" p={6} radius="xl" border="primary">
+        <Text size="lg" weight="black" style={{ marginBottom: tokens.spacing[4] }}>
+          Breakdown
+        </Text>
+        <Box style={{ padding: tokens.spacing[4], textAlign: 'center' }}>
+          <Text size="sm" color="tertiary">
+            投资组合明细数据需要绑定账户解锁
+          </Text>
+        </Box>
+      </Box>
+    )
+  }
+
   // 计算Stocks和Crypto的比例（这里简化处理，实际应该从portfolio数据获取）
-  const stocksPct = 91.13 // 默认值
-  const cryptoPct = 8.87
-  const totalPct = stocksPct + cryptoPct
+  // 由于没有真实数据，暂时不显示比例图
+  const totalPct = frequentlyTraded.reduce((sum, item) => sum + item.weightPct, 0)
 
   return (
     <Box bg="secondary" p={6} radius="xl" border="primary">
@@ -653,45 +651,13 @@ function BreakdownSection({ frequentlyTraded }: { frequentlyTraded: Array<{ symb
         </select>
       </Box>
 
-      <Box style={{ marginBottom: tokens.spacing[4] }}>
-        <Text as="span" size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[2] }}>
-          This breakdown includes <Text as="span" weight="bold" style={{ color: tokens.colors.text.primary }}>{totalPct.toFixed(1)}%</Text> of this Portfolio
-        </Text>
-      </Box>
-
-      {/* Horizontal Bar Chart */}
-      <Box style={{ display: 'flex', gap: 0, marginBottom: tokens.spacing[4], borderRadius: tokens.radius.md, overflow: 'hidden' }}>
-        <Box
-          style={{
-            width: `${stocksPct}%`,
-            height: 40,
-            background: 'rgba(59, 130, 246, 0.8)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: tokens.colors.text.primary,
-            fontSize: tokens.typography.fontSize.sm,
-            fontWeight: tokens.typography.fontWeight.black,
-          }}
-        >
-          Stocks {stocksPct.toFixed(1)}%
+      {totalPct > 0 && (
+        <Box style={{ marginBottom: tokens.spacing[4] }}>
+          <Text as="span" size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[2] }}>
+            This breakdown includes <Text as="span" weight="bold" style={{ color: tokens.colors.text.primary }}>{totalPct.toFixed(1)}%</Text> of this Portfolio
+          </Text>
         </Box>
-        <Box
-          style={{
-            width: `${cryptoPct}%`,
-            height: 40,
-            background: 'rgba(251, 146, 60, 0.8)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: tokens.colors.text.primary,
-            fontSize: tokens.typography.fontSize.sm,
-            fontWeight: tokens.typography.fontWeight.black,
-          }}
-        >
-          Crypto {cryptoPct.toFixed(1)}%
-        </Box>
-      </Box>
+      )}
 
       {/* Asset List */}
       <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>

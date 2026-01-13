@@ -52,9 +52,15 @@ export default function HomePage() {
       try {
         const { loadAllTraders } = await import('@/lib/data/trader-loader')
         const tradersData = await loadAllTraders(supabase)
+        console.log('[HomePage] 加载到的交易者数据:', {
+          count: tradersData.length,
+          sample: tradersData.slice(0, 3).map(t => ({ id: t.id, handle: t.handle, roi: t.roi })),
+        })
         setTraders(tradersData)
       } catch (error) {
+        console.error('[HomePage] 加载交易者数据失败:', error)
         logError(error, 'HomePage')
+        setTraders([]) // 确保在错误时设置为空数组
       } finally {
         setLoadingTraders(false)
       }

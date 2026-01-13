@@ -240,6 +240,18 @@ function normalizeData(rawData) {
     const avgBuyVolume = item.avgBuyVolume != null ? Number(item.avgBuyVolume) : null
     const lastActivity = item.lastActivity != null ? new Date(item.lastActivity).toISOString() : null
 
+    // 多时间段ROI（如果API提供）
+    const roi_7d = item.roi7d != null ? Number(item.roi7d) : (item.roi_7d != null ? Number(item.roi_7d) : null)
+    const roi_30d = item.roi30d != null ? Number(item.roi30d) : (item.roi_30d != null ? Number(item.roi_30d) : null)
+    const roi_1y = item.roi1y != null ? Number(item.roi1y) : (item.roi_1y != null ? Number(item.roi_1y) : null)
+    const roi_2y = item.roi2y != null ? Number(item.roi2y) : (item.roi_2y != null ? Number(item.roi_2y) : null)
+
+    // 交易统计（如果API提供）
+    const totalTrades = item.totalTrades != null ? Number(item.totalTrades) : (item.total_trades != null ? Number(item.total_trades) : null)
+    const avgProfit = item.avgProfit != null ? Number(item.avgProfit) : (item.avg_profit != null ? Number(item.avg_profit) : null)
+    const avgLoss = item.avgLoss != null ? Number(item.avgLoss) : (item.avg_loss != null ? Number(item.avg_loss) : null)
+    const profitableTradesPct = item.profitableTradesPct != null ? Number(item.profitableTradesPct) : (item.profitable_trades_pct != null ? Number(item.profitable_trades_pct) : null)
+
     return {
       encryptedUid: traderId,
       nickName: handle,
@@ -251,6 +263,14 @@ function normalizeData(rawData) {
       volume_90d: totalVolume,
       avg_buy_90d: avgBuyVolume,
       lastActivity: lastActivity,
+      roi_7d: isNaN(roi_7d) ? null : roi_7d,
+      roi_30d: isNaN(roi_30d) ? null : roi_30d,
+      roi_1y: isNaN(roi_1y) ? null : roi_1y,
+      roi_2y: isNaN(roi_2y) ? null : roi_2y,
+      totalTrades: totalTrades,
+      avgProfit: avgProfit,
+      avgLoss: avgLoss,
+      profitableTradesPct: profitableTradesPct,
       _raw: item,
     }
   })
@@ -321,6 +341,14 @@ async function importToSupabase(normalizedData, sourceType = 'binance_web3') {
       win_rate: item.winRate != null ? Number(item.winRate) : null,
       volume_90d: item.volume_90d != null ? Number(item.volume_90d) : null,
       avg_buy_90d: item.avg_buy_90d != null ? Number(item.avg_buy_90d) : null,
+      roi_7d: item.roi_7d != null && !isNaN(item.roi_7d) ? Number(item.roi_7d) : null,
+      roi_30d: item.roi_30d != null && !isNaN(item.roi_30d) ? Number(item.roi_30d) : null,
+      roi_1y: item.roi_1y != null && !isNaN(item.roi_1y) ? Number(item.roi_1y) : null,
+      roi_2y: item.roi_2y != null && !isNaN(item.roi_2y) ? Number(item.roi_2y) : null,
+      total_trades: item.totalTrades != null && !isNaN(item.totalTrades) ? Number(item.totalTrades) : null,
+      avg_profit: item.avgProfit != null && !isNaN(item.avgProfit) ? Number(item.avgProfit) : null,
+      avg_loss: item.avgLoss != null && !isNaN(item.avgLoss) ? Number(item.avgLoss) : null,
+      profitable_trades_pct: item.profitableTradesPct != null && !isNaN(item.profitableTradesPct) ? Number(item.profitableTradesPct) : null,
       captured_at: capturedAt,
     }
     // 如果数据库表中有 followers 列且不允许 NULL，设置为 0（但代码中不再使用此值）

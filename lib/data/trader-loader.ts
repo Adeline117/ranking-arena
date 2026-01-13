@@ -98,19 +98,32 @@ function snapshotToTrader(
 export async function loadAllTraders(supabase: SupabaseClient): Promise<Trader[]> {
   try {
     const startTime = performance.now()
+    console.log('[trader-loader] 🚀 开始加载交易者数据...')
 
     // 1. 获取所有数据源的最新时间戳
     const timestamps = await getAllLatestTimestamps(supabase)
+    console.log('[trader-loader] 📅 获取到的时间戳:', timestamps)
 
     // 2. 获取所有数据源的最新快照
     const snapshots = await getAllLatestSnapshots(supabase, timestamps, 100)
+    console.log('[trader-loader] 📸 获取到的快照数据:', {
+      binance: snapshots.binance?.length || 0,
+      binance_web3: snapshots.binance_web3?.length || 0,
+      bybit: snapshots.bybit?.length || 0,
+      bitget: snapshots.bitget?.length || 0,
+      mexc: snapshots.mexc?.length || 0,
+      coinex: snapshots.coinex?.length || 0,
+      okx: snapshots.okx?.length || 0,
+      kucoin: snapshots.kucoin?.length || 0,
+      gate: snapshots.gate?.length || 0,
+    })
 
     // 3. 获取所有数据源的 handle 信息
     const handleMaps = await getAllTraderHandles(supabase, snapshots)
 
     // 4. 转换数据
     const allTradersData: Trader[] = []
-    const sources: TraderSource[] = ['binance', 'binance_web3', 'bybit', 'bitget', 'mexc', 'coinex']
+    const sources: TraderSource[] = ['binance', 'binance_web3', 'bybit', 'bitget', 'mexc', 'coinex', 'okx', 'kucoin', 'gate']
 
     // 调试：输出每个source的handleMap大小
     sources.forEach((source) => {
@@ -161,6 +174,30 @@ export async function loadAllTraders(supabase: SupabaseClient): Promise<Trader[]
     const withAvatarCount = tradersData.filter(t => t.avatar_url && t.avatar_url.trim() !== '').length
     console.log(`[trader-loader] ⚡ 加载耗时: ${loadTime.toFixed(0)}ms`)
     console.log(`[trader-loader] 📈 加载了 ${tradersData.length} 个交易员，其中 ${withAvatarCount} 个有头像URL`)
+    
+    // 如果数据为空，输出详细调试信息
+    if (tradersData.length === 0) {
+      console.warn('[trader-loader] ⚠️ 警告：没有加载到任何交易者数据！')
+      console.warn('[trader-loader] 调试信息:', {
+        timestamps,
+        snapshotCounts: {
+          binance: snapshots.binance?.length || 0,
+          binance_web3: snapshots.binance_web3?.length || 0,
+          bybit: snapshots.bybit?.length || 0,
+          bitget: snapshots.bitget?.length || 0,
+          mexc: snapshots.mexc?.length || 0,
+          coinex: snapshots.coinex?.length || 0,
+          okx: snapshots.okx?.length || 0,
+          kucoin: snapshots.kucoin?.length || 0,
+          gate: snapshots.gate?.length || 0,
+        },
+        handleMapSizes: Object.fromEntries(
+          Object.entries(handleMaps).map(([k, v]) => [k, v?.size || 0])
+        ),
+        allTradersDataLength: allTradersData.length,
+        uniqueTradersMapSize: uniqueTradersMap.size,
+      })
+    }
     
     // 输出前5名trader的头像URL（用于调试）
     if (tradersData.length > 0) {

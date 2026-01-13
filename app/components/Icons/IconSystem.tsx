@@ -336,7 +336,7 @@ export function SettingsIcon({ size = 16, style, ...props }: IconProps) {
 }
 
 // Ranking Badge
-export function RankingBadge({ rank, size = 24 }: { rank: 1 | 2 | 3; size?: number }) {
+export function RankingBadge({ rank, size = 24 }: { rank: 1 | 2 | 3; size?: number }): React.ReactElement {
   const colors = {
     1: '#FFD700', // Gold
     2: '#C0C0C0', // Silver
