@@ -1,28 +1,24 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useMemo, useState, useRef, useCallback, useReducer } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { ThumbsUpIcon, ThumbsDownIcon, CommentIcon } from '../Icons'
 import { useLanguage } from '../Utils/LanguageProvider'
+import { supabase } from '@/lib/supabase/client'
+import { formatTimeAgo } from '@/lib/utils/date'
+import { type PollChoice, type PostWithUserState, getPollWinner } from '@/lib/types'
 
-type PollChoice = 'bull' | 'bear' | 'wait'
+// 本地类型（扩展后端类型）
+type Post = PostWithUserState
 
-type Post = {
-  views?: number
-  id: number
-  group: string
-  groupId?: string // 添加小组ID字段
-  title: string
-  author: string
-  authorTraderId?: string
-  time: string
-  body: string
-  comments: number
-  likes: number
-  pollEnabled?: boolean
-  poll?: { bull: number; bear: number; wait: number }
-  hotScore?: number
+type Comment = {
+  id: string
+  content: string
+  author_handle?: string
+  author_avatar_url?: string
+  created_at: string
+  replies?: Comment[]
 }
 
 const ARENA_PURPLE = '#8b6fa8'
@@ -32,25 +28,15 @@ function pollLabel(choice: PollChoice | 'tie', t: (key: keyof typeof import('@/l
   if (choice === 'bear') return t('bearish')
   return t('wait')
 }
+
 function pollColor(choice: PollChoice | 'tie') {
   if (choice === 'bull') return '#7CFFB2'
   if (choice === 'bear') return '#FF7C7C'
   return '#A9A9A9'
 }
-function getPollWinner(poll?: { bull: number; bear: number; wait: number }): PollChoice | 'tie' {
-  if (!poll) return 'tie'
-  const arr: Array<[PollChoice, number]> = [
-    ['bull', poll.bull],
-    ['bear', poll.bear],
-    ['wait', poll.wait],
-  ]
-  arr.sort((a, b) => b[1] - a[1])
-  if (arr[0][1] === arr[1][1]) return 'tie'
-  return arr[0][0]
-}
 
-function AvatarLink({ handle }: { handle: string }) {
-  // 统一跳转到 /trader/[handle] 页面
+function AvatarLink({ handle, avatarUrl }: { handle?: string | null; avatarUrl?: string | null }) {
+  if (!handle) return null
   const href = `/trader/${encodeURIComponent(handle)}`
   return (
     <Link
@@ -77,6 +63,7 @@ function AvatarLink({ handle }: { handle: string }) {
           fontWeight: tokens.typography.fontWeight.black,
           fontSize: tokens.typography.fontSize.xs,
           transition: `all ${tokens.transition.base}`,
+          overflow: 'hidden',
         }}
         onMouseEnter={(e) => {
           e.currentTarget.style.transform = 'scale(1.1)'
@@ -87,230 +74,318 @@ function AvatarLink({ handle }: { handle: string }) {
           e.currentTarget.style.boxShadow = tokens.shadow.none
         }}
       >
-        {(handle?.[0] || 'U').toUpperCase()}
+        {avatarUrl ? (
+          <img src={avatarUrl} alt={handle} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+        ) : (
+          (handle?.[0] || 'U').toUpperCase()
+        )}
       </span>
       <span style={{ fontWeight: 850, fontSize: 12, color: tokens.colors.text.secondary }}>{handle}</span>
     </Link>
   )
 }
 
-export default function PostFeed(props: { variant?: 'compact' | 'full' } = {}) {
-  void props
-
-  const posts: Post[] = useMemo(
-    () => [
-      {
-        id: 11,
-        group: 'BTC 内幕鲸鱼组',
-        groupId: 'btc-whale-group',
-        title: '今晚 8 点会不会假突破？我给出 3 个证据',
-        author: 'zero_chill',
-        comments: 212,
-        likes: 1203,
-        time: '2h',
-        body:
-          '证据 1：链上大额转入交易所明显增多；证据 2：永续资金费率开始抬头但现货成交跟不上；证据 3：关键阻力位附近挂单结构很"干净"。我的结论：如果 8 点前后放量但回踩不站稳，假突破概率更高。策略上我会分批，先小仓试探，严格止损……',
-        pollEnabled: true,
-        poll: { bull: 4664, bear: 1200, wait: 888 },
-        hotScore: 98,
-        views: 128000,
-      },
-      {
-        id: 12,
-        group: '合约爆仓幸存者',
-        groupId: 'contract-survivors',
-        title: '"不设止损"不是勇敢，是数学不及格',
-        author: 'night_whale',
-        comments: 98,
-        likes: 640,
-        time: '4h',
-        body:
-          '很多人误以为"扛单"=强者，其实是把风险用时间放大。你只要想清楚：任何策略都有最大回撤，杠杆会把它乘上去。止损不是承认失败，是在保护你的下一次机会。',
-        pollEnabled: true,
-        poll: { bull: 520, bear: 980, wait: 300 },
-        hotScore: 76,
-        views: 100000,
-      },
-      {
-        id: 13,
-        group: 'DeFi 长线仓位讨论区',
-        groupId: 'defi-long-term',
-        title: 'ETH 质押收益到底算不算"无风险"？',
-        author: 'alpha_fox',
-        comments: 76,
-        likes: 301,
-        time: '6h',
-        body:
-          '从名义上看质押像"利息"，但它承担了协议风险、惩罚风险（slashing）、流动性风险、以及机会成本。更现实的问题是：你拿到的收益计价单位是 ETH，本身价格波动就已经把"无风险"否掉了。',
-        pollEnabled: false,
-        hotScore: 64,
-        views: 104000,
-      },
-      {
-        id: 14,
-        group: '新手入坑区',
-        groupId: 'newbie-zone',
-        title: '现货/合约/杠杆到底有什么区别？一句话讲明白',
-        author: 'Alice',
-        comments: 54,
-        likes: 210,
-        time: '9h',
-        body:
-          '现货：你真买了币；杠杆：你借钱放大现货仓位；合约：你买的是"价格涨跌的合约"，可以做空。新手最容易死在合约，因为它把波动、杠杆、强平规则都叠加了。',
-        pollEnabled: true,
-        poll: { bull: 180, bear: 120, wait: 900 },
-        hotScore: 71,
-        views: 103400,
-      },
-    ],
-    []
-  )
-
+export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?: string; authorHandle?: string } = {}) {
   const { t } = useLanguage()
+  const [posts, setPosts] = useState<Post[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [openPost, setOpenPost] = useState<Post | null>(null)
-
-  const [commentsOpen, setCommentsOpen] = useState<Record<number, boolean>>({})
-  const [pollState, setPollState] = useState<Record<number, { bull: number; bear: number; wait: number }>>({})
-  const [myVote, setMyVote] = useState<Record<number, PollChoice | null>>({})
-  
-  // 使用 reducer 管理点赞状态，确保原子性更新
-  type ReactState = {
-    myReact: Record<number, 'up' | 'down' | null>
-    reactCounts: Record<number, { up: number; down: number }>
-  }
-  
-  type ReactAction = 
-    | { type: 'TOGGLE_REACT'; postId: number; dir: 'up' | 'down' }
-    | { type: 'INIT_REACTS'; posts: Post[] }
-  
-  const reactReducer = (state: ReactState, action: ReactAction): ReactState => {
-    switch (action.type) {
-      case 'TOGGLE_REACT': {
-        const { postId, dir } = action
-        const currentVote = state.myReact[postId]
-        const newVote = currentVote === dir ? null : dir
-        const cur = state.reactCounts[postId] ?? { up: 0, down: 0 }
-        let next = { ...cur }
-
-        if (currentVote === dir) {
-          // 取消投票
-          next = { ...next, [dir]: Math.max(0, next[dir] - 1) }
-        } else {
-          // 切换投票
-          if (currentVote) {
-            // 先取消之前的投票
-            next = { ...next, [currentVote]: Math.max(0, next[currentVote] - 1) }
-          }
-          // 添加新投票 - 只加1
-          next = { ...next, [dir]: next[dir] + 1 }
-        }
-
-        return {
-          myReact: { ...state.myReact, [postId]: newVote },
-          reactCounts: { ...state.reactCounts, [postId]: next }
-        }
-      }
-      case 'INIT_REACTS': {
-        const reactCounts = { ...state.reactCounts }
-        const myReact = { ...state.myReact }
-        for (const p of action.posts) {
-          if (!reactCounts[p.id]) {
-            reactCounts[p.id] = { up: p.likes, down: Math.floor(p.likes * 0.08) }
-          }
-          if (myReact[p.id] === undefined) {
-            myReact[p.id] = null
-          }
-        }
-        return { myReact, reactCounts }
-      }
-      default:
-        return state
-    }
-  }
-  
-  const [reactState, dispatchReact] = useReducer(reactReducer, {
-    myReact: {},
-    reactCounts: {}
-  })
-  
-  const myReact = reactState.myReact
-  const reactCounts = reactState.reactCounts
+  const [comments, setComments] = useState<Comment[]>([])
+  const [loadingComments, setLoadingComments] = useState(false)
+  const [newComment, setNewComment] = useState('')
+  const [submittingComment, setSubmittingComment] = useState(false)
+  const [accessToken, setAccessToken] = useState<string | null>(null)
   const processingRef = useRef<Set<string>>(new Set())
-  const toggleReactRef = useRef<((postId: number, dir: 'up' | 'down') => void) | null>(null)
+
+  // 获取用户 token
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setAccessToken(session?.access_token || null)
+    })
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setAccessToken(session?.access_token || null)
+    })
+
+    return () => subscription.unsubscribe()
+  }, [])
+
+  // 加载帖子
+  const loadPosts = useCallback(async () => {
+    try {
+      setLoading(true)
+      setError(null)
+
+      const params = new URLSearchParams()
+      params.set('limit', '20')
+      params.set('sort_by', 'created_at')
+      params.set('sort_order', 'desc')
+      
+      if (props.groupId) params.set('group_id', props.groupId)
+      if (props.authorHandle) params.set('author_handle', props.authorHandle)
+
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      }
+      if (accessToken) {
+        headers['Authorization'] = `Bearer ${accessToken}`
+      }
+
+      const response = await fetch(`/api/posts?${params.toString()}`, { headers })
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || '获取帖子失败')
+      }
+
+      // API 返回格式: { success: true, data: { posts: [...] } }
+      setPosts(data.data?.posts || [])
+    } catch (err: any) {
+      console.error('[PostFeed] 加载失败:', err)
+      setError(err.message || '加载失败')
+    } finally {
+      setLoading(false)
+    }
+  }, [props.groupId, props.authorHandle, accessToken])
 
   useEffect(() => {
-    setPollState((prev) => {
-      const next = { ...prev }
-      for (const p of posts) if (p.pollEnabled && p.poll && !next[p.id]) next[p.id] = p.poll
-      return next
-    })
-    setMyVote((prev) => {
-      const next = { ...prev }
-      for (const p of posts) if (next[p.id] === undefined) next[p.id] = null
-      return next
-    })
-    dispatchReact({ type: 'INIT_REACTS', posts })
-  }, [posts])
+    loadPosts()
+  }, [loadPosts])
 
-  const toggleComments = (postId: number) => setCommentsOpen((p) => ({ ...p, [postId]: !p[postId] }))
+  // 加载评论
+  const loadComments = useCallback(async (postId: string) => {
+    try {
+      setLoadingComments(true)
+      const response = await fetch(`/api/posts/${postId}/comments`)
+      const data = await response.json()
 
-  const toggleVote = (postId: number, choice: PollChoice) => {
-    setPollState((prev) => {
-      const current = prev[postId]
-      if (!current) return prev
-      const old = myVote[postId]
-      const next = { ...current }
-
-      if (old === choice) next[choice] = Math.max(0, next[choice] - 1)
-      else {
-        if (old) next[old] = Math.max(0, next[old] - 1)
-        next[choice] = next[choice] + 1
+      if (response.ok) {
+        setComments(data.comments || [])
       }
-      return { ...prev, [postId]: next }
-    })
+    } catch (err) {
+      console.error('[PostFeed] 加载评论失败:', err)
+    } finally {
+      setLoadingComments(false)
+    }
+  }, [])
 
-    setMyVote((prev) => {
-      const old = prev[postId]
-      return { ...prev, [postId]: old === choice ? null : choice }
-    })
-  }
-
-  const toggleReact = useCallback((postId: number, dir: 'up' | 'down') => {
-    // 防止重复调用 - 使用同步检查
-    const key = `${postId}-${dir}`
-    if (processingRef.current.has(key)) {
+  // 点赞/踩
+  const toggleReaction = useCallback(async (postId: string, reactionType: 'up' | 'down') => {
+    if (!accessToken) {
+      alert('请先登录')
       return
     }
-    
-    // 立即添加到 Set，防止在异步操作之前再次调用
+
+    const key = `react-${postId}-${reactionType}`
+    if (processingRef.current.has(key)) return
     processingRef.current.add(key)
 
-    // 使用 reducer 确保原子性更新
-    dispatchReact({ type: 'TOGGLE_REACT', postId, dir })
-    
-    // 清除处理标记
-    setTimeout(() => {
-      processingRef.current.delete(key)
-    }, 500)
-  }, [])
-  
-  // 保存到 ref 以便在组件重新渲染时保持引用
-  toggleReactRef.current = toggleReact
+    try {
+      const response = await fetch(`/api/posts/${postId}/like`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ reaction_type: reactionType }),
+      })
+
+      const data = await response.json()
+
+      if (response.ok) {
+        // 更新本地状态
+        setPosts(prev => prev.map(p => {
+          if (p.id === postId) {
+            return {
+              ...p,
+              like_count: data.like_count,
+              dislike_count: data.dislike_count,
+              user_reaction: data.reaction,
+            }
+          }
+          return p
+        }))
+
+        // 如果弹窗打开，也更新弹窗中的帖子
+        if (openPost?.id === postId) {
+          setOpenPost(prev => prev ? {
+            ...prev,
+            like_count: data.like_count,
+            dislike_count: data.dislike_count,
+            user_reaction: data.reaction,
+          } : null)
+        }
+      }
+    } catch (err) {
+      console.error('[PostFeed] 点赞失败:', err)
+    } finally {
+      setTimeout(() => processingRef.current.delete(key), 300)
+    }
+  }, [accessToken, openPost?.id])
+
+  // 投票
+  const toggleVote = useCallback(async (postId: string, choice: PollChoice) => {
+    if (!accessToken) {
+      alert('请先登录')
+      return
+    }
+
+    const key = `vote-${postId}-${choice}`
+    if (processingRef.current.has(key)) return
+    processingRef.current.add(key)
+
+    try {
+      const response = await fetch(`/api/posts/${postId}/vote`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ choice }),
+      })
+
+      const data = await response.json()
+
+      if (response.ok) {
+        // 更新本地状态
+        setPosts(prev => prev.map(p => {
+          if (p.id === postId) {
+            return {
+              ...p,
+              poll_bull: data.poll.bull,
+              poll_bear: data.poll.bear,
+              poll_wait: data.poll.wait,
+              user_vote: data.vote,
+            }
+          }
+          return p
+        }))
+
+        // 如果弹窗打开，也更新
+        if (openPost?.id === postId) {
+          setOpenPost(prev => prev ? {
+            ...prev,
+            poll_bull: data.poll.bull,
+            poll_bear: data.poll.bear,
+            poll_wait: data.poll.wait,
+            user_vote: data.vote,
+          } : null)
+        }
+      }
+    } catch (err) {
+      console.error('[PostFeed] 投票失败:', err)
+    } finally {
+      setTimeout(() => processingRef.current.delete(key), 300)
+    }
+  }, [accessToken, openPost?.id])
+
+  // 提交评论
+  const submitComment = useCallback(async (postId: string) => {
+    if (!accessToken) {
+      alert('请先登录')
+      return
+    }
+
+    if (!newComment.trim()) return
+
+    setSubmittingComment(true)
+    try {
+      const response = await fetch(`/api/posts/${postId}/comments`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ content: newComment.trim() }),
+      })
+
+      const data = await response.json()
+
+      if (response.ok) {
+        setComments(prev => [...prev, data.comment])
+        setNewComment('')
+        
+        // 更新评论计数
+        setPosts(prev => prev.map(p => {
+          if (p.id === postId) {
+            return { ...p, comment_count: p.comment_count + 1 }
+          }
+          return p
+        }))
+        
+        if (openPost?.id === postId) {
+          setOpenPost(prev => prev ? { ...prev, comment_count: prev.comment_count + 1 } : null)
+        }
+      } else {
+        alert(data.error || '发表评论失败')
+      }
+    } catch (err) {
+      console.error('[PostFeed] 发表评论失败:', err)
+      alert('发表评论失败')
+    } finally {
+      setSubmittingComment(false)
+    }
+  }, [accessToken, newComment, openPost?.id])
+
+  // 打开帖子详情
+  const handleOpenPost = useCallback((post: Post) => {
+    setOpenPost(post)
+    setComments([])
+    loadComments(post.id)
+  }, [loadComments])
+
+  if (loading) {
+    return (
+      <div style={{ padding: tokens.spacing[4], textAlign: 'center', color: tokens.colors.text.tertiary }}>
+        加载中...
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div style={{ padding: tokens.spacing[4], textAlign: 'center', color: tokens.colors.text.tertiary }}>
+        {error}
+        <button
+          onClick={loadPosts}
+          style={{
+            marginLeft: tokens.spacing[2],
+            padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
+            background: tokens.colors.accent.primary,
+            color: '#fff',
+            border: 'none',
+            borderRadius: tokens.radius.sm,
+            cursor: 'pointer',
+          }}
+        >
+          重试
+        </button>
+      </div>
+    )
+  }
+
+  if (posts.length === 0) {
+    return (
+      <div style={{ padding: tokens.spacing[4], textAlign: 'center', color: tokens.colors.text.tertiary }}>
+        暂无帖子
+      </div>
+    )
+  }
 
   return (
     <>
       <div>
         {posts.map((p) => {
-          const reacts = reactCounts[p.id] ?? { up: p.likes, down: Math.floor(p.likes * 0.08) }
-          const poll = pollState[p.id]
-          const winner = p.pollEnabled && poll ? getPollWinner(poll) : 'tie'
+          const poll = { bull: p.poll_bull, bear: p.poll_bear, wait: p.poll_wait }
+          const winner = p.poll_enabled ? getPollWinner(poll) : 'tie'
           const label = pollLabel(winner, t)
           const color = pollColor(winner)
 
           return (
             <div
               key={p.id}
-              onClick={() => setOpenPost(p)}
+              onClick={() => handleOpenPost(p)}
               style={{
                 width: '100%',
                 textAlign: 'left',
@@ -330,9 +405,9 @@ export default function PostFeed(props: { variant?: 'compact' | 'full' } = {}) {
               }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
-                {p.groupId ? (
+                {p.group_id ? (
                   <Link
-                    href={`/groups/${p.groupId}`}
+                    href={`/groups/${p.group_id}`}
                     onClick={(e) => e.stopPropagation()}
                     style={{
                       fontSize: 12,
@@ -341,38 +416,33 @@ export default function PostFeed(props: { variant?: 'compact' | 'full' } = {}) {
                       cursor: 'pointer',
                     }}
                   >
-                    {p.group}
+                    {p.group_name || '小组'}
                   </Link>
                 ) : (
-                  <div
-                    style={{
-                      fontSize: 12,
-                      color: ARENA_PURPLE,
-                    }}
-                  >
-                    {p.group}
+                  <div style={{ fontSize: 12, color: ARENA_PURPLE }}>
+                    讨论
                   </div>
                 )}
-                {/* ✅ 这里就是"点头像进主页" */}
-                <AvatarLink handle={p.author} />
+                <AvatarLink handle={p.author_handle} avatarUrl={p.author_avatar_url} />
               </div>
 
               <div style={{ marginTop: 6, fontWeight: 950, lineHeight: 1.25 }}>
                 {p.title}{' '}
-                <span
-                  style={{
-                    fontSize: 11,
-                    color,
-                    fontWeight: 950,
-                    border: '1px solid #1f1f1f',
-                    padding: '2px 6px',
-                    borderRadius: 999,
-                    marginLeft: 6,
-                  }}
-                  title={p.pollEnabled ? t('wait') : t('wait')}
-                >
-                  {label}
-                </span>
+                {p.poll_enabled && (
+                  <span
+                    style={{
+                      fontSize: 11,
+                      color,
+                      fontWeight: 950,
+                      border: '1px solid #1f1f1f',
+                      padding: '2px 6px',
+                      borderRadius: 999,
+                      marginLeft: 6,
+                    }}
+                  >
+                    {label}
+                  </span>
+                )}
               </div>
 
               <div style={{ marginTop: 8, display: 'flex', gap: 10, flexWrap: 'wrap', color: tokens.colors.text.secondary, fontSize: 12, alignItems: 'center' }}>
@@ -380,30 +450,29 @@ export default function PostFeed(props: { variant?: 'compact' | 'full' } = {}) {
                   onClick={(e) => {
                     e.preventDefault()
                     e.stopPropagation()
-                    if (toggleReactRef.current) {
-                      toggleReactRef.current(p.id, 'up')
-                    }
+                    toggleReaction(p.id, 'up')
                   }}
-                  active={myReact[p.id] === 'up'}
+                  active={p.user_reaction === 'up'}
                   icon={<ThumbsUpIcon size={14} />}
-                  count={reacts.up}
+                  count={p.like_count}
                   showCount={true}
                 />
                 <ReactButton
                   onClick={(e) => {
                     e.preventDefault()
                     e.stopPropagation()
-                    if (toggleReactRef.current) {
-                      toggleReactRef.current(p.id, 'down')
-                    }
+                    toggleReaction(p.id, 'down')
                   }}
-                  active={myReact[p.id] === 'down'}
+                  active={p.user_reaction === 'down'}
                   icon={<ThumbsDownIcon size={14} />}
-                  count={reacts.down}
+                  count={p.dislike_count}
                   showCount={false}
                 />
                 <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <CommentIcon size={14} /> {p.comments}
+                  <CommentIcon size={14} /> {p.comment_count}
+                </span>
+                <span style={{ color: tokens.colors.text.tertiary }}>
+                  {formatTimeAgo(p.created_at)}
                 </span>
               </div>
             </div>
@@ -411,78 +480,100 @@ export default function PostFeed(props: { variant?: 'compact' | 'full' } = {}) {
         })}
       </div>
 
-      {openPost ? (
+      {openPost && (
         <Modal onClose={() => setOpenPost(null)}>
-          <div style={{ fontSize: 12, color: ARENA_PURPLE }}>{openPost.group}</div>
+          <div style={{ fontSize: 12, color: ARENA_PURPLE }}>
+            {openPost.group_name || '讨论'}
+          </div>
 
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, marginTop: 8 }}>
             <div style={{ fontSize: 20, fontWeight: 950, lineHeight: 1.25 }}>{openPost.title}</div>
-            {/* ✅ 弹窗里也能点进主页 */}
-            <AvatarLink handle={openPost.author} />
+            <AvatarLink handle={openPost.author_handle} avatarUrl={openPost.author_avatar_url} />
           </div>
 
           <div style={{ marginTop: 8, fontSize: 12, color: tokens.colors.text.tertiary, display: 'flex', alignItems: 'center', gap: 6 }}>
-            {openPost.author} · {openPost.time} · <CommentIcon size={12} /> {openPost.comments}
+            {openPost.author_handle} · {formatTimeAgo(openPost.created_at)} · <CommentIcon size={12} /> {openPost.comment_count}
           </div>
 
           <div style={{ marginTop: 12, fontSize: 14, color: tokens.colors.text.primary, lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>
-            {openPost.body}
+            {openPost.content}
           </div>
 
           <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid #141414', display: 'flex', gap: 14, flexWrap: 'wrap' }}>
-            <Action 
-              icon={<ThumbsUpIcon size={14} />} 
-              text={t('upvote')} 
+            <Action
+              icon={<ThumbsUpIcon size={14} />}
+              text={t('upvote')}
               onClick={(e) => {
                 if (e) {
                   e.preventDefault()
                   e.stopPropagation()
                 }
-                if (toggleReactRef.current) {
-                  toggleReactRef.current(openPost.id, 'up')
-                }
-              }} 
-              active={myReact[openPost.id] === 'up'}
-              count={reactCounts[openPost.id]?.up ?? openPost.likes}
+                toggleReaction(openPost.id, 'up')
+              }}
+              active={openPost.user_reaction === 'up'}
+              count={openPost.like_count}
               showCount={true}
             />
-            <Action 
-              icon={<ThumbsDownIcon size={14} />} 
-              text={t('downvote')} 
+            <Action
+              icon={<ThumbsDownIcon size={14} />}
+              text={t('downvote')}
               onClick={(e) => {
                 if (e) {
                   e.preventDefault()
                   e.stopPropagation()
                 }
-                if (toggleReactRef.current) {
-                  toggleReactRef.current(openPost.id, 'down')
-                }
-              }} 
-              active={myReact[openPost.id] === 'down'}
-              count={reactCounts[openPost.id]?.down ?? Math.floor(openPost.likes * 0.08)}
+                toggleReaction(openPost.id, 'down')
+              }}
+              active={openPost.user_reaction === 'down'}
+              count={openPost.dislike_count}
               showCount={false}
             />
-            <Action icon={<CommentIcon size={14} />} text={t('comment')} onClick={() => toggleComments(openPost.id)} />
-            {openPost.pollEnabled && pollState[openPost.id] ? (
+            {openPost.poll_enabled && (
               <>
-                <Action text={`📈 ${t('bullish')}`} onClick={() => toggleVote(openPost.id, 'bull')} active={myVote[openPost.id] === 'bull'} />
-                <Action text={`📉 ${t('bearish')}`} onClick={() => toggleVote(openPost.id, 'bear')} active={myVote[openPost.id] === 'bear'} />
-                <Action text={`⏸ ${t('wait')}`} onClick={() => toggleVote(openPost.id, 'wait')} active={myVote[openPost.id] === 'wait'} />
+                <Action
+                  text={`📈 ${t('bullish')}`}
+                  onClick={() => toggleVote(openPost.id, 'bull')}
+                  active={openPost.user_vote === 'bull'}
+                  count={openPost.poll_bull}
+                  showCount={true}
+                />
+                <Action
+                  text={`📉 ${t('bearish')}`}
+                  onClick={() => toggleVote(openPost.id, 'bear')}
+                  active={openPost.user_vote === 'bear'}
+                  count={openPost.poll_bear}
+                  showCount={true}
+                />
+                <Action
+                  text={`⏸ ${t('wait')}`}
+                  onClick={() => toggleVote(openPost.id, 'wait')}
+                  active={openPost.user_vote === 'wait'}
+                  count={openPost.poll_wait}
+                  showCount={true}
+                />
               </>
-            ) : null}
+            )}
           </div>
 
-          {commentsOpen[openPost.id] ? (
-            <div style={{ marginTop: 12, borderTop: '1px solid #141414', paddingTop: 12 }}>
-              <div style={{ fontWeight: 950, marginBottom: 8 }}>{t('commentsMock')}</div>
+          {/* 评论区 */}
+          <div style={{ marginTop: 16, borderTop: '1px solid #141414', paddingTop: 16 }}>
+            <div style={{ fontWeight: 950, marginBottom: 12 }}>
+              {t('comments')} ({openPost.comment_count})
+            </div>
+
+            {/* 评论输入框 */}
+            <div style={{ marginBottom: 16 }}>
               <textarea
-                placeholder={t('writeComment')}
+                value={newComment}
+                onChange={(e) => setNewComment(e.target.value)}
+                placeholder={accessToken ? t('writeComment') : '请先登录后发表评论'}
+                disabled={!accessToken || submittingComment}
                 style={{
                   width: '100%',
-                  minHeight: 86,
+                  minHeight: 80,
                   resize: 'vertical',
                   padding: 12,
-                  borderRadius: 14,
+                  borderRadius: 12,
                   border: `1px solid ${tokens.colors.border.primary}`,
                   background: tokens.colors.bg.secondary,
                   color: tokens.colors.text.primary,
@@ -491,10 +582,80 @@ export default function PostFeed(props: { variant?: 'compact' | 'full' } = {}) {
                   lineHeight: 1.6,
                 }}
               />
+              {accessToken && (
+                <button
+                  onClick={() => submitComment(openPost.id)}
+                  disabled={!newComment.trim() || submittingComment}
+                  style={{
+                    marginTop: 8,
+                    padding: '8px 16px',
+                    background: newComment.trim() && !submittingComment ? ARENA_PURPLE : 'rgba(139, 111, 168, 0.3)',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: 8,
+                    cursor: newComment.trim() && !submittingComment ? 'pointer' : 'not-allowed',
+                    fontWeight: 700,
+                    fontSize: 13,
+                  }}
+                >
+                  {submittingComment ? '发送中...' : '发表评论'}
+                </button>
+              )}
             </div>
-          ) : null}
+
+            {/* 评论列表 */}
+            {loadingComments ? (
+              <div style={{ color: tokens.colors.text.tertiary, fontSize: 13 }}>加载评论中...</div>
+            ) : comments.length === 0 ? (
+              <div style={{ color: tokens.colors.text.tertiary, fontSize: 13 }}>暂无评论，来发表第一条评论吧</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {comments.map((comment) => (
+                  <div
+                    key={comment.id}
+                    style={{
+                      padding: 12,
+                      background: tokens.colors.bg.secondary,
+                      borderRadius: 8,
+                      border: `1px solid ${tokens.colors.border.primary}`,
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                      <AvatarLink handle={comment.author_handle || '匿名'} avatarUrl={comment.author_avatar_url} />
+                      <span style={{ fontSize: 11, color: tokens.colors.text.tertiary }}>
+                        {formatTimeAgo(comment.created_at)}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: 13, color: tokens.colors.text.primary, lineHeight: 1.6 }}>
+                      {comment.content}
+                    </div>
+                    {/* 嵌套回复 */}
+                    {comment.replies && comment.replies.length > 0 && (
+                      <div style={{ marginTop: 12, marginLeft: 16, borderLeft: `2px solid ${tokens.colors.border.primary}`, paddingLeft: 12 }}>
+                        {comment.replies.map((reply) => (
+                          <div key={reply.id} style={{ marginBottom: 8 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                              <span style={{ fontSize: 12, fontWeight: 700, color: tokens.colors.text.secondary }}>
+                                {reply.author_handle || '匿名'}
+                              </span>
+                              <span style={{ fontSize: 11, color: tokens.colors.text.tertiary }}>
+                                {formatTimeAgo(reply.created_at)}
+                              </span>
+                            </div>
+                            <div style={{ fontSize: 13, color: tokens.colors.text.primary }}>
+                              {reply.content}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </Modal>
-      ) : null}
+      )}
     </>
   )
 }
@@ -505,27 +666,20 @@ function ReactButton({ onClick, active, icon, count, showCount = true }: { onCli
   const processingRef = useRef(false)
 
   const handleClick = (e: React.MouseEvent) => {
-    // 防止重复点击
-    if (processingRef.current) {
-      console.log('[ReactButton] 防抖：跳过重复点击')
-      return
-    }
+    if (processingRef.current) return
     processingRef.current = true
-    
+
     e.preventDefault()
     e.stopPropagation()
-    
+
     setIsAnimating(true)
     setTimeout(() => {
       setIsAnimating(false)
       processingRef.current = false
     }, 300)
-    
+
     onClick(e)
   }
-
-  // 直接显示 count，因为 reactCounts 已经包含了用户的点赞
-  const displayCount = showCount ? count : null
 
   return (
     <button
@@ -570,7 +724,7 @@ function ReactButton({ onClick, active, icon, count, showCount = true }: { onCli
       >
         {icon}
       </span>
-      {showCount && displayCount}
+      {showCount && count}
     </button>
   )
 }
@@ -586,9 +740,6 @@ function Action(props: { icon?: React.ReactNode; text: string; onClick: (e?: Rea
     setTimeout(() => setIsAnimating(false), 300)
     props.onClick(e)
   }
-
-  // 直接显示 count，因为 reactCounts 已经包含了用户的点赞
-  const displayCount = props.showCount && props.count !== undefined ? props.count : null
 
   return (
     <button
@@ -636,7 +787,7 @@ function Action(props: { icon?: React.ReactNode; text: string; onClick: (e?: Rea
         {props.icon}
       </span>
       {props.text}
-      {props.showCount && props.count !== undefined && ` ${displayCount}`}
+      {props.showCount && props.count !== undefined && ` ${props.count}`}
     </button>
   )
 }
@@ -653,12 +804,15 @@ function Modal(props: { children: React.ReactNode; onClose: () => void }) {
         placeItems: 'center',
         padding: 16,
         zIndex: 60,
+        overflowY: 'auto',
       }}
     >
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
           width: 'min(760px, 100%)',
+          maxHeight: '90vh',
+          overflowY: 'auto',
           border: '1px solid #1f1f1f',
           borderRadius: 16,
           background: '#0b0b0b',

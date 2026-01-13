@@ -194,17 +194,17 @@ export default function HomePage() {
                   style={{
                     flex: 1,
                     padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
-                    background: activeTimeRange === range ? tokens.colors.accent.primary : 'transparent',
-                    color: activeTimeRange === range ? '#fff' : tokens.colors.text.secondary,
-                    border: 'none',
+                    background: activeTimeRange === range ? tokens.colors.bg.primary : 'transparent',
+                    color: activeTimeRange === range ? tokens.colors.text.primary : tokens.colors.text.tertiary,
+                    border: activeTimeRange === range ? `1px solid ${tokens.colors.border.primary}` : '1px solid transparent',
                     borderRadius: tokens.radius.md,
                     fontSize: tokens.typography.fontSize.sm,
-                    fontWeight: tokens.typography.fontWeight.bold,
+                    fontWeight: activeTimeRange === range ? tokens.typography.fontWeight.bold : tokens.typography.fontWeight.medium,
                     cursor: 'pointer',
                     transition: `all ${tokens.transition.base}`,
                   }}
                 >
-                  {range === '90D' ? '90天' : range === '30D' ? '30天' : '7天'}
+                  {range === '90D' ? t('days90') : range === '30D' ? t('days30') : t('days7')}
                 </button>
               ))}
             </Box>

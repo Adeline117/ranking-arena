@@ -39,10 +39,32 @@ function normalizeData(rawData) {
       }
     }
     
-    // PnL 可能在 followerYieldE8（需要除以 1e8）
+    // PnL 可能在多个字段中（按优先级尝试）
     let pnl = null
     if (item.followerYieldE8 != null) {
       pnl = Number(item.followerYieldE8) / 1e8
+    } else if (item.pnl != null) {
+      pnl = Number(item.pnl)
+    } else if (item.totalPnl != null) {
+      pnl = Number(item.totalPnl)
+    } else if (item.profit != null) {
+      pnl = Number(item.profit)
+    } else if (item.yieldE8 != null) {
+      pnl = Number(item.yieldE8) / 1e8
+    }
+    // 从 metricValues 数组提取（第2个位置可能是 PNL）
+    if (pnl === null && item.metricValues && Array.isArray(item.metricValues) && item.metricValues.length > 1) {
+      const pnlStr = item.metricValues[1] // 第2个可能是 PNL
+      if (pnlStr && typeof pnlStr === 'string') {
+        // 格式如 "+$1,234.56" 或 "$1.2K"
+        const match = pnlStr.match(/\$?([+-]?\d+(?:,?\d+)*\.?\d*)\s*(?:K|M)?/i)
+        if (match) {
+          let value = parseFloat(match[1].replace(/,/g, ''))
+          if (pnlStr.toUpperCase().includes('K')) value *= 1000
+          if (pnlStr.toUpperCase().includes('M')) value *= 1000000
+          pnl = value
+        }
+      }
     }
     
     // 注意：不再获取 followers，因为所有 trader 的粉丝数只能来源 Arena 注册用户的关注

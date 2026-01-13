@@ -8,7 +8,6 @@ import type { TraderFeedItem } from '@/lib/data/trader'
 type Group = {
   id: string
   name: string
-  subtitle?: string | null
 }
 
 interface UserHomeLayoutProps {
@@ -214,11 +213,6 @@ export default function UserHomeLayout({
                     <Text size="base" weight="bold">
                       {group.name}
                     </Text>
-                    {group.subtitle && (
-                      <Text size="xs" color="tertiary" style={{ marginTop: tokens.spacing[1] }}>
-                        {group.subtitle}
-                      </Text>
-                    )}
                   </Box>
                 </Link>
               ))}

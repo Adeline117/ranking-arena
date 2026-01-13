@@ -9,20 +9,29 @@ import MarketPanel from '@/app/components/Features/MarketPanel'
 import Card from '@/app/components/UI/Card'
 import RankingTableCompact from '@/app/components/Features/RankingTableCompact'
 import { Box, Text } from '@/app/components/Base'
-import type { Trader } from '@/app/components/Features/RankingTable'
+// 本地 Trader 类型，匹配 RankingTableCompact 的期望
+type Trader = {
+  id: string
+  handle: string | null
+  roi: number
+  win_rate: number
+  followers: number
+  source?: string
+}
 import { useLanguage } from '@/app/components/Utils/LanguageProvider'
 
 type Post = {
-  id: number
+  id: string
   group: string
   title: string
   author: string
+  author_handle?: string
   time: string
   body: string
   comments: number
   likes: number
-  hotScore?: number
-  views?: number
+  hotScore: number
+  views: number
 }
 
 export default function HotPage() {
@@ -31,6 +40,8 @@ export default function HotPage() {
   const [email, setEmail] = useState<string | null>(null)
   const [traders, setTraders] = useState<Trader[]>([])
   const [loadingTraders, setLoadingTraders] = useState(true)
+  const [posts, setPosts] = useState<Post[]>([])
+  const [loadingPosts, setLoadingPosts] = useState(true)
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -39,6 +50,7 @@ export default function HotPage() {
     })
   }, [])
 
+  // 加载交易员数据
   useEffect(() => {
     const load = async () => {
       setLoadingTraders(true)
@@ -88,63 +100,106 @@ export default function HotPage() {
         })
       }
 
-      const tradersData: Trader[] = snapshots.map((item: any) => ({
+      const tradersData = snapshots.map((item: any) => ({
         id: item.source_trader_id,
         handle: handleMap.get(item.source_trader_id) || item.source_trader_id,
         roi: item.roi || 0,
         win_rate: 0,
         followers: item.followers || 0,
-        source: 'binance', // 数据来源
+        source: 'binance' as const,
       }))
+      
+      setTraders(tradersData as Trader[])
 
-      setTraders(tradersData)
       setLoadingTraders(false)
     }
     load()
   }, [])
 
-  // 热榜帖子（mock数据，后续接入真实数据）
-  const posts: Post[] = useMemo(
-    () => [
-      {
-        id: 11,
-        group: 'BTC 内幕鲸鱼组',
-        title: '今晚 8 点会不会假突破？我给出 3 个证据',
-        author: 'zero_chill',
-        comments: 212,
-        likes: 1203,
-        time: '2h',
-        body: '证据 1：链上大额转入交易所明显增多；证据 2：永续资金费率开始抬头但现货成交跟不上；证据 3：关键阻力位附近挂单结构很"干净"。我的结论：如果 8 点前后放量但回踩不站稳，假突破概率更高。',
-        hotScore: 98,
-        views: 128000,
-      },
-      {
-        id: 12,
-        group: '合约爆仓幸存者',
-        title: '"不设止损"不是勇敢，是数学不及格',
-        author: 'night_whale',
-        comments: 98,
-        likes: 640,
-        time: '4h',
-        body: '很多人误以为"扛单"=强者，其实是把风险用时间放大。你只要想清楚：任何策略都有最大回撤，杠杆会把它乘上去。止损不是承认失败，是在保护你的下一次机会。',
-        hotScore: 76,
-        views: 100000,
-      },
-      {
-        id: 14,
-        group: '新手入坑区',
-        title: '现货/合约/杠杆到底有什么区别？一句话讲明白',
-        author: 'Alice',
-        comments: 54,
-        likes: 210,
-        time: '9h',
-        body: '现货：你真买了币；杠杆：你借钱放大现货仓位；合约：你买的是"价格涨跌的合约"，可以做空。新手最容易死在合约，因为它把波动、杠杆、强平规则都叠加了。',
-        hotScore: 71,
-        views: 103400,
-      },
-    ],
-    []
-  )
+  // 从数据库加载热榜帖子
+  useEffect(() => {
+    const loadPosts = async () => {
+      setLoadingPosts(true)
+      try {
+        // 从数据库获取热门帖子
+        const { data, error } = await supabase
+          .from('posts')
+          .select(`
+            id,
+            title,
+            content,
+            author_handle,
+            created_at,
+            like_count,
+            dislike_count,
+            comment_count,
+            view_count,
+            hot_score,
+            group_id,
+            groups(name)
+          `)
+          .order('hot_score', { ascending: false, nullsFirst: false })
+          .order('view_count', { ascending: false, nullsFirst: false })
+          .order('like_count', { ascending: false, nullsFirst: false })
+          .limit(20)
+
+        if (error) {
+          console.error('Failed to load hot posts:', error)
+          setPosts([])
+          setLoadingPosts(false)
+          return
+        }
+
+        if (data && data.length > 0) {
+          const postsData: Post[] = data.map((post: any) => {
+            // 计算时间差
+            const createdAt = new Date(post.created_at)
+            const now = new Date()
+            const diffMs = now.getTime() - createdAt.getTime()
+            const diffHours = Math.floor(diffMs / (1000 * 60 * 60))
+            const diffDays = Math.floor(diffHours / 24)
+            
+            let timeStr = ''
+            if (diffDays > 0) {
+              timeStr = `${diffDays}d`
+            } else if (diffHours > 0) {
+              timeStr = `${diffHours}h`
+            } else {
+              const diffMins = Math.floor(diffMs / (1000 * 60))
+              timeStr = `${diffMins}m`
+            }
+
+            return {
+              id: post.id,
+              group: post.groups?.name || '综合讨论',
+              title: post.title || '无标题',
+              author: post.author_handle || '匿名',
+              author_handle: post.author_handle,
+              time: timeStr,
+              body: post.content || '',
+              comments: post.comment_count || 0,
+              likes: post.like_count || 0,
+              hotScore: post.hot_score || 
+                (post.view_count || 0) * 0.1 + 
+                (post.like_count || 0) * 2 + 
+                (post.comment_count || 0) * 3,
+              views: post.view_count || 0,
+            }
+          })
+          setPosts(postsData)
+        } else {
+          setPosts([])
+        }
+      } catch (e) {
+        console.error('Failed to load posts:', e)
+        setPosts([])
+      } finally {
+        setLoadingPosts(false)
+      }
+    }
+    
+    loadPosts()
+  }, [])
 
   const hotPosts = useMemo(() => {
     const sorted = [...posts].sort((a, b) => (b.hotScore ?? 0) - (a.hotScore ?? 0))
@@ -174,56 +229,68 @@ export default function HotPage() {
               <Text size="sm" color="secondary" style={{ marginBottom: tokens.spacing[3] }}>
                 {loggedIn ? t('loggedInShowAllHot') : t('notLoggedInShowLimitedHot')}
               </Text>
-              <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
-                {visibleHot.map((p, idx) => {
-                  const rank = idx + 1
-                  return (
-                    <Link
-                      key={p.id}
-                      href={`/post/${p.id}`}
-                      style={{ textDecoration: 'none' }}
-                    >
-                      <Box
-                        className="hot-post-item"
-                        bg="primary"
-                        p={4}
-                        radius="md"
-                        border="primary"
-                        style={{
-                          cursor: 'pointer',
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.background = tokens.colors.bg.secondary
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.background = tokens.colors.bg.primary
-                        }}
+              
+              {loadingPosts ? (
+                <Box style={{ padding: tokens.spacing[4], textAlign: 'center' }}>
+                  <Text color="tertiary">{t('loading')}</Text>
+                </Box>
+              ) : visibleHot.length === 0 ? (
+                <Box style={{ padding: tokens.spacing[4], textAlign: 'center' }}>
+                  <Text color="tertiary">{t('noData')}</Text>
+                </Box>
+              ) : (
+                <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
+                  {visibleHot.map((p, idx) => {
+                    const rank = idx + 1
+                    return (
+                      <Link
+                        key={p.id}
+                        href={`/groups?post=${p.id}`}
+                        style={{ textDecoration: 'none' }}
                       >
-                        <Box className="hot-post-meta" style={{ display: 'flex', gap: tokens.spacing[2], marginBottom: tokens.spacing[2], flexWrap: 'wrap' }}>
-                          <Text className="hot-post-rank" size="sm" weight="black" style={{ color: rank <= 3 ? tokens.colors.accent.warning : tokens.colors.text.secondary }}>
-                            #{rank}
+                        <Box
+                          className="hot-post-item"
+                          bg="primary"
+                          p={4}
+                          radius="md"
+                          border="primary"
+                          style={{
+                            cursor: 'pointer',
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.background = tokens.colors.bg.secondary
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.background = tokens.colors.bg.primary
+                          }}
+                        >
+                          <Box className="hot-post-meta" style={{ display: 'flex', gap: tokens.spacing[2], marginBottom: tokens.spacing[2], flexWrap: 'wrap' }}>
+                            <Text className="hot-post-rank" size="sm" weight="black" style={{ color: rank <= 3 ? tokens.colors.accent.warning : tokens.colors.text.secondary }}>
+                              #{rank}
+                            </Text>
+                            <Text size="xs" color="secondary">{p.group}</Text>
+                            <Text size="xs" color="tertiary">{(p.views ?? 0).toLocaleString()} {t('views')}</Text>
+                          </Box>
+                          <Text className="hot-post-title" size="base" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>
+                            {p.title}
                           </Text>
-                          <Text size="xs" color="secondary">{p.group}</Text>
-                          <Text size="xs" color="tertiary">{(p.views ?? 0).toLocaleString()} {t('views')}</Text>
+                          <Text className="hot-post-body" size="sm" color="secondary" style={{ marginBottom: tokens.spacing[2], lineHeight: 1.5 }}>
+                            {p.body.slice(0, 100)}{p.body.length > 100 ? '...' : ''}
+                          </Text>
+                          <Box className="hot-post-footer" style={{ display: 'flex', gap: tokens.spacing[3], fontSize: tokens.typography.fontSize.xs, color: tokens.colors.text.tertiary, flexWrap: 'wrap' }}>
+                            <Text size="xs" color="tertiary">{p.author}</Text>
+                            <Text size="xs" color="tertiary">{p.time}</Text>
+                            <Text size="xs" color="tertiary">💬 {p.comments}</Text>
+                            <Text size="xs" color="tertiary">👍 {p.likes}</Text>
+                          </Box>
                         </Box>
-                        <Text className="hot-post-title" size="base" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>
-                          {p.title}
-                        </Text>
-                        <Text className="hot-post-body" size="sm" color="secondary" style={{ marginBottom: tokens.spacing[2], lineHeight: 1.5 }}>
-                          {p.body.slice(0, 100)}...
-                        </Text>
-                        <Box className="hot-post-footer" style={{ display: 'flex', gap: tokens.spacing[3], fontSize: tokens.typography.fontSize.xs, color: tokens.colors.text.tertiary, flexWrap: 'wrap' }}>
-                          <Text size="xs" color="tertiary">{p.author}</Text>
-                          <Text size="xs" color="tertiary">{p.time}</Text>
-                          <Text size="xs" color="tertiary">💬 {p.comments}</Text>
-                          <Text size="xs" color="tertiary">👍 {p.likes}</Text>
-                        </Box>
-                      </Box>
-                    </Link>
-                  )
-                })}
-              </Box>
-              {!loggedIn && (
+                      </Link>
+                    )
+                  })}
+                </Box>
+              )}
+              
+              {!loggedIn && posts.length > 3 && (
                 <Box style={{ marginTop: tokens.spacing[4], padding: tokens.spacing[3], textAlign: 'center' }}>
                   <Text size="sm" color="secondary">
                     {t('wantToSeeAllHotList')}

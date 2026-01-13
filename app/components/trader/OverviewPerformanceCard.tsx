@@ -3,10 +3,12 @@
 import { useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../Base'
+import { useLanguage } from '../Utils/LanguageProvider'
 import type { TraderPerformance } from '@/lib/data/trader'
 
-interface OverviewPerformanceCardProps {
+export interface OverviewPerformanceCardProps {
   performance: TraderPerformance
+  profitableWeeksPct?: number // 盈利周数百分比（可选）
 }
 
 type Period = '7D' | '30D' | '90D'
@@ -16,7 +18,10 @@ type Period = '7D' | '30D' | '90D'
  * ROI视觉权重最高，其他指标中性色
  * 只显示 7D/30D/90D（Binance提供的时间段）
  */
-export default function OverviewPerformanceCard({ performance }: OverviewPerformanceCardProps) {
+export default function OverviewPerformanceCard({ performance, profitableWeeksPct }: OverviewPerformanceCardProps) {
+  // profitableWeeksPct 可在需要时使用
+  void profitableWeeksPct
+  const { t } = useLanguage()
   const [period, setPeriod] = useState<Period>('90D')
 
   // 根据时间段获取对应数据
@@ -99,7 +104,7 @@ export default function OverviewPerformanceCard({ performance }: OverviewPerform
             letterSpacing: '-0.02em',
           }}
         >
-          {roi !== undefined ? `${roi >= 0 ? '+' : ''}${roi.toFixed(2)}%` : 'N/A'}
+          {roi !== undefined ? `${roi >= 0 ? '+' : ''}${roi.toFixed(2)}%` : t('na')}
         </Text>
         <Text size="xs" color="tertiary" style={{ fontWeight: tokens.typography.fontWeight.normal }}>
           ROI ({period})
@@ -119,42 +124,42 @@ export default function OverviewPerformanceCard({ performance }: OverviewPerform
         <Box>
           <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1] }}>
             <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[1] }}>
-              盈亏 (PnL)
+              {t('pnl')}
             </Text>
-            <InfoIcon tooltip="选定时间段内的总盈亏金额" />
+            <InfoIcon tooltip={t('pnl')} />
           </Box>
           <Text size="base" weight="bold" style={{ 
             color: pnl !== undefined 
               ? (pnl >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error)
               : tokens.colors.text.secondary 
           }}>
-            {pnl !== undefined ? `${pnl >= 0 ? '+' : ''}$${Math.abs(pnl) >= 1000000 ? (pnl / 1000000).toFixed(2) + 'M' : Math.abs(pnl) >= 1000 ? (pnl / 1000).toFixed(2) + 'K' : pnl.toFixed(2)}` : 'N/A'}
+            {pnl !== undefined ? `${pnl >= 0 ? '+' : ''}$${Math.abs(pnl) >= 1000000 ? (pnl / 1000000).toFixed(2) + 'M' : Math.abs(pnl) >= 1000 ? (pnl / 1000).toFixed(2) + 'K' : pnl.toFixed(2)}` : t('na')}
           </Text>
         </Box>
         <Box>
           <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1] }}>
             <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[1] }}>
-              胜率
+              {t('winRate')}
             </Text>
-            <InfoIcon tooltip="盈利交易占总交易次数的百分比" />
+            <InfoIcon tooltip={t('winRate')} />
           </Box>
           <Text size="base" weight="bold" style={{ 
             color: winRate !== undefined && winRate > 50 ? tokens.colors.accent.success : tokens.colors.text.secondary 
           }}>
-            {winRate !== undefined ? `${winRate.toFixed(1)}%` : 'N/A'}
+            {winRate !== undefined ? `${winRate.toFixed(1)}%` : t('na')}
           </Text>
         </Box>
         <Box>
           <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1] }}>
             <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[1] }}>
-              最大回撤
+              {t('maxDrawdown')}
             </Text>
-            <InfoIcon tooltip="从最高点到最低点的最大跌幅" />
+            <InfoIcon tooltip={t('maxDrawdown')} />
           </Box>
           <Text size="base" weight="bold" style={{ 
             color: maxDrawdown !== undefined ? tokens.colors.accent.error : tokens.colors.text.secondary 
           }}>
-            {maxDrawdown !== undefined ? `-${maxDrawdown.toFixed(2)}%` : 'N/A'}
+            {maxDrawdown !== undefined ? `-${maxDrawdown.toFixed(2)}%` : t('na')}
           </Text>
         </Box>
       </Box>

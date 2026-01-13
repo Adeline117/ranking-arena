@@ -128,3 +128,4 @@ CREATE POLICY "Service role can update" ON trader_yearly_performance FOR UPDATE 
 CREATE POLICY "Service role can update" ON trader_frequently_traded FOR UPDATE USING (true);
 CREATE POLICY "Service role can update" ON trader_stats_detail FOR UPDATE USING (true);
 
+

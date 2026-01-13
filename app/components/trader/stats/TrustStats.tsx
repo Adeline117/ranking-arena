@@ -16,10 +16,30 @@ export default function TrustStats({ stats }: TrustStatsProps) {
   // 从stats中提取关键指标
   const winRate = stats.trading?.profitableTradesPct || 0
   const avgHoldingTime = stats.additionalStats?.avgHoldingTime || 'N/A'
-  // TODO: maxDrawdown 和 profitFactor 需要添加到数据层
-  // 暂时使用占位数据
-  const maxDrawdown = 0 // TODO: 从stats中获取
-  const profitFactor = 0 // TODO: 从stats.trading中获取或计算
+  
+  // 从 additionalStats 获取 maxDrawdown
+  const maxDrawdown = stats.additionalStats?.maxDrawdown ?? 0
+  
+  // 计算 Profit Factor: avgProfit * profitableTradesPct / (avgLoss * (100 - profitableTradesPct))
+  // 如果没有足够数据，显示 N/A
+  let profitFactor = 0
+  if (stats.trading) {
+    const { avgProfit, avgLoss, profitableTradesPct } = stats.trading
+    if (avgProfit > 0 && avgLoss > 0 && profitableTradesPct > 0 && profitableTradesPct < 100) {
+      // Profit Factor = (胜率 * 平均盈利) / ((1-胜率) * 平均亏损)
+      const winPct = profitableTradesPct / 100
+      const lossPct = 1 - winPct
+      if (lossPct > 0 && avgLoss > 0) {
+        profitFactor = (winPct * avgProfit) / (lossPct * avgLoss)
+      }
+    }
+  }
+
+  // 格式化显示值
+  const formatValue = (value: number, suffix: string = '', fallback: string = 'N/A') => {
+    if (value === 0 || !Number.isFinite(value)) return fallback
+    return value.toFixed(2) + suffix
+  }
 
   return (
     <Box bg="secondary" p={6} radius="none" border="none">
@@ -39,8 +59,16 @@ export default function TrustStats({ stats }: TrustStatsProps) {
           <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[3], fontWeight: tokens.typography.fontWeight.normal }}>
             胜率
           </Text>
-          <Text size="2xl" weight="black" style={{ color: tokens.colors.text.primary }}>
-            {winRate.toFixed(1)}%
+          <Text 
+            size="2xl" 
+            weight="black" 
+            style={{ 
+              color: winRate > 50 ? tokens.colors.accent.success : 
+                     winRate > 0 ? tokens.colors.text.primary : 
+                     tokens.colors.text.tertiary 
+            }}
+          >
+            {winRate > 0 ? `${winRate.toFixed(1)}%` : 'N/A'}
           </Text>
         </Box>
 
@@ -59,8 +87,14 @@ export default function TrustStats({ stats }: TrustStatsProps) {
           <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[3], fontWeight: tokens.typography.fontWeight.normal }}>
             最大回撤
           </Text>
-          <Text size="2xl" weight="black" style={{ color: tokens.colors.text.primary }}>
-            {maxDrawdown > 0 ? maxDrawdown.toFixed(2) + '%' : 'N/A'}
+          <Text 
+            size="2xl" 
+            weight="black" 
+            style={{ 
+              color: maxDrawdown > 0 ? tokens.colors.accent.error : tokens.colors.text.tertiary 
+            }}
+          >
+            {maxDrawdown > 0 ? `-${maxDrawdown.toFixed(2)}%` : 'N/A'}
           </Text>
         </Box>
 
@@ -69,9 +103,23 @@ export default function TrustStats({ stats }: TrustStatsProps) {
           <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[3], fontWeight: tokens.typography.fontWeight.normal }}>
             Profit Factor
           </Text>
-          <Text size="2xl" weight="black" style={{ color: tokens.colors.text.primary }}>
-            {profitFactor > 0 ? profitFactor.toFixed(2) : 'N/A'}
+          <Text 
+            size="2xl" 
+            weight="black" 
+            style={{ 
+              color: profitFactor > 1.5 ? tokens.colors.accent.success : 
+                     profitFactor > 1 ? tokens.colors.accent.warning :
+                     profitFactor > 0 ? tokens.colors.accent.error :
+                     tokens.colors.text.tertiary 
+            }}
+          >
+            {formatValue(profitFactor)}
           </Text>
+          {profitFactor > 0 && (
+            <Text size="xs" color="tertiary" style={{ marginTop: tokens.spacing[1] }}>
+              {profitFactor >= 2 ? '优秀' : profitFactor >= 1.5 ? '良好' : profitFactor >= 1 ? '及格' : '需改进'}
+            </Text>
+          )}
         </Box>
       </Box>
     </Box>

@@ -14,6 +14,7 @@ export interface TraderSnapshot {
   pnl: number | null
   win_rate: number | null
   max_drawdown?: number | null
+  trades_count?: number | null
 }
 
 export interface TraderHandle {
@@ -55,7 +56,7 @@ export async function getLatestSnapshots(
 
   let query = supabase
     .from('trader_snapshots')
-    .select('source_trader_id, rank, roi, followers, pnl, win_rate, max_drawdown')
+    .select('source_trader_id, rank, roi, followers, pnl, win_rate, max_drawdown, trades_count')
     .eq('source', source)
     .eq('captured_at', timestamp)
     .order('rank', { ascending: true })

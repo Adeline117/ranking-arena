@@ -11,7 +11,7 @@ type Trader = {
   id: string
   handle: string | null
   roi: number
-  win_rate: number
+  win_rate?: number // 胜率可选
   followers: number
 }
 
@@ -128,7 +128,7 @@ function CompareTraders({ traders, onRemove, onClear }: CompareTradersProps) {
                   </span>
                 </Text>
                 <Text size="xs" color="secondary">
-                  胜率: {Math.round(trader.win_rate)}%
+                  胜率: {trader.win_rate != null ? `${Math.round(trader.win_rate)}%` : '—'}
                 </Text>
                 <Text size="xs" color="secondary">
                   粉丝: {formatNumber(trader.followers)}

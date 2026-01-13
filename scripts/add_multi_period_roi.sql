@@ -21,3 +21,4 @@ COMMENT ON COLUMN trader_snapshots.win_rate_30d IS '30天胜率';
 COMMENT ON COLUMN trader_snapshots.max_drawdown_7d IS '7天最大回撤';
 COMMENT ON COLUMN trader_snapshots.max_drawdown_30d IS '30天最大回撤';
 
+
