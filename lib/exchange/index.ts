@@ -5,7 +5,7 @@
 export * from './binance'
 export * from './encryption'
 
-export type Exchange = 'binance' | 'bybit' | 'bitget' | 'mexc' | 'coinex'
+export type Exchange = 'binance' | 'bybit' | 'bitget' | 'mexc' | 'coinex' | 'okx' | 'kucoin' | 'gate'
 
 export interface ExchangeConnection {
   id: string

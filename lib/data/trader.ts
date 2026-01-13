@@ -62,12 +62,17 @@ export interface TraderStats {
   
   // derived_from_snapshot_*: 基于快照计算的数据（从公开快照派生）
   additionalStats?: { // derived_from_snapshot_additional_stats
-    tradesPerWeek: number // derived_from_snapshot_trades_per_week
-    avgHoldingTime: string // derived_from_snapshot_avg_holding_time
-    activeSince: string // public_snapshot_first_seen_at (首次在 Arena 发现的时间)
-    profitableWeeksPct: number // derived_from_snapshot_profitable_weeks_pct
+    tradesPerWeek?: number // derived_from_snapshot_trades_per_week
+    avgHoldingTime?: string // derived_from_snapshot_avg_holding_time
+    activeSince?: string // public_snapshot_first_seen_at (首次在 Arena 发现的时间)
+    profitableWeeksPct?: number // derived_from_snapshot_profitable_weeks_pct
+    riskScore?: number // risk_score from snapshot
+    volume90d?: number // volume_90d from snapshot
+    maxDrawdown?: number // max_drawdown from snapshot
+    sharpeRatio?: number // sharpe_ratio from snapshot
   }
   monthlyPerformance?: Array<{ month: string; value: number }> // derived_from_snapshot_monthly_performance
+  yearlyPerformance?: Array<{ year: number; value: number }> // derived_from_snapshot_yearly_performance
 }
 
 export interface PortfolioItem {
@@ -103,8 +108,8 @@ export async function getTraderByHandle(handle: string): Promise<TraderProfile |
     // 解码 URL 编码的 handle
     const decodedHandle = decodeURIComponent(handle)
     
-    // 尝试所有数据源：binance_web3, binance, bybit, bitget, mexc, coinex
-    const sources = ['binance_web3', 'binance', 'bybit', 'bitget', 'mexc', 'coinex']
+    // 尝试所有数据源：binance_web3, binance, bybit, bitget, mexc, coinex, okx, kucoin, gate
+    const sources = ['binance_web3', 'binance', 'bybit', 'bitget', 'mexc', 'coinex', 'okx', 'kucoin', 'gate']
     
     for (const sourceType of sources) {
       // 从 trader_sources 表获取交易员信息（只查询 profile_url，因为 avatar_url 列不存在）
@@ -276,8 +281,8 @@ export async function getTraderPerformance(handle: string, period: '7D' | '30D' 
     // 解码 URL 编码的 handle
     const decodedHandle = decodeURIComponent(handle)
     
-    // 尝试所有数据源：binance_web3, binance, bybit, bitget, mexc, coinex
-    const sources = ['binance_web3', 'binance', 'bybit', 'bitget', 'mexc', 'coinex']
+    // 尝试所有数据源：binance_web3, binance, bybit, bitget, mexc, coinex, okx, kucoin, gate
+    const sources = ['binance_web3', 'binance', 'bybit', 'bitget', 'mexc', 'coinex', 'okx', 'kucoin', 'gate']
     
     for (const sourceType of sources) {
       // 先获取 source_trader_id - 尝试多个可能的 handle 值
@@ -326,34 +331,34 @@ export async function getTraderPerformance(handle: string, period: '7D' | '30D' 
         continue
       }
 
-      // 获取最新的 ROI 数据（90天）
+      // 获取最新的 ROI 数据（包括多时间段）
       const { data: latestSnapshot } = await supabase
         .from('trader_snapshots')
-        .select('roi')
+        .select('roi, roi_7d, roi_30d, roi_1y, roi_2y')
         .eq('source', sourceType)
         .eq('source_trader_id', source.source_trader_id)
         .order('captured_at', { ascending: false })
         .limit(1)
         .maybeSingle()
 
-      // 返回真实数据（目前只有 90D ROI，其他字段暂时使用默认值）
+      // 返回真实数据（包括多时间段ROI）
       return {
+        roi_7d: latestSnapshot?.roi_7d ?? undefined,
+        roi_30d: latestSnapshot?.roi_30d ?? undefined,
         roi_90d: latestSnapshot?.roi || 0,
-        return_ytd: latestSnapshot?.roi || 0,
-        // 其他字段暂时保持为空，等有真实数据源后再补充
+        roi_1y: latestSnapshot?.roi_1y ?? undefined,
+        roi_2y: latestSnapshot?.roi_2y ?? undefined,
       }
     }
 
-    // 如果没有找到，返回默认值
+    // 如果没有找到，返回空对象
     return {
       roi_90d: 0,
-      return_ytd: 0,
     }
   } catch (error) {
     console.error('Error in getTraderPerformance:', error)
     return {
       roi_90d: 0,
-      return_ytd: 0,
     }
   }
 }
@@ -362,131 +367,380 @@ export async function getTraderPerformance(handle: string, period: '7D' | '30D' 
  * 获取交易员统计数据
  */
 export async function getTraderStats(handle: string): Promise<TraderStats> {
-  // TODO: 从真实数据表获取
-  void handle
-  return {
-    expectedDividends: {
-      dividendYield: 0.05,
-      assets: 8,
-      trendingStocks: [
-        { symbol: 'NTES', yield: 2.15 },
-        { symbol: 'TGT', yield: 4.64 },
-        { symbol: 'AAPL', yield: 0.52 },
-      ],
-    },
-    trading: {
-      totalTrades12M: 357,
-      avgProfit: 400.65,
-      avgLoss: -63.82,
-      profitableTradesPct: 48.46,
-    },
-    frequentlyTraded: [
-      {
-        symbol: 'ARVLF',
-        weightPct: 11.24,
-        count: 40,
-        avgProfit: 0,
-        avgLoss: -99.99,
-        profitablePct: 0,
+  try {
+    // 解码 URL 编码的 handle
+    const decodedHandle = decodeURIComponent(handle)
+    
+    // 尝试所有数据源：binance_web3, binance, bybit, bitget, mexc, coinex, okx, kucoin, gate
+    const sources = ['binance_web3', 'binance', 'bybit', 'bitget', 'mexc', 'coinex', 'okx', 'kucoin', 'gate']
+    
+    for (const sourceType of sources) {
+      // 先获取 source_trader_id - 尝试多个可能的 handle 值
+      let source = null
+      const { data: source1 } = await supabase
+        .from('trader_sources')
+        .select('source_trader_id')
+        .eq('source', sourceType)
+        .eq('handle', handle)
+        .maybeSingle()
+      
+      if (source1) {
+        source = source1
+      } else if (decodedHandle !== handle) {
+        const { data: source2 } = await supabase
+          .from('trader_sources')
+          .select('source_trader_id')
+          .eq('source', sourceType)
+          .eq('handle', decodedHandle)
+          .maybeSingle()
+        if (source2) source = source2
+      }
+      
+      // 如果 handle 找不到，尝试作为 source_trader_id
+      if (!source) {
+        const { data: source3 } = await supabase
+          .from('trader_sources')
+          .select('source_trader_id')
+          .eq('source', sourceType)
+          .eq('source_trader_id', handle)
+          .maybeSingle()
+        if (source3) source = source3
+      }
+      
+      if (!source && decodedHandle !== handle) {
+        const { data: source4 } = await supabase
+          .from('trader_sources')
+          .select('source_trader_id')
+          .eq('source', sourceType)
+          .eq('source_trader_id', decodedHandle)
+          .maybeSingle()
+        if (source4) source = source4
+      }
+
+      if (!source) {
+        continue
+      }
+
+      // 获取最新的快照数据（包含新字段）
+      const { data: latestSnapshot } = await supabase
+        .from('trader_snapshots')
+        .select('roi, captured_at, total_trades, avg_profit, avg_loss, profitable_trades_pct, risk_score, avg_holding_time_days, trades_per_week, volume_90d, max_drawdown, sharpe_ratio')
+        .eq('source', sourceType)
+        .eq('source_trader_id', source.source_trader_id)
+        .order('captured_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      // 获取历史快照数据用于计算
+      const { data: snapshots } = await supabase
+        .from('trader_snapshots')
+        .select('roi, captured_at')
+        .eq('source', sourceType)
+        .eq('source_trader_id', source.source_trader_id)
+        .order('captured_at', { ascending: true })
+
+      if (!snapshots || snapshots.length === 0) {
+        continue
+      }
+
+      // 计算 activeSince（最早的 captured_at）
+      const earliestSnapshot = snapshots[0]
+      const activeSinceDate = new Date(earliestSnapshot.captured_at)
+      const activeSince = `${activeSinceDate.getMonth() + 1}/${activeSinceDate.getDate()}/${activeSinceDate.getFullYear().toString().slice(-2)}`
+
+      // 计算 profitableWeeksPct（如果有多个时间点的数据）
+      let profitableWeeksPct: number | undefined = undefined
+      if (snapshots.length > 1) {
+        const profitableWeeks = snapshots.filter(s => (s.roi || 0) > 0).length
+        profitableWeeksPct = (profitableWeeks / snapshots.length) * 100
+      }
+
+      // 获取频繁交易资产
+      const frequentlyTraded = await getTraderFrequentlyTraded(handle)
+
+      // 获取月度表现
+      const monthlyPerformance = await getTraderMonthlyPerformance(handle)
+
+      // 获取年度表现
+      const yearlyPerformance = await getTraderYearlyPerformance(handle)
+
+      // 返回可计算的数据
+      return {
+        // account_required_* 字段需要绑定账户，返回undefined
+        expectedDividends: undefined,
+        trading: latestSnapshot ? {
+          totalTrades12M: latestSnapshot.total_trades ?? 0,
+          avgProfit: latestSnapshot.avg_profit ?? 0,
+          avgLoss: latestSnapshot.avg_loss ?? 0,
+          profitableTradesPct: latestSnapshot.profitable_trades_pct ?? 0,
+        } : undefined,
+        frequentlyTraded: frequentlyTraded.length > 0 ? frequentlyTraded : undefined,
+        // derived_from_snapshot_* 字段
+        additionalStats: {
+          tradesPerWeek: latestSnapshot?.trades_per_week ?? undefined,
+          avgHoldingTime: latestSnapshot?.avg_holding_time_days ? `${latestSnapshot.avg_holding_time_days}天` : undefined,
+          activeSince, // 可以从最早快照计算
+          profitableWeeksPct, // 可以从历史快照计算
+          riskScore: latestSnapshot?.risk_score ?? undefined,
+          volume90d: latestSnapshot?.volume_90d ?? undefined,
+          maxDrawdown: latestSnapshot?.max_drawdown ?? undefined,
+          sharpeRatio: latestSnapshot?.sharpe_ratio ?? undefined,
+        },
+        monthlyPerformance: monthlyPerformance.length > 0 ? monthlyPerformance : undefined,
+        yearlyPerformance: yearlyPerformance.length > 0 ? yearlyPerformance : undefined,
+      }
+    }
+
+    // 如果没有找到，返回空对象
+    return {
+      additionalStats: {
+        tradesPerWeek: undefined,
+        avgHoldingTime: undefined,
+        activeSince: undefined,
+        profitableWeeksPct: undefined,
       },
-      {
-        symbol: 'NIO',
-        weightPct: 8.68,
-        count: 31,
-        avgProfit: 29.0,
-        avgLoss: -59.02,
-        profitablePct: 6.45,
+    }
+  } catch (error) {
+    console.error('Error in getTraderStats:', error)
+    return {
+      additionalStats: {
+        tradesPerWeek: undefined,
+        avgHoldingTime: undefined,
+        activeSince: undefined,
+        profitableWeeksPct: undefined,
       },
-      {
-        symbol: 'PLTR',
-        weightPct: 7.56,
-        count: 27,
-        avgProfit: 1688.25,
-        avgLoss: 0,
-        profitablePct: 100.0,
-      },
-    ],
-    additionalStats: {
-      tradesPerWeek: 6.26,
-      avgHoldingTime: '31.5 Months',
-      activeSince: '2/8/22',
-      profitableWeeksPct: 54.39,
-    },
-    monthlyPerformance: [
-      { month: 'Jan', value: 5.57 },
-      { month: 'Feb', value: -23.53 },
-      { month: 'Mar', value: -7.51 },
-      { month: 'Apr', value: 9.65 },
-      { month: 'May', value: 17.86 },
-      { month: 'Jun', value: 1.13 },
-      { month: 'Jul', value: 20.97 },
-      { month: 'Aug', value: 3.11 },
-      { month: 'Sep', value: 0.42 },
-      { month: 'Oct', value: -5.62 },
-      { month: 'Nov', value: -19.30 },
-      { month: 'Dec', value: -1.77 },
-    ],
+    }
+  }
+}
+
+/**
+ * 获取交易员频繁交易资产
+ */
+export async function getTraderFrequentlyTraded(handle: string): Promise<Array<{
+  symbol: string
+  weightPct: number
+  count: number
+  avgProfit: number
+  avgLoss: number
+  profitablePct: number
+}>> {
+  try {
+    const decodedHandle = decodeURIComponent(handle)
+    const sources = ['binance_web3', 'binance', 'bybit', 'bitget', 'mexc', 'coinex', 'okx', 'kucoin', 'gate']
+    
+    for (const sourceType of sources) {
+      let source = null
+      const { data: source1 } = await supabase
+        .from('trader_sources')
+        .select('source_trader_id')
+        .eq('source', sourceType)
+        .eq('handle', handle)
+        .maybeSingle()
+      
+      if (source1) {
+        source = source1
+      } else if (decodedHandle !== handle) {
+        const { data: source2 } = await supabase
+          .from('trader_sources')
+          .select('source_trader_id')
+          .eq('source', sourceType)
+          .eq('handle', decodedHandle)
+          .maybeSingle()
+        if (source2) source = source2
+      }
+      
+      if (!source) {
+        const { data: source3 } = await supabase
+          .from('trader_sources')
+          .select('source_trader_id')
+          .eq('source', sourceType)
+          .eq('source_trader_id', handle)
+          .maybeSingle()
+        if (source3) source = source3
+      }
+      
+      if (!source) continue
+
+      // 获取最新的频繁交易资产数据
+      const { data: latestSnapshot } = await supabase
+        .from('trader_snapshots')
+        .select('captured_at')
+        .eq('source', sourceType)
+        .eq('source_trader_id', source.source_trader_id)
+        .order('captured_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (!latestSnapshot) continue
+
+      const { data: frequentlyTraded } = await supabase
+        .from('trader_frequently_traded')
+        .select('symbol, weight_pct, trade_count, avg_profit, avg_loss, profitable_pct')
+        .eq('source', sourceType)
+        .eq('source_trader_id', source.source_trader_id)
+        .eq('captured_at', latestSnapshot.captured_at)
+        .order('weight_pct', { ascending: false })
+        .limit(10)
+
+      if (frequentlyTraded && frequentlyTraded.length > 0) {
+        return frequentlyTraded.map((item: any) => ({
+          symbol: item.symbol,
+          weightPct: item.weight_pct ?? 0,
+          count: item.trade_count ?? 0,
+          avgProfit: item.avg_profit ?? 0,
+          avgLoss: item.avg_loss ?? 0,
+          profitablePct: item.profitable_pct ?? 0,
+        }))
+      }
+    }
+
+    return []
+  } catch (error) {
+    console.error('Error in getTraderFrequentlyTraded:', error)
+    return []
+  }
+}
+
+/**
+ * 获取交易员月度表现
+ */
+export async function getTraderMonthlyPerformance(handle: string): Promise<Array<{ month: string; value: number }>> {
+  try {
+    const decodedHandle = decodeURIComponent(handle)
+    const sources = ['binance_web3', 'binance', 'bybit', 'bitget', 'mexc', 'coinex', 'okx', 'kucoin', 'gate']
+    
+    for (const sourceType of sources) {
+      let source = null
+      const { data: source1 } = await supabase
+        .from('trader_sources')
+        .select('source_trader_id')
+        .eq('source', sourceType)
+        .eq('handle', handle)
+        .maybeSingle()
+      
+      if (source1) {
+        source = source1
+      } else if (decodedHandle !== handle) {
+        const { data: source2 } = await supabase
+          .from('trader_sources')
+          .select('source_trader_id')
+          .eq('source', sourceType)
+          .eq('handle', decodedHandle)
+          .maybeSingle()
+        if (source2) source = source2
+      }
+      
+      if (!source) {
+        const { data: source3 } = await supabase
+          .from('trader_sources')
+          .select('source_trader_id')
+          .eq('source', sourceType)
+          .eq('source_trader_id', handle)
+          .maybeSingle()
+        if (source3) source = source3
+      }
+      
+      if (!source) continue
+
+      // 获取最近12个月的月度表现
+      const { data: monthlyData } = await supabase
+        .from('trader_monthly_performance')
+        .select('year, month, roi')
+        .eq('source', sourceType)
+        .eq('source_trader_id', source.source_trader_id)
+        .order('year', { ascending: false })
+        .order('month', { ascending: false })
+        .limit(12)
+
+      if (monthlyData && monthlyData.length > 0) {
+        return monthlyData.map((item: any) => ({
+          month: `${item.year}-${String(item.month).padStart(2, '0')}`,
+          value: item.roi ?? 0,
+        }))
+      }
+    }
+
+    return []
+  } catch (error) {
+    console.error('Error in getTraderMonthlyPerformance:', error)
+    return []
+  }
+}
+
+/**
+ * 获取交易员年度表现
+ */
+export async function getTraderYearlyPerformance(handle: string): Promise<Array<{ year: number; value: number }>> {
+  try {
+    const decodedHandle = decodeURIComponent(handle)
+    const sources = ['binance_web3', 'binance', 'bybit', 'bitget', 'mexc', 'coinex', 'okx', 'kucoin', 'gate']
+    
+    for (const sourceType of sources) {
+      let source = null
+      const { data: source1 } = await supabase
+        .from('trader_sources')
+        .select('source_trader_id')
+        .eq('source', sourceType)
+        .eq('handle', handle)
+        .maybeSingle()
+      
+      if (source1) {
+        source = source1
+      } else if (decodedHandle !== handle) {
+        const { data: source2 } = await supabase
+          .from('trader_sources')
+          .select('source_trader_id')
+          .eq('source', sourceType)
+          .eq('handle', decodedHandle)
+          .maybeSingle()
+        if (source2) source = source2
+      }
+      
+      if (!source) {
+        const { data: source3 } = await supabase
+          .from('trader_sources')
+          .select('source_trader_id')
+          .eq('source', sourceType)
+          .eq('source_trader_id', handle)
+          .maybeSingle()
+        if (source3) source = source3
+      }
+      
+      if (!source) continue
+
+      // 获取年度表现
+      const { data: yearlyData } = await supabase
+        .from('trader_yearly_performance')
+        .select('year, roi')
+        .eq('source', sourceType)
+        .eq('source_trader_id', source.source_trader_id)
+        .order('year', { ascending: false })
+        .limit(5)
+
+      if (yearlyData && yearlyData.length > 0) {
+        return yearlyData.map((item: any) => ({
+          year: item.year,
+          value: item.roi ?? 0,
+        }))
+      }
+    }
+
+    return []
+  } catch (error) {
+    console.error('Error in getTraderYearlyPerformance:', error)
+    return []
   }
 }
 
 /**
  * 获取交易员投资组合
+ * 注意：Portfolio数据需要绑定账户才能获取，目前返回空数组
  */
 export async function getTraderPortfolio(handle: string): Promise<PortfolioItem[]> {
-  // TODO: 从真实数据表获取
+  // Portfolio数据需要用户授权访问私有交易数据，目前无法获取
+  // 返回空数组，UI会显示空状态提示
   void handle
-  return [
-    {
-      market: 'NIO',
-      direction: 'long',
-      invested: 13.45,
-      pnl: -53.11,
-      value: 2.03,
-      price: 5.1,
-      priceChange: -0.4,
-      priceChangePct: -7.27,
-    },
-    {
-      market: 'NVDA',
-      direction: 'long',
-      invested: 10.07,
-      pnl: 69.21,
-      value: 5.48,
-      price: 186.5,
-      priceChange: -1.04,
-      priceChangePct: -0.55,
-    },
-    {
-      market: 'PLTR',
-      direction: 'long',
-      invested: 9.58,
-      pnl: 1663.81,
-      value: 54.29,
-      price: 177.75,
-      priceChange: -3.09,
-      priceChangePct: -1.71,
-    },
-    {
-      market: 'CHPT',
-      direction: 'long',
-      invested: 8.57,
-      pnl: -90.4,
-      value: 0.26,
-      price: 6.64,
-      priceChange: -0.09,
-      priceChangePct: -1.34,
-    },
-    {
-      market: 'TSLA',
-      direction: 'long',
-      invested: 8.23,
-      pnl: 126.19,
-      value: 5.98,
-      price: 449.72,
-      priceChange: -4.71,
-      priceChangePct: -1.04,
-    },
-  ]
+  return []
 }
 
 /**
@@ -542,8 +796,8 @@ export async function getTraderFeed(handle: string): Promise<TraderFeedItem[]> {
  */
 export async function getSimilarTraders(handle: string, limit: number = 6): Promise<TraderProfile[]> {
   try {
-    // 尝试所有数据源：binance_web3, binance, bybit, bitget, mexc, coinex
-    const sources = ['binance_web3', 'binance', 'bybit', 'bitget', 'mexc', 'coinex']
+    // 尝试所有数据源：binance_web3, binance, bybit, bitget, mexc, coinex, okx, kucoin, gate
+    const sources = ['binance_web3', 'binance', 'bybit', 'bitget', 'mexc', 'coinex', 'okx', 'kucoin', 'gate']
     
     for (const sourceType of sources) {
       // 从 trader_sources 和 trader_snapshots 获取相似交易员（按 ROI 排名）

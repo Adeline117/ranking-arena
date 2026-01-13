@@ -17,6 +17,18 @@ export default function NewPostPage() {
   const [userHandle, setUserHandle] = useState<string | null>(null)
   const [title, setTitle] = useState("")
   const [content, setContent] = useState("")
+  const [images, setImages] = useState<string[]>([])
+  const [uploadingImages, setUploadingImages] = useState(false)
+  const [links, setLinks] = useState<Array<{ url: string; title?: string; description?: string; image?: string }>>([])
+  const [newLinkUrl, setNewLinkUrl] = useState("")
+  const [addingLink, setAddingLink] = useState(false)
+  const [poll, setPoll] = useState<{
+    question: string
+    options: string[]
+    type: 'single' | 'multiple'
+    endAt?: string
+  } | null>(null)
+  const [showPollForm, setShowPollForm] = useState(false)
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
@@ -57,6 +69,95 @@ export default function NewPostPage() {
     }
   }
 
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (!files || files.length === 0) return
+
+    setUploadingImages(true)
+    try {
+      const uploadPromises = Array.from(files).map(async (file) => {
+        const formData = new FormData()
+        formData.append('file', file)
+        formData.append('userId', userId!)
+
+        const response = await fetch('/api/posts/upload-image', {
+          method: 'POST',
+          body: formData,
+        })
+
+        if (!response.ok) {
+          const error = await response.json()
+          throw new Error(error.error || 'Upload failed')
+        }
+
+        const data = await response.json()
+        return data.url
+      })
+
+      const uploadedUrls = await Promise.all(uploadPromises)
+      setImages([...images, ...uploadedUrls])
+    } catch (err: any) {
+      alert('图片上传失败: ' + err.message)
+    } finally {
+      setUploadingImages(false)
+      // 重置 input
+      e.target.value = ''
+    }
+  }
+
+  const removeImage = (index: number) => {
+    setImages(images.filter((_, i) => i !== index))
+  }
+
+  const handleAddLink = async () => {
+    if (!newLinkUrl.trim()) return
+
+    setAddingLink(true)
+    try {
+      // 获取链接预览
+      const response = await fetch(`/api/posts/link-preview?url=${encodeURIComponent(newLinkUrl)}`)
+      const preview = response.ok ? await response.json() : null
+
+      setLinks([
+        ...links,
+        {
+          url: newLinkUrl,
+          title: preview?.title,
+          description: preview?.description,
+          image: preview?.image,
+        },
+      ])
+      setNewLinkUrl("")
+    } catch (err) {
+      // 即使预览失败，也添加链接
+      setLinks([...links, { url: newLinkUrl }])
+      setNewLinkUrl("")
+    } finally {
+      setAddingLink(false)
+    }
+  }
+
+  const removeLink = (index: number) => {
+    setLinks(links.filter((_, i) => i !== index))
+  }
+
+  const addPollOption = () => {
+    if (!poll) return
+    setPoll({ ...poll, options: [...poll.options, ''] })
+  }
+
+  const updatePollOption = (index: number, value: string) => {
+    if (!poll) return
+    const newOptions = [...poll.options]
+    newOptions[index] = value
+    setPoll({ ...poll, options: newOptions })
+  }
+
+  const removePollOption = (index: number) => {
+    if (!poll || poll.options.length <= 2) return
+    setPoll({ ...poll, options: poll.options.filter((_, i) => i !== index) })
+  }
+
   const handlePublish = async () => {
     if (!userId) {
       alert('请先登录')
@@ -69,14 +170,49 @@ export default function NewPostPage() {
       return
     }
 
+    if (poll && (!poll.question.trim() || poll.options.filter(o => o.trim()).length < 2)) {
+      alert('请完善投票信息（至少2个选项）')
+      return
+    }
+
     setLoading(true)
     try {
+      let pollId: string | null = null
+
+      // 创建投票（如果有）
+      if (poll && poll.question.trim() && poll.options.filter(o => o.trim()).length >= 2) {
+        const pollOptions = poll.options
+          .filter(o => o.trim())
+          .map((text, index) => ({ text: text.trim(), votes: 0, index }))
+
+        const { data: pollData, error: pollError } = await supabase
+          .from('polls')
+          .insert({
+            question: poll.question.trim(),
+            options: pollOptions,
+            type: poll.type,
+            end_at: poll.endAt || null,
+          })
+          .select()
+          .single()
+
+        if (pollError) {
+          throw new Error('创建投票失败: ' + pollError.message)
+        }
+
+        pollId = pollData.id
+      }
+
+      // 创建帖子
       const { error } = await supabase.from("posts").insert({
         group_id: groupId,
         title: title.trim(),
         content: content.trim(),
         author_handle: userHandle || email?.split('@')[0] || 'anonymous',
-        author_id: userId, // 添加用户ID
+        author_id: userId,
+        images: images.length > 0 ? images : null,
+        links: links.length > 0 ? links : null,
+        poll_id: pollId,
       })
 
       if (error) {
@@ -183,6 +319,325 @@ export default function NewPostPage() {
               resize: 'vertical',
             }}
           />
+        </Box>
+
+        {/* Images Section */}
+        <Box
+          bg="secondary"
+          p={6}
+          radius="xl"
+          border="primary"
+          style={{ marginBottom: tokens.spacing[4] }}
+        >
+          <Text size="lg" weight="black" style={{ marginBottom: tokens.spacing[4] }}>
+            图片
+          </Text>
+          <input
+            type="file"
+            accept="image/jpeg,image/jpg,image/png,image/gif,image/webp"
+            multiple
+            onChange={handleImageUpload}
+            disabled={uploadingImages}
+            style={{ display: 'none' }}
+            id="image-upload"
+          />
+          <label htmlFor="image-upload" style={{ display: 'inline-block', cursor: uploadingImages ? 'not-allowed' : 'pointer' }}>
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={uploadingImages}
+              style={{ pointerEvents: 'none' }}
+            >
+              {uploadingImages ? '上传中...' : '+ 添加图片'}
+            </Button>
+          </label>
+          {images.length > 0 && (
+            <Box style={{ display: 'flex', flexWrap: 'wrap', gap: tokens.spacing[3], marginTop: tokens.spacing[4] }}>
+              {images.map((url, index) => (
+                <Box
+                  key={index}
+                  style={{
+                    position: 'relative',
+                    width: 120,
+                    height: 120,
+                    borderRadius: tokens.radius.md,
+                    overflow: 'hidden',
+                    border: `1px solid ${tokens.colors.border.primary}`,
+                  }}
+                >
+                  <img
+                    src={url}
+                    alt={`Upload ${index + 1}`}
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  />
+                  <button
+                    onClick={() => removeImage(index)}
+                    style={{
+                      position: 'absolute',
+                      top: 4,
+                      right: 4,
+                      width: 24,
+                      height: 24,
+                      borderRadius: '50%',
+                      background: 'rgba(0,0,0,0.7)',
+                      color: '#fff',
+                      border: 'none',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '16px',
+                    }}
+                  >
+                    ×
+                  </button>
+                </Box>
+              ))}
+            </Box>
+          )}
+        </Box>
+
+        {/* Links Section */}
+        <Box
+          bg="secondary"
+          p={6}
+          radius="xl"
+          border="primary"
+          style={{ marginBottom: tokens.spacing[4] }}
+        >
+          <Text size="lg" weight="black" style={{ marginBottom: tokens.spacing[4] }}>
+            链接
+          </Text>
+          <Box style={{ display: 'flex', gap: tokens.spacing[2], marginBottom: tokens.spacing[3] }}>
+            <input
+              type="url"
+              value={newLinkUrl}
+              onChange={(e) => setNewLinkUrl(e.target.value)}
+              placeholder="输入链接 URL"
+              style={{
+                flex: 1,
+                padding: tokens.spacing[2],
+                borderRadius: tokens.radius.md,
+                border: `1px solid ${tokens.colors.border.primary}`,
+                background: tokens.colors.bg.primary,
+                color: tokens.colors.text.primary,
+                fontSize: tokens.typography.fontSize.sm,
+                outline: 'none',
+              }}
+              onKeyPress={(e) => {
+                if (e.key === 'Enter') {
+                  handleAddLink()
+                }
+              }}
+            />
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleAddLink}
+              disabled={addingLink || !newLinkUrl.trim()}
+            >
+              {addingLink ? '添加中...' : '添加'}
+            </Button>
+          </Box>
+          {links.length > 0 && (
+            <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
+              {links.map((link, index) => (
+                <Box
+                  key={index}
+                  style={{
+                    padding: tokens.spacing[3],
+                    borderRadius: tokens.radius.md,
+                    background: tokens.colors.bg.primary,
+                    border: `1px solid ${tokens.colors.border.primary}`,
+                    display: 'flex',
+                    gap: tokens.spacing[3],
+                    alignItems: 'flex-start',
+                  }}
+                >
+                  {link.image && (
+                    <img
+                      src={link.image}
+                      alt={link.title || 'Link preview'}
+                      style={{
+                        width: 80,
+                        height: 80,
+                        borderRadius: tokens.radius.md,
+                        objectFit: 'cover',
+                      }}
+                    />
+                  )}
+                  <Box style={{ flex: 1, minWidth: 0 }}>
+                    {link.title && (
+                      <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[1] }}>
+                        {link.title}
+                      </Text>
+                    )}
+                    {link.description && (
+                      <Text size="xs" color="secondary" style={{ marginBottom: tokens.spacing[1] }}>
+                        {link.description}
+                      </Text>
+                    )}
+                    <Text size="xs" color="tertiary">
+                      {link.url}
+                    </Text>
+                  </Box>
+                  <button
+                    onClick={() => removeLink(index)}
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      color: tokens.colors.text.tertiary,
+                      cursor: 'pointer',
+                      fontSize: '18px',
+                      padding: tokens.spacing[1],
+                    }}
+                  >
+                    ×
+                  </button>
+                </Box>
+              ))}
+            </Box>
+          )}
+        </Box>
+
+        {/* Poll Section */}
+        <Box
+          bg="secondary"
+          p={6}
+          radius="xl"
+          border="primary"
+          style={{ marginBottom: tokens.spacing[4] }}
+        >
+          <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: tokens.spacing[4] }}>
+            <Text size="lg" weight="black">
+              投票
+            </Text>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                if (showPollForm) {
+                  setPoll(null)
+                  setShowPollForm(false)
+                } else {
+                  setPoll({
+                    question: '',
+                    options: ['', ''],
+                    type: 'single',
+                  })
+                  setShowPollForm(true)
+                }
+              }}
+            >
+              {showPollForm ? '取消投票' : '+ 添加投票'}
+            </Button>
+          </Box>
+          {showPollForm && poll && (
+            <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}>
+              <Box>
+                <Text size="sm" weight="semibold" style={{ marginBottom: tokens.spacing[2] }}>
+                  投票问题
+                </Text>
+                <input
+                  type="text"
+                  value={poll.question}
+                  onChange={(e) => setPoll({ ...poll, question: e.target.value })}
+                  placeholder="输入投票问题"
+                  style={{
+                    width: '100%',
+                    padding: tokens.spacing[2],
+                    borderRadius: tokens.radius.md,
+                    border: `1px solid ${tokens.colors.border.primary}`,
+                    background: tokens.colors.bg.primary,
+                    color: tokens.colors.text.primary,
+                    fontSize: tokens.typography.fontSize.sm,
+                    outline: 'none',
+                  }}
+                />
+              </Box>
+              <Box>
+                <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: tokens.spacing[2] }}>
+                  <Text size="sm" weight="semibold">
+                    选项
+                  </Text>
+                  <Box style={{ display: 'flex', gap: tokens.spacing[2] }}>
+                    <Button
+                      variant={poll.type === 'single' ? 'primary' : 'secondary'}
+                      size="sm"
+                      onClick={() => setPoll({ ...poll, type: 'single' })}
+                    >
+                      单选
+                    </Button>
+                    <Button
+                      variant={poll.type === 'multiple' ? 'primary' : 'secondary'}
+                      size="sm"
+                      onClick={() => setPoll({ ...poll, type: 'multiple' })}
+                    >
+                      多选
+                    </Button>
+                  </Box>
+                </Box>
+                {poll.options.map((option, index) => (
+                  <Box key={index} style={{ display: 'flex', gap: tokens.spacing[2], marginBottom: tokens.spacing[2] }}>
+                    <input
+                      type="text"
+                      value={option}
+                      onChange={(e) => updatePollOption(index, e.target.value)}
+                      placeholder={`选项 ${index + 1}`}
+                      style={{
+                        flex: 1,
+                        padding: tokens.spacing[2],
+                        borderRadius: tokens.radius.md,
+                        border: `1px solid ${tokens.colors.border.primary}`,
+                        background: tokens.colors.bg.primary,
+                        color: tokens.colors.text.primary,
+                        fontSize: tokens.typography.fontSize.sm,
+                        outline: 'none',
+                      }}
+                    />
+                    {poll.options.length > 2 && (
+                      <Button
+                        variant="text"
+                        size="sm"
+                        onClick={() => removePollOption(index)}
+                        style={{ color: '#ff7c7c' }}
+                      >
+                        删除
+                      </Button>
+                    )}
+                  </Box>
+                ))}
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={addPollOption}
+                  style={{ marginTop: tokens.spacing[2] }}
+                >
+                  + 添加选项
+                </Button>
+              </Box>
+              <Box>
+                <Text size="sm" weight="semibold" style={{ marginBottom: tokens.spacing[2] }}>
+                  截止时间（可选）
+                </Text>
+                <input
+                  type="datetime-local"
+                  value={poll.endAt || ''}
+                  onChange={(e) => setPoll({ ...poll, endAt: e.target.value })}
+                  style={{
+                    width: '100%',
+                    padding: tokens.spacing[2],
+                    borderRadius: tokens.radius.md,
+                    border: `1px solid ${tokens.colors.border.primary}`,
+                    background: tokens.colors.bg.primary,
+                    color: tokens.colors.text.primary,
+                    fontSize: tokens.typography.fontSize.sm,
+                    outline: 'none',
+                  }}
+                />
+              </Box>
+            </Box>
+          )}
         </Box>
 
         <Box style={{ display: 'flex', justifyContent: 'flex-end', gap: tokens.spacing[3] }}>

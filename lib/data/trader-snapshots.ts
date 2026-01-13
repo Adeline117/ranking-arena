@@ -5,7 +5,7 @@
 
 import { SupabaseClient } from '@supabase/supabase-js'
 
-export type TraderSource = 'binance' | 'binance_web3' | 'bybit' | 'bitget' | 'mexc' | 'coinex'
+export type TraderSource = 'binance' | 'binance_web3' | 'bybit' | 'bitget' | 'mexc' | 'coinex' | 'okx' | 'kucoin' | 'gate'
 
 export interface TraderSnapshot {
   source_trader_id: string
@@ -16,6 +16,23 @@ export interface TraderSnapshot {
   followers: number // 已废弃，保留仅为向后兼容，实际值不再使用
   pnl: number | null
   win_rate: number | null
+  // 多时间段ROI
+  roi_7d?: number | null
+  roi_30d?: number | null
+  roi_1y?: number | null
+  roi_2y?: number | null
+  // 交易统计
+  total_trades?: number | null
+  avg_profit?: number | null
+  avg_loss?: number | null
+  profitable_trades_pct?: number | null
+  // 风险和其他指标
+  risk_score?: number | null
+  avg_holding_time_days?: number | null
+  trades_per_week?: number | null
+  volume_90d?: number | null
+  max_drawdown?: number | null
+  sharpe_ratio?: number | null
 }
 
 export interface TraderHandle {
@@ -41,11 +58,36 @@ export async function getLatestTimestamp(
     .maybeSingle()
 
   if (error) {
-    console.error(`[trader-snapshots] ❌ ${source} 时间戳查询错误:`, error)
+    // 如果是"没有数据"的情况，静默处理
+    const errorCode = error.code || ''
+    const errorMessage = error.message || ''
+    
+    // 忽略常见的"无数据"错误
+    if (
+      errorCode === 'PGRST116' || // 未找到行
+      errorMessage.includes('relation') && errorMessage.includes('does not exist') || // 表不存在
+      errorMessage.includes('column') && errorMessage.includes('does not exist') // 列不存在
+    ) {
+      // 静默返回 null，不记录错误
+      return null
+    }
+    
+    // 其他错误才记录日志
+    console.warn(`[trader-snapshots] ⚠️ ${source} 时间戳查询警告:`, {
+      code: errorCode,
+      message: errorMessage,
+    })
     return null
   }
 
-  return data?.captured_at || null
+  const timestamp = data?.captured_at || null
+  if (timestamp) {
+    console.log(`[trader-snapshots] ✅ ${source} 最新时间戳: ${timestamp}`)
+  } else {
+    console.log(`[trader-snapshots] ⚠️ ${source} 没有找到时间戳`)
+  }
+
+  return timestamp
 }
 
 /**
@@ -58,22 +100,59 @@ export async function getLatestSnapshots(
   limit: number = 100
 ): Promise<TraderSnapshot[]> {
   if (!timestamp) {
+    console.log(`[trader-snapshots] ⚠️ ${source} 没有时间戳，跳过查询`)
     return []
   }
 
   // 注意：不再查询 followers 字段，因为所有 trader 的粉丝数只能来源 Arena 注册用户的关注
   // 保留 followers 字段在查询中仅为了向后兼容（如果数据库表中有此列），但实际值不再使用
+  // 使用更简单的字段列表，避免查询不存在的字段导致错误
   const { data, error } = await supabase
     .from('trader_snapshots')
-    .select('source_trader_id, rank, roi, followers, pnl, win_rate') // followers 字段已废弃，不再使用
+    .select('source_trader_id, rank, roi, followers, pnl, win_rate') // 先只查询基本字段，避免字段不存在导致查询失败
     .eq('source', source)
     .eq('captured_at', timestamp)
     .order('rank', { ascending: true })
     .limit(limit)
 
   if (error) {
-    console.error(`[trader-snapshots] ❌ ${source} 快照查询错误:`, error)
+    // 如果是"没有数据"或"表不存在"等常见情况，静默处理
+    // 只在真正的错误时才记录日志
+    const errorCode = error.code || ''
+    const errorMessage = error.message || ''
+    
+    // 忽略常见的"无数据"错误
+    if (
+      errorCode === 'PGRST116' || // 未找到行
+      errorMessage.includes('relation') && errorMessage.includes('does not exist') || // 表不存在
+      errorMessage.includes('column') && errorMessage.includes('does not exist') // 列不存在
+    ) {
+      // 静默返回空数组，不记录错误
+      return []
+    }
+    
+    // 其他错误才记录日志
+    console.warn(`[trader-snapshots] ⚠️ ${source} 快照查询警告:`, {
+      code: errorCode,
+      message: errorMessage,
+      timestamp,
+      details: error,
+    })
     return []
+  }
+
+  // 添加调试日志
+  if (data && data.length > 0) {
+    console.log(`[trader-snapshots] ✅ ${source} 查询成功: ${data.length} 条记录 (timestamp: ${timestamp})`)
+  } else {
+    console.log(`[trader-snapshots] ⚠️ ${source} 查询成功但没有数据 (timestamp: ${timestamp})`)
+    // 尝试查询是否有该时间戳的数据（用于调试）
+    const { data: debugData } = await supabase
+      .from('trader_snapshots')
+      .select('captured_at')
+      .eq('source', source)
+      .limit(5)
+    console.log(`[trader-snapshots] 🔍 ${source} 调试: 该数据源的所有 captured_at 值:`, debugData?.map(d => d.captured_at))
   }
 
   return (data || []) as TraderSnapshot[]
@@ -201,16 +280,28 @@ export async function getTraderHandles(
       }
 
     return handleMap
-  } catch (err: any) {
-    console.error(`[trader-snapshots] ❌ ${source} handle 查询异常:`, {
-      error: err,
-      message: err?.message,
-      stack: err?.stack,
-      source,
-      traderIdsCount: traderIds.length,
-    })
-    return new Map()
-  }
+    } catch (err: any) {
+      // 只在真正的错误时才记录日志
+      const errorMessage = err?.message || String(err || '')
+      
+      // 忽略常见的"无数据"错误
+      if (
+        errorMessage.includes('relation') && errorMessage.includes('does not exist') || // 表不存在
+        errorMessage.includes('column') && errorMessage.includes('does not exist') || // 列不存在
+        !errorMessage || errorMessage === '{}' // 空错误对象
+      ) {
+        // 静默返回空 Map，不记录错误
+        return new Map()
+      }
+      
+      // 其他错误才记录日志
+      console.warn(`[trader-snapshots] ⚠️ ${source} handle 查询警告:`, {
+        message: errorMessage,
+        source,
+        traderIdsCount: traderIds.length,
+      })
+      return new Map()
+    }
 }
 
 /**
@@ -219,7 +310,7 @@ export async function getTraderHandles(
 export async function getAllLatestTimestamps(
   supabase: SupabaseClient
 ): Promise<Record<TraderSource, string | null>> {
-  const sources: TraderSource[] = ['binance', 'binance_web3', 'bybit', 'bitget', 'mexc', 'coinex']
+  const sources: TraderSource[] = ['binance', 'binance_web3', 'bybit', 'bitget', 'mexc', 'coinex', 'okx', 'kucoin', 'gate']
   
   const results = await Promise.all(
     sources.map(source => getLatestTimestamp(supabase, source))
@@ -232,6 +323,9 @@ export async function getAllLatestTimestamps(
     bitget: results[3],
     mexc: results[4],
     coinex: results[5],
+    okx: results[6],
+    kucoin: results[7],
+    gate: results[8],
   }
 
   return timestamps
@@ -245,7 +339,7 @@ export async function getAllLatestSnapshots(
   timestamps: Record<TraderSource, string | null>,
   limit: number = 100
 ): Promise<Record<TraderSource, TraderSnapshot[]>> {
-  const sources: TraderSource[] = ['binance', 'binance_web3', 'bybit', 'bitget', 'mexc', 'coinex']
+  const sources: TraderSource[] = ['binance', 'binance_web3', 'bybit', 'bitget', 'mexc', 'coinex', 'okx', 'kucoin', 'gate']
   
   const results = await Promise.all(
     sources.map(source => getLatestSnapshots(supabase, source, timestamps[source], limit))
@@ -258,6 +352,9 @@ export async function getAllLatestSnapshots(
     bitget: results[3],
     mexc: results[4],
     coinex: results[5],
+    okx: results[6],
+    kucoin: results[7],
+    gate: results[8],
   }
 }
 
@@ -268,7 +365,7 @@ export async function getAllTraderHandles(
   supabase: SupabaseClient,
   snapshots: Record<TraderSource, TraderSnapshot[]>
 ): Promise<Record<TraderSource, Map<string, TraderHandle>>> {
-  const sources: TraderSource[] = ['binance', 'binance_web3', 'bybit', 'bitget', 'mexc', 'coinex']
+  const sources: TraderSource[] = ['binance', 'binance_web3', 'bybit', 'bitget', 'mexc', 'coinex', 'okx', 'kucoin', 'gate']
   
   const results = await Promise.all(
     sources.map(source => {
@@ -284,6 +381,9 @@ export async function getAllTraderHandles(
     bitget: results[3],
     mexc: results[4],
     coinex: results[5],
+    okx: results[6],
+    kucoin: results[7],
+    gate: results[8],
   }
 }
 

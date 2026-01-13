@@ -28,7 +28,7 @@ export default function AdditionalStats({ data }: AdditionalStatsProps) {
             Trades Per Week
           </Text>
           <Text size="lg" weight="bold">
-            {data.tradesPerWeek.toFixed(2)}
+            {data.tradesPerWeek !== undefined ? data.tradesPerWeek.toFixed(2) : 'N/A'}
           </Text>
         </Box>
         <Box>
@@ -51,8 +51,8 @@ export default function AdditionalStats({ data }: AdditionalStatsProps) {
           <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[1] }}>
             Profitable weeks
           </Text>
-          <Text size="lg" weight="bold" style={{ color: tokens.colors.accent.success }}>
-            {data.profitableWeeksPct.toFixed(2)}%
+          <Text size="lg" weight="bold" style={{ color: '#7CFFB2' }}>
+            {data.profitableWeeksPct !== undefined ? data.profitableWeeksPct.toFixed(2) : 'N/A'}%
           </Text>
         </Box>
       </Box>

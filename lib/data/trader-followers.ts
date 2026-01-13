@@ -230,10 +230,12 @@ export async function getTradersArenaFollowersCount(
         
         const hasErrorContent = hasMessage || hasCode || hasHint || hasDetails
         
-        // 特殊处理：如果是表不存在错误（code 42P01 或 relation does not exist），这是真正的错误
-        // 但要确保 code 或 message 确实存在且非空
-        const isTableNotFound = (hasCode && error.code === '42P01') || 
-                                (hasMessage && typeof error.message === 'string' && error.message.toLowerCase().includes('does not exist'))
+      // 特殊处理：如果是表不存在错误（code PGRST205, 42P01 或 relation does not exist），这是正常的
+      // 表不存在时，所有 trader 的粉丝数都是 0（这是正常的，因为还没有用户关注）
+      const isTableNotFound = (hasCode && (error.code === '42P01' || error.code === 'PGRST205')) || 
+                              (hasMessage && typeof error.message === 'string' && 
+                               (error.message.toLowerCase().includes('does not exist') || 
+                                error.message.toLowerCase().includes('could not find the table')))
         
         // 如果既没有错误内容也不是表不存在错误，不记录错误
         if (!hasErrorContent && !isTableNotFound) {
@@ -245,22 +247,24 @@ export async function getTradersArenaFollowersCount(
         // 只有在确实有错误内容时才记录错误
         const batchNum = Math.floor(i / BATCH_SIZE) + 1
         
-        // 如果是表不存在错误，使用 warn 而不是 error（因为这是预期的错误，提示用户创建表）
+        // 如果是表不存在错误，静默处理（表不存在时返回 0 是正常的）
         if (isTableNotFound) {
-          if (i === 0) {
-            // 只提示一次
-            console.warn(`[trader-followers] trader_follows 表不存在，请运行 scripts/setup_trader_follows.sql 创建表`)
-          }
+          // 表不存在时，所有 trader 的粉丝数都是 0（这是正常的，因为还没有用户关注）
+          // 不记录错误，静默处理
+          batch.forEach(id => resultMap.set(id, 0))
+          continue
         } else {
-          // 真正的错误，记录详细信息
-          console.error(`[trader-followers] 批量获取粉丝数失败 (batch ${batchNum}):`, {
-            error,
-            message: error.message,
-            code: error.code,
-            hint: error.hint,
-            details: error.details,
-            batchNum,
-          })
+          // 真正的错误，记录详细信息（但只在第一次遇到时记录）
+          if (i === 0) {
+            console.error(`[trader-followers] 批量获取粉丝数失败 (batch ${batchNum}):`, {
+              error,
+              message: error.message,
+              code: error.code,
+              hint: error.hint,
+              details: error.details,
+              batchNum,
+            })
+          }
         }
         
         // 初始化这批 trader 的粉丝数为 0（无论是否有错误）

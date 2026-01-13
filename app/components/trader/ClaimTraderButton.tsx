@@ -52,60 +52,43 @@ export default function ClaimTraderButton({ traderId, handle, userId, source = '
       // 检查是否有实际的错误内容（空对象 {} 表示正常情况，不应该记录为错误）
       // 只有当 error 对象有实际的错误属性（message/code/hint/details）时，才是真正的错误
       if (error) {
-        // 详细检查错误对象的结构，确保只有真实的值才被认为是错误内容
-        const errorKeys = Object.keys(error || {})
-        
-        // 严格检查：只有非空、非 undefined、非 null 的值才被认为是错误内容
-        const hasMessage = error.message && typeof error.message === 'string' && error.message.trim() !== ''
-        const hasCode = error.code && (typeof error.code === 'string' || typeof error.code === 'number')
-        const hasHint = error.hint && typeof error.hint === 'string' && error.hint.trim() !== ''
-        
-        // details 可能是对象，需要检查是否为空对象或只有空值的属性
-        let hasDetails = false
-        if (error.details) {
-          if (typeof error.details === 'string' && error.details.trim() !== '') {
-            hasDetails = true
-          } else if (typeof error.details === 'object' && error.details !== null) {
-            // 检查对象是否为空对象或只有空值的属性
-            const detailsKeys = Object.keys(error.details)
-            if (detailsKeys.length > 0) {
-              const hasNonEmptyValue = detailsKeys.some(key => {
-                const value = (error.details as any)[key]
-                if (value === null || value === undefined || value === '') {
-                  return false
+        // 使用 JSON.stringify 检查是否为空对象（最可靠的方法）
+        let hasErrorContent = false
+        try {
+          const errorJson = JSON.stringify(error)
+          if (errorJson !== '{}' && errorJson !== 'null') {
+            // 不是空对象，检查是否有有效的错误字段
+            const hasMessage = !!(error.message && typeof error.message === 'string' && error.message.trim() !== '')
+            const hasCode = !!(error.code !== undefined && error.code !== null && error.code !== '' && 
+                           (typeof error.code === 'string' || typeof error.code === 'number'))
+            const hasHint = !!(error.hint && typeof error.hint === 'string' && error.hint.trim() !== '')
+            
+            // details 可能是对象，需要检查是否为空对象
+            let hasDetails = false
+            if (error.details !== undefined && error.details !== null) {
+              if (typeof error.details === 'string' && error.details.trim() !== '') {
+                hasDetails = true
+              } else if (typeof error.details === 'object') {
+                try {
+                  const detailsJson = JSON.stringify(error.details)
+                  hasDetails = detailsJson !== '{}' && detailsJson !== 'null'
+                } catch (e) {
+                  // JSON.stringify 失败，忽略
                 }
-                if (typeof value === 'object') {
-                  return Object.keys(value).length > 0
-                }
-                return true
-              })
-              hasDetails = hasNonEmptyValue
+              }
             }
-            // 如果 detailsKeys.length === 0，hasDetails 保持为 false（空对象）
+            
+            hasErrorContent = hasMessage || hasCode || hasHint || hasDetails
           }
-        }
-        
-        const hasErrorContent = hasMessage || hasCode || hasHint || hasDetails
-        
-        // 调试：查看错误对象的实际结构（仅在开发环境且是空对象时）
-        if (process.env.NODE_ENV === 'development' && !hasErrorContent) {
-          // 如果错误对象存在但没有有效的错误内容，记录调试信息（不是错误）
-          // 这是正常的"没找到连接"情况
-          if (errorKeys.length === 0) {
-            // 完全空对象 {}
-            // 不记录，因为这是正常的 Supabase maybeSingle() 响应
-          } else {
-            // 有属性但都是空值，记录调试信息
-            console.debug('[ClaimTrader] 调试：错误对象有属性但无有效内容（这是正常的，表示没找到连接）:', {
-              errorKeys,
-              error,
-              hasMessage,
-              hasCode,
-              hasHint,
-              hasDetails,
-              userId: actualUserId,
-              source,
-            })
+          // 如果 errorJson === '{}'，hasErrorContent 保持为 false
+        } catch (e) {
+          // JSON.stringify 失败，使用备用方法
+          const errorKeys = Object.keys(error || {})
+          if (errorKeys.length > 0) {
+            const hasMessage = !!(error.message && typeof error.message === 'string' && error.message.trim() !== '')
+            const hasCode = !!(error.code !== undefined && error.code !== null && error.code !== '')
+            const hasHint = !!(error.hint && typeof error.hint === 'string' && error.hint.trim() !== '')
+            hasErrorContent = hasMessage || hasCode || hasHint
           }
         }
         
@@ -122,7 +105,7 @@ export default function ClaimTraderButton({ traderId, handle, userId, source = '
             source,
           })
         }
-        // 如果 hasErrorContent 是 false（空对象 {} 或所有属性都是 undefined/null/空字符串/空对象），则不记录错误
+        // 如果 hasErrorContent 是 false（空对象 {}），则不记录错误
         // 这是正常的"没找到连接"情况，不应该记录为错误
       }
       
@@ -130,13 +113,17 @@ export default function ClaimTraderButton({ traderId, handle, userId, source = '
       // 注意：即使是空错误对象 {}（正常的"没找到记录"情况），也应该设置连接状态为 false
       setHasConnection(!!data)
     } catch (err: any) {
-      console.error('[ClaimTrader] 检查连接异常:', {
-        error: err,
-        message: err?.message,
-        stack: err?.stack,
-        userId,
-        source,
-      })
+      // 检查是否有实际的错误内容
+      const hasErrorContent = !!(err?.message || err?.code || err?.stack)
+      if (hasErrorContent) {
+        console.error('[ClaimTrader] 检查连接异常:', {
+          error: err,
+          message: err?.message,
+          stack: err?.stack,
+          userId,
+          source,
+        })
+      }
       setHasConnection(false)
     } finally {
       setChecking(false)

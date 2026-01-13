@@ -16,6 +16,7 @@ import StatsPage from '@/app/components/trader/stats/StatsPage'
 import PinnedPost from '@/app/components/trader/PinnedPost'
 import PortfolioTable from '@/app/components/trader/PortfolioTable'
 import TradingViewShell from '@/app/components/trader/TradingViewShell'
+import AccountRequiredStats from '@/app/components/trader/AccountRequiredStats'
 import { Box, Text } from '@/app/components/Base'
 import { RankingSkeleton } from '@/app/components/UI/Skeleton'
 import {
@@ -446,6 +447,9 @@ export default function UserHomePage(props: { params: { handle: string } | Promi
                 isRegistered={profile.isRegistered}
                 isOwnProfile={isOwnProfile}
               />
+              {isOwnProfile && currentUserId && (
+                <AccountRequiredStats userId={currentUserId} />
+              )}
               {similarTraders.length > 0 && <SimilarTraders traders={similarTraders} />}
             </Box>
           </Box>
