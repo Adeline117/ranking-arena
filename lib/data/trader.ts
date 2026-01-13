@@ -320,85 +320,68 @@ export async function getTraderPerformance(handle: string, period: '7D' | '30D' 
 
       // 遍历所有候选记录，找到有快照数据的那条
       for (const candidate of candidateSources) {
-        // 获取最新快照（可能包含 roi_7d, roi_30d 列）
-        const { data: latestSnapshot } = await supabase
+        // 获取最新快照（只查询存在的列）
+        const { data: latestSnapshot, error: snapshotError } = await supabase
           .from('trader_snapshots')
-          .select('roi, pnl, win_rate, max_drawdown, roi_7d, roi_30d, pnl_7d, pnl_30d, win_rate_7d, win_rate_30d, max_drawdown_7d, max_drawdown_30d, season_id')
+          .select('roi, pnl, win_rate, max_drawdown, season_id')
           .eq('source', sourceType)
           .eq('source_trader_id', candidate.source_trader_id)
           .or('season_id.is.null,season_id.eq.90D')
           .order('captured_at', { ascending: false })
           .limit(1)
           .maybeSingle()
+        
+        if (snapshotError) {
+          console.error(`[getTraderPerformance] 查询错误:`, snapshotError.message)
+          continue
+        }
 
         // 如果没有数据，尝试下一个候选
         if (!latestSnapshot || latestSnapshot.roi === null) {
           continue
         }
 
-        // 检查是否有新列的数据（roi_7d, roi_30d）
-        const hasNewColumns = latestSnapshot.roi_7d !== undefined || latestSnapshot.roi_30d !== undefined
+        // 从 season_id 行获取 7D/30D 数据
+        // 获取7D数据
+        const { data: snapshot7d } = await supabase
+          .from('trader_snapshots')
+          .select('roi, pnl, win_rate, max_drawdown')
+          .eq('source', sourceType)
+          .eq('source_trader_id', candidate.source_trader_id)
+          .eq('season_id', '7D')
+          .order('captured_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
 
-        let roi_7d = latestSnapshot.roi_7d ?? undefined
-        let roi_30d = latestSnapshot.roi_30d ?? undefined
-        let pnl_7d = latestSnapshot.pnl_7d ?? undefined
-        let pnl_30d = latestSnapshot.pnl_30d ?? undefined
-        let win_rate_7d = latestSnapshot.win_rate_7d ?? undefined
-        let win_rate_30d = latestSnapshot.win_rate_30d ?? undefined
-        let max_drawdown_7d = latestSnapshot.max_drawdown_7d ?? undefined
-        let max_drawdown_30d = latestSnapshot.max_drawdown_30d ?? undefined
-
-        // 如果没有新列数据，尝试从旧的 season_id 行获取
-        if (!hasNewColumns) {
-          // 获取7D数据
-          const { data: snapshot7d } = await supabase
-            .from('trader_snapshots')
-            .select('roi, pnl, win_rate, max_drawdown')
-            .eq('source', sourceType)
-            .eq('source_trader_id', candidate.source_trader_id)
-            .eq('season_id', '7D')
-            .order('captured_at', { ascending: false })
-            .limit(1)
-            .maybeSingle()
-
-          // 获取30D数据
-          const { data: snapshot30d } = await supabase
-            .from('trader_snapshots')
-            .select('roi, pnl, win_rate, max_drawdown')
-            .eq('source', sourceType)
-            .eq('source_trader_id', candidate.source_trader_id)
-            .eq('season_id', '30D')
-            .order('captured_at', { ascending: false })
-            .limit(1)
-            .maybeSingle()
-
-          roi_7d = snapshot7d?.roi ?? undefined
-          roi_30d = snapshot30d?.roi ?? undefined
-          pnl_7d = snapshot7d?.pnl ?? undefined
-          pnl_30d = snapshot30d?.pnl ?? undefined
-          win_rate_7d = snapshot7d?.win_rate ?? undefined
-          win_rate_30d = snapshot30d?.win_rate ?? undefined
-          max_drawdown_7d = snapshot7d?.max_drawdown ?? undefined
-          max_drawdown_30d = snapshot30d?.max_drawdown ?? undefined
-        }
+        // 获取30D数据
+        const { data: snapshot30d } = await supabase
+          .from('trader_snapshots')
+          .select('roi, pnl, win_rate, max_drawdown')
+          .eq('source', sourceType)
+          .eq('source_trader_id', candidate.source_trader_id)
+          .eq('season_id', '30D')
+          .order('captured_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
 
         // 返回所有时间段的数据
-        return {
+        const result = {
           roi_90d: latestSnapshot.roi || 0,
-          roi_7d,
-          roi_30d,
+          roi_7d: snapshot7d?.roi ?? undefined,
+          roi_30d: snapshot30d?.roi ?? undefined,
           pnl: latestSnapshot.pnl ?? undefined,
           win_rate: latestSnapshot.win_rate ?? undefined,
           max_drawdown: latestSnapshot.max_drawdown ?? undefined,
-          pnl_7d,
-          pnl_30d,
-          win_rate_7d,
-          win_rate_30d,
-          max_drawdown_7d,
-          max_drawdown_30d,
+          pnl_7d: snapshot7d?.pnl ?? undefined,
+          pnl_30d: snapshot30d?.pnl ?? undefined,
+          win_rate_7d: snapshot7d?.win_rate ?? undefined,
+          win_rate_30d: snapshot30d?.win_rate ?? undefined,
+          max_drawdown_7d: snapshot7d?.max_drawdown ?? undefined,
+          max_drawdown_30d: snapshot30d?.max_drawdown ?? undefined,
           roi_1y: undefined,
           roi_2y: undefined,
         }
+        return result
       }
     }
 

@@ -1,3 +1,8 @@
 {
-    "crons": [{ "path": "/api/cron/fetch-traders", "schedule": "0 9 * * *" }]
+  "crons": [
+    {
+      "path": "/api/cron/fetch-traders",
+      "schedule": "0 */6 * * *"
+    }
+  ]
 }

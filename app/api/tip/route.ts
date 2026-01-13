@@ -1,39 +1,73 @@
-import { NextResponse } from "next/server"
-import { createClient } from "@supabase/supabase-js"
+/**
+ * 打赏 API
+ * POST /api/tip - 给帖子打赏
+ */
 
-export const runtime = "nodejs"
+import { NextRequest } from 'next/server'
+import {
+  getSupabaseAdmin,
+  requireAuth,
+  success,
+  error,
+  handleError,
+  validateString,
+} from '@/lib/api'
 
-function getAdminSupabase() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const service = process.env.SUPABASE_SERVICE_ROLE_KEY
-  if (!url || !service) throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY")
-  return createClient(url, service, { auth: { persistSession: false } })
-}
+export const runtime = 'nodejs'
 
-export async function POST(req: Request) {
+export async function POST(request: NextRequest) {
   try {
-    const supabase = getAdminSupabase()
-    const body = await req.json()
+    // 验证用户身份
+    const user = await requireAuth(request)
+    const supabase = getSupabaseAdmin()
+    
+    const body = await request.json()
 
-    const post_id = String(body.post_id || "")
+    const post_id = validateString(body.post_id, { 
+      required: true, 
+      fieldName: 'post_id' 
+    })
     const amount_cents = Number(body.amount_cents ?? 100)
 
     if (!post_id) {
-      return NextResponse.json({ ok: false, error: "missing post_id" }, { status: 400 })
+      return error('缺少 post_id 参数', 400)
     }
 
-    // ✅ MVP：写 gifts（你确保 gifts 表至少有 post_id / amount_cents）
-    const { error } = await supabase.from("gifts").insert({
+    if (amount_cents <= 0 || amount_cents > 100000) {
+      return error('打赏金额无效', 400)
+    }
+
+    // 检查帖子是否存在
+    const { data: post } = await supabase
+      .from('posts')
+      .select('id, author_id')
+      .eq('id', post_id)
+      .maybeSingle()
+
+    if (!post) {
+      return error('帖子不存在', 404)
+    }
+
+    // 不能给自己的帖子打赏
+    if (post.author_id === user.id) {
+      return error('不能给自己的帖子打赏', 400)
+    }
+
+    // 写入 gifts 表
+    const { error: insertError } = await supabase.from('gifts').insert({
       post_id,
+      from_user_id: user.id,
+      to_user_id: post.author_id,
       amount_cents,
     })
 
-    if (error) {
-      return NextResponse.json({ ok: false, error: error.message }, { status: 500 })
+    if (insertError) {
+      console.error('[tip] Insert error:', insertError)
+      return error('打赏失败: ' + insertError.message, 500)
     }
 
-    return NextResponse.json({ ok: true })
-  } catch (e: any) {
-    return NextResponse.json({ ok: false, error: e?.message ?? "unknown" }, { status: 500 })
+    return success({ message: '打赏成功' })
+  } catch (e) {
+    return handleError(e, 'tip POST')
   }
 }

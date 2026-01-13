@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '../Utils/LanguageProvider'
+import { supabase } from '@/lib/supabase/client'
 
 export type Trader = {
   id: string
@@ -54,6 +55,86 @@ export default function TraderDrawer({
     'overview'
   )
   const [perfRange, setPerfRange] = useState<'90D' | '7D' | '30D' | 'Years'>('90D')
+  const [userId, setUserId] = useState<string | null>(null)
+  const [following, setFollowing] = useState(false)
+  const [followLoading, setFollowLoading] = useState(false)
+  const [lastUpdated, setLastUpdated] = useState<string>('')
+
+  // 获取用户登录状态
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      setUserId(data.session?.user?.id ?? null)
+    })
+  }, [])
+
+  // 检查关注状态
+  useEffect(() => {
+    if (!userId || !trader?.id) return
+    ;(async () => {
+      const { data } = await supabase
+        .from('trader_follows')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('trader_id', trader.id)
+        .maybeSingle()
+      setFollowing(!!data)
+    })()
+  }, [userId, trader?.id])
+
+  // 获取最后更新时间
+  useEffect(() => {
+    if (!trader?.id) return
+    ;(async () => {
+      const { data } = await supabase
+        .from('trader_snapshots')
+        .select('captured_at')
+        .eq('source_trader_id', trader.id)
+        .order('captured_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      if (data?.captured_at) {
+        setLastUpdated(new Date(data.captured_at).toLocaleString('zh-CN'))
+      }
+    })()
+  }, [trader?.id])
+
+  // 关注/取消关注
+  const handleFollow = async () => {
+    if (!userId) {
+      window.location.href = '/login'
+      return
+    }
+    if (!trader?.id) return
+
+    setFollowLoading(true)
+    try {
+      if (following) {
+        await supabase
+          .from('trader_follows')
+          .delete()
+          .eq('user_id', userId)
+          .eq('trader_id', trader.id)
+        setFollowing(false)
+      } else {
+        await supabase
+          .from('trader_follows')
+          .insert({ user_id: userId, trader_id: trader.id })
+        setFollowing(true)
+      }
+    } catch (err) {
+      console.error('Follow error:', err)
+    } finally {
+      setFollowLoading(false)
+    }
+  }
+
+  // 复制交易（跳转到交易所）
+  const handleCopy = () => {
+    // 跳转到交易员的交易所页面
+    if (trader?.id) {
+      window.open(`https://www.binance.com/zh-CN/copy-trading/lead-details/${trader.id}`, '_blank')
+    }
+  }
 
   useEffect(() => {
     if (open) {
@@ -204,11 +285,19 @@ export default function TraderDrawer({
             <Link href={`/trader/${trader.id}`} style={{ ...btnGhost, textDecoration: 'none' }}>
               Open page
             </Link>
-            <button style={btnGhost} onClick={() => alert('Follow (mock)')}>
-              {t('followMock')}
+            <button 
+              style={{
+                ...btnGhost,
+                background: following ? 'rgba(139, 111, 168, 0.2)' : 'transparent',
+                borderColor: following ? '#8b6fa8' : undefined,
+              }} 
+              onClick={handleFollow}
+              disabled={followLoading}
+            >
+              {followLoading ? '...' : following ? t('following') : t('follow')}
             </button>
-            <button style={btnPrimary} onClick={() => alert('Copy (mock)')}>
-              {t('copyMock')}
+            <button style={btnPrimary} onClick={handleCopy}>
+              {t('copy')}
             </button>
             <button onClick={onClose} style={iconBtn} aria-label="Close">
               ✕
@@ -531,7 +620,7 @@ export default function TraderDrawer({
             <div style={panel}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div style={{ fontSize: 14, fontWeight: 900 }}>Portfolio</div>
-                <div style={{ fontSize: 12, color: tokens.colors.text.tertiary }}>Last updated: (mock)</div>
+                <div style={{ fontSize: 12, color: tokens.colors.text.tertiary }}>Last updated: {lastUpdated || '—'}</div>
               </div>
 
               <div style={{ marginTop: 14, borderRadius: 14, overflow: 'hidden', border: '1px solid rgba(255,255,255,0.08)' }}>

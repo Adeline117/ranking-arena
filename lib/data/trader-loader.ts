@@ -17,7 +17,7 @@ let traderCache: { data: Trader[]; timestamp: number; timeRange: string } | null
 const CACHE_TTL = 60 * 1000 // 1分钟缓存
 
 function snapshotToTrader(
-  snapshot: { source_trader_id: string; roi: number; followers: number; pnl: number | null; win_rate: number | null; max_drawdown?: number | null },
+  snapshot: { source_trader_id: string; roi: number; followers: number; pnl: number | null; win_rate: number | null; max_drawdown?: number | null; trades_count?: number | null },
   source: TraderSource,
   handleMap: Map<string, { handle: string | null; profile_url?: string | null }>,
   arenaFollowersCount: number = 0
@@ -25,17 +25,20 @@ function snapshotToTrader(
   const handleData = handleMap.get(snapshot.source_trader_id)
   const displayHandle = handleData?.handle?.trim() || snapshot.source_trader_id
 
-  return {
+  const trader: Trader = {
     id: snapshot.source_trader_id,
     handle: displayHandle,
     roi: snapshot.roi || 0,
     pnl: snapshot.pnl ?? undefined,
-    win_rate: snapshot.win_rate ?? 0,
+    win_rate: snapshot.win_rate ?? undefined,
     max_drawdown: snapshot.max_drawdown ?? undefined,
+    trades_count: snapshot.trades_count ?? undefined,
     followers: arenaFollowersCount,
     source,
     avatar_url: handleData?.profile_url?.trim() || undefined,
   }
+  
+  return trader
 }
 
 export async function loadAllTraders(

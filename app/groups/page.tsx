@@ -15,7 +15,6 @@ import { useLanguage } from '@/app/components/Utils/LanguageProvider'
 type Group = {
   id: string
   name: string
-  subtitle?: string | null
   avatar_url?: string | null
   member_count?: number | null
 }
@@ -29,14 +28,12 @@ function GroupsList() {
       try {
         const { data, error } = await supabase
           .from('groups')
-          .select('id, name, subtitle, avatar_url, member_count')
+          .select('id, name, avatar_url, member_count')
           .order('member_count', { ascending: false, nullsFirst: false })
           .limit(10)
 
-        // 检查是否是真正的错误（空对象 {} 不是错误）
-        const hasRealError = error && (error.message || error.code || error.details)
-        if (hasRealError) {
-          console.error('Error loading groups:', error)
+        if (error) {
+          console.error('Error loading groups:', JSON.stringify(error))
         }
         setGroups(data || [])
       } catch (err) {
@@ -127,11 +124,6 @@ function GroupsList() {
             <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[1] }}>
               {group.name}
             </Text>
-            {group.subtitle && (
-              <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[1] }}>
-                {group.subtitle}
-              </Text>
-            )}
             {group.member_count !== null && group.member_count !== undefined && (
               <Text size="xs" color="tertiary">
                 {group.member_count} 位成员

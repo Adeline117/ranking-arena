@@ -98,9 +98,18 @@ async function main() {
           const avatarEl = card.querySelector('img')
           const avatar = avatarEl?.src || null
           
-          // 提取 PnL
-          const pnlMatch = text.match(/PnL[:\s]*\$?([+-]?\d+(?:,?\d+)*\.?\d*)/i)
-          const pnl = pnlMatch ? parseFloat(pnlMatch[1].replace(/,/g, '')) : null
+          // 提取 PnL（支持多种格式：$1,234.56、PnL +$1.2K、1234 USDT 等）
+          const pnlMatch = text.match(/PnL[:\s]*\$?([+-]?\d+(?:,?\d+)*\.?\d*)\s*(?:K|M)?/i) ||
+                           text.match(/(?:Profit|盈亏|收益)[:\s]*\$?([+-]?\d+(?:,?\d+)*\.?\d*)\s*(?:K|M)?/i) ||
+                           text.match(/\$([+-]?\d+(?:,?\d+)*\.?\d*)\s*(?:K|M)?(?:\s*USDT)?/i)
+          let pnl = null
+          if (pnlMatch) {
+            let pnlValue = parseFloat(pnlMatch[1].replace(/,/g, ''))
+            const pnlText = pnlMatch[0].toUpperCase()
+            if (pnlText.includes('K')) pnlValue *= 1000
+            if (pnlText.includes('M')) pnlValue *= 1000000
+            pnl = pnlValue
+          }
           
           // 提取胜率
           const winRateMatch = text.match(/(?:Win Rate|胜率)[:\s]*(\d+\.?\d*)%/i)
@@ -341,4 +350,5 @@ function sleep(ms) {
 }
 
 main().catch(console.error)
+
 

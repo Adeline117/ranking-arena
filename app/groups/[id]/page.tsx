@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/Layout/TopNav'
@@ -13,9 +13,7 @@ import { LikeIcon, CommentIcon } from '@/app/components/Icons'
 type Group = {
   id: string
   name: string
-  subtitle?: string | null
   avatar_url?: string | null
-  description?: string | null
   member_count?: number | null
 }
 
@@ -28,6 +26,7 @@ type Post = {
   author_handle?: string | null
   like_count?: number | null
   comment_count?: number | null
+  user_liked?: boolean // 当前用户是否点赞
 }
 
 export default function GroupDetailPage({ params }: { params: { id: string } | Promise<{ id: string }> }) {
@@ -46,6 +45,7 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
   const { t } = useLanguage()
   const [email, setEmail] = useState<string | null>(null)
   const [userId, setUserId] = useState<string | null>(null)
+  const [accessToken, setAccessToken] = useState<string | null>(null)
   const [group, setGroup] = useState<Group | null>(null)
   const [posts, setPosts] = useState<Post[]>([])
   const [sortedPosts, setSortedPosts] = useState<Post[]>([])
@@ -54,12 +54,36 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
   const [error, setError] = useState<string | null>(null)
   const [joining, setJoining] = useState(false)
   const [sortMode, setSortMode] = useState<'latest' | 'hot'>('latest')
+  const [likeLoading, setLikeLoading] = useState<Record<string, boolean>>({})
+  // 评论相关状态
+  const [expandedComments, setExpandedComments] = useState<Record<string, boolean>>({})
+  const [comments, setComments] = useState<Record<string, any[]>>({})
+  const [newComment, setNewComment] = useState<Record<string, string>>({})
+  const [commentLoading, setCommentLoading] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      setEmail(data.user?.email ?? null)
-      setUserId(data.user?.id ?? null)
+    supabase.auth.getSession().then(({ data }) => {
+      setEmail(data.session?.user?.email ?? null)
+      setUserId(data.session?.user?.id ?? null)
+      setAccessToken(data.session?.access_token ?? null)
     })
+  }, [])
+
+  // 获取用户点赞状态
+  const fetchUserLikes = useCallback(async (postIds: string[], uid: string) => {
+    if (!uid || postIds.length === 0) return {}
+    
+    const { data } = await supabase
+      .from('post_likes')
+      .select('post_id')
+      .eq('user_id', uid)
+      .in('post_id', postIds)
+    
+    const likeMap: Record<string, boolean> = {}
+    data?.forEach(item => {
+      likeMap[item.post_id] = true
+    })
+    return likeMap
   }, [])
 
   useEffect(() => {
@@ -73,7 +97,7 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
         // 读取小组信息
         const { data: groupData, error: groupErr } = await supabase
           .from('groups')
-          .select('id, name, subtitle, avatar_url, description, member_count')
+          .select('id, name, avatar_url, member_count')
           .eq('id', groupId)
           .maybeSingle()
 
@@ -96,7 +120,18 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
         if (postsErr) {
           setError(postsErr.message)
         } else {
-          setPosts((postsData || []) as Post[])
+          const postsList = (postsData || []) as Post[]
+          
+          // 获取用户点赞状态
+          if (userId) {
+            const postIds = postsList.map(p => p.id)
+            const likeMap = await fetchUserLikes(postIds, userId)
+            postsList.forEach(post => {
+              post.user_liked = likeMap[post.id] || false
+            })
+          }
+          
+          setPosts(postsList)
         }
 
         // 检查用户是否是成员
@@ -117,7 +152,7 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
     }
 
     load()
-  }, [groupId, userId])
+  }, [groupId, userId, fetchUserLikes])
 
   // 计算帖子排序
   useEffect(() => {
@@ -146,6 +181,125 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
       setSortedPosts(sorted)
     }
   }, [posts, sortMode])
+
+  // 点赞功能
+  const handleLike = async (postId: string) => {
+    if (!accessToken) {
+      alert('请先登录')
+      return
+    }
+
+    setLikeLoading(prev => ({ ...prev, [postId]: true }))
+    
+    try {
+      const response = await fetch(`/api/posts/${postId}/like`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ reaction_type: 'up' }),
+      })
+
+      const result = await response.json()
+      
+      if (response.ok) {
+        // 更新本地状态
+        setPosts(prev => prev.map(p => {
+          if (p.id === postId) {
+            const wasLiked = p.user_liked
+            return {
+              ...p,
+              user_liked: !wasLiked,
+              like_count: wasLiked 
+                ? Math.max(0, (p.like_count || 0) - 1)
+                : (p.like_count || 0) + 1,
+            }
+          }
+          return p
+        }))
+      } else {
+        alert(result.error || '操作失败')
+      }
+    } catch (err: any) {
+      alert('网络错误: ' + err.message)
+    } finally {
+      setLikeLoading(prev => ({ ...prev, [postId]: false }))
+    }
+  }
+
+  // 加载评论
+  const loadComments = async (postId: string) => {
+    setCommentLoading(prev => ({ ...prev, [postId]: true }))
+    
+    try {
+      const response = await fetch(`/api/posts/${postId}/comments`)
+      const result = await response.json()
+      
+      if (response.ok) {
+        setComments(prev => ({ ...prev, [postId]: result.comments || [] }))
+      }
+    } catch (err) {
+      console.error('加载评论失败:', err)
+    } finally {
+      setCommentLoading(prev => ({ ...prev, [postId]: false }))
+    }
+  }
+
+  // 展开/收起评论
+  const toggleComments = (postId: string) => {
+    const isExpanded = expandedComments[postId]
+    setExpandedComments(prev => ({ ...prev, [postId]: !isExpanded }))
+    
+    if (!isExpanded && !comments[postId]) {
+      loadComments(postId)
+    }
+  }
+
+  // 提交评论
+  const submitComment = async (postId: string) => {
+    if (!accessToken) {
+      alert('请先登录')
+      return
+    }
+    
+    const content = newComment[postId]?.trim()
+    if (!content) return
+
+    setCommentLoading(prev => ({ ...prev, [postId]: true }))
+    
+    try {
+      const response = await fetch(`/api/posts/${postId}/comments`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ content }),
+      })
+
+      const result = await response.json()
+      
+      if (response.ok) {
+        setNewComment(prev => ({ ...prev, [postId]: '' }))
+        // 重新加载评论
+        loadComments(postId)
+        // 更新评论数
+        setPosts(prev => prev.map(p => {
+          if (p.id === postId) {
+            return { ...p, comment_count: (p.comment_count || 0) + 1 }
+          }
+          return p
+        }))
+      } else {
+        alert(result.error || '评论失败')
+      }
+    } catch (err: any) {
+      alert('网络错误: ' + err.message)
+    } finally {
+      setCommentLoading(prev => ({ ...prev, [postId]: false }))
+    }
+  }
 
   if (loading) {
     return (
@@ -262,11 +416,6 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
                   <Text size="2xl" weight="black" style={{ marginBottom: tokens.spacing[1] }}>
                     {group.name}
                   </Text>
-                  {group.subtitle && (
-                    <Text size="sm" color="secondary" style={{ marginBottom: tokens.spacing[2] }}>
-                      {group.subtitle}
-                    </Text>
-                  )}
                   {group.member_count !== null && group.member_count !== undefined && (
                     <Text size="sm" color="tertiary">
                       {group.member_count} 位成员
@@ -286,11 +435,6 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
                 </Link>
               </Box>
 
-              {group.description && (
-                <Text size="sm" color="secondary" style={{ marginTop: tokens.spacing[3], lineHeight: 1.6 }}>
-                  {group.description}
-                </Text>
-              )}
 
               {/* Join/Leave Button */}
               <Box style={{ marginTop: tokens.spacing[4] }}>
@@ -378,14 +522,6 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
                       border: `1px solid ${tokens.colors.border.primary}`,
                       transition: `all ${tokens.transition.base}`,
                     }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.background = tokens.colors.bg.tertiary || tokens.colors.bg.hover
-                      e.currentTarget.style.borderColor = tokens.colors.border.secondary || tokens.colors.border.primary
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = tokens.colors.bg.secondary
-                      e.currentTarget.style.borderColor = tokens.colors.border.primary
-                    }}
                   >
                     <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: tokens.spacing[2] }}>
                       <Text size="lg" weight="bold">{post.title}</Text>
@@ -422,18 +558,29 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
                       <Button
                         variant="text"
                         size="sm"
-                        onClick={() => alert('Like (mock)')}
-                        style={{ padding: 0, minWidth: 'auto' }}
+                        onClick={() => handleLike(post.id)}
+                        disabled={likeLoading[post.id]}
+                        style={{ 
+                          padding: 0, 
+                          minWidth: 'auto',
+                          color: post.user_liked ? tokens.colors.accent?.success : undefined,
+                        }}
                       >
                         <LikeIcon size={14} />
-                        <Text size="xs" color="secondary" style={{ marginLeft: tokens.spacing[1] }}>
+                        <Text 
+                          size="xs" 
+                          style={{ 
+                            marginLeft: tokens.spacing[1],
+                            color: post.user_liked ? tokens.colors.accent?.success : tokens.colors.text.secondary,
+                          }}
+                        >
                           {post.like_count || 0}
                         </Text>
                       </Button>
                       <Button
                         variant="text"
                         size="sm"
-                        onClick={() => alert('Comment (mock)')}
+                        onClick={() => toggleComments(post.id)}
                         style={{ padding: 0, minWidth: 'auto' }}
                       >
                         <CommentIcon size={14} />
@@ -442,6 +589,75 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
                         </Text>
                       </Button>
                     </Box>
+
+                    {/* 评论区 */}
+                    {expandedComments[post.id] && (
+                      <Box style={{ 
+                        marginTop: tokens.spacing[3], 
+                        paddingTop: tokens.spacing[3],
+                        borderTop: `1px solid ${tokens.colors.border.primary}`,
+                      }}>
+                        {/* 评论输入框 */}
+                        {accessToken && (
+                          <Box style={{ display: 'flex', gap: tokens.spacing[2], marginBottom: tokens.spacing[3] }}>
+                            <input
+                              type="text"
+                              placeholder="写评论..."
+                              value={newComment[post.id] || ''}
+                              onChange={(e) => setNewComment(prev => ({ ...prev, [post.id]: e.target.value }))}
+                              onKeyDown={(e) => e.key === 'Enter' && submitComment(post.id)}
+                              style={{
+                                flex: 1,
+                                padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+                                borderRadius: tokens.radius.md,
+                                border: `1px solid ${tokens.colors.border.primary}`,
+                                background: tokens.colors.bg.primary,
+                                color: tokens.colors.text.primary,
+                                fontSize: tokens.typography.fontSize.sm,
+                              }}
+                            />
+                            <Button
+                              variant="primary"
+                              size="sm"
+                              onClick={() => submitComment(post.id)}
+                              disabled={commentLoading[post.id] || !newComment[post.id]?.trim()}
+                            >
+                              发送
+                            </Button>
+                          </Box>
+                        )}
+
+                        {/* 评论列表 */}
+                        {commentLoading[post.id] ? (
+                          <Text size="xs" color="tertiary">加载中...</Text>
+                        ) : comments[post.id]?.length > 0 ? (
+                          <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
+                            {comments[post.id].map((comment: any) => (
+                              <Box 
+                                key={comment.id}
+                                style={{ 
+                                  padding: tokens.spacing[2],
+                                  background: tokens.colors.bg.primary,
+                                  borderRadius: tokens.radius.md,
+                                }}
+                              >
+                                <Box style={{ display: 'flex', justifyContent: 'space-between', marginBottom: tokens.spacing[1] }}>
+                                  <Text size="xs" weight="bold" color="secondary">
+                                    @{comment.author_handle || '匿名'}
+                                  </Text>
+                                  <Text size="xs" color="tertiary">
+                                    {new Date(comment.created_at).toLocaleString('zh-CN')}
+                                  </Text>
+                                </Box>
+                                <Text size="sm">{comment.content}</Text>
+                              </Box>
+                            ))}
+                          </Box>
+                        ) : (
+                          <Text size="xs" color="tertiary">暂无评论</Text>
+                        )}
+                      </Box>
+                    )}
                   </Box>
                 ))}
               </Box>

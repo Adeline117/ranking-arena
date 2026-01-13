@@ -82,7 +82,7 @@ function SearchContent() {
         // 搜索小组
         const { data: groups } = await supabase
           .from('groups')
-          .select('id, name, subtitle')
+          .select('id, name')
           .ilike('name', `%${query}%`)
           .limit(10)
 
@@ -92,7 +92,7 @@ function SearchContent() {
               type: 'group',
               id: g.id,
               title: g.name,
-              subtitle: g.subtitle || '',
+              subtitle: '',
             })
           })
         }

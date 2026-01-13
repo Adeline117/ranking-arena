@@ -38,8 +38,9 @@ export interface Trader {
   handle: string | null
   roi: number // ROI（百分比）
   pnl?: number // 盈亏金额
-  win_rate: number // 胜率（百分比，如 85.71）
+  win_rate?: number // 胜率（百分比，如 85.71）- null 时显示 "—"
   max_drawdown?: number // 最大回撤（百分比）
+  trades_count?: number // 交易次数
   volume_90d?: number // 交易量
   avg_buy_90d?: number // 平均买入
   followers: number // 粉丝数 - 仅来自 Arena 注册用户的关注（trader_follows 表统计）
@@ -63,10 +64,30 @@ export default function RankingTable(props: {
   
   // 分页状态
   const [currentPage, setCurrentPage] = useState(1)
+  const [showRules, setShowRules] = useState(false)
   const itemsPerPage = 20 // 每页显示 20 条
 
-  // 按90天ROI排序（固定）
-  const sortedTraders = [...traders].sort((a, b) => b.roi - a.roi)
+  // 过滤：PNL >= $1000 才计入排行
+  const filteredTraders = traders.filter(t => (t.pnl ?? 0) >= 1000)
+  
+  // 排序规则：ROI 降序 → 回撤小优先 → 交易次数多优先
+  // 每个榜单只保留前100人
+  const sortedTraders = [...filteredTraders]
+    .sort((a, b) => {
+      // 1. ROI 降序
+      if (b.roi !== a.roi) return b.roi - a.roi
+      
+      // 2. ROI 相同，回撤小的靠前（回撤是负数或正数百分比，越小越好）
+      const mddA = a.max_drawdown ?? Infinity
+      const mddB = b.max_drawdown ?? Infinity
+      if (mddA !== mddB) return mddA - mddB
+      
+      // 3. 回撤也相同，交易次数多的靠前
+      const tradesA = a.trades_count ?? 0
+      const tradesB = b.trades_count ?? 0
+      return tradesB - tradesA
+    })
+    .slice(0, 100) // 只保留前100人
   
   // 计算分页
   const totalPages = Math.ceil(sortedTraders.length / itemsPerPage)
@@ -115,19 +136,76 @@ export default function RankingTable(props: {
         <Text size="xs" weight="bold" color="tertiary" style={{ textAlign: 'center', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
           {t('rank')}
         </Text>
-        <Text size="xs" weight="bold" color="tertiary" style={{ textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-          {t('trader')}
-        </Text>
+        <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
+          <Text size="xs" weight="bold" color="tertiary" style={{ textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+            {t('trader')}
+          </Text>
+          <button
+            onClick={() => setShowRules(!showRules)}
+            style={{
+              background: 'transparent',
+              border: `1px solid ${tokens.colors.border.primary}`,
+              borderRadius: tokens.radius.full,
+              width: 16,
+              height: 16,
+              fontSize: 10,
+              color: tokens.colors.text.tertiary,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: 0,
+              transition: `all ${tokens.transition.fast}`,
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.borderColor = tokens.colors.accent.primary
+              e.currentTarget.style.color = tokens.colors.accent.primary
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.borderColor = tokens.colors.border.primary
+              e.currentTarget.style.color = tokens.colors.text.tertiary
+            }}
+            title="排名规则"
+          >
+            ?
+          </button>
+        </Box>
         <Text size="xs" weight="bold" color="tertiary" style={{ textAlign: 'right', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
           ROI ({timeRange})
         </Text>
         <Text size="xs" weight="bold" color="tertiary" style={{ textAlign: 'right', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-          胜率
+          {t('winRate')}
         </Text>
         <Text size="xs" weight="bold" color="tertiary" style={{ textAlign: 'right', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-          回撤
+          {t('drawdown')}
         </Text>
       </Box>
+
+      {/* 排名规则说明 */}
+      {showRules && (
+        <Box
+          style={{
+            padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+            background: `${tokens.colors.accent.primary}10`,
+            borderBottom: `1px solid ${tokens.colors.border.primary}`,
+            fontSize: tokens.typography.fontSize.xs,
+            color: tokens.colors.text.secondary,
+            lineHeight: 1.6,
+          }}
+        >
+          <Text size="xs" weight="bold" style={{ color: tokens.colors.accent.primary, marginBottom: 6, display: 'block' }}>
+            排名规则
+          </Text>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <span>① 按 ROI 从高到低排序</span>
+            <span>② ROI 相同时，回撤更小的靠前</span>
+            <span>③ 回撤也相同时，交易次数更多的靠前</span>
+            <span style={{ color: tokens.colors.text.tertiary, marginTop: 4 }}>
+              * PNL 低于 $1,000 的交易员不计入排行榜
+            </span>
+          </div>
+        </Box>
+      )}
 
       {loading ? (
         <RankingSkeleton />
@@ -145,12 +223,12 @@ export default function RankingTable(props: {
       ) : (
         <>
           <Box style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-            {paginatedTraders.map((t, idx) => {
+            {paginatedTraders.map((trader, idx) => {
               const rank = startIndex + idx + 1 // 全局排名
-              const traderHandle = t.handle || t.id
+              const traderHandle = trader.handle || trader.id
               const href = `/trader/${encodeURIComponent(traderHandle)}`
               // 使用组合 key 确保唯一性：id + source + index
-              const uniqueKey = `${t.id}-${t.source || 'unknown'}-${startIndex + idx}`
+              const uniqueKey = `${trader.id}-${trader.source || 'unknown'}-${startIndex + idx}`
               
               // 格式化显示名称：如果是钱包地址（以0x开头且长度>20），则截断
               const formatDisplayName = (name: string) => {
@@ -162,9 +240,9 @@ export default function RankingTable(props: {
               }
               
               const displayName = formatDisplayName(traderHandle)
-              const sourceLabelText = t.source ? (sourceLabels[t.source] || t.source) : sourceLabel
+              const sourceLabelText = trader.source ? (sourceLabels[trader.source] || trader.source) : sourceLabel
 
-              const ariaLabel = `排名 ${rank}，交易员 ${displayName}，90天ROI ${t.roi >= 0 ? '+' : ''}${t.roi.toFixed(2)}%，胜率 ${(t.win_rate * 100).toFixed(1)}%，粉丝 ${t.followers.toLocaleString()}`
+              const ariaLabel = `${t('rank')} ${rank}, ${t('trader')} ${displayName}, ROI ${trader.roi >= 0 ? '+' : ''}${trader.roi.toFixed(2)}%, ${t('winRate')} ${trader.win_rate !== undefined ? trader.win_rate.toFixed(1) + '%' : '—'}`
               
               return (
                 <Link
@@ -228,7 +306,7 @@ export default function RankingTable(props: {
                         width: 32,
                         height: 32,
                         borderRadius: tokens.radius.full,
-                        background: t.avatar_url ? tokens.colors.bg.secondary : getAvatarFallbackGradient(t.id),
+                        background: trader.avatar_url ? tokens.colors.bg.secondary : getAvatarFallbackGradient(trader.id),
                         border: `1.5px solid ${tokens.colors.border.primary}`,
                         display: 'grid',
                         placeItems: 'center',
@@ -253,9 +331,9 @@ export default function RankingTable(props: {
                         e.currentTarget.style.borderColor = tokens.colors.border.primary
                       }}
                     >
-                      {t.avatar_url ? (
+                      {trader.avatar_url ? (
                         <img 
-                          src={t.avatar_url} 
+                          src={trader.avatar_url} 
                           alt={displayName} 
                           referrerPolicy="origin-when-cross-origin"
                           loading="lazy"
@@ -277,14 +355,14 @@ export default function RankingTable(props: {
                               // 确保容器显示渐变背景
                               const container = e.currentTarget.parentElement
                               if (container) {
-                                container.style.background = getAvatarFallbackGradient(t.id)
+                                container.style.background = getAvatarFallbackGradient(trader.id)
                               }
                             }
                           }}
                         />
                       ) : null}
                       {/* 首字母 - 如果没有头像或头像加载失败时显示 */}
-                      {!t.avatar_url && (
+                      {!trader.avatar_url && (
                         <Text 
                           size="xs" 
                           weight="black" 
@@ -335,9 +413,9 @@ export default function RankingTable(props: {
                             {sourceLabelText}
                           </Text>
                         </Box>
-                        {t.followers > 0 && (
+                        {trader.followers > 0 && (
                           <Text size="xs" color="tertiary" style={{ fontSize: '10px' }}>
-                            {t.followers.toLocaleString()} 粉丝
+                            {trader.followers.toLocaleString()} {t('followers')}
                           </Text>
                         )}
                       </Box>
@@ -350,29 +428,31 @@ export default function RankingTable(props: {
                       size="sm"
                       weight="black"
                       style={{
-                        color: t.roi >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error,
+                        color: trader.roi >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error,
                         lineHeight: tokens.typography.lineHeight.tight,
                         fontSize: tokens.typography.fontSize.base,
-                        textShadow: rank <= 3 ? `0 1px 2px ${t.roi >= 0 ? tokens.colors.accent.success + '40' : tokens.colors.accent.error + '40'}` : 'none',
+                        textShadow: rank <= 3 ? `0 1px 2px ${trader.roi >= 0 ? tokens.colors.accent.success + '40' : tokens.colors.accent.error + '40'}` : 'none',
                       }}
                     >
-                      {t.roi >= 0 ? '+' : ''}
-                      {t.roi.toFixed(2)}%
+                      {trader.roi >= 0 ? '+' : ''}
+                      {trader.roi.toFixed(2)}%
                     </Text>
-                    {t.pnl !== undefined && (
-                      <Text
-                        size="xs"
-                        weight="semibold"
-                        style={{
-                          color: tokens.colors.text.secondary,
-                          lineHeight: tokens.typography.lineHeight.tight,
-                          opacity: 0.8,
-                        }}
-                      >
-                        {t.pnl >= 0 ? '+' : ''}
-                        {formatPnL(t.pnl)}
-                      </Text>
-                    )}
+                    <Text
+                      size="xs"
+                      weight="semibold"
+                      style={{
+                        color: trader.pnl !== undefined 
+                          ? (trader.pnl >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error)
+                          : tokens.colors.text.tertiary,
+                        lineHeight: tokens.typography.lineHeight.tight,
+                        opacity: trader.pnl !== undefined ? 0.9 : 0.5,
+                      }}
+                    >
+                      {trader.pnl !== undefined 
+                        ? `${trader.pnl >= 0 ? '+' : ''}${formatPnL(trader.pnl)}`
+                        : '—'
+                      }
+                    </Text>
                   </Box>
 
                   {/* 胜率 - 已经是百分比，不需要乘100 */}
@@ -381,11 +461,11 @@ export default function RankingTable(props: {
                       size="sm" 
                       weight="bold" 
                       style={{ 
-                        color: t.win_rate > 50 ? tokens.colors.accent.success : tokens.colors.text.secondary,
+                        color: trader.win_rate !== undefined && trader.win_rate > 50 ? tokens.colors.accent.success : tokens.colors.text.secondary,
                         lineHeight: tokens.typography.lineHeight.tight,
                       }}
                     >
-                      {t.win_rate.toFixed(1)}%
+                      {trader.win_rate !== undefined ? `${trader.win_rate.toFixed(1)}%` : '—'}
                     </Text>
                   </Box>
 
@@ -395,12 +475,12 @@ export default function RankingTable(props: {
                       size="sm" 
                       weight="semibold" 
                       style={{ 
-                        color: t.max_drawdown !== undefined ? tokens.colors.accent.error : tokens.colors.text.tertiary,
+                        color: trader.max_drawdown !== undefined ? tokens.colors.accent.error : tokens.colors.text.tertiary,
                         lineHeight: tokens.typography.lineHeight.tight,
-                        opacity: t.max_drawdown !== undefined ? 1 : 0.5,
+                        opacity: trader.max_drawdown !== undefined ? 1 : 0.5,
                       }}
                     >
-                      {t.max_drawdown !== undefined ? `-${t.max_drawdown.toFixed(2)}%` : '—'}
+                      {trader.max_drawdown !== undefined ? `-${trader.max_drawdown.toFixed(2)}%` : '—'}
                     </Text>
                   </Box>
 
@@ -589,4 +669,5 @@ export default function RankingTable(props: {
     </Box>
   )
 }
+
 

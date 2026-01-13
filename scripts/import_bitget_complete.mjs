@@ -129,54 +129,67 @@ async function scrapeRanking(page, ranking) {
     // 提取数据
     const data = await page.evaluate(() => {
       const results = []
+      const bodyText = document.body.innerText || ''
       
-      // 方法1: 查找表格行
-      const rows = document.querySelectorAll('tr, [class*="item"], [class*="row"], [class*="trader-card"]')
+      // 方法1: 从页面文本解析 - Bitget 格式如:
+      // "老枪\n@BGUSER-9WQM8XWL\n收益率:\n+12,821.83%\n$25,399.3总收益\n253\n/\n500\n跟单者"
+      // 或表格格式: "4\tEncryption\n@Encryption-\t+9,280.79%\t$18,585.98\t79/500"
       
-      rows.forEach((row, idx) => {
-        const text = row.innerText || ''
-        const link = row.querySelector('a[href*="/copy-trading/trader/"]')
+      // 查找所有带链接的交易员元素
+      const links = document.querySelectorAll('a[href*="/copy-trading/trader/"]')
+      
+      links.forEach((link, idx) => {
+        const href = link.getAttribute('href')
+        const idMatch = href.match(/trader\/([^/?]+)/)
+        if (!idMatch) return
         
-        // 提取 ROI（查找百分比）
-        const roiMatch = text.match(/([+-]?\d+\.?\d*)%/)
-        const roi = roiMatch ? parseFloat(roiMatch[1]) : null
+        const traderId = idMatch[1]
+        const profileUrl = href.startsWith('http') ? href : `https://www.bitget.com${href}`
         
-        // 提取交易员 ID
-        let traderId = null
-        let profileUrl = null
-        if (link) {
-          const href = link.getAttribute('href')
-          profileUrl = href.startsWith('http') ? href : `https://www.bitget.com${href}`
-          const idMatch = href.match(/trader\/(\d+)/)
-          traderId = idMatch ? idMatch[1] : null
+        // 获取包含此链接的父容器的文本
+        let container = link.parentElement
+        for (let i = 0; i < 5 && container; i++) {
+          if (container.innerText && container.innerText.length > 50) break
+          container = container.parentElement
         }
         
-        // 提取昵称
-        const nameEl = row.querySelector('[class*="name"], [class*="nickname"]')
-        const nickname = nameEl?.innerText?.trim() || null
+        const text = container?.innerText || link.innerText || ''
+        
+        // 提取 ROI - 格式: +12,821.83% 或 收益率: +12,821.83%
+        const roiMatch = text.match(/([+-]?\d{1,3}(?:,\d{3})*\.?\d*)%/)
+        const roi = roiMatch ? parseFloat(roiMatch[1].replace(/,/g, '')) : null
+        
+        // 提取 PNL - 格式: $25,399.3总收益 或 $18,585.98
+        const pnlMatch = text.match(/\$([0-9,]+\.?\d*)(?:\s*(?:总收益|USDT))?/i)
+        const pnl = pnlMatch ? parseFloat(pnlMatch[1].replace(/,/g, '')) : null
+        
+        // 提取昵称 - 链接文本或 @ 前的文字
+        let nickname = null
+        const nicknameMatch = text.match(/^([^\n@]+)/) || text.match(/([^\n]+)\n@/)
+        if (nicknameMatch) {
+          nickname = nicknameMatch[1].trim()
+        }
         
         // 提取头像
-        const avatarEl = row.querySelector('img[src*="avatar"], img[class*="avatar"]')
+        const avatarEl = container?.querySelector('img') || link.querySelector('img')
         const avatar = avatarEl?.src || null
         
-        // 提取粉丝数
-        const followersMatch = text.match(/(\d+(?:,\d+)*)\s*(?:followers|跟随者|粉丝)/i)
-        const followers = followersMatch ? parseInt(followersMatch[1].replace(/,/g, '')) : null
+        // 提取跟单者数
+        const followersMatch = text.match(/(\d+)\s*\/\s*(\d+)\s*(?:跟单者)?/)
+        const followers = followersMatch ? parseInt(followersMatch[1]) : null
         
-        // 提取胜率
-        const winRateMatch = text.match(/(?:胜率|Win Rate)[:\s]*(\d+\.?\d*)%/i)
-        const winRate = winRateMatch ? parseFloat(winRateMatch[1]) : null
-        
-        if (traderId && roi !== null) {
+        if (traderId && roi !== null && !results.find(r => r.traderId === traderId)) {
           results.push({
-            rank: idx + 1,
+            rank: results.length + 1,
             traderId,
             nickname,
             avatar,
             profileUrl,
             roi,
+            pnl,
             followers,
-            winRate,
+            winRate: null,
+            maxDrawdown: null,
           })
         }
       })
@@ -260,6 +273,20 @@ async function scrapeTraderDetails(page, trader) {
       // 提取统计数据
       const statsText = document.body.innerText || ''
       
+      // 提取 PNL（多种格式：累计盈亏、Total PnL、盈亏等）
+      const pnlPatterns = [
+        /(?:累计盈亏|Total PnL|总盈亏|盈亏)[:\s]*\$?([+-]?\d+(?:,?\d+)*\.?\d*)\s*(?:USDT)?/i,
+        /(?:Profit|收益)[:\s]*\$?([+-]?\d+(?:,?\d+)*\.?\d*)\s*(?:USDT)?/i,
+        /PnL[:\s]*\$?([+-]?\d+(?:,?\d+)*\.?\d*)\s*(?:USDT)?/i,
+      ]
+      for (const pattern of pnlPatterns) {
+        const match = statsText.match(pattern)
+        if (match) {
+          result.stats.pnl = parseFloat(match[1].replace(/,/g, ''))
+          break
+        }
+      }
+      
       // 总交易次数
       const tradesMatch = statsText.match(/(?:总交易|Total Trades)[:\s]*(\d+)/i)
       if (tradesMatch) result.stats.totalTrades = parseInt(tradesMatch[1])
@@ -301,18 +328,23 @@ async function scrapeTraderDetails(page, trader) {
     // 更新统计数据到快照
     if (Object.keys(details.stats).length > 0) {
       const updateData = {}
+      if (details.stats.pnl != null) updateData.pnl = details.stats.pnl
       if (details.stats.maxDrawdown) updateData.max_drawdown = details.stats.maxDrawdown
       if (details.stats.totalTrades) updateData.trades_count = details.stats.totalTrades
       
       if (Object.keys(updateData).length > 0) {
-        await supabase
+        // 更新最新的快照记录
+        const { error } = await supabase
           .from('trader_snapshots')
           .update(updateData)
           .eq('source', trader.source)
           .eq('source_trader_id', trader.traderId)
           .order('captured_at', { ascending: false })
           .limit(1)
-          .catch(() => {})
+        
+        if (!error && updateData.pnl != null) {
+          console.log(`    ✓ PNL: $${updateData.pnl.toFixed(2)}`)
+        }
       }
     }
 
@@ -362,4 +394,5 @@ function sleep(ms) {
 }
 
 main().catch(console.error)
+
 

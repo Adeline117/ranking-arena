@@ -1,161 +1,186 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+/**
+ * 同步交易所数据 API
+ * POST /api/exchange/sync
+ */
+
+import { NextRequest } from 'next/server'
 import {
-  calculateTradeLevelStats,
-  calculateDetailedMetrics,
-  calculateHoldingTimeAnalysis,
-  calculateProfitabilityAnalysis,
-  calculateRiskMetrics,
-  type Trade,
-} from '@/lib/services/trading-metrics'
+  getSupabaseAdmin,
+  requireAuth,
+  success,
+  notFound,
+  handleError,
+  validateEnum,
+} from '@/lib/api'
+import { decrypt } from '@/lib/exchange/encryption'
+import { type Exchange, SUPPORTED_EXCHANGES } from '@/lib/exchange'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-
-import crypto from 'crypto'
-
-// 简单的解密函数
-function decrypt(encrypted: string, key: string): string {
-  const [ivHex, encryptedHex] = encrypted.split(':')
-  const iv = Buffer.from(ivHex, 'hex')
-  const decipher = crypto.createDecipheriv('aes-256-cbc', Buffer.from(key, 'hex'), iv)
-  let decrypted = decipher.update(encryptedHex, 'hex', 'utf8')
-  decrypted += decipher.final('utf8')
-  return decrypted
-}
-
-// 从交易所获取交易历史（示例实现，需要根据实际 API 调整）
-async function fetchTradesFromExchange(
-  exchange: string,
-  accessToken: string,
-  userId: string
-): Promise<Trade[]> {
-  // 这里应该调用实际的交易所 API
-  // 示例：从 user_trading_history 表获取（如果已同步）
-  const supabase = createClient(supabaseUrl, supabaseServiceKey)
-  
-  const { data: trades } = await supabase
-    .from('user_trading_history')
-    .select('*')
-    .eq('user_id', userId)
-    .eq('exchange', exchange)
-    .order('executed_at', { ascending: false })
-    .limit(1000)
-
-  return (trades || []).map(t => ({
-    id: t.trade_id,
-    symbol: t.symbol,
-    side: t.side as 'buy' | 'sell',
-    quantity: Number(t.quantity),
-    price: Number(t.price),
-    fee: Number(t.fee || 0),
-    pnl: t.pnl ? Number(t.pnl) : undefined,
-    executed_at: t.executed_at,
-    holding_time_days: t.holding_time_days ? Number(t.holding_time_days) : undefined,
-  }))
-}
+// 导入各交易所客户端
+import {
+  getBinanceAccount,
+  getBinanceTrades,
+  calculateTradingStats as calculateBinanceTradingStats,
+} from '@/lib/exchange/binance'
+import {
+  getBybitAccount,
+  getBybitTrades,
+  calculateBybitTradingStats,
+} from '@/lib/exchange/bybit'
+import {
+  getBitgetAccount,
+  getBitgetTrades,
+  calculateBitgetTradingStats,
+} from '@/lib/exchange/bitget'
+import {
+  getMexcAccount,
+  getMexcTrades,
+  calculateMexcTradingStats,
+} from '@/lib/exchange/mexc'
+import {
+  getCoinexAccount,
+  getCoinexTrades,
+  calculateCoinexTradingStats,
+} from '@/lib/exchange/coinex'
 
 export async function POST(request: NextRequest) {
   try {
+    const user = await requireAuth(request)
+    const supabase = getSupabaseAdmin()
+
     const body = await request.json()
-    const { userId, exchange } = body
-
-    if (!userId || !exchange) {
-      return NextResponse.json({ error: 'Missing userId or exchange' }, { status: 400 })
-    }
-
-    const supabase = createClient(supabaseUrl, supabaseServiceKey)
+    const exchange = validateEnum(body.exchange, SUPPORTED_EXCHANGES, {
+      required: true,
+      fieldName: '交易所',
+    })!
 
     // 获取用户连接信息
     const { data: connection, error: connError } = await supabase
       .from('user_exchange_connections')
       .select('*')
-      .eq('user_id', userId)
+      .eq('user_id', user.id)
       .eq('exchange', exchange)
       .eq('is_active', true)
       .single()
 
     if (connError || !connection) {
-      return NextResponse.json({ error: 'Connection not found' }, { status: 404 })
+      return notFound('未找到有效的交易所连接')
     }
 
-    // 解密 access_token
-    const encryptionKey = process.env.ENCRYPTION_KEY || ''
-    if (!encryptionKey) {
-      return NextResponse.json({ error: 'Encryption key not configured' }, { status: 500 })
-    }
+    // 解密凭证
+    let apiKey: string
+    let apiSecret: string
+    let passphrase: string | undefined
 
-    let accessToken: string
     try {
-      accessToken = decrypt(connection.access_token_encrypted, encryptionKey)
+      apiKey = decrypt(connection.api_key_encrypted)
+      apiSecret = decrypt(connection.api_secret_encrypted)
+      if (connection.access_token_encrypted && exchange === 'bitget') {
+        passphrase = decrypt(connection.access_token_encrypted)
+      }
     } catch (err) {
-      return NextResponse.json({ error: 'Failed to decrypt token' }, { status: 500 })
+      console.error('[exchange/sync] 解密失败:', err)
+      const error = new Error('解密凭证失败')
+      ;(error as any).statusCode = 500
+      throw error
     }
 
-    // 获取交易历史
-    const trades = await fetchTradesFromExchange(exchange, accessToken, userId)
+    // 根据交易所类型获取数据
+    let trades: any[] = []
+    let stats: any = null
 
-    if (trades.length === 0) {
-      return NextResponse.json({ message: 'No trades found', metrics: null })
+    try {
+      switch (exchange as Exchange) {
+        case 'binance':
+          await getBinanceAccount({ apiKey, apiSecret })
+          trades = await getBinanceTrades({ apiKey, apiSecret })
+          stats = calculateBinanceTradingStats(trades)
+          break
+
+        case 'bybit':
+          await getBybitAccount({ apiKey, apiSecret })
+          const bybitTrades = await getBybitTrades({ apiKey, apiSecret })
+          trades = bybitTrades
+          stats = calculateBybitTradingStats(bybitTrades)
+          break
+
+        case 'bitget':
+          await getBitgetAccount({ apiKey, apiSecret, passphrase })
+          const bitgetTrades = await getBitgetTrades({ apiKey, apiSecret, passphrase })
+          trades = bitgetTrades
+          stats = calculateBitgetTradingStats(bitgetTrades)
+          break
+
+        case 'mexc':
+          await getMexcAccount({ apiKey, apiSecret })
+          const mexcTrades = await getMexcTrades({ apiKey, apiSecret }, 'BTCUSDT')
+          trades = mexcTrades
+          stats = calculateMexcTradingStats(mexcTrades)
+          break
+
+        case 'coinex':
+          await getCoinexAccount({ apiKey, apiSecret })
+          const coinexTrades = await getCoinexTrades({ apiKey, apiSecret }, 'BTCUSDT')
+          trades = coinexTrades
+          stats = calculateCoinexTradingStats(coinexTrades)
+          break
+      }
+    } catch (err: any) {
+      console.error(`[exchange/sync] ${exchange} 同步失败:`, err)
+      
+      // 更新连接状态为失败
+      await supabase
+        .from('user_exchange_connections')
+        .update({
+          last_sync_at: new Date().toISOString(),
+          last_sync_status: 'error',
+          last_sync_error: err.message || '同步失败',
+        })
+        .eq('id', connection.id)
+
+      throw err
     }
 
-    // 计算所有指标
-    const tradeLevelStats = calculateTradeLevelStats(trades)
-    const detailedMetrics = calculateDetailedMetrics(trades)
-    const holdingTimeAnalysis = calculateHoldingTimeAnalysis(trades)
-    const profitabilityAnalysis = calculateProfitabilityAnalysis(trades)
-    const riskMetrics = calculateRiskMetrics(trades)
+    // 保存交易统计数据
+    if (stats && stats.totalTrades > 0) {
+      const periodStart = new Date()
+      periodStart.setDate(periodStart.getDate() - 90)
+      const periodEnd = new Date()
 
-    // 保存到数据库
-    const periodStart = new Date()
-    periodStart.setDate(periodStart.getDate() - 90) // 最近 90 天
-    const periodEnd = new Date()
-
-    const { error: saveError } = await supabase
-      .from('user_trading_data')
-      .upsert({
-        user_id: userId,
-        exchange,
-        period_start: periodStart.toISOString().split('T')[0],
-        period_end: periodEnd.toISOString().split('T')[0],
-        total_trades: tradeLevelStats.total_trades,
-        avg_profit: tradeLevelStats.avg_profit,
-        avg_loss: tradeLevelStats.avg_loss,
-        profitable_trades_pct: tradeLevelStats.profitable_trades_pct,
-        avg_holding_time_days: holdingTimeAnalysis.avg_holding_time,
-        profitable_holding_time_days: holdingTimeAnalysis.median_holding_time,
-        profitable_weeks: Math.floor(holdingTimeAnalysis.short_term_trades_pct / 10), // 简化计算
-        updated_at: new Date().toISOString(),
-      }, {
-        onConflict: 'user_id,exchange,period_start,period_end',
-      })
-
-    if (saveError) {
-      console.error('Error saving trading data:', saveError)
+      await supabase
+        .from('user_trading_data')
+        .upsert({
+          user_id: user.id,
+          exchange,
+          period_start: periodStart.toISOString().split('T')[0],
+          period_end: periodEnd.toISOString().split('T')[0],
+          total_trades: stats.totalTrades,
+          avg_profit: stats.avgProfit,
+          avg_loss: stats.avgLoss,
+          profitable_trades_pct: stats.profitableTradesPct,
+          trades_per_week: stats.tradesPerWeek,
+          active_since: stats.activeSince?.toISOString().split('T')[0],
+          updated_at: new Date().toISOString(),
+        }, {
+          onConflict: 'user_id,exchange,period_start,period_end',
+        })
     }
 
-    // 更新连接状态
+    // 更新连接状态为成功
     await supabase
       .from('user_exchange_connections')
       .update({
         last_sync_at: new Date().toISOString(),
         last_sync_status: 'success',
+        last_sync_error: null,
       })
       .eq('id', connection.id)
 
-    return NextResponse.json({
-      success: true,
-      metrics: {
-        tradeLevelStats,
-        detailedMetrics,
-        holdingTimeAnalysis,
-        profitabilityAnalysis,
-        riskMetrics,
-      },
+    return success({
+      message: '同步成功',
       tradesCount: trades.length,
+      stats,
     })
-  } catch (error: any) {
-    console.error('Error syncing exchange data:', error)
-    return NextResponse.json({ error: error.message || 'Sync failed' }, { status: 500 })
+  } catch (error) {
+    return handleError(error, 'exchange/sync')
   }
 }
