@@ -8,7 +8,7 @@ import TopNav from '@/app/components/Layout/TopNav'
 import RankingTableCompact from '@/app/components/Features/RankingTableCompact'
 import PostFeed from '@/app/components/Features/PostFeed'
 import Card from '@/app/components/UI/Card'
-import { Box, Text } from '@/app/components/Base'
+import { Box, Text, Button } from '@/app/components/Base'
 import type { Trader } from '@/app/components/Features/RankingTable'
 import { useLanguage } from '@/app/components/Utils/LanguageProvider'
 
@@ -79,16 +79,19 @@ function GroupsList() {
             textDecoration: 'none',
             color: tokens.colors.text.primary,
             transition: `all ${tokens.transition.base}`,
+            cursor: 'pointer',
           }}
           onMouseEnter={(e) => {
             e.currentTarget.style.background = tokens.colors.bg.tertiary || tokens.colors.bg.hover
             e.currentTarget.style.borderColor = tokens.colors.border.secondary || tokens.colors.border.primary
             e.currentTarget.style.transform = 'translateX(4px)'
+            e.currentTarget.style.boxShadow = tokens.shadow.sm
           }}
           onMouseLeave={(e) => {
             e.currentTarget.style.background = tokens.colors.bg.secondary
             e.currentTarget.style.borderColor = tokens.colors.border.primary
             e.currentTarget.style.transform = 'translateX(0)'
+            e.currentTarget.style.boxShadow = 'none'
           }}
         >
           {/* Avatar */}
@@ -153,63 +156,70 @@ export default function GroupsPage() {
   useEffect(() => {
     const load = async () => {
       setLoadingTraders(true)
-      
-      // 获取最新的 captured_at
-      const { data: latestSnapshot } = await supabase
-        .from('trader_snapshots')
-        .select('captured_at')
-        .eq('source', 'binance')
-        .order('captured_at', { ascending: false })
-        .limit(1)
-        .single()
+      try {
+        // 获取最新的 captured_at (90D 数据)
+        const { data: latestSnapshot } = await supabase
+          .from('trader_snapshots')
+          .select('captured_at')
+          .eq('source', 'binance')
+          .order('captured_at', { ascending: false })
+          .limit(1)
+          .single()
 
-      if (!latestSnapshot) {
+        if (!latestSnapshot) {
+          setTraders([])
+          setLoadingTraders(false)
+          return
+        }
+
+        // 查询 snapshots - 按 ROI 排序获取前10
+        const { data: snapshots } = await supabase
+          .from('trader_snapshots')
+          .select('source_trader_id, rank, roi, pnl, followers, win_rate, max_drawdown')
+          .eq('source', 'binance')
+          .eq('captured_at', latestSnapshot.captured_at)
+          .order('roi', { ascending: false })
+          .limit(10)
+
+        if (!snapshots || snapshots.length === 0) {
+          setTraders([])
+          setLoadingTraders(false)
+          return
+        }
+
+        // 查询 handles
+        const traderIds = snapshots.map((s: any) => s.source_trader_id)
+        const { data: sources } = await supabase
+          .from('trader_sources')
+          .select('source_trader_id, handle')
+          .eq('source', 'binance')
+          .in('source_trader_id', traderIds)
+
+        const handleMap = new Map()
+        if (sources) {
+          sources.forEach((s: any) => {
+            handleMap.set(s.source_trader_id, s.handle)
+          })
+        }
+
+        const tradersData: Trader[] = snapshots.map((item: any) => ({
+          id: item.source_trader_id,
+          handle: handleMap.get(item.source_trader_id) || item.source_trader_id,
+          roi: item.roi || 0,
+          pnl: item.pnl || 10000,
+          win_rate: item.win_rate || 0,
+          max_drawdown: item.max_drawdown,
+          followers: item.followers || 0,
+          source: 'binance',
+        }))
+
+        setTraders(tradersData)
+      } catch (error) {
+        console.error('加载排行榜失败:', error)
         setTraders([])
+      } finally {
         setLoadingTraders(false)
-        return
       }
-
-      // 查询 snapshots
-      const { data: snapshots } = await supabase
-        .from('trader_snapshots')
-        .select('source_trader_id, rank, roi, followers')
-        .eq('source', 'binance')
-        .eq('captured_at', latestSnapshot.captured_at)
-        .order('rank', { ascending: true })
-        .limit(10)
-
-      if (!snapshots || snapshots.length === 0) {
-        setTraders([])
-        setLoadingTraders(false)
-        return
-      }
-
-      // 查询 handles
-      const traderIds = snapshots.map((s: any) => s.source_trader_id)
-      const { data: sources } = await supabase
-        .from('trader_sources')
-        .select('source_trader_id, handle')
-        .eq('source', 'binance')
-        .in('source_trader_id', traderIds)
-
-      const handleMap = new Map()
-      if (sources) {
-        sources.forEach((s: any) => {
-          handleMap.set(s.source_trader_id, s.handle)
-        })
-      }
-
-      const tradersData: Trader[] = snapshots.map((item: any) => ({
-        id: item.source_trader_id,
-        handle: handleMap.get(item.source_trader_id) || item.source_trader_id,
-        roi: item.roi || 0,
-        win_rate: 0,
-        followers: item.followers || 0,
-        source: 'binance', // 数据来源
-      }))
-
-      setTraders(tradersData)
-      setLoadingTraders(false)
     }
     load()
   }, [])
@@ -244,6 +254,30 @@ export default function GroupsPage() {
                 {t('hotGroups')}
               </Text>
               <GroupsList />
+              
+              {/* 申请创办小组按钮 */}
+              <Link href="/groups/apply" style={{ display: 'block', marginTop: tokens.spacing[4] }}>
+                <Button
+                  variant="secondary"
+                  style={{
+                    width: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: tokens.spacing[2],
+                    padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+                    borderRadius: tokens.radius.lg,
+                    border: `1px dashed ${tokens.colors.border.primary}`,
+                    background: 'transparent',
+                    color: tokens.colors.text.secondary,
+                    cursor: 'pointer',
+                    transition: `all ${tokens.transition.base}`,
+                  }}
+                >
+                  <span style={{ fontSize: '18px' }}>+</span>
+                  {t('applyCreateGroup')}
+                </Button>
+              </Link>
             </Card>
           </Box>
         </Box>

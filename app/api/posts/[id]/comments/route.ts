@@ -2,6 +2,7 @@
  * 帖子评论 API
  * GET /api/posts/[id]/comments - 获取评论列表
  * POST /api/posts/[id]/comments - 添加评论
+ * DELETE /api/posts/[id]/comments - 删除评论
  */
 
 import { NextRequest } from 'next/server'
@@ -14,7 +15,7 @@ import {
   validateString,
   validateNumber,
 } from '@/lib/api'
-import { getPostComments, createComment } from '@/lib/data/comments'
+import { getPostComments, createComment, deleteComment } from '@/lib/data/comments'
 
 type RouteContext = { params: Promise<{ id: string }> }
 
@@ -62,5 +63,24 @@ export async function POST(request: NextRequest, context: RouteContext) {
     return success({ comment }, 201)
   } catch (error) {
     return handleError(error, 'posts/[id]/comments POST')
+  }
+}
+
+export async function DELETE(request: NextRequest, context: RouteContext) {
+  try {
+    const user = await requireAuth(request)
+    const supabase = getSupabaseAdmin()
+
+    const body = await request.json()
+    const commentId = validateString(body.comment_id, {
+      required: true,
+      fieldName: '评论ID',
+    })!
+
+    await deleteComment(supabase, commentId, user.id)
+
+    return success({ message: '评论已删除' })
+  } catch (error) {
+    return handleError(error, 'posts/[id]/comments DELETE')
   }
 }

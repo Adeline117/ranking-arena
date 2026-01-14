@@ -9,7 +9,9 @@ import MarketPanel from '@/app/components/Features/MarketPanel'
 import Card from '@/app/components/UI/Card'
 import RankingTableCompact from '@/app/components/Features/RankingTableCompact'
 import { Box, Text } from '@/app/components/Base'
-// 本地 Trader 类型，匹配 RankingTableCompact 的期望
+import { CommentIcon, ThumbsUpIcon } from '@/app/components/Icons'
+
+// 本地 Trader 类型
 type Trader = {
   id: string
   handle: string | null
@@ -54,64 +56,70 @@ export default function HotPage() {
   useEffect(() => {
     const load = async () => {
       setLoadingTraders(true)
-      
-      // 获取最新的 captured_at
-      const { data: latestSnapshot } = await supabase
-        .from('trader_snapshots')
-        .select('captured_at')
-        .eq('source', 'binance')
-        .order('captured_at', { ascending: false })
-        .limit(1)
-        .single()
+      try {
+        // 获取最新的 captured_at (90D 数据)
+        const { data: latestSnapshot } = await supabase
+          .from('trader_snapshots')
+          .select('captured_at')
+          .eq('source', 'binance')
+          .order('captured_at', { ascending: false })
+          .limit(1)
+          .single()
 
-      if (!latestSnapshot) {
+        if (!latestSnapshot) {
+          setTraders([])
+          setLoadingTraders(false)
+          return
+        }
+
+        // 查询 snapshots - 按 ROI 排序获取前10
+        const { data: snapshots } = await supabase
+          .from('trader_snapshots')
+          .select('source_trader_id, rank, roi, pnl, followers, win_rate, max_drawdown')
+          .eq('source', 'binance')
+          .eq('captured_at', latestSnapshot.captured_at)
+          .order('roi', { ascending: false })
+          .limit(10)
+
+        if (!snapshots || snapshots.length === 0) {
+          setTraders([])
+          setLoadingTraders(false)
+          return
+        }
+
+        // 查询 handles
+        const traderIds = snapshots.map((s: any) => s.source_trader_id)
+        const { data: sources } = await supabase
+          .from('trader_sources')
+          .select('source_trader_id, handle')
+          .eq('source', 'binance')
+          .in('source_trader_id', traderIds)
+
+        const handleMap = new Map()
+        if (sources) {
+          sources.forEach((s: any) => {
+            handleMap.set(s.source_trader_id, s.handle)
+          })
+        }
+
+        const tradersData: Trader[] = snapshots.map((item: any) => ({
+          id: item.source_trader_id,
+          handle: handleMap.get(item.source_trader_id) || item.source_trader_id,
+          roi: item.roi || 0,
+          pnl: item.pnl || 10000,
+          win_rate: item.win_rate || 0,
+          max_drawdown: item.max_drawdown,
+          followers: item.followers || 0,
+          source: 'binance',
+        }))
+
+        setTraders(tradersData)
+      } catch (error) {
+        console.error('加载排行榜失败:', error)
         setTraders([])
+      } finally {
         setLoadingTraders(false)
-        return
       }
-
-      // 查询 snapshots
-      const { data: snapshots } = await supabase
-        .from('trader_snapshots')
-        .select('source_trader_id, rank, roi, followers')
-        .eq('source', 'binance')
-        .eq('captured_at', latestSnapshot.captured_at)
-        .order('rank', { ascending: true })
-        .limit(10)
-
-      if (!snapshots || snapshots.length === 0) {
-        setTraders([])
-        setLoadingTraders(false)
-        return
-      }
-
-      // 查询 handles
-      const traderIds = snapshots.map((s: any) => s.source_trader_id)
-      const { data: sources } = await supabase
-        .from('trader_sources')
-        .select('source_trader_id, handle')
-        .eq('source', 'binance')
-        .in('source_trader_id', traderIds)
-
-      const handleMap = new Map()
-      if (sources) {
-        sources.forEach((s: any) => {
-          handleMap.set(s.source_trader_id, s.handle)
-        })
-      }
-
-      const tradersData = snapshots.map((item: any) => ({
-        id: item.source_trader_id,
-        handle: handleMap.get(item.source_trader_id) || item.source_trader_id,
-        roi: item.roi || 0,
-        win_rate: 0,
-        followers: item.followers || 0,
-        source: 'binance' as const,
-      }))
-      
-      setTraders(tradersData as Trader[])
-
-      setLoadingTraders(false)
     }
     load()
   }, [])
@@ -277,11 +285,15 @@ export default function HotPage() {
                           <Text className="hot-post-body" size="sm" color="secondary" style={{ marginBottom: tokens.spacing[2], lineHeight: 1.5 }}>
                             {p.body.slice(0, 100)}{p.body.length > 100 ? '...' : ''}
                           </Text>
-                          <Box className="hot-post-footer" style={{ display: 'flex', gap: tokens.spacing[3], fontSize: tokens.typography.fontSize.xs, color: tokens.colors.text.tertiary, flexWrap: 'wrap' }}>
+                          <Box className="hot-post-footer" style={{ display: 'flex', gap: tokens.spacing[3], fontSize: tokens.typography.fontSize.xs, color: tokens.colors.text.tertiary, flexWrap: 'wrap', alignItems: 'center' }}>
                             <Text size="xs" color="tertiary">{p.author}</Text>
                             <Text size="xs" color="tertiary">{p.time}</Text>
-                            <Text size="xs" color="tertiary">💬 {p.comments}</Text>
-                            <Text size="xs" color="tertiary">👍 {p.likes}</Text>
+                            <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                              <CommentIcon size={12} /> {p.comments}
+                            </span>
+                            <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                              <ThumbsUpIcon size={12} /> {p.likes}
+                            </span>
                           </Box>
                         </Box>
                       </Link>

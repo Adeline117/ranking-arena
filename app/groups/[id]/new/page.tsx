@@ -319,38 +319,104 @@ export default function NewPostPage() {
               resize: 'vertical',
             }}
           />
-        </Box>
-
-        {/* Images Section */}
-        <Box
-          bg="secondary"
-          p={6}
-          radius="xl"
-          border="primary"
-          style={{ marginBottom: tokens.spacing[4] }}
-        >
-          <Text size="lg" weight="black" style={{ marginBottom: tokens.spacing[4] }}>
-            图片
-          </Text>
-          <input
-            type="file"
-            accept="image/jpeg,image/jpg,image/png,image/gif,image/webp"
-            multiple
-            onChange={handleImageUpload}
-            disabled={uploadingImages}
-            style={{ display: 'none' }}
-            id="image-upload"
-          />
-          <label htmlFor="image-upload" style={{ display: 'inline-block', cursor: uploadingImages ? 'not-allowed' : 'pointer' }}>
-            <Button
-              variant="secondary"
-              size="sm"
+          
+          {/* 功能工具栏 */}
+          <Box style={{ 
+            display: 'flex', 
+            gap: tokens.spacing[2], 
+            marginTop: tokens.spacing[3],
+            paddingTop: tokens.spacing[3],
+            borderTop: `1px solid ${tokens.colors.border.primary}`,
+          }}>
+            {/* 图片按钮 */}
+            <input
+              type="file"
+              accept="image/jpeg,image/jpg,image/png,image/gif,image/webp"
+              multiple
+              onChange={handleImageUpload}
               disabled={uploadingImages}
-              style={{ pointerEvents: 'none' }}
+              style={{ display: 'none' }}
+              id="image-upload"
+            />
+            <label htmlFor="image-upload" style={{ cursor: uploadingImages ? 'not-allowed' : 'pointer' }}>
+              <Box
+                style={{
+                  padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+                  borderRadius: tokens.radius.md,
+                  border: `1px solid ${images.length > 0 ? tokens.colors.accent?.primary || '#8b6fa8' : tokens.colors.border.primary}`,
+                  background: images.length > 0 ? 'rgba(139, 111, 168, 0.1)' : 'transparent',
+                  color: images.length > 0 ? tokens.colors.accent?.primary || '#8b6fa8' : tokens.colors.text.secondary,
+                  cursor: uploadingImages ? 'not-allowed' : 'pointer',
+                  fontSize: tokens.typography.fontSize.sm,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: tokens.spacing[1],
+                  transition: `all ${tokens.transition.base}`,
+                }}
+              >
+                {uploadingImages ? '⏳' : '📷'} 图片 {images.length > 0 && `(${images.length})`}
+              </Box>
+            </label>
+            
+            {/* 链接按钮 */}
+            <Box
+              onClick={() => {
+                const linkSection = document.getElementById('link-section')
+                if (linkSection) {
+                  linkSection.style.display = linkSection.style.display === 'none' ? 'block' : 'none'
+                }
+              }}
+              style={{
+                padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+                borderRadius: tokens.radius.md,
+                border: `1px solid ${links.length > 0 ? tokens.colors.accent?.primary || '#8b6fa8' : tokens.colors.border.primary}`,
+                background: links.length > 0 ? 'rgba(139, 111, 168, 0.1)' : 'transparent',
+                color: links.length > 0 ? tokens.colors.accent?.primary || '#8b6fa8' : tokens.colors.text.secondary,
+                cursor: 'pointer',
+                fontSize: tokens.typography.fontSize.sm,
+                display: 'flex',
+                alignItems: 'center',
+                gap: tokens.spacing[1],
+                transition: `all ${tokens.transition.base}`,
+              }}
             >
-              {uploadingImages ? '上传中...' : '+ 添加图片'}
-            </Button>
-          </label>
+              🔗 链接 {links.length > 0 && `(${links.length})`}
+            </Box>
+            
+            {/* 投票按钮 */}
+            <Box
+              onClick={() => {
+                if (showPollForm) {
+                  setPoll(null)
+                  setShowPollForm(false)
+                } else {
+                  setPoll({
+                    question: '',
+                    options: ['', ''],
+                    type: 'single',
+                  })
+                  setShowPollForm(true)
+                }
+              }}
+              style={{
+                padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+                borderRadius: tokens.radius.md,
+                border: `1px solid ${showPollForm ? tokens.colors.accent?.primary || '#8b6fa8' : tokens.colors.border.primary}`,
+                background: showPollForm ? 'rgba(139, 111, 168, 0.1)' : 'transparent',
+                color: showPollForm ? tokens.colors.accent?.primary || '#8b6fa8' : tokens.colors.text.secondary,
+                cursor: 'pointer',
+                fontSize: tokens.typography.fontSize.sm,
+                display: 'flex',
+                alignItems: 'center',
+                gap: tokens.spacing[1],
+                transition: `all ${tokens.transition.base}`,
+              }}
+            >
+              📊 投票
+            </Box>
+          </Box>
+
+          {/* 已上传图片预览 */}
           {images.length > 0 && (
             <Box style={{ display: 'flex', flexWrap: 'wrap', gap: tokens.spacing[3], marginTop: tokens.spacing[4] }}>
               {images.map((url, index) => (
@@ -358,8 +424,8 @@ export default function NewPostPage() {
                   key={index}
                   style={{
                     position: 'relative',
-                    width: 120,
-                    height: 120,
+                    width: 100,
+                    height: 100,
                     borderRadius: tokens.radius.md,
                     overflow: 'hidden',
                     border: `1px solid ${tokens.colors.border.primary}`,
@@ -376,8 +442,8 @@ export default function NewPostPage() {
                       position: 'absolute',
                       top: 4,
                       right: 4,
-                      width: 24,
-                      height: 24,
+                      width: 20,
+                      height: 20,
                       borderRadius: '50%',
                       background: 'rgba(0,0,0,0.7)',
                       color: '#fff',
@@ -386,7 +452,7 @@ export default function NewPostPage() {
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      fontSize: '16px',
+                      fontSize: '12px',
                     }}
                   >
                     ×
@@ -395,247 +461,158 @@ export default function NewPostPage() {
               ))}
             </Box>
           )}
-        </Box>
 
-        {/* Links Section */}
-        <Box
-          bg="secondary"
-          p={6}
-          radius="xl"
-          border="primary"
-          style={{ marginBottom: tokens.spacing[4] }}
-        >
-          <Text size="lg" weight="black" style={{ marginBottom: tokens.spacing[4] }}>
-            链接
-          </Text>
-          <Box style={{ display: 'flex', gap: tokens.spacing[2], marginBottom: tokens.spacing[3] }}>
-            <input
-              type="url"
-              value={newLinkUrl}
-              onChange={(e) => setNewLinkUrl(e.target.value)}
-              placeholder="输入链接 URL"
-              style={{
-                flex: 1,
-                padding: tokens.spacing[2],
-                borderRadius: tokens.radius.md,
-                border: `1px solid ${tokens.colors.border.primary}`,
-                background: tokens.colors.bg.primary,
-                color: tokens.colors.text.primary,
-                fontSize: tokens.typography.fontSize.sm,
-                outline: 'none',
-              }}
-              onKeyPress={(e) => {
-                if (e.key === 'Enter') {
-                  handleAddLink()
-                }
-              }}
-            />
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={handleAddLink}
-              disabled={addingLink || !newLinkUrl.trim()}
-            >
-              {addingLink ? '添加中...' : '添加'}
-            </Button>
-          </Box>
-          {links.length > 0 && (
-            <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
-              {links.map((link, index) => (
-                <Box
-                  key={index}
-                  style={{
-                    padding: tokens.spacing[3],
-                    borderRadius: tokens.radius.md,
-                    background: tokens.colors.bg.primary,
-                    border: `1px solid ${tokens.colors.border.primary}`,
-                    display: 'flex',
-                    gap: tokens.spacing[3],
-                    alignItems: 'flex-start',
-                  }}
-                >
-                  {link.image && (
-                    <img
-                      src={link.image}
-                      alt={link.title || 'Link preview'}
-                      style={{
-                        width: 80,
-                        height: 80,
-                        borderRadius: tokens.radius.md,
-                        objectFit: 'cover',
-                      }}
-                    />
-                  )}
-                  <Box style={{ flex: 1, minWidth: 0 }}>
-                    {link.title && (
-                      <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[1] }}>
-                        {link.title}
-                      </Text>
-                    )}
-                    {link.description && (
-                      <Text size="xs" color="secondary" style={{ marginBottom: tokens.spacing[1] }}>
-                        {link.description}
-                      </Text>
-                    )}
-                    <Text size="xs" color="tertiary">
-                      {link.url}
-                    </Text>
-                  </Box>
-                  <button
-                    onClick={() => removeLink(index)}
+          {/* 链接区域（可折叠） */}
+          <Box id="link-section" style={{ display: links.length > 0 ? 'block' : 'none', marginTop: tokens.spacing[4] }}>
+            <Box style={{ display: 'flex', gap: tokens.spacing[2], marginBottom: tokens.spacing[3] }}>
+              <input
+                type="url"
+                value={newLinkUrl}
+                onChange={(e) => setNewLinkUrl(e.target.value)}
+                placeholder="输入链接 URL"
+                style={{
+                  flex: 1,
+                  padding: tokens.spacing[2],
+                  borderRadius: tokens.radius.md,
+                  border: `1px solid ${tokens.colors.border.primary}`,
+                  background: tokens.colors.bg.primary,
+                  color: tokens.colors.text.primary,
+                  fontSize: tokens.typography.fontSize.sm,
+                  outline: 'none',
+                }}
+                onKeyPress={(e) => {
+                  if (e.key === 'Enter') {
+                    handleAddLink()
+                  }
+                }}
+              />
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={handleAddLink}
+                disabled={addingLink || !newLinkUrl.trim()}
+              >
+                {addingLink ? '...' : '添加'}
+              </Button>
+            </Box>
+            {links.length > 0 && (
+              <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
+                {links.map((link, index) => (
+                  <Box
+                    key={index}
                     style={{
-                      background: 'transparent',
-                      border: 'none',
-                      color: tokens.colors.text.tertiary,
-                      cursor: 'pointer',
-                      fontSize: '18px',
-                      padding: tokens.spacing[1],
+                      padding: tokens.spacing[2],
+                      borderRadius: tokens.radius.md,
+                      background: tokens.colors.bg.primary,
+                      border: `1px solid ${tokens.colors.border.primary}`,
+                      display: 'flex',
+                      gap: tokens.spacing[2],
+                      alignItems: 'center',
                     }}
                   >
-                    ×
-                  </button>
-                </Box>
-              ))}
-            </Box>
-          )}
-        </Box>
-
-        {/* Poll Section */}
-        <Box
-          bg="secondary"
-          p={6}
-          radius="xl"
-          border="primary"
-          style={{ marginBottom: tokens.spacing[4] }}
-        >
-          <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: tokens.spacing[4] }}>
-            <Text size="lg" weight="black">
-              投票
-            </Text>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => {
-                if (showPollForm) {
-                  setPoll(null)
-                  setShowPollForm(false)
-                } else {
-                  setPoll({
-                    question: '',
-                    options: ['', ''],
-                    type: 'single',
-                  })
-                  setShowPollForm(true)
-                }
-              }}
-            >
-              {showPollForm ? '取消投票' : '+ 添加投票'}
-            </Button>
-          </Box>
-          {showPollForm && poll && (
-            <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}>
-              <Box>
-                <Text size="sm" weight="semibold" style={{ marginBottom: tokens.spacing[2] }}>
-                  投票问题
-                </Text>
-                <input
-                  type="text"
-                  value={poll.question}
-                  onChange={(e) => setPoll({ ...poll, question: e.target.value })}
-                  placeholder="输入投票问题"
-                  style={{
-                    width: '100%',
-                    padding: tokens.spacing[2],
-                    borderRadius: tokens.radius.md,
-                    border: `1px solid ${tokens.colors.border.primary}`,
-                    background: tokens.colors.bg.primary,
-                    color: tokens.colors.text.primary,
-                    fontSize: tokens.typography.fontSize.sm,
-                    outline: 'none',
-                  }}
-                />
-              </Box>
-              <Box>
-                <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: tokens.spacing[2] }}>
-                  <Text size="sm" weight="semibold">
-                    选项
-                  </Text>
-                  <Box style={{ display: 'flex', gap: tokens.spacing[2] }}>
-                    <Button
-                      variant={poll.type === 'single' ? 'primary' : 'secondary'}
-                      size="sm"
-                      onClick={() => setPoll({ ...poll, type: 'single' })}
-                    >
-                      单选
-                    </Button>
-                    <Button
-                      variant={poll.type === 'multiple' ? 'primary' : 'secondary'}
-                      size="sm"
-                      onClick={() => setPoll({ ...poll, type: 'multiple' })}
-                    >
-                      多选
-                    </Button>
-                  </Box>
-                </Box>
-                {poll.options.map((option, index) => (
-                  <Box key={index} style={{ display: 'flex', gap: tokens.spacing[2], marginBottom: tokens.spacing[2] }}>
-                    <input
-                      type="text"
-                      value={option}
-                      onChange={(e) => updatePollOption(index, e.target.value)}
-                      placeholder={`选项 ${index + 1}`}
+                    <Text size="xs" color="tertiary" style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {link.title || link.url}
+                    </Text>
+                    <button
+                      onClick={() => removeLink(index)}
                       style={{
-                        flex: 1,
-                        padding: tokens.spacing[2],
-                        borderRadius: tokens.radius.md,
-                        border: `1px solid ${tokens.colors.border.primary}`,
-                        background: tokens.colors.bg.primary,
-                        color: tokens.colors.text.primary,
-                        fontSize: tokens.typography.fontSize.sm,
-                        outline: 'none',
+                        background: 'transparent',
+                        border: 'none',
+                        color: tokens.colors.text.tertiary,
+                        cursor: 'pointer',
+                        fontSize: '14px',
+                        padding: tokens.spacing[1],
                       }}
-                    />
-                    {poll.options.length > 2 && (
-                      <Button
-                        variant="text"
-                        size="sm"
-                        onClick={() => removePollOption(index)}
-                        style={{ color: '#ff7c7c' }}
-                      >
-                        删除
-                      </Button>
-                    )}
+                    >
+                      ×
+                    </button>
                   </Box>
                 ))}
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={addPollOption}
-                  style={{ marginTop: tokens.spacing[2] }}
-                >
-                  + 添加选项
-                </Button>
               </Box>
-              <Box>
-                <Text size="sm" weight="semibold" style={{ marginBottom: tokens.spacing[2] }}>
-                  截止时间（可选）
-                </Text>
-                <input
-                  type="datetime-local"
-                  value={poll.endAt || ''}
-                  onChange={(e) => setPoll({ ...poll, endAt: e.target.value })}
-                  style={{
-                    width: '100%',
-                    padding: tokens.spacing[2],
-                    borderRadius: tokens.radius.md,
-                    border: `1px solid ${tokens.colors.border.primary}`,
-                    background: tokens.colors.bg.primary,
-                    color: tokens.colors.text.primary,
-                    fontSize: tokens.typography.fontSize.sm,
-                    outline: 'none',
-                  }}
-                />
+            )}
+          </Box>
+
+          {/* 投票区域（可折叠） */}
+          {showPollForm && poll && (
+            <Box style={{ marginTop: tokens.spacing[4], padding: tokens.spacing[4], background: tokens.colors.bg.primary, borderRadius: tokens.radius.md, border: `1px solid ${tokens.colors.border.primary}` }}>
+              <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: tokens.spacing[3] }}>
+                <Text size="sm" weight="semibold">投票设置</Text>
+                <Box style={{ display: 'flex', gap: tokens.spacing[2] }}>
+                  <Button
+                    variant={poll.type === 'single' ? 'primary' : 'secondary'}
+                    size="sm"
+                    onClick={() => setPoll({ ...poll, type: 'single' })}
+                  >
+                    单选
+                  </Button>
+                  <Button
+                    variant={poll.type === 'multiple' ? 'primary' : 'secondary'}
+                    size="sm"
+                    onClick={() => setPoll({ ...poll, type: 'multiple' })}
+                  >
+                    多选
+                  </Button>
+                </Box>
               </Box>
+              <input
+                type="text"
+                value={poll.question}
+                onChange={(e) => setPoll({ ...poll, question: e.target.value })}
+                placeholder="投票问题"
+                style={{
+                  width: '100%',
+                  padding: tokens.spacing[2],
+                  borderRadius: tokens.radius.md,
+                  border: `1px solid ${tokens.colors.border.primary}`,
+                  background: 'transparent',
+                  color: tokens.colors.text.primary,
+                  fontSize: tokens.typography.fontSize.sm,
+                  outline: 'none',
+                  marginBottom: tokens.spacing[2],
+                }}
+              />
+              {poll.options.map((option, index) => (
+                <Box key={index} style={{ display: 'flex', gap: tokens.spacing[2], marginBottom: tokens.spacing[2] }}>
+                  <input
+                    type="text"
+                    value={option}
+                    onChange={(e) => updatePollOption(index, e.target.value)}
+                    placeholder={`选项 ${index + 1}`}
+                    style={{
+                      flex: 1,
+                      padding: tokens.spacing[2],
+                      borderRadius: tokens.radius.md,
+                      border: `1px solid ${tokens.colors.border.primary}`,
+                      background: 'transparent',
+                      color: tokens.colors.text.primary,
+                      fontSize: tokens.typography.fontSize.sm,
+                      outline: 'none',
+                    }}
+                  />
+                  {poll.options.length > 2 && (
+                    <button
+                      onClick={() => removePollOption(index)}
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        color: '#ff7c7c',
+                        cursor: 'pointer',
+                        fontSize: '14px',
+                      }}
+                    >
+                      ×
+                    </button>
+                  )}
+                </Box>
+              ))}
+              <Button
+                variant="text"
+                size="sm"
+                onClick={addPollOption}
+                style={{ color: tokens.colors.accent?.primary || '#8b6fa8', padding: 0 }}
+              >
+                + 添加选项
+              </Button>
             </Box>
           )}
         </Box>

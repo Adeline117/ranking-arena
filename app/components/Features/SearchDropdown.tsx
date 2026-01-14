@@ -27,15 +27,26 @@ interface HotPost {
   view_count?: number
 }
 
+interface SearchResult {
+  id: string
+  type: 'trader' | 'post' | 'group'
+  title: string
+  subtitle?: string
+  href: string
+}
+
 /**
  * 搜索下拉菜单
+ * - 实时搜索建议
  * - 显示搜索历史记录（可删除）
  * - 显示热榜帖子前十（前三标橙）
  */
-export default function SearchDropdown({ open, onClose }: SearchDropdownProps) {
+export default function SearchDropdown({ open, query, onClose }: SearchDropdownProps) {
   const [searchHistory, setSearchHistory] = useState<SearchHistoryItem[]>([])
   const [hotPosts, setHotPosts] = useState<HotPost[]>([])
   const [loading, setLoading] = useState(false)
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([])
+  const [searching, setSearching] = useState(false)
 
   // 加载搜索历史
   useEffect(() => {
@@ -95,6 +106,85 @@ export default function SearchDropdown({ open, onClose }: SearchDropdownProps) {
     loadHotPosts()
   }, [loadHotPosts])
 
+  // 实时搜索
+  useEffect(() => {
+    if (!open || !query.trim() || query.length < 2) {
+      setSearchResults([])
+      return
+    }
+
+    const searchTimer = setTimeout(async () => {
+      setSearching(true)
+      const results: SearchResult[] = []
+
+      try {
+        // 搜索交易员
+        const { data: traders } = await supabase
+          .from('trader_sources')
+          .select('source_trader_id, handle, source')
+          .ilike('handle', `%${query}%`)
+          .limit(5)
+
+        if (traders) {
+          traders.forEach((trader: any) => {
+            results.push({
+              id: trader.source_trader_id,
+              type: 'trader',
+              title: trader.handle || '未知交易员',
+              subtitle: trader.source?.toUpperCase(),
+              href: `/trader/${encodeURIComponent(trader.handle || trader.source_trader_id)}`,
+            })
+          })
+        }
+
+        // 搜索帖子
+        const { data: posts } = await supabase
+          .from('posts')
+          .select('id, title, author_handle')
+          .or(`title.ilike.%${query}%`)
+          .limit(5)
+
+        if (posts) {
+          posts.forEach((post: any) => {
+            results.push({
+              id: post.id,
+              type: 'post',
+              title: post.title || '无标题',
+              subtitle: post.author_handle ? `@${post.author_handle}` : undefined,
+              href: `/groups?post=${post.id}`,
+            })
+          })
+        }
+
+        // 搜索群组
+        const { data: groups } = await supabase
+          .from('groups')
+          .select('id, name')
+          .ilike('name', `%${query}%`)
+          .limit(3)
+
+        if (groups) {
+          groups.forEach((group: any) => {
+            results.push({
+              id: group.id,
+              type: 'group',
+              title: group.name,
+              href: `/groups/${group.id}`,
+            })
+          })
+        }
+
+        setSearchResults(results)
+      } catch (error) {
+        console.error('Search error:', error)
+      } finally {
+        setSearching(false)
+      }
+    }, 300) // 300ms 防抖
+
+    return () => clearTimeout(searchTimer)
+  }, [query, open])
+
   // 删除单个历史记录
   const handleDeleteHistory = (id: string, e: React.MouseEvent) => {
     e.preventDefault()
@@ -116,7 +206,55 @@ export default function SearchDropdown({ open, onClose }: SearchDropdownProps) {
     }
   }
 
+  // 保存搜索到历史记录
+  const saveToHistory = (searchQuery: string) => {
+    if (!searchQuery.trim()) return
+    
+    const newItem: SearchHistoryItem = {
+      id: Date.now().toString(),
+      query: searchQuery.trim(),
+      timestamp: Date.now(),
+    }
+    
+    // 移除重复项，添加新项到最前面
+    const newHistory = [
+      newItem,
+      ...searchHistory.filter(item => item.query !== searchQuery.trim())
+    ].slice(0, 10) // 最多保留10条
+    
+    setSearchHistory(newHistory)
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('searchHistory', JSON.stringify(newHistory))
+    }
+  }
+
+  // 点击搜索结果时保存到历史
+  const handleResultClick = () => {
+    if (query.trim()) {
+      saveToHistory(query)
+    }
+    onClose()
+  }
+
   if (!open) return null
+
+  const getTypeLabel = (type: string) => {
+    switch (type) {
+      case 'trader': return '交易员'
+      case 'post': return '帖子'
+      case 'group': return '群组'
+      default: return ''
+    }
+  }
+
+  const getTypeIcon = (type: string) => {
+    switch (type) {
+      case 'trader': return '👤'
+      case 'post': return '📝'
+      case 'group': return '👥'
+      default: return ''
+    }
+  }
 
   return (
     <Box
@@ -134,8 +272,72 @@ export default function SearchDropdown({ open, onClose }: SearchDropdownProps) {
         boxShadow: tokens.shadow.md,
       }}
     >
-      {/* 搜索历史 */}
-      {searchHistory.length > 0 && (
+      {/* 实时搜索结果 */}
+      {query.trim().length >= 2 && (
+        <Box>
+          <Box
+            style={{
+              padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+              borderBottom: `1px solid ${tokens.colors.border.primary}`,
+            }}
+          >
+            <Text size="xs" weight="bold" color="tertiary" style={{ textTransform: 'uppercase' }}>
+              搜索结果
+            </Text>
+          </Box>
+          {searching ? (
+            <Box style={{ padding: tokens.spacing[4], textAlign: 'center' }}>
+              <Text size="sm" color="tertiary">搜索中...</Text>
+            </Box>
+          ) : searchResults.length === 0 ? (
+            <Box style={{ padding: tokens.spacing[4], textAlign: 'center' }}>
+              <Text size="sm" color="tertiary">未找到相关结果</Text>
+            </Box>
+          ) : (
+            searchResults.map((result) => (
+              <Link
+                key={`${result.type}-${result.id}`}
+                href={result.href}
+                style={{ textDecoration: 'none' }}
+                onClick={handleResultClick}
+              >
+                <Box
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: tokens.spacing[3],
+                    padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+                    borderBottom: `1px solid ${tokens.colors.border.primary}`,
+                    cursor: 'pointer',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = tokens.colors.bg.tertiary
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'transparent'
+                  }}
+                >
+                  <Text size="lg">{getTypeIcon(result.type)}</Text>
+                  <Box style={{ flex: 1 }}>
+                    <Text size="sm" style={{ color: tokens.colors.text.primary }}>
+                      {result.title}
+                    </Text>
+                    <Box style={{ display: 'flex', gap: tokens.spacing[2], marginTop: 2 }}>
+                      <Text size="xs" color="tertiary">{getTypeLabel(result.type)}</Text>
+                      {result.subtitle && (
+                        <Text size="xs" color="tertiary">· {result.subtitle}</Text>
+                      )}
+                    </Box>
+                  </Box>
+                </Box>
+              </Link>
+            ))
+          )}
+        </Box>
+      )}
+
+      {/* 搜索历史 - 仅在没有输入查询时显示 */}
+      {query.trim().length < 2 && searchHistory.length > 0 && (
         <Box>
           <Box
             style={{
@@ -217,85 +419,120 @@ export default function SearchDropdown({ open, onClose }: SearchDropdownProps) {
         </Box>
       )}
 
-      {/* 热榜帖子 */}
-      <Box>
-        <Box
-          style={{
-            padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
-            borderBottom: searchHistory.length > 0 ? `1px solid ${tokens.colors.border.primary}` : 'none',
-          }}
-        >
-          <Text size="xs" weight="bold" color="tertiary" style={{ textTransform: 'uppercase' }}>
-            热榜帖子
-          </Text>
-        </Box>
+      {/* 热榜帖子 - 仅在没有输入查询时显示 */}
+      {query.trim().length < 2 && (
         <Box>
-          {loading ? (
-            <Box style={{ padding: tokens.spacing[4], textAlign: 'center' }}>
-              <Text size="sm" color="tertiary">加载中...</Text>
-            </Box>
-          ) : hotPosts.length === 0 ? (
-            <Box style={{ padding: tokens.spacing[4], textAlign: 'center' }}>
-              <Text size="sm" color="tertiary">暂无热门帖子</Text>
-            </Box>
-          ) : (
-            hotPosts.map((post) => (
-              <Link
-                key={post.id}
-                href={`/groups?post=${post.id}`}
-                style={{ textDecoration: 'none' }}
-                onClick={onClose}
-              >
-                <Box
-                  style={{
-                    display: 'flex',
-                    alignItems: 'flex-start',
-                    gap: tokens.spacing[3],
-                    padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
-                    borderBottom: `1px solid ${tokens.colors.border.primary}`,
-                    cursor: 'pointer',
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = tokens.colors.bg.tertiary
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = 'transparent'
-                  }}
-                >
-                  {/* 排名 - 前三标橙 */}
-                  <Text
-                    size="sm"
-                    weight="black"
+          <Box
+            style={{
+              padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+              borderBottom: searchHistory.length > 0 ? `1px solid ${tokens.colors.border.primary}` : 'none',
+            }}
+          >
+            <Text size="xs" weight="bold" color="tertiary" style={{ textTransform: 'uppercase' }}>
+              🔥 热榜帖子
+            </Text>
+          </Box>
+          <Box>
+            {loading ? (
+              // 骨架屏加载状态，避免布局跳动
+              <Box style={{ padding: `${tokens.spacing[2]} 0` }}>
+                {[1, 2, 3, 4, 5].map((i) => (
+                  <Box
+                    key={i}
                     style={{
-                      color: post.rank <= 3 ? '#FF9800' : tokens.colors.text.tertiary, // 橙色
-                      minWidth: 24,
-                      textAlign: 'right',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: tokens.spacing[3],
+                      padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+                      borderBottom: `1px solid ${tokens.colors.border.primary}`,
                     }}
                   >
-                    {post.rank}
-                  </Text>
-                  <Box style={{ flex: 1 }}>
+                    <Box
+                      style={{
+                        width: 24,
+                        height: 16,
+                        background: tokens.colors.bg.tertiary,
+                        borderRadius: tokens.radius.sm,
+                        animation: 'pulse 1.5s ease-in-out infinite',
+                      }}
+                    />
+                    <Box style={{ flex: 1 }}>
+                      <Box
+                        style={{
+                          width: `${60 + Math.random() * 30}%`,
+                          height: 14,
+                          background: tokens.colors.bg.tertiary,
+                          borderRadius: tokens.radius.sm,
+                          animation: 'pulse 1.5s ease-in-out infinite',
+                        }}
+                      />
+                    </Box>
+                  </Box>
+                ))}
+              </Box>
+            ) : hotPosts.length === 0 ? (
+              <Box style={{ padding: tokens.spacing[4], textAlign: 'center' }}>
+                <Text size="sm" color="tertiary">暂无热门帖子</Text>
+              </Box>
+            ) : (
+              hotPosts.map((post) => (
+                <Link
+                  key={post.id}
+                  href={`/groups?post=${post.id}`}
+                  style={{ textDecoration: 'none' }}
+                  onClick={onClose}
+                >
+                  <Box
+                    style={{
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: tokens.spacing[3],
+                      padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+                      borderBottom: `1px solid ${tokens.colors.border.primary}`,
+                      cursor: 'pointer',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = tokens.colors.bg.tertiary
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = 'transparent'
+                    }}
+                  >
+                    {/* 排名 - 前三标橙 */}
                     <Text
                       size="sm"
+                      weight="black"
                       style={{
-                        color: tokens.colors.text.primary,
-                        lineHeight: 1.5,
+                        color: post.rank <= 3 ? '#FF9800' : tokens.colors.text.tertiary, // 橙色
+                        minWidth: 24,
+                        textAlign: 'right',
                       }}
                     >
-                      {post.title}
+                      {post.rank}
                     </Text>
-                    {post.view_count !== undefined && post.view_count > 0 && (
-                      <Text size="xs" color="tertiary" style={{ marginTop: tokens.spacing[1] }}>
-                        {post.view_count.toLocaleString()} 浏览
+                    <Box style={{ flex: 1 }}>
+                      <Text
+                        size="sm"
+                        style={{
+                          color: tokens.colors.text.primary,
+                          lineHeight: 1.5,
+                        }}
+                      >
+                        {post.title}
                       </Text>
-                    )}
+                      {post.view_count !== undefined && post.view_count > 0 && (
+                        <Text size="xs" color="tertiary" style={{ marginTop: tokens.spacing[1] }}>
+                          {post.view_count.toLocaleString()} 浏览
+                        </Text>
+                      )}
+                    </Box>
                   </Box>
-                </Box>
-              </Link>
-            ))
-          )}
+                </Link>
+              ))
+            )}
+          </Box>
         </Box>
-      </Box>
+      )}
     </Box>
   )
 }

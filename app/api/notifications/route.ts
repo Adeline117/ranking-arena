@@ -2,6 +2,7 @@
  * 通知 API
  * GET /api/notifications - 获取通知列表
  * PUT /api/notifications - 标记通知为已读
+ * DELETE /api/notifications - 删除单个通知
  */
 
 import { NextRequest } from 'next/server'
@@ -19,6 +20,7 @@ import {
   getUnreadNotificationCount,
   markNotificationAsRead,
   markAllNotificationsAsRead,
+  deleteNotification,
 } from '@/lib/data/notifications'
 
 export async function GET(request: NextRequest) {
@@ -65,5 +67,24 @@ export async function PUT(request: NextRequest) {
     }
   } catch (error) {
     return handleError(error, 'notifications PUT')
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const user = await requireAuth(request)
+    const supabase = getSupabaseAdmin()
+    const body = await request.json()
+
+    const notification_id = validateString(body.notification_id)
+
+    if (!notification_id) {
+      return handleError(new Error('请提供 notification_id'), 'notifications DELETE')
+    }
+
+    await deleteNotification(supabase, notification_id, user.id)
+    return success({ message: '已删除通知' })
+  } catch (error) {
+    return handleError(error, 'notifications DELETE')
   }
 }

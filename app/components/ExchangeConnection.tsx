@@ -7,6 +7,8 @@ import { tokens } from '@/lib/design-tokens'
 import type { ExchangeConnection } from '@/lib/exchange'
 import ExchangeLogo from './UI/ExchangeLogo'
 import { useLanguage } from './Utils/LanguageProvider'
+import { useToast } from './UI/Toast'
+import { useDialog } from './UI/Dialog'
 
 interface ExchangeConnectionProps {
   userId: string
@@ -22,6 +24,8 @@ const EXCHANGES = [
 
 export default function ExchangeConnectionManager({ userId }: ExchangeConnectionProps) {
   const { t } = useLanguage()
+  const { showToast } = useToast()
+  const { showConfirm } = useDialog()
   const [connections, setConnections] = useState<ExchangeConnection[]>([])
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState<string | null>(null)
@@ -94,7 +98,7 @@ export default function ExchangeConnectionManager({ userId }: ExchangeConnection
     try {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) {
-        alert('请先登录')
+        showToast('请先登录', 'warning')
         return
       }
 
@@ -110,28 +114,29 @@ export default function ExchangeConnectionManager({ userId }: ExchangeConnection
       const result = await response.json()
 
       if (!response.ok) {
-        alert(result.error || t('syncError'))
+        showToast(result.error || t('syncError'), 'error')
         return
       }
 
-      alert(t('syncSuccess'))
+      showToast(t('syncSuccess'), 'success')
       await loadConnections()
     } catch (err: any) {
-      alert(err.message || t('syncError'))
+      showToast(err.message || t('syncError'), 'error')
     } finally {
       setSyncing(null)
     }
   }
 
   const handleDisconnect = async (exchange: string) => {
-    if (!confirm(t('confirmDisconnect').replace('{exchange}', exchange))) {
+    const confirmed = await showConfirm('断开连接', t('confirmDisconnect').replace('{exchange}', exchange))
+    if (!confirmed) {
       return
     }
 
     try {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) {
-        alert(t('pleaseLogin'))
+        showToast(t('pleaseLogin'), 'warning')
         return
       }
 
@@ -147,14 +152,14 @@ export default function ExchangeConnectionManager({ userId }: ExchangeConnection
       const result = await response.json()
 
       if (!response.ok) {
-        alert(result.error || t('disconnectFailed'))
+        showToast(result.error || t('disconnectFailed'), 'error')
         return
       }
 
-      alert(t('disconnected'))
+      showToast(t('disconnected'), 'success')
       await loadConnections()
     } catch (err: any) {
-      alert(err.message || t('disconnectFailed'))
+      showToast(err.message || t('disconnectFailed'), 'error')
     }
   }
 

@@ -1,6 +1,8 @@
-import { NextResponse } from 'next/server'
+import { NextResponse, NextRequest } from 'next/server'
+import { checkRateLimit, RateLimitPresets } from '@/lib/api'
 
 export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic' // 禁用静态渲染
 
 type MarketRow = {
   symbol: string
@@ -53,7 +55,11 @@ function formatRow(symbol: string, priceNum: number, pctNum: number): MarketRow 
 // Next.js 缓存配置：revalidate 60秒（1分钟）
 export const revalidate = 60
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
+  // 公开 API 限流：每分钟 100 次
+  const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.public)
+  if (rateLimitResponse) return rateLimitResponse
+
   try {
     const { searchParams } = new URL(request.url)
     const pairsParam = searchParams.get('pairs')

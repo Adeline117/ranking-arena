@@ -8,7 +8,7 @@ import { supabase } from '@/lib/supabase/client'
 import { Box, Text, Button } from '../Base'
 import FollowButton from '../UI/FollowButton'
 import ClaimTraderButton from './ClaimTraderButton'
-import { getAvatarFallbackGradient, getAvatarInitial } from '@/lib/utils/avatar'
+import { getAvatarGradient, getAvatarInitial } from '@/lib/utils/avatar'
 
 interface TraderHeaderProps {
   handle: string
@@ -20,7 +20,7 @@ interface TraderHeaderProps {
   source?: string // 'binance', 'bybit', etc.
 }
 
-export default function TraderHeader({ handle, traderId, avatarUrl, isRegistered, followers = 0, isOwnProfile = false, source = 'binance' }: TraderHeaderProps) {
+export default function TraderHeader({ handle, traderId, avatarUrl, isRegistered, followers = 0, isOwnProfile = false, source }: TraderHeaderProps) {
   const [userId, setUserId] = useState<string | null>(null)
   const router = useRouter()
 
@@ -55,7 +55,7 @@ export default function TraderHeader({ handle, traderId, avatarUrl, isRegistered
             width: 64,
             height: 64,
             borderRadius: tokens.radius.full,
-            background: avatarUrl ? tokens.colors.bg.secondary : getAvatarFallbackGradient(traderId),
+            background: avatarUrl ? tokens.colors.bg.secondary : getAvatarGradient(traderId),
             border: `2px solid ${tokens.colors.border.primary}`,
             display: 'grid',
             placeItems: 'center',
@@ -101,7 +101,7 @@ export default function TraderHeader({ handle, traderId, avatarUrl, isRegistered
                   (e.target as HTMLImageElement).style.display = 'none'
                   const container = e.currentTarget.parentElement
                   if (container) {
-                    container.style.background = getAvatarFallbackGradient(traderId)
+                    container.style.background = getAvatarGradient(traderId)
                   }
                 }
               }}

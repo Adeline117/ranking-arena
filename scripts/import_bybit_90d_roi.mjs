@@ -39,30 +39,49 @@ function normalizeData(rawData) {
       }
     }
     
-    // PnL 可能在多个字段中（按优先级尝试）
+    // metricValues 数组顺序（从 Bybit 截图分析）:
+    // [0] ROI: "+4994.56%"
+    // [1] Drawdown: "+38.38%"  
+    // [2] Followers' PnL: "+771.37"
+    // [3] Win Rate: "+100.00%"
+    // [4] Profit-to-Loss Ratio: "4.55 : 0"
+    // [5] Sharpe Ratio: "+14.32"
+    
+    // 从 metricValues 数组提取 PnL（第3个位置，索引2）
     let pnl = null
-    if (item.followerYieldE8 != null) {
-      pnl = Number(item.followerYieldE8) / 1e8
-    } else if (item.pnl != null) {
-      pnl = Number(item.pnl)
-    } else if (item.totalPnl != null) {
-      pnl = Number(item.totalPnl)
-    } else if (item.profit != null) {
-      pnl = Number(item.profit)
-    } else if (item.yieldE8 != null) {
-      pnl = Number(item.yieldE8) / 1e8
-    }
-    // 从 metricValues 数组提取（第2个位置可能是 PNL）
-    if (pnl === null && item.metricValues && Array.isArray(item.metricValues) && item.metricValues.length > 1) {
-      const pnlStr = item.metricValues[1] // 第2个可能是 PNL
+    if (item.metricValues && Array.isArray(item.metricValues) && item.metricValues.length > 2) {
+      const pnlStr = item.metricValues[2] // 第3个是 Followers' PnL
       if (pnlStr && typeof pnlStr === 'string') {
-        // 格式如 "+$1,234.56" 或 "$1.2K"
-        const match = pnlStr.match(/\$?([+-]?\d+(?:,?\d+)*\.?\d*)\s*(?:K|M)?/i)
+        // 格式如 "+771.37" 或 "-14,094.12" 或 "+$1.2K"
+        const cleanStr = pnlStr.replace(/[$,]/g, '')
+        const match = cleanStr.match(/([+-]?\d+\.?\d*)\s*(?:K|M)?/i)
         if (match) {
-          let value = parseFloat(match[1].replace(/,/g, ''))
-          if (pnlStr.toUpperCase().includes('K')) value *= 1000
-          if (pnlStr.toUpperCase().includes('M')) value *= 1000000
+          let value = parseFloat(match[1])
+          if (cleanStr.toUpperCase().includes('K')) value *= 1000
+          if (cleanStr.toUpperCase().includes('M')) value *= 1000000
           pnl = value
+        }
+      }
+    }
+    // 备用：从其他字段获取
+    if (pnl === null) {
+      if (item.followerYieldE8 != null) {
+        pnl = Number(item.followerYieldE8) / 1e8
+      } else if (item.pnl != null) {
+        pnl = Number(item.pnl)
+      } else if (item.totalPnl != null) {
+        pnl = Number(item.totalPnl)
+      }
+    }
+    
+    // 从 metricValues 提取 Drawdown（第2个位置，索引1）
+    let maxDrawdown = null
+    if (item.metricValues && Array.isArray(item.metricValues) && item.metricValues.length > 1) {
+      const ddStr = item.metricValues[1]
+      if (ddStr && typeof ddStr === 'string') {
+        const ddNum = parseFloat(ddStr.replace(/[+%]/g, ''))
+        if (!isNaN(ddNum)) {
+          maxDrawdown = ddNum
         }
       }
     }
@@ -85,34 +104,19 @@ function normalizeData(rawData) {
       }
     }
 
-    // 多时间段ROI（如果API提供）
-    const roi_7d = item.roi7d != null ? Number(item.roi7d) : (item.roi_7d != null ? Number(item.roi_7d) : null)
-    const roi_30d = item.roi30d != null ? Number(item.roi30d) : (item.roi_30d != null ? Number(item.roi_30d) : null)
-    const roi_1y = item.roi1y != null ? Number(item.roi1y) : (item.roi_1y != null ? Number(item.roi_1y) : null)
-    const roi_2y = item.roi2y != null ? Number(item.roi2y) : (item.roi_2y != null ? Number(item.roi_2y) : null)
-
     // 交易统计（如果API提供）
     const totalTrades = item.totalTrades != null ? Number(item.totalTrades) : (item.total_trades != null ? Number(item.total_trades) : null)
-    const avgProfit = item.avgProfit != null ? Number(item.avgProfit) : (item.avg_profit != null ? Number(item.avg_profit) : null)
-    const avgLoss = item.avgLoss != null ? Number(item.avgLoss) : (item.avg_loss != null ? Number(item.avg_loss) : null)
-    const profitableTradesPct = item.profitableTradesPct != null ? Number(item.profitableTradesPct) : (item.profitable_trades_pct != null ? Number(item.profitable_trades_pct) : null)
 
     return {
       traderId: String(traderId),
       handle: handle,
       roi: roi,
       pnl: pnl,
+      maxDrawdown: maxDrawdown,
       followerCount: null, // 已废弃，不再从交易所 API 获取
       avatarUrl: avatarUrl,
       winRate: winRate,
-      roi_7d: isNaN(roi_7d) ? null : roi_7d,
-      roi_30d: isNaN(roi_30d) ? null : roi_30d,
-      roi_1y: isNaN(roi_1y) ? null : roi_1y,
-      roi_2y: isNaN(roi_2y) ? null : roi_2y,
       totalTrades: totalTrades,
-      avgProfit: avgProfit,
-      avgLoss: avgLoss,
-      profitableTradesPct: profitableTradesPct,
       _raw: item,
     }
   })
@@ -577,67 +581,22 @@ async function importToSupabase(normalizedData, period = '90D') {
     identity_type: 'trader'
   }))
 
-  // 获取所有交易员的最新快照数据（用于合并其他时间段的数据）
-  const traderIds = validData.map(item => item.traderId)
-  console.log('查询现有快照数据以合并其他时间段...')
-  const { data: existingSnapshots } = await supabase
-    .from('trader_snapshots')
-    .select('source_trader_id, roi, roi_7d, roi_30d, roi_1y, roi_2y, pnl, win_rate, total_trades, avg_profit, avg_loss, profitable_trades_pct')
-    .eq('source', 'bybit')
-    .in('source_trader_id', traderIds)
-    .order('captured_at', { ascending: false })
-
-  // 创建交易员ID到最新快照的映射
-  const latestSnapshotMap = new Map()
-  if (existingSnapshots) {
-    for (const snap of existingSnapshots) {
-      if (!latestSnapshotMap.has(snap.source_trader_id)) {
-        latestSnapshotMap.set(snap.source_trader_id, snap)
-      }
-    }
-  }
-
   // 转换为 trader_snapshots 数据（rank 重新计算为 1-100）
-  // 注意：不再保存 followers 字段，因为所有 trader 的粉丝数只能来源 Arena 注册用户的关注
-  // 如果数据库表中有 followers 列且不允许 NULL，可以设置为 0，但代码中不再使用此值
+  // 表结构: id, source, source_trader_id, roi, pnl, win_rate, followers, rank, captured_at, max_drawdown, trades_count, holding_days, season_id
   const snapshotsData = validData.map((item, index) => {
-    const latestSnapshot = latestSnapshotMap.get(item.traderId) || {}
-    
-    const snapshot = {
+    return {
       source: 'bybit',
       source_trader_id: item.traderId,
       rank: index + 1,
-      // 优先使用新数据，如果没有则使用最新快照的数据
-      pnl: item.pnl != null ? item.pnl : (latestSnapshot.pnl != null ? latestSnapshot.pnl : null),
-      win_rate: item.winRate != null ? item.winRate : (latestSnapshot.win_rate != null ? latestSnapshot.win_rate : null),
-      roi_1y: item.roi_1y != null && !isNaN(item.roi_1y) ? Number(item.roi_1y) : (latestSnapshot.roi_1y != null ? latestSnapshot.roi_1y : null),
-      roi_2y: item.roi_2y != null && !isNaN(item.roi_2y) ? Number(item.roi_2y) : (latestSnapshot.roi_2y != null ? latestSnapshot.roi_2y : null),
-      total_trades: item.totalTrades != null && !isNaN(item.totalTrades) ? Number(item.totalTrades) : (latestSnapshot.total_trades != null ? latestSnapshot.total_trades : null),
-      avg_profit: item.avgProfit != null && !isNaN(item.avgProfit) ? Number(item.avgProfit) : (latestSnapshot.avg_profit != null ? latestSnapshot.avg_profit : null),
-      avg_loss: item.avgLoss != null && !isNaN(item.avgLoss) ? Number(item.avgLoss) : (latestSnapshot.avg_loss != null ? latestSnapshot.avg_loss : null),
-      profitable_trades_pct: item.profitableTradesPct != null && !isNaN(item.profitableTradesPct) ? Number(item.profitableTradesPct) : (latestSnapshot.profitable_trades_pct != null ? latestSnapshot.profitable_trades_pct : null),
+      roi: item.roi,
+      pnl: item.pnl,
+      win_rate: item.winRate,
+      max_drawdown: item.maxDrawdown || null,
+      trades_count: item.totalTrades || null,
+      followers: 0, // 不再使用交易所粉丝数
+      season_id: period, // 用 season_id 区分时间段: 7D, 30D, 90D
       captured_at: capturedAt,
     }
-    
-    // 根据时间段将ROI存储到对应字段，其他时间段从最新快照获取
-    if (period === '7D') {
-      snapshot.roi_7d = item.roi
-      snapshot.roi_30d = latestSnapshot.roi_30d != null ? latestSnapshot.roi_30d : null
-      snapshot.roi = latestSnapshot.roi != null ? latestSnapshot.roi : null
-    } else if (period === '30D') {
-      snapshot.roi_7d = latestSnapshot.roi_7d != null ? latestSnapshot.roi_7d : null
-      snapshot.roi_30d = item.roi
-      snapshot.roi = latestSnapshot.roi != null ? latestSnapshot.roi : null
-    } else {
-      // 90D 或默认
-      snapshot.roi = item.roi
-      snapshot.roi_7d = latestSnapshot.roi_7d != null ? latestSnapshot.roi_7d : (item.roi_7d != null && !isNaN(item.roi_7d) ? Number(item.roi_7d) : null)
-      snapshot.roi_30d = latestSnapshot.roi_30d != null ? latestSnapshot.roi_30d : (item.roi_30d != null && !isNaN(item.roi_30d) ? Number(item.roi_30d) : null)
-    }
-    
-    // 如果数据库表中有 followers 列且不允许 NULL，设置为 0（但代码中不再使用此值）
-    // snapshot.followers = 0
-    return snapshot
   })
 
   // 分批写入 trader_sources（upsert）

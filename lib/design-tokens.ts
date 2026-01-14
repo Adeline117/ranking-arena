@@ -134,11 +134,13 @@ export function getSpacing(value: keyof typeof tokens.spacing): string {
 
 export function getColor(path: string): string {
   const parts = path.split('.')
-  let value: any = tokens.colors
+  let value: Record<string, unknown> | string = tokens.colors as Record<string, unknown>
   for (const part of parts) {
-    value = value[part]
+    if (typeof value === 'object' && value !== null && part in value) {
+      value = value[part] as Record<string, unknown> | string
+    }
   }
-  return value
+  return typeof value === 'string' ? value : ''
 }
 
 // Responsive helper

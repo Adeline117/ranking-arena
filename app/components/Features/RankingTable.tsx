@@ -7,7 +7,7 @@ import { RankingSkeleton } from '../UI/Skeleton'
 import { RankingBadge } from '../Icons'
 import { Box, Text } from '../Base'
 import { useLanguage } from '../Utils/LanguageProvider'
-import { getAvatarFallbackGradient, getAvatarInitial } from '@/lib/utils/avatar'
+import { getAvatarGradient, getAvatarInitial } from '@/lib/utils/avatar'
 
 // 格式化 PnL 显示
 function formatPnL(pnl: number): string {
@@ -242,7 +242,7 @@ export default function RankingTable(props: {
               const displayName = formatDisplayName(traderHandle)
               const sourceLabelText = trader.source ? (sourceLabels[trader.source] || trader.source) : sourceLabel
 
-              const ariaLabel = `${t('rank')} ${rank}, ${t('trader')} ${displayName}, ROI ${trader.roi >= 0 ? '+' : ''}${trader.roi.toFixed(2)}%, ${t('winRate')} ${trader.win_rate !== undefined ? trader.win_rate.toFixed(1) + '%' : '—'}`
+              const ariaLabel = `${t('rank')} ${rank}, ${t('trader')} ${displayName}, ROI ${(trader.roi || 0) >= 0 ? '+' : ''}${(trader.roi || 0).toFixed(2)}%, ${t('winRate')} ${trader.win_rate != null ? trader.win_rate.toFixed(1) + '%' : '—'}`
               
               return (
                 <Link
@@ -306,7 +306,7 @@ export default function RankingTable(props: {
                         width: 32,
                         height: 32,
                         borderRadius: tokens.radius.full,
-                        background: trader.avatar_url ? tokens.colors.bg.secondary : getAvatarFallbackGradient(trader.id),
+                        background: trader.avatar_url ? tokens.colors.bg.secondary : getAvatarGradient(trader.id),
                         border: `1.5px solid ${tokens.colors.border.primary}`,
                         display: 'grid',
                         placeItems: 'center',
@@ -355,7 +355,7 @@ export default function RankingTable(props: {
                               // 确保容器显示渐变背景
                               const container = e.currentTarget.parentElement
                               if (container) {
-                                container.style.background = getAvatarFallbackGradient(trader.id)
+                                container.style.background = getAvatarGradient(trader.id)
                               }
                             }
                           }}
@@ -413,11 +413,6 @@ export default function RankingTable(props: {
                             {sourceLabelText}
                           </Text>
                         </Box>
-                        {trader.followers > 0 && (
-                          <Text size="xs" color="tertiary" style={{ fontSize: '10px' }}>
-                            {trader.followers.toLocaleString()} {t('followers')}
-                          </Text>
-                        )}
                       </Box>
                     </Box>
                   </Box>
@@ -428,27 +423,27 @@ export default function RankingTable(props: {
                       size="sm"
                       weight="black"
                       style={{
-                        color: trader.roi >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error,
+                        color: (trader.roi || 0) >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error,
                         lineHeight: tokens.typography.lineHeight.tight,
                         fontSize: tokens.typography.fontSize.base,
-                        textShadow: rank <= 3 ? `0 1px 2px ${trader.roi >= 0 ? tokens.colors.accent.success + '40' : tokens.colors.accent.error + '40'}` : 'none',
+                        textShadow: rank <= 3 ? `0 1px 2px ${(trader.roi || 0) >= 0 ? tokens.colors.accent.success + '40' : tokens.colors.accent.error + '40'}` : 'none',
                       }}
                     >
-                      {trader.roi >= 0 ? '+' : ''}
-                      {trader.roi.toFixed(2)}%
+                      {(trader.roi || 0) >= 0 ? '+' : ''}
+                      {(trader.roi || 0).toFixed(2)}%
                     </Text>
                     <Text
                       size="xs"
                       weight="semibold"
                       style={{
-                        color: trader.pnl !== undefined 
+                        color: trader.pnl != null 
                           ? (trader.pnl >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error)
                           : tokens.colors.text.tertiary,
                         lineHeight: tokens.typography.lineHeight.tight,
-                        opacity: trader.pnl !== undefined ? 0.9 : 0.5,
+                        opacity: trader.pnl != null ? 0.9 : 0.5,
                       }}
                     >
-                      {trader.pnl !== undefined 
+                      {trader.pnl != null 
                         ? `${trader.pnl >= 0 ? '+' : ''}${formatPnL(trader.pnl)}`
                         : '—'
                       }
@@ -461,11 +456,11 @@ export default function RankingTable(props: {
                       size="sm" 
                       weight="bold" 
                       style={{ 
-                        color: trader.win_rate !== undefined && trader.win_rate > 50 ? tokens.colors.accent.success : tokens.colors.text.secondary,
+                        color: trader.win_rate != null && trader.win_rate > 50 ? tokens.colors.accent.success : tokens.colors.text.secondary,
                         lineHeight: tokens.typography.lineHeight.tight,
                       }}
                     >
-                      {trader.win_rate !== undefined ? `${trader.win_rate.toFixed(1)}%` : '—'}
+                      {trader.win_rate != null ? `${trader.win_rate.toFixed(1)}%` : '—'}
                     </Text>
                   </Box>
 
@@ -475,12 +470,12 @@ export default function RankingTable(props: {
                       size="sm" 
                       weight="semibold" 
                       style={{ 
-                        color: trader.max_drawdown !== undefined ? tokens.colors.accent.error : tokens.colors.text.tertiary,
+                        color: trader.max_drawdown != null ? tokens.colors.accent.error : tokens.colors.text.tertiary,
                         lineHeight: tokens.typography.lineHeight.tight,
-                        opacity: trader.max_drawdown !== undefined ? 1 : 0.5,
+                        opacity: trader.max_drawdown != null ? 1 : 0.5,
                       }}
                     >
-                      {trader.max_drawdown !== undefined ? `-${trader.max_drawdown.toFixed(2)}%` : '—'}
+                      {trader.max_drawdown != null ? `-${trader.max_drawdown.toFixed(2)}%` : '—'}
                     </Text>
                   </Box>
 

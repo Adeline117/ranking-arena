@@ -1,5 +1,8 @@
 "use client"
 
+import React from "react";
+import { ThumbsUpIcon, CommentIcon } from "@/app/components/Icons";
+
 type Post = {
   id: string
   author_handle?: string | null
@@ -7,14 +10,16 @@ type Post = {
   comment_count?: number | null
 }
 
-import React from "react";
-
 export default function PostFooterActions({ post }: { post: Post }) {
   return (
     <div className="mt-3 flex items-center gap-4 text-xs opacity-70">
       <span>@{post.author_handle ?? "anonymous"}</span>
-      <span>❤️ {post.like_count ?? 0}</span>
-      <span>💬 {post.comment_count ?? 0}</span>
+      <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+        <ThumbsUpIcon size={12} /> {post.like_count ?? 0}
+      </span>
+      <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+        <CommentIcon size={12} /> {post.comment_count ?? 0}
+      </span>
 
       <button
         className="ml-auto rounded-md border border-white/10 bg-white/5 px-2 py-1 hover:bg-white/10"

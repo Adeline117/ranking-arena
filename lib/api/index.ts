@@ -15,3 +15,10 @@ export {
   getUserProfile,
 } from '@/lib/supabase/server'
 
+// 重新导出限流函数
+export {
+  checkRateLimit,
+  getIdentifier,
+  RateLimitPresets,
+} from '@/lib/utils/rate-limit'
+
