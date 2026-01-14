@@ -93,11 +93,16 @@ function formatTimeAgo(dateStr: string) {
 }
 
 export default function HotPage() {
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
   const { showToast } = useToast()
   const [loggedIn, setLoggedIn] = useState(false)
   const [email, setEmail] = useState<string | null>(null)
   const [accessToken, setAccessToken] = useState<string | null>(null)
+  // 翻译相关状态
+  const [translatedContent, setTranslatedContent] = useState<string | null>(null)
+  const [showingOriginal, setShowingOriginal] = useState(true)
+  const [translating, setTranslating] = useState(false)
+  const [translationCache, setTranslationCache] = useState<Record<string, string>>({})
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [traders, setTraders] = useState<Trader[]>([])
   const [loadingTraders, setLoadingTraders] = useState(true)
@@ -307,12 +312,69 @@ export default function HotPage() {
     }
   }, [])
 
+  // 检测文本是否是中文
+  const isChineseText = useCallback((text: string) => {
+    if (!text) return false
+    const chineseRegex = /[\u4e00-\u9fa5]/g
+    const chineseMatches = text.match(chineseRegex)
+    const chineseRatio = chineseMatches ? chineseMatches.length / text.length : 0
+    return chineseRatio > 0.1
+  }, [])
+
+  // 翻译帖子内容
+  const translateContent = useCallback(async (postId: string, content: string, targetLang: 'zh' | 'en') => {
+    const cacheKey = `${postId}-${targetLang}`
+    
+    if (translationCache[cacheKey]) {
+      setTranslatedContent(translationCache[cacheKey])
+      setShowingOriginal(false)
+      return
+    }
+
+    setTranslating(true)
+    try {
+      const response = await fetch('/api/translate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: content, targetLang }),
+      })
+      const data = await response.json()
+      
+      if (response.ok && data.success && data.data?.translatedText) {
+        const translated = data.data.translatedText
+        setTranslatedContent(translated)
+        setShowingOriginal(false)
+        setTranslationCache(prev => ({ ...prev, [cacheKey]: translated }))
+      } else {
+        console.error('[HotPage] 翻译失败:', data.error)
+        showToast(data.error || '翻译失败', 'error')
+      }
+    } catch (err) {
+      console.error('[HotPage] 翻译出错:', err)
+      showToast('翻译服务出错', 'error')
+    } finally {
+      setTranslating(false)
+    }
+  }, [translationCache, showToast])
+
   // 打开帖子详情
   const handleOpenPost = useCallback((post: Post) => {
     setOpenPost(post)
     setComments([])
+    setTranslatedContent(null)
+    setShowingOriginal(true)
     loadComments(post.id)
-  }, [loadComments])
+
+    // 自动检测并翻译
+    if (post.body) {
+      const isChinese = isChineseText(post.body)
+      const needsTranslation = (language === 'en' && isChinese) || (language === 'zh' && !isChinese)
+      
+      if (needsTranslation) {
+        translateContent(post.id, post.body, language)
+      }
+    }
+  }, [loadComments, language, isChineseText, translateContent])
 
   // 提交评论
   const submitComment = useCallback(async (postId: string) => {
@@ -548,8 +610,47 @@ export default function HotPage() {
             </div>
 
             <div translate="no" style={{ marginTop: 12, fontSize: 14, color: tokens.colors.text.primary, lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>
-              {renderContentWithLinks(openPost.body || '')}
+              {showingOriginal 
+                ? renderContentWithLinks(openPost.body || '')
+                : renderContentWithLinks(translatedContent || openPost.body || '')
+              }
             </div>
+
+            {/* 翻译/原文切换按钮 */}
+            {(translatedContent || translating) && (
+              <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <button
+                  onClick={() => setShowingOriginal(!showingOriginal)}
+                  disabled={translating}
+                  style={{
+                    padding: '4px 10px',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    border: `1px solid ${tokens.colors.border.primary}`,
+                    borderRadius: 6,
+                    background: tokens.colors.bg.tertiary,
+                    color: tokens.colors.text.secondary,
+                    cursor: translating ? 'wait' : 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 4,
+                  }}
+                >
+                  {translating ? (
+                    <>⏳ {language === 'zh' ? '翻译中...' : 'Translating...'}</>
+                  ) : showingOriginal ? (
+                    <>🌐 {language === 'zh' ? '查看翻译' : 'View Translation'}</>
+                  ) : (
+                    <>📄 {language === 'zh' ? '查看原文' : 'View Original'}</>
+                  )}
+                </button>
+                {!showingOriginal && (
+                  <span style={{ fontSize: 11, color: tokens.colors.text.tertiary }}>
+                    {language === 'zh' ? '由 AI 翻译' : 'Translated by AI'}
+                  </span>
+                )}
+              </div>
+            )}
 
             <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${tokens.colors.border.secondary}`, display: 'flex', gap: 14, flexWrap: 'wrap' }}>
               <button

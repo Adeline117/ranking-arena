@@ -9,7 +9,7 @@ import ThemeToggle from '../Utils/ThemeToggle'
 import LanguageSwitcher from '../Utils/LanguageSwitcher'
 import SearchDropdown from '../Features/SearchDropdown'
 import { useLanguage } from '../Utils/LanguageProvider'
-import { SearchIcon, UserIcon, DashboardIcon, NotificationIcon } from '../Icons'
+import { SearchIcon, UserIcon, DashboardIcon, NotificationIcon, MessageIcon } from '../Icons'
 import { Box } from '../Base'
 
 export default function TopNav({ email }: { email: string | null }) {

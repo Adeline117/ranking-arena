@@ -36,6 +36,10 @@ export default function SettingsPage() {
     notifyLike: boolean
     notifyComment: boolean
     notifyMention: boolean
+    notifyMessage: boolean
+    showFollowers: boolean
+    showFollowing: boolean
+    dmPermission: string
   } | null>(null)
   
   // Password change
@@ -53,7 +57,13 @@ export default function SettingsPage() {
   const [notifyLike, setNotifyLike] = useState(true)
   const [notifyComment, setNotifyComment] = useState(true)
   const [notifyMention, setNotifyMention] = useState(true)
+  const [notifyMessage, setNotifyMessage] = useState(true)
   const [savingNotifications, setSavingNotifications] = useState(false)
+  
+  // Privacy settings
+  const [showFollowers, setShowFollowers] = useState(true)
+  const [showFollowing, setShowFollowing] = useState(true)
+  const [dmPermission, setDmPermission] = useState<'all' | 'mutual' | 'none'>('mutual')
 
   // Check if there are unsaved changes
   const hasUnsavedChanges = useCallback(() => {
@@ -66,9 +76,13 @@ export default function SettingsPage() {
       notifyFollow !== initial.notifyFollow ||
       notifyLike !== initial.notifyLike ||
       notifyComment !== initial.notifyComment ||
-      notifyMention !== initial.notifyMention
+      notifyMention !== initial.notifyMention ||
+      notifyMessage !== initial.notifyMessage ||
+      showFollowers !== initial.showFollowers ||
+      showFollowing !== initial.showFollowing ||
+      dmPermission !== initial.dmPermission
     )
-  }, [handle, bio, avatarFile, notifyFollow, notifyLike, notifyComment, notifyMention])
+  }, [handle, bio, avatarFile, notifyFollow, notifyLike, notifyComment, notifyMention, notifyMessage, showFollowers, showFollowing, dmPermission])
 
   // Warn before leaving with unsaved changes
   useEffect(() => {
@@ -106,7 +120,7 @@ export default function SettingsPage() {
       // 只使用 user_profiles（避免访问不存在的 profiles 表）
       const { data: userProfile } = await supabase
         .from('user_profiles')
-        .select('handle, bio, avatar_url, notify_follow, notify_like, notify_comment, notify_mention')
+        .select('handle, bio, avatar_url, notify_follow, notify_like, notify_comment, notify_mention, notify_message, show_followers, show_following, dm_permission')
         .eq('id', uid)
         .maybeSingle()
       
@@ -118,6 +132,10 @@ export default function SettingsPage() {
         const profileNotifyLike = userProfile.notify_like !== false
         const profileNotifyComment = userProfile.notify_comment !== false
         const profileNotifyMention = userProfile.notify_mention !== false
+        const profileNotifyMessage = userProfile.notify_message !== false
+        const profileShowFollowers = userProfile.show_followers !== false
+        const profileShowFollowing = userProfile.show_following !== false
+        const profileDmPermission = userProfile.dm_permission || 'mutual'
         
         setHandle(profileHandle)
         setBio(profileBio)
@@ -127,6 +145,10 @@ export default function SettingsPage() {
         setNotifyLike(profileNotifyLike)
         setNotifyComment(profileNotifyComment)
         setNotifyMention(profileNotifyMention)
+        setNotifyMessage(profileNotifyMessage)
+        setShowFollowers(profileShowFollowers)
+        setShowFollowing(profileShowFollowing)
+        setDmPermission(profileDmPermission)
         
         // Store initial values for change detection
         initialValuesRef.current = {
@@ -137,6 +159,10 @@ export default function SettingsPage() {
           notifyLike: profileNotifyLike,
           notifyComment: profileNotifyComment,
           notifyMention: profileNotifyMention,
+          notifyMessage: profileNotifyMessage,
+          showFollowers: profileShowFollowers,
+          showFollowing: profileShowFollowing,
+          dmPermission: profileDmPermission,
         }
       }
 
@@ -210,6 +236,10 @@ export default function SettingsPage() {
             notify_like: notifyLike,
             notify_comment: notifyComment,
             notify_mention: notifyMention,
+            notify_message: notifyMessage,
+            show_followers: showFollowers,
+            show_following: showFollowing,
+            dm_permission: dmPermission,
           },
           { onConflict: 'id' }
         )
@@ -229,6 +259,10 @@ export default function SettingsPage() {
         notifyLike,
         notifyComment,
         notifyMention,
+        notifyMessage,
+        showFollowers,
+        showFollowing,
+        dmPermission,
       }
       setAvatarFile(null) // Clear avatar file state
       
@@ -344,6 +378,7 @@ export default function SettingsPage() {
           notify_like: notifyLike,
           notify_comment: notifyComment,
           notify_mention: notifyMention,
+          notify_message: notifyMessage,
         })
         .eq('id', userId)
 
@@ -694,9 +729,110 @@ export default function SettingsPage() {
               />
               <Text size="sm">有人 @提及 我时通知</Text>
             </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3], cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={notifyMessage}
+                onChange={(e) => setNotifyMessage(e.target.checked)}
+                style={{ width: 18, height: 18, accentColor: '#8b6fa8' }}
+              />
+              <Text size="sm">收到私信时通知</Text>
+            </label>
             <Text size="xs" color="tertiary" style={{ marginTop: tokens.spacing[2] }}>
               通知偏好将与个人资料一起保存
             </Text>
+          </Box>
+        </Box>
+
+        {/* Privacy Settings Section */}
+        <Box
+          bg="secondary"
+          p={6}
+          radius="xl"
+          border="primary"
+          style={{ marginBottom: tokens.spacing[6] }}
+        >
+          <Text size="lg" weight="black" style={{ marginBottom: tokens.spacing[4] }}>
+            隐私设置
+          </Text>
+          <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}>
+            {/* 关注列表可见性 */}
+            <Box>
+              <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>
+                关注列表可见性
+              </Text>
+              <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3], cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={showFollowing}
+                    onChange={(e) => setShowFollowing(e.target.checked)}
+                    style={{ width: 18, height: 18, accentColor: '#8b6fa8' }}
+                  />
+                  <Text size="sm">展示我的关注列表</Text>
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3], cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={showFollowers}
+                    onChange={(e) => setShowFollowers(e.target.checked)}
+                    style={{ width: 18, height: 18, accentColor: '#8b6fa8' }}
+                  />
+                  <Text size="sm">展示我的粉丝列表</Text>
+                </label>
+              </Box>
+              <Text size="xs" color="tertiary" style={{ marginTop: tokens.spacing[1] }}>
+                关闭后，其他用户将无法查看你的关注/粉丝列表
+              </Text>
+            </Box>
+
+            {/* 私信权限 */}
+            <Box>
+              <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>
+                私信权限
+              </Text>
+              <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3], cursor: 'pointer' }}>
+                  <input
+                    type="radio"
+                    name="dmPermission"
+                    checked={dmPermission === 'all'}
+                    onChange={() => setDmPermission('all')}
+                    style={{ width: 18, height: 18, accentColor: '#8b6fa8' }}
+                  />
+                  <Box>
+                    <Text size="sm">所有人</Text>
+                    <Text size="xs" color="tertiary">任何人都可以给我发私信</Text>
+                  </Box>
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3], cursor: 'pointer' }}>
+                  <input
+                    type="radio"
+                    name="dmPermission"
+                    checked={dmPermission === 'mutual'}
+                    onChange={() => setDmPermission('mutual')}
+                    style={{ width: 18, height: 18, accentColor: '#8b6fa8' }}
+                  />
+                  <Box>
+                    <Text size="sm">互相关注</Text>
+                    <Text size="xs" color="tertiary">互相关注可以无限私信，非互关最多发3条消息（我回复后对方可继续）</Text>
+                  </Box>
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3], cursor: 'pointer' }}>
+                  <input
+                    type="radio"
+                    name="dmPermission"
+                    checked={dmPermission === 'none'}
+                    onChange={() => setDmPermission('none')}
+                    style={{ width: 18, height: 18, accentColor: '#8b6fa8' }}
+                  />
+                  <Box>
+                    <Text size="sm">关闭私信</Text>
+                    <Text size="xs" color="tertiary">不接收任何人的私信</Text>
+                  </Box>
+                </label>
+              </Box>
+            </Box>
           </Box>
         </Box>
 
