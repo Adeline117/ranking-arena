@@ -197,6 +197,7 @@ export const translations = {
     cannotRepostOwn: '不能转发自己的帖子',
     alreadyReposted: '已经转发过此帖子',
     repostedFrom: '转发自',
+    dataUpdated: '数据已更新',
   },
   en: {
     home: 'Home',
@@ -393,6 +394,7 @@ export const translations = {
     cannotRepostOwn: 'Cannot repost your own post',
     alreadyReposted: 'Already reposted',
     repostedFrom: 'Reposted from',
+    dataUpdated: 'Data updated',
   },
 }
 

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, Suspense } from 'react'
+import { useEffect, useState, Suspense, useCallback, useMemo } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import TopNav from '@/app/components/Layout/TopNav'
@@ -16,6 +16,14 @@ type SearchResult = {
   meta?: string
 }
 
+// 高亮样式 - 使用 CSS 变量实现主题一致性
+const HIGHLIGHT_STYLE = {
+  backgroundColor: 'var(--color-brand-light, rgba(139, 111, 168, 0.3))',
+  color: '#d4b8e8',
+  borderRadius: '2px',
+  padding: '0 2px',
+}
+
 function SearchContent() {
   const searchParams = useSearchParams()
   const query = searchParams.get('q') || ''
@@ -28,6 +36,40 @@ function SearchContent() {
     supabase.auth.getUser().then(({ data }) => {
       setEmail(data.user?.email ?? null)
     })
+  }, [])
+
+  // 高亮匹配文本的函数
+  const highlightText = useCallback((text: string, searchQuery: string): React.ReactNode => {
+    if (!text || !searchQuery.trim()) return text
+
+    const lowerText = text.toLowerCase()
+    const lowerQuery = searchQuery.toLowerCase().trim()
+    const parts: React.ReactNode[] = []
+    let lastIndex = 0
+
+    // 找到所有匹配项
+    let index = lowerText.indexOf(lowerQuery)
+    while (index !== -1) {
+      // 添加匹配前的文本
+      if (index > lastIndex) {
+        parts.push(text.slice(lastIndex, index))
+      }
+      // 添加高亮的匹配文本
+      parts.push(
+        <span key={`highlight-${index}`} style={HIGHLIGHT_STYLE}>
+          {text.slice(index, index + lowerQuery.length)}
+        </span>
+      )
+      lastIndex = index + lowerQuery.length
+      index = lowerText.indexOf(lowerQuery, lastIndex)
+    }
+    
+    // 添加剩余文本
+    if (lastIndex < text.length) {
+      parts.push(text.slice(lastIndex))
+    }
+
+    return parts.length > 0 ? parts : text
   }, [])
 
   useEffect(() => {
@@ -223,11 +265,11 @@ function SearchContent() {
                   <div style={{ fontSize: '24px' }}>{getIcon(result.type)}</div>
                   <div style={{ flex: 1 }}>
                     <div className="search-result-title" style={{ fontSize: '16px', fontWeight: 900, marginBottom: '4px', color: '#eaeaea' }}>
-                      {result.title}
+                      {highlightText(result.title, query)}
                     </div>
                     {result.subtitle && (
                       <div className="search-result-subtitle" style={{ fontSize: '13px', color: '#9a9a9a', marginBottom: '4px' }}>
-                        {result.subtitle}
+                        {highlightText(result.subtitle, query)}
                       </div>
                     )}
                     {result.meta && (

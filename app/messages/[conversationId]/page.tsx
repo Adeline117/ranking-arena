@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase/client'
@@ -39,6 +39,7 @@ export default function ConversationPage({ params }: { params: { conversationId:
   const [sending, setSending] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
 
   useEffect(() => {
     if (params && typeof params === 'object' && 'then' in params) {
@@ -75,7 +76,7 @@ export default function ConversationPage({ params }: { params: { conversationId:
     scrollToBottom()
   }, [messages])
 
-  const loadMessages = async (uid: string, convId: string) => {
+  const loadMessages = useCallback(async (uid: string, convId: string) => {
     try {
       setLoading(true)
       const res = await fetch(`/api/messages?conversationId=${convId}&userId=${uid}`)
@@ -121,7 +122,52 @@ export default function ConversationPage({ params }: { params: { conversationId:
     } finally {
       setLoading(false)
     }
-  }
+  }, [showToast, router])
+
+  // 订阅实时消息更新
+  useEffect(() => {
+    if (!userId || !conversationId || !otherUser) return
+
+    // 创建实时订阅通道 - 监听来自对方的新消息
+    const channel = supabase
+      .channel(`conversation:${conversationId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'direct_messages',
+          filter: `sender_id=eq.${otherUser.id}`,
+        },
+        (payload) => {
+          // 检查这条消息是否是发给当前用户的
+          const newMsg = payload.new as Message
+          if (newMsg.receiver_id === userId) {
+            console.log('[Conversation] 收到新消息:', payload)
+            // 添加新消息到列表（避免重复）
+            setMessages(prev => {
+              if (prev.some(m => m.id === newMsg.id)) {
+                return prev
+              }
+              return [...prev, newMsg]
+            })
+          }
+        }
+      )
+      .subscribe((status) => {
+        console.log('[Conversation] Realtime subscription status:', status)
+      })
+
+    channelRef.current = channel
+
+    // 清理函数
+    return () => {
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current)
+        channelRef.current = null
+      }
+    }
+  }, [userId, conversationId, otherUser])
 
   const handleSend = async () => {
     if (!newMessage.trim() || !userId || !otherUser || sending) return

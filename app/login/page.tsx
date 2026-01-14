@@ -93,6 +93,61 @@ function getPasswordStrength(password: string): { level: 0 | 1 | 2 | 3 | 4; labe
   return { level: 4, label: '强', color: '#2fe57d' }
 }
 
+// 实时验证函数
+function validateEmail(email: string): { valid: boolean; message: string } {
+  if (!email) return { valid: true, message: '' }  // 空值不显示错误
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  if (!emailRegex.test(email)) {
+    return { valid: false, message: '请输入有效的邮箱地址' }
+  }
+  return { valid: true, message: '' }
+}
+
+function validatePassword(password: string, lang: 'zh' | 'en'): { valid: boolean; message: string } {
+  if (!password) return { valid: true, message: '' }  // 空值不显示错误
+  if (password.length < 6) {
+    return { 
+      valid: false, 
+      message: lang === 'zh' ? '密码至少需要6个字符' : 'Password must be at least 6 characters' 
+    }
+  }
+  return { valid: true, message: '' }
+}
+
+function validateHandle(handle: string, lang: 'zh' | 'en'): { valid: boolean; message: string } {
+  if (!handle) return { valid: true, message: '' }  // 空值不显示错误
+  if (handle.length < 3) {
+    return { 
+      valid: false, 
+      message: lang === 'zh' ? '用户名至少需要3个字符' : 'Username must be at least 3 characters' 
+    }
+  }
+  if (!/^[a-zA-Z0-9_\u4e00-\u9fa5]+$/.test(handle)) {
+    return { 
+      valid: false, 
+      message: lang === 'zh' ? '用户名只能包含字母、数字、下划线和中文' : 'Username can only contain letters, numbers, underscores and Chinese characters' 
+    }
+  }
+  return { valid: true, message: '' }
+}
+
+// 内联验证提示样式
+const validationStyle = {
+  marginTop: 4,
+  fontSize: 11,
+  display: 'flex',
+  alignItems: 'center',
+  gap: 4,
+}
+
+const errorTextStyle = {
+  color: '#ff7c7c',
+}
+
+const successTextStyle = {
+  color: '#2fe57d',
+}
+
 export default function LoginPage() {
   const [lang, setLang] = useState<Language>(() => {
     // 从 localStorage 读取语言偏好
@@ -115,11 +170,29 @@ export default function LoginPage() {
   const [countdown, setCountdown] = useState(0)
   const [loginWithCode, setLoginWithCode] = useState(false) // 登录时是否使用验证码
   const [showPassword, setShowPassword] = useState(false) // 密码可见性切换
+  
+  // 实时验证相关状态
+  const [touchedFields, setTouchedFields] = useState<{
+    email: boolean;
+    password: boolean;
+    handle: boolean;
+  }>({ email: false, password: false, handle: false })
+  
   const router = useRouter()
   const { showToast } = useToast()
 
   const t = translations[lang]
   const passwordStrength = getPasswordStrength(password)
+  
+  // 实时验证结果
+  const emailValidation = validateEmail(email)
+  const passwordValidation = validatePassword(password, lang)
+  const handleValidation = validateHandle(handle, lang)
+  
+  // 标记字段为已触摸
+  const markTouched = (field: 'email' | 'password' | 'handle') => {
+    setTouchedFields(prev => ({ ...prev, [field]: true }))
+  }
 
   // 语言偏好保存到 localStorage
   useEffect(() => {
@@ -472,6 +545,7 @@ export default function LoginPage() {
     setCountdown(0)
     setError(null)
     setLoginWithCode(false)
+    setTouchedFields({ email: false, password: false, handle: false })
   }
 
   return (
@@ -549,11 +623,12 @@ export default function LoginPage() {
               width: '100%', 
               padding: 12, 
               borderRadius: 12,
-              border: '1px solid #1f1f1f',
+              border: `1px solid ${touchedFields.email && !emailValidation.valid ? '#ff7c7c' : '#1f1f1f'}`,
               background: '#0b0b0b',
               color: '#eaeaea',
               fontSize: 14,
               outline: 'none',
+              transition: 'border-color 0.2s ease',
             }}
             placeholder="you@email.com"
             value={email}
@@ -561,8 +636,19 @@ export default function LoginPage() {
               setEmail(e.target.value)
               if (isRegister) resetForm()
             }}
+            onBlur={() => markTouched('email')}
             disabled={codeVerified}
           />
+          {/* 实时邮箱验证提示 */}
+          {touchedFields.email && email && (
+            <div style={validationStyle}>
+              {emailValidation.valid ? (
+                <span style={successTextStyle}>✓ 邮箱格式正确</span>
+              ) : (
+                <span style={errorTextStyle}>✕ {emailValidation.message}</span>
+              )}
+            </div>
+          )}
         </div>
 
         {/* 注册模式：验证码流程 */}
@@ -674,21 +760,39 @@ export default function LoginPage() {
                       width: '100%', 
                       padding: 12, 
                       borderRadius: 12,
-                      border: '1px solid #1f1f1f',
+                      border: `1px solid ${touchedFields.handle && !handleValidation.valid ? '#ff7c7c' : '#1f1f1f'}`,
                       background: '#0b0b0b',
                       color: '#eaeaea',
                       fontSize: 14,
                       outline: 'none',
+                      transition: 'border-color 0.2s ease',
                     }}
                     placeholder="用户名（至少3个字符，可重复）"
                     value={handle}
                     onChange={(e) => setHandle(e.target.value)}
+                    onBlur={() => markTouched('handle')}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' && !loading && handle && handle.length >= 3 && password && password.length >= 6) {
                         handleSetPassword()
                       }
                     }}
                   />
+                  {/* 实时用户名验证提示 */}
+                  {touchedFields.handle && handle && (
+                    <div style={validationStyle}>
+                      {handleValidation.valid ? (
+                        <span style={successTextStyle}>✓ 用户名格式正确</span>
+                      ) : (
+                        <span style={errorTextStyle}>✕ {handleValidation.message}</span>
+                      )}
+                    </div>
+                  )}
+                  {/* 字符计数 */}
+                  {handle && (
+                    <div style={{ marginTop: 4, fontSize: 11, color: handle.length >= 3 ? '#9a9a9a' : '#ff7c7c' }}>
+                      {handle.length}/3 字符（最少）
+                    </div>
+                  )}
                 </div>
                 <div style={{ marginBottom: 16 }}>
                   <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 800 }}>
@@ -702,15 +806,17 @@ export default function LoginPage() {
                         padding: 12, 
                         paddingRight: 44,
                         borderRadius: 12,
-                        border: '1px solid #1f1f1f',
+                        border: `1px solid ${touchedFields.password && !passwordValidation.valid ? '#ff7c7c' : '#1f1f1f'}`,
                         background: '#0b0b0b',
                         color: '#eaeaea',
                         fontSize: 14,
                         outline: 'none',
+                        transition: 'border-color 0.2s ease',
                       }}
                       placeholder="设置密码（至少6位）"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
+                      onBlur={() => markTouched('password')}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' && !loading && handle && handle.length >= 3 && password && password.length >= 6) {
                           handleSetPassword()
@@ -737,6 +843,12 @@ export default function LoginPage() {
                       {showPassword ? '🙈' : '👁️'}
                     </button>
                   </div>
+                  {/* 实时密码验证提示 */}
+                  {touchedFields.password && password && !passwordValidation.valid && (
+                    <div style={validationStyle}>
+                      <span style={errorTextStyle}>✕ {passwordValidation.message}</span>
+                    </div>
+                  )}
                   {/* 密码强度指示器 */}
                   {password && (
                     <div style={{ marginTop: 8 }}>
@@ -754,9 +866,14 @@ export default function LoginPage() {
                           />
                         ))}
                       </div>
-                      <span style={{ fontSize: 11, color: passwordStrength.color }}>
-                        密码强度: {passwordStrength.label}
-                      </span>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: 11, color: passwordStrength.color }}>
+                          密码强度: {passwordStrength.label}
+                        </span>
+                        <span style={{ fontSize: 11, color: password.length >= 6 ? '#9a9a9a' : '#ff7c7c' }}>
+                          {password.length}/6 字符
+                        </span>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -803,15 +920,17 @@ export default function LoginPage() {
                         padding: 12, 
                         paddingRight: 44,
                         borderRadius: 12,
-                        border: '1px solid #1f1f1f',
+                        border: `1px solid ${touchedFields.password && password && !passwordValidation.valid ? '#ff7c7c' : '#1f1f1f'}`,
                         background: '#0b0b0b',
                         color: '#eaeaea',
                         fontSize: 14,
                         outline: 'none',
+                        transition: 'border-color 0.2s ease',
                       }}
                       placeholder="password"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
+                      onBlur={() => markTouched('password')}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' && !loading && email && password) {
                           handleLogin()
@@ -838,6 +957,12 @@ export default function LoginPage() {
                       {showPassword ? '🙈' : '👁️'}
                     </button>
                   </div>
+                  {/* 实时密码验证提示（登录模式） */}
+                  {touchedFields.password && password && !passwordValidation.valid && (
+                    <div style={validationStyle}>
+                      <span style={errorTextStyle}>✕ {passwordValidation.message}</span>
+                    </div>
+                  )}
                 </div>
                 <button
                   onClick={handleLogin}

@@ -8,6 +8,7 @@ export * from './logger'
 export * from './error-handler'
 export * from './redis'
 export * from './rate-limit'
+export * from './validation'
 
 /**
  * 安全的 JSON 解析

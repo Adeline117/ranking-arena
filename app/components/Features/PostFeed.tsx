@@ -504,9 +504,19 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
           return comment
         }
         setComments(prev => prev.map(updateCommentLike))
+      } else {
+        // 处理API错误
+        if (response.status === 429) {
+          showToast('操作过于频繁，请稍后再试', 'warning')
+        } else if (response.status === 401) {
+          showToast('登录已过期，请重新登录', 'warning')
+        } else {
+          showToast(json.error || '点赞失败', 'error')
+        }
       }
     } catch (err) {
       console.error('[PostFeed] 评论点赞失败:', err)
+      showToast('网络错误，请稍后重试', 'error')
     } finally {
       setCommentLikeLoading(prev => ({ ...prev, [commentId]: false }))
     }

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, lazy, Suspense } from 'react'
+import { useEffect, useState, lazy, Suspense, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
@@ -14,11 +14,15 @@ import { Box } from './components/Base'
 import { useLanguage } from './components/Utils/LanguageProvider'
 import { ErrorBoundary } from './components/UI/ErrorBoundary'
 import { SkeletonCard } from './components/UI/Skeleton'
+import { useToast } from './components/UI/Toast'
 
 // 懒加载非关键组件
 const PostFeed = lazy(() => import('./components/Features/PostFeed'))
 const MarketPanel = lazy(() => import('./components/Features/MarketPanel'))
 const CompareTraders = lazy(() => import('./components/Features/CompareTraders'))
+
+// 本地存储 key
+const TIME_RANGE_STORAGE_KEY = 'ranking_time_range'
 
 /* =====================
    Page
@@ -26,6 +30,7 @@ const CompareTraders = lazy(() => import('./components/Features/CompareTraders')
 
 export default function HomePage() {
   const { t } = useLanguage()
+  const { showToast } = useToast()
   
   /* ---------- auth ---------- */
   const [email, setEmail] = useState<string | null>(null)
@@ -36,67 +41,93 @@ export default function HomePage() {
     })
   }, [])
 
-  /* ---------- ranking flow (多时间段，合并所有交易所) ---------- */
-  const [traders90D, setTraders90D] = useState<Trader[]>([])
-  const [traders30D, setTraders30D] = useState<Trader[]>([])
-  const [traders7D, setTraders7D] = useState<Trader[]>([])
+  /* ---------- ranking flow (懒加载：只加载当前选中的时间段) ---------- */
+  // 使用 Map 缓存已加载的数据
+  const tradersCache = useRef<Map<string, Trader[]>>(new Map())
+  const [currentTraders, setCurrentTraders] = useState<Trader[]>([])
   const [loadingTraders, setLoadingTraders] = useState(true)
-  const [activeTimeRange, setActiveTimeRange] = useState<'90D' | '30D' | '7D'>('90D')
-
-  useEffect(() => {
-    const loadTimeRange = async (timeRange: '7D' | '30D' | '90D'): Promise<Trader[]> => {
-      try {
-        const response = await fetch(`/api/traders?timeRange=${timeRange}`)
-        if (!response.ok) {
-          console.error(`[HomePage] ${timeRange} API 错误`)
-          return []
-        }
-        const data = await response.json()
-        return data.traders || []
-      } catch (error) {
-        console.error(`[HomePage] 加载 ${timeRange} 数据失败:`, error)
-        return []
+  
+  // 从 localStorage 读取用户偏好的时间段
+  const [activeTimeRange, setActiveTimeRange] = useState<'90D' | '30D' | '7D'>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem(TIME_RANGE_STORAGE_KEY)
+      if (saved === '90D' || saved === '30D' || saved === '7D') {
+        return saved
       }
     }
+    return '90D'
+  })
 
-    const load = async () => {
-      setLoadingTraders(true)
-      try {
-        // 并行获取三个时间段的数据（合并所有交易所）
-        const [data90D, data30D, data7D] = await Promise.all([
-          loadTimeRange('90D'),
-          loadTimeRange('30D'),
-          loadTimeRange('7D'),
-        ])
-
-        console.log(`[HomePage] 合并数据: 90D=${data90D.length}, 30D=${data30D.length}, 7D=${data7D.length}`)
-        
-        setTraders90D(data90D)
-        setTraders30D(data30D)
-        setTraders7D(data7D)
-      } catch (error) {
-        console.error('[HomePage] 加载交易者数据失败:', error)
-        logError(error, 'HomePage')
-        setTraders90D([])
-        setTraders30D([])
-        setTraders7D([])
-      } finally {
-        setLoadingTraders(false)
-      }
+  // 加载单个时间段数据
+  const loadTimeRange = useCallback(async (timeRange: '7D' | '30D' | '90D', forceRefresh = false): Promise<Trader[]> => {
+    // 检查缓存（非强制刷新时）
+    if (!forceRefresh && tradersCache.current.has(timeRange)) {
+      return tradersCache.current.get(timeRange) || []
     }
-
-    load()
     
-    // 每5分钟自动刷新一次数据
+    try {
+      const response = await fetch(`/api/traders?timeRange=${timeRange}`)
+      if (!response.ok) {
+        console.error(`[HomePage] ${timeRange} API 错误`)
+        return tradersCache.current.get(timeRange) || []
+      }
+      const data = await response.json()
+      const traders = data.traders || []
+      
+      // 更新缓存
+      tradersCache.current.set(timeRange, traders)
+      
+      return traders
+    } catch (error) {
+      console.error(`[HomePage] 加载 ${timeRange} 数据失败:`, error)
+      return tradersCache.current.get(timeRange) || []
+    }
+  }, [])
+
+  // 加载当前选中时间段的数据
+  const loadCurrentData = useCallback(async (forceRefresh = false) => {
+    setLoadingTraders(true)
+    try {
+      const traders = await loadTimeRange(activeTimeRange, forceRefresh)
+      setCurrentTraders(traders)
+      
+      if (forceRefresh) {
+        showToast(t('dataUpdated') || '数据已更新', 'success')
+      }
+    } catch (error) {
+      console.error('[HomePage] 加载交易者数据失败:', error)
+      logError(error, 'HomePage')
+      setCurrentTraders([])
+    } finally {
+      setLoadingTraders(false)
+    }
+  }, [activeTimeRange, loadTimeRange, showToast, t])
+
+  // 初次加载和时间段切换时加载数据
+  useEffect(() => {
+    loadCurrentData()
+  }, [loadCurrentData])
+
+  // 保存时间段偏好到 localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(TIME_RANGE_STORAGE_KEY, activeTimeRange)
+    }
+  }, [activeTimeRange])
+  
+  // 每5分钟自动刷新当前时间段数据
+  useEffect(() => {
     const interval = setInterval(() => {
-      load()
+      loadCurrentData(true)
     }, 5 * 60 * 1000)
     
     return () => clearInterval(interval)
-  }, [email])
-  
-  // 根据当前选择的时间段返回对应的数据
-  const currentTraders = activeTimeRange === '90D' ? traders90D : activeTimeRange === '30D' ? traders30D : traders7D
+  }, [loadCurrentData])
+
+  // 切换时间段的处理函数
+  const handleTimeRangeChange = useCallback((range: '90D' | '30D' | '7D') => {
+    setActiveTimeRange(range)
+  }, [])
 
   /* ---------- trader compare ---------- */
   const [compareTraders, setCompareTraders] = useState<Trader[]>([])
@@ -193,7 +224,7 @@ export default function HomePage() {
               {(['90D', '30D', '7D'] as const).map((range) => (
                 <button
                   key={range}
-                  onClick={() => setActiveTimeRange(range)}
+                  onClick={() => handleTimeRangeChange(range)}
                   style={{
                     flex: 1,
                     padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,

@@ -4,6 +4,17 @@
 :root {
   --background: #000000;
   --foreground: #FFFFFF;
+  
+  /* Brand colors - Arena Purple */
+  --color-brand: #8b6fa8;
+  --color-brand-hover: #9d84b5;
+  --color-brand-muted: rgba(139, 111, 168, 0.15);
+  --color-brand-light: rgba(139, 111, 168, 0.3);
+  
+  /* Validation colors */
+  --color-success: #2fe57d;
+  --color-error: #ff7c7c;
+  --color-warning: #ffc107;
 }
 
 @theme inline {

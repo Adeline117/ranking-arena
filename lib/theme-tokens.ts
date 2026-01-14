@@ -39,6 +39,9 @@ export const lightTokens = {
       success: '#00C853',      // Positive ROI/states
       warning: '#FF9800',      // Warnings
       error: '#F44336',        // Negative ROI/states
+      brand: '#8b6fa8',        // Arena brand purple
+      brandHover: '#9d84b5',   // Brand hover state
+      brandMuted: 'rgba(139, 111, 168, 0.15)', // Brand muted background
     },
     
     overlay: {
@@ -83,6 +86,9 @@ export const darkTokens = {
       success: '#4DFF9A',      // Positive ROI/states
       warning: '#FFB800',      // Warnings
       error: '#FF4D4D',        // Negative ROI/states
+      brand: '#8b6fa8',        // Arena brand purple
+      brandHover: '#9d84b5',   // Brand hover state
+      brandMuted: 'rgba(139, 111, 168, 0.15)', // Brand muted background
     },
     
     overlay: {

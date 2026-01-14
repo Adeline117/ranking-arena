@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase/client'
@@ -8,6 +8,7 @@ import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/Layout/TopNav'
 import { Box, Text } from '@/app/components/Base'
 import Avatar from '@/app/components/UI/Avatar'
+import { useToast } from '@/app/components/UI/Toast'
 
 type Conversation = {
   id: string
@@ -24,26 +25,15 @@ type Conversation = {
 
 export default function MessagesPage() {
   const router = useRouter()
+  const { showToast } = useToast()
   const [email, setEmail] = useState<string | null>(null)
   const [userId, setUserId] = useState<string | null>(null)
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [loading, setLoading] = useState(true)
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
 
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      setEmail(data.user?.email ?? null)
-      setUserId(data.user?.id ?? null)
-      
-      if (!data.user) {
-        router.push('/login')
-        return
-      }
-      
-      loadConversations(data.user.id)
-    })
-  }, [router])
-
-  const loadConversations = async (uid: string) => {
+  // 加载会话列表
+  const loadConversations = useCallback(async (uid: string) => {
     try {
       setLoading(true)
       const res = await fetch(`/api/conversations?userId=${uid}`)
@@ -57,7 +47,73 @@ export default function MessagesPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      setEmail(data.user?.email ?? null)
+      setUserId(data.user?.id ?? null)
+      
+      if (!data.user) {
+        router.push('/login')
+        return
+      }
+      
+      loadConversations(data.user.id)
+    })
+  }, [router, loadConversations])
+
+  // 订阅实时消息更新
+  useEffect(() => {
+    if (!userId) return
+
+    // 创建实时订阅通道
+    const channel = supabase
+      .channel(`messages-list:${userId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'direct_messages',
+          filter: `receiver_id=eq.${userId}`,
+        },
+        (payload) => {
+          // 收到新消息时，刷新会话列表
+          console.log('[Messages] 收到新消息:', payload)
+          loadConversations(userId)
+          
+          // 显示新消息提示
+          showToast('收到新消息', 'info')
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'direct_messages',
+          filter: `receiver_id=eq.${userId}`,
+        },
+        () => {
+          // 消息状态更新时（如已读状态），刷新会话列表
+          loadConversations(userId)
+        }
+      )
+      .subscribe((status) => {
+        console.log('[Messages] Realtime subscription status:', status)
+      })
+
+    channelRef.current = channel
+
+    // 清理函数：组件卸载时取消订阅
+    return () => {
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current)
+        channelRef.current = null
+      }
+    }
+  }, [userId, loadConversations, showToast])
 
   const formatTime = (dateString: string) => {
     const date = new Date(dateString)
