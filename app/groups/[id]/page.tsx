@@ -121,6 +121,11 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
   const [comments, setComments] = useState<Record<string, any[]>>({})
   const [newComment, setNewComment] = useState<Record<string, string>>({})
   const [commentLoading, setCommentLoading] = useState<Record<string, boolean>>({})
+  // 翻译相关状态
+  const [translatedPosts, setTranslatedPosts] = useState<Record<string, { title?: string; content?: string }>>({})
+  const [translatingPosts, setTranslatingPosts] = useState(false)
+  // 展开/收起状态
+  const [expandedPosts, setExpandedPosts] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -180,6 +185,80 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
     })
     return repostMap
   }, [])
+
+  // 检测是否为中文文本
+  const isChineseText = useCallback((text: string) => {
+    if (!text) return false
+    const chineseRegex = /[\u4e00-\u9fa5]/g
+    const chineseMatches = text.match(chineseRegex)
+    const chineseRatio = chineseMatches ? chineseMatches.length / text.length : 0
+    return chineseRatio > 0.1
+  }, [])
+
+  // 翻译帖子
+  const translatePosts = useCallback(async (postsToTranslate: Post[], targetLang: 'zh' | 'en') => {
+    if (translatingPosts) return
+    
+    const needsTranslation = postsToTranslate.filter(p => {
+      if (translatedPosts[p.id]?.title) return false
+      const titleIsChinese = isChineseText(p.title || '')
+      return targetLang === 'en' ? titleIsChinese : !titleIsChinese
+    })
+    
+    if (needsTranslation.length === 0) return
+    
+    setTranslatingPosts(true)
+    const batch = needsTranslation.slice(0, 5)
+    
+    for (const post of batch) {
+      try {
+        // 翻译标题
+        const titleRes = await fetch('/api/translate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' },
+          cache: 'no-store',
+          body: JSON.stringify({ text: post.title || '', targetLang }),
+        })
+        const titleData = await titleRes.json()
+        
+        // 翻译内容（如果有）
+        let translatedContent = ''
+        if (post.content) {
+          const contentRes = await fetch('/api/translate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' },
+            cache: 'no-store',
+            body: JSON.stringify({ text: post.content, targetLang }),
+          })
+          const contentData = await contentRes.json()
+          if (contentData.success) {
+            translatedContent = contentData.data?.translatedText || ''
+          }
+        }
+        
+        if (titleData.success) {
+          setTranslatedPosts(prev => ({
+            ...prev,
+            [post.id]: { 
+              title: titleData.data?.translatedText || post.title,
+              content: translatedContent || post.content || ''
+            }
+          }))
+        }
+      } catch (err) {
+        console.error('[GroupPage] 翻译出错:', err)
+      }
+    }
+    
+    setTranslatingPosts(false)
+  }, [translatingPosts, translatedPosts, isChineseText])
+
+  // 当帖子加载或语言变化时触发翻译
+  useEffect(() => {
+    if (posts.length > 0) {
+      translatePosts(posts, language as 'zh' | 'en')
+    }
+  }, [posts, language, translatePosts])
 
   useEffect(() => {
     // 等待 groupId 加载完成
@@ -861,7 +940,9 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
                     {/* 帖子内容 */}
                     <Box style={{ flex: 1, padding: tokens.spacing[4] }}>
                       <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: tokens.spacing[2] }}>
-                        <Text size="lg" weight="bold">{post.title}</Text>
+                        <Text size="lg" weight="bold">
+                          {translatedPosts[post.id]?.title || post.title}
+                        </Text>
                         <Text size="xs" color="tertiary">
                           {new Date(post.created_at).toLocaleString(language === 'zh' ? 'zh-CN' : 'en-US')}
                         </Text>
@@ -897,15 +978,46 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
                       </Box>
                     )}
 
-                    {post.content && (
-                      <Text size="sm" color="secondary" style={{ 
-                        marginTop: tokens.spacing[3], 
-                        lineHeight: 1.6,
-                        whiteSpace: 'pre-wrap',
-                      }}>
-                        {renderContentWithLinks(post.content)}
-                      </Text>
-                    )}
+                    {post.content && (() => {
+                      const displayContent = translatedPosts[post.id]?.content || post.content
+                      const isLongContent = displayContent.length > 150
+                      const isExpanded = expandedPosts[post.id]
+                      const contentToShow = isExpanded || !isLongContent 
+                        ? displayContent 
+                        : displayContent.slice(0, 150) + '...'
+                      
+                      return (
+                        <Box style={{ marginTop: tokens.spacing[3] }}>
+                          <Text size="sm" color="secondary" style={{ 
+                            lineHeight: 1.6,
+                            whiteSpace: 'pre-wrap',
+                          }}>
+                            {renderContentWithLinks(contentToShow)}
+                          </Text>
+                          {isLongContent && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setExpandedPosts(prev => ({ ...prev, [post.id]: !prev[post.id] }))
+                              }}
+                              style={{
+                                background: 'transparent',
+                                border: 'none',
+                                color: ARENA_PURPLE,
+                                cursor: 'pointer',
+                                fontSize: 12,
+                                marginTop: tokens.spacing[2],
+                                padding: 0,
+                              }}
+                            >
+                              {isExpanded 
+                                ? (language === 'zh' ? '收起' : 'Show less') 
+                                : (language === 'zh' ? '展开查看' : 'Show more')}
+                            </button>
+                          )}
+                        </Box>
+                      )
+                    })()}
 
                     <Box style={{ 
                       marginTop: tokens.spacing[3], 
