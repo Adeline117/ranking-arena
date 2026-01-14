@@ -5,9 +5,10 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY
-
 export async function POST(request: NextRequest) {
+  // 在函数内部读取环境变量，避免 serverless 缓存问题
+  const OPENAI_API_KEY = process.env.OPENAI_API_KEY
+  
   try {
     const body = await request.json()
     const { text, targetLang } = body
@@ -21,9 +22,9 @@ export async function POST(request: NextRequest) {
 
     // 如果没有配置 OpenAI API Key，返回错误
     if (!OPENAI_API_KEY) {
-      console.error('[translate] OPENAI_API_KEY not configured. Available env vars:', Object.keys(process.env).filter(k => k.includes('OPENAI') || k.includes('API')))
+      console.error('[translate] OPENAI_API_KEY not configured')
       return NextResponse.json(
-        { success: false, error: '翻译服务未配置，请在 Vercel 环境变量中添加 OPENAI_API_KEY' },
+        { success: false, error: '翻译服务未配置' },
         { status: 503 }
       )
     }
