@@ -22,6 +22,7 @@ export default function TopNav({ email }: { email: string | null }) {
   const [showSearchDropdown, setShowSearchDropdown] = useState(false)
   const [theme, setTheme] = useState<'light' | 'dark'>('dark')
   const [unreadCount, setUnreadCount] = useState(0)
+  const [unreadMessageCount, setUnreadMessageCount] = useState(0)
   const menuRef = useRef<HTMLDivElement>(null)
   const searchRef = useRef<HTMLDivElement>(null)
 
@@ -117,6 +118,53 @@ export default function TopNav({ email }: { email: string | null }) {
         (payload) => {
           // 收到新通知或通知状态更新时，重新获取未读数量
           fetchUnreadCount()
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [myId])
+
+  // 获取未读私信数量
+  useEffect(() => {
+    if (!myId) return
+
+    const fetchUnreadMessageCount = async () => {
+      try {
+        const { count, error } = await supabase
+          .from('direct_messages')
+          .select('*', { count: 'exact', head: true })
+          .eq('receiver_id', myId)
+          .eq('read', false)
+        
+        if (!error && typeof count === 'number') {
+          setUnreadMessageCount(count)
+        }
+      } catch (err) {
+        // 如果表不存在，静默处理
+        if (!String(err).includes('Could not find')) {
+          console.error('Error fetching unread message count:', err)
+        }
+      }
+    }
+
+    fetchUnreadMessageCount()
+
+    // 订阅实时私信更新
+    const channel = supabase
+      .channel(`messages:${myId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'direct_messages',
+          filter: `receiver_id=eq.${myId}`,
+        },
+        () => {
+          fetchUnreadMessageCount()
         }
       )
       .subscribe()
@@ -491,6 +539,57 @@ export default function TopNav({ email }: { email: string | null }) {
           <ThemeToggle />
           {myId ? (
             <>
+              {/* 私信图标 */}
+              <Link
+                href="/messages"
+                aria-label="私信"
+                style={{
+                  position: 'relative',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: 36,
+                  height: 36,
+                  borderRadius: tokens.radius.full,
+                  background: 'transparent',
+                  color: tokens.colors.text.secondary,
+                  transition: `all ${tokens.transition.base}`,
+                  textDecoration: 'none',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = tokens.colors.bg.secondary
+                  e.currentTarget.style.color = tokens.colors.text.primary
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'transparent'
+                  e.currentTarget.style.color = tokens.colors.text.secondary
+                }}
+              >
+                <MessageIcon size={20} />
+                {unreadMessageCount > 0 && (
+                  <Box
+                    style={{
+                      position: 'absolute',
+                      top: 4,
+                      right: 4,
+                      minWidth: 16,
+                      height: 16,
+                      borderRadius: '50%',
+                      background: '#8b6fa8',
+                      color: '#fff',
+                      fontSize: 10,
+                      fontWeight: 900,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      padding: '0 4px',
+                      border: `2px solid ${tokens.colors.bg.primary}`,
+                    }}
+                  >
+                    {unreadMessageCount > 99 ? '99+' : unreadMessageCount}
+                  </Box>
+                )}
+              </Link>
               {/* 通知铃铛图标 */}
               <Link
                 href="/notifications"
@@ -666,6 +765,56 @@ export default function TopNav({ email }: { email: string | null }) {
                   >
                     <DashboardIcon size={16} />
                     <span>{t('dashboard')}</span>
+                  </Link>
+                  <Link
+                    href="/messages"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: tokens.spacing[2],
+                      padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+                      borderRadius: tokens.radius.md,
+                      color: tokens.colors.text.primary,
+                      textDecoration: 'none',
+                      fontSize: tokens.typography.fontSize.base,
+                      fontWeight: tokens.typography.fontWeight.bold,
+                      transition: `all ${tokens.transition.base}`,
+                      position: 'relative',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = tokens.colors.bg.secondary
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = 'transparent'
+                    }}
+                    onClick={() => setShowUserMenu(false)}
+                  >
+                    <Box style={{ position: 'relative' }}>
+                      <MessageIcon size={16} />
+                      {unreadMessageCount > 0 && (
+                        <Box
+                          style={{
+                            position: 'absolute',
+                            top: -6,
+                            right: -6,
+                            minWidth: 16,
+                            height: 16,
+                            borderRadius: '50%',
+                            background: '#8b6fa8',
+                            color: '#fff',
+                            fontSize: 10,
+                            fontWeight: 900,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            padding: '0 4px',
+                          }}
+                        >
+                          {unreadMessageCount > 99 ? '99+' : unreadMessageCount}
+                        </Box>
+                      )}
+                    </Box>
+                    <span>私信</span>
                   </Link>
                   <Link
                     href="/notifications"
