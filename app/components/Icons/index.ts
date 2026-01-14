@@ -20,6 +20,7 @@ export {
   RankingBadge,
   SunIcon,
   MoonIcon,
+  MessageIcon,
 } from './IconSystem'
 
 // Re-export ChartIcon as MarketIcon for backward compatibility

@@ -637,11 +637,11 @@ export default function HotPage() {
                   }}
                 >
                   {translating ? (
-                    <>⏳ {language === 'zh' ? '翻译中...' : 'Translating...'}</>
+                    <>{language === 'zh' ? '翻译中...' : 'Translating...'}</>
                   ) : showingOriginal ? (
-                    <>🌐 {language === 'zh' ? '查看翻译' : 'View Translation'}</>
+                    <>{language === 'zh' ? '查看翻译' : 'View Translation'}</>
                   ) : (
-                    <>📄 {language === 'zh' ? '查看原文' : 'View Original'}</>
+                    <>{language === 'zh' ? '查看原文' : 'View Original'}</>
                   )}
                 </button>
                 {!showingOriginal && (

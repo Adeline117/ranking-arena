@@ -396,3 +396,25 @@ export function MoonIcon({ size = 16, style, ...props }: IconProps) {
     </svg>
   )
 }
+
+// Message Icon (for direct messages)
+export function MessageIcon({ size = 16, style, ...props }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="none"
+      style={{ display: 'inline-block', verticalAlign: 'middle', ...style }}
+      {...props}
+    >
+      <path
+        d="M14 10.5a5.5 5.5 0 0 1-.6 2.5 5.5 5.5 0 0 1-4.9 3 5.5 5.5 0 0 1-2.5-.6L2 16.5l1.1-4a5.5 5.5 0 0 1-.6-2.5 5.5 5.5 0 0 1 3-4.9A5.5 5.5 0 0 1 8 4.5h.3a5.5 5.5 0 0 1 5.2 5.2v.3z"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
