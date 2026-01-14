@@ -130,9 +130,9 @@ export function DialogProvider({ children }: { children: ReactNode }) {
 
   const getButtonColor = () => {
     if (state.options?.type === 'danger') {
-      return '#ff4d4d'
+      return tokens.colors.accent.error
     }
-    return '#8b6fa8'
+    return tokens.colors.accent.primary
   }
 
   return (
@@ -146,7 +146,7 @@ export function DialogProvider({ children }: { children: ReactNode }) {
           style={{
             position: 'fixed',
             inset: 0,
-            background: 'rgba(0, 0, 0, 0.65)',
+            background: tokens.colors.overlay.dark,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -160,8 +160,8 @@ export function DialogProvider({ children }: { children: ReactNode }) {
             style={{
               width: '100%',
               maxWidth: 400,
-              background: '#0b0b0b',
-              border: '1px solid #1f1f1f',
+              background: tokens.colors.bg.secondary,
+              border: `1px solid ${tokens.colors.border.primary}`,
               borderRadius: 16,
               padding: 24,
               animation: 'dialogSlideIn 0.3s ease-out',
@@ -171,7 +171,7 @@ export function DialogProvider({ children }: { children: ReactNode }) {
             <h2 style={{
               fontSize: 18,
               fontWeight: 900,
-              color: '#f2f2f2',
+              color: tokens.colors.text.primary,
               marginBottom: 12,
             }}>
               {state.options.title}
@@ -180,7 +180,7 @@ export function DialogProvider({ children }: { children: ReactNode }) {
             {/* Message */}
             <p style={{
               fontSize: 14,
-              color: '#9a9a9a',
+              color: tokens.colors.text.secondary,
               lineHeight: 1.6,
               marginBottom: 24,
             }}>
@@ -199,21 +199,21 @@ export function DialogProvider({ children }: { children: ReactNode }) {
                   style={{
                     padding: '10px 20px',
                     borderRadius: 10,
-                    border: '1px solid #1f1f1f',
+                    border: `1px solid ${tokens.colors.border.primary}`,
                     background: 'transparent',
-                    color: '#9a9a9a',
+                    color: tokens.colors.text.secondary,
                     fontWeight: 700,
                     fontSize: 14,
                     cursor: 'pointer',
                     transition: 'all 0.2s ease',
                   }}
                   onMouseEnter={(e) => {
-                    e.currentTarget.style.background = 'rgba(255,255,255,0.05)'
-                    e.currentTarget.style.color = '#eaeaea'
+                    e.currentTarget.style.background = tokens.colors.bg.hover
+                    e.currentTarget.style.color = tokens.colors.text.primary
                   }}
                   onMouseLeave={(e) => {
                     e.currentTarget.style.background = 'transparent'
-                    e.currentTarget.style.color = '#9a9a9a'
+                    e.currentTarget.style.color = tokens.colors.text.secondary
                   }}
                 >
                   {state.options.cancelText || '取消'}
@@ -226,7 +226,7 @@ export function DialogProvider({ children }: { children: ReactNode }) {
                   borderRadius: 10,
                   border: 'none',
                   background: getButtonColor(),
-                  color: '#fff',
+                  color: tokens.colors.white,
                   fontWeight: 900,
                   fontSize: 14,
                   cursor: 'pointer',
