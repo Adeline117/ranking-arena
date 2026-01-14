@@ -153,6 +153,9 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
   const [showingOriginal, setShowingOriginal] = useState(true)
   const [translating, setTranslating] = useState(false)
   const [translationCache, setTranslationCache] = useState<Record<string, string>>({})
+  // 列表翻译状态
+  const [translatedListPosts, setTranslatedListPosts] = useState<Record<string, { title?: string; body?: string }>>({})
+  const [translatingList, setTranslatingList] = useState(false)
 
   // 获取用户 token 和 ID
   useEffect(() => {
@@ -799,6 +802,66 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
     }
   }, [translationCache, showToast])
 
+  // 翻译列表中的帖子标题
+  const translateListPosts = useCallback(async (postsToTranslate: Post[], targetLang: 'zh' | 'en') => {
+    if (translatingList) return
+    
+    // 过滤出需要翻译的帖子（中文内容且目标语言是英文，或反之）
+    const needsTranslation = postsToTranslate.filter(p => {
+      const alreadyTranslated = translatedListPosts[p.id]?.title
+      if (alreadyTranslated) return false
+      
+      const hasChinese = isChineseText(p.title || '') || isChineseText(p.content || '')
+      return targetLang === 'en' ? hasChinese : !hasChinese
+    })
+    
+    if (needsTranslation.length === 0) return
+    
+    setTranslatingList(true)
+    
+    // 批量翻译，每次最多5个
+    const batch = needsTranslation.slice(0, 5)
+    
+    for (const post of batch) {
+      try {
+        const textToTranslate = `${post.title || ''}\n---\n${(post.content || '').slice(0, 200)}`
+        
+        const response = await fetch('/api/translate', {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'Cache-Control': 'no-cache',
+          },
+          cache: 'no-store',
+          body: JSON.stringify({ text: textToTranslate, targetLang }),
+        })
+        const data = await response.json()
+        
+        if (response.ok && data.success && data.data?.translatedText) {
+          const parts = data.data.translatedText.split('\n---\n')
+          const translatedTitle = parts[0] || post.title
+          const translatedBody = parts[1] || ''
+          
+          setTranslatedListPosts(prev => ({
+            ...prev,
+            [post.id]: { title: translatedTitle, body: translatedBody }
+          }))
+        }
+      } catch (err) {
+        console.error('[PostFeed] 列表翻译出错:', err)
+      }
+    }
+    
+    setTranslatingList(false)
+  }, [translatingList, translatedListPosts, isChineseText])
+
+  // 当语言变化时翻译列表帖子
+  useEffect(() => {
+    if (language === 'en' && posts.length > 0) {
+      translateListPosts(posts, 'en')
+    }
+  }, [language, posts, translateListPosts])
+
   // 打开帖子详情
   const handleOpenPost = useCallback((post: Post) => {
     setOpenPost(post)
@@ -910,7 +973,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
               </div>
 
               <div style={{ marginTop: 6, fontWeight: 950, lineHeight: 1.25 }}>
-                {p.title}{' '}
+                {(language === 'en' && translatedListPosts[p.id]?.title) || p.title}{' '}
                 {p.poll_enabled && (
                   <span
                     style={{
