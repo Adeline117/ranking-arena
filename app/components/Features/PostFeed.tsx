@@ -805,17 +805,18 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
     }
   }, [translationCache, showToast])
 
-  // 翻译列表中的帖子标题
+  // 翻译列表中的帖子标题（只翻译标题，不翻译内容）
   const translateListPosts = useCallback(async (postsToTranslate: Post[], targetLang: 'zh' | 'en') => {
     if (translatingList) return
     
-    // 过滤出需要翻译的帖子（中文内容且目标语言是英文，或反之）
+    // 过滤出需要翻译的帖子
     const needsTranslation = postsToTranslate.filter(p => {
       const alreadyTranslated = translatedListPosts[p.id]?.title
       if (alreadyTranslated) return false
       
-      const hasChinese = isChineseText(p.title || '') || isChineseText(p.content || '')
-      return targetLang === 'en' ? hasChinese : !hasChinese
+      const titleIsChinese = isChineseText(p.title || '')
+      // 中文标题 + 目标英文 = 需要翻译 | 英文标题 + 目标中文 = 需要翻译
+      return targetLang === 'en' ? titleIsChinese : !titleIsChinese
     })
     
     if (needsTranslation.length === 0) return
@@ -827,8 +828,6 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
     
     for (const post of batch) {
       try {
-        const textToTranslate = `${post.title || ''}\n---\n${(post.content || '').slice(0, 200)}`
-        
         const response = await fetch('/api/translate', {
           method: 'POST',
           headers: { 
@@ -836,18 +835,14 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
             'Cache-Control': 'no-cache',
           },
           cache: 'no-store',
-          body: JSON.stringify({ text: textToTranslate, targetLang }),
+          body: JSON.stringify({ text: post.title || '', targetLang }),
         })
         const data = await response.json()
         
         if (response.ok && data.success && data.data?.translatedText) {
-          const parts = data.data.translatedText.split('\n---\n')
-          const translatedTitle = parts[0] || post.title
-          const translatedBody = parts[1] || ''
-          
           setTranslatedListPosts(prev => ({
             ...prev,
-            [post.id]: { title: translatedTitle, body: translatedBody }
+            [post.id]: { title: data.data.translatedText }
           }))
         }
       } catch (err) {
@@ -860,8 +855,8 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
 
   // 当语言变化时翻译列表帖子
   useEffect(() => {
-    if (language === 'en' && posts.length > 0) {
-      translateListPosts(posts, 'en')
+    if (posts.length > 0) {
+      translateListPosts(posts, language as 'zh' | 'en')
     }
   }, [language, posts, translateListPosts])
 
@@ -1045,7 +1040,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
               </div>
 
               <div style={{ marginTop: 6, fontWeight: 950, lineHeight: 1.25 }}>
-                {(language === 'en' && translatedListPosts[p.id]?.title) || p.title}{' '}
+                {translatedListPosts[p.id]?.title || p.title}{' '}
                 {p.poll_enabled && (
                   <span
                     style={{
