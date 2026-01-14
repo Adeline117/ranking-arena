@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState, useCallback } from 'react'
+import { useEffect, useMemo, useState, useCallback, Suspense } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
@@ -13,6 +13,7 @@ import { Box, Text } from '@/app/components/Base'
 import { CommentIcon, ThumbsUpIcon, ThumbsDownIcon } from '@/app/components/Icons'
 import { useToast } from '@/app/components/UI/Toast'
 import { formatTimeAgo } from '@/lib/utils/date'
+import { RankingSkeleton } from '@/app/components/UI/Skeleton'
 
 // Use design tokens for brand color
 const ARENA_PURPLE = '#8b6fa8' // fallback, prefer tokens.colors.accent.brand
@@ -85,7 +86,7 @@ type Comment = {
   replies?: Comment[]
 }
 
-export default function HotPage() {
+function HotContent() {
   const { t, language } = useLanguage()
   const { showToast } = useToast()
   const router = useRouter()
@@ -898,5 +899,20 @@ export default function HotPage() {
         </div>
       )}
     </Box>
+  )
+}
+
+export default function HotPage() {
+  return (
+    <Suspense fallback={
+      <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
+        <TopNav email={null} />
+        <Box style={{ maxWidth: 1200, margin: '0 auto', padding: tokens.spacing[6] }}>
+          <RankingSkeleton />
+        </Box>
+      </Box>
+    }>
+      <HotContent />
+    </Suspense>
   )
 }
