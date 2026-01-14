@@ -18,7 +18,7 @@ type RouteContext = { params: Promise<{ id: string }> }
 
 export async function POST(request: NextRequest, context: RouteContext) {
   // 限流：每分钟最多 30 次点赞操作
-  const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.standard)
+  const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.write)
   if (rateLimitResponse) return rateLimitResponse
 
   try {
