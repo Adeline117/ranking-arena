@@ -156,6 +156,9 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
   // 列表翻译状态
   const [translatedListPosts, setTranslatedListPosts] = useState<Record<string, { title?: string; body?: string }>>({})
   const [translatingList, setTranslatingList] = useState(false)
+  // 评论翻译状态
+  const [translatedComments, setTranslatedComments] = useState<Record<string, string>>({})
+  const [translatingComments, setTranslatingComments] = useState(false)
 
   // 获取用户 token 和 ID
   useEffect(() => {
@@ -862,6 +865,75 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
     }
   }, [language, posts, translateListPosts])
 
+  // 翻译评论
+  const translateComments = useCallback(async (commentsToTranslate: Comment[], targetLang: 'zh' | 'en') => {
+    if (translatingComments) return
+    
+    // 过滤出需要翻译的评论
+    const needsTranslation = commentsToTranslate.filter(c => {
+      if (translatedComments[c.id]) return false
+      const hasChinese = isChineseText(c.content || '')
+      return targetLang === 'en' ? hasChinese : !hasChinese
+    })
+    
+    // 也检查回复
+    const replies: Comment[] = []
+    commentsToTranslate.forEach(c => {
+      if (c.replies) {
+        c.replies.forEach(r => {
+          if (!translatedComments[r.id]) {
+            const hasChinese = isChineseText(r.content || '')
+            if ((targetLang === 'en' && hasChinese) || (targetLang === 'zh' && !hasChinese)) {
+              replies.push(r)
+            }
+          }
+        })
+      }
+    })
+    
+    const allToTranslate = [...needsTranslation, ...replies]
+    if (allToTranslate.length === 0) return
+    
+    setTranslatingComments(true)
+    
+    // 批量翻译，每次最多5个
+    const batch = allToTranslate.slice(0, 5)
+    
+    for (const comment of batch) {
+      try {
+        const response = await fetch('/api/translate', {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'Cache-Control': 'no-cache',
+          },
+          cache: 'no-store',
+          body: JSON.stringify({ text: comment.content, targetLang }),
+        })
+        const data = await response.json()
+        
+        if (response.ok && data.success && data.data?.translatedText) {
+          setTranslatedComments(prev => ({
+            ...prev,
+            [comment.id]: data.data.translatedText
+          }))
+        }
+      } catch (err) {
+        console.error('[PostFeed] 评论翻译出错:', err)
+      }
+    }
+    
+    setTranslatingComments(false)
+  }, [translatingComments, translatedComments, isChineseText])
+
+  // 当评论加载或语言变化时翻译评论
+  useEffect(() => {
+    if (comments.length > 0 && openPost) {
+      const targetLang = language === 'en' ? 'en' : 'zh'
+      translateComments(comments, targetLang)
+    }
+  }, [comments, language, openPost, translateComments])
+
   // 打开帖子详情
   const handleOpenPost = useCallback((post: Post) => {
     setOpenPost(post)
@@ -1298,7 +1370,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
                         )}
                       </div>
                       <div translate="no" style={{ fontSize: 13, color: tokens.colors.text.primary, lineHeight: 1.6 }}>
-                        {renderContentWithLinks(comment.content || '')}
+                        {renderContentWithLinks(translatedComments[comment.id] || comment.content || '')}
                       </div>
                       
                       {/* 评论操作栏：点赞和回复 */}
@@ -1488,7 +1560,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
                                 )}
                               </div>
                               <div style={{ fontSize: 13, color: tokens.colors.text.primary }}>
-                                {renderContentWithLinks(reply.content || '')}
+                                {renderContentWithLinks(translatedComments[reply.id] || reply.content || '')}
                               </div>
                               {/* 回复的点赞按钮 */}
                               <div style={{ marginTop: 4 }}>
