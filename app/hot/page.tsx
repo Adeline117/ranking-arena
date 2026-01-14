@@ -547,7 +547,7 @@ export default function HotPage() {
               {openPost.author} · {openPost.time} · <CommentIcon size={12} /> {openPost.comments}
             </div>
 
-            <div style={{ marginTop: 12, fontSize: 14, color: tokens.colors.text.primary, lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>
+            <div translate="no" style={{ marginTop: 12, fontSize: 14, color: tokens.colors.text.primary, lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>
               {renderContentWithLinks(openPost.body || '')}
             </div>
 
@@ -662,7 +662,7 @@ export default function HotPage() {
                           {formatTimeAgo(comment.created_at)}
                         </span>
                       </div>
-                      <div style={{ fontSize: 13, color: tokens.colors.text.primary, lineHeight: 1.6 }}>
+                      <div translate="no" style={{ fontSize: 13, color: tokens.colors.text.primary, lineHeight: 1.6 }}>
                         {renderContentWithLinks(comment.content || '')}
                       </div>
                     </div>

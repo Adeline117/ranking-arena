@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/Layout/TopNav'
@@ -264,6 +265,8 @@ function GroupsList() {
 
 export default function GroupsPage() {
   const { t } = useLanguage()
+  const searchParams = useSearchParams()
+  const initialPostId = searchParams.get('post')
   const [email, setEmail] = useState<string | null>(null)
   const [loggedIn, setLoggedIn] = useState(false)
   const [traders, setTraders] = useState<Trader[]>([])
@@ -366,7 +369,7 @@ export default function GroupsPage() {
               <Text size="sm" color="secondary" style={{ marginBottom: tokens.spacing[3] }}>
                 {loggedIn ? t('loggedInShowAll') : t('notLoggedInShowLimited')}
               </Text>
-              <PostFeed variant={loggedIn ? 'full' : 'compact'} />
+              <PostFeed variant={loggedIn ? 'full' : 'compact'} initialPostId={initialPostId} />
             </Card>
           </Box>
 
