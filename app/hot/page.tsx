@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, useCallback } from 'react'
 import Link from 'next/link'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/Layout/TopNav'
@@ -11,8 +12,10 @@ import RankingTableCompact from '@/app/components/Features/RankingTableCompact'
 import { Box, Text } from '@/app/components/Base'
 import { CommentIcon, ThumbsUpIcon, ThumbsDownIcon } from '@/app/components/Icons'
 import { useToast } from '@/app/components/UI/Toast'
+import { formatTimeAgo } from '@/lib/utils/date'
 
-const ARENA_PURPLE = '#8b6fa8'
+// Use design tokens for brand color
+const ARENA_PURPLE = '#8b6fa8' // fallback, prefer tokens.colors.accent.brand
 
 // 链接解析函数 - 将文本中的URL转换为可点击链接
 function renderContentWithLinks(text: string) {
@@ -82,19 +85,11 @@ type Comment = {
   replies?: Comment[]
 }
 
-function formatTimeAgo(dateStr: string) {
-  const date = new Date(dateStr)
-  const now = new Date()
-  const diff = Math.floor((now.getTime() - date.getTime()) / 1000)
-  if (diff < 60) return `${diff}秒前`
-  if (diff < 3600) return `${Math.floor(diff / 60)}分钟前`
-  if (diff < 86400) return `${Math.floor(diff / 3600)}小时前`
-  return `${Math.floor(diff / 86400)}天前`
-}
-
 export default function HotPage() {
   const { t, language } = useLanguage()
   const { showToast } = useToast()
+  const router = useRouter()
+  const searchParams = useSearchParams()
   const [loggedIn, setLoggedIn] = useState(false)
   const [email, setEmail] = useState<string | null>(null)
   const [accessToken, setAccessToken] = useState<string | null>(null)
@@ -115,6 +110,12 @@ export default function HotPage() {
   const [loadingComments, setLoadingComments] = useState(false)
   const [newComment, setNewComment] = useState('')
   const [submittingComment, setSubmittingComment] = useState(false)
+  
+  // 评论分页状态
+  const COMMENTS_PER_PAGE = 10
+  const [commentsOffset, setCommentsOffset] = useState(0)
+  const [hasMoreComments, setHasMoreComments] = useState(true)
+  const [loadingMoreComments, setLoadingMoreComments] = useState(false)
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -293,24 +294,55 @@ export default function HotPage() {
     return loggedIn ? hotPosts : hotPosts.slice(0, 3) // 未登录只显示前3条
   }, [loggedIn, hotPosts])
 
-  // 加载评论
+  // 加载评论（初始加载）
   const loadComments = useCallback(async (postId: string) => {
     try {
       setLoadingComments(true)
-      const response = await fetch(`/api/posts/${postId}/comments`)
+      setCommentsOffset(0)
+      setHasMoreComments(true)
+      
+      const response = await fetch(`/api/posts/${postId}/comments?limit=${COMMENTS_PER_PAGE}&offset=0`)
       const data = await response.json()
       if (response.ok) {
         setComments(data.comments || [])
+        setHasMoreComments(data.pagination?.has_more ?? false)
+        setCommentsOffset(COMMENTS_PER_PAGE)
       } else {
         setComments([])
+        setHasMoreComments(false)
       }
     } catch (err) {
       console.error('[HotPage] 加载评论失败:', err)
       setComments([])
+      setHasMoreComments(false)
     } finally {
       setLoadingComments(false)
     }
   }, [])
+
+  // 加载更多评论
+  const loadMoreComments = useCallback(async () => {
+    if (!openPost || loadingMoreComments || !hasMoreComments) return
+    
+    try {
+      setLoadingMoreComments(true)
+      const response = await fetch(`/api/posts/${openPost.id}/comments?limit=${COMMENTS_PER_PAGE}&offset=${commentsOffset}`)
+      const data = await response.json()
+      
+      if (response.ok) {
+        const newComments = data.comments || []
+        setComments(prev => [...prev, ...newComments])
+        setHasMoreComments(data.pagination?.has_more ?? false)
+        setCommentsOffset(prev => prev + COMMENTS_PER_PAGE)
+      } else {
+        setHasMoreComments(false)
+      }
+    } catch (err) {
+      console.error('[HotPage] 加载更多评论失败:', err)
+    } finally {
+      setLoadingMoreComments(false)
+    }
+  }, [openPost, commentsOffset, loadingMoreComments, hasMoreComments])
 
   // 检测文本是否是中文
   const isChineseText = useCallback((text: string) => {
@@ -365,6 +397,11 @@ export default function HotPage() {
     setShowingOriginal(true)
     loadComments(post.id)
 
+    // 更新 URL，添加 postId 参数
+    const params = new URLSearchParams(searchParams.toString())
+    params.set('post', post.id)
+    router.replace(`/hot?${params.toString()}`, { scroll: false })
+
     // 自动检测并翻译
     if (post.body) {
       const isChinese = isChineseText(post.body)
@@ -374,7 +411,44 @@ export default function HotPage() {
         translateContent(post.id, post.body, language)
       }
     }
-  }, [loadComments, language, isChineseText, translateContent])
+  }, [loadComments, language, isChineseText, translateContent, searchParams, router])
+
+  // 关闭帖子详情
+  const handleClosePost = useCallback(() => {
+    setOpenPost(null)
+    // 移除 URL 中的 postId 参数
+    const params = new URLSearchParams(searchParams.toString())
+    params.delete('post')
+    const newUrl = params.toString() ? `/hot?${params.toString()}` : '/hot'
+    router.replace(newUrl, { scroll: false })
+  }, [searchParams, router])
+
+  // 从 URL 参数恢复帖子详情弹窗状态
+  useEffect(() => {
+    const postId = searchParams.get('post')
+    if (postId && posts.length > 0 && !openPost) {
+      const post = posts.find(p => p.id === postId)
+      if (post) {
+        handleOpenPost(post)
+      }
+    }
+  }, [searchParams, posts, openPost, handleOpenPost])
+
+  // 语言切换时重新翻译当前打开的帖子
+  useEffect(() => {
+    if (openPost && openPost.body) {
+      const isChinese = isChineseText(openPost.body)
+      const needsTranslation = (language === 'en' && isChinese) || (language === 'zh' && !isChinese)
+      
+      // 重置翻译状态
+      setTranslatedContent(null)
+      setShowingOriginal(true)
+      
+      if (needsTranslation) {
+        translateContent(openPost.id, openPost.body, language)
+      }
+    }
+  }, [language]) // 只监听语言变化
 
   // 提交评论
   const submitComment = useCallback(async (postId: string) => {
@@ -567,7 +641,7 @@ export default function HotPage() {
       {/* 帖子详情弹窗 */}
       {openPost && (
         <div
-          onClick={() => setOpenPost(null)}
+          onClick={handleClosePost}
           style={{
             position: 'fixed',
             inset: 0,
@@ -592,7 +666,22 @@ export default function HotPage() {
             }}
           >
             <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-              <button onClick={() => setOpenPost(null)} style={{ border: 'none', background: 'transparent', color: tokens.colors.text.secondary, cursor: 'pointer', fontSize: 20 }}>
+              <button 
+                onClick={handleClosePost} 
+                style={{ 
+                  border: 'none', 
+                  background: 'transparent', 
+                  color: tokens.colors.text.secondary, 
+                  cursor: 'pointer', 
+                  fontSize: 20,
+                  width: 44,
+                  height: 44,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderRadius: 8,
+                }}
+              >
                 ×
               </button>
             </div>
@@ -768,6 +857,40 @@ export default function HotPage() {
                       </div>
                     </div>
                   ))}
+                  
+                  {/* 加载更多评论按钮 */}
+                  {hasMoreComments && (
+                    <button
+                      onClick={loadMoreComments}
+                      disabled={loadingMoreComments}
+                      style={{
+                        padding: '10px 16px',
+                        background: 'transparent',
+                        border: `1px solid ${tokens.colors.border.primary}`,
+                        borderRadius: 8,
+                        color: tokens.colors.text.secondary,
+                        fontSize: 13,
+                        fontWeight: 600,
+                        cursor: loadingMoreComments ? 'not-allowed' : 'pointer',
+                        opacity: loadingMoreComments ? 0.6 : 1,
+                        transition: 'all 0.2s ease',
+                        width: '100%',
+                        marginTop: 4,
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!loadingMoreComments) {
+                          e.currentTarget.style.borderColor = tokens.colors.accent.primary
+                          e.currentTarget.style.color = tokens.colors.accent.primary
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.borderColor = tokens.colors.border.primary
+                        e.currentTarget.style.color = tokens.colors.text.secondary
+                      }}
+                    >
+                      {loadingMoreComments ? '加载中...' : '加载更多评论'}
+                    </button>
+                  )}
                 </div>
               )}
             </div>

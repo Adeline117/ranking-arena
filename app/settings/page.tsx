@@ -11,6 +11,43 @@ import ExchangeConnectionManager from '@/app/components/ExchangeConnection'
 import { useToast } from '@/app/components/UI/Toast'
 import { useDialog } from '@/app/components/UI/Dialog'
 
+// 实时验证函数
+function validateHandle(handle: string): { valid: boolean; message: string } {
+  if (!handle) return { valid: true, message: '' }
+  if (handle.length < 3) {
+    return { valid: false, message: '用户名至少需要3个字符' }
+  }
+  if (!/^[a-zA-Z0-9_\u4e00-\u9fa5]+$/.test(handle)) {
+    return { valid: false, message: '用户名只能包含字母、数字、下划线和中文' }
+  }
+  return { valid: true, message: '' }
+}
+
+function validateEmail(email: string): { valid: boolean; message: string } {
+  if (!email) return { valid: true, message: '' }
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  if (!emailRegex.test(email)) {
+    return { valid: false, message: '请输入有效的邮箱地址' }
+  }
+  return { valid: true, message: '' }
+}
+
+function validatePassword(password: string): { valid: boolean; message: string } {
+  if (!password) return { valid: true, message: '' }
+  if (password.length < 6) {
+    return { valid: false, message: '密码至少需要6个字符' }
+  }
+  return { valid: true, message: '' }
+}
+
+function validatePasswordMatch(password: string, confirmPassword: string): { valid: boolean; message: string } {
+  if (!confirmPassword) return { valid: true, message: '' }
+  if (password !== confirmPassword) {
+    return { valid: false, message: '两次输入的密码不一致' }
+  }
+  return { valid: true, message: '' }
+}
+
 export default function SettingsPage() {
   const router = useRouter()
   const { showToast } = useToast()
@@ -64,6 +101,25 @@ export default function SettingsPage() {
   const [showFollowers, setShowFollowers] = useState(true)
   const [showFollowing, setShowFollowing] = useState(true)
   const [dmPermission, setDmPermission] = useState<'all' | 'mutual' | 'none'>('mutual')
+
+  // 实时验证状态
+  const [touchedFields, setTouchedFields] = useState<{
+    handle: boolean
+    newPassword: boolean
+    confirmPassword: boolean
+    newEmail: boolean
+  }>({ handle: false, newPassword: false, confirmPassword: false, newEmail: false })
+
+  // 验证结果
+  const handleValidation = validateHandle(handle)
+  const newPasswordValidation = validatePassword(newPassword)
+  const confirmPasswordValidation = validatePasswordMatch(newPassword, confirmNewPassword)
+  const newEmailValidation = validateEmail(newEmail)
+
+  // 标记字段为已触摸
+  const markTouched = (field: keyof typeof touchedFields) => {
+    setTouchedFields(prev => ({ ...prev, [field]: true }))
+  }
 
   // Check if there are unsaved changes
   const hasUnsavedChanges = useCallback(() => {
@@ -505,19 +561,37 @@ export default function SettingsPage() {
             type="text"
             value={handle}
             onChange={(e) => setHandle(e.target.value)}
+            onBlur={() => markTouched('handle')}
             placeholder="输入用户名"
             style={{
               width: '100%',
               padding: tokens.spacing[3],
               borderRadius: tokens.radius.md,
-              border: `1px solid ${tokens.colors.border.primary}`,
+              border: `1px solid ${touchedFields.handle && !handleValidation.valid ? '#ff7c7c' : tokens.colors.border.primary}`,
               background: tokens.colors.bg.primary,
               color: tokens.colors.text.primary,
               fontSize: tokens.typography.fontSize.base,
               fontFamily: tokens.typography.fontFamily.sans.join(', '),
               outline: 'none',
+              transition: 'border-color 0.2s ease',
             }}
           />
+          {/* 实时用户名验证 */}
+          {touchedFields.handle && handle && (
+            <Box style={{ marginTop: tokens.spacing[2], display: 'flex', alignItems: 'center', gap: tokens.spacing[1] }}>
+              {handleValidation.valid ? (
+                <Text size="xs" style={{ color: '#2fe57d' }}>✓ 用户名格式正确</Text>
+              ) : (
+                <Text size="xs" style={{ color: '#ff7c7c' }}>✕ {handleValidation.message}</Text>
+              )}
+            </Box>
+          )}
+          {/* 字符计数 */}
+          {handle && (
+            <Text size="xs" color="tertiary" style={{ marginTop: tokens.spacing[1] }}>
+              {handle.length}/3 字符（最少）
+            </Text>
+          )}
         </Box>
 
         {/* Bio Section */}
@@ -593,45 +667,74 @@ export default function SettingsPage() {
                 outline: 'none',
               }}
             />
-            <input
-              type="password"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              placeholder="新密码（至少6位）"
-              style={{
-                width: '100%',
-                padding: tokens.spacing[3],
-                borderRadius: tokens.radius.md,
-                border: `1px solid ${tokens.colors.border.primary}`,
-                background: tokens.colors.bg.primary,
-                color: tokens.colors.text.primary,
-                fontSize: tokens.typography.fontSize.base,
-                fontFamily: tokens.typography.fontFamily.sans.join(', '),
-                outline: 'none',
-              }}
-            />
-            <input
-              type="password"
-              value={confirmNewPassword}
-              onChange={(e) => setConfirmNewPassword(e.target.value)}
-              placeholder="确认新密码"
-              style={{
-                width: '100%',
-                padding: tokens.spacing[3],
-                borderRadius: tokens.radius.md,
-                border: `1px solid ${tokens.colors.border.primary}`,
-                background: tokens.colors.bg.primary,
-                color: tokens.colors.text.primary,
-                fontSize: tokens.typography.fontSize.base,
-                fontFamily: tokens.typography.fontFamily.sans.join(', '),
-                outline: 'none',
-              }}
-            />
+            <Box>
+              <input
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                onBlur={() => markTouched('newPassword')}
+                placeholder="新密码（至少6位）"
+                style={{
+                  width: '100%',
+                  padding: tokens.spacing[3],
+                  borderRadius: tokens.radius.md,
+                  border: `1px solid ${touchedFields.newPassword && !newPasswordValidation.valid ? '#ff7c7c' : tokens.colors.border.primary}`,
+                  background: tokens.colors.bg.primary,
+                  color: tokens.colors.text.primary,
+                  fontSize: tokens.typography.fontSize.base,
+                  fontFamily: tokens.typography.fontFamily.sans.join(', '),
+                  outline: 'none',
+                  transition: 'border-color 0.2s ease',
+                }}
+              />
+              {/* 实时密码验证 */}
+              {touchedFields.newPassword && newPassword && !newPasswordValidation.valid && (
+                <Text size="xs" style={{ color: '#ff7c7c', marginTop: tokens.spacing[1] }}>
+                  ✕ {newPasswordValidation.message}
+                </Text>
+              )}
+              {newPassword && (
+                <Text size="xs" color="tertiary" style={{ marginTop: tokens.spacing[1] }}>
+                  {newPassword.length}/6 字符
+                </Text>
+              )}
+            </Box>
+            <Box>
+              <input
+                type="password"
+                value={confirmNewPassword}
+                onChange={(e) => setConfirmNewPassword(e.target.value)}
+                onBlur={() => markTouched('confirmPassword')}
+                placeholder="确认新密码"
+                style={{
+                  width: '100%',
+                  padding: tokens.spacing[3],
+                  borderRadius: tokens.radius.md,
+                  border: `1px solid ${touchedFields.confirmPassword && !confirmPasswordValidation.valid ? '#ff7c7c' : tokens.colors.border.primary}`,
+                  background: tokens.colors.bg.primary,
+                  color: tokens.colors.text.primary,
+                  fontSize: tokens.typography.fontSize.base,
+                  fontFamily: tokens.typography.fontFamily.sans.join(', '),
+                  outline: 'none',
+                  transition: 'border-color 0.2s ease',
+                }}
+              />
+              {/* 确认密码匹配验证 */}
+              {touchedFields.confirmPassword && confirmNewPassword && (
+                <Box style={{ marginTop: tokens.spacing[1] }}>
+                  {confirmPasswordValidation.valid ? (
+                    <Text size="xs" style={{ color: '#2fe57d' }}>✓ 密码匹配</Text>
+                  ) : (
+                    <Text size="xs" style={{ color: '#ff7c7c' }}>✕ {confirmPasswordValidation.message}</Text>
+                  )}
+                </Box>
+              )}
+            </Box>
             <Box style={{ display: 'flex', justifyContent: 'flex-end' }}>
               <Button
                 variant="secondary"
                 onClick={handleChangePassword}
-                disabled={savingPassword}
+                disabled={savingPassword || !currentPassword || !newPasswordValidation.valid || !confirmPasswordValidation.valid}
               >
                 {savingPassword ? '保存中...' : '修改密码'}
               </Button>
@@ -653,31 +756,45 @@ export default function SettingsPage() {
           <Text size="sm" color="secondary" style={{ marginBottom: tokens.spacing[4] }}>
             当前邮箱：{email}
           </Text>
-          <Box style={{ display: 'flex', gap: tokens.spacing[3] }}>
-            <input
-              type="email"
-              value={newEmail}
-              onChange={(e) => setNewEmail(e.target.value)}
-              placeholder="输入新邮箱地址"
-              style={{
-                flex: 1,
-                padding: tokens.spacing[3],
-                borderRadius: tokens.radius.md,
-                border: `1px solid ${tokens.colors.border.primary}`,
-                background: tokens.colors.bg.primary,
-                color: tokens.colors.text.primary,
-                fontSize: tokens.typography.fontSize.base,
-                fontFamily: tokens.typography.fontFamily.sans.join(', '),
-                outline: 'none',
-              }}
-            />
-            <Button
-              variant="secondary"
-              onClick={handleChangeEmail}
-              disabled={savingEmail}
-            >
-              {savingEmail ? '发送中...' : '发送验证'}
-            </Button>
+          <Box style={{ display: 'flex', gap: tokens.spacing[3], flexDirection: 'column' }}>
+            <Box style={{ display: 'flex', gap: tokens.spacing[3] }}>
+              <input
+                type="email"
+                value={newEmail}
+                onChange={(e) => setNewEmail(e.target.value)}
+                onBlur={() => markTouched('newEmail')}
+                placeholder="输入新邮箱地址"
+                style={{
+                  flex: 1,
+                  padding: tokens.spacing[3],
+                  borderRadius: tokens.radius.md,
+                  border: `1px solid ${touchedFields.newEmail && !newEmailValidation.valid ? '#ff7c7c' : tokens.colors.border.primary}`,
+                  background: tokens.colors.bg.primary,
+                  color: tokens.colors.text.primary,
+                  fontSize: tokens.typography.fontSize.base,
+                  fontFamily: tokens.typography.fontFamily.sans.join(', '),
+                  outline: 'none',
+                  transition: 'border-color 0.2s ease',
+                }}
+              />
+              <Button
+                variant="secondary"
+                onClick={handleChangeEmail}
+                disabled={savingEmail || !newEmail || !newEmailValidation.valid}
+              >
+                {savingEmail ? '发送中...' : '发送验证'}
+              </Button>
+            </Box>
+            {/* 实时邮箱验证 */}
+            {touchedFields.newEmail && newEmail && (
+              <Box>
+                {newEmailValidation.valid ? (
+                  <Text size="xs" style={{ color: '#2fe57d' }}>✓ 邮箱格式正确</Text>
+                ) : (
+                  <Text size="xs" style={{ color: '#ff7c7c' }}>✕ {newEmailValidation.message}</Text>
+                )}
+              </Box>
+            )}
           </Box>
         </Box>
 

@@ -10,11 +10,17 @@ import {
   success,
   handleError,
   validateString,
+  checkRateLimit,
+  RateLimitPresets,
 } from '@/lib/api'
 
 type RouteContext = { params: Promise<{ id: string }> }
 
 export async function POST(request: NextRequest, context: RouteContext) {
+  // 限流：每分钟最多 30 次点赞操作
+  const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.standard)
+  if (rateLimitResponse) return rateLimitResponse
+
   try {
     const user = await requireAuth(request)
     const supabase = getSupabaseAdmin()
@@ -37,49 +43,71 @@ export async function POST(request: NextRequest, context: RouteContext) {
     let likeCount = 0
 
     if (existing) {
-      // 取消点赞
-      await supabase
+      // 取消点赞：使用原子操作
+      const { error: deleteError } = await supabase
         .from('comment_likes')
         .delete()
         .eq('id', existing.id)
       
-      // 更新评论的点赞数
-      const { data: comment } = await supabase
-        .from('comments')
-        .select('like_count')
-        .eq('id', commentId)
-        .single()
+      if (deleteError) throw deleteError
+
+      // 原子减少点赞数（使用 RPC 函数）
+      const { data: result, error: rpcError } = await supabase
+        .rpc('decrement_comment_like_count', { p_comment_id: commentId })
       
-      likeCount = Math.max(0, (comment?.like_count || 1) - 1)
-      
-      await supabase
-        .from('comments')
-        .update({ like_count: likeCount })
-        .eq('id', commentId)
+      if (rpcError) {
+        // 如果 RPC 函数不存在，回退到普通更新
+        console.warn('[comment-like] RPC 函数不可用，使用回退方案:', rpcError.message)
+        const { data: comment } = await supabase
+          .from('comments')
+          .select('like_count')
+          .eq('id', commentId)
+          .single()
+        
+        likeCount = Math.max(0, (comment?.like_count || 1) - 1)
+        
+        await supabase
+          .from('comments')
+          .update({ like_count: likeCount })
+          .eq('id', commentId)
+      } else {
+        likeCount = result ?? 0
+      }
       
       liked = false
     } else {
       // 添加点赞
-      await supabase
+      const { error: insertError } = await supabase
         .from('comment_likes')
         .insert({
           comment_id: commentId,
           user_id: user.id,
         })
       
-      // 更新评论的点赞数
-      const { data: comment } = await supabase
-        .from('comments')
-        .select('like_count')
-        .eq('id', commentId)
-        .single()
+      if (insertError) throw insertError
+
+      // 原子增加点赞数（使用 RPC 函数）
+      const { data: result, error: rpcError } = await supabase
+        .rpc('increment_comment_like_count', { p_comment_id: commentId })
       
-      likeCount = (comment?.like_count || 0) + 1
-      
-      await supabase
-        .from('comments')
-        .update({ like_count: likeCount })
-        .eq('id', commentId)
+      if (rpcError) {
+        // 如果 RPC 函数不存在，回退到普通更新
+        console.warn('[comment-like] RPC 函数不可用，使用回退方案:', rpcError.message)
+        const { data: comment } = await supabase
+          .from('comments')
+          .select('like_count')
+          .eq('id', commentId)
+          .single()
+        
+        likeCount = (comment?.like_count || 0) + 1
+        
+        await supabase
+          .from('comments')
+          .update({ like_count: likeCount })
+          .eq('id', commentId)
+      } else {
+        likeCount = result ?? 0
+      }
       
       liked = true
     }
