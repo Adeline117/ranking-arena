@@ -157,67 +157,30 @@ function GroupsContent() {
     })
   }, [])
 
+  // 加载交易员数据 - 使用统一的 API
   useEffect(() => {
     const load = async () => {
       setLoadingTraders(true)
       try {
-        // 获取最新的 captured_at (90D 数据)
-        const { data: latestSnapshot } = await supabase
-          .from('trader_snapshots')
-          .select('captured_at')
-          .eq('source', 'binance')
-          .order('captured_at', { ascending: false })
-          .limit(1)
-          .single()
-
-        if (!latestSnapshot) {
+        const response = await fetch('/api/traders?timeRange=90D')
+        const json = await response.json()
+        
+        if (json.success && json.data) {
+          // 取前10名
+          const top10 = json.data.slice(0, 10).map((item: any) => ({
+            id: item.id || item.source_trader_id,
+            handle: item.handle || item.source_trader_id,
+            roi: item.roi || 0,
+            pnl: item.pnl || 0,
+            win_rate: item.win_rate || 0,
+            max_drawdown: item.max_drawdown,
+            followers: item.followers || 0,
+            source: item.source || 'binance',
+          }))
+          setTraders(top10)
+        } else {
           setTraders([])
-          setLoadingTraders(false)
-          return
         }
-
-        // 查询 snapshots - 按 ROI 排序获取前10
-        const { data: snapshots } = await supabase
-          .from('trader_snapshots')
-          .select('source_trader_id, rank, roi, pnl, followers, win_rate, max_drawdown')
-          .eq('source', 'binance')
-          .eq('captured_at', latestSnapshot.captured_at)
-          .order('roi', { ascending: false })
-          .limit(10)
-
-        if (!snapshots || snapshots.length === 0) {
-          setTraders([])
-          setLoadingTraders(false)
-          return
-        }
-
-        // 查询 handles
-        const traderIds = snapshots.map((s: any) => s.source_trader_id)
-        const { data: sources } = await supabase
-          .from('trader_sources')
-          .select('source_trader_id, handle')
-          .eq('source', 'binance')
-          .in('source_trader_id', traderIds)
-
-        const handleMap = new Map()
-        if (sources) {
-          sources.forEach((s: any) => {
-            handleMap.set(s.source_trader_id, s.handle)
-          })
-        }
-
-        const tradersData: Trader[] = snapshots.map((item: any) => ({
-          id: item.source_trader_id,
-          handle: handleMap.get(item.source_trader_id) || item.source_trader_id,
-          roi: item.roi || 0,
-          pnl: item.pnl || 10000,
-          win_rate: item.win_rate || 0,
-          max_drawdown: item.max_drawdown,
-          followers: item.followers || 0,
-          source: 'binance',
-        }))
-
-        setTraders(tradersData)
       } catch (error) {
         console.error('加载排行榜失败:', error)
         setTraders([])
