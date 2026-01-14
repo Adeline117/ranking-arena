@@ -16,6 +16,8 @@ export interface Comment {
   // 关联信息
   author_handle?: string
   author_avatar_url?: string
+  // 用户状态
+  user_liked?: boolean
   // 嵌套回复
   replies?: Comment[]
 }
@@ -32,9 +34,9 @@ export interface CreateCommentInput {
 export async function getPostComments(
   supabase: SupabaseClient,
   postId: string,
-  options: { limit?: number; offset?: number } = {}
+  options: { limit?: number; offset?: number; userId?: string } = {}
 ): Promise<Comment[]> {
-  const { limit = 50, offset = 0 } = options
+  const { limit = 50, offset = 0, userId } = options
 
   // 获取顶级评论
   const { data: comments, error } = await supabase
@@ -77,6 +79,23 @@ export async function getPostComments(
     })
   }
 
+  // 获取用户对评论的点赞状态
+  const userLikedMap = new Map<string, boolean>()
+  if (userId) {
+    const allCommentIds = allComments.map(c => c.id)
+    const { data: likes } = await supabase
+      .from('comment_likes')
+      .select('comment_id')
+      .eq('user_id', userId)
+      .in('comment_id', allCommentIds)
+    
+    if (likes) {
+      likes.forEach((like: { comment_id: string }) => {
+        userLikedMap.set(like.comment_id, true)
+      })
+    }
+  }
+
   // 构建回复映射
   const repliesMap = new Map<string, Comment[]>()
   if (replies) {
@@ -93,6 +112,7 @@ export async function getPostComments(
         updated_at: reply.updated_at,
         author_handle: profile?.handle,
         author_avatar_url: profile?.avatar_url || undefined,
+        user_liked: userLikedMap.get(reply.id) || false,
       }
 
       const parentReplies = repliesMap.get(reply.parent_id) || []
@@ -115,6 +135,7 @@ export async function getPostComments(
       updated_at: c.updated_at,
       author_handle: profile?.handle,
       author_avatar_url: profile?.avatar_url || undefined,
+      user_liked: userLikedMap.get(c.id) || false,
       replies: repliesMap.get(c.id) || [],
     }
   })

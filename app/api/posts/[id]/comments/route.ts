@@ -28,7 +28,17 @@ export async function GET(request: NextRequest, context: RouteContext) {
     const offset = validateNumber(searchParams.get('offset'), { min: 0 }) ?? 0
 
     const supabase = getSupabaseAdmin()
-    const comments = await getPostComments(supabase, id, { limit, offset })
+    
+    // 尝试获取当前用户ID（用于获取点赞状态）
+    let userId: string | undefined
+    const authHeader = request.headers.get('Authorization')
+    if (authHeader?.startsWith('Bearer ')) {
+      const token = authHeader.slice(7)
+      const { data: { user } } = await supabase.auth.getUser(token)
+      userId = user?.id
+    }
+    
+    const comments = await getPostComments(supabase, id, { limit, offset, userId })
 
     return successWithPagination(
       { comments },
