@@ -12,135 +12,12 @@ import Card from '@/app/components/UI/Card'
 import { Box, Text, Button } from '@/app/components/Base'
 import type { Trader } from '@/app/components/Features/RankingTable'
 import { useLanguage } from '@/app/components/Utils/LanguageProvider'
-import { ThumbsUpIcon, CommentIcon } from '@/app/components/Icons'
 
 type Group = {
   id: string
   name: string
   avatar_url?: string | null
   member_count?: number | null
-}
-
-type HotPost = {
-  id: string
-  title: string
-  author_handle: string
-  like_count: number
-  comment_count: number
-  hot_score: number
-}
-
-// 热门动态推荐列表组件
-function HotPostsList() {
-  const [posts, setPosts] = useState<HotPost[]>([])
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('posts')
-          .select('id, title, author_handle, like_count, comment_count, hot_score')
-          .order('hot_score', { ascending: false, nullsFirst: false })
-          .order('like_count', { ascending: false, nullsFirst: false })
-          .limit(5)
-
-        if (error) {
-          console.error('加载热门动态失败:', error)
-        }
-        setPosts(data || [])
-      } catch (err) {
-        console.error('Error:', err)
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    load()
-  }, [])
-
-  if (loading) {
-    return (
-      <Text size="sm" color="tertiary" style={{ padding: tokens.spacing[4], textAlign: 'center' }}>
-        加载中...
-      </Text>
-    )
-  }
-
-  if (posts.length === 0) {
-    return (
-      <Text size="sm" color="tertiary" style={{ padding: tokens.spacing[4], textAlign: 'center' }}>
-        暂无热门动态
-      </Text>
-    )
-  }
-
-  return (
-    <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
-      {posts.map((post, index) => (
-        <Link
-          key={post.id}
-          href={`/groups?post=${post.id}`}
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            padding: tokens.spacing[2],
-            borderRadius: tokens.radius.md,
-            background: tokens.colors.bg.secondary,
-            border: `1px solid ${tokens.colors.border.primary}`,
-            textDecoration: 'none',
-            color: tokens.colors.text.primary,
-            transition: `all ${tokens.transition.base}`,
-            cursor: 'pointer',
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = tokens.colors.bg.tertiary || tokens.colors.bg.hover
-            e.currentTarget.style.borderColor = '#8b6fa8'
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = tokens.colors.bg.secondary
-            e.currentTarget.style.borderColor = tokens.colors.border.primary
-          }}
-        >
-          <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], marginBottom: 4 }}>
-            <Text 
-              size="xs" 
-              weight="black" 
-              style={{ 
-                color: index < 3 ? '#FFB020' : tokens.colors.text.tertiary,
-                minWidth: 20,
-              }}
-            >
-              #{index + 1}
-            </Text>
-            <Text size="xs" color="secondary" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              @{post.author_handle}
-            </Text>
-          </Box>
-          <Text 
-            size="sm" 
-            weight="semibold" 
-            style={{ 
-              overflow: 'hidden', 
-              textOverflow: 'ellipsis', 
-              whiteSpace: 'nowrap',
-              marginBottom: 4,
-            }}
-          >
-            {post.title}
-          </Text>
-          <Box style={{ display: 'flex', gap: tokens.spacing[3], fontSize: 11, color: tokens.colors.text.tertiary }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-              <ThumbsUpIcon size={10} /> {post.like_count || 0}
-            </span>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-              <CommentIcon size={10} /> {post.comment_count || 0}
-            </span>
-          </Box>
-        </Link>
-      ))}
-    </Box>
-  )
 }
 
 function GroupsList() {
@@ -373,18 +250,8 @@ export default function GroupsPage() {
             </Card>
           </Box>
 
-          {/* 右：小组推荐和热门动态 */}
+          {/* 右：小组推荐 */}
           <Box as="section" style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}>
-            {/* 热门动态推荐 */}
-            <Card title="🔥 热门动态">
-              <HotPostsList />
-              <Link href="/hot" style={{ display: 'block', marginTop: tokens.spacing[3], textAlign: 'center' }}>
-                <Text size="xs" color="secondary" style={{ color: '#8b6fa8' }}>
-                  查看更多热门 →
-                </Text>
-              </Link>
-            </Card>
-
             {/* 小组推荐 */}
             <Card title={t('groupRecommendations')}>
               <Text size="sm" color="secondary" style={{ marginBottom: tokens.spacing[3] }}>
