@@ -165,9 +165,11 @@ function GroupsContent() {
         const response = await fetch('/api/traders?timeRange=90D')
         const json = await response.json()
         
-        if (json.success && json.data) {
+        // API 返回格式是 { traders: [...] }
+        const tradersData = json.traders || json.data || []
+        if (tradersData.length > 0) {
           // 取前10名
-          const top10 = json.data.slice(0, 10).map((item: any) => ({
+          const top10 = tradersData.slice(0, 10).map((item: any) => ({
             id: item.id || item.source_trader_id,
             handle: item.handle || item.source_trader_id,
             roi: item.roi || 0,
