@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Suspense } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
@@ -36,7 +36,7 @@ import {
 
 type TabKey = 'overview' | 'stats' | 'portfolio'
 
-export default function UserHomePage(props: { params: { handle: string } | Promise<{ handle: string }> }) {
+function UserHomeContent(props: { params: { handle: string } | Promise<{ handle: string }> }) {
   const searchParams = useSearchParams()
   const router = useRouter()
   const pathname = usePathname()
@@ -522,6 +522,21 @@ export default function UserHomePage(props: { params: { handle: string } | Promi
         {activeTab === 'portfolio' && <PortfolioTable items={portfolio} />}
       </Box>
     </Box>
+  )
+}
+
+export default function UserHomePage(props: { params: { handle: string } | Promise<{ handle: string }> }) {
+  return (
+    <Suspense fallback={
+      <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
+        <TopNav email={null} />
+        <Box style={{ maxWidth: 1200, margin: '0 auto', padding: tokens.spacing[6] }}>
+          <RankingSkeleton />
+        </Box>
+      </Box>
+    }>
+      <UserHomeContent {...props} />
+    </Suspense>
   )
 }
 
