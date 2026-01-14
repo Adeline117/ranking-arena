@@ -7,6 +7,8 @@ import { tokens } from '@/lib/design-tokens'
 import { supabase } from '@/lib/supabase/client'
 import { Box, Text, Button } from '../Base'
 import FollowButton from '../UI/FollowButton'
+import UserFollowButton from '../UI/UserFollowButton'
+import MessageButton from '../UI/MessageButton'
 import { getAvatarGradient, getAvatarInitial } from '@/lib/utils/avatar'
 
 /**
@@ -208,8 +210,27 @@ export default function TraderAboutCard({
           编辑个人资料
         </Button>
       ) : traderId && userId ? (
-        <Box style={{ marginBottom: tokens.spacing[4] }}>
-          <FollowButton traderId={traderId} userId={userId} />
+        <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2], marginBottom: tokens.spacing[4] }}>
+          {/* 如果是注册用户，使用用户关注按钮 */}
+          {isRegistered ? (
+            <>
+              <UserFollowButton 
+                targetUserId={traderId} 
+                currentUserId={userId} 
+                fullWidth 
+                size="lg"
+              />
+              <MessageButton 
+                targetUserId={traderId} 
+                currentUserId={userId} 
+                fullWidth 
+                size="md"
+              />
+            </>
+          ) : (
+            /* 如果是交易员（非注册用户），使用交易员关注按钮 */
+            <FollowButton traderId={traderId} userId={userId} />
+          )}
         </Box>
       ) : null}
 

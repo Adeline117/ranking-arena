@@ -124,7 +124,7 @@ function AvatarLink({ handle, avatarUrl }: { handle?: string | null; avatarUrl?:
 }
 
 export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?: string; authorHandle?: string; initialPostId?: string | null } = {}) {
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
   const { showToast } = useToast()
   const { showDangerConfirm } = useDialog()
   const [posts, setPosts] = useState<Post[]>([])
@@ -148,6 +148,11 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
   const [submittingReply, setSubmittingReply] = useState(false)
   const [commentLikeLoading, setCommentLikeLoading] = useState<Record<string, boolean>>({})
   const [expandedReplies, setExpandedReplies] = useState<Record<string, boolean>>({})
+  // 翻译相关状态
+  const [translatedContent, setTranslatedContent] = useState<string | null>(null)
+  const [showingOriginal, setShowingOriginal] = useState(true)
+  const [translating, setTranslating] = useState(false)
+  const [translationCache, setTranslationCache] = useState<Record<string, string>>({})
 
   // 获取用户 token 和 ID
   useEffect(() => {
@@ -221,7 +226,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
         // 延迟加载评论避免循环依赖
         fetch(`/api/posts/${postToOpen.id}/comments`)
           .then(res => res.json())
-          .then(data => { if (data.comments) setComments(data.comments) })
+          .then(data => { if (data.success && data.data?.comments) setComments(data.data.comments) })
           .catch(err => console.error('[PostFeed] 加载评论失败:', err))
       } else {
         // 帖子不在当前列表中，单独加载
@@ -279,12 +284,13 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
         headers['Authorization'] = `Bearer ${accessToken}`
       }
       const response = await fetch(`/api/posts/${postId}/comments`, { headers })
-      const data = await response.json()
+      const json = await response.json()
 
-      if (response.ok) {
-        setComments(data.comments || [])
+      if (response.ok && json.success) {
+        // API 返回格式：{ success: true, data: { comments: [...] } }
+        setComments(json.data?.comments || [])
       } else {
-        console.error('[PostFeed] 加载评论失败:', data.error)
+        console.error('[PostFeed] 加载评论失败:', json.error)
         setComments([])
       }
     } catch (err) {
@@ -731,12 +737,71 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
     }
   }, [accessToken, openPost?.id, showDangerConfirm, showToast])
 
+  // 检测文本是否是中文
+  const isChineseText = useCallback((text: string) => {
+    if (!text) return false
+    const chineseRegex = /[\u4e00-\u9fa5]/g
+    const chineseMatches = text.match(chineseRegex)
+    const chineseRatio = chineseMatches ? chineseMatches.length / text.length : 0
+    return chineseRatio > 0.1 // 超过10%是中文字符
+  }, [])
+
+  // 翻译帖子内容
+  const translateContent = useCallback(async (postId: string, content: string, targetLang: 'zh' | 'en') => {
+    const cacheKey = `${postId}-${targetLang}`
+    
+    // 检查缓存
+    if (translationCache[cacheKey]) {
+      setTranslatedContent(translationCache[cacheKey])
+      setShowingOriginal(false)
+      return
+    }
+
+    setTranslating(true)
+    try {
+      const response = await fetch('/api/translate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: content, targetLang }),
+      })
+      const data = await response.json()
+      
+      if (response.ok && data.success && data.data?.translatedText) {
+        const translated = data.data.translatedText
+        setTranslatedContent(translated)
+        setShowingOriginal(false)
+        // 缓存翻译结果
+        setTranslationCache(prev => ({ ...prev, [cacheKey]: translated }))
+      } else {
+        console.error('[PostFeed] 翻译失败:', data.error)
+        showToast(data.error || '翻译失败', 'error')
+      }
+    } catch (err) {
+      console.error('[PostFeed] 翻译出错:', err)
+      showToast('翻译服务出错', 'error')
+    } finally {
+      setTranslating(false)
+    }
+  }, [translationCache, showToast])
+
   // 打开帖子详情
   const handleOpenPost = useCallback((post: Post) => {
     setOpenPost(post)
     setComments([])
+    setTranslatedContent(null)
+    setShowingOriginal(true)
     loadComments(post.id)
-  }, [loadComments])
+
+    // 自动检测并翻译
+    if (post.content) {
+      const isChinese = isChineseText(post.content)
+      const needsTranslation = (language === 'en' && isChinese) || (language === 'zh' && !isChinese)
+      
+      if (needsTranslation) {
+        translateContent(post.id, post.content, language)
+      }
+    }
+  }, [loadComments, language, isChineseText, translateContent])
 
   if (loading) {
     return (
@@ -949,8 +1014,47 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
           </div>
 
           <div translate="no" style={{ marginTop: 12, fontSize: 14, color: tokens.colors.text.primary, lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>
-            {renderContentWithLinks(openPost.content || '')}
+            {showingOriginal 
+              ? renderContentWithLinks(openPost.content || '')
+              : renderContentWithLinks(translatedContent || openPost.content || '')
+            }
           </div>
+
+          {/* 翻译/原文切换按钮 */}
+          {(translatedContent || translating) && (
+            <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <button
+                onClick={() => setShowingOriginal(!showingOriginal)}
+                disabled={translating}
+                style={{
+                  padding: '4px 10px',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  border: `1px solid ${tokens.colors.border.primary}`,
+                  borderRadius: 6,
+                  background: tokens.colors.bg.tertiary,
+                  color: tokens.colors.text.secondary,
+                  cursor: translating ? 'wait' : 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 4,
+                }}
+              >
+                {translating ? (
+                  <>⏳ {language === 'zh' ? '翻译中...' : 'Translating...'}</>
+                ) : showingOriginal ? (
+                  <>🌐 {language === 'zh' ? '查看翻译' : 'View Translation'}</>
+                ) : (
+                  <>📄 {language === 'zh' ? '查看原文' : 'View Original'}</>
+                )}
+              </button>
+              {!showingOriginal && (
+                <span style={{ fontSize: 11, color: tokens.colors.text.tertiary }}>
+                  {language === 'zh' ? '由 AI 翻译' : 'Translated by AI'}
+                </span>
+              )}
+            </div>
+          )}
 
           <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${tokens.colors.border.secondary}`, display: 'flex', gap: 14, flexWrap: 'wrap' }}>
             <Action
