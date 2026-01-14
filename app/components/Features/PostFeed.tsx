@@ -174,9 +174,13 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
 
       if (response.ok) {
         setComments(data.comments || [])
+      } else {
+        console.error('[PostFeed] 加载评论失败:', data.error)
+        setComments([])
       }
     } catch (err) {
       console.error('[PostFeed] 加载评论失败:', err)
+      setComments([])
     } finally {
       setLoadingComments(false)
     }
@@ -369,8 +373,19 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
       const json = await response.json()
 
       if (response.ok && json.success) {
-        // 从列表中移除评论
-        setComments(prev => prev.filter(c => c.id !== commentId))
+        // 从列表中移除评论（包括顶级评论和嵌套回复）
+        setComments(prev => prev.map(c => {
+          // 如果是顶级评论被删除，直接过滤
+          if (c.id === commentId) return null
+          // 如果是嵌套回复被删除，过滤掉回复
+          if (c.replies && c.replies.length > 0) {
+            return {
+              ...c,
+              replies: c.replies.filter(r => r.id !== commentId)
+            }
+          }
+          return c
+        }).filter(Boolean) as Comment[])
         
         // 更新评论计数
         setPosts(prev => prev.map(p => {
