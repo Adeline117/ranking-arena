@@ -17,6 +17,36 @@ interface UploadedImage {
 const TITLE_MAX_LENGTH = 100
 const CONTENT_MAX_LENGTH = 10000
 
+// 链接解析函数
+function renderContentWithLinks(text: string) {
+  if (!text) return null
+  const urlRegex = /(https?:\/\/[^\s<>"{}|\\^`[\]]+)/g
+  const parts = text.split(urlRegex)
+  
+  return parts.map((part, index) => {
+    if (urlRegex.test(part)) {
+      urlRegex.lastIndex = 0
+      return (
+        <a
+          key={index}
+          href={part}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            color: '#8b6fa8',
+            textDecoration: 'underline',
+            wordBreak: 'break-all',
+          }}
+        >
+          {part}
+        </a>
+      )
+    }
+    return part
+  })
+}
+
 export default function EditPostPage() {
   const params = useParams<{ id: string }>()
   const postId = params.id as string
@@ -73,7 +103,9 @@ export default function EditPostPage() {
         setOriginalPost(post)
         setTitle(post.title || '')
         setContent(post.content || '')
-        setImages((post.image_urls || []).map((url: string) => ({ url, fileName: url.split('/').pop() || '' })))
+        // 兼容 images 和 image_urls 两种字段名
+        const imageUrls = post.images || post.image_urls || []
+        setImages(imageUrls.map((url: string) => ({ url, fileName: url.split('/').pop() || '' })))
       } catch (error) {
         console.error('Error loading post:', error)
         showToast('加载帖子失败', 'error')
@@ -193,7 +225,7 @@ export default function EditPostPage() {
         .update({
           title,
           content: finalContent,
-          image_urls: images.map(img => img.url),
+          images: images.map(img => img.url),
           updated_at: new Date().toISOString(),
         })
         .eq('id', postId)
@@ -287,22 +319,45 @@ export default function EditPostPage() {
                 <Text size="sm" weight="bold">
                   内容
                 </Text>
-                <button
-                  type="button"
-                  onClick={() => setShowPreview(!showPreview)}
-                  style={{
-                    padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
-                    borderRadius: tokens.radius.sm,
-                    border: `1px solid ${tokens.colors.border.primary}`,
-                    background: showPreview ? tokens.colors.accent.primary : 'transparent',
-                    color: showPreview ? '#fff' : tokens.colors.text.secondary,
-                    fontSize: tokens.typography.fontSize.xs,
-                    cursor: 'pointer',
-                    fontWeight: 700,
-                  }}
-                >
-                  {showPreview ? '编辑' : '预览'}
-                </button>
+                <Box style={{ display: 'flex', borderRadius: tokens.radius.md, overflow: 'hidden', border: `1px solid ${tokens.colors.border.primary}` }}>
+                  <button
+                    type="button"
+                    onClick={() => setShowPreview(false)}
+                    style={{
+                      padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
+                      border: 'none',
+                      background: !showPreview ? '#8b6fa8' : 'transparent',
+                      color: !showPreview ? '#fff' : tokens.colors.text.secondary,
+                      fontSize: tokens.typography.fontSize.xs,
+                      cursor: 'pointer',
+                      fontWeight: 700,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4,
+                    }}
+                  >
+                    ✏️ 编辑
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowPreview(true)}
+                    style={{
+                      padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
+                      border: 'none',
+                      borderLeft: `1px solid ${tokens.colors.border.primary}`,
+                      background: showPreview ? '#8b6fa8' : 'transparent',
+                      color: showPreview ? '#fff' : tokens.colors.text.secondary,
+                      fontSize: tokens.typography.fontSize.xs,
+                      cursor: 'pointer',
+                      fontWeight: 700,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4,
+                    }}
+                  >
+                    👁️ 预览
+                  </button>
+                </Box>
               </Box>
               <Text 
                 size="xs" 
@@ -319,20 +374,37 @@ export default function EditPostPage() {
                   minHeight: 288,
                   padding: tokens.spacing[4],
                   borderRadius: tokens.radius.md,
-                  border: `1px solid ${tokens.colors.border.primary}`,
-                  background: tokens.colors.bg.secondary,
+                  border: `2px solid #8b6fa8`,
+                  background: `linear-gradient(135deg, rgba(139, 111, 168, 0.05) 0%, rgba(139, 111, 168, 0.1) 100%)`,
                   color: tokens.colors.text.primary,
                   fontSize: tokens.typography.fontSize.base,
                   lineHeight: 1.6,
                   whiteSpace: 'pre-wrap',
                   wordBreak: 'break-word',
+                  position: 'relative',
                 }}
               >
-                {content || <Text color="tertiary">预览内容将显示在这里...</Text>}
+                {/* 预览模式标签 */}
+                <Box
+                  style={{
+                    position: 'absolute',
+                    top: -12,
+                    left: 12,
+                    background: '#8b6fa8',
+                    color: '#fff',
+                    padding: '2px 10px',
+                    borderRadius: 999,
+                    fontSize: 11,
+                    fontWeight: 700,
+                  }}
+                >
+                  预览模式
+                </Box>
+                {content ? renderContentWithLinks(content) : <Text color="tertiary">预览内容将显示在这里...</Text>}
               </Box>
             ) : (
               <textarea
-                placeholder="输入内容..."
+                placeholder="输入内容... (链接会自动变为可点击)"
                 value={content}
                 onChange={(e) => setContent(e.target.value.slice(0, CONTENT_MAX_LENGTH))}
                 maxLength={CONTENT_MAX_LENGTH}

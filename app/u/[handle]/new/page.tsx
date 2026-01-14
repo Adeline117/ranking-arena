@@ -17,6 +17,36 @@ const TITLE_MAX_LENGTH = 100
 const CONTENT_MAX_LENGTH = 10000
 const DRAFT_KEY_PREFIX = 'post_draft_'
 
+// 链接解析函数
+function renderContentWithLinks(text: string) {
+  if (!text) return null
+  const urlRegex = /(https?:\/\/[^\s<>"{}|\\^`[\]]+)/g
+  const parts = text.split(urlRegex)
+  
+  return parts.map((part, index) => {
+    if (urlRegex.test(part)) {
+      urlRegex.lastIndex = 0 // Reset regex state
+      return (
+        <a
+          key={index}
+          href={part}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            color: '#8b6fa8',
+            textDecoration: 'underline',
+            wordBreak: 'break-all',
+          }}
+        >
+          {part}
+        </a>
+      )
+    }
+    return part
+  })
+}
+
 export default function NewPostPage() {
   const params = useParams<{ handle: string }>()
   const handle = params.handle as string
@@ -33,6 +63,8 @@ export default function NewPostPage() {
   const [uploading, setUploading] = useState(false)
   const [showPreview, setShowPreview] = useState(false)
   const [draftSaved, setDraftSaved] = useState(false)
+  // 投票相关状态
+  const [pollEnabled, setPollEnabled] = useState(false)
 
   const draftKey = `${DRAFT_KEY_PREFIX}${handle}`
 
@@ -49,11 +81,12 @@ export default function NewPostPage() {
       const draft = localStorage.getItem(draftKey)
       if (draft) {
         try {
-          const { title: draftTitle, content: draftContent, images: draftImages } = JSON.parse(draft)
+          const { title: draftTitle, content: draftContent, images: draftImages, pollEnabled: draftPollEnabled } = JSON.parse(draft)
           if (draftTitle || draftContent) {
             setTitle(draftTitle || '')
             setContent(draftContent || '')
             setImages(draftImages || [])
+            setPollEnabled(draftPollEnabled || false)
             showToast('已恢复草稿', 'info')
           }
         } catch (e) {
@@ -69,7 +102,7 @@ export default function NewPostPage() {
     
     const saveTimer = setTimeout(() => {
       if (title.trim() || content.trim()) {
-        localStorage.setItem(draftKey, JSON.stringify({ title, content, images }))
+        localStorage.setItem(draftKey, JSON.stringify({ title, content, images, pollEnabled }))
         setDraftSaved(true)
         // Reset saved indicator after 2 seconds
         setTimeout(() => setDraftSaved(false), 2000)
@@ -77,7 +110,7 @@ export default function NewPostPage() {
     }, 1000) // Save 1 second after user stops typing
 
     return () => clearTimeout(saveTimer)
-  }, [title, content, images, handle, draftKey])
+  }, [title, content, images, pollEnabled, handle, draftKey])
 
   // Clear draft after successful publish
   const clearDraft = useCallback(() => {
@@ -210,10 +243,12 @@ export default function NewPostPage() {
         author_handle: handle,
         // group_id 为 null，表示这是个人动态
         author_id: userId,
-        image_urls: images.map(img => img.url),
+        images: images.map(img => img.url),
+        poll_enabled: pollEnabled,
       })
 
       if (error) {
+        console.error('创建帖子失败:', error)
         showToast(error.message, 'error')
         return
       }
@@ -223,6 +258,7 @@ export default function NewPostPage() {
       showToast('发布成功！', 'success')
       router.push(`/u/${handle}`)
     } catch (error: any) {
+      console.error('发布异常:', error)
       showToast(error?.message || '发布失败', 'error')
     } finally {
       setLoading(false)
@@ -279,22 +315,45 @@ export default function NewPostPage() {
                 <Text size="sm" weight="bold">
                   内容
                 </Text>
-                <button
-                  type="button"
-                  onClick={() => setShowPreview(!showPreview)}
-                  style={{
-                    padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
-                    borderRadius: tokens.radius.sm,
-                    border: `1px solid ${tokens.colors.border.primary}`,
-                    background: showPreview ? tokens.colors.accent.primary : 'transparent',
-                    color: showPreview ? '#fff' : tokens.colors.text.secondary,
-                    fontSize: tokens.typography.fontSize.xs,
-                    cursor: 'pointer',
-                    fontWeight: 700,
-                  }}
-                >
-                  {showPreview ? '编辑' : '预览'}
-                </button>
+                <Box style={{ display: 'flex', borderRadius: tokens.radius.md, overflow: 'hidden', border: `1px solid ${tokens.colors.border.primary}` }}>
+                  <button
+                    type="button"
+                    onClick={() => setShowPreview(false)}
+                    style={{
+                      padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
+                      border: 'none',
+                      background: !showPreview ? '#8b6fa8' : 'transparent',
+                      color: !showPreview ? '#fff' : tokens.colors.text.secondary,
+                      fontSize: tokens.typography.fontSize.xs,
+                      cursor: 'pointer',
+                      fontWeight: 700,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4,
+                    }}
+                  >
+                    ✏️ 编辑
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowPreview(true)}
+                    style={{
+                      padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
+                      border: 'none',
+                      borderLeft: `1px solid ${tokens.colors.border.primary}`,
+                      background: showPreview ? '#8b6fa8' : 'transparent',
+                      color: showPreview ? '#fff' : tokens.colors.text.secondary,
+                      fontSize: tokens.typography.fontSize.xs,
+                      cursor: 'pointer',
+                      fontWeight: 700,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4,
+                    }}
+                  >
+                    👁️ 预览
+                  </button>
+                </Box>
                 {draftSaved && (
                   <Text size="xs" color="tertiary" style={{ color: '#2fe57d' }}>
                     ✓ 草稿已保存
@@ -316,20 +375,37 @@ export default function NewPostPage() {
                   minHeight: 288,
                   padding: tokens.spacing[4],
                   borderRadius: tokens.radius.md,
-                  border: `1px solid ${tokens.colors.border.primary}`,
-                  background: tokens.colors.bg.secondary,
+                  border: `2px solid #8b6fa8`,
+                  background: `linear-gradient(135deg, rgba(139, 111, 168, 0.05) 0%, rgba(139, 111, 168, 0.1) 100%)`,
                   color: tokens.colors.text.primary,
                   fontSize: tokens.typography.fontSize.base,
                   lineHeight: 1.6,
                   whiteSpace: 'pre-wrap',
                   wordBreak: 'break-word',
+                  position: 'relative',
                 }}
               >
-                {content || <Text color="tertiary">预览内容将显示在这里...</Text>}
+                {/* 预览模式标签 */}
+                <Box
+                  style={{
+                    position: 'absolute',
+                    top: -12,
+                    left: 12,
+                    background: '#8b6fa8',
+                    color: '#fff',
+                    padding: '2px 10px',
+                    borderRadius: 999,
+                    fontSize: 11,
+                    fontWeight: 700,
+                  }}
+                >
+                  预览模式
+                </Box>
+                {content ? renderContentWithLinks(content) : <Text color="tertiary">预览内容将显示在这里...</Text>}
               </Box>
             ) : (
               <textarea
-                placeholder="输入内容... (支持使用 @用户名 提及其他用户)"
+                placeholder="输入内容... (支持使用 @用户名 提及其他用户，链接将自动变为可点击)"
                 value={content}
                 onChange={(e) => setContent(e.target.value.slice(0, CONTENT_MAX_LENGTH))}
                 maxLength={CONTENT_MAX_LENGTH}
@@ -350,8 +426,57 @@ export default function NewPostPage() {
               />
             )}
             <Text size="xs" color="tertiary" style={{ marginTop: tokens.spacing[1] }}>
-              提示：使用 @用户名 可以提及其他用户
+              提示：使用 @用户名 可以提及其他用户，链接会自动变为可点击
             </Text>
+          </Box>
+
+          {/* 投票功能开关 */}
+          <Box
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: tokens.spacing[3],
+              padding: tokens.spacing[4],
+              borderRadius: tokens.radius.md,
+              border: `1px solid ${pollEnabled ? '#8b6fa8' : tokens.colors.border.primary}`,
+              background: pollEnabled ? 'rgba(139, 111, 168, 0.1)' : tokens.colors.bg.secondary,
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+            }}
+            onClick={() => setPollEnabled(!pollEnabled)}
+          >
+            <Box
+              style={{
+                width: 44,
+                height: 24,
+                borderRadius: 12,
+                background: pollEnabled ? '#8b6fa8' : tokens.colors.border.primary,
+                position: 'relative',
+                transition: 'background 0.2s ease',
+              }}
+            >
+              <Box
+                style={{
+                  width: 20,
+                  height: 20,
+                  borderRadius: '50%',
+                  background: '#fff',
+                  position: 'absolute',
+                  top: 2,
+                  left: pollEnabled ? 22 : 2,
+                  transition: 'left 0.2s ease',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                }}
+              />
+            </Box>
+            <Box>
+              <Text size="sm" weight="bold" style={{ color: pollEnabled ? '#8b6fa8' : tokens.colors.text.primary }}>
+                📊 开启投票
+              </Text>
+              <Text size="xs" color="tertiary">
+                让读者投票：看涨 / 看跌 / 观望
+              </Text>
+            </Box>
           </Box>
 
           {/* 图片上传区域 */}
