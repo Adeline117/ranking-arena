@@ -10,6 +10,38 @@ import { Box, Text, Button } from '@/app/components/Base'
 import { useLanguage } from '@/app/components/Utils/LanguageProvider'
 import { ThumbsUpIcon, ThumbsDownIcon, CommentIcon } from '@/app/components/Icons'
 
+const ARENA_PURPLE = '#8b6fa8'
+
+// 链接解析函数 - 将文本中的URL转换为可点击链接
+function renderContentWithLinks(text: string) {
+  if (!text) return null
+  const urlRegex = /(https?:\/\/[^\s<>"{}|\\^`[\]]+)/g
+  const parts = text.split(urlRegex)
+  
+  return parts.map((part, index) => {
+    if (urlRegex.test(part)) {
+      urlRegex.lastIndex = 0 // Reset regex state
+      return (
+        <a
+          key={index}
+          href={part}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            color: ARENA_PURPLE,
+            textDecoration: 'underline',
+            wordBreak: 'break-all',
+          }}
+        >
+          {part}
+        </a>
+      )
+    }
+    return part
+  })
+}
+
 type Group = {
   id: string
   name: string
@@ -871,7 +903,7 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
                         lineHeight: 1.6,
                         whiteSpace: 'pre-wrap',
                       }}>
-                        {post.content}
+                        {renderContentWithLinks(post.content)}
                       </Text>
                     )}
 
@@ -1039,7 +1071,7 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
                                     {new Date(comment.created_at).toLocaleString('zh-CN')}
                                   </Text>
                                 </Box>
-                                <Text size="sm">{comment.content}</Text>
+                                <Text size="sm">{renderContentWithLinks(comment.content)}</Text>
                               </Box>
                             ))}
                           </Box>

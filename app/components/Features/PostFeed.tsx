@@ -26,6 +26,36 @@ type Comment = {
 
 const ARENA_PURPLE = '#8b6fa8'
 
+// 链接解析函数 - 将文本中的URL转换为可点击链接
+function renderContentWithLinks(text: string) {
+  if (!text) return null
+  const urlRegex = /(https?:\/\/[^\s<>"{}|\\^`[\]]+)/g
+  const parts = text.split(urlRegex)
+  
+  return parts.map((part, index) => {
+    if (urlRegex.test(part)) {
+      urlRegex.lastIndex = 0 // Reset regex state
+      return (
+        <a
+          key={index}
+          href={part}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            color: ARENA_PURPLE,
+            textDecoration: 'underline',
+            wordBreak: 'break-all',
+          }}
+        >
+          {part}
+        </a>
+      )
+    }
+    return part
+  })
+}
+
 function pollLabel(choice: PollChoice | 'tie', t: (key: keyof typeof import('@/lib/i18n').translations.zh) => string) {
   if (choice === 'bull') return t('bullish')
   if (choice === 'bear') return t('bearish')
@@ -728,7 +758,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
           </div>
 
           <div style={{ marginTop: 12, fontSize: 14, color: tokens.colors.text.primary, lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>
-            {openPost.content}
+            {renderContentWithLinks(openPost.content || '')}
           </div>
 
           <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${tokens.colors.border.secondary}`, display: 'flex', gap: 14, flexWrap: 'wrap' }}>
@@ -889,7 +919,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
                       )}
                     </div>
                     <div style={{ fontSize: 13, color: tokens.colors.text.primary, lineHeight: 1.6 }}>
-                      {comment.content}
+                      {renderContentWithLinks(comment.content || '')}
                     </div>
                     {/* 嵌套回复 */}
                     {comment.replies && comment.replies.length > 0 && (
@@ -935,7 +965,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
                               )}
                             </div>
                             <div style={{ fontSize: 13, color: tokens.colors.text.primary }}>
-                              {reply.content}
+                              {renderContentWithLinks(reply.content || '')}
                             </div>
                           </div>
                         ))}

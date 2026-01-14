@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useCallback } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
@@ -9,7 +9,40 @@ import MarketPanel from '@/app/components/Features/MarketPanel'
 import Card from '@/app/components/UI/Card'
 import RankingTableCompact from '@/app/components/Features/RankingTableCompact'
 import { Box, Text } from '@/app/components/Base'
-import { CommentIcon, ThumbsUpIcon } from '@/app/components/Icons'
+import { CommentIcon, ThumbsUpIcon, ThumbsDownIcon } from '@/app/components/Icons'
+import { useToast } from '@/app/components/UI/Toast'
+
+const ARENA_PURPLE = '#8b6fa8'
+
+// 链接解析函数 - 将文本中的URL转换为可点击链接
+function renderContentWithLinks(text: string) {
+  if (!text) return null
+  const urlRegex = /(https?:\/\/[^\s<>"{}|\\^`[\]]+)/g
+  const parts = text.split(urlRegex)
+  
+  return parts.map((part, index) => {
+    if (urlRegex.test(part)) {
+      urlRegex.lastIndex = 0 // Reset regex state
+      return (
+        <a
+          key={index}
+          href={part}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            color: ARENA_PURPLE,
+            textDecoration: 'underline',
+            wordBreak: 'break-all',
+          }}
+        >
+          {part}
+        </a>
+      )
+    }
+    return part
+  })
+}
 
 // 本地 Trader 类型
 type Trader = {
@@ -32,23 +65,60 @@ type Post = {
   body: string
   comments: number
   likes: number
+  dislikes?: number
   hotScore: number
   views: number
+  created_at?: string
+  user_reaction?: 'up' | 'down' | null
+}
+
+type Comment = {
+  id: string
+  content: string
+  user_id: string
+  author_handle?: string
+  author_avatar_url?: string
+  created_at: string
+  replies?: Comment[]
+}
+
+function formatTimeAgo(dateStr: string) {
+  const date = new Date(dateStr)
+  const now = new Date()
+  const diff = Math.floor((now.getTime() - date.getTime()) / 1000)
+  if (diff < 60) return `${diff}秒前`
+  if (diff < 3600) return `${Math.floor(diff / 60)}分钟前`
+  if (diff < 86400) return `${Math.floor(diff / 3600)}小时前`
+  return `${Math.floor(diff / 86400)}天前`
 }
 
 export default function HotPage() {
   const { t } = useLanguage()
+  const { showToast } = useToast()
   const [loggedIn, setLoggedIn] = useState(false)
   const [email, setEmail] = useState<string | null>(null)
+  const [accessToken, setAccessToken] = useState<string | null>(null)
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [traders, setTraders] = useState<Trader[]>([])
   const [loadingTraders, setLoadingTraders] = useState(true)
   const [posts, setPosts] = useState<Post[]>([])
   const [loadingPosts, setLoadingPosts] = useState(true)
+  
+  // 帖子详情弹窗状态
+  const [openPost, setOpenPost] = useState<Post | null>(null)
+  const [comments, setComments] = useState<Comment[]>([])
+  const [loadingComments, setLoadingComments] = useState(false)
+  const [newComment, setNewComment] = useState('')
+  const [submittingComment, setSubmittingComment] = useState(false)
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
       setEmail(data.user?.email ?? null)
       setLoggedIn(!!data.user)
+      setCurrentUserId(data.user?.id ?? null)
+    })
+    supabase.auth.getSession().then(({ data }) => {
+      setAccessToken(data.session?.access_token ?? null)
     })
   }, [])
 
@@ -218,6 +288,120 @@ export default function HotPage() {
     return loggedIn ? hotPosts : hotPosts.slice(0, 3) // 未登录只显示前3条
   }, [loggedIn, hotPosts])
 
+  // 加载评论
+  const loadComments = useCallback(async (postId: string) => {
+    try {
+      setLoadingComments(true)
+      const response = await fetch(`/api/posts/${postId}/comments`)
+      const data = await response.json()
+      if (response.ok) {
+        setComments(data.comments || [])
+      } else {
+        setComments([])
+      }
+    } catch (err) {
+      console.error('[HotPage] 加载评论失败:', err)
+      setComments([])
+    } finally {
+      setLoadingComments(false)
+    }
+  }, [])
+
+  // 打开帖子详情
+  const handleOpenPost = useCallback((post: Post) => {
+    setOpenPost(post)
+    setComments([])
+    loadComments(post.id)
+  }, [loadComments])
+
+  // 提交评论
+  const submitComment = useCallback(async (postId: string) => {
+    if (!accessToken) {
+      showToast('请先登录', 'warning')
+      return
+    }
+    if (!newComment.trim()) return
+
+    setSubmittingComment(true)
+    try {
+      const response = await fetch(`/api/posts/${postId}/comments`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ content: newComment.trim() }),
+      })
+
+      const json = await response.json()
+      if (response.ok && json.success) {
+        setNewComment('')
+        setComments(prev => [...prev, json.data.comment])
+        setPosts(prev => prev.map(p => {
+          if (p.id === postId) {
+            return { ...p, comments: p.comments + 1 }
+          }
+          return p
+        }))
+        if (openPost?.id === postId) {
+          setOpenPost(prev => prev ? { ...prev, comments: prev.comments + 1 } : null)
+        }
+      } else {
+        showToast(json.error || '发表评论失败', 'error')
+      }
+    } catch (err) {
+      console.error('[HotPage] 提交评论失败:', err)
+      showToast('发表评论失败', 'error')
+    } finally {
+      setSubmittingComment(false)
+    }
+  }, [accessToken, newComment, openPost?.id, showToast])
+
+  // 点赞/踩
+  const toggleReaction = useCallback(async (postId: string, reactionType: 'up' | 'down') => {
+    if (!accessToken) {
+      showToast('请先登录', 'warning')
+      return
+    }
+
+    try {
+      const response = await fetch(`/api/posts/${postId}/like`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ reaction_type: reactionType }),
+      })
+
+      const json = await response.json()
+      if (response.ok && json.success) {
+        const result = json.data
+        setPosts(prev => prev.map(p => {
+          if (p.id === postId) {
+            return {
+              ...p,
+              likes: result.like_count,
+              dislikes: result.dislike_count,
+              user_reaction: result.reaction,
+            }
+          }
+          return p
+        }))
+        if (openPost?.id === postId) {
+          setOpenPost(prev => prev ? {
+            ...prev,
+            likes: result.like_count,
+            dislikes: result.dislike_count,
+            user_reaction: result.reaction,
+          } : null)
+        }
+      }
+    } catch (err) {
+      console.error('[HotPage] 点赞失败:', err)
+    }
+  }, [accessToken, openPost?.id, showToast])
+
   return (
     <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
       <TopNav email={email} />
@@ -251,52 +435,48 @@ export default function HotPage() {
                   {visibleHot.map((p, idx) => {
                     const rank = idx + 1
                     return (
-                      <Link
+                      <Box
                         key={p.id}
-                        href={`/groups?post=${p.id}`}
-                        style={{ textDecoration: 'none' }}
+                        className="hot-post-item"
+                        bg="primary"
+                        p={4}
+                        radius="md"
+                        border="primary"
+                        style={{
+                          cursor: 'pointer',
+                        }}
+                        onClick={() => handleOpenPost(p)}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.background = tokens.colors.bg.secondary
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = tokens.colors.bg.primary
+                        }}
                       >
-                        <Box
-                          className="hot-post-item"
-                          bg="primary"
-                          p={4}
-                          radius="md"
-                          border="primary"
-                          style={{
-                            cursor: 'pointer',
-                          }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.background = tokens.colors.bg.secondary
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.background = tokens.colors.bg.primary
-                          }}
-                        >
-                          <Box className="hot-post-meta" style={{ display: 'flex', gap: tokens.spacing[2], marginBottom: tokens.spacing[2], flexWrap: 'wrap' }}>
-                            <Text className="hot-post-rank" size="sm" weight="black" style={{ color: rank <= 3 ? tokens.colors.accent.warning : tokens.colors.text.secondary }}>
-                              #{rank}
-                            </Text>
-                            <Text size="xs" color="secondary">{p.group}</Text>
-                            <Text size="xs" color="tertiary">{(p.views ?? 0).toLocaleString()} {t('views')}</Text>
-                          </Box>
-                          <Text className="hot-post-title" size="base" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>
-                            {p.title}
+                        <Box className="hot-post-meta" style={{ display: 'flex', gap: tokens.spacing[2], marginBottom: tokens.spacing[2], flexWrap: 'wrap' }}>
+                          <Text className="hot-post-rank" size="sm" weight="black" style={{ color: rank <= 3 ? tokens.colors.accent.warning : tokens.colors.text.secondary }}>
+                            #{rank}
                           </Text>
-                          <Text className="hot-post-body" size="sm" color="secondary" style={{ marginBottom: tokens.spacing[2], lineHeight: 1.5 }}>
-                            {p.body.slice(0, 100)}{p.body.length > 100 ? '...' : ''}
-                          </Text>
-                          <Box className="hot-post-footer" style={{ display: 'flex', gap: tokens.spacing[3], fontSize: tokens.typography.fontSize.xs, color: tokens.colors.text.tertiary, flexWrap: 'wrap', alignItems: 'center' }}>
-                            <Text size="xs" color="tertiary">{p.author}</Text>
-                            <Text size="xs" color="tertiary">{p.time}</Text>
-                            <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                              <CommentIcon size={12} /> {p.comments}
-                            </span>
-                            <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                              <ThumbsUpIcon size={12} /> {p.likes}
-                            </span>
-                          </Box>
+                          <Text size="xs" color="secondary">{p.group}</Text>
+                          <Text size="xs" color="tertiary">{(p.views ?? 0).toLocaleString()} {t('views')}</Text>
                         </Box>
-                      </Link>
+                        <Text className="hot-post-title" size="base" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>
+                          {p.title}
+                        </Text>
+                        <Text className="hot-post-body" size="sm" color="secondary" style={{ marginBottom: tokens.spacing[2], lineHeight: 1.5 }}>
+                          {renderContentWithLinks(p.body.slice(0, 100))}{p.body.length > 100 ? '...' : ''}
+                        </Text>
+                        <Box className="hot-post-footer" style={{ display: 'flex', gap: tokens.spacing[3], fontSize: tokens.typography.fontSize.xs, color: tokens.colors.text.tertiary, flexWrap: 'wrap', alignItems: 'center' }}>
+                          <Text size="xs" color="tertiary">{p.author}</Text>
+                          <Text size="xs" color="tertiary">{p.time}</Text>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <CommentIcon size={12} /> {p.comments}
+                          </span>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <ThumbsUpIcon size={12} /> {p.likes}
+                          </span>
+                        </Box>
+                      </Box>
                     )
                   })}
                 </Box>
@@ -321,6 +501,178 @@ export default function HotPage() {
           </Box>
         </Box>
       </Box>
+
+      {/* 帖子详情弹窗 */}
+      {openPost && (
+        <div
+          onClick={() => setOpenPost(null)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: tokens.colors.overlay.dark,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 20,
+            zIndex: 1000,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: 'min(760px, 100%)',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+              border: `1px solid ${tokens.colors.border.primary}`,
+              borderRadius: 16,
+              background: tokens.colors.bg.secondary,
+              padding: 16,
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <button onClick={() => setOpenPost(null)} style={{ border: 'none', background: 'transparent', color: tokens.colors.text.secondary, cursor: 'pointer', fontSize: 20 }}>
+                ×
+              </button>
+            </div>
+
+            <div style={{ fontSize: 12, color: ARENA_PURPLE }}>
+              {openPost.group}
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, marginTop: 8 }}>
+              <div style={{ fontSize: 20, fontWeight: 950, lineHeight: 1.25 }}>{openPost.title}</div>
+            </div>
+
+            <div style={{ marginTop: 8, fontSize: 12, color: tokens.colors.text.tertiary, display: 'flex', alignItems: 'center', gap: 6 }}>
+              {openPost.author} · {openPost.time} · <CommentIcon size={12} /> {openPost.comments}
+            </div>
+
+            <div style={{ marginTop: 12, fontSize: 14, color: tokens.colors.text.primary, lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>
+              {renderContentWithLinks(openPost.body || '')}
+            </div>
+
+            <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${tokens.colors.border.secondary}`, display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+              <button
+                onClick={() => toggleReaction(openPost.id, 'up')}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '6px 12px',
+                  border: 'none',
+                  borderRadius: 8,
+                  background: openPost.user_reaction === 'up' ? `${tokens.colors.accent.success}20` : tokens.colors.bg.tertiary,
+                  color: openPost.user_reaction === 'up' ? tokens.colors.accent.success : tokens.colors.text.secondary,
+                  cursor: 'pointer',
+                  fontSize: 13,
+                  fontWeight: 600,
+                }}
+              >
+                <ThumbsUpIcon size={14} /> {openPost.likes}
+              </button>
+              <button
+                onClick={() => toggleReaction(openPost.id, 'down')}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '6px 12px',
+                  border: 'none',
+                  borderRadius: 8,
+                  background: openPost.user_reaction === 'down' ? `${tokens.colors.accent.error}20` : tokens.colors.bg.tertiary,
+                  color: openPost.user_reaction === 'down' ? tokens.colors.accent.error : tokens.colors.text.secondary,
+                  cursor: 'pointer',
+                  fontSize: 13,
+                  fontWeight: 600,
+                }}
+              >
+                <ThumbsDownIcon size={14} />
+              </button>
+            </div>
+
+            {/* 评论区 */}
+            <div style={{ marginTop: 16, borderTop: `1px solid ${tokens.colors.border.secondary}`, paddingTop: 16 }}>
+              <div style={{ fontWeight: 950, marginBottom: 12 }}>
+                {t('comments')} ({openPost.comments})
+              </div>
+
+              {/* 评论输入框 */}
+              <div style={{ marginBottom: 16 }}>
+                <textarea
+                  value={newComment}
+                  onChange={(e) => setNewComment(e.target.value)}
+                  placeholder={accessToken ? t('writeComment') : '请先登录后发表评论'}
+                  disabled={!accessToken || submittingComment}
+                  style={{
+                    width: '100%',
+                    minHeight: 80,
+                    padding: 12,
+                    borderRadius: 8,
+                    border: `1px solid ${tokens.colors.border.primary}`,
+                    background: tokens.colors.bg.primary,
+                    color: tokens.colors.text.primary,
+                    fontSize: 14,
+                    resize: 'vertical',
+                    outline: 'none',
+                  }}
+                />
+                {accessToken && (
+                  <button
+                    onClick={() => submitComment(openPost.id)}
+                    disabled={!newComment.trim() || submittingComment}
+                    style={{
+                      marginTop: 8,
+                      padding: '8px 16px',
+                      background: newComment.trim() && !submittingComment ? ARENA_PURPLE : 'rgba(139, 111, 168, 0.3)',
+                      color: '#fff',
+                      border: 'none',
+                      borderRadius: 8,
+                      fontSize: 13,
+                      fontWeight: 700,
+                      cursor: newComment.trim() && !submittingComment ? 'pointer' : 'not-allowed',
+                    }}
+                  >
+                    {submittingComment ? '发送中...' : '发表评论'}
+                  </button>
+                )}
+              </div>
+
+              {/* 评论列表 */}
+              {loadingComments ? (
+                <div style={{ color: tokens.colors.text.tertiary, fontSize: 13 }}>加载评论中...</div>
+              ) : comments.length === 0 ? (
+                <div style={{ color: tokens.colors.text.tertiary, fontSize: 13 }}>暂无评论，来发表第一条评论吧</div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  {comments.filter(Boolean).map((comment) => (
+                    <div
+                      key={comment.id}
+                      style={{
+                        padding: 12,
+                        background: tokens.colors.bg.primary,
+                        borderRadius: 8,
+                        border: `1px solid ${tokens.colors.border.primary}`,
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: tokens.colors.text.secondary }}>
+                          {comment.author_handle || '匿名'}
+                        </span>
+                        <span style={{ fontSize: 11, color: tokens.colors.text.tertiary }}>
+                          {formatTimeAgo(comment.created_at)}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: 13, color: tokens.colors.text.primary, lineHeight: 1.6 }}>
+                        {renderContentWithLinks(comment.content || '')}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </Box>
   )
 }
