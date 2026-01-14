@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
 import { supabase } from '@/lib/supabase/client'
 import TopNav from '@/app/components/Layout/TopNav'
@@ -17,6 +17,7 @@ import PinnedPost from '@/app/components/trader/PinnedPost'
 import PortfolioTable from '@/app/components/trader/PortfolioTable'
 import TradingViewShell from '@/app/components/trader/TradingViewShell'
 import AccountRequiredStats from '@/app/components/trader/AccountRequiredStats'
+import CreatedGroups from '@/app/components/trader/CreatedGroups'
 import { Box, Text } from '@/app/components/Base'
 import { RankingSkeleton } from '@/app/components/UI/Skeleton'
 import {
@@ -36,6 +37,10 @@ import {
 type TabKey = 'overview' | 'stats' | 'portfolio'
 
 export default function UserHomePage(props: { params: { handle: string } | Promise<{ handle: string }> }) {
+  const searchParams = useSearchParams()
+  const router = useRouter()
+  const pathname = usePathname()
+  
   const [handle, setHandle] = useState<string>('')
   const [email, setEmail] = useState<string | null>(null)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
@@ -46,8 +51,35 @@ export default function UserHomePage(props: { params: { handle: string } | Promi
   const [feed, setFeed] = useState<TraderFeedItem[]>([])
   const [similarTraders, setSimilarTraders] = useState<TraderProfile[]>([])
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<TabKey>('overview')
-  const router = useRouter()
+  
+  // Read tab from URL, default to 'overview'
+  const urlTab = searchParams.get('tab') as TabKey | null
+  const [activeTab, setActiveTab] = useState<TabKey>(
+    urlTab && ['overview', 'stats', 'portfolio'].includes(urlTab) ? urlTab : 'overview'
+  )
+
+  // Update URL when tab changes
+  const handleTabChange = (tab: TabKey) => {
+    setActiveTab(tab)
+    const params = new URLSearchParams(searchParams.toString())
+    if (tab === 'overview') {
+      params.delete('tab') // Don't show tab in URL for default
+    } else {
+      params.set('tab', tab)
+    }
+    const newUrl = params.toString() ? `${pathname}?${params.toString()}` : pathname
+    router.replace(newUrl, { scroll: false })
+  }
+
+  // Sync with URL changes
+  useEffect(() => {
+    const tab = searchParams.get('tab') as TabKey | null
+    if (tab && ['overview', 'stats', 'portfolio'].includes(tab)) {
+      setActiveTab(tab)
+    } else if (!tab) {
+      setActiveTab('overview')
+    }
+  }, [searchParams])
 
   // 解析 params
   useEffect(() => {
@@ -111,15 +143,15 @@ export default function UserHomePage(props: { params: { handle: string } | Promi
             .maybeSingle()
 
           if (userProfile && userProfile.handle) {
-            // 获取粉丝数（关注他的人）
+            // 获取粉丝数（关注他的人）- 使用 trader_follows 表
             const { count: followersCount } = await supabase
-              .from('follows')
+              .from('trader_follows')
               .select('*', { count: 'exact', head: true })
               .eq('trader_id', userProfile.id)
             
-            // 获取关注的人数量（他关注的人）
+            // 获取关注的人数量（他关注的人）- 使用 trader_follows 表
             const { count: followingCount } = await supabase
-              .from('follows')
+              .from('trader_follows')
               .select('*', { count: 'exact', head: true })
               .eq('user_id', userProfile.id)
 
@@ -143,12 +175,12 @@ export default function UserHomePage(props: { params: { handle: string } | Promi
           const traderOriginalAvatarUrl = profileData.avatar_url
           
           const { count: followersCount } = await supabase
-            .from('follows')
+            .from('trader_follows')
             .select('*', { count: 'exact', head: true })
             .eq('trader_id', profileData.id)
           
           const { count: followingCount } = await supabase
-            .from('follows')
+            .from('trader_follows')
             .select('*', { count: 'exact', head: true })
             .eq('user_id', profileData.id)
 
@@ -207,14 +239,14 @@ export default function UserHomePage(props: { params: { handle: string } | Promi
 
                 if (newProfile) {
                   console.log('[UserPage] Profile created successfully:', newProfile.handle)
-                  // 获取粉丝数和关注数
+                  // 获取粉丝数和关注数 - 使用 trader_follows 表
                   const { count: followersCount } = await supabase
-                    .from('follows')
+                    .from('trader_follows')
                     .select('*', { count: 'exact', head: true })
                     .eq('trader_id', newProfile.id)
                   
                   const { count: followingCount } = await supabase
-                    .from('follows')
+                    .from('trader_follows')
                     .select('*', { count: 'exact', head: true })
                     .eq('user_id', newProfile.id)
 
@@ -343,14 +375,39 @@ export default function UserHomePage(props: { params: { handle: string } | Promi
     return (
       <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
         <TopNav email={email} />
-        <Box style={{ maxWidth: 1200, margin: '0 auto', padding: tokens.spacing[6] }}>
-          <Text size="lg" weight="bold">
-            用户不存在
+        <Box style={{ maxWidth: 1200, margin: '0 auto', padding: tokens.spacing[6], textAlign: 'center' }}>
+          <Box
+            style={{
+              width: 80,
+              height: 80,
+              borderRadius: '50%',
+              background: tokens.colors.bg.secondary,
+              border: `2px solid ${tokens.colors.border.primary}`,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto',
+              marginBottom: tokens.spacing[4],
+            }}
+          >
+            <Text size="2xl" weight="bold" color="tertiary">
+              {handle?.charAt(0)?.toUpperCase() || '?'}
+            </Text>
+          </Box>
+          <Text size="xl" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>
+            @{handle}
           </Text>
-          <Text size="sm" color="tertiary" style={{ marginTop: tokens.spacing[2] }}>
-            Handle: {handle || '(empty)'}
+          <Text size="sm" color="tertiary" style={{ marginBottom: tokens.spacing[4] }}>
+            该用户尚未在平台注册
           </Text>
-          <Link href="/" style={{ color: tokens.colors.text.secondary, textDecoration: 'none', marginTop: tokens.spacing[2], display: 'inline-block' }}>
+          <Link 
+            href="/" 
+            style={{ 
+              color: tokens.colors.accent?.primary || '#8b6fa8', 
+              textDecoration: 'none',
+              fontSize: tokens.typography.fontSize.sm,
+            }}
+          >
             ← 返回首页
           </Link>
         </Box>
@@ -399,10 +456,11 @@ export default function UserHomePage(props: { params: { handle: string } | Promi
           isRegistered={profile.isRegistered}
           followers={profile.followers}
           isOwnProfile={isOwnProfile}
+          source={profile.source}
         />
 
         {/* Tabs */}
-        <TraderTabs activeTab={activeTab} onTabChange={setActiveTab} />
+        <TraderTabs activeTab={activeTab} onTabChange={handleTabChange} />
 
         {/* Tab Content */}
         {activeTab === 'overview' && (
@@ -447,6 +505,8 @@ export default function UserHomePage(props: { params: { handle: string } | Promi
                 isRegistered={profile.isRegistered}
                 isOwnProfile={isOwnProfile}
               />
+              {/* 创办的小组 */}
+              <CreatedGroups userId={profile.id} />
               {isOwnProfile && currentUserId && (
                 <AccountRequiredStats userId={currentUserId} />
               )}

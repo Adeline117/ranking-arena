@@ -5,25 +5,50 @@ import crypto from 'crypto'
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 
-// OAuth 配置（需要从环境变量获取）
+// OAuth 配置（根据 Binance 官方文档）
 const OAUTH_CONFIG: Record<string, {
   clientId: string
   redirectUri: string
   authUrl: string
-  scope?: string
+  scope: string
+  supportsPKCE?: boolean
 }> = {
   binance: {
     clientId: process.env.BINANCE_OAUTH_CLIENT_ID || '',
-    redirectUri: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/exchange/auth/callback?exchange=binance`,
-    authUrl: 'https://accounts.binance.com/oauth/authorize',
-    scope: 'read',
+    redirectUri: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/exchange/auth/callback`,
+    // Binance 授权 URL 需要带语言前缀
+    authUrl: 'https://accounts.binance.com/en/oauth/authorize',
+    // Binance scope 格式：逗号分隔
+    scope: 'user:openId,user:email',
+    supportsPKCE: true,
   },
   bybit: {
     clientId: process.env.BYBIT_OAUTH_CLIENT_ID || '',
-    redirectUri: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/exchange/auth/callback?exchange=bybit`,
+    redirectUri: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/exchange/auth/callback`,
     authUrl: 'https://api.bybit.com/v5/account/oauth/authorize',
     scope: 'read',
+    supportsPKCE: false,
   },
+}
+
+/**
+ * 生成 PKCE code_verifier（随机字符串）
+ */
+function generateCodeVerifier(): string {
+  // 生成 28 个随机字节，转为十六进制字符串
+  return crypto.randomBytes(28).toString('hex')
+}
+
+/**
+ * 生成 PKCE code_challenge（code_verifier 的 SHA256 hash，Base64 URL 编码）
+ */
+function generateCodeChallenge(codeVerifier: string): string {
+  const hash = crypto.createHash('sha256').update(codeVerifier).digest()
+  // Base64 URL 编码：替换 + 为 -，/ 为 _，去掉末尾 =
+  return hash.toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '')
 }
 
 export async function GET(request: NextRequest) {
@@ -31,6 +56,8 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const exchange = searchParams.get('exchange')
     const userId = searchParams.get('userId')
+    // 是否使用 PKCE 流程（适用于浏览器/移动端应用）
+    const usePKCE = searchParams.get('pkce') === 'true'
 
     if (!exchange || !userId) {
       return NextResponse.json({ error: 'Missing exchange or userId' }, { status: 400 })
@@ -42,34 +69,58 @@ export async function GET(request: NextRequest) {
     }
 
     // 生成 state（用于防止 CSRF 攻击）
-    const state = crypto.randomBytes(32).toString('hex')
+    const state = crypto.randomBytes(20).toString('hex')
     
+    // PKCE 相关参数
+    let codeVerifier: string | null = null
+    let codeChallenge: string | null = null
+    
+    if (usePKCE && config.supportsPKCE) {
+      codeVerifier = generateCodeVerifier()
+      codeChallenge = generateCodeChallenge(codeVerifier)
+    }
+
     // 存储 state 到数据库（关联 userId）
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
-    await supabase
+    const { error: insertError } = await supabase
       .from('oauth_states')
       .insert({
         user_id: userId,
         exchange,
         state,
+        code_verifier: codeVerifier, // 存储 code_verifier 用于后续验证
         expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(), // 10分钟过期
       })
 
-    // 构建授权 URL
-    const params = new URLSearchParams({
+    if (insertError) {
+      console.error('Error storing OAuth state:', insertError)
+      return NextResponse.json({ error: 'Failed to initialize OAuth flow' }, { status: 500 })
+    }
+
+    // 构建授权 URL 参数
+    const params: Record<string, string> = {
+      response_type: 'code',
       client_id: config.clientId,
       redirect_uri: config.redirectUri,
-      response_type: 'code',
+      scope: config.scope,
       state,
-      ...(config.scope && { scope: config.scope }),
+    }
+
+    // 如果使用 PKCE，添加 code_challenge
+    if (codeChallenge) {
+      params.code_challenge = codeChallenge
+      params.code_challenge_method = 'S256'
+    }
+
+    const authUrl = `${config.authUrl}?${new URLSearchParams(params).toString()}`
+
+    return NextResponse.json({ 
+      authUrl, 
+      state,
+      usePKCE: !!codeChallenge,
     })
-
-    const authUrl = `${config.authUrl}?${params.toString()}`
-
-    return NextResponse.json({ authUrl, state })
   } catch (error: any) {
     console.error('Error generating OAuth URL:', error)
     return NextResponse.json({ error: error.message || 'Failed to generate OAuth URL' }, { status: 500 })
   }
 }
-

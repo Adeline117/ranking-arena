@@ -4,12 +4,6 @@ import { useEffect, useState, lazy, Suspense } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
-import {
-  getAllLatestTimestamps,
-  getAllLatestSnapshots,
-  getAllTraderHandles,
-  type TraderSource,
-} from '@/lib/data/trader-snapshots'
 import { logError } from '@/lib/utils/error-handler'
 
 import TopNav from './components/Layout/TopNav'
@@ -42,7 +36,7 @@ export default function HomePage() {
     })
   }, [])
 
-  /* ---------- ranking flow (多时间段) ---------- */
+  /* ---------- ranking flow (多时间段，合并所有交易所) ---------- */
   const [traders90D, setTraders90D] = useState<Trader[]>([])
   const [traders30D, setTraders30D] = useState<Trader[]>([])
   const [traders7D, setTraders7D] = useState<Trader[]>([])
@@ -50,23 +44,32 @@ export default function HomePage() {
   const [activeTimeRange, setActiveTimeRange] = useState<'90D' | '30D' | '7D'>('90D')
 
   useEffect(() => {
+    const loadTimeRange = async (timeRange: '7D' | '30D' | '90D'): Promise<Trader[]> => {
+      try {
+        const response = await fetch(`/api/traders?timeRange=${timeRange}`)
+        if (!response.ok) {
+          console.error(`[HomePage] ${timeRange} API 错误`)
+          return []
+        }
+        const data = await response.json()
+        return data.traders || []
+      } catch (error) {
+        console.error(`[HomePage] 加载 ${timeRange} 数据失败:`, error)
+        return []
+      }
+    }
+
     const load = async () => {
       setLoadingTraders(true)
       try {
-        const { loadAllTraders } = await import('@/lib/data/trader-loader')
-        
-        // 并行加载三个时间段的数据
+        // 并行获取三个时间段的数据（合并所有交易所）
         const [data90D, data30D, data7D] = await Promise.all([
-          loadAllTraders(supabase, '90D'),
-          loadAllTraders(supabase, '30D'),
-          loadAllTraders(supabase, '7D'),
+          loadTimeRange('90D'),
+          loadTimeRange('30D'),
+          loadTimeRange('7D'),
         ])
-        
-        console.log('[HomePage] 加载到的交易者数据:', {
-          '90D': data90D.length,
-          '30D': data30D.length,
-          '7D': data7D.length,
-        })
+
+        console.log(`[HomePage] 合并数据: 90D=${data90D.length}, 30D=${data30D.length}, 7D=${data7D.length}`)
         
         setTraders90D(data90D)
         setTraders30D(data30D)
@@ -213,7 +216,7 @@ export default function HomePage() {
               traders={currentTraders}
               loading={loadingTraders}
               loggedIn={!!email}
-              source={currentTraders.length > 0 ? currentTraders[0].source : 'binance'}
+              source={currentTraders.length > 0 ? currentTraders[0].source : 'all'}
               timeRange={activeTimeRange}
             />
           </Box>

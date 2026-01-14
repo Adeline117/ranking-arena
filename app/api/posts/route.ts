@@ -16,10 +16,16 @@ import {
   validateString,
   validateNumber,
   validateEnum,
+  checkRateLimit,
+  RateLimitPresets,
 } from '@/lib/api'
 import { getPosts, createPost, getUserPostReactions, getUserPostVotes } from '@/lib/data/posts'
 
 export async function GET(request: NextRequest) {
+  // 公开 API 限流：每分钟 100 次
+  const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.public)
+  if (rateLimitResponse) return rateLimitResponse
+
   try {
     const supabase = getSupabaseAdmin()
     const { searchParams } = new URL(request.url)
@@ -74,6 +80,10 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  // 写操作限流：每分钟 30 次
+  const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.write)
+  if (rateLimitResponse) return rateLimitResponse
+
   try {
     const user = await requireAuth(request)
     const supabase = getSupabaseAdmin()

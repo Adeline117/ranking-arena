@@ -1,5 +1,6 @@
 /**
  * 交易员数据加载器 - 优化版
+ * 使用 Redis 分布式缓存
  */
 
 import { SupabaseClient } from '@supabase/supabase-js'
@@ -11,10 +12,12 @@ import {
 } from './trader-snapshots'
 import type { Trader } from '@/app/components/Features/RankingTable'
 import { getTradersArenaFollowersCount } from './trader-followers'
+import { getCachedData, CacheKeys } from '@/lib/utils/redis'
 
-// 内存缓存
+// 内存缓存（作为 Redis 的二级缓存，减少网络请求）
 let traderCache: { data: Trader[]; timestamp: number; timeRange: string } | null = null
-const CACHE_TTL = 60 * 1000 // 1分钟缓存
+const MEMORY_CACHE_TTL = 30 * 1000 // 内存缓存 30 秒
+const REDIS_CACHE_TTL = 120 // Redis 缓存 2 分钟
 
 function snapshotToTrader(
   snapshot: { source_trader_id: string; roi: number; followers: number; pnl: number | null; win_rate: number | null; max_drawdown?: number | null; trades_count?: number | null },
@@ -45,11 +48,42 @@ export async function loadAllTraders(
   supabase: SupabaseClient,
   timeRange: '7D' | '30D' | '90D' = '90D'
 ): Promise<Trader[]> {
-  // 检查缓存
-  if (traderCache && traderCache.timeRange === timeRange && Date.now() - traderCache.timestamp < CACHE_TTL) {
+  // 1. 先检查内存缓存（最快）
+  if (traderCache && traderCache.timeRange === timeRange && Date.now() - traderCache.timestamp < MEMORY_CACHE_TTL) {
     return traderCache.data
   }
 
+  // 2. 使用 Redis 分布式缓存
+  const cacheKey = CacheKeys.traders(timeRange)
+  
+  try {
+    const traders = await getCachedData<Trader[]>(
+      cacheKey,
+      async () => {
+        // 缓存未命中，从数据库加载
+        return await loadTradersFromDB(supabase, timeRange)
+      },
+      REDIS_CACHE_TTL
+    )
+
+    // 更新内存缓存
+    traderCache = { data: traders, timestamp: Date.now(), timeRange }
+
+    return traders
+  } catch (error) {
+    console.error('[trader-loader] Redis 缓存失败，尝试直接加载:', error)
+    // Redis 失败时，直接从数据库加载
+    return await loadTradersFromDB(supabase, timeRange)
+  }
+}
+
+/**
+ * 从数据库加载交易员数据（内部函数）
+ */
+async function loadTradersFromDB(
+  supabase: SupabaseClient,
+  timeRange: '7D' | '30D' | '90D'
+): Promise<Trader[]> {
   try {
     const seasonId = timeRange === '90D' ? null : timeRange
 
@@ -90,12 +124,9 @@ export async function loadAllTraders(
     // 按 ROI 排序
     traders.sort((a, b) => b.roi - a.roi)
 
-    // 更新缓存
-    traderCache = { data: traders, timestamp: Date.now(), timeRange }
-
     return traders
   } catch (error) {
-    console.error('[trader-loader] 加载失败:', error)
+    console.error('[trader-loader] 数据库加载失败:', error)
     return []
   }
 }

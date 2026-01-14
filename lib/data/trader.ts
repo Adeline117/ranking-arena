@@ -5,6 +5,94 @@
 
 import { supabase } from '@/lib/supabase/client'
 
+// 支持的交易所数据源
+const TRADER_SOURCES = ['binance', 'bybit', 'bitget', 'okx', 'kucoin', 'gate', 'mexc', 'coinex'] as const
+const TRADER_SOURCES_WITH_WEB3 = ['binance_web3', ...TRADER_SOURCES] as const
+
+interface TraderSourceResult {
+  source_trader_id: string
+  handle: string | null
+  profile_url: string | null
+  sourceType: string
+}
+
+/**
+ * 通用的交易员数据源查找函数
+ * 遍历所有数据源，尝试通过 handle 或 source_trader_id 找到交易员
+ */
+async function findTraderSource(
+  handle: string,
+  options: { includeWeb3?: boolean; selectFields?: string } = {}
+): Promise<TraderSourceResult | null> {
+  const { includeWeb3 = false, selectFields = 'source_trader_id, handle, profile_url' } = options
+  const decodedHandle = decodeURIComponent(handle)
+  const sources = includeWeb3 ? TRADER_SOURCES_WITH_WEB3 : TRADER_SOURCES
+
+  for (const sourceType of sources) {
+    // 尝试按 handle 查询
+    const { data: byHandle } = await supabase
+      .from('trader_sources')
+      .select(selectFields)
+      .eq('source', sourceType)
+      .eq('handle', handle)
+      .limit(1)
+      .maybeSingle()
+
+    if (byHandle && typeof byHandle === 'object') {
+      const result = byHandle as { source_trader_id: string; handle: string | null; profile_url: string | null }
+      return { ...result, sourceType }
+    }
+
+    // 尝试解码后的 handle
+    if (decodedHandle !== handle) {
+      const { data: byDecodedHandle } = await supabase
+        .from('trader_sources')
+        .select(selectFields)
+        .eq('source', sourceType)
+        .eq('handle', decodedHandle)
+        .limit(1)
+        .maybeSingle()
+
+      if (byDecodedHandle && typeof byDecodedHandle === 'object') {
+        const result = byDecodedHandle as { source_trader_id: string; handle: string | null; profile_url: string | null }
+        return { ...result, sourceType }
+      }
+    }
+
+    // 尝试作为 source_trader_id 查询
+    const { data: byId } = await supabase
+      .from('trader_sources')
+      .select(selectFields)
+      .eq('source', sourceType)
+      .eq('source_trader_id', handle)
+      .limit(1)
+      .maybeSingle()
+
+    if (byId && typeof byId === 'object') {
+      const result = byId as { source_trader_id: string; handle: string | null; profile_url: string | null }
+      return { ...result, sourceType }
+    }
+
+    // 尝试解码后的 handle 作为 source_trader_id
+    if (decodedHandle !== handle) {
+      const { data: byDecodedId } = await supabase
+        .from('trader_sources')
+        .select(selectFields)
+        .eq('source', sourceType)
+        .eq('source_trader_id', decodedHandle)
+        .limit(1)
+        .maybeSingle()
+
+      if (byDecodedId && typeof byDecodedId === 'object') {
+        const result = byDecodedId as { source_trader_id: string; handle: string | null; profile_url: string | null }
+        return { ...result, sourceType }
+      }
+    }
+  }
+
+  return null
+}
+
 export interface TraderProfile {
   handle: string
   id: string
@@ -101,7 +189,7 @@ export interface PortfolioItem {
 
 export interface TraderFeedItem {
   id: string
-  type: 'post' | 'group_post'
+  type: 'post' | 'group_post' | 'repost'
   title: string
   content?: string
   time: string
@@ -109,6 +197,10 @@ export interface TraderFeedItem {
   groupName?: string
   like_count?: number
   is_pinned?: boolean
+  // 转发相关
+  repost_comment?: string
+  original_author_handle?: string
+  original_post_id?: string
 }
 
 /**
@@ -918,7 +1010,7 @@ export async function getTraderPositionHistory(handle: string): Promise<Position
 }
 
 /**
- * 获取交易员动态 feed
+ * 获取交易员动态 feed（包括自己发布的帖子和转发的帖子）
  */
 export async function getTraderFeed(handle: string): Promise<TraderFeedItem[]> {
   try {
@@ -926,7 +1018,7 @@ export async function getTraderFeed(handle: string): Promise<TraderFeedItem[]> {
     const decodedHandle = decodeURIComponent(handle)
     
     // 从 posts 表获取交易员发布的帖子 - 尝试多个可能的 handle 值
-    let posts = null
+    let posts: any[] = []
     const { data: posts1 } = await supabase
       .from('posts')
       .select('id, title, content, created_at, group_id, like_count, is_pinned, groups(name)')
@@ -946,9 +1038,44 @@ export async function getTraderFeed(handle: string): Promise<TraderFeedItem[]> {
       if (posts2) posts = posts2
     }
 
-    if (!posts) return []
+    // 获取用户 ID（通过 handle 查找）
+    const { data: userProfile } = await supabase
+      .from('user_profiles')
+      .select('id')
+      .eq('handle', decodedHandle)
+      .maybeSingle()
 
-    return posts.map((post: any) => ({
+    // 获取用户转发的帖子
+    let reposts: any[] = []
+    if (userProfile?.id) {
+      const { data: repostsData } = await supabase
+        .from('reposts')
+        .select(`
+          id,
+          comment,
+          created_at,
+          post_id,
+          posts (
+            id,
+            title,
+            content,
+            author_handle,
+            group_id,
+            like_count,
+            groups (name)
+          )
+        `)
+        .eq('user_id', userProfile.id)
+        .order('created_at', { ascending: false })
+        .limit(20)
+      
+      if (repostsData) {
+        reposts = repostsData
+      }
+    }
+
+    // 合并自己发的帖子
+    const feedItems: TraderFeedItem[] = posts.map((post: any) => ({
       id: post.id,
       type: post.group_id ? 'group_post' : 'post',
       title: post.title,
@@ -959,6 +1086,31 @@ export async function getTraderFeed(handle: string): Promise<TraderFeedItem[]> {
       like_count: post.like_count || 0,
       is_pinned: post.is_pinned || false,
     }))
+
+    // 添加转发的帖子
+    reposts.forEach((repost: any) => {
+      if (repost.posts) {
+        feedItems.push({
+          id: `repost-${repost.id}`,
+          type: 'repost',
+          title: repost.posts.title,
+          content: repost.posts.content || '',
+          time: repost.created_at,
+          groupId: repost.posts.group_id,
+          groupName: repost.posts.groups?.name,
+          like_count: repost.posts.like_count || 0,
+          is_pinned: false,
+          repost_comment: repost.comment,
+          original_author_handle: repost.posts.author_handle,
+          original_post_id: repost.posts.id,
+        })
+      }
+    })
+
+    // 按时间排序（最新的在前）
+    feedItems.sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime())
+
+    return feedItems
   } catch (error) {
     console.error('Error fetching trader feed:', error)
     return []

@@ -37,71 +37,30 @@ async function main() {
     await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
     await page.setViewport({ width: 1920, height: 1080 })
 
-    // 存储所有交易员数据（用于合并多时间段数据）
-    const allTraders = new Map()
+    // 只抓取合约排行榜（期货），按时间段分开存储
+    const futuresRankings = RANKINGS.filter(r => r.type === 'futures')
+    const capturedAt = new Date().toISOString()
+    let totalSaved = 0
 
-    // 抓取每个排行榜
-    for (const ranking of RANKINGS) {
-      console.log(`\n📊 抓取 ${ranking.type} ${ranking.period}D 排行榜...`)
-      const traders = await scrapeRanking(page, ranking)
+    // 分别抓取每个时间段的排行榜
+    for (const ranking of futuresRankings) {
+      const seasonId = ranking.period + 'D' // 7D, 30D, 90D
+      console.log(`\n📊 抓取 Bitget ${seasonId} 排行榜...`)
       
-      // 合并数据
+      const traders = await scrapeRanking(page, ranking)
+      console.log(`  获取到 ${traders.length} 个交易员`)
+      
+      // 保存每个交易员（使用 season_id 区分时间段）
       for (const trader of traders) {
-        const key = `${ranking.type}_${trader.traderId}`
-        const existing = allTraders.get(key) || {
-          source: ranking.type === 'futures' ? 'bitget' : 'bitget_spot',
-          traderId: trader.traderId,
-          nickname: trader.nickname,
-          avatar: trader.avatar,
-          profileUrl: trader.profileUrl,
-        }
-        
-        // 添加对应时间段的数据
-        if (ranking.period === '7') {
-          existing.roi_7d = trader.roi
-          existing.pnl_7d = trader.pnl
-          existing.winRate_7d = trader.winRate
-        } else if (ranking.period === '30') {
-          existing.roi_30d = trader.roi
-          existing.pnl_30d = trader.pnl
-          existing.winRate_30d = trader.winRate
-        } else {
-          existing.roi = trader.roi
-          existing.pnl = trader.pnl
-          existing.winRate = trader.winRate
-          existing.rank = trader.rank
-          existing.followers = trader.followers
-          existing.totalTrades = trader.totalTrades
-          existing.maxDrawdown = trader.maxDrawdown
-        }
-        
-        allTraders.set(key, existing)
+        await saveTraderWithSeason(trader, capturedAt, seasonId)
+        totalSaved++
       }
       
       // 避免请求过快
       await sleep(2000)
     }
 
-    console.log(`\n📥 保存 ${allTraders.size} 个交易员数据...`)
-    
-    // 保存到数据库
-    const capturedAt = new Date().toISOString()
-    
-    for (const [key, trader] of allTraders) {
-      await saveTrader(trader, capturedAt)
-    }
-
-    // 抓取排名前 50 的交易员详细数据
-    console.log('\n📋 抓取交易员详细数据...')
-    const topTraders = Array.from(allTraders.values())
-      .filter(t => t.profileUrl && t.rank && t.rank <= 50)
-      .slice(0, 50)
-
-    for (const trader of topTraders) {
-      await scrapeTraderDetails(page, trader)
-      await sleep(1500)
-    }
-
+    console.log(`\n📥 总共保存 ${totalSaved} 条数据`)
     console.log('\n✅ 完成!')
     console.log('结束时间:', new Date().toISOString())
 
@@ -353,11 +312,11 @@ async function scrapeTraderDetails(page, trader) {
   }
 }
 
-async function saveTrader(trader, capturedAt) {
+async function saveTraderWithSeason(trader, capturedAt, seasonId) {
   try {
     // 保存 trader_sources
     await supabase.from('trader_sources').upsert({
-      source: trader.source,
+      source: 'bitget',
       source_type: 'leaderboard',
       source_trader_id: trader.traderId,
       handle: trader.nickname || null,
@@ -365,24 +324,21 @@ async function saveTrader(trader, capturedAt) {
       is_active: true,
     }, { onConflict: 'source,source_trader_id' })
 
-    // 保存 trader_snapshots
+    // 保存 trader_snapshots（使用 season_id 区分时间段）
     const snapshotData = {
-      source: trader.source,
+      source: 'bitget',
       source_trader_id: trader.traderId,
       rank: trader.rank || null,
       roi: trader.roi || 0,
-      roi_7d: trader.roi_7d || null,
-      roi_30d: trader.roi_30d || null,
       pnl: trader.pnl || null,
       win_rate: trader.winRate || null,
       max_drawdown: trader.maxDrawdown || null,
-      followers: trader.followers || 0,
+      followers: 0, // 不使用交易所粉丝数
+      season_id: seasonId, // 7D, 30D, 90D
       captured_at: capturedAt,
     }
 
-    await supabase.from('trader_snapshots').upsert(snapshotData, {
-      onConflict: 'source,source_trader_id,captured_at',
-    })
+    await supabase.from('trader_snapshots').insert(snapshotData)
 
   } catch (error) {
     console.log(`  保存失败 ${trader.traderId}: ${error.message}`)

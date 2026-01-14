@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from "@/lib/supabase/client"
 import { useRouter } from 'next/navigation'
+import { useToast } from '@/app/components/UI/Toast'
 
 type Language = 'zh' | 'en'
 
@@ -38,6 +39,7 @@ const translations = {
     handleMinLength: '用户名至少3个字符',
     countdown: '秒后重发',
     loginWithCode: '或使用验证码登录',
+    forgotPassword: '忘记密码？',
   },
   en: {
     title: 'Login / Register',
@@ -70,11 +72,36 @@ const translations = {
     handleMinLength: 'Username must be at least 3 characters',
     countdown: 's to resend',
     loginWithCode: 'Or login with verification code',
+    forgotPassword: 'Forgot password?',
   },
 }
 
+// 密码强度计算函数
+function getPasswordStrength(password: string): { level: 0 | 1 | 2 | 3 | 4; label: string; color: string } {
+  if (!password) return { level: 0, label: '', color: '' }
+  
+  let score = 0
+  if (password.length >= 6) score++
+  if (password.length >= 8) score++
+  if (/[a-z]/.test(password) && /[A-Z]/.test(password)) score++
+  if (/\d/.test(password)) score++
+  if (/[^a-zA-Z0-9]/.test(password)) score++
+  
+  if (score <= 1) return { level: 1, label: '弱', color: '#ff4d4d' }
+  if (score === 2) return { level: 2, label: '一般', color: '#ffa500' }
+  if (score === 3) return { level: 3, label: '中等', color: '#ffc107' }
+  return { level: 4, label: '强', color: '#2fe57d' }
+}
+
 export default function LoginPage() {
-  const [lang, setLang] = useState<Language>('zh')
+  const [lang, setLang] = useState<Language>(() => {
+    // 从 localStorage 读取语言偏好
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('preferredLanguage')
+      if (saved === 'en' || saved === 'zh') return saved
+    }
+    return 'zh'
+  })
   const [isRegister, setIsRegister] = useState(false)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -87,9 +114,19 @@ export default function LoginPage() {
   const [sendingCode, setSendingCode] = useState(false)
   const [countdown, setCountdown] = useState(0)
   const [loginWithCode, setLoginWithCode] = useState(false) // 登录时是否使用验证码
+  const [showPassword, setShowPassword] = useState(false) // 密码可见性切换
   const router = useRouter()
+  const { showToast } = useToast()
 
   const t = translations[lang]
+  const passwordStrength = getPasswordStrength(password)
+
+  // 语言偏好保存到 localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('preferredLanguage', lang)
+    }
+  }, [lang])
 
   // 处理认证状态变化（但不自动跳转，等待用户完成注册流程）
   useEffect(() => {
@@ -182,7 +219,7 @@ export default function LoginPage() {
         console.log('[OTP] 发送成功:', data)
         setCodeSent(true)
         setCountdown(60) // 开始60秒倒计时（重发限制）
-        alert(t.codeSent)
+        showToast(t.codeSent, 'success')
       } else {
         console.warn('[OTP] 发送返回空数据')
         setError('发送失败，请重试。如果仍然收到链接而不是验证码，请检查 Supabase Dashboard 中的 Email Auth 配置。')
@@ -234,7 +271,7 @@ export default function LoginPage() {
         console.log('[OTP Login] 发送成功:', data)
         setCodeSent(true)
         setCountdown(60)
-        alert(t.codeSent)
+        showToast(t.codeSent, 'success')
       } else {
         console.warn('[OTP Login] 发送返回空数据')
         setError('发送失败，请重试')
@@ -282,7 +319,7 @@ export default function LoginPage() {
           setCodeVerified(true)
           // 创建临时用户 profile（用户名稍后设置）
           await createUserProfile(data.user.id, email)
-          alert(t.codeVerified)
+          showToast(t.codeVerified, 'success')
           // 不在这里跳转，等待用户完成设置密码和用户名
         } else {
           // 登录模式：验证成功，立即登录并跳转
@@ -369,8 +406,8 @@ export default function LoginPage() {
         // 创建/更新用户 profile（用户名可以重复）
         await createUserProfile(user.id, email, handle)
         
-        // 注册完成，使用用户ID跳转到用户主页（因为用户名可能重复）
-        router.push(`/u/${handle}`)
+        // 注册完成，跳转到新用户引导页面
+        router.push('/welcome')
       } else {
         router.push('/')
       }
@@ -657,27 +694,71 @@ export default function LoginPage() {
                   <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 800 }}>
                     {t.password}
                   </label>
-                  <input
-                    type="password"
-                    style={{ 
-                      width: '100%', 
-                      padding: 12, 
-                      borderRadius: 12,
-                      border: '1px solid #1f1f1f',
-                      background: '#0b0b0b',
-                      color: '#eaeaea',
-                      fontSize: 14,
-                      outline: 'none',
-                    }}
-                    placeholder="设置密码（至少6位）"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && !loading && handle && handle.length >= 3 && password && password.length >= 6) {
-                        handleSetPassword()
-                      }
-                    }}
-                  />
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      style={{ 
+                        width: '100%', 
+                        padding: 12, 
+                        paddingRight: 44,
+                        borderRadius: 12,
+                        border: '1px solid #1f1f1f',
+                        background: '#0b0b0b',
+                        color: '#eaeaea',
+                        fontSize: 14,
+                        outline: 'none',
+                      }}
+                      placeholder="设置密码（至少6位）"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !loading && handle && handle.length >= 3 && password && password.length >= 6) {
+                          handleSetPassword()
+                        }
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      style={{
+                        position: 'absolute',
+                        right: 12,
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        background: 'transparent',
+                        border: 'none',
+                        padding: 4,
+                        cursor: 'pointer',
+                        color: '#9a9a9a',
+                        fontSize: 16,
+                      }}
+                      tabIndex={-1}
+                    >
+                      {showPassword ? '🙈' : '👁️'}
+                    </button>
+                  </div>
+                  {/* 密码强度指示器 */}
+                  {password && (
+                    <div style={{ marginTop: 8 }}>
+                      <div style={{ display: 'flex', gap: 4, marginBottom: 4 }}>
+                        {[1, 2, 3, 4].map((level) => (
+                          <div
+                            key={level}
+                            style={{
+                              flex: 1,
+                              height: 4,
+                              borderRadius: 2,
+                              background: level <= passwordStrength.level ? passwordStrength.color : '#2a2a2a',
+                              transition: 'background 0.2s ease',
+                            }}
+                          />
+                        ))}
+                      </div>
+                      <span style={{ fontSize: 11, color: passwordStrength.color }}>
+                        密码强度: {passwordStrength.label}
+                      </span>
+                    </div>
+                  )}
                 </div>
                 <button
                   onClick={handleSetPassword}
@@ -713,28 +794,50 @@ export default function LoginPage() {
                   <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 800 }}>
                     {t.password}
                   </label>
-                  <input
-                    type="password"
-                    className="login-input"
-                    style={{ 
-                      width: '100%', 
-                      padding: 12, 
-                      borderRadius: 12,
-                      border: '1px solid #1f1f1f',
-                      background: '#0b0b0b',
-                      color: '#eaeaea',
-                      fontSize: 14,
-                      outline: 'none',
-                    }}
-                    placeholder="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && !loading && email && password) {
-                        handleLogin()
-                      }
-                    }}
-                  />
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      className="login-input"
+                      style={{ 
+                        width: '100%', 
+                        padding: 12, 
+                        paddingRight: 44,
+                        borderRadius: 12,
+                        border: '1px solid #1f1f1f',
+                        background: '#0b0b0b',
+                        color: '#eaeaea',
+                        fontSize: 14,
+                        outline: 'none',
+                      }}
+                      placeholder="password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !loading && email && password) {
+                          handleLogin()
+                        }
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      style={{
+                        position: 'absolute',
+                        right: 12,
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        background: 'transparent',
+                        border: 'none',
+                        padding: 4,
+                        cursor: 'pointer',
+                        color: '#9a9a9a',
+                        fontSize: 16,
+                      }}
+                      tabIndex={-1}
+                    >
+                      {showPassword ? '🙈' : '👁️'}
+                    </button>
+                  </div>
                 </div>
                 <button
                   onClick={handleLogin}
@@ -755,6 +858,27 @@ export default function LoginPage() {
                 >
                   {loading ? t.loggingIn : t.login}
                 </button>
+                {/* 忘记密码 */}
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+                  <a
+                    href="/reset-password"
+                    style={{
+                      color: '#9a9a9a',
+                      fontSize: 12,
+                      textDecoration: 'none',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.color = '#8b6fa8'
+                      e.currentTarget.style.textDecoration = 'underline'
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.color = '#9a9a9a'
+                      e.currentTarget.style.textDecoration = 'none'
+                    }}
+                  >
+                    {t.forgotPassword}
+                  </a>
+                </div>
                 {/* 切换到验证码登录 */}
                 <button
                   onClick={() => {

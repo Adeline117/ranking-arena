@@ -106,7 +106,10 @@ export default function TraderFeed({ items, title, showPostButton = false, onPos
         {sortedItems.map((item, idx) => (
           <Link
             key={item.id}
-            href={item.groupId ? `/groups/${item.groupId}` : `/posts/${item.id}`}
+            href={item.type === 'repost' && item.original_post_id 
+              ? (item.groupId ? `/groups/${item.groupId}` : `/posts/${item.original_post_id}`)
+              : (item.groupId ? `/groups/${item.groupId}` : `/posts/${item.id}`)
+            }
             style={{ textDecoration: 'none' }}
           >
             <Box
@@ -123,6 +126,44 @@ export default function TraderFeed({ items, title, showPostButton = false, onPos
                 e.currentTarget.style.background = tokens.colors.bg.primary
               }}
             >
+              {/* 转发标识 */}
+              {item.type === 'repost' && (
+                <Box style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: tokens.spacing[1], 
+                  marginBottom: tokens.spacing[2],
+                  color: tokens.colors.text.tertiary,
+                }}>
+                  <span style={{ fontSize: 12 }}>↗</span>
+                  <Text size="xs" color="tertiary">
+                    转发自{' '}
+                    <Link
+                      href={`/u/${item.original_author_handle}`}
+                      onClick={(e) => e.stopPropagation()}
+                      style={{ color: tokens.colors.accent?.primary || '#8b6fa8', textDecoration: 'none' }}
+                    >
+                      @{item.original_author_handle}
+                    </Link>
+                  </Text>
+                </Box>
+              )}
+              
+              {/* 转发评论 */}
+              {item.type === 'repost' && item.repost_comment && (
+                <Box style={{ 
+                  marginBottom: tokens.spacing[2],
+                  padding: tokens.spacing[2],
+                  background: tokens.colors.bg.secondary,
+                  borderRadius: tokens.radius.md,
+                  borderLeft: `3px solid ${tokens.colors.accent?.primary || '#8b6fa8'}`,
+                }}>
+                  <Text size="xs" color="secondary" style={{ fontStyle: 'italic' }}>
+                    &ldquo;{item.repost_comment}&rdquo;
+                  </Text>
+                </Box>
+              )}
+
               <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: tokens.spacing[2] }}>
                 <Box style={{ flex: 1, display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
                   <Text size="sm" weight="black" style={{ color: tokens.colors.text.primary }}>

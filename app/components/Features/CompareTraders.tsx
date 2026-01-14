@@ -3,7 +3,7 @@
 import React, { memo } from 'react'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
-import { formatNumber, formatPercent } from '@/lib/design-system-helpers'
+import { formatCompact as formatNumber, formatPercent } from '@/lib/utils/format'
 import { Box, Text, Button } from '../Base'
 
 // Trader type - should match the type used in RankingTable

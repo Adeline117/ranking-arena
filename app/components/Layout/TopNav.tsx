@@ -21,6 +21,7 @@ export default function TopNav({ email }: { email: string | null }) {
   const [searchQuery, setSearchQuery] = useState('')
   const [showSearchDropdown, setShowSearchDropdown] = useState(false)
   const [theme, setTheme] = useState<'light' | 'dark'>('dark')
+  const [unreadCount, setUnreadCount] = useState(0)
   const menuRef = useRef<HTMLDivElement>(null)
   const searchRef = useRef<HTMLDivElement>(null)
 
@@ -78,6 +79,52 @@ export default function TopNav({ email }: { email: string | null }) {
       alive = false
     }
   }, [])
+
+  // 获取未读通知数量并订阅实时更新
+  useEffect(() => {
+    if (!myId) return
+
+    // 初始获取未读数量
+    const fetchUnreadCount = async () => {
+      try {
+        const { count, error } = await supabase
+          .from('notifications')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', myId)
+          .eq('read', false)
+        
+        if (!error && typeof count === 'number') {
+          setUnreadCount(count)
+        }
+      } catch (err) {
+        console.error('Error fetching unread count:', err)
+      }
+    }
+
+    fetchUnreadCount()
+
+    // 订阅实时通知更新
+    const channel = supabase
+      .channel(`notifications:${myId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'notifications',
+          filter: `user_id=eq.${myId}`,
+        },
+        (payload) => {
+          // 收到新通知或通知状态更新时，重新获取未读数量
+          fetchUnreadCount()
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [myId])
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -420,10 +467,81 @@ export default function TopNav({ email }: { email: string | null }) {
             position: 'relative',
           }}
         >
+          {/* 移动端搜索按钮 */}
+          <Link
+            href="/search"
+            className="mobile-search-button"
+            aria-label="搜索"
+            style={{
+              display: 'none',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 36,
+              height: 36,
+              borderRadius: tokens.radius.full,
+              background: 'transparent',
+              color: tokens.colors.text.secondary,
+              transition: `all ${tokens.transition.base}`,
+              textDecoration: 'none',
+            }}
+          >
+            <SearchIcon size={20} />
+          </Link>
           <LanguageSwitcher />
           <ThemeToggle />
           {myId ? (
             <>
+              {/* 通知铃铛图标 */}
+              <Link
+                href="/notifications"
+                aria-label="通知"
+                style={{
+                  position: 'relative',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: 36,
+                  height: 36,
+                  borderRadius: tokens.radius.full,
+                  background: 'transparent',
+                  color: tokens.colors.text.secondary,
+                  transition: `all ${tokens.transition.base}`,
+                  textDecoration: 'none',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = tokens.colors.bg.secondary
+                  e.currentTarget.style.color = tokens.colors.text.primary
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'transparent'
+                  e.currentTarget.style.color = tokens.colors.text.secondary
+                }}
+              >
+                <NotificationIcon size={20} />
+                {unreadCount > 0 && (
+                  <Box
+                    style={{
+                      position: 'absolute',
+                      top: 4,
+                      right: 4,
+                      minWidth: 16,
+                      height: 16,
+                      borderRadius: '50%',
+                      background: '#ff4d4d',
+                      color: '#fff',
+                      fontSize: 10,
+                      fontWeight: 900,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      padding: '0 4px',
+                      border: `2px solid ${tokens.colors.bg.primary}`,
+                    }}
+                  >
+                    {unreadCount > 99 ? '99+' : unreadCount}
+                  </Box>
+                )}
+              </Link>
               <Box
                 as="button"
                 onClick={() => setShowUserMenu(!showUserMenu)}
@@ -562,6 +680,7 @@ export default function TopNav({ email }: { email: string | null }) {
                       fontSize: tokens.typography.fontSize.base,
                       fontWeight: tokens.typography.fontWeight.bold,
                       transition: `all ${tokens.transition.base}`,
+                      position: 'relative',
                     }}
                     onMouseEnter={(e) => {
                       e.currentTarget.style.background = tokens.colors.bg.secondary
@@ -571,7 +690,31 @@ export default function TopNav({ email }: { email: string | null }) {
                     }}
                     onClick={() => setShowUserMenu(false)}
                   >
-                    <NotificationIcon size={16} />
+                    <Box style={{ position: 'relative' }}>
+                      <NotificationIcon size={16} />
+                      {unreadCount > 0 && (
+                        <Box
+                          style={{
+                            position: 'absolute',
+                            top: -6,
+                            right: -6,
+                            minWidth: 16,
+                            height: 16,
+                            borderRadius: '50%',
+                            background: '#ff4d4d',
+                            color: '#fff',
+                            fontSize: 10,
+                            fontWeight: 900,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            padding: '0 4px',
+                          }}
+                        >
+                          {unreadCount > 99 ? '99+' : unreadCount}
+                        </Box>
+                      )}
+                    </Box>
                     <span>{t('notifications')}</span>
                   </Link>
                   <Box

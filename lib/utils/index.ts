@@ -6,6 +6,8 @@ export * from './date'
 export * from './format'
 export * from './logger'
 export * from './error-handler'
+export * from './redis'
+export * from './rate-limit'
 
 /**
  * 安全的 JSON 解析

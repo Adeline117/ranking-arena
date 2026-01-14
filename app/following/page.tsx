@@ -31,9 +31,9 @@ export default function FollowingPage() {
     const load = async () => {
       setLoading(true)
       try {
-        // 获取用户关注的所有交易员ID
+        // 获取用户关注的所有交易员ID（使用 trader_follows 表）
         const { data: follows, error: followsError } = await supabase
-          .from('follows')
+          .from('trader_follows')
           .select('trader_id')
           .eq('user_id', userId)
 

@@ -8,6 +8,8 @@ import { useLanguage } from '../Utils/LanguageProvider'
 import { supabase } from '@/lib/supabase/client'
 import { formatTimeAgo } from '@/lib/utils/date'
 import { type PollChoice, type PostWithUserState, getPollWinner } from '@/lib/types'
+import { useToast } from '../UI/Toast'
+import { useDialog } from '../UI/Dialog'
 
 // 本地类型（扩展后端类型）
 type Post = PostWithUserState
@@ -15,6 +17,7 @@ type Post = PostWithUserState
 type Comment = {
   id: string
   content: string
+  user_id?: string
   author_handle?: string
   author_avatar_url?: string
   created_at: string
@@ -37,7 +40,7 @@ function pollColor(choice: PollChoice | 'tie') {
 
 function AvatarLink({ handle, avatarUrl }: { handle?: string | null; avatarUrl?: string | null }) {
   if (!handle) return null
-  const href = `/trader/${encodeURIComponent(handle)}`
+  const href = `/u/${encodeURIComponent(handle)}`
   return (
     <Link
       href={href}
@@ -87,6 +90,8 @@ function AvatarLink({ handle, avatarUrl }: { handle?: string | null; avatarUrl?:
 
 export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?: string; authorHandle?: string } = {}) {
   const { t } = useLanguage()
+  const { showToast } = useToast()
+  const { showDangerConfirm } = useDialog()
   const [posts, setPosts] = useState<Post[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -96,16 +101,23 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
   const [newComment, setNewComment] = useState('')
   const [submittingComment, setSubmittingComment] = useState(false)
   const [accessToken, setAccessToken] = useState<string | null>(null)
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+  const [editingPost, setEditingPost] = useState<Post | null>(null)
+  const [editTitle, setEditTitle] = useState('')
+  const [editContent, setEditContent] = useState('')
+  const [savingEdit, setSavingEdit] = useState(false)
   const processingRef = useRef<Set<string>>(new Set())
 
-  // 获取用户 token
+  // 获取用户 token 和 ID
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setAccessToken(session?.access_token || null)
+      setCurrentUserId(session?.user?.id || null)
     })
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setAccessToken(session?.access_token || null)
+      setCurrentUserId(session?.user?.id || null)
     })
 
     return () => subscription.unsubscribe()
@@ -173,7 +185,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
   // 点赞/踩
   const toggleReaction = useCallback(async (postId: string, reactionType: 'up' | 'down') => {
     if (!accessToken) {
-      alert('请先登录')
+      showToast('请先登录', 'warning')
       return
     }
 
@@ -191,17 +203,18 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
         body: JSON.stringify({ reaction_type: reactionType }),
       })
 
-      const data = await response.json()
+      const json = await response.json()
 
-      if (response.ok) {
+      if (response.ok && json.success) {
+        const result = json.data
         // 更新本地状态
         setPosts(prev => prev.map(p => {
           if (p.id === postId) {
             return {
               ...p,
-              like_count: data.like_count,
-              dislike_count: data.dislike_count,
-              user_reaction: data.reaction,
+              like_count: result.like_count,
+              dislike_count: result.dislike_count,
+              user_reaction: result.reaction,
             }
           }
           return p
@@ -211,9 +224,9 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
         if (openPost?.id === postId) {
           setOpenPost(prev => prev ? {
             ...prev,
-            like_count: data.like_count,
-            dislike_count: data.dislike_count,
-            user_reaction: data.reaction,
+            like_count: result.like_count,
+            dislike_count: result.dislike_count,
+            user_reaction: result.reaction,
           } : null)
         }
       }
@@ -227,7 +240,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
   // 投票
   const toggleVote = useCallback(async (postId: string, choice: PollChoice) => {
     if (!accessToken) {
-      alert('请先登录')
+      showToast('请先登录', 'warning')
       return
     }
 
@@ -245,18 +258,19 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
         body: JSON.stringify({ choice }),
       })
 
-      const data = await response.json()
+      const json = await response.json()
 
-      if (response.ok) {
+      if (response.ok && json.success) {
+        const result = json.data
         // 更新本地状态
         setPosts(prev => prev.map(p => {
           if (p.id === postId) {
             return {
               ...p,
-              poll_bull: data.poll.bull,
-              poll_bear: data.poll.bear,
-              poll_wait: data.poll.wait,
-              user_vote: data.vote,
+              poll_bull: result.poll.bull,
+              poll_bear: result.poll.bear,
+              poll_wait: result.poll.wait,
+              user_vote: result.vote,
             }
           }
           return p
@@ -266,10 +280,10 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
         if (openPost?.id === postId) {
           setOpenPost(prev => prev ? {
             ...prev,
-            poll_bull: data.poll.bull,
-            poll_bear: data.poll.bear,
-            poll_wait: data.poll.wait,
-            user_vote: data.vote,
+            poll_bull: result.poll.bull,
+            poll_bear: result.poll.bear,
+            poll_wait: result.poll.wait,
+            user_vote: result.vote,
           } : null)
         }
       }
@@ -283,7 +297,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
   // 提交评论
   const submitComment = useCallback(async (postId: string) => {
     if (!accessToken) {
-      alert('请先登录')
+      showToast('请先登录', 'warning')
       return
     }
 
@@ -300,10 +314,11 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
         body: JSON.stringify({ content: newComment.trim() }),
       })
 
-      const data = await response.json()
+      const json = await response.json()
 
-      if (response.ok) {
-        setComments(prev => [...prev, data.comment])
+      if (response.ok && json.success) {
+        const result = json.data
+        setComments(prev => [...prev, result.comment])
         setNewComment('')
         
         // 更新评论计数
@@ -318,15 +333,167 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
           setOpenPost(prev => prev ? { ...prev, comment_count: prev.comment_count + 1 } : null)
         }
       } else {
-        alert(data.error || '发表评论失败')
+        showToast(json.error || '发表评论失败', 'error')
       }
     } catch (err) {
       console.error('[PostFeed] 发表评论失败:', err)
-      alert('发表评论失败')
+      showToast('发表评论失败', 'error')
     } finally {
       setSubmittingComment(false)
     }
-  }, [accessToken, newComment, openPost?.id])
+  }, [accessToken, newComment, openPost?.id, showToast])
+
+  // 删除评论
+  const [deletingCommentId, setDeletingCommentId] = useState<string | null>(null)
+  
+  const deleteComment = useCallback(async (postId: string, commentId: string) => {
+    if (!accessToken) {
+      showToast('请先登录', 'warning')
+      return
+    }
+
+    const confirmed = await showDangerConfirm('删除评论', '确定要删除这条评论吗？')
+    if (!confirmed) return
+
+    setDeletingCommentId(commentId)
+    try {
+      const response = await fetch(`/api/posts/${postId}/comments`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ comment_id: commentId }),
+      })
+
+      const json = await response.json()
+
+      if (response.ok && json.success) {
+        // 从列表中移除评论
+        setComments(prev => prev.filter(c => c.id !== commentId))
+        
+        // 更新评论计数
+        setPosts(prev => prev.map(p => {
+          if (p.id === postId) {
+            return { ...p, comment_count: Math.max(0, p.comment_count - 1) }
+          }
+          return p
+        }))
+        
+        if (openPost?.id === postId) {
+          setOpenPost(prev => prev ? { ...prev, comment_count: Math.max(0, prev.comment_count - 1) } : null)
+        }
+        
+        showToast('评论已删除', 'success')
+      } else {
+        showToast(json.error || '删除评论失败', 'error')
+      }
+    } catch (err) {
+      console.error('[PostFeed] 删除评论失败:', err)
+      showToast('删除评论失败', 'error')
+    } finally {
+      setDeletingCommentId(null)
+    }
+  }, [accessToken, openPost?.id, showDangerConfirm, showToast])
+
+  // 开始编辑帖子
+  const handleStartEdit = useCallback((post: Post, e: React.MouseEvent) => {
+    e.stopPropagation()
+    setEditingPost(post)
+    setEditTitle(post.title || '')
+    setEditContent(post.content || '')
+  }, [])
+
+  // 保存编辑
+  const handleSaveEdit = useCallback(async () => {
+    if (!editingPost || !accessToken) return
+    if (!editTitle.trim()) {
+      showToast('标题不能为空', 'warning')
+      return
+    }
+
+    setSavingEdit(true)
+    try {
+      const response = await fetch(`/api/posts/${editingPost.id}/edit`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          title: editTitle.trim(),
+          content: editContent.trim(),
+        }),
+      })
+
+      const data = await response.json()
+
+      if (response.ok) {
+        // 更新本地状态
+        setPosts(prev => prev.map(p => 
+          p.id === editingPost.id 
+            ? { ...p, title: editTitle.trim(), content: editContent.trim() }
+            : p
+        ))
+        
+        // 如果弹窗打开，也更新
+        if (openPost?.id === editingPost.id) {
+          setOpenPost(prev => prev ? { ...prev, title: editTitle.trim(), content: editContent.trim() } : null)
+        }
+        
+        setEditingPost(null)
+        showToast('编辑成功', 'success')
+      } else {
+        showToast(data.error || '编辑失败', 'error')
+      }
+    } catch (err) {
+      console.error('[PostFeed] 编辑失败:', err)
+      showToast('编辑失败', 'error')
+    } finally {
+      setSavingEdit(false)
+    }
+  }, [editingPost, accessToken, editTitle, editContent, openPost?.id, showToast])
+
+  // 删除帖子
+  const handleDeletePost = useCallback(async (post: Post, e: React.MouseEvent) => {
+    e.stopPropagation()
+    
+    if (!accessToken) {
+      showToast('请先登录', 'warning')
+      return
+    }
+
+    const confirmed = await showDangerConfirm('删除帖子', '确定要删除这篇帖子吗？删除后无法恢复。')
+    if (!confirmed) return
+
+    try {
+      const response = await fetch(`/api/posts/${post.id}/delete`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+        },
+      })
+
+      const data = await response.json()
+
+      if (response.ok) {
+        // 从列表中移除
+        setPosts(prev => prev.filter(p => p.id !== post.id))
+        
+        // 如果弹窗打开，关闭它
+        if (openPost?.id === post.id) {
+          setOpenPost(null)
+        }
+        
+        showToast('删除成功', 'success')
+      } else {
+        showToast(data.error || '删除失败', 'error')
+      }
+    } catch (err) {
+      console.error('[PostFeed] 删除失败:', err)
+      showToast('删除失败', 'error')
+    }
+  }, [accessToken, openPost?.id, showDangerConfirm, showToast])
 
   // 打开帖子详情
   const handleOpenPost = useCallback((post: Post) => {
@@ -474,6 +641,56 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
                 <span style={{ color: tokens.colors.text.tertiary }}>
                   {formatTimeAgo(p.created_at)}
                 </span>
+                
+                {/* 编辑/删除按钮 - 仅作者可见 */}
+                {currentUserId && p.author_id === currentUserId && (
+                  <span style={{ display: 'flex', gap: 8, marginLeft: 'auto' }}>
+                    <button
+                      onClick={(e) => handleStartEdit(p, e)}
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        color: tokens.colors.text.tertiary,
+                        cursor: 'pointer',
+                        fontSize: 12,
+                        padding: '2px 6px',
+                        borderRadius: 4,
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.color = '#8b6fa8'
+                        e.currentTarget.style.background = 'rgba(139,111,168,0.1)'
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.color = tokens.colors.text.tertiary
+                        e.currentTarget.style.background = 'transparent'
+                      }}
+                    >
+                      编辑
+                    </button>
+                    <button
+                      onClick={(e) => handleDeletePost(p, e)}
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        color: tokens.colors.text.tertiary,
+                        cursor: 'pointer',
+                        fontSize: 12,
+                        padding: '2px 6px',
+                        borderRadius: 4,
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.color = '#ff4d4d'
+                        e.currentTarget.style.background = 'rgba(255,77,77,0.1)'
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.color = tokens.colors.text.tertiary
+                        e.currentTarget.style.background = 'transparent'
+                      }}
+                    >
+                      删除
+                    </button>
+                  </span>
+                )}
               </div>
             </div>
           )
@@ -610,7 +827,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
               <div style={{ color: tokens.colors.text.tertiary, fontSize: 13 }}>暂无评论，来发表第一条评论吧</div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                {comments.map((comment) => (
+                {comments.filter(Boolean).map((comment) => (
                   <div
                     key={comment.id}
                     style={{
@@ -625,6 +842,36 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
                       <span style={{ fontSize: 11, color: tokens.colors.text.tertiary }}>
                         {formatTimeAgo(comment.created_at)}
                       </span>
+                      {/* 删除按钮 - 仅评论作者可见 */}
+                      {currentUserId && comment.user_id === currentUserId && (
+                        <button
+                          onClick={() => openPost && deleteComment(openPost.id, comment.id)}
+                          disabled={deletingCommentId === comment.id}
+                          style={{
+                            marginLeft: 'auto',
+                            background: 'transparent',
+                            border: 'none',
+                            color: tokens.colors.text.tertiary,
+                            cursor: deletingCommentId === comment.id ? 'not-allowed' : 'pointer',
+                            fontSize: 11,
+                            padding: '2px 6px',
+                            borderRadius: 4,
+                            opacity: deletingCommentId === comment.id ? 0.5 : 1,
+                          }}
+                          onMouseEnter={(e) => {
+                            if (deletingCommentId !== comment.id) {
+                              e.currentTarget.style.color = '#ff4d4d'
+                              e.currentTarget.style.background = 'rgba(255,77,77,0.1)'
+                            }
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.color = tokens.colors.text.tertiary
+                            e.currentTarget.style.background = 'transparent'
+                          }}
+                        >
+                          {deletingCommentId === comment.id ? '删除中...' : '删除'}
+                        </button>
+                      )}
                     </div>
                     <div style={{ fontSize: 13, color: tokens.colors.text.primary, lineHeight: 1.6 }}>
                       {comment.content}
@@ -641,6 +888,36 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
                               <span style={{ fontSize: 11, color: tokens.colors.text.tertiary }}>
                                 {formatTimeAgo(reply.created_at)}
                               </span>
+                              {/* 删除按钮 - 仅回复作者可见 */}
+                              {currentUserId && reply.user_id === currentUserId && (
+                                <button
+                                  onClick={() => openPost && deleteComment(openPost.id, reply.id)}
+                                  disabled={deletingCommentId === reply.id}
+                                  style={{
+                                    marginLeft: 'auto',
+                                    background: 'transparent',
+                                    border: 'none',
+                                    color: tokens.colors.text.tertiary,
+                                    cursor: deletingCommentId === reply.id ? 'not-allowed' : 'pointer',
+                                    fontSize: 11,
+                                    padding: '2px 6px',
+                                    borderRadius: 4,
+                                    opacity: deletingCommentId === reply.id ? 0.5 : 1,
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    if (deletingCommentId !== reply.id) {
+                                      e.currentTarget.style.color = '#ff4d4d'
+                                      e.currentTarget.style.background = 'rgba(255,77,77,0.1)'
+                                    }
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.currentTarget.style.color = tokens.colors.text.tertiary
+                                    e.currentTarget.style.background = 'transparent'
+                                  }}
+                                >
+                                  {deletingCommentId === reply.id ? '...' : '删除'}
+                                </button>
+                              )}
                             </div>
                             <div style={{ fontSize: 13, color: tokens.colors.text.primary }}>
                               {reply.content}
@@ -655,6 +932,116 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
             )}
           </div>
         </Modal>
+      )}
+
+      {/* 编辑帖子弹窗 */}
+      {editingPost && (
+        <div
+          onClick={() => setEditingPost(null)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0, 0, 0, 0.65)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 20,
+            zIndex: 10000,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: '100%',
+              maxWidth: 500,
+              background: '#0b0b0b',
+              border: '1px solid #1f1f1f',
+              borderRadius: 16,
+              padding: 24,
+            }}
+          >
+            <h2 style={{ fontSize: 18, fontWeight: 900, marginBottom: 20 }}>编辑帖子</h2>
+            
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 800 }}>
+                标题
+              </label>
+              <input
+                type="text"
+                value={editTitle}
+                onChange={(e) => setEditTitle(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: 12,
+                  borderRadius: 12,
+                  border: '1px solid #1f1f1f',
+                  background: '#060606',
+                  color: '#eaeaea',
+                  fontSize: 14,
+                  outline: 'none',
+                }}
+              />
+            </div>
+
+            <div style={{ marginBottom: 20 }}>
+              <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 800 }}>
+                内容
+              </label>
+              <textarea
+                value={editContent}
+                onChange={(e) => setEditContent(e.target.value)}
+                rows={8}
+                style={{
+                  width: '100%',
+                  padding: 12,
+                  borderRadius: 12,
+                  border: '1px solid #1f1f1f',
+                  background: '#060606',
+                  color: '#eaeaea',
+                  fontSize: 14,
+                  outline: 'none',
+                  resize: 'vertical',
+                  lineHeight: 1.6,
+                }}
+              />
+            </div>
+
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setEditingPost(null)}
+                disabled={savingEdit}
+                style={{
+                  padding: '10px 20px',
+                  borderRadius: 10,
+                  border: '1px solid #1f1f1f',
+                  background: 'transparent',
+                  color: '#9a9a9a',
+                  fontWeight: 700,
+                  fontSize: 14,
+                  cursor: savingEdit ? 'not-allowed' : 'pointer',
+                }}
+              >
+                取消
+              </button>
+              <button
+                onClick={handleSaveEdit}
+                disabled={savingEdit || !editTitle.trim()}
+                style={{
+                  padding: '10px 20px',
+                  borderRadius: 10,
+                  border: 'none',
+                  background: savingEdit || !editTitle.trim() ? 'rgba(139,111,168,0.3)' : '#8b6fa8',
+                  color: '#fff',
+                  fontWeight: 900,
+                  fontSize: 14,
+                  cursor: savingEdit || !editTitle.trim() ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {savingEdit ? '保存中...' : '保存'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </>
   )

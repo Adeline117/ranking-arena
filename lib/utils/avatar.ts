@@ -65,21 +65,6 @@ export function getAvatarInitial(name: string | null | undefined): string {
   return firstChar
 }
 
-/**
- * 根据用户ID生成渐变背景（用于头像fallback）
- */
-export function getAvatarFallbackGradient(userId: string): string {
-  const hash1 = userId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)
-  const hash2 = userId.split('').reverse().reduce((acc, char) => acc + char.charCodeAt(0), 0)
-  
-  const hue1 = Math.abs(hash1) % 360
-  const hue2 = Math.abs(hash2) % 360
-  const saturation = 70 + (Math.abs(hash1) % 20)
-  const lightness1 = 40 + (Math.abs(hash1) % 20)
-  const lightness2 = 50 + (Math.abs(hash2) % 20)
-  
-  return `linear-gradient(135deg, hsl(${hue1}, ${saturation}%, ${lightness1}%), hsl(${hue2}, ${saturation}%, ${lightness2}%))`
-}
 
 /**
  * 将HSL颜色转换为十六进制（不带#）

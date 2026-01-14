@@ -11,11 +11,17 @@ import {
   error,
   handleError,
   validateString,
+  checkRateLimit,
+  RateLimitPresets,
 } from '@/lib/api'
 
 export const runtime = 'nodejs'
 
 export async function POST(request: NextRequest) {
+  // 敏感操作限流：每分钟 10 次
+  const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.sensitive)
+  if (rateLimitResponse) return rateLimitResponse
+
   try {
     // 验证用户身份
     const user = await requireAuth(request)

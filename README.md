@@ -135,9 +135,8 @@ npm run clean        # 清理构建缓存
 
 详细文档位于 `docs/` 目录：
 
-- [项目结构说明](docs/PROJECT_STRUCTURE.md)
 - [Supabase 配置指南](docs/SUPABASE_SETUP.md)
-- [交易员关注功能](docs/SETUP_TRADER_FOLLOWS.md)
+- [绑定账户后解锁字段清单](docs/ACCOUNT_REQUIRED_FIELDS.md)
 
 ## 🤝 贡献
 

@@ -13,6 +13,8 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.89.0",
+    "@upstash/ratelimit": "^2.0.8",
+    "@upstash/redis": "^1.36.1",
     "dotenv": "^17.2.3",
     "next": "16.1.1",
     "node-fetch": "^3.3.2",

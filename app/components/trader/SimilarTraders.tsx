@@ -4,7 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../Base'
-import { getAvatarFallbackGradient, getAvatarInitial } from '@/lib/utils/avatar'
+import { getAvatarGradient, getAvatarInitial } from '@/lib/utils/avatar'
 import type { TraderProfile } from '@/lib/data/trader'
 
 interface SimilarTradersProps {
@@ -37,7 +37,7 @@ function AvatarWithFallback({
         width: size,
         height: size,
         borderRadius: tokens.radius.full,
-        background: getAvatarFallbackGradient(traderId),
+        background: getAvatarGradient(traderId),
         border: `1.5px solid ${tokens.colors.border.primary}`,
         display: 'grid',
         placeItems: 'center',

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { supabase } from '@/lib/supabase/client'
+import { useToast } from './Toast'
 
 type FollowButtonProps = {
   traderId: string
@@ -10,6 +10,7 @@ type FollowButtonProps = {
 }
 
 export default function FollowButton({ traderId, userId, initialFollowing = false }: FollowButtonProps) {
+  const { showToast } = useToast()
   const [following, setFollowing] = useState(initialFollowing)
   const [loading, setLoading] = useState(false)
 
@@ -17,75 +18,49 @@ export default function FollowButton({ traderId, userId, initialFollowing = fals
     if (!userId) return
     ;(async () => {
       try {
-        // 使用 trader_follows 表（所有 trader 的粉丝数只能来源 Arena 注册用户的关注）
-        const { data } = await supabase
-          .from('trader_follows')
-          .select('*')
-          .eq('user_id', userId)
-          .eq('trader_id', traderId)
-          .maybeSingle()
-        setFollowing(!!data)
-      } catch (error: any) {
-        // 检查是否有实际的错误内容，避免记录空错误对象 {}
-        const hasErrorContent = !!(error?.message || error?.code || error?.hint || error?.details)
-        if (hasErrorContent) {
-          console.error('Check following error:', error)
+        // 通过 API 检查关注状态
+        const response = await fetch(`/api/follow?userId=${userId}&traderId=${traderId}`)
+        if (response.ok) {
+          const data = await response.json()
+          setFollowing(data.following)
         }
+      } catch (error) {
+        console.error('Check following error:', error)
       }
     })()
   }, [userId, traderId])
 
   const handleToggle = async () => {
     if (!userId) {
-      alert('请先登录')
+      showToast('请先登录', 'warning')
       return
     }
 
     setLoading(true)
     try {
-      if (following) {
-        // 取消关注：从 trader_follows 表删除
-        const { error } = await supabase
-          .from('trader_follows')
-          .delete()
-          .eq('user_id', userId)
-          .eq('trader_id', traderId)
-        
-        if (error) {
-          // 检查是否有实际的错误内容
-          const hasErrorContent = !!(error.message || error.code || error.hint || error.details)
-          if (hasErrorContent) {
-            throw error
-          }
-          // 如果是空错误对象 {}，不抛出异常，继续执行（可能是正常的数据库响应）
-        }
-        setFollowing(false)
+      const response = await fetch('/api/follow', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId,
+          traderId,
+          action: following ? 'unfollow' : 'follow',
+        }),
+      })
+
+      const data = await response.json()
+      if (response.ok) {
+        setFollowing(data.following)
+      } else if (data.tableNotFound) {
+        // 表不存在，静默处理，不记录错误
+        showToast('关注功能暂未开放', 'warning')
       } else {
-        // 关注：插入到 trader_follows 表
-        const { error } = await supabase
-          .from('trader_follows')
-          .insert({ user_id: userId, trader_id: traderId })
-        
-        if (error) {
-          // 检查是否有实际的错误内容
-          const hasErrorContent = !!(error.message || error.code || error.hint || error.details)
-          if (hasErrorContent) {
-            throw error
-          }
-          // 如果是空错误对象 {}，不抛出异常，继续执行（可能是正常的数据库响应）
-        }
-        setFollowing(true)
+        console.error('Toggle follow error:', data)
+        showToast('操作失败，请重试', 'error')
       }
-    } catch (error: any) {
-      // 检查是否有实际的错误内容，避免记录空错误对象 {}
-      const hasErrorContent = !!(error?.message || error?.code || error?.hint || error?.details)
-      if (hasErrorContent) {
-        console.error('Toggle follow error:', error)
-        alert('操作失败，请重试')
-      } else {
-        // 空错误对象 {}，可能是正常的数据库响应，不记录错误，但操作可能失败
-        // 这里不显示错误提示，让用户重试
-      }
+    } catch (error) {
+      console.error('Toggle follow error:', error)
+      showToast('操作失败，请重试', 'error')
     } finally {
       setLoading(false)
     }
@@ -133,4 +108,3 @@ export default function FollowButton({ traderId, userId, initialFollowing = fals
     </button>
   )
 }
-

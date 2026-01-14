@@ -7,7 +7,7 @@ import { tokens } from '@/lib/design-tokens'
 import { supabase } from '@/lib/supabase/client'
 import { Box, Text, Button } from '../Base'
 import FollowButton from '../UI/FollowButton'
-import { getAvatarFallbackGradient, getAvatarInitial } from '@/lib/utils/avatar'
+import { getAvatarGradient, getAvatarInitial } from '@/lib/utils/avatar'
 
 /**
  * 带 fallback 的头像组件
@@ -35,7 +35,7 @@ function AvatarWithFallback({
         width: size,
         height: size,
         borderRadius: tokens.radius.full,
-        background: getAvatarFallbackGradient(traderId),
+        background: getAvatarGradient(traderId),
         border: `2px solid ${tokens.colors.border.primary}`,
         display: 'grid',
         placeItems: 'center',
