@@ -146,6 +146,42 @@ export function validateUUID(
 }
 
 /**
+ * 验证布尔值
+ */
+export function validateBoolean(
+  value: unknown,
+  options: {
+    required?: boolean
+    fieldName?: string
+  } = {}
+): boolean | null {
+  const { required = false, fieldName = '字段' } = options
+  
+  if (value === undefined || value === null || value === '') {
+    if (required) {
+      throw new ValidationError(`${fieldName}不能为空`)
+    }
+    return null
+  }
+  
+  if (typeof value === 'boolean') {
+    return value
+  }
+  
+  if (typeof value === 'string') {
+    if (value.toLowerCase() === 'true') return true
+    if (value.toLowerCase() === 'false') return false
+  }
+  
+  if (typeof value === 'number') {
+    if (value === 1) return true
+    if (value === 0) return false
+  }
+  
+  throw new ValidationError(`${fieldName}必须是布尔值`)
+}
+
+/**
  * 验证邮箱
  */
 export function validateEmail(
