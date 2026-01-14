@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
@@ -12,6 +12,7 @@ import Card from '@/app/components/UI/Card'
 import { Box, Text, Button } from '@/app/components/Base'
 import type { Trader } from '@/app/components/Features/RankingTable'
 import { useLanguage } from '@/app/components/Utils/LanguageProvider'
+import { RankingSkeleton } from '@/app/components/UI/Skeleton'
 
 type Group = {
   id: string
@@ -140,7 +141,7 @@ function GroupsList() {
   )
 }
 
-export default function GroupsPage() {
+function GroupsContent() {
   const { t } = useLanguage()
   const searchParams = useSearchParams()
   const initialPostId = searchParams.get('post')
@@ -287,5 +288,20 @@ export default function GroupsPage() {
         </Box>
       </Box>
     </Box>
+  )
+}
+
+export default function GroupsPage() {
+  return (
+    <Suspense fallback={
+      <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
+        <TopNav email={null} />
+        <Box style={{ maxWidth: 1200, margin: '0 auto', padding: tokens.spacing[6] }}>
+          <RankingSkeleton />
+        </Box>
+      </Box>
+    }>
+      <GroupsContent />
+    </Suspense>
   )
 }
