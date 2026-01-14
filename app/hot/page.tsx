@@ -99,6 +99,11 @@ function HotContent() {
   const [showingOriginal, setShowingOriginal] = useState(true)
   const [translating, setTranslating] = useState(false)
   const [translationCache, setTranslationCache] = useState<Record<string, string>>({})
+  // 列表翻译状态
+  const [translatedListPosts, setTranslatedListPosts] = useState<Record<string, { title?: string; body?: string }>>({})
+  const [translatingList, setTranslatingList] = useState(false)
+  // 展开/收起状态
+  const [expandedPosts, setExpandedPosts] = useState<Record<string, boolean>>({})
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [traders, setTraders] = useState<Trader[]>([])
   const [loadingTraders, setLoadingTraders] = useState(true)
@@ -354,6 +359,52 @@ function HotContent() {
     return chineseRatio > 0.1
   }, [])
 
+  // 翻译列表帖子
+  const translateListPosts = useCallback(async (postsToTranslate: Post[], targetLang: 'zh' | 'en') => {
+    if (translatingList) return
+    
+    const needsTranslation = postsToTranslate.filter(p => {
+      if (translatedListPosts[p.id]?.title) return false
+      const titleIsChinese = isChineseText(p.title || '')
+      return targetLang === 'en' ? titleIsChinese : !titleIsChinese
+    })
+    
+    if (needsTranslation.length === 0) return
+    
+    setTranslatingList(true)
+    const batch = needsTranslation.slice(0, 5)
+    
+    for (const post of batch) {
+      try {
+        const response = await fetch('/api/translate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' },
+          cache: 'no-store',
+          body: JSON.stringify({ text: post.title || '', targetLang }),
+        })
+        const data = await response.json()
+        
+        if (response.ok && data.success && data.data?.translatedText) {
+          setTranslatedListPosts(prev => ({
+            ...prev,
+            [post.id]: { title: data.data.translatedText, body: post.body }
+          }))
+        }
+      } catch (err) {
+        console.error('[HotPage] 列表翻译出错:', err)
+      }
+    }
+    
+    setTranslatingList(false)
+  }, [translatingList, translatedListPosts, isChineseText])
+
+  // 当帖子加载或语言变化时翻译列表
+  useEffect(() => {
+    if (posts.length > 0) {
+      translateListPosts(posts, language as 'zh' | 'en')
+    }
+  }, [posts, language, translateListPosts])
+
   // 翻译帖子内容
   const translateContent = useCallback(async (postId: string, content: string, targetLang: 'zh' | 'en') => {
     const cacheKey = `${postId}-${targetLang}`
@@ -602,11 +653,43 @@ function HotContent() {
                           <Text size="xs" color="tertiary">{(p.views ?? 0).toLocaleString()} {t('views')}</Text>
                         </Box>
                         <Text className="hot-post-title" size="base" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>
-                          {p.title}
+                          {translatedListPosts[p.id]?.title || p.title}
                         </Text>
-                        <Text className="hot-post-body" size="sm" color="secondary" style={{ marginBottom: tokens.spacing[2], lineHeight: 1.5 }}>
-                          {renderContentWithLinks(p.body.slice(0, 100))}{p.body.length > 100 ? '...' : ''}
-                        </Text>
+                        {(() => {
+                          const isExpanded = expandedPosts[p.id]
+                          const isLongContent = p.body.length > 100
+                          const contentToShow = isExpanded || !isLongContent
+                            ? p.body
+                            : p.body.slice(0, 100) + '...'
+                          return (
+                            <>
+                              <Text className="hot-post-body" size="sm" color="secondary" style={{ marginBottom: tokens.spacing[2], lineHeight: 1.5 }}>
+                                {renderContentWithLinks(contentToShow)}
+                              </Text>
+                              {isLongContent && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    setExpandedPosts(prev => ({ ...prev, [p.id]: !prev[p.id] }))
+                                  }}
+                                  style={{
+                                    background: 'transparent',
+                                    border: 'none',
+                                    color: ARENA_PURPLE,
+                                    cursor: 'pointer',
+                                    fontSize: 12,
+                                    marginBottom: tokens.spacing[2],
+                                    padding: 0,
+                                  }}
+                                >
+                                  {isExpanded 
+                                    ? (language === 'zh' ? '收起' : 'Show less') 
+                                    : (language === 'zh' ? '展开查看' : 'Show more')}
+                                </button>
+                              )}
+                            </>
+                          )
+                        })()}
                         <Box className="hot-post-footer" style={{ display: 'flex', gap: tokens.spacing[3], fontSize: tokens.typography.fontSize.xs, color: tokens.colors.text.tertiary, flexWrap: 'wrap', alignItems: 'center' }}>
                           <Text size="xs" color="tertiary">{p.author}</Text>
                           <Text size="xs" color="tertiary">{p.time}</Text>
