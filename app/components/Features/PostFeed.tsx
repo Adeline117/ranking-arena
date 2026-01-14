@@ -616,7 +616,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
                       fontSize: 11,
                       color,
                       fontWeight: 950,
-                      border: '1px solid #1f1f1f',
+                      border: `1px solid ${tokens.colors.border.primary}`,
                       padding: '2px 6px',
                       borderRadius: 999,
                       marginLeft: 6,
@@ -731,7 +731,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
             {openPost.content}
           </div>
 
-          <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid #141414', display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+          <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${tokens.colors.border.secondary}`, display: 'flex', gap: 14, flexWrap: 'wrap' }}>
             <Action
               icon={<ThumbsUpIcon size={14} />}
               text={t('upvote')}
@@ -788,7 +788,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
           </div>
 
           {/* 评论区 */}
-          <div style={{ marginTop: 16, borderTop: '1px solid #141414', paddingTop: 16 }}>
+          <div style={{ marginTop: 16, borderTop: `1px solid ${tokens.colors.border.secondary}`, paddingTop: 16 }}>
             <div style={{ fontWeight: 950, marginBottom: 12 }}>
               {t('comments')} ({openPost.comment_count})
             </div>
@@ -969,16 +969,16 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
             style={{
               width: '100%',
               maxWidth: 500,
-              background: '#0b0b0b',
-              border: '1px solid #1f1f1f',
+              background: tokens.colors.bg.secondary,
+              border: `1px solid ${tokens.colors.border.primary}`,
               borderRadius: 16,
               padding: 24,
             }}
           >
-            <h2 style={{ fontSize: 18, fontWeight: 900, marginBottom: 20 }}>编辑帖子</h2>
+            <h2 style={{ fontSize: 18, fontWeight: 900, marginBottom: 20, color: tokens.colors.text.primary }}>编辑帖子</h2>
             
             <div style={{ marginBottom: 16 }}>
-              <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 800 }}>
+              <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 800, color: tokens.colors.text.primary }}>
                 标题
               </label>
               <input
@@ -989,9 +989,9 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
                   width: '100%',
                   padding: 12,
                   borderRadius: 12,
-                  border: '1px solid #1f1f1f',
-                  background: '#060606',
-                  color: '#eaeaea',
+                  border: `1px solid ${tokens.colors.border.primary}`,
+                  background: tokens.colors.bg.primary,
+                  color: tokens.colors.text.primary,
                   fontSize: 14,
                   outline: 'none',
                 }}
@@ -999,7 +999,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
             </div>
 
             <div style={{ marginBottom: 20 }}>
-              <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 800 }}>
+              <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 800, color: tokens.colors.text.primary }}>
                 内容
               </label>
               <textarea
@@ -1010,9 +1010,9 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
                   width: '100%',
                   padding: 12,
                   borderRadius: 12,
-                  border: '1px solid #1f1f1f',
-                  background: '#060606',
-                  color: '#eaeaea',
+                  border: `1px solid ${tokens.colors.border.primary}`,
+                  background: tokens.colors.bg.primary,
+                  color: tokens.colors.text.primary,
                   fontSize: 14,
                   outline: 'none',
                   resize: 'vertical',
@@ -1028,9 +1028,9 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
                 style={{
                   padding: '10px 20px',
                   borderRadius: 10,
-                  border: '1px solid #1f1f1f',
+                  border: `1px solid ${tokens.colors.border.primary}`,
                   background: 'transparent',
-                  color: '#9a9a9a',
+                  color: tokens.colors.text.secondary,
                   fontWeight: 700,
                   fontSize: 14,
                   cursor: savingEdit ? 'not-allowed' : 'pointer',
@@ -1215,9 +1215,9 @@ function Modal(props: { children: React.ReactNode; onClose: () => void }) {
           width: 'min(760px, 100%)',
           maxHeight: '90vh',
           overflowY: 'auto',
-          border: '1px solid #1f1f1f',
+          border: `1px solid ${tokens.colors.border.primary}`,
           borderRadius: 16,
-          background: '#0b0b0b',
+          background: tokens.colors.bg.secondary,
           padding: 16,
         }}
       >

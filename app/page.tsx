@@ -222,7 +222,15 @@ export default function HomePage() {
           </Box>
 
           {/* 右：市场 */}
-          <Box as="section" className="home-right-section">
+          <Box 
+            as="section" 
+            className="home-right-section"
+            style={{
+              position: 'sticky',
+              top: tokens.spacing[4],
+              alignSelf: 'start',
+            }}
+          >
             <ErrorBoundary>
               <Suspense fallback={<SkeletonCard />}>
                 <MarketPanel />

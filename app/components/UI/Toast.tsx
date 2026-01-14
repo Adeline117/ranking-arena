@@ -28,34 +28,38 @@ export function useToast() {
 }
 
 const getToastStyles = (type: ToastType) => {
+  const successColor = tokens.colors.accent.success
+  const errorColor = tokens.colors.accent.error
+  const warningColor = tokens.colors.accent.warning
+  
   switch (type) {
     case 'success':
       return {
-        background: 'rgba(47, 229, 125, 0.15)',
-        border: '1px solid rgba(47, 229, 125, 0.4)',
-        color: '#2fe57d',
+        background: `${successColor}20`,
+        border: `1px solid ${successColor}66`,
+        color: successColor,
         icon: '✓',
       }
     case 'error':
       return {
-        background: 'rgba(255, 77, 77, 0.15)',
-        border: '1px solid rgba(255, 77, 77, 0.4)',
-        color: '#ff7c7c',
+        background: `${errorColor}20`,
+        border: `1px solid ${errorColor}66`,
+        color: errorColor,
         icon: '✕',
       }
     case 'warning':
       return {
-        background: 'rgba(255, 193, 7, 0.15)',
-        border: '1px solid rgba(255, 193, 7, 0.4)',
-        color: '#ffc107',
+        background: `${warningColor}20`,
+        border: `1px solid ${warningColor}66`,
+        color: warningColor,
         icon: '⚠',
       }
     case 'info':
     default:
       return {
-        background: 'rgba(139, 111, 168, 0.15)',
-        border: '1px solid rgba(139, 111, 168, 0.4)',
-        color: '#8b6fa8',
+        background: `${tokens.colors.accent.primary}20`,
+        border: `1px solid ${tokens.colors.accent.primary}66`,
+        color: tokens.colors.accent.primary,
         icon: 'ℹ',
       }
   }
