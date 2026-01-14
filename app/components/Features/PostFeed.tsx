@@ -177,7 +177,8 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
 
       const params = new URLSearchParams()
       params.set('limit', '20')
-      params.set('sort_by', 'created_at')
+      // 推荐页面默认按热度排序，特定小组页面按时间排序
+      params.set('sort_by', props.groupId ? 'created_at' : 'hot_score')
       params.set('sort_order', 'desc')
       
       if (props.groupId) params.set('group_id', props.groupId)

@@ -539,58 +539,7 @@ export default function TopNav({ email }: { email: string | null }) {
           <ThemeToggle />
           {myId ? (
             <>
-              {/* 私信图标 */}
-              <Link
-                href="/messages"
-                aria-label="私信"
-                style={{
-                  position: 'relative',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  width: 36,
-                  height: 36,
-                  borderRadius: tokens.radius.full,
-                  background: 'transparent',
-                  color: tokens.colors.text.secondary,
-                  transition: `all ${tokens.transition.base}`,
-                  textDecoration: 'none',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = tokens.colors.bg.secondary
-                  e.currentTarget.style.color = tokens.colors.text.primary
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'transparent'
-                  e.currentTarget.style.color = tokens.colors.text.secondary
-                }}
-              >
-                <MessageIcon size={20} />
-                {unreadMessageCount > 0 && (
-                  <Box
-                    style={{
-                      position: 'absolute',
-                      top: 4,
-                      right: 4,
-                      minWidth: 16,
-                      height: 16,
-                      borderRadius: '50%',
-                      background: '#8b6fa8',
-                      color: '#fff',
-                      fontSize: 10,
-                      fontWeight: 900,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      padding: '0 4px',
-                      border: `2px solid ${tokens.colors.bg.primary}`,
-                    }}
-                  >
-                    {unreadMessageCount > 99 ? '99+' : unreadMessageCount}
-                  </Box>
-                )}
-              </Link>
-              {/* 通知铃铛图标 */}
+              {/* 通知铃铛图标（包含私信和系统通知） */}
               <Link
                 href="/notifications"
                 aria-label="通知"
@@ -617,7 +566,7 @@ export default function TopNav({ email }: { email: string | null }) {
                 }}
               >
                 <NotificationIcon size={20} />
-                {unreadCount > 0 && (
+                {(unreadCount + unreadMessageCount) > 0 && (
                   <Box
                     style={{
                       position: 'absolute',
@@ -637,7 +586,7 @@ export default function TopNav({ email }: { email: string | null }) {
                       border: `2px solid ${tokens.colors.bg.primary}`,
                     }}
                   >
-                    {unreadCount > 99 ? '99+' : unreadCount}
+                    {(unreadCount + unreadMessageCount) > 99 ? '99+' : (unreadCount + unreadMessageCount)}
                   </Box>
                 )}
               </Link>
