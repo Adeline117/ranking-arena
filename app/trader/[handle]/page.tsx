@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Suspense } from 'react'
 import Link from 'next/link'
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
@@ -29,7 +29,7 @@ import type {
 
 type TabKey = 'overview' | 'stats' | 'portfolio'
 
-export default function TraderPage(props: { params: { handle: string } | Promise<{ handle: string }> }) {
+function TraderContent(props: { params: { handle: string } | Promise<{ handle: string }> }) {
   const { t } = useLanguage()
   const searchParams = useSearchParams()
   const router = useRouter()
@@ -259,6 +259,21 @@ export default function TraderPage(props: { params: { handle: string } | Promise
         {activeTab === 'portfolio' && <PortfolioTable items={portfolio} history={positionHistory} />}
       </Box>
     </Box>
+  )
+}
+
+export default function TraderPage(props: { params: { handle: string } | Promise<{ handle: string }> }) {
+  return (
+    <Suspense fallback={
+      <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
+        <TopNav email={null} />
+        <Box style={{ maxWidth: 1200, margin: '0 auto', padding: tokens.spacing[6] }}>
+          <RankingSkeleton />
+        </Box>
+      </Box>
+    }>
+      <TraderContent {...props} />
+    </Suspense>
   )
 }
 
