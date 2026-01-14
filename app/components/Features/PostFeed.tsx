@@ -772,7 +772,11 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
     try {
       const response = await fetch('/api/translate', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-cache',
+        },
+        cache: 'no-store',
         body: JSON.stringify({ text: content, targetLang }),
       })
       const data = await response.json()
