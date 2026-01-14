@@ -937,7 +937,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
     setShowingOriginal(true)
     loadComments(post.id)
 
-    // 自动检测并翻译
+    // 自动检测并翻译内容
     if (post.content) {
       const isChinese = isChineseText(post.content)
       const needsTranslation = (language === 'en' && isChinese) || (language === 'zh' && !isChinese)
@@ -946,7 +946,16 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
         translateContent(post.id, post.content, language)
       }
     }
-  }, [loadComments, language, isChineseText, translateContent])
+    
+    // 翻译标题（如果还没翻译过）
+    if (!translatedListPosts[post.id]?.title && post.title) {
+      const titleIsChinese = isChineseText(post.title)
+      const needsTitleTranslation = (language === 'en' && titleIsChinese) || (language === 'zh' && !titleIsChinese)
+      if (needsTitleTranslation) {
+        translateListPosts([post], language as 'zh' | 'en')
+      }
+    }
+  }, [loadComments, language, isChineseText, translateContent, translatedListPosts, translateListPosts])
 
   if (loading) {
     return (
@@ -1150,7 +1159,9 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, marginTop: 8 }}>
-            <div style={{ fontSize: 20, fontWeight: 950, lineHeight: 1.25 }}>{openPost.title}</div>
+            <div style={{ fontSize: 20, fontWeight: 950, lineHeight: 1.25 }}>
+              {translatedListPosts[openPost.id]?.title || openPost.title}
+            </div>
             <AvatarLink handle={openPost.author_handle} avatarUrl={openPost.author_avatar_url} />
           </div>
 
