@@ -38,21 +38,39 @@ export async function getPostComments(
 ): Promise<Comment[]> {
   const { limit = 50, offset = 0, userId } = options
 
-  // 获取顶级评论
-  const { data: comments, error } = await supabase
+  // 获取所有顶级评论（不在这里排序，后面会自定义排序）
+  const { data: allTopComments, error } = await supabase
     .from('comments')
     .select('*')
     .eq('post_id', postId)
     .is('parent_id', null)
-    .order('created_at', { ascending: true })
-    .range(offset, offset + limit - 1)
 
   if (error) {
     console.error('[comments] 获取评论失败:', error)
     throw error
   }
 
-  if (!comments || comments.length === 0) return []
+  if (!allTopComments || allTopComments.length === 0) return []
+
+  // 自定义排序：前3条按点赞数降序，后面按时间升序
+  const sortedComments = [...allTopComments]
+  
+  // 按点赞数降序排序
+  const byLikes = [...sortedComments].sort((a, b) => (b.like_count || 0) - (a.like_count || 0))
+  
+  // 取前3个高赞评论
+  const top3 = byLikes.slice(0, 3)
+  const top3Ids = new Set(top3.map(c => c.id))
+  
+  // 剩余评论按时间升序
+  const rest = sortedComments
+    .filter(c => !top3Ids.has(c.id))
+    .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+  
+  // 合并：前3高赞 + 剩余按时间
+  const comments = [...top3, ...rest].slice(offset, offset + limit)
+
+  if (comments.length === 0) return []
 
   // 获取所有回复
   const commentIds = comments.map(c => c.id)
