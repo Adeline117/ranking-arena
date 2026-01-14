@@ -21,8 +21,9 @@ export async function POST(request: NextRequest) {
 
     // 如果没有配置 OpenAI API Key，返回错误
     if (!OPENAI_API_KEY) {
+      console.error('[translate] OPENAI_API_KEY not configured. Available env vars:', Object.keys(process.env).filter(k => k.includes('OPENAI') || k.includes('API')))
       return NextResponse.json(
-        { success: false, error: '翻译服务未配置' },
+        { success: false, error: '翻译服务未配置，请在 Vercel 环境变量中添加 OPENAI_API_KEY' },
         { status: 503 }
       )
     }
