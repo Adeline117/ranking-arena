@@ -1,3 +1,4 @@
+import React from 'react'
 import { type PollChoice } from '@/lib/types'
 
 export const ARENA_PURPLE = '#8b6fa8'

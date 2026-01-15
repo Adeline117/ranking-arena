@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
 import { supabase } from '@/lib/supabase/client'
@@ -172,30 +171,8 @@ export default function TraderHeader({ handle, traderId, avatarUrl, isRegistered
           ← 返回
         </Button>
         
-        {isOwnProfile ? (
-          <Button
-            variant="ghost"
-            size="md"
-            onClick={() => router.push('/settings')}
-          >
-            编辑个人资料
-          </Button>
-        ) : (
+        {!isOwnProfile && (
           <>
-            {isRegistered && (
-              <Link href={`/u/${handle}`} style={{ textDecoration: 'none' }}>
-                <Text
-                  size="sm"
-                  weight="bold"
-                  style={{
-                    color: tokens.colors.text.secondary,
-                    textDecoration: 'underline',
-                  }}
-                >
-                  主页
-                </Text>
-              </Link>
-            )}
             {!isRegistered && userId && (
               <ClaimTraderButton traderId={traderId} handle={handle} userId={userId} source={source} />
             )}
