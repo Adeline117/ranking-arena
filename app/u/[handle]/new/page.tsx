@@ -130,6 +130,8 @@ export default function NewPostPage() {
   ])
   const [pollDuration, setPollDuration] = useState(0) // 默认永久（0表示永久）
   const [pollType, setPollType] = useState<'single' | 'multiple'>('single')
+  // 图片拖拽排序状态
+  const [draggedImageIndex, setDraggedImageIndex] = useState<number | null>(null)
 
   const draftKey = `${DRAFT_KEY_PREFIX}${handle}`
 
@@ -260,11 +262,55 @@ export default function NewPostPage() {
     setImages(prev => prev.filter((_, i) => i !== index))
   }
 
-  // 插入图片到内容
+  // 图片拖拽排序处理
+  const handleDragStart = (index: number) => {
+    setDraggedImageIndex(index)
+  }
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault()
+    if (draggedImageIndex === null || draggedImageIndex === index) return
+    
+    // 重新排序图片
+    setImages(prev => {
+      const newImages = [...prev]
+      const draggedImage = newImages[draggedImageIndex]
+      newImages.splice(draggedImageIndex, 1)
+      newImages.splice(index, 0, draggedImage)
+      return newImages
+    })
+    setDraggedImageIndex(index)
+  }
+
+  const handleDragEnd = () => {
+    setDraggedImageIndex(null)
+  }
+
+  // 插入图片到内容（在光标位置）
   const insertImageToContent = (url: string) => {
     const imageMarkdown = `\n![image](${url})\n`
-    setContent(prev => prev + imageMarkdown)
+    
+    // 如果有记录的光标位置，在光标位置插入
+    if (cursorPosition !== null) {
+      setContent(prev => {
+        const before = prev.slice(0, cursorPosition)
+        const after = prev.slice(cursorPosition)
+        return before + imageMarkdown + after
+      })
+      // 更新光标位置
+      setCursorPosition(cursorPosition + imageMarkdown.length)
+    } else {
+      // 否则添加到末尾
+      setContent(prev => prev + imageMarkdown)
+    }
     showToast(t('imageInserted'), 'info')
+  }
+
+  // 保存光标位置
+  const handleTextareaSelect = () => {
+    if (textareaRef.current) {
+      setCursorPosition(textareaRef.current.selectionStart)
+    }
   }
 
   const handleSubmit = async () => {
@@ -515,9 +561,16 @@ export default function NewPostPage() {
               </Box>
             ) : (
               <textarea
+                ref={textareaRef}
                 placeholder={t('enterContent')}
                 value={content}
-                onChange={(e) => setContent(e.target.value.slice(0, CONTENT_MAX_LENGTH))}
+                onChange={(e) => {
+                  setContent(e.target.value.slice(0, CONTENT_MAX_LENGTH))
+                  handleTextareaSelect()
+                }}
+                onSelect={handleTextareaSelect}
+                onClick={handleTextareaSelect}
+                onKeyUp={handleTextareaSelect}
                 maxLength={CONTENT_MAX_LENGTH}
                 rows={12}
                 style={{
@@ -764,26 +817,37 @@ export default function NewPostPage() {
                 marginBottom: tokens.spacing[3],
               }}
             >
-              {/* 已上传的图片预览 */}
+              {/* 已上传的图片预览 - 支持拖拽排序 */}
               {images.map((image, index) => (
                 <Box
-                  key={index}
+                  key={image.url}
+                  draggable
+                  onDragStart={() => handleDragStart(index)}
+                  onDragOver={(e) => handleDragOver(e, index)}
+                  onDragEnd={handleDragEnd}
                   style={{
                     position: 'relative',
                     width: 100,
                     height: 100,
                     borderRadius: tokens.radius.md,
                     overflow: 'hidden',
-                    border: `1px solid ${tokens.colors.border.primary}`,
+                    border: draggedImageIndex === index 
+                      ? `2px solid ${tokens.colors.brand}` 
+                      : `1px solid ${tokens.colors.border.primary}`,
+                    cursor: 'grab',
+                    opacity: draggedImageIndex === index ? 0.7 : 1,
+                    transition: 'all 0.2s ease',
                   }}
                 >
                   <img
                     src={image.url}
                     alt={`Upload ${index + 1}`}
+                    draggable={false}
                     style={{
                       width: '100%',
                       height: '100%',
                       objectFit: 'cover',
+                      pointerEvents: 'none',
                     }}
                   />
                   <Box
