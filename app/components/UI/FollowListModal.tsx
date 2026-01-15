@@ -227,7 +227,7 @@ export default function FollowListModal({
                         targetUserId={user.id}
                         currentUserId={currentUserId}
                         size="sm"
-                        initialIsFollowing={user.is_following}
+                        initialFollowing={user.is_following}
                       />
                     </Box>
                   )}
