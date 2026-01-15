@@ -301,8 +301,9 @@ export default function SettingsPage() {
         )
       
       if (userProfilesError) {
-        console.error('Error saving profile:', userProfilesError)
-        showToast('保存失败，请重试', 'error')
+        console.error('Error saving profile:', JSON.stringify(userProfilesError, null, 2))
+        console.error('Error details - code:', userProfilesError.code, 'message:', userProfilesError.message, 'hint:', userProfilesError.hint)
+        showToast(`保存失败: ${userProfilesError.message || '请重试'}`, 'error')
         return
       }
       
