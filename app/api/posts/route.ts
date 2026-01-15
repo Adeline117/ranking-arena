@@ -2,6 +2,10 @@
  * 帖子列表 API
  * GET /api/posts - 获取帖子列表
  * POST /api/posts - 创建新帖子
+ * 
+ * 性能优化：
+ * - 未登录用户使用缓存
+ * - 并行获取用户反应和投票状态
  */
 
 import { NextRequest } from 'next/server'
@@ -20,6 +24,22 @@ import {
   RateLimitPresets,
 } from '@/lib/api'
 import { getPosts, createPost, getUserPostReactions, getUserPostVotes } from '@/lib/data/posts'
+import { getServerCache, setServerCache, deleteServerCacheByPrefix, CacheTTL } from '@/lib/utils/server-cache'
+
+// 缓存键前缀
+const POSTS_CACHE_PREFIX = 'posts:'
+
+// 生成缓存键
+function getCacheKey(params: {
+  limit: number
+  offset: number
+  group_id?: string
+  author_handle?: string
+  sort_by: string
+  sort_order: string
+}): string {
+  return `${POSTS_CACHE_PREFIX}${params.sort_by}:${params.sort_order}:${params.limit}:${params.offset}:${params.group_id || ''}:${params.author_handle || ''}`
+}
 
 export async function GET(request: NextRequest) {
   // 公开 API 限流：每分钟 100 次
@@ -43,24 +63,45 @@ export async function GET(request: NextRequest) {
       ['asc', 'desc'] as const
     ) ?? 'desc'
 
-    const posts = await getPosts(supabase, {
-      limit,
-      offset,
-      group_id,
-      author_handle,
-      sort_by,
-      sort_order,
-    })
+    // 检查用户登录状态
+    const user = await getAuthUser(request)
+    
+    // 生成缓存键
+    const cacheKey = getCacheKey({ limit, offset, group_id, author_handle, sort_by, sort_order })
+    
+    // 尝试从缓存获取帖子列表
+    let posts = getServerCache<Awaited<ReturnType<typeof getPosts>>>(cacheKey)
+    
+    if (!posts) {
+      // 缓存未命中，从数据库获取
+      posts = await getPosts(supabase, {
+        limit,
+        offset,
+        group_id,
+        author_handle,
+        sort_by,
+        sort_order,
+      })
+      
+      // 缓存帖子列表（1分钟）
+      setServerCache(cacheKey, posts, CacheTTL.SHORT)
+    }
 
-    // 如果用户已登录，获取用户的点赞和投票状态
+    // 如果用户已登录，获取用户的点赞和投票状态（并行获取）
     let userReactions: Map<string, 'up' | 'down'> = new Map()
     let userVotes: Map<string, 'bull' | 'bear' | 'wait'> = new Map()
 
-    const user = await getAuthUser(request)
     if (user && posts.length > 0) {
       const postIds = posts.map(p => p.id)
-      userReactions = await getUserPostReactions(supabase, postIds, user.id)
-      userVotes = await getUserPostVotes(supabase, postIds, user.id)
+      
+      // 🚀 并行获取用户反应和投票状态
+      const [reactions, votes] = await Promise.all([
+        getUserPostReactions(supabase, postIds, user.id),
+        getUserPostVotes(supabase, postIds, user.id),
+      ])
+      
+      userReactions = reactions
+      userVotes = votes
     }
 
     // 添加用户状态到帖子
@@ -104,6 +145,9 @@ export async function POST(request: NextRequest) {
       group_id,
       poll_enabled,
     })
+
+    // 创建帖子后清除相关缓存
+    deleteServerCacheByPrefix(POSTS_CACHE_PREFIX)
 
     return success({ post }, 201)
   } catch (error) {

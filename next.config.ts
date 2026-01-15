@@ -46,8 +46,11 @@ const nextConfig: NextConfig = {
   
   // 实验性功能
   experimental: {
-    optimizePackageImports: ['@supabase/supabase-js', '@upstash/redis', '@upstash/ratelimit'],
+    optimizePackageImports: ['@supabase/supabase-js', '@upstash/redis', '@upstash/ratelimit', 'lodash', 'date-fns'],
   },
+  
+  // 生产环境不生成 source maps（减少构建大小）
+  productionBrowserSourceMaps: false,
   
   // 响应头配置 - 缓存优化
   async headers() {

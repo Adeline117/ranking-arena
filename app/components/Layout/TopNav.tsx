@@ -271,19 +271,11 @@ export default function TopNav({ email }: { email: string | null }) {
             }}
             onMouseEnter={(e) => {
               e.currentTarget.style.transform = 'translateY(-1px)'
-              const logoBox = e.currentTarget.querySelector('[data-logo-box]') as HTMLElement
-              if (logoBox) {
-                logoBox.style.transform = 'scale(1.05) rotate(2deg)'
-                logoBox.style.boxShadow = tokens.shadow.md
-              }
+              e.currentTarget.style.opacity = '0.85'
             }}
             onMouseLeave={(e) => {
               e.currentTarget.style.transform = 'translateY(0)'
-              const logoBox = e.currentTarget.querySelector('[data-logo-box]') as HTMLElement
-              if (logoBox) {
-                logoBox.style.transform = 'scale(1) rotate(0deg)'
-                logoBox.style.boxShadow = tokens.shadow.sm
-              }
+              e.currentTarget.style.opacity = '1'
             }}
             onKeyDown={(e) => {
               if (e.key === 'Enter' || e.key === ' ') {
@@ -292,99 +284,52 @@ export default function TopNav({ email }: { email: string | null }) {
               }
             }}
           >
-            {/* Logo Icon - 紫色系现代设计 */}
+            {/* Logo - 莫比乌斯环 + arena */}
             <Box
               data-logo-box
               style={{
-                position: 'relative',
-                width: 40,
-                height: 40,
-                borderRadius: tokens.radius.lg,
-                // 紫色系渐变：深紫到浅紫（适配主题）
-                background: theme === 'light'
-                  ? 'linear-gradient(135deg, #7C3AED 0%, #A855F7 50%, #C084FC 100%)' // 亮色主题：深紫到浅紫
-                  : 'linear-gradient(135deg, #8B5CF6 0%, #A78BFA 50%, #C4B5FD 100%)', // 暗色主题：稍亮紫色
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'center',
-                fontWeight: tokens.typography.fontWeight.black,
-                color: '#FFFFFF', // 白色文字确保在紫色背景上清晰可见
-                fontSize: '24px',
-                boxShadow: theme === 'light'
-                  ? '0 2px 8px rgba(124, 58, 237, 0.3)' // 亮色主题：紫色阴影
-                  : '0 2px 8px rgba(139, 92, 246, 0.4), 0 0 16px rgba(139, 92, 246, 0.2)', // 暗色主题：紫色光晕
+                gap: '8px',
                 transition: `all ${tokens.transition.base}`,
-                overflow: 'hidden',
               }}
             >
-              {/* 内部装饰光效 - 紫色光效 */}
-              <Box
-                style={{
-                  position: 'absolute',
-                  top: '-50%',
-                  left: '-50%',
-                  width: '200%',
-                  height: '200%',
-                  background: `radial-gradient(circle, rgba(255,255,255,0.25) 0%, rgba(167, 139, 250, 0.3) 50%, transparent 70%)`,
-                  opacity: 0.7,
-                  transition: `opacity ${tokens.transition.base}`,
-                }}
-              />
-              {/* Logo文字 - 字母A设计（现代字体样式） */}
-              <Box
-                style={{
-                  position: 'relative',
-                  zIndex: 1,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  width: '100%',
-                  height: '100%',
-                  fontFamily: 'var(--font-geist-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-                  fontSize: '28px',
-                  fontWeight: 700, // 使用bold而不是black，更加优雅
-                  letterSpacing: '-1px', // 负字间距让字母更紧凑
-                  lineHeight: '1',
-                  color: '#FFFFFF',
-                  textShadow: '0 2px 8px rgba(0, 0, 0, 0.5), 0 0 20px rgba(255, 255, 255, 0.1)', // 更强的阴影和微光
-                  fontFeatureSettings: '"liga" 1, "kern" 1', // 启用连字和字距调整
-                  WebkitFontSmoothing: 'antialiased',
-                  MozOsxFontSmoothing: 'grayscale',
-                  transform: 'translateY(-1px)', // 微调垂直位置，视觉上更居中
-                }}
+              {/* 无限符号 ∞ - 两个水滴尖端相连 */}
+              <svg
+                width="28"
+                height="14"
+                viewBox="0 0 56 28"
+                fill="none"
+                style={{ flexShrink: 0 }}
               >
-                A
-              </Box>
-            </Box>
-            {/* Logo文字 - 可选：如果需要显示完整品牌名 */}
-            <Box
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                justifyContent: 'center',
-                lineHeight: tokens.typography.lineHeight.tight,
-              }}
-            >
+                <defs>
+                  <linearGradient id="infGrad" x1="0%" y1="50%" x2="100%" y2="50%">
+                    <stop offset="0%" stopColor="#A78BFA" />
+                    <stop offset="50%" stopColor="#8B5CF6" />
+                    <stop offset="100%" stopColor="#7C3AED" />
+                  </linearGradient>
+                </defs>
+                {/* 完整的 ∞：两个水滴，尖端在中心交叉 */}
+                <path
+                  d="M28 14 C22 6, 12 4, 8 8 C4 12, 4 16, 8 20 C12 24, 22 22, 28 14 C34 6, 44 4, 48 8 C52 12, 52 16, 48 20 C44 24, 34 22, 28 14"
+                  stroke="url(#infGrad)"
+                  strokeWidth="5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  fill="none"
+                />
+              </svg>
+              {/* 文字：arena - 首字母变色 */}
               <Box
                 style={{
-                  fontSize: tokens.typography.fontSize.sm,
-                  fontWeight: tokens.typography.fontWeight.black,
+                  fontSize: '22px',
+                  fontWeight: 700,
                   color: tokens.colors.text.primary,
                   letterSpacing: '-0.3px',
+                  fontFamily: 'var(--font-geist-sans), system-ui, sans-serif',
                 }}
               >
-                Ranking
-              </Box>
-              <Box
-                style={{
-                  fontSize: tokens.typography.fontSize.xs,
-                  fontWeight: tokens.typography.fontWeight.semibold,
-                  color: tokens.colors.text.secondary,
-                  letterSpacing: '0.5px',
-                  marginTop: '-2px',
-                }}
-              >
-                Arena
+                <span style={{ color: '#8B5CF6', fontWeight: 800 }}>a</span>rena
               </Box>
             </Box>
           </Link>
