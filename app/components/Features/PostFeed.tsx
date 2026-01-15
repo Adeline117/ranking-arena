@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { tokens } from '@/lib/design-tokens'
@@ -32,19 +33,122 @@ const REPLIES_PREVIEW_COUNT = 2
 
 const ARENA_PURPLE = '#8b6fa8'
 
-// 链接解析函数 - 将文本中的URL转换为可点击链接
+// 内容渲染函数 - 将文本中的URL转换为可点击链接，Markdown图片转换为图片元素
 function renderContentWithLinks(text: string) {
   if (!text) return null
-  const urlRegex = /(https?:\/\/[^\s<>"{}|\\^`[\]]+)/g
-  const parts = text.split(urlRegex)
   
+  // 先处理 Markdown 图片语法 ![alt](url)
+  const imageRegex = /!\[([^\]]*)\]\(([^)]+)\)/g
+  const urlRegex = /(https?:\/\/[^\s<>"{}|\\^`[\]]+)/g
+  
+  // 分割内容，保留图片和链接
+  const parts: { type: 'text' | 'image' | 'link'; content: string; url?: string }[] = []
+  let lastIndex = 0
+  let match
+  
+  // 先找出所有图片
+  const imageMatches: { start: number; end: number; alt: string; url: string }[] = []
+  while ((match = imageRegex.exec(text)) !== null) {
+    imageMatches.push({
+      start: match.index,
+      end: match.index + match[0].length,
+      alt: match[1],
+      url: match[2],
+    })
+  }
+  
+  // 构建内容片段
+  let currentIndex = 0
+  for (const img of imageMatches) {
+    // 图片前的文本
+    if (img.start > currentIndex) {
+      const beforeText = text.slice(currentIndex, img.start)
+      // 处理这段文本中的链接
+      const linkParts = beforeText.split(urlRegex)
+      linkParts.forEach((part, i) => {
+        if (urlRegex.test(part)) {
+          urlRegex.lastIndex = 0
+          parts.push({ type: 'link', content: part, url: part })
+        } else if (part) {
+          parts.push({ type: 'text', content: part })
+        }
+      })
+    }
+    // 图片
+    parts.push({ type: 'image', content: img.alt, url: img.url })
+    currentIndex = img.end
+  }
+  
+  // 最后一个图片后的文本
+  if (currentIndex < text.length) {
+    const afterText = text.slice(currentIndex)
+    const linkParts = afterText.split(urlRegex)
+    linkParts.forEach((part, i) => {
+      if (urlRegex.test(part)) {
+        urlRegex.lastIndex = 0
+        parts.push({ type: 'link', content: part, url: part })
+      } else if (part) {
+        parts.push({ type: 'text', content: part })
+      }
+    })
+  }
+  
+  // 如果没有图片，直接处理链接
+  if (imageMatches.length === 0) {
+    const linkParts = text.split(urlRegex)
+    return linkParts.map((part, index) => {
+      if (urlRegex.test(part)) {
+        urlRegex.lastIndex = 0
+        return (
+          <a
+            key={index}
+            href={part}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              color: ARENA_PURPLE,
+              textDecoration: 'underline',
+              wordBreak: 'break-all',
+            }}
+          >
+            {part}
+          </a>
+        )
+      }
+      return part
+    })
+  }
+  
+  // 渲染所有片段
   return parts.map((part, index) => {
-    if (urlRegex.test(part)) {
-      urlRegex.lastIndex = 0 // Reset regex state
+    if (part.type === 'image') {
+      return (
+        <img
+          key={index}
+          src={part.url}
+          alt={part.content || 'image'}
+          onClick={(e) => {
+            e.stopPropagation()
+            window.open(part.url, '_blank')
+          }}
+          style={{
+            maxWidth: '100%',
+            maxHeight: 300,
+            borderRadius: 8,
+            cursor: 'pointer',
+            display: 'inline-block',
+            verticalAlign: 'middle',
+            margin: '4px 6px',
+          }}
+        />
+      )
+    }
+    if (part.type === 'link') {
       return (
         <a
           key={index}
-          href={part}
+          href={part.url}
           target="_blank"
           rel="noopener noreferrer"
           onClick={(e) => e.stopPropagation()}
@@ -54,11 +158,11 @@ function renderContentWithLinks(text: string) {
             wordBreak: 'break-all',
           }}
         >
-          {part}
+          {part.content}
         </a>
       )
     }
-    return part
+    return <span key={index}>{part.content}</span>
   })
 }
 
@@ -124,13 +228,16 @@ function AvatarLink({ handle, avatarUrl }: { handle?: string | null; avatarUrl?:
   )
 }
 
-export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?: string; authorHandle?: string; initialPostId?: string | null } = {}) {
+type SortType = 'time' | 'likes'
+
+export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?: string; authorHandle?: string; initialPostId?: string | null; showSortButtons?: boolean } = {}) {
   const { t, language } = useLanguage()
   const { showToast } = useToast()
   const { showDangerConfirm } = useDialog()
   const [posts, setPosts] = useState<Post[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [sortType, setSortType] = useState<SortType>('time')
   const [openPost, setOpenPost] = useState<Post | null>(null)
   const [comments, setComments] = useState<Comment[]>([])
   const [loadingComments, setLoadingComments] = useState(false)
@@ -160,6 +267,21 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
   // 评论翻译状态
   const [translatedComments, setTranslatedComments] = useState<Record<string, string>>({})
   const [translatingComments, setTranslatingComments] = useState(false)
+  // 自定义投票状态
+  const [customPoll, setCustomPoll] = useState<{
+    id: string
+    question: string
+    options: { text: string; votes: number | null }[]
+    type: 'single' | 'multiple'
+    endAt: string | null
+    isExpired: boolean
+    showResults: boolean
+    totalVotes: number | null
+  } | null>(null)
+  const [customPollUserVotes, setCustomPollUserVotes] = useState<number[]>([])
+  const [loadingCustomPoll, setLoadingCustomPoll] = useState(false)
+  const [votingCustomPoll, setVotingCustomPoll] = useState(false)
+  const [selectedPollOptions, setSelectedPollOptions] = useState<number[]>([])
 
   // 获取用户 token 和 ID
   useEffect(() => {
@@ -184,8 +306,19 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
 
       const params = new URLSearchParams()
       params.set('limit', '20')
-      // 推荐页面默认按热度排序，特定小组页面按时间排序
-      params.set('sort_by', props.groupId ? 'created_at' : 'hot_score')
+      // 根据排序类型设置排序方式
+      if (sortType === 'likes') {
+        params.set('sort_by', 'like_count')
+      } else if (props.authorHandle) {
+        // 个人主页按时间排序
+        params.set('sort_by', 'created_at')
+      } else if (props.groupId) {
+        // 小组页面按时间排序
+        params.set('sort_by', 'created_at')
+      } else {
+        // 推荐页面按热度排序
+        params.set('sort_by', 'hot_score')
+      }
       params.set('sort_order', 'desc')
       
       if (props.groupId) params.set('group_id', props.groupId)
@@ -213,7 +346,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
     } finally {
       setLoading(false)
     }
-  }, [props.groupId, props.authorHandle, accessToken])
+  }, [props.groupId, props.authorHandle, accessToken, sortType])
 
   useEffect(() => {
     loadPosts()
@@ -420,6 +553,73 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
       setTimeout(() => processingRef.current.delete(key), 300)
     }
   }, [accessToken, openPost?.id])
+
+  // 加载自定义投票
+  const loadCustomPoll = useCallback(async (postId: string) => {
+    setLoadingCustomPoll(true)
+    setCustomPoll(null)
+    setCustomPollUserVotes([])
+    setSelectedPollOptions([])
+    try {
+      const headers: Record<string, string> = {}
+      if (accessToken) {
+        headers['Authorization'] = `Bearer ${accessToken}`
+      }
+      const response = await fetch(`/api/posts/${postId}/poll-vote`, { headers })
+      const data = await response.json()
+      if (response.ok && data.success && data.data?.poll) {
+        setCustomPoll(data.data.poll)
+        setCustomPollUserVotes(data.data.userVotes || [])
+        setSelectedPollOptions(data.data.userVotes || [])
+      }
+    } catch (err) {
+      console.error('[PostFeed] 加载投票失败:', err)
+    } finally {
+      setLoadingCustomPoll(false)
+    }
+  }, [accessToken])
+
+  // 提交自定义投票
+  const submitCustomPollVote = useCallback(async (postId: string) => {
+    if (!accessToken) {
+      showToast('请先登录', 'warning')
+      return
+    }
+    if (selectedPollOptions.length === 0) {
+      showToast('请选择至少一个选项', 'warning')
+      return
+    }
+    setVotingCustomPoll(true)
+    try {
+      const response = await fetch(`/api/posts/${postId}/poll-vote`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ optionIndexes: selectedPollOptions }),
+      })
+      const data = await response.json()
+      if (response.ok && data.success) {
+        // 更新投票状态 - 现在可以显示结果了
+        setCustomPoll(prev => prev ? {
+          ...prev,
+          options: data.data.poll.options,
+          showResults: true,
+          totalVotes: data.data.poll.totalVotes,
+        } : null)
+        setCustomPollUserVotes(data.data.userVotes)
+        showToast('投票成功', 'success')
+      } else {
+        showToast(data.error || '投票失败', 'error')
+      }
+    } catch (err) {
+      console.error('[PostFeed] 自定义投票失败:', err)
+      showToast('投票失败', 'error')
+    } finally {
+      setVotingCustomPoll(false)
+    }
+  }, [accessToken, selectedPollOptions])
 
   // 提交评论
   const submitComment = useCallback(async (postId: string) => {
@@ -656,13 +856,14 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
     }
   }, [accessToken, openPost?.id, showDangerConfirm, showToast])
 
-  // 开始编辑帖子
+  // 路由
+  const router = useRouter()
+
+  // 开始编辑帖子 - 导航到编辑页面
   const handleStartEdit = useCallback((post: Post, e: React.MouseEvent) => {
     e.stopPropagation()
-    setEditingPost(post)
-    setEditTitle(post.title || '')
-    setEditContent(post.content || '')
-  }, [])
+    router.push(`/post/${post.id}/edit`)
+  }, [router])
 
   // 保存编辑
   const handleSaveEdit = useCallback(async () => {
@@ -755,6 +956,48 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
     }
   }, [accessToken, openPost?.id, showDangerConfirm, showToast])
 
+  // 置顶帖子
+  const handleTogglePin = useCallback(async (post: Post, e: React.MouseEvent) => {
+    e.stopPropagation()
+    
+    if (!accessToken) {
+      showToast('请先登录', 'warning')
+      return
+    }
+
+    try {
+      const response = await fetch(`/api/posts/${post.id}/pin`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+        },
+      })
+
+      const data = await response.json()
+
+      if (response.ok && data.success) {
+        // 更新本地状态
+        setPosts(prev => prev.map(p => {
+          if (p.id === post.id) {
+            return { ...p, is_pinned: data.data.is_pinned }
+          }
+          // 如果置顶了一个帖子，取消其他帖子的置顶状态
+          if (data.data.is_pinned && p.is_pinned) {
+            return { ...p, is_pinned: false }
+          }
+          return p
+        }))
+        
+        showToast(data.data.message, 'success')
+      } else {
+        showToast(data.error || '操作失败', 'error')
+      }
+    } catch (err) {
+      console.error('[PostFeed] 置顶失败:', err)
+      showToast('操作失败', 'error')
+    }
+  }, [accessToken, showToast])
+
   // 检测文本是否是中文
   const isChineseText = useCallback((text: string) => {
     if (!text) return false
@@ -764,24 +1007,51 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
     return chineseRatio > 0.1 // 超过10%是中文字符
   }, [])
 
+  // 从内容中提取图片Markdown
+  const extractImagesFromContent = useCallback((content: string): string[] => {
+    const imageRegex = /!\[([^\]]*)\]\(([^)]+)\)/g
+    const images: string[] = []
+    let match
+    while ((match = imageRegex.exec(content)) !== null) {
+      images.push(match[0])
+    }
+    return images
+  }, [])
+
+  // 从内容中移除图片Markdown（用于翻译）
+  const removeImagesFromContent = useCallback((content: string): string => {
+    return content.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '').replace(/\n{3,}/g, '\n\n').trim()
+  }, [])
+
   // 翻译帖子内容（带缓存，一个帖子只消耗一次GPT）
   const translateContent = useCallback(async (postId: string, content: string, targetLang: 'zh' | 'en') => {
     const cacheKey = `${postId}-content-${targetLang}`
     
+    // 提取原内容中的图片
+    const originalImages = extractImagesFromContent(content)
+    
     // 检查本地缓存
     if (translationCache[cacheKey]) {
-      setTranslatedContent(translationCache[cacheKey])
+      // 将原图片追加到缓存的翻译内容后
+      let cachedWithImages = translationCache[cacheKey]
+      if (originalImages.length > 0 && !cachedWithImages.includes('![')) {
+        cachedWithImages += '\n\n' + originalImages.join('\n')
+      }
+      setTranslatedContent(cachedWithImages)
       setShowingOriginal(false)
       return
     }
 
     setTranslating(true)
     try {
+      // 移除图片后再翻译（避免翻译图片链接）
+      const textToTranslate = removeImagesFromContent(content)
+      
       const response = await fetch('/api/translate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          text: content, 
+          text: textToTranslate, 
           targetLang,
           contentType: 'post_content',
           contentId: postId,
@@ -790,11 +1060,15 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
       const data = await response.json()
       
       if (response.ok && data.success && data.data?.translatedText) {
-        const translated = data.data.translatedText
+        let translated = data.data.translatedText
+        // 将原图片追加到翻译内容后
+        if (originalImages.length > 0) {
+          translated += '\n\n' + originalImages.join('\n')
+        }
         setTranslatedContent(translated)
         setShowingOriginal(false)
-        // 本地缓存（服务端也会缓存到数据库）
-        setTranslationCache(prev => ({ ...prev, [cacheKey]: translated }))
+        // 本地缓存（不含图片，图片会在读取时动态添加）
+        setTranslationCache(prev => ({ ...prev, [cacheKey]: data.data.translatedText }))
         if (data.data.cached) {
           console.log('[PostFeed] 翻译命中服务端缓存')
         }
@@ -808,7 +1082,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
     } finally {
       setTranslating(false)
     }
-  }, [translationCache, showToast])
+  }, [translationCache, showToast, extractImagesFromContent, removeImagesFromContent])
 
   // 批量翻译帖子标题（使用批量API，减少请求次数）
   const translateListPosts = useCallback(async (postsToTranslate: Post[], targetLang: 'zh' | 'en') => {
@@ -954,6 +1228,14 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
     setComments([])
     setTranslatedContent(null)
     loadComments(post.id)
+    // 如果帖子有关联的自定义投票，加载它
+    if (post.poll_id) {
+      loadCustomPoll(post.id)
+    } else {
+      setCustomPoll(null)
+      setCustomPollUserVotes([])
+      setSelectedPollOptions([])
+    }
 
     // 检测是否需要翻译
     const contentIsChinese = post.content ? isChineseText(post.content) : false
@@ -1012,14 +1294,86 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
 
   if (posts.length === 0) {
     return (
-      <div style={{ padding: tokens.spacing[4], textAlign: 'center', color: tokens.colors.text.tertiary }}>
-        暂无帖子
+      <div>
+        {/* 排序按钮 */}
+        {props.showSortButtons && (
+          <div style={{ display: 'flex', gap: tokens.spacing[2], marginBottom: tokens.spacing[3] }}>
+            <button
+              onClick={() => setSortType('time')}
+              style={{
+                padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
+                borderRadius: tokens.radius.md,
+                border: `1px solid ${sortType === 'time' ? ARENA_PURPLE : tokens.colors.border.primary}`,
+                background: sortType === 'time' ? 'rgba(139, 111, 168, 0.15)' : tokens.colors.bg.primary,
+                color: sortType === 'time' ? tokens.colors.text.primary : tokens.colors.text.secondary,
+                fontSize: tokens.typography.fontSize.xs,
+                fontWeight: sortType === 'time' ? 700 : 400,
+                cursor: 'pointer',
+              }}
+            >
+              最新
+            </button>
+            <button
+              onClick={() => setSortType('likes')}
+              style={{
+                padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
+                borderRadius: tokens.radius.md,
+                border: `1px solid ${sortType === 'likes' ? ARENA_PURPLE : tokens.colors.border.primary}`,
+                background: sortType === 'likes' ? 'rgba(139, 111, 168, 0.15)' : tokens.colors.bg.primary,
+                color: sortType === 'likes' ? tokens.colors.text.primary : tokens.colors.text.secondary,
+                fontSize: tokens.typography.fontSize.xs,
+                fontWeight: sortType === 'likes' ? 700 : 400,
+                cursor: 'pointer',
+              }}
+            >
+              最热
+            </button>
+          </div>
+        )}
+        <div style={{ padding: tokens.spacing[4], textAlign: 'center', color: tokens.colors.text.tertiary }}>
+          暂无帖子
+        </div>
       </div>
     )
   }
 
   return (
     <>
+      {/* 排序按钮 */}
+      {props.showSortButtons && (
+        <div style={{ display: 'flex', gap: tokens.spacing[2], marginBottom: tokens.spacing[3] }}>
+          <button
+            onClick={() => setSortType('time')}
+            style={{
+              padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
+              borderRadius: tokens.radius.md,
+              border: `1px solid ${sortType === 'time' ? ARENA_PURPLE : tokens.colors.border.primary}`,
+              background: sortType === 'time' ? 'rgba(139, 111, 168, 0.15)' : tokens.colors.bg.primary,
+              color: sortType === 'time' ? tokens.colors.text.primary : tokens.colors.text.secondary,
+              fontSize: tokens.typography.fontSize.xs,
+              fontWeight: sortType === 'time' ? 700 : 400,
+              cursor: 'pointer',
+            }}
+          >
+            最新
+          </button>
+          <button
+            onClick={() => setSortType('likes')}
+            style={{
+              padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
+              borderRadius: tokens.radius.md,
+              border: `1px solid ${sortType === 'likes' ? ARENA_PURPLE : tokens.colors.border.primary}`,
+              background: sortType === 'likes' ? 'rgba(139, 111, 168, 0.15)' : tokens.colors.bg.primary,
+              color: sortType === 'likes' ? tokens.colors.text.primary : tokens.colors.text.secondary,
+              fontSize: tokens.typography.fontSize.xs,
+              fontWeight: sortType === 'likes' ? 700 : 400,
+              cursor: 'pointer',
+            }}
+          >
+            最热
+          </button>
+        </div>
+      )}
       <div>
         {posts.map((p) => {
           const poll = { bull: p.poll_bull, bear: p.poll_bear, wait: p.poll_wait }
@@ -1063,34 +1417,108 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
                   >
                     {p.group_name || '小组'}
                   </Link>
-                ) : (
-                  <div style={{ fontSize: 12, color: ARENA_PURPLE }}>
-                    讨论
-                  </div>
-                )}
+                ) : null}
                 <AvatarLink handle={p.author_handle} avatarUrl={p.author_avatar_url} />
               </div>
 
-              <div style={{ marginTop: 6, fontWeight: 950, lineHeight: 1.25 }}>
-                {translatedListPosts[p.id]?.title || p.title}{' '}
-                {p.poll_enabled && (
+              <div style={{ marginTop: 6, fontWeight: 950, lineHeight: 1.25, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <span>{translatedListPosts[p.id]?.title || p.title}</span>
+                {/* 自定义投票标识 */}
+                {p.poll_id && (
                   <span
                     style={{
                       fontSize: 11,
-                      color,
-                      fontWeight: 950,
+                      color: ARENA_PURPLE,
+                      fontWeight: 700,
                       border: `1px solid ${tokens.colors.border.primary}`,
-                      padding: '2px 6px',
+                      padding: '2px 8px',
                       borderRadius: 999,
-                      marginLeft: 6,
+                      background: 'rgba(139,111,168,0.1)',
                     }}
                   >
-                    {label}
+                    投票
+                  </span>
+                )}
+                {/* 图片标识 */}
+                {p.images && p.images.length > 0 && (
+                  <span
+                    style={{
+                      fontSize: 11,
+                      color: tokens.colors.text.tertiary,
+                      fontWeight: 600,
+                    }}
+                  >
+                    {p.images.length}图
                   </span>
                 )}
               </div>
 
-              <div style={{ marginTop: 8, display: 'flex', gap: 10, flexWrap: 'wrap', color: tokens.colors.text.secondary, fontSize: 12, alignItems: 'center' }}>
+              {/* 内容预览 */}
+              {p.content && (
+                <div style={{ 
+                  marginTop: 8, 
+                  fontSize: 13, 
+                  color: tokens.colors.text.secondary, 
+                  lineHeight: 1.5,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  display: '-webkit-box',
+                  WebkitLineClamp: 2,
+                  WebkitBoxOrient: 'vertical',
+                }}>
+                  {(translatedListPosts[p.id]?.body || p.content).slice(0, 150)}
+                </div>
+              )}
+
+              {/* 图片预览 - 最多显示4张 */}
+              {p.images && p.images.length > 0 && (
+                <div style={{ 
+                  marginTop: 10, 
+                  display: 'flex', 
+                  gap: 8,
+                  flexWrap: 'wrap',
+                }}>
+                  {p.images.slice(0, 4).map((imgUrl, idx) => (
+                    <div
+                      key={idx}
+                      style={{
+                        width: p.images!.length === 1 ? 200 : 80,
+                        height: p.images!.length === 1 ? 150 : 80,
+                        borderRadius: 8,
+                        overflow: 'hidden',
+                        position: 'relative',
+                      }}
+                    >
+                      <img
+                        src={imgUrl}
+                        alt={`Image ${idx + 1}`}
+                        style={{
+                          width: '100%',
+                          height: '100%',
+                          objectFit: 'cover',
+                        }}
+                      />
+                      {idx === 3 && p.images!.length > 4 && (
+                        <div style={{
+                          position: 'absolute',
+                          inset: 0,
+                          background: 'rgba(0,0,0,0.5)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: '#fff',
+                          fontSize: 14,
+                          fontWeight: 700,
+                        }}>
+                          +{p.images!.length - 4}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div style={{ marginTop: 10, display: 'flex', gap: 10, flexWrap: 'wrap', color: tokens.colors.text.secondary, fontSize: 12, alignItems: 'center' }}>
                 <ReactButton
                   onClick={(e) => {
                     e.preventDefault()
@@ -1120,9 +1548,45 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
                   {formatTimeAgo(p.created_at)}
                 </span>
                 
-                {/* 编辑/删除按钮 - 仅作者可见 */}
+                {/* 置顶标识 */}
+                {p.is_pinned && (
+                  <span style={{ 
+                    fontSize: 11, 
+                    color: ARENA_PURPLE, 
+                    fontWeight: 700,
+                    padding: '2px 6px',
+                    background: 'rgba(139,111,168,0.1)',
+                    borderRadius: 4,
+                  }}>
+                    置顶
+                  </span>
+                )}
+                
+                {/* 置顶/编辑/删除按钮 - 仅作者可见 */}
                 {currentUserId && p.author_id === currentUserId && (
                   <span style={{ display: 'flex', gap: 8, marginLeft: 'auto' }}>
+                    <button
+                      onClick={(e) => handleTogglePin(p, e)}
+                      style={{
+                        background: p.is_pinned ? 'rgba(139,111,168,0.1)' : 'transparent',
+                        border: 'none',
+                        color: p.is_pinned ? ARENA_PURPLE : tokens.colors.text.tertiary,
+                        cursor: 'pointer',
+                        fontSize: 12,
+                        padding: '2px 6px',
+                        borderRadius: 4,
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.color = ARENA_PURPLE
+                        e.currentTarget.style.background = 'rgba(139,111,168,0.1)'
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.color = p.is_pinned ? ARENA_PURPLE : tokens.colors.text.tertiary
+                        e.currentTarget.style.background = p.is_pinned ? 'rgba(139,111,168,0.1)' : 'transparent'
+                      }}
+                    >
+                      {p.is_pinned ? '取消置顶' : '置顶'}
+                    </button>
                     <button
                       onClick={(e) => handleStartEdit(p, e)}
                       style={{
@@ -1177,9 +1641,11 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
 
       {openPost && (
         <Modal onClose={() => setOpenPost(null)}>
-          <div style={{ fontSize: 12, color: ARENA_PURPLE }}>
-            {openPost.group_name || '讨论'}
-          </div>
+          {openPost.group_name && (
+            <div style={{ fontSize: 12, color: ARENA_PURPLE }}>
+              {openPost.group_name}
+            </div>
+          )}
 
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, marginTop: 8 }}>
             <div style={{ fontSize: 20, fontWeight: 950, lineHeight: 1.25 }}>
@@ -1238,6 +1704,152 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
             </div>
           )}
 
+          {/* 自定义投票组件 */}
+          {openPost.poll_id && (
+            <div style={{ 
+              marginTop: 16, 
+              padding: 16, 
+              background: tokens.colors.bg.secondary, 
+              borderRadius: 12,
+              border: `1px solid ${tokens.colors.border.primary}`,
+            }}>
+              {loadingCustomPoll ? (
+                <div style={{ color: tokens.colors.text.tertiary, fontSize: 13 }}>加载投票中...</div>
+              ) : customPoll ? (
+                <>
+                  <div style={{ fontWeight: 700, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    {customPoll.question || '投票'}
+                    {customPoll.endAt && (
+                      <span style={{ 
+                        fontSize: 11, 
+                        color: customPoll.isExpired ? '#ff6b6b' : tokens.colors.text.tertiary,
+                        fontWeight: 400,
+                      }}>
+                        {customPoll.isExpired 
+                          ? '（已结束）' 
+                          : `（截止：${new Date(customPoll.endAt).toLocaleString('zh-CN')}）`
+                        }
+                      </span>
+                    )}
+                    {!customPoll.endAt && (
+                      <span style={{ fontSize: 11, color: ARENA_PURPLE, fontWeight: 400 }}>（永久）</span>
+                    )}
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {customPoll.options.map((option, index) => {
+                      const isSelected = selectedPollOptions.includes(index)
+                      const hasVoted = customPollUserVotes.includes(index)
+                      const votePercentage = customPoll.showResults && customPoll.totalVotes && option.votes !== null
+                        ? Math.round((option.votes / customPoll.totalVotes) * 100)
+                        : 0
+                      
+                      return (
+                        <button
+                          key={index}
+                          onClick={() => {
+                            if (customPoll.isExpired) return
+                            if (customPoll.type === 'single') {
+                              setSelectedPollOptions([index])
+                            } else {
+                              setSelectedPollOptions(prev => 
+                                prev.includes(index) 
+                                  ? prev.filter(i => i !== index)
+                                  : [...prev, index]
+                              )
+                            }
+                          }}
+                          disabled={customPoll.isExpired}
+                          style={{
+                            position: 'relative',
+                            padding: '10px 14px',
+                            borderRadius: 8,
+                            border: isSelected || hasVoted
+                              ? `2px solid ${ARENA_PURPLE}`
+                              : `1px solid ${tokens.colors.border.primary}`,
+                            background: tokens.colors.bg.primary,
+                            color: tokens.colors.text.primary,
+                            cursor: customPoll.isExpired ? 'default' : 'pointer',
+                            textAlign: 'left',
+                            fontSize: 13,
+                            fontWeight: hasVoted ? 600 : 400,
+                            overflow: 'hidden',
+                          }}
+                        >
+                          {/* 投票结果进度条 */}
+                          {customPoll.showResults && (
+                            <div style={{
+                              position: 'absolute',
+                              left: 0,
+                              top: 0,
+                              bottom: 0,
+                              width: `${votePercentage}%`,
+                              background: hasVoted 
+                                ? 'rgba(139, 111, 168, 0.2)' 
+                                : 'rgba(139, 111, 168, 0.1)',
+                              transition: 'width 0.3s ease',
+                            }} />
+                          )}
+                          <div style={{ position: 'relative', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span>
+                              {customPoll.type === 'multiple' && (
+                                <span style={{ marginRight: 8 }}>
+                                  {isSelected ? '☑' : '☐'}
+                                </span>
+                              )}
+                              {option.text}
+                              {hasVoted && ' ✓'}
+                            </span>
+                            {customPoll.showResults && option.votes !== null && (
+                              <span style={{ fontSize: 12, color: tokens.colors.text.secondary }}>
+                                {option.votes} 票 ({votePercentage}%)
+                              </span>
+                            )}
+                          </div>
+                        </button>
+                      )
+                    })}
+                  </div>
+                  {/* 投票按钮 */}
+                  {!customPoll.isExpired && customPollUserVotes.length === 0 && (
+                    <button
+                      onClick={() => submitCustomPollVote(openPost.id)}
+                      disabled={selectedPollOptions.length === 0 || votingCustomPoll}
+                      style={{
+                        marginTop: 12,
+                        padding: '8px 16px',
+                        background: selectedPollOptions.length > 0 && !votingCustomPoll 
+                          ? ARENA_PURPLE 
+                          : 'rgba(139, 111, 168, 0.3)',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: 8,
+                        cursor: selectedPollOptions.length > 0 && !votingCustomPoll ? 'pointer' : 'not-allowed',
+                        fontWeight: 600,
+                        fontSize: 13,
+                      }}
+                    >
+                      {votingCustomPoll ? '投票中...' : '提交投票'}
+                    </button>
+                  )}
+                  {/* 总票数 */}
+                  {customPoll.showResults && customPoll.totalVotes !== null && (
+                    <div style={{ marginTop: 10, fontSize: 12, color: tokens.colors.text.tertiary }}>
+                      共 {customPoll.totalVotes} 人参与投票
+                    </div>
+                  )}
+                  {/* 未投票提示 */}
+                  {!customPoll.showResults && !customPoll.isExpired && (
+                    <div style={{ marginTop: 10, fontSize: 12, color: tokens.colors.text.tertiary }}>
+                      投票后可查看结果
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div style={{ color: tokens.colors.text.tertiary, fontSize: 13 }}>暂无投票</div>
+              )}
+            </div>
+          )}
+
           <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${tokens.colors.border.secondary}`, display: 'flex', gap: 14, flexWrap: 'wrap' }}>
             <Action
               icon={<ThumbsUpIcon size={14} />}
@@ -1267,31 +1879,6 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
               count={openPost.dislike_count}
               showCount={false}
             />
-            {openPost.poll_enabled && (
-              <>
-                <Action
-                  text={`📈 ${t('bullish')}`}
-                  onClick={() => toggleVote(openPost.id, 'bull')}
-                  active={openPost.user_vote === 'bull'}
-                  count={openPost.poll_bull}
-                  showCount={true}
-                />
-                <Action
-                  text={`📉 ${t('bearish')}`}
-                  onClick={() => toggleVote(openPost.id, 'bear')}
-                  active={openPost.user_vote === 'bear'}
-                  count={openPost.poll_bear}
-                  showCount={true}
-                />
-                <Action
-                  text={`⏸ ${t('wait')}`}
-                  onClick={() => toggleVote(openPost.id, 'wait')}
-                  active={openPost.user_vote === 'wait'}
-                  count={openPost.poll_wait}
-                  showCount={true}
-                />
-              </>
-            )}
           </div>
 
           {/* 评论区 */}

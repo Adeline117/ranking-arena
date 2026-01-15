@@ -72,6 +72,7 @@ export async function getPosts(
       author_handle,
       group_id,
       poll_enabled,
+      poll_id,
       poll_bull,
       poll_bear,
       poll_wait,
@@ -81,6 +82,7 @@ export async function getPosts(
       view_count,
       hot_score,
       is_pinned,
+      images,
       created_at,
       updated_at,
       groups(name)
@@ -132,6 +134,7 @@ export async function getPosts(
     group_id: post.group_id,
     group_name: post.groups?.name,
     poll_enabled: post.poll_enabled || false,
+    poll_id: post.poll_id || null,
     poll_bull: post.poll_bull || 0,
     poll_bear: post.poll_bear || 0,
     poll_wait: post.poll_wait || 0,
@@ -141,6 +144,7 @@ export async function getPosts(
     view_count: post.view_count || 0,
     hot_score: post.hot_score || 0,
     is_pinned: post.is_pinned || false,
+    images: post.images || null,
     created_at: post.created_at,
     updated_at: post.updated_at,
   }))

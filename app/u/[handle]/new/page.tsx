@@ -67,25 +67,210 @@ function VideoPlayer({ embedUrl, type }: { embedUrl: string; type: string }) {
 }
 
 // 链接解析函数（支持视频嵌入）
-function renderContentWithLinks(text: string) {
+// 带编辑控制的内容渲染（用于预览模式）
+function renderContentWithControls(
+  text: string, 
+  onMoveImage: (url: string, direction: 'up' | 'down') => void,
+  onRemoveImage: (url: string) => void,
+  imageCount: number
+) {
   if (!text) return null
+  
+  const imageRegex = /!\[([^\]]*)\]\(([^)]+)\)/g
   const urlRegex = /(https?:\/\/[^\s<>"{}|\\^`[\]]+)/g
-  const parts = text.split(urlRegex)
+  
+  // 先找出所有图片
+  const imageMatches: { start: number; end: number; alt: string; url: string; imageIndex: number }[] = []
+  let match
+  let imgIdx = 0
+  while ((match = imageRegex.exec(text)) !== null) {
+    imageMatches.push({
+      start: match.index,
+      end: match.index + match[0].length,
+      alt: match[1],
+      url: match[2],
+      imageIndex: imgIdx++,
+    })
+  }
+  
+  // 如果没有图片，直接处理链接
+  if (imageMatches.length === 0) {
+    const linkParts = text.split(urlRegex)
+    return linkParts.map((part, index) => {
+      if (urlRegex.test(part)) {
+        urlRegex.lastIndex = 0
+        const video = parseVideoUrl(part)
+        if (video) {
+          return <VideoPlayer key={index} embedUrl={video.embedUrl} type={video.type} />
+        }
+        return (
+          <a
+            key={index}
+            href={part}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              color: '#8b6fa8',
+              textDecoration: 'underline',
+              wordBreak: 'break-all',
+            }}
+          >
+            {part}
+          </a>
+        )
+      }
+      return part
+    })
+  }
+  
+  // 构建内容片段
+  const parts: { type: 'text' | 'image' | 'link' | 'video'; content: string; url?: string; video?: { embedUrl: string; type: string }; imageIndex?: number }[] = []
+  let currentIndex = 0
+  
+  for (const img of imageMatches) {
+    if (img.start > currentIndex) {
+      const beforeText = text.slice(currentIndex, img.start)
+      const linkParts = beforeText.split(urlRegex)
+      linkParts.forEach((part) => {
+        if (urlRegex.test(part)) {
+          urlRegex.lastIndex = 0
+          const video = parseVideoUrl(part)
+          if (video) {
+            parts.push({ type: 'video', content: part, video })
+          } else {
+            parts.push({ type: 'link', content: part, url: part })
+          }
+        } else if (part) {
+          parts.push({ type: 'text', content: part })
+        }
+      })
+    }
+    parts.push({ type: 'image', content: img.alt, url: img.url, imageIndex: img.imageIndex })
+    currentIndex = img.end
+  }
+  
+  if (currentIndex < text.length) {
+    const afterText = text.slice(currentIndex)
+    const linkParts = afterText.split(urlRegex)
+    linkParts.forEach((part) => {
+      if (urlRegex.test(part)) {
+        urlRegex.lastIndex = 0
+        const video = parseVideoUrl(part)
+        if (video) {
+          parts.push({ type: 'video', content: part, video })
+        } else {
+          parts.push({ type: 'link', content: part, url: part })
+        }
+      } else if (part) {
+        parts.push({ type: 'text', content: part })
+      }
+    })
+  }
   
   return parts.map((part, index) => {
-    if (urlRegex.test(part)) {
-      urlRegex.lastIndex = 0 // Reset regex state
-      
-      // 检查是否是视频链接
-      const video = parseVideoUrl(part)
-      if (video) {
-        return <VideoPlayer key={index} embedUrl={video.embedUrl} type={video.type} />
-      }
-      
+    if (part.type === 'image') {
+      const isFirst = part.imageIndex === 0
+      const isLast = part.imageIndex === imageCount - 1
+      return (
+        <span key={index} style={{ position: 'relative', display: 'inline-block', margin: '4px 6px' }}>
+          <img
+            src={part.url}
+            alt={part.content || 'image'}
+            style={{
+              maxWidth: '100%',
+              maxHeight: 300,
+              borderRadius: 8,
+              cursor: 'pointer',
+              display: 'block',
+            }}
+            onClick={(e) => {
+              e.stopPropagation()
+              window.open(part.url, '_blank')
+            }}
+          />
+          {/* 图片控制栏 */}
+          <div style={{
+            position: 'absolute',
+            top: 4,
+            right: 4,
+            display: 'flex',
+            gap: 4,
+            background: 'rgba(0,0,0,0.7)',
+            borderRadius: 6,
+            padding: '2px 4px',
+          }}>
+            <button
+              onClick={(e) => { e.stopPropagation(); onMoveImage(part.url!, 'up') }}
+              disabled={isFirst}
+              title="上移"
+              style={{
+                width: 24,
+                height: 24,
+                border: 'none',
+                background: isFirst ? 'rgba(100,100,100,0.5)' : 'rgba(139,111,168,0.9)',
+                color: '#fff',
+                cursor: isFirst ? 'not-allowed' : 'pointer',
+                fontSize: 14,
+                borderRadius: 4,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              ↑
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); onMoveImage(part.url!, 'down') }}
+              disabled={isLast}
+              title="下移"
+              style={{
+                width: 24,
+                height: 24,
+                border: 'none',
+                background: isLast ? 'rgba(100,100,100,0.5)' : 'rgba(139,111,168,0.9)',
+                color: '#fff',
+                cursor: isLast ? 'not-allowed' : 'pointer',
+                fontSize: 14,
+                borderRadius: 4,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              ↓
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); onRemoveImage(part.url!) }}
+              title="移除"
+              style={{
+                width: 24,
+                height: 24,
+                border: 'none',
+                background: 'rgba(255,77,77,0.9)',
+                color: '#fff',
+                cursor: 'pointer',
+                fontSize: 14,
+                borderRadius: 4,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              ×
+            </button>
+          </div>
+        </span>
+      )
+    }
+    if (part.type === 'video' && part.video) {
+      return <VideoPlayer key={index} embedUrl={part.video.embedUrl} type={part.video.type} />
+    }
+    if (part.type === 'link') {
       return (
         <a
           key={index}
-          href={part}
+          href={part.url}
           target="_blank"
           rel="noopener noreferrer"
           onClick={(e) => e.stopPropagation()}
@@ -95,11 +280,11 @@ function renderContentWithLinks(text: string) {
             wordBreak: 'break-all',
           }}
         >
-          {part}
+          {part.content}
         </a>
       )
     }
-    return part
+    return <span key={index}>{part.content}</span>
   })
 }
 
@@ -306,6 +491,65 @@ export default function NewPostPage() {
     showToast(t('imageInserted'), 'info')
   }
 
+  // 移动图片在内容中的位置（上移或下移）
+  const moveImageInContent = (url: string, direction: 'up' | 'down') => {
+    const imagePattern = `![image](${url})`
+    const regex = /!\[image\]\([^)]+\)/g
+    const matches: { match: string; start: number; end: number }[] = []
+    let m
+    while ((m = regex.exec(content)) !== null) {
+      matches.push({ match: m[0], start: m.index, end: m.index + m[0].length })
+    }
+
+    const currentIndex = matches.findIndex(m => m.match.includes(url))
+    if (currentIndex === -1) return
+
+    const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1
+    if (targetIndex < 0 || targetIndex >= matches.length) {
+      showToast(direction === 'up' ? '已在最顶部' : '已在最底部', 'info')
+      return
+    }
+
+    // 交换两个图片的位置
+    const current = matches[currentIndex]
+    const target = matches[targetIndex]
+
+    let newContent = content
+    // 用占位符替换，避免重叠问题
+    const placeholder1 = `__PLACEHOLDER_1__`
+    const placeholder2 = `__PLACEHOLDER_2__`
+
+    if (direction === 'up') {
+      // 先替换后面的，再替换前面的
+      newContent = newContent.slice(0, target.start) + placeholder1 + 
+                   newContent.slice(target.end, current.start) + placeholder2 + 
+                   newContent.slice(current.end)
+      newContent = newContent.replace(placeholder1, current.match)
+      newContent = newContent.replace(placeholder2, target.match)
+    } else {
+      newContent = newContent.slice(0, current.start) + placeholder1 + 
+                   newContent.slice(current.end, target.start) + placeholder2 + 
+                   newContent.slice(target.end)
+      newContent = newContent.replace(placeholder1, target.match)
+      newContent = newContent.replace(placeholder2, current.match)
+    }
+
+    setContent(newContent)
+    showToast(direction === 'up' ? '图片已上移' : '图片已下移', 'success')
+  }
+
+  // 从内容中移除图片
+  const removeImageFromContent = (url: string) => {
+    const imagePattern = new RegExp(`\\n?!\\[image\\]\\(${url.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\)\\n?`, 'g')
+    setContent(prev => prev.replace(imagePattern, '\n').replace(/\n{3,}/g, '\n\n').trim())
+    showToast('图片已从内容中移除', 'info')
+  }
+
+  // 检查图片是否已在内容中
+  const isImageInContent = (url: string) => {
+    return content.includes(url)
+  }
+
   // 保存光标位置
   const handleTextareaSelect = () => {
     if (textareaRef.current) {
@@ -350,28 +594,51 @@ export default function NewPostPage() {
         }
       }
 
-      // 如果开启投票，先创建投票
-      let pollId = null
+      // 验证投票选项（如果开启投票）
+      let validPollOptions: { text: string; votes: number }[] = []
       if (pollEnabled) {
-        // 验证投票选项
-        const validOptions = pollOptions.filter(opt => opt.text.trim())
-        if (validOptions.length < 2) {
+        validPollOptions = pollOptions.filter(opt => opt.text.trim())
+        if (validPollOptions.length < 2) {
           showToast('请至少填写2个投票选项', 'warning')
           setLoading(false)
           return
         }
+      }
 
+      // 1. 先创建帖子
+      const { data: newPost, error: postError } = await supabase
+        .from('posts')
+        .insert({
+          title,
+          content: finalContent,
+          author_handle: decodedHandle,
+          author_id: userId,
+          images: images.map(img => img.url),
+          poll_enabled: pollEnabled,
+        })
+        .select('id')
+        .single()
+
+      if (postError || !newPost) {
+        console.error('创建帖子失败:', JSON.stringify(postError, null, 2))
+        showToast(postError?.message || '创建失败，请检查权限', 'error')
+        return
+      }
+
+      // 2. 如果开启投票，创建投票并更新帖子
+      if (pollEnabled && validPollOptions.length >= 2) {
         // 计算截止时间（0表示永久，不设置截止时间）
         const endAt = pollDuration > 0 
           ? new Date(Date.now() + pollDuration * 60 * 60 * 1000).toISOString()
           : null
 
-        // 创建投票
+        // 创建投票（带上 post_id）
         const { data: pollData, error: pollError } = await supabase
           .from('polls')
           .insert({
+            post_id: newPost.id,
             question: title,
-            options: validOptions.map((opt, index) => ({ 
+            options: validPollOptions.map((opt, index) => ({ 
               text: opt.text.trim(), 
               votes: 0,
               index 
@@ -384,29 +651,14 @@ export default function NewPostPage() {
 
         if (pollError) {
           console.error('创建投票失败:', pollError)
-          showToast('创建投票失败: ' + pollError.message, 'error')
-          setLoading(false)
-          return
+          // 投票创建失败，但帖子已创建，继续
+        } else if (pollData) {
+          // 更新帖子的 poll_id
+          await supabase
+            .from('posts')
+            .update({ poll_id: pollData.id })
+            .eq('id', newPost.id)
         }
-        pollId = pollData.id
-      }
-
-      const { error } = await supabase.from('posts').insert({
-        title,
-        content: finalContent,
-        author_handle: decodedHandle,
-        // group_id 为 null，表示这是个人动态
-        author_id: userId,
-        images: images.map(img => img.url),
-        poll_enabled: pollEnabled,
-        poll_id: pollId,
-      })
-
-      if (error) {
-        console.error('创建帖子失败:', JSON.stringify(error, null, 2))
-        console.error('Error details - code:', error.code, 'message:', error.message, 'hint:', error.hint)
-        showToast(error.message || '创建失败，请检查权限', 'error')
-        return
       }
 
       // Clear draft after successful publish
@@ -557,7 +809,12 @@ export default function NewPostPage() {
                 >
                   {t('previewMode')}
                 </Box>
-                {content ? renderContentWithLinks(content) : <Text color="tertiary">{t('previewPlaceholder')}</Text>}
+                {content ? renderContentWithControls(
+                  content, 
+                  moveImageInContent, 
+                  removeImageFromContent,
+                  (content.match(/!\[image\]\([^)]+\)/g) || []).length
+                ) : <Text color="tertiary">{t('previewPlaceholder')}</Text>}
               </Box>
             ) : (
               <textarea
@@ -639,7 +896,7 @@ export default function NewPostPage() {
               </Box>
               <Box>
                 <Text size="sm" weight="bold" style={{ color: pollEnabled ? '#8b6fa8' : tokens.colors.text.primary }}>
-                  📊 {t('enablePoll')}
+                  {t('enablePoll')}
                 </Text>
                 <Text size="xs" color="tertiary">
                   {t('pollDescription')}
@@ -787,7 +1044,7 @@ export default function NewPostPage() {
                 </Box>
 
                 <Text size="xs" color="tertiary">
-                  💡 投票结果在用户投票后或截止时间后才会显示
+                  投票结果在用户投票后或截止时间后才会显示
                 </Text>
               </Box>
             )}
@@ -798,6 +1055,26 @@ export default function NewPostPage() {
             <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[2], display: 'block' }}>
               图片（可选，最多9张）
             </Text>
+            
+            {/* 操作提示 */}
+            <Box 
+              style={{ 
+                padding: tokens.spacing[3],
+                marginBottom: tokens.spacing[3],
+                background: 'rgba(139, 111, 168, 0.1)',
+                borderRadius: tokens.radius.md,
+                border: '1px dashed #8b6fa8',
+              }}
+            >
+              <Text size="xs" color="secondary" style={{ display: 'block', marginBottom: 4 }}>
+                <strong>如何插入图片到指定位置：</strong>
+              </Text>
+              <Text size="xs" color="tertiary" style={{ display: 'block', lineHeight: 1.6 }}>
+                1. 在上方文字框中<strong>点击光标</strong>到想插入图片的位置<br />
+                2. 点击图片上的 <span style={{ background: '#8b6fa8', color: '#fff', padding: '0 4px', borderRadius: 3 }}>↵</span> 按钮插入<br />
+                3. 切换到<strong>预览模式</strong>，可用 ↑↓ 按钮调整图片顺序
+              </Text>
+            </Box>
             
             <input
               ref={fileInputRef}
@@ -818,7 +1095,9 @@ export default function NewPostPage() {
               }}
             >
               {/* 已上传的图片预览 - 支持拖拽排序 */}
-              {images.map((image, index) => (
+              {images.map((image, index) => {
+                const inContent = isImageInContent(image.url)
+                return (
                 <Box
                   key={image.url}
                   draggable
@@ -831,9 +1110,11 @@ export default function NewPostPage() {
                     height: 100,
                     borderRadius: tokens.radius.md,
                     overflow: 'hidden',
-                    border: draggedImageIndex === index 
-                      ? `2px solid ${tokens.colors.brand}` 
-                      : `1px solid ${tokens.colors.border.primary}`,
+                    border: inContent 
+                      ? `2px solid #8b6fa8`
+                      : draggedImageIndex === index 
+                        ? `2px solid ${tokens.colors.accent.brand}` 
+                        : `1px solid ${tokens.colors.border.primary}`,
                     cursor: 'grab',
                     opacity: draggedImageIndex === index ? 0.7 : 1,
                     transition: 'all 0.2s ease',
@@ -850,6 +1131,24 @@ export default function NewPostPage() {
                       pointerEvents: 'none',
                     }}
                   />
+                  {/* 已插入标记 */}
+                  {inContent && (
+                    <Box
+                      style={{
+                        position: 'absolute',
+                        bottom: 0,
+                        left: 0,
+                        right: 0,
+                        background: 'rgba(139,111,168,0.9)',
+                        color: '#fff',
+                        fontSize: 10,
+                        textAlign: 'center',
+                        padding: '2px 0',
+                      }}
+                    >
+                      已插入
+                    </Box>
+                  )}
                   <Box
                     style={{
                       position: 'absolute',
@@ -861,7 +1160,7 @@ export default function NewPostPage() {
                   >
                     <button
                       onClick={() => insertImageToContent(image.url)}
-                      title="插入到内容"
+                      title={inContent ? "再次插入到光标位置" : "插入到光标位置"}
                       style={{
                         width: 24,
                         height: 24,
@@ -897,7 +1196,7 @@ export default function NewPostPage() {
                     </button>
                   </Box>
                 </Box>
-              ))}
+              )})}
               
               {/* 上传按钮 */}
               {images.length < 9 && (

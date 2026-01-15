@@ -11,7 +11,7 @@ import TraderTabs from '@/app/components/trader/TraderTabs'
 import OverviewPerformanceCard from '@/app/components/trader/OverviewPerformanceCard'
 import TraderAboutCard from '@/app/components/trader/TraderAboutCard'
 import SimilarTraders from '@/app/components/trader/SimilarTraders'
-import TraderFeed from '@/app/components/trader/TraderFeed'
+import PostFeed from '@/app/components/Features/PostFeed'
 import StatsPage from '@/app/components/trader/stats/StatsPage'
 import PinnedPost from '@/app/components/trader/PinnedPost'
 import PortfolioTable from '@/app/components/trader/PortfolioTable'
@@ -601,13 +601,30 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
               {feed.filter((f) => f.is_pinned && f.type !== 'group_post').length > 0 && (
                 <PinnedPost item={feed.filter((f) => f.is_pinned && f.type !== 'group_post')[0]} />
               )}
-              {/* 交易员动态 - 紧跟在Performance后面 */}
-              <TraderFeed
-                items={feed.filter((f) => f.type !== 'group_post' && !f.is_pinned)}
-                title="动态"
-                showPostButton={isOwnProfile}
-                onPostClick={() => router.push(`/u/${handle}/new`)}
-              />
+              {/* 交易员动态 - 使用 PostFeed 组件 */}
+              <Box bg="secondary" p={4} radius="lg" border="primary" style={{ marginTop: tokens.spacing[4] }}>
+                <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: tokens.spacing[4] }}>
+                  <Text size="lg" weight="black">动态</Text>
+                  {isOwnProfile && (
+                    <button
+                      onClick={() => router.push(`/u/${handle}/new`)}
+                      style={{
+                        padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
+                        borderRadius: tokens.radius.md,
+                        border: 'none',
+                        background: tokens.colors.accent.brand,
+                        color: '#FFFFFF',
+                        fontSize: tokens.typography.fontSize.sm,
+                        fontWeight: tokens.typography.fontWeight.black,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      发动态
+                    </button>
+                  )}
+                </Box>
+                <PostFeed authorHandle={profile.handle} variant="compact" showSortButtons />
+              </Box>
             </Box>
 
             {/* Right Column - 交易员卡片 */}
