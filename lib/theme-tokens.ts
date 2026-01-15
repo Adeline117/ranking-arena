@@ -42,6 +42,7 @@ export const lightTokens = {
       brand: '#8b6fa8',        // Arena brand purple
       brandHover: '#9d84b5',   // Brand hover state
       brandMuted: 'rgba(139, 111, 168, 0.15)', // Brand muted background
+      translated: '#4A8A87',   // Translated text color (darker teal for light mode)
     },
     
     overlay: {
@@ -89,6 +90,7 @@ export const darkTokens = {
       brand: '#8b6fa8',        // Arena brand purple
       brandHover: '#9d84b5',   // Brand hover state
       brandMuted: 'rgba(139, 111, 168, 0.15)', // Brand muted background
+      translated: '#7CBBB8',   // Translated text color (soft teal for dark mode)
     },
     
     overlay: {
