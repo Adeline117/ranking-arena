@@ -108,12 +108,16 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
       setLoading(true)
 
       try {
+        // 解码 URL 编码的 handle（中文等特殊字符会被编码）
+        const decodedHandle = decodeURIComponent(handle)
+        
         // 先尝试从 trader_sources 获取（如果用户也是交易员）
         let profileData: TraderProfile | null = await getTraderByHandle(handle)
         let isTraderInRanking = !!profileData // 标记是否在排行榜上
 
         // 如果找不到，从 user_profiles 表获取注册用户信息（profiles 表不存在）
         if (!profileData) {
+          
           // 检查是否在排行榜上（即使不是trader，也可能在trader_sources中）
           // 尝试所有数据源查找
           const sources = ['binance_web3', 'binance', 'bybit', 'bitget', 'mexc', 'coinex']
@@ -124,7 +128,7 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
               .from('trader_sources')
               .select('source_trader_id')
               .eq('source', sourceType)
-              .eq('handle', handle)
+              .eq('handle', decodedHandle)
               .maybeSingle()
             
             if (sourceData) {
@@ -136,13 +140,77 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
           isTraderInRanking = foundInRanking
           
           // 直接使用 user_profiles 表（因为 profiles 表不存在）
-          const { data: userProfile } = await supabase
+          // 先通过 handle 查询（使用解码后的 handle）
+          let userProfile = null
+          console.log('[UserPage] Querying user_profiles by handle:', handle, '(decoded:', decodedHandle, ')')
+          
+          // 先尝试解码后的 handle
+          const { data: profileByHandle, error: handleError } = await supabase
             .from('user_profiles')
             .select('*')
-            .eq('handle', handle)
+            .eq('handle', decodedHandle)
             .maybeSingle()
 
-          if (userProfile && userProfile.handle) {
+          console.log('[UserPage] Query by handle result:', profileByHandle, 'error:', handleError)
+
+          if (profileByHandle) {
+            userProfile = profileByHandle
+          } else {
+            // 如果通过 handle 找不到，尝试通过 id 查询（handle 可能是 userId）
+            // 注意：只有当 handle 看起来像 UUID 时才尝试通过 id 查询
+            const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+            if (uuidRegex.test(handle)) {
+              console.log('[UserPage] Querying user_profiles by id:', handle)
+              const { data: profileById, error: idError } = await supabase
+                .from('user_profiles')
+                .select('*')
+                .eq('id', handle)
+                .maybeSingle()
+              
+              console.log('[UserPage] Query by id result:', profileById, 'error:', idError)
+              
+              if (profileById) {
+                userProfile = profileById
+                // 如果用户有设置 handle，重定向到正确的 URL
+                if (profileById.handle && profileById.handle !== decodedHandle) {
+                  console.log('[UserPage] Redirecting to correct handle:', profileById.handle)
+                  window.location.href = `/u/${encodeURIComponent(profileById.handle)}`
+                  return
+                }
+              }
+            }
+            
+            // 如果还是找不到，检查当前登录用户
+            if (!userProfile) {
+              const { data: { user: currentUser } } = await supabase.auth.getUser()
+              if (currentUser) {
+                console.log('[UserPage] Checking current user profile by userId:', currentUser.id)
+                const { data: currentUserProfile } = await supabase
+                  .from('user_profiles')
+                  .select('*')
+                  .eq('id', currentUser.id)
+                  .maybeSingle()
+                
+                console.log('[UserPage] Current user profile:', currentUserProfile)
+                
+                if (currentUserProfile) {
+                  // 找到当前用户的 profile
+                  // 如果用户有 handle 且与 URL 不同，重定向
+                  if (currentUserProfile.handle && currentUserProfile.handle !== decodedHandle) {
+                    console.log('[UserPage] Redirecting to user handle:', currentUserProfile.handle)
+                    window.location.href = `/u/${encodeURIComponent(currentUserProfile.handle)}`
+                    return
+                  }
+                  // 如果 handle 匹配或用户没有设置 handle，使用该 profile
+                  if (currentUserProfile.handle === decodedHandle || !currentUserProfile.handle) {
+                    userProfile = currentUserProfile
+                  }
+                }
+              }
+            }
+          }
+
+          if (userProfile) {
             // 获取粉丝数（关注他的人）- 使用 trader_follows 表
             const { count: followersCount } = await supabase
               .from('trader_follows')
@@ -156,7 +224,7 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
               .eq('user_id', userProfile.id)
 
             profileData = {
-              handle: userProfile.handle || handle,
+              handle: userProfile.handle || decodedHandle,
               id: userProfile.id,
               bio: userProfile.bio || null,
               followers: followersCount || 0,
@@ -298,10 +366,34 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
                 .maybeSingle()
               
               if (profileById) {
-                console.log('[UserPage] Found profile by ID, redirecting to:', profileById.handle)
-                // 如果找到用户但 handle 不匹配，重定向到正确的 handle
-                window.location.href = `/u/${profileById.handle}`
-                return
+                // 如果找到用户且有 handle，重定向到正确的 handle
+                if (profileById.handle && profileById.handle !== handle) {
+                  console.log('[UserPage] Found profile by ID, redirecting to:', profileById.handle)
+                  window.location.href = `/u/${profileById.handle}`
+                  return
+                }
+                // 如果用户没有设置 handle，使用当前 profile 数据显示页面
+                console.log('[UserPage] Found profile by ID, using profile data')
+                const { count: followersCount } = await supabase
+                  .from('trader_follows')
+                  .select('*', { count: 'exact', head: true })
+                  .eq('trader_id', profileById.id)
+                
+                const { count: followingCount } = await supabase
+                  .from('trader_follows')
+                  .select('*', { count: 'exact', head: true })
+                  .eq('user_id', profileById.id)
+
+                profileData = {
+                  handle: profileById.handle || decodedHandle,
+                  id: profileById.id,
+                  bio: profileById.bio || null,
+                  followers: followersCount || 0,
+                  following: followingCount || 0,
+                  copiers: 0,
+                  avatar_url: profileById.avatar_url || undefined,
+                  isRegistered: true,
+                }
               } else {
                 console.log('[UserPage] No profile found by ID, creating new profile...')
                 // 如果找不到，尝试创建新的 profile（不包含 email，因为 user_profiles 表没有这个列）
@@ -316,9 +408,34 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
                     .single()
 
                   if (userProfileData) {
-                    console.log('[UserPage] User profile created, redirecting to:', emailHandle)
-                    window.location.href = `/u/${emailHandle}`
-                    return
+                    console.log('[UserPage] User profile created:', userProfileData.handle)
+                    // 如果新创建的 handle 与当前 URL 不同，重定向
+                    if (userProfileData.handle && userProfileData.handle !== decodedHandle) {
+                      console.log('[UserPage] Redirecting to:', userProfileData.handle)
+                      window.location.href = `/u/${encodeURIComponent(userProfileData.handle)}`
+                      return
+                    }
+                    // 否则直接使用创建的数据
+                    const { count: followersCount } = await supabase
+                      .from('trader_follows')
+                      .select('*', { count: 'exact', head: true })
+                      .eq('trader_id', userProfileData.id)
+                    
+                    const { count: followingCount } = await supabase
+                      .from('trader_follows')
+                      .select('*', { count: 'exact', head: true })
+                      .eq('user_id', userProfileData.id)
+
+                    profileData = {
+                      handle: userProfileData.handle || decodedHandle,
+                      id: userProfileData.id,
+                      bio: userProfileData.bio || null,
+                      followers: followersCount || 0,
+                      following: followingCount || 0,
+                      copiers: 0,
+                      avatar_url: userProfileData.avatar_url || undefined,
+                      isRegistered: true,
+                    }
                   } else if (insertError) {
                     console.log('[UserPage] Error creating user profile:', insertError)
                   }

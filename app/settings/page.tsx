@@ -244,23 +244,49 @@ export default function SettingsPage() {
 
   const uploadAvatar = async (file: File, userId: string): Promise<string | null> => {
     try {
-      const fileExt = file.name.split('.').pop()
-      const fileName = `${userId}-${Date.now()}.${fileExt}`
-      const filePath = `avatars/${fileName}`
+      // 检查文件大小（最大 5MB）
+      if (file.size > 5 * 1024 * 1024) {
+        showToast('图片大小不能超过 5MB', 'error')
+        return null
+      }
 
-      const { error: uploadError } = await supabase.storage
+      const fileExt = file.name.split('.').pop()?.toLowerCase()
+      // 检查文件类型
+      if (!['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(fileExt || '')) {
+        showToast('只支持 JPG、PNG、GIF、WebP 格式', 'error')
+        return null
+      }
+
+      const fileName = `${userId}-${Date.now()}.${fileExt}`
+      const filePath = `${fileName}`  // 不需要 avatars/ 前缀，因为 bucket 名就是 avatars
+
+      console.log('[Avatar] Uploading to:', filePath)
+
+      const { error: uploadError, data: uploadData } = await supabase.storage
         .from('avatars')
         .upload(filePath, file, { upsert: true })
 
       if (uploadError) {
-        console.error('Upload error:', uploadError)
+        console.error('[Avatar] Upload error:', uploadError)
+        // 显示具体的错误信息
+        if (uploadError.message?.includes('Bucket not found')) {
+          showToast('存储服务未配置，请联系管理员', 'error')
+        } else if (uploadError.message?.includes('security') || uploadError.message?.includes('policy')) {
+          showToast('没有上传权限，请联系管理员', 'error')
+        } else {
+          showToast(`上传失败: ${uploadError.message}`, 'error')
+        }
         return null
       }
 
+      console.log('[Avatar] Upload success:', uploadData)
+
       const { data } = supabase.storage.from('avatars').getPublicUrl(filePath)
+      console.log('[Avatar] Public URL:', data.publicUrl)
       return data.publicUrl
-    } catch (error) {
-      console.error('Error uploading avatar:', error)
+    } catch (error: any) {
+      console.error('[Avatar] Error uploading avatar:', error)
+      showToast(`上传异常: ${error?.message || '未知错误'}`, 'error')
       return null
     }
   }
@@ -274,9 +300,14 @@ export default function SettingsPage() {
       
       // Upload avatar if changed
       if (avatarFile) {
+        console.log('[Settings] Uploading avatar...')
         const uploadedUrl = await uploadAvatar(avatarFile, userId)
         if (uploadedUrl) {
           finalAvatarUrl = uploadedUrl
+          console.log('[Settings] Avatar uploaded:', uploadedUrl)
+        } else {
+          console.log('[Settings] Avatar upload failed, keeping old avatar')
+          // 上传失败时不阻止其他数据保存，继续使用旧头像
         }
       }
       
@@ -305,7 +336,12 @@ export default function SettingsPage() {
       if (userProfilesError) {
         console.error('Error saving profile:', JSON.stringify(userProfilesError, null, 2))
         console.error('Error details - code:', userProfilesError.code, 'message:', userProfilesError.message, 'hint:', userProfilesError.hint)
-        showToast(`保存失败: ${userProfilesError.message || '请重试'}`, 'error')
+        // 处理 handle 重复的错误
+        if (userProfilesError.code === '23505' || userProfilesError.message?.includes('unique') || userProfilesError.message?.includes('duplicate')) {
+          showToast('用户名已被使用，请选择其他用户名', 'error')
+        } else {
+          showToast(`保存失败: ${userProfilesError.message || '请重试'}`, 'error')
+        }
         return
       }
       

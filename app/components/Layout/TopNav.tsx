@@ -17,6 +17,7 @@ export default function TopNav({ email }: { email: string | null }) {
   const pathname = usePathname()
   const [myId, setMyId] = useState<string | null>(null)
   const [myHandle, setMyHandle] = useState<string | null>(null)
+  const [myAvatarUrl, setMyAvatarUrl] = useState<string | null>(null)
   const [showUserMenu, setShowUserMenu] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [showSearchDropdown, setShowSearchDropdown] = useState(false)
@@ -54,20 +55,30 @@ export default function TopNav({ email }: { email: string | null }) {
       const userId = data.user?.id ?? null
       setMyId(userId)
       
-      // 获取用户的handle
+      // 获取用户的handle和头像
       if (userId) {
         // 直接使用 user_profiles 表（profiles 表不存在）
         supabase
           .from('user_profiles')
-          .select('handle')
+          .select('handle, avatar_url')
           .eq('id', userId)
           .maybeSingle()
           .then(({ data: userProfile }) => {
             if (!alive) return
-            if (userProfile && userProfile.handle) {
-              setMyHandle(userProfile.handle)
+            if (userProfile) {
+              if (userProfile.handle) {
+                setMyHandle(userProfile.handle)
+              } else if (data.user?.email) {
+                // 如果没有 handle，使用邮箱前缀
+                const defaultHandle = data.user.email.split('@')[0]
+                setMyHandle(defaultHandle)
+              }
+              // 设置头像
+              if (userProfile.avatar_url) {
+                setMyAvatarUrl(userProfile.avatar_url)
+              }
             } else {
-              // 如果都没有 handle，尝试从邮箱创建默认 handle
+              // 如果没有 profile，使用邮箱前缀作为 handle
               if (data.user?.email) {
                 const defaultHandle = data.user.email.split('@')[0]
                 setMyHandle(defaultHandle)
@@ -621,22 +632,36 @@ export default function TopNav({ email }: { email: string | null }) {
                   }
                 }}
               >
-                <Box
-                  style={{
-                    width: 36,
-                    height: 36,
-                    borderRadius: tokens.radius.full,
-                    border: `1px solid ${tokens.colors.border.primary}`,
-                    background: tokens.colors.bg.secondary,
-                    display: 'grid',
-                    placeItems: 'center',
-                    fontWeight: tokens.typography.fontWeight.black,
-                    color: tokens.colors.text.primary,
-                    fontSize: tokens.typography.fontSize.sm,
-                  }}
-                >
-                  {(email?.[0] ?? 'U').toUpperCase()}
-                </Box>
+                {myAvatarUrl ? (
+                  <img
+                    src={myAvatarUrl}
+                    alt="头像"
+                    style={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: tokens.radius.full,
+                      border: `1px solid ${tokens.colors.border.primary}`,
+                      objectFit: 'cover',
+                    }}
+                  />
+                ) : (
+                  <Box
+                    style={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: tokens.radius.full,
+                      border: `1px solid ${tokens.colors.border.primary}`,
+                      background: tokens.colors.bg.secondary,
+                      display: 'grid',
+                      placeItems: 'center',
+                      fontWeight: tokens.typography.fontWeight.black,
+                      color: tokens.colors.text.primary,
+                      fontSize: tokens.typography.fontSize.sm,
+                    }}
+                  >
+                    {(myHandle?.[0] ?? email?.[0] ?? 'U').toUpperCase()}
+                  </Box>
+                )}
               </Box>
 
               {showUserMenu && (

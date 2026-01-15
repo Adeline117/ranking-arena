@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
 import { supabase } from '@/lib/supabase/client'
@@ -185,10 +184,6 @@ export default function TraderAboutCard({
           style={{ 
             marginBottom: tokens.spacing[4], 
             lineHeight: tokens.typography.lineHeight.relaxed,
-            padding: tokens.spacing[3],
-            background: tokens.colors.bg.primary,
-            borderRadius: tokens.radius.md,
-            border: `1px solid ${tokens.colors.border.primary}`,
           }}
         >
           {bio.length > 50 ? bio.slice(0, 50) + '...' : bio}
@@ -263,23 +258,6 @@ export default function TraderAboutCard({
         )}
       </Box>
 
-      {/* 如果是注册用户，显示主页链接 */}
-      {isRegistered && (
-        <Box style={{ marginTop: tokens.spacing[3] }}>
-          <Link href={`/u/${handle}`} style={{ textDecoration: 'none' }}>
-            <Text
-              size="sm"
-              weight="bold"
-              style={{
-                color: tokens.colors.text.secondary,
-                textDecoration: 'underline',
-              }}
-            >
-              查看主页 →
-            </Text>
-          </Link>
-        </Box>
-      )}
     </Box>
   )
 }
