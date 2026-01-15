@@ -7,6 +7,7 @@ import TopNav from '@/app/components/Layout/TopNav'
 import { Box, Text, Button } from '@/app/components/Base'
 import { tokens } from '@/lib/design-tokens'
 import { useToast } from '@/app/components/UI/Toast'
+import { useLanguage } from '@/app/components/Utils/LanguageProvider'
 
 interface UploadedImage {
   url: string
@@ -32,7 +33,40 @@ const POLL_DURATION_OPTIONS = [
   { label: '7天', value: 168 },
 ]
 
-// 链接解析函数
+// 解析视频链接
+function parseVideoUrl(url: string): { type: 'youtube' | 'bilibili'; embedUrl: string } | null {
+  // YouTube
+  const youtubeMatch = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/)
+  if (youtubeMatch) {
+    return { type: 'youtube', embedUrl: `https://www.youtube.com/embed/${youtubeMatch[1]}` }
+  }
+  // Bilibili
+  const bilibiliMatch = url.match(/bilibili\.com\/video\/(BV[a-zA-Z0-9]+)|bilibili\.com\/video\/av(\d+)/)
+  if (bilibiliMatch) {
+    const bvid = bilibiliMatch[1]
+    const aid = bilibiliMatch[2]
+    if (bvid) return { type: 'bilibili', embedUrl: `//player.bilibili.com/player.html?bvid=${bvid}&autoplay=0` }
+    if (aid) return { type: 'bilibili', embedUrl: `//player.bilibili.com/player.html?aid=${aid}&autoplay=0` }
+  }
+  return null
+}
+
+// 视频播放器组件
+function VideoPlayer({ embedUrl, type }: { embedUrl: string; type: string }) {
+  return (
+    <div style={{ position: 'relative', width: '100%', paddingBottom: '56.25%', margin: '8px 0', borderRadius: 8, overflow: 'hidden', background: '#000' }}>
+      <iframe
+        src={embedUrl}
+        style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 'none' }}
+        allowFullScreen
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+        title={type === 'youtube' ? 'YouTube 视频' : 'Bilibili 视频'}
+      />
+    </div>
+  )
+}
+
+// 链接解析函数（支持视频嵌入）
 function renderContentWithLinks(text: string) {
   if (!text) return null
   const urlRegex = /(https?:\/\/[^\s<>"{}|\\^`[\]]+)/g
@@ -41,6 +75,13 @@ function renderContentWithLinks(text: string) {
   return parts.map((part, index) => {
     if (urlRegex.test(part)) {
       urlRegex.lastIndex = 0 // Reset regex state
+      
+      // 检查是否是视频链接
+      const video = parseVideoUrl(part)
+      if (video) {
+        return <VideoPlayer key={index} embedUrl={video.embedUrl} type={video.type} />
+      }
+      
       return (
         <a
           key={index}
@@ -67,7 +108,10 @@ export default function NewPostPage() {
   const handle = params.handle as string
   const router = useRouter()
   const { showToast } = useToast()
+  const { t } = useLanguage()
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const [cursorPosition, setCursorPosition] = useState<number | null>(null)
 
   const [email, setEmail] = useState<string | null>(null)
   const [userId, setUserId] = useState<string | null>(null)
@@ -84,7 +128,7 @@ export default function NewPostPage() {
     { text: '', votes: 0 },
     { text: '', votes: 0 },
   ])
-  const [pollDuration, setPollDuration] = useState(24) // 默认1天
+  const [pollDuration, setPollDuration] = useState(0) // 默认永久（0表示永久）
   const [pollType, setPollType] = useState<'single' | 'multiple'>('single')
 
   const draftKey = `${DRAFT_KEY_PREFIX}${handle}`
@@ -108,7 +152,7 @@ export default function NewPostPage() {
             setContent(draftContent || '')
             setImages(draftImages || [])
             setPollEnabled(draftPollEnabled || false)
-            showToast('已恢复草稿', 'info')
+            showToast(t('draftRestored'), 'info')
           }
         } catch (e) {
           console.error('Failed to parse draft:', e)
@@ -146,12 +190,12 @@ export default function NewPostPage() {
     if (!files || files.length === 0) return
 
     if (!userId) {
-      showToast('请先登录', 'warning')
+      showToast(t('pleaseLogin'), 'warning')
       return
     }
 
     if (images.length + files.length > 9) {
-      showToast('最多上传9张图片', 'warning')
+      showToast(t('maxImages'), 'warning')
       return
     }
 
@@ -220,17 +264,17 @@ export default function NewPostPage() {
   const insertImageToContent = (url: string) => {
     const imageMarkdown = `\n![image](${url})\n`
     setContent(prev => prev + imageMarkdown)
-    showToast('图片已插入到内容', 'info')
+    showToast(t('imageInserted'), 'info')
   }
 
   const handleSubmit = async () => {
     if (!title.trim()) {
-      showToast('请输入标题', 'warning')
+      showToast(t('pleaseEnterTitle'), 'warning')
       return
     }
 
     if (!userId) {
-      showToast('请先登录', 'warning')
+      showToast(t('pleaseLogin'), 'warning')
       router.push('/login')
       return
     }
@@ -245,7 +289,7 @@ export default function NewPostPage() {
     // 解码 URL 中的 handle 进行比较（中文用户名会被编码）
     const decodedHandle = decodeURIComponent(handle)
     if (!profile || profile.handle !== decodedHandle) {
-      showToast('无权发布', 'error')
+      showToast(t('noPermission'), 'error')
       return
     }
 
@@ -260,6 +304,47 @@ export default function NewPostPage() {
         }
       }
 
+      // 如果开启投票，先创建投票
+      let pollId = null
+      if (pollEnabled) {
+        // 验证投票选项
+        const validOptions = pollOptions.filter(opt => opt.text.trim())
+        if (validOptions.length < 2) {
+          showToast('请至少填写2个投票选项', 'warning')
+          setLoading(false)
+          return
+        }
+
+        // 计算截止时间（0表示永久，不设置截止时间）
+        const endAt = pollDuration > 0 
+          ? new Date(Date.now() + pollDuration * 60 * 60 * 1000).toISOString()
+          : null
+
+        // 创建投票
+        const { data: pollData, error: pollError } = await supabase
+          .from('polls')
+          .insert({
+            question: title,
+            options: validOptions.map((opt, index) => ({ 
+              text: opt.text.trim(), 
+              votes: 0,
+              index 
+            })),
+            type: pollType,
+            end_at: endAt,
+          })
+          .select('id')
+          .single()
+
+        if (pollError) {
+          console.error('创建投票失败:', pollError)
+          showToast('创建投票失败: ' + pollError.message, 'error')
+          setLoading(false)
+          return
+        }
+        pollId = pollData.id
+      }
+
       const { error } = await supabase.from('posts').insert({
         title,
         content: finalContent,
@@ -268,17 +353,19 @@ export default function NewPostPage() {
         author_id: userId,
         images: images.map(img => img.url),
         poll_enabled: pollEnabled,
+        poll_id: pollId,
       })
 
       if (error) {
-        console.error('创建帖子失败:', error)
-        showToast(error.message, 'error')
+        console.error('创建帖子失败:', JSON.stringify(error, null, 2))
+        console.error('Error details - code:', error.code, 'message:', error.message, 'hint:', error.hint)
+        showToast(error.message || '创建失败，请检查权限', 'error')
         return
       }
 
       // Clear draft after successful publish
       clearDraft()
-      showToast('发布成功！', 'success')
+      showToast(t('publishSuccess'), 'success')
       router.push(`/u/${encodeURIComponent(decodedHandle)}`)
     } catch (error: any) {
       console.error('发布异常:', error)
@@ -293,17 +380,17 @@ export default function NewPostPage() {
       <TopNav email={email} />
       <Box style={{ maxWidth: 800, margin: '0 auto', padding: tokens.spacing[6] }}>
         <Text size="2xl" weight="black" style={{ marginBottom: tokens.spacing[2] }}>
-          发动态
+          {t('postUpdate')}
         </Text>
         <Text size="sm" color="secondary" style={{ marginBottom: tokens.spacing[6] }}>
-          分享你的交易想法和见解
+          {t('shareIdeas')}
         </Text>
 
         <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}>
           <Box>
             <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: tokens.spacing[2] }}>
               <Text size="sm" weight="bold">
-                标题
+                {t('titleLabel')}
               </Text>
               <Text 
                 size="xs" 
@@ -314,7 +401,7 @@ export default function NewPostPage() {
             </Box>
             <input
               type="text"
-              placeholder="输入标题..."
+              placeholder={t('enterTitle')}
               value={title}
               onChange={(e) => setTitle(e.target.value.slice(0, TITLE_MAX_LENGTH))}
               maxLength={TITLE_MAX_LENGTH}
@@ -336,7 +423,7 @@ export default function NewPostPage() {
             <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: tokens.spacing[2] }}>
               <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3] }}>
                 <Text size="sm" weight="bold">
-                  内容
+                  {t('contentLabel')}
                 </Text>
                 <Box style={{ display: 'flex', borderRadius: tokens.radius.md, overflow: 'hidden', border: `1px solid ${tokens.colors.border.primary}` }}>
                   <button
@@ -355,7 +442,7 @@ export default function NewPostPage() {
                       gap: 4,
                     }}
                   >
-                    ✏️ 编辑
+                    ✏️ {t('edit')}
                   </button>
                   <button
                     type="button"
@@ -374,12 +461,12 @@ export default function NewPostPage() {
                       gap: 4,
                     }}
                   >
-                    👁️ 预览
+                    👁️ {t('preview')}
                   </button>
                 </Box>
                 {draftSaved && (
                   <Text size="xs" color="tertiary" style={{ color: '#2fe57d' }}>
-                    ✓ 草稿已保存
+                    ✓ {t('draftSaved')}
                   </Text>
                 )}
               </Box>
@@ -422,13 +509,13 @@ export default function NewPostPage() {
                     fontWeight: 700,
                   }}
                 >
-                  预览模式
+                  {t('previewMode')}
                 </Box>
-                {content ? renderContentWithLinks(content) : <Text color="tertiary">预览内容将显示在这里...</Text>}
+                {content ? renderContentWithLinks(content) : <Text color="tertiary">{t('previewPlaceholder')}</Text>}
               </Box>
             ) : (
               <textarea
-                placeholder="输入内容... (支持使用 @用户名 提及其他用户，链接将自动变为可点击)"
+                placeholder={t('enterContent')}
                 value={content}
                 onChange={(e) => setContent(e.target.value.slice(0, CONTENT_MAX_LENGTH))}
                 maxLength={CONTENT_MAX_LENGTH}
@@ -449,7 +536,7 @@ export default function NewPostPage() {
               />
             )}
             <Text size="xs" color="tertiary" style={{ marginTop: tokens.spacing[1] }}>
-              提示：使用 @用户名 可以提及其他用户，链接会自动变为可点击
+              {t('mentionTip')}
             </Text>
           </Box>
 
@@ -499,10 +586,10 @@ export default function NewPostPage() {
               </Box>
               <Box>
                 <Text size="sm" weight="bold" style={{ color: pollEnabled ? '#8b6fa8' : tokens.colors.text.primary }}>
-                  📊 开启投票
+                  📊 {t('enablePoll')}
                 </Text>
                 <Text size="xs" color="tertiary">
-                  自定义投票选项，到期自动公布结果
+                  {t('pollDescription')}
                 </Text>
               </Box>
             </Box>
@@ -768,11 +855,11 @@ export default function NewPostPage() {
                   }}
                 >
                   {uploading ? (
-                    <Text size="xs" color="secondary">上传中...</Text>
+                    <Text size="xs" color="secondary">{t('uploadingImage')}</Text>
                   ) : (
                     <>
                       <Text size="2xl" color="secondary" style={{ lineHeight: 1 }}>+</Text>
-                      <Text size="xs" color="secondary">添加图片</Text>
+                      <Text size="xs" color="secondary">{t('addImage')}</Text>
                     </>
                   )}
                 </label>
@@ -780,7 +867,7 @@ export default function NewPostPage() {
             </Box>
             
             <Text size="xs" color="tertiary">
-              支持 JPG、PNG、GIF、WebP 格式，单张最大 5MB
+              {t('imageSupport')}
             </Text>
           </Box>
 
@@ -791,7 +878,7 @@ export default function NewPostPage() {
               onClick={() => router.back()}
               disabled={loading}
             >
-              取消
+              {t('cancel')}
             </Button>
             <Button
               variant="primary"
@@ -799,7 +886,7 @@ export default function NewPostPage() {
               onClick={handleSubmit}
               disabled={loading || !title.trim()}
             >
-              {loading ? '发布中...' : '发布'}
+              {loading ? t('publishing') : t('publish')}
             </Button>
           </Box>
         </Box>
