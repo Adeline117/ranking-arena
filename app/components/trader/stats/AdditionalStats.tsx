@@ -1,6 +1,7 @@
 'use client'
 
 import { tokens } from '@/lib/design-tokens'
+import { useLanguage } from '../../Utils/LanguageProvider'
 import { Box, Text } from '../../Base'
 import type { TraderStats } from '@/lib/data/trader'
 
@@ -9,12 +10,13 @@ interface AdditionalStatsProps {
 }
 
 export default function AdditionalStats({ data }: AdditionalStatsProps) {
+  const { t, language } = useLanguage()
   if (!data) return null
 
   return (
     <Box bg="secondary" p={6} radius="xl" border="primary" style={{ marginBottom: tokens.spacing[6] }}>
       <Text size="lg" weight="black" style={{ marginBottom: tokens.spacing[4] }}>
-        Additional Stats
+        {t('additionalStats')}
       </Text>
       <Box
         style={{
@@ -25,34 +27,34 @@ export default function AdditionalStats({ data }: AdditionalStatsProps) {
       >
         <Box>
           <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[1] }}>
-            Trades Per Week
+            {t('tradesPerWeek')}
           </Text>
           <Text size="lg" weight="bold">
-            {data.tradesPerWeek !== undefined ? data.tradesPerWeek.toFixed(2) : 'N/A'}
+            {data.tradesPerWeek !== undefined ? data.tradesPerWeek.toFixed(2) : t('na')}
           </Text>
         </Box>
         <Box>
           <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[1] }}>
-            Avg. Holdings time
+            {t('avgHoldingTime')}
           </Text>
           <Text size="lg" weight="bold">
-            {data.avgHoldingTime}
+            {data.avgHoldingTime || t('na')}
           </Text>
         </Box>
         <Box>
           <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[1] }}>
-            Tracked since (first seen in Arena)
+            {language === 'zh' ? t('trackedSinceCn') : t('trackedSince')}
           </Text>
           <Text size="lg" weight="bold">
-            {data.activeSince}
+            {data.activeSince || t('na')}
           </Text>
         </Box>
         <Box>
           <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[1] }}>
-            Profitable weeks
+            {t('profitableWeeks')}
           </Text>
           <Text size="lg" weight="bold" style={{ color: '#7CFFB2' }}>
-            {data.profitableWeeksPct !== undefined ? data.profitableWeeksPct.toFixed(2) : 'N/A'}%
+            {data.profitableWeeksPct !== undefined ? data.profitableWeeksPct.toFixed(2) : t('na')}%
           </Text>
         </Box>
       </Box>

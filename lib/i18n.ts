@@ -13,10 +13,10 @@ export const translations = {
     following: '关注中',
     followers: '粉丝',
     bio: '个人简介',
-    performance: 'Performance',
-    stats: 'Stats',
-    portfolio: 'Portfolio',
-    chart: 'Chart',
+    performance: '业绩表现',
+    stats: '数据统计',
+    portfolio: '持仓',
+    chart: '图表',
     traderLeaderboard: '交易者排行榜',
     loggedIn: '已登录',
     guest: '游客模式',
@@ -149,6 +149,10 @@ export const translations = {
     currentPositions: '当前持仓',
     noPositions: '暂无持仓',
     noHistory: '暂无历史数据',
+    // 交易统计
+    additionalStats: '更多数据',
+    tradesPerWeek: '周交易次数',
+    profitableWeeks: '盈利周数',
     // 通用
     lightMode: '浅色模式',
     darkMode: '深色模式',
@@ -346,6 +350,10 @@ export const translations = {
     currentPositions: 'Current Positions',
     noPositions: 'No positions',
     noHistory: 'No history',
+    // Trading stats
+    additionalStats: 'Additional Stats',
+    tradesPerWeek: 'Trades Per Week',
+    profitableWeeks: 'Profitable Weeks',
     // Common
     lightMode: 'Light Mode',
     darkMode: 'Dark Mode',
