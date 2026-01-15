@@ -8,6 +8,7 @@ import { Box, Text, Button } from '../Base'
 import FollowButton from '../UI/FollowButton'
 import UserFollowButton from '../UI/UserFollowButton'
 import MessageButton from '../UI/MessageButton'
+import FollowListModal from '../UI/FollowListModal'
 import { getAvatarGradient, getAvatarInitial } from '@/lib/utils/avatar'
 
 /**
@@ -109,6 +110,8 @@ interface TraderAboutCardProps {
   following?: number // 他关注的人数量
   isRegistered?: boolean
   isOwnProfile?: boolean
+  showFollowers?: boolean // 是否公开展示粉丝列表
+  showFollowing?: boolean // 是否公开展示关注列表
 }
 
 /**
@@ -124,8 +127,11 @@ export default function TraderAboutCard({
   following = 0,
   isRegistered,
   isOwnProfile = false,
+  showFollowers = true,
+  showFollowing = true,
 }: TraderAboutCardProps) {
   const [userId, setUserId] = useState<string | null>(null)
+  const [modalType, setModalType] = useState<'followers' | 'following' | null>(null)
   const router = useRouter()
 
   useEffect(() => {
@@ -133,6 +139,24 @@ export default function TraderAboutCard({
       setUserId(data.user?.id ?? null)
     })
   }, [])
+
+  // 处理点击关注者/关注中
+  const handleFollowListClick = (type: 'followers' | 'following') => {
+    // 只有注册用户才能查看列表
+    if (!isRegistered) return
+    
+    // 检查隐私设置 - 自己总是可以看到
+    if (isOwnProfile) {
+      setModalType(type)
+      return
+    }
+    
+    // 检查对应的隐私设置
+    const canView = type === 'followers' ? showFollowers : showFollowing
+    if (canView) {
+      setModalType(type)
+    }
+  }
 
   return (
     <Box
@@ -238,19 +262,112 @@ export default function TraderAboutCard({
           gap: tokens.spacing[6],
         }}
       >
-        <Box style={{ flex: 1 }}>
-          <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[1], fontWeight: tokens.typography.fontWeight.medium }}>
-            关注者
-          </Text>
+        {/* 关注者 */}
+        <Box 
+          style={{ 
+            flex: 1,
+            cursor: isRegistered && (isOwnProfile || showFollowers) ? 'pointer' : 'default',
+            padding: tokens.spacing[2],
+            margin: `-${tokens.spacing[2]}`,
+            borderRadius: tokens.radius.md,
+            transition: `background ${tokens.transition.fast}`,
+          }}
+          onClick={() => handleFollowListClick('followers')}
+          onMouseEnter={(e) => {
+            if (isRegistered && (isOwnProfile || showFollowers)) {
+              e.currentTarget.style.background = tokens.colors.bg.hover
+            }
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'transparent'
+          }}
+        >
+          <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1], marginBottom: tokens.spacing[1] }}>
+            <Text size="xs" color="tertiary" style={{ fontWeight: tokens.typography.fontWeight.medium }}>
+              关注者
+            </Text>
+            {/* 隐私指示器 - 仅自己可见 */}
+            {isOwnProfile && (
+              <span 
+                title={showFollowers ? '公开 - 其他人可以查看' : '私密 - 仅自己可见'}
+                style={{ 
+                  fontSize: 10,
+                  color: showFollowers ? tokens.colors.text.tertiary : tokens.colors.accent.warning,
+                  cursor: 'help',
+                }}
+              >
+                {showFollowers ? '👁' : '🔒'}
+              </span>
+            )}
+            {/* 不可点击提示 */}
+            {!isOwnProfile && !showFollowers && isRegistered && (
+              <span 
+                title="该用户已关闭粉丝列表展示"
+                style={{ 
+                  fontSize: 10,
+                  color: tokens.colors.text.tertiary,
+                }}
+              >
+                🔒
+              </span>
+            )}
+          </Box>
           <Text size="base" weight="bold" style={{ color: tokens.colors.text.primary, fontSize: tokens.typography.fontSize.lg }}>
             {followers.toLocaleString()}
           </Text>
         </Box>
+
+        {/* 关注中 */}
         {following !== undefined && (
-          <Box style={{ flex: 1 }}>
-            <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[1], fontWeight: tokens.typography.fontWeight.medium }}>
-              关注中
-            </Text>
+          <Box 
+            style={{ 
+              flex: 1,
+              cursor: isRegistered && (isOwnProfile || showFollowing) ? 'pointer' : 'default',
+              padding: tokens.spacing[2],
+              margin: `-${tokens.spacing[2]}`,
+              borderRadius: tokens.radius.md,
+              transition: `background ${tokens.transition.fast}`,
+            }}
+            onClick={() => handleFollowListClick('following')}
+            onMouseEnter={(e) => {
+              if (isRegistered && (isOwnProfile || showFollowing)) {
+                e.currentTarget.style.background = tokens.colors.bg.hover
+              }
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'transparent'
+            }}
+          >
+            <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1], marginBottom: tokens.spacing[1] }}>
+              <Text size="xs" color="tertiary" style={{ fontWeight: tokens.typography.fontWeight.medium }}>
+                关注中
+              </Text>
+              {/* 隐私指示器 - 仅自己可见 */}
+              {isOwnProfile && (
+                <span 
+                  title={showFollowing ? '公开 - 其他人可以查看' : '私密 - 仅自己可见'}
+                  style={{ 
+                    fontSize: 10,
+                    color: showFollowing ? tokens.colors.text.tertiary : tokens.colors.accent.warning,
+                    cursor: 'help',
+                  }}
+                >
+                  {showFollowing ? '👁' : '🔒'}
+                </span>
+              )}
+              {/* 不可点击提示 */}
+              {!isOwnProfile && !showFollowing && isRegistered && (
+                <span 
+                  title="该用户已关闭关注列表展示"
+                  style={{ 
+                    fontSize: 10,
+                    color: tokens.colors.text.tertiary,
+                  }}
+                >
+                  🔒
+                </span>
+              )}
+            </Box>
             <Text size="base" weight="bold" style={{ color: tokens.colors.text.primary, fontSize: tokens.typography.fontSize.lg }}>
               {following.toLocaleString()}
             </Text>
@@ -258,6 +375,17 @@ export default function TraderAboutCard({
         )}
       </Box>
 
+      {/* 关注列表弹窗 */}
+      {isRegistered && (
+        <FollowListModal
+          isOpen={modalType !== null}
+          onClose={() => setModalType(null)}
+          type={modalType || 'followers'}
+          handle={handle}
+          currentUserId={userId}
+          isOwnProfile={isOwnProfile}
+        />
+      )}
     </Box>
   )
 }

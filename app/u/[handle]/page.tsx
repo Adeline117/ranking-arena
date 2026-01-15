@@ -147,7 +147,7 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
           // 先尝试解码后的 handle
           const { data: profileByHandle, error: handleError } = await supabase
             .from('user_profiles')
-            .select('*')
+            .select('*, show_followers, show_following')
             .eq('handle', decodedHandle)
             .maybeSingle()
 
@@ -234,6 +234,9 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
               // 如果用户不在排行榜上且没有设置头像，在Avatar组件中会生成头像
               avatar_url: userProfile.avatar_url || (foundInRanking ? null : undefined),
               isRegistered: true,
+              // 隐私设置
+              showFollowers: userProfile.show_followers !== false,
+              showFollowing: userProfile.show_following !== false,
             }
           }
         } else {
@@ -346,6 +349,9 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
                     // 如果设置了头像使用设置的头像，否则根据是否在排行榜上决定是否生成头像
                     avatar_url: newProfile.avatar_url || (foundInRankingForNewProfile ? null : undefined),
                     isRegistered: true,
+                    // 新创建的用户默认公开
+                    showFollowers: true,
+                    showFollowing: true,
                   }
                   console.log('[UserPage] profileData set:', profileData.handle)
                 } else {
@@ -393,6 +399,8 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
                   copiers: 0,
                   avatar_url: profileById.avatar_url || undefined,
                   isRegistered: true,
+                  showFollowers: profileById.show_followers !== false,
+                  showFollowing: profileById.show_following !== false,
                 }
               } else {
                 console.log('[UserPage] No profile found by ID, creating new profile...')
@@ -435,6 +443,9 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
                       copiers: 0,
                       avatar_url: userProfileData.avatar_url || undefined,
                       isRegistered: true,
+                      // 新创建的用户默认公开
+                      showFollowers: true,
+                      showFollowing: true,
                     }
                   } else if (insertError) {
                     console.log('[UserPage] Error creating user profile:', insertError)
@@ -638,6 +649,8 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
                 following={profile.following}
                 isRegistered={profile.isRegistered}
                 isOwnProfile={isOwnProfile}
+                showFollowers={profile.showFollowers}
+                showFollowing={profile.showFollowing}
               />
               {/* 创办的小组 */}
               <CreatedGroups userId={profile.id} />

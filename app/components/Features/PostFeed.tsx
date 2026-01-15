@@ -32,6 +32,7 @@ type Comment = {
 const REPLIES_PREVIEW_COUNT = 2
 
 const ARENA_PURPLE = '#8b6fa8'
+// 翻译文本颜色使用主题令牌，会根据明暗模式自动切换
 
 // 内容渲染函数 - 将文本中的URL转换为可点击链接，Markdown图片转换为图片元素
 function renderContentWithLinks(text: string) {
@@ -1422,7 +1423,9 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
               </div>
 
               <div style={{ marginTop: 6, fontWeight: 950, lineHeight: 1.25, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                <span>{translatedListPosts[p.id]?.title || p.title}</span>
+                <span style={{ color: translatedListPosts[p.id]?.title ? tokens.colors.accent.translated : tokens.colors.text.primary }}>
+                  {translatedListPosts[p.id]?.title || p.title}
+                </span>
                 {/* 自定义投票标识 */}
                 {p.poll_id && (
                   <span
@@ -1458,7 +1461,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
                 <div style={{ 
                   marginTop: 8, 
                   fontSize: 13, 
-                  color: tokens.colors.text.secondary, 
+                  color: translatedListPosts[p.id]?.body ? tokens.colors.accent.translated : tokens.colors.text.secondary, 
                   lineHeight: 1.5,
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
@@ -1648,7 +1651,14 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
           )}
 
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, marginTop: 8 }}>
-            <div style={{ fontSize: 20, fontWeight: 950, lineHeight: 1.25 }}>
+            <div style={{ 
+              fontSize: 20, 
+              fontWeight: 950, 
+              lineHeight: 1.25,
+              color: !showingOriginal && translatedListPosts[openPost.id]?.title 
+                ? tokens.colors.accent.translated 
+                : tokens.colors.text.primary,
+            }}>
               {showingOriginal 
                 ? openPost.title 
                 : (translatedListPosts[openPost.id]?.title || openPost.title)
@@ -1661,7 +1671,15 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
             {openPost.author_handle} · {formatTimeAgo(openPost.created_at)} · <CommentIcon size={12} /> {openPost.comment_count}
           </div>
 
-          <div translate="no" style={{ marginTop: 12, fontSize: 14, color: tokens.colors.text.primary, lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>
+          <div translate="no" style={{ 
+            marginTop: 12, 
+            fontSize: 14, 
+            color: !showingOriginal && translatedContent 
+              ? tokens.colors.accent.translated 
+              : tokens.colors.text.primary, 
+            lineHeight: 1.7, 
+            whiteSpace: 'pre-wrap' 
+          }}>
             {showingOriginal 
               ? renderContentWithLinks(openPost.content || '')
               : renderContentWithLinks(translatedContent || openPost.content || '')
@@ -1988,7 +2006,13 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
                           </button>
                         )}
                       </div>
-                      <div translate="no" style={{ fontSize: 13, color: tokens.colors.text.primary, lineHeight: 1.6 }}>
+                      <div translate="no" style={{ 
+                        fontSize: 13, 
+                        color: translatedComments[comment.id] 
+                          ? tokens.colors.accent.translated 
+                          : tokens.colors.text.primary, 
+                        lineHeight: 1.6 
+                      }}>
                         {renderContentWithLinks(translatedComments[comment.id] || comment.content || '')}
                       </div>
                       
@@ -2178,7 +2202,12 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
                                   </button>
                                 )}
                               </div>
-                              <div style={{ fontSize: 13, color: tokens.colors.text.primary }}>
+                              <div style={{ 
+                                fontSize: 13, 
+                                color: translatedComments[reply.id] 
+                                  ? tokens.colors.accent.translated 
+                                  : tokens.colors.text.primary 
+                              }}>
                                 {renderContentWithLinks(translatedComments[reply.id] || reply.content || '')}
                               </div>
                               {/* 回复的点赞按钮 */}
