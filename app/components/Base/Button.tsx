@@ -35,9 +35,9 @@ export function Button({
 
   const variantStyles: Record<typeof variant, React.CSSProperties> = {
     primary: {
-      background: tokens.colors.accent?.primary || tokens.colors.bg.secondary,
-      color: tokens.colors.black || tokens.colors.text.primary,
-      border: `1px solid ${tokens.colors.border.primary}`,
+      background: tokens.colors.accent?.brand || '#8b6fa8',
+      color: '#FFFFFF',
+      border: `1px solid ${tokens.colors.accent?.brand || '#8b6fa8'}`,
       boxShadow: tokens.shadow.sm,
     },
     secondary: {
@@ -98,6 +98,7 @@ export function Button({
           e.currentTarget.style.transform = 'translateY(-1px)'
           if (variant === 'primary') {
             e.currentTarget.style.boxShadow = tokens.shadow.md
+            e.currentTarget.style.background = tokens.colors.accent?.brandHover || '#9d84b5'
           } else if (variant === 'secondary') {
             e.currentTarget.style.boxShadow = tokens.shadow.sm
           }
@@ -107,6 +108,9 @@ export function Button({
         if (!props.disabled) {
           e.currentTarget.style.transform = 'translateY(0)'
           e.currentTarget.style.boxShadow = variantStyles[variant].boxShadow || tokens.shadow.xs
+          if (variant === 'primary') {
+            e.currentTarget.style.background = tokens.colors.accent?.brand || '#8b6fa8'
+          }
         }
       }}
       onKeyDown={(e) => {
