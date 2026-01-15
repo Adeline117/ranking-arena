@@ -160,12 +160,20 @@ export default function HomePage() {
           className="main-grid"
           style={{
             display: 'grid',
-            gridTemplateColumns: '320px 1fr 280px',
+            gridTemplateColumns: '260px minmax(0, 1fr) 280px',
             gap: tokens.spacing[4],
+            alignItems: 'start',
           }}
         >
           {/* 左：热门讨论 */}
-          <Box as="section" className="home-left-section">
+          <Box 
+            as="section" 
+            className="home-left-section"
+            style={{
+              position: 'sticky',
+              top: tokens.spacing[4],
+            }}
+          >
             <Card title={t('hotDiscussion')}>
               <ErrorBoundary>
                 <Suspense fallback={<SkeletonCard />}>
@@ -208,7 +216,13 @@ export default function HomePage() {
           </Box>
 
           {/* 中：排名流（产品核心） */}
-          <Box as="section" className="home-ranking-section">
+          <Box 
+            as="section" 
+            className="home-ranking-section"
+            style={{
+              minWidth: 0,
+            }}
+          >
             {/* 时间段切换按钮 */}
             <Box
               style={{
@@ -259,7 +273,8 @@ export default function HomePage() {
             style={{
               position: 'sticky',
               top: tokens.spacing[4],
-              alignSelf: 'start',
+              maxHeight: 'calc(100vh - 100px)',
+              overflowY: 'auto',
             }}
           >
             <ErrorBoundary>

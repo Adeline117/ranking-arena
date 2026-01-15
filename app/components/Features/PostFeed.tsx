@@ -763,11 +763,11 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
     return chineseRatio > 0.1 // 超过10%是中文字符
   }, [])
 
-  // 翻译帖子内容
+  // 翻译帖子内容（带缓存，一个帖子只消耗一次GPT）
   const translateContent = useCallback(async (postId: string, content: string, targetLang: 'zh' | 'en') => {
-    const cacheKey = `${postId}-${targetLang}`
+    const cacheKey = `${postId}-content-${targetLang}`
     
-    // 检查缓存
+    // 检查本地缓存
     if (translationCache[cacheKey]) {
       setTranslatedContent(translationCache[cacheKey])
       setShowingOriginal(false)
@@ -778,12 +778,13 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
     try {
       const response = await fetch('/api/translate', {
         method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Cache-Control': 'no-cache',
-        },
-        cache: 'no-store',
-        body: JSON.stringify({ text: content, targetLang }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          text: content, 
+          targetLang,
+          contentType: 'post_content',
+          contentId: postId,
+        }),
       })
       const data = await response.json()
       
@@ -791,8 +792,11 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
         const translated = data.data.translatedText
         setTranslatedContent(translated)
         setShowingOriginal(false)
-        // 缓存翻译结果
+        // 本地缓存（服务端也会缓存到数据库）
         setTranslationCache(prev => ({ ...prev, [cacheKey]: translated }))
+        if (data.data.cached) {
+          console.log('[PostFeed] 翻译命中服务端缓存')
+        }
       } else {
         console.error('[PostFeed] 翻译失败:', data.error)
         showToast(data.error || '翻译失败', 'error')
@@ -805,7 +809,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
     }
   }, [translationCache, showToast])
 
-  // 翻译列表中的帖子标题（只翻译标题，不翻译内容）
+  // 批量翻译帖子标题（使用批量API，减少请求次数）
   const translateListPosts = useCallback(async (postsToTranslate: Post[], targetLang: 'zh' | 'en') => {
     if (translatingList) return
     
@@ -813,8 +817,9 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
     const needsTranslation = postsToTranslate.filter(p => {
       const alreadyTranslated = translatedListPosts[p.id]?.title
       if (alreadyTranslated) return false
+      if (!p.title) return false
       
-      const titleIsChinese = isChineseText(p.title || '')
+      const titleIsChinese = isChineseText(p.title)
       // 中文标题 + 目标英文 = 需要翻译 | 英文标题 + 目标中文 = 需要翻译
       return targetLang === 'en' ? titleIsChinese : !titleIsChinese
     })
@@ -823,34 +828,40 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
     
     setTranslatingList(true)
     
-    // 批量翻译，每次最多5个
-    const batch = needsTranslation.slice(0, 5)
-    
-    for (const post of batch) {
-      try {
-        const response = await fetch('/api/translate', {
-          method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json',
-            'Cache-Control': 'no-cache',
-          },
-          cache: 'no-store',
-          body: JSON.stringify({ text: post.title || '', targetLang }),
-        })
-        const data = await response.json()
+    try {
+      // 使用批量翻译API（最多20个）
+      const items = needsTranslation.slice(0, 20).map(post => ({
+        id: post.id,
+        text: post.title || '',
+        contentType: 'post_title' as const,
+        contentId: post.id,
+      }))
+
+      const response = await fetch('/api/translate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items, targetLang }),
+      })
+      const data = await response.json()
+      
+      if (response.ok && data.success && data.data?.results) {
+        const results = data.data.results as Record<string, { translatedText: string; cached: boolean }>
         
-        if (response.ok && data.success && data.data?.translatedText) {
-          setTranslatedListPosts(prev => ({
-            ...prev,
-            [post.id]: { title: data.data.translatedText }
-          }))
-        }
-      } catch (err) {
-        console.error('[PostFeed] 列表翻译出错:', err)
+        setTranslatedListPosts(prev => {
+          const updated = { ...prev }
+          for (const [id, result] of Object.entries(results)) {
+            updated[id] = { title: result.translatedText }
+          }
+          return updated
+        })
+        
+        console.log(`[PostFeed] 批量翻译完成: ${data.data.cached}/${data.data.total} 命中缓存`)
       }
+    } catch (err) {
+      console.error('[PostFeed] 列表翻译出错:', err)
+    } finally {
+      setTranslatingList(false)
     }
-    
-    setTranslatingList(false)
   }, [translatingList, translatedListPosts, isChineseText])
 
   // 当语言变化时翻译列表帖子
@@ -860,65 +871,72 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
     }
   }, [language, posts, translateListPosts])
 
-  // 翻译评论
+  // 批量翻译评论（使用批量API）
   const translateComments = useCallback(async (commentsToTranslate: Comment[], targetLang: 'zh' | 'en') => {
     if (translatingComments) return
     
-    // 过滤出需要翻译的评论
-    const needsTranslation = commentsToTranslate.filter(c => {
-      if (translatedComments[c.id]) return false
-      const hasChinese = isChineseText(c.content || '')
-      return targetLang === 'en' ? hasChinese : !hasChinese
-    })
+    // 收集所有需要翻译的评论和回复
+    const allComments: Comment[] = []
     
-    // 也检查回复
-    const replies: Comment[] = []
     commentsToTranslate.forEach(c => {
+      // 检查主评论
+      if (!translatedComments[c.id] && c.content) {
+        const hasChinese = isChineseText(c.content)
+        if ((targetLang === 'en' && hasChinese) || (targetLang === 'zh' && !hasChinese)) {
+          allComments.push(c)
+        }
+      }
+      // 检查回复
       if (c.replies) {
         c.replies.forEach(r => {
-          if (!translatedComments[r.id]) {
-            const hasChinese = isChineseText(r.content || '')
+          if (!translatedComments[r.id] && r.content) {
+            const hasChinese = isChineseText(r.content)
             if ((targetLang === 'en' && hasChinese) || (targetLang === 'zh' && !hasChinese)) {
-              replies.push(r)
+              allComments.push(r)
             }
           }
         })
       }
     })
     
-    const allToTranslate = [...needsTranslation, ...replies]
-    if (allToTranslate.length === 0) return
+    if (allComments.length === 0) return
     
     setTranslatingComments(true)
     
-    // 批量翻译，每次最多5个
-    const batch = allToTranslate.slice(0, 5)
-    
-    for (const comment of batch) {
-      try {
-        const response = await fetch('/api/translate', {
-          method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json',
-            'Cache-Control': 'no-cache',
-          },
-          cache: 'no-store',
-          body: JSON.stringify({ text: comment.content, targetLang }),
-        })
-        const data = await response.json()
+    try {
+      // 使用批量翻译API（最多20个）
+      const items = allComments.slice(0, 20).map(comment => ({
+        id: comment.id,
+        text: comment.content || '',
+        contentType: 'comment' as const,
+        contentId: comment.id,
+      }))
+
+      const response = await fetch('/api/translate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items, targetLang }),
+      })
+      const data = await response.json()
+      
+      if (response.ok && data.success && data.data?.results) {
+        const results = data.data.results as Record<string, { translatedText: string; cached: boolean }>
         
-        if (response.ok && data.success && data.data?.translatedText) {
-          setTranslatedComments(prev => ({
-            ...prev,
-            [comment.id]: data.data.translatedText
-          }))
-        }
-      } catch (err) {
-        console.error('[PostFeed] 评论翻译出错:', err)
+        setTranslatedComments(prev => {
+          const updated = { ...prev }
+          for (const [id, result] of Object.entries(results)) {
+            updated[id] = result.translatedText
+          }
+          return updated
+        })
+        
+        console.log(`[PostFeed] 评论批量翻译完成: ${data.data.cached}/${data.data.total} 命中缓存`)
       }
+    } catch (err) {
+      console.error('[PostFeed] 评论翻译出错:', err)
+    } finally {
+      setTranslatingComments(false)
     }
-    
-    setTranslatingComments(false)
   }, [translatingComments, translatedComments, isChineseText])
 
   // 当评论加载或语言变化时翻译评论
@@ -1893,7 +1911,7 @@ function Modal(props: { children: React.ReactNode; onClose: () => void }) {
         display: 'grid',
         placeItems: 'center',
         padding: 16,
-        zIndex: 60,
+        zIndex: 9999,
         overflowY: 'auto',
       }}
     >

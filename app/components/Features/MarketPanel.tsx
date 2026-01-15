@@ -388,6 +388,8 @@ const MarketRow = memo(function MarketRow({ data }: { data: MarketRow }) {
         transition: `all ${tokens.transition.base}`,
         contain: 'layout style paint',
         cursor: 'pointer',
+        gap: tokens.spacing[2],
+        overflow: 'hidden',
       }}
       onMouseEnter={(e) => {
         e.currentTarget.style.background = tokens.colors.bg.secondary
@@ -402,10 +404,10 @@ const MarketRow = memo(function MarketRow({ data }: { data: MarketRow }) {
         e.currentTarget.style.boxShadow = tokens.shadow.none
       }}
     >
-      <Text size="sm" weight="black">
+      <Text size="sm" weight="black" style={{ flexShrink: 0 }}>
         {data.symbol.replace('-USD', '')}
       </Text>
-      <Box style={{ textAlign: 'right', minWidth: '100px' }}>
+      <Box style={{ textAlign: 'right', flexShrink: 0 }}>
         <div
           style={{
             fontSize: tokens.typography.fontSize.sm,
@@ -413,6 +415,7 @@ const MarketRow = memo(function MarketRow({ data }: { data: MarketRow }) {
             marginBottom: tokens.spacing[1],
             color: tokens.colors.text.primary,
             lineHeight: 1.5,
+            whiteSpace: 'nowrap',
           }}
         >
           ${data.price}
@@ -423,6 +426,7 @@ const MarketRow = memo(function MarketRow({ data }: { data: MarketRow }) {
             fontWeight: 700,
             color: data.direction === 'up' ? tokens.colors.accent.success : tokens.colors.accent.error,
             lineHeight: 1.5,
+            whiteSpace: 'nowrap',
           }}
         >
           {data.changePct}

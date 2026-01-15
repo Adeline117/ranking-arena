@@ -195,62 +195,81 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
     return chineseRatio > 0.1
   }, [])
 
-  // 翻译帖子
+  // 批量翻译帖子（使用批量API，带缓存）
   const translatePosts = useCallback(async (postsToTranslate: Post[], targetLang: 'zh' | 'en') => {
     if (translatingPosts) return
     
     const needsTranslation = postsToTranslate.filter(p => {
       if (translatedPosts[p.id]?.title) return false
-      const titleIsChinese = isChineseText(p.title || '')
+      if (!p.title) return false
+      const titleIsChinese = isChineseText(p.title)
       return targetLang === 'en' ? titleIsChinese : !titleIsChinese
     })
     
     if (needsTranslation.length === 0) return
     
     setTranslatingPosts(true)
-    const batch = needsTranslation.slice(0, 5)
     
-    for (const post of batch) {
-      try {
-        // 翻译标题
-        const titleRes = await fetch('/api/translate', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' },
-          cache: 'no-store',
-          body: JSON.stringify({ text: post.title || '', targetLang }),
-        })
-        const titleData = await titleRes.json()
-        
-        // 翻译内容（如果有）
-        let translatedContent = ''
-        if (post.content) {
-          const contentRes = await fetch('/api/translate', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' },
-            cache: 'no-store',
-            body: JSON.stringify({ text: post.content, targetLang }),
+    try {
+      // 批量翻译标题和内容
+      const items: Array<{id: string; text: string; contentType: 'post_title' | 'post_content'; contentId: string}> = []
+      
+      needsTranslation.slice(0, 10).forEach(post => {
+        // 添加标题翻译请求
+        if (post.title) {
+          items.push({
+            id: `${post.id}-title`,
+            text: post.title,
+            contentType: 'post_title',
+            contentId: post.id,
           })
-          const contentData = await contentRes.json()
-          if (contentData.success) {
-            translatedContent = contentData.data?.translatedText || ''
-          }
         }
-        
-        if (titleData.success) {
-          setTranslatedPosts(prev => ({
-            ...prev,
-            [post.id]: { 
-              title: titleData.data?.translatedText || post.title,
-              content: translatedContent || post.content || ''
-            }
-          }))
+        // 添加内容翻译请求
+        if (post.content) {
+          items.push({
+            id: `${post.id}-content`,
+            text: post.content,
+            contentType: 'post_content',
+            contentId: post.id,
+          })
         }
-      } catch (err) {
-        console.error('[GroupPage] 翻译出错:', err)
+      })
+
+      if (items.length === 0) {
+        setTranslatingPosts(false)
+        return
       }
+
+      const response = await fetch('/api/translate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items, targetLang }),
+      })
+      const data = await response.json()
+      
+      if (response.ok && data.success && data.data?.results) {
+        const results = data.data.results as Record<string, { translatedText: string; cached: boolean }>
+        
+        setTranslatedPosts(prev => {
+          const updated = { ...prev }
+          needsTranslation.forEach(post => {
+            const titleResult = results[`${post.id}-title`]
+            const contentResult = results[`${post.id}-content`]
+            updated[post.id] = {
+              title: titleResult?.translatedText || post.title || '',
+              content: contentResult?.translatedText || post.content || '',
+            }
+          })
+          return updated
+        })
+        
+        console.log(`[GroupPage] 批量翻译完成: ${data.data.cached}/${data.data.total} 命中缓存`)
+      }
+    } catch (err) {
+      console.error('[GroupPage] 翻译出错:', err)
+    } finally {
+      setTranslatingPosts(false)
     }
-    
-    setTranslatingPosts(false)
   }, [translatingPosts, translatedPosts, isChineseText])
 
   // 当帖子加载或语言变化时触发翻译

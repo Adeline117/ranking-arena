@@ -13,6 +13,9 @@ import {
   checkRateLimit,
   RateLimitPresets,
 } from '@/lib/api'
+import { createLogger } from '@/lib/utils/logger'
+
+const logger = createLogger('comment-like')
 
 type RouteContext = { params: Promise<{ id: string }> }
 
@@ -57,7 +60,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       
       if (rpcError) {
         // 如果 RPC 函数不存在，回退到普通更新
-        console.warn('[comment-like] RPC 函数不可用，使用回退方案:', rpcError.message)
+        logger.warn(`RPC unavailable, using fallback: ${rpcError.message}`)
         const { data: comment } = await supabase
           .from('comments')
           .select('like_count')
@@ -92,7 +95,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       
       if (rpcError) {
         // 如果 RPC 函数不存在，回退到普通更新
-        console.warn('[comment-like] RPC 函数不可用，使用回退方案:', rpcError.message)
+        logger.warn(`RPC unavailable, using fallback: ${rpcError.message}`)
         const { data: comment } = await supabase
           .from('comments')
           .select('like_count')
@@ -117,4 +120,3 @@ export async function POST(request: NextRequest, context: RouteContext) {
     return handleError(error, 'posts/[id]/comments/like POST')
   }
 }
-

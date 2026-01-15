@@ -31,7 +31,18 @@ const translations = {
  * @param locale 语言
  */
 export function formatTimeAgo(dateString: string | Date, locale: Locale = 'zh'): string {
+  // 处理无效输入
+  if (!dateString) {
+    return locale === 'zh' ? '未知时间' : 'unknown'
+  }
+  
   const date = typeof dateString === 'string' ? new Date(dateString) : dateString
+  
+  // 检查日期是否有效
+  if (isNaN(date.getTime())) {
+    return locale === 'zh' ? '未知时间' : 'unknown'
+  }
+  
   const now = new Date()
   const diffMs = now.getTime() - date.getTime()
   

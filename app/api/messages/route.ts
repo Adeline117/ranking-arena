@@ -6,6 +6,9 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { createLogger } from '@/lib/utils/logger'
+
+const logger = createLogger('messages-api')
 
 export const dynamic = 'force-dynamic'
 
@@ -65,7 +68,7 @@ export async function GET(request: NextRequest) {
       if (msgError.message?.includes('Could not find')) {
         return NextResponse.json({ messages: [] })
       }
-      console.error('[Messages API] 查询错误:', msgError)
+      logger.error('Query error', { error: msgError.message })
       return NextResponse.json({ error: msgError.message }, { status: 500 })
     }
 
@@ -79,7 +82,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ messages: messages || [] })
   } catch (error) {
-    console.error('[Messages API] 错误:', error)
+    logger.error('GET error', { error: String(error) })
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
@@ -159,7 +162,7 @@ export async function POST(request: NextRequest) {
         .maybeSingle()
 
       if (replyError && !replyError.message?.includes('Could not find')) {
-        console.error('[Messages API] 查询回复错误:', replyError)
+        logger.warn('Query reply error', { error: replyError.message })
       }
 
       // 如果接收者没有回复过，检查发送者已发送的消息数量
@@ -171,7 +174,7 @@ export async function POST(request: NextRequest) {
           .eq('receiver_id', receiverId)
 
         if (countError && !countError.message?.includes('Could not find')) {
-          console.error('[Messages API] 统计消息数错误:', countError)
+          logger.warn('Count messages error', { error: countError.message })
         }
 
         const currentCount = sentCount || 0
@@ -217,7 +220,7 @@ export async function POST(request: NextRequest) {
             .single()
           conversation = existingConv
         } else {
-          console.error('[Messages API] 创建会话错误:', convError)
+          logger.error('Create conversation error', { error: convError.message })
           return NextResponse.json({ error: '创建会话失败' }, { status: 500 })
         }
       } else {
@@ -242,7 +245,7 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (msgError) {
-      console.error('[Messages API] 发送消息错误:', msgError)
+      logger.error('Send message error', { error: msgError.message })
       return NextResponse.json({ error: '发送失败' }, { status: 500 })
     }
 
@@ -252,8 +255,7 @@ export async function POST(request: NextRequest) {
       conversation_id: conversation.id
     })
   } catch (error) {
-    console.error('[Messages API] 错误:', error)
+    logger.error('POST error', { error: String(error) })
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
-

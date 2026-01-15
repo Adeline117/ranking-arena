@@ -40,9 +40,12 @@ export default function ThemeToggle() {
     window.dispatchEvent(new CustomEvent('themechange', { detail: { theme: newTheme } }))
   }
 
+  const ariaLabel = theme === 'dark' ? '切换到亮色主题' : '切换到暗色主题'
+
   if (!mounted) {
     return (
       <button
+        aria-label="切换主题"
         style={{
           padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
           borderRadius: tokens.radius.md,
@@ -64,6 +67,9 @@ export default function ThemeToggle() {
   return (
     <button
       onClick={toggleTheme}
+      aria-label={ariaLabel}
+      aria-pressed={theme === 'dark'}
+      role="switch"
       style={{
         padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
         borderRadius: tokens.radius.md,
@@ -84,14 +90,13 @@ export default function ThemeToggle() {
       onMouseLeave={(e) => {
         e.currentTarget.style.background = tokens.colors.bg.secondary
       }}
-      title={theme === 'dark' ? '切换到亮色主题' : '切换到暗色主题'}
+      title={ariaLabel}
     >
       {theme === 'dark' ? (
-        <SunIcon size={16} style={{ color: tokens.colors.text.primary }} />
+        <SunIcon size={16} style={{ color: tokens.colors.text.primary }} aria-hidden="true" />
       ) : (
-        <MoonIcon size={16} style={{ color: tokens.colors.text.primary }} />
+        <MoonIcon size={16} style={{ color: tokens.colors.text.primary }} aria-hidden="true" />
       )}
     </button>
   )
 }
-

@@ -40,28 +40,36 @@
 /* 大屏幕（> 1440px） */
 @media (min-width: 1440px) {
   .main-grid {
-    grid-template-columns: 360px 1fr 320px !important;
-    gap: 24px !important;
+    grid-template-columns: 280px minmax(0, 1fr) 300px !important;
+    gap: 20px !important;
+    align-items: start !important;
   }
 }
 
 /* 桌面（1024px - 1440px） */
 @media (min-width: 1024px) and (max-width: 1439px) {
   .main-grid {
-    grid-template-columns: 320px 1fr 280px !important;
-    gap: 20px !important;
+    grid-template-columns: 260px minmax(0, 1fr) 280px !important;
+    gap: 16px !important;
+    align-items: start !important;
   }
 }
 
 /* 平板横屏（768px - 1024px） */
 @media (min-width: 768px) and (max-width: 1023px) {
   .main-grid {
-    grid-template-columns: 280px 1fr 240px !important;
+    grid-template-columns: 240px minmax(0, 1fr) 260px !important;
     gap: 16px !important;
+    align-items: start !important;
   }
 
   body {
     font-size: 13px;
+  }
+
+  /* 右侧市场面板响应式调整 */
+  .home-right-section {
+    max-height: calc(100vh - 80px) !important;
   }
 }
 
@@ -72,14 +80,19 @@
     gap: 16px !important;
   }
 
-  /* 确保排行榜在最上面 */
+  /* 确保排行榜在最上面，并移除 sticky */
   .home-left-section,
   .home-right-section {
     order: 2 !important;
+    position: static !important;
+    max-height: none !important;
+    overflow: visible !important;
   }
 
   .home-ranking-section {
     order: 1 !important; /* 排行榜显示在最上面 */
+    min-width: 0 !important;
+    overflow: visible !important;
   }
 }
 
@@ -90,14 +103,19 @@
     gap: 12px !important;
   }
 
-  /* 确保排行榜在最上面 */
+  /* 确保排行榜在最上面，并移除 sticky */
   .home-left-section,
   .home-right-section {
     order: 2 !important;
+    position: static !important;
+    max-height: none !important;
+    overflow: visible !important;
   }
 
   .home-ranking-section {
     order: 1 !important; /* 排行榜显示在最上面 */
+    min-width: 0 !important;
+    overflow: visible !important;
   }
 
   /* Logo响应式：小屏幕隐藏文字，只显示图标 */
@@ -184,50 +202,42 @@
 /* 桌面 */
 @media (min-width: 1024px) {
   .ranking-table-grid {
-    grid-template-columns: 60px 1fr 120px 80px 100px 100px !important;
-    font-size: 14px !important;
+    grid-template-columns: 40px minmax(120px, 1fr) 100px 70px 70px !important;
+    font-size: 13px !important;
+    gap: 12px !important;
   }
 }
 
 /* 平板 */
 @media (min-width: 768px) and (max-width: 1023px) {
   .ranking-table-grid {
-    grid-template-columns: 50px 1fr 100px 70px 80px 80px !important;
-    font-size: 13px !important;
-    gap: 12px !important;
+    grid-template-columns: 36px minmax(100px, 1fr) 90px 60px 60px !important;
+    font-size: 12px !important;
+    gap: 8px !important;
   }
 }
 
 /* 手机横屏 */
 @media (min-width: 640px) and (max-width: 767px) {
   .ranking-table-grid {
-    grid-template-columns: 40px 1fr 80px 60px !important;
-    font-size: 12px !important;
-    gap: 10px !important;
-  }
-
-  .ranking-table-grid > div:nth-child(5),
-  .ranking-table-grid > div:nth-child(6) {
-    display: none;
+    grid-template-columns: 32px minmax(80px, 1fr) 80px 55px 55px !important;
+    font-size: 11px !important;
+    gap: 6px !important;
   }
 }
 
 /* 手机竖屏 */
 @media (max-width: 639px) {
   .ranking-table-grid {
-    grid-template-columns: 35px 1fr 70px !important;
-    font-size: 12px !important;
-    gap: 8px !important;
-  }
-
-  .ranking-table-grid > div:nth-child(4),
-  .ranking-table-grid > div:nth-child(5),
-  .ranking-table-grid > div:nth-child(6) {
-    display: none;
+    grid-template-columns: 28px minmax(70px, 1fr) 70px 50px 50px !important;
+    font-size: 11px !important;
+    gap: 4px !important;
+    padding-left: 8px !important;
+    padding-right: 8px !important;
   }
 
   .ranking-table-header {
-    font-size: 11px !important;
+    font-size: 10px !important;
     font-weight: 700 !important;
   }
 }
@@ -235,9 +245,11 @@
 /* 小屏手机（< 480px） */
 @media (max-width: 479px) {
   .ranking-table-grid {
-    grid-template-columns: 30px 1fr 60px !important;
-    font-size: 11px !important;
-    gap: 6px !important;
+    grid-template-columns: 24px minmax(60px, 1fr) 65px 45px 45px !important;
+    font-size: 10px !important;
+    gap: 3px !important;
+    padding-left: 6px !important;
+    padding-right: 6px !important;
   }
 }
 
@@ -426,6 +438,8 @@
   .home-left-section,
   .home-right-section {
     order: 2 !important;
+    position: static !important;
+    max-height: none !important;
   }
 
   .home-ranking-section {
@@ -436,8 +450,13 @@
 /* iPad 横屏 (1024px - 1366px) */
 @media (min-width: 1024px) and (max-width: 1366px) and (orientation: landscape) {
   .main-grid {
-    grid-template-columns: 300px 1fr 260px !important;
-    gap: 18px !important;
+    grid-template-columns: 260px minmax(0, 1fr) 280px !important;
+    gap: 16px !important;
+    align-items: start !important;
+  }
+
+  .home-right-section {
+    max-height: calc(100vh - 80px) !important;
   }
 }
 

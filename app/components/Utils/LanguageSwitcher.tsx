@@ -10,9 +10,22 @@ export default function LanguageSwitcher() {
   }
 
   return (
-    <div style={{ display: 'flex', gap: '4px', background: 'rgba(255,255,255,0.05)', borderRadius: '8px', padding: '2px' }}>
+    <div
+      role="radiogroup"
+      aria-label="选择语言"
+      style={{
+        display: 'flex',
+        gap: '4px',
+        background: 'rgba(255,255,255,0.05)',
+        borderRadius: '8px',
+        padding: '2px',
+      }}
+    >
       <button
         onClick={() => handleChange('zh')}
+        role="radio"
+        aria-checked={lang === 'zh'}
+        aria-label="切换到中文"
         style={{
           padding: '4px 10px',
           borderRadius: '6px',
@@ -29,6 +42,9 @@ export default function LanguageSwitcher() {
       </button>
       <button
         onClick={() => handleChange('en')}
+        role="radio"
+        aria-checked={lang === 'en'}
+        aria-label="Switch to English"
         style={{
           padding: '4px 10px',
           borderRadius: '6px',
@@ -46,4 +62,3 @@ export default function LanguageSwitcher() {
     </div>
   )
 }
-

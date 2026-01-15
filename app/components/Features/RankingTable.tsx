@@ -67,27 +67,9 @@ export default function RankingTable(props: {
   const [showRules, setShowRules] = useState(false)
   const itemsPerPage = 20 // 每页显示 20 条
 
-  // 过滤：PNL >= $1000 才计入排行
-  const filteredTraders = traders.filter(t => (t.pnl ?? 0) >= 1000)
-  
-  // 排序规则：ROI 降序 → 回撤小优先 → 交易次数多优先
-  // 每个榜单只保留前100人
-  const sortedTraders = [...filteredTraders]
-    .sort((a, b) => {
-      // 1. ROI 降序
-      if (b.roi !== a.roi) return b.roi - a.roi
-      
-      // 2. ROI 相同，回撤小的靠前（回撤是负数或正数百分比，越小越好）
-      const mddA = a.max_drawdown ?? Infinity
-      const mddB = b.max_drawdown ?? Infinity
-      if (mddA !== mddB) return mddA - mddB
-      
-      // 3. 回撤也相同，交易次数多的靠前
-      const tradesA = a.trades_count ?? 0
-      const tradesB = b.trades_count ?? 0
-      return tradesB - tradesA
-    })
-    .slice(0, 100) // 只保留前100人
+  // API 已经完成了过滤（PNL >= $1000）和排序（ROI 降序 → 回撤小 → 交易次数多）
+  // 前端直接使用 API 返回的数据，不再重复过滤和排序
+  const sortedTraders = traders.slice(0, 100) // 确保最多显示100人
   
   // 计算分页
   const totalPages = Math.ceil(sortedTraders.length / itemsPerPage)
@@ -124,9 +106,9 @@ export default function RankingTable(props: {
         className="ranking-table-header ranking-table-grid"
         style={{
           display: 'grid',
-          gridTemplateColumns: '50px 1fr 110px 80px 80px', // Rank | Trader | ROI+PnL | Win Rate | MDD
-          gap: tokens.spacing[3],
-          padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+          gridTemplateColumns: '36px minmax(100px, 1fr) 90px 60px 60px', // Rank | Trader | ROI+PnL | Win Rate | MDD
+          gap: tokens.spacing[2],
+          padding: `${tokens.spacing[3]} ${tokens.spacing[3]}`,
           borderBottom: `2px solid ${tokens.colors.border.primary}`,
           background: tokens.colors.bg.secondary,
           borderRadius: `${tokens.radius.lg} ${tokens.radius.lg} 0 0`,
@@ -263,10 +245,10 @@ export default function RankingTable(props: {
                     role="row"
                     style={{
                       display: 'grid',
-                      gridTemplateColumns: '50px 1fr 110px 80px 80px', // Rank | Trader | ROI+PnL | Win Rate | MDD
+                      gridTemplateColumns: '36px minmax(100px, 1fr) 90px 60px 60px', // Rank | Trader | ROI+PnL | Win Rate | MDD
                       alignItems: 'center',
-                      gap: tokens.spacing[3],
-                      padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+                      gap: tokens.spacing[2],
+                      padding: `${tokens.spacing[3]} ${tokens.spacing[3]}`,
                       borderBottom: `1px solid ${tokens.colors.border.primary}`,
                       cursor: 'pointer',
                       background: rank <= 3 ? `${tokens.colors.bg.secondary}80` : tokens.colors.bg.primary,
@@ -299,19 +281,19 @@ export default function RankingTable(props: {
                     </Box>
 
                   {/* 交易员ID - 唯一可点击的元素，视觉权重最高 */}
-                  <Box style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'nowrap' }}>
+                  <Box style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'nowrap', minWidth: 0 }}>
                     {/* 头像 - 放在名字左边，优化UI */}
                     <Box
                       style={{
-                        width: 32,
-                        height: 32,
+                        width: 28,
+                        height: 28,
                         borderRadius: tokens.radius.full,
                         background: trader.avatar_url ? tokens.colors.bg.secondary : getAvatarGradient(trader.id),
                         border: `1.5px solid ${tokens.colors.border.primary}`,
                         display: 'grid',
                         placeItems: 'center',
                         fontWeight: tokens.typography.fontWeight.black,
-                        fontSize: tokens.typography.fontSize.xs,
+                        fontSize: '10px',
                         color: '#ffffff',
                         overflow: 'hidden',
                         flexShrink: 0,
@@ -369,7 +351,7 @@ export default function RankingTable(props: {
                           style={{ 
                             color: '#ffffff',
                             textShadow: '0 1px 2px rgba(0, 0, 0, 0.3)',
-                            fontSize: '12px',
+                            fontSize: '10px',
                             lineHeight: '1',
                           }}
                         >
@@ -378,54 +360,54 @@ export default function RankingTable(props: {
                       )}
                     </Box>
                     {/* 名字 - 在头像右边 */}
-                    <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[1], minWidth: 0, flex: 1 }}>
+                    <Box style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0, flex: 1 }}>
                       <Text 
-                        size="sm" 
+                        size="xs" 
                         weight="black" 
                         style={{ 
                           color: tokens.colors.text.primary,
                           overflow: 'hidden',
                           textOverflow: 'ellipsis',
                           whiteSpace: 'nowrap',
+                          fontSize: '13px',
                         }}
                       >
                         {displayName}
                       </Text>
-                      <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
-                        <Box
+                      <Box
+                        style={{
+                          padding: '1px 4px',
+                          background: `${tokens.colors.accent.primary}20`,
+                          borderRadius: tokens.radius.sm,
+                          display: 'inline-flex',
+                          width: 'fit-content',
+                        }}
+                      >
+                        <Text
+                          size="xs"
+                          weight="bold"
                           style={{
-                            padding: `2px ${tokens.spacing[2]}`,
-                            background: `${tokens.colors.accent.primary}20`,
-                            borderRadius: tokens.radius.sm,
-                            border: `1px solid ${tokens.colors.accent.primary}40`,
+                            color: tokens.colors.accent.primary,
+                            fontSize: '9px',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.3px',
                           }}
                         >
-                          <Text
-                            size="xs"
-                            weight="bold"
-                            style={{
-                              color: tokens.colors.accent.primary,
-                              fontSize: '10px',
-                              textTransform: 'uppercase',
-                              letterSpacing: '0.5px',
-                            }}
-                          >
-                            {sourceLabelText}
-                          </Text>
-                        </Box>
+                          {sourceLabelText}
+                        </Text>
                       </Box>
                     </Box>
                   </Box>
 
                   {/* ROI (90D) - 上面显示百分比，下面小字显示 PnL，优化UI */}
-                  <Box style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: tokens.spacing[1] }}>
+                  <Box style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1 }}>
                     <Text
                       size="sm"
                       weight="black"
                       style={{
                         color: (trader.roi || 0) >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error,
-                        lineHeight: tokens.typography.lineHeight.tight,
-                        fontSize: tokens.typography.fontSize.base,
+                        lineHeight: 1.2,
+                        fontSize: '13px',
                         textShadow: rank <= 3 ? `0 1px 2px ${(trader.roi || 0) >= 0 ? tokens.colors.accent.success + '40' : tokens.colors.accent.error + '40'}` : 'none',
                       }}
                     >
@@ -439,7 +421,8 @@ export default function RankingTable(props: {
                         color: trader.pnl != null 
                           ? (trader.pnl >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error)
                           : tokens.colors.text.tertiary,
-                        lineHeight: tokens.typography.lineHeight.tight,
+                        lineHeight: 1.2,
+                        fontSize: '10px',
                         opacity: trader.pnl != null ? 0.9 : 0.5,
                       }}
                     >
@@ -453,11 +436,12 @@ export default function RankingTable(props: {
                   {/* 胜率 - 已经是百分比，不需要乘100 */}
                   <Box style={{ textAlign: 'right' }}>
                     <Text 
-                      size="sm" 
+                      size="xs" 
                       weight="bold" 
                       style={{ 
                         color: trader.win_rate != null && trader.win_rate > 50 ? tokens.colors.accent.success : tokens.colors.text.secondary,
-                        lineHeight: tokens.typography.lineHeight.tight,
+                        lineHeight: 1.2,
+                        fontSize: '12px',
                       }}
                     >
                       {trader.win_rate != null ? `${trader.win_rate.toFixed(1)}%` : '—'}
@@ -467,15 +451,16 @@ export default function RankingTable(props: {
                   {/* 最大回撤 */}
                   <Box style={{ textAlign: 'right' }}>
                     <Text 
-                      size="sm" 
+                      size="xs" 
                       weight="semibold" 
                       style={{ 
                         color: trader.max_drawdown != null ? tokens.colors.accent.error : tokens.colors.text.tertiary,
-                        lineHeight: tokens.typography.lineHeight.tight,
+                        lineHeight: 1.2,
+                        fontSize: '12px',
                         opacity: trader.max_drawdown != null ? 1 : 0.5,
                       }}
                     >
-                      {trader.max_drawdown != null ? `-${trader.max_drawdown.toFixed(2)}%` : '—'}
+                      {trader.max_drawdown != null ? `-${Math.abs(trader.max_drawdown).toFixed(1)}%` : '—'}
                     </Text>
                   </Box>
 
