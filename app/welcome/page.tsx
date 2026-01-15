@@ -86,8 +86,8 @@ export default function WelcomePage() {
       return
     }
 
-    if (handle.length < 3) {
-      showToast('用户名至少3个字符', 'warning')
+    if (handle.length < 1) {
+      showToast('用户名至少1个字符', 'warning')
       return
     }
 
@@ -379,7 +379,7 @@ export default function WelcomePage() {
               <Button
                 variant="primary"
                 onClick={handleSaveProfile}
-                disabled={saving || !handle.trim() || handle.length < 3}
+                disabled={saving || !handle.trim() || handle.length < 1}
                 style={{ flex: 2 }}
               >
                 {saving ? '保存中...' : '下一步'}

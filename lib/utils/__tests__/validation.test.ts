@@ -84,10 +84,9 @@ describe('validateHandle', () => {
     expect(result.isValid).toBe(true)
   })
 
-  it('should return invalid for handle with less than 3 characters', () => {
-    const result = validateHandle('ab')
-    expect(result.isValid).toBe(false)
-    expect(result.message).toBe('用户名至少需要3个字符')
+  it('should return valid for handle with 1 or more characters', () => {
+    const result = validateHandle('a')
+    expect(result.isValid).toBe(true)
   })
 
   it('should handle whitespace correctly', () => {
