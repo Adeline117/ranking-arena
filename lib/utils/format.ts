@@ -66,7 +66,8 @@ export function formatCompact(num: number | string, decimals = 1): string {
   if (abs >= 1e6) return `${sign}${(abs / 1e6).toFixed(decimals)}M`
   if (abs >= 1e3) return `${sign}${(abs / 1e3).toFixed(decimals)}K`
   
-  return `${sign}${abs.toFixed(decimals)}`
+  // 小于1000的整数，直接显示整数，不带小数点
+  return `${sign}${Math.round(abs)}`
 }
 
 /**
