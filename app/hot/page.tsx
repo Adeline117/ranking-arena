@@ -323,43 +323,56 @@ function HotContent() {
     return chineseRatio > 0.1
   }, [])
 
-  // 翻译列表帖子
+  // 批量翻译列表帖子（使用批量API，带缓存）
   const translateListPosts = useCallback(async (postsToTranslate: Post[], targetLang: 'zh' | 'en') => {
     if (translatingList) return
     
     const needsTranslation = postsToTranslate.filter(p => {
       if (translatedListPosts[p.id]?.title) return false
-      const titleIsChinese = isChineseText(p.title || '')
+      if (!p.title) return false
+      const titleIsChinese = isChineseText(p.title)
       return targetLang === 'en' ? titleIsChinese : !titleIsChinese
     })
     
     if (needsTranslation.length === 0) return
     
     setTranslatingList(true)
-    const batch = needsTranslation.slice(0, 5)
     
-    for (const post of batch) {
-      try {
-        const response = await fetch('/api/translate', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' },
-          cache: 'no-store',
-          body: JSON.stringify({ text: post.title || '', targetLang }),
-        })
-        const data = await response.json()
+    try {
+      // 使用批量翻译API
+      const items = needsTranslation.slice(0, 20).map(post => ({
+        id: post.id,
+        text: post.title || '',
+        contentType: 'post_title' as const,
+        contentId: post.id,
+      }))
+
+      const response = await fetch('/api/translate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items, targetLang }),
+      })
+      const data = await response.json()
+      
+      if (response.ok && data.success && data.data?.results) {
+        const results = data.data.results as Record<string, { translatedText: string; cached: boolean }>
         
-        if (response.ok && data.success && data.data?.translatedText) {
-          setTranslatedListPosts(prev => ({
-            ...prev,
-            [post.id]: { title: data.data.translatedText, body: post.body }
-          }))
-        }
-      } catch (err) {
-        console.error('[HotPage] 列表翻译出错:', err)
+        setTranslatedListPosts(prev => {
+          const updated = { ...prev }
+          for (const [id, result] of Object.entries(results)) {
+            const post = postsToTranslate.find(p => p.id === id)
+            updated[id] = { title: result.translatedText, body: post?.body }
+          }
+          return updated
+        })
+        
+        console.log(`[HotPage] 批量翻译完成: ${data.data.cached}/${data.data.total} 命中缓存`)
       }
+    } catch (err) {
+      console.error('[HotPage] 列表翻译出错:', err)
+    } finally {
+      setTranslatingList(false)
     }
-    
-    setTranslatingList(false)
   }, [translatingList, translatedListPosts, isChineseText])
 
   // 当帖子加载或语言变化时翻译列表
@@ -369,9 +382,9 @@ function HotContent() {
     }
   }, [posts, language, translateListPosts])
 
-  // 翻译帖子内容
+  // 翻译帖子内容（带缓存）
   const translateContent = useCallback(async (postId: string, content: string, targetLang: 'zh' | 'en') => {
-    const cacheKey = `${postId}-${targetLang}`
+    const cacheKey = `${postId}-content-${targetLang}`
     
     if (translationCache[cacheKey]) {
       setTranslatedContent(translationCache[cacheKey])
@@ -383,12 +396,13 @@ function HotContent() {
     try {
       const response = await fetch('/api/translate', {
         method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Cache-Control': 'no-cache',
-        },
-        cache: 'no-store',
-        body: JSON.stringify({ text: content, targetLang }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          text: content, 
+          targetLang,
+          contentType: 'post_content',
+          contentId: postId,
+        }),
       })
       const data = await response.json()
       
@@ -397,6 +411,9 @@ function HotContent() {
         setTranslatedContent(translated)
         setShowingOriginal(false)
         setTranslationCache(prev => ({ ...prev, [cacheKey]: translated }))
+        if (data.data.cached) {
+          console.log('[HotPage] 翻译命中服务端缓存')
+        }
       } else {
         console.error('[HotPage] 翻译失败:', data.error)
         showToast(data.error || '翻译失败', 'error')

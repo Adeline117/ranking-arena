@@ -6,6 +6,9 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { createLogger } from '@/lib/utils/logger'
+
+const logger = createLogger('traders-api')
 
 export const dynamic = 'force-dynamic'
 
@@ -91,7 +94,7 @@ export async function GET(request: NextRequest) {
       const { data: snapshots, error } = await snapshotQuery
 
       if (error) {
-        console.error(`[Traders API] ${source} 查询错误:`, error.message)
+        logger.warn(`${source} query error: ${error.message}`)
         continue
       }
 
@@ -153,7 +156,7 @@ export async function GET(request: NextRequest) {
     // 严格取前 100 名
     const topTraders = allTraders.slice(0, 100)
 
-    console.log(`[Traders API] ${timeRange} 合并 ${ALL_SOURCES.length} 个交易所，共 ${allTraders.length} 条，返回前 ${topTraders.length} 条`)
+    logger.info(`${timeRange}: merged ${ALL_SOURCES.length} exchanges, total ${allTraders.length}, returning top ${topTraders.length}`)
 
     return NextResponse.json({ 
       traders: topTraders,
@@ -161,7 +164,7 @@ export async function GET(request: NextRequest) {
       totalCount: allTraders.length,
     })
   } catch (error) {
-    console.error('[Traders API] 错误:', error)
+    logger.error('API error', { error: String(error) })
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

@@ -14,6 +14,7 @@ import {
 } from '@/lib/api'
 import { decrypt } from '@/lib/exchange/encryption'
 import { type Exchange, SUPPORTED_EXCHANGES } from '@/lib/exchange'
+import { createLogger } from '@/lib/utils/logger'
 
 // 导入各交易所客户端
 import {
@@ -41,6 +42,8 @@ import {
   getCoinexTrades,
   calculateCoinexTradingStats,
 } from '@/lib/exchange/coinex'
+
+const logger = createLogger('exchange-sync')
 
 export async function POST(request: NextRequest) {
   try {
@@ -78,7 +81,7 @@ export async function POST(request: NextRequest) {
         passphrase = decrypt(connection.access_token_encrypted)
       }
     } catch (err) {
-      console.error('[exchange/sync] 解密失败:', err)
+      logger.error('Decryption failed', { error: String(err) })
       const error = new Error('解密凭证失败')
       ;(error as any).statusCode = 500
       throw error
@@ -125,7 +128,7 @@ export async function POST(request: NextRequest) {
           break
       }
     } catch (err: any) {
-      console.error(`[exchange/sync] ${exchange} 同步失败:`, err)
+      logger.error(`${exchange} sync failed`, { error: err.message })
       
       // 更新连接状态为失败
       await supabase
