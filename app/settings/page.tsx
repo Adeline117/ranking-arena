@@ -100,7 +100,7 @@ export default function SettingsPage() {
   // Privacy settings
   const [showFollowers, setShowFollowers] = useState(true)
   const [showFollowing, setShowFollowing] = useState(true)
-  const [dmPermission, setDmPermission] = useState<'all' | 'mutual' | 'none'>('mutual')
+  const [dmPermission, setDmPermission] = useState<'all' | 'mutual' | 'none'>('all')
 
   // 实时验证状态
   const [touchedFields, setTouchedFields] = useState<{
@@ -191,7 +191,7 @@ export default function SettingsPage() {
         const profileNotifyMessage = userProfile.notify_message !== false
         const profileShowFollowers = userProfile.show_followers !== false
         const profileShowFollowing = userProfile.show_following !== false
-        const profileDmPermission = userProfile.dm_permission || 'mutual'
+        const profileDmPermission = userProfile.dm_permission || 'all'
         
         setHandle(profileHandle)
         setBio(profileBio)
