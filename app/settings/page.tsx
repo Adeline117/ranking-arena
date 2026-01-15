@@ -14,8 +14,8 @@ import { useDialog } from '@/app/components/UI/Dialog'
 // 实时验证函数
 function validateHandle(handle: string): { valid: boolean; message: string } {
   if (!handle) return { valid: true, message: '' }
-  if (handle.length < 3) {
-    return { valid: false, message: '用户名至少需要3个字符' }
+  if (handle.length < 1) {
+    return { valid: false, message: '用户名至少需要1个字符' }
   }
   if (!/^[a-zA-Z0-9_\u4e00-\u9fa5]+$/.test(handle)) {
     return { valid: false, message: '用户名只能包含字母、数字、下划线和中文' }
@@ -590,7 +590,7 @@ export default function SettingsPage() {
           {/* 字符计数 */}
           {handle && (
             <Text size="xs" color="tertiary" style={{ marginTop: tokens.spacing[1] }}>
-              {handle.length}/3 字符（最少）
+              {handle.length}/1 字符（最少）
             </Text>
           )}
         </Box>

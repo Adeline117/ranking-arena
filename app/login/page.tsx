@@ -36,7 +36,7 @@ const translations = {
     passwordRequired: '请设置密码',
     passwordMinLength: '密码至少6位',
     handleRequired: '请输入用户名',
-    handleMinLength: '用户名至少3个字符',
+    handleMinLength: '用户名至少1个字符',
     countdown: '秒后重发',
     loginWithCode: '或使用验证码登录',
     forgotPassword: '忘记密码？',
@@ -69,7 +69,7 @@ const translations = {
     passwordRequired: 'Please set password',
     passwordMinLength: 'Password must be at least 6 characters',
     handleRequired: 'Please enter username',
-    handleMinLength: 'Username must be at least 3 characters',
+    handleMinLength: 'Username must be at least 1 character',
     countdown: 's to resend',
     loginWithCode: 'Or login with verification code',
     forgotPassword: 'Forgot password?',
@@ -116,10 +116,10 @@ function validatePassword(password: string, lang: 'zh' | 'en'): { valid: boolean
 
 function validateHandle(handle: string, lang: 'zh' | 'en'): { valid: boolean; message: string } {
   if (!handle) return { valid: true, message: '' }  // 空值不显示错误
-  if (handle.length < 3) {
+  if (handle.length < 1) {
     return { 
       valid: false, 
-      message: lang === 'zh' ? '用户名至少需要3个字符' : 'Username must be at least 3 characters' 
+      message: lang === 'zh' ? '用户名至少需要1个字符' : 'Username must be at least 1 character' 
     }
   }
   if (!/^[a-zA-Z0-9_\u4e00-\u9fa5]+$/.test(handle)) {
@@ -452,7 +452,7 @@ export default function LoginPage() {
       return
     }
 
-    if (!handle || handle.length < 3) {
+    if (!handle || handle.length < 1) {
       setError(t.handleMinLength)
       return
     }
@@ -879,17 +879,17 @@ export default function LoginPage() {
                 </div>
                 <button
                   onClick={handleSetPassword}
-                  disabled={loading || !password || password.length < 6 || !handle || handle.length < 3}
+                  disabled={loading || !password || password.length < 6 || !handle || handle.length < 1}
                   style={{ 
                     width: '100%',
                     padding: '12px 16px', 
                     borderRadius: 12,
                     border: 'none',
-                    background: loading || !password || password.length < 6 || !handle || handle.length < 3 ? 'rgba(139,111,168,0.3)' : '#8b6fa8',
+                    background: loading || !password || password.length < 6 || !handle || handle.length < 1 ? 'rgba(139,111,168,0.3)' : '#8b6fa8',
                     color: '#fff',
                     fontWeight: 900,
                     fontSize: 14,
-                    cursor: loading || !password || password.length < 6 || !handle || handle.length < 3 ? 'not-allowed' : 'pointer',
+                    cursor: loading || !password || password.length < 6 || !handle || handle.length < 1 ? 'not-allowed' : 'pointer',
                     marginBottom: 16,
                   }}
                 >

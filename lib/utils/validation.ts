@@ -82,7 +82,7 @@ export function validatePasswordMatchEn(password: string, confirmPassword: strin
 /**
  * 验证用户名格式
  */
-export function validateHandle(handle: string, minLength = 3): ValidationResult {
+export function validateHandle(handle: string, minLength = 1): ValidationResult {
   if (!handle) return { valid: true, message: '' }
   if (handle.length < minLength) {
     return { valid: false, message: `用户名至少需要${minLength}个字符` }
@@ -96,7 +96,7 @@ export function validateHandle(handle: string, minLength = 3): ValidationResult 
 /**
  * 验证用户名格式（英文消息）
  */
-export function validateHandleEn(handle: string, minLength = 3): ValidationResult {
+export function validateHandleEn(handle: string, minLength = 1): ValidationResult {
   if (!handle) return { valid: true, message: '' }
   if (handle.length < minLength) {
     return { valid: false, message: `Username must be at least ${minLength} characters` }
