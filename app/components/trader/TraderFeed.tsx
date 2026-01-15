@@ -76,18 +76,18 @@ export default function TraderFeed({ items, title, showPostButton = false, onPos
                 padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
                 borderRadius: tokens.radius.md,
                 border: 'none',
-                background: tokens.colors.accent.primary,
-                color: tokens.colors.black,
+                background: tokens.colors.accent.brand,
+                color: '#FFFFFF',
                 fontSize: tokens.typography.fontSize.sm,
                 fontWeight: tokens.typography.fontWeight.black,
                 cursor: 'pointer',
                 transition: `all ${tokens.transition.base}`,
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.background = tokens.colors.text.secondary
+                e.currentTarget.style.background = tokens.colors.accent.brandHover
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.background = tokens.colors.accent.primary
+                e.currentTarget.style.background = tokens.colors.accent.brand
               }}
             >
               发动态

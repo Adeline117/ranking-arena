@@ -67,7 +67,7 @@ export default function OverviewPerformanceCard({ performance, profitableWeeksPc
         }}
       >
         <Text size="lg" weight="black" style={{ color: tokens.colors.text.primary }}>
-          Performance
+          {t('performance')}
         </Text>
         {/* 时间选择 - 只显示 7D/30D/90D */}
         <select
@@ -107,7 +107,7 @@ export default function OverviewPerformanceCard({ performance, profitableWeeksPc
           {roi !== undefined ? `${roi >= 0 ? '+' : ''}${roi.toFixed(2)}%` : t('na')}
         </Text>
         <Text size="xs" color="tertiary" style={{ fontWeight: tokens.typography.fontWeight.normal }}>
-          ROI ({period})
+          {t('roi')} ({period})
         </Text>
       </Box>
 

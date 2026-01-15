@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
+import { useLanguage } from '../Utils/LanguageProvider'
 import { Box, Text } from '../Base'
 import type { PortfolioItem, PositionHistoryItem } from '@/lib/data/trader'
 
@@ -16,6 +17,7 @@ type ViewMode = 'current' | 'history'
  * Portfolio页面 - 显示当前持仓和历史仓位
  */
 export default function PortfolioTable({ items, history = [] }: PortfolioTableProps) {
+  const { t } = useLanguage()
   const [viewMode, setViewMode] = useState<ViewMode>('current')
   const [selectedMarket, setSelectedMarket] = useState<string | null>(null)
 
@@ -31,7 +33,7 @@ export default function PortfolioTable({ items, history = [] }: PortfolioTablePr
           }}
         >
           <Text size="lg" weight="black" style={{ color: tokens.colors.text.primary }}>
-            Portfolio
+            {t('portfolio')}
           </Text>
           <Box style={{ display: 'flex', gap: tokens.spacing[2] }}>
             <button
@@ -47,7 +49,7 @@ export default function PortfolioTable({ items, history = [] }: PortfolioTablePr
                 cursor: 'pointer',
               }}
             >
-              Current
+              {t('current')}
             </button>
             <button
               onClick={() => setViewMode('history')}

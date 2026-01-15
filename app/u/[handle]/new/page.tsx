@@ -13,9 +13,24 @@ interface UploadedImage {
   fileName: string
 }
 
+interface PollOption {
+  text: string
+  votes: number
+}
+
 const TITLE_MAX_LENGTH = 100
 const CONTENT_MAX_LENGTH = 10000
 const DRAFT_KEY_PREFIX = 'post_draft_'
+
+// 投票持续时间选项
+const POLL_DURATION_OPTIONS = [
+  { label: '1小时', value: 1 },
+  { label: '6小时', value: 6 },
+  { label: '12小时', value: 12 },
+  { label: '1天', value: 24 },
+  { label: '3天', value: 72 },
+  { label: '7天', value: 168 },
+]
 
 // 链接解析函数
 function renderContentWithLinks(text: string) {
@@ -65,6 +80,12 @@ export default function NewPostPage() {
   const [draftSaved, setDraftSaved] = useState(false)
   // 投票相关状态
   const [pollEnabled, setPollEnabled] = useState(false)
+  const [pollOptions, setPollOptions] = useState<PollOption[]>([
+    { text: '', votes: 0 },
+    { text: '', votes: 0 },
+  ])
+  const [pollDuration, setPollDuration] = useState(24) // 默认1天
+  const [pollType, setPollType] = useState<'single' | 'multiple'>('single')
 
   const draftKey = `${DRAFT_KEY_PREFIX}${handle}`
 
@@ -221,7 +242,9 @@ export default function NewPostPage() {
       .eq('id', userId)
       .maybeSingle()
 
-    if (!profile || profile.handle !== handle) {
+    // 解码 URL 中的 handle 进行比较（中文用户名会被编码）
+    const decodedHandle = decodeURIComponent(handle)
+    if (!profile || profile.handle !== decodedHandle) {
       showToast('无权发布', 'error')
       return
     }
@@ -240,7 +263,7 @@ export default function NewPostPage() {
       const { error } = await supabase.from('posts').insert({
         title,
         content: finalContent,
-        author_handle: handle,
+        author_handle: decodedHandle,
         // group_id 为 null，表示这是个人动态
         author_id: userId,
         images: images.map(img => img.url),
@@ -256,7 +279,7 @@ export default function NewPostPage() {
       // Clear draft after successful publish
       clearDraft()
       showToast('发布成功！', 'success')
-      router.push(`/u/${handle}`)
+      router.push(`/u/${encodeURIComponent(decodedHandle)}`)
     } catch (error: any) {
       console.error('发布异常:', error)
       showToast(error?.message || '发布失败', 'error')
@@ -433,50 +456,201 @@ export default function NewPostPage() {
           {/* 投票功能开关 */}
           <Box
             style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: tokens.spacing[3],
               padding: tokens.spacing[4],
               borderRadius: tokens.radius.md,
               border: `1px solid ${pollEnabled ? '#8b6fa8' : tokens.colors.border.primary}`,
               background: pollEnabled ? 'rgba(139, 111, 168, 0.1)' : tokens.colors.bg.secondary,
-              cursor: 'pointer',
               transition: 'all 0.2s ease',
             }}
-            onClick={() => setPollEnabled(!pollEnabled)}
           >
             <Box
               style={{
-                width: 44,
-                height: 24,
-                borderRadius: 12,
-                background: pollEnabled ? '#8b6fa8' : tokens.colors.border.primary,
-                position: 'relative',
-                transition: 'background 0.2s ease',
+                display: 'flex',
+                alignItems: 'center',
+                gap: tokens.spacing[3],
+                cursor: 'pointer',
               }}
+              onClick={() => setPollEnabled(!pollEnabled)}
             >
               <Box
                 style={{
-                  width: 20,
-                  height: 20,
-                  borderRadius: '50%',
-                  background: '#fff',
-                  position: 'absolute',
-                  top: 2,
-                  left: pollEnabled ? 22 : 2,
-                  transition: 'left 0.2s ease',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                  width: 44,
+                  height: 24,
+                  borderRadius: 12,
+                  background: pollEnabled ? '#8b6fa8' : tokens.colors.border.primary,
+                  position: 'relative',
+                  transition: 'background 0.2s ease',
+                  flexShrink: 0,
                 }}
-              />
+              >
+                <Box
+                  style={{
+                    width: 20,
+                    height: 20,
+                    borderRadius: '50%',
+                    background: '#fff',
+                    position: 'absolute',
+                    top: 2,
+                    left: pollEnabled ? 22 : 2,
+                    transition: 'left 0.2s ease',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                  }}
+                />
+              </Box>
+              <Box>
+                <Text size="sm" weight="bold" style={{ color: pollEnabled ? '#8b6fa8' : tokens.colors.text.primary }}>
+                  📊 开启投票
+                </Text>
+                <Text size="xs" color="tertiary">
+                  自定义投票选项，到期自动公布结果
+                </Text>
+              </Box>
             </Box>
-            <Box>
-              <Text size="sm" weight="bold" style={{ color: pollEnabled ? '#8b6fa8' : tokens.colors.text.primary }}>
-                📊 开启投票
-              </Text>
-              <Text size="xs" color="tertiary">
-                让读者投票：看涨 / 看跌 / 观望
-              </Text>
-            </Box>
+
+            {/* 投票设置 */}
+            {pollEnabled && (
+              <Box style={{ marginTop: tokens.spacing[4], display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
+                {/* 投票选项 */}
+                <Box>
+                  <Text size="xs" weight="bold" style={{ marginBottom: tokens.spacing[2], display: 'block' }}>
+                    投票选项（至少2个，最多6个）
+                  </Text>
+                  {pollOptions.map((option, index) => (
+                    <Box key={index} style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], marginBottom: tokens.spacing[2] }}>
+                      <Text size="xs" color="tertiary" style={{ width: 20 }}>{index + 1}.</Text>
+                      <input
+                        type="text"
+                        placeholder={`选项 ${index + 1}`}
+                        value={option.text}
+                        onChange={(e) => {
+                          const newOptions = [...pollOptions]
+                          newOptions[index].text = e.target.value
+                          setPollOptions(newOptions)
+                        }}
+                        style={{
+                          flex: 1,
+                          padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+                          borderRadius: tokens.radius.md,
+                          border: `1px solid ${tokens.colors.border.primary}`,
+                          background: tokens.colors.bg.primary,
+                          color: tokens.colors.text.primary,
+                          fontSize: tokens.typography.fontSize.sm,
+                          outline: 'none',
+                        }}
+                      />
+                      {pollOptions.length > 2 && (
+                        <button
+                          onClick={() => setPollOptions(pollOptions.filter((_, i) => i !== index))}
+                          style={{
+                            width: 28,
+                            height: 28,
+                            border: 'none',
+                            background: 'rgba(255,77,77,0.2)',
+                            color: '#ff4d4d',
+                            borderRadius: tokens.radius.md,
+                            cursor: 'pointer',
+                            fontSize: 16,
+                          }}
+                        >
+                          ×
+                        </button>
+                      )}
+                    </Box>
+                  ))}
+                  {pollOptions.length < 6 && (
+                    <button
+                      onClick={() => setPollOptions([...pollOptions, { text: '', votes: 0 }])}
+                      style={{
+                        padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+                        border: `1px dashed ${tokens.colors.border.primary}`,
+                        background: 'transparent',
+                        color: tokens.colors.text.secondary,
+                        borderRadius: tokens.radius.md,
+                        cursor: 'pointer',
+                        fontSize: tokens.typography.fontSize.sm,
+                        width: '100%',
+                      }}
+                    >
+                      + 添加选项
+                    </button>
+                  )}
+                </Box>
+
+                {/* 投票类型和持续时间 */}
+                <Box style={{ display: 'flex', gap: tokens.spacing[4], flexWrap: 'wrap' }}>
+                  {/* 投票类型 */}
+                  <Box style={{ flex: 1, minWidth: 150 }}>
+                    <Text size="xs" weight="bold" style={{ marginBottom: tokens.spacing[2], display: 'block' }}>
+                      投票类型
+                    </Text>
+                    <Box style={{ display: 'flex', gap: tokens.spacing[2] }}>
+                      <button
+                        onClick={() => setPollType('single')}
+                        style={{
+                          flex: 1,
+                          padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+                          border: `1px solid ${pollType === 'single' ? '#8b6fa8' : tokens.colors.border.primary}`,
+                          background: pollType === 'single' ? 'rgba(139,111,168,0.2)' : 'transparent',
+                          color: pollType === 'single' ? '#8b6fa8' : tokens.colors.text.secondary,
+                          borderRadius: tokens.radius.md,
+                          cursor: 'pointer',
+                          fontSize: tokens.typography.fontSize.xs,
+                          fontWeight: 600,
+                        }}
+                      >
+                        单选
+                      </button>
+                      <button
+                        onClick={() => setPollType('multiple')}
+                        style={{
+                          flex: 1,
+                          padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+                          border: `1px solid ${pollType === 'multiple' ? '#8b6fa8' : tokens.colors.border.primary}`,
+                          background: pollType === 'multiple' ? 'rgba(139,111,168,0.2)' : 'transparent',
+                          color: pollType === 'multiple' ? '#8b6fa8' : tokens.colors.text.secondary,
+                          borderRadius: tokens.radius.md,
+                          cursor: 'pointer',
+                          fontSize: tokens.typography.fontSize.xs,
+                          fontWeight: 600,
+                        }}
+                      >
+                        多选
+                      </button>
+                    </Box>
+                  </Box>
+
+                  {/* 持续时间 */}
+                  <Box style={{ flex: 1, minWidth: 150 }}>
+                    <Text size="xs" weight="bold" style={{ marginBottom: tokens.spacing[2], display: 'block' }}>
+                      投票持续时间
+                    </Text>
+                    <select
+                      value={pollDuration}
+                      onChange={(e) => setPollDuration(Number(e.target.value))}
+                      style={{
+                        width: '100%',
+                        padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+                        borderRadius: tokens.radius.md,
+                        border: `1px solid ${tokens.colors.border.primary}`,
+                        background: tokens.colors.bg.primary,
+                        color: tokens.colors.text.primary,
+                        fontSize: tokens.typography.fontSize.sm,
+                        outline: 'none',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {POLL_DURATION_OPTIONS.map(opt => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                      ))}
+                    </select>
+                  </Box>
+                </Box>
+
+                <Text size="xs" color="tertiary">
+                  💡 投票结果在用户投票后或截止时间后才会显示
+                </Text>
+              </Box>
+            )}
           </Box>
 
           {/* 图片上传区域 */}
