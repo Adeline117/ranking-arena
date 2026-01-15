@@ -10,6 +10,7 @@ export interface Post {
   author_handle: string
   group_id?: string | null
   poll_enabled: boolean
+  poll_id?: string | null
   poll_bull: number
   poll_bear: number
   poll_wait: number
@@ -19,6 +20,7 @@ export interface Post {
   view_count: number
   hot_score: number
   is_pinned: boolean
+  images?: string[] | null
   created_at: string
   updated_at?: string | null
 }

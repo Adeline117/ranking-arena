@@ -1,35 +1,97 @@
-"use client"
+'use client'
 
-import { useState, useEffect } from "react"
-import { useParams, useRouter } from "next/navigation"
-import { supabase } from "@/lib/supabase/client"
-import { tokens } from "@/lib/design-tokens"
-import TopNav from "@/app/components/Layout/TopNav"
-import { Box, Text, Button } from "@/app/components/Base"
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { useParams, useRouter } from 'next/navigation'
+import { supabase } from '@/lib/supabase/client'
+import TopNav from '@/app/components/Layout/TopNav'
+import { Box, Text, Button } from '@/app/components/Base'
+import { tokens } from '@/lib/design-tokens'
+import { useToast } from '@/app/components/UI/Toast'
+import { useLanguage } from '@/app/components/Utils/LanguageProvider'
 
-export default function NewPostPage() {
+interface UploadedImage {
+  url: string
+  fileName: string
+}
+
+interface PollOption {
+  text: string
+  votes: number
+}
+
+const TITLE_MAX_LENGTH = 100
+const CONTENT_MAX_LENGTH = 10000
+const DRAFT_KEY_PREFIX = 'group_post_draft_'
+
+// 投票持续时间选项
+const POLL_DURATION_OPTIONS = [
+  { label: '1小时', value: 1 },
+  { label: '6小时', value: 6 },
+  { label: '12小时', value: 12 },
+  { label: '1天', value: 24 },
+  { label: '3天', value: 72 },
+  { label: '7天', value: 168 },
+]
+
+// 链接解析函数
+function renderContentWithLinks(text: string) {
+  if (!text) return null
+  const urlRegex = /(https?:\/\/[^\s<>"{}|\\^`[\]]+)/g
+  const parts = text.split(urlRegex)
+  
+  return parts.map((part, index) => {
+    if (urlRegex.test(part)) {
+      urlRegex.lastIndex = 0 // Reset regex state
+      return (
+        <a
+          key={index}
+          href={part}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            color: '#8b6fa8',
+            textDecoration: 'underline',
+            wordBreak: 'break-all',
+          }}
+        >
+          {part}
+        </a>
+      )
+    }
+    return part
+  })
+}
+
+export default function NewGroupPostPage() {
   const params = useParams<{ id: string }>()
   const groupId = params.id as string
   const router = useRouter()
+  const { showToast } = useToast()
+  const { t } = useLanguage()
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const [email, setEmail] = useState<string | null>(null)
   const [userId, setUserId] = useState<string | null>(null)
   const [userHandle, setUserHandle] = useState<string | null>(null)
-  const [title, setTitle] = useState("")
-  const [content, setContent] = useState("")
-  const [images, setImages] = useState<string[]>([])
-  const [uploadingImages, setUploadingImages] = useState(false)
-  const [links, setLinks] = useState<Array<{ url: string; title?: string; description?: string; image?: string }>>([])
-  const [newLinkUrl, setNewLinkUrl] = useState("")
-  const [addingLink, setAddingLink] = useState(false)
-  const [poll, setPoll] = useState<{
-    question: string
-    options: string[]
-    type: 'single' | 'multiple'
-    endAt?: string
-  } | null>(null)
-  const [showPollForm, setShowPollForm] = useState(false)
+  const [groupName, setGroupName] = useState<string>('')
+  const [title, setTitle] = useState('')
+  const [content, setContent] = useState('')
   const [loading, setLoading] = useState(false)
+  const [images, setImages] = useState<UploadedImage[]>([])
+  const [uploading, setUploading] = useState(false)
+  const [showPreview, setShowPreview] = useState(false)
+  const [draftSaved, setDraftSaved] = useState(false)
+  // 投票相关状态
+  const [pollEnabled, setPollEnabled] = useState(false)
+  const [pollOptions, setPollOptions] = useState<PollOption[]>([
+    { text: '', votes: 0 },
+    { text: '', votes: 0 },
+  ])
+  const [pollDuration, setPollDuration] = useState(24) // 默认1天
+  const [pollType, setPollType] = useState<'single' | 'multiple'>('single')
+
+  const draftKey = `${DRAFT_KEY_PREFIX}${groupId}`
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -40,11 +102,29 @@ export default function NewPostPage() {
         router.push('/login')
         return
       }
-
-      // 获取用户 handle
+      
       loadUserHandle(data.user.id)
     })
   }, [router])
+
+  // 加载小组名称
+  useEffect(() => {
+    if (!groupId) return
+    
+    const loadGroupName = async () => {
+      const { data } = await supabase
+        .from('groups')
+        .select('name')
+        .eq('id', groupId)
+        .maybeSingle()
+      
+      if (data?.name) {
+        setGroupName(data.name)
+      }
+    }
+    
+    loadGroupName()
+  }, [groupId])
 
   const loadUserHandle = async (uid: string) => {
     try {
@@ -59,7 +139,6 @@ export default function NewPostPage() {
         return
       }
 
-      // 如果没有 handle，使用邮箱前缀
       const { data: user } = await supabase.auth.getUser()
       if (user?.user?.email) {
         setUserHandle(user.user.email.split('@')[0])
@@ -69,357 +148,591 @@ export default function NewPostPage() {
     }
   }
 
+  // Load draft from localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined' && groupId) {
+      const draft = localStorage.getItem(draftKey)
+      if (draft) {
+        try {
+          const { title: draftTitle, content: draftContent, images: draftImages, pollEnabled: draftPollEnabled } = JSON.parse(draft)
+          if (draftTitle || draftContent) {
+            setTitle(draftTitle || '')
+            setContent(draftContent || '')
+            setImages(draftImages || [])
+            setPollEnabled(draftPollEnabled || false)
+            showToast(t('draftRestored'), 'info')
+          }
+        } catch (e) {
+          console.error('Failed to parse draft:', e)
+        }
+      }
+    }
+  }, [groupId, draftKey, showToast, t])
+
+  // Auto-save draft to localStorage (debounced)
+  useEffect(() => {
+    if (typeof window === 'undefined' || !groupId) return
+    
+    const saveTimer = setTimeout(() => {
+      if (title.trim() || content.trim()) {
+        localStorage.setItem(draftKey, JSON.stringify({ title, content, images, pollEnabled }))
+        setDraftSaved(true)
+        setTimeout(() => setDraftSaved(false), 2000)
+      }
+    }, 1000)
+
+    return () => clearTimeout(saveTimer)
+  }, [title, content, images, pollEnabled, groupId, draftKey])
+
+  // Clear draft after successful publish
+  const clearDraft = useCallback(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem(draftKey)
+    }
+  }, [draftKey])
+
+  // 处理图片上传
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files
     if (!files || files.length === 0) return
 
-    setUploadingImages(true)
-    try {
-      const uploadPromises = Array.from(files).map(async (file) => {
+    if (!userId) {
+      showToast(t('pleaseLogin'), 'warning')
+      return
+    }
+
+    if (images.length + files.length > 9) {
+      showToast(t('maxImages'), 'warning')
+      return
+    }
+
+    setUploading(true)
+    const newImages: UploadedImage[] = []
+
+    for (const file of Array.from(files)) {
+      const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp']
+      if (!allowedTypes.includes(file.type)) {
+        showToast(`${file.name} ${t('formatNotSupported')}`, 'error')
+        continue
+      }
+
+      if (file.size > 5 * 1024 * 1024) {
+        showToast(`${file.name} ${t('fileTooLarge')}`, 'error')
+        continue
+      }
+
+      try {
         const formData = new FormData()
         formData.append('file', file)
-        formData.append('userId', userId!)
+        formData.append('userId', userId)
 
         const response = await fetch('/api/posts/upload-image', {
           method: 'POST',
           body: formData,
         })
 
+        const data = await response.json()
+
         if (!response.ok) {
-          const error = await response.json()
-          throw new Error(error.error || 'Upload failed')
+          showToast(data.error || '上传失败', 'error')
+          continue
         }
 
-        const data = await response.json()
-        return data.url
-      })
+        newImages.push({
+          url: data.url,
+          fileName: data.fileName,
+        })
+      } catch (error) {
+        console.error('Upload error:', error)
+        showToast('上传失败', 'error')
+      }
+    }
 
-      const uploadedUrls = await Promise.all(uploadPromises)
-      setImages([...images, ...uploadedUrls])
-    } catch (err: any) {
-      alert('图片上传失败: ' + err.message)
-    } finally {
-      setUploadingImages(false)
-      // 重置 input
-      e.target.value = ''
+    if (newImages.length > 0) {
+      setImages(prev => [...prev, ...newImages])
+      showToast(`成功上传 ${newImages.length} 张图片`, 'success')
+    }
+
+    setUploading(false)
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
     }
   }
 
+  // 移除图片
   const removeImage = (index: number) => {
-    setImages(images.filter((_, i) => i !== index))
+    setImages(prev => prev.filter((_, i) => i !== index))
   }
 
-  const handleAddLink = async () => {
-    if (!newLinkUrl.trim()) return
+  // 插入图片到内容
+  const insertImageToContent = (url: string) => {
+    const imageMarkdown = `\n![image](${url})\n`
+    setContent(prev => prev + imageMarkdown)
+    showToast(t('imageInserted'), 'info')
+  }
 
-    setAddingLink(true)
-    try {
-      // 获取链接预览
-      const response = await fetch(`/api/posts/link-preview?url=${encodeURIComponent(newLinkUrl)}`)
-      const preview = response.ok ? await response.json() : null
-
-      setLinks([
-        ...links,
-        {
-          url: newLinkUrl,
-          title: preview?.title,
-          description: preview?.description,
-          image: preview?.image,
-        },
-      ])
-      setNewLinkUrl("")
-    } catch (err) {
-      // 即使预览失败，也添加链接
-      setLinks([...links, { url: newLinkUrl }])
-      setNewLinkUrl("")
-    } finally {
-      setAddingLink(false)
+  const handleSubmit = async () => {
+    if (!title.trim()) {
+      showToast(t('pleaseEnterTitle'), 'warning')
+      return
     }
-  }
 
-  const removeLink = (index: number) => {
-    setLinks(links.filter((_, i) => i !== index))
-  }
-
-  const addPollOption = () => {
-    if (!poll) return
-    setPoll({ ...poll, options: [...poll.options, ''] })
-  }
-
-  const updatePollOption = (index: number, value: string) => {
-    if (!poll) return
-    const newOptions = [...poll.options]
-    newOptions[index] = value
-    setPoll({ ...poll, options: newOptions })
-  }
-
-  const removePollOption = (index: number) => {
-    if (!poll || poll.options.length <= 2) return
-    setPoll({ ...poll, options: poll.options.filter((_, i) => i !== index) })
-  }
-
-  const handlePublish = async () => {
     if (!userId) {
-      alert('请先登录')
+      showToast(t('pleaseLogin'), 'warning')
       router.push('/login')
-      return
-    }
-
-    if (!title.trim() || !content.trim()) {
-      alert('请填写标题和内容')
-      return
-    }
-
-    if (poll && (!poll.question.trim() || poll.options.filter(o => o.trim()).length < 2)) {
-      alert('请完善投票信息（至少2个选项）')
       return
     }
 
     setLoading(true)
     try {
-      let pollId: string | null = null
+      // 如果有图片但没有插入到内容中，自动附加到内容末尾
+      let finalContent = content
+      if (images.length > 0) {
+        const unincludedImages = images.filter(img => !content.includes(img.url))
+        if (unincludedImages.length > 0) {
+          finalContent += '\n\n' + unincludedImages.map(img => `![image](${img.url})`).join('\n')
+        }
+      }
 
-      // 创建投票（如果有）
-      if (poll && poll.question.trim() && poll.options.filter(o => o.trim()).length >= 2) {
-        const pollOptions = poll.options
-          .filter(o => o.trim())
-          .map((text, index) => ({ text: text.trim(), votes: 0, index }))
+      // 如果开启投票，先创建投票
+      let pollId = null
+      if (pollEnabled) {
+        const validOptions = pollOptions.filter(opt => opt.text.trim())
+        if (validOptions.length < 2) {
+          showToast('请至少填写2个投票选项', 'warning')
+          setLoading(false)
+          return
+        }
+
+        const endAt = new Date(Date.now() + pollDuration * 60 * 60 * 1000)
 
         const { data: pollData, error: pollError } = await supabase
           .from('polls')
           .insert({
-            question: poll.question.trim(),
-            options: pollOptions,
-            type: poll.type,
-            end_at: poll.endAt || null,
+            question: title,
+            options: validOptions.map((opt, index) => ({ 
+              text: opt.text.trim(), 
+              votes: 0,
+              index 
+            })),
+            type: pollType,
+            end_at: endAt.toISOString(),
           })
-          .select()
+          .select('id')
           .single()
 
         if (pollError) {
-          throw new Error('创建投票失败: ' + pollError.message)
+          console.error('创建投票失败:', pollError)
+          showToast('创建投票失败: ' + pollError.message, 'error')
+          setLoading(false)
+          return
         }
-
         pollId = pollData.id
       }
 
-      // 创建帖子
-      const { error } = await supabase.from("posts").insert({
-        group_id: groupId,
-        title: title.trim(),
-        content: content.trim(),
+      const { error } = await supabase.from('posts').insert({
+        title,
+        content: finalContent,
         author_handle: userHandle || email?.split('@')[0] || 'anonymous',
+        group_id: groupId,
         author_id: userId,
-        images: images.length > 0 ? images : null,
-        links: links.length > 0 ? links : null,
+        images: images.map(img => img.url),
+        poll_enabled: pollEnabled,
         poll_id: pollId,
       })
 
       if (error) {
-        console.error('Error creating post:', error)
-        alert(error.message || '发布失败，请重试')
+        console.error('创建帖子失败:', JSON.stringify(error, null, 2))
+        showToast(error.message || '创建失败，请检查权限', 'error')
         return
       }
 
+      clearDraft()
+      showToast(t('publishSuccess'), 'success')
       router.push(`/groups/${groupId}`)
-    } catch (err: any) {
-      console.error('Error:', err)
-      alert(err?.message || '发布失败，请重试')
+    } catch (error: any) {
+      console.error('发布异常:', error)
+      showToast(error?.message || '发布失败', 'error')
     } finally {
       setLoading(false)
     }
   }
 
-  if (!userId) {
-    return (
-      <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
-        <TopNav email={email} />
-        <Box style={{ maxWidth: 800, margin: '0 auto', padding: tokens.spacing[6] }}>
-          <Text size="lg">加载中...</Text>
-        </Box>
-      </Box>
-    )
-  }
-
   return (
     <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
       <TopNav email={email} />
-      
       <Box style={{ maxWidth: 800, margin: '0 auto', padding: tokens.spacing[6] }}>
-        <Text size="2xl" weight="black" style={{ marginBottom: tokens.spacing[6] }}>
-          发布新帖子
+        <Text size="2xl" weight="black" style={{ marginBottom: tokens.spacing[2] }}>
+          {t('newPost')}
+        </Text>
+        <Text size="sm" color="secondary" style={{ marginBottom: tokens.spacing[6] }}>
+          {groupName ? `发布到「${groupName}」` : t('shareIdeas')}
         </Text>
 
-        <Box
-          bg="secondary"
-          p={6}
-          radius="xl"
-          border="primary"
-          style={{ marginBottom: tokens.spacing[4] }}
-        >
-          <Text size="sm" color="tertiary" style={{ marginBottom: tokens.spacing[2] }}>
-            小组 ID: {groupId}
-          </Text>
-        </Box>
-
-        <Box
-          bg="secondary"
-          p={6}
-          radius="xl"
-          border="primary"
-          style={{ marginBottom: tokens.spacing[4] }}
-        >
-          <Text size="lg" weight="black" style={{ marginBottom: tokens.spacing[4] }}>
-            标题
-          </Text>
-          <input
-            type="text"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="输入帖子标题"
-            style={{
-              width: '100%',
-              padding: tokens.spacing[3],
-              borderRadius: tokens.radius.md,
-              border: `1px solid ${tokens.colors.border.primary}`,
-              background: tokens.colors.bg.primary,
-              color: tokens.colors.text.primary,
-              fontSize: tokens.typography.fontSize.base,
-              fontFamily: tokens.typography.fontFamily.sans.join(', '),
-              outline: 'none',
-            }}
-          />
-        </Box>
-
-        <Box
-          bg="secondary"
-          p={6}
-          radius="xl"
-          border="primary"
-          style={{ marginBottom: tokens.spacing[4] }}
-        >
-          <Text size="lg" weight="black" style={{ marginBottom: tokens.spacing[4] }}>
-            内容
-          </Text>
-          <textarea
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            placeholder="写下你的想法..."
-            rows={12}
-            style={{
-              width: '100%',
-              padding: tokens.spacing[3],
-              borderRadius: tokens.radius.md,
-              border: `1px solid ${tokens.colors.border.primary}`,
-              background: tokens.colors.bg.primary,
-              color: tokens.colors.text.primary,
-              fontSize: tokens.typography.fontSize.base,
-              fontFamily: tokens.typography.fontFamily.sans.join(', '),
-              outline: 'none',
-              resize: 'vertical',
-            }}
-          />
-          
-          {/* 功能工具栏 */}
-          <Box style={{ 
-            display: 'flex', 
-            gap: tokens.spacing[2], 
-            marginTop: tokens.spacing[3],
-            paddingTop: tokens.spacing[3],
-            borderTop: `1px solid ${tokens.colors.border.primary}`,
-          }}>
-            {/* 图片按钮 */}
+        <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}>
+          <Box>
+            <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: tokens.spacing[2] }}>
+              <Text size="sm" weight="bold">
+                {t('titleLabel')}
+              </Text>
+              <Text 
+                size="xs" 
+                style={{ color: title.length > TITLE_MAX_LENGTH ? tokens.colors.accent.error : tokens.colors.text.tertiary }}
+              >
+                {title.length}/{TITLE_MAX_LENGTH}
+              </Text>
+            </Box>
             <input
+              type="text"
+              placeholder={t('enterTitle')}
+              value={title}
+              onChange={(e) => setTitle(e.target.value.slice(0, TITLE_MAX_LENGTH))}
+              maxLength={TITLE_MAX_LENGTH}
+              style={{
+                width: '100%',
+                padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+                borderRadius: tokens.radius.md,
+                border: `1px solid ${title.length > TITLE_MAX_LENGTH ? tokens.colors.accent.error : tokens.colors.border.primary}`,
+                background: tokens.colors.bg.secondary,
+                color: tokens.colors.text.primary,
+                fontSize: tokens.typography.fontSize.base,
+                outline: 'none',
+                fontFamily: tokens.typography.fontFamily.sans.join(', '),
+              }}
+            />
+          </Box>
+
+          <Box>
+            <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: tokens.spacing[2] }}>
+              <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3] }}>
+                <Text size="sm" weight="bold">
+                  {t('contentLabel')}
+                </Text>
+                <Box style={{ display: 'flex', borderRadius: tokens.radius.md, overflow: 'hidden', border: `1px solid ${tokens.colors.border.primary}` }}>
+                  <button
+                    type="button"
+                    onClick={() => setShowPreview(false)}
+                    style={{
+                      padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
+                      border: 'none',
+                      background: !showPreview ? '#8b6fa8' : 'transparent',
+                      color: !showPreview ? '#fff' : tokens.colors.text.secondary,
+                      fontSize: tokens.typography.fontSize.xs,
+                      cursor: 'pointer',
+                      fontWeight: 700,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4,
+                    }}
+                  >
+                    ✏️ {t('edit')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowPreview(true)}
+                    style={{
+                      padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
+                      border: 'none',
+                      borderLeft: `1px solid ${tokens.colors.border.primary}`,
+                      background: showPreview ? '#8b6fa8' : 'transparent',
+                      color: showPreview ? '#fff' : tokens.colors.text.secondary,
+                      fontSize: tokens.typography.fontSize.xs,
+                      cursor: 'pointer',
+                      fontWeight: 700,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4,
+                    }}
+                  >
+                    👁️ {t('preview')}
+                  </button>
+                </Box>
+                {draftSaved && (
+                  <Text size="xs" color="tertiary" style={{ color: '#2fe57d' }}>
+                    ✓ {t('draftSaved')}
+                  </Text>
+                )}
+              </Box>
+              <Text 
+                size="xs" 
+                style={{ color: content.length > CONTENT_MAX_LENGTH ? tokens.colors.accent.error : tokens.colors.text.tertiary }}
+              >
+                {content.length}/{CONTENT_MAX_LENGTH}
+              </Text>
+            </Box>
+            
+            {showPreview ? (
+              <Box
+                style={{
+                  width: '100%',
+                  minHeight: 288,
+                  padding: tokens.spacing[4],
+                  borderRadius: tokens.radius.md,
+                  border: `2px solid #8b6fa8`,
+                  background: `linear-gradient(135deg, rgba(139, 111, 168, 0.05) 0%, rgba(139, 111, 168, 0.1) 100%)`,
+                  color: tokens.colors.text.primary,
+                  fontSize: tokens.typography.fontSize.base,
+                  lineHeight: 1.6,
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-word',
+                  position: 'relative',
+                }}
+              >
+                <Box
+                  style={{
+                    position: 'absolute',
+                    top: -12,
+                    left: 12,
+                    background: '#8b6fa8',
+                    color: '#fff',
+                    padding: '2px 10px',
+                    borderRadius: 999,
+                    fontSize: 11,
+                    fontWeight: 700,
+                  }}
+                >
+                  {t('previewMode')}
+                </Box>
+                {content ? renderContentWithLinks(content) : <Text color="tertiary">{t('previewPlaceholder')}</Text>}
+              </Box>
+            ) : (
+              <textarea
+                placeholder={t('enterContent')}
+                value={content}
+                onChange={(e) => setContent(e.target.value.slice(0, CONTENT_MAX_LENGTH))}
+                maxLength={CONTENT_MAX_LENGTH}
+                rows={12}
+                style={{
+                  width: '100%',
+                  padding: tokens.spacing[4],
+                  borderRadius: tokens.radius.md,
+                  border: `1px solid ${content.length > CONTENT_MAX_LENGTH ? tokens.colors.accent.error : tokens.colors.border.primary}`,
+                  background: tokens.colors.bg.secondary,
+                  color: tokens.colors.text.primary,
+                  fontSize: tokens.typography.fontSize.base,
+                  outline: 'none',
+                  fontFamily: tokens.typography.fontFamily.sans.join(', '),
+                  resize: 'vertical',
+                  lineHeight: 1.6,
+                }}
+              />
+            )}
+            <Text size="xs" color="tertiary" style={{ marginTop: tokens.spacing[1] }}>
+              {t('mentionTip')}
+            </Text>
+          </Box>
+
+          {/* 投票功能开关 */}
+          <Box
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: tokens.spacing[3],
+              padding: tokens.spacing[4],
+              borderRadius: tokens.radius.md,
+              border: `1px solid ${pollEnabled ? '#8b6fa8' : tokens.colors.border.primary}`,
+              background: pollEnabled ? 'rgba(139, 111, 168, 0.1)' : tokens.colors.bg.secondary,
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+            }}
+            onClick={() => setPollEnabled(!pollEnabled)}
+          >
+            <Box
+              style={{
+                width: 44,
+                height: 24,
+                borderRadius: 12,
+                background: pollEnabled ? '#8b6fa8' : tokens.colors.border.primary,
+                position: 'relative',
+                transition: 'background 0.2s ease',
+              }}
+            >
+              <Box
+                style={{
+                  width: 20,
+                  height: 20,
+                  borderRadius: '50%',
+                  background: '#fff',
+                  position: 'absolute',
+                  top: 2,
+                  left: pollEnabled ? 22 : 2,
+                  transition: 'left 0.2s ease',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                }}
+              />
+            </Box>
+            <Box>
+              <Text size="sm" weight="bold" style={{ color: pollEnabled ? '#8b6fa8' : tokens.colors.text.primary }}>
+                📊 {t('enablePoll')}
+              </Text>
+              <Text size="xs" color="tertiary">
+                {t('pollDescription')}
+              </Text>
+            </Box>
+          </Box>
+
+          {/* 投票设置 */}
+          {pollEnabled && (
+            <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
+              <Box>
+                <Text size="xs" weight="bold" style={{ marginBottom: tokens.spacing[2], display: 'block' }}>
+                  投票选项（至少2个，最多6个）
+                </Text>
+                {pollOptions.map((option, index) => (
+                  <Box key={index} style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], marginBottom: tokens.spacing[2] }}>
+                    <Text size="xs" color="tertiary" style={{ width: 20 }}>{index + 1}.</Text>
+                    <input
+                      type="text"
+                      placeholder={`选项 ${index + 1}`}
+                      value={option.text}
+                      onChange={(e) => {
+                        const newOptions = [...pollOptions]
+                        newOptions[index].text = e.target.value
+                        setPollOptions(newOptions)
+                      }}
+                      style={{
+                        flex: 1,
+                        padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+                        borderRadius: tokens.radius.md,
+                        border: `1px solid ${tokens.colors.border.primary}`,
+                        background: tokens.colors.bg.primary,
+                        color: tokens.colors.text.primary,
+                        fontSize: tokens.typography.fontSize.sm,
+                        outline: 'none',
+                      }}
+                    />
+                    {pollOptions.length > 2 && (
+                      <button
+                        onClick={() => setPollOptions(pollOptions.filter((_, i) => i !== index))}
+                        style={{
+                          width: 28,
+                          height: 28,
+                          border: 'none',
+                          background: 'rgba(255,77,77,0.2)',
+                          color: '#ff4d4d',
+                          borderRadius: tokens.radius.md,
+                          cursor: 'pointer',
+                          fontSize: 16,
+                        }}
+                      >
+                        ×
+                      </button>
+                    )}
+                  </Box>
+                ))}
+                {pollOptions.length < 6 && (
+                  <button
+                    onClick={() => setPollOptions([...pollOptions, { text: '', votes: 0 }])}
+                    style={{
+                      padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+                      border: `1px dashed ${tokens.colors.border.primary}`,
+                      background: 'transparent',
+                      color: tokens.colors.text.secondary,
+                      borderRadius: tokens.radius.md,
+                      cursor: 'pointer',
+                      fontSize: tokens.typography.fontSize.sm,
+                      width: '100%',
+                    }}
+                  >
+                    + 添加选项
+                  </button>
+                )}
+              </Box>
+
+              <Box style={{ display: 'flex', gap: tokens.spacing[4], flexWrap: 'wrap' }}>
+                <Box style={{ flex: 1, minWidth: 150 }}>
+                  <Text size="xs" weight="bold" style={{ marginBottom: tokens.spacing[2], display: 'block' }}>
+                    投票类型
+                  </Text>
+                  <Box style={{ display: 'flex', gap: tokens.spacing[2] }}>
+                    <button
+                      onClick={() => setPollType('single')}
+                      style={{
+                        flex: 1,
+                        padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+                        borderRadius: tokens.radius.md,
+                        border: `1px solid ${pollType === 'single' ? '#8b6fa8' : tokens.colors.border.primary}`,
+                        background: pollType === 'single' ? 'rgba(139, 111, 168, 0.2)' : 'transparent',
+                        color: pollType === 'single' ? '#8b6fa8' : tokens.colors.text.secondary,
+                        cursor: 'pointer',
+                        fontSize: tokens.typography.fontSize.sm,
+                        fontWeight: 600,
+                      }}
+                    >
+                      单选
+                    </button>
+                    <button
+                      onClick={() => setPollType('multiple')}
+                      style={{
+                        flex: 1,
+                        padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+                        borderRadius: tokens.radius.md,
+                        border: `1px solid ${pollType === 'multiple' ? '#8b6fa8' : tokens.colors.border.primary}`,
+                        background: pollType === 'multiple' ? 'rgba(139, 111, 168, 0.2)' : 'transparent',
+                        color: pollType === 'multiple' ? '#8b6fa8' : tokens.colors.text.secondary,
+                        cursor: 'pointer',
+                        fontSize: tokens.typography.fontSize.sm,
+                        fontWeight: 600,
+                      }}
+                    >
+                      多选
+                    </button>
+                  </Box>
+                </Box>
+
+                <Box style={{ flex: 1, minWidth: 150 }}>
+                  <Text size="xs" weight="bold" style={{ marginBottom: tokens.spacing[2], display: 'block' }}>
+                    投票持续时间
+                  </Text>
+                  <select
+                    value={pollDuration}
+                    onChange={(e) => setPollDuration(Number(e.target.value))}
+                    style={{
+                      width: '100%',
+                      padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+                      borderRadius: tokens.radius.md,
+                      border: `1px solid ${tokens.colors.border.primary}`,
+                      background: tokens.colors.bg.primary,
+                      color: tokens.colors.text.primary,
+                      fontSize: tokens.typography.fontSize.sm,
+                      outline: 'none',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {POLL_DURATION_OPTIONS.map(opt => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {/* 图片上传区域 */}
+          <Box>
+            <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[2], display: 'block' }}>
+              {t('imagesOptional')}
+            </Text>
+            
+            <input
+              ref={fileInputRef}
               type="file"
               accept="image/jpeg,image/jpg,image/png,image/gif,image/webp"
               multiple
               onChange={handleImageUpload}
-              disabled={uploadingImages}
               style={{ display: 'none' }}
               id="image-upload"
             />
-            <label htmlFor="image-upload" style={{ cursor: uploadingImages ? 'not-allowed' : 'pointer' }}>
-              <Box
-                style={{
-                  padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-                  borderRadius: tokens.radius.md,
-                  border: `1px solid ${images.length > 0 ? tokens.colors.accent?.primary || '#8b6fa8' : tokens.colors.border.primary}`,
-                  background: images.length > 0 ? 'rgba(139, 111, 168, 0.1)' : 'transparent',
-                  color: images.length > 0 ? tokens.colors.accent?.primary || '#8b6fa8' : tokens.colors.text.secondary,
-                  cursor: uploadingImages ? 'not-allowed' : 'pointer',
-                  fontSize: tokens.typography.fontSize.sm,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: tokens.spacing[1],
-                  transition: `all ${tokens.transition.base}`,
-                }}
-              >
-                {uploadingImages ? '⏳' : '📷'} 图片 {images.length > 0 && `(${images.length})`}
-              </Box>
-            </label>
             
-            {/* 链接按钮 */}
-            <Box
-              onClick={() => {
-                const linkSection = document.getElementById('link-section')
-                if (linkSection) {
-                  linkSection.style.display = linkSection.style.display === 'none' ? 'block' : 'none'
-                }
-              }}
-              style={{
-                padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-                borderRadius: tokens.radius.md,
-                border: `1px solid ${links.length > 0 ? tokens.colors.accent?.primary || '#8b6fa8' : tokens.colors.border.primary}`,
-                background: links.length > 0 ? 'rgba(139, 111, 168, 0.1)' : 'transparent',
-                color: links.length > 0 ? tokens.colors.accent?.primary || '#8b6fa8' : tokens.colors.text.secondary,
-                cursor: 'pointer',
-                fontSize: tokens.typography.fontSize.sm,
-                display: 'flex',
-                alignItems: 'center',
-                gap: tokens.spacing[1],
-                transition: `all ${tokens.transition.base}`,
+            <Box 
+              style={{ 
+                display: 'flex', 
+                flexWrap: 'wrap', 
+                gap: tokens.spacing[3],
+                marginBottom: tokens.spacing[3],
               }}
             >
-              🔗 链接 {links.length > 0 && `(${links.length})`}
-            </Box>
-            
-            {/* 投票按钮 */}
-            <Box
-              onClick={() => {
-                if (showPollForm) {
-                  setPoll(null)
-                  setShowPollForm(false)
-                } else {
-                  setPoll({
-                    question: '',
-                    options: ['', ''],
-                    type: 'single',
-                  })
-                  setShowPollForm(true)
-                }
-              }}
-              style={{
-                padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-                borderRadius: tokens.radius.md,
-                border: `1px solid ${showPollForm ? tokens.colors.accent?.primary || '#8b6fa8' : tokens.colors.border.primary}`,
-                background: showPollForm ? 'rgba(139, 111, 168, 0.1)' : 'transparent',
-                color: showPollForm ? tokens.colors.accent?.primary || '#8b6fa8' : tokens.colors.text.secondary,
-                cursor: 'pointer',
-                fontSize: tokens.typography.fontSize.sm,
-                display: 'flex',
-                alignItems: 'center',
-                gap: tokens.spacing[1],
-                transition: `all ${tokens.transition.base}`,
-              }}
-            >
-              📊 投票
-            </Box>
-          </Box>
-
-          {/* 已上传图片预览 */}
-          {images.length > 0 && (
-            <Box style={{ display: 'flex', flexWrap: 'wrap', gap: tokens.spacing[3], marginTop: tokens.spacing[4] }}>
-              {images.map((url, index) => (
+              {images.map((image, index) => (
                 <Box
                   key={index}
                   style={{
@@ -432,206 +745,116 @@ export default function NewPostPage() {
                   }}
                 >
                   <img
-                    src={url}
+                    src={image.url}
                     alt={`Upload ${index + 1}`}
-                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'cover',
+                    }}
                   />
-                  <button
-                    onClick={() => removeImage(index)}
+                  <Box
                     style={{
                       position: 'absolute',
-                      top: 4,
-                      right: 4,
-                      width: 20,
-                      height: 20,
-                      borderRadius: '50%',
-                      background: 'rgba(0,0,0,0.7)',
-                      color: '#fff',
-                      border: 'none',
-                      cursor: 'pointer',
+                      top: 0,
+                      right: 0,
                       display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: '12px',
+                      gap: 2,
                     }}
                   >
-                    ×
-                  </button>
-                </Box>
-              ))}
-            </Box>
-          )}
-
-          {/* 链接区域（可折叠） */}
-          <Box id="link-section" style={{ display: links.length > 0 ? 'block' : 'none', marginTop: tokens.spacing[4] }}>
-            <Box style={{ display: 'flex', gap: tokens.spacing[2], marginBottom: tokens.spacing[3] }}>
-              <input
-                type="url"
-                value={newLinkUrl}
-                onChange={(e) => setNewLinkUrl(e.target.value)}
-                placeholder="输入链接 URL"
-                style={{
-                  flex: 1,
-                  padding: tokens.spacing[2],
-                  borderRadius: tokens.radius.md,
-                  border: `1px solid ${tokens.colors.border.primary}`,
-                  background: tokens.colors.bg.primary,
-                  color: tokens.colors.text.primary,
-                  fontSize: tokens.typography.fontSize.sm,
-                  outline: 'none',
-                }}
-                onKeyPress={(e) => {
-                  if (e.key === 'Enter') {
-                    handleAddLink()
-                  }
-                }}
-              />
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={handleAddLink}
-                disabled={addingLink || !newLinkUrl.trim()}
-              >
-                {addingLink ? '...' : '添加'}
-              </Button>
-            </Box>
-            {links.length > 0 && (
-              <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
-                {links.map((link, index) => (
-                  <Box
-                    key={index}
-                    style={{
-                      padding: tokens.spacing[2],
-                      borderRadius: tokens.radius.md,
-                      background: tokens.colors.bg.primary,
-                      border: `1px solid ${tokens.colors.border.primary}`,
-                      display: 'flex',
-                      gap: tokens.spacing[2],
-                      alignItems: 'center',
-                    }}
-                  >
-                    <Text size="xs" color="tertiary" style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {link.title || link.url}
-                    </Text>
                     <button
-                      onClick={() => removeLink(index)}
+                      onClick={() => insertImageToContent(image.url)}
+                      title="插入到内容"
                       style={{
-                        background: 'transparent',
+                        width: 24,
+                        height: 24,
                         border: 'none',
-                        color: tokens.colors.text.tertiary,
+                        background: 'rgba(139,111,168,0.9)',
+                        color: '#fff',
                         cursor: 'pointer',
-                        fontSize: '14px',
-                        padding: tokens.spacing[1],
+                        fontSize: 12,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      ↵
+                    </button>
+                    <button
+                      onClick={() => removeImage(index)}
+                      title="删除"
+                      style={{
+                        width: 24,
+                        height: 24,
+                        border: 'none',
+                        background: 'rgba(255,77,77,0.9)',
+                        color: '#fff',
+                        cursor: 'pointer',
+                        fontSize: 14,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
                       }}
                     >
                       ×
                     </button>
                   </Box>
-                ))}
-              </Box>
-            )}
-          </Box>
-
-          {/* 投票区域（可折叠） */}
-          {showPollForm && poll && (
-            <Box style={{ marginTop: tokens.spacing[4], padding: tokens.spacing[4], background: tokens.colors.bg.primary, borderRadius: tokens.radius.md, border: `1px solid ${tokens.colors.border.primary}` }}>
-              <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: tokens.spacing[3] }}>
-                <Text size="sm" weight="semibold">投票设置</Text>
-                <Box style={{ display: 'flex', gap: tokens.spacing[2] }}>
-                  <Button
-                    variant={poll.type === 'single' ? 'primary' : 'secondary'}
-                    size="sm"
-                    onClick={() => setPoll({ ...poll, type: 'single' })}
-                  >
-                    单选
-                  </Button>
-                  <Button
-                    variant={poll.type === 'multiple' ? 'primary' : 'secondary'}
-                    size="sm"
-                    onClick={() => setPoll({ ...poll, type: 'multiple' })}
-                  >
-                    多选
-                  </Button>
-                </Box>
-              </Box>
-              <input
-                type="text"
-                value={poll.question}
-                onChange={(e) => setPoll({ ...poll, question: e.target.value })}
-                placeholder="投票问题"
-                style={{
-                  width: '100%',
-                  padding: tokens.spacing[2],
-                  borderRadius: tokens.radius.md,
-                  border: `1px solid ${tokens.colors.border.primary}`,
-                  background: 'transparent',
-                  color: tokens.colors.text.primary,
-                  fontSize: tokens.typography.fontSize.sm,
-                  outline: 'none',
-                  marginBottom: tokens.spacing[2],
-                }}
-              />
-              {poll.options.map((option, index) => (
-                <Box key={index} style={{ display: 'flex', gap: tokens.spacing[2], marginBottom: tokens.spacing[2] }}>
-                  <input
-                    type="text"
-                    value={option}
-                    onChange={(e) => updatePollOption(index, e.target.value)}
-                    placeholder={`选项 ${index + 1}`}
-                    style={{
-                      flex: 1,
-                      padding: tokens.spacing[2],
-                      borderRadius: tokens.radius.md,
-                      border: `1px solid ${tokens.colors.border.primary}`,
-                      background: 'transparent',
-                      color: tokens.colors.text.primary,
-                      fontSize: tokens.typography.fontSize.sm,
-                      outline: 'none',
-                    }}
-                  />
-                  {poll.options.length > 2 && (
-                    <button
-                      onClick={() => removePollOption(index)}
-                      style={{
-                        background: 'transparent',
-                        border: 'none',
-                        color: '#ff7c7c',
-                        cursor: 'pointer',
-                        fontSize: '14px',
-                      }}
-                    >
-                      ×
-                    </button>
-                  )}
                 </Box>
               ))}
-              <Button
-                variant="text"
-                size="sm"
-                onClick={addPollOption}
-                style={{ color: tokens.colors.accent?.primary || '#8b6fa8', padding: 0 }}
-              >
-                + 添加选项
-              </Button>
+              
+              {images.length < 9 && (
+                <label
+                  htmlFor="image-upload"
+                  style={{
+                    width: 100,
+                    height: 100,
+                    borderRadius: tokens.radius.md,
+                    border: `2px dashed ${tokens.colors.border.primary}`,
+                    background: tokens.colors.bg.secondary,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: uploading ? 'not-allowed' : 'pointer',
+                    opacity: uploading ? 0.5 : 1,
+                    transition: 'all 0.2s ease',
+                  }}
+                >
+                  {uploading ? (
+                    <Text size="xs" color="secondary">{t('uploadingImage')}</Text>
+                  ) : (
+                    <>
+                      <Text size="2xl" color="secondary" style={{ lineHeight: 1 }}>+</Text>
+                      <Text size="xs" color="secondary">{t('addImage')}</Text>
+                    </>
+                  )}
+                </label>
+              )}
             </Box>
-          )}
-        </Box>
+            
+            <Text size="xs" color="tertiary">
+              {t('imageSupport')}
+            </Text>
+          </Box>
 
-        <Box style={{ display: 'flex', justifyContent: 'flex-end', gap: tokens.spacing[3] }}>
-          <Button
-            variant="secondary"
-            onClick={() => router.back()}
-            disabled={loading}
-          >
-            取消
-          </Button>
-          <Button
-            variant="primary"
-            onClick={handlePublish}
-            disabled={loading || !title.trim() || !content.trim()}
-          >
-            {loading ? '发布中...' : '发布'}
-          </Button>
+          <Box style={{ display: 'flex', gap: tokens.spacing[3], justifyContent: 'flex-end' }}>
+            <Button
+              variant="ghost"
+              size="md"
+              onClick={() => router.back()}
+              disabled={loading}
+            >
+              {t('cancel')}
+            </Button>
+            <Button
+              variant="primary"
+              size="md"
+              onClick={handleSubmit}
+              disabled={loading || !title.trim()}
+            >
+              {loading ? t('publishing') : t('publish')}
+            </Button>
+          </Box>
         </Box>
       </Box>
     </Box>

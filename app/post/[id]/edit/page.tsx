@@ -17,19 +17,193 @@ interface UploadedImage {
 const TITLE_MAX_LENGTH = 100
 const CONTENT_MAX_LENGTH = 10000
 
-// 链接解析函数
-function renderContentWithLinks(text: string) {
+// 带编辑控制的内容渲染（用于预览模式）
+function renderContentWithControls(
+  text: string, 
+  onMoveImage: (url: string, direction: 'up' | 'down') => void,
+  onRemoveImage: (url: string) => void,
+  imageCount: number
+) {
   if (!text) return null
+  
+  const imageRegex = /!\[([^\]]*)\]\(([^)]+)\)/g
   const urlRegex = /(https?:\/\/[^\s<>"{}|\\^`[\]]+)/g
-  const parts = text.split(urlRegex)
+  
+  // 先找出所有图片
+  const imageMatches: { start: number; end: number; alt: string; url: string; imageIndex: number }[] = []
+  let match
+  let imgIdx = 0
+  while ((match = imageRegex.exec(text)) !== null) {
+    imageMatches.push({
+      start: match.index,
+      end: match.index + match[0].length,
+      alt: match[1],
+      url: match[2],
+      imageIndex: imgIdx++,
+    })
+  }
+  
+  // 如果没有图片，直接处理链接
+  if (imageMatches.length === 0) {
+    const linkParts = text.split(urlRegex)
+    return linkParts.map((part, index) => {
+      if (urlRegex.test(part)) {
+        urlRegex.lastIndex = 0
+        return (
+          <a
+            key={index}
+            href={part}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              color: '#8b6fa8',
+              textDecoration: 'underline',
+              wordBreak: 'break-all',
+            }}
+          >
+            {part}
+          </a>
+        )
+      }
+      return part
+    })
+  }
+  
+  // 构建内容片段
+  const parts: { type: 'text' | 'image' | 'link'; content: string; url?: string; imageIndex?: number }[] = []
+  let currentIndex = 0
+  
+  for (const img of imageMatches) {
+    if (img.start > currentIndex) {
+      const beforeText = text.slice(currentIndex, img.start)
+      const linkParts = beforeText.split(urlRegex)
+      linkParts.forEach((part) => {
+        if (urlRegex.test(part)) {
+          urlRegex.lastIndex = 0
+          parts.push({ type: 'link', content: part, url: part })
+        } else if (part) {
+          parts.push({ type: 'text', content: part })
+        }
+      })
+    }
+    parts.push({ type: 'image', content: img.alt, url: img.url, imageIndex: img.imageIndex })
+    currentIndex = img.end
+  }
+  
+  if (currentIndex < text.length) {
+    const afterText = text.slice(currentIndex)
+    const linkParts = afterText.split(urlRegex)
+    linkParts.forEach((part) => {
+      if (urlRegex.test(part)) {
+        urlRegex.lastIndex = 0
+        parts.push({ type: 'link', content: part, url: part })
+      } else if (part) {
+        parts.push({ type: 'text', content: part })
+      }
+    })
+  }
   
   return parts.map((part, index) => {
-    if (urlRegex.test(part)) {
-      urlRegex.lastIndex = 0
+    if (part.type === 'image') {
+      const isFirst = part.imageIndex === 0
+      const isLast = part.imageIndex === imageCount - 1
+      return (
+        <span key={index} style={{ position: 'relative', display: 'inline-block', margin: '4px 6px' }}>
+          <img
+            src={part.url}
+            alt={part.content || 'image'}
+            style={{
+              maxWidth: '100%',
+              maxHeight: 300,
+              borderRadius: 8,
+              cursor: 'pointer',
+              display: 'block',
+            }}
+            onClick={(e) => {
+              e.stopPropagation()
+              window.open(part.url, '_blank')
+            }}
+          />
+          {/* 图片控制栏 */}
+          <div style={{
+            position: 'absolute',
+            top: 4,
+            right: 4,
+            display: 'flex',
+            gap: 4,
+            background: 'rgba(0,0,0,0.7)',
+            borderRadius: 6,
+            padding: '2px 4px',
+          }}>
+            <button
+              onClick={(e) => { e.stopPropagation(); onMoveImage(part.url!, 'up') }}
+              disabled={isFirst}
+              title="上移"
+              style={{
+                width: 24,
+                height: 24,
+                border: 'none',
+                background: isFirst ? 'rgba(100,100,100,0.5)' : 'rgba(139,111,168,0.9)',
+                color: '#fff',
+                cursor: isFirst ? 'not-allowed' : 'pointer',
+                fontSize: 14,
+                borderRadius: 4,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              ↑
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); onMoveImage(part.url!, 'down') }}
+              disabled={isLast}
+              title="下移"
+              style={{
+                width: 24,
+                height: 24,
+                border: 'none',
+                background: isLast ? 'rgba(100,100,100,0.5)' : 'rgba(139,111,168,0.9)',
+                color: '#fff',
+                cursor: isLast ? 'not-allowed' : 'pointer',
+                fontSize: 14,
+                borderRadius: 4,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              ↓
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); onRemoveImage(part.url!) }}
+              title="移除"
+              style={{
+                width: 24,
+                height: 24,
+                border: 'none',
+                background: 'rgba(255,77,77,0.9)',
+                color: '#fff',
+                cursor: 'pointer',
+                fontSize: 14,
+                borderRadius: 4,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              ×
+            </button>
+          </div>
+        </span>
+      )
+    }
+    if (part.type === 'link') {
       return (
         <a
           key={index}
-          href={part}
+          href={part.url}
           target="_blank"
           rel="noopener noreferrer"
           onClick={(e) => e.stopPropagation()}
@@ -39,11 +213,11 @@ function renderContentWithLinks(text: string) {
             wordBreak: 'break-all',
           }}
         >
-          {part}
+          {part.content}
         </a>
       )
     }
-    return part
+    return <span key={index}>{part.content}</span>
   })
 }
 
@@ -53,6 +227,7 @@ export default function EditPostPage() {
   const router = useRouter()
   const { showToast } = useToast()
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   const [email, setEmail] = useState<string | null>(null)
   const [userId, setUserId] = useState<string | null>(null)
@@ -64,6 +239,8 @@ export default function EditPostPage() {
   const [uploading, setUploading] = useState(false)
   const [showPreview, setShowPreview] = useState(false)
   const [originalPost, setOriginalPost] = useState<any>(null)
+  const [cursorPosition, setCursorPosition] = useState<number | null>(null)
+  const [draggedImageIndex, setDraggedImageIndex] = useState<number | null>(null)
 
   // 获取用户信息
   useEffect(() => {
@@ -190,11 +367,106 @@ export default function EditPostPage() {
     setImages(prev => prev.filter((_, i) => i !== index))
   }
 
-  // 插入图片到内容
+  // 插入图片到内容（在光标位置）
   const insertImageToContent = (url: string) => {
     const imageMarkdown = `\n![image](${url})\n`
-    setContent(prev => prev + imageMarkdown)
+    
+    if (cursorPosition !== null) {
+      setContent(prev => {
+        const before = prev.slice(0, cursorPosition)
+        const after = prev.slice(cursorPosition)
+        return before + imageMarkdown + after
+      })
+      setCursorPosition(cursorPosition + imageMarkdown.length)
+    } else {
+      setContent(prev => prev + imageMarkdown)
+    }
     showToast('图片已插入到内容', 'info')
+  }
+
+  // 移动图片在内容中的位置（上移或下移）
+  const moveImageInContent = (url: string, direction: 'up' | 'down') => {
+    const regex = /!\[image\]\([^)]+\)/g
+    const matches: { match: string; start: number; end: number }[] = []
+    let m
+    while ((m = regex.exec(content)) !== null) {
+      matches.push({ match: m[0], start: m.index, end: m.index + m[0].length })
+    }
+
+    const currentIndex = matches.findIndex(m => m.match.includes(url))
+    if (currentIndex === -1) return
+
+    const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1
+    if (targetIndex < 0 || targetIndex >= matches.length) {
+      showToast(direction === 'up' ? '已在最顶部' : '已在最底部', 'info')
+      return
+    }
+
+    const current = matches[currentIndex]
+    const target = matches[targetIndex]
+
+    let newContent = content
+    const placeholder1 = `__PLACEHOLDER_1__`
+    const placeholder2 = `__PLACEHOLDER_2__`
+
+    if (direction === 'up') {
+      newContent = newContent.slice(0, target.start) + placeholder1 + 
+                   newContent.slice(target.end, current.start) + placeholder2 + 
+                   newContent.slice(current.end)
+      newContent = newContent.replace(placeholder1, current.match)
+      newContent = newContent.replace(placeholder2, target.match)
+    } else {
+      newContent = newContent.slice(0, current.start) + placeholder1 + 
+                   newContent.slice(current.end, target.start) + placeholder2 + 
+                   newContent.slice(target.end)
+      newContent = newContent.replace(placeholder1, target.match)
+      newContent = newContent.replace(placeholder2, current.match)
+    }
+
+    setContent(newContent)
+    showToast(direction === 'up' ? '图片已上移' : '图片已下移', 'success')
+  }
+
+  // 从内容中移除图片
+  const removeImageFromContent = (url: string) => {
+    const imagePattern = new RegExp(`\\n?!\\[image\\]\\(${url.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\)\\n?`, 'g')
+    setContent(prev => prev.replace(imagePattern, '\n').replace(/\n{3,}/g, '\n\n').trim())
+    showToast('图片已从内容中移除', 'info')
+  }
+
+  // 检查图片是否已在内容中
+  const isImageInContent = (url: string) => {
+    return content.includes(url)
+  }
+
+  // 保存光标位置
+  const handleTextareaSelect = () => {
+    if (textareaRef.current) {
+      setCursorPosition(textareaRef.current.selectionStart)
+    }
+  }
+
+  // 图片拖拽排序
+  const handleDragStart = (index: number) => {
+    setDraggedImageIndex(index)
+  }
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault()
+    if (draggedImageIndex === null || draggedImageIndex === index) return
+    
+    setImages(prev => {
+      const newImages = [...prev]
+      const draggedImage = newImages[draggedImageIndex]
+      newImages.splice(draggedImageIndex, 1)
+      newImages.splice(index, 0, draggedImage)
+      return newImages
+    })
+    setDraggedImageIndex(index)
+  }
+
+  const handleDragEnd = () => {
+    setDraggedImageIndex(null)
   }
 
   // 提交更新
@@ -336,7 +608,7 @@ export default function EditPostPage() {
                       gap: 4,
                     }}
                   >
-                    ✏️ 编辑
+                    编辑
                   </button>
                   <button
                     type="button"
@@ -355,7 +627,7 @@ export default function EditPostPage() {
                       gap: 4,
                     }}
                   >
-                    👁️ 预览
+                    预览
                   </button>
                 </Box>
               </Box>
@@ -400,13 +672,25 @@ export default function EditPostPage() {
                 >
                   预览模式
                 </Box>
-                {content ? renderContentWithLinks(content) : <Text color="tertiary">预览内容将显示在这里...</Text>}
+                {content ? renderContentWithControls(
+                  content,
+                  moveImageInContent,
+                  removeImageFromContent,
+                  (content.match(/!\[image\]\([^)]+\)/g) || []).length
+                ) : <Text color="tertiary">预览内容将显示在这里...</Text>}
               </Box>
             ) : (
               <textarea
+                ref={textareaRef}
                 placeholder="输入内容... (链接会自动变为可点击)"
                 value={content}
-                onChange={(e) => setContent(e.target.value.slice(0, CONTENT_MAX_LENGTH))}
+                onChange={(e) => {
+                  setContent(e.target.value.slice(0, CONTENT_MAX_LENGTH))
+                  handleTextareaSelect()
+                }}
+                onSelect={handleTextareaSelect}
+                onClick={handleTextareaSelect}
+                onKeyUp={handleTextareaSelect}
                 maxLength={CONTENT_MAX_LENGTH}
                 rows={12}
                 style={{
@@ -441,24 +725,76 @@ export default function EditPostPage() {
               style={{ display: 'none' }}
             />
             
+            {/* 操作提示 */}
+            <Box 
+              style={{ 
+                padding: tokens.spacing[3],
+                marginBottom: tokens.spacing[3],
+                background: 'rgba(139, 111, 168, 0.1)',
+                borderRadius: tokens.radius.md,
+                border: '1px dashed #8b6fa8',
+              }}
+            >
+              <Text size="xs" color="secondary" style={{ display: 'block', marginBottom: 4 }}>
+                <strong>如何插入图片到指定位置：</strong>
+              </Text>
+              <Text size="xs" color="tertiary" style={{ display: 'block', lineHeight: 1.6 }}>
+                1. 在上方文字框中<strong>点击光标</strong>到想插入图片的位置<br />
+                2. 点击图片上的 <span style={{ background: '#8b6fa8', color: '#fff', padding: '0 4px', borderRadius: 3 }}>↵</span> 按钮插入<br />
+                3. 切换到<strong>预览模式</strong>，可用 ↑↓ 按钮调整图片顺序
+              </Text>
+            </Box>
+            
             <Box style={{ display: 'flex', flexWrap: 'wrap', gap: tokens.spacing[2], marginBottom: tokens.spacing[3] }}>
-              {images.map((img, index) => (
+              {images.map((img, index) => {
+                const inContent = isImageInContent(img.url)
+                return (
                 <Box
-                  key={index}
+                  key={img.url}
+                  draggable
+                  onDragStart={() => handleDragStart(index)}
+                  onDragOver={(e) => handleDragOver(e, index)}
+                  onDragEnd={handleDragEnd}
                   style={{
                     position: 'relative',
                     width: 100,
                     height: 100,
                     borderRadius: tokens.radius.md,
                     overflow: 'hidden',
-                    border: `1px solid ${tokens.colors.border.primary}`,
+                    border: inContent 
+                      ? '2px solid #8b6fa8'
+                      : draggedImageIndex === index 
+                        ? '2px solid #8b6fa8' 
+                        : `1px solid ${tokens.colors.border.primary}`,
+                    cursor: 'grab',
+                    opacity: draggedImageIndex === index ? 0.7 : 1,
+                    transition: 'all 0.2s ease',
                   }}
                 >
                   <img
                     src={img.url}
                     alt={img.fileName}
-                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    draggable={false}
+                    style={{ width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }}
                   />
+                  {/* 已插入标记 */}
+                  {inContent && (
+                    <Box
+                      style={{
+                        position: 'absolute',
+                        bottom: 0,
+                        left: 0,
+                        right: 0,
+                        background: 'rgba(139,111,168,0.9)',
+                        color: '#fff',
+                        fontSize: 10,
+                        textAlign: 'center',
+                        padding: '2px 0',
+                      }}
+                    >
+                      已插入
+                    </Box>
+                  )}
                   <Box
                     style={{
                       position: 'absolute',
@@ -476,7 +812,7 @@ export default function EditPostPage() {
                         height: 24,
                         borderRadius: '50%',
                         border: 'none',
-                        background: 'rgba(0,0,0,0.6)',
+                        background: 'rgba(139,111,168,0.9)',
                         color: '#fff',
                         fontSize: 12,
                         cursor: 'pointer',
@@ -484,9 +820,9 @@ export default function EditPostPage() {
                         alignItems: 'center',
                         justifyContent: 'center',
                       }}
-                      title="插入到内容"
+                      title={inContent ? "再次插入到光标位置" : "插入到光标位置"}
                     >
-                      +
+                      ↵
                     </button>
                     <button
                       type="button"
@@ -496,7 +832,7 @@ export default function EditPostPage() {
                         height: 24,
                         borderRadius: '50%',
                         border: 'none',
-                        background: 'rgba(255,0,0,0.6)',
+                        background: 'rgba(255,77,77,0.9)',
                         color: '#fff',
                         fontSize: 12,
                         cursor: 'pointer',
@@ -510,7 +846,7 @@ export default function EditPostPage() {
                     </button>
                   </Box>
                 </Box>
-              ))}
+              )})}
               
               {images.length < 9 && (
                 <button
