@@ -1,8 +1,10 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, ZCOOL_KuaiLe } from "next/font/google";
+import { Suspense } from "react";
 import "./globals.css";
 import KeyboardShortcuts from "./components/Utils/KeyboardShortcuts";
 import Providers from "./components/Providers";
+import { GlobalProgress } from "./components/UI/GlobalProgress";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -11,6 +13,13 @@ const geistSans = Geist({
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
+  subsets: ["latin"],
+});
+
+// 站酷快乐体 - 用于中文 Logo
+const zcoolKuaiLe = ZCOOL_KuaiLe({
+  variable: "--font-logo-cn",
+  weight: "400",
   subsets: ["latin"],
 });
 
@@ -67,9 +76,12 @@ export default function RootLayout({
   return (
     <html lang="zh-CN" data-theme="dark" translate="no">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} ${zcoolKuaiLe.variable} antialiased`}
       >
         <Providers>
+          <Suspense fallback={null}>
+            <GlobalProgress />
+          </Suspense>
           <KeyboardShortcuts />
           {children}
         </Providers>
