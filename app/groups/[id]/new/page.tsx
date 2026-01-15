@@ -425,7 +425,7 @@ export default function NewGroupPostPage() {
                       gap: 4,
                     }}
                   >
-                    ✏️ {t('edit')}
+                    {t('edit')}
                   </button>
                   <button
                     type="button"
@@ -444,7 +444,7 @@ export default function NewGroupPostPage() {
                       gap: 4,
                     }}
                   >
-                    👁️ {t('preview')}
+                    {t('preview')}
                   </button>
                 </Box>
                 {draftSaved && (
@@ -563,7 +563,7 @@ export default function NewGroupPostPage() {
             </Box>
             <Box>
               <Text size="sm" weight="bold" style={{ color: pollEnabled ? '#8b6fa8' : tokens.colors.text.primary }}>
-                📊 {t('enablePoll')}
+                {t('enablePoll')}
               </Text>
               <Text size="xs" color="tertiary">
                 {t('pollDescription')}
