@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { useEffect, useState, useRef, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { tokens } from '@/lib/design-tokens'
 import { ThumbsUpIcon, ThumbsDownIcon, CommentIcon } from '../Icons'
 import { useLanguage } from '../Utils/LanguageProvider'
@@ -952,26 +953,30 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
     setOpenPost(post)
     setComments([])
     setTranslatedContent(null)
-    setShowingOriginal(true)
     loadComments(post.id)
 
+    // 检测是否需要翻译
+    const contentIsChinese = post.content ? isChineseText(post.content) : false
+    const titleIsChinese = post.title ? isChineseText(post.title) : false
+    const needsContentTranslation = post.content && ((language === 'en' && contentIsChinese) || (language === 'zh' && !contentIsChinese))
+    const needsTitleTranslation = post.title && ((language === 'en' && titleIsChinese) || (language === 'zh' && !titleIsChinese))
+    const hasTranslatedTitle = !!translatedListPosts[post.id]?.title
+    
+    // 如果有翻译需求或已有翻译，默认显示翻译版本
+    if (needsContentTranslation || needsTitleTranslation || hasTranslatedTitle) {
+      setShowingOriginal(false)
+    } else {
+      setShowingOriginal(true)
+    }
+
     // 自动检测并翻译内容
-    if (post.content) {
-      const isChinese = isChineseText(post.content)
-      const needsTranslation = (language === 'en' && isChinese) || (language === 'zh' && !isChinese)
-      
-      if (needsTranslation) {
-        translateContent(post.id, post.content, language)
-      }
+    if (needsContentTranslation) {
+      translateContent(post.id, post.content!, language)
     }
     
     // 翻译标题（如果还没翻译过）
-    if (!translatedListPosts[post.id]?.title && post.title) {
-      const titleIsChinese = isChineseText(post.title)
-      const needsTitleTranslation = (language === 'en' && titleIsChinese) || (language === 'zh' && !titleIsChinese)
-      if (needsTitleTranslation) {
-        translateListPosts([post], language as 'zh' | 'en')
-      }
+    if (!hasTranslatedTitle && needsTitleTranslation) {
+      translateListPosts([post], language as 'zh' | 'en')
     }
   }, [loadComments, language, isChineseText, translateContent, translatedListPosts, translateListPosts])
 
@@ -1178,7 +1183,10 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
 
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, marginTop: 8 }}>
             <div style={{ fontSize: 20, fontWeight: 950, lineHeight: 1.25 }}>
-              {translatedListPosts[openPost.id]?.title || openPost.title}
+              {showingOriginal 
+                ? openPost.title 
+                : (translatedListPosts[openPost.id]?.title || openPost.title)
+              }
             </div>
             <AvatarLink handle={openPost.author_handle} avatarUrl={openPost.author_avatar_url} />
           </div>
@@ -1194,8 +1202,8 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
             }
           </div>
 
-          {/* 翻译/原文切换按钮 */}
-          {(translatedContent || translating) && (
+          {/* 翻译/原文切换按钮 - 有翻译内容或翻译标题时显示 */}
+          {(translatedContent || translatedListPosts[openPost.id]?.title || translating) && (
             <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
               <button
                 onClick={() => setShowingOriginal(!showingOriginal)}
@@ -1901,7 +1909,17 @@ function Action(props: { icon?: React.ReactNode; text: string; onClick: (e?: Rea
 }
 
 function Modal(props: { children: React.ReactNode; onClose: () => void }) {
-  return (
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = ''
+    }
+  }, [])
+
+  const modalContent = (
     <div
       onClick={props.onClose}
       style={{
@@ -1936,4 +1954,7 @@ function Modal(props: { children: React.ReactNode; onClose: () => void }) {
       </div>
     </div>
   )
+
+  if (!mounted) return null
+  return createPortal(modalContent, document.body)
 }

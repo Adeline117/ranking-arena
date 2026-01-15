@@ -174,9 +174,10 @@ export default function SettingsPage() {
       setLoading(true)
       
       // 只使用 user_profiles（避免访问不存在的 profiles 表）
+      // Note: dm_permission 暂时移除，等运行迁移后再添加
       const { data: userProfile } = await supabase
         .from('user_profiles')
-        .select('handle, bio, avatar_url, notify_follow, notify_like, notify_comment, notify_mention, notify_message, show_followers, show_following, dm_permission')
+        .select('handle, bio, avatar_url, notify_follow, notify_like, notify_comment, notify_mention, notify_message, show_followers, show_following')
         .eq('id', uid)
         .maybeSingle()
       
@@ -191,7 +192,7 @@ export default function SettingsPage() {
         const profileNotifyMessage = userProfile.notify_message !== false
         const profileShowFollowers = userProfile.show_followers !== false
         const profileShowFollowing = userProfile.show_following !== false
-        const profileDmPermission = userProfile.dm_permission || 'all'
+        const profileDmPermission = 'all' // TODO: 运行迁移后改为 userProfile.dm_permission || 'all'
         
         setHandle(profileHandle)
         setBio(profileBio)
@@ -280,6 +281,7 @@ export default function SettingsPage() {
       }
       
       // Update profile and notification preferences in user_profiles (consolidated save)
+      // Note: dm_permission is excluded to avoid errors if column doesn't exist
       const { error: userProfilesError } = await supabase
         .from('user_profiles')
         .upsert(
@@ -295,7 +297,7 @@ export default function SettingsPage() {
             notify_message: notifyMessage,
             show_followers: showFollowers,
             show_following: showFollowing,
-            dm_permission: dmPermission,
+            // dm_permission: dmPermission, // TODO: 运行 setup_user_messaging.sql 后取消注释
           },
           { onConflict: 'id' }
         )

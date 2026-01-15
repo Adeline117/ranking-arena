@@ -1,5 +1,7 @@
 'use client'
 
+import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { tokens } from '@/lib/design-tokens'
 
 interface ModalProps {
@@ -8,7 +10,18 @@ interface ModalProps {
 }
 
 export function Modal({ children, onClose }: ModalProps) {
-  return (
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+    // 打开弹窗时禁止背景滚动
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = ''
+    }
+  }, [])
+
+  const modalContent = (
     <div
       onClick={onClose}
       role="dialog"
@@ -20,7 +33,7 @@ export function Modal({ children, onClose }: ModalProps) {
         display: 'grid',
         placeItems: 'center',
         padding: 16,
-        zIndex: 60,
+        zIndex: 9000,
         overflowY: 'auto',
       }}
     >
@@ -61,5 +74,9 @@ export function Modal({ children, onClose }: ModalProps) {
       </div>
     </div>
   )
+
+  // 使用 Portal 将弹窗渲染到 body 层级，脱离 sticky 父容器的层叠上下文
+  if (!mounted) return null
+  return createPortal(modalContent, document.body)
 }
 
