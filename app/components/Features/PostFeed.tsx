@@ -796,11 +796,6 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
       return
     }
 
-    if (userReposts[postId]) {
-      showToast('已经转发过此帖子', 'warning')
-      return
-    }
-
     setRepostLoading(prev => ({ ...prev, [postId]: true }))
     
     try {
@@ -816,11 +811,9 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
       const result = await response.json()
       
       if (response.ok) {
-        setUserReposts(prev => ({ ...prev, [postId]: true }))
-        setRepostCounts(prev => ({ ...prev, [postId]: result.repost_count }))
         setShowRepostModal(null)
         setRepostComment('')
-        showToast('转发成功！', 'success')
+        showToast('转发成功！已发布到你的主页', 'success')
       } else {
         showToast(result.error || '转发失败', 'error')
       }
@@ -830,7 +823,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
     } finally {
       setRepostLoading(prev => ({ ...prev, [postId]: false }))
     }
-  }, [accessToken, posts, openPost, currentUserId, userReposts, showToast])
+  }, [accessToken, posts, openPost, currentUserId, showToast])
 
   // 提交评论
   const submitComment = useCallback(async (postId: string) => {
@@ -1612,25 +1605,6 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
                 e.currentTarget.style.background = 'transparent'
               }}
             >
-              {/* 转发标记 */}
-              {p.is_repost && (
-                <div style={{ 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  gap: 6, 
-                  fontSize: 12, 
-                  color: tokens.colors.text.tertiary,
-                  marginBottom: 8,
-                }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M17 1l4 4-4 4" />
-                    <path d="M3 11V9a4 4 0 014-4h14" />
-                    <path d="M7 23l-4-4 4-4" />
-                    <path d="M21 13v2a4 4 0 01-4 4H3" />
-                  </svg>
-                  <span>{p.repost_by_handle} {t('repostedFrom') || '转发自'} @{p.author_handle}</span>
-                </div>
-              )}
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
                 {p.group_id ? (
                   <Link
@@ -1745,6 +1719,80 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
                       )}
                     </div>
                   ))}
+                </div>
+              )}
+
+              {/* 原始帖子引用卡片（转发时显示） */}
+              {p.original_post && (
+                <div 
+                  style={{ 
+                    marginTop: 10,
+                    padding: 12,
+                    background: tokens.colors.bg.tertiary,
+                    borderRadius: tokens.radius.md,
+                    border: `1px solid ${tokens.colors.border.primary}`,
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div style={{ marginBottom: 8 }}>
+                    <AvatarLink handle={p.original_post.author_handle} avatarUrl={p.original_post.author_avatar_url} />
+                  </div>
+                  {p.original_post.title && (
+                    <div style={{ 
+                      fontSize: 13, 
+                      color: tokens.colors.text.primary,
+                      fontWeight: 600,
+                      marginBottom: 4,
+                    }}>
+                      {p.original_post.title}
+                    </div>
+                  )}
+                  <div style={{ 
+                    fontSize: 12, 
+                    color: tokens.colors.text.secondary,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    display: '-webkit-box',
+                    WebkitLineClamp: 2,
+                    WebkitBoxOrient: 'vertical',
+                  }}>
+                    {removeImagesFromContent(p.original_post.content).slice(0, 100)}
+                  </div>
+                  {/* 原始帖子图片预览 */}
+                  {p.original_post.images && p.original_post.images.length > 0 && (
+                    <div style={{ 
+                      marginTop: 8, 
+                      display: 'flex', 
+                      gap: 4,
+                    }}>
+                      {p.original_post.images.slice(0, 3).map((imgUrl, idx) => (
+                        <div
+                          key={idx}
+                          style={{
+                            width: 48,
+                            height: 48,
+                            borderRadius: 4,
+                            overflow: 'hidden',
+                          }}
+                        >
+                          <img
+                            src={imgUrl}
+                            alt=""
+                            style={{
+                              width: '100%',
+                              height: '100%',
+                              objectFit: 'cover',
+                            }}
+                          />
+                        </div>
+                      ))}
+                      {p.original_post.images.length > 3 && (
+                        <span style={{ fontSize: 11, color: tokens.colors.text.tertiary, alignSelf: 'center' }}>
+                          +{p.original_post.images.length - 3}
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -2173,7 +2221,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
             {/* 转发 */}
             <Action
               icon={<span style={{ fontSize: 14 }}>↗</span>}
-              text={userReposts[openPost.id] ? '已转发' : '转发'}
+              text="转发"
               onClick={(e) => {
                 if (e) {
                   e.preventDefault()
@@ -2183,15 +2231,11 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
                   showToast('不能转发自己的帖子', 'warning')
                   return
                 }
-                if (userReposts[openPost.id]) {
-                  showToast('已经转发过此帖子', 'warning')
-                  return
-                }
                 setShowRepostModal(openPost.id)
               }}
-              active={userReposts[openPost.id]}
-              count={repostCounts[openPost.id] || 0}
-              showCount={true}
+              active={false}
+              count={0}
+              showCount={false}
             />
           </div>
 
