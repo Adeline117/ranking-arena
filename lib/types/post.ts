@@ -35,6 +35,11 @@ export interface PostWithAuthor extends Post {
 export interface PostWithUserState extends PostWithAuthor {
   user_reaction?: 'up' | 'down' | null
   user_vote?: PollChoice | null
+  // 转发相关字段
+  is_repost?: boolean
+  repost_by_handle?: string
+  repost_comment?: string
+  repost_at?: string
 }
 
 export interface CreatePostInput {
