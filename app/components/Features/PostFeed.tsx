@@ -467,6 +467,8 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
                 like_count: post.like_count || 0,
                 dislike_count: post.dislike_count || 0,
                 comment_count: post.comment_count || 0,
+                bookmark_count: post.bookmark_count || 0,
+                repost_count: post.repost_count || 0,
                 view_count: post.view_count || 0,
                 hot_score: post.hot_score || 0,
                 is_pinned: post.is_pinned || false,
