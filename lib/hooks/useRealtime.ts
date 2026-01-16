@@ -124,10 +124,9 @@ export function useRealtime<T extends Record<string, unknown>>(
       channelConfig.filter = filter
     }
 
-    // @ts-expect-error - Supabase types issue with postgres_changes event
     channel
       .on(
-        'postgres_changes',
+        'postgres_changes' as any,
         channelConfig,
         handleChange as (payload: RealtimePostgresChangesPayload<{ [key: string]: unknown }>) => void
       )
