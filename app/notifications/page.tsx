@@ -564,7 +564,7 @@ export default function NotificationsPage() {
                   href={notif.link} 
                   prefetch={true}
                   style={{ textDecoration: 'none', color: 'inherit' }}
-                  onMouseEnter={() => prefetchLink(notif.link)}
+                  onMouseEnter={() => prefetchLink(notif.link!)}
                 >
                   {Content}
                 </Link>
