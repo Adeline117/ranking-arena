@@ -124,18 +124,21 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
     // 异步清理孤立的书签记录（不阻塞响应）
     if (orphanedBookmarkIds.length > 0) {
-      supabase
-        .from('post_bookmarks')
-        .delete()
-        .in('id', orphanedBookmarkIds)
-        .then(() => {
+      (async () => {
+        try {
+          await supabase
+            .from('post_bookmarks')
+            .delete()
+            .in('id', orphanedBookmarkIds)
           // 更新收藏夹的 post_count
-          supabase
+          await supabase
             .from('bookmark_folders')
             .update({ post_count: Math.max(0, folder.post_count - orphanedBookmarkIds.length) })
             .eq('id', id)
-        })
-        .catch(err => console.error('Error cleaning orphaned bookmarks:', err))
+        } catch (err) {
+          console.error('Error cleaning orphaned bookmarks:', err)
+        }
+      })()
     }
 
     // 获取收藏夹所有者的信息
