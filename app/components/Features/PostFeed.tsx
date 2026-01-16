@@ -1612,6 +1612,25 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
                 e.currentTarget.style.background = 'transparent'
               }}
             >
+              {/* 转发标记 */}
+              {p.is_repost && (
+                <div style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: 6, 
+                  fontSize: 12, 
+                  color: tokens.colors.text.tertiary,
+                  marginBottom: 8,
+                }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M17 1l4 4-4 4" />
+                    <path d="M3 11V9a4 4 0 014-4h14" />
+                    <path d="M7 23l-4-4 4-4" />
+                    <path d="M21 13v2a4 4 0 01-4 4H3" />
+                  </svg>
+                  <span>{p.repost_by_handle} {t('repostedFrom') || '转发自'} @{p.author_handle}</span>
+                </div>
+              )}
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
                 {p.group_id ? (
                   <Link

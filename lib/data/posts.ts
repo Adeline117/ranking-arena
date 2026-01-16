@@ -30,6 +30,11 @@ export interface Post {
 
 export interface PostWithAuthor extends Post {
   author_avatar_url?: string
+  // 转发相关字段
+  is_repost?: boolean
+  repost_by_handle?: string
+  repost_comment?: string
+  repost_at?: string
 }
 
 export interface CreatePostInput {
@@ -63,6 +68,11 @@ export async function getPosts(
     sort_by = 'created_at',
     sort_order = 'desc',
   } = options
+
+  // 如果是获取某个用户的帖子，需要同时获取转发的帖子
+  if (author_handle && !group_id) {
+    return getPostsWithReposts(supabase, author_handle, { limit, offset, sort_by, sort_order })
+  }
 
   let query = supabase
     .from('posts')
@@ -145,12 +155,196 @@ export async function getPosts(
     like_count: post.like_count || 0,
     dislike_count: post.dislike_count || 0,
     comment_count: post.comment_count || 0,
+    bookmark_count: post.bookmark_count || 0,
+    repost_count: post.repost_count || 0,
     view_count: post.view_count || 0,
     hot_score: post.hot_score || 0,
     is_pinned: post.is_pinned || false,
     images: post.images || null,
     created_at: post.created_at,
     updated_at: post.updated_at,
+  }))
+}
+
+/**
+ * 获取用户的帖子和转发
+ */
+async function getPostsWithReposts(
+  supabase: SupabaseClient,
+  author_handle: string,
+  options: { limit: number; offset: number; sort_by: string; sort_order: string }
+): Promise<PostWithAuthor[]> {
+  const { limit, offset, sort_by, sort_order } = options
+
+  // 1. 首先获取用户的 ID
+  const { data: userProfile } = await supabase
+    .from('user_profiles')
+    .select('id')
+    .eq('handle', author_handle)
+    .maybeSingle()
+
+  // 2. 获取用户自己发布的帖子
+  const { data: ownPosts, error: ownError } = await supabase
+    .from('posts')
+    .select(`
+      id,
+      title,
+      content,
+      author_id,
+      author_handle,
+      group_id,
+      poll_enabled,
+      poll_id,
+      poll_bull,
+      poll_bear,
+      poll_wait,
+      like_count,
+      dislike_count,
+      comment_count,
+      bookmark_count,
+      repost_count,
+      view_count,
+      hot_score,
+      is_pinned,
+      images,
+      created_at,
+      updated_at,
+      groups(name)
+    `)
+    .eq('author_handle', author_handle)
+
+  if (ownError) {
+    console.error('[posts] 获取用户帖子失败:', ownError)
+    throw ownError
+  }
+
+  // 3. 获取用户转发的帖子
+  let repostedPosts: any[] = []
+  if (userProfile?.id) {
+    const { data: reposts, error: repostsError } = await supabase
+      .from('reposts')
+      .select(`
+        id,
+        comment,
+        created_at,
+        post_id,
+        posts (
+          id,
+          title,
+          content,
+          author_id,
+          author_handle,
+          group_id,
+          poll_enabled,
+          poll_id,
+          poll_bull,
+          poll_bear,
+          poll_wait,
+          like_count,
+          dislike_count,
+          comment_count,
+          bookmark_count,
+          repost_count,
+          view_count,
+          hot_score,
+          is_pinned,
+          images,
+          created_at,
+          updated_at,
+          groups(name)
+        )
+      `)
+      .eq('user_id', userProfile.id)
+
+    if (!repostsError && reposts) {
+      repostedPosts = reposts
+        .filter((r: any) => r.posts) // 过滤掉原帖已删除的转发
+        .map((r: any) => ({
+          ...r.posts,
+          is_repost: true,
+          repost_by_handle: author_handle,
+          repost_comment: r.comment,
+          repost_at: r.created_at,
+          // 使用转发时间作为排序依据
+          _sort_time: r.created_at,
+        }))
+    }
+  }
+
+  // 4. 合并帖子和转发
+  const allPosts = [
+    ...(ownPosts || []).map((p: any) => ({ ...p, _sort_time: p.created_at })),
+    ...repostedPosts,
+  ]
+
+  // 5. 排序
+  allPosts.sort((a, b) => {
+    let aVal: any, bVal: any
+    if (sort_by === 'created_at') {
+      aVal = new Date(a._sort_time).getTime()
+      bVal = new Date(b._sort_time).getTime()
+    } else if (sort_by === 'like_count') {
+      aVal = a.like_count || 0
+      bVal = b.like_count || 0
+    } else {
+      aVal = a.hot_score || 0
+      bVal = b.hot_score || 0
+    }
+    return sort_order === 'desc' ? bVal - aVal : aVal - bVal
+  })
+
+  // 6. 分页
+  const paginatedPosts = allPosts.slice(offset, offset + limit)
+
+  // 7. 获取作者头像
+  const authorHandles = [...new Set(paginatedPosts.map((p: any) => p.author_handle).filter(Boolean))]
+  const avatarMap = new Map<string, string>()
+
+  if (authorHandles.length > 0) {
+    const { data: profiles } = await supabase
+      .from('user_profiles')
+      .select('handle, avatar_url')
+      .in('handle', authorHandles)
+
+    if (profiles) {
+      profiles.forEach((p: { handle: string; avatar_url: string | null }) => {
+        if (p.avatar_url) {
+          avatarMap.set(p.handle, p.avatar_url)
+        }
+      })
+    }
+  }
+
+  return paginatedPosts.map((post: any) => ({
+    id: post.id,
+    title: post.title,
+    content: post.content,
+    author_id: post.author_id,
+    author_handle: post.author_handle,
+    author_avatar_url: avatarMap.get(post.author_handle),
+    group_id: post.group_id,
+    group_name: post.groups?.name,
+    poll_enabled: post.poll_enabled || false,
+    poll_id: post.poll_id || null,
+    poll_bull: post.poll_bull || 0,
+    poll_bear: post.poll_bear || 0,
+    poll_wait: post.poll_wait || 0,
+    like_count: post.like_count || 0,
+    dislike_count: post.dislike_count || 0,
+    comment_count: post.comment_count || 0,
+    bookmark_count: post.bookmark_count || 0,
+    repost_count: post.repost_count || 0,
+    view_count: post.view_count || 0,
+    hot_score: post.hot_score || 0,
+    is_pinned: post.is_pinned || false,
+    images: post.images || null,
+    created_at: post.created_at,
+    updated_at: post.updated_at,
+    // 转发相关字段
+    is_repost: post.is_repost || false,
+    repost_by_handle: post.repost_by_handle,
+    repost_comment: post.repost_comment,
+    repost_at: post.repost_at,
   }))
 }
 
