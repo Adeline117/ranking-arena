@@ -260,6 +260,7 @@ export const translations = {
     fillAllRequired: '请填写所有必填项',
     fillPassphrase: '请填写 Passphrase',
     cannotAccessClipboard: '无法访问剪贴板',
+    share: '分享',
   },
   en: {
     home: 'Home',
@@ -519,6 +520,7 @@ export const translations = {
     fillAllRequired: 'Please fill in all required fields',
     fillPassphrase: 'Please enter Passphrase',
     cannotAccessClipboard: 'Cannot access clipboard',
+    share: 'Share',
   },
 }
 
