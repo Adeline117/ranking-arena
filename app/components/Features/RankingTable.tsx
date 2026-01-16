@@ -46,6 +46,10 @@ export interface Trader {
   followers: number // 粉丝数 - 仅来自 Arena 注册用户的关注（trader_follows 表统计）
   source?: string // 数据来源：binance, bybit, okx等
   avatar_url?: string // 头像URL
+  arena_score?: number // Arena Score (0-100)
+  return_score?: number // 收益分
+  drawdown_score?: number // 回撤分
+  stability_score?: number // 稳定分
 }
 
 /**
@@ -106,7 +110,7 @@ export default function RankingTable(props: {
         className="ranking-table-header ranking-table-grid"
         style={{
           display: 'grid',
-          gridTemplateColumns: '36px minmax(100px, 1fr) 90px 60px 60px', // Rank | Trader | ROI+PnL | Win Rate | MDD
+          gridTemplateColumns: '36px minmax(90px, 1fr) 52px 80px 50px 50px', // Rank | Trader | Score | ROI+PnL | Win Rate | MDD
           gap: tokens.spacing[2],
           padding: `${tokens.spacing[3]} ${tokens.spacing[3]}`,
           borderBottom: `2px solid ${tokens.colors.border.primary}`,
@@ -152,6 +156,9 @@ export default function RankingTable(props: {
             ?
           </button>
         </Box>
+        <Text size="xs" weight="bold" color="tertiary" style={{ textAlign: 'center', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+          Score
+        </Text>
         <Text size="xs" weight="bold" color="tertiary" style={{ textAlign: 'right', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
           ROI ({timeRange})
         </Text>
@@ -176,14 +183,14 @@ export default function RankingTable(props: {
           }}
         >
           <Text size="xs" weight="bold" style={{ color: tokens.colors.accent.primary, marginBottom: 6, display: 'block' }}>
-            排名规则
+            Arena Score 排名规则
           </Text>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <span>① 按 ROI 从高到低排序</span>
-            <span>② ROI 相同时，回撤更小的靠前</span>
-            <span>③ 回撤也相同时，交易次数更多的靠前</span>
+            <span>① 按 Arena Score 从高到低排序（0-100 分）</span>
+            <span>② 分数构成：收益分（85%）+ 稳定/风险分（15%）</span>
+            <span>③ Score 相同时，回撤更小的靠前</span>
             <span style={{ color: tokens.colors.text.tertiary, marginTop: 4 }}>
-              * PNL 低于 $1,000 的交易员不计入排行榜
+              * 入榜门槛：7D &gt; $300 | 30D &gt; $1,000 | 90D &gt; $3,000
             </span>
           </div>
         </Box>
@@ -245,7 +252,7 @@ export default function RankingTable(props: {
                     role="row"
                     style={{
                       display: 'grid',
-                      gridTemplateColumns: '36px minmax(100px, 1fr) 90px 60px 60px', // Rank | Trader | ROI+PnL | Win Rate | MDD
+                      gridTemplateColumns: '36px minmax(90px, 1fr) 52px 80px 50px 50px', // Rank | Trader | Score | ROI+PnL | Win Rate | MDD
                       alignItems: 'center',
                       gap: tokens.spacing[2],
                       padding: `${tokens.spacing[3]} ${tokens.spacing[3]}`,
@@ -387,6 +394,48 @@ export default function RankingTable(props: {
                           {sourceLabelText}
                         </Text>
                       </Box>
+                    </Box>
+                  </Box>
+
+                  {/* Arena Score - 核心排名指标 */}
+                  <Box style={{ textAlign: 'center' }}>
+                    <Box
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        minWidth: 40,
+                        padding: '4px 8px',
+                        background: trader.arena_score != null && trader.arena_score >= 60 
+                          ? `${tokens.colors.accent.success}20`
+                          : trader.arena_score != null && trader.arena_score >= 40
+                            ? `${tokens.colors.accent.warning}15`
+                            : `${tokens.colors.bg.tertiary}`,
+                        borderRadius: tokens.radius.md,
+                        border: `1px solid ${
+                          trader.arena_score != null && trader.arena_score >= 60 
+                            ? tokens.colors.accent.success + '40'
+                            : trader.arena_score != null && trader.arena_score >= 40
+                              ? tokens.colors.accent.warning + '30'
+                              : tokens.colors.border.primary
+                        }`,
+                      }}
+                    >
+                      <Text
+                        size="sm"
+                        weight="black"
+                        style={{
+                          color: trader.arena_score != null && trader.arena_score >= 60 
+                            ? tokens.colors.accent.success
+                            : trader.arena_score != null && trader.arena_score >= 40
+                              ? tokens.colors.accent.warning
+                              : tokens.colors.text.secondary,
+                          fontSize: '13px',
+                          lineHeight: 1,
+                        }}
+                      >
+                        {trader.arena_score != null ? trader.arena_score.toFixed(1) : '—'}
+                      </Text>
                     </Box>
                   </Box>
 

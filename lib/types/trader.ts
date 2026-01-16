@@ -82,6 +82,14 @@ export interface TraderPerformance {
   profitable_weeks?: number
   monthlyPerformance?: MonthlyPerformance[]
   yearlyPerformance?: YearlyPerformance[]
+  /** Arena Score - 7天 (0-100) */
+  arena_score_7d?: number
+  /** Arena Score - 30天 (0-100) */
+  arena_score_30d?: number
+  /** Arena Score - 90天 (0-100) */
+  arena_score_90d?: number
+  /** 总体评分 (0-100) - 加权计算：70% 90D + 25% 30D + 5% 7D */
+  overall_score?: number
 }
 
 /** 月度绩效 */
@@ -216,10 +224,16 @@ export interface RankedTrader {
   followers: number
   source: string
   avatar_url: string | null
-  /** 风险调整得分 */
-  risk_adjusted_score?: number
-  /** 稳定性得分 */
+  /** Arena Score (0-100) - 核心排名指标 */
+  arena_score?: number
+  /** 收益分 (0-85) */
+  return_score?: number
+  /** 回撤分 (0-8) */
+  drawdown_score?: number
+  /** 稳定分 (0-7) */
   stability_score?: number
+  /** 风险调整得分（旧版兼容） */
+  risk_adjusted_score?: number
   /** 是否可疑 */
   is_suspicious?: boolean
   /** 可疑原因 */
@@ -232,7 +246,7 @@ export interface RankingQueryParams {
   exchange?: Exchange
   minPnl?: number
   minTrades?: number
-  sortBy?: 'roi' | 'pnl' | 'win_rate' | 'risk_adjusted'
+  sortBy?: 'roi' | 'pnl' | 'win_rate' | 'risk_adjusted' | 'arena_score'
   limit?: number
   offset?: number
 }
@@ -289,7 +303,9 @@ export interface TradersListResponse {
   traders: RankedTrader[]
   timeRange: TimeRange
   totalCount: number
-  rankingMode?: 'simple' | 'risk_adjusted'
+  rankingMode?: 'simple' | 'risk_adjusted' | 'arena_score'
+  /** 当前榜单的 PnL 门槛 */
+  pnlThreshold?: number
 }
 
 /** 交易员详情响应 */

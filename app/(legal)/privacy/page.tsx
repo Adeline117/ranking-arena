@@ -2,7 +2,7 @@ import { Metadata } from 'next'
 
 export const metadata: Metadata = {
   title: '隐私政策',
-  description: 'Ranking Arena 隐私政策',
+  description: 'Arena 隐私政策',
 }
 
 export default function PrivacyPolicyPage() {

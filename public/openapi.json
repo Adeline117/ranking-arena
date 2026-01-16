@@ -1,17 +1,17 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "Ranking Arena API",
+    "title": "Arena API",
     "description": "多交易所交易员排行榜平台 API\n\n## 认证\n\n使用 Bearer Token 进行认证，在请求头中添加：\n```\nAuthorization: Bearer <token>\n```\n\n## 限流\n\n- 公开 API: 60 请求/分钟\n- 认证 API: 120 请求/分钟\n- 写入 API: 30 请求/分钟",
     "version": "1.0.0",
     "contact": {
       "name": "API Support",
-      "email": "api@rankingarena.com"
+      "email": "api@arenafi.org"
     }
   },
   "servers": [
     {
-      "url": "https://rankingarena.com/api/v1",
+      "url": "https://www.arenafi.org/api/v1",
       "description": "生产环境"
     },
     {

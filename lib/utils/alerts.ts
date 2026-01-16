@@ -45,7 +45,7 @@ function getConfig(): NotificationConfig {
       ? {
           webhookUrl: process.env.SLACK_WEBHOOK_URL,
           channel: process.env.SLACK_CHANNEL || '#alerts',
-          username: process.env.SLACK_USERNAME || 'Ranking Arena Bot',
+          username: process.env.SLACK_USERNAME || 'Arena Bot',
         }
       : undefined,
     discord: process.env.DISCORD_WEBHOOK_URL
@@ -115,7 +115,7 @@ async function sendSlackAlert(payload: AlertPayload, config: NotificationConfig[
             short: true,
           },
         ],
-        footer: 'Ranking Arena Alerts',
+        footer: 'Arena Alerts',
         ts: Math.floor(Date.now() / 1000).toString(),
       },
     ],
@@ -177,7 +177,7 @@ async function sendDiscordAlert(payload: AlertPayload, config: NotificationConfi
         ],
         timestamp: payload.timestamp || new Date().toISOString(),
         footer: {
-          text: 'Ranking Arena Alerts',
+          text: 'Arena Alerts',
         },
       },
     ],

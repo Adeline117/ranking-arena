@@ -193,7 +193,7 @@ self.addEventListener('push', (event) => {
   };
 
   event.waitUntil(
-    self.registration.showNotification(data.title || 'Ranking Arena', options)
+    self.registration.showNotification(data.title || 'Arena', options)
   );
 });
 

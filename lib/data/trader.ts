@@ -36,7 +36,8 @@ export interface TraderProfile {
   id: string
   bio?: string
   followers?: number
-  following?: number
+  following?: number // 关注的用户数量 (user_follows)
+  followingTraders?: number // 关注的交易员数量 (trader_follows)
   copiers?: number
   avatar_url?: string
   isRegistered?: boolean

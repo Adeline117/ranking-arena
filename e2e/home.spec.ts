@@ -7,7 +7,7 @@ test.describe('首页测试', () => {
 
   test('页面正常加载', async ({ page }) => {
     // 检查页面标题
-    await expect(page).toHaveTitle(/Ranking Arena/)
+    await expect(page).toHaveTitle(/Arena/)
     
     // 检查导航栏存在
     await expect(page.getByRole('navigation')).toBeVisible()

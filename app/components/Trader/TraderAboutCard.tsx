@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
 import { supabase } from '@/lib/supabase/client'
@@ -107,7 +108,8 @@ interface TraderAboutCardProps {
   avatarUrl?: string
   bio?: string
   followers?: number // 关注他的人数量（粉丝数）- 仅来自 Arena 注册用户的关注（trader_follows 表统计）
-  following?: number // 他关注的人数量
+  following?: number // 他关注的用户数量（user_follows 表）
+  followingTraders?: number // 他关注的交易员数量（trader_follows 表）
   isRegistered?: boolean
   isOwnProfile?: boolean
   showFollowers?: boolean // 是否公开展示粉丝列表
@@ -125,6 +127,7 @@ export default function TraderAboutCard({
   bio,
   followers = 0,
   following = 0,
+  followingTraders = 0,
   isRegistered,
   isOwnProfile = false,
   showFollowers = true,

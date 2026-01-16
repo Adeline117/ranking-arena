@@ -2,7 +2,7 @@ import { Metadata } from 'next'
 
 export const metadata: Metadata = {
   title: '服务条款',
-  description: 'Ranking Arena 服务条款',
+  description: 'Arena 服务条款',
 }
 
 export default function TermsOfServicePage() {
@@ -23,7 +23,7 @@ export default function TermsOfServicePage() {
               1. 接受条款
             </h2>
             <p>
-              欢迎使用 Ranking Arena（以下简称"本平台"或"我们"）。通过访问或使用我们的服务，
+              欢迎使用 Arena（以下简称"本平台"或"我们"）。通过访问或使用我们的服务，
               您同意受本服务条款（以下简称"条款"）的约束。如果您不同意这些条款的任何部分，
               请不要使用我们的服务。
             </p>
@@ -34,7 +34,7 @@ export default function TermsOfServicePage() {
               2. 服务描述
             </h2>
             <p>
-              Ranking Arena 是一个加密货币交易员排行榜与社区平台，提供以下服务：
+              Arena 是一个加密货币交易员排行榜与社区平台，提供以下服务：
             </p>
             <ul className="list-disc pl-6 space-y-2 mt-4">
               <li>聚合多个交易所的交易员排行数据</li>

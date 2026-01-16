@@ -91,7 +91,7 @@ export default function OfflinePage() {
             marginTop: '2rem',
           }}
         >
-          Ranking Arena - 加密货币交易员排行榜
+          Arena - 加密货币交易员排行榜
         </p>
       </div>
     </div>

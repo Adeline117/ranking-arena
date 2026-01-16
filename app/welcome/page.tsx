@@ -228,7 +228,7 @@ export default function WelcomePage() {
               欢迎加入
             </Text>
             <Text size="2xl" weight="black" style={{ marginBottom: 24, color: '#8b6fa8' }}>
-              Ranking Arena
+              Arena
             </Text>
             <Text color="secondary" style={{ marginBottom: 32, lineHeight: 1.6 }}>
               这里汇聚了各大交易所的顶级交易员，你可以：
@@ -477,7 +477,7 @@ export default function WelcomePage() {
               设置完成！
             </Text>
             <Text color="secondary" style={{ marginBottom: 32 }}>
-              欢迎来到 Ranking Arena，开始你的探索之旅吧！
+              欢迎来到 Arena，开始你的探索之旅吧！
             </Text>
 
             <Box style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>

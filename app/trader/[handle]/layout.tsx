@@ -19,7 +19,7 @@ export async function generateMetadata({ params }: { params: { handle: string } 
     const profile = adminSupabase ? await getTraderByHandle(handle) : null
     
     if (profile) {
-      const title = `${profile.handle} · Ranking Arena`
+      const title = `${profile.handle} · Arena`
       const description = profile.bio 
         ? `${profile.bio.substring(0, 150)}${profile.bio.length > 150 ? '...' : ''}`
         : `查看 ${profile.handle} 的交易员资料，包括90天ROI、胜率、粉丝数等统计数据。`
@@ -35,7 +35,7 @@ export async function generateMetadata({ params }: { params: { handle: string } 
           description,
           type: 'profile',
           url: canonicalUrl,
-          siteName: 'Ranking Arena',
+          siteName: 'Arena',
           images: profile.avatar_url ? [{
             url: profile.avatar_url,
             width: 200,
@@ -48,7 +48,7 @@ export async function generateMetadata({ params }: { params: { handle: string } 
           title,
           description,
           images: profile.avatar_url ? [profile.avatar_url] : undefined,
-          creator: '@rankingarena',
+          creator: '@arenafi',
         },
         robots: {
           index: true,
@@ -62,7 +62,7 @@ export async function generateMetadata({ params }: { params: { handle: string } 
   
   // 默认metadata
   return {
-    title: `${handle} · Ranking Arena`,
+    title: `${handle} · Arena`,
     description: `查看 ${handle} 的交易员资料`,
     alternates: {
       canonical: canonicalUrl,
