@@ -5,9 +5,11 @@ import { tokens } from '@/lib/design-tokens'
 import { Box } from '../Base'
 import TopNav from '../Layout/TopNav'
 import ExchangeQuickConnect from '../ExchangeQuickConnect'
-import { ErrorBoundary } from '../UI/ErrorBoundary'
+import { ErrorBoundary } from '../Utils/ErrorBoundary'
 import { useToast } from '../UI/Toast'
 import { useLanguage } from '../Utils/LanguageProvider'
+import { JsonLd } from '../Utils/JsonLd'
+import { generateWebSiteSchema, generateOrganizationSchema, combineSchemas } from '@/lib/seo'
 
 import RankingSection from './RankingSection'
 import SidebarSection from './SidebarSection'
@@ -49,6 +51,9 @@ export default function HomePage() {
         color: tokens.colors.text.primary,
       }}
     >
+      {/* JSON-LD 结构化数据 */}
+      <JsonLd data={combineSchemas(generateWebSiteSchema(), generateOrganizationSchema())} />
+      
       {/* 顶部导航 */}
       <TopNav email={email} />
 

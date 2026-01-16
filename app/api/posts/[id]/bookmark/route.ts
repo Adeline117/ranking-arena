@@ -6,6 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { apiLogger } from '@/lib/utils/logger'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -40,7 +41,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
     return NextResponse.json({ bookmarked: !!bookmark })
 
   } catch (error) {
-    console.error('Error checking bookmark:', error)
+    apiLogger.error('Error checking bookmark:', error)
     return NextResponse.json({ bookmarked: false })
   }
 }
@@ -101,7 +102,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
           .eq('id', existingBookmark.id)
 
         if (updateError) {
-          console.error('Error updating bookmark folder:', updateError)
+          apiLogger.error('Error updating bookmark folder:', updateError)
           return NextResponse.json({ error: '移动收藏夹失败' }, { status: 500 })
         }
 
@@ -127,7 +128,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
         .eq('id', existingBookmark.id)
 
       if (deleteError) {
-        console.error('Error removing bookmark:', deleteError)
+        apiLogger.error('Error removing bookmark:', deleteError)
         return NextResponse.json({ error: '取消收藏失败' }, { status: 500 })
       }
 
@@ -161,7 +162,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
           .maybeSingle()
 
         if (folderQueryError) {
-          console.error('Error querying default folder:', folderQueryError)
+          apiLogger.error('Error querying default folder:', folderQueryError)
           // 如果 bookmark_folders 表不存在，继续但不设置 folder_id
         }
 
@@ -180,7 +181,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
             .single()
           
           if (createFolderError) {
-            console.error('Error creating default folder:', createFolderError)
+            apiLogger.error('Error creating default folder:', createFolderError)
             // 继续但不设置 folder_id
           } else if (newFolder) {
             folder_id = newFolder.id
@@ -202,7 +203,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
         .insert(insertData)
 
       if (insertError) {
-        console.error('Error adding bookmark:', insertError)
+        apiLogger.error('Error adding bookmark:', insertError)
         // 提供更详细的错误信息
         if (insertError.code === '23503') {
           return NextResponse.json({ error: '帖子不存在或已被删除' }, { status: 404 })
@@ -235,7 +236,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     }
 
   } catch (error) {
-    console.error('Error toggling bookmark:', error)
+    apiLogger.error('Error toggling bookmark:', error)
     return NextResponse.json({ error: '服务器错误' }, { status: 500 })
   }
 }

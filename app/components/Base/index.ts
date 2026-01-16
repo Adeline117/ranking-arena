@@ -7,3 +7,5 @@ export type { TextProps } from './Text'
 export { default as Button } from './Button'
 export type { ButtonProps } from './Button'
 
+export { default as OptimizedImage, Avatar, CardImage, Thumbnail, HeroImage } from './OptimizedImage'
+export type { OptimizedImageProps } from './OptimizedImage'

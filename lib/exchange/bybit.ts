@@ -160,8 +160,9 @@ export async function validateBybitCredentials(config: BybitConfig): Promise<boo
   try {
     await getBybitAccount(config)
     return true
-  } catch (error: any) {
-    if (error.message?.includes('10003') || error.message?.includes('10004') || error.message?.includes('Invalid')) {
+  } catch (error: unknown) {
+    const err = error as { message?: string }
+    if (err.message?.includes('10003') || err.message?.includes('10004') || err.message?.includes('Invalid')) {
       return false
     }
     // 其他错误可能是网络问题等，抛出

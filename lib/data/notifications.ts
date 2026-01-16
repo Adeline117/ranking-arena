@@ -26,6 +26,20 @@ export interface NotificationListOptions {
   unread_only?: boolean
 }
 
+// 数据库返回的通知行类型
+interface NotificationRow {
+  id: string
+  user_id: string
+  type: 'follow' | 'like' | 'comment' | 'system' | 'mention'
+  title: string
+  message: string
+  link?: string
+  read: boolean
+  actor_id?: string
+  reference_id?: string
+  created_at: string
+}
+
 /**
  * 获取用户通知列表
  */
@@ -73,7 +87,7 @@ export async function getUserNotifications(
     }
   }
 
-  return data.map((n: any) => {
+  return data.map((n: NotificationRow) => {
     const actor = n.actor_id ? actorMap.get(n.actor_id) : undefined
     return {
       id: n.id,

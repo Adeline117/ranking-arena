@@ -16,6 +16,17 @@ export const CURRENT_VERSION: ApiVersion = 'v1'
 export const DEPRECATED_VERSIONS: ApiVersion[] = []
 
 // ============================================
+// 版本上下文类型
+// ============================================
+
+export interface VersionContext {
+  version: ApiVersion
+  isDeprecated: boolean
+  deprecationDate?: string
+  sunsetDate?: string
+}
+
+// ============================================
 // 版本检测
 // ============================================
 
@@ -42,6 +53,21 @@ export function extractApiVersion(request: NextRequest): ApiVersion {
 }
 
 /**
+ * 解析请求的 API 版本并返回版本上下文
+ */
+export function parseApiVersion(request: NextRequest): VersionContext {
+  const version = extractApiVersion(request)
+  const deprecated = isDeprecated(version)
+  
+  return {
+    version,
+    isDeprecated: deprecated,
+    deprecationDate: deprecated ? '2025-06-01' : undefined,
+    sunsetDate: deprecated ? '2025-12-31' : undefined,
+  }
+}
+
+/**
  * 检查版本是否已弃用
  */
 export function isDeprecated(version: ApiVersion): boolean {
@@ -57,15 +83,36 @@ export function isDeprecated(version: ApiVersion): boolean {
  */
 export function addVersionHeaders(
   response: NextResponse,
-  version: ApiVersion
+  context: VersionContext
 ): NextResponse {
-  response.headers.set('X-API-Version', version)
+  response.headers.set('X-API-Version', context.version)
   response.headers.set('X-API-Current-Version', CURRENT_VERSION)
   
-  if (isDeprecated(version)) {
+  if (context.isDeprecated) {
     response.headers.set('X-API-Deprecated', 'true')
-    response.headers.set('Deprecation', 'true')
-    response.headers.set('Sunset', '2025-12-31') // 设置弃用截止日期
+  }
+  
+  return response
+}
+
+/**
+ * 添加弃用警告头到响应
+ */
+export function addDeprecationHeaders(
+  response: NextResponse,
+  context: VersionContext,
+  _pathname: string,
+  _method: string
+): NextResponse {
+  if (context.isDeprecated) {
+    response.headers.set('Deprecation', context.deprecationDate || 'true')
+    if (context.sunsetDate) {
+      response.headers.set('Sunset', context.sunsetDate)
+    }
+    response.headers.set(
+      'X-API-Deprecated-Message',
+      `API version ${context.version} is deprecated. Please migrate to ${CURRENT_VERSION}.`
+    )
   }
   
   return response

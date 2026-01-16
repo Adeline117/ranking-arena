@@ -113,8 +113,9 @@ export async function validateBinanceCredentials(config: BinanceConfig): Promise
   try {
     await getBinanceAccount(config)
     return true
-  } catch (error: any) {
-    if (error.message?.includes('401') || error.message?.includes('Invalid API-key')) {
+  } catch (error: unknown) {
+    const err = error as { message?: string }
+    if (err.message?.includes('401') || err.message?.includes('Invalid API-key')) {
       return false
     }
     throw error

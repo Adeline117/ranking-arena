@@ -135,8 +135,9 @@ export async function validateMexcCredentials(config: MexcConfig): Promise<boole
   try {
     await getMexcAccount(config)
     return true
-  } catch (error: any) {
-    if (error.message?.includes('401') || error.message?.includes('-1002') || error.message?.includes('Invalid')) {
+  } catch (error: unknown) {
+    const err = error as { message?: string }
+    if (err.message?.includes('401') || err.message?.includes('-1002') || err.message?.includes('Invalid')) {
       return false
     }
     throw error

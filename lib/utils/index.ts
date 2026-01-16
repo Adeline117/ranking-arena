@@ -37,13 +37,13 @@ export function sleep(ms: number): Promise<void> {
 /**
  * 防抖函数
  */
-export function debounce<T extends (...args: any[]) => any>(
-  fn: T,
+export function debounce<TArgs extends unknown[], TReturn>(
+  fn: (...args: TArgs) => TReturn,
   delay: number
-): (...args: Parameters<T>) => void {
+): (...args: TArgs) => void {
   let timeoutId: NodeJS.Timeout | null = null
   
-  return (...args: Parameters<T>) => {
+  return (...args: TArgs) => {
     if (timeoutId) clearTimeout(timeoutId)
     timeoutId = setTimeout(() => fn(...args), delay)
   }
@@ -52,13 +52,13 @@ export function debounce<T extends (...args: any[]) => any>(
 /**
  * 节流函数
  */
-export function throttle<T extends (...args: any[]) => any>(
-  fn: T,
+export function throttle<TArgs extends unknown[], TReturn>(
+  fn: (...args: TArgs) => TReturn,
   limit: number
-): (...args: Parameters<T>) => void {
+): (...args: TArgs) => void {
   let inThrottle = false
   
-  return (...args: Parameters<T>) => {
+  return (...args: TArgs) => {
     if (!inThrottle) {
       fn(...args)
       inThrottle = true
@@ -90,11 +90,11 @@ export function deepClone<T>(obj: T): T {
 /**
  * 检查对象是否为空
  */
-export function isEmpty(obj: any): boolean {
+export function isEmpty(obj: unknown): boolean {
   if (obj === null || obj === undefined) return true
   if (typeof obj === 'string') return obj.trim().length === 0
   if (Array.isArray(obj)) return obj.length === 0
-  if (typeof obj === 'object') return Object.keys(obj).length === 0
+  if (typeof obj === 'object') return Object.keys(obj as object).length === 0
   return false
 }
 

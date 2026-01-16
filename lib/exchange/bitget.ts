@@ -159,8 +159,9 @@ export async function validateBitgetCredentials(config: BitgetConfig): Promise<b
   try {
     await getBitgetAccount(config)
     return true
-  } catch (error: any) {
-    if (error.message?.includes('40014') || error.message?.includes('40015') || error.message?.includes('Invalid')) {
+  } catch (error: unknown) {
+    const err = error as { message?: string }
+    if (err.message?.includes('40014') || err.message?.includes('40015') || err.message?.includes('Invalid')) {
       return false
     }
     throw error

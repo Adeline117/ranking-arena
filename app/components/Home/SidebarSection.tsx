@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import { Box } from '../Base'
 import Card from '../UI/Card'
-import { ErrorBoundary } from '../UI/ErrorBoundary'
+import { ErrorBoundary } from '../Utils/ErrorBoundary'
 import { SkeletonCard } from '../UI/Skeleton'
 import { useLanguage } from '../Utils/LanguageProvider'
 

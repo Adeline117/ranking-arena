@@ -12,6 +12,8 @@ const adminSupabase = supabaseUrl && supabaseKey
 export async function generateMetadata({ params }: { params: { handle: string } | Promise<{ handle: string }> }): Promise<Metadata> {
   const resolvedParams = await params
   const handle = decodeURIComponent(resolvedParams.handle)
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'
+  const canonicalUrl = `${baseUrl}/trader/${encodeURIComponent(handle)}`
   
   try {
     const profile = adminSupabase ? await getTraderByHandle(handle) : null
@@ -25,18 +27,32 @@ export async function generateMetadata({ params }: { params: { handle: string } 
       return {
         title,
         description,
+        alternates: {
+          canonical: canonicalUrl,
+        },
         openGraph: {
           title,
           description,
           type: 'profile',
-          url: `${process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'}/trader/${encodeURIComponent(handle)}`,
-          images: profile.avatar_url ? [profile.avatar_url] : undefined,
+          url: canonicalUrl,
+          siteName: 'Ranking Arena',
+          images: profile.avatar_url ? [{
+            url: profile.avatar_url,
+            width: 200,
+            height: 200,
+            alt: `${profile.handle}'s avatar`,
+          }] : undefined,
         },
         twitter: {
           card: 'summary',
           title,
           description,
           images: profile.avatar_url ? [profile.avatar_url] : undefined,
+          creator: '@rankingarena',
+        },
+        robots: {
+          index: true,
+          follow: true,
         },
       }
     }
@@ -48,8 +64,45 @@ export async function generateMetadata({ params }: { params: { handle: string } 
   return {
     title: `${handle} · Ranking Arena`,
     description: `查看 ${handle} 的交易员资料`,
+    alternates: {
+      canonical: canonicalUrl,
+    },
   }
 }
+
+/**
+ * 为热门交易员预生成静态页面
+ * 减少首次访问时的服务端渲染时间
+ */
+export async function generateStaticParams() {
+  // 只有在有数据库连接时才预生成
+  if (!adminSupabase) {
+    return []
+  }
+
+  try {
+    // 获取 ROI 排名前 50 的交易员
+    const { data } = await adminSupabase
+      .from('trader_sources')
+      .select('handle')
+      .not('handle', 'is', null)
+      .limit(50)
+
+    if (!data) return []
+
+    return data
+      .filter(t => t.handle)
+      .map(t => ({
+        handle: encodeURIComponent(t.handle),
+      }))
+  } catch (error) {
+    console.error('[generateStaticParams] Error:', error)
+    return []
+  }
+}
+
+// ISR: 每小时重新生成静态页面
+export const revalidate = 3600
 
 export default function TraderLayout({
   children,

@@ -1,6 +1,11 @@
 import type { NextConfig } from "next";
 import { withSentryConfig } from "@sentry/nextjs";
 
+// Bundle Analyzer 条件导入
+const withBundleAnalyzer = process.env.ANALYZE === 'true'
+  ? require('@next/bundle-analyzer')({ enabled: true })
+  : (config: NextConfig) => config;
+
 const nextConfig: NextConfig = {
   /* config options here */
   
@@ -113,5 +118,5 @@ const sentryWebpackPluginOptions = {
   },
 };
 
-// 导出配置（包装 Sentry）
-export default withSentryConfig(nextConfig, sentryWebpackPluginOptions);
+// 导出配置（包装 Bundle Analyzer + Sentry）
+export default withBundleAnalyzer(withSentryConfig(nextConfig, sentryWebpackPluginOptions));

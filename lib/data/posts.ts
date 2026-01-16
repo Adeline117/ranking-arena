@@ -62,6 +62,47 @@ export interface PostListOptions {
   sort_order?: 'asc' | 'desc'
 }
 
+// 数据库返回的帖子行类型
+interface PostRow {
+  id: string
+  title: string
+  content: string
+  author_id: string
+  author_handle: string
+  group_id?: string
+  poll_enabled?: boolean
+  poll_id?: string | null
+  poll_bull?: number
+  poll_bear?: number
+  poll_wait?: number
+  like_count?: number
+  dislike_count?: number
+  comment_count?: number
+  bookmark_count?: number
+  repost_count?: number
+  view_count?: number
+  hot_score?: number
+  is_pinned?: boolean
+  images?: string[]
+  link_preview_url?: string
+  link_preview_title?: string
+  link_preview_description?: string
+  link_preview_image?: string
+  created_at: string
+  updated_at?: string
+  original_post_id?: string | null
+  groups?: { name: string } | { name: string }[]
+  original_posts?: {
+    id: string
+    title: string
+    content: string
+    author_handle: string
+    images?: string[]
+    created_at: string
+    user_profiles?: { avatar_url?: string }
+  }
+}
+
 /**
  * 获取帖子列表
  */
@@ -78,7 +119,7 @@ export async function getPosts(
     sort_order = 'desc',
   } = options
 
-  // 注意：original_post_id 字段可能不存在，需要单独处理
+  // 查询帖子列表，包含转发的原始帖子信息
   let query = supabase
     .from('posts')
     .select(`
@@ -104,6 +145,7 @@ export async function getPosts(
       images,
       created_at,
       updated_at,
+      original_post_id,
       groups(name)
     `)
     .range(offset, offset + limit - 1)
@@ -143,10 +185,63 @@ export async function getPosts(
     }
   }
 
-  // 注意：原始帖子功能需要先在数据库中添加 original_post_id 字段
-  // 运行 scripts/setup_repost_as_post.sql 后才能启用
+  // 获取所有需要加载的原始帖子 ID
+  const originalPostIds = [...new Set(
+    (data || [])
+      .map(p => p.original_post_id)
+      .filter((id): id is string => !!id)
+  )]
 
-  return (data || []).map((post: any) => ({
+  // 批量获取原始帖子数据
+  const originalPostMap = new Map<string, OriginalPost>()
+  if (originalPostIds.length > 0) {
+    const { data: originalPosts } = await supabase
+      .from('posts')
+      .select(`
+        id,
+        title,
+        content,
+        author_handle,
+        images,
+        created_at
+      `)
+      .in('id', originalPostIds)
+
+    if (originalPosts) {
+      // 获取原始帖子作者头像
+      const originalAuthorHandles = [...new Set(originalPosts.map(p => p.author_handle).filter(Boolean))]
+      const originalAvatarMap = new Map<string, string>()
+
+      if (originalAuthorHandles.length > 0) {
+        const { data: originalProfiles } = await supabase
+          .from('user_profiles')
+          .select('handle, avatar_url')
+          .in('handle', originalAuthorHandles)
+
+        if (originalProfiles) {
+          originalProfiles.forEach((p: { handle: string; avatar_url: string | null }) => {
+            if (p.avatar_url) {
+              originalAvatarMap.set(p.handle, p.avatar_url)
+            }
+          })
+        }
+      }
+
+      originalPosts.forEach((op: { id: string; title: string; content: string; author_handle: string; images?: string[]; created_at: string }) => {
+        originalPostMap.set(op.id, {
+          id: op.id,
+          title: op.title,
+          content: op.content,
+          author_handle: op.author_handle,
+          author_avatar_url: originalAvatarMap.get(op.author_handle) || null,
+          images: op.images || null,
+          created_at: op.created_at,
+        })
+      })
+    }
+  }
+
+  return (data || []).map((post: PostRow) => ({
     id: post.id,
     title: post.title,
     content: post.content,
@@ -154,7 +249,7 @@ export async function getPosts(
     author_handle: post.author_handle,
     author_avatar_url: avatarMap.get(post.author_handle),
     group_id: post.group_id,
-    group_name: post.groups?.name,
+    group_name: Array.isArray(post.groups) ? post.groups[0]?.name : post.groups?.name,
     poll_enabled: post.poll_enabled || false,
     poll_id: post.poll_id || null,
     poll_bull: post.poll_bull || 0,
@@ -171,9 +266,8 @@ export async function getPosts(
     images: post.images || null,
     created_at: post.created_at,
     updated_at: post.updated_at,
-    // 转发功能暂时禁用，需要先运行 SQL 脚本
-    original_post_id: null,
-    original_post: null,
+    original_post_id: post.original_post_id || null,
+    original_post: post.original_post_id ? originalPostMap.get(post.original_post_id) || null : null,
   }))
 }
 
@@ -207,6 +301,7 @@ export async function getPostById(
       is_pinned,
       created_at,
       updated_at,
+      original_post_id,
       groups(name)
     `)
     .eq('id', postId)
@@ -231,6 +326,47 @@ export async function getPostById(
     author_avatar_url = profile?.avatar_url || undefined
   }
 
+  // 获取原始帖子数据（如果是转发）
+  let original_post: OriginalPost | null = null
+  if (data.original_post_id) {
+    const { data: originalPostData } = await supabase
+      .from('posts')
+      .select(`
+        id,
+        title,
+        content,
+        author_handle,
+        images,
+        created_at
+      `)
+      .eq('id', data.original_post_id)
+      .maybeSingle()
+
+    if (originalPostData) {
+      // 获取原始帖子作者头像
+      let original_author_avatar_url: string | null = null
+      if (originalPostData.author_handle) {
+        const { data: originalProfile } = await supabase
+          .from('user_profiles')
+          .select('avatar_url')
+          .eq('handle', originalPostData.author_handle)
+          .maybeSingle()
+        
+        original_author_avatar_url = originalProfile?.avatar_url || null
+      }
+
+      original_post = {
+        id: originalPostData.id,
+        title: originalPostData.title,
+        content: originalPostData.content,
+        author_handle: originalPostData.author_handle,
+        author_avatar_url: original_author_avatar_url,
+        images: originalPostData.images || null,
+        created_at: originalPostData.created_at,
+      }
+    }
+  }
+
   return {
     id: data.id,
     title: data.title,
@@ -239,7 +375,7 @@ export async function getPostById(
     author_handle: data.author_handle,
     author_avatar_url,
     group_id: data.group_id,
-    group_name: (data as any).groups?.name,
+    group_name: (() => { const g = (data as PostRow).groups; return Array.isArray(g) ? g[0]?.name : g?.name; })(),
     poll_enabled: data.poll_enabled || false,
     poll_bull: data.poll_bull || 0,
     poll_bear: data.poll_bear || 0,
@@ -254,6 +390,8 @@ export async function getPostById(
     is_pinned: data.is_pinned || false,
     created_at: data.created_at,
     updated_at: data.updated_at,
+    original_post_id: data.original_post_id || null,
+    original_post,
   }
 }
 
