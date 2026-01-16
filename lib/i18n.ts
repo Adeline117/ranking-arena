@@ -262,6 +262,7 @@ export const translations = {
     cannotAccessClipboard: '无法访问剪贴板',
     share: '分享',
     ranking: '排行榜',
+    me: '我的',
   },
   en: {
     home: 'Home',
@@ -523,6 +524,7 @@ export const translations = {
     cannotAccessClipboard: 'Cannot access clipboard',
     share: 'Share',
     ranking: 'Ranking',
+    me: 'Me',
   },
 }
 
