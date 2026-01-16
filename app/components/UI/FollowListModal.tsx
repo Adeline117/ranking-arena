@@ -23,6 +23,7 @@ interface FollowListModalProps {
   handle: string
   currentUserId?: string | null
   isOwnProfile?: boolean
+  isPublic?: boolean // 该列表是否公开
 }
 
 export default function FollowListModal({
@@ -32,6 +33,7 @@ export default function FollowListModal({
   handle,
   currentUserId,
   isOwnProfile = false,
+  isPublic = true,
 }: FollowListModalProps) {
   const router = useRouter()
   const [users, setUsers] = useState<FollowUser[]>([])
@@ -101,7 +103,7 @@ export default function FollowListModal({
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        zIndex: 3000,
+        zIndex: 1100,
       }}
       onClick={onClose}
     >
@@ -128,7 +130,23 @@ export default function FollowListModal({
           paddingBottom: tokens.spacing[3],
           borderBottom: `1px solid ${tokens.colors.border.primary}`,
         }}>
-          <Text size="lg" weight="bold">{title}</Text>
+          <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[1] }}>
+            <Text size="lg" weight="bold">{title}</Text>
+            {/* 隐私状态说明 - 仅自己可见 */}
+            {isOwnProfile && (
+              <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1] }}>
+                <span style={{ 
+                  fontSize: 10, 
+                  color: isPublic ? tokens.colors.accent.success : tokens.colors.accent.warning,
+                }}>
+                  {isPublic ? '○' : '●'}
+                </span>
+                <Text size="xs" color="tertiary">
+                  {isPublic ? '公开 - 其他人可以查看' : '私密 - 仅自己可见'}
+                </Text>
+              </Box>
+            )}
+          </Box>
           <button
             onClick={onClose}
             style={{
@@ -154,11 +172,21 @@ export default function FollowListModal({
           ) : hidden ? (
             <Box style={{ textAlign: 'center', padding: tokens.spacing[6] }}>
               <Box style={{ 
-                fontSize: 40, 
+                width: 40,
+                height: 40,
+                borderRadius: '50%',
+                background: tokens.colors.bg.tertiary,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                margin: '0 auto',
                 marginBottom: tokens.spacing[3],
                 opacity: 0.5,
               }}>
-                🔒
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                </svg>
               </Box>
               <Text size="sm" color="tertiary">{hiddenMessage}</Text>
             </Box>

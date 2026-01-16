@@ -498,6 +498,7 @@ export default function TopNav({ email }: { email: string | null }) {
               {/* 通知铃铛图标（包含私信和系统通知） */}
               <Link
                 href="/notifications"
+                prefetch={true}
                 aria-label="通知"
                 style={{
                   position: 'relative',
@@ -737,6 +738,7 @@ export default function TopNav({ email }: { email: string | null }) {
                   </Link>
                   <Link
                     href="/notifications"
+                    prefetch={true}
                     style={{
                       display: 'flex',
                       alignItems: 'center',

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useToast } from './Toast'
+import { getCsrfHeaders } from '@/lib/api/client'
 
 type FollowButtonProps = {
   traderId: string
@@ -40,7 +41,7 @@ export default function FollowButton({ traderId, userId, initialFollowing = fals
     try {
       const response = await fetch('/api/follow', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getCsrfHeaders() },
         body: JSON.stringify({
           userId,
           traderId,
@@ -104,7 +105,7 @@ export default function FollowButton({ traderId, userId, initialFollowing = fals
         transition: 'all 200ms ease',
       }}
     >
-      {loading ? '...' : following ? '已关注' : '关注'}
+      {loading ? '...' : following ? '取消关注' : '关注'}
     </button>
   )
 }

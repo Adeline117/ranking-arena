@@ -30,6 +30,7 @@ export default function MessagesPage() {
   const [userId, setUserId] = useState<string | null>(null)
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [loading, setLoading] = useState(true)
+  const [orphanUnreadCount, setOrphanUnreadCount] = useState(0) // 孤立的未读消息数
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
 
   // 加载会话列表
@@ -41,6 +42,22 @@ export default function MessagesPage() {
       
       if (data.conversations) {
         setConversations(data.conversations)
+        
+        // 检查是否有孤立的未读消息（不属于任何会话）
+        const conversationUnreadTotal = data.conversations.reduce(
+          (sum: number, c: Conversation) => sum + c.unread_count, 0
+        )
+        
+        // 获取总的未读私信数
+        const { count: totalUnread } = await supabase
+          .from('direct_messages')
+          .select('*', { count: 'exact', head: true })
+          .eq('receiver_id', uid)
+          .eq('read', false)
+        
+        // 如果总未读数大于会话中的未读数，说明有孤立消息
+        const orphanCount = (totalUnread || 0) - conversationUnreadTotal
+        setOrphanUnreadCount(orphanCount > 0 ? orphanCount : 0)
       }
     } catch (error) {
       console.error('Error loading conversations:', error)
@@ -80,7 +97,6 @@ export default function MessagesPage() {
         },
         (payload) => {
           // 收到新消息时，刷新会话列表
-          console.log('[Messages] 收到新消息:', payload)
           loadConversations(userId)
           
           // 显示新消息提示
@@ -100,9 +116,7 @@ export default function MessagesPage() {
           loadConversations(userId)
         }
       )
-      .subscribe((status) => {
-        console.log('[Messages] Realtime subscription status:', status)
-      })
+      .subscribe()
 
     channelRef.current = channel
 
@@ -147,73 +161,213 @@ export default function MessagesPage() {
     <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
       <TopNav email={email} />
       
-      <Box style={{ maxWidth: 800, margin: '0 auto', padding: tokens.spacing[6] }}>
-        <Text size="2xl" weight="black" style={{ marginBottom: tokens.spacing[6] }}>
-          私信
-        </Text>
-
-        {conversations.length === 0 ? (
-          <Box
-            bg="secondary"
-            p={8}
-            radius="xl"
-            border="primary"
-            style={{ textAlign: 'center' }}
-          >
-            <Text size="lg" color="secondary" style={{ marginBottom: tokens.spacing[2] }}>
-              暂无私信
-            </Text>
-            <Text size="sm" color="tertiary">
-              当你和其他用户开始私信聊天后，会话将显示在这里
+      <Box style={{ maxWidth: 600, margin: '0 auto', padding: `${tokens.spacing[5]} ${tokens.spacing[4]}` }}>
+        {/* 页面标题 */}
+        <Box style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'space-between',
+          marginBottom: tokens.spacing[5],
+        }}>
+          <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3] }}>
+            <Box style={{
+              width: 40,
+              height: 40,
+              borderRadius: 12,
+              background: 'linear-gradient(135deg, rgba(149, 117, 205, 0.2) 0%, rgba(126, 87, 194, 0.1) 100%)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#9575cd" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+              </svg>
+            </Box>
+            <Text size="xl" weight="black">
+              私信
             </Text>
           </Box>
-        ) : (
-          <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
-            {conversations.map((conv) => (
+          {conversations.length > 0 && (
+            <Text size="sm" color="tertiary">
+              {conversations.length} 个对话
+            </Text>
+          )}
+        </Box>
+
+        {/* 孤立未读消息提示 */}
+        {orphanUnreadCount > 0 && (
+          <Box
+            style={{
+              marginBottom: tokens.spacing[4],
+              padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+              background: 'rgba(255, 193, 7, 0.1)',
+              border: '1px solid rgba(255, 193, 7, 0.3)',
+              borderRadius: 12,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: tokens.spacing[3],
+            }}
+          >
+            <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
+              <Text size="sm" color="primary">
+                有 {orphanUnreadCount} 条历史未读消息（对话可能已被删除）
+              </Text>
+            </Box>
+            <button
+              onClick={async () => {
+                if (!userId) return
+                try {
+                  // 标记所有未读消息为已读
+                  await supabase
+                    .from('direct_messages')
+                    .update({ read: true })
+                    .eq('receiver_id', userId)
+                    .eq('read', false)
+                  setOrphanUnreadCount(0)
+                  showToast('已清除', 'success')
+                } catch {
+                  showToast('清除失败', 'error')
+                }
+              }}
+              style={{
+                padding: '6px 12px',
+                background: 'rgba(255, 193, 7, 0.2)',
+                border: '1px solid rgba(255, 193, 7, 0.4)',
+                borderRadius: 8,
+                color: tokens.colors.text.primary,
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              全部清除
+            </button>
+          </Box>
+        )}
+
+        {conversations.length === 0 && orphanUnreadCount === 0 ? (
+          <Box
+            style={{ 
+              textAlign: 'center',
+              padding: `${tokens.spacing[10]} ${tokens.spacing[6]}`,
+              background: tokens.colors.bg.secondary,
+              borderRadius: 20,
+              border: `1px solid ${tokens.colors.border.primary}`,
+            }}
+          >
+            <Box style={{
+              width: 72,
+              height: 72,
+              borderRadius: '50%',
+              background: 'linear-gradient(135deg, rgba(149, 117, 205, 0.15) 0%, rgba(126, 87, 194, 0.08) 100%)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto',
+              marginBottom: tokens.spacing[4],
+            }}>
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#9575cd" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                <line x1="9" y1="10" x2="15" y2="10"/>
+              </svg>
+            </Box>
+            <Text size="lg" weight="bold" style={{ marginBottom: tokens.spacing[2], color: tokens.colors.text.primary }}>
+              暂无私信
+            </Text>
+            <Text size="sm" color="tertiary" style={{ maxWidth: 280, margin: '0 auto', lineHeight: 1.6 }}>
+              访问用户主页点击「私信」按钮，开始与其他用户交流
+            </Text>
+          </Box>
+        ) : conversations.length > 0 ? (
+          <Box style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {conversations.map((conv, index) => (
               <Link
                 key={conv.id}
                 href={`/messages/${conv.id}`}
                 style={{ textDecoration: 'none' }}
               >
                 <Box
-                  bg="secondary"
-                  p={4}
-                  radius="lg"
-                  border="primary"
                   style={{
                     display: 'flex',
                     alignItems: 'center',
-                    gap: tokens.spacing[4],
+                    gap: tokens.spacing[3],
+                    padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+                    background: conv.unread_count > 0 
+                      ? 'rgba(149, 117, 205, 0.08)' 
+                      : 'transparent',
+                    borderRadius: index === 0 ? '16px 16px 4px 4px' 
+                      : index === conversations.length - 1 ? '4px 4px 16px 16px' 
+                      : '4px',
                     cursor: 'pointer',
-                    transition: 'background-color 0.2s',
+                    transition: 'all 0.2s',
+                    border: `1px solid ${conv.unread_count > 0 ? 'rgba(149, 117, 205, 0.2)' : tokens.colors.border.primary}`,
+                    marginBottom: -1,
                   }}
-                  className="hover-bg"
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = tokens.colors.bg.secondary
+                    e.currentTarget.style.transform = 'translateX(4px)'
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = conv.unread_count > 0 
+                      ? 'rgba(149, 117, 205, 0.08)' 
+                      : 'transparent'
+                    e.currentTarget.style.transform = 'translateX(0)'
+                  }}
                 >
-                  <Avatar
-                    userId={conv.other_user.id}
-                    name={conv.other_user.handle}
-                    avatarUrl={conv.other_user.avatar_url}
-                    size={50}
-                  />
+                  {/* 头像区域 */}
+                  <Box style={{ position: 'relative', flexShrink: 0 }}>
+                    <Avatar
+                      userId={conv.other_user.id}
+                      name={conv.other_user.handle}
+                      avatarUrl={conv.other_user.avatar_url}
+                      size={52}
+                    />
+                    {/* 未读标记点 */}
+                    {conv.unread_count > 0 && (
+                      <Box style={{
+                        position: 'absolute',
+                        top: 0,
+                        right: 0,
+                        width: 14,
+                        height: 14,
+                        borderRadius: '50%',
+                        background: 'linear-gradient(135deg, #9575cd 0%, #7e57c2 100%)',
+                        border: `2px solid ${tokens.colors.bg.primary}`,
+                      }} />
+                    )}
+                  </Box>
                   
+                  {/* 内容区域 */}
                   <Box style={{ flex: 1, minWidth: 0 }}>
-                    <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: tokens.spacing[1] }}>
-                      <Text size="sm" weight="bold" style={{ color: tokens.colors.text.primary }}>
-                        @{conv.other_user.handle}
+                    <Box style={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      justifyContent: 'space-between', 
+                      marginBottom: 4,
+                    }}>
+                      <Text 
+                        size="base" 
+                        weight={conv.unread_count > 0 ? 'black' : 'bold'} 
+                        style={{ color: tokens.colors.text.primary }}
+                      >
+                        {conv.other_user.handle}
                       </Text>
-                      <Text size="xs" color="tertiary">
+                      <Text size="xs" color="tertiary" style={{ flexShrink: 0, marginLeft: 8 }}>
                         {formatTime(conv.last_message_at)}
                       </Text>
                     </Box>
-                    <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <Box style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <Text
                         size="sm"
-                        color="secondary"
+                        color={conv.unread_count > 0 ? 'primary' : 'secondary'}
+                        weight={conv.unread_count > 0 ? 'semibold' : 'normal'}
                         style={{
                           overflow: 'hidden',
                           textOverflow: 'ellipsis',
                           whiteSpace: 'nowrap',
-                          maxWidth: '80%',
+                          flex: 1,
                         }}
                       >
                         {conv.last_message_preview || '开始聊天'}
@@ -221,16 +375,18 @@ export default function MessagesPage() {
                       {conv.unread_count > 0 && (
                         <Box
                           style={{
-                            background: '#8b6fa8',
+                            background: 'linear-gradient(135deg, #9575cd 0%, #7e57c2 100%)',
                             color: '#fff',
-                            borderRadius: '50%',
-                            width: 20,
+                            borderRadius: 10,
+                            minWidth: 20,
                             height: 20,
+                            padding: '0 6px',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            fontSize: 12,
-                            fontWeight: 'bold',
+                            fontSize: 11,
+                            fontWeight: 700,
+                            flexShrink: 0,
                           }}
                         >
                           {conv.unread_count > 99 ? '99+' : conv.unread_count}
@@ -238,18 +394,23 @@ export default function MessagesPage() {
                       )}
                     </Box>
                   </Box>
+                  
+                  {/* 箭头指示 */}
+                  <Box style={{ 
+                    color: tokens.colors.text.tertiary,
+                    opacity: 0.5,
+                    flexShrink: 0,
+                  }}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M9 18l6-6-6-6"/>
+                    </svg>
+                  </Box>
                 </Box>
               </Link>
             ))}
           </Box>
-        )}
+        ) : null}
       </Box>
-
-      <style jsx global>{`
-        .hover-bg:hover {
-          background-color: ${tokens.colors.bg.tertiary} !important;
-        }
-      `}</style>
     </Box>
   )
 }

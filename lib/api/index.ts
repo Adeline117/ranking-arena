@@ -5,6 +5,7 @@
 export * from './response'
 export * from './validation'
 export * from './middleware'
+export * from './errors'
 
 // 重新导出 supabase server 函数
 export {
@@ -22,4 +23,3 @@ export {
   getIdentifier,
   RateLimitPresets,
 } from '@/lib/utils/rate-limit'
-

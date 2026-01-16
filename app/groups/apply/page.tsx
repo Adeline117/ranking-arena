@@ -191,7 +191,21 @@ export default function ApplyGroupPage() {
         <Box as="main" style={{ maxWidth: 600, margin: '0 auto', padding: tokens.spacing[6] }}>
           <Card title={language === 'zh' ? '申请已提交' : 'Application Submitted'}>
             <Box style={{ textAlign: 'center', padding: tokens.spacing[8] }}>
-              <Box style={{ fontSize: 64, marginBottom: tokens.spacing[4] }}>🎉</Box>
+              <Box style={{ 
+                width: 64, 
+                height: 64,
+                borderRadius: '50%',
+                background: 'rgba(139,111,168,0.2)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                margin: '0 auto',
+                marginBottom: tokens.spacing[4],
+              }}>
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#8b6fa8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="20 6 9 17 4 12"></polyline>
+                </svg>
+              </Box>
               <Text size="lg" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>
                 {language === 'zh' ? '申请已成功提交！' : 'Application submitted successfully!'}
               </Text>

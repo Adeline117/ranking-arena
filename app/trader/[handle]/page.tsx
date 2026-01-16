@@ -7,15 +7,15 @@ import { tokens } from '@/lib/design-tokens'
 import { supabase } from '@/lib/supabase/client'
 import { useLanguage } from '@/app/components/Utils/LanguageProvider'
 import TopNav from '@/app/components/Layout/TopNav'
-import TraderHeader from '@/app/components/trader/TraderHeader'
-import TraderTabs from '@/app/components/trader/TraderTabs'
-import OverviewPerformanceCard from '@/app/components/trader/OverviewPerformanceCard'
-import TraderAboutCard from '@/app/components/trader/TraderAboutCard'
-import SimilarTraders from '@/app/components/trader/SimilarTraders'
-import TraderFeed from '@/app/components/trader/TraderFeed'
-import StatsPage from '@/app/components/trader/stats/StatsPage'
-import PinnedPost from '@/app/components/trader/PinnedPost'
-import PortfolioTable from '@/app/components/trader/PortfolioTable'
+import TraderHeader from '@/app/components/Trader/TraderHeader'
+import TraderTabs from '@/app/components/Trader/TraderTabs'
+import OverviewPerformanceCard from '@/app/components/Trader/OverviewPerformanceCard'
+import TraderAboutCard from '@/app/components/Trader/TraderAboutCard'
+import SimilarTraders from '@/app/components/Trader/SimilarTraders'
+import TraderFeed from '@/app/components/Trader/TraderFeed'
+import StatsPage from '@/app/components/Trader/stats/StatsPage'
+// PinnedPost 组件已集成到 TraderFeed 中（置顶帖子自动显示在动态列表最上方）
+import PortfolioTable from '@/app/components/Trader/PortfolioTable'
 import { Box, Text } from '@/app/components/Base'
 import { RankingSkeleton } from '@/app/components/UI/Skeleton'
 import type {
@@ -229,12 +229,8 @@ function TraderContent(props: { params: { handle: string } | Promise<{ handle: s
               {performance && (
                 <OverviewPerformanceCard performance={performance} />
               )}
-              {/* 置顶帖子 - Performance和动态之间 */}
-              {feed.filter((f) => f.is_pinned && f.type !== 'group_post').length > 0 && (
-                <PinnedPost item={feed.filter((f) => f.is_pinned && f.type !== 'group_post')[0]} />
-              )}
-              {/* 交易员动态 - 紧跟在Performance后面 */}
-              <TraderFeed items={feed.filter((f) => f.type !== 'group_post' && !f.is_pinned)} title={t('activities')} />
+              {/* 交易员动态（置顶帖子自动显示在最上面） */}
+              <TraderFeed items={feed.filter((f) => f.type !== 'group_post')} title={t('activities')} />
             </Box>
 
             {/* Right Column - 交易员卡片 */}

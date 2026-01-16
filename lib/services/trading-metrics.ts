@@ -1,276 +1,443 @@
 /**
- * 交易数据计算服务
- * 实现所有 account_required_* 字段的计算逻辑
+ * 专业交易风险指标计算服务
+ * 提供夏普率、波动率、索提诺比率等专业指标的计算
  */
 
-export interface Trade {
-  id: string
-  symbol: string
-  side: 'buy' | 'sell'
-  quantity: number
-  price: number
-  fee: number
-  pnl?: number
-  executed_at: string
-  holding_time_days?: number
-}
+// ============================================
+// 类型定义
+// ============================================
 
-export interface TradeLevelStats {
-  total_trades: number
-  avg_profit: number
-  avg_loss: number
-  profitable_trades_pct: number
-}
-
-export interface DetailedMetrics {
-  avg_pnl: number
-  max_drawdown: number
-  sharpe_ratio: number
-  sortino_ratio: number
-}
-
-export interface HoldingTimeAnalysis {
-  avg_holding_time: number
-  median_holding_time: number
-  short_term_trades_pct: number
-  long_term_trades_pct: number
-}
-
-export interface ProfitabilityAnalysis {
-  profitable_trades_count: number
-  losing_trades_count: number
-  largest_win: number
-  largest_loss: number
-  win_loss_ratio: number
+export interface PerformanceData {
+  /** 收益率序列（百分比） */
+  returns: number[]
+  /** 周期类型 */
+  period: 'daily' | 'weekly' | 'monthly'
 }
 
 export interface RiskMetrics {
-  volatility: number
-  beta: number
-  var_95: number
-  max_leverage: number
+  /** 夏普率 - 风险调整收益指标 */
+  sharpeRatio: number | null
+  /** 索提诺比率 - 只考虑下行风险的风险调整收益 */
+  sortinoRatio: number | null
+  /** 卡尔马比率 - 年化收益/最大回撤 */
+  calmarRatio: number | null
+  /** 波动率（年化，百分比） */
+  volatility: number | null
+  /** 下行波动率（年化，百分比） */
+  downwardVolatility: number | null
+  /** 最大回撤（百分比） */
+  maxDrawdown: number | null
+  /** 最大回撤持续天数 */
+  maxDrawdownDuration: number | null
+  /** 最大连续亏损次数 */
+  maxConsecutiveLosses: number | null
+  /** 最大连续盈利次数 */
+  maxConsecutiveWins: number | null
+  /** 盈亏比（平均盈利/平均亏损） */
+  profitLossRatio: number | null
+  /** 收益风险比 (期望收益/风险) */
+  rewardRiskRatio: number | null
+  /** 风险评级 (1-5，5为最高风险) */
+  riskLevel: 1 | 2 | 3 | 4 | 5
+  /** 风险评级描述 */
+  riskLevelDescription: string
 }
 
-export interface PositionDetail {
-  symbol: string
-  direction: 'long' | 'short'
-  invested_pct: number
-  entry_price: number
-  current_price: number
-  pnl: number
-  holding_time: number
+export interface TradeRecord {
+  pnl: number      // 盈亏金额
+  pnlPct: number   // 盈亏百分比
+  openTime: string
+  closeTime: string
+}
+
+// ============================================
+// 常量配置
+// ============================================
+
+/** 年化因子 */
+const ANNUALIZATION_FACTOR = {
+  daily: Math.sqrt(365),
+  weekly: Math.sqrt(52),
+  monthly: Math.sqrt(12),
+}
+
+/** 无风险利率（年化，假设为 4%） */
+const RISK_FREE_RATE = 0.04
+
+/** 风险等级阈值 */
+const RISK_LEVEL_THRESHOLDS = {
+  volatility: [10, 25, 50, 100], // 波动率阈值
+  maxDrawdown: [5, 15, 30, 50],  // 最大回撤阈值
+  sharpe: [2, 1, 0.5, 0],        // 夏普率阈值（倒序）
+}
+
+// ============================================
+// 基础计算函数
+// ============================================
+
+/**
+ * 计算平均值
+ */
+function mean(values: number[]): number {
+  if (values.length === 0) return 0
+  return values.reduce((sum, v) => sum + v, 0) / values.length
 }
 
 /**
- * 计算逐笔交易统计
+ * 计算标准差
  */
-export function calculateTradeLevelStats(trades: Trade[]): TradeLevelStats {
-  const profitableTrades = trades.filter(t => (t.pnl || 0) > 0)
-  const losingTrades = trades.filter(t => (t.pnl || 0) < 0)
-
-  const avgProfit = profitableTrades.length > 0
-    ? profitableTrades.reduce((sum, t) => sum + (t.pnl || 0), 0) / profitableTrades.length
-    : 0
-
-  const avgLoss = losingTrades.length > 0
-    ? losingTrades.reduce((sum, t) => sum + (t.pnl || 0), 0) / losingTrades.length
-    : 0
-
-  return {
-    total_trades: trades.length,
-    avg_profit: avgProfit,
-    avg_loss: avgLoss,
-    profitable_trades_pct: trades.length > 0 ? (profitableTrades.length / trades.length) * 100 : 0,
-  }
+function standardDeviation(values: number[], avg?: number): number {
+  if (values.length < 2) return 0
+  const m = avg ?? mean(values)
+  const squaredDiffs = values.map(v => Math.pow(v - m, 2))
+  return Math.sqrt(mean(squaredDiffs))
 }
 
 /**
- * 计算详细交易指标
+ * 计算下行标准差（只考虑负收益）
  */
-export function calculateDetailedMetrics(trades: Trade[], initialCapital: number = 10000): DetailedMetrics {
-  if (trades.length === 0) {
-    return {
-      avg_pnl: 0,
-      max_drawdown: 0,
-      sharpe_ratio: 0,
-      sortino_ratio: 0,
-    }
+function downwardStandardDeviation(values: number[], threshold = 0): number {
+  const negativeReturns = values.filter(v => v < threshold)
+  if (negativeReturns.length < 2) return 0
+  const squaredDiffs = negativeReturns.map(v => Math.pow(v - threshold, 2))
+  return Math.sqrt(mean(squaredDiffs))
+}
+
+// ============================================
+// 风险指标计算函数
+// ============================================
+
+/**
+ * 计算夏普率
+ * Sharpe Ratio = (Portfolio Return - Risk-Free Rate) / Portfolio Std Dev
+ */
+export function calculateSharpeRatio(
+  returns: number[],
+  period: 'daily' | 'weekly' | 'monthly' = 'daily',
+  riskFreeRate = RISK_FREE_RATE
+): number | null {
+  if (returns.length < 10) return null
+
+  const avgReturn = mean(returns)
+  const stdDev = standardDeviation(returns, avgReturn)
+
+  if (stdDev === 0) return null
+
+  // 年化
+  const annualizationFactor = ANNUALIZATION_FACTOR[period]
+  const annualizedReturn = avgReturn * (period === 'daily' ? 365 : period === 'weekly' ? 52 : 12)
+  const annualizedStdDev = stdDev * annualizationFactor
+
+  const sharpe = (annualizedReturn / 100 - riskFreeRate) / (annualizedStdDev / 100)
+  
+  return Math.round(sharpe * 100) / 100
+}
+
+/**
+ * 计算索提诺比率
+ * Sortino Ratio = (Portfolio Return - Target Return) / Downward Std Dev
+ */
+export function calculateSortinoRatio(
+  returns: number[],
+  period: 'daily' | 'weekly' | 'monthly' = 'daily',
+  targetReturn = 0
+): number | null {
+  if (returns.length < 10) return null
+
+  const avgReturn = mean(returns)
+  const downwardStdDev = downwardStandardDeviation(returns, targetReturn)
+
+  if (downwardStdDev === 0) return null
+
+  // 年化
+  const annualizationFactor = ANNUALIZATION_FACTOR[period]
+  const annualizedReturn = avgReturn * (period === 'daily' ? 365 : period === 'weekly' ? 52 : 12)
+  const annualizedDownwardStdDev = downwardStdDev * annualizationFactor
+
+  const sortino = (annualizedReturn / 100) / (annualizedDownwardStdDev / 100)
+  
+  return Math.round(sortino * 100) / 100
+}
+
+/**
+ * 计算卡尔马比率
+ * Calmar Ratio = Annual Return / Max Drawdown
+ */
+export function calculateCalmarRatio(
+  annualizedReturn: number,
+  maxDrawdown: number
+): number | null {
+  if (maxDrawdown === 0) return null
+  const calmar = annualizedReturn / Math.abs(maxDrawdown)
+  return Math.round(calmar * 100) / 100
+}
+
+/**
+ * 计算波动率（年化）
+ */
+export function calculateVolatility(
+  returns: number[],
+  period: 'daily' | 'weekly' | 'monthly' = 'daily'
+): number | null {
+  if (returns.length < 10) return null
+
+  const stdDev = standardDeviation(returns)
+  const annualizationFactor = ANNUALIZATION_FACTOR[period]
+  const annualizedVol = stdDev * annualizationFactor
+
+  return Math.round(annualizedVol * 100) / 100
+}
+
+/**
+ * 计算最大回撤
+ */
+export function calculateMaxDrawdown(returns: number[]): {
+  maxDrawdown: number
+  maxDrawdownDuration: number
+} {
+  if (returns.length === 0) {
+    return { maxDrawdown: 0, maxDrawdownDuration: 0 }
   }
 
-  // 计算累计收益
-  let cumulativeValue = initialCapital
-  const returns: number[] = []
-  const values: number[] = [initialCapital]
-  let peak = initialCapital
-  let maxDrawdown = 0
+  // 计算累积收益
+  let cumulativeReturn = 100 // 从 100 开始
+  const peaks: number[] = []
+  const drawdowns: number[] = []
+  
+  let peak = cumulativeReturn
+  let maxDD = 0
+  let currentDDStart = -1
+  let maxDDDuration = 0
+  let currentDDLength = 0
 
-  for (const trade of trades) {
-    const pnl = trade.pnl || 0
-    cumulativeValue += pnl
-    values.push(cumulativeValue)
+  returns.forEach((ret, idx) => {
+    cumulativeReturn *= (1 + ret / 100)
     
-    const returnPct = pnl / initialCapital
-    returns.push(returnPct)
-
-    if (cumulativeValue > peak) {
-      peak = cumulativeValue
+    if (cumulativeReturn > peak) {
+      peak = cumulativeReturn
+      if (currentDDStart >= 0) {
+        maxDDDuration = Math.max(maxDDDuration, currentDDLength)
+      }
+      currentDDStart = -1
+      currentDDLength = 0
+    } else {
+      if (currentDDStart < 0) currentDDStart = idx
+      currentDDLength++
+      const dd = ((peak - cumulativeReturn) / peak) * 100
+      maxDD = Math.max(maxDD, dd)
     }
     
-    const drawdown = (peak - cumulativeValue) / peak
-    if (drawdown > maxDrawdown) {
-      maxDrawdown = drawdown
-    }
+    peaks.push(peak)
+    drawdowns.push(((peak - cumulativeReturn) / peak) * 100)
+  })
+
+  // 检查最后的回撤持续时间
+  if (currentDDStart >= 0) {
+    maxDDDuration = Math.max(maxDDDuration, currentDDLength)
   }
 
-  const avgPnl = returns.reduce((sum, r) => sum + r, 0) / returns.length
-
-  // 计算夏普比率（假设无风险利率为 0）
-  const avgReturn = returns.reduce((sum, r) => sum + r, 0) / returns.length
-  const variance = returns.reduce((sum, r) => sum + Math.pow(r - avgReturn, 2), 0) / returns.length
-  const stdDev = Math.sqrt(variance)
-  const sharpeRatio = stdDev > 0 ? avgReturn / stdDev : 0
-
-  // 计算索提诺比率（只考虑下行波动）
-  const downsideReturns = returns.filter(r => r < 0)
-  const downsideVariance = downsideReturns.length > 0
-    ? downsideReturns.reduce((sum, r) => sum + Math.pow(r, 2), 0) / downsideReturns.length
-    : 0
-  const downsideStdDev = Math.sqrt(downsideVariance)
-  const sortinoRatio = downsideStdDev > 0 ? avgReturn / downsideStdDev : 0
-
   return {
-    avg_pnl: avgPnl * initialCapital, // 转换为绝对金额
-    max_drawdown: maxDrawdown * 100, // 转换为百分比
-    sharpe_ratio: sharpeRatio,
-    sortino_ratio: sortinoRatio,
+    maxDrawdown: Math.round(maxDD * 100) / 100,
+    maxDrawdownDuration: maxDDDuration,
   }
 }
 
 /**
- * 计算持仓时间分析
+ * 计算最大连续亏损/盈利次数
  */
-export function calculateHoldingTimeAnalysis(trades: Trade[]): HoldingTimeAnalysis {
-  if (trades.length === 0) {
-    return {
-      avg_holding_time: 0,
-      median_holding_time: 0,
-      short_term_trades_pct: 0,
-      long_term_trades_pct: 0,
+export function calculateConsecutiveStreak(trades: TradeRecord[]): {
+  maxConsecutiveLosses: number
+  maxConsecutiveWins: number
+} {
+  let maxLosses = 0
+  let maxWins = 0
+  let currentLosses = 0
+  let currentWins = 0
+
+  trades.forEach(trade => {
+    if (trade.pnl < 0) {
+      currentLosses++
+      currentWins = 0
+      maxLosses = Math.max(maxLosses, currentLosses)
+    } else if (trade.pnl > 0) {
+      currentWins++
+      currentLosses = 0
+      maxWins = Math.max(maxWins, currentWins)
     }
-  }
+  })
 
-  const holdingTimes = trades
-    .filter(t => t.holding_time_days !== undefined && t.holding_time_days !== null)
-    .map(t => t.holding_time_days!)
-
-  if (holdingTimes.length === 0) {
-    return {
-      avg_holding_time: 0,
-      median_holding_time: 0,
-      short_term_trades_pct: 0,
-      long_term_trades_pct: 0,
-    }
-  }
-
-  const avgHoldingTime = holdingTimes.reduce((sum, t) => sum + t, 0) / holdingTimes.length
-
-  const sorted = [...holdingTimes].sort((a, b) => a - b)
-  const medianHoldingTime = sorted.length % 2 === 0
-    ? (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2
-    : sorted[Math.floor(sorted.length / 2)]
-
-  const shortTermTrades = holdingTimes.filter(t => t < 7).length
-  const longTermTrades = holdingTimes.filter(t => t > 30).length
-
-  return {
-    avg_holding_time: avgHoldingTime,
-    median_holding_time: medianHoldingTime,
-    short_term_trades_pct: (shortTermTrades / holdingTimes.length) * 100,
-    long_term_trades_pct: (longTermTrades / holdingTimes.length) * 100,
-  }
+  return { maxConsecutiveLosses: maxLosses, maxConsecutiveWins: maxWins }
 }
 
 /**
- * 计算盈利能力分析
+ * 计算盈亏比
  */
-export function calculateProfitabilityAnalysis(trades: Trade[]): ProfitabilityAnalysis {
-  const profitableTrades = trades.filter(t => (t.pnl || 0) > 0)
-  const losingTrades = trades.filter(t => (t.pnl || 0) < 0)
+export function calculateProfitLossRatio(trades: TradeRecord[]): number | null {
+  const profits = trades.filter(t => t.pnl > 0).map(t => t.pnl)
+  const losses = trades.filter(t => t.pnl < 0).map(t => Math.abs(t.pnl))
 
-  const profits = profitableTrades.map(t => t.pnl || 0)
-  const losses = losingTrades.map(t => Math.abs(t.pnl || 0))
+  if (profits.length === 0 || losses.length === 0) return null
 
-  const largestWin = profits.length > 0 ? Math.max(...profits) : 0
-  const largestLoss = losses.length > 0 ? Math.max(...losses) : 0
+  const avgProfit = mean(profits)
+  const avgLoss = mean(losses)
 
-  const avgWin = profits.length > 0 ? profits.reduce((sum, p) => sum + p, 0) / profits.length : 0
-  const avgLoss = losses.length > 0 ? losses.reduce((sum, l) => sum + l, 0) / losses.length : 0
-  const winLossRatio = avgLoss > 0 ? avgWin / avgLoss : 0
+  if (avgLoss === 0) return null
 
-  return {
-    profitable_trades_count: profitableTrades.length,
-    losing_trades_count: losingTrades.length,
-    largest_win: largestWin,
-    largest_loss: largestLoss,
-    win_loss_ratio: winLossRatio,
-  }
+  return Math.round((avgProfit / avgLoss) * 100) / 100
 }
 
 /**
- * 计算风险指标
+ * 计算风险等级
  */
-export function calculateRiskMetrics(trades: Trade[], benchmarkReturns?: number[]): RiskMetrics {
-  if (trades.length === 0) {
-    return {
-      volatility: 0,
-      beta: 0,
-      var_95: 0,
-      max_leverage: 1,
-    }
+export function calculateRiskLevel(
+  volatility: number | null,
+  maxDrawdown: number | null,
+  sharpeRatio: number | null
+): { level: 1 | 2 | 3 | 4 | 5; description: string } {
+  let score = 0
+
+  // 波动率评分
+  if (volatility !== null) {
+    if (volatility > RISK_LEVEL_THRESHOLDS.volatility[3]) score += 4
+    else if (volatility > RISK_LEVEL_THRESHOLDS.volatility[2]) score += 3
+    else if (volatility > RISK_LEVEL_THRESHOLDS.volatility[1]) score += 2
+    else if (volatility > RISK_LEVEL_THRESHOLDS.volatility[0]) score += 1
   }
 
-  const returns = trades.map(t => (t.pnl || 0) / 10000) // 假设初始资金 10000
-
-  // 计算波动率（年化）
-  const avgReturn = returns.reduce((sum, r) => sum + r, 0) / returns.length
-  const variance = returns.reduce((sum, r) => sum + Math.pow(r - avgReturn, 2), 0) / returns.length
-  const volatility = Math.sqrt(variance) * Math.sqrt(252) * 100 // 年化并转换为百分比
-
-  // 计算 Beta（如果有基准数据）
-  let beta = 1
-  if (benchmarkReturns && benchmarkReturns.length === returns.length) {
-    const benchmarkAvg = benchmarkReturns.reduce((sum, r) => sum + r, 0) / benchmarkReturns.length
-    const covariance = returns.reduce((sum, r, i) => sum + (r - avgReturn) * (benchmarkReturns[i] - benchmarkAvg), 0) / returns.length
-    const benchmarkVariance = benchmarkReturns.reduce((sum, r) => sum + Math.pow(r - benchmarkAvg, 2), 0) / benchmarkReturns.length
-    beta = benchmarkVariance > 0 ? covariance / benchmarkVariance : 1
+  // 最大回撤评分
+  if (maxDrawdown !== null) {
+    const absDD = Math.abs(maxDrawdown)
+    if (absDD > RISK_LEVEL_THRESHOLDS.maxDrawdown[3]) score += 4
+    else if (absDD > RISK_LEVEL_THRESHOLDS.maxDrawdown[2]) score += 3
+    else if (absDD > RISK_LEVEL_THRESHOLDS.maxDrawdown[1]) score += 2
+    else if (absDD > RISK_LEVEL_THRESHOLDS.maxDrawdown[0]) score += 1
   }
 
-  // 计算 VaR (95%)
-  const sortedReturns = [...returns].sort((a, b) => a - b)
-  const varIndex = Math.floor(sortedReturns.length * 0.05)
-  const var_95 = Math.abs(sortedReturns[varIndex] || 0) * 10000 // 转换为绝对金额
+  // 夏普率评分（夏普率越高越好，所以反向评分）
+  if (sharpeRatio !== null) {
+    if (sharpeRatio < RISK_LEVEL_THRESHOLDS.sharpe[3]) score += 4
+    else if (sharpeRatio < RISK_LEVEL_THRESHOLDS.sharpe[2]) score += 3
+    else if (sharpeRatio < RISK_LEVEL_THRESHOLDS.sharpe[1]) score += 2
+    else if (sharpeRatio < RISK_LEVEL_THRESHOLDS.sharpe[0]) score += 1
+  }
 
-  // 最大杠杆（从交易数据中推断，这里简化处理）
-  const maxLeverage = 1 // 实际应从交易所 API 获取
+  // 平均分（3项指标）
+  const avgScore = score / 3
+  
+  let level: 1 | 2 | 3 | 4 | 5
+  let description: string
 
-  return {
+  if (avgScore <= 1) {
+    level = 1
+    description = '低风险'
+  } else if (avgScore <= 1.5) {
+    level = 2
+    description = '较低风险'
+  } else if (avgScore <= 2.5) {
+    level = 3
+    description = '中等风险'
+  } else if (avgScore <= 3.5) {
+    level = 4
+    description = '较高风险'
+  } else {
+    level = 5
+    description = '高风险'
+  }
+
+  return { level, description }
+}
+
+// ============================================
+// 综合计算函数
+// ============================================
+
+/**
+ * 计算所有风险指标
+ */
+export function calculateAllRiskMetrics(
+  data: PerformanceData,
+  trades?: TradeRecord[],
+  annualizedReturn?: number
+): RiskMetrics {
+  const { returns, period } = data
+
+  // 基础指标
+  const volatility = calculateVolatility(returns, period)
+  const sharpeRatio = calculateSharpeRatio(returns, period)
+  const sortinoRatio = calculateSortinoRatio(returns, period)
+  
+  // 最大回撤
+  const { maxDrawdown, maxDrawdownDuration } = calculateMaxDrawdown(returns)
+  
+  // 下行波动率
+  const downwardVol = downwardStandardDeviation(returns) * ANNUALIZATION_FACTOR[period]
+  const downwardVolatility = Math.round(downwardVol * 100) / 100
+
+  // 卡尔马比率
+  const calmarRatio = annualizedReturn !== undefined 
+    ? calculateCalmarRatio(annualizedReturn, maxDrawdown)
+    : null
+
+  // 交易相关指标
+  let maxConsecutiveLosses: number | null = null
+  let maxConsecutiveWins: number | null = null
+  let profitLossRatio: number | null = null
+
+  if (trades && trades.length > 0) {
+    const streaks = calculateConsecutiveStreak(trades)
+    maxConsecutiveLosses = streaks.maxConsecutiveLosses
+    maxConsecutiveWins = streaks.maxConsecutiveWins
+    profitLossRatio = calculateProfitLossRatio(trades)
+  }
+
+  // 收益风险比
+  const rewardRiskRatio = volatility && volatility > 0 && annualizedReturn !== undefined
+    ? Math.round((annualizedReturn / volatility) * 100) / 100
+    : null
+
+  // 风险等级
+  const { level: riskLevel, description: riskLevelDescription } = calculateRiskLevel(
     volatility,
-    beta,
-    var_95,
-    max_leverage: maxLeverage,
+    maxDrawdown,
+    sharpeRatio
+  )
+
+  return {
+    sharpeRatio,
+    sortinoRatio,
+    calmarRatio,
+    volatility,
+    downwardVolatility,
+    maxDrawdown,
+    maxDrawdownDuration,
+    maxConsecutiveLosses,
+    maxConsecutiveWins,
+    profitLossRatio,
+    rewardRiskRatio,
+    riskLevel,
+    riskLevelDescription,
   }
 }
 
 /**
- * 计算投资组合明细
+ * 格式化风险指标用于显示
  */
-export function calculatePortfolioBreakdown(
-  positions: PositionDetail[],
-  totalValue: number
-): PositionDetail[] {
-  return positions.map(pos => ({
-    ...pos,
-    invested_pct: (pos.entry_price * pos.invested_pct) / totalValue * 100,
-  }))
-}
+export function formatRiskMetric(
+  value: number | null,
+  type: 'ratio' | 'percentage' | 'days' | 'count'
+): string {
+  if (value === null || value === undefined) return '—'
 
+  switch (type) {
+    case 'ratio':
+      return value.toFixed(2)
+    case 'percentage':
+      return `${value.toFixed(2)}%`
+    case 'days':
+      return `${value} 天`
+    case 'count':
+      return `${value} 次`
+    default:
+      return String(value)
+  }
+}

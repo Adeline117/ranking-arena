@@ -168,10 +168,10 @@ function SearchContent() {
   }
 
   const getIcon = (type: string) => {
-    if (type === 'trader') return '👤'
-    if (type === 'post') return '📝'
-    if (type === 'group') return '👥'
-    return '🔍'
+    if (type === 'trader') return 'T'
+    if (type === 'post') return 'P'
+    if (type === 'group') return 'G'
+    return 'S'
   }
 
   return (
@@ -223,13 +223,11 @@ function SearchContent() {
           <RankingSkeleton />
         ) : !query ? (
           <EmptyState 
-            icon="🔍"
             title="开始搜索"
             description="在顶部搜索栏输入关键词，搜索交易者、帖子或小组"
           />
         ) : filteredResults.length === 0 ? (
           <EmptyState 
-            icon="🔍"
             title="未找到结果"
             description={`没有找到与"${query}"相关的内容`}
           />

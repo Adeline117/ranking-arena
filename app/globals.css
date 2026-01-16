@@ -17,6 +17,60 @@
   --color-warning: #ffc107;
 }
 
+/* Dark theme (default) */
+[data-theme='dark'] {
+  --background: #0B0A10;
+  --foreground: #EDEDED;
+  
+  /* Background colors */
+  --color-bg-primary: #0B0A10;
+  --color-bg-secondary: #14121C;
+  --color-bg-tertiary: #1C1926;
+  --color-bg-hover: #252232;
+  
+  /* Text colors */
+  --color-text-primary: #EDEDED;
+  --color-text-secondary: #A8A8B3;
+  --color-text-tertiary: #6B6B7B;
+  
+  /* Border colors */
+  --color-border-primary: #2A2836;
+  --color-border-secondary: #3A3848;
+  
+  /* Accent colors */
+  --color-accent-primary: #8b6fa8;
+  --color-accent-success: #2fe57d;
+  --color-accent-error: #ff7c7c;
+  --color-accent-warning: #ffc107;
+}
+
+/* Light theme */
+[data-theme='light'] {
+  --background: #FFFFFF;
+  --foreground: #1A1A1A;
+  
+  /* Background colors */
+  --color-bg-primary: #FFFFFF;
+  --color-bg-secondary: #F8F8FA;
+  --color-bg-tertiary: #F0F0F4;
+  --color-bg-hover: #E8E8EC;
+  
+  /* Text colors */
+  --color-text-primary: #1A1A1A;
+  --color-text-secondary: #5A5A6A;
+  --color-text-tertiary: #8A8A9A;
+  
+  /* Border colors */
+  --color-border-primary: #E0E0E6;
+  --color-border-secondary: #D0D0D8;
+  
+  /* Accent colors */
+  --color-accent-primary: #7B5F98;
+  --color-accent-success: #22C55E;
+  --color-accent-error: #EF4444;
+  --color-accent-warning: #F59E0B;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -34,6 +88,7 @@ html {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+  scroll-behavior: smooth;
 }
 
 /* Theme-aware body styles */
@@ -43,55 +98,29 @@ body {
   line-height: 1.5;
   overflow-x: hidden;
   transition: background-color 200ms ease, color 200ms ease;
-}
-
-/* Dark theme (default) */
-[data-theme='dark'] {
-  background: #0B0A10;
-  color: #EDEDED;
-}
-
-[data-theme='dark'] body {
-  background: #0B0A10; /* Near-black deep purple */
-  color: #EDEDED; /* Primary text */
-}
-
-/* Light theme */
-[data-theme='light'] {
-  background: #FFFFFF;
-  color: #1A1A1A;
-}
-
-[data-theme='light'] body {
-  background: #FFFFFF;
-  color: #1A1A1A;
-}
-
-/* Smooth scrolling */
-html {
-  scroll-behavior: smooth;
+  background: var(--color-bg-primary);
+  color: var(--color-text-primary);
 }
 
 /* Focus styles */
 :focus-visible {
-  outline: 2px solid rgba(255, 255, 255, 0.2);
+  outline: 2px solid var(--color-accent-primary);
   outline-offset: 2px;
 }
 
 /* Selection */
 ::selection {
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--color-accent-primary);
   color: #FFFFFF;
 }
 
-/* Animations */
+/* ============================================
+   Animations
+   ============================================ */
+
 @keyframes pulse {
-  0%, 100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.5;
-  }
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
 }
 
 @keyframes fadeIn {
@@ -105,7 +134,6 @@ html {
   }
 }
 
-/* 页面过渡动画 */
 @keyframes pageEnter {
   from {
     opacity: 0;
@@ -139,7 +167,38 @@ html {
   }
 }
 
-/* 页面进入动画类 */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes ripple {
+  to {
+    width: 200px;
+    height: 200px;
+    opacity: 0;
+  }
+}
+
+@keyframes toastSlideIn {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+/* ============================================
+   Animation Classes
+   ============================================ */
+
 .page-enter {
   animation: pageEnter 0.3s ease-out forwards;
 }
@@ -168,7 +227,10 @@ html {
 .stagger-enter > *:nth-child(8) { animation-delay: 350ms; }
 .stagger-enter > *:nth-child(n+9) { animation-delay: 400ms; }
 
-/* 悬停放大效果 */
+/* ============================================
+   Utility Classes
+   ============================================ */
+
 .hover-lift {
   transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
@@ -178,7 +240,6 @@ html {
   box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
 }
 
-/* 按钮按压效果 */
 .press-effect {
   transition: transform 0.1s ease;
 }
@@ -187,32 +248,7 @@ html {
   transform: scale(0.97);
 }
 
-/* 按钮波纹效果 */
-@keyframes ripple {
-  to {
-    width: 200px;
-    height: 200px;
-    opacity: 0;
-  }
-}
-
-/* 加载旋转动画 */
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-/* 骨架屏闪烁 */
-@keyframes shimmer {
-  0% {
-    background-position: -200% 0;
-  }
-  100% {
-    background-position: 200% 0;
-  }
-}
-
+/* 骨架屏 */
 .skeleton {
   background: linear-gradient(
     90deg,
@@ -224,7 +260,10 @@ html {
   animation: shimmer 1.5s infinite;
 }
 
-/* Responsive utilities */
+/* ============================================
+   Responsive Utilities
+   ============================================ */
+
 @media (max-width: 1024px) {
   .main-grid {
     grid-template-columns: 1fr !important;
@@ -235,4 +274,26 @@ html {
   body {
     font-size: 13px;
   }
+}
+
+/* ============================================
+   Custom Scrollbar
+   ============================================ */
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-bg-secondary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-border-secondary);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-tertiary);
 }

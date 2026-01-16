@@ -52,14 +52,25 @@ export default function ExchangeQuickConnect() {
     }
   }
 
-  const handleConnect = (exchange: string) => {
+  const handleConnect = async (exchange: string) => {
     if (!userId) {
-      router.push('/login')
+      try {
+        router.push('/login')
+      } catch (err) {
+        console.error('[ExchangeQuickConnect] 导航失败:', err)
+        // 回退到 window.location
+        window.location.href = '/login'
+      }
       return
     }
 
     // 跳转到授权引导页面
-    router.push(`/exchange/auth?exchange=${exchange}`)
+    try {
+      router.push(`/exchange/auth?exchange=${exchange}`)
+    } catch (err) {
+      console.error('[ExchangeQuickConnect] 导航失败:', err)
+      window.location.href = `/exchange/auth?exchange=${exchange}`
+    }
   }
 
   if (loading) {
@@ -155,7 +166,14 @@ export default function ExchangeQuickConnect() {
             <Button
               variant="secondary"
               size="sm"
-              onClick={() => router.push('/settings')}
+              onClick={async () => {
+                try {
+                  router.push('/settings')
+                } catch (err) {
+                  console.error('[ExchangeQuickConnect] 导航失败:', err)
+                  window.location.href = '/settings'
+                }
+              }}
             >
               {t('goToSettings')}
             </Button>

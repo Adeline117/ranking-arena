@@ -249,9 +249,9 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
 
   const getTypeIcon = (type: string) => {
     switch (type) {
-      case 'trader': return '👤'
-      case 'post': return '📝'
-      case 'group': return '👥'
+      case 'trader': return 'T'
+      case 'post': return 'P'
+      case 'group': return 'G'
       default: return ''
     }
   }
@@ -429,7 +429,7 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
             }}
           >
             <Text size="xs" weight="bold" color="tertiary" style={{ textTransform: 'uppercase' }}>
-              🔥 热榜帖子
+              热榜帖子
             </Text>
           </Box>
           <Box>

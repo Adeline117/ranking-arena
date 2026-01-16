@@ -60,3 +60,4 @@ JOIN posts p ON c.post_id = p.id
 ORDER BY c.created_at DESC
 LIMIT 10;
 
+

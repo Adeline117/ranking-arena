@@ -136,6 +136,9 @@ export const translations = {
     maxDrawdown: '最大回撤',
     drawdown: '回撤',
     copiers: '跟单者',
+    equityCurve: '资金曲线',
+    pnlDistribution: '盈亏分布',
+    livePositions: '实时持仓',
     // 排行榜
     source: '来源',
     allExchanges: '全部交易所',
@@ -392,6 +395,9 @@ export const translations = {
     maxDrawdown: 'Max Drawdown',
     drawdown: 'Drawdown',
     copiers: 'Copiers',
+    equityCurve: 'Equity Curve',
+    pnlDistribution: 'PnL Distribution',
+    livePositions: 'Live Positions',
     // Leaderboard
     source: 'Source',
     allExchanges: 'All Exchanges',

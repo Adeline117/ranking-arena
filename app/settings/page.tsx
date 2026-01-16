@@ -260,8 +260,6 @@ export default function SettingsPage() {
       const fileName = `${userId}-${Date.now()}.${fileExt}`
       const filePath = `${fileName}`  // 不需要 avatars/ 前缀，因为 bucket 名就是 avatars
 
-      console.log('[Avatar] Uploading to:', filePath)
-
       const { error: uploadError, data: uploadData } = await supabase.storage
         .from('avatars')
         .upload(filePath, file, { upsert: true })
@@ -279,13 +277,9 @@ export default function SettingsPage() {
         return null
       }
 
-      console.log('[Avatar] Upload success:', uploadData)
-
       const { data } = supabase.storage.from('avatars').getPublicUrl(filePath)
-      console.log('[Avatar] Public URL:', data.publicUrl)
       return data.publicUrl
     } catch (error: any) {
-      console.error('[Avatar] Error uploading avatar:', error)
       showToast(`上传异常: ${error?.message || '未知错误'}`, 'error')
       return null
     }
@@ -300,15 +294,11 @@ export default function SettingsPage() {
       
       // Upload avatar if changed
       if (avatarFile) {
-        console.log('[Settings] Uploading avatar...')
         const uploadedUrl = await uploadAvatar(avatarFile, userId)
         if (uploadedUrl) {
           finalAvatarUrl = uploadedUrl
-          console.log('[Settings] Avatar uploaded:', uploadedUrl)
-        } else {
-          console.log('[Settings] Avatar upload failed, keeping old avatar')
-          // 上传失败时不阻止其他数据保存，继续使用旧头像
         }
+        // 上传失败时不阻止其他数据保存，继续使用旧头像
       }
       
       // Update profile and notification preferences in user_profiles (consolidated save)
@@ -1004,7 +994,7 @@ export default function SettingsPage() {
             }}
           >
             <Text size="sm" style={{ color: '#ffc107' }}>
-              ⚠️ 您有未保存的更改
+              您有未保存的更改
             </Text>
           </Box>
         )}

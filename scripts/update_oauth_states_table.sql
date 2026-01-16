@@ -11,3 +11,4 @@ COMMENT ON COLUMN oauth_states.code_verifier IS 'PKCE code_verifier，用于 PKC
 -- 查看更新后的表结构
 -- \d oauth_states
 
+

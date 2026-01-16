@@ -1,7 +1,38 @@
 'use client'
 
-import { createContext, useContext, useState, useCallback, ReactNode } from 'react'
+import { createContext, useContext, useState, useCallback, ReactNode, useEffect } from 'react'
 import { tokens } from '@/lib/design-tokens'
+
+// 注入全局动画样式
+const DIALOG_STYLES_ID = 'dialog-animation-styles'
+const injectDialogStyles = () => {
+  if (typeof document === 'undefined') return
+  if (document.getElementById(DIALOG_STYLES_ID)) return
+  
+  const style = document.createElement('style')
+  style.id = DIALOG_STYLES_ID
+  style.textContent = `
+    @keyframes dialogFadeIn {
+      from {
+        opacity: 0;
+      }
+      to {
+        opacity: 1;
+      }
+    }
+    @keyframes dialogSlideIn {
+      from {
+        transform: scale(0.95) translateY(-10px);
+        opacity: 0;
+      }
+      to {
+        transform: scale(1) translateY(0);
+        opacity: 1;
+      }
+    }
+  `
+  document.head.appendChild(style)
+}
 
 interface DialogOptions {
   title: string
@@ -43,6 +74,11 @@ export function DialogProvider({ children }: { children: ReactNode }) {
     options: null,
     resolve: null,
   })
+
+  // 注入动画样式
+  useEffect(() => {
+    injectDialogStyles()
+  }, [])
 
   const showDialog = useCallback((options: DialogOptions): Promise<boolean> => {
     return new Promise((resolve) => {
@@ -151,7 +187,7 @@ export function DialogProvider({ children }: { children: ReactNode }) {
             alignItems: 'center',
             justifyContent: 'center',
             padding: 20,
-            zIndex: 10000,
+            zIndex: 1100,
             animation: 'dialogFadeIn 0.2s ease-out',
           }}
         >
@@ -247,28 +283,6 @@ export function DialogProvider({ children }: { children: ReactNode }) {
           </div>
         </div>
       )}
-
-      {/* Animation styles */}
-      <style jsx global>{`
-        @keyframes dialogFadeIn {
-          from {
-            opacity: 0;
-          }
-          to {
-            opacity: 1;
-          }
-        }
-        @keyframes dialogSlideIn {
-          from {
-            transform: scale(0.95) translateY(-10px);
-            opacity: 0;
-          }
-          to {
-            transform: scale(1) translateY(0);
-            opacity: 1;
-          }
-        }
-      `}</style>
     </DialogContext.Provider>
   )
 }

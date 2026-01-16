@@ -650,7 +650,9 @@ export default function NewPostPage() {
           .single()
 
         if (pollError) {
-          console.error('创建投票失败:', pollError)
+          console.error('创建投票失败:', JSON.stringify(pollError, null, 2))
+          console.error('投票数据:', { post_id: newPost.id, question: title, type: pollType })
+          showToast(`投票创建失败: ${pollError.message || pollError.code || '未知错误'}`, 'warning')
           // 投票创建失败，但帖子已创建，继续
         } else if (pollData) {
           // 更新帖子的 poll_id
@@ -740,7 +742,7 @@ export default function NewPostPage() {
                       gap: 4,
                     }}
                   >
-                    ✏️ {t('edit')}
+                    {t('edit')}
                   </button>
                   <button
                     type="button"
@@ -759,7 +761,7 @@ export default function NewPostPage() {
                       gap: 4,
                     }}
                   >
-                    👁️ {t('preview')}
+                    {t('preview')}
                   </button>
                 </Box>
                 {draftSaved && (

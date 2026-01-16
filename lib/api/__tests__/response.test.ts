@@ -24,7 +24,7 @@ describe('API Response Helpers', () => {
       
       expect(response.status).toBe(500)
       expect(body.success).toBe(false)
-      expect(body.error).toBe('Something went wrong')
+      expect(body.error.message).toBe('Something went wrong')
     })
   })
 
@@ -35,7 +35,7 @@ describe('API Response Helpers', () => {
       
       expect(response.status).toBe(404)
       expect(body.success).toBe(false)
-      expect(body.error).toBe('Resource not found')
+      expect(body.error.message).toBe('Resource not found')
     })
   })
 
@@ -46,14 +46,14 @@ describe('API Response Helpers', () => {
       
       expect(response.status).toBe(401)
       expect(body.success).toBe(false)
-      expect(body.error).toBe('Please login')
+      expect(body.error.message).toBe('Please login')
     })
 
     it('should use default message if not provided', async () => {
       const response = unauthorized()
       const body = await response.json()
       
-      expect(body.error).toBe('未授权')
+      expect(body.error.message).toBe('未授权')
     })
   })
 
@@ -64,7 +64,7 @@ describe('API Response Helpers', () => {
       
       expect(response.status).toBe(400)
       expect(body.success).toBe(false)
-      expect(body.error).toBe('Invalid input')
+      expect(body.error.message).toBe('Invalid input')
     })
   })
 
@@ -77,7 +77,7 @@ describe('API Response Helpers', () => {
       const body = await response.json()
       
       expect(response.status).toBe(403)
-      expect(body.error).toBe('Custom error')
+      expect(body.error.message).toBe('Custom error')
     })
 
     it('should default to 500 status for generic errors', async () => {
@@ -93,8 +93,7 @@ describe('API Response Helpers', () => {
       const body = await response.json()
       
       expect(response.status).toBe(500)
-      expect(body.error).toBe('服务器内部错误')
+      expect(body.error.message).toBe('服务器错误，请稍后重试')
     })
   })
 })
-

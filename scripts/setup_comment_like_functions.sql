@@ -37,3 +37,4 @@ GRANT EXECUTE ON FUNCTION decrement_comment_like_count(UUID) TO authenticated;
 GRANT EXECUTE ON FUNCTION increment_comment_like_count(UUID) TO service_role;
 GRANT EXECUTE ON FUNCTION decrement_comment_like_count(UUID) TO service_role;
 
+

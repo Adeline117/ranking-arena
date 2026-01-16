@@ -19,6 +19,8 @@ export interface Post {
   like_count: number
   dislike_count: number
   comment_count: number
+  bookmark_count: number
+  repost_count: number
   view_count: number
   hot_score: number
   is_pinned: boolean
@@ -79,6 +81,8 @@ export async function getPosts(
       like_count,
       dislike_count,
       comment_count,
+      bookmark_count,
+      repost_count,
       view_count,
       hot_score,
       is_pinned,

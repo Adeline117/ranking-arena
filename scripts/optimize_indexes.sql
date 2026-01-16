@@ -205,6 +205,81 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_bookmarks_post
 -- ORDER BY pg_total_relation_size(relid) DESC;
 
 -- ============================================
+-- 第十一部分：物化视图（可选 - 高级优化）
+-- ============================================
+
+-- 创建排行榜物化视图（缓存 Top 100 交易员）
+-- 注意：需要定期刷新
+CREATE MATERIALIZED VIEW IF NOT EXISTS mv_top_traders_90d AS
+SELECT 
+  ts.source,
+  ts.source_trader_id,
+  ts.roi,
+  ts.pnl,
+  ts.win_rate,
+  ts.max_drawdown,
+  ts.trades_count,
+  ts.captured_at,
+  tsrc.handle,
+  tsrc.profile_url
+FROM trader_snapshots ts
+LEFT JOIN trader_sources tsrc 
+  ON ts.source = tsrc.source AND ts.source_trader_id = tsrc.source_trader_id
+WHERE ts.season_id = '90D'
+  AND ts.captured_at = (
+    SELECT MAX(captured_at) 
+    FROM trader_snapshots 
+    WHERE source = ts.source AND season_id = '90D'
+  )
+ORDER BY ts.roi DESC
+LIMIT 500;
+
+-- 物化视图索引
+CREATE INDEX IF NOT EXISTS idx_mv_top_traders_roi 
+  ON mv_top_traders_90d(roi DESC);
+
+CREATE INDEX IF NOT EXISTS idx_mv_top_traders_source 
+  ON mv_top_traders_90d(source, roi DESC);
+
+-- 刷新物化视图的函数
+CREATE OR REPLACE FUNCTION refresh_top_traders_view()
+RETURNS void AS $$
+BEGIN
+  REFRESH MATERIALIZED VIEW CONCURRENTLY mv_top_traders_90d;
+END;
+$$ LANGUAGE plpgsql;
+
+-- ============================================
+-- 第十二部分：查询性能分析函数
+-- ============================================
+
+-- 获取慢查询统计
+CREATE OR REPLACE FUNCTION get_slow_queries(threshold_ms int DEFAULT 100)
+RETURNS TABLE(
+  query text,
+  calls bigint,
+  mean_time float,
+  total_time float
+) AS $$
+BEGIN
+  RETURN QUERY
+  SELECT 
+    pg_stat_statements.query,
+    pg_stat_statements.calls,
+    pg_stat_statements.mean_exec_time,
+    pg_stat_statements.total_exec_time
+  FROM pg_stat_statements
+  WHERE pg_stat_statements.mean_exec_time > threshold_ms
+  ORDER BY pg_stat_statements.total_exec_time DESC
+  LIMIT 20;
+EXCEPTION
+  WHEN undefined_table THEN
+    -- pg_stat_statements 扩展未启用
+    RETURN;
+END;
+$$ LANGUAGE plpgsql;
+
+-- ============================================
 -- 完成
 -- ============================================
 

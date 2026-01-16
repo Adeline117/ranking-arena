@@ -122,14 +122,11 @@ export default function MarketPanel() {
         if (market.length === 0) {
           const cachedData = getCache<MarketRow[]>(cacheKey)
           if (cachedData && cachedData.length > 0) {
-            console.log('[MarketPanel] 使用客户端缓存数据')
             setMarket(cachedData)
             setLastUpdate(new Date())
             setLoading(false)
           }
         }
-        
-        console.log('[MarketPanel] 请求市场数据, pairs:', pairsParam)
         
         let res: Response
         try {
@@ -139,13 +136,11 @@ export default function MarketPanel() {
           })
         } catch (fetchError: any) {
           if (fetchError.name === 'AbortError' || fetchError.name === 'TimeoutError') {
-            console.error('[MarketPanel] 请求超时')
             setError('请求超时，请稍后重试')
             setLoading(false)
             return
           }
           if (fetchError.message?.includes('Failed to fetch') || fetchError.message?.includes('fetch failed')) {
-            console.error('[MarketPanel] 网络错误:', fetchError.message)
             setError('网络连接失败，请检查网络设置')
             setLoading(false)
             return
@@ -154,8 +149,6 @@ export default function MarketPanel() {
         }
         
         if (!res.ok) {
-          const errorText = await res.text().catch(() => 'Unknown error')
-          console.error('[MarketPanel] API 请求失败:', res.status, errorText)
           // 不抛出异常，而是设置错误状态
           setError(`无法获取市场数据 (${res.status})`)
           setMarket([])
@@ -166,15 +159,7 @@ export default function MarketPanel() {
         const json = await res.json()
         if (!alive) return
 
-        console.log('[MarketPanel] API 响应:', { 
-          rows: json.rows?.length || 0, 
-          source: json.source, 
-          error: json.error,
-          warning: json.warning 
-        })
-
         if (json.error) {
-          console.error('[MarketPanel] API 返回错误:', json.error)
           setError(json.error)
           setMarket([])
         } else {
@@ -186,15 +171,9 @@ export default function MarketPanel() {
             pairsToFilter.includes(row.symbol)
           )
           
-          console.log('[MarketPanel] 过滤后数据:', filteredRows.length, '条', {
-            totalRows: json.rows?.length || 0,
-            customPairs: pairsToFilter,
-            filteredSymbols: filteredRows.map((r: MarketRow) => r.symbol),
-            allSymbols: json.rows?.map((r: MarketRow) => r.symbol) || [],
-          })
-          
           if (filteredRows.length === 0 && json.rows && json.rows.length > 0) {
-            console.warn('[MarketPanel] 警告: API 返回了数据但过滤后为空', {
+            // API 返回了数据但过滤后为空 - 可能是币种名称不匹配
+            console.warn('[MarketPanel] 警告: 过滤后数据为空', {
               customPairs: pairsToFilter,
               apiSymbols: json.rows.map((r: MarketRow) => r.symbol),
               mismatch: pairsToFilter.filter(p => !json.rows.some((r: MarketRow) => r.symbol === p)),

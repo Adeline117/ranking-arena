@@ -25,7 +25,7 @@ export interface BoxProps extends React.HTMLAttributes<HTMLDivElement> {
   border?: 'primary' | 'secondary' | 'focus' | 'none'
 }
 
-export function Box({
+export default function Box({
   as: Component = 'div',
   p,
   px,

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useRef, useCallback } from 'react'
+import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase/client'
@@ -40,6 +40,17 @@ export default function ConversationPage({ params }: { params: { conversationId:
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
+
+  // 注入 spin 动画样式
+  useEffect(() => {
+    if (typeof document === 'undefined') return
+    const styleId = 'spin-animation-style'
+    if (document.getElementById(styleId)) return
+    const style = document.createElement('style')
+    style.id = styleId
+    style.textContent = '@keyframes spin { to { transform: rotate(360deg); } }'
+    document.head.appendChild(style)
+  }, [])
 
   useEffect(() => {
     if (params && typeof params === 'object' && 'then' in params) {
@@ -143,7 +154,6 @@ export default function ConversationPage({ params }: { params: { conversationId:
           // 检查这条消息是否是发给当前用户的
           const newMsg = payload.new as Message
           if (newMsg.receiver_id === userId) {
-            console.log('[Conversation] 收到新消息:', payload)
             // 添加新消息到列表（避免重复）
             setMessages(prev => {
               if (prev.some(m => m.id === newMsg.id)) {
@@ -154,9 +164,7 @@ export default function ConversationPage({ params }: { params: { conversationId:
           }
         }
       )
-      .subscribe((status) => {
-        console.log('[Conversation] Realtime subscription status:', status)
-      })
+      .subscribe()
 
     channelRef.current = channel
 
@@ -280,46 +288,93 @@ export default function ConversationPage({ params }: { params: { conversationId:
       
       {/* Header */}
       <Box
-        bg="secondary"
-        p={4}
-        border="primary"
         style={{
           display: 'flex',
           alignItems: 'center',
           gap: tokens.spacing[3],
-          borderLeft: 'none',
-          borderRight: 'none',
+          padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+          background: tokens.colors.bg.secondary,
+          borderBottom: `1px solid ${tokens.colors.border.primary}`,
+          backdropFilter: 'blur(8px)',
         }}
       >
-        <Link href="/messages" style={{ color: tokens.colors.text.primary, textDecoration: 'none' }}>
-          <Box style={{ 
-            padding: tokens.spacing[2], 
-            borderRadius: tokens.radius.md,
+        <Link 
+          href="/messages" 
+          style={{ 
+            color: tokens.colors.text.secondary, 
+            textDecoration: 'none',
             display: 'flex',
-            alignItems: 'center'
-          }}>
-            ← 返回
-          </Box>
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: 36,
+            height: 36,
+            borderRadius: tokens.radius.full,
+            transition: 'all 0.2s',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = tokens.colors.bg.tertiary || 'rgba(255,255,255,0.1)'
+            e.currentTarget.style.color = tokens.colors.text.primary
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'transparent'
+            e.currentTarget.style.color = tokens.colors.text.secondary
+          }}
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M19 12H5M12 19l-7-7 7-7"/>
+          </svg>
         </Link>
         
         {otherUser && (
-          <Link href={`/u/${otherUser.handle}`} style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: tokens.spacing[3] }}>
-            <Avatar
-              userId={otherUser.id}
-              name={otherUser.handle}
-              avatarUrl={otherUser.avatar_url}
-              size={40}
-            />
-            <Box>
-              <Text size="sm" weight="bold" style={{ color: tokens.colors.text.primary }}>
-                @{otherUser.handle}
+          <Link 
+            href={`/u/${otherUser.handle}`} 
+            style={{ 
+              textDecoration: 'none', 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: tokens.spacing[3],
+              flex: 1,
+              padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+              borderRadius: tokens.radius.lg,
+              transition: 'background 0.2s',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = tokens.colors.bg.tertiary || 'rgba(255,255,255,0.05)'
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'transparent'
+            }}
+          >
+            <Box style={{ position: 'relative' }}>
+              <Avatar
+                userId={otherUser.id}
+                name={otherUser.handle}
+                avatarUrl={otherUser.avatar_url}
+                size={44}
+              />
+              {/* 在线状态指示器（可选） */}
+              <Box style={{
+                position: 'absolute',
+                bottom: 1,
+                right: 1,
+                width: 12,
+                height: 12,
+                borderRadius: '50%',
+                background: '#4caf50',
+                border: `2px solid ${tokens.colors.bg.secondary}`,
+              }} />
+            </Box>
+            <Box style={{ flex: 1, minWidth: 0 }}>
+              <Text size="base" weight="bold" style={{ color: tokens.colors.text.primary }}>
+                {otherUser.handle}
               </Text>
               {otherUser.bio && (
-                <Text size="xs" color="secondary" style={{ 
-                  maxWidth: 300, 
+                <Text size="xs" color="tertiary" style={{ 
+                  maxWidth: '100%', 
                   overflow: 'hidden', 
                   textOverflow: 'ellipsis', 
-                  whiteSpace: 'nowrap' 
+                  whiteSpace: 'nowrap',
+                  marginTop: 2,
                 }}>
                   {otherUser.bio}
                 </Text>
@@ -343,61 +398,120 @@ export default function ConversationPage({ params }: { params: { conversationId:
             {/* Date Divider */}
             <Box style={{ 
               textAlign: 'center', 
-              margin: `${tokens.spacing[4]} 0`,
-              position: 'relative'
+              margin: `${tokens.spacing[5]} 0`,
+              position: 'relative',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: tokens.spacing[3],
             }}>
+              <Box style={{ 
+                flex: 1, 
+                height: 1, 
+                background: `linear-gradient(to right, transparent, ${tokens.colors.border.primary})`,
+                maxWidth: 80,
+              }} />
               <Text
                 size="xs"
                 color="tertiary"
                 style={{
-                  background: tokens.colors.bg.primary,
-                  padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
-                  borderRadius: tokens.radius.full,
-                  border: `1px solid ${tokens.colors.border.primary}`,
+                  fontSize: 11,
+                  letterSpacing: '0.5px',
+                  fontWeight: 600,
                 }}
               >
                 {formatDate(group.date)}
               </Text>
+              <Box style={{ 
+                flex: 1, 
+                height: 1, 
+                background: `linear-gradient(to left, transparent, ${tokens.colors.border.primary})`,
+                maxWidth: 80,
+              }} />
             </Box>
             
             {/* Messages */}
-            {group.messages.map((msg) => {
+            {group.messages.map((msg, msgIndex) => {
               const isMine = msg.sender_id === userId
+              const prevMsg = msgIndex > 0 ? group.messages[msgIndex - 1] : null
+              const nextMsg = msgIndex < group.messages.length - 1 ? group.messages[msgIndex + 1] : null
+              const isSameSenderAsPrev = prevMsg?.sender_id === msg.sender_id
+              const isSameSenderAsNext = nextMsg?.sender_id === msg.sender_id
+              
+              // 计算是否显示时间（最后一条消息或下一条是不同发送者时显示）
+              const showTime = !isSameSenderAsNext
+              
               return (
                 <Box
                   key={msg.id}
                   style={{
                     display: 'flex',
-                    justifyContent: isMine ? 'flex-end' : 'flex-start',
-                    marginBottom: tokens.spacing[3],
+                    flexDirection: 'column',
+                    alignItems: isMine ? 'flex-end' : 'flex-start',
+                    marginBottom: isSameSenderAsNext ? '2px' : tokens.spacing[3],
                   }}
                 >
+                  {/* 气泡 */}
                   <Box
                     style={{
-                      maxWidth: '70%',
-                      padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+                      maxWidth: '75%',
+                      minWidth: 48,
+                      padding: '10px 14px',
                       borderRadius: isMine 
-                        ? `${tokens.radius.xl} ${tokens.radius.xl} ${tokens.radius.sm} ${tokens.radius.xl}`
-                        : `${tokens.radius.xl} ${tokens.radius.xl} ${tokens.radius.xl} ${tokens.radius.sm}`,
-                      background: isMine ? '#8b6fa8' : tokens.colors.bg.secondary,
+                        ? isSameSenderAsPrev && isSameSenderAsNext
+                          ? '18px 6px 6px 18px'  // 中间
+                          : isSameSenderAsPrev
+                            ? '18px 6px 18px 18px' // 最后
+                            : isSameSenderAsNext
+                              ? '18px 18px 6px 18px' // 第一条
+                              : '18px' // 单独一条
+                        : isSameSenderAsPrev && isSameSenderAsNext
+                          ? '6px 18px 18px 6px'  // 中间
+                          : isSameSenderAsPrev
+                            ? '6px 18px 18px 18px' // 最后
+                            : isSameSenderAsNext
+                              ? '18px 18px 18px 6px' // 第一条
+                              : '18px', // 单独一条
+                      background: isMine 
+                        ? 'linear-gradient(135deg, #9575cd 0%, #7e57c2 100%)' 
+                        : tokens.colors.bg.secondary,
                       color: isMine ? '#fff' : tokens.colors.text.primary,
                       border: isMine ? 'none' : `1px solid ${tokens.colors.border.primary}`,
+                      boxShadow: isMine 
+                        ? '0 1px 2px rgba(126, 87, 194, 0.2)' 
+                        : '0 1px 2px rgba(0,0,0,0.05)',
                     }}
                   >
-                    <Text size="sm" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                    <Text 
+                      size="sm" 
+                      style={{ 
+                        whiteSpace: 'pre-wrap', 
+                        wordBreak: 'break-word',
+                        lineHeight: 1.5,
+                      }}
+                    >
                       {msg.content}
                     </Text>
+                  </Box>
+                  
+                  {/* 时间戳 - 放在气泡外面下方 */}
+                  {showTime && (
                     <Text 
                       size="xs" 
+                      color="tertiary"
                       style={{ 
-                        opacity: 0.7, 
-                        marginTop: tokens.spacing[1],
-                        textAlign: 'right'
+                        marginTop: 4,
+                        paddingLeft: isMine ? 0 : 4,
+                        paddingRight: isMine ? 4 : 0,
+                        fontSize: 11,
                       }}
                     >
                       {formatTime(msg.created_at)}
+                      {isMine && msg.read && (
+                        <span style={{ marginLeft: 4, opacity: 0.7 }}>✓</span>
+                      )}
                     </Text>
-                  </Box>
+                  )}
                 </Box>
               )
             })}
@@ -405,10 +519,35 @@ export default function ConversationPage({ params }: { params: { conversationId:
         ))}
         
         {messages.length === 0 && (
-          <Box style={{ textAlign: 'center', padding: tokens.spacing[8] }}>
-            <Text size="sm" color="secondary">
-              开始和 @{otherUser?.handle} 聊天吧
-            </Text>
+          <Box style={{ 
+            textAlign: 'center', 
+            padding: `${tokens.spacing[8]} ${tokens.spacing[4]}`,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: tokens.spacing[3],
+          }}>
+            <Box style={{
+              width: 64,
+              height: 64,
+              borderRadius: '50%',
+              background: 'linear-gradient(135deg, rgba(149, 117, 205, 0.2) 0%, rgba(126, 87, 194, 0.1) 100%)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}>
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#9575cd" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+              </svg>
+            </Box>
+            <Box>
+              <Text size="base" weight="bold" style={{ marginBottom: 4, color: tokens.colors.text.primary }}>
+                开始对话
+              </Text>
+              <Text size="sm" color="tertiary">
+                向 @{otherUser?.handle} 发送第一条消息
+              </Text>
+            </Box>
           </Box>
         )}
         
@@ -417,21 +556,23 @@ export default function ConversationPage({ params }: { params: { conversationId:
 
       {/* Input Area */}
       <Box
-        bg="secondary"
-        p={4}
-        border="primary"
         style={{
-          borderLeft: 'none',
-          borderRight: 'none',
-          borderBottom: 'none',
+          padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+          background: tokens.colors.bg.secondary,
+          borderTop: `1px solid ${tokens.colors.border.primary}`,
         }}
       >
         <Box style={{ 
           maxWidth: 800, 
           margin: '0 auto',
           display: 'flex',
-          gap: tokens.spacing[3],
-          alignItems: 'flex-end'
+          gap: tokens.spacing[2],
+          alignItems: 'flex-end',
+          background: tokens.colors.bg.primary,
+          borderRadius: 24,
+          padding: '6px 6px 6px 16px',
+          border: `1px solid ${tokens.colors.border.primary}`,
+          transition: 'border-color 0.2s, box-shadow 0.2s',
         }}>
           <textarea
             ref={inputRef}
@@ -442,30 +583,69 @@ export default function ConversationPage({ params }: { params: { conversationId:
             rows={1}
             style={{
               flex: 1,
-              padding: tokens.spacing[3],
-              borderRadius: tokens.radius.lg,
-              border: `1px solid ${tokens.colors.border.primary}`,
-              background: tokens.colors.bg.primary,
+              padding: '8px 0',
+              border: 'none',
+              background: 'transparent',
               color: tokens.colors.text.primary,
               fontSize: tokens.typography.fontSize.sm,
               fontFamily: tokens.typography.fontFamily.sans.join(', '),
               outline: 'none',
               resize: 'none',
-              minHeight: 44,
-              maxHeight: 120,
+              minHeight: 24,
+              maxHeight: 100,
+              lineHeight: 1.5,
+            }}
+            onFocus={(e) => {
+              const container = e.currentTarget.parentElement
+              if (container) {
+                container.style.borderColor = '#9575cd'
+                container.style.boxShadow = '0 0 0 2px rgba(149, 117, 205, 0.2)'
+              }
+            }}
+            onBlur={(e) => {
+              const container = e.currentTarget.parentElement
+              if (container) {
+                container.style.borderColor = tokens.colors.border.primary
+                container.style.boxShadow = 'none'
+              }
             }}
           />
-          <Button
-            variant="primary"
+          <button
             onClick={handleSend}
             disabled={!newMessage.trim() || sending}
             style={{
-              padding: `${tokens.spacing[3]} ${tokens.spacing[5]}`,
-              borderRadius: tokens.radius.lg,
+              width: 40,
+              height: 40,
+              borderRadius: '50%',
+              border: 'none',
+              background: newMessage.trim() 
+                ? 'linear-gradient(135deg, #9575cd 0%, #7e57c2 100%)' 
+                : tokens.colors.bg.tertiary || 'rgba(255,255,255,0.1)',
+              color: newMessage.trim() ? '#fff' : tokens.colors.text.tertiary,
+              cursor: newMessage.trim() && !sending ? 'pointer' : 'default',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              transition: 'all 0.2s',
+              flexShrink: 0,
+              opacity: sending ? 0.6 : 1,
             }}
           >
-            {sending ? '发送中...' : '发送'}
-          </Button>
+            {sending ? (
+              <Box style={{
+                width: 18,
+                height: 18,
+                border: '2px solid currentColor',
+                borderTopColor: 'transparent',
+                borderRadius: '50%',
+                animation: 'spin 1s linear infinite',
+              }} />
+            ) : (
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+              </svg>
+            )}
+          </button>
         </Box>
       </Box>
     </Box>

@@ -11,7 +11,7 @@ export interface TextProps extends React.HTMLAttributes<HTMLElement> {
   lineHeight?: keyof typeof tokens.typography.lineHeight
 }
 
-export function Text({
+export default function Text({
   as: Component = 'p',
   size = 'base',
   weight = 'normal',

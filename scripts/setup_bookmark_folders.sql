@@ -36,11 +36,21 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- 分别创建 INSERT 和 DELETE 触发器以避免 NEW/OLD 引用问题
 DROP TRIGGER IF EXISTS trg_update_folder_post_count ON post_bookmarks;
-CREATE TRIGGER trg_update_folder_post_count
-AFTER INSERT OR DELETE ON post_bookmarks
+DROP TRIGGER IF EXISTS trg_update_folder_post_count_insert ON post_bookmarks;
+DROP TRIGGER IF EXISTS trg_update_folder_post_count_delete ON post_bookmarks;
+
+CREATE TRIGGER trg_update_folder_post_count_insert
+AFTER INSERT ON post_bookmarks
 FOR EACH ROW
-WHEN (NEW.folder_id IS NOT NULL OR OLD.folder_id IS NOT NULL)
+WHEN (NEW.folder_id IS NOT NULL)
+EXECUTE FUNCTION update_folder_post_count();
+
+CREATE TRIGGER trg_update_folder_post_count_delete
+AFTER DELETE ON post_bookmarks
+FOR EACH ROW
+WHEN (OLD.folder_id IS NOT NULL)
 EXECUTE FUNCTION update_folder_post_count();
 
 -- 5. 创建函数：确保每个用户有默认收藏夹
@@ -67,6 +77,10 @@ $$ LANGUAGE plpgsql;
 -- 6. RLS 策略
 ALTER TABLE bookmark_folders ENABLE ROW LEVEL SECURITY;
 
+-- 先删除已存在的策略
+DROP POLICY IF EXISTS "Users can view own and public folders" ON bookmark_folders;
+DROP POLICY IF EXISTS "Users can manage own folders" ON bookmark_folders;
+
 -- 用户可以查看自己的收藏夹和公开的收藏夹
 CREATE POLICY "Users can view own and public folders" ON bookmark_folders
   FOR SELECT USING (user_id = auth.uid() OR is_public = true);
@@ -77,4 +91,5 @@ CREATE POLICY "Users can manage own folders" ON bookmark_folders
 
 -- 验证
 SELECT 'bookmark_folders 表创建成功' AS status;
+
 

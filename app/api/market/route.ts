@@ -64,11 +64,8 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const pairsParam = searchParams.get('pairs')
     
-    console.log('[Market API] 请求市场数据, pairs:', pairsParam || 'default')
-    
     // 检查内存缓存（如果存在且未过期）
     if (cache && Date.now() - cache.ts < TTL_MS) {
-      console.log('[Market API] ✅ 使用缓存数据, source:', cache.source)
       return NextResponse.json({ rows: cache.rows })
     }
     
@@ -86,15 +83,12 @@ export async function GET(request: NextRequest) {
     // 1) 命中缓存直接返回（如果请求的pairs与缓存一致）
     const now = Date.now()
     if (cache && now - cache.ts < TTL_MS && !pairsParam) {
-      console.log('[Market API] 返回缓存数据, source:', cache.source)
       return NextResponse.json({ rows: cache.rows, source: cache.source, cached: true })
     }
 
     // 2) 先主源 CoinGecko
     try {
-      console.log('[Market API] 尝试从 CoinGecko 获取数据...')
       const rows = await fetchFromCoinGeckoForPairs(targetPairs)
-      console.log('[Market API] CoinGecko 成功, 返回', rows.length, '条数据')
       
       if (!pairsParam) {
         cache = { ts: now, rows, source: 'coingecko' }
@@ -118,7 +112,6 @@ export async function GET(request: NextRequest) {
       
       try {
         const rows = await fetchFromCoinbaseForPairs(targetPairs)
-        console.log('[Market API] Coinbase 成功, 返回', rows.length, '条数据')
         
         if (!pairsParam) {
           cache = { ts: now, rows, source: 'coinbase' }

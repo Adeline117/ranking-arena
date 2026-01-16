@@ -62,3 +62,4 @@ USING (
 -- ============================================
 SELECT 'avatars Storage Bucket 设置完成！' as result;
 
+

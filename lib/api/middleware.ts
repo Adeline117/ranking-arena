@@ -168,4 +168,3 @@ export function withPublic<T>(
 ) {
   return withApiMiddleware(handler, { ...options, requireAuth: false })
 }
-

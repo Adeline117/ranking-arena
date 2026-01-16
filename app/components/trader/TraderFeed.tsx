@@ -15,16 +15,36 @@ interface TraderFeedProps {
 
 type SortType = 'all' | 'top'
 
+// 移除 Markdown 图片语法，只保留文字内容
+function cleanContent(text: string, maxLength = 120): string {
+  if (!text) return ''
+  const cleanText = text.replace(/!\[([^\]]*)\]\([^)]+\)/g, '').trim()
+  if (cleanText.length > maxLength) {
+    return cleanText.slice(0, maxLength) + '...'
+  }
+  return cleanText
+}
+
 export default function TraderFeed({ items, title, showPostButton = false, onPostClick }: TraderFeedProps) {
   const [sortType, setSortType] = useState<SortType>('all')
 
-  // 排序逻辑
+  // 排序逻辑 - 置顶帖子始终在最上面
   const sortedItems = useMemo(() => {
+    let sorted: TraderFeedItem[]
+    
     if (sortType === 'top') {
-      return [...items].sort((a, b) => (b.like_count || 0) - (a.like_count || 0))
+      sorted = [...items].sort((a, b) => (b.like_count || 0) - (a.like_count || 0))
+    } else {
+      // all: 按时间最新排序
+      sorted = [...items].sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime())
     }
-    // all: 按时间最新排序
-    return [...items].sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime())
+    
+    // 置顶帖子始终在最上面
+    return sorted.sort((a, b) => {
+      if (a.is_pinned && !b.is_pinned) return -1
+      if (!a.is_pinned && b.is_pinned) return 1
+      return 0
+    })
   }, [items, sortType])
 
   return (
@@ -165,13 +185,25 @@ export default function TraderFeed({ items, title, showPostButton = false, onPos
               )}
 
               <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: tokens.spacing[2] }}>
-                <Box style={{ flex: 1, display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
+                <Box style={{ flex: 1, display: 'flex', alignItems: 'center', gap: tokens.spacing[2], flexWrap: 'wrap' }}>
+                  {/* 置顶标识 */}
+                  {item.is_pinned && (
+                    <Text size="xs" style={{ 
+                      color: tokens.colors.accent.primary, 
+                      fontWeight: tokens.typography.fontWeight.black,
+                      background: 'rgba(139,111,168,0.1)',
+                      padding: '2px 6px',
+                      borderRadius: tokens.radius.sm,
+                    }}>
+                      📌 置顶
+                    </Text>
+                  )}
                   <Text size="sm" weight="black" style={{ color: tokens.colors.text.primary }}>
                     {item.title}
                   </Text>
                   {sortType === 'top' && item.like_count !== undefined && item.like_count > 0 && (
                     <Text size="xs" color="tertiary">
-                      ❤️ {item.like_count}
+                      {item.like_count} 赞
                     </Text>
                   )}
                 </Box>
@@ -181,7 +213,7 @@ export default function TraderFeed({ items, title, showPostButton = false, onPos
               </Box>
               {item.content && (
                 <Text size="xs" color="secondary" style={{ lineHeight: 1.5 }}>
-                  {item.content.slice(0, 120)}...
+                  {cleanContent(item.content)}
                 </Text>
               )}
               {item.groupId && item.groupName && (

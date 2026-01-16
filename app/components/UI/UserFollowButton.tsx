@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useToast } from './Toast'
 import { tokens } from '@/lib/design-tokens'
+import { apiPost } from '@/lib/api/client'
 
 type UserFollowButtonProps = {
   targetUserId: string
@@ -56,27 +57,22 @@ export default function UserFollowButton({
 
     setLoading(true)
     try {
-      const response = await fetch('/api/users/follow', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          followerId: currentUserId,
-          followingId: targetUserId,
-          action: following ? 'unfollow' : 'follow',
-        }),
+      const result = await apiPost<{ following: boolean; tableNotFound?: boolean }>('/api/users/follow', {
+        followerId: currentUserId,
+        followingId: targetUserId,
+        action: following ? 'unfollow' : 'follow',
       })
 
-      const data = await response.json()
-      if (response.ok) {
-        setFollowing(data.following)
-        const isMutual = data.following && followedBy
-        onFollowChange?.(data.following, isMutual)
-        showToast(data.following ? '关注成功' : '已取消关注', 'success')
-      } else if (data.tableNotFound) {
+      if (result.success && result.data) {
+        setFollowing(result.data.following)
+        const isMutual = result.data.following && followedBy
+        onFollowChange?.(result.data.following, isMutual)
+        showToast(result.data.following ? '关注成功' : '已取消关注', 'success')
+      } else if (result.data?.tableNotFound) {
         showToast('关注功能暂未开放', 'warning')
       } else {
-        console.error('Toggle follow error:', data)
-        showToast(data.error || '操作失败，请重试', 'error')
+        console.error('Toggle follow error:', result.error)
+        showToast(result.error?.message || '操作失败，请重试', 'error')
       }
     } catch (error) {
       console.error('Toggle follow error:', error)
@@ -140,10 +136,9 @@ export default function UserFollowButton({
     >
       {loading ? '...' : (
         <>
-          {following ? (isMutual ? '互相关注' : '已关注') : (followedBy ? '回关' : '关注')}
+          {following ? (isMutual ? '互关 ✓' : '取消关注') : (followedBy ? '回关' : '关注')}
         </>
       )}
     </button>
   )
 }
-

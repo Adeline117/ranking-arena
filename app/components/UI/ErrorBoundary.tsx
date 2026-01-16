@@ -1,35 +1,53 @@
 'use client'
 
 import React, { Component, ReactNode } from 'react'
+import * as Sentry from '@sentry/nextjs'
 import { Box, Text, Button } from '../Base'
 import { tokens } from '@/lib/design-tokens'
 
 interface Props {
   children: ReactNode
   fallback?: ReactNode
+  /** 错误上下文信息 */
+  context?: string
 }
 
 interface State {
   hasError: boolean
   error: Error | null
+  eventId: string | null
 }
 
 /**
  * 错误边界组件
  * 捕获子组件的错误并显示友好的错误信息
+ * 同时上报错误到 Sentry
  */
 export class ErrorBoundary extends Component<Props, State> {
   constructor(props: Props) {
     super(props)
-    this.state = { hasError: false, error: null }
+    this.state = { hasError: false, error: null, eventId: null }
   }
 
-  static getDerivedStateFromError(error: Error): State {
+  static getDerivedStateFromError(error: Error): Partial<State> {
     return { hasError: true, error }
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
     console.error('[ErrorBoundary] 捕获到错误:', error, errorInfo)
+    
+    // 上报错误到 Sentry
+    const eventId = Sentry.captureException(error, {
+      tags: {
+        errorBoundary: true,
+        context: this.props.context || 'unknown',
+      },
+      extra: {
+        componentStack: errorInfo.componentStack,
+      },
+    })
+    
+    this.setState({ eventId })
   }
 
   handleReset = () => {
