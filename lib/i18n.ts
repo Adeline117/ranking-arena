@@ -261,6 +261,7 @@ export const translations = {
     fillPassphrase: '请填写 Passphrase',
     cannotAccessClipboard: '无法访问剪贴板',
     share: '分享',
+    ranking: '排行榜',
   },
   en: {
     home: 'Home',
@@ -521,6 +522,7 @@ export const translations = {
     fillPassphrase: 'Please enter Passphrase',
     cannotAccessClipboard: 'Cannot access clipboard',
     share: 'Share',
+    ranking: 'Ranking',
   },
 }
 
