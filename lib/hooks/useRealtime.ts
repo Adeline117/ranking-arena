@@ -124,13 +124,14 @@ export function useRealtime<T extends Record<string, unknown>>(
       channelConfig.filter = filter
     }
 
+    // @ts-expect-error - Supabase types issue with postgres_changes event
     channel
       .on(
         'postgres_changes',
         channelConfig,
         handleChange as (payload: RealtimePostgresChangesPayload<{ [key: string]: unknown }>) => void
       )
-      .subscribe((status) => {
+      .subscribe((status: string) => {
         if (status === 'SUBSCRIBED') {
           setStatus('connected')
         } else if (status === 'CHANNEL_ERROR') {
