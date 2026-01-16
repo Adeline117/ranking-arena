@@ -25,21 +25,28 @@ export interface Post {
   images?: string[] | null
   created_at: string
   updated_at?: string | null
+  // 转发相关
+  original_post_id?: string | null
 }
 
 export interface PostWithAuthor extends Post {
   author_avatar_url?: string | null
   group_name?: string | null
+  // 原始帖子信息（如果是转发）
+  original_post?: {
+    id: string
+    title: string
+    content: string
+    author_handle: string
+    author_avatar_url?: string | null
+    images?: string[] | null
+    created_at: string
+  } | null
 }
 
 export interface PostWithUserState extends PostWithAuthor {
   user_reaction?: 'up' | 'down' | null
   user_vote?: PollChoice | null
-  // 转发相关字段
-  is_repost?: boolean
-  repost_by_handle?: string
-  repost_comment?: string
-  repost_at?: string
 }
 
 export interface CreatePostInput {
