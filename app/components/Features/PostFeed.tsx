@@ -378,42 +378,29 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
     }
   }, [props.groupId, props.authorHandle, accessToken, sortType])
 
-  // 加载用户收藏和转发状态 - 必须在使用它的 useEffect 之前定义
+  // 加载用户收藏状态 - 必须在使用它的 useEffect 之前定义
+  // 注意：转发状态不再需要检查，因为新设计允许多次转发
   const loadUserBookmarksAndReposts = useCallback(async (postIds: string[]) => {
     if (!accessToken || postIds.length === 0) return
 
     try {
-      // 并行获取收藏和转发状态
-      const [bookmarkResults, repostResults] = await Promise.all([
-        Promise.all(postIds.map(async (postId) => {
-          const res = await fetch(`/api/posts/${postId}/bookmark`, {
-            headers: { 'Authorization': `Bearer ${accessToken}` },
-          })
-          const data = await res.json()
-          return { postId, bookmarked: data.bookmarked || false }
-        })),
-        Promise.all(postIds.map(async (postId) => {
-          const res = await fetch(`/api/posts/${postId}/repost`, {
-            headers: { 'Authorization': `Bearer ${accessToken}` },
-          })
-          const data = await res.json()
-          return { postId, reposted: data.reposted || false }
-        })),
-      ])
+      // 获取收藏状态
+      const bookmarkResults = await Promise.all(postIds.map(async (postId) => {
+        const res = await fetch(`/api/posts/${postId}/bookmark`, {
+          headers: { 'Authorization': `Bearer ${accessToken}` },
+        })
+        const data = await res.json()
+        return { postId, bookmarked: data.bookmarked || false }
+      }))
 
-      // 批量更新用户收藏和转发状态
+      // 批量更新用户收藏状态
       setUserBookmarks(prev => {
         const updated = { ...prev }
         bookmarkResults.forEach(r => { updated[r.postId] = r.bookmarked })
         return updated
       })
-      setUserReposts(prev => {
-        const updated = { ...prev }
-        repostResults.forEach(r => { updated[r.postId] = r.reposted })
-        return updated
-      })
     } catch (err) {
-      console.error('[PostFeed] 加载收藏/转发状态失败:', err)
+      console.error('[PostFeed] 加载收藏状态失败:', err)
     }
   }, [accessToken])
 
