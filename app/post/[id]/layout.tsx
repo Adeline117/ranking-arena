@@ -17,7 +17,7 @@ export async function generateMetadata({ params }: { params: { id: string } | Pr
       .maybeSingle()
     
     if (post) {
-      const title = `${post.title.slice(0, 60)} · Ranking Arena`
+      const title = `${post.title.slice(0, 60)} · Arena`
       const description = post.content 
         ? post.content.slice(0, 160) + (post.content.length > 160 ? '...' : '')
         : `${post.author_handle} 发布的帖子`
@@ -37,7 +37,7 @@ export async function generateMetadata({ params }: { params: { id: string } | Pr
           description,
           type: 'article',
           url: canonicalUrl,
-          siteName: 'Ranking Arena',
+          siteName: 'Arena',
           publishedTime: post.created_at,
           authors: [`${BASE_URL}/u/${encodeURIComponent(post.author_handle)}`],
           images: ogImage ? [{
@@ -52,7 +52,7 @@ export async function generateMetadata({ params }: { params: { id: string } | Pr
           title: post.title,
           description,
           images: ogImage ? [ogImage] : undefined,
-          creator: '@rankingarena',
+          creator: '@arenafi',
         },
         robots: {
           index: true,
@@ -66,7 +66,7 @@ export async function generateMetadata({ params }: { params: { id: string } | Pr
   
   // 默认metadata
   return {
-    title: '帖子 · Ranking Arena',
+    title: '帖子 · Arena',
     description: '查看帖子详情',
     alternates: {
       canonical: canonicalUrl,

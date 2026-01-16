@@ -22,7 +22,7 @@ export async function generateMetadata({ params }: { params: { handle: string } 
         .maybeSingle()
       
       if (profile) {
-        const title = `${profile.handle} · Ranking Arena`
+        const title = `${profile.handle} · Arena`
         const description = profile.bio 
           ? `${profile.bio.substring(0, 150)}${profile.bio.length > 150 ? '...' : ''}`
           : `查看 ${profile.handle} 的个人资料和交易动态。`
@@ -52,7 +52,7 @@ export async function generateMetadata({ params }: { params: { handle: string } 
   
   // 默认metadata
   return {
-    title: `${handle} · Ranking Arena`,
+    title: `${handle} · Arena`,
     description: `查看 ${handle} 的个人资料`,
   }
 }

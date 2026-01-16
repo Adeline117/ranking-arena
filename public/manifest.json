@@ -1,6 +1,6 @@
 {
-  "name": "Ranking Arena",
-  "short_name": "RankArena",
+  "name": "Arena",
+  "short_name": "Arena",
   "description": "加密货币交易员排行榜与社区平台",
   "start_url": "/",
   "display": "standalone",

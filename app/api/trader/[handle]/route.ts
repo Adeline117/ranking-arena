@@ -10,6 +10,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import { getServerCache, setServerCache, CacheTTL } from '@/lib/utils/server-cache'
+import { calculateArenaScore, calculateOverallScore } from '@/lib/utils/arena-score'
 
 // Next.js 缓存配置
 export const revalidate = 300 // 5分钟
@@ -248,6 +249,41 @@ async function getTraderDetails(
     }
   }
   
+  // 计算各时间段的 Arena Score
+  const score90d = snapshot?.roi != null && snapshot?.pnl != null
+    ? calculateArenaScore({
+        roi: snapshot.roi,
+        pnl: snapshot.pnl,
+        maxDrawdown: snapshot.max_drawdown,
+        winRate: snapshot.win_rate,
+      }, '90D')
+    : null
+
+  const score30d = snapshot30d?.roi != null && snapshot30d?.pnl != null
+    ? calculateArenaScore({
+        roi: snapshot30d.roi,
+        pnl: snapshot30d.pnl,
+        maxDrawdown: snapshot30d.max_drawdown,
+        winRate: snapshot30d.win_rate,
+      }, '30D')
+    : null
+
+  const score7d = snapshot7d?.roi != null && snapshot7d?.pnl != null
+    ? calculateArenaScore({
+        roi: snapshot7d.roi,
+        pnl: snapshot7d.pnl,
+        maxDrawdown: snapshot7d.max_drawdown,
+        winRate: snapshot7d.win_rate,
+      }, '7D')
+    : null
+
+  // 计算总体分数
+  const overallScore = calculateOverallScore({
+    score7d: score7d?.meetsThreshold ? score7d.totalScore : null,
+    score30d: score30d?.meetsThreshold ? score30d.totalScore : null,
+    score90d: score90d?.meetsThreshold ? score90d.totalScore : null,
+  })
+
   return {
     profile: {
       handle: traderHandle,
@@ -271,6 +307,11 @@ async function getTraderDetails(
       win_rate_30d: snapshot30d?.win_rate ?? undefined,
       max_drawdown_7d: snapshot7d?.max_drawdown ?? undefined,
       max_drawdown_30d: snapshot30d?.max_drawdown ?? undefined,
+      // Arena Score
+      arena_score_90d: score90d?.totalScore ?? undefined,
+      arena_score_30d: score30d?.totalScore ?? undefined,
+      arena_score_7d: score7d?.totalScore ?? undefined,
+      overall_score: overallScore,
     },
     stats: {
       additionalStats: {
@@ -366,6 +407,41 @@ async function getTraderDetailsFromSnapshots(
   const snapshot30d = snapshot30dResult.data as SnapshotData | null
   const arenaFollowers = arenaFollowersResult.count || 0
   
+  // 计算各时间段的 Arena Score
+  const score90d = snapshot?.roi != null && snapshot?.pnl != null
+    ? calculateArenaScore({
+        roi: snapshot.roi,
+        pnl: snapshot.pnl,
+        maxDrawdown: snapshot.max_drawdown,
+        winRate: snapshot.win_rate,
+      }, '90D')
+    : null
+
+  const score30d = snapshot30d?.roi != null && snapshot30d?.pnl != null
+    ? calculateArenaScore({
+        roi: snapshot30d.roi,
+        pnl: snapshot30d.pnl,
+        maxDrawdown: snapshot30d.max_drawdown,
+        winRate: snapshot30d.win_rate,
+      }, '30D')
+    : null
+
+  const score7d = snapshot7d?.roi != null && snapshot7d?.pnl != null
+    ? calculateArenaScore({
+        roi: snapshot7d.roi,
+        pnl: snapshot7d.pnl,
+        maxDrawdown: snapshot7d.max_drawdown,
+        winRate: snapshot7d.win_rate,
+      }, '7D')
+    : null
+
+  // 计算总体分数
+  const overallScore = calculateOverallScore({
+    score7d: score7d?.meetsThreshold ? score7d.totalScore : null,
+    score30d: score30d?.meetsThreshold ? score30d.totalScore : null,
+    score90d: score90d?.meetsThreshold ? score90d.totalScore : null,
+  })
+
   return {
     profile: {
       handle: traderId,
@@ -389,6 +465,11 @@ async function getTraderDetailsFromSnapshots(
       win_rate_30d: snapshot30d?.win_rate ?? undefined,
       max_drawdown_7d: snapshot7d?.max_drawdown ?? undefined,
       max_drawdown_30d: snapshot30d?.max_drawdown ?? undefined,
+      // Arena Score
+      arena_score_90d: score90d?.totalScore ?? undefined,
+      arena_score_30d: score30d?.totalScore ?? undefined,
+      arena_score_7d: score7d?.totalScore ?? undefined,
+      overall_score: overallScore,
     },
     stats: {
       additionalStats: {

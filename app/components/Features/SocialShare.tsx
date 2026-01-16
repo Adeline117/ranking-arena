@@ -188,7 +188,7 @@ export function InviteFriends({ referralCode, onInvite }: InviteFriendsProps) {
     if (navigator.share) {
       try {
         await navigator.share({
-          title: 'Ranking Arena - 发现顶级交易员',
+          title: 'Arena - 发现顶级交易员',
           text: '我发现了一个很棒的交易员排行榜平台，快来看看！',
           url: inviteUrl,
         })

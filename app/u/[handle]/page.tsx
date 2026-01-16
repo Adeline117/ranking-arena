@@ -431,6 +431,18 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
           }
         }
 
+        // 获取关注的交易员数量 (trader_follows)
+        if (profileData && profileData.id) {
+          const { count: tradersCount } = await supabase
+            .from('trader_follows')
+            .select('*', { count: 'exact', head: true })
+            .eq('user_id', profileData.id)
+          
+          if (tradersCount !== null) {
+            profileData.followingTraders = tradersCount
+          }
+        }
+
         const [performanceData, statsData, portfolioData, feedData, similarData] = await Promise.all([
           getTraderPerformance(handle).catch(() => null),
           getTraderStats(handle).catch(() => null),
@@ -606,6 +618,7 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
                 bio={profile.bio}
                 followers={profile.followers}
                 following={profile.following}
+                followingTraders={profile.followingTraders}
                 isRegistered={profile.isRegistered}
                 isOwnProfile={isOwnProfile}
                 showFollowers={profile.showFollowers}

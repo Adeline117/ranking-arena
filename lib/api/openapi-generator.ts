@@ -465,16 +465,16 @@ export class OpenAPIGenerator {
 // ============================================
 
 /**
- * 创建 Ranking Arena API 文档
+ * 创建 Arena API 文档
  */
 export function createRankingArenaOpenAPI(): OpenAPIGenerator {
   const generator = new OpenAPIGenerator(
     {
-      title: 'Ranking Arena API',
+      title: 'Arena API',
       version: '1.0.0',
       description: '交易员排行榜和社区平台 API',
       contact: {
-        name: 'Ranking Arena Team',
+        name: 'Arena Team',
         url: 'https://www.arenafi.org',
       },
     },

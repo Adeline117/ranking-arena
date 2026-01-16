@@ -1,12 +1,17 @@
 /**
  * 获取排行榜交易员数据 API
- * 合并所有交易所数据，使用风险调整排名算法
+ * 合并所有交易所数据，使用 Arena Score 排名算法
  * 支持 7D/30D/90D 时间段分别显示
  */
 
 import { NextResponse } from 'next/server'
 import { withPublic } from '@/lib/api/middleware'
-import { rankTraders, simpleRankTraders, type TraderRankingData } from '@/lib/utils/ranking'
+import { 
+  calculateArenaScore, 
+  ARENA_CONFIG, 
+  type Period,
+  type ArenaScoreResult 
+} from '@/lib/utils/arena-score'
 
 export const dynamic = 'force-dynamic'
 
@@ -27,18 +32,17 @@ interface TraderData {
   followers: number
   source: string
   avatar_url: string | null
-  risk_adjusted_score?: number
+  arena_score?: number
+  return_score?: number
+  drawdown_score?: number
   stability_score?: number
-  is_suspicious?: boolean
 }
 
 export const GET = withPublic(
   async ({ supabase, request }) => {
     // 获取查询参数
     const searchParams = request.nextUrl.searchParams
-    const timeRange = searchParams.get('timeRange') || '90D'
-    // 默认使用简单排名，加 ?ranking=advanced 启用高级排名
-    const useAdvancedRanking = searchParams.get('ranking') === 'advanced'
+    const timeRange = (searchParams.get('timeRange') || '90D') as Period
 
     const allTraders: TraderData[] = []
 
@@ -117,73 +121,57 @@ export const GET = withPublic(
     const results = await Promise.all(sourcePromises)
     results.forEach(traders => allTraders.push(...traders))
 
-    // 使用排名算法
-    let rankedTraders: TraderData[]
+    // 使用 Arena Score 排名
+    // 1. 计算每个交易员的 Arena Score
+    // 2. 过滤未达 PnL 门槛的交易员
+    // 3. 按 Arena Score 降序排序
     
-    if (useAdvancedRanking) {
-      // 高级排名算法（风险调整）
-      const rankingData: TraderRankingData[] = allTraders.map(t => ({
-        id: t.id,
-        roi: t.roi,
-        pnl: t.pnl,
-        win_rate: t.win_rate,
-        max_drawdown: t.max_drawdown,
-        trades_count: t.trades_count,
-        source: t.source,
-      }))
+    const pnlThreshold = ARENA_CONFIG.PNL_THRESHOLD[timeRange]
+    
+    const scoredTraders = allTraders
+      .map(trader => {
+        const scoreResult = calculateArenaScore(
+          {
+            roi: trader.roi,
+            pnl: trader.pnl,
+            maxDrawdown: trader.max_drawdown,
+            winRate: trader.win_rate,
+          },
+          timeRange
+        )
+        
+        return {
+          ...trader,
+          arena_score: scoreResult.totalScore,
+          return_score: scoreResult.returnScore,
+          drawdown_score: scoreResult.drawdownScore,
+          stability_score: scoreResult.stabilityScore,
+          _meetsThreshold: scoreResult.meetsThreshold,
+        }
+      })
+      // 过滤未达门槛的（Bybit 的 PnL 是跟单者盈亏，特殊处理）
+      .filter(t => t.source === 'bybit' || t._meetsThreshold)
+      // 按 Arena Score 降序排序
+      .sort((a, b) => {
+        // 主排序：Arena Score 降序
+        if (b.arena_score !== a.arena_score) {
+          return b.arena_score - a.arena_score
+        }
+        // 次排序：回撤小的优先
+        const mddA = Math.abs(a.max_drawdown ?? Infinity)
+        const mddB = Math.abs(b.max_drawdown ?? Infinity)
+        return mddA - mddB
+      })
 
-      const ranked = rankTraders(rankingData)
-      
-      // 合并排名结果
-      const rankedMap = new Map(ranked.map(r => [r.id, r]))
-      rankedTraders = allTraders
-        .filter(t => rankedMap.has(t.id))
-        .map(t => {
-          const rankInfo = rankedMap.get(t.id)!
-          return {
-            ...t,
-            risk_adjusted_score: rankInfo.risk_adjusted_score,
-            stability_score: rankInfo.stability_score,
-            is_suspicious: rankInfo.is_suspicious,
-          }
-        })
-        .sort((a, b) => {
-          const rankA = rankedMap.get(a.id)!.rank
-          const rankB = rankedMap.get(b.id)!.rank
-          return rankA - rankB
-        })
-    } else {
-      // 简单排名（保持向后兼容）
-      const rankingData: TraderRankingData[] = allTraders.map(t => ({
-        id: t.id,
-        roi: t.roi,
-        pnl: t.pnl,
-        win_rate: t.win_rate,
-        max_drawdown: t.max_drawdown,
-        trades_count: t.trades_count,
-        source: t.source,
-      }))
-
-      const sorted = simpleRankTraders(rankingData)
-      const sortedIds = new Set(sorted.map(s => s.id))
-      
-      rankedTraders = allTraders
-        .filter(t => sortedIds.has(t.id))
-        .sort((a, b) => {
-          const idxA = sorted.findIndex(s => s.id === a.id)
-          const idxB = sorted.findIndex(s => s.id === b.id)
-          return idxA - idxB
-        })
-    }
-
-    // 取前 100 名
-    const topTraders = rankedTraders.slice(0, 100)
+    // 取前 100 名，移除内部字段
+    const topTraders = scoredTraders.slice(0, 100).map(({ _meetsThreshold, ...t }) => t)
 
     return NextResponse.json({ 
       traders: topTraders,
       timeRange,
       totalCount: allTraders.length,
-      rankingMode: useAdvancedRanking ? 'risk_adjusted' : 'simple',
+      rankingMode: 'arena_score',
+      pnlThreshold,
     })
   },
   { name: 'traders', rateLimit: 'read' }

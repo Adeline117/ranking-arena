@@ -33,6 +33,7 @@ export default function OverviewPerformanceCard({ performance, profitableWeeksPc
           pnl: performance.pnl_7d,
           winRate: performance.win_rate_7d,
           maxDrawdown: performance.max_drawdown_7d,
+          arenaScore: (performance as any).arena_score_7d,
         }
       case '30D':
         return {
@@ -40,6 +41,7 @@ export default function OverviewPerformanceCard({ performance, profitableWeeksPc
           pnl: performance.pnl_30d,
           winRate: performance.win_rate_30d,
           maxDrawdown: performance.max_drawdown_30d,
+          arenaScore: (performance as any).arena_score_30d,
         }
       case '90D':
       default:
@@ -48,12 +50,14 @@ export default function OverviewPerformanceCard({ performance, profitableWeeksPc
           pnl: performance.pnl,
           winRate: performance.win_rate,
           maxDrawdown: performance.max_drawdown,
+          arenaScore: (performance as any).arena_score_90d,
         }
     }
   }
 
   const data = getData()
-  const { roi, pnl, winRate, maxDrawdown } = data
+  const { roi, pnl, winRate, maxDrawdown, arenaScore } = data
+  const overallScore = (performance as any).overall_score
 
   return (
     <Box bg="secondary" p={6} radius="none" border="none">
@@ -90,25 +94,130 @@ export default function OverviewPerformanceCard({ performance, profitableWeeksPc
         </select>
       </Box>
 
-      {/* ROI Display - 视觉权重最高 */}
-      <Box style={{ marginBottom: tokens.spacing[8] }}>
-        <Text
-          size="3xl"
-          weight="black"
-          style={{
-            color: roi !== undefined 
-              ? (roi >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error)
-              : tokens.colors.text.tertiary,
-            lineHeight: 1.1,
-            marginBottom: tokens.spacing[2],
-            letterSpacing: '-0.02em',
-          }}
-        >
-          {roi !== undefined ? `${roi >= 0 ? '+' : ''}${roi.toFixed(2)}%` : t('na')}
-        </Text>
-        <Text size="xs" color="tertiary" style={{ fontWeight: tokens.typography.fontWeight.normal }}>
-          {t('roi')} ({period})
-        </Text>
+      {/* Arena Score + ROI Display - 双核心指标 */}
+      <Box style={{ 
+        display: 'flex', 
+        gap: tokens.spacing[6], 
+        marginBottom: tokens.spacing[8],
+        alignItems: 'flex-end',
+      }}>
+        {/* Arena Score - 核心排名指标 */}
+        <Box style={{ flex: '0 0 auto' }}>
+          <Box
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 72,
+              height: 72,
+              borderRadius: tokens.radius.lg,
+              background: arenaScore !== undefined && arenaScore >= 60 
+                ? `linear-gradient(135deg, ${tokens.colors.accent.success}20, ${tokens.colors.accent.success}10)`
+                : arenaScore !== undefined && arenaScore >= 40
+                  ? `linear-gradient(135deg, ${tokens.colors.accent.warning}15, ${tokens.colors.accent.warning}08)`
+                  : tokens.colors.bg.tertiary,
+              border: `2px solid ${
+                arenaScore !== undefined && arenaScore >= 60 
+                  ? tokens.colors.accent.success + '50'
+                  : arenaScore !== undefined && arenaScore >= 40
+                    ? tokens.colors.accent.warning + '40'
+                    : tokens.colors.border.primary
+              }`,
+              marginBottom: tokens.spacing[2],
+            }}
+          >
+            <Text
+              size="2xl"
+              weight="black"
+              style={{
+                color: arenaScore !== undefined && arenaScore >= 60 
+                  ? tokens.colors.accent.success
+                  : arenaScore !== undefined && arenaScore >= 40
+                    ? tokens.colors.accent.warning
+                    : tokens.colors.text.secondary,
+                lineHeight: 1,
+              }}
+            >
+              {arenaScore !== undefined ? arenaScore.toFixed(1) : '—'}
+            </Text>
+          </Box>
+          <Text size="xs" color="tertiary" style={{ 
+            fontWeight: tokens.typography.fontWeight.normal,
+            textAlign: 'center',
+            display: 'block',
+          }}>
+            Score ({period})
+          </Text>
+        </Box>
+
+        {/* ROI Display */}
+        <Box style={{ flex: 1 }}>
+          <Text
+            size="3xl"
+            weight="black"
+            style={{
+              color: roi !== undefined 
+                ? (roi >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error)
+                : tokens.colors.text.tertiary,
+              lineHeight: 1.1,
+              marginBottom: tokens.spacing[2],
+              letterSpacing: '-0.02em',
+            }}
+          >
+            {roi !== undefined ? `${roi >= 0 ? '+' : ''}${roi.toFixed(2)}%` : t('na')}
+          </Text>
+          <Text size="xs" color="tertiary" style={{ fontWeight: tokens.typography.fontWeight.normal }}>
+            {t('roi')} ({period})
+          </Text>
+        </Box>
+
+        {/* Overall Score - 总体评分 */}
+        {overallScore !== undefined && (
+          <Box style={{ flex: '0 0 auto', textAlign: 'right' }}>
+            <Text size="xs" color="tertiary" style={{ 
+              marginBottom: tokens.spacing[1],
+              display: 'block',
+            }}>
+              Overall
+            </Text>
+            <Box
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+                borderRadius: tokens.radius.md,
+                background: overallScore >= 60 
+                  ? `${tokens.colors.accent.success}15`
+                  : overallScore >= 40
+                    ? `${tokens.colors.accent.warning}10`
+                    : tokens.colors.bg.tertiary,
+                border: `1px solid ${
+                  overallScore >= 60 
+                    ? tokens.colors.accent.success + '30'
+                    : overallScore >= 40
+                      ? tokens.colors.accent.warning + '25'
+                      : tokens.colors.border.primary
+                }`,
+              }}
+            >
+              <Text
+                size="lg"
+                weight="black"
+                style={{
+                  color: overallScore >= 60 
+                    ? tokens.colors.accent.success
+                    : overallScore >= 40
+                      ? tokens.colors.accent.warning
+                      : tokens.colors.text.secondary,
+                  lineHeight: 1,
+                }}
+              >
+                {overallScore.toFixed(1)}
+              </Text>
+            </Box>
+          </Box>
+        )}
       </Box>
 
       {/* 辅助指标 - 显示关键数据（只显示有真实数据的指标） */}

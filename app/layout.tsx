@@ -38,13 +38,13 @@ export const viewport: Viewport = {
 
 export const metadata: Metadata = {
   title: {
-    default: "Ranking Arena · 加密交易员排行榜与社区",
-    template: "%s · Ranking Arena",
+    default: "Arena · 加密交易员排行榜与社区",
+    template: "%s · Arena",
   },
   description:
     "聚合 Binance/Bybit/Bitget/MEXC/CoinEx 等交易员 90 天 ROI 排行，支持关注、发帖与个人主页。",
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "https://www.arenafi.org"),
-  applicationName: "Ranking Arena",
+  applicationName: "Arena",
   keywords: [
     "Copy Trading",
     "Trader Ranking",
@@ -56,24 +56,24 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Ranking Arena",
+    title: "Arena",
   },
   formatDetection: {
     telephone: false,
   },
   openGraph: {
     type: "website",
-    title: "Ranking Arena · 加密交易员排行榜与社区",
+    title: "Arena · 加密交易员排行榜与社区",
     description:
       "聚合多交易所 90 天 ROI 排行，实时更新，支持关注与发帖。",
     url: process.env.NEXT_PUBLIC_APP_URL || "https://www.arenafi.org",
-    siteName: "Ranking Arena",
+    siteName: "Arena",
     images: [
       {
         url: "/og.png",
         width: 1200,
         height: 630,
-        alt: "Ranking Arena",
+        alt: "Arena",
       },
     ],
   },
