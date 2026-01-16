@@ -78,6 +78,7 @@ export async function getPosts(
     sort_order = 'desc',
   } = options
 
+  // 注意：original_post_id 字段可能不存在，需要单独处理
   let query = supabase
     .from('posts')
     .select(`
@@ -103,7 +104,6 @@ export async function getPosts(
       images,
       created_at,
       updated_at,
-      original_post_id,
       groups(name)
     `)
     .range(offset, offset + limit - 1)
@@ -143,49 +143,8 @@ export async function getPosts(
     }
   }
 
-  // 获取原始帖子信息（如果有转发）
-  const originalPostIds = [...new Set((data || []).map(p => p.original_post_id).filter(Boolean))]
-  const originalPostMap = new Map<string, OriginalPost>()
-
-  if (originalPostIds.length > 0) {
-    const { data: originalPosts } = await supabase
-      .from('posts')
-      .select('id, title, content, author_handle, images, created_at')
-      .in('id', originalPostIds)
-
-    if (originalPosts) {
-      // 获取原始帖子作者头像
-      const originalAuthorHandles = [...new Set(originalPosts.map(p => p.author_handle).filter(Boolean))]
-      const originalAvatarMap = new Map<string, string>()
-
-      if (originalAuthorHandles.length > 0) {
-        const { data: originalProfiles } = await supabase
-          .from('user_profiles')
-          .select('handle, avatar_url')
-          .in('handle', originalAuthorHandles)
-
-        if (originalProfiles) {
-          originalProfiles.forEach((p: { handle: string; avatar_url: string | null }) => {
-            if (p.avatar_url) {
-              originalAvatarMap.set(p.handle, p.avatar_url)
-            }
-          })
-        }
-      }
-
-      originalPosts.forEach((p: any) => {
-        originalPostMap.set(p.id, {
-          id: p.id,
-          title: p.title,
-          content: p.content,
-          author_handle: p.author_handle,
-          author_avatar_url: originalAvatarMap.get(p.author_handle) || null,
-          images: p.images || null,
-          created_at: p.created_at,
-        })
-      })
-    }
-  }
+  // 注意：原始帖子功能需要先在数据库中添加 original_post_id 字段
+  // 运行 scripts/setup_repost_as_post.sql 后才能启用
 
   return (data || []).map((post: any) => ({
     id: post.id,
@@ -212,8 +171,9 @@ export async function getPosts(
     images: post.images || null,
     created_at: post.created_at,
     updated_at: post.updated_at,
-    original_post_id: post.original_post_id || null,
-    original_post: post.original_post_id ? originalPostMap.get(post.original_post_id) || null : null,
+    // 转发功能暂时禁用，需要先运行 SQL 脚本
+    original_post_id: null,
+    original_post: null,
   }))
 }
 
