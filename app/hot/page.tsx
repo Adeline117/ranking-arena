@@ -366,10 +366,9 @@ function HotContent() {
           return updated
         })
         
-        console.log(`[HotPage] 批量翻译完成: ${data.data.cached}/${data.data.total} 命中缓存`)
       }
-    } catch (err) {
-      console.error('[HotPage] 列表翻译出错:', err)
+    } catch {
+      // 翻译失败，静默处理
     } finally {
       setTranslatingList(false)
     }
@@ -411,15 +410,10 @@ function HotContent() {
         setTranslatedContent(translated)
         setShowingOriginal(false)
         setTranslationCache(prev => ({ ...prev, [cacheKey]: translated }))
-        if (data.data.cached) {
-          console.log('[HotPage] 翻译命中服务端缓存')
-        }
       } else {
-        console.error('[HotPage] 翻译失败:', data.error)
         showToast(data.error || '翻译失败', 'error')
       }
-    } catch (err) {
-      console.error('[HotPage] 翻译出错:', err)
+    } catch {
       showToast('翻译服务出错', 'error')
     } finally {
       setTranslating(false)

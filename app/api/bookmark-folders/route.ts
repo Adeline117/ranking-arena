@@ -19,8 +19,12 @@ export async function GET(request: NextRequest) {
     const user = await requireAuth(request)
     const supabase = getSupabaseAdmin()
 
-    // 确保用户有默认收藏夹
-    await supabase.rpc('ensure_default_bookmark_folder', { p_user_id: user.id })
+    // 尝试确保用户有默认收藏夹（如果表存在）
+    try {
+      await supabase.rpc('ensure_default_bookmark_folder', { p_user_id: user.id })
+    } catch {
+      // 函数可能不存在，忽略错误
+    }
 
     // 获取用户的所有收藏夹
     const { data: folders, error } = await supabase
@@ -30,7 +34,14 @@ export async function GET(request: NextRequest) {
       .order('is_default', { ascending: false })
       .order('created_at', { ascending: true })
 
-    if (error) throw error
+    if (error) {
+      // 如果表不存在，返回空列表
+      const ignoredCodes = ['42P01', 'PGRST116', 'PGRST204']
+      if (ignoredCodes.includes(error.code || '')) {
+        return success({ folders: [] })
+      }
+      throw error
+    }
 
     return success({ folders: folders || [] })
   } catch (error) {
@@ -80,4 +91,5 @@ export async function POST(request: NextRequest) {
     return handleError(error, 'bookmark-folders POST')
   }
 }
+
 

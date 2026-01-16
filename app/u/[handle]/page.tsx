@@ -6,18 +6,19 @@ import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
 import { supabase } from '@/lib/supabase/client'
 import TopNav from '@/app/components/Layout/TopNav'
-import TraderHeader from '@/app/components/trader/TraderHeader'
-import TraderTabs from '@/app/components/trader/TraderTabs'
-import OverviewPerformanceCard from '@/app/components/trader/OverviewPerformanceCard'
-import TraderAboutCard from '@/app/components/trader/TraderAboutCard'
-import SimilarTraders from '@/app/components/trader/SimilarTraders'
+import TraderHeader from '@/app/components/Trader/TraderHeader'
+import TraderTabs from '@/app/components/Trader/TraderTabs'
+import OverviewPerformanceCard from '@/app/components/Trader/OverviewPerformanceCard'
+import TraderAboutCard from '@/app/components/Trader/TraderAboutCard'
+import SimilarTraders from '@/app/components/Trader/SimilarTraders'
 import PostFeed from '@/app/components/Features/PostFeed'
-import StatsPage from '@/app/components/trader/stats/StatsPage'
-import PinnedPost from '@/app/components/trader/PinnedPost'
-import PortfolioTable from '@/app/components/trader/PortfolioTable'
-import TradingViewShell from '@/app/components/trader/TradingViewShell'
-import AccountRequiredStats from '@/app/components/trader/AccountRequiredStats'
-import CreatedGroups from '@/app/components/trader/CreatedGroups'
+import StatsPage from '@/app/components/Trader/stats/StatsPage'
+// PinnedPost 组件已集成到 PostFeed 中（置顶帖子自动显示在动态列表最上方）
+import PortfolioTable from '@/app/components/Trader/PortfolioTable'
+import TradingViewShell from '@/app/components/Trader/TradingViewShell'
+import AccountRequiredStats from '@/app/components/Trader/AccountRequiredStats'
+import CreatedGroups from '@/app/components/Trader/CreatedGroups'
+import UserBookmarkFolders from '@/app/components/Trader/UserBookmarkFolders'
 import { Box, Text } from '@/app/components/Base'
 import { RankingSkeleton } from '@/app/components/UI/Skeleton'
 import {
@@ -142,7 +143,6 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
           // 直接使用 user_profiles 表（因为 profiles 表不存在）
           // 先通过 handle 查询（使用解码后的 handle）
           let userProfile = null
-          console.log('[UserPage] Querying user_profiles by handle:', handle, '(decoded:', decodedHandle, ')')
           
           // 先尝试解码后的 handle
           const { data: profileByHandle, error: handleError } = await supabase
@@ -151,8 +151,6 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
             .eq('handle', decodedHandle)
             .maybeSingle()
 
-          console.log('[UserPage] Query by handle result:', profileByHandle, 'error:', handleError)
-
           if (profileByHandle) {
             userProfile = profileByHandle
           } else {
@@ -160,20 +158,16 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
             // 注意：只有当 handle 看起来像 UUID 时才尝试通过 id 查询
             const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
             if (uuidRegex.test(handle)) {
-              console.log('[UserPage] Querying user_profiles by id:', handle)
               const { data: profileById, error: idError } = await supabase
                 .from('user_profiles')
                 .select('*')
                 .eq('id', handle)
                 .maybeSingle()
               
-              console.log('[UserPage] Query by id result:', profileById, 'error:', idError)
-              
               if (profileById) {
                 userProfile = profileById
                 // 如果用户有设置 handle，重定向到正确的 URL
                 if (profileById.handle && profileById.handle !== decodedHandle) {
-                  console.log('[UserPage] Redirecting to correct handle:', profileById.handle)
                   window.location.href = `/u/${encodeURIComponent(profileById.handle)}`
                   return
                 }
@@ -184,20 +178,16 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
             if (!userProfile) {
               const { data: { user: currentUser } } = await supabase.auth.getUser()
               if (currentUser) {
-                console.log('[UserPage] Checking current user profile by userId:', currentUser.id)
                 const { data: currentUserProfile } = await supabase
                   .from('user_profiles')
                   .select('*')
                   .eq('id', currentUser.id)
                   .maybeSingle()
                 
-                console.log('[UserPage] Current user profile:', currentUserProfile)
-                
                 if (currentUserProfile) {
                   // 找到当前用户的 profile
                   // 如果用户有 handle 且与 URL 不同，重定向
                   if (currentUserProfile.handle && currentUserProfile.handle !== decodedHandle) {
-                    console.log('[UserPage] Redirecting to user handle:', currentUserProfile.handle)
                     window.location.href = `/u/${encodeURIComponent(currentUserProfile.handle)}`
                     return
                   }
@@ -211,17 +201,17 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
           }
 
           if (userProfile) {
-            // 获取粉丝数（关注他的人）- 使用 trader_follows 表
+            // 获取粉丝数（关注他的人）- 使用 user_follows 表
             const { count: followersCount } = await supabase
-              .from('trader_follows')
+              .from('user_follows')
               .select('*', { count: 'exact', head: true })
-              .eq('trader_id', userProfile.id)
+              .eq('following_id', userProfile.id)
             
-            // 获取关注的人数量（他关注的人）- 使用 trader_follows 表
+            // 获取关注的人数量（他关注的人）- 使用 user_follows 表
             const { count: followingCount } = await supabase
-              .from('trader_follows')
+              .from('user_follows')
               .select('*', { count: 'exact', head: true })
-              .eq('user_id', userProfile.id)
+              .eq('follower_id', userProfile.id)
 
             profileData = {
               handle: userProfile.handle || decodedHandle,
@@ -246,14 +236,14 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
           const traderOriginalAvatarUrl = profileData.avatar_url
           
           const { count: followersCount } = await supabase
-            .from('trader_follows')
+            .from('user_follows')
             .select('*', { count: 'exact', head: true })
-            .eq('trader_id', profileData.id)
+            .eq('following_id', profileData.id)
           
           const { count: followingCount } = await supabase
-            .from('trader_follows')
+            .from('user_follows')
             .select('*', { count: 'exact', head: true })
-            .eq('user_id', profileData.id)
+            .eq('follower_id', profileData.id)
 
           if (followersCount !== null) {
             profileData.followers = followersCount
@@ -269,15 +259,12 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
         if (!profileData) {
           // 如果找不到用户，尝试从当前登录用户创建 profile
           const { data: { user } } = await supabase.auth.getUser()
-          console.log('[UserPage] No profileData found, checking user:', user?.id, 'handle:', handle)
           
           if (user && user.email) {
             const emailHandle = user.email.split('@')[0]
-            console.log('[UserPage] Email handle:', emailHandle, 'current handle:', handle)
             
             // 如果 handle 匹配邮箱前缀，尝试创建 profile
             if (handle === emailHandle || handle === user.id.slice(0, 8)) {
-              console.log('[UserPage] Handle matches, creating profile...')
               const defaultHandle = emailHandle
               try {
                 // 尝试创建 profile（只使用 user_profiles 表，因为 profiles 表不存在）
@@ -294,32 +281,25 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
                   .single()
                 
                 if (userProfileData) {
-                  console.log('[UserPage] Profile created in user_profiles table:', userProfileData)
                   newProfile = userProfileData
                 } else if (userProfileError) {
-                  console.log('[UserPage] Error creating in user_profiles table:', userProfileError)
-                  console.log('[UserPage] Error details:', JSON.stringify(userProfileError, null, 2))
-                  
                   // 如果错误是因为缺少 handle 列，提示用户运行修复脚本
                   if (userProfileError.message?.includes('handle') || userProfileError.code === 'PGRST204') {
-                    console.error('[UserPage] ❌ user_profiles 表缺少 handle 列！')
-                    console.error('[UserPage] 请运行 scripts/fix_user_profiles_complete.sql 来修复表结构')
                     alert('数据库表结构不完整，请运行 scripts/fix_user_profiles_complete.sql 来修复')
                   }
                 }
 
                 if (newProfile) {
-                  console.log('[UserPage] Profile created successfully:', newProfile.handle)
-                  // 获取粉丝数和关注数 - 使用 trader_follows 表
+                  // 获取粉丝数和关注数 - 使用 user_follows 表
                   const { count: followersCount } = await supabase
-                    .from('trader_follows')
+                    .from('user_follows')
                     .select('*', { count: 'exact', head: true })
-                    .eq('trader_id', newProfile.id)
+                    .eq('following_id', newProfile.id)
                   
                   const { count: followingCount } = await supabase
-                    .from('trader_follows')
+                    .from('user_follows')
                     .select('*', { count: 'exact', head: true })
-                    .eq('user_id', newProfile.id)
+                    .eq('follower_id', newProfile.id)
 
                   // 检查新创建的用户是否在排行榜上
                   let foundInRankingForNewProfile = false
@@ -353,16 +333,11 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
                     showFollowers: true,
                     showFollowing: true,
                   }
-                  console.log('[UserPage] profileData set:', profileData.handle)
-                } else {
-                  console.log('[UserPage] Failed to create profile')
                 }
-              } catch (error) {
-                console.error('[UserPage] Exception creating profile:', error)
-                console.error('[UserPage] Exception details:', JSON.stringify(error, null, 2))
+              } catch {
+                // 创建 profile 失败，静默处理
               }
             } else {
-              console.log('[UserPage] Handle does not match, trying to find or create by ID...')
               // 如果 handle 不匹配，尝试通过 ID 查找
               // 直接使用 user_profiles 表（因为 profiles 表不存在）
               const { data: profileById } = await supabase
@@ -374,21 +349,19 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
               if (profileById) {
                 // 如果找到用户且有 handle，重定向到正确的 handle
                 if (profileById.handle && profileById.handle !== handle) {
-                  console.log('[UserPage] Found profile by ID, redirecting to:', profileById.handle)
                   window.location.href = `/u/${profileById.handle}`
                   return
                 }
                 // 如果用户没有设置 handle，使用当前 profile 数据显示页面
-                console.log('[UserPage] Found profile by ID, using profile data')
                 const { count: followersCount } = await supabase
-                  .from('trader_follows')
+                  .from('user_follows')
                   .select('*', { count: 'exact', head: true })
-                  .eq('trader_id', profileById.id)
+                  .eq('following_id', profileById.id)
                 
                 const { count: followingCount } = await supabase
-                  .from('trader_follows')
+                  .from('user_follows')
                   .select('*', { count: 'exact', head: true })
-                  .eq('user_id', profileById.id)
+                  .eq('follower_id', profileById.id)
 
                 profileData = {
                   handle: profileById.handle || decodedHandle,
@@ -403,8 +376,7 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
                   showFollowing: profileById.show_following !== false,
                 }
               } else {
-                console.log('[UserPage] No profile found by ID, creating new profile...')
-                // 如果找不到，尝试创建新的 profile（不包含 email，因为 user_profiles 表没有这个列）
+                // 如果找不到，尝试创建新的 profile
                 try {
                   const { data: userProfileData, error: insertError } = await supabase
                     .from('user_profiles')
@@ -416,23 +388,21 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
                     .single()
 
                   if (userProfileData) {
-                    console.log('[UserPage] User profile created:', userProfileData.handle)
                     // 如果新创建的 handle 与当前 URL 不同，重定向
                     if (userProfileData.handle && userProfileData.handle !== decodedHandle) {
-                      console.log('[UserPage] Redirecting to:', userProfileData.handle)
                       window.location.href = `/u/${encodeURIComponent(userProfileData.handle)}`
                       return
                     }
                     // 否则直接使用创建的数据
                     const { count: followersCount } = await supabase
-                      .from('trader_follows')
+                      .from('user_follows')
                       .select('*', { count: 'exact', head: true })
-                      .eq('trader_id', userProfileData.id)
+                      .eq('following_id', userProfileData.id)
                     
                     const { count: followingCount } = await supabase
-                      .from('trader_follows')
+                      .from('user_follows')
                       .select('*', { count: 'exact', head: true })
-                      .eq('user_id', userProfileData.id)
+                      .eq('follower_id', userProfileData.id)
 
                     profileData = {
                       handle: userProfileData.handle || decodedHandle,
@@ -447,11 +417,9 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
                       showFollowers: true,
                       showFollowing: true,
                     }
-                  } else if (insertError) {
-                    console.log('[UserPage] Error creating user profile:', insertError)
                   }
-                } catch (error) {
-                  console.error('[UserPage] Error creating profile:', error)
+                } catch {
+                  // 创建 profile 失败，静默处理
                 }
               }
             }
@@ -593,12 +561,7 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
         {/* Tab Content */}
         {activeTab === 'overview' && (
           <Box
-            className="profile-grid"
-            style={{
-              display: 'grid',
-              gridTemplateColumns: '1fr 320px',
-              gap: tokens.spacing[8],
-            }}
+            className="main-grid"
           >
             {/* Left Column - 核心绩效指标和动态 */}
             <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[6] }}>
@@ -608,12 +571,8 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
                   profitableWeeksPct={stats?.additionalStats?.profitableWeeksPct}
                 />
               )}
-              {/* 置顶帖子 - Performance和动态之间 */}
-              {feed.filter((f) => f.is_pinned && f.type !== 'group_post').length > 0 && (
-                <PinnedPost item={feed.filter((f) => f.is_pinned && f.type !== 'group_post')[0]} />
-              )}
-              {/* 交易员动态 - 使用 PostFeed 组件 */}
-              <Box bg="secondary" p={4} radius="lg" border="primary" style={{ marginTop: tokens.spacing[4] }}>
+              {/* 交易员动态 - 使用 PostFeed 组件（置顶帖子会自动显示在最上面） */}
+              <Box bg="secondary" p={4} radius="lg" border="primary">
                 <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: tokens.spacing[4] }}>
                   <Text size="lg" weight="black">动态</Text>
                   {isOwnProfile && (
@@ -654,6 +613,8 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
               />
               {/* 创办的小组 */}
               <CreatedGroups userId={profile.id} />
+              {/* 公开收藏夹 */}
+              <UserBookmarkFolders userId={profile.id} isOwnProfile={isOwnProfile} />
               {isOwnProfile && currentUserId && (
                 <AccountRequiredStats userId={currentUserId} />
               )}

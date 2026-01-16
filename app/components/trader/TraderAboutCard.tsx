@@ -169,6 +169,7 @@ export default function TraderAboutCard({
         top: 80, // 在TopNav下方
         boxShadow: tokens.shadow.md,
         transition: `all ${tokens.transition.base}`,
+        zIndex: 10,
       }}
       onMouseEnter={(e) => {
         e.currentTarget.style.boxShadow = tokens.shadow.lg
@@ -282,36 +283,9 @@ export default function TraderAboutCard({
             e.currentTarget.style.background = 'transparent'
           }}
         >
-          <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1], marginBottom: tokens.spacing[1] }}>
-            <Text size="xs" color="tertiary" style={{ fontWeight: tokens.typography.fontWeight.medium }}>
-              关注者
-            </Text>
-            {/* 隐私指示器 - 仅自己可见 */}
-            {isOwnProfile && (
-              <span 
-                title={showFollowers ? '公开 - 其他人可以查看' : '私密 - 仅自己可见'}
-                style={{ 
-                  fontSize: 10,
-                  color: showFollowers ? tokens.colors.text.tertiary : tokens.colors.accent.warning,
-                  cursor: 'help',
-                }}
-              >
-                {showFollowers ? '👁' : '🔒'}
-              </span>
-            )}
-            {/* 不可点击提示 */}
-            {!isOwnProfile && !showFollowers && isRegistered && (
-              <span 
-                title="该用户已关闭粉丝列表展示"
-                style={{ 
-                  fontSize: 10,
-                  color: tokens.colors.text.tertiary,
-                }}
-              >
-                🔒
-              </span>
-            )}
-          </Box>
+          <Text size="xs" color="tertiary" style={{ fontWeight: tokens.typography.fontWeight.medium, marginBottom: tokens.spacing[1] }}>
+            关注者
+          </Text>
           <Text size="base" weight="bold" style={{ color: tokens.colors.text.primary, fontSize: tokens.typography.fontSize.lg }}>
             {followers.toLocaleString()}
           </Text>
@@ -338,36 +312,9 @@ export default function TraderAboutCard({
               e.currentTarget.style.background = 'transparent'
             }}
           >
-            <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1], marginBottom: tokens.spacing[1] }}>
-              <Text size="xs" color="tertiary" style={{ fontWeight: tokens.typography.fontWeight.medium }}>
+            <Text size="xs" color="tertiary" style={{ fontWeight: tokens.typography.fontWeight.medium, marginBottom: tokens.spacing[1] }}>
                 关注中
               </Text>
-              {/* 隐私指示器 - 仅自己可见 */}
-              {isOwnProfile && (
-                <span 
-                  title={showFollowing ? '公开 - 其他人可以查看' : '私密 - 仅自己可见'}
-                  style={{ 
-                    fontSize: 10,
-                    color: showFollowing ? tokens.colors.text.tertiary : tokens.colors.accent.warning,
-                    cursor: 'help',
-                  }}
-                >
-                  {showFollowing ? '👁' : '🔒'}
-                </span>
-              )}
-              {/* 不可点击提示 */}
-              {!isOwnProfile && !showFollowing && isRegistered && (
-                <span 
-                  title="该用户已关闭关注列表展示"
-                  style={{ 
-                    fontSize: 10,
-                    color: tokens.colors.text.tertiary,
-                  }}
-                >
-                  🔒
-                </span>
-              )}
-            </Box>
             <Text size="base" weight="bold" style={{ color: tokens.colors.text.primary, fontSize: tokens.typography.fontSize.lg }}>
               {following.toLocaleString()}
             </Text>
@@ -384,6 +331,7 @@ export default function TraderAboutCard({
           handle={handle}
           currentUserId={userId}
           isOwnProfile={isOwnProfile}
+          isPublic={modalType === 'followers' ? showFollowers : showFollowing}
         />
       )}
     </Box>

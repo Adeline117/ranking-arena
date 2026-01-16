@@ -136,7 +136,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
       .eq('poll_id', poll.id)
       .eq('user_id', user.id)
 
-    // 删除现有投票
+    // 删除现有投票并手动更新计数（不依赖触发器）
+    const existingIndexes = existingVotes?.map(v => v.option_index) || []
+    
     if (existingVotes && existingVotes.length > 0) {
       await supabase
         .from('poll_votes')
@@ -160,12 +162,40 @@ export async function POST(request: NextRequest, context: RouteContext) {
       throw new Error('投票失败: ' + insertError.message)
     }
 
-    // 获取更新后的投票信息
-    const { data: updatedPoll } = await supabase
+    // 手动更新投票计数（因为触发器可能不工作）
+    let updatedOptions = [...poll.options]
+    
+    // 减少旧投票的计数
+    for (const oldIdx of existingIndexes) {
+      if (updatedOptions[oldIdx]) {
+        updatedOptions[oldIdx] = {
+          ...updatedOptions[oldIdx],
+          votes: Math.max(0, (updatedOptions[oldIdx].votes || 0) - 1)
+        }
+      }
+    }
+    
+    // 增加新投票的计数
+    for (const newIdx of optionIndexes) {
+      if (updatedOptions[newIdx]) {
+        updatedOptions[newIdx] = {
+          ...updatedOptions[newIdx],
+          votes: (updatedOptions[newIdx].votes || 0) + 1
+        }
+      }
+    }
+    
+    // 更新 polls 表
+    const { data: updatedPoll, error: updateError } = await supabase
       .from('polls')
-      .select('*')
+      .update({ options: updatedOptions, updated_at: new Date().toISOString() })
       .eq('id', poll.id)
+      .select('*')
       .single()
+    
+    if (updateError) {
+      console.error('更新投票计数失败:', updateError)
+    }
 
     return success({
       poll: {
@@ -179,4 +209,5 @@ export async function POST(request: NextRequest, context: RouteContext) {
     return handleError(error, 'posts/[id]/poll-vote POST')
   }
 }
+
 

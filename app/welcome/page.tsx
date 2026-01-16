@@ -10,14 +10,14 @@ import { useToast } from '@/app/components/UI/Toast'
 type Step = 'welcome' | 'profile' | 'interests' | 'complete'
 
 const interests = [
-  { id: 'btc', label: 'BTC 交易', emoji: '₿' },
-  { id: 'eth', label: 'ETH 交易', emoji: 'Ξ' },
-  { id: 'altcoin', label: '山寨币', emoji: '🪙' },
-  { id: 'futures', label: '合约/期货', emoji: '📈' },
-  { id: 'spot', label: '现货交易', emoji: '💰' },
-  { id: 'defi', label: 'DeFi', emoji: '🔗' },
-  { id: 'nft', label: 'NFT', emoji: '🖼' },
-  { id: 'analysis', label: '技术分析', emoji: '📊' },
+  { id: 'btc', label: 'BTC 交易', emoji: '' },
+  { id: 'eth', label: 'ETH 交易', emoji: '' },
+  { id: 'altcoin', label: '山寨币', emoji: '' },
+  { id: 'futures', label: '合约/期货', emoji: '' },
+  { id: 'spot', label: '现货交易', emoji: '' },
+  { id: 'defi', label: 'DeFi', emoji: '' },
+  { id: 'nft', label: 'NFT', emoji: '' },
+  { id: 'analysis', label: '技术分析', emoji: '' },
 ]
 
 export default function WelcomePage() {
@@ -225,7 +225,7 @@ export default function WelcomePage() {
         {step === 'welcome' && (
           <Box style={{ textAlign: 'center' }}>
             <Text size="3xl" weight="black" style={{ marginBottom: 12 }}>
-              🎉 欢迎加入
+              欢迎加入
             </Text>
             <Text size="2xl" weight="black" style={{ marginBottom: 24, color: '#8b6fa8' }}>
               Ranking Arena
@@ -250,9 +250,11 @@ export default function WelcomePage() {
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  fontSize: 20,
+                  fontSize: 14,
+                  fontWeight: 700,
+                  color: '#8b6fa8',
                 }}>
-                  📊
+                  1
                 </Box>
                 <Box>
                   <Text weight="bold">查看交易员排名</Text>
@@ -269,9 +271,11 @@ export default function WelcomePage() {
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  fontSize: 20,
+                  fontSize: 14,
+                  fontWeight: 700,
+                  color: '#8b6fa8',
                 }}>
-                  ⭐
+                  2
                 </Box>
                 <Box>
                   <Text weight="bold">关注优秀交易员</Text>
@@ -288,9 +292,11 @@ export default function WelcomePage() {
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  fontSize: 20,
+                  fontSize: 14,
+                  fontWeight: 700,
+                  color: '#8b6fa8',
                 }}>
-                  💬
+                  3
                 </Box>
                 <Box>
                   <Text weight="bold">参与社区讨论</Text>
@@ -424,7 +430,6 @@ export default function WelcomePage() {
                     transition: 'all 0.2s ease',
                   }}
                 >
-                  <span style={{ fontSize: 20 }}>{interest.emoji}</span>
                   <Text size="sm" weight="bold">{interest.label}</Text>
                 </Box>
               ))}
@@ -455,10 +460,18 @@ export default function WelcomePage() {
         {step === 'complete' && (
           <Box style={{ textAlign: 'center' }}>
             <Box style={{ 
-              fontSize: 64, 
-              marginBottom: 24,
+              width: 64, 
+              height: 64,
+              borderRadius: '50%',
+              background: 'rgba(139,111,168,0.2)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 24px',
             }}>
-              🎊
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#8b6fa8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
             </Box>
             <Text size="2xl" weight="black" style={{ marginBottom: 12 }}>
               设置完成！

@@ -42,31 +42,12 @@ export default function Avatar({
   // - avatarUrl 为 undefined：不在排行榜上，生成默认头像
   let finalAvatarUrl: string | null | undefined = null
   
-  // 调试日志：记录前几个trader的头像URL
-  if (isTrader && (name?.includes('老') || name?.includes('East') || name?.includes('Rock') || name?.includes('Encryption'))) {
-    console.log(`[Avatar] Trader "${name}" (${userId}):`, {
-      avatarUrl,
-      avatarUrl_type: typeof avatarUrl,
-      avatarUrl_value: avatarUrl,
-      isTrader,
-    })
-  }
-  
   if (isTrader) {
     // trader：如果有 avatarUrl 且不为空，则使用；否则显示首字母头像（不生成）
     if (avatarUrl && typeof avatarUrl === 'string' && avatarUrl.trim() !== '') {
       finalAvatarUrl = avatarUrl.trim()
     } else {
       finalAvatarUrl = null // 没有头像URL，显示首字母头像
-      
-      // 调试日志：如果没有头像URL，输出警告
-      if (name && (name.includes('老') || name.includes('East') || name.includes('Rock') || name.includes('Encryption'))) {
-        console.warn(`[Avatar] ⚠️ Trader "${name}" 没有头像URL:`, {
-          avatarUrl,
-          avatarUrl_type: typeof avatarUrl,
-          avatarUrl_length: avatarUrl?.length || 0,
-        })
-      }
     }
   } else {
     // 普通用户
@@ -138,47 +119,25 @@ export default function Avatar({
               display: imageLoading ? 'none' : 'block',
             }}
             onLoad={() => {
-              console.log(`[Avatar] ✅ 图片加载成功: "${finalAvatarUrl?.substring(0, 80)}${finalAvatarUrl && finalAvatarUrl.length > 80 ? '...' : ''}"`, {
-                name,
-                userId,
-                isTrader,
-              })
               setImageLoading(false)
             }}
             onError={(e) => {
               const img = e.target as HTMLImageElement
               const currentSrc = img?.src || finalAvatarUrl || ''
               
-              // Bitget的URL可能返回403（需要referrer），尝试不同的referrerPolicy
-              // 或者URL没有扩展名，需要添加扩展名
+              // Bitget URL 可能需要添加扩展名
               const hasExtension = currentSrc && /\.(jpg|jpeg|png|gif|webp|svg|ico)(\?|$|#)/i.test(currentSrc)
               const isBitgetUrl = currentSrc.includes('bgstatic.com')
               
-              console.error(`[Avatar] ❌ 图片加载失败: "${currentSrc.substring(0, 100)}${currentSrc.length > 100 ? '...' : ''}"`, {
-                name,
-                userId,
-                isTrader,
-                url_type: typeof finalAvatarUrl,
-                url_length: currentSrc?.length || 0,
-                url_has_extension: hasExtension,
-                is_bitget_url: isBitgetUrl,
-                error_target: img?.src || '(空)',
-              })
-              
-              // 如果是Bitget URL且没有扩展名，尝试添加扩展名
+              // 如果是 Bitget URL 且没有扩展名，尝试添加扩展名
               if (isBitgetUrl && !hasExtension && currentSrc && !currentSrc.includes('?')) {
-                // 尝试添加 .jpg 扩展名
                 const urlWithJpg = `${currentSrc}.jpg`
-                console.log(`[Avatar] 🔄 Bitget URL无扩展名，尝试添加 .jpg: "${urlWithJpg.substring(0, 100)}${urlWithJpg.length > 100 ? '...' : ''}"`)
-                
-                // 直接更新src，让浏览器尝试加载
                 if (img && img.src === currentSrc) {
                   img.src = urlWithJpg
-                  return // 不设置error，让新URL尝试加载
+                  return
                 }
               }
               
-              // 如果已经尝试过或不是Bitget URL，使用fallback
               setImageError(true)
               setImageLoading(false)
             }}

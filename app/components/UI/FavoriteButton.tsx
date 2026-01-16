@@ -75,7 +75,7 @@ export default function FavoriteButton({ traderId, userId, initialFavorited = fa
       }}
       title={favorited ? '取消收藏' : '收藏'}
     >
-      {favorited ? '❤️' : '🤍'}
+      {favorited ? '★' : '☆'}
     </button>
   )
 }

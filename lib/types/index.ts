@@ -35,4 +35,3 @@ export interface UserBasicInfo {
   avatar_url?: string | null
   email?: string
 }
-

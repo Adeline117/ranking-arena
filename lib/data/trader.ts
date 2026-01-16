@@ -340,8 +340,6 @@ export async function getTraderByHandle(handle: string): Promise<TraderProfile |
       })()
     ])
 
-    console.log(`[trader] Found trader: ${source.handle || source.source_trader_id} (source: ${source.source}, arena followers: ${followersCount})`)
-
     return {
       handle: source.handle || source.source_trader_id,
       id: source.source_trader_id,
@@ -856,11 +854,11 @@ export async function getTraderFeed(handle: string): Promise<TraderFeedItem[]> {
     // 添加转发
     repostsData.forEach((repost) => {
       const r = repost as Record<string, unknown>
-      const postsArr = r.posts as Array<Record<string, unknown>> | null
-      const postData = postsArr?.[0]
+      // Supabase 一对一关联返回单个对象，不是数组
+      const postData = r.posts as Record<string, unknown> | null
       
       if (postData) {
-        const groups = postData.groups as Array<{ name: string }> | null
+        const groups = postData.groups as { name: string } | null
         feedItems.push({
           id: `repost-${r.id}`,
           type: 'repost',
@@ -868,7 +866,7 @@ export async function getTraderFeed(handle: string): Promise<TraderFeedItem[]> {
           content: String(postData.content || ''),
           time: String(r.created_at),
           groupId: postData.group_id ? String(postData.group_id) : undefined,
-          groupName: groups?.[0]?.name,
+          groupName: groups?.name,
           like_count: Number(postData.like_count) || 0,
           is_pinned: false,
           repost_comment: r.comment ? String(r.comment) : undefined,

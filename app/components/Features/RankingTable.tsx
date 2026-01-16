@@ -288,10 +288,11 @@ export default function RankingTable(props: {
                         width: 28,
                         height: 28,
                         borderRadius: tokens.radius.full,
-                        background: trader.avatar_url ? tokens.colors.bg.secondary : getAvatarGradient(trader.id),
+                        background: getAvatarGradient(trader.id),
                         border: `1.5px solid ${tokens.colors.border.primary}`,
-                        display: 'grid',
-                        placeItems: 'center',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
                         fontWeight: tokens.typography.fontWeight.black,
                         fontSize: '10px',
                         color: '#ffffff',
@@ -313,50 +314,40 @@ export default function RankingTable(props: {
                         e.currentTarget.style.borderColor = tokens.colors.border.primary
                       }}
                     >
-                      {trader.avatar_url ? (
+                      {/* 首字母 - 始终存在作为底层 */}
+                      <Text 
+                        size="xs" 
+                        weight="black" 
+                        style={{ 
+                          color: '#ffffff',
+                          textShadow: '0 1px 2px rgba(0, 0, 0, 0.3)',
+                          fontSize: '10px',
+                          lineHeight: '1',
+                        }}
+                      >
+                        {getAvatarInitial(displayName)}
+                      </Text>
+                      {/* 头像图片 - 如果有且加载成功则覆盖首字母 */}
+                      {trader.avatar_url && (
                         <img 
                           src={trader.avatar_url} 
                           alt={displayName} 
-                          referrerPolicy="origin-when-cross-origin"
+                          referrerPolicy="no-referrer"
                           loading="lazy"
                           style={{ 
                             width: '100%', 
                             height: '100%', 
                             objectFit: 'cover',
-                            transition: `opacity ${tokens.transition.base}`,
-                            opacity: 0,
-                          }}
-                          onLoad={(e) => {
-                            // 图片加载成功，平滑显示
-                            e.currentTarget.style.opacity = '1'
+                            position: 'absolute',
+                            inset: 0,
                           }}
                           onError={(e) => {
-                            // 隐藏图片，显示首字母
+                            // 隐藏图片，首字母会自动显示
                             if (e.target) {
                               (e.target as HTMLImageElement).style.display = 'none'
-                              // 确保容器显示渐变背景
-                              const container = e.currentTarget.parentElement
-                              if (container) {
-                                container.style.background = getAvatarGradient(trader.id)
-                              }
                             }
                           }}
                         />
-                      ) : null}
-                      {/* 首字母 - 如果没有头像或头像加载失败时显示 */}
-                      {!trader.avatar_url && (
-                        <Text 
-                          size="xs" 
-                          weight="black" 
-                          style={{ 
-                            color: '#ffffff',
-                            textShadow: '0 1px 2px rgba(0, 0, 0, 0.3)',
-                            fontSize: '10px',
-                            lineHeight: '1',
-                          }}
-                        >
-                          {getAvatarInitial(displayName)}
-                        </Text>
                       )}
                     </Box>
                     {/* 名字 - 在头像右边 */}
@@ -649,5 +640,3 @@ export default function RankingTable(props: {
     </Box>
   )
 }
-
-

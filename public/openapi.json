@@ -1,0 +1,381 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Ranking Arena API",
+    "description": "多交易所交易员排行榜平台 API\n\n## 认证\n\n使用 Bearer Token 进行认证，在请求头中添加：\n```\nAuthorization: Bearer <token>\n```\n\n## 限流\n\n- 公开 API: 60 请求/分钟\n- 认证 API: 120 请求/分钟\n- 写入 API: 30 请求/分钟",
+    "version": "1.0.0",
+    "contact": {
+      "name": "API Support",
+      "email": "api@rankingarena.com"
+    }
+  },
+  "servers": [
+    {
+      "url": "https://rankingarena.com/api/v1",
+      "description": "生产环境"
+    },
+    {
+      "url": "http://localhost:3000/api/v1",
+      "description": "开发环境"
+    }
+  ],
+  "tags": [
+    { "name": "Traders", "description": "交易员相关接口" },
+    { "name": "Posts", "description": "帖子相关接口" },
+    { "name": "Comments", "description": "评论相关接口" },
+    { "name": "Users", "description": "用户相关接口" },
+    { "name": "Market", "description": "市场数据接口" },
+    { "name": "Search", "description": "搜索接口" },
+    { "name": "Auth", "description": "认证接口" }
+  ],
+  "paths": {
+    "/traders": {
+      "get": {
+        "tags": ["Traders"],
+        "summary": "获取交易员排行榜",
+        "description": "获取多交易所合并的交易员排行榜数据",
+        "parameters": [
+          {
+            "name": "timeRange",
+            "in": "query",
+            "description": "时间范围",
+            "schema": { "type": "string", "enum": ["7D", "30D", "90D"], "default": "90D" }
+          },
+          {
+            "name": "exchange",
+            "in": "query",
+            "description": "交易所筛选",
+            "schema": { "type": "string", "enum": ["binance", "bybit", "bitget", "okx", "mexc"] }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "返回数量",
+            "schema": { "type": "integer", "default": 100, "maximum": 100 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "traders": { "type": "array", "items": { "$ref": "#/components/schemas/RankedTrader" } },
+                        "timeRange": { "type": "string" },
+                        "totalCount": { "type": "integer" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": { "$ref": "#/components/responses/RateLimitError" }
+        }
+      }
+    },
+    "/traders/{id}": {
+      "get": {
+        "tags": ["Traders"],
+        "summary": "获取交易员详情",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "交易员 ID 或 handle",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "data": { "$ref": "#/components/schemas/TraderDetail" }
+                  }
+                }
+              }
+            }
+          },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/traders/{id}/follow": {
+      "post": {
+        "tags": ["Traders"],
+        "summary": "关注交易员",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "关注成功" },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      },
+      "delete": {
+        "tags": ["Traders"],
+        "summary": "取消关注交易员",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "取消关注成功" },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/posts": {
+      "get": {
+        "tags": ["Posts"],
+        "summary": "获取帖子列表",
+        "parameters": [
+          { "name": "page", "in": "query", "schema": { "type": "integer", "default": 1 } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 20 } },
+          { "name": "sort", "in": "query", "schema": { "type": "string", "enum": ["latest", "hot"] } }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "data": { "type": "array", "items": { "$ref": "#/components/schemas/Post" } },
+                    "meta": { "$ref": "#/components/schemas/Pagination" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": ["Posts"],
+        "summary": "创建帖子",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CreatePostInput" }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "创建成功" },
+          "400": { "$ref": "#/components/responses/ValidationError" },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/search/traders": {
+      "get": {
+        "tags": ["Search"],
+        "summary": "搜索交易员",
+        "parameters": [
+          { "name": "q", "in": "query", "required": true, "schema": { "type": "string" } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 10 } }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "data": { "type": "array", "items": { "$ref": "#/components/schemas/TraderSearchResult" } }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    },
+    "schemas": {
+      "RankedTrader": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "handle": { "type": "string" },
+          "roi": { "type": "number", "description": "收益率 (%)" },
+          "pnl": { "type": "number", "description": "盈亏金额 ($)" },
+          "win_rate": { "type": "number", "description": "胜率 (%)" },
+          "max_drawdown": { "type": "number", "description": "最大回撤 (%)" },
+          "trades_count": { "type": "integer", "description": "交易次数" },
+          "followers": { "type": "integer", "description": "粉丝数" },
+          "source": { "type": "string", "description": "数据来源交易所" },
+          "avatar_url": { "type": "string", "format": "uri" }
+        },
+        "required": ["id", "handle", "roi", "source"]
+      },
+      "TraderDetail": {
+        "type": "object",
+        "properties": {
+          "profile": { "$ref": "#/components/schemas/TraderProfile" },
+          "performance": { "$ref": "#/components/schemas/TraderPerformance" },
+          "stats": { "$ref": "#/components/schemas/TraderStats" }
+        }
+      },
+      "TraderProfile": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "handle": { "type": "string" },
+          "bio": { "type": "string" },
+          "followers": { "type": "integer" },
+          "avatar_url": { "type": "string" },
+          "source": { "type": "string" }
+        }
+      },
+      "TraderPerformance": {
+        "type": "object",
+        "properties": {
+          "roi_7d": { "type": "number" },
+          "roi_30d": { "type": "number" },
+          "roi_90d": { "type": "number" },
+          "pnl": { "type": "number" },
+          "win_rate": { "type": "number" },
+          "max_drawdown": { "type": "number" }
+        }
+      },
+      "TraderStats": {
+        "type": "object",
+        "properties": {
+          "trading": {
+            "type": "object",
+            "properties": {
+              "totalTrades12M": { "type": "integer" },
+              "avgProfit": { "type": "number" },
+              "avgLoss": { "type": "number" },
+              "profitableTradesPct": { "type": "number" }
+            }
+          }
+        }
+      },
+      "Post": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "title": { "type": "string" },
+          "content": { "type": "string" },
+          "author_handle": { "type": "string" },
+          "like_count": { "type": "integer" },
+          "comment_count": { "type": "integer" },
+          "created_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "CreatePostInput": {
+        "type": "object",
+        "required": ["title"],
+        "properties": {
+          "title": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "content": { "type": "string", "maxLength": 10000 },
+          "images": { "type": "array", "items": { "type": "string", "format": "uri" }, "maxItems": 9 }
+        }
+      },
+      "TraderSearchResult": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "handle": { "type": "string" },
+          "avatar_url": { "type": "string" },
+          "source": { "type": "string" },
+          "roi": { "type": "number" }
+        }
+      },
+      "Pagination": {
+        "type": "object",
+        "properties": {
+          "page": { "type": "integer" },
+          "limit": { "type": "integer" },
+          "total": { "type": "integer" },
+          "totalPages": { "type": "integer" },
+          "hasNext": { "type": "boolean" },
+          "hasPrev": { "type": "boolean" }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean", "example": false },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": { "type": "string" },
+              "message": { "type": "string" },
+              "timestamp": { "type": "string", "format": "date-time" }
+            }
+          }
+        }
+      }
+    },
+    "responses": {
+      "Unauthorized": {
+        "description": "未授权",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/Error" },
+            "example": { "success": false, "error": { "code": "UNAUTHORIZED", "message": "未授权，请先登录" } }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "资源不存在",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/Error" }
+          }
+        }
+      },
+      "ValidationError": {
+        "description": "验证错误",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/Error" }
+          }
+        }
+      },
+      "RateLimitError": {
+        "description": "请求频率超限",
+        "headers": {
+          "X-RateLimit-Limit": { "schema": { "type": "integer" } },
+          "X-RateLimit-Remaining": { "schema": { "type": "integer" } },
+          "Retry-After": { "schema": { "type": "integer" } }
+        },
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/Error" }
+          }
+        }
+      }
+    }
+  }
+}

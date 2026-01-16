@@ -1,0 +1,79 @@
+import { Meta } from '@storybook/blocks'
+
+<Meta title="Introduction" />
+
+# Ranking Arena 组件库
+
+欢迎来到 Ranking Arena 组件库文档。这里包含了项目中所有可复用的 UI 组件。
+
+## 🎯 设计原则
+
+- **一致性**: 所有组件遵循统一的设计语言
+- **可访问性**: 支持键盘导航和屏幕阅读器
+- **响应式**: 适配移动端和桌面端
+- **性能优先**: 轻量级实现，避免不必要的重渲染
+
+## 📦 组件分类
+
+### 基础组件 (Base)
+- `Box` - 灵活的容器组件
+- `Text` - 文本排版组件
+- `Button` - 按钮组件
+
+### UI 组件 (UI)
+- `Card` - 卡片容器
+- `Avatar` - 头像组件
+- `Toast` - 提示消息
+- `Skeleton` - 骨架屏
+- `Dialog` - 对话框
+
+### 功能组件 (Features)
+- `RankingTable` - 排行榜表格
+- `EnhancedSearch` - 增强搜索
+- `MarketPanel` - 市场数据面板
+- `PostFeed` - 动态流
+
+### 图表组件 (Charts)
+- `EquityCurve` - 资金曲线
+- `PnLChart` - 盈亏分布
+- `DrawdownChart` - 回撤图表
+
+## 🎨 主题
+
+组件库支持深色和浅色两种主题。通过 CSS 变量和 design tokens 实现主题切换。
+
+```css
+/* 主题变量示例 */
+--color-bg-primary: #0a0a0a;
+--color-text-primary: #fafafa;
+--color-accent-success: #22c55e;
+--color-accent-error: #ef4444;
+```
+
+## 🚀 快速开始
+
+```tsx
+import { Box, Text, Button } from '@/app/components/Base'
+import { Card } from '@/app/components/UI/Card'
+
+function MyComponent() {
+  return (
+    <Card title="示例卡片">
+      <Box p={4}>
+        <Text size="lg" weight="bold">
+          Hello World
+        </Text>
+        <Button variant="primary" onClick={() => alert('Clicked!')}>
+          点击我
+        </Button>
+      </Box>
+    </Card>
+  )
+}
+```
+
+## 📚 更多资源
+
+- [Design Tokens](/lib/design-tokens)
+- [国际化配置](/lib/i18n.ts)
+- [API 文档](/public/openapi.json)

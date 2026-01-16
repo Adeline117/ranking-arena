@@ -396,3 +396,4 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 -- 3. 互相关注可以无限私信
 -- 4. 非互相关注只能发送3条消息，对方回复后才能继续
 
+

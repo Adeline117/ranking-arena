@@ -114,9 +114,7 @@ export function getExchangeName(exchange: Exchange): string {
     gate: 'Gate.io',
   }
   return names[exchange] || exchange
-}
-
-/**
+}/**
  * 支持的交易所列表
  */
 export const SUPPORTED_EXCHANGES: Exchange[] = ['binance', 'bybit', 'bitget', 'mexc', 'coinex']

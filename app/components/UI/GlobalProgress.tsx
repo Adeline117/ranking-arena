@@ -110,7 +110,7 @@ export function GlobalProgress() {
           left: 0,
           right: 0,
           height: 3,
-          zIndex: 99999,
+          zIndex: 1400,
           pointerEvents: 'none',
         }}
       >
@@ -137,7 +137,7 @@ export function GlobalProgress() {
           right: 0,
           width: 100,
           height: 3,
-          zIndex: 99999,
+          zIndex: 1400,
           pointerEvents: 'none',
           background: `linear-gradient(90deg, transparent, ${PROGRESS_COLOR})`,
           opacity: isComplete ? 0 : (progress > 10 ? 0.8 : 0),

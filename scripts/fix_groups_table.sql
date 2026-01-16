@@ -180,3 +180,4 @@ CREATE POLICY "Groups are viewable by everyone"
 
 SELECT 'groups 表结构修复完成！' AS status;
 
+

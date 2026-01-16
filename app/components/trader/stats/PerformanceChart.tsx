@@ -42,8 +42,8 @@ export default function PerformanceChart({ monthlyData }: PerformanceChartProps)
             onMouseEnter={() => setShowTooltip(true)}
             onMouseLeave={() => setShowTooltip(false)}
           >
-            <Text size="xs" color="tertiary" style={{ fontSize: '16px' }}>
-              ℹ️
+            <Text size="xs" color="tertiary" style={{ fontSize: '12px' }}>
+              ?
             </Text>
             {showTooltip && (
               <Box

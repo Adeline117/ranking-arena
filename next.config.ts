@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { withSentryConfig } from "@sentry/nextjs";
 
 const nextConfig: NextConfig = {
   /* config options here */
@@ -47,6 +48,7 @@ const nextConfig: NextConfig = {
   // 实验性功能
   experimental: {
     optimizePackageImports: ['@supabase/supabase-js', '@upstash/redis', '@upstash/ratelimit', 'lodash', 'date-fns'],
+    instrumentationHook: true,
   },
   
   // 生产环境不生成 source maps（减少构建大小）
@@ -85,4 +87,32 @@ const nextConfig: NextConfig = {
   // Next.js 16 默认启用 SWC 压缩，无需配置
 };
 
-export default nextConfig;
+// Sentry 配置选项
+const sentryWebpackPluginOptions = {
+  // 组织和项目名称（从环境变量获取）
+  org: process.env.SENTRY_ORG,
+  project: process.env.SENTRY_PROJECT,
+  
+  // 只在生产环境上传 source maps
+  silent: !process.env.CI,
+  
+  // 上传 source maps 到 Sentry
+  widenClientFileUpload: true,
+  
+  // 自动检测 release
+  automaticVercelMonitors: true,
+  
+  // 隐藏 source maps 不暴露给客户端
+  hideSourceMaps: true,
+  
+  // 禁用日志（减少噪音）
+  disableLogger: true,
+  
+  // 跳过没有 DSN 配置时的上传
+  sourcemaps: {
+    disable: !process.env.SENTRY_DSN,
+  },
+};
+
+// 导出配置（包装 Sentry）
+export default withSentryConfig(nextConfig, sentryWebpackPluginOptions);

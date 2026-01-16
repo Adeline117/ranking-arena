@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { useEffect, useState, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/Layout/TopNav'
@@ -263,10 +264,9 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
           return updated
         })
         
-        console.log(`[GroupPage] 批量翻译完成: ${data.data.cached}/${data.data.total} 命中缓存`)
       }
-    } catch (err) {
-      console.error('[GroupPage] 翻译出错:', err)
+    } catch {
+      // 翻译失败，静默处理
     } finally {
       setTranslatingPosts(false)
     }

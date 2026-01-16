@@ -156,7 +156,7 @@ export default function UserHomeLayout({
                 fontWeight: tokens.typography.fontWeight.bold,
               }}
             >
-              💎 VIP交易者
+              VIP交易者
             </Box>
             <Box
               bg="primary"
@@ -169,7 +169,7 @@ export default function UserHomeLayout({
                 fontWeight: tokens.typography.fontWeight.bold,
               }}
             >
-              🔥 顶尖表现者
+              顶尖表现者
             </Box>
           </Box>
           {isOwnProfile && (

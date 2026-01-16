@@ -83,6 +83,34 @@ async function findTraderSource(
   return results.find(r => r !== null) || null
 }
 
+// 从 trader_snapshots 直接查找交易员（当 trader_sources 没有数据时的回退方案）
+async function findTraderFromSnapshots(
+  supabase: SupabaseClient,
+  handle: string
+): Promise<{ traderId: string; sourceType: SourceType } | null> {
+  const decodedHandle = decodeURIComponent(handle)
+  
+  // 并行查询所有数据源的快照
+  const queries = TRADER_SOURCES.map(async (sourceType) => {
+    const { data } = await supabase
+      .from('trader_snapshots')
+      .select('source_trader_id')
+      .eq('source', sourceType)
+      .eq('source_trader_id', decodedHandle)
+      .limit(1)
+      .maybeSingle()
+    
+    if (data) {
+      return { traderId: data.source_trader_id, sourceType }
+    }
+    
+    return null
+  })
+  
+  const results = await Promise.all(queries)
+  return results.find(r => r !== null) || null
+}
+
 // 获取交易员详细数据
 async function getTraderDetails(
   supabase: SupabaseClient,
@@ -281,6 +309,99 @@ async function getTraderDetails(
   }
 }
 
+// 从 trader_snapshots 获取交易员数据（回退方案，当 trader_sources 没有数据时使用）
+async function getTraderDetailsFromSnapshots(
+  supabase: SupabaseClient,
+  traderId: string,
+  sourceType: SourceType
+) {
+  // 获取最新快照数据
+  const [
+    snapshotResult,
+    snapshot7dResult,
+    snapshot30dResult,
+    arenaFollowersResult,
+  ] = await Promise.all([
+    // 最新快照（90D）
+    supabase
+      .from('trader_snapshots')
+      .select('roi, pnl, win_rate, max_drawdown, trades_count, followers, captured_at, season_id')
+      .eq('source', sourceType)
+      .eq('source_trader_id', traderId)
+      .order('captured_at', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    
+    // 7天快照
+    supabase
+      .from('trader_snapshots')
+      .select('roi, pnl, win_rate, max_drawdown')
+      .eq('source', sourceType)
+      .eq('source_trader_id', traderId)
+      .eq('season_id', '7D')
+      .order('captured_at', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    
+    // 30天快照
+    supabase
+      .from('trader_snapshots')
+      .select('roi, pnl, win_rate, max_drawdown')
+      .eq('source', sourceType)
+      .eq('source_trader_id', traderId)
+      .eq('season_id', '30D')
+      .order('captured_at', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    
+    // Arena 粉丝数
+    supabase
+      .from('trader_follows')
+      .select('*', { count: 'exact', head: true })
+      .eq('trader_id', traderId),
+  ])
+  
+  const snapshot = snapshotResult.data as SnapshotData | null
+  const snapshot7d = snapshot7dResult.data as SnapshotData | null
+  const snapshot30d = snapshot30dResult.data as SnapshotData | null
+  const arenaFollowers = arenaFollowersResult.count || 0
+  
+  return {
+    profile: {
+      handle: traderId,
+      id: traderId,
+      bio: undefined,
+      followers: arenaFollowers,
+      avatar_url: undefined,
+      isRegistered: false,
+      source: sourceType,
+    },
+    performance: {
+      roi_90d: snapshot?.roi || 0,
+      roi_7d: snapshot7d?.roi ?? undefined,
+      roi_30d: snapshot30d?.roi ?? undefined,
+      pnl: snapshot?.pnl ?? undefined,
+      win_rate: snapshot?.win_rate ?? undefined,
+      max_drawdown: snapshot?.max_drawdown ?? undefined,
+      pnl_7d: snapshot7d?.pnl ?? undefined,
+      pnl_30d: snapshot30d?.pnl ?? undefined,
+      win_rate_7d: snapshot7d?.win_rate ?? undefined,
+      win_rate_30d: snapshot30d?.win_rate ?? undefined,
+      max_drawdown_7d: snapshot7d?.max_drawdown ?? undefined,
+      max_drawdown_30d: snapshot30d?.max_drawdown ?? undefined,
+    },
+    stats: {
+      additionalStats: {
+        tradesCount: snapshot?.trades_count ?? undefined,
+      },
+    },
+    portfolio: [],
+    positionHistory: [],
+    feed: [],
+    similarTraders: [],
+  }
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ handle: string }> }
@@ -304,7 +425,6 @@ export async function GET(
     // 检查缓存
     const cached = getServerCache<ReturnType<typeof getTraderDetails>>(cacheKey)
     if (cached) {
-      console.log(`[Trader API] 缓存命中: ${decodedHandle} (${Date.now() - startTime}ms)`)
       return NextResponse.json({ ...await cached, cached: true })
     }
 
@@ -313,22 +433,34 @@ export async function GET(
     // 查找交易员
     const found = await findTraderSource(supabase, handle)
     
-    if (!found) {
+    if (found) {
+      // 从 trader_sources 找到了，获取详细数据
+      const data = await getTraderDetails(supabase, found.source, found.sourceType)
+      
+      // 缓存结果
+      setServerCache(cacheKey, data, CacheTTL.MEDIUM)
+      
+      const duration = Date.now() - startTime
+      return NextResponse.json({ ...data, cached: false, fetchTime: duration })
+    }
+    
+    // trader_sources 没找到，尝试从 trader_snapshots 获取基本数据
+    const snapshotFound = await findTraderFromSnapshots(supabase, handle)
+    
+    if (!snapshotFound) {
       return NextResponse.json({ 
         error: 'Trader not found',
         handle: decodedHandle,
       }, { status: 404 })
     }
     
-    // 获取详细数据
-    const data = await getTraderDetails(supabase, found.source, found.sourceType)
+    // 从快照获取基本数据
+    const data = await getTraderDetailsFromSnapshots(supabase, snapshotFound.traderId, snapshotFound.sourceType)
     
     // 缓存结果
     setServerCache(cacheKey, data, CacheTTL.MEDIUM)
     
     const duration = Date.now() - startTime
-    console.log(`[Trader API] 找到交易员: ${found.source.handle || found.source.source_trader_id} (${found.sourceType}) in ${duration}ms`)
-    
     return NextResponse.json({ ...data, cached: false, fetchTime: duration })
 
   } catch (error) {

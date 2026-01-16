@@ -1,7 +1,0 @@
-# 临时数据文件
-data/backup/
-*.json
-!package.json
-!package-lock.json
-!tsconfig.json
-!vercel.json

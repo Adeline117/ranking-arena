@@ -10,7 +10,7 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
   loading?: boolean
 }
 
-export function Button({
+export default function Button({
   variant = 'secondary',
   size = 'md',
   fullWidth = false,

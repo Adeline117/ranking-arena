@@ -1,9 +1,11 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '../Base'
 import { supabase } from '@/lib/supabase/client'
+import { getCsrfHeaders } from '@/lib/api/client'
 
 type BookmarkFolder = {
   id: string
@@ -28,7 +30,7 @@ export default function BookmarkModal({ isOpen, onClose, onSelect, postId }: Boo
   const [creating, setCreating] = useState(false)
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [newFolderName, setNewFolderName] = useState('')
-  const [newFolderPublic, setNewFolderPublic] = useState(false)
+  const [newFolderPublic, setNewFolderPublic] = useState(true)
   const [accessToken, setAccessToken] = useState<string | null>(null)
 
   useEffect(() => {
@@ -41,21 +43,70 @@ export default function BookmarkModal({ isOpen, onClose, onSelect, postId }: Boo
     if (isOpen && accessToken) {
       loadFolders()
     }
+    // 关闭时重置状态
+    if (!isOpen) {
+      setShowCreateForm(false)
+      setNewFolderName('')
+      setNewFolderPublic(true)
+    }
   }, [isOpen, accessToken])
 
+  // 打开弹窗时禁止背景滚动，ESC 键关闭
+  useEffect(() => {
+    if (!isOpen) return
+    
+    const originalOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose()
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    
+    return () => {
+      document.body.style.overflow = originalOverflow
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [isOpen, onClose])
+
   const loadFolders = async () => {
-    if (!accessToken) return
+    if (!accessToken) {
+      // 如果没有 token，尝试重新获取
+      const { data } = await supabase.auth.getSession()
+      if (!data.session?.access_token) {
+        setLoading(false)
+        return
+      }
+      setAccessToken(data.session.access_token)
+    }
+    
+    const token = accessToken || (await supabase.auth.getSession()).data.session?.access_token
+    if (!token) {
+      setLoading(false)
+      return
+    }
     
     setLoading(true)
     try {
       const response = await fetch('/api/bookmark-folders', {
         headers: {
-          'Authorization': `Bearer ${accessToken}`
+          'Authorization': `Bearer ${token}`
         }
       })
+      
+      // 如果返回 401，不做重定向，只是清空收藏夹
+      if (response.status === 401) {
+        setFolders([])
+        setLoading(false)
+        return
+      }
+      
       const data = await response.json()
       if (response.ok) {
-        setFolders(data.folders || [])
+        // API 返回格式: { success: true, data: { folders: [...] } }
+        setFolders(data.data?.folders || data.folders || [])
       }
     } catch (error) {
       console.error('加载收藏夹失败:', error)
@@ -73,7 +124,8 @@ export default function BookmarkModal({ isOpen, onClose, onSelect, postId }: Boo
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`
+          'Authorization': `Bearer ${accessToken}`,
+          ...getCsrfHeaders()
         },
         body: JSON.stringify({
           name: newFolderName.trim(),
@@ -83,12 +135,16 @@ export default function BookmarkModal({ isOpen, onClose, onSelect, postId }: Boo
       
       const data = await response.json()
       if (response.ok) {
-        setFolders(prev => [...prev, data.folder])
+        // API 返回格式: { success: true, data: { folder: {...} } }
+        const newFolder = data.data?.folder || data.folder
+        if (newFolder) {
+          setFolders(prev => [...prev, newFolder])
+        }
         setNewFolderName('')
-        setNewFolderPublic(false)
+        setNewFolderPublic(true)  // 重置为默认公开
         setShowCreateForm(false)
       } else {
-        alert(data.error || '创建失败')
+        alert(data.error?.message || data.error || '创建失败')
       }
     } catch (error) {
       alert('创建失败')
@@ -108,9 +164,10 @@ export default function BookmarkModal({ isOpen, onClose, onSelect, postId }: Boo
     return colors[index]
   }
 
-  if (!isOpen) return null
+  // 使用 Portal 渲染到 document.body，确保弹窗显示在所有元素之上
+  if (!isOpen || typeof document === 'undefined') return null
 
-  return (
+  const modalContent = (
     <Box
       style={{
         position: 'fixed',
@@ -122,7 +179,7 @@ export default function BookmarkModal({ isOpen, onClose, onSelect, postId }: Boo
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        zIndex: 3000,
+        zIndex: 1200,
       }}
       onClick={onClose}
     >
@@ -197,7 +254,7 @@ export default function BookmarkModal({ isOpen, onClose, onSelect, postId }: Boo
                   onChange={(e) => setNewFolderPublic(e.target.checked)}
                   style={{ width: 16, height: 16 }}
                 />
-                <Text size="sm">公开（在主页展示）</Text>
+                <Text size="sm">公开（取消勾选则为私密）</Text>
               </label>
             </Box>
             <Button
@@ -223,7 +280,7 @@ export default function BookmarkModal({ isOpen, onClose, onSelect, postId }: Boo
           </Text>
         ) : (
           <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
-            {folders.map((folder) => (
+            {folders.filter(folder => folder && folder.id && folder.name).map((folder) => (
               <Box
                 key={folder.id}
                 onClick={() => handleSelectFolder(folder.id)}
@@ -250,7 +307,8 @@ export default function BookmarkModal({ isOpen, onClose, onSelect, postId }: Boo
                     width: 40,
                     height: 40,
                     borderRadius: tokens.radius.md,
-                    background: folder.avatar_url ? `url(${folder.avatar_url})` : getDefaultAvatar(folder.name),
+                    backgroundColor: folder?.avatar_url ? undefined : getDefaultAvatar(folder?.name || ''),
+                    backgroundImage: folder?.avatar_url ? `url(${folder.avatar_url})` : undefined,
                     backgroundSize: 'cover',
                     backgroundPosition: 'center',
                     display: 'flex',
@@ -259,7 +317,7 @@ export default function BookmarkModal({ isOpen, onClose, onSelect, postId }: Boo
                     flexShrink: 0,
                   }}
                 >
-                  {!folder.avatar_url && (
+                  {!folder?.avatar_url && folder?.name && (
                     <Text size="lg" weight="bold" style={{ color: '#fff' }}>
                       {folder.name.charAt(0)}
                     </Text>
@@ -293,7 +351,7 @@ export default function BookmarkModal({ isOpen, onClose, onSelect, postId }: Boo
                       </span>
                     )}
                   </Box>
-                  <Text size="xs" color="tertiary">{folder.post_count} 个收藏</Text>
+                  <Text size="xs" color="tertiary">{folder.post_count || 0} 个收藏</Text>
                 </Box>
               </Box>
             ))}
@@ -302,5 +360,8 @@ export default function BookmarkModal({ isOpen, onClose, onSelect, postId }: Boo
       </Box>
     </Box>
   )
+
+  return createPortal(modalContent, document.body)
 }
+
 

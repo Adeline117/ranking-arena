@@ -3,12 +3,34 @@
 -- 1. 创建 polls 表
 CREATE TABLE IF NOT EXISTS polls (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  post_id UUID REFERENCES posts(id) ON DELETE CASCADE,
   question TEXT NOT NULL,
   options JSONB NOT NULL DEFAULT '[]',
   type TEXT DEFAULT 'single', -- single: 单选, multiple: 多选
   end_at TIMESTAMP WITH TIME ZONE,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE(post_id)
 );
+
+-- 添加 post_id 字段（如果表已存在但缺少该字段）
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'polls' AND column_name = 'post_id'
+  ) THEN
+    ALTER TABLE polls ADD COLUMN post_id UUID REFERENCES posts(id) ON DELETE CASCADE;
+    ALTER TABLE polls ADD CONSTRAINT polls_post_id_unique UNIQUE (post_id);
+  END IF;
+  
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'polls' AND column_name = 'updated_at'
+  ) THEN
+    ALTER TABLE polls ADD COLUMN updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();
+  END IF;
+END $$;
 
 -- 2. 添加 posts 表缺失的字段
 DO $$

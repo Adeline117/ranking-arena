@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, Suspense } from 'react'
+import { useEffect, useState, Suspense, useMemo } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
@@ -125,6 +125,17 @@ function ApiKeyAuthContent() {
   const [passphrase, setPassphrase] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // 注入响应式网格样式
+  useEffect(() => {
+    if (typeof document === 'undefined') return
+    const styleId = 'api-key-grid-style'
+    if (document.getElementById(styleId)) return
+    const style = document.createElement('style')
+    style.id = styleId
+    style.textContent = '@media (min-width: 768px) { .api-key-grid { grid-template-columns: 1fr 1fr !important; } }'
+    document.head.appendChild(style)
+  }, [])
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -278,13 +289,6 @@ function ApiKeyAuthContent() {
         {selectedExchange && config && (
           <Box style={{ display: 'grid', gridTemplateColumns: '1fr', gap: tokens.spacing[6] }}>
             {/* 移动端优先：上下布局，桌面端会通过 CSS 变成左右布局 */}
-            <style jsx global>{`
-              @media (min-width: 768px) {
-                .api-key-grid {
-                  grid-template-columns: 1fr 1fr !important;
-                }
-              }
-            `}</style>
             <Box className="api-key-grid" style={{ display: 'grid', gridTemplateColumns: '1fr', gap: tokens.spacing[6] }}>
               {/* 左侧：步骤引导 */}
               <Box>
@@ -329,7 +333,7 @@ function ApiKeyAuthContent() {
                       {language === 'zh' ? '操作步骤' : 'Steps'}
                     </Text>
                     <Text size="xs" color="tertiary">
-                      ⏱️ {language === 'zh' ? '约 2 分钟' : '~2 minutes'}
+                      {language === 'zh' ? '约 2 分钟' : '~2 minutes'}
                     </Text>
                   </Box>
 
@@ -374,7 +378,7 @@ function ApiKeyAuthContent() {
                     onClick={() => window.open(config.apiManagementUrl, '_blank')}
                     style={{ marginTop: tokens.spacing[4] }}
                   >
-                    🔗 {language === 'zh' ? `打开 ${config.name} API 管理页面` : `Open ${config.name} API Management`}
+                    {language === 'zh' ? `打开 ${config.name} API 管理页面` : `Open ${config.name} API Management`}
                   </Button>
                 </Box>
 
@@ -388,7 +392,7 @@ function ApiKeyAuthContent() {
                   }}
                 >
                   <Text size="sm" color="secondary">
-                    🎬 {language === 'zh' ? '视频教程即将上线' : 'Video tutorial coming soon'}
+                    {language === 'zh' ? '视频教程即将上线' : 'Video tutorial coming soon'}
                   </Text>
                 </Box>
               </Box>
@@ -406,7 +410,20 @@ function ApiKeyAuthContent() {
                   }}
                 >
                   <Box style={{ display: 'flex', alignItems: 'flex-start', gap: tokens.spacing[3] }}>
-                    <Text size="xl">🛡️</Text>
+                    <Box style={{ 
+                      width: 28, 
+                      height: 28, 
+                      borderRadius: '50%', 
+                      background: tokens.colors.accent.success + '30',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                    }}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={tokens.colors.accent.success} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                      </svg>
+                    </Box>
                     <Box>
                       <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[2], color: tokens.colors.accent.success }}>
                         {language === 'zh' ? '安全提示' : 'Security Notice'}
@@ -605,4 +622,5 @@ export default function ApiKeyAuthPage() {
     </Suspense>
   )
 }
+
 

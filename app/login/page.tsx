@@ -262,8 +262,6 @@ export default function LoginPage() {
       // 1. 不设置 emailRedirectTo
       // 2. 明确指定 type 为 'email'（虽然这是默认值）
       // 3. 确保 shouldCreateUser 为 true（注册模式）
-      console.log('[OTP] 发送验证码到:', email)
-      
       const { data, error: otpError } = await supabase.auth.signInWithOtp({
         email,
         options: {
@@ -274,9 +272,6 @@ export default function LoginPage() {
       })
 
       if (otpError) {
-        console.error('[OTP] 发送错误:', otpError)
-        console.error('[OTP] 错误详情:', JSON.stringify(otpError, null, 2))
-        
         // 检查是否是配置问题
         if (otpError.message.includes('redirect') || otpError.message.includes('link')) {
           setError('配置错误：Supabase 可能配置为发送 Magic Link。请检查 Supabase Dashboard → Authentication → Settings → Site URL 是否正确设置为 https://www.arenafi.org，并确保 Email Templates 配置为发送验证码。')
@@ -289,16 +284,13 @@ export default function LoginPage() {
 
       // 验证是否成功发送
       if (data) {
-        console.log('[OTP] 发送成功:', data)
         setCodeSent(true)
         setCountdown(60) // 开始60秒倒计时（重发限制）
         showToast(t.codeSent, 'success')
       } else {
-        console.warn('[OTP] 发送返回空数据')
         setError('发送失败，请重试。如果仍然收到链接而不是验证码，请检查 Supabase Dashboard 中的 Email Auth 配置。')
       }
     } catch (err: any) {
-      console.error('[OTP] 发送验证码异常:', err)
       setError(err?.message || '发送失败，请检查网络连接')
     } finally {
       setSendingCode(false)
@@ -323,8 +315,6 @@ export default function LoginPage() {
 
     try {
       // 登录时发送验证码，不创建新用户
-      console.log('[OTP Login] 发送验证码到:', email)
-      
       const { data, error: otpError } = await supabase.auth.signInWithOtp({
         email,
         options: {
@@ -334,23 +324,19 @@ export default function LoginPage() {
       })
 
       if (otpError) {
-        console.error('[OTP Login] 发送错误:', otpError)
         setError(otpError.message || '发送失败，请重试')
         setSendingCode(false)
         return
       }
 
       if (data) {
-        console.log('[OTP Login] 发送成功:', data)
         setCodeSent(true)
         setCountdown(60)
         showToast(t.codeSent, 'success')
       } else {
-        console.warn('[OTP Login] 发送返回空数据')
         setError('发送失败，请重试')
       }
     } catch (err: any) {
-      console.error('[OTP Login] 发送验证码异常:', err)
       setError(err?.message || '发送失败')
     } finally {
       setSendingCode(false)
@@ -840,7 +826,7 @@ export default function LoginPage() {
                       }}
                       tabIndex={-1}
                     >
-                      {showPassword ? '🙈' : '👁️'}
+                      {showPassword ? '隐藏' : '显示'}
                     </button>
                   </div>
                   {/* 实时密码验证提示 */}
@@ -954,7 +940,7 @@ export default function LoginPage() {
                       }}
                       tabIndex={-1}
                     >
-                      {showPassword ? '🙈' : '👁️'}
+                      {showPassword ? '隐藏' : '显示'}
                     </button>
                   </div>
                   {/* 实时密码验证提示（登录模式） */}

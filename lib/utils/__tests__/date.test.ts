@@ -59,4 +59,3 @@ describe('formatTimeAgo', () => {
     expect(formatTimeAgo(undefined as any)).toBe('未知时间')
   })
 })
-

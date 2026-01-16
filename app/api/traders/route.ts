@@ -1,21 +1,19 @@
 /**
  * 获取排行榜交易员数据 API
- * 合并所有交易所数据，按 ROI 排序
+ * 合并所有交易所数据，使用风险调整排名算法
  * 支持 7D/30D/90D 时间段分别显示
  */
 
-import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { NextResponse } from 'next/server'
+import { withPublic } from '@/lib/api/middleware'
+import { rankTraders, simpleRankTraders, type TraderRankingData } from '@/lib/utils/ranking'
 
 export const dynamic = 'force-dynamic'
-
-const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
 
 // 支持的交易所
 const ALL_SOURCES = ['binance', 'binance_web3', 'bybit', 'bitget', 'mexc', 'coinex']
 
-// 使用 season_id 区分时间段的交易所（每个时间段有独立记录）
+// 使用 season_id 区分时间段的交易所
 const SEASON_ID_SOURCES = ['binance', 'bybit', 'bitget', 'mexc', 'binance_web3', 'coinex']
 
 interface TraderData {
@@ -29,28 +27,26 @@ interface TraderData {
   followers: number
   source: string
   avatar_url: string | null
+  risk_adjusted_score?: number
+  stability_score?: number
+  is_suspicious?: boolean
 }
 
-export async function GET(request: NextRequest) {
-  try {
-    if (!SUPABASE_URL || !SUPABASE_KEY) {
-      return NextResponse.json({ error: 'Missing Supabase config' }, { status: 500 })
-    }
-
-    const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
-    
+export const GET = withPublic(
+  async ({ supabase, request }) => {
     // 获取查询参数
     const searchParams = request.nextUrl.searchParams
-    const timeRange = searchParams.get('timeRange') || '90D' // 7D, 30D, 90D
+    const timeRange = searchParams.get('timeRange') || '90D'
+    // 默认使用简单排名，加 ?ranking=advanced 启用高级排名
+    const useAdvancedRanking = searchParams.get('ranking') === 'advanced'
 
     const allTraders: TraderData[] = []
 
-    // 遍历所有交易所获取数据
-    for (const source of ALL_SOURCES) {
-      // 判断数据存储方式
+    // 并行获取所有交易所数据
+    const sourcePromises = ALL_SOURCES.map(async (source) => {
       const useSeasonId = SEASON_ID_SOURCES.includes(source)
 
-      // 获取最新的 captured_at
+      // 获取最新 captured_at
       let timestampQuery = supabase
         .from('trader_snapshots')
         .select('captured_at')
@@ -58,46 +54,34 @@ export async function GET(request: NextRequest) {
         .order('captured_at', { ascending: false })
         .limit(1)
 
-      // 对于使用 season_id 的交易所，按时间段过滤
       if (useSeasonId) {
         timestampQuery = timestampQuery.eq('season_id', timeRange)
       }
 
       const { data: latestSnapshot } = await timestampQuery.maybeSingle()
+      if (!latestSnapshot) return []
 
-      if (!latestSnapshot) continue
-
-      // 查询快照数据 - 只查询存在的字段
+      // 查询快照数据
       let snapshotQuery = supabase
         .from('trader_snapshots')
         .select('source_trader_id, rank, roi, pnl, followers, win_rate, max_drawdown, trades_count')
         .eq('source', source)
         .eq('captured_at', latestSnapshot.captured_at)
 
-      // 对于使用 season_id 的交易所，按时间段过滤
       if (useSeasonId) {
         snapshotQuery = snapshotQuery.eq('season_id', timeRange)
       }
 
-      // PnL 过滤 - Bybit 的 PnL 是 Followers' PnL（跟单者盈亏），不适用于筛选
-      // 其他交易所使用 PnL >= 1000 过滤
-      if (source !== 'bybit') {
-        snapshotQuery = snapshotQuery.gte('pnl', 1000)
-      }
-
-      // 排序
-      snapshotQuery = snapshotQuery.order('roi', { ascending: false }).limit(100)
+      snapshotQuery = snapshotQuery.order('roi', { ascending: false }).limit(150)
 
       const { data: snapshots, error } = await snapshotQuery
 
-      if (error) {
-        console.error(`[Traders API] ${source} 查询错误:`, error.message)
-        continue
+      if (error || !snapshots?.length) {
+        if (error) console.error(`[Traders API] ${source} 查询错误:`, error.message)
+        return []
       }
 
-      if (!snapshots || snapshots.length === 0) continue
-
-      // 获取 handles
+      // 批量获取 handles
       const traderIds = snapshots.map(s => s.source_trader_id)
       const { data: sources } = await supabase
         .from('trader_sources')
@@ -105,18 +89,16 @@ export async function GET(request: NextRequest) {
         .eq('source', source)
         .in('source_trader_id', traderIds)
 
-      const handleMap = new Map()
-      if (sources) {
-        sources.forEach((s: { source_trader_id: string; handle: string | null; profile_url: string | null }) => {
-          handleMap.set(s.source_trader_id, { handle: s.handle, avatar_url: s.profile_url })
-        })
-      }
+      const handleMap = new Map<string, { handle: string | null; avatar_url: string | null }>()
+      sources?.forEach((s: { source_trader_id: string; handle: string | null; profile_url: string | null }) => {
+        // profile_url 存储的是头像图片 URL（由抓取脚本保存）
+        handleMap.set(s.source_trader_id, { handle: s.handle, avatar_url: s.profile_url })
+      })
 
       // 构建交易员数据
-      for (const item of snapshots) {
-        const info = handleMap.get(item.source_trader_id) || {}
-        
-        allTraders.push({
+      return snapshots.map(item => {
+        const info = handleMap.get(item.source_trader_id) || { handle: null, avatar_url: null }
+        return {
           id: item.source_trader_id,
           handle: info.handle || item.source_trader_id,
           roi: item.roi ?? 0,
@@ -127,41 +109,82 @@ export async function GET(request: NextRequest) {
           followers: item.followers || 0,
           source,
           avatar_url: info.avatar_url,
-        })
-      }
-    }
-
-    // 排序规则（与前端 RankingTable 一致）：
-    // 1. ROI 降序
-    // 2. ROI 相同时，回撤小的靠前
-    // 3. 回撤也相同时，交易次数多的靠前
-    allTraders.sort((a, b) => {
-      // 1. ROI 降序
-      if (b.roi !== a.roi) return b.roi - a.roi
-      
-      // 2. 回撤小的靠前（回撤越小越好）
-      const mddA = a.max_drawdown ?? Infinity
-      const mddB = b.max_drawdown ?? Infinity
-      if (mddA !== mddB) return mddA - mddB
-      
-      // 3. 交易次数多的靠前
-      const tradesA = a.trades_count ?? 0
-      const tradesB = b.trades_count ?? 0
-      return tradesB - tradesA
+        }
+      })
     })
 
-    // 严格取前 100 名
-    const topTraders = allTraders.slice(0, 100)
+    // 等待所有查询完成
+    const results = await Promise.all(sourcePromises)
+    results.forEach(traders => allTraders.push(...traders))
 
-    console.log(`[Traders API] ${timeRange} 合并 ${ALL_SOURCES.length} 个交易所，共 ${allTraders.length} 条，返回前 ${topTraders.length} 条`)
+    // 使用排名算法
+    let rankedTraders: TraderData[]
+    
+    if (useAdvancedRanking) {
+      // 高级排名算法（风险调整）
+      const rankingData: TraderRankingData[] = allTraders.map(t => ({
+        id: t.id,
+        roi: t.roi,
+        pnl: t.pnl,
+        win_rate: t.win_rate,
+        max_drawdown: t.max_drawdown,
+        trades_count: t.trades_count,
+        source: t.source,
+      }))
+
+      const ranked = rankTraders(rankingData)
+      
+      // 合并排名结果
+      const rankedMap = new Map(ranked.map(r => [r.id, r]))
+      rankedTraders = allTraders
+        .filter(t => rankedMap.has(t.id))
+        .map(t => {
+          const rankInfo = rankedMap.get(t.id)!
+          return {
+            ...t,
+            risk_adjusted_score: rankInfo.risk_adjusted_score,
+            stability_score: rankInfo.stability_score,
+            is_suspicious: rankInfo.is_suspicious,
+          }
+        })
+        .sort((a, b) => {
+          const rankA = rankedMap.get(a.id)!.rank
+          const rankB = rankedMap.get(b.id)!.rank
+          return rankA - rankB
+        })
+    } else {
+      // 简单排名（保持向后兼容）
+      const rankingData: TraderRankingData[] = allTraders.map(t => ({
+        id: t.id,
+        roi: t.roi,
+        pnl: t.pnl,
+        win_rate: t.win_rate,
+        max_drawdown: t.max_drawdown,
+        trades_count: t.trades_count,
+        source: t.source,
+      }))
+
+      const sorted = simpleRankTraders(rankingData)
+      const sortedIds = new Set(sorted.map(s => s.id))
+      
+      rankedTraders = allTraders
+        .filter(t => sortedIds.has(t.id))
+        .sort((a, b) => {
+          const idxA = sorted.findIndex(s => s.id === a.id)
+          const idxB = sorted.findIndex(s => s.id === b.id)
+          return idxA - idxB
+        })
+    }
+
+    // 取前 100 名
+    const topTraders = rankedTraders.slice(0, 100)
 
     return NextResponse.json({ 
       traders: topTraders,
       timeRange,
       totalCount: allTraders.length,
+      rankingMode: useAdvancedRanking ? 'risk_adjusted' : 'simple',
     })
-  } catch (error) {
-    console.error('[Traders API] 错误:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
-  }
-}
+  },
+  { name: 'traders', rateLimit: 'read' }
+)

@@ -1,7 +1,30 @@
 'use client'
 
-import { createContext, useContext, useState, useCallback, ReactNode } from 'react'
+import { createContext, useContext, useState, useCallback, ReactNode, useEffect } from 'react'
 import { tokens } from '@/lib/design-tokens'
+
+// 注入全局动画样式
+const TOAST_STYLES_ID = 'toast-animation-styles'
+const injectToastStyles = () => {
+  if (typeof document === 'undefined') return
+  if (document.getElementById(TOAST_STYLES_ID)) return
+  
+  const style = document.createElement('style')
+  style.id = TOAST_STYLES_ID
+  style.textContent = `
+    @keyframes toastSlideIn {
+      from {
+        transform: translateX(100%);
+        opacity: 0;
+      }
+      to {
+        transform: translateX(0);
+        opacity: 1;
+      }
+    }
+  `
+  document.head.appendChild(style)
+}
 
 type ToastType = 'success' | 'error' | 'warning' | 'info'
 
@@ -13,7 +36,7 @@ interface Toast {
 }
 
 interface ToastContextType {
-  showToast: (message: string, type?: ToastType, duration?: number) => void
+  showToast: (message: string | { message?: string; code?: string } | unknown, type?: ToastType, duration?: number) => void
   hideToast: (id: string) => void
 }
 
@@ -113,9 +136,34 @@ function ToastItem({ toast, onClose }: { toast: Toast; onClose: () => void }) {
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([])
 
-  const showToast = useCallback((message: string, type: ToastType = 'info', duration: number = 3000) => {
+  // 注入动画样式
+  useEffect(() => {
+    injectToastStyles()
+  }, [])
+
+  const showToast = useCallback((message: string | { message?: string; code?: string; error?: string } | unknown, type: ToastType = 'info', duration: number = 3000) => {
+    // 处理各种类型的消息输入
+    let finalMessage: string
+    if (typeof message === 'string') {
+      finalMessage = message
+    } else if (message && typeof message === 'object') {
+      const msgObj = message as Record<string, unknown>
+      // 尝试多种常见的错误消息字段
+      if (typeof msgObj.message === 'string') {
+        finalMessage = msgObj.message
+      } else if (typeof msgObj.error === 'string') {
+        finalMessage = msgObj.error
+      } else if (typeof msgObj.msg === 'string') {
+        finalMessage = msgObj.msg
+      } else {
+        finalMessage = '操作失败'
+      }
+    } else {
+      finalMessage = String(message || '未知错误')
+    }
+    
     const id = `toast-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-    const newToast: Toast = { id, message, type, duration }
+    const newToast: Toast = { id, message: finalMessage, type, duration }
     
     setToasts((prev) => [...prev, newToast])
 
@@ -141,7 +189,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             position: 'fixed',
             top: 80,
             right: 20,
-            zIndex: 9999,
+            zIndex: 1300,
             display: 'flex',
             flexDirection: 'column',
             gap: 8,
@@ -156,20 +204,6 @@ export function ToastProvider({ children }: { children: ReactNode }) {
           ))}
         </div>
       )}
-
-      {/* Animation styles */}
-      <style jsx global>{`
-        @keyframes toastSlideIn {
-          from {
-            transform: translateX(100%);
-            opacity: 0;
-          }
-          to {
-            transform: translateX(0);
-            opacity: 1;
-          }
-        }
-      `}</style>
     </ToastContext.Provider>
   )
 }

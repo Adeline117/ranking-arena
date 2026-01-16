@@ -59,7 +59,13 @@ async function translateWithGPT(text: string, targetLang: 'zh' | 'en'): Promise<
         messages: [
           {
             role: 'system',
-            content: `You are a professional translator. Translate the following text to ${targetLanguage}. Keep the original meaning and tone. Only output the translated text without any explanation or additional text.`
+            content: `You are a professional translator. Translate the following text to ${targetLanguage}. 
+Rules:
+1. Keep the original meaning and tone
+2. Keep all Arabic numerals (0-9) unchanged - do not convert to other numeral systems
+3. Keep all punctuation marks unchanged
+4. Keep all emoji and emoticons unchanged
+5. Only output the translated text without any explanation or additional text`
           },
           {
             role: 'user',

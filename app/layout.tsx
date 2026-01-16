@@ -5,6 +5,7 @@ import "./globals.css";
 import KeyboardShortcuts from "./components/Utils/KeyboardShortcuts";
 import Providers from "./components/Providers";
 import { GlobalProgress } from "./components/UI/GlobalProgress";
+import { ServiceWorkerRegistration } from "./components/Utils/ServiceWorkerRegistration";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -28,6 +29,10 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 5,
   userScalable: true,
+  themeColor: [
+    { media: '(prefers-color-scheme: dark)', color: '#0B0A10' },
+    { media: '(prefers-color-scheme: light)', color: '#FFFFFF' },
+  ],
 };
 
 export const metadata: Metadata = {
@@ -46,6 +51,15 @@ export const metadata: Metadata = {
     "ROI 排行",
     "跟单",
   ],
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "Ranking Arena",
+  },
+  formatDetection: {
+    telephone: false,
+  },
   openGraph: {
     type: "website",
     title: "Ranking Arena · 加密交易员排行榜与社区",
@@ -79,6 +93,7 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} ${zcoolKuaiLe.variable} antialiased`}
       >
         <Providers>
+          <ServiceWorkerRegistration />
           <Suspense fallback={null}>
             <GlobalProgress />
           </Suspense>

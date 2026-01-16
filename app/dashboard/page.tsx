@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/Layout/TopNav'
@@ -48,6 +48,17 @@ export default function DashboardPage() {
   })
   const [activities, setActivities] = useState<Activity[]>([])
   const [loadingActivities, setLoadingActivities] = useState(true)
+
+  // 注入响应式网格样式
+  useEffect(() => {
+    if (typeof document === 'undefined') return
+    const styleId = 'dashboard-grid-style'
+    if (document.getElementById(styleId)) return
+    const style = document.createElement('style')
+    style.id = styleId
+    style.textContent = '@media (max-width: 900px) { .dashboard-grid { grid-template-columns: 1fr !important; } }'
+    document.head.appendChild(style)
+  }, [])
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -697,15 +708,6 @@ export default function DashboardPage() {
           </Box>
         </Box>
       </Box>
-
-      {/* 响应式样式 */}
-      <style jsx global>{`
-        @media (max-width: 900px) {
-          .dashboard-grid {
-            grid-template-columns: 1fr !important;
-          }
-        }
-      `}</style>
     </Box>
   )
 }

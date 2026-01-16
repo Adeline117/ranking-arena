@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from 'react'
 import { isChineseText } from '../utils'
+import { getCsrfHeaders } from '@/lib/api/client'
 
 type Comment = {
   id: string
@@ -58,7 +59,7 @@ export function usePostTranslation(
     try {
       const response = await fetch('/api/translate', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getCsrfHeaders() },
         body: JSON.stringify({
           text: content,
           targetLang,
@@ -114,7 +115,7 @@ export function usePostTranslation(
 
       const response = await fetch('/api/translate', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getCsrfHeaders() },
         body: JSON.stringify({ items, targetLang }),
       })
       const data = await response.json()
@@ -179,7 +180,7 @@ export function usePostTranslation(
 
       const response = await fetch('/api/translate', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getCsrfHeaders() },
         body: JSON.stringify({ items, targetLang }),
       })
       const data = await response.json()
@@ -217,4 +218,5 @@ export function usePostTranslation(
     translateComments,
   }
 }
+
 

@@ -12,3 +12,4 @@ UPDATE groups SET rules = '1. 请尊重他人，禁止人身攻击
 -- 验证
 SELECT id, name, rules FROM groups LIMIT 5;
 
+

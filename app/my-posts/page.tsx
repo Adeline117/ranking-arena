@@ -145,7 +145,6 @@ export default function MyPostsPage() {
             我的帖子
           </Text>
           <EmptyState
-            icon="📝"
             title="请先登录"
             description="登录后可以查看和管理您发布的帖子"
             action={
@@ -193,7 +192,6 @@ export default function MyPostsPage() {
           <RankingSkeleton />
         ) : posts.length === 0 ? (
           <EmptyState
-            icon="📝"
             title="暂无帖子"
             description="发布您的第一篇帖子，分享交易见解"
             action={userHandle ? (
@@ -250,7 +248,7 @@ export default function MyPostsPage() {
                     <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[4] }}>
                       {post.group && (
                         <Text size="xs" color="tertiary">
-                          📁 {post.group.name}
+                          {post.group.name}
                         </Text>
                       )}
                       <Text size="xs" color="tertiary">
@@ -258,10 +256,10 @@ export default function MyPostsPage() {
                       </Text>
                       <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3] }}>
                         <Text size="xs" color="tertiary">
-                          ❤️ {post.like_count || 0}
+                          {post.like_count || 0} 赞
                         </Text>
                         <Text size="xs" color="tertiary">
-                          💬 {post.comment_count || 0}
+                          {post.comment_count || 0} 评论
                         </Text>
                       </Box>
                     </Box>

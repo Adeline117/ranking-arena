@@ -214,3 +214,4 @@ WHERE hot_score IS NULL OR hot_score = 0;
 
 SELECT 'Mock 数据创建完成！' as status;
 
+

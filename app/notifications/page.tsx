@@ -21,14 +21,17 @@ export default function NotificationsPage() {
   const { showToast } = useToast()
   const [email, setEmail] = useState<string | null>(null)
   const [accessToken, setAccessToken] = useState<string | null>(null)
+  const [userId, setUserId] = useState<string | null>(null)
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
+  const [unreadMessageCount, setUnreadMessageCount] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [typeFilter, setTypeFilter] = useState<NotificationType>('all')
   const [hasMore, setHasMore] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [navigatingTo, setNavigatingTo] = useState<string | null>(null)
 
   // 检查登录状态
   useEffect(() => {
@@ -39,19 +42,47 @@ export default function NotificationsPage() {
       }
       setEmail(session.user?.email ?? null)
       setAccessToken(session.access_token)
+      setUserId(session.user?.id ?? null)
     })
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!session) {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      // 只在明确登出时跳转，不在 token 刷新时跳转
+      if (event === 'SIGNED_OUT') {
         router.push('/login')
         return
       }
-      setEmail(session.user?.email ?? null)
-      setAccessToken(session.access_token)
+      if (session) {
+        setEmail(session.user?.email ?? null)
+        setAccessToken(session.access_token)
+        setUserId(session.user?.id ?? null)
+      }
     })
 
     return () => subscription.unsubscribe()
   }, [router])
+
+  // 获取未读私信数量
+  useEffect(() => {
+    if (!userId) return
+
+    const fetchUnreadMessageCount = async () => {
+      try {
+        const { count, error } = await supabase
+          .from('direct_messages')
+          .select('*', { count: 'exact', head: true })
+          .eq('receiver_id', userId)
+          .eq('read', false)
+        
+        if (!error && typeof count === 'number') {
+          setUnreadMessageCount(count)
+        }
+      } catch {
+        // 如果表不存在，静默处理
+      }
+    }
+
+    fetchUnreadMessageCount()
+  }, [userId])
 
   // 加载通知
   const loadNotifications = useCallback(async () => {
@@ -67,12 +98,14 @@ export default function NotificationsPage() {
         },
       })
 
-      const data = await response.json()
+      const result = await response.json()
 
       if (!response.ok) {
-        throw new Error(data.error || '获取通知失败')
+        throw new Error(result.error?.message || result.error || '获取通知失败')
       }
 
+      // API 返回格式: { success: true, data: { notifications, unread_count } }
+      const data = result.data || result
       setNotifications(data.notifications || [])
       setUnreadCount(data.unread_count || 0)
     } catch (err: any) {
@@ -89,51 +122,64 @@ export default function NotificationsPage() {
     }
   }, [accessToken, loadNotifications])
 
-  // 标记单个为已读
-  const markAsRead = async (notificationId: string) => {
+  // 预加载通知中的链接目标页面
+  useEffect(() => {
+    if (notifications.length > 0) {
+      // 预加载前5个通知的目标页面
+      const linksToPreload = notifications
+        .slice(0, 5)
+        .map(n => n.link)
+        .filter((link): link is string => !!link && link.startsWith('/'))
+      
+      linksToPreload.forEach(link => {
+        router.prefetch(link)
+      })
+    }
+  }, [notifications, router])
+
+  // 标记单个为已读 - 非阻塞，立即更新UI
+  const markAsRead = useCallback((notificationId: string) => {
     if (!accessToken) return
 
-    try {
-      await fetch('/api/notifications', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify({ notification_id: notificationId }),
-      })
+    // 立即更新本地状态，提供即时反馈
+    setNotifications(prev => prev.map(n => 
+      n.id === notificationId ? { ...n, read: true } : n
+    ))
+    setUnreadCount(prev => Math.max(0, prev - 1))
 
-      // 更新本地状态
-      setNotifications(prev => prev.map(n => 
-        n.id === notificationId ? { ...n, read: true } : n
-      ))
-      setUnreadCount(prev => Math.max(0, prev - 1))
-    } catch (err) {
+    // 后台发送请求，不阻塞UI
+    fetch('/api/notifications', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({ notification_id: notificationId }),
+    }).catch(err => {
       console.error('[Notifications] 标记已读失败:', err)
-    }
-  }
+    })
+  }, [accessToken])
 
-  // 标记全部为已读
-  const markAllAsRead = async () => {
+  // 标记全部为已读 - 非阻塞，立即更新UI
+  const markAllAsRead = useCallback(() => {
     if (!accessToken) return
 
-    try {
-      await fetch('/api/notifications', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify({ mark_all: true }),
-      })
+    // 立即更新本地状态
+    setNotifications(prev => prev.map(n => ({ ...n, read: true })))
+    setUnreadCount(0)
 
-      // 更新本地状态
-      setNotifications(prev => prev.map(n => ({ ...n, read: true })))
-      setUnreadCount(0)
-    } catch (err) {
+    // 后台发送请求
+    fetch('/api/notifications', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({ mark_all: true }),
+    }).catch(err => {
       console.error('[Notifications] 标记全部已读失败:', err)
-    }
-  }
+    })
+  }, [accessToken])
 
   const getIcon = (type: string) => {
     if (type === 'follow') return '关'
@@ -218,11 +264,23 @@ export default function NotificationsPage() {
     ? notifications 
     : notifications.filter(n => n.type === typeFilter)
 
-  const handleNotificationClick = (notif: Notification) => {
+  // 预加载通知链接的目标页面
+  const prefetchLink = useCallback((link: string | undefined) => {
+    if (link && link.startsWith('/')) {
+      router.prefetch(link)
+    }
+  }, [router])
+
+  // 处理通知点击 - 立即响应，不阻塞导航
+  const handleNotificationClick = useCallback((notif: Notification, e?: React.MouseEvent) => {
     if (!notif.read) {
       markAsRead(notif.id)
     }
-  }
+    // 显示导航指示器
+    if (notif.link) {
+      setNavigatingTo(notif.id)
+    }
+  }, [markAsRead])
 
   return (
     <div style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
@@ -244,6 +302,23 @@ export default function NotificationsPage() {
               }}>
                 {unreadCount} 条未读
               </span>
+            )}
+            {unreadCount === 0 && unreadMessageCount > 0 && (
+              <Link 
+                href="/messages"
+                style={{
+                  marginLeft: 12,
+                  padding: '4px 10px',
+                  background: '#8b6fa8',
+                  color: '#fff',
+                  borderRadius: 12,
+                  fontSize: 14,
+                  fontWeight: 700,
+                  textDecoration: 'none',
+                }}
+              >
+                {unreadMessageCount} 条私信
+              </Link>
             )}
           </h1>
           {unreadCount > 0 && (
@@ -329,36 +404,79 @@ export default function NotificationsPage() {
             </button>
           </div>
         ) : filteredNotifications.length === 0 ? (
-          <EmptyState 
-            title={typeFilter === 'all' ? '暂无通知' : `暂无${typeFilter === 'follow' ? '关注' : typeFilter === 'like' ? '点赞' : typeFilter === 'comment' ? '评论' : '提及'}通知`}
-            description={typeFilter === 'all' ? '当你收到关注、点赞或评论时会显示在这里' : '切换到其他类型查看更多通知'}
-          />
+          <div>
+            <EmptyState 
+              title={typeFilter === 'all' ? '暂无通知' : `暂无${typeFilter === 'follow' ? '关注' : typeFilter === 'like' ? '点赞' : typeFilter === 'comment' ? '评论' : '提及'}通知`}
+              description={typeFilter === 'all' ? '当你收到关注、点赞或评论时会显示在这里' : '切换到其他类型查看更多通知'}
+            />
+            {/* 如果有未读私信，显示提示 */}
+            {unreadMessageCount > 0 && (
+              <div style={{
+                marginTop: 24,
+                padding: '16px 20px',
+                background: 'rgba(139, 111, 168, 0.1)',
+                border: '1px solid rgba(139, 111, 168, 0.3)',
+                borderRadius: 12,
+                textAlign: 'center',
+              }}>
+                <div style={{ fontSize: 14, color: tokens.colors.text.primary, marginBottom: 8 }}>
+                  你有 <strong>{unreadMessageCount}</strong> 条未读私信
+                </div>
+                <Link
+                  href="/messages"
+                  style={{
+                    display: 'inline-block',
+                    padding: '8px 16px',
+                    background: tokens.colors.accent.primary,
+                    color: '#fff',
+                    borderRadius: 8,
+                    textDecoration: 'none',
+                    fontSize: 13,
+                    fontWeight: 700,
+                  }}
+                >
+                  查看私信
+                </Link>
+              </div>
+            )}
+          </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             {filteredNotifications.map((notif) => {
+              const isNavigating = navigatingTo === notif.id
               const Content = (
                 <div
                   onClick={() => handleNotificationClick(notif)}
                   style={{
                     padding: '16px',
                     borderRadius: '12px',
-                    background: notif.read ? tokens.colors.bg.secondary : 'rgba(139,111,168,0.1)',
-                    border: `1px solid ${notif.read ? tokens.colors.border.primary : 'rgba(139,111,168,0.3)'}`,
+                    background: isNavigating 
+                      ? 'rgba(139,111,168,0.2)' 
+                      : notif.read 
+                        ? tokens.colors.bg.secondary 
+                        : 'rgba(139,111,168,0.1)',
+                    border: `1px solid ${isNavigating ? tokens.colors.accent.primary : notif.read ? tokens.colors.border.primary : 'rgba(139,111,168,0.3)'}`,
                     display: 'flex',
                     alignItems: 'flex-start',
                     gap: '12px',
-                    transition: 'all 200ms ease',
+                    transition: 'all 150ms ease',
                     cursor: notif.link ? 'pointer' : 'default',
+                    opacity: isNavigating ? 0.8 : 1,
+                    transform: isNavigating ? 'scale(0.99)' : 'scale(1)',
                   }}
                   onMouseEnter={(e) => {
-                    e.currentTarget.style.background = notif.read 
-                      ? tokens.colors.bg.tertiary || 'rgba(255,255,255,0.04)'
-                      : 'rgba(139,111,168,0.15)'
+                    if (!isNavigating) {
+                      e.currentTarget.style.background = notif.read 
+                        ? tokens.colors.bg.tertiary || 'rgba(255,255,255,0.04)'
+                        : 'rgba(139,111,168,0.15)'
+                    }
                   }}
                   onMouseLeave={(e) => {
-                    e.currentTarget.style.background = notif.read 
-                      ? tokens.colors.bg.secondary
-                      : 'rgba(139,111,168,0.1)'
+                    if (!isNavigating) {
+                      e.currentTarget.style.background = notif.read 
+                        ? tokens.colors.bg.secondary
+                        : 'rgba(139,111,168,0.1)'
+                    }
                   }}
                 >
                   {/* 头像或图标 */}
@@ -441,7 +559,13 @@ export default function NotificationsPage() {
               )
 
               return notif.link ? (
-                <Link key={notif.id} href={notif.link} style={{ textDecoration: 'none', color: 'inherit' }}>
+                <Link 
+                  key={notif.id} 
+                  href={notif.link} 
+                  prefetch={true}
+                  style={{ textDecoration: 'none', color: 'inherit' }}
+                  onMouseEnter={() => prefetchLink(notif.link)}
+                >
                   {Content}
                 </Link>
               ) : (

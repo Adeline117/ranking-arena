@@ -197,7 +197,7 @@ function ExchangeCallbackPageContent() {
           }}
         >
           <Text size="xs" color="tertiary">
-            💡 提示：如果还没有创建API Key，请返回 {exchangeName} 页面创建后再来绑定。
+            提示：如果还没有创建API Key，请返回 {exchangeName} 页面创建后再来绑定。
           </Text>
         </Box>
       </Box>

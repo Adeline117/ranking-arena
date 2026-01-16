@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useToast } from './Toast'
 import { tokens } from '@/lib/design-tokens'
+import { getCsrfHeaders } from '@/lib/api/client'
 
 type MessageButtonProps = {
   targetUserId: string
@@ -38,7 +39,7 @@ export default function MessageButton({
     try {
       const response = await fetch('/api/messages/start', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getCsrfHeaders() },
         body: JSON.stringify({
           senderId: currentUserId,
           receiverId: targetUserId,
@@ -144,4 +145,5 @@ function MessageIcon({ size = 16 }: { size?: number }) {
     </svg>
   )
 }
+
 

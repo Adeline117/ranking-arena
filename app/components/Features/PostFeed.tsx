@@ -12,6 +12,8 @@ import { formatTimeAgo } from '@/lib/utils/date'
 import { type PollChoice, type PostWithUserState, getPollWinner } from '@/lib/types'
 import { useToast } from '../UI/Toast'
 import { useDialog } from '../UI/Dialog'
+import { getCsrfHeaders } from '@/lib/api/client'
+import BookmarkModal from '../UI/BookmarkModal'
 
 // 本地类型（扩展后端类型）
 type Post = PostWithUserState
@@ -283,6 +285,19 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
   const [loadingCustomPoll, setLoadingCustomPoll] = useState(false)
   const [votingCustomPoll, setVotingCustomPoll] = useState(false)
   const [selectedPollOptions, setSelectedPollOptions] = useState<number[]>([])
+  // 收藏和转发状态
+  const [bookmarkLoading, setBookmarkLoading] = useState<Record<string, boolean>>({})
+  const [repostLoading, setRepostLoading] = useState<Record<string, boolean>>({})
+  const [showRepostModal, setShowRepostModal] = useState<string | null>(null)
+  const [repostComment, setRepostComment] = useState('')
+  // 用户收藏和转发状态
+  const [userBookmarks, setUserBookmarks] = useState<Record<string, boolean>>({})
+  const [userReposts, setUserReposts] = useState<Record<string, boolean>>({})
+  const [bookmarkCounts, setBookmarkCounts] = useState<Record<string, number>>({})
+  const [repostCounts, setRepostCounts] = useState<Record<string, number>>({})
+  // 收藏夹选择弹窗状态
+  const [showBookmarkModal, setShowBookmarkModal] = useState(false)
+  const [bookmarkingPostId, setBookmarkingPostId] = useState<string | null>(null)
 
   // 获取用户 token 和 ID
   useEffect(() => {
@@ -336,11 +351,25 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
       const data = await response.json()
 
       if (!response.ok) {
-        throw new Error(data.error || '获取帖子失败')
+        const errorMsg = typeof data.error === 'string' 
+          ? data.error 
+          : (data.error?.message || '获取帖子失败')
+        throw new Error(errorMsg)
       }
 
       // API 返回格式: { success: true, data: { posts: [...] } }
-      setPosts(data.data?.posts || [])
+      const loadedPosts = data.data?.posts || []
+      setPosts(loadedPosts)
+      
+      // 初始化收藏和转发计数
+      const initialBookmarkCounts: Record<string, number> = {}
+      const initialRepostCounts: Record<string, number> = {}
+      loadedPosts.forEach((post: Post) => {
+        initialBookmarkCounts[post.id] = post.bookmark_count || 0
+        initialRepostCounts[post.id] = post.repost_count || 0
+      })
+      setBookmarkCounts(prev => ({ ...prev, ...initialBookmarkCounts }))
+      setRepostCounts(prev => ({ ...prev, ...initialRepostCounts }))
     } catch (err: any) {
       console.error('[PostFeed] 加载失败:', err)
       setError(err.message || '加载失败')
@@ -349,9 +378,56 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
     }
   }, [props.groupId, props.authorHandle, accessToken, sortType])
 
+  // 加载用户收藏和转发状态 - 必须在使用它的 useEffect 之前定义
+  const loadUserBookmarksAndReposts = useCallback(async (postIds: string[]) => {
+    if (!accessToken || postIds.length === 0) return
+
+    try {
+      // 并行获取收藏和转发状态
+      const [bookmarkResults, repostResults] = await Promise.all([
+        Promise.all(postIds.map(async (postId) => {
+          const res = await fetch(`/api/posts/${postId}/bookmark`, {
+            headers: { 'Authorization': `Bearer ${accessToken}` },
+          })
+          const data = await res.json()
+          return { postId, bookmarked: data.bookmarked || false }
+        })),
+        Promise.all(postIds.map(async (postId) => {
+          const res = await fetch(`/api/posts/${postId}/repost`, {
+            headers: { 'Authorization': `Bearer ${accessToken}` },
+          })
+          const data = await res.json()
+          return { postId, reposted: data.reposted || false }
+        })),
+      ])
+
+      // 批量更新用户收藏和转发状态
+      setUserBookmarks(prev => {
+        const updated = { ...prev }
+        bookmarkResults.forEach(r => { updated[r.postId] = r.bookmarked })
+        return updated
+      })
+      setUserReposts(prev => {
+        const updated = { ...prev }
+        repostResults.forEach(r => { updated[r.postId] = r.reposted })
+        return updated
+      })
+    } catch (err) {
+      console.error('[PostFeed] 加载收藏/转发状态失败:', err)
+    }
+  }, [accessToken])
+
   useEffect(() => {
     loadPosts()
   }, [loadPosts])
+
+  // 加载用户收藏和转发状态
+  useEffect(() => {
+    if (posts.length > 0 && accessToken) {
+      const postIds = posts.map(p => p.id)
+      loadUserBookmarksAndReposts(postIds)
+    }
+  }, [posts, accessToken, loadUserBookmarksAndReposts])
 
   // 处理 initialPostId - 自动打开指定帖子
   const initialPostIdRef = useRef<string | null>(null)
@@ -621,6 +697,138 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
       setVotingCustomPoll(false)
     }
   }, [accessToken, selectedPollOptions])
+
+  // 收藏帖子 - 点击收藏到默认收藏夹，已收藏则取消收藏
+  const handleBookmark = useCallback(async (postId: string) => {
+    if (!accessToken) {
+      showToast('请先登录', 'warning')
+      return
+    }
+
+    setBookmarkLoading(prev => ({ ...prev, [postId]: true }))
+    
+    try {
+      const response = await fetch(`/api/posts/${postId}/bookmark`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`,
+          ...getCsrfHeaders(),
+        },
+      })
+
+      const result = await response.json()
+      
+      if (response.ok) {
+        setUserBookmarks(prev => ({ ...prev, [postId]: result.bookmarked }))
+        setBookmarkCounts(prev => ({ ...prev, [postId]: result.bookmark_count }))
+        showToast(result.bookmarked ? '已收藏到默认收藏夹' : '已取消收藏', 'success')
+      } else {
+        showToast(result.error || '操作失败', 'error')
+      }
+    } catch (err) {
+      console.error('[PostFeed] 收藏失败:', err)
+      showToast('网络错误', 'error')
+    } finally {
+      setBookmarkLoading(prev => ({ ...prev, [postId]: false }))
+    }
+  }, [accessToken, showToast])
+
+  // 打开收藏夹选择弹窗
+  const openBookmarkFolderModal = useCallback((postId: string) => {
+    if (!accessToken) {
+      showToast('请先登录', 'warning')
+      return
+    }
+    setBookmarkingPostId(postId)
+    setShowBookmarkModal(true)
+  }, [accessToken, showToast])
+
+  // 收藏到指定收藏夹
+  const handleBookmarkToFolder = useCallback(async (folderId: string) => {
+    if (!accessToken || !bookmarkingPostId) return
+
+    setBookmarkLoading(prev => ({ ...prev, [bookmarkingPostId]: true }))
+    
+    try {
+      const response = await fetch(`/api/posts/${bookmarkingPostId}/bookmark`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`,
+          ...getCsrfHeaders(),
+        },
+        body: JSON.stringify({ folder_id: folderId }),
+      })
+
+      const result = await response.json()
+      
+      if (response.ok) {
+        setUserBookmarks(prev => ({ ...prev, [bookmarkingPostId]: result.bookmarked }))
+        setBookmarkCounts(prev => ({ ...prev, [bookmarkingPostId]: result.bookmark_count }))
+        showToast('已收藏到指定收藏夹', 'success')
+      } else {
+        showToast(result.error || '操作失败', 'error')
+      }
+    } catch (err) {
+      console.error('[PostFeed] 收藏失败:', err)
+      showToast('网络错误', 'error')
+    } finally {
+      setBookmarkLoading(prev => ({ ...prev, [bookmarkingPostId]: false }))
+      setShowBookmarkModal(false)
+      setBookmarkingPostId(null)
+    }
+  }, [accessToken, bookmarkingPostId, showToast])
+
+  // 转发帖子
+  const handleRepost = useCallback(async (postId: string, comment?: string) => {
+    if (!accessToken) {
+      showToast('请先登录', 'warning')
+      return
+    }
+
+    // 检查是否是自己的帖子
+    const post = posts.find(p => p.id === postId) || openPost
+    if (post?.author_id === currentUserId) {
+      showToast('不能转发自己的帖子', 'warning')
+      return
+    }
+
+    if (userReposts[postId]) {
+      showToast('已经转发过此帖子', 'warning')
+      return
+    }
+
+    setRepostLoading(prev => ({ ...prev, [postId]: true }))
+    
+    try {
+      const response = await fetch(`/api/posts/${postId}/repost`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ comment }),
+      })
+
+      const result = await response.json()
+      
+      if (response.ok) {
+        setUserReposts(prev => ({ ...prev, [postId]: true }))
+        setRepostCounts(prev => ({ ...prev, [postId]: result.repost_count }))
+        setShowRepostModal(null)
+        setRepostComment('')
+        showToast('转发成功！', 'success')
+      } else {
+        showToast(result.error || '转发失败', 'error')
+      }
+    } catch (err) {
+      console.error('[PostFeed] 转发失败:', err)
+      showToast('网络错误', 'error')
+    } finally {
+      setRepostLoading(prev => ({ ...prev, [postId]: false }))
+    }
+  }, [accessToken, posts, openPost, currentUserId, userReposts, showToast])
 
   // 提交评论
   const submitComment = useCallback(async (postId: string) => {
@@ -993,8 +1201,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
       } else {
         showToast(data.error || '操作失败', 'error')
       }
-    } catch (err) {
-      console.error('[PostFeed] 置顶失败:', err)
+    } catch {
       showToast('操作失败', 'error')
     }
   }, [accessToken, showToast])
@@ -1070,15 +1277,10 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
         setShowingOriginal(false)
         // 本地缓存（不含图片，图片会在读取时动态添加）
         setTranslationCache(prev => ({ ...prev, [cacheKey]: data.data.translatedText }))
-        if (data.data.cached) {
-          console.log('[PostFeed] 翻译命中服务端缓存')
-        }
       } else {
-        console.error('[PostFeed] 翻译失败:', data.error)
         showToast(data.error || '翻译失败', 'error')
       }
-    } catch (err) {
-      console.error('[PostFeed] 翻译出错:', err)
+    } catch {
       showToast('翻译服务出错', 'error')
     } finally {
       setTranslating(false)
@@ -1131,10 +1333,9 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
           return updated
         })
         
-        console.log(`[PostFeed] 批量翻译完成: ${data.data.cached}/${data.data.total} 命中缓存`)
       }
-    } catch (err) {
-      console.error('[PostFeed] 列表翻译出错:', err)
+    } catch {
+      // 批量翻译失败，静默处理
     } finally {
       setTranslatingList(false)
     }
@@ -1206,10 +1407,9 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
           return updated
         })
         
-        console.log(`[PostFeed] 评论批量翻译完成: ${data.data.cached}/${data.data.total} 命中缓存`)
       }
-    } catch (err) {
-      console.error('[PostFeed] 评论翻译出错:', err)
+    } catch {
+      // 评论翻译失败，静默处理
     } finally {
       setTranslatingComments(false)
     }
@@ -1376,7 +1576,13 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
         </div>
       )}
       <div>
-        {posts.map((p) => {
+        {/* 只在个人主页（有 authorHandle）时才将置顶帖子排在最上面 */}
+        {(props.authorHandle ? [...posts].sort((a, b) => {
+          // 置顶帖子优先（仅在个人主页生效）
+          if (a.is_pinned && !b.is_pinned) return -1
+          if (!a.is_pinned && b.is_pinned) return 1
+          return 0
+        }) : posts).map((p) => {
           const poll = { bull: p.poll_bull, bear: p.poll_bear, wait: p.poll_wait }
           const winner = p.poll_enabled ? getPollWinner(poll) : 'tie'
           const label = pollLabel(winner, t)
@@ -1456,7 +1662,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
                 )}
               </div>
 
-              {/* 内容预览 */}
+              {/* 内容预览 - 移除图片 Markdown 语法 */}
               {p.content && (
                 <div style={{ 
                   marginTop: 8, 
@@ -1469,7 +1675,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
                   WebkitLineClamp: 2,
                   WebkitBoxOrient: 'vertical',
                 }}>
-                  {(translatedListPosts[p.id]?.body || p.content).slice(0, 150)}
+                  {removeImagesFromContent(translatedListPosts[p.id]?.body || p.content).slice(0, 150)}
                 </div>
               )}
 
@@ -1896,6 +2102,75 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
               active={openPost.user_reaction === 'down'}
               count={openPost.dislike_count}
               showCount={false}
+            />
+            {/* 收藏 */}
+            <Action
+              icon={<span style={{ fontSize: 14 }}>{userBookmarks[openPost.id] ? '★' : '☆'}</span>}
+              text={userBookmarks[openPost.id] ? '已收藏' : '收藏'}
+              onClick={(e) => {
+                if (e) {
+                  e.preventDefault()
+                  e.stopPropagation()
+                }
+                handleBookmark(openPost.id)
+              }}
+              active={userBookmarks[openPost.id]}
+              count={bookmarkCounts[openPost.id] || 0}
+              showCount={true}
+            />
+            {/* 选择收藏夹 - 仅在已登录时显示 */}
+            {accessToken && (
+              <button
+                onClick={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  openBookmarkFolderModal(openPost.id)
+                }}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: tokens.colors.text.tertiary,
+                  cursor: 'pointer',
+                  padding: '6px 8px',
+                  fontSize: 12,
+                  borderRadius: 6,
+                  transition: 'all 0.2s ease',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)'
+                  e.currentTarget.style.color = tokens.colors.text.secondary
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'transparent'
+                  e.currentTarget.style.color = tokens.colors.text.tertiary
+                }}
+                title="选择收藏夹"
+              >
+                ▼
+              </button>
+            )}
+            {/* 转发 */}
+            <Action
+              icon={<span style={{ fontSize: 14 }}>↗</span>}
+              text={userReposts[openPost.id] ? '已转发' : '转发'}
+              onClick={(e) => {
+                if (e) {
+                  e.preventDefault()
+                  e.stopPropagation()
+                }
+                if (openPost.author_id === currentUserId) {
+                  showToast('不能转发自己的帖子', 'warning')
+                  return
+                }
+                if (userReposts[openPost.id]) {
+                  showToast('已经转发过此帖子', 'warning')
+                  return
+                }
+                setShowRepostModal(openPost.id)
+              }}
+              active={userReposts[openPost.id]}
+              count={repostCounts[openPost.id] || 0}
+              showCount={true}
             />
           </div>
 
@@ -2388,6 +2663,112 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
           </div>
         </div>
       )}
+
+      {/* 转发弹窗 - 使用 Portal 渲染到 body */}
+      {showRepostModal && typeof document !== 'undefined' && createPortal(
+        <div
+          onClick={() => {
+            setShowRepostModal(null)
+            setRepostComment('')
+          }}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0, 0, 0, 0.65)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 20,
+            zIndex: 99999,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: '100%',
+              maxWidth: 400,
+              background: tokens.colors.bg.secondary,
+              border: `1px solid ${tokens.colors.border.primary}`,
+              borderRadius: 16,
+              padding: 24,
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
+            }}
+          >
+            <h2 style={{ fontSize: 18, fontWeight: 900, marginBottom: 16, color: tokens.colors.text.primary }}>
+              转发到主页
+            </h2>
+            
+            <textarea
+              value={repostComment}
+              onChange={(e) => setRepostComment(e.target.value)}
+              placeholder="添加评论（可选）..."
+              style={{
+                width: '100%',
+                minHeight: 80,
+                padding: 12,
+                borderRadius: 12,
+                border: `1px solid ${tokens.colors.border.primary}`,
+                background: tokens.colors.bg.primary,
+                color: tokens.colors.text.primary,
+                fontSize: 14,
+                resize: 'vertical',
+                marginBottom: 16,
+                outline: 'none',
+              }}
+              maxLength={280}
+            />
+            
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => {
+                  setShowRepostModal(null)
+                  setRepostComment('')
+                }}
+                style={{
+                  padding: '10px 20px',
+                  borderRadius: 10,
+                  border: `1px solid ${tokens.colors.border.primary}`,
+                  background: 'transparent',
+                  color: tokens.colors.text.secondary,
+                  fontWeight: 700,
+                  fontSize: 14,
+                  cursor: 'pointer',
+                }}
+              >
+                取消
+              </button>
+              <button
+                onClick={() => handleRepost(showRepostModal, repostComment)}
+                disabled={repostLoading[showRepostModal]}
+                style={{
+                  padding: '10px 20px',
+                  borderRadius: 10,
+                  border: 'none',
+                  background: repostLoading[showRepostModal] ? 'rgba(139,111,168,0.3)' : '#8b6fa8',
+                  color: '#fff',
+                  fontWeight: 900,
+                  fontSize: 14,
+                  cursor: repostLoading[showRepostModal] ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {repostLoading[showRepostModal] ? '转发中...' : '转发'}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* 收藏夹选择弹窗 */}
+      <BookmarkModal
+        isOpen={showBookmarkModal}
+        onClose={() => {
+          setShowBookmarkModal(false)
+          setBookmarkingPostId(null)
+        }}
+        onSelect={handleBookmarkToFolder}
+        postId={bookmarkingPostId || ''}
+      />
     </>
   )
 }
@@ -2545,7 +2926,7 @@ function Modal(props: { children: React.ReactNode; onClose: () => void }) {
         display: 'grid',
         placeItems: 'center',
         padding: 16,
-        zIndex: 9999,
+        zIndex: 1000,
         overflowY: 'auto',
       }}
     >
