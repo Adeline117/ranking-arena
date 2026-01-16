@@ -138,8 +138,9 @@ export async function validateCoinexCredentials(config: CoinexConfig): Promise<b
   try {
     await getCoinexAccount(config)
     return true
-  } catch (error: any) {
-    if (error.message?.includes('25') || error.message?.includes('Invalid') || error.message?.includes('authorization')) {
+  } catch (error: unknown) {
+    const err = error as { message?: string }
+    if (err.message?.includes('25') || err.message?.includes('Invalid') || err.message?.includes('authorization')) {
       return false
     }
     throw error

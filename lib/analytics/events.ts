@@ -137,6 +137,20 @@ export interface TabChangeEvent {
   }
 }
 
+// 交易员详情查看事件
+export interface TraderViewEvent {
+  name: 'trader_view'
+  props: {
+    trader_id: string
+    trader_handle: string
+    source?: string
+    referrer?: string
+    section?: string
+    timeRange?: string
+    duration?: number
+  }
+}
+
 // 所有事件类型联合
 export type TrackEvent =
   | PageViewEvent
@@ -152,6 +166,7 @@ export type TrackEvent =
   | PerformanceEvent
   | AuthEvent
   | TabChangeEvent
+  | TraderViewEvent
 
 // 事件名称类型
 export type EventName = TrackEvent['name']

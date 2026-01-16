@@ -10,6 +10,7 @@ import Avatar from '@/app/components/UI/Avatar'
 import ExchangeConnectionManager from '@/app/components/ExchangeConnection'
 import { useToast } from '@/app/components/UI/Toast'
 import { useDialog } from '@/app/components/UI/Dialog'
+import { uiLogger } from '@/lib/utils/logger'
 
 // 实时验证函数
 function validateHandle(handle: string): { valid: boolean; message: string } {
@@ -224,7 +225,7 @@ export default function SettingsPage() {
       }
 
     } catch (error) {
-      console.error('Error loading profile:', error)
+      uiLogger.error('Error loading profile:', error)
     } finally {
       setLoading(false)
     }
@@ -265,7 +266,7 @@ export default function SettingsPage() {
         .upload(filePath, file, { upsert: true })
 
       if (uploadError) {
-        console.error('[Avatar] Upload error:', uploadError)
+        uiLogger.error('Avatar upload error:', uploadError)
         // 显示具体的错误信息
         if (uploadError.message?.includes('Bucket not found')) {
           showToast('存储服务未配置，请联系管理员', 'error')
@@ -324,8 +325,8 @@ export default function SettingsPage() {
         )
       
       if (userProfilesError) {
-        console.error('Error saving profile:', JSON.stringify(userProfilesError, null, 2))
-        console.error('Error details - code:', userProfilesError.code, 'message:', userProfilesError.message, 'hint:', userProfilesError.hint)
+        uiLogger.error('Error saving profile:', JSON.stringify(userProfilesError, null, 2))
+        uiLogger.error('Error details - code:', userProfilesError.code, 'message:', userProfilesError.message, 'hint:', userProfilesError.hint)
         // 处理 handle 重复的错误
         if (userProfilesError.code === '23505' || userProfilesError.message?.includes('unique') || userProfilesError.message?.includes('duplicate')) {
           showToast('用户名已被使用，请选择其他用户名', 'error')
@@ -354,7 +355,7 @@ export default function SettingsPage() {
       showToast('保存成功！', 'success')
       router.push(`/u/${handle || userId}`)
     } catch (error) {
-      console.error('Error saving:', error)
+      uiLogger.error('Error saving:', error)
       showToast('保存失败，请重试', 'error')
     } finally {
       setSaving(false)

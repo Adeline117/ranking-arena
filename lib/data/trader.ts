@@ -10,6 +10,8 @@
 
 import { supabase } from '@/lib/supabase/client'
 import type { SupabaseClient } from '@supabase/supabase-js'
+import * as cache from '@/lib/cache'
+import { CacheKey, CACHE_TTL } from '@/lib/cache'
 
 // 支持的交易所数据源
 export const TRADER_SOURCES = ['binance', 'bybit', 'bitget', 'okx', 'kucoin', 'gate', 'mexc', 'coinex'] as const
@@ -308,128 +310,145 @@ async function getTraderArenaFollowersCountBatch(
 export async function getTraderByHandle(handle: string): Promise<TraderProfile | null> {
   if (!handle) return null
 
-  try {
-    // 单次查询找到交易员
-    const source = await findTraderAcrossSources(handle)
-    
-    if (!source) {
-      console.warn(`[trader] No trader found for handle: ${handle}`)
-      return null
-    }
+  const cacheKey = CacheKey.traders.detail(handle)
 
-    // 并行获取粉丝数和用户资料
-    const [followersCount, profileData] = await Promise.all([
-      // 获取 Arena 粉丝数
-      (async () => {
-        const { getTraderArenaFollowersCount } = await import('./trader-followers')
-        return getTraderArenaFollowersCount(supabase, source.source_trader_id)
-      })(),
-      // 检查是否在平台注册
-      (async () => {
-        const profileHandle = source.handle || source.source_trader_id
-        const decodedHandle = decodeURIComponent(handle)
+  // 使用缓存包装查询
+  return cache.getOrSet(
+    cacheKey,
+    async () => {
+      try {
+        // 单次查询找到交易员
+        const source = await findTraderAcrossSources(handle)
         
-        const { data } = await supabase
-          .from('user_profiles')
-          .select('id, bio')
-          .or(`handle.eq.${profileHandle},handle.eq.${decodedHandle},handle.eq.${handle}`)
-          .limit(1)
-          .maybeSingle()
-        
-        return data
-      })()
-    ])
+        if (!source) {
+          console.warn(`[trader] No trader found for handle: ${handle}`)
+          return null
+        }
 
-    return {
-      handle: source.handle || source.source_trader_id,
-      id: source.source_trader_id,
-      bio: profileData?.bio || undefined,
-      followers: followersCount,
-      copiers: 0,
-      avatar_url: source.profile_url || undefined,
-      isRegistered: !!profileData,
-      source: source.source,
-    }
-  } catch (error) {
-    console.error('[trader] Error in getTraderByHandle:', error)
-    return null
-  }
+        // 并行获取粉丝数和用户资料
+        const [followersCount, profileData] = await Promise.all([
+          // 获取 Arena 粉丝数
+          (async () => {
+            const { getTraderArenaFollowersCount } = await import('./trader-followers')
+            return getTraderArenaFollowersCount(supabase, source.source_trader_id)
+          })(),
+          // 检查是否在平台注册
+          (async () => {
+            const profileHandle = source.handle || source.source_trader_id
+            const decodedHandle = decodeURIComponent(handle)
+            
+            const { data } = await supabase
+              .from('user_profiles')
+              .select('id, bio')
+              .or(`handle.eq.${profileHandle},handle.eq.${decodedHandle},handle.eq.${handle}`)
+              .limit(1)
+              .maybeSingle()
+            
+            return data
+          })()
+        ])
+
+        return {
+          handle: source.handle || source.source_trader_id,
+          id: source.source_trader_id,
+          bio: profileData?.bio || undefined,
+          followers: followersCount,
+          copiers: 0,
+          avatar_url: source.profile_url || undefined,
+          isRegistered: !!profileData,
+          source: source.source,
+        }
+      } catch (error) {
+        console.error('[trader] Error in getTraderByHandle:', error)
+        return null
+      }
+    },
+    { ttl: CACHE_TTL.TRADER_DETAIL }
+  )
 }
 
 /**
  * 获取交易员绩效数据
- * 优化版本：使用单次查询 + 并行查询
+ * 优化版本：使用单次查询 + 并行查询 + Redis 缓存
  */
 export async function getTraderPerformance(
   handle: string,
-  _period: '7D' | '30D' | '90D' | '1Y' | '2Y' | 'All' = '90D'
+  period: '7D' | '30D' | '90D' | '1Y' | '2Y' | 'All' = '90D'
 ): Promise<TraderPerformance> {
-  try {
-    // 先找到交易员
-    const source = await findTraderAcrossSources(handle)
-    
-    if (!source) {
-      return { roi_90d: 0 }
-    }
+  const cacheKey = CacheKey.traders.performance(handle, period)
 
-    // 并行查询所有时间段的数据
-    const [snapshot90d, snapshot7d, snapshot30d] = await Promise.all([
-      // 90D 数据（默认）
-      supabase
-        .from('trader_snapshots')
-        .select('roi, pnl, win_rate, max_drawdown')
-        .eq('source', source.source)
-        .eq('source_trader_id', source.source_trader_id)
-        .or('season_id.is.null,season_id.eq.90D')
-        .order('captured_at', { ascending: false })
-        .limit(1)
-        .maybeSingle(),
-      // 7D 数据
-      supabase
-        .from('trader_snapshots')
-        .select('roi, pnl, win_rate, max_drawdown')
-        .eq('source', source.source)
-        .eq('source_trader_id', source.source_trader_id)
-        .eq('season_id', '7D')
-        .order('captured_at', { ascending: false })
-        .limit(1)
-        .maybeSingle(),
-      // 30D 数据
-      supabase
-        .from('trader_snapshots')
-        .select('roi, pnl, win_rate, max_drawdown')
-        .eq('source', source.source)
-        .eq('source_trader_id', source.source_trader_id)
-        .eq('season_id', '30D')
-        .order('captured_at', { ascending: false })
-        .limit(1)
-        .maybeSingle(),
-    ])
+  return cache.getOrSet(
+    cacheKey,
+    async () => {
+      try {
+        // 先找到交易员
+        const source = await findTraderAcrossSources(handle)
+        
+        if (!source) {
+          return { roi_90d: 0 }
+        }
 
-    const data90d = snapshot90d.data
-    const data7d = snapshot7d.data
-    const data30d = snapshot30d.data
+        // 并行查询所有时间段的数据
+        const [snapshot90d, snapshot7d, snapshot30d] = await Promise.all([
+          // 90D 数据（默认）
+          supabase
+            .from('trader_snapshots')
+            .select('roi, pnl, win_rate, max_drawdown')
+            .eq('source', source.source)
+            .eq('source_trader_id', source.source_trader_id)
+            .or('season_id.is.null,season_id.eq.90D')
+            .order('captured_at', { ascending: false })
+            .limit(1)
+            .maybeSingle(),
+          // 7D 数据
+          supabase
+            .from('trader_snapshots')
+            .select('roi, pnl, win_rate, max_drawdown')
+            .eq('source', source.source)
+            .eq('source_trader_id', source.source_trader_id)
+            .eq('season_id', '7D')
+            .order('captured_at', { ascending: false })
+            .limit(1)
+            .maybeSingle(),
+          // 30D 数据
+          supabase
+            .from('trader_snapshots')
+            .select('roi, pnl, win_rate, max_drawdown')
+            .eq('source', source.source)
+            .eq('source_trader_id', source.source_trader_id)
+            .eq('season_id', '30D')
+            .order('captured_at', { ascending: false })
+            .limit(1)
+            .maybeSingle(),
+        ])
 
-    return {
-      roi_90d: data90d?.roi || 0,
-      roi_7d: data7d?.roi ?? undefined,
-      roi_30d: data30d?.roi ?? undefined,
-      pnl: data90d?.pnl ?? undefined,
-      win_rate: data90d?.win_rate ?? undefined,
-      max_drawdown: data90d?.max_drawdown ?? undefined,
-      pnl_7d: data7d?.pnl ?? undefined,
-      pnl_30d: data30d?.pnl ?? undefined,
-      win_rate_7d: data7d?.win_rate ?? undefined,
-      win_rate_30d: data30d?.win_rate ?? undefined,
-      max_drawdown_7d: data7d?.max_drawdown ?? undefined,
-      max_drawdown_30d: data30d?.max_drawdown ?? undefined,
-      roi_1y: undefined,
-      roi_2y: undefined,
-    }
-  } catch (error) {
-    console.error('Error in getTraderPerformance:', error)
-    return { roi_90d: 0 }
-  }
+        const data90d = snapshot90d.data
+        const data7d = snapshot7d.data
+        const data30d = snapshot30d.data
+
+        return {
+          roi_90d: data90d?.roi || 0,
+          roi_7d: data7d?.roi ?? undefined,
+          roi_30d: data30d?.roi ?? undefined,
+          pnl: data90d?.pnl ?? undefined,
+          win_rate: data90d?.win_rate ?? undefined,
+          max_drawdown: data90d?.max_drawdown ?? undefined,
+          pnl_7d: data7d?.pnl ?? undefined,
+          pnl_30d: data30d?.pnl ?? undefined,
+          win_rate_7d: data7d?.win_rate ?? undefined,
+          win_rate_30d: data30d?.win_rate ?? undefined,
+          max_drawdown_7d: data7d?.max_drawdown ?? undefined,
+          max_drawdown_30d: data30d?.max_drawdown ?? undefined,
+          roi_1y: undefined,
+          roi_2y: undefined,
+        }
+      } catch (error) {
+        console.error('Error in getTraderPerformance:', error)
+        return { roi_90d: 0 }
+      }
+    },
+    { ttl: CACHE_TTL.TRADER_PERFORMANCE }
+  )
 }
 
 /**

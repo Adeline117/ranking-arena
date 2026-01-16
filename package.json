@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "analyze": "ANALYZE=true next build",
     "start": "next start",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
@@ -34,10 +35,12 @@
     "puppeteer": "^24.34.0",
     "react": "19.2.3",
     "react-dom": "19.2.3",
+    "swr": "^2.3.8",
     "zod": "^3.23.8",
     "zustand": "^5.0.0"
   },
   "devDependencies": {
+    "@next/bundle-analyzer": "^15.3.0",
     "@playwright/test": "^1.57.0",
     "@storybook/addon-essentials": "^8.6.14",
     "@storybook/addon-interactions": "^8.6.14",

@@ -6,6 +6,7 @@ import KeyboardShortcuts from "./components/Utils/KeyboardShortcuts";
 import Providers from "./components/Providers";
 import { GlobalProgress } from "./components/UI/GlobalProgress";
 import { ServiceWorkerRegistration } from "./components/Utils/ServiceWorkerRegistration";
+import CookieConsent from "./components/UI/CookieConsent";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -99,6 +100,7 @@ export default function RootLayout({
           </Suspense>
           <KeyboardShortcuts />
           {children}
+          <CookieConsent />
         </Providers>
       </body>
     </html>

@@ -26,6 +26,12 @@ import type {
   PositionHistoryItem,
   TraderFeedItem,
 } from '@/lib/data/trader'
+import { JsonLd } from '@/app/components/Utils/JsonLd'
+import {
+  generateTraderProfilePageSchema,
+  generateBreadcrumbSchema,
+  combineSchemas,
+} from '@/lib/seo'
 
 type TabKey = 'overview' | 'stats' | 'portfolio'
 
@@ -169,34 +175,28 @@ function TraderContent(props: { params: { handle: string } | Promise<{ handle: s
     )
   }
 
-  // 结构化数据（JSON-LD）
-  const structuredData = profile ? {
-    '@context': 'https://schema.org',
-    '@type': 'Person',
-    name: profile.handle,
-    description: profile.bio || `交易员 ${profile.handle}`,
-    url: `${process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'}/trader/${encodeURIComponent(handle)}`,
-    image: profile.avatar_url || undefined,
-    identifier: profile.id,
-    knowsAbout: 'Cryptocurrency Trading',
-    ...(performance?.roi_90d !== undefined && {
-      mainEntity: {
-        '@type': 'FinancialProduct',
-        name: 'Trading Performance',
-        description: `90天ROI: ${performance.roi_90d}%`,
-      },
+  // 结构化数据（JSON-LD）- 使用 SEO 模块生成
+  const structuredData = profile ? combineSchemas(
+    generateTraderProfilePageSchema({
+      handle: profile.handle,
+      id: profile.id,
+      bio: profile.bio,
+      avatarUrl: profile.avatar_url,
+      source: profile.source,
+      followers: profile.followers,
+      roi90d: performance?.roi_90d,
     }),
-  } : null
+    generateBreadcrumbSchema([
+      { name: '首页', url: process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org' },
+      { name: '交易员', url: `${process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'}/search?type=trader` },
+      { name: profile.handle },
+    ])
+  ) : null
 
   return (
     <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
       {/* 结构化数据（JSON-LD） */}
-      {structuredData && (
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
-        />
-      )}
+      {structuredData && <JsonLd data={structuredData} />}
       
       <TopNav email={email} />
 

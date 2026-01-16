@@ -1,6 +1,6 @@
 /**
  * API 中间件工具
- * 提供统一的认证、限流、错误处理
+ * 提供统一的认证、限流、错误处理、版本控制
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -8,6 +8,13 @@ import { User } from '@supabase/supabase-js'
 import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
 import { checkRateLimit, RateLimitPresets, type RateLimitConfig } from '@/lib/utils/rate-limit'
 import { createLogger } from '@/lib/utils/logger'
+import { 
+  parseApiVersion, 
+  addVersionHeaders, 
+  addDeprecationHeaders,
+  type VersionContext,
+  type ApiVersion,
+} from './versioning'
 
 const logger = createLogger('api-middleware')
 
@@ -21,6 +28,8 @@ interface ApiContext {
   supabase: ReturnType<typeof getSupabaseAdmin>
   /** 请求对象 */
   request: NextRequest
+  /** API 版本上下文 */
+  version: VersionContext
 }
 
 /**
@@ -38,7 +47,12 @@ interface MiddlewareOptions {
   rateLimit?: RateLimitConfig | keyof typeof RateLimitPresets | false
   /** API 名称（用于日志） */
   name?: string
+  /** 是否启用版本控制（默认 true） */
+  versioning?: boolean
 }
+
+// 导出版本类型供外部使用
+export type { VersionContext, ApiVersion }
 
 /**
  * 创建统一的 API 响应
@@ -89,9 +103,15 @@ export function withApiMiddleware<T>(
     requireAuth: needsAuth = false,
     rateLimit = needsAuth ? 'authenticated' : 'public',
     name = 'api',
+    versioning = true,
   } = options
 
   return async (request: NextRequest): Promise<NextResponse> => {
+    const startTime = Date.now()
+    
+    // 解析 API 版本
+    const versionContext = parseApiVersion(request)
+    
     try {
       // 1. 限流检查
       if (rateLimit !== false) {
@@ -102,6 +122,10 @@ export function withApiMiddleware<T>(
         const rateLimitResponse = await checkRateLimit(request, config)
         if (rateLimitResponse) {
           logger.warn(`Rate limit exceeded for ${name}`)
+          // 添加版本头到限流响应
+          if (versioning) {
+            addVersionHeaders(rateLimitResponse, versionContext)
+          }
           return rateLimitResponse
         }
       }
@@ -111,7 +135,11 @@ export function withApiMiddleware<T>(
       if (needsAuth) {
         user = await getAuthUser(request)
         if (!user) {
-          return createErrorResponse('未授权', 401)
+          const errorResponse = createErrorResponse('未授权', 401)
+          if (versioning) {
+            addVersionHeaders(errorResponse, versionContext)
+          }
+          return errorResponse
         }
       } else {
         // 即使不需要认证，也尝试获取用户信息
@@ -121,27 +149,48 @@ export function withApiMiddleware<T>(
       // 3. 获取 Supabase 客户端
       const supabase = getSupabaseAdmin()
 
-      // 4. 执行处理函数
-      const result = await handler({ user, supabase, request })
+      // 4. 执行处理函数（传入版本上下文）
+      const result = await handler({ user, supabase, request, version: versionContext })
 
       // 5. 返回响应
+      let response: NextResponse
       if (result instanceof NextResponse) {
-        return result
+        response = result
+      } else {
+        response = createResponse({ success: true, data: result })
       }
 
-      return createResponse({ success: true, data: result })
-    } catch (error: any) {
+      // 6. 添加版本和弃用头
+      if (versioning) {
+        addVersionHeaders(response, versionContext)
+        addDeprecationHeaders(response, versionContext, request.nextUrl.pathname, request.method)
+      }
+      
+      // 7. 添加响应时间头
+      const duration = Date.now() - startTime
+      response.headers.set('X-Response-Time', `${duration}ms`)
+
+      return response
+    } catch (error: unknown) {
       // 错误处理
-      const statusCode = error.statusCode || 500
-      const message = error.message || '服务器内部错误'
+      const err = error as { statusCode?: number; message?: string }
+      const statusCode = err.statusCode || 500
+      const message = err.message || '服务器内部错误'
+      const duration = Date.now() - startTime
 
       if (statusCode >= 500) {
-        logger.error(`${name} error: ${message}`, { error: String(error) })
+        logger.error(`${name} error: ${message}`, { error: String(error), duration })
       } else {
-        logger.warn(`${name} client error: ${message}`)
+        logger.warn(`${name} client error: ${message}`, { duration })
       }
 
-      return createErrorResponse(message, statusCode)
+      const errorResponse = createErrorResponse(message, statusCode)
+      if (versioning) {
+        addVersionHeaders(errorResponse, versionContext)
+      }
+      errorResponse.headers.set('X-Response-Time', `${duration}ms`)
+      
+      return errorResponse
     }
   }
 }

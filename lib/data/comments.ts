@@ -28,6 +28,18 @@ export interface CreateCommentInput {
   parent_id?: string
 }
 
+// 数据库返回的评论行类型
+interface CommentRow {
+  id: string
+  post_id: string
+  user_id: string
+  content: string
+  parent_id?: string | null
+  like_count?: number
+  created_at: string
+  updated_at: string
+}
+
 /**
  * 获取帖子的评论列表
  */
@@ -117,14 +129,14 @@ export async function getPostComments(
   // 构建回复映射
   const repliesMap = new Map<string, Comment[]>()
   if (replies) {
-    replies.forEach((reply: any) => {
+    replies.forEach((reply: CommentRow) => {
       const profile = profileMap.get(reply.user_id)
       const comment: Comment = {
         id: reply.id,
         post_id: reply.post_id,
         user_id: reply.user_id,
         content: reply.content,
-        parent_id: reply.parent_id,
+        parent_id: reply.parent_id ?? undefined,
         like_count: reply.like_count || 0,
         created_at: reply.created_at,
         updated_at: reply.updated_at,
@@ -133,21 +145,23 @@ export async function getPostComments(
         user_liked: userLikedMap.get(reply.id) || false,
       }
 
-      const parentReplies = repliesMap.get(reply.parent_id) || []
-      parentReplies.push(comment)
-      repliesMap.set(reply.parent_id, parentReplies)
+      if (reply.parent_id) {
+        const parentReplies = repliesMap.get(reply.parent_id) || []
+        parentReplies.push(comment)
+        repliesMap.set(reply.parent_id, parentReplies)
+      }
     })
   }
 
   // 构建结果
-  return comments.map((c: any) => {
+  return comments.map((c: CommentRow) => {
     const profile = profileMap.get(c.user_id)
     return {
       id: c.id,
       post_id: c.post_id,
       user_id: c.user_id,
       content: c.content,
-      parent_id: c.parent_id,
+      parent_id: c.parent_id ?? undefined,
       like_count: c.like_count || 0,
       created_at: c.created_at,
       updated_at: c.updated_at,

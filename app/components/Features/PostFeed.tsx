@@ -1948,6 +1948,79 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
             }
           </div>
 
+          {/* 原始帖子引用卡片（转发时显示） */}
+          {openPost.original_post && (
+            <div 
+              style={{ 
+                marginTop: 12,
+                padding: 12,
+                background: tokens.colors.bg.tertiary,
+                borderRadius: 10,
+                border: `1px solid ${tokens.colors.border.secondary}`,
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                <span style={{ fontSize: 11, color: tokens.colors.text.tertiary }}>转发自</span>
+                <AvatarLink handle={openPost.original_post.author_handle} avatarUrl={openPost.original_post.author_avatar_url} />
+              </div>
+              {openPost.original_post.title && (
+                <div style={{ 
+                  fontSize: 14, 
+                  color: tokens.colors.text.primary,
+                  fontWeight: 600,
+                  marginBottom: 6,
+                }}>
+                  {openPost.original_post.title}
+                </div>
+              )}
+              <div style={{ 
+                fontSize: 13, 
+                color: tokens.colors.text.secondary,
+                lineHeight: 1.5,
+              }}>
+                {removeImagesFromContent(openPost.original_post.content).slice(0, 200)}
+                {openPost.original_post.content.length > 200 && '...'}
+              </div>
+              {/* 原始帖子图片预览 */}
+              {openPost.original_post.images && openPost.original_post.images.length > 0 && (
+                <div style={{ 
+                  marginTop: 10, 
+                  display: 'flex', 
+                  gap: 6,
+                  flexWrap: 'wrap',
+                }}>
+                  {openPost.original_post.images.slice(0, 4).map((imgUrl, idx) => (
+                    <div
+                      key={idx}
+                      style={{
+                        width: 80,
+                        height: 80,
+                        borderRadius: 8,
+                        overflow: 'hidden',
+                        flexShrink: 0,
+                      }}
+                    >
+                      <img
+                        src={imgUrl}
+                        alt=""
+                        style={{
+                          width: '100%',
+                          height: '100%',
+                          objectFit: 'cover',
+                        }}
+                      />
+                    </div>
+                  ))}
+                  {openPost.original_post.images.length > 4 && (
+                    <span style={{ fontSize: 12, color: tokens.colors.text.tertiary, alignSelf: 'center' }}>
+                      +{openPost.original_post.images.length - 4}
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* 翻译/原文切换按钮 - 有翻译内容或翻译标题时显示 */}
           {(translatedContent || translatedListPosts[openPost.id]?.title || translating) && (
             <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
