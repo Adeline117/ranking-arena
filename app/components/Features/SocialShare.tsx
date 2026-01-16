@@ -255,7 +255,7 @@ export function InviteFriends({ referralCode, onInvite }: InviteFriendsProps) {
               <TelegramIcon />
               Telegram
             </button>
-            {typeof navigator !== 'undefined' && navigator.share && (
+            {typeof navigator !== 'undefined' && typeof navigator.share !== 'undefined' && (
               <button
                 onClick={handleShare}
                 className="px-4 py-2 bg-[var(--color-bg-tertiary)] text-[var(--color-text-primary)] rounded-lg text-xs font-medium hover:bg-[var(--color-bg-hover)] transition-colors"
