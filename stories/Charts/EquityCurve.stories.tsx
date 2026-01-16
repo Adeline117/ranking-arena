@@ -105,8 +105,6 @@ export const CustomColors: Story = {
     title: '自定义颜色',
     showTooltip: true,
     lineColor: '#8b5cf6',
-    areaTopColor: 'rgba(139, 92, 246, 0.4)',
-    areaBottomColor: 'rgba(139, 92, 246, 0.0)',
   },
 }
 
