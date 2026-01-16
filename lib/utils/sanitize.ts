@@ -59,7 +59,7 @@ export function sanitizeHtml(dirty: string, options: SanitizeOptions = {}): stri
   } = options
   
   // 配置消毒选项
-  const config: DOMPurify.Config = {
+  const config: { ALLOWED_TAGS: string[]; ALLOWED_ATTR: string[] } = {
     ALLOWED_TAGS: allowedTags,
     ALLOWED_ATTR: allowedAttr,
   }
