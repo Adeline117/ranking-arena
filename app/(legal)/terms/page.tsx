@@ -23,8 +23,8 @@ export default function TermsOfServicePage() {
               1. 接受条款
             </h2>
             <p>
-              欢迎使用 Arena（以下简称"本平台"或"我们"）。通过访问或使用我们的服务，
-              您同意受本服务条款（以下简称"条款"）的约束。如果您不同意这些条款的任何部分，
+              欢迎使用 Arena（以下简称&ldquo;本平台&rdquo;或&ldquo;我们&rdquo;）。通过访问或使用我们的服务，
+              您同意受本服务条款（以下简称&ldquo;条款&rdquo;）的约束。如果您不同意这些条款的任何部分，
               请不要使用我们的服务。
             </p>
           </section>

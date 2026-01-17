@@ -43,28 +43,28 @@ const TIER_CONFIG: Record<SubscriptionTier, {
 }> = {
   free: {
     label: '免费',
-    icon: '👤',
+    icon: '',
     color: tokens.colors.text.secondary,
     bgColor: tokens.colors.bg.tertiary,
     borderColor: tokens.colors.border.secondary,
   },
   pro: {
     label: 'Pro',
-    icon: '⭐',
+    icon: '',
     color: '#f59e0b',
     bgColor: 'rgba(245, 158, 11, 0.1)',
     borderColor: 'rgba(245, 158, 11, 0.3)',
   },
   elite: {
     label: 'Elite',
-    icon: '💎',
+    icon: '',
     color: '#8b5cf6',
     bgColor: 'rgba(139, 92, 246, 0.1)',
     borderColor: 'rgba(139, 92, 246, 0.3)',
   },
   enterprise: {
     label: 'Enterprise',
-    icon: '🏆',
+    icon: '',
     color: '#ec4899',
     bgColor: 'rgba(236, 72, 153, 0.1)',
     borderColor: 'rgba(236, 72, 153, 0.3)',

@@ -127,6 +127,9 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
   const [translatingPosts, setTranslatingPosts] = useState(false)
   // 展开/收起状态
   const [expandedPosts, setExpandedPosts] = useState<Record<string, boolean>>({})
+  // 相关小组
+  const [relatedGroups, setRelatedGroups] = useState<Array<{id: string; name: string; name_en?: string | null; avatar_url?: string | null; member_count?: number | null}>>([])
+  const [loadingRelatedGroups, setLoadingRelatedGroups] = useState(true)
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -278,6 +281,99 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
       translatePosts(posts, language as 'zh' | 'en')
     }
   }, [posts, language, translatePosts])
+
+  // 获取相关小组 - 常来这个小组的人也爱去的小组
+  useEffect(() => {
+    if (!groupId || groupId === 'loading') return
+    
+    const fetchRelatedGroups = async () => {
+      setLoadingRelatedGroups(true)
+      try {
+        // 1. 获取当前小组的成员
+        const { data: memberData } = await supabase
+          .from('group_members')
+          .select('user_id')
+          .eq('group_id', groupId)
+          .limit(50)
+        
+        if (!memberData || memberData.length === 0) {
+          // 如果没有成员，获取热门小组
+          const { data: hotGroups } = await supabase
+            .from('groups')
+            .select('id, name, name_en, avatar_url, member_count')
+            .neq('id', groupId)
+            .order('member_count', { ascending: false, nullsFirst: false })
+            .limit(5)
+          
+          setRelatedGroups(hotGroups || [])
+          setLoadingRelatedGroups(false)
+          return
+        }
+        
+        const memberIds = memberData.map(m => m.user_id)
+        
+        // 2. 获取这些成员加入的其他小组
+        const { data: otherMemberships } = await supabase
+          .from('group_members')
+          .select('group_id')
+          .in('user_id', memberIds)
+          .neq('group_id', groupId)
+        
+        if (!otherMemberships || otherMemberships.length === 0) {
+          const { data: hotGroups } = await supabase
+            .from('groups')
+            .select('id, name, name_en, avatar_url, member_count')
+            .neq('id', groupId)
+            .order('member_count', { ascending: false, nullsFirst: false })
+            .limit(5)
+          
+          setRelatedGroups(hotGroups || [])
+          setLoadingRelatedGroups(false)
+          return
+        }
+        
+        // 3. 统计小组出现频率
+        const groupCounts: Record<string, number> = {}
+        otherMemberships.forEach(m => {
+          groupCounts[m.group_id] = (groupCounts[m.group_id] || 0) + 1
+        })
+        
+        // 4. 按频率排序取前5
+        const sortedGroupIds = Object.entries(groupCounts)
+          .sort(([, a], [, b]) => b - a)
+          .slice(0, 5)
+          .map(([id]) => id)
+        
+        if (sortedGroupIds.length === 0) {
+          setRelatedGroups([])
+          setLoadingRelatedGroups(false)
+          return
+        }
+        
+        // 5. 获取小组信息
+        const { data: groupsData } = await supabase
+          .from('groups')
+          .select('id, name, name_en, avatar_url, member_count')
+          .in('id', sortedGroupIds)
+        
+        // 按照频率排序
+        const sortedGroups = (groupsData || []).sort((a, b) => {
+          const aIdx = sortedGroupIds.indexOf(a.id)
+          const bIdx = sortedGroupIds.indexOf(b.id)
+          return aIdx - bIdx
+        })
+        
+        setRelatedGroups(sortedGroups)
+      } catch (err) {
+        console.error('Error fetching related groups:', err)
+        setRelatedGroups([])
+      } finally {
+        setLoadingRelatedGroups(false)
+      }
+    }
+    
+    fetchRelatedGroups()
+  }, [groupId])
 
   useEffect(() => {
     // 等待 groupId 加载完成
@@ -738,11 +834,127 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
     }
   }
 
+  // 相关小组组件
+  const RelatedGroupsSidebar = () => (
+    <Box
+      style={{
+        position: 'sticky',
+        top: 80,
+        padding: tokens.spacing[4],
+        background: tokens.colors.bg.secondary,
+        borderRadius: tokens.radius.xl,
+        border: `1px solid ${tokens.colors.border.primary}`,
+      }}
+    >
+      <Text size="md" weight="bold" style={{ marginBottom: tokens.spacing[4] }}>
+        {language === 'zh' ? '常来这里的人也爱去' : 'People Here Also Visit'}
+      </Text>
+      
+      {loadingRelatedGroups ? (
+        <Text size="sm" color="tertiary" style={{ textAlign: 'center', padding: tokens.spacing[4] }}>
+          {language === 'zh' ? '加载中...' : 'Loading...'}
+        </Text>
+      ) : relatedGroups.length === 0 ? (
+        <Text size="sm" color="tertiary" style={{ textAlign: 'center', padding: tokens.spacing[4] }}>
+          {language === 'zh' ? '暂无推荐' : 'No recommendations'}
+        </Text>
+      ) : (
+        <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
+          {relatedGroups.map((relGroup, idx) => (
+            <Link
+              key={relGroup.id}
+              href={`/groups/${relGroup.id}`}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: tokens.spacing[3],
+                padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+                borderRadius: tokens.radius.lg,
+                background: 'transparent',
+                border: '1px solid transparent',
+                textDecoration: 'none',
+                color: tokens.colors.text.primary,
+                transition: 'all 0.2s ease',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'rgba(139, 111, 168, 0.1)'
+                e.currentTarget.style.borderColor = 'rgba(139, 111, 168, 0.2)'
+                e.currentTarget.style.transform = 'translateX(4px)'
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'transparent'
+                e.currentTarget.style.borderColor = 'transparent'
+                e.currentTarget.style.transform = 'translateX(0)'
+              }}
+            >
+              {/* Avatar */}
+              <Box
+                style={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: tokens.radius.md,
+                  background: 'linear-gradient(135deg, rgba(139, 111, 168, 0.2) 0%, rgba(139, 111, 168, 0.1) 100%)',
+                  border: `1px solid ${tokens.colors.border.primary}`,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  overflow: 'hidden',
+                  flexShrink: 0,
+                }}
+              >
+                {relGroup.avatar_url ? (
+                  <img
+                    src={relGroup.avatar_url}
+                    alt={relGroup.name}
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  />
+                ) : (
+                  <Text size="sm" weight="bold" style={{ color: '#c9b8db' }}>
+                    {relGroup.name.charAt(0).toUpperCase()}
+                  </Text>
+                )}
+              </Box>
+
+              {/* Info */}
+              <Box style={{ flex: 1, minWidth: 0 }}>
+                <Text size="sm" weight="medium" style={{ 
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  marginBottom: 2,
+                }}>
+                  {language === 'en' && relGroup.name_en ? relGroup.name_en : relGroup.name}
+                </Text>
+                {relGroup.member_count != null && (
+                  <Text size="xs" color="tertiary">
+                    {relGroup.member_count} {language === 'zh' ? '位成员' : 'members'}
+                  </Text>
+                )}
+              </Box>
+            </Link>
+          ))}
+        </Box>
+      )}
+    </Box>
+  )
+
   return (
     <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
       <TopNav email={email} />
 
-      <Box as="main" style={{ maxWidth: 900, margin: '0 auto', padding: `${tokens.spacing[6]} ${tokens.spacing[4]}` }}>
+      <Box 
+        as="main" 
+        style={{ 
+          maxWidth: 1200, 
+          margin: '0 auto', 
+          padding: `${tokens.spacing[6]} ${tokens.spacing[4]}`,
+          display: 'grid',
+          gridTemplateColumns: '1fr 280px',
+          gap: tokens.spacing[6],
+        }}
+      >
+        {/* Main Content */}
+        <Box>
         {/* Group Header */}
         <Box
           style={{
@@ -1334,6 +1546,12 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
             </Box>
           </Box>
         )}
+        </Box>
+
+        {/* Right Sidebar - Related Groups */}
+        <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}>
+          <RelatedGroupsSidebar />
+        </Box>
 
         {/* 小组信息弹窗 */}
         {showGroupInfo && group && (

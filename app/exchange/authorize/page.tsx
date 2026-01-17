@@ -154,7 +154,7 @@ function ExchangeAuthorizePageContent() {
           </Text>
           <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
             <Text size="sm" color="tertiary">
-              • 请确保只授予"读取"权限，不要授予"交易"或"提现"权限
+              • 请确保只授予&ldquo;读取&rdquo;权限，不要授予&ldquo;交易&rdquo;或&ldquo;提现&rdquo;权限
             </Text>
             <Text size="sm" color="tertiary">
               • 您的API Key和Secret将被加密存储，仅用于获取您的交易数据

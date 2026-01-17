@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, Suspense } from 'react'
+import { useState, useEffect, Suspense, useRef } from 'react'
 import { supabase } from "@/lib/supabase/client"
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
@@ -52,24 +52,218 @@ const translations = {
   },
 }
 
+// CSS keyframe animations
+const injectStyles = () => {
+  if (typeof window === 'undefined') return
+  if (document.getElementById('reset-password-styles')) return
+  
+  const style = document.createElement('style')
+  style.id = 'reset-password-styles'
+  style.textContent = `
+    @keyframes resetGradient {
+      0%, 100% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+    }
+    
+    @keyframes cardEnter {
+      from { 
+        opacity: 0; 
+        transform: translateY(30px) scale(0.95); 
+        filter: blur(10px);
+      }
+      to { 
+        opacity: 1; 
+        transform: translateY(0) scale(1); 
+        filter: blur(0);
+      }
+    }
+    
+    @keyframes inputFocus {
+      0% { box-shadow: 0 0 0 0 rgba(139, 111, 168, 0.4); }
+      100% { box-shadow: 0 0 0 4px rgba(139, 111, 168, 0.1); }
+    }
+    
+    @keyframes buttonPulse {
+      0%, 100% { box-shadow: 0 4px 20px rgba(139, 111, 168, 0.3); }
+      50% { box-shadow: 0 4px 30px rgba(139, 111, 168, 0.5); }
+    }
+    
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      10%, 30%, 50%, 70%, 90% { transform: translateX(-4px); }
+      20%, 40%, 60%, 80% { transform: translateX(4px); }
+    }
+    
+    @keyframes spinLoader {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+    
+    @keyframes successPop {
+      0% { transform: scale(0.8); opacity: 0; }
+      50% { transform: scale(1.05); }
+      100% { transform: scale(1); opacity: 1; }
+    }
+    
+    @keyframes floatParticle {
+      0%, 100% { transform: translateY(0px) rotate(0deg); opacity: 0.3; }
+      50% { transform: translateY(-20px) rotate(180deg); opacity: 0.5; }
+    }
+    
+    .reset-page-bg {
+      position: fixed;
+      inset: 0;
+      background: linear-gradient(135deg, #0a0a0f 0%, #13111a 50%, #0f0d14 100%);
+      z-index: 0;
+    }
+    
+    .reset-page-bg::before {
+      content: '';
+      position: absolute;
+      top: -50%;
+      left: -50%;
+      width: 200%;
+      height: 200%;
+      background: radial-gradient(ellipse at center, rgba(139, 111, 168, 0.08) 0%, transparent 50%);
+      animation: resetGradient 20s ease infinite;
+    }
+    
+    .reset-card {
+      animation: cardEnter 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+    }
+    
+    .reset-input {
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    
+    .reset-input:focus {
+      border-color: #8b6fa8 !important;
+      animation: inputFocus 0.3s ease forwards;
+      background: rgba(139, 111, 168, 0.05) !important;
+    }
+    
+    .reset-button {
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    
+    .reset-button:not(:disabled):hover {
+      transform: translateY(-2px);
+      animation: buttonPulse 2s ease infinite;
+    }
+    
+    .reset-button:not(:disabled):active {
+      transform: translateY(0) scale(0.98);
+    }
+    
+    .error-shake {
+      animation: shake 0.5s ease;
+    }
+    
+    .success-message {
+      animation: successPop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+    }
+    
+    .lang-btn {
+      transition: all 0.2s ease;
+    }
+    
+    .lang-btn:hover {
+      transform: translateY(-1px);
+    }
+    
+    .floating-particle {
+      position: absolute;
+      border-radius: 50%;
+      background: linear-gradient(135deg, rgba(139, 111, 168, 0.3), rgba(139, 111, 168, 0.1));
+      animation: floatParticle 6s ease-in-out infinite;
+    }
+    
+    .loader-spin {
+      animation: spinLoader 1s linear infinite;
+    }
+    
+    .link-hover {
+      position: relative;
+      transition: all 0.2s ease;
+    }
+    
+    .link-hover::after {
+      content: '';
+      position: absolute;
+      bottom: -2px;
+      left: 0;
+      width: 0;
+      height: 1px;
+      background: #8b6fa8;
+      transition: width 0.3s ease;
+    }
+    
+    .link-hover:hover::after {
+      width: 100%;
+    }
+    
+    .password-toggle {
+      transition: all 0.2s ease;
+    }
+    
+    .password-toggle:hover {
+      color: #8b6fa8 !important;
+    }
+  `
+  document.head.appendChild(style)
+}
+
+// Password strength indicator
+function getPasswordStrength(password: string): { level: 0 | 1 | 2 | 3 | 4; label: string; labelEn: string; color: string } {
+  if (!password) return { level: 0, label: '', labelEn: '', color: '' }
+  
+  let score = 0
+  if (password.length >= 6) score++
+  if (password.length >= 8) score++
+  if (/[a-z]/.test(password) && /[A-Z]/.test(password)) score++
+  if (/\d/.test(password)) score++
+  if (/[^a-zA-Z0-9]/.test(password)) score++
+  
+  if (score <= 1) return { level: 1, label: '弱', labelEn: 'Weak', color: '#ff4d4d' }
+  if (score === 2) return { level: 2, label: '一般', labelEn: 'Fair', color: '#ffa500' }
+  if (score === 3) return { level: 3, label: '中等', labelEn: 'Good', color: '#ffc107' }
+  return { level: 4, label: '强', labelEn: 'Strong', color: '#2fe57d' }
+}
+
 function ResetPasswordContent() {
   const [lang, setLang] = useState<Language>('zh')
   const [email, setEmail] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [countdown, setCountdown] = useState(0)
-  const [isResetMode, setIsResetMode] = useState(false) // 是否是重置模式（点击邮件链接后）
+  const [isResetMode, setIsResetMode] = useState(false)
+  const [mounted, setMounted] = useState(false)
+  const errorRef = useRef<HTMLDivElement>(null)
   const router = useRouter()
   const searchParams = useSearchParams()
 
   const t = translations[lang]
+  const passwordStrength = getPasswordStrength(newPassword)
 
-  // 检查是否有 access_token（从邮件链接跳转）
   useEffect(() => {
-    // Supabase 会在 URL hash 中包含 access_token
+    injectStyles()
+    setMounted(true)
+    
+    // Get language from localStorage
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('preferredLanguage')
+      if (saved === 'en' || saved === 'zh') setLang(saved)
+    }
+  }, [])
+
+  useEffect(() => {
     const hashParams = new URLSearchParams(window.location.hash.substring(1))
     const accessToken = hashParams.get('access_token')
     const type = hashParams.get('type')
@@ -78,7 +272,6 @@ function ResetPasswordContent() {
       setIsResetMode(true)
     }
 
-    // 监听认证状态
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'PASSWORD_RECOVERY') {
         setIsResetMode(true)
@@ -90,7 +283,6 @@ function ResetPasswordContent() {
     }
   }, [])
 
-  // 倒计时
   useEffect(() => {
     if (countdown > 0) {
       const timer = setTimeout(() => {
@@ -100,7 +292,15 @@ function ResetPasswordContent() {
     }
   }, [countdown])
 
-  // 发送重置邮件
+  // Shake error box when error changes
+  useEffect(() => {
+    if (error && errorRef.current) {
+      errorRef.current.classList.remove('error-shake')
+      void errorRef.current.offsetWidth
+      errorRef.current.classList.add('error-shake')
+    }
+  }, [error])
+
   const handleSendResetEmail = async () => {
     if (!email) {
       setError(t.emailRequired)
@@ -124,13 +324,12 @@ function ResetPasswordContent() {
       setSuccess(t.emailSent)
       setCountdown(60)
     } catch (err: any) {
-      setError(err?.message || '发送失败')
+      setError(err?.message || (lang === 'zh' ? '发送失败' : 'Failed to send'))
     } finally {
       setLoading(false)
     }
   }
 
-  // 重置密码
   const handleResetPassword = async () => {
     if (!newPassword) {
       setError(t.passwordRequired)
@@ -163,101 +362,181 @@ function ResetPasswordContent() {
 
       setSuccess(t.resetSuccess)
       
-      // 3秒后跳转到登录页
       setTimeout(() => {
         router.push('/login')
       }, 3000)
     } catch (err: any) {
-      setError(err?.message || '重置失败')
+      setError(err?.message || (lang === 'zh' ? '重置失败' : 'Reset failed'))
     } finally {
       setLoading(false)
     }
   }
 
+  // Loading spinner component
+  const Spinner = () => (
+    <svg className="loader-spin" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+      <circle cx="12" cy="12" r="10" strokeOpacity="0.25" />
+      <path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round" />
+    </svg>
+  )
+
+  if (!mounted) return null
+
   return (
     <div style={{ 
       minHeight: '100vh', 
-      background: '#060606', 
-      color: '#f2f2f2',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
       padding: 20,
+      position: 'relative',
+      overflow: 'hidden',
     }}>
+      {/* Animated background */}
+      <div className="reset-page-bg" />
+      
+      {/* Floating particles */}
+      {[...Array(5)].map((_, i) => (
+        <div
+          key={i}
+          className="floating-particle"
+          style={{
+            width: 6 + i * 3,
+            height: 6 + i * 3,
+            left: `${15 + i * 18}%`,
+            top: `${25 + (i % 3) * 20}%`,
+            animationDelay: `${i * 0.6}s`,
+            animationDuration: `${5 + i}s`,
+          }}
+        />
+      ))}
+      
       <div 
+        className="reset-card"
         style={{ 
-          maxWidth: 420, 
+          maxWidth: 440, 
           width: '100%',
-          background: 'rgba(255,255,255,0.03)',
-          border: '1px solid #1f1f1f',
-          borderRadius: 16,
-          padding: 32,
+          background: 'rgba(15, 15, 20, 0.8)',
+          border: '1px solid rgba(139, 111, 168, 0.15)',
+          borderRadius: 24,
+          padding: '40px 36px',
+          position: 'relative',
+          zIndex: 1,
+          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 80px rgba(139, 111, 168, 0.08)',
         }}
       >
-        {/* 语言选择 */}
+        {/* Language selector */}
         <div style={{ 
           display: 'flex', 
           justifyContent: 'flex-end', 
-          marginBottom: 20,
+          marginBottom: 28,
           gap: 8,
         }}>
           <button
+            className="lang-btn"
             onClick={() => setLang('zh')}
             style={{
-              padding: '6px 12px',
-              borderRadius: 8,
-              border: lang === 'zh' ? '1px solid #8b6fa8' : '1px solid #1f1f1f',
-              background: lang === 'zh' ? 'rgba(139,111,168,0.15)' : 'transparent',
-              color: '#eaeaea',
+              padding: '8px 14px',
+              borderRadius: 10,
+              border: lang === 'zh' ? '1px solid rgba(139, 111, 168, 0.5)' : '1px solid rgba(255, 255, 255, 0.1)',
+              background: lang === 'zh' ? 'rgba(139, 111, 168, 0.15)' : 'transparent',
+              color: lang === 'zh' ? '#c9b8db' : '#8a8a8a',
               cursor: 'pointer',
-              fontWeight: lang === 'zh' ? 900 : 700,
+              fontWeight: lang === 'zh' ? 700 : 500,
               fontSize: 13,
             }}
           >
             中文
           </button>
           <button
+            className="lang-btn"
             onClick={() => setLang('en')}
             style={{
-              padding: '6px 12px',
-              borderRadius: 8,
-              border: lang === 'en' ? '1px solid #8b6fa8' : '1px solid #1f1f1f',
-              background: lang === 'en' ? 'rgba(139,111,168,0.15)' : 'transparent',
-              color: '#eaeaea',
+              padding: '8px 14px',
+              borderRadius: 10,
+              border: lang === 'en' ? '1px solid rgba(139, 111, 168, 0.5)' : '1px solid rgba(255, 255, 255, 0.1)',
+              background: lang === 'en' ? 'rgba(139, 111, 168, 0.15)' : 'transparent',
+              color: lang === 'en' ? '#c9b8db' : '#8a8a8a',
               cursor: 'pointer',
-              fontWeight: lang === 'en' ? 900 : 700,
+              fontWeight: lang === 'en' ? 700 : 500,
               fontSize: 13,
             }}
           >
-            English
+            EN
           </button>
         </div>
 
-        <h1 style={{ fontSize: 24, marginBottom: 8, fontWeight: 950 }}>
+        {/* Icon */}
+        <div style={{ 
+          textAlign: 'center', 
+          marginBottom: 24,
+        }}>
+          <div style={{
+            width: 56,
+            height: 56,
+            borderRadius: '50%',
+            background: 'linear-gradient(135deg, rgba(139, 111, 168, 0.2) 0%, rgba(139, 111, 168, 0.1) 100%)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            margin: '0 auto',
+          }}>
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#c9b8db" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              {isResetMode ? (
+                <>
+                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                </>
+              ) : (
+                <>
+                  <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                  <polyline points="22,6 12,13 2,6"></polyline>
+                </>
+              )}
+            </svg>
+          </div>
+        </div>
+
+        {/* Title */}
+        <h1 style={{ 
+          fontSize: 26, 
+          marginBottom: 8, 
+          fontWeight: 800,
+          textAlign: 'center',
+          background: 'linear-gradient(135deg, #f2f2f2 0%, #c9b8db 100%)',
+          WebkitBackgroundClip: 'text',
+          WebkitTextFillColor: 'transparent',
+        }}>
           {isResetMode ? t.setNewPassword : t.title}
         </h1>
         
-        <p style={{ fontSize: 13, color: '#9a9a9a', marginBottom: 24 }}>
+        <p style={{ 
+          fontSize: 14, 
+          color: '#7a7a7a', 
+          marginBottom: 28,
+          textAlign: 'center',
+        }}>
           {isResetMode ? t.setNewPasswordDesc : t.description}
         </p>
 
         {!isResetMode ? (
-          // 发送重置邮件表单
+          // Send reset email form
           <>
-            <div style={{ marginBottom: 16 }}>
-              <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 800 }}>
+            <div style={{ marginBottom: 20 }}>
+              <label style={{ display: 'block', marginBottom: 8, fontSize: 13, fontWeight: 600, color: '#b0b0b0' }}>
                 {t.email}
               </label>
               <input
                 type="email"
+                className="reset-input"
                 style={{ 
                   width: '100%', 
-                  padding: 12, 
+                  padding: '14px 16px', 
                   borderRadius: 12,
-                  border: '1px solid #1f1f1f',
-                  background: '#0b0b0b',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  background: 'rgba(0, 0, 0, 0.3)',
                   color: '#eaeaea',
-                  fontSize: 14,
+                  fontSize: 15,
                   outline: 'none',
                 }}
                 placeholder="you@email.com"
@@ -274,136 +553,262 @@ function ResetPasswordContent() {
             <button
               onClick={handleSendResetEmail}
               disabled={loading || !email || countdown > 0}
+              className="reset-button"
               style={{ 
                 width: '100%',
-                padding: '12px 16px', 
+                padding: '14px 16px', 
                 borderRadius: 12,
                 border: 'none',
-                background: loading || !email || countdown > 0 ? 'rgba(139,111,168,0.3)' : '#8b6fa8',
+                background: loading || !email || countdown > 0 
+                  ? 'rgba(139, 111, 168, 0.2)' 
+                  : 'linear-gradient(135deg, #8b6fa8 0%, #6b4f88 100%)',
                 color: '#fff',
-                fontWeight: 900,
-                fontSize: 14,
+                fontWeight: 700,
+                fontSize: 15,
                 cursor: loading || !email || countdown > 0 ? 'not-allowed' : 'pointer',
-                marginBottom: 16,
+                marginBottom: 20,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
               }}
             >
+              {loading && <Spinner />}
               {loading ? t.sending : countdown > 0 ? `${countdown} ${t.countdown}` : t.sendResetLink}
             </button>
           </>
         ) : (
-          // 设置新密码表单
+          // Set new password form
           <>
-            <div style={{ marginBottom: 16 }}>
-              <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 800 }}>
+            <div style={{ marginBottom: 20 }}>
+              <label style={{ display: 'block', marginBottom: 8, fontSize: 13, fontWeight: 600, color: '#b0b0b0' }}>
                 {t.newPassword}
               </label>
-              <input
-                type="password"
-                style={{ 
-                  width: '100%', 
-                  padding: 12, 
-                  borderRadius: 12,
-                  border: '1px solid #1f1f1f',
-                  background: '#0b0b0b',
-                  color: '#eaeaea',
-                  fontSize: 14,
-                  outline: 'none',
-                }}
-                placeholder="••••••"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-              />
+              <div style={{ position: 'relative' }}>
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  className="reset-input"
+                  style={{ 
+                    width: '100%', 
+                    padding: '14px 16px', 
+                    paddingRight: 50,
+                    borderRadius: 12,
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                    background: 'rgba(0, 0, 0, 0.3)',
+                    color: '#eaeaea',
+                    fontSize: 15,
+                    outline: 'none',
+                  }}
+                  placeholder="••••••"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="password-toggle"
+                  style={{
+                    position: 'absolute',
+                    right: 14,
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    background: 'transparent',
+                    border: 'none',
+                    padding: 4,
+                    cursor: 'pointer',
+                    color: '#6a6a6a',
+                    fontSize: 12,
+                  }}
+                  tabIndex={-1}
+                >
+                  {showPassword ? (lang === 'zh' ? '隐藏' : 'Hide') : (lang === 'zh' ? '显示' : 'Show')}
+                </button>
+              </div>
+              
+              {/* Password strength indicator */}
+              {newPassword && (
+                <div style={{ marginTop: 10 }}>
+                  <div style={{ display: 'flex', gap: 4, marginBottom: 6 }}>
+                    {[1, 2, 3, 4].map((level) => (
+                      <div
+                        key={level}
+                        style={{
+                          flex: 1,
+                          height: 4,
+                          borderRadius: 2,
+                          background: level <= passwordStrength.level ? passwordStrength.color : 'rgba(255, 255, 255, 0.1)',
+                          transition: 'all 0.3s ease',
+                        }}
+                      />
+                    ))}
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: 11, color: passwordStrength.color, fontWeight: 500 }}>
+                      {lang === 'zh' ? `密码强度: ${passwordStrength.label}` : `Strength: ${passwordStrength.labelEn}`}
+                    </span>
+                    <span style={{ fontSize: 11, color: newPassword.length >= 6 ? '#6a6a6a' : '#ff7c7c' }}>
+                      {newPassword.length}/6
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
 
-            <div style={{ marginBottom: 16 }}>
-              <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 800 }}>
+            <div style={{ marginBottom: 20 }}>
+              <label style={{ display: 'block', marginBottom: 8, fontSize: 13, fontWeight: 600, color: '#b0b0b0' }}>
                 {t.confirmPassword}
               </label>
-              <input
-                type="password"
-                style={{ 
-                  width: '100%', 
-                  padding: 12, 
-                  borderRadius: 12,
-                  border: '1px solid #1f1f1f',
-                  background: '#0b0b0b',
-                  color: '#eaeaea',
-                  fontSize: 14,
-                  outline: 'none',
-                }}
-                placeholder="••••••"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !loading && newPassword && confirmPassword) {
-                    handleResetPassword()
-                  }
-                }}
-              />
+              <div style={{ position: 'relative' }}>
+                <input
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  className="reset-input"
+                  style={{ 
+                    width: '100%', 
+                    padding: '14px 16px', 
+                    paddingRight: 50,
+                    borderRadius: 12,
+                    border: `1px solid ${confirmPassword && confirmPassword !== newPassword ? 'rgba(255, 124, 124, 0.5)' : 'rgba(255, 255, 255, 0.1)'}`,
+                    background: 'rgba(0, 0, 0, 0.3)',
+                    color: '#eaeaea',
+                    fontSize: 15,
+                    outline: 'none',
+                  }}
+                  placeholder="••••••"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !loading && newPassword && confirmPassword) {
+                      handleResetPassword()
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  className="password-toggle"
+                  style={{
+                    position: 'absolute',
+                    right: 14,
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    background: 'transparent',
+                    border: 'none',
+                    padding: 4,
+                    cursor: 'pointer',
+                    color: '#6a6a6a',
+                    fontSize: 12,
+                  }}
+                  tabIndex={-1}
+                >
+                  {showConfirmPassword ? (lang === 'zh' ? '隐藏' : 'Hide') : (lang === 'zh' ? '显示' : 'Show')}
+                </button>
+              </div>
+              {confirmPassword && confirmPassword === newPassword && (
+                <div style={{ marginTop: 6, fontSize: 12 }}>
+                  <span style={{ color: '#2fe57d' }}>✓ {lang === 'zh' ? '密码匹配' : 'Passwords match'}</span>
+                </div>
+              )}
             </div>
 
             <button
               onClick={handleResetPassword}
               disabled={loading || !newPassword || !confirmPassword}
+              className="reset-button"
               style={{ 
                 width: '100%',
-                padding: '12px 16px', 
+                padding: '14px 16px', 
                 borderRadius: 12,
                 border: 'none',
-                background: loading || !newPassword || !confirmPassword ? 'rgba(139,111,168,0.3)' : '#8b6fa8',
+                background: loading || !newPassword || !confirmPassword 
+                  ? 'rgba(139, 111, 168, 0.2)' 
+                  : 'linear-gradient(135deg, #8b6fa8 0%, #6b4f88 100%)',
                 color: '#fff',
-                fontWeight: 900,
-                fontSize: 14,
+                fontWeight: 700,
+                fontSize: 15,
                 cursor: loading || !newPassword || !confirmPassword ? 'not-allowed' : 'pointer',
-                marginBottom: 16,
+                marginBottom: 20,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
               }}
             >
+              {loading && <Spinner />}
               {loading ? t.resetting : t.resetPassword}
             </button>
           </>
         )}
 
-        {/* 返回登录 */}
+        {/* Back to login */}
         <Link
           href="/login"
+          className="link-hover"
           style={{
-            display: 'block',
-            textAlign: 'center',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 6,
             color: '#8b6fa8',
-            fontSize: 13,
-            fontWeight: 800,
-            textDecoration: 'underline',
+            fontSize: 14,
+            fontWeight: 600,
+            textDecoration: 'none',
           }}
         >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="19" y1="12" x2="5" y2="12"></line>
+            <polyline points="12 19 5 12 12 5"></polyline>
+          </svg>
           {t.backToLogin}
         </Link>
 
-        {/* 错误信息 */}
+        {/* Error message */}
         {error && (
-          <div style={{ 
-            marginTop: 16,
-            padding: 12,
-            borderRadius: 12,
-            background: 'rgba(255,77,77,0.15)',
-            border: '1px solid rgba(255,77,77,0.3)',
-            color: '#ff7c7c',
-            fontSize: 13,
-          }}>
+          <div 
+            ref={errorRef}
+            style={{ 
+              marginTop: 20,
+              padding: 14,
+              borderRadius: 12,
+              background: 'rgba(255, 77, 77, 0.1)',
+              border: '1px solid rgba(255, 77, 77, 0.2)',
+              color: '#ff7c7c',
+              fontSize: 13,
+              fontWeight: 500,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+            }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="8" x2="12" y2="12" />
+              <line x1="12" y1="16" x2="12.01" y2="16" />
+            </svg>
             {error}
           </div>
         )}
 
-        {/* 成功信息 */}
+        {/* Success message */}
         {success && (
-          <div style={{ 
-            marginTop: 16,
-            padding: 12,
-            borderRadius: 12,
-            background: 'rgba(47,229,125,0.15)',
-            border: '1px solid rgba(47,229,125,0.3)',
-            color: '#2fe57d',
-            fontSize: 13,
-          }}>
+          <div 
+            className="success-message"
+            style={{ 
+              marginTop: 20,
+              padding: 14,
+              borderRadius: 12,
+              background: 'rgba(47, 229, 125, 0.1)',
+              border: '1px solid rgba(47, 229, 125, 0.2)',
+              color: '#2fe57d',
+              fontSize: 13,
+              fontWeight: 500,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+            }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
             {success}
           </div>
         )}
@@ -412,22 +817,29 @@ function ResetPasswordContent() {
   )
 }
 
-// 使用 Suspense 包装主组件
+// Wrap with Suspense
 export default function ResetPasswordPage() {
   return (
     <Suspense fallback={
       <div style={{ 
         minHeight: '100vh', 
-        background: '#060606', 
+        background: '#0a0a0f', 
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
       }}>
-        <div style={{ color: '#9a9a9a' }}>加载中...</div>
+        <div style={{
+          width: 40,
+          height: 40,
+          border: '3px solid rgba(139, 111, 168, 0.2)',
+          borderTopColor: '#8b6fa8',
+          borderRadius: '50%',
+          animation: 'spin 1s linear infinite',
+        }} />
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>
     }>
       <ResetPasswordContent />
     </Suspense>
   )
 }
-

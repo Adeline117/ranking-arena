@@ -24,6 +24,7 @@ type Group = {
 function GroupsList() {
   const [groups, setGroups] = useState<Group[]>([])
   const [loading, setLoading] = useState(true)
+  const [hoveredGroup, setHoveredGroup] = useState<string | null>(null)
 
   useEffect(() => {
     const load = async () => {
@@ -66,77 +67,125 @@ function GroupsList() {
 
   return (
     <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
-      {groups.map((group) => (
-        <Link
-          key={group.id}
-          href={`/groups/${group.id}`}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: tokens.spacing[3],
-            padding: tokens.spacing[3],
-            borderRadius: tokens.radius.md,
-            background: tokens.colors.bg.secondary,
-            border: `1px solid ${tokens.colors.border.primary}`,
-            textDecoration: 'none',
-            color: tokens.colors.text.primary,
-            transition: `all ${tokens.transition.base}`,
-            cursor: 'pointer',
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = tokens.colors.bg.tertiary || tokens.colors.bg.hover
-            e.currentTarget.style.borderColor = tokens.colors.border.secondary || tokens.colors.border.primary
-            e.currentTarget.style.transform = 'translateX(4px)'
-            e.currentTarget.style.boxShadow = tokens.shadow.sm
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = tokens.colors.bg.secondary
-            e.currentTarget.style.borderColor = tokens.colors.border.primary
-            e.currentTarget.style.transform = 'translateX(0)'
-            e.currentTarget.style.boxShadow = 'none'
-          }}
-        >
-          {/* Avatar */}
-          <Box
+      {groups.map((group, idx) => {
+        const isHovered = hoveredGroup === group.id
+        return (
+          <Link
+            key={group.id}
+            href={`/groups/${group.id}`}
             style={{
-              width: 40,
-              height: 40,
-              borderRadius: tokens.radius.md,
-              background: tokens.colors.bg.tertiary || tokens.colors.bg.primary,
-              border: `1px solid ${tokens.colors.border.primary}`,
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'center',
+              gap: tokens.spacing[3],
+              padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+              borderRadius: tokens.radius.lg,
+              background: isHovered 
+                ? 'linear-gradient(135deg, rgba(139, 111, 168, 0.12) 0%, rgba(139, 111, 168, 0.05) 100%)'
+                : tokens.colors.bg.secondary,
+              border: `1px solid ${isHovered ? 'rgba(139, 111, 168, 0.3)' : tokens.colors.border.primary}`,
+              textDecoration: 'none',
+              color: tokens.colors.text.primary,
+              transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+              cursor: 'pointer',
+              transform: isHovered ? 'translateX(6px) scale(1.02)' : 'translateX(0) scale(1)',
+              boxShadow: isHovered ? '0 8px 24px rgba(139, 111, 168, 0.15)' : 'none',
+              position: 'relative',
               overflow: 'hidden',
-              flexShrink: 0,
             }}
+            onMouseEnter={() => setHoveredGroup(group.id)}
+            onMouseLeave={() => setHoveredGroup(null)}
           >
-            {group.avatar_url ? (
-              <img
-                src={group.avatar_url}
-                alt={group.name}
-                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+            {/* Hover glow effect */}
+            {isHovered && (
+              <Box
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  background: 'linear-gradient(90deg, transparent 0%, rgba(139, 111, 168, 0.08) 50%, transparent 100%)',
+                  pointerEvents: 'none',
+                }}
               />
-            ) : (
-              <Text size="sm" weight="bold" color="tertiary">
-                {group.name.charAt(0).toUpperCase()}
-              </Text>
             )}
-          </Box>
+            
+            {/* Avatar */}
+            <Box
+              style={{
+                width: 44,
+                height: 44,
+                borderRadius: tokens.radius.lg,
+                background: `linear-gradient(135deg, rgba(139, 111, 168, 0.2) 0%, rgba(139, 111, 168, 0.1) 100%)`,
+                border: isHovered 
+                  ? '2px solid rgba(139, 111, 168, 0.4)'
+                  : `1px solid ${tokens.colors.border.primary}`,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                overflow: 'hidden',
+                flexShrink: 0,
+                transition: 'all 0.25s ease',
+                transform: isHovered ? 'scale(1.08)' : 'scale(1)',
+                boxShadow: isHovered ? '0 4px 12px rgba(139, 111, 168, 0.2)' : 'none',
+              }}
+            >
+              {group.avatar_url ? (
+                <img
+                  src={group.avatar_url}
+                  alt={group.name}
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                />
+              ) : (
+                <Text size="md" weight="bold" style={{ color: '#c9b8db' }}>
+                  {group.name.charAt(0).toUpperCase()}
+                </Text>
+              )}
+            </Box>
 
-          {/* Info */}
-          <Box style={{ flex: 1, minWidth: 0 }}>
-            <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[1] }}>
-              {group.name}
-            </Text>
-            {group.member_count !== null && group.member_count !== undefined && (
-              <Text size="xs" color="tertiary">
-                {group.member_count} 位成员
+            {/* Info */}
+            <Box style={{ flex: 1, minWidth: 0, position: 'relative', zIndex: 1 }}>
+              <Text 
+                size="sm" 
+                weight="bold" 
+                style={{ 
+                  marginBottom: tokens.spacing[1],
+                  color: isHovered ? '#c9b8db' : tokens.colors.text.primary,
+                  transition: 'color 0.2s ease',
+                }}
+              >
+                {group.name}
               </Text>
-            )}
-          </Box>
-        </Link>
-      ))}
+              {group.member_count !== null && group.member_count !== undefined && (
+                <Text size="xs" color="tertiary" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <span style={{ 
+                    display: 'inline-block', 
+                    width: 6, 
+                    height: 6, 
+                    borderRadius: '50%', 
+                    background: isHovered ? '#8b6fa8' : tokens.colors.text.tertiary,
+                    transition: 'background 0.2s ease',
+                  }} />
+                  {group.member_count} 位成员
+                </Text>
+              )}
+            </Box>
+            
+            {/* Arrow indicator on hover */}
+            <Box
+              style={{
+                opacity: isHovered ? 1 : 0,
+                transform: isHovered ? 'translateX(0)' : 'translateX(-8px)',
+                transition: 'all 0.25s ease',
+                color: '#8b6fa8',
+                fontSize: 16,
+              }}
+            >
+              →
+            </Box>
+          </Link>
+        )
+      })}
     </Box>
   )
 }

@@ -14,20 +14,40 @@ interface TraderHeaderProps {
   traderId: string
   avatarUrl?: string
   isRegistered?: boolean
-  followers?: number // 粉丝数 - 仅来自 Arena 注册用户的关注（trader_follows 表统计）
+  followers?: number
   isOwnProfile?: boolean
-  source?: string // 'binance', 'bybit', etc.
+  source?: string
 }
 
-export default function TraderHeader({ handle, traderId, avatarUrl, isRegistered, followers = 0, isOwnProfile = false, source }: TraderHeaderProps) {
+// 来源平台配置
+const sourceConfig: Record<string, { label: string; color: string }> = {
+  binance: { label: 'Binance', color: '#F0B90B' },
+  bybit: { label: 'Bybit', color: '#F7A600' },
+  bitget: { label: 'Bitget', color: '#00C853' },
+}
+
+export default function TraderHeader({ 
+  handle, 
+  traderId, 
+  avatarUrl, 
+  isRegistered, 
+  followers = 0, 
+  isOwnProfile = false, 
+  source 
+}: TraderHeaderProps) {
   const [userId, setUserId] = useState<string | null>(null)
+  const [mounted, setMounted] = useState(false)
+  const [avatarHovered, setAvatarHovered] = useState(false)
   const router = useRouter()
 
   useEffect(() => {
+    setMounted(true)
     supabase.auth.getUser().then(({ data }) => {
       setUserId(data.user?.id ?? null)
     })
   }, [])
+
+  const sourceInfo = source ? sourceConfig[source.toLowerCase()] : null
 
   return (
     <Box
@@ -36,26 +56,64 @@ export default function TraderHeader({ handle, traderId, avatarUrl, isRegistered
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'flex-start',
-        marginBottom: tokens.spacing[8],
-        paddingBottom: tokens.spacing[6],
-        paddingTop: tokens.spacing[4],
-        borderBottom: `2px solid ${tokens.colors.border.primary}`,
-        background: tokens.colors.bg.secondary,
-        borderRadius: tokens.radius.lg,
+        marginBottom: tokens.spacing[6],
         padding: tokens.spacing[6],
-        boxShadow: tokens.shadow.sm,
+        background: `linear-gradient(135deg, ${tokens.colors.bg.secondary}F8 0%, ${tokens.colors.bg.primary}E8 100%)`,
+        borderRadius: tokens.radius.xl,
+        border: `1px solid ${tokens.colors.border.primary}50`,
+        boxShadow: `0 8px 32px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.05)`,
+        position: 'relative',
+        overflow: 'hidden',
+        opacity: mounted ? 1 : 0,
+        transform: mounted ? 'translateY(0)' : 'translateY(-20px)',
+        transition: 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
       }}
     >
+      {/* 背景装饰 */}
+      <Box
+        style={{
+          position: 'absolute',
+          top: -100,
+          left: -100,
+          width: 300,
+          height: 300,
+          background: `radial-gradient(circle, ${tokens.colors.accent.primary}08 0%, transparent 70%)`,
+          pointerEvents: 'none',
+        }}
+      />
+      <Box
+        style={{
+          position: 'absolute',
+          bottom: -80,
+          right: -80,
+          width: 200,
+          height: 200,
+          background: `radial-gradient(circle, ${tokens.colors.accent.brand}06 0%, transparent 70%)`,
+          pointerEvents: 'none',
+        }}
+      />
+      
       {/* 左侧：Avatar + Handle */}
-      <Box className="profile-header-info" style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[4], flex: 1 }}>
+      <Box
+        className="profile-header-info"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: tokens.spacing[5],
+          flex: 1,
+          position: 'relative',
+          zIndex: 1,
+        }}
+      >
+        {/* Avatar */}
         <Box
           className="profile-header-avatar"
           style={{
-            width: 64,
-            height: 64,
+            width: 72,
+            height: 72,
             borderRadius: tokens.radius.full,
             background: avatarUrl ? tokens.colors.bg.secondary : getAvatarGradient(traderId),
-            border: `2px solid ${tokens.colors.border.primary}`,
+            border: `3px solid ${avatarHovered ? tokens.colors.accent.primary : tokens.colors.border.primary}`,
             display: 'grid',
             placeItems: 'center',
             fontWeight: tokens.typography.fontWeight.black,
@@ -63,20 +121,16 @@ export default function TraderHeader({ handle, traderId, avatarUrl, isRegistered
             color: '#ffffff',
             overflow: 'hidden',
             flexShrink: 0,
-            boxShadow: tokens.shadow.md,
-            transition: `all ${tokens.transition.base}`,
+            boxShadow: avatarHovered 
+              ? `0 8px 32px rgba(139, 111, 168, 0.4), 0 0 0 4px ${tokens.colors.accent.primary}20`
+              : `0 4px 16px rgba(0, 0, 0, 0.15)`,
+            transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
             position: 'relative',
+            transform: avatarHovered ? 'scale(1.08)' : 'scale(1)',
+            cursor: 'pointer',
           }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.transform = 'scale(1.05)'
-            e.currentTarget.style.boxShadow = tokens.shadow.lg
-            e.currentTarget.style.borderColor = tokens.colors.accent.primary
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.transform = 'scale(1)'
-            e.currentTarget.style.boxShadow = tokens.shadow.md
-            e.currentTarget.style.borderColor = tokens.colors.border.primary
-          }}
+          onMouseEnter={() => setAvatarHovered(true)}
+          onMouseLeave={() => setAvatarHovered(false)}
         >
           {avatarUrl ? (
             <img 
@@ -88,14 +142,9 @@ export default function TraderHeader({ handle, traderId, avatarUrl, isRegistered
                 width: '100%', 
                 height: '100%', 
                 objectFit: 'cover',
-                transition: `opacity ${tokens.transition.base}`,
-                opacity: 0,
-              }}
-              onLoad={(e) => {
-                e.currentTarget.style.opacity = '1'
+                transition: 'all 0.4s ease',
               }}
               onError={(e) => {
-                // 隐藏图片，显示首字母
                 if (e.target) {
                   (e.target as HTMLImageElement).style.display = 'none'
                   const container = e.currentTarget.parentElement
@@ -105,15 +154,14 @@ export default function TraderHeader({ handle, traderId, avatarUrl, isRegistered
                 }
               }}
             />
-          ) : null}
-          {!avatarUrl && (
+          ) : (
             <Text 
               size="2xl" 
               weight="black" 
               style={{ 
                 color: '#ffffff',
-                textShadow: '0 2px 4px rgba(0, 0, 0, 0.4)',
-                fontSize: '28px',
+                textShadow: '0 2px 8px rgba(0, 0, 0, 0.4)',
+                fontSize: '32px',
                 lineHeight: '1',
               }}
             >
@@ -122,43 +170,98 @@ export default function TraderHeader({ handle, traderId, avatarUrl, isRegistered
           )}
         </Box>
 
+        {/* Info */}
         <Box style={{ flex: 1, minWidth: 0 }}>
-          <Text 
-            size="2xl" 
-            weight="black" 
-            style={{ 
-              marginBottom: tokens.spacing[2],
-              color: tokens.colors.text.primary,
-              lineHeight: tokens.typography.lineHeight.tight,
-            }}
-          >
-            {handle}
-          </Text>
-          <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3] }}>
-            <Text size="sm" color="secondary" style={{ fontWeight: tokens.typography.fontWeight.semibold }}>
-              {followers.toLocaleString()} 粉丝
+          <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3], marginBottom: tokens.spacing[2] }}>
+            <Text 
+              size="2xl" 
+              weight="black" 
+              style={{ 
+                color: tokens.colors.text.primary,
+                lineHeight: tokens.typography.lineHeight.tight,
+              }}
+            >
+              {handle}
             </Text>
-            {source && (
+            
+            {/* Source Badge */}
+            {sourceInfo && (
               <Box
                 style={{
-                  padding: `2px ${tokens.spacing[2]}`,
-                  background: `${tokens.colors.accent.primary}20`,
-                  borderRadius: tokens.radius.sm,
-                  border: `1px solid ${tokens.colors.accent.primary}40`,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  padding: `4px ${tokens.spacing[3]}`,
+                  background: `${sourceInfo.color}18`,
+                  borderRadius: tokens.radius.full,
+                  border: `1px solid ${sourceInfo.color}40`,
                 }}
               >
-                <Text size="xs" weight="bold" style={{ color: tokens.colors.accent.primary, textTransform: 'uppercase' }}>
-                  {source}
+                <Text 
+                  size="xs" 
+                  weight="bold" 
+                  style={{ 
+                    color: sourceInfo.color,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.5px',
+                  }}
+                >
+                  {sourceInfo.label}
                 </Text>
               </Box>
             )}
+            
+            {/* Verified Badge for Registered Users */}
+            {isRegistered && (
+              <Box
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: 22,
+                  height: 22,
+                  background: `linear-gradient(135deg, ${tokens.colors.accent.success}, #00D4AA)`,
+                  borderRadius: tokens.radius.full,
+                  boxShadow: `0 2px 8px ${tokens.colors.accent.success}40`,
+                }}
+                title="已认证用户"
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+              </Box>
+            )}
+          </Box>
+          
+          <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[4] }}>
+            <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
+              <Text size="sm" color="secondary" style={{ fontWeight: tokens.typography.fontWeight.semibold }}>
+                <Text
+                  as="span"
+                  weight="black"
+                  style={{ color: tokens.colors.text.primary, marginRight: 4 }}
+                >
+                  {followers.toLocaleString()}
+                </Text>
+                粉丝
+              </Text>
+            </Box>
           </Box>
         </Box>
       </Box>
 
       {/* 右侧：Buttons */}
-      <Box className="profile-header-actions" style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], flexShrink: 0 }}>
-        {/* 退出按钮 */}
+      <Box
+        className="profile-header-actions"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: tokens.spacing[3],
+          flexShrink: 0,
+          position: 'relative',
+          zIndex: 1,
+        }}
+      >
+        {/* 返回按钮 */}
         <Button
           variant="ghost"
           size="sm"
@@ -166,6 +269,19 @@ export default function TraderHeader({ handle, traderId, avatarUrl, isRegistered
           style={{
             color: tokens.colors.text.tertiary,
             fontSize: tokens.typography.fontSize.sm,
+            padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+            borderRadius: tokens.radius.lg,
+            background: tokens.colors.bg.tertiary,
+            border: `1px solid ${tokens.colors.border.primary}`,
+            transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = tokens.colors.bg.secondary
+            e.currentTarget.style.borderColor = tokens.colors.accent.primary + '40'
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = tokens.colors.bg.tertiary
+            e.currentTarget.style.borderColor = tokens.colors.border.primary
           }}
         >
           ← 返回
@@ -183,4 +299,3 @@ export default function TraderHeader({ handle, traderId, avatarUrl, isRegistered
     </Box>
   )
 }
-

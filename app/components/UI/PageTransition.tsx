@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation'
 interface PageTransitionProps {
   children: ReactNode
   className?: string
-  animation?: 'fade' | 'slide' | 'scale'
+  animation?: 'fade' | 'slide' | 'scale' | 'slideLeft'
 }
 
 /**
@@ -36,7 +36,8 @@ export function PageTransition({
   const animationClass = {
     fade: 'page-enter',
     slide: 'page-slide-in',
-    scale: 'page-scale-in',
+    scale: 'page-enter-scale',
+    slideLeft: 'page-slide-in-left',
   }[animation]
 
   return (
@@ -57,13 +58,37 @@ export function PageTransition({
  */
 export function StaggerList({ 
   children, 
-  className = '' 
+  className = '',
+  fast = false,
 }: { 
   children: ReactNode
-  className?: string 
+  className?: string
+  fast?: boolean 
 }) {
   return (
-    <div className={`stagger-enter ${className}`}>
+    <div className={`${fast ? 'stagger-fast' : 'stagger-children'} ${className}`}>
+      {children}
+    </div>
+  )
+}
+
+/**
+ * 卡片入场动画包装组件
+ */
+export function CardEnter({ 
+  children, 
+  className = '',
+  delay = 0,
+}: { 
+  children: ReactNode
+  className?: string
+  delay?: number 
+}) {
+  return (
+    <div 
+      className={`card-enter ${className}`}
+      style={{ animationDelay: delay ? `${delay}ms` : undefined }}
+    >
       {children}
     </div>
   )

@@ -8,9 +8,10 @@ type FollowButtonProps = {
   traderId: string
   userId: string | null
   initialFollowing?: boolean
+  onFollowChange?: (following: boolean) => void
 }
 
-export default function FollowButton({ traderId, userId, initialFollowing = false }: FollowButtonProps) {
+export default function FollowButton({ traderId, userId, initialFollowing = false, onFollowChange }: FollowButtonProps) {
   const { showToast } = useToast()
   const [following, setFollowing] = useState(initialFollowing)
   const [loading, setLoading] = useState(false)
@@ -52,6 +53,7 @@ export default function FollowButton({ traderId, userId, initialFollowing = fals
       const data = await response.json()
       if (response.ok) {
         setFollowing(data.following)
+        onFollowChange?.(data.following)
       } else if (data.tableNotFound) {
         // 表不存在，静默处理，不记录错误
         showToast('关注功能暂未开放', 'warning')

@@ -1,8 +1,184 @@
+'use client'
+
 import Link from "next/link"
+import { useEffect, useState } from "react"
 
 const ARENA_PURPLE = '#8b6fa8'
 
+// CSS styles
+const injectStyles = () => {
+  if (typeof window === 'undefined') return
+  if (document.getElementById('not-found-styles')) return
+  
+  const style = document.createElement('style')
+  style.id = 'not-found-styles'
+  style.textContent = `
+    @keyframes float404 {
+      0%, 100% { transform: translateY(0) rotate(0deg); }
+      25% { transform: translateY(-15px) rotate(-2deg); }
+      75% { transform: translateY(-8px) rotate(2deg); }
+    }
+    
+    @keyframes glitch {
+      0%, 100% { text-shadow: 0 0 60px rgba(139, 111, 168, 0.3); }
+      20% { text-shadow: -3px 0 rgba(255, 124, 124, 0.5), 3px 0 rgba(139, 111, 168, 0.5); }
+      40% { text-shadow: 3px 0 rgba(255, 124, 124, 0.5), -3px 0 rgba(139, 111, 168, 0.5); }
+      60% { text-shadow: 0 0 60px rgba(139, 111, 168, 0.3); }
+    }
+    
+    @keyframes orbitParticle {
+      from { transform: rotate(0deg) translateX(120px) rotate(0deg); }
+      to { transform: rotate(360deg) translateX(120px) rotate(-360deg); }
+    }
+    
+    @keyframes pulseGlow {
+      0%, 100% { opacity: 0.3; transform: scale(1); }
+      50% { opacity: 0.6; transform: scale(1.05); }
+    }
+    
+    @keyframes floatUp {
+      0%, 100% { transform: translateY(0); opacity: 0.4; }
+      50% { transform: translateY(-30px); opacity: 0.8; }
+    }
+    
+    @keyframes fadeInUp {
+      from { 
+        opacity: 0; 
+        transform: translateY(30px); 
+      }
+      to { 
+        opacity: 1; 
+        transform: translateY(0); 
+      }
+    }
+    
+    @keyframes buttonHover {
+      0%, 100% { box-shadow: 0 4px 20px rgba(139, 111, 168, 0.3); }
+      50% { box-shadow: 0 6px 30px rgba(139, 111, 168, 0.5); }
+    }
+    
+    @keyframes lineGrow {
+      from { width: 0; opacity: 0; }
+      to { width: 100%; opacity: 1; }
+    }
+    
+    .not-found-bg {
+      position: fixed;
+      inset: 0;
+      background: linear-gradient(135deg, #0a0a0f 0%, #13111a 50%, #0f0d14 100%);
+      z-index: 0;
+    }
+    
+    .glow-orb {
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(60px);
+      animation: pulseGlow 6s ease-in-out infinite;
+    }
+    
+    .number-404 {
+      animation: float404 6s ease-in-out infinite, glitch 8s ease-in-out infinite;
+    }
+    
+    .orbit-container {
+      position: absolute;
+      width: 240px;
+      height: 240px;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+    }
+    
+    .orbit-particle {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 8px;
+      height: 8px;
+      margin: -4px 0 0 -4px;
+      border-radius: 50%;
+      animation: orbitParticle linear infinite;
+    }
+    
+    .floating-element {
+      position: absolute;
+      animation: floatUp 4s ease-in-out infinite;
+    }
+    
+    .content-section {
+      animation: fadeInUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      opacity: 0;
+    }
+    
+    .action-button {
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      position: relative;
+      overflow: hidden;
+    }
+    
+    .action-button::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, rgba(255,255,255,0.1) 0%, transparent 50%);
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+    
+    .action-button:hover::before {
+      opacity: 1;
+    }
+    
+    .action-button.primary:hover {
+      transform: translateY(-3px);
+      animation: buttonHover 2s ease infinite;
+    }
+    
+    .action-button.secondary:hover {
+      transform: translateY(-2px);
+      border-color: ${ARENA_PURPLE} !important;
+      color: ${ARENA_PURPLE} !important;
+      box-shadow: 0 4px 20px rgba(139, 111, 168, 0.2);
+    }
+    
+    .decorative-line {
+      height: 1px;
+      background: linear-gradient(90deg, transparent 0%, rgba(139, 111, 168, 0.3) 50%, transparent 100%);
+      animation: lineGrow 1.5s ease forwards;
+    }
+    
+    .suggestion-card {
+      transition: all 0.3s ease;
+      cursor: pointer;
+    }
+    
+    .suggestion-card:hover {
+      transform: translateY(-4px);
+      background: rgba(139, 111, 168, 0.1) !important;
+      border-color: rgba(139, 111, 168, 0.3) !important;
+    }
+  `
+  document.head.appendChild(style)
+}
+
 export default function NotFoundPage() {
+  const [mounted, setMounted] = useState(false)
+  
+  useEffect(() => {
+    injectStyles()
+    setMounted(true)
+  }, [])
+  
+  if (!mounted) {
+    return (
+      <div style={{ 
+        minHeight: '100vh',
+        background: '#0a0a0f',
+      }} />
+    )
+  }
+
   return (
     <div style={{ 
       minHeight: '100vh',
@@ -11,106 +187,234 @@ export default function NotFoundPage() {
       alignItems: 'center',
       justifyContent: 'center',
       padding: 24,
-      background: '#0B0A10',
       color: '#EDEDED',
       fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+      position: 'relative',
+      overflow: 'hidden',
     }}>
-      {/* 404 大数字 */}
-      <div style={{
-        fontSize: 120,
-        fontWeight: 900,
-        lineHeight: 1,
-        marginBottom: 16,
-        background: `linear-gradient(135deg, ${ARENA_PURPLE} 0%, rgba(139, 111, 168, 0.3) 100%)`,
-        WebkitBackgroundClip: 'text',
-        WebkitTextFillColor: 'transparent',
-        textShadow: `0 0 60px rgba(139, 111, 168, 0.3)`,
-      }}>
-        404
-      </div>
-
-      <h1 style={{ 
-        fontSize: 24, 
-        fontWeight: 700,
-        marginBottom: 12,
-      }}>
-        页面不存在
-      </h1>
+      {/* Animated background */}
+      <div className="not-found-bg" />
       
-      <p style={{ 
-        opacity: 0.6, 
-        marginBottom: 32,
-        fontSize: 14,
+      {/* Glow orbs */}
+      <div 
+        className="glow-orb"
+        style={{
+          width: 400,
+          height: 400,
+          background: `radial-gradient(circle, rgba(139, 111, 168, 0.15) 0%, transparent 70%)`,
+          top: '30%',
+          left: '40%',
+          transform: 'translate(-50%, -50%)',
+        }}
+      />
+      <div 
+        className="glow-orb"
+        style={{
+          width: 300,
+          height: 300,
+          background: `radial-gradient(circle, rgba(107, 79, 136, 0.1) 0%, transparent 70%)`,
+          top: '60%',
+          left: '60%',
+          transform: 'translate(-50%, -50%)',
+          animationDelay: '2s',
+        }}
+      />
+      
+      {/* Floating geometric elements */}
+      {[...Array(6)].map((_, i) => (
+        <div
+          key={i}
+          className="floating-element"
+          style={{
+            left: `${15 + i * 14}%`,
+            top: `${20 + (i % 3) * 25}%`,
+            width: 6 + (i % 3) * 4,
+            height: 6 + (i % 3) * 4,
+            background: `rgba(139, 111, 168, ${0.2 + (i % 3) * 0.1})`,
+            borderRadius: i % 2 === 0 ? '50%' : '2px',
+            transform: i % 2 === 0 ? 'none' : 'rotate(45deg)',
+            animationDelay: `${i * 0.4}s`,
+            animationDuration: `${4 + i * 0.5}s`,
+          }}
+        />
+      ))}
+      
+      {/* Main content */}
+      <div style={{ 
+        position: 'relative', 
+        zIndex: 1,
         textAlign: 'center',
-        maxWidth: 400,
+        maxWidth: 500,
       }}>
-        您访问的页面可能已被移动、删除，或者链接有误。
-      </p>
+        {/* 404 Number with orbit effect */}
+        <div style={{ position: 'relative', marginBottom: 32 }}>
+          {/* Orbiting particles */}
+          <div className="orbit-container">
+            {[...Array(3)].map((_, i) => (
+              <div
+                key={i}
+                className="orbit-particle"
+                style={{
+                  background: `rgba(139, 111, 168, ${0.4 + i * 0.2})`,
+                  animationDuration: `${8 + i * 4}s`,
+                  animationDelay: `${i * -2}s`,
+                }}
+              />
+            ))}
+          </div>
+          
+          {/* 404 text */}
+          <div 
+            className="number-404"
+            style={{
+              fontSize: 140,
+              fontWeight: 900,
+              lineHeight: 1,
+              background: `linear-gradient(135deg, ${ARENA_PURPLE} 0%, rgba(139, 111, 168, 0.3) 100%)`,
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              position: 'relative',
+              zIndex: 2,
+            }}
+          >
+            404
+          </div>
+        </div>
 
-      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'center' }}>
-        <Link 
-          href="/"
+        {/* Title */}
+        <h1 
+          className="content-section"
           style={{ 
-            padding: '12px 24px', 
-            background: ARENA_PURPLE,
-            color: '#fff', 
-            borderRadius: 8,
-            textDecoration: 'none',
-            fontSize: 14,
-            fontWeight: 600,
-            transition: 'all 0.2s ease',
+            fontSize: 28, 
+            fontWeight: 700,
+            marginBottom: 12,
+            animationDelay: '0.2s',
           }}
         >
-          返回首页
-        </Link>
+          页面不存在
+        </h1>
         
-        <Link 
-          href="/hot"
+        {/* Description */}
+        <p 
+          className="content-section"
           style={{ 
-            padding: '12px 24px', 
-            background: 'transparent',
-            color: '#EDEDED', 
-            borderRadius: 8,
-            border: '1px solid rgba(255,255,255,0.2)',
-            textDecoration: 'none',
-            fontSize: 14,
-            fontWeight: 500,
-            transition: 'all 0.2s ease',
+            opacity: 0.6, 
+            marginBottom: 16,
+            fontSize: 15,
+            lineHeight: 1.6,
+            animationDelay: '0.3s',
           }}
         >
-          查看热榜
-        </Link>
+          您访问的页面可能已被移动、删除，或者链接有误
+        </p>
         
-        <Link 
-          href="/groups"
+        {/* Decorative line */}
+        <div 
+          className="decorative-line"
           style={{ 
-            padding: '12px 24px', 
-            background: 'transparent',
-            color: '#EDEDED', 
-            borderRadius: 8,
-            border: '1px solid rgba(255,255,255,0.2)',
-            textDecoration: 'none',
-            fontSize: 14,
-            fontWeight: 500,
-            transition: 'all 0.2s ease',
+            maxWidth: 200, 
+            margin: '24px auto',
+          }}
+        />
+
+        {/* Action buttons */}
+        <div 
+          className="content-section"
+          style={{ 
+            display: 'flex', 
+            gap: 14, 
+            flexWrap: 'wrap', 
+            justifyContent: 'center',
+            marginBottom: 40,
+            animationDelay: '0.4s',
           }}
         >
-          浏览小组
-        </Link>
+          <Link 
+            href="/"
+            className="action-button primary"
+            style={{ 
+              padding: '14px 28px', 
+              background: `linear-gradient(135deg, ${ARENA_PURPLE} 0%, #6b4f88 100%)`,
+              color: '#fff', 
+              borderRadius: 12,
+              textDecoration: 'none',
+              fontSize: 15,
+              fontWeight: 600,
+            }}
+          >
+            返回首页
+          </Link>
+          
+          <Link 
+            href="/hot"
+            className="action-button secondary"
+            style={{ 
+              padding: '14px 28px', 
+              background: 'transparent',
+              color: '#EDEDED', 
+              borderRadius: 12,
+              border: '1px solid rgba(255,255,255,0.15)',
+              textDecoration: 'none',
+              fontSize: 15,
+              fontWeight: 500,
+            }}
+          >
+            查看热榜
+          </Link>
+        </div>
+
+        {/* Suggestions */}
+        <div 
+          className="content-section"
+          style={{
+            animationDelay: '0.5s',
+          }}
+        >
+          <p style={{ 
+            fontSize: 13, 
+            color: '#6a6a6a', 
+            marginBottom: 16,
+            fontWeight: 500,
+          }}>
+            或者探索这些内容
+          </p>
+          
+          <div style={{ 
+            display: 'flex', 
+            gap: 12, 
+            justifyContent: 'center',
+            flexWrap: 'wrap',
+          }}>
+            {[
+              { href: '/groups', label: '浏览小组', icon: '◈' },
+              { href: '/search', label: '搜索', icon: '⌕' },
+              { href: '/login', label: '登录', icon: '→' },
+            ].map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                className="suggestion-card"
+                style={{
+                  padding: '10px 18px',
+                  background: 'rgba(255,255,255,0.03)',
+                  border: '1px solid rgba(255,255,255,0.08)',
+                  borderRadius: 10,
+                  textDecoration: 'none',
+                  color: '#9a9a9a',
+                  fontSize: 13,
+                  fontWeight: 500,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                }}
+              >
+                <span style={{ opacity: 0.6 }}>{item.icon}</span>
+                {item.label}
+              </Link>
+            ))}
+          </div>
+        </div>
       </div>
-
-      {/* 装饰背景 */}
-      <div style={{
-        position: 'fixed',
-        top: '50%',
-        left: '50%',
-        transform: 'translate(-50%, -50%)',
-        width: 600,
-        height: 600,
-        background: `radial-gradient(circle, rgba(139, 111, 168, 0.1) 0%, transparent 70%)`,
-        pointerEvents: 'none',
-        zIndex: -1,
-      }} />
     </div>
   )
 }

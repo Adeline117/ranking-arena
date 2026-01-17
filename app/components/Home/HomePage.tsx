@@ -49,8 +49,21 @@ export default function HomePage() {
         minHeight: '100vh',
         background: tokens.colors.bg.primary,
         color: tokens.colors.text.primary,
+        position: 'relative',
       }}
     >
+      {/* Background mesh gradient */}
+      <Box
+        style={{
+          position: 'fixed',
+          inset: 0,
+          background: tokens.gradient.mesh,
+          opacity: 0.5,
+          pointerEvents: 'none',
+          zIndex: 0,
+        }}
+      />
+      
       {/* JSON-LD 结构化数据 */}
       <JsonLd data={combineSchemas(generateWebSiteSchema(), generateOrganizationSchema())} />
       
@@ -60,19 +73,21 @@ export default function HomePage() {
       {/* 主体 */}
       <Box
         as="main"
-        className="container-padding"
+        className="container-padding page-enter"
         px={4}
         py={6}
         style={{
           maxWidth: 1200,
           margin: '0 auto',
+          position: 'relative',
+          zIndex: 1,
         }}
       >
         {/* 快速绑定交易所 */}
         <ExchangeQuickConnect />
         
         <Box
-          className="main-grid"
+          className="main-grid stagger-children"
           style={{
             display: 'grid',
             gridTemplateColumns: '260px minmax(0, 1fr) 280px',

@@ -5,6 +5,14 @@
  * - 并行查询所有数据
  * - 内存缓存（5分钟TTL）
  * - 减少数据库往返
+ * 
+ * 数据包括：
+ * - 基本信息、绩效数据
+ * - 资产偏好（7D/30D/90D）
+ * - 收益率曲线（7D/30D/90D）
+ * - 仓位历史记录
+ * - 项目表现详细数据（夏普比率、跟单者盈亏等）
+ * - tracked_since（Arena 首次追踪时间）
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -40,6 +48,67 @@ interface SnapshotData {
   followers?: number | null
   captured_at?: string
   season_id?: string
+}
+
+interface AssetBreakdownItem {
+  symbol: string
+  weight_pct: number
+  period: string
+}
+
+interface EquityCurvePoint {
+  data_date: string
+  roi_pct: number | null
+  pnl_usd: number | null
+}
+
+interface PositionHistoryItem {
+  symbol: string
+  direction: string
+  position_type: string | null
+  margin_mode: string | null
+  open_time: string | null
+  close_time: string | null
+  entry_price: number | null
+  exit_price: number | null
+  max_position_size: number | null
+  closed_size: number | null
+  pnl_usd: number | null
+  pnl_pct: number | null
+  status: string | null
+}
+
+interface StatsDetailData {
+  sharpe_ratio: number | null
+  copiers_pnl: number | null
+  copiers_count: number | null
+  winning_positions: number | null
+  total_positions: number | null
+  avg_holding_time_hours: number | null
+  avg_profit: number | null
+  avg_loss: number | null
+  period: string | null
+}
+
+// 安全查询函数 - 处理可能不存在的表
+// 使用 PromiseLike 类型以兼容 Supabase 的 PostgrestFilterBuilder
+async function safeQuery<T>(
+  queryFn: () => PromiseLike<{ data: T | null; error: any }>
+): Promise<T | null> {
+  try {
+    const result = await queryFn()
+    // 如果表不存在，error.code 会是 '42P01' 或 message 包含 'does not exist'
+    if (result.error && (
+      result.error.code === '42P01' || 
+      result.error.message?.includes('does not exist') ||
+      result.error.message?.includes('relation')
+    )) {
+      return null
+    }
+    return result.data
+  } catch {
+    return null
+  }
 }
 
 // 查找交易员来源
@@ -129,8 +198,20 @@ async function getTraderDetails(
     arenaFollowersResult,
     userProfileResult,
     portfolioResult,
-    historyResult,
+    positionHistoryResult,
     postsResult,
+    // 新增：资产偏好
+    assetBreakdown90dResult,
+    assetBreakdown30dResult,
+    assetBreakdown7dResult,
+    // 新增：收益率曲线
+    equityCurve90dResult,
+    equityCurve30dResult,
+    equityCurve7dResult,
+    // 新增：详细统计
+    statsDetailResult,
+    // 新增：tracked_since
+    trackedSinceResult,
   ] = await Promise.all([
     // 最新快照
     supabase
@@ -177,23 +258,23 @@ async function getTraderDetails(
       .eq('handle', traderHandle)
       .maybeSingle(),
     
-    // 持仓数据
-    supabase
+    // 当前持仓数据 (表可能不存在)
+    safeQuery(() => supabase
       .from('trader_portfolio')
-      .select('symbol, direction, weight_pct, entry_price, pnl_pct')
+      .select('symbol, direction, invested_pct, entry_price, pnl')
       .eq('source', sourceType)
       .eq('source_trader_id', traderId)
-      .order('updated_at', { ascending: false })
-      .limit(100),
+      .order('captured_at', { ascending: false })
+      .limit(50)),
     
-    // 历史订单
-    supabase
+    // 仓位历史记录（扩展字段）(表可能不存在)
+    safeQuery(() => supabase
       .from('trader_position_history')
-      .select('symbol, direction, entry_price, exit_price, pnl_pct, open_time, close_time')
+      .select('symbol, direction, position_type, margin_mode, open_time, close_time, entry_price, exit_price, max_position_size, closed_size, pnl_usd, pnl_pct, status')
       .eq('source', sourceType)
       .eq('source_trader_id', traderId)
-      .order('close_time', { ascending: false })
-      .limit(50),
+      .order('open_time', { ascending: false })
+      .limit(100)),
     
     // 帖子
     supabase
@@ -202,6 +283,85 @@ async function getTraderDetails(
       .eq('author_handle', traderHandle)
       .order('created_at', { ascending: false })
       .limit(20),
+    
+    // 资产偏好 90D (表可能不存在)
+    safeQuery(() => supabase
+      .from('trader_asset_breakdown')
+      .select('symbol, weight_pct, period')
+      .eq('source', sourceType)
+      .eq('source_trader_id', traderId)
+      .eq('period', '90D')
+      .order('weight_pct', { ascending: false })
+      .limit(20)),
+    
+    // 资产偏好 30D (表可能不存在)
+    safeQuery(() => supabase
+      .from('trader_asset_breakdown')
+      .select('symbol, weight_pct, period')
+      .eq('source', sourceType)
+      .eq('source_trader_id', traderId)
+      .eq('period', '30D')
+      .order('weight_pct', { ascending: false })
+      .limit(20)),
+    
+    // 资产偏好 7D (表可能不存在)
+    safeQuery(() => supabase
+      .from('trader_asset_breakdown')
+      .select('symbol, weight_pct, period')
+      .eq('source', sourceType)
+      .eq('source_trader_id', traderId)
+      .eq('period', '7D')
+      .order('weight_pct', { ascending: false })
+      .limit(20)),
+    
+    // 收益率曲线 90D (表可能不存在)
+    safeQuery(() => supabase
+      .from('trader_equity_curve')
+      .select('data_date, roi_pct, pnl_usd')
+      .eq('source', sourceType)
+      .eq('source_trader_id', traderId)
+      .eq('period', '90D')
+      .order('data_date', { ascending: true })
+      .limit(90)),
+    
+    // 收益率曲线 30D (表可能不存在)
+    safeQuery(() => supabase
+      .from('trader_equity_curve')
+      .select('data_date, roi_pct, pnl_usd')
+      .eq('source', sourceType)
+      .eq('source_trader_id', traderId)
+      .eq('period', '30D')
+      .order('data_date', { ascending: true })
+      .limit(30)),
+    
+    // 收益率曲线 7D (表可能不存在)
+    safeQuery(() => supabase
+      .from('trader_equity_curve')
+      .select('data_date, roi_pct, pnl_usd')
+      .eq('source', sourceType)
+      .eq('source_trader_id', traderId)
+      .eq('period', '7D')
+      .order('data_date', { ascending: true })
+      .limit(7)),
+    
+    // 详细统计数据 (表可能不存在)
+    safeQuery(() => supabase
+      .from('trader_stats_detail')
+      .select('sharpe_ratio, copiers_pnl, copiers_count, winning_positions, total_positions, avg_holding_time_hours, avg_profit, avg_loss, period')
+      .eq('source', sourceType)
+      .eq('source_trader_id', traderId)
+      .order('captured_at', { ascending: false })
+      .limit(3)),
+    
+    // tracked_since（首次抓取时间）
+    supabase
+      .from('trader_snapshots')
+      .select('captured_at')
+      .eq('source', sourceType)
+      .eq('source_trader_id', traderId)
+      .order('captured_at', { ascending: true })
+      .limit(1)
+      .maybeSingle(),
   ])
   
   const snapshot = snapshotResult.data as SnapshotData | null
@@ -209,9 +369,29 @@ async function getTraderDetails(
   const snapshot30d = snapshot30dResult.data as SnapshotData | null
   const arenaFollowers = arenaFollowersResult.count || 0
   const userProfile = userProfileResult.data
-  const portfolioData = portfolioResult.data || []
-  const historyData = historyResult.data || []
+  // 使用 safeQuery 返回的结果（可能是 null 或数据数组）
+  const portfolioData = (portfolioResult || []) as any[]
+  const positionHistoryData = (positionHistoryResult || []) as PositionHistoryItem[]
   const posts = postsResult.data || []
+  
+  // 资产偏好数据（safeQuery 返回 null 或数据）
+  const assetBreakdown90d = (assetBreakdown90dResult || []) as AssetBreakdownItem[]
+  const assetBreakdown30d = (assetBreakdown30dResult || []) as AssetBreakdownItem[]
+  const assetBreakdown7d = (assetBreakdown7dResult || []) as AssetBreakdownItem[]
+  
+  // 收益率曲线数据
+  const equityCurve90d = (equityCurve90dResult || []) as EquityCurvePoint[]
+  const equityCurve30d = (equityCurve30dResult || []) as EquityCurvePoint[]
+  const equityCurve7d = (equityCurve7dResult || []) as EquityCurvePoint[]
+  
+  // 详细统计数据
+  const statsDetailList = (statsDetailResult || []) as StatsDetailData[]
+  const statsDetail90d = statsDetailList.find(s => s.period === '90D') || statsDetailList[0]
+  const statsDetail30d = statsDetailList.find(s => s.period === '30D')
+  const statsDetail7d = statsDetailList.find(s => s.period === '7D')
+  
+  // tracked_since
+  const trackedSince = trackedSinceResult.data?.captured_at || null
   
   // 获取相似交易员（单独查询，因为依赖 snapshot 数据）
   let similarTraders: Array<{ handle: string; id: string; followers: number; avatar_url?: string; source: string }> = []
@@ -312,28 +492,96 @@ async function getTraderDetails(
       arena_score_30d: score30d?.totalScore ?? undefined,
       arena_score_7d: score7d?.totalScore ?? undefined,
       overall_score: overallScore,
+      // 详细统计
+      sharpe_ratio: statsDetail90d?.sharpe_ratio ?? undefined,
+      sharpe_ratio_30d: statsDetail30d?.sharpe_ratio ?? undefined,
+      sharpe_ratio_7d: statsDetail7d?.sharpe_ratio ?? undefined,
+      // 获胜仓位和总仓位（按周期）
+      winning_positions: statsDetail90d?.winning_positions ?? undefined,
+      winning_positions_30d: statsDetail30d?.winning_positions ?? undefined,
+      winning_positions_7d: statsDetail7d?.winning_positions ?? undefined,
+      total_positions: statsDetail90d?.total_positions ?? undefined,
+      total_positions_30d: statsDetail30d?.total_positions ?? undefined,
+      total_positions_7d: statsDetail7d?.total_positions ?? undefined,
     },
     stats: {
       additionalStats: {
         tradesCount: snapshot?.trades_count ?? undefined,
+        avgHoldingTime: statsDetail90d?.avg_holding_time_hours 
+          ? `${Math.round(statsDetail90d.avg_holding_time_hours)}h` 
+          : undefined,
+        avgProfit: statsDetail90d?.avg_profit ?? undefined,
+        avgLoss: statsDetail90d?.avg_loss ?? undefined,
+        trackedSince: trackedSince 
+          ? new Date(trackedSince).toLocaleDateString('zh-CN', { year: 'numeric', month: 'short', day: 'numeric' })
+          : undefined,
+        maxDrawdown: snapshot?.max_drawdown ?? undefined,
       },
+      trading: {
+        totalTrades12M: snapshot?.trades_count ?? 0,
+        avgProfit: statsDetail90d?.avg_profit ?? 0,
+        avgLoss: statsDetail90d?.avg_loss ?? 0,
+        profitableTradesPct: snapshot?.win_rate ?? 0,
+        winningPositions: statsDetail90d?.winning_positions ?? undefined,
+        totalPositions: statsDetail90d?.total_positions ?? undefined,
+      },
+      frequentlyTraded: assetBreakdown90d.map(item => ({
+        symbol: item.symbol,
+        weightPct: item.weight_pct,
+        count: 0,
+        avgProfit: 0,
+        avgLoss: 0,
+        profitablePct: 0,
+      })),
     },
+    // 资产偏好（按时间段）
+    assetBreakdown: {
+      '90D': assetBreakdown90d.map(item => ({ symbol: item.symbol, weightPct: item.weight_pct })),
+      '30D': assetBreakdown30d.map(item => ({ symbol: item.symbol, weightPct: item.weight_pct })),
+      '7D': assetBreakdown7d.map(item => ({ symbol: item.symbol, weightPct: item.weight_pct })),
+    },
+    // 收益率曲线（按时间段）
+    equityCurve: {
+      '90D': equityCurve90d.map(item => ({ 
+        date: item.data_date, 
+        roi: item.roi_pct ?? 0, 
+        pnl: item.pnl_usd ?? 0 
+      })),
+      '30D': equityCurve30d.map(item => ({ 
+        date: item.data_date, 
+        roi: item.roi_pct ?? 0, 
+        pnl: item.pnl_usd ?? 0 
+      })),
+      '7D': equityCurve7d.map(item => ({ 
+        date: item.data_date, 
+        roi: item.roi_pct ?? 0, 
+        pnl: item.pnl_usd ?? 0 
+      })),
+    },
+    // 当前持仓
     portfolio: portfolioData.map((item: any) => ({
       market: item.symbol || '',
       direction: item.direction === 'short' ? 'short' : 'long',
-      invested: item.weight_pct ?? 0,
-      pnl: item.pnl_pct ?? 0,
-      value: item.weight_pct ?? 0,
+      invested: item.invested_pct ?? 0,
+      pnl: item.pnl ?? 0,
+      value: item.invested_pct ?? 0,
       price: item.entry_price ?? 0,
     })),
-    positionHistory: historyData.map((item: any) => ({
+    // 仓位历史记录（详细版）
+    positionHistory: positionHistoryData.map((item) => ({
       symbol: item.symbol || '',
       direction: item.direction === 'short' ? 'short' : 'long',
-      entryPrice: item.entry_price || 0,
-      exitPrice: item.exit_price || 0,
-      pnlPct: item.pnl_pct || 0,
+      positionType: item.position_type || 'perpetual',
+      marginMode: item.margin_mode || 'cross',
       openTime: item.open_time || '',
       closeTime: item.close_time || '',
+      entryPrice: item.entry_price || 0,
+      exitPrice: item.exit_price || 0,
+      maxPositionSize: item.max_position_size || 0,
+      closedSize: item.closed_size || 0,
+      pnlUsd: item.pnl_usd || 0,
+      pnlPct: item.pnl_pct || 0,
+      status: item.status || 'closed',
     })),
     feed: posts.map((post: any) => ({
       id: post.id,
@@ -347,6 +595,8 @@ async function getTraderDetails(
       is_pinned: post.is_pinned || false,
     })),
     similarTraders,
+    // tracked_since
+    trackedSince: trackedSince || undefined,
   }
 }
 
@@ -362,6 +612,7 @@ async function getTraderDetailsFromSnapshots(
     snapshot7dResult,
     snapshot30dResult,
     arenaFollowersResult,
+    trackedSinceResult,
   ] = await Promise.all([
     // 最新快照（90D）
     supabase
@@ -400,12 +651,23 @@ async function getTraderDetailsFromSnapshots(
       .from('trader_follows')
       .select('*', { count: 'exact', head: true })
       .eq('trader_id', traderId),
+    
+    // tracked_since
+    supabase
+      .from('trader_snapshots')
+      .select('captured_at')
+      .eq('source', sourceType)
+      .eq('source_trader_id', traderId)
+      .order('captured_at', { ascending: true })
+      .limit(1)
+      .maybeSingle(),
   ])
   
   const snapshot = snapshotResult.data as SnapshotData | null
   const snapshot7d = snapshot7dResult.data as SnapshotData | null
   const snapshot30d = snapshot30dResult.data as SnapshotData | null
   const arenaFollowers = arenaFollowersResult.count || 0
+  const trackedSince = trackedSinceResult.data?.captured_at || null
   
   // 计算各时间段的 Arena Score
   const score90d = snapshot?.roi != null && snapshot?.pnl != null
@@ -474,12 +736,26 @@ async function getTraderDetailsFromSnapshots(
     stats: {
       additionalStats: {
         tradesCount: snapshot?.trades_count ?? undefined,
+        trackedSince: trackedSince 
+          ? new Date(trackedSince).toLocaleDateString('zh-CN', { year: 'numeric', month: 'short', day: 'numeric' })
+          : undefined,
+        maxDrawdown: snapshot?.max_drawdown ?? undefined,
       },
+      trading: {
+        totalTrades12M: snapshot?.trades_count ?? 0,
+        avgProfit: 0,
+        avgLoss: 0,
+        profitableTradesPct: snapshot?.win_rate ?? 0,
+      },
+      frequentlyTraded: [],
     },
+    assetBreakdown: { '90D': [], '30D': [], '7D': [] },
+    equityCurve: { '90D': [], '30D': [], '7D': [] },
     portfolio: [],
     positionHistory: [],
     feed: [],
     similarTraders: [],
+    trackedSince: trackedSince || undefined,
   }
 }
 
@@ -529,6 +805,7 @@ export async function GET(
     const snapshotFound = await findTraderFromSnapshots(supabase, handle)
     
     if (!snapshotFound) {
+      console.warn(`[trader] No trader found for handle: ${decodedHandle}`)
       return NextResponse.json({ 
         error: 'Trader not found',
         handle: decodedHandle,

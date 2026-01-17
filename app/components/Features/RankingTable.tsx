@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import { RankingSkeleton } from '../UI/Skeleton'
@@ -8,6 +8,7 @@ import { RankingBadge } from '../Icons'
 import { Box, Text } from '../Base'
 import { useLanguage } from '../Utils/LanguageProvider'
 import { getAvatarGradient, getAvatarInitial } from '@/lib/utils/avatar'
+import { ScoreRulesModal } from '../UI/ScoreRulesModal'
 
 // 格式化 PnL 显示
 function formatPnL(pnl: number): string {
@@ -52,8 +53,75 @@ export interface Trader {
   stability_score?: number // 稳定分
 }
 
+// CSS animations for top 3
+const injectStyles = () => {
+  if (typeof window === 'undefined') return
+  if (document.getElementById('ranking-table-styles')) return
+  
+  const style = document.createElement('style')
+  style.id = 'ranking-table-styles'
+  style.textContent = `
+    /* 奖牌发光效果 */
+    @keyframes medalGlowGold {
+      0%, 100% { 
+        filter: drop-shadow(0 0 4px rgba(255, 215, 0, 0.6)) drop-shadow(0 0 8px rgba(255, 215, 0, 0.4));
+      }
+      50% { 
+        filter: drop-shadow(0 0 8px rgba(255, 215, 0, 0.8)) drop-shadow(0 0 16px rgba(255, 215, 0, 0.5));
+      }
+    }
+    
+    @keyframes medalGlowSilver {
+      0%, 100% { 
+        filter: drop-shadow(0 0 3px rgba(192, 192, 192, 0.6)) drop-shadow(0 0 6px rgba(192, 192, 192, 0.4));
+      }
+      50% { 
+        filter: drop-shadow(0 0 6px rgba(192, 192, 192, 0.8)) drop-shadow(0 0 12px rgba(192, 192, 192, 0.5));
+      }
+    }
+    
+    @keyframes medalGlowBronze {
+      0%, 100% { 
+        filter: drop-shadow(0 0 3px rgba(205, 127, 50, 0.6)) drop-shadow(0 0 6px rgba(205, 127, 50, 0.4));
+      }
+      50% { 
+        filter: drop-shadow(0 0 6px rgba(205, 127, 50, 0.8)) drop-shadow(0 0 12px rgba(205, 127, 50, 0.5));
+      }
+    }
+    
+    /* 奖牌发光类 */
+    .medal-glow-gold {
+      animation: medalGlowGold 2s ease-in-out infinite;
+    }
+    
+    .medal-glow-silver {
+      animation: medalGlowSilver 2s ease-in-out infinite;
+    }
+    
+    .medal-glow-bronze {
+      animation: medalGlowBronze 2s ease-in-out infinite;
+    }
+    
+    /* 普通行样式 */
+    .ranking-row {
+      transition: all 0.2s ease;
+    }
+    
+    .ranking-row:hover {
+      background: var(--glass-bg-light) !important;
+    }
+    
+    @media (prefers-reduced-motion: reduce) {
+      .medal-glow-gold, .medal-glow-silver, .medal-glow-bronze {
+        animation: none;
+      }
+    }
+  `
+  document.head.appendChild(style)
+}
+
 /**
- * 排行榜页面 - 极度克制，只解决"谁最强"的问题
+ * 排行榜页面 - 核心功能，突出前三名
  * 只保留：排名、交易员ID、ROI、PnL、胜率、最大回撤
  */
 export default function RankingTable(props: {
@@ -69,7 +137,13 @@ export default function RankingTable(props: {
   // 分页状态
   const [currentPage, setCurrentPage] = useState(1)
   const [showRules, setShowRules] = useState(false)
+  const [showScoreRulesModal, setShowScoreRulesModal] = useState(false)
   const itemsPerPage = 20 // 每页显示 20 条
+
+  // Inject styles on mount
+  useEffect(() => {
+    injectStyles()
+  }, [])
 
   // API 已经完成了过滤（PNL >= $1000）和排序（ROI 降序 → 回撤小 → 交易次数多）
   // 前端直接使用 API 返回的数据，不再重复过滤和排序
@@ -81,49 +155,60 @@ export default function RankingTable(props: {
   const endIndex = startIndex + itemsPerPage
   const paginatedTraders = sortedTraders.slice(startIndex, endIndex)
   
-          // 数据来源标签映射
-          const sourceLabels: Record<string, string> = {
-            'binance': 'Binance',
-            'binance_web3': 'Binance Web3',
-            'bybit': 'Bybit',
-            'bitget': 'Bitget',
-            'mexc': 'MEXC',
-            'coinex': 'CoinEx',
-            'okx': 'OKX',
-          }
+  // 数据来源标签映射
+  const sourceLabels: Record<string, string> = {
+    'binance': 'Binance',
+    'binance_web3': 'Binance Web3',
+    'bybit': 'Bybit',
+    'bitget': 'Bitget',
+    'mexc': 'MEXC',
+    'coinex': 'CoinEx',
+    'okx': 'OKX',
+  }
   
   const sourceLabel = source ? sourceLabels[source] || source : t('unknownSource')
 
+  // Get medal glow class based on rank
+  const getMedalGlowClass = (rank: number) => {
+    if (rank === 1) return 'medal-glow-gold'
+    if (rank === 2) return 'medal-glow-silver'
+    if (rank === 3) return 'medal-glow-bronze'
+    return ''
+  }
+
   return (
     <Box
-      bg="secondary"
+      className="glass-card"
       p={0}
-      radius="lg"
-      border="primary"
+      radius="xl"
       style={{
-        boxShadow: tokens.shadow.md,
+        boxShadow: `${tokens.shadow.lg}, 0 0 0 1px var(--glass-border-light)`,
         overflow: 'hidden',
+        background: tokens.glass.bg.secondary,
+        backdropFilter: tokens.glass.blur.lg,
+        WebkitBackdropFilter: tokens.glass.blur.lg,
+        border: tokens.glass.border.light,
       }}
     >
-      {/* Header - 优化UI */}
+      {/* Header - 增大字体和间距 */}
       <Box
         className="ranking-table-header ranking-table-grid"
         style={{
           display: 'grid',
-          gridTemplateColumns: '36px minmax(90px, 1fr) 52px 80px 50px 50px', // Rank | Trader | Score | ROI+PnL | Win Rate | MDD
+          // 增大列宽：Rank | Trader | Score | ROI+PnL | Win Rate | MDD
+          gridTemplateColumns: '44px minmax(140px, 1.5fr) 64px 90px 70px 70px',
           gap: tokens.spacing[2],
-          padding: `${tokens.spacing[3]} ${tokens.spacing[3]}`,
-          borderBottom: `2px solid ${tokens.colors.border.primary}`,
-          background: tokens.colors.bg.secondary,
-          borderRadius: `${tokens.radius.lg} ${tokens.radius.lg} 0 0`,
-          boxShadow: tokens.shadow.xs,
+          padding: `${tokens.spacing[4]} ${tokens.spacing[4]}`,
+          borderBottom: `1px solid var(--glass-border-light)`,
+          background: tokens.glass.bg.light,
+          borderRadius: `${tokens.radius.xl} ${tokens.radius.xl} 0 0`,
         }}
       >
-        <Text size="xs" weight="bold" color="tertiary" style={{ textAlign: 'center', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+        <Text size="sm" weight="bold" color="tertiary" style={{ textAlign: 'center', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap', fontSize: '12px' }}>
           {t('rank')}
         </Text>
         <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
-          <Text size="xs" weight="bold" color="tertiary" style={{ textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+          <Text size="sm" weight="bold" color="tertiary" style={{ textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap', fontSize: '12px' }}>
             {t('trader')}
           </Text>
           <button
@@ -132,9 +217,9 @@ export default function RankingTable(props: {
               background: 'transparent',
               border: `1px solid ${tokens.colors.border.primary}`,
               borderRadius: tokens.radius.full,
-              width: 16,
-              height: 16,
-              fontSize: 10,
+              width: 18,
+              height: 18,
+              fontSize: 11,
               color: tokens.colors.text.tertiary,
               cursor: 'pointer',
               display: 'flex',
@@ -142,31 +227,34 @@ export default function RankingTable(props: {
               justifyContent: 'center',
               padding: 0,
               transition: `all ${tokens.transition.fast}`,
+              flexShrink: 0,
             }}
             onMouseEnter={(e) => {
               e.currentTarget.style.borderColor = tokens.colors.accent.primary
               e.currentTarget.style.color = tokens.colors.accent.primary
+              e.currentTarget.style.transform = 'scale(1.1)'
             }}
             onMouseLeave={(e) => {
               e.currentTarget.style.borderColor = tokens.colors.border.primary
               e.currentTarget.style.color = tokens.colors.text.tertiary
+              e.currentTarget.style.transform = 'scale(1)'
             }}
             title="排名规则"
           >
             ?
           </button>
         </Box>
-        <Text size="xs" weight="bold" color="tertiary" style={{ textAlign: 'center', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+        <Text size="sm" weight="bold" color="tertiary" style={{ textAlign: 'center', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap', fontSize: '12px' }}>
           Score
         </Text>
-        <Text size="xs" weight="bold" color="tertiary" style={{ textAlign: 'right', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-          ROI ({timeRange})
+        <Text size="sm" weight="bold" color="tertiary" style={{ textAlign: 'right', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap', fontSize: '12px' }}>
+          ROI
         </Text>
-        <Text size="xs" weight="bold" color="tertiary" style={{ textAlign: 'right', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-          {t('winRate')}
+        <Text size="sm" weight="bold" color="tertiary" style={{ textAlign: 'right', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap', fontSize: '12px' }}>
+          Win%
         </Text>
-        <Text size="xs" weight="bold" color="tertiary" style={{ textAlign: 'right', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-          {t('drawdown')}
+        <Text size="sm" weight="bold" color="tertiary" style={{ textAlign: 'right', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap', fontSize: '12px' }}>
+          MDD
         </Text>
       </Box>
 
@@ -174,27 +262,61 @@ export default function RankingTable(props: {
       {showRules && (
         <Box
           style={{
-            padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+            padding: `${tokens.spacing[4]} ${tokens.spacing[5]}`,
             background: `${tokens.colors.accent.primary}10`,
             borderBottom: `1px solid ${tokens.colors.border.primary}`,
-            fontSize: tokens.typography.fontSize.xs,
+            fontSize: tokens.typography.fontSize.sm,
             color: tokens.colors.text.secondary,
-            lineHeight: 1.6,
+            lineHeight: 1.7,
           }}
         >
-          <Text size="xs" weight="bold" style={{ color: tokens.colors.accent.primary, marginBottom: 6, display: 'block' }}>
+          <Text size="sm" weight="bold" style={{ color: tokens.colors.accent.primary, marginBottom: 8, display: 'block' }}>
             Arena Score 排名规则
           </Text>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             <span>① 按 Arena Score 从高到低排序（0-100 分）</span>
             <span>② 分数构成：收益分（85%）+ 稳定/风险分（15%）</span>
             <span>③ Score 相同时，回撤更小的靠前</span>
-            <span style={{ color: tokens.colors.text.tertiary, marginTop: 4 }}>
-              * 入榜门槛：7D &gt; $300 | 30D &gt; $1,000 | 90D &gt; $3,000
+            <span style={{ color: tokens.colors.text.tertiary, marginTop: 6 }}>
+              * 入榜门槛（PNL 收益）：7D &gt; $300 | 30D &gt; $1,000 | 90D &gt; $3,000
             </span>
           </div>
+          <button
+            onClick={() => setShowScoreRulesModal(true)}
+            style={{
+              marginTop: 12,
+              padding: '6px 14px',
+              fontSize: tokens.typography.fontSize.xs,
+              fontWeight: tokens.typography.fontWeight.bold,
+              color: tokens.colors.accent.primary,
+              background: `${tokens.colors.accent.primary}15`,
+              border: `1px solid ${tokens.colors.accent.primary}30`,
+              borderRadius: tokens.radius.md,
+              cursor: 'pointer',
+              transition: tokens.transition.base,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 4,
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = `${tokens.colors.accent.primary}25`
+              e.currentTarget.style.borderColor = `${tokens.colors.accent.primary}50`
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = `${tokens.colors.accent.primary}15`
+              e.currentTarget.style.borderColor = `${tokens.colors.accent.primary}30`
+            }}
+          >
+            详细
+          </button>
         </Box>
       )}
+
+      {/* Arena Score 详细规则弹窗 */}
+      <ScoreRulesModal 
+        isOpen={showScoreRulesModal} 
+        onClose={() => setShowScoreRulesModal(false)} 
+      />
 
       {loading ? (
         <RankingSkeleton />
@@ -202,9 +324,9 @@ export default function RankingTable(props: {
         <Box
           style={{
             color: tokens.colors.text.tertiary,
-            padding: `${tokens.spacing[10]} ${tokens.spacing[3]}`,
+            padding: `${tokens.spacing[10]} ${tokens.spacing[4]}`,
             textAlign: 'center',
-            fontSize: tokens.typography.fontSize.sm,
+            fontSize: tokens.typography.fontSize.md,
           }}
         >
           {t('noTraderData')}
@@ -216,12 +338,10 @@ export default function RankingTable(props: {
               const rank = startIndex + idx + 1 // 全局排名
               const traderHandle = trader.handle || trader.id
               const href = `/trader/${encodeURIComponent(traderHandle)}`
-              // 使用组合 key 确保唯一性：id + source + index
               const uniqueKey = `${trader.id}-${trader.source || 'unknown'}-${startIndex + idx}`
               
-              // 格式化显示名称：如果是钱包地址（以0x开头且长度>20），则截断
+              // 格式化显示名称
               const formatDisplayName = (name: string) => {
-                // 判断是否是钱包地址（0x开头，长度>20）
                 if (name.startsWith('0x') && name.length > 20) {
                   return `${name.substring(0, 6)}...${name.substring(name.length - 4)}`
                 }
@@ -248,278 +368,258 @@ export default function RankingTable(props: {
                   }}
                 >
                   <Box
-                    className="ranking-table-grid"
+                    className="ranking-row"
                     role="row"
                     style={{
                       display: 'grid',
-                      gridTemplateColumns: '36px minmax(90px, 1fr) 52px 80px 50px 50px', // Rank | Trader | Score | ROI+PnL | Win Rate | MDD
+                      gridTemplateColumns: '44px minmax(140px, 1.5fr) 64px 90px 70px 70px',
                       alignItems: 'center',
                       gap: tokens.spacing[2],
-                      padding: `${tokens.spacing[3]} ${tokens.spacing[3]}`,
-                      borderBottom: `1px solid ${tokens.colors.border.primary}`,
+                      padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+                      borderBottom: `1px solid var(--glass-border-light)`,
                       cursor: 'pointer',
-                      background: rank <= 3 ? `${tokens.colors.bg.secondary}80` : tokens.colors.bg.primary,
-                      transition: `all ${tokens.transition.base}`,
-                      borderRadius: tokens.radius.none,
                       position: 'relative',
                     }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.background = tokens.colors.bg.tertiary || tokens.colors.bg.hover || `${tokens.colors.bg.secondary}CC`
-                      e.currentTarget.style.transform = 'translateX(4px)'
-                      e.currentTarget.style.boxShadow = tokens.shadow.sm
-                      e.currentTarget.style.borderLeft = `3px solid ${tokens.colors.accent.primary}`
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = rank <= 3 ? `${tokens.colors.bg.secondary}80` : tokens.colors.bg.primary
-                      e.currentTarget.style.transform = 'translateX(0)'
-                      e.currentTarget.style.boxShadow = tokens.shadow.none
-                      e.currentTarget.style.borderLeft = 'none'
-                    }}
                   >
-                    {/* 排名 */}
+                    {/* 排名 - 前三名发光特效 */}
                     <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                       {rank <= 3 ? (
-                        <RankingBadge rank={rank as 1 | 2 | 3} size={24} />
+                        <Box className={getMedalGlowClass(rank)}>
+                          <RankingBadge rank={rank as 1 | 2 | 3} size={24} />
+                        </Box>
                       ) : (
-                        <Text size="sm" weight="bold" color="tertiary">
+                        <Text size="sm" weight="bold" color="tertiary" style={{ fontSize: '13px' }}>
                           #{rank}
                         </Text>
                       )}
                     </Box>
 
-                  {/* 交易员ID - 唯一可点击的元素，视觉权重最高 */}
-                  <Box style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'nowrap', minWidth: 0 }}>
-                    {/* 头像 - 放在名字左边，优化UI */}
-                    <Box
-                      style={{
-                        width: 28,
-                        height: 28,
-                        borderRadius: tokens.radius.full,
-                        background: getAvatarGradient(trader.id),
-                        border: `1.5px solid ${tokens.colors.border.primary}`,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontWeight: tokens.typography.fontWeight.black,
-                        fontSize: '10px',
-                        color: '#ffffff',
-                        overflow: 'hidden',
-                        flexShrink: 0,
-                        boxShadow: tokens.shadow.sm,
-                        transition: `all ${tokens.transition.base}`,
-                        cursor: 'pointer',
-                        position: 'relative',
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.transform = 'scale(1.08)'
-                        e.currentTarget.style.boxShadow = tokens.shadow.md
-                        e.currentTarget.style.borderColor = tokens.colors.accent.primary
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.transform = 'scale(1)'
-                        e.currentTarget.style.boxShadow = tokens.shadow.sm
-                        e.currentTarget.style.borderColor = tokens.colors.border.primary
-                      }}
-                    >
-                      {/* 首字母 - 始终存在作为底层 */}
-                      <Text 
-                        size="xs" 
-                        weight="black" 
-                        style={{ 
-                          color: '#ffffff',
-                          textShadow: '0 1px 2px rgba(0, 0, 0, 0.3)',
-                          fontSize: '10px',
-                          lineHeight: '1',
-                        }}
-                      >
-                        {getAvatarInitial(displayName)}
-                      </Text>
-                      {/* 头像图片 - 如果有且加载成功则覆盖首字母 */}
-                      {trader.avatar_url && (
-                        <img 
-                          src={trader.avatar_url} 
-                          alt={displayName} 
-                          referrerPolicy="no-referrer"
-                          loading="lazy"
-                          style={{ 
-                            width: '100%', 
-                            height: '100%', 
-                            objectFit: 'cover',
-                            position: 'absolute',
-                            inset: 0,
-                          }}
-                          onError={(e) => {
-                            // 隐藏图片，首字母会自动显示
-                            if (e.target) {
-                              (e.target as HTMLImageElement).style.display = 'none'
-                            }
-                          }}
-                        />
-                      )}
-                    </Box>
-                    {/* 名字 - 在头像右边 */}
-                    <Box style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0, flex: 1 }}>
-                      <Text 
-                        size="xs" 
-                        weight="black" 
-                        style={{ 
-                          color: tokens.colors.text.primary,
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                          fontSize: '13px',
-                        }}
-                      >
-                        {displayName}
-                      </Text>
+                    {/* 交易员ID */}
+                    <Box style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'nowrap', minWidth: 0 }}>
+                      {/* 头像 */}
                       <Box
                         style={{
-                          padding: '1px 4px',
-                          background: `${tokens.colors.accent.primary}20`,
-                          borderRadius: tokens.radius.sm,
-                          display: 'inline-flex',
-                          width: 'fit-content',
+                          width: 30,
+                          height: 30,
+                          borderRadius: tokens.radius.full,
+                          background: getAvatarGradient(trader.id),
+                          border: `1px solid ${tokens.colors.border.primary}`,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontWeight: tokens.typography.fontWeight.black,
+                          fontSize: '10px',
+                          color: '#ffffff',
+                          overflow: 'hidden',
+                          flexShrink: 0,
+                          position: 'relative',
                         }}
                       >
+                        <Text 
+                          size="xs" 
+                          weight="black" 
+                          style={{ 
+                            color: '#ffffff',
+                            fontSize: '10px',
+                            lineHeight: '1',
+                          }}
+                        >
+                          {getAvatarInitial(displayName)}
+                        </Text>
+                        {trader.avatar_url && (
+                          <img 
+                            src={trader.avatar_url} 
+                            alt={displayName} 
+                            referrerPolicy="no-referrer"
+                            loading="lazy"
+                            style={{ 
+                              width: '100%', 
+                              height: '100%', 
+                              objectFit: 'cover',
+                              position: 'absolute',
+                              inset: 0,
+                            }}
+                            onError={(e) => {
+                              if (e.target) {
+                                (e.target as HTMLImageElement).style.display = 'none'
+                              }
+                            }}
+                          />
+                        )}
+                      </Box>
+                      {/* 名字 + 交易所标签 */}
+                      <Box style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0, flex: 1 }}>
+                        <Text 
+                          size="sm"
+                          weight="bold" 
+                          style={{ 
+                            color: tokens.colors.text.primary,
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                            fontSize: '13px',
+                          }}
+                        >
+                          {displayName}
+                        </Text>
                         <Text
                           size="xs"
-                          weight="bold"
+                          weight="semibold"
                           style={{
                             color: tokens.colors.accent.primary,
                             fontSize: '9px',
                             textTransform: 'uppercase',
-                            letterSpacing: '0.3px',
+                            opacity: 0.85,
                           }}
                         >
                           {sourceLabelText}
                         </Text>
                       </Box>
                     </Box>
-                  </Box>
 
-                  {/* Arena Score - 核心排名指标 */}
-                  <Box style={{ textAlign: 'center' }}>
-                    <Box
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        minWidth: 40,
-                        padding: '4px 8px',
-                        background: trader.arena_score != null && trader.arena_score >= 60 
-                          ? `${tokens.colors.accent.success}20`
-                          : trader.arena_score != null && trader.arena_score >= 40
-                            ? `${tokens.colors.accent.warning}15`
-                            : `${tokens.colors.bg.tertiary}`,
-                        borderRadius: tokens.radius.md,
-                        border: `1px solid ${
-                          trader.arena_score != null && trader.arena_score >= 60 
-                            ? tokens.colors.accent.success + '40'
-                            : trader.arena_score != null && trader.arena_score >= 40
-                              ? tokens.colors.accent.warning + '30'
-                              : tokens.colors.border.primary
-                        }`,
-                      }}
-                    >
-                      <Text
-                        size="sm"
-                        weight="black"
+                    {/* Arena Score - 前三名带光效 */}
+                    <Box style={{ textAlign: 'center', display: 'flex', justifyContent: 'center' }}>
+                      <Box
                         style={{
-                          color: trader.arena_score != null && trader.arena_score >= 60 
-                            ? tokens.colors.accent.success
+                          position: 'relative',
+                          minWidth: 46,
+                          height: 24,
+                          borderRadius: tokens.radius.md,
+                          background: trader.arena_score != null && trader.arena_score >= 60 
+                            ? tokens.gradient.successSubtle
                             : trader.arena_score != null && trader.arena_score >= 40
-                              ? tokens.colors.accent.warning
-                              : tokens.colors.text.secondary,
-                          fontSize: '13px',
-                          lineHeight: 1,
+                              ? tokens.gradient.warningSubtle
+                              : tokens.glass.bg.light,
+                          border: `1px solid ${
+                            trader.arena_score != null && trader.arena_score >= 60 
+                              ? `${tokens.colors.accent.success}50`
+                              : trader.arena_score != null && trader.arena_score >= 40
+                                ? `${tokens.colors.accent.warning}40`
+                                : 'rgba(255, 255, 255, 0.15)'
+                          }`,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          overflow: 'hidden',
                         }}
                       >
-                        {trader.arena_score != null ? trader.arena_score.toFixed(1) : '—'}
+                        {/* Progress background */}
+                        {trader.arena_score != null && (
+                          <Box
+                            style={{
+                              position: 'absolute',
+                              left: 0,
+                              top: 0,
+                              bottom: 0,
+                              width: `${trader.arena_score}%`,
+                              background: trader.arena_score >= 60 
+                                ? `${tokens.colors.accent.success}20`
+                                : trader.arena_score >= 40
+                                  ? `${tokens.colors.accent.warning}20`
+                                  : `${tokens.colors.accent.primary}15`,
+                              transition: 'width 0.3s ease',
+                            }}
+                          />
+                        )}
+                        <Text
+                          size="sm"
+                          weight="black"
+                          style={{
+                            position: 'relative',
+                            color: trader.arena_score != null && trader.arena_score >= 60 
+                              ? tokens.colors.accent.success
+                              : trader.arena_score != null && trader.arena_score >= 40
+                                ? tokens.colors.accent.warning
+                                : tokens.colors.text.secondary,
+                            fontSize: '12px',
+                            lineHeight: 1,
+                          }}
+                        >
+                          {trader.arena_score != null ? trader.arena_score.toFixed(1) : '—'}
+                        </Text>
+                      </Box>
+                    </Box>
+
+                    {/* ROI - 增大字体 */}
+                    <Box style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1 }}>
+                      <Text
+                        size="md"
+                        weight="black"
+                        style={{
+                          color: (trader.roi || 0) >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error,
+                          lineHeight: 1.2,
+                          fontSize: '14px',
+                        }}
+                      >
+                        {(trader.roi || 0) >= 0 ? '+' : ''}
+                        {(trader.roi || 0).toFixed(1)}%
+                      </Text>
+                      <Text
+                        size="xs"
+                        weight="semibold"
+                        style={{
+                          color: trader.pnl != null 
+                            ? (trader.pnl >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error)
+                            : tokens.colors.text.tertiary,
+                          lineHeight: 1.2,
+                          fontSize: '10px',
+                          opacity: trader.pnl != null ? 0.85 : 0.5,
+                        }}
+                      >
+                        {trader.pnl != null 
+                          ? `${trader.pnl >= 0 ? '+' : ''}${formatPnL(trader.pnl)}`
+                          : '—'
+                        }
                       </Text>
                     </Box>
-                  </Box>
 
-                  {/* ROI (90D) - 上面显示百分比，下面小字显示 PnL，优化UI */}
-                  <Box style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1 }}>
-                    <Text
-                      size="sm"
-                      weight="black"
-                      style={{
-                        color: (trader.roi || 0) >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error,
-                        lineHeight: 1.2,
-                        fontSize: '13px',
-                        textShadow: rank <= 3 ? `0 1px 2px ${(trader.roi || 0) >= 0 ? tokens.colors.accent.success + '40' : tokens.colors.accent.error + '40'}` : 'none',
-                      }}
-                    >
-                      {(trader.roi || 0) >= 0 ? '+' : ''}
-                      {(trader.roi || 0).toFixed(2)}%
-                    </Text>
-                    <Text
-                      size="xs"
-                      weight="semibold"
-                      style={{
-                        color: trader.pnl != null 
-                          ? (trader.pnl >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error)
-                          : tokens.colors.text.tertiary,
-                        lineHeight: 1.2,
-                        fontSize: '10px',
-                        opacity: trader.pnl != null ? 0.9 : 0.5,
-                      }}
-                    >
-                      {trader.pnl != null 
-                        ? `${trader.pnl >= 0 ? '+' : ''}${formatPnL(trader.pnl)}`
-                        : '—'
-                      }
-                    </Text>
-                  </Box>
+                    {/* 胜率 - 增大字体 */}
+                    <Box style={{ textAlign: 'right' }}>
+                      <Text 
+                        size="sm"
+                        weight="semibold" 
+                        style={{ 
+                          color: trader.win_rate != null && trader.win_rate > 50 ? tokens.colors.accent.success : tokens.colors.text.secondary,
+                          lineHeight: 1,
+                          fontSize: '13px',
+                        }}
+                      >
+                        {trader.win_rate != null ? `${trader.win_rate.toFixed(0)}%` : '—'}
+                      </Text>
+                    </Box>
 
-                  {/* 胜率 - 已经是百分比，不需要乘100 */}
-                  <Box style={{ textAlign: 'right' }}>
-                    <Text 
-                      size="xs" 
-                      weight="bold" 
-                      style={{ 
-                        color: trader.win_rate != null && trader.win_rate > 50 ? tokens.colors.accent.success : tokens.colors.text.secondary,
-                        lineHeight: 1.2,
-                        fontSize: '12px',
-                      }}
-                    >
-                      {trader.win_rate != null ? `${trader.win_rate.toFixed(1)}%` : '—'}
-                    </Text>
-                  </Box>
+                    {/* 最大回撤 - 增大字体 */}
+                    <Box style={{ textAlign: 'right' }}>
+                      <Text 
+                        size="sm"
+                        weight="semibold" 
+                        style={{ 
+                          color: trader.max_drawdown != null ? tokens.colors.accent.error : tokens.colors.text.tertiary,
+                          lineHeight: 1,
+                          fontSize: '13px',
+                          opacity: trader.max_drawdown != null ? 1 : 0.5,
+                        }}
+                      >
+                        {trader.max_drawdown != null ? `-${Math.abs(trader.max_drawdown).toFixed(0)}%` : '—'}
+                      </Text>
+                    </Box>
 
-                  {/* 最大回撤 */}
-                  <Box style={{ textAlign: 'right' }}>
-                    <Text 
-                      size="xs" 
-                      weight="semibold" 
-                      style={{ 
-                        color: trader.max_drawdown != null ? tokens.colors.accent.error : tokens.colors.text.tertiary,
-                        lineHeight: 1.2,
-                        fontSize: '12px',
-                        opacity: trader.max_drawdown != null ? 1 : 0.5,
-                      }}
-                    >
-                      {trader.max_drawdown != null ? `-${Math.abs(trader.max_drawdown).toFixed(1)}%` : '—'}
-                    </Text>
                   </Box>
-
-                </Box>
-              </Link>
-            )
-          })}
-        </Box>
+                </Link>
+              )
+            })}
+          </Box>
           
-          {/* 分页控件 - 优化UI */}
+          {/* 分页控件 */}
           {totalPages > 1 && (
             <Box
               style={{
-                padding: `${tokens.spacing[4]} ${tokens.spacing[4]}`,
+                padding: `${tokens.spacing[5]} ${tokens.spacing[4]}`,
                 borderTop: `2px solid ${tokens.colors.border.primary}`,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                gap: tokens.spacing[2],
+                gap: tokens.spacing[3],
                 background: tokens.colors.bg.primary,
                 borderRadius: `0 0 ${tokens.radius.lg} ${tokens.radius.lg}`,
               }}
@@ -560,32 +660,26 @@ export default function RankingTable(props: {
               {/* 页码数字按钮 */}
               <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1], flexWrap: 'wrap', justifyContent: 'center', minWidth: 200 }}>
                 {(() => {
-                  // 生成页码数组
                   const pages: (number | string)[] = []
                   
                   if (totalPages <= 7) {
-                    // 如果总页数 <= 7，显示所有页码
                     for (let i = 1; i <= totalPages; i++) {
                       pages.push(i)
                     }
                   } else {
-                    // 如果总页数 > 7，显示部分页码
                     if (currentPage <= 3) {
-                      // 当前页在前3页
                       for (let i = 1; i <= 5; i++) {
                         pages.push(i)
                       }
                       pages.push('...')
                       pages.push(totalPages)
                     } else if (currentPage >= totalPages - 2) {
-                      // 当前页在后3页
                       pages.push(1)
                       pages.push('...')
                       for (let i = totalPages - 4; i <= totalPages; i++) {
                         pages.push(i)
                       }
                     } else {
-                      // 当前页在中间
                       pages.push(1)
                       pages.push('...')
                       for (let i = currentPage - 1; i <= currentPage + 1; i++) {
@@ -613,8 +707,8 @@ export default function RankingTable(props: {
                         key={pageNum}
                         onClick={() => setCurrentPage(pageNum)}
                         style={{
-                          minWidth: '36px',
-                          height: '36px',
+                          minWidth: '40px',
+                          height: '40px',
                           padding: `0 ${tokens.spacing[2]}`,
                           background: isActive ? `${tokens.colors.accent.primary}30` : `${tokens.colors.accent.primary}10`,
                           border: `1.5px solid ${isActive ? tokens.colors.accent.primary : tokens.colors.border.primary}`,

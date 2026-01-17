@@ -32,6 +32,8 @@ export default function ConversationPage({ params }: { params: { conversationId:
   const [conversationId, setConversationId] = useState<string>('')
   const [email, setEmail] = useState<string | null>(null)
   const [userId, setUserId] = useState<string | null>(null)
+  const [accessToken, setAccessToken] = useState<string | null>(null) // 添加 access token
+  const [authChecked, setAuthChecked] = useState(false) // 追踪认证检查是否完成
   const [messages, setMessages] = useState<Message[]>([])
   const [otherUser, setOtherUser] = useState<OtherUser | null>(null)
   const [loading, setLoading] = useState(true)
@@ -62,21 +64,19 @@ export default function ConversationPage({ params }: { params: { conversationId:
     }
   }, [params])
 
+  // 使用 getSession 代替 getUser，更可靠地检查认证状态
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      setEmail(data.user?.email ?? null)
-      setUserId(data.user?.id ?? null)
+    supabase.auth.getSession().then(({ data }) => {
+      setEmail(data.session?.user?.email ?? null)
+      setUserId(data.session?.user?.id ?? null)
+      setAccessToken(data.session?.access_token ?? null) // 保存 access token
+      setAuthChecked(true) // 认证检查完成
       
-      if (!data.user) {
-        router.push('/login')
-        return
-      }
-      
-      if (conversationId) {
-        loadMessages(data.user.id, conversationId)
+      if (data.session?.user?.id && data.session?.access_token && conversationId) {
+        loadMessages(data.session.user.id, conversationId, data.session.access_token)
       }
     })
-  }, [router, conversationId])
+  }, [conversationId])
 
   // 滚动到底部
   const scrollToBottom = () => {
@@ -87,10 +87,15 @@ export default function ConversationPage({ params }: { params: { conversationId:
     scrollToBottom()
   }, [messages])
 
-  const loadMessages = useCallback(async (uid: string, convId: string) => {
+  const loadMessages = useCallback(async (uid: string, convId: string, token?: string) => {
     try {
       setLoading(true)
-      const res = await fetch(`/api/messages?conversationId=${convId}&userId=${uid}`)
+      // #region agent log
+      console.log('[DEBUG] loadMessages called with token:', !!token);
+      // #endregion
+      const res = await fetch(`/api/messages?conversationId=${convId}&userId=${uid}`, {
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+      })
       const data = await res.json()
       
       if (data.error) {
@@ -261,6 +266,75 @@ export default function ConversationPage({ params }: { params: { conversationId:
     })
     
     return groups
+  }
+
+  // 等待认证检查完成
+  if (!authChecked || (authChecked && !userId && loading)) {
+    return (
+      <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
+        <TopNav email={email} />
+        <Box style={{ maxWidth: 800, margin: '0 auto', padding: tokens.spacing[6] }}>
+          <Text size="lg">加载中...</Text>
+        </Box>
+      </Box>
+    )
+  }
+
+  // 认证检查完成但用户未登录
+  if (authChecked && !userId) {
+    return (
+      <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
+        <TopNav email={email} />
+        <Box style={{ maxWidth: 600, margin: '0 auto', padding: `${tokens.spacing[5]} ${tokens.spacing[4]}` }}>
+          <Box
+            style={{ 
+              textAlign: 'center',
+              padding: `${tokens.spacing[10]} ${tokens.spacing[6]}`,
+              background: tokens.colors.bg.secondary,
+              borderRadius: 20,
+              border: `1px solid ${tokens.colors.border.primary}`,
+            }}
+          >
+            <Box style={{
+              width: 72,
+              height: 72,
+              borderRadius: '50%',
+              background: 'linear-gradient(135deg, rgba(149, 117, 205, 0.15) 0%, rgba(126, 87, 194, 0.08) 100%)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto',
+              marginBottom: tokens.spacing[4],
+            }}>
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#9575cd" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+              </svg>
+            </Box>
+            <Text size="lg" weight="bold" style={{ marginBottom: tokens.spacing[2], color: tokens.colors.text.primary }}>
+              请先登录
+            </Text>
+            <Text size="sm" color="tertiary" style={{ maxWidth: 280, margin: '0 auto', lineHeight: 1.6, marginBottom: tokens.spacing[4] }}>
+              登录后可以查看和发送私信
+            </Text>
+            <a
+              href="/login"
+              style={{
+                display: 'inline-block',
+                padding: '12px 24px',
+                background: 'linear-gradient(135deg, #9575cd 0%, #7e57c2 100%)',
+                color: '#fff',
+                borderRadius: 12,
+                textDecoration: 'none',
+                fontWeight: 700,
+                fontSize: '14px',
+              }}
+            >
+              前往登录
+            </a>
+          </Box>
+        </Box>
+      </Box>
+    )
   }
 
   if (loading) {

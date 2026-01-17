@@ -10,30 +10,221 @@ import { useToast } from '@/app/components/UI/Toast'
 type Step = 'welcome' | 'profile' | 'interests' | 'complete'
 
 const interests = [
-  { id: 'btc', label: 'BTC 交易', emoji: '' },
-  { id: 'eth', label: 'ETH 交易', emoji: '' },
-  { id: 'altcoin', label: '山寨币', emoji: '' },
-  { id: 'futures', label: '合约/期货', emoji: '' },
-  { id: 'spot', label: '现货交易', emoji: '' },
-  { id: 'defi', label: 'DeFi', emoji: '' },
-  { id: 'nft', label: 'NFT', emoji: '' },
-  { id: 'analysis', label: '技术分析', emoji: '' },
+  { id: 'btc', label: 'BTC 交易', labelEn: 'BTC Trading', icon: '₿' },
+  { id: 'eth', label: 'ETH 交易', labelEn: 'ETH Trading', icon: 'Ξ' },
+  { id: 'altcoin', label: '山寨币', labelEn: 'Altcoins', icon: '◈' },
+  { id: 'futures', label: '合约/期货', labelEn: 'Futures', icon: '⟡' },
+  { id: 'spot', label: '现货交易', labelEn: 'Spot', icon: '◉' },
+  { id: 'defi', label: 'DeFi', labelEn: 'DeFi', icon: '⬡' },
+  { id: 'nft', label: 'NFT', labelEn: 'NFT', icon: '◇' },
+  { id: 'analysis', label: '技术分析', labelEn: 'Analysis', icon: '' },
 ]
+
+// CSS keyframe animations
+const injectStyles = () => {
+  if (typeof window === 'undefined') return
+  if (document.getElementById('welcome-page-styles')) return
+  
+  const style = document.createElement('style')
+  style.id = 'welcome-page-styles'
+  style.textContent = `
+    @keyframes welcomeGradient {
+      0%, 100% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+    }
+    
+    @keyframes stepEnter {
+      from { 
+        opacity: 0; 
+        transform: translateX(40px);
+      }
+      to { 
+        opacity: 1; 
+        transform: translateX(0);
+      }
+    }
+    
+    @keyframes stepExit {
+      from { 
+        opacity: 1; 
+        transform: translateX(0);
+      }
+      to { 
+        opacity: 0; 
+        transform: translateX(-40px);
+      }
+    }
+    
+    @keyframes cardFloat {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-8px); }
+    }
+    
+    @keyframes featureItem {
+      from { 
+        opacity: 0; 
+        transform: translateY(20px);
+      }
+      to { 
+        opacity: 1; 
+        transform: translateY(0);
+      }
+    }
+    
+    @keyframes progressPulse {
+      0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(139, 111, 168, 0.4); }
+      50% { transform: scale(1.1); box-shadow: 0 0 0 8px rgba(139, 111, 168, 0); }
+    }
+    
+    @keyframes interestHover {
+      from { transform: scale(1); }
+      to { transform: scale(1.02); }
+    }
+    
+    @keyframes celebrationBurst {
+      0% { transform: scale(0); opacity: 0; }
+      50% { transform: scale(1.2); opacity: 1; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+    
+    @keyframes checkDraw {
+      from { stroke-dashoffset: 50; }
+      to { stroke-dashoffset: 0; }
+    }
+    
+    @keyframes confetti {
+      0% { transform: translateY(0) rotate(0deg); opacity: 1; }
+      100% { transform: translateY(100px) rotate(720deg); opacity: 0; }
+    }
+    
+    @keyframes floatParticle {
+      0%, 100% { transform: translateY(0px) rotate(0deg); opacity: 0.3; }
+      50% { transform: translateY(-15px) rotate(180deg); opacity: 0.5; }
+    }
+    
+    .welcome-page-bg {
+      position: fixed;
+      inset: 0;
+      background: linear-gradient(135deg, #0a0a0f 0%, #13111a 50%, #0f0d14 100%);
+      z-index: 0;
+    }
+    
+    .welcome-page-bg::before {
+      content: '';
+      position: absolute;
+      top: -50%;
+      left: -50%;
+      width: 200%;
+      height: 200%;
+      background: radial-gradient(ellipse at center, rgba(139, 111, 168, 0.06) 0%, transparent 50%);
+      animation: welcomeGradient 25s ease infinite;
+    }
+    
+    .welcome-card {
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+    }
+    
+    .step-content {
+      animation: stepEnter 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+    
+    .step-content.exiting {
+      animation: stepExit 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+    
+    .feature-item {
+      animation: featureItem 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      opacity: 0;
+    }
+    
+    .progress-dot.active {
+      animation: progressPulse 2s ease infinite;
+    }
+    
+    .interest-card {
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    
+    .interest-card:hover {
+      transform: translateY(-2px);
+    }
+    
+    .interest-card.selected {
+      animation: interestHover 0.2s ease forwards;
+    }
+    
+    .celebration-icon {
+      animation: celebrationBurst 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+    }
+    
+    .check-animation {
+      stroke-dasharray: 50;
+      stroke-dashoffset: 50;
+      animation: checkDraw 0.5s ease 0.3s forwards;
+    }
+    
+    .confetti-particle {
+      position: absolute;
+      animation: confetti 1.5s ease forwards;
+    }
+    
+    .floating-particle {
+      position: absolute;
+      border-radius: 50%;
+      background: linear-gradient(135deg, rgba(139, 111, 168, 0.3), rgba(139, 111, 168, 0.1));
+      animation: floatParticle 6s ease-in-out infinite;
+    }
+    
+    .welcome-button {
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    
+    .welcome-button:not(:disabled):hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 30px rgba(139, 111, 168, 0.4);
+    }
+    
+    .welcome-button:not(:disabled):active {
+      transform: translateY(0) scale(0.98);
+    }
+    
+    .welcome-input {
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    
+    .welcome-input:focus {
+      border-color: #8b6fa8 !important;
+      box-shadow: 0 0 0 4px rgba(139, 111, 168, 0.1);
+      background: rgba(139, 111, 168, 0.05) !important;
+    }
+  `
+  document.head.appendChild(style)
+}
 
 export default function WelcomePage() {
   const router = useRouter()
   const { showToast } = useToast()
   
   const [step, setStep] = useState<Step>('welcome')
+  const [prevStep, setPrevStep] = useState<Step | null>(null)
   const [userId, setUserId] = useState<string | null>(null)
   const [email, setEmail] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [mounted, setMounted] = useState(false)
+  const [transitioning, setTransitioning] = useState(false)
   
   // Profile setup
   const [handle, setHandle] = useState('')
   const [bio, setBio] = useState('')
   const [selectedInterests, setSelectedInterests] = useState<string[]>([])
   const [saving, setSaving] = useState(false)
+  const [showConfetti, setShowConfetti] = useState(false)
+
+  useEffect(() => {
+    injectStyles()
+    setMounted(true)
+  }, [])
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -47,7 +238,6 @@ export default function WelcomePage() {
       setUserId(user.id)
       setEmail(user.email || null)
 
-      // 检查是否已完成引导
       const { data: profile } = await supabase
         .from('user_profiles')
         .select('handle, onboarding_completed')
@@ -55,7 +245,6 @@ export default function WelcomePage() {
         .maybeSingle()
 
       if (profile?.onboarding_completed) {
-        // 已完成引导，跳转到首页
         router.push('/')
         return
       }
@@ -71,6 +260,15 @@ export default function WelcomePage() {
 
     checkAuth()
   }, [router])
+
+  const goToStep = (newStep: Step) => {
+    setTransitioning(true)
+    setPrevStep(step)
+    setTimeout(() => {
+      setStep(newStep)
+      setTransitioning(false)
+    }, 300)
+  }
 
   const toggleInterest = (id: string) => {
     setSelectedInterests(prev => 
@@ -106,7 +304,7 @@ export default function WelcomePage() {
         return
       }
 
-      setStep('interests')
+      goToStep('interests')
     } catch (error: any) {
       showToast(error?.message || '保存失败', 'error')
     } finally {
@@ -117,7 +315,6 @@ export default function WelcomePage() {
   const handleComplete = async () => {
     setSaving(true)
     try {
-      // 保存兴趣偏好和标记完成引导
       const { error } = await supabase
         .from('user_profiles')
         .update({
@@ -130,10 +327,11 @@ export default function WelcomePage() {
         console.error('Error saving interests:', error)
       }
 
-      setStep('complete')
+      setShowConfetti(true)
+      goToStep('complete')
     } catch (error) {
       console.error('Error completing onboarding:', error)
-      setStep('complete')
+      goToStep('complete')
     } finally {
       setSaving(false)
     }
@@ -150,7 +348,8 @@ export default function WelcomePage() {
       console.error('Error skipping:', error)
     } finally {
       setSaving(false)
-      setStep('complete')
+      setShowConfetti(true)
+      goToStep('complete')
     }
   }
 
@@ -162,345 +361,574 @@ export default function WelcomePage() {
     router.push(`/u/${handle}`)
   }
 
-  if (loading) {
+  const getStepIndex = (s: Step) => {
+    const steps = ['welcome', 'profile', 'interests', 'complete']
+    return steps.indexOf(s)
+  }
+
+  if (loading || !mounted) {
     return (
       <Box style={{ 
         minHeight: '100vh', 
-        background: tokens.colors.bg.primary, 
+        background: '#0a0a0f', 
         color: tokens.colors.text.primary,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
       }}>
-        <Text size="lg">加载中...</Text>
+        <div style={{
+          width: 40,
+          height: 40,
+          border: '3px solid rgba(139, 111, 168, 0.2)',
+          borderTopColor: '#8b6fa8',
+          borderRadius: '50%',
+          animation: 'spin 1s linear infinite',
+        }} />
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </Box>
     )
   }
 
+  // Confetti particles
+  const ConfettiParticles = () => (
+    <>
+      {showConfetti && [...Array(12)].map((_, i) => (
+        <div
+          key={i}
+          className="confetti-particle"
+          style={{
+            left: `${30 + Math.random() * 40}%`,
+            top: '30%',
+            width: 8,
+            height: 8,
+            borderRadius: Math.random() > 0.5 ? '50%' : '2px',
+            background: ['#8b6fa8', '#c9b8db', '#6b4f88', '#ff7c7c', '#2fe57d'][Math.floor(Math.random() * 5)],
+            animationDelay: `${i * 0.1}s`,
+          }}
+        />
+      ))}
+    </>
+  )
+
   return (
     <Box style={{ 
       minHeight: '100vh', 
-      background: '#060606', 
-      color: '#f2f2f2',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
       padding: 20,
+      position: 'relative',
+      overflow: 'hidden',
     }}>
-      <Box style={{ 
-        maxWidth: 520, 
-        width: '100%',
-        background: 'rgba(255,255,255,0.03)',
-        border: '1px solid #1f1f1f',
-        borderRadius: 20,
-        padding: 40,
-      }}>
-        {/* 步骤指示器 */}
+      {/* Animated background */}
+      <div className="welcome-page-bg" />
+      
+      {/* Floating particles */}
+      {[...Array(5)].map((_, i) => (
+        <div
+          key={i}
+          className="floating-particle"
+          style={{
+            width: 6 + i * 3,
+            height: 6 + i * 3,
+            left: `${15 + i * 18}%`,
+            top: `${25 + (i % 3) * 20}%`,
+            animationDelay: `${i * 0.7}s`,
+            animationDuration: `${5 + i}s`,
+          }}
+        />
+      ))}
+      
+      <Box 
+        className="welcome-card"
+        style={{ 
+          maxWidth: 540, 
+          width: '100%',
+          background: 'rgba(15, 15, 20, 0.85)',
+          border: '1px solid rgba(139, 111, 168, 0.15)',
+          borderRadius: 28,
+          padding: '48px 44px',
+          position: 'relative',
+          zIndex: 1,
+          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 100px rgba(139, 111, 168, 0.06)',
+        }}
+      >
+        {/* Confetti */}
+        <ConfettiParticles />
+        
+        {/* Progress indicator */}
         <Box style={{ 
           display: 'flex', 
           justifyContent: 'center', 
-          gap: 8, 
-          marginBottom: 32,
+          gap: 12, 
+          marginBottom: 40,
         }}>
-          {['welcome', 'profile', 'interests', 'complete'].map((s, i) => (
-            <Box
-              key={s}
-              style={{
-                width: 8,
-                height: 8,
-                borderRadius: '50%',
-                background: step === s || 
-                  (step === 'profile' && i < 1) ||
-                  (step === 'interests' && i < 2) ||
-                  (step === 'complete' && i < 3)
-                  ? '#8b6fa8'
-                  : '#2a2a2a',
-                transition: 'background 0.3s ease',
-              }}
-            />
-          ))}
+          {['welcome', 'profile', 'interests', 'complete'].map((s, i) => {
+            const isActive = s === step
+            const isPast = getStepIndex(step) > i
+            
+            return (
+              <Box
+                key={s}
+                className={`progress-dot ${isActive ? 'active' : ''}`}
+                style={{
+                  width: isActive ? 28 : 10,
+                  height: 10,
+                  borderRadius: 5,
+                  background: isPast || isActive
+                    ? 'linear-gradient(135deg, #8b6fa8 0%, #6b4f88 100%)'
+                    : 'rgba(255, 255, 255, 0.1)',
+                  transition: 'all 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
+                }}
+              />
+            )
+          })}
         </Box>
 
-        {/* 欢迎步骤 */}
-        {step === 'welcome' && (
-          <Box style={{ textAlign: 'center' }}>
-            <Text size="3xl" weight="black" style={{ marginBottom: 12 }}>
-              欢迎加入
-            </Text>
-            <Text size="2xl" weight="black" style={{ marginBottom: 24, color: '#8b6fa8' }}>
-              Arena
-            </Text>
-            <Text color="secondary" style={{ marginBottom: 32, lineHeight: 1.6 }}>
-              这里汇聚了各大交易所的顶级交易员，你可以：
-            </Text>
-            
-            <Box style={{ 
-              display: 'flex', 
-              flexDirection: 'column', 
-              gap: 16,
-              marginBottom: 40,
-              textAlign: 'left',
-            }}>
-              <Box style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <Box style={{ 
-                  width: 40, 
-                  height: 40, 
-                  borderRadius: 10,
-                  background: 'rgba(139,111,168,0.15)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: 14,
-                  fontWeight: 700,
-                  color: '#8b6fa8',
-                }}>
-                  1
-                </Box>
-                <Box>
-                  <Text weight="bold">查看交易员排名</Text>
-                  <Text size="sm" color="secondary">聚合 5 大交易所实时 ROI 数据</Text>
-                </Box>
-              </Box>
-              
-              <Box style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <Box style={{ 
-                  width: 40, 
-                  height: 40, 
-                  borderRadius: 10,
-                  background: 'rgba(139,111,168,0.15)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: 14,
-                  fontWeight: 700,
-                  color: '#8b6fa8',
-                }}>
-                  2
-                </Box>
-                <Box>
-                  <Text weight="bold">关注优秀交易员</Text>
-                  <Text size="sm" color="secondary">追踪他们的动态和策略分享</Text>
-                </Box>
-              </Box>
-              
-              <Box style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <Box style={{ 
-                  width: 40, 
-                  height: 40, 
-                  borderRadius: 10,
-                  background: 'rgba(139,111,168,0.15)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: 14,
-                  fontWeight: 700,
-                  color: '#8b6fa8',
-                }}>
-                  3
-                </Box>
-                <Box>
-                  <Text weight="bold">参与社区讨论</Text>
-                  <Text size="sm" color="secondary">与其他交易者交流心得</Text>
-                </Box>
-              </Box>
-            </Box>
-
-            <Button
-              variant="primary"
-              size="lg"
-              onClick={() => setStep('profile')}
-              style={{ width: '100%' }}
-            >
-              开始设置
-            </Button>
-          </Box>
-        )}
-
-        {/* 设置资料步骤 */}
-        {step === 'profile' && (
-          <Box>
-            <Text size="2xl" weight="black" style={{ marginBottom: 8, textAlign: 'center' }}>
-              设置你的资料
-            </Text>
-            <Text color="secondary" style={{ marginBottom: 32, textAlign: 'center' }}>
-              让其他用户更容易找到你
-            </Text>
-
-            <Box style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-              <Box>
-                <Text size="sm" weight="bold" style={{ marginBottom: 8, display: 'block' }}>
-                  用户名 *
-                </Text>
-                <input
-                  type="text"
-                  value={handle}
-                  onChange={(e) => setHandle(e.target.value)}
-                  placeholder="输入用户名（至少3个字符）"
-                  style={{
-                    width: '100%',
-                    padding: '12px 16px',
-                    borderRadius: 12,
-                    border: '1px solid #1f1f1f',
-                    background: '#0b0b0b',
-                    color: '#eaeaea',
-                    fontSize: 14,
-                    outline: 'none',
-                  }}
-                />
-              </Box>
-
-              <Box>
-                <Text size="sm" weight="bold" style={{ marginBottom: 8, display: 'block' }}>
-                  个人简介（可选）
-                </Text>
-                <textarea
-                  value={bio}
-                  onChange={(e) => setBio(e.target.value)}
-                  placeholder="介绍一下你自己，比如交易风格、经验等..."
-                  rows={4}
-                  style={{
-                    width: '100%',
-                    padding: '12px 16px',
-                    borderRadius: 12,
-                    border: '1px solid #1f1f1f',
-                    background: '#0b0b0b',
-                    color: '#eaeaea',
-                    fontSize: 14,
-                    outline: 'none',
-                    resize: 'none',
-                    lineHeight: 1.5,
-                  }}
-                />
-              </Box>
-            </Box>
-
-            <Box style={{ display: 'flex', gap: 12, marginTop: 32 }}>
-              <Button
-                variant="ghost"
-                onClick={() => setStep('welcome')}
-                style={{ flex: 1 }}
+        {/* Step content */}
+        <div 
+          key={step}
+          className={`step-content ${transitioning ? 'exiting' : ''}`}
+        >
+          {/* Welcome step */}
+          {step === 'welcome' && (
+            <Box style={{ textAlign: 'center' }}>
+              <Text 
+                size="3xl" 
+                weight="black" 
+                style={{ 
+                  marginBottom: 8,
+                  background: 'linear-gradient(135deg, #f2f2f2 0%, #c9b8db 100%)',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                }}
               >
-                返回
-              </Button>
-              <Button
-                variant="primary"
-                onClick={handleSaveProfile}
-                disabled={saving || !handle.trim() || handle.length < 1}
-                style={{ flex: 2 }}
+                欢迎加入
+              </Text>
+              <Text 
+                size="2xl" 
+                weight="black" 
+                style={{ 
+                  marginBottom: 28,
+                  background: 'linear-gradient(135deg, #8b6fa8 0%, #c9b8db 100%)',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                }}
               >
-                {saving ? '保存中...' : '下一步'}
-              </Button>
+                Arena
+              </Text>
+              <Text color="secondary" style={{ marginBottom: 36, lineHeight: 1.7, color: '#8a8a8a' }}>
+                这里汇聚了各大交易所的顶级交易员
+              </Text>
+              
+              <Box style={{ 
+                display: 'flex', 
+                flexDirection: 'column', 
+                gap: 18,
+                marginBottom: 44,
+                textAlign: 'left',
+              }}>
+                {[
+                  { num: 1, title: '查看交易员排名', desc: '聚合 5 大交易所实时 ROI 数据' },
+                  { num: 2, title: '关注优秀交易员', desc: '追踪他们的动态和策略分享' },
+                  { num: 3, title: '参与社区讨论', desc: '与其他交易者交流心得' },
+                ].map((item, idx) => (
+                  <Box 
+                    key={item.num}
+                    className="feature-item"
+                    style={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      gap: 16,
+                      animationDelay: `${0.2 + idx * 0.15}s`,
+                      padding: '14px 16px',
+                      borderRadius: 14,
+                      background: 'rgba(139, 111, 168, 0.05)',
+                      border: '1px solid rgba(139, 111, 168, 0.1)',
+                    }}
+                  >
+                    <Box style={{ 
+                      width: 44, 
+                      height: 44, 
+                      borderRadius: 12,
+                      background: 'linear-gradient(135deg, rgba(139, 111, 168, 0.2) 0%, rgba(139, 111, 168, 0.1) 100%)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: 15,
+                      fontWeight: 800,
+                      color: '#c9b8db',
+                      flexShrink: 0,
+                    }}>
+                      {item.num}
+                    </Box>
+                    <Box>
+                      <Text weight="bold" style={{ marginBottom: 2, color: '#eaeaea' }}>{item.title}</Text>
+                      <Text size="sm" style={{ color: '#7a7a7a' }}>{item.desc}</Text>
+                    </Box>
+                  </Box>
+                ))}
+              </Box>
+
+              <button
+                className="welcome-button"
+                onClick={() => goToStep('profile')}
+                style={{ 
+                  width: '100%',
+                  padding: '16px 24px',
+                  borderRadius: 14,
+                  border: 'none',
+                  background: 'linear-gradient(135deg, #8b6fa8 0%, #6b4f88 100%)',
+                  color: '#fff',
+                  fontWeight: 700,
+                  fontSize: 16,
+                  cursor: 'pointer',
+                }}
+              >
+                开始设置
+              </button>
             </Box>
-          </Box>
-        )}
+          )}
 
-        {/* 选择兴趣步骤 */}
-        {step === 'interests' && (
-          <Box>
-            <Text size="2xl" weight="black" style={{ marginBottom: 8, textAlign: 'center' }}>
-              选择你的兴趣
-            </Text>
-            <Text color="secondary" style={{ marginBottom: 32, textAlign: 'center' }}>
-              帮助我们为你推荐更相关的内容
-            </Text>
+          {/* Profile setup step */}
+          {step === 'profile' && (
+            <Box>
+              <Text 
+                size="2xl" 
+                weight="black" 
+                style={{ 
+                  marginBottom: 8, 
+                  textAlign: 'center',
+                  background: 'linear-gradient(135deg, #f2f2f2 0%, #c9b8db 100%)',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                }}
+              >
+                设置你的资料
+              </Text>
+              <Text color="secondary" style={{ marginBottom: 36, textAlign: 'center', color: '#7a7a7a' }}>
+                让其他用户更容易找到你
+              </Text>
 
-            <Box style={{ 
-              display: 'grid', 
-              gridTemplateColumns: 'repeat(2, 1fr)',
-              gap: 12,
-              marginBottom: 32,
-            }}>
-              {interests.map((interest) => (
-                <Box
-                  key={interest.id}
-                  onClick={() => toggleInterest(interest.id)}
-                  style={{
-                    padding: '14px 16px',
+              <Box style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+                <Box>
+                  <Text size="sm" weight="bold" style={{ marginBottom: 10, display: 'block', color: '#b0b0b0' }}>
+                    用户名 *
+                  </Text>
+                  <input
+                    type="text"
+                    className="welcome-input"
+                    value={handle}
+                    onChange={(e) => setHandle(e.target.value)}
+                    placeholder="输入用户名"
+                    style={{
+                      width: '100%',
+                      padding: '14px 18px',
+                      borderRadius: 12,
+                      border: '1px solid rgba(255, 255, 255, 0.1)',
+                      background: 'rgba(0, 0, 0, 0.3)',
+                      color: '#eaeaea',
+                      fontSize: 15,
+                      outline: 'none',
+                    }}
+                  />
+                </Box>
+
+                <Box>
+                  <Text size="sm" weight="bold" style={{ marginBottom: 10, display: 'block', color: '#b0b0b0' }}>
+                    个人简介（可选）
+                  </Text>
+                  <textarea
+                    className="welcome-input"
+                    value={bio}
+                    onChange={(e) => setBio(e.target.value)}
+                    placeholder="介绍一下你自己，比如交易风格、经验等..."
+                    rows={4}
+                    style={{
+                      width: '100%',
+                      padding: '14px 18px',
+                      borderRadius: 12,
+                      border: '1px solid rgba(255, 255, 255, 0.1)',
+                      background: 'rgba(0, 0, 0, 0.3)',
+                      color: '#eaeaea',
+                      fontSize: 15,
+                      outline: 'none',
+                      resize: 'none',
+                      lineHeight: 1.6,
+                    }}
+                  />
+                </Box>
+              </Box>
+
+              <Box style={{ display: 'flex', gap: 14, marginTop: 36 }}>
+                <button
+                  className="welcome-button"
+                  onClick={() => goToStep('welcome')}
+                  style={{ 
+                    flex: 1,
+                    padding: '14px 20px',
                     borderRadius: 12,
-                    border: selectedInterests.includes(interest.id) 
-                      ? '1px solid #8b6fa8' 
-                      : '1px solid #1f1f1f',
-                    background: selectedInterests.includes(interest.id)
-                      ? 'rgba(139,111,168,0.15)'
-                      : 'transparent',
+                    border: '1px solid rgba(255, 255, 255, 0.15)',
+                    background: 'transparent',
+                    color: '#b0b0b0',
+                    fontWeight: 600,
+                    fontSize: 15,
                     cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 10,
-                    transition: 'all 0.2s ease',
                   }}
                 >
-                  <Text size="sm" weight="bold">{interest.label}</Text>
-                </Box>
-              ))}
+                  返回
+                </button>
+                <button
+                  className="welcome-button"
+                  onClick={handleSaveProfile}
+                  disabled={saving || !handle.trim() || handle.length < 1}
+                  style={{ 
+                    flex: 2,
+                    padding: '14px 20px',
+                    borderRadius: 12,
+                    border: 'none',
+                    background: saving || !handle.trim() || handle.length < 1 
+                      ? 'rgba(139, 111, 168, 0.2)' 
+                      : 'linear-gradient(135deg, #8b6fa8 0%, #6b4f88 100%)',
+                    color: '#fff',
+                    fontWeight: 700,
+                    fontSize: 15,
+                    cursor: saving || !handle.trim() || handle.length < 1 ? 'not-allowed' : 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 8,
+                  }}
+                >
+                  {saving && (
+                    <div style={{
+                      width: 16,
+                      height: 16,
+                      border: '2px solid rgba(255,255,255,0.3)',
+                      borderTopColor: '#fff',
+                      borderRadius: '50%',
+                      animation: 'spin 1s linear infinite',
+                    }} />
+                  )}
+                  {saving ? '保存中...' : '下一步'}
+                </button>
+              </Box>
             </Box>
+          )}
 
-            <Box style={{ display: 'flex', gap: 12 }}>
-              <Button
-                variant="ghost"
-                onClick={handleSkipInterests}
-                disabled={saving}
-                style={{ flex: 1 }}
+          {/* Interests step */}
+          {step === 'interests' && (
+            <Box>
+              <Text 
+                size="2xl" 
+                weight="black" 
+                style={{ 
+                  marginBottom: 8, 
+                  textAlign: 'center',
+                  background: 'linear-gradient(135deg, #f2f2f2 0%, #c9b8db 100%)',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                }}
               >
-                跳过
-              </Button>
-              <Button
-                variant="primary"
-                onClick={handleComplete}
-                disabled={saving}
-                style={{ flex: 2 }}
-              >
-                {saving ? '保存中...' : '完成'}
-              </Button>
-            </Box>
-          </Box>
-        )}
+                选择你的兴趣
+              </Text>
+              <Text color="secondary" style={{ marginBottom: 32, textAlign: 'center', color: '#7a7a7a' }}>
+                帮助我们为你推荐更相关的内容
+              </Text>
 
-        {/* 完成步骤 */}
-        {step === 'complete' && (
-          <Box style={{ textAlign: 'center' }}>
-            <Box style={{ 
-              width: 64, 
-              height: 64,
-              borderRadius: '50%',
-              background: 'rgba(139,111,168,0.2)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              margin: '0 auto 24px',
-            }}>
-              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#8b6fa8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="20 6 9 17 4 12"></polyline>
-              </svg>
-            </Box>
-            <Text size="2xl" weight="black" style={{ marginBottom: 12 }}>
-              设置完成！
-            </Text>
-            <Text color="secondary" style={{ marginBottom: 32 }}>
-              欢迎来到 Arena，开始你的探索之旅吧！
-            </Text>
+              <Box style={{ 
+                display: 'grid', 
+                gridTemplateColumns: 'repeat(2, 1fr)',
+                gap: 14,
+                marginBottom: 36,
+              }}>
+                {interests.map((interest, idx) => {
+                  const isSelected = selectedInterests.includes(interest.id)
+                  return (
+                    <Box
+                      key={interest.id}
+                      onClick={() => toggleInterest(interest.id)}
+                      className={`interest-card ${isSelected ? 'selected' : ''}`}
+                      style={{
+                        padding: '16px 18px',
+                        borderRadius: 14,
+                        border: isSelected 
+                          ? '1px solid rgba(139, 111, 168, 0.5)' 
+                          : '1px solid rgba(255, 255, 255, 0.1)',
+                        background: isSelected
+                          ? 'linear-gradient(135deg, rgba(139, 111, 168, 0.2) 0%, rgba(139, 111, 168, 0.1) 100%)'
+                          : 'rgba(0, 0, 0, 0.2)',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 12,
+                        animationDelay: `${idx * 0.05}s`,
+                      }}
+                    >
+                      <span style={{ 
+                        fontSize: 18, 
+                        opacity: isSelected ? 1 : 0.6,
+                        transition: 'opacity 0.2s ease',
+                      }}>
+                        {interest.icon}
+                      </span>
+                      <Text 
+                        size="sm" 
+                        weight={isSelected ? "bold" : "medium"}
+                        style={{ color: isSelected ? '#c9b8db' : '#9a9a9a' }}
+                      >
+                        {interest.label}
+                      </Text>
+                    </Box>
+                  )
+                })}
+              </Box>
 
-            <Box style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <Button
-                variant="primary"
-                size="lg"
-                onClick={handleGoHome}
-                style={{ width: '100%' }}
-              >
-                探索交易员排名
-              </Button>
-              <Button
-                variant="ghost"
-                onClick={handleGoProfile}
-                style={{ width: '100%' }}
-              >
-                查看我的主页
-              </Button>
+              <Box style={{ display: 'flex', gap: 14 }}>
+                <button
+                  className="welcome-button"
+                  onClick={handleSkipInterests}
+                  disabled={saving}
+                  style={{ 
+                    flex: 1,
+                    padding: '14px 20px',
+                    borderRadius: 12,
+                    border: '1px solid rgba(255, 255, 255, 0.15)',
+                    background: 'transparent',
+                    color: '#b0b0b0',
+                    fontWeight: 600,
+                    fontSize: 15,
+                    cursor: saving ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  跳过
+                </button>
+                <button
+                  className="welcome-button"
+                  onClick={handleComplete}
+                  disabled={saving}
+                  style={{ 
+                    flex: 2,
+                    padding: '14px 20px',
+                    borderRadius: 12,
+                    border: 'none',
+                    background: saving 
+                      ? 'rgba(139, 111, 168, 0.2)' 
+                      : 'linear-gradient(135deg, #8b6fa8 0%, #6b4f88 100%)',
+                    color: '#fff',
+                    fontWeight: 700,
+                    fontSize: 15,
+                    cursor: saving ? 'not-allowed' : 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 8,
+                  }}
+                >
+                  {saving && (
+                    <div style={{
+                      width: 16,
+                      height: 16,
+                      border: '2px solid rgba(255,255,255,0.3)',
+                      borderTopColor: '#fff',
+                      borderRadius: '50%',
+                      animation: 'spin 1s linear infinite',
+                    }} />
+                  )}
+                  {saving ? '保存中...' : '完成'}
+                </button>
+              </Box>
             </Box>
-          </Box>
-        )}
+          )}
+
+          {/* Complete step */}
+          {step === 'complete' && (
+            <Box style={{ textAlign: 'center' }}>
+              <Box 
+                className="celebration-icon"
+                style={{ 
+                  width: 80, 
+                  height: 80,
+                  borderRadius: '50%',
+                  background: 'linear-gradient(135deg, rgba(139, 111, 168, 0.3) 0%, rgba(139, 111, 168, 0.1) 100%)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  margin: '0 auto 28px',
+                  boxShadow: '0 0 40px rgba(139, 111, 168, 0.3)',
+                }}
+              >
+                <svg 
+                  width="40" 
+                  height="40" 
+                  viewBox="0 0 24 24" 
+                  fill="none" 
+                  stroke="#c9b8db" 
+                  strokeWidth="2.5" 
+                  strokeLinecap="round" 
+                  strokeLinejoin="round"
+                >
+                  <polyline className="check-animation" points="20 6 9 17 4 12"></polyline>
+                </svg>
+              </Box>
+              <Text 
+                size="2xl" 
+                weight="black" 
+                style={{ 
+                  marginBottom: 12,
+                  background: 'linear-gradient(135deg, #f2f2f2 0%, #c9b8db 100%)',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                }}
+              >
+                设置完成！
+              </Text>
+              <Text color="secondary" style={{ marginBottom: 36, color: '#7a7a7a' }}>
+                欢迎来到 Arena，开始你的探索之旅吧！
+              </Text>
+
+              <Box style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <button
+                  className="welcome-button"
+                  onClick={handleGoHome}
+                  style={{ 
+                    width: '100%',
+                    padding: '16px 24px',
+                    borderRadius: 14,
+                    border: 'none',
+                    background: 'linear-gradient(135deg, #8b6fa8 0%, #6b4f88 100%)',
+                    color: '#fff',
+                    fontWeight: 700,
+                    fontSize: 16,
+                    cursor: 'pointer',
+                  }}
+                >
+                  探索交易员排名
+                </button>
+                <button
+                  className="welcome-button"
+                  onClick={handleGoProfile}
+                  style={{ 
+                    width: '100%',
+                    padding: '14px 20px',
+                    borderRadius: 12,
+                    border: '1px solid rgba(139, 111, 168, 0.3)',
+                    background: 'transparent',
+                    color: '#b0b0b0',
+                    fontWeight: 600,
+                    fontSize: 15,
+                    cursor: 'pointer',
+                  }}
+                >
+                  查看我的主页
+                </button>
+              </Box>
+            </Box>
+          )}
+        </div>
+        
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </Box>
     </Box>
   )
 }
-

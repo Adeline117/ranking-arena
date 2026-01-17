@@ -1,6 +1,7 @@
 /**
  * Design System Tokens
  * Trader-focused minimal theme with light/dark mode support
+ * Enhanced with glassmorphism, gradients, and animations
  */
 
 import { getThemeTokens, type Theme } from './theme-tokens'
@@ -60,6 +61,8 @@ export const tokens = {
       xl: '20px',    // 1.25rem
       '2xl': '24px', // 1.5rem
       '3xl': '32px', // 2rem
+      '4xl': '40px', // 2.5rem
+      '5xl': '48px', // 3rem
     },
     fontWeight: {
       normal: 400,
@@ -84,6 +87,7 @@ export const tokens = {
     lg: '12px',
     xl: '16px',
     '2xl': '20px',
+    '3xl': '24px',
     full: '9999px',
   },
   
@@ -95,8 +99,121 @@ export const tokens = {
     md: '0 4px 12px rgba(0, 0, 0, 0.15)',
     lg: '0 8px 24px rgba(0, 0, 0, 0.2)',
     xl: '0 16px 48px rgba(0, 0, 0, 0.25)',
+    '2xl': '0 24px 64px rgba(0, 0, 0, 0.3)',
     inner: 'inset 0 1px 2px rgba(0, 0, 0, 0.1)',
+    innerLg: 'inset 0 2px 4px rgba(0, 0, 0, 0.15)',
     glow: '0 0 20px rgba(139, 111, 168, 0.3)',
+    glowLg: '0 0 40px rgba(139, 111, 168, 0.4)',
+    glowSuccess: '0 0 20px rgba(47, 229, 125, 0.3)',
+    glowError: '0 0 20px rgba(255, 124, 124, 0.3)',
+    glowWarning: '0 0 20px rgba(255, 193, 7, 0.3)',
+    // Card hover shadow
+    cardHover: '0 20px 40px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(139, 111, 168, 0.1)',
+  },
+  
+  // Glassmorphism effects - Using CSS variables for theme-awareness
+  glass: {
+    // Background colors with transparency - these use CSS variables defined in globals.css
+    bg: {
+      light: 'var(--glass-bg-light)',
+      medium: 'var(--glass-bg-medium)',
+      heavy: 'var(--glass-bg-heavy)',
+      dark: 'rgba(0, 0, 0, 0.4)',
+      darkMedium: 'rgba(0, 0, 0, 0.6)',
+      darkHeavy: 'rgba(0, 0, 0, 0.8)',
+      // Theme-aware glass backgrounds
+      primary: 'var(--glass-bg-primary)',
+      secondary: 'var(--glass-bg-secondary)',
+      tertiary: 'var(--glass-bg-tertiary)',
+    },
+    // Blur values
+    blur: {
+      none: 'none',
+      xs: 'blur(4px)',
+      sm: 'blur(8px)',
+      md: 'blur(12px)',
+      lg: 'blur(20px)',
+      xl: 'blur(40px)',
+    },
+    // Border for glass elements - using CSS variables for theme-awareness
+    border: {
+      light: '1px solid var(--glass-border-light)',
+      medium: '1px solid var(--glass-border-medium)',
+      heavy: '1px solid var(--glass-border-heavy)',
+      accent: '1px solid rgba(139, 111, 168, 0.3)',
+    },
+  },
+  
+  // Gradient presets
+  gradient: {
+    // Brand gradients
+    primary: 'linear-gradient(135deg, #8b6fa8 0%, #6b4f88 100%)',
+    primaryHover: 'linear-gradient(135deg, #9d84b5 0%, #8b6fa8 100%)',
+    primarySubtle: 'linear-gradient(135deg, rgba(139, 111, 168, 0.2) 0%, rgba(139, 111, 168, 0.05) 100%)',
+    
+    // Accent gradients
+    purple: 'linear-gradient(135deg, #A78BFA 0%, #8B5CF6 50%, #7C3AED 100%)',
+    purpleSubtle: 'linear-gradient(135deg, rgba(167, 139, 250, 0.15) 0%, rgba(124, 58, 237, 0.05) 100%)',
+    
+    // Status gradients
+    success: 'linear-gradient(135deg, #2fe57d 0%, #22c55e 100%)',
+    successSubtle: 'linear-gradient(135deg, rgba(47, 229, 125, 0.2) 0%, rgba(34, 197, 94, 0.05) 100%)',
+    error: 'linear-gradient(135deg, #ff7c7c 0%, #ef4444 100%)',
+    errorSubtle: 'linear-gradient(135deg, rgba(255, 124, 124, 0.2) 0%, rgba(239, 68, 68, 0.05) 100%)',
+    warning: 'linear-gradient(135deg, #ffc107 0%, #f59e0b 100%)',
+    warningSubtle: 'linear-gradient(135deg, rgba(255, 193, 7, 0.2) 0%, rgba(245, 158, 11, 0.05) 100%)',
+    
+    // Background gradients
+    dark: 'linear-gradient(180deg, #0B0A10 0%, #14121C 100%)',
+    darkRadial: 'radial-gradient(ellipse at top, #1C1926 0%, #0B0A10 100%)',
+    mesh: 'radial-gradient(at 40% 20%, rgba(139, 111, 168, 0.15) 0px, transparent 50%), radial-gradient(at 80% 0%, rgba(124, 58, 237, 0.1) 0px, transparent 50%), radial-gradient(at 0% 50%, rgba(167, 139, 250, 0.1) 0px, transparent 50%)',
+    
+    // Card gradients
+    card: 'linear-gradient(145deg, rgba(20, 18, 28, 0.95) 0%, rgba(11, 10, 16, 0.9) 100%)',
+    cardHover: 'linear-gradient(145deg, rgba(28, 25, 38, 0.98) 0%, rgba(20, 18, 28, 0.95) 100%)',
+    cardGlass: 'linear-gradient(165deg, rgba(28, 25, 38, 0.85) 0%, rgba(11, 10, 16, 0.75) 100%)',
+    
+    // Shimmer effect for loading states
+    shimmer: 'linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.08) 50%, transparent 100%)',
+    
+    // Border gradients (for pseudo-elements)
+    borderGlow: 'linear-gradient(135deg, rgba(139, 111, 168, 0.5) 0%, rgba(124, 58, 237, 0.3) 100%)',
+  },
+  
+  // Animation timing functions
+  easing: {
+    // Standard easings
+    linear: 'linear',
+    ease: 'ease',
+    easeIn: 'ease-in',
+    easeOut: 'ease-out',
+    easeInOut: 'ease-in-out',
+    
+    // Custom cubic-bezier curves
+    standard: 'cubic-bezier(0.4, 0, 0.2, 1)',     // Material Design standard
+    decelerate: 'cubic-bezier(0, 0, 0.2, 1)',    // Entering elements
+    accelerate: 'cubic-bezier(0.4, 0, 1, 1)',    // Leaving elements
+    sharp: 'cubic-bezier(0.4, 0, 0.6, 1)',       // Quick, sharp movements
+    bounce: 'cubic-bezier(0.68, -0.55, 0.265, 1.55)',  // Bouncy effect
+    elastic: 'cubic-bezier(0.68, -0.6, 0.32, 1.6)',    // More elastic
+    smooth: 'cubic-bezier(0.25, 0.46, 0.45, 0.94)',    // Very smooth
+    spring: 'cubic-bezier(0.175, 0.885, 0.32, 1.275)', // Spring-like
+  },
+  
+  // Animation durations
+  duration: {
+    instant: '0ms',
+    fast: '100ms',
+    normal: '200ms',
+    slow: '300ms',
+    slower: '400ms',
+    slowest: '500ms',
+    // For complex animations
+    enter: '250ms',
+    exit: '200ms',
+    expand: '300ms',
+    collapse: '250ms',
+    page: '400ms',
   },
   
   // Transitions (enhanced for smoother animations)
@@ -105,6 +222,14 @@ export const tokens = {
     base: '200ms cubic-bezier(0.4, 0, 0.2, 1)',
     slow: '300ms cubic-bezier(0.4, 0, 0.2, 1)',
     bounce: '300ms cubic-bezier(0.68, -0.55, 0.265, 1.55)',
+    smooth: '400ms cubic-bezier(0.25, 0.46, 0.45, 0.94)',
+    spring: '500ms cubic-bezier(0.175, 0.885, 0.32, 1.275)',
+    // Property-specific
+    colors: 'color 200ms ease, background-color 200ms ease, border-color 200ms ease',
+    transform: 'transform 300ms cubic-bezier(0.4, 0, 0.2, 1)',
+    opacity: 'opacity 200ms ease',
+    shadow: 'box-shadow 300ms cubic-bezier(0.4, 0, 0.2, 1)',
+    all: 'all 300ms cubic-bezier(0.4, 0, 0.2, 1)',
   },
   
   // Z-index scale
@@ -115,15 +240,43 @@ export const tokens = {
     overlay: 300,
     modal: 400,
     popover: 500,
+    tooltip: 600,
+    toast: 700,
+    max: 9999,
   },
   
   // Breakpoints
   breakpoint: {
+    xs: '480px',
     sm: '640px',
     md: '768px',
     lg: '1024px',
     xl: '1280px',
     '2xl': '1536px',
+  },
+  
+  // Animation keyframe names (reference for CSS)
+  keyframes: {
+    fadeIn: 'fadeIn',
+    fadeOut: 'fadeOut',
+    fadeInUp: 'fadeInUp',
+    fadeInDown: 'fadeInDown',
+    fadeInLeft: 'fadeInLeft',
+    fadeInRight: 'fadeInRight',
+    scaleIn: 'scaleIn',
+    scaleOut: 'scaleOut',
+    slideInUp: 'slideInUp',
+    slideInDown: 'slideInDown',
+    slideInLeft: 'slideInLeft',
+    slideInRight: 'slideInRight',
+    slideOutUp: 'slideOutUp',
+    slideOutDown: 'slideOutDown',
+    pulse: 'pulse',
+    spin: 'spin',
+    bounce: 'bounce',
+    shake: 'shake',
+    shimmer: 'shimmer',
+    glow: 'glow',
   },
 } as const
 
@@ -143,10 +296,43 @@ export function getColor(path: string): string {
   return typeof value === 'string' ? value : ''
 }
 
+// Glass effect helper
+export function getGlassStyle(variant: 'light' | 'medium' | 'heavy' = 'medium') {
+  return {
+    background: tokens.glass.bg[variant],
+    backdropFilter: tokens.glass.blur.lg,
+    WebkitBackdropFilter: tokens.glass.blur.lg,
+    border: tokens.glass.border[variant],
+  }
+}
+
+// Gradient text helper
+export function getGradientTextStyle(gradient: keyof typeof tokens.gradient = 'primary') {
+  return {
+    background: tokens.gradient[gradient],
+    WebkitBackgroundClip: 'text',
+    WebkitTextFillColor: 'transparent',
+    backgroundClip: 'text',
+  }
+}
+
 // Responsive helper
 export const media = {
+  xs: `@media (min-width: ${tokens.breakpoint.xs})`,
   sm: `@media (min-width: ${tokens.breakpoint.sm})`,
   md: `@media (min-width: ${tokens.breakpoint.md})`,
   lg: `@media (min-width: ${tokens.breakpoint.lg})`,
   xl: `@media (min-width: ${tokens.breakpoint.xl})`,
+  '2xl': `@media (min-width: ${tokens.breakpoint['2xl']})`,
+  // Motion preferences
+  reducedMotion: '@media (prefers-reduced-motion: reduce)',
+  motion: '@media (prefers-reduced-motion: no-preference)',
 } as const
+
+// Animation helper for staggered children
+export function getStaggerDelay(index: number, baseDelay: number = 50): string {
+  return `${index * baseDelay}ms`
+}
+
+// Export type for tokens
+export type DesignTokens = typeof tokens

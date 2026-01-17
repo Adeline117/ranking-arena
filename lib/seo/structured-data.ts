@@ -175,7 +175,7 @@ export function generateOrganizationSchema(): OrganizationSchema {
     description: SITE_DESCRIPTION,
     sameAs: [
       // 添加社交媒体链接
-      // 'https://twitter.com/rankingarena',
+      // 'https://twitter.com/arenafi',
     ],
     contactPoint: {
       '@type': 'ContactPoint',

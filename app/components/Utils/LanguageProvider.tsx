@@ -3,10 +3,13 @@
 import { createContext, useContext, useState, useEffect, useMemo, ReactNode } from 'react'
 import { Language, getLanguage, setLanguage as setLang, translations } from '@/lib/i18n'
 
+// Translation function type - accepts any string but returns the key if not found
+export type TranslationFunction = (key: string) => string
+
 type LanguageContextType = {
   language: Language
   setLanguage: (lang: Language) => void
-  t: (key: keyof typeof translations.zh) => string
+  t: TranslationFunction
 }
 
 const LanguageContext = createContext<LanguageContextType | undefined>(undefined)
@@ -38,10 +41,11 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
 
   // 创建一个响应式的翻译函数，依赖于 language 状态
   // 在 hydration 完成前，始终使用 'zh' 避免不匹配
-  const t = useMemo(() => {
+  const t = useMemo((): TranslationFunction => {
     const currentLang = isMounted ? language : 'zh'
-    return (key: keyof typeof translations.zh): string => {
-      return translations[currentLang][key] || translations.zh[key] || key
+    return (key: string): string => {
+      const k = key as keyof typeof translations.zh
+      return translations[currentLang][k] || translations.zh[k] || key
     }
   }, [language, isMounted])
 
@@ -60,9 +64,10 @@ export function useLanguage() {
     return {
       language: defaultLanguage,
       setLanguage: setLang,
-      t: (key: keyof typeof translations.zh): string => {
-        return translations[defaultLanguage][key] || translations.zh[key] || key
-      }
+      t: ((key: string): string => {
+        const k = key as keyof typeof translations.zh
+        return translations[defaultLanguage][k] || translations.zh[k] || key
+      }) as TranslationFunction
     }
   }
   return context

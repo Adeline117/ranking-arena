@@ -3,95 +3,84 @@ import {
   validatePassword,
   validateHandle,
   getPasswordStrength,
-  emailRegex,
+  EMAIL_REGEX,
 } from '../validation'
 
 describe('validateEmail', () => {
   it('should return valid for correct email format', () => {
     const result = validateEmail('test@example.com')
-    expect(result.isValid).toBe(true)
+    expect(result.valid).toBe(true)
     expect(result.message).toBe('')
   })
 
-  it('should return invalid for empty email when required', () => {
-    const result = validateEmail('', true)
-    expect(result.isValid).toBe(false)
-    expect(result.message).toBe('邮箱不能为空')
-  })
-
-  it('should return valid for empty email when not required', () => {
-    const result = validateEmail('', false)
-    expect(result.isValid).toBe(true)
+  it('should return valid for empty email (optional by default)', () => {
+    const result = validateEmail('')
+    expect(result.valid).toBe(true)
   })
 
   it('should return invalid for malformed email', () => {
     const result = validateEmail('invalid-email')
-    expect(result.isValid).toBe(false)
+    expect(result.valid).toBe(false)
     expect(result.message).toBe('请输入有效的邮箱地址')
   })
 
   it('should return invalid for email without domain', () => {
     const result = validateEmail('test@')
-    expect(result.isValid).toBe(false)
+    expect(result.valid).toBe(false)
   })
 
   it('should return invalid for email without @ symbol', () => {
     const result = validateEmail('testexample.com')
-    expect(result.isValid).toBe(false)
+    expect(result.valid).toBe(false)
   })
 })
 
 describe('validatePassword', () => {
   it('should return valid for password with 6+ characters', () => {
     const result = validatePassword('password123')
-    expect(result.isValid).toBe(true)
+    expect(result.valid).toBe(true)
     expect(result.message).toBe('')
   })
 
-  it('should return invalid for empty password when required', () => {
-    const result = validatePassword('', true)
-    expect(result.isValid).toBe(false)
-    expect(result.message).toBe('密码不能为空')
-  })
-
-  it('should return valid for empty password when not required', () => {
-    const result = validatePassword('', false)
-    expect(result.isValid).toBe(true)
+  it('should return valid for empty password (optional by default)', () => {
+    const result = validatePassword('')
+    expect(result.valid).toBe(true)
   })
 
   it('should return invalid for password with less than 6 characters', () => {
     const result = validatePassword('12345')
-    expect(result.isValid).toBe(false)
-    expect(result.message).toBe('密码至少需要6位')
+    expect(result.valid).toBe(false)
+    expect(result.message).toBe('密码至少需要6个字符')
+  })
+
+  it('should support custom minimum length', () => {
+    const result = validatePassword('12345678', 10)
+    expect(result.valid).toBe(false)
+    expect(result.message).toBe('密码至少需要10个字符')
   })
 })
 
 describe('validateHandle', () => {
-  it('should return valid for handle with 3+ characters', () => {
+  it('should return valid for handle with 1+ characters', () => {
     const result = validateHandle('user123')
-    expect(result.isValid).toBe(true)
+    expect(result.valid).toBe(true)
     expect(result.message).toBe('')
   })
 
-  it('should return invalid for empty handle when required', () => {
-    const result = validateHandle('', true)
-    expect(result.isValid).toBe(false)
-    expect(result.message).toBe('用户名不能为空')
+  it('should return valid for empty handle (optional by default)', () => {
+    const result = validateHandle('')
+    expect(result.valid).toBe(true)
   })
 
-  it('should return valid for empty handle when not required', () => {
-    const result = validateHandle('', false)
-    expect(result.isValid).toBe(true)
-  })
-
-  it('should return valid for handle with 1 or more characters', () => {
+  it('should return valid for single character handle', () => {
     const result = validateHandle('a')
-    expect(result.isValid).toBe(true)
+    expect(result.valid).toBe(true)
   })
 
-  it('should handle whitespace correctly', () => {
-    const result = validateHandle('   ', true)
-    expect(result.isValid).toBe(false)
+  it('should support custom minimum length', () => {
+    const result = validateHandle('ab', 3)
+    expect(result.valid).toBe(false)
+    expect(result.message).toBe('用户名至少需要3个字符')
   })
 })
 
@@ -122,17 +111,16 @@ describe('getPasswordStrength', () => {
   })
 })
 
-describe('emailRegex', () => {
+describe('EMAIL_REGEX', () => {
   it('should match valid email addresses', () => {
-    expect(emailRegex.test('test@example.com')).toBe(true)
-    expect(emailRegex.test('user.name@domain.org')).toBe(true)
-    expect(emailRegex.test('user+tag@example.co.uk')).toBe(true)
+    expect(EMAIL_REGEX.test('test@example.com')).toBe(true)
+    expect(EMAIL_REGEX.test('user.name@domain.org')).toBe(true)
+    expect(EMAIL_REGEX.test('user+tag@example.co.uk')).toBe(true)
   })
 
   it('should not match invalid email addresses', () => {
-    expect(emailRegex.test('invalid')).toBe(false)
-    expect(emailRegex.test('@nodomain.com')).toBe(false)
-    expect(emailRegex.test('noatsign.com')).toBe(false)
+    expect(EMAIL_REGEX.test('invalid')).toBe(false)
+    expect(EMAIL_REGEX.test('@nodomain.com')).toBe(false)
+    expect(EMAIL_REGEX.test('noatsign.com')).toBe(false)
   })
 })
-

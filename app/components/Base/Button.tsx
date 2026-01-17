@@ -4,10 +4,12 @@ import React, { useState, useCallback } from 'react'
 import { tokens } from '@/lib/design-tokens'
 
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: 'primary' | 'secondary' | 'ghost' | 'text'
+  variant?: 'primary' | 'secondary' | 'ghost' | 'text' | 'success' | 'danger'
   size?: 'sm' | 'md' | 'lg'
   fullWidth?: boolean
   loading?: boolean
+  icon?: React.ReactNode
+  iconPosition?: 'left' | 'right'
 }
 
 export default function Button({
@@ -15,11 +17,14 @@ export default function Button({
   size = 'md',
   fullWidth = false,
   loading = false,
+  icon,
+  iconPosition = 'left',
   style,
   children,
   ...props
 }: ButtonProps) {
   const [isPressed, setIsPressed] = useState(false)
+  const [isHovered, setIsHovered] = useState(false)
   const [ripple, setRipple] = useState<{ x: number; y: number } | null>(null)
 
   // 创建波纹效果
@@ -29,7 +34,7 @@ export default function Button({
       x: e.clientX - rect.left,
       y: e.clientY - rect.top,
     })
-    setTimeout(() => setRipple(null), 500)
+    setTimeout(() => setRipple(null), 600)
   }, [])
 
   const isDisabled = props.disabled || loading
@@ -40,29 +45,31 @@ export default function Button({
     justifyContent: 'center',
     gap: tokens.spacing[2],
     border: 'none',
-    borderRadius: tokens.radius.md,
-    fontWeight: tokens.typography.fontWeight.semibold,
+    borderRadius: tokens.radius.lg,
+    fontWeight: tokens.typography.fontWeight.bold,
     cursor: isDisabled ? 'not-allowed' : 'pointer',
-    transition: `all ${tokens.transition.base}`,
+    transition: tokens.transition.all,
     fontFamily: tokens.typography.fontFamily.sans.join(', '),
     position: 'relative',
     overflow: 'hidden',
-    transform: isPressed && !isDisabled ? 'scale(0.97)' : 'scale(1)',
+    transform: isPressed && !isDisabled ? 'scale(0.97)' : isHovered && !isDisabled ? 'translateY(-2px)' : 'scale(1)',
     ...(fullWidth && { width: '100%' }),
   }
 
-  const variantStyles: Record<typeof variant, React.CSSProperties> = {
+  const variantStyles: Record<string, React.CSSProperties> = {
     primary: {
-      background: tokens.colors.accent?.brand || '#8b6fa8',
+      background: tokens.gradient.primary,
       color: '#FFFFFF',
-      border: `1px solid ${tokens.colors.accent?.brand || '#8b6fa8'}`,
-      boxShadow: tokens.shadow.sm,
+      border: 'none',
+      boxShadow: `0 4px 12px ${tokens.colors.accent?.primary || '#8b6fa8'}40`,
     },
     secondary: {
-      background: tokens.colors.bg.secondary,
+      background: tokens.glass.bg.light,
+      backdropFilter: tokens.glass.blur.sm,
+      WebkitBackdropFilter: tokens.glass.blur.sm,
       color: tokens.colors.text.primary,
-      border: `1px solid ${tokens.colors.border.primary}`,
-      boxShadow: tokens.shadow.xs,
+      border: tokens.glass.border.light,
+      boxShadow: tokens.shadow.sm,
     },
     ghost: {
       background: 'transparent',
@@ -71,8 +78,20 @@ export default function Button({
     },
     text: {
       background: 'transparent',
-      color: tokens.colors.text.primary,
+      color: tokens.colors.accent.primary,
       border: 'none',
+    },
+    success: {
+      background: tokens.gradient.success,
+      color: '#FFFFFF',
+      border: 'none',
+      boxShadow: `0 4px 12px ${tokens.colors.accent.success}40`,
+    },
+    danger: {
+      background: tokens.gradient.error,
+      color: '#FFFFFF',
+      border: 'none',
+      boxShadow: `0 4px 12px ${tokens.colors.accent.error}40`,
     },
   }
 
@@ -101,6 +120,15 @@ export default function Button({
 
   // 自动生成aria-label（如果未提供）
   const ariaLabel = props['aria-label'] || (typeof children === 'string' ? children : undefined) || 'Button'
+
+  const getHoverShadow = () => {
+    switch (variant) {
+      case 'primary': return tokens.shadow.glow
+      case 'success': return tokens.shadow.glowSuccess
+      case 'danger': return tokens.shadow.glowError
+      default: return tokens.shadow.md
+    }
+  }
   
   return (
     <button
@@ -113,21 +141,20 @@ export default function Button({
       }}
       onMouseEnter={(e) => {
         if (!isDisabled) {
-          e.currentTarget.style.transform = 'translateY(-1px)'
+          setIsHovered(true)
+          e.currentTarget.style.boxShadow = getHoverShadow()
           if (variant === 'primary') {
-            e.currentTarget.style.boxShadow = tokens.shadow.md
-            e.currentTarget.style.background = tokens.colors.accent?.brandHover || '#9d84b5'
-          } else if (variant === 'secondary') {
-            e.currentTarget.style.boxShadow = tokens.shadow.sm
+            e.currentTarget.style.background = tokens.gradient.primaryHover
           }
         }
       }}
       onMouseLeave={(e) => {
         if (!isDisabled) {
+          setIsHovered(false)
           e.currentTarget.style.transform = 'translateY(0)'
-          e.currentTarget.style.boxShadow = variantStyles[variant].boxShadow || tokens.shadow.xs
+          e.currentTarget.style.boxShadow = variantStyles[variant]?.boxShadow?.toString() || tokens.shadow.xs
           if (variant === 'primary') {
-            e.currentTarget.style.background = tokens.colors.accent?.brand || '#8b6fa8'
+            e.currentTarget.style.background = tokens.gradient.primary
           }
         }
         setIsPressed(false)
@@ -168,12 +195,12 @@ export default function Button({
             position: 'absolute',
             left: ripple.x,
             top: ripple.y,
-            width: 4,
-            height: 4,
-            background: 'rgba(255, 255, 255, 0.4)',
+            width: 8,
+            height: 8,
+            background: 'rgba(255, 255, 255, 0.5)',
             borderRadius: '50%',
             transform: 'translate(-50%, -50%)',
-            animation: 'ripple 0.5s ease-out forwards',
+            animation: 'ripple 0.6s ease-out forwards',
             pointerEvents: 'none',
           }}
         />
@@ -189,23 +216,28 @@ export default function Button({
             justifyContent: 'center',
             inset: 0,
             background: 'inherit',
+            borderRadius: 'inherit',
           }}
         >
           <span
+            className="spinner-sm"
             style={{
-              width: 16,
-              height: 16,
-              border: '2px solid transparent',
+              borderColor: 'rgba(255, 255, 255, 0.3)',
               borderTopColor: 'currentColor',
-              borderRadius: '50%',
-              animation: 'spin 0.6s linear infinite',
             }}
           />
         </span>
       )}
       
       {/* 内容 - 加载时隐藏但保留空间 */}
-      <span style={{ opacity: loading ? 0 : 1 }}>
+      <span style={{ 
+        opacity: loading ? 0 : 1,
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: tokens.spacing[2],
+        flexDirection: iconPosition === 'right' ? 'row-reverse' : 'row',
+      }}>
+        {icon && <span style={{ display: 'flex', alignItems: 'center' }}>{icon}</span>}
         {children}
       </span>
     </button>

@@ -63,25 +63,30 @@ export function PostCard({
     return (
       <div
         onClick={onClick}
+        className="list-item-hover"
         style={{
           display: 'flex',
           flexDirection: 'column',
           gap: 6,
           padding: `${tokens.spacing[3]} ${tokens.spacing[3]}`,
-          borderRadius: tokens.radius.md,
-          background: tokens.colors.bg.secondary,
-          border: `1px solid ${tokens.colors.border.primary}`,
+          borderRadius: tokens.radius.lg,
+          background: tokens.glass.bg.light,
+          border: tokens.glass.border.light,
           cursor: 'pointer',
-          transition: `all ${tokens.transition.fast}`,
+          transition: tokens.transition.all,
           minHeight: 80,
+          position: 'relative',
+          overflow: 'hidden',
         }}
         onMouseEnter={(e) => {
-          e.currentTarget.style.background = tokens.colors.bg.hover
-          e.currentTarget.style.borderColor = tokens.colors.border.secondary
+          e.currentTarget.style.background = tokens.glass.bg.medium
+          e.currentTarget.style.borderColor = `${tokens.colors.accent.primary}30`
+          e.currentTarget.style.boxShadow = tokens.shadow.sm
         }}
         onMouseLeave={(e) => {
-          e.currentTarget.style.background = tokens.colors.bg.secondary
-          e.currentTarget.style.borderColor = tokens.colors.border.primary
+          e.currentTarget.style.background = tokens.glass.bg.light
+          e.currentTarget.style.borderColor = 'var(--glass-border-light)'
+          e.currentTarget.style.boxShadow = 'none'
         }}
       >
         {/* 标题 */}
@@ -136,28 +141,33 @@ export function PostCard({
   return (
     <div
       onClick={onClick}
+      className="glass-card-hover"
       style={{
         display: 'flex',
         flexDirection: 'column',
         gap: tokens.spacing[3],
         padding: tokens.spacing[4],
-        borderRadius: tokens.radius.lg,
-        background: tokens.colors.bg.secondary,
-        border: `1px solid ${tokens.colors.border.primary}`,
+        borderRadius: tokens.radius.xl,
+        background: tokens.glass.bg.secondary,
+        backdropFilter: tokens.glass.blur.md,
+        WebkitBackdropFilter: tokens.glass.blur.md,
+        border: tokens.glass.border.light,
         cursor: 'pointer',
-        transition: `all ${tokens.transition.base}`,
+        transition: tokens.transition.all,
+        position: 'relative',
+        overflow: 'hidden',
       }}
       onMouseEnter={(e) => {
-        e.currentTarget.style.background = tokens.colors.bg.hover
-        e.currentTarget.style.borderColor = tokens.colors.border.secondary
-        e.currentTarget.style.transform = 'translateY(-1px)'
-        e.currentTarget.style.boxShadow = tokens.shadow.sm
+        e.currentTarget.style.background = tokens.glass.bg.tertiary
+        e.currentTarget.style.transform = 'translateY(-4px)'
+        e.currentTarget.style.boxShadow = tokens.shadow.lg
+        e.currentTarget.style.borderColor = `${tokens.colors.accent.primary}30`
       }}
       onMouseLeave={(e) => {
-        e.currentTarget.style.background = tokens.colors.bg.secondary
-        e.currentTarget.style.borderColor = tokens.colors.border.primary
+        e.currentTarget.style.background = tokens.glass.bg.secondary
         e.currentTarget.style.transform = 'translateY(0)'
         e.currentTarget.style.boxShadow = 'none'
+        e.currentTarget.style.borderColor = 'var(--glass-border-light)'
       }}
     >
       {/* 头部 */}

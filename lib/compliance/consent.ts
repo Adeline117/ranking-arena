@@ -217,7 +217,7 @@ class ConsentManager {
     // 分析追踪
     if (!this.state.analytics) {
       // 禁用 Google Analytics
-      // @ts-ignore
+      // @ts-expect-error - GA disable flag on window
       window['ga-disable-GA_MEASUREMENT_ID'] = true
       
       // 通知 analytics 模块
@@ -229,7 +229,7 @@ class ConsentManager {
       } catch {}
     } else {
       // 启用分析
-      // @ts-ignore
+      // @ts-expect-error - GA disable flag on window
       delete window['ga-disable-GA_MEASUREMENT_ID']
       
       try {

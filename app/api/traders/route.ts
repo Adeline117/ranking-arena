@@ -140,19 +140,19 @@ export const GET = withPublic(
           timeRange
         )
         
-        return {
+          return {
           ...trader,
           arena_score: scoreResult.totalScore,
           return_score: scoreResult.returnScore,
           drawdown_score: scoreResult.drawdownScore,
           stability_score: scoreResult.stabilityScore,
           _meetsThreshold: scoreResult.meetsThreshold,
-        }
-      })
+          }
+        })
       // 过滤未达门槛的（Bybit 的 PnL 是跟单者盈亏，特殊处理）
       .filter(t => t.source === 'bybit' || t._meetsThreshold)
       // 按 Arena Score 降序排序
-      .sort((a, b) => {
+        .sort((a, b) => {
         // 主排序：Arena Score 降序
         if (b.arena_score !== a.arena_score) {
           return b.arena_score - a.arena_score
@@ -161,18 +161,23 @@ export const GET = withPublic(
         const mddA = Math.abs(a.max_drawdown ?? Infinity)
         const mddB = Math.abs(b.max_drawdown ?? Infinity)
         return mddA - mddB
-      })
+        })
 
     // 取前 100 名，移除内部字段
     const topTraders = scoredTraders.slice(0, 100).map(({ _meetsThreshold, ...t }) => t)
 
-    return NextResponse.json({ 
+    const response = NextResponse.json({ 
       traders: topTraders,
       timeRange,
       totalCount: allTraders.length,
       rankingMode: 'arena_score',
       pnlThreshold,
     })
+    
+    // 添加缓存头，提高页面加载速度
+    response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300')
+    
+    return response
   },
   { name: 'traders', rateLimit: 'read' }
 )

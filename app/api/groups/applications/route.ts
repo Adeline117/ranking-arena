@@ -5,7 +5,7 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 
 // 检查是否是管理员
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 async function isAdmin(supabase: SupabaseClient<any>, userId: string): Promise<boolean> {
   const { data: profile } = await supabase
     .from('user_profiles')

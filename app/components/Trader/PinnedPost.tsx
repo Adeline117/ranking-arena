@@ -53,7 +53,7 @@ export default function PinnedPost({ item }: PinnedPostProps) {
     >
       <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], marginBottom: tokens.spacing[2] }}>
         <Text size="xs" style={{ color: tokens.colors.accent.primary, fontWeight: tokens.typography.fontWeight.black }}>
-          📌 置顶
+          置顶
         </Text>
       </Box>
       <Link

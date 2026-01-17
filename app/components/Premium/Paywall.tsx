@@ -57,14 +57,15 @@ export function Paywall({
   onUpgradeClick,
 }: PaywallProps) {
   const { tier: currentTier } = usePremium()
-  const featureAccess = feature ? useFeatureAccess(feature) : null
+  // Always call hook unconditionally with a default feature
+  const featureAccess = useFeatureAccess(feature || 'advanced_analytics')
+  const featureInfo = feature ? getFeature(feature) : null
 
   // 检查是否需要显示付费墙
   let shouldShowPaywall = false
   let requiredTier: SubscriptionTier = 'pro'
-  let featureInfo = feature ? getFeature(feature) : null
 
-  if (feature && featureAccess) {
+  if (feature) {
     shouldShowPaywall = !featureAccess.hasAccess || featureAccess.isLimitReached
     requiredTier = featureInfo?.tier[0] || 'pro'
   } else if (tier) {
@@ -199,7 +200,7 @@ function CardPaywall({
           fontSize: '28px',
         }}
       >
-        {featureIcon || '⭐'}
+        {featureIcon || ''}
       </Box>
 
       {/* 标题 */}
@@ -346,7 +347,7 @@ function BannerPaywall({
     >
       <Box>
         <Text size="md" weight="bold" style={{ marginBottom: tokens.spacing[1] }}>
-          ⭐ {title}
+          {title}
         </Text>
         <Text size="sm" color="secondary">{description}</Text>
       </Box>

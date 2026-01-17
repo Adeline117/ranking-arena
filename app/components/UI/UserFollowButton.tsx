@@ -26,9 +26,13 @@ export default function UserFollowButton({
   const [following, setFollowing] = useState(initialFollowing)
   const [followedBy, setFollowedBy] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [initialLoading, setInitialLoading] = useState(true) // 初始加载状态
 
   useEffect(() => {
-    if (!currentUserId || currentUserId === targetUserId) return
+    if (!currentUserId || currentUserId === targetUserId) {
+      setInitialLoading(false)
+      return
+    }
     ;(async () => {
       try {
         const response = await fetch(`/api/users/follow?followerId=${currentUserId}&followingId=${targetUserId}`)
@@ -39,6 +43,8 @@ export default function UserFollowButton({
         }
       } catch (error) {
         console.error('Check following error:', error)
+      } finally {
+        setInitialLoading(false)
       }
     })()
   }, [currentUserId, targetUserId])
@@ -57,7 +63,7 @@ export default function UserFollowButton({
 
     setLoading(true)
     try {
-      const result = await apiPost<{ following: boolean; tableNotFound?: boolean }>('/api/users/follow', {
+      const result = await apiPost<{ following: boolean; mutual?: boolean; tableNotFound?: boolean }>('/api/users/follow', {
         followerId: currentUserId,
         followingId: targetUserId,
         action: following ? 'unfollow' : 'follow',
@@ -65,14 +71,20 @@ export default function UserFollowButton({
 
       if (result.success && result.data) {
         setFollowing(result.data.following)
-        const isMutual = result.data.following && followedBy
-        onFollowChange?.(result.data.following, isMutual)
+        // 根据 API 返回的 mutual 状态更新 followedBy（互关时对方也关注了我）
+        if (result.data.mutual !== undefined) {
+          setFollowedBy(result.data.mutual)
+        }
+        onFollowChange?.(result.data.following, result.data.mutual ?? false)
         showToast(result.data.following ? '关注成功' : '已取消关注', 'success')
       } else if (result.data?.tableNotFound) {
         showToast('关注功能暂未开放', 'warning')
       } else {
-        console.error('Toggle follow error:', result.error)
-        showToast(result.error?.message || '操作失败，请重试', 'error')
+        const errorMsg = typeof result.error === 'string' 
+          ? result.error 
+          : result.error?.message || '操作失败，请重试'
+        console.error('Toggle follow error:', errorMsg)
+        showToast(errorMsg, 'error')
       }
     } catch (error) {
       console.error('Toggle follow error:', error)
@@ -114,6 +126,27 @@ export default function UserFollowButton({
     return null
   }
 
+  // 初始加载时显示加载状态
+  if (initialLoading) {
+    return (
+      <button
+        disabled
+        style={{
+          ...sizeStyles[size],
+          width: fullWidth ? '100%' : 'auto',
+          border: '1px solid rgba(255,255,255,0.2)',
+          background: 'rgba(255,255,255,0.05)',
+          color: '#fff',
+          fontWeight: 700,
+          cursor: 'not-allowed',
+          opacity: 0.6,
+        }}
+      >
+        ...
+      </button>
+    )
+  }
+
   return (
     <button
       onClick={handleToggle}
@@ -136,7 +169,7 @@ export default function UserFollowButton({
     >
       {loading ? '...' : (
         <>
-          {following ? (isMutual ? '互关 ✓' : '取消关注') : (followedBy ? '回关' : '关注')}
+          {following ? (isMutual ? '互相关注' : '取消关注') : (followedBy ? '回关' : '关注')}
         </>
       )}
     </button>

@@ -30,6 +30,7 @@ export default function MessagesPage() {
   const [userId, setUserId] = useState<string | null>(null)
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [loading, setLoading] = useState(true)
+  const [authChecked, setAuthChecked] = useState(false) // 追踪认证检查是否完成
   const [orphanUnreadCount, setOrphanUnreadCount] = useState(0) // 孤立的未读消息数
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
 
@@ -66,19 +67,56 @@ export default function MessagesPage() {
     }
   }, [])
 
+  // 监听 auth state 变化，确保在 session 恢复后正确获取用户信息
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      setEmail(data.user?.email ?? null)
-      setUserId(data.user?.id ?? null)
+    // #region agent log
+    console.log('[DEBUG] Auth check useEffect started');
+    // #endregion
+    
+    // 首先获取当前 session
+    supabase.auth.getSession().then(({ data, error }) => {
+      // #region agent log
+      console.log('[DEBUG] getSession result:', { hasSession: !!data.session, hasUser: !!data.session?.user, userId: data.session?.user?.id, error: error?.message });
+      // #endregion
       
-      if (!data.user) {
-        router.push('/login')
-        return
+      if (data.session?.user) {
+        setEmail(data.session.user.email ?? null)
+        setUserId(data.session.user.id)
+        // #region agent log
+        console.log('[DEBUG] Setting userId:', data.session.user.id);
+        // #endregion
+        loadConversations(data.session.user.id)
+      } else {
+        // #region agent log
+        console.log('[DEBUG] No session found!');
+        // #endregion
       }
-      
-      loadConversations(data.user.id)
+      setAuthChecked(true)
     })
-  }, [router, loadConversations])
+
+    // 监听 auth 状态变化（处理 session 恢复的情况）
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      // #region agent log
+      console.log('[DEBUG] onAuthStateChange:', { event, hasSession: !!session, userId: session?.user?.id });
+      // #endregion
+      
+      if (session?.user) {
+        setEmail(session.user.email ?? null)
+        setUserId(session.user.id)
+        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+          loadConversations(session.user.id)
+        }
+      } else if (event === 'SIGNED_OUT') {
+        setUserId(null)
+        setEmail(null)
+      }
+      setAuthChecked(true)
+    })
+
+    return () => {
+      subscription.unsubscribe()
+    }
+  }, [loadConversations])
 
   // 订阅实时消息更新
   useEffect(() => {
@@ -144,6 +182,81 @@ export default function MessagesPage() {
     } else {
       return date.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })
     }
+  }
+
+  // #region agent log
+  console.log('[DEBUG] Messages render state:', { authChecked, userId, loading, willShowLogin: authChecked && !userId });
+  // #endregion
+
+  // 等待认证检查完成
+  if (!authChecked || (authChecked && !userId && loading)) {
+    console.log('[DEBUG] Showing loading state');
+    return (
+      <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
+        <TopNav email={email} />
+        <Box style={{ maxWidth: 800, margin: '0 auto', padding: tokens.spacing[6] }}>
+          <Text size="lg">加载中...</Text>
+        </Box>
+      </Box>
+    )
+  }
+
+  // 认证检查完成但用户未登录
+  if (authChecked && !userId) {
+    console.log('[DEBUG] Showing login required page because authChecked=true and userId=null');
+    return (
+      <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
+        <TopNav email={email} />
+        <Box style={{ maxWidth: 600, margin: '0 auto', padding: `${tokens.spacing[5]} ${tokens.spacing[4]}` }}>
+          <Box
+            style={{ 
+              textAlign: 'center',
+              padding: `${tokens.spacing[10]} ${tokens.spacing[6]}`,
+              background: tokens.colors.bg.secondary,
+              borderRadius: 20,
+              border: `1px solid ${tokens.colors.border.primary}`,
+            }}
+          >
+            <Box style={{
+              width: 72,
+              height: 72,
+              borderRadius: '50%',
+              background: 'linear-gradient(135deg, rgba(149, 117, 205, 0.15) 0%, rgba(126, 87, 194, 0.08) 100%)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto',
+              marginBottom: tokens.spacing[4],
+            }}>
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#9575cd" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+              </svg>
+            </Box>
+            <Text size="lg" weight="bold" style={{ marginBottom: tokens.spacing[2], color: tokens.colors.text.primary }}>
+              请先登录
+            </Text>
+            <Text size="sm" color="tertiary" style={{ maxWidth: 280, margin: '0 auto', lineHeight: 1.6, marginBottom: tokens.spacing[4] }}>
+              登录后可以查看和发送私信
+            </Text>
+            <a
+              href="/login"
+              style={{
+                display: 'inline-block',
+                padding: '12px 24px',
+                background: 'linear-gradient(135deg, #9575cd 0%, #7e57c2 100%)',
+                color: '#fff',
+                borderRadius: 12,
+                textDecoration: 'none',
+                fontWeight: 700,
+                fontSize: '14px',
+              }}
+            >
+              前往登录
+            </a>
+          </Box>
+        </Box>
+      </Box>
+    )
   }
 
   if (loading) {
