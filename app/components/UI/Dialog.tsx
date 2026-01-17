@@ -3,37 +3,6 @@
 import { createContext, useContext, useState, useCallback, ReactNode, useEffect } from 'react'
 import { tokens } from '@/lib/design-tokens'
 
-// 注入全局动画样式
-const DIALOG_STYLES_ID = 'dialog-animation-styles'
-const injectDialogStyles = () => {
-  if (typeof document === 'undefined') return
-  if (document.getElementById(DIALOG_STYLES_ID)) return
-  
-  const style = document.createElement('style')
-  style.id = DIALOG_STYLES_ID
-  style.textContent = `
-    @keyframes dialogFadeIn {
-      from {
-        opacity: 0;
-      }
-      to {
-        opacity: 1;
-      }
-    }
-    @keyframes dialogSlideIn {
-      from {
-        transform: scale(0.95) translateY(-10px);
-        opacity: 0;
-      }
-      to {
-        transform: scale(1) translateY(0);
-        opacity: 1;
-      }
-    }
-  `
-  document.head.appendChild(style)
-}
-
 interface DialogOptions {
   title: string
   message: string
@@ -64,6 +33,7 @@ export function useDialog() {
 
 interface DialogState {
   isOpen: boolean
+  isExiting: boolean
   options: DialogOptions | null
   resolve: ((value: boolean) => void) | null
 }
@@ -71,19 +41,31 @@ interface DialogState {
 export function DialogProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<DialogState>({
     isOpen: false,
+    isExiting: false,
     options: null,
     resolve: null,
   })
+  const [isLoading, setIsLoading] = useState(false)
 
-  // 注入动画样式
+  // Handle escape key
   useEffect(() => {
-    injectDialogStyles()
-  }, [])
+    if (!state.isOpen) return
+    
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        handleCancel()
+      }
+    }
+    
+    document.addEventListener('keydown', handleEscape)
+    return () => document.removeEventListener('keydown', handleEscape)
+  }, [state.isOpen])
 
   const showDialog = useCallback((options: DialogOptions): Promise<boolean> => {
     return new Promise((resolve) => {
       setState({
         isOpen: true,
+        isExiting: false,
         options,
         resolve,
       })
@@ -94,6 +76,7 @@ export function DialogProvider({ children }: { children: ReactNode }) {
     return new Promise((resolve) => {
       setState({
         isOpen: true,
+        isExiting: false,
         options: {
           title,
           message,
@@ -125,30 +108,39 @@ export function DialogProvider({ children }: { children: ReactNode }) {
     })
   }, [showDialog])
 
+  const closeDialog = useCallback(() => {
+    setState(prev => ({ ...prev, isExiting: true }))
+    setTimeout(() => {
+      setState({
+        isOpen: false,
+        isExiting: false,
+        options: null,
+        resolve: null,
+      })
+    }, 200)
+  }, [])
+
   const hideDialog = useCallback(() => {
     if (state.resolve) {
       state.resolve(false)
     }
-    setState({
-      isOpen: false,
-      options: null,
-      resolve: null,
-    })
-  }, [state.resolve])
+    closeDialog()
+  }, [state.resolve, closeDialog])
 
   const handleConfirm = useCallback(async () => {
     if (state.options?.onConfirm) {
-      await state.options.onConfirm()
+      setIsLoading(true)
+      try {
+        await state.options.onConfirm()
+      } finally {
+        setIsLoading(false)
+      }
     }
     if (state.resolve) {
       state.resolve(true)
     }
-    setState({
-      isOpen: false,
-      options: null,
-      resolve: null,
-    })
-  }, [state.options, state.resolve])
+    closeDialog()
+  }, [state.options, state.resolve, closeDialog])
 
   const handleCancel = useCallback(() => {
     if (state.options?.onCancel) {
@@ -157,19 +149,25 @@ export function DialogProvider({ children }: { children: ReactNode }) {
     if (state.resolve) {
       state.resolve(false)
     }
-    setState({
-      isOpen: false,
-      options: null,
-      resolve: null,
-    })
-  }, [state.options, state.resolve])
+    closeDialog()
+  }, [state.options, state.resolve, closeDialog])
 
-  const getButtonColor = () => {
+  const getButtonConfig = () => {
     if (state.options?.type === 'danger') {
-      return tokens.colors.accent.error
+      return {
+        gradient: tokens.gradient.error,
+        shadowColor: `${tokens.colors.accent.error}40`,
+        hoverShadow: tokens.shadow.glowError,
+      }
     }
-    return tokens.colors.accent.primary
+    return {
+      gradient: tokens.gradient.primary,
+      shadowColor: `${tokens.colors.accent.primary}40`,
+      hoverShadow: tokens.shadow.glow,
+    }
   }
+
+  const buttonConfig = getButtonConfig()
 
   return (
     <DialogContext.Provider value={{ showDialog, showAlert, showConfirm, showDangerConfirm, hideDialog }}>
@@ -179,106 +177,180 @@ export function DialogProvider({ children }: { children: ReactNode }) {
       {state.isOpen && state.options && (
         <div
           onClick={handleCancel}
+          className={state.isExiting ? 'modal-overlay-exit' : 'modal-overlay-enter'}
           style={{
             position: 'fixed',
             inset: 0,
-            background: tokens.colors.overlay.dark,
+            background: 'rgba(0, 0, 0, 0.75)',
+            backdropFilter: tokens.glass.blur.sm,
+            WebkitBackdropFilter: tokens.glass.blur.sm,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             padding: 20,
-            zIndex: 1100,
-            animation: 'dialogFadeIn 0.2s ease-out',
+            zIndex: tokens.zIndex.modal,
           }}
         >
           <div
             onClick={(e) => e.stopPropagation()}
+            className={state.isExiting ? 'modal-content-exit' : 'modal-content-enter'}
             style={{
               width: '100%',
-              maxWidth: 400,
-              background: tokens.colors.bg.secondary,
-              border: `1px solid ${tokens.colors.border.primary}`,
-              borderRadius: 16,
-              padding: 24,
-              animation: 'dialogSlideIn 0.3s ease-out',
+              maxWidth: 420,
+              background: tokens.glass.bg.secondary,
+              backdropFilter: tokens.glass.blur.xl,
+              WebkitBackdropFilter: tokens.glass.blur.xl,
+              border: tokens.glass.border.medium,
+              borderRadius: tokens.radius['2xl'],
+              padding: 0,
+              boxShadow: `${tokens.shadow.xl}, 0 0 80px rgba(139, 111, 168, 0.1)`,
+              overflow: 'hidden',
             }}
           >
-            {/* Title */}
-            <h2 style={{
-              fontSize: 18,
-              fontWeight: 900,
-              color: tokens.colors.text.primary,
-              marginBottom: 12,
-            }}>
-              {state.options.title}
-            </h2>
-
-            {/* Message */}
-            <p style={{
-              fontSize: 14,
-              color: tokens.colors.text.secondary,
-              lineHeight: 1.6,
-              marginBottom: 24,
-            }}>
-              {state.options.message}
-            </p>
-
-            {/* Buttons */}
-            <div style={{
-              display: 'flex',
-              gap: 12,
-              justifyContent: 'flex-end',
-            }}>
-              {state.options.type !== 'alert' && (
-                <button
-                  onClick={handleCancel}
-                  style={{
-                    padding: '10px 20px',
-                    borderRadius: 10,
-                    border: `1px solid ${tokens.colors.border.primary}`,
-                    background: 'transparent',
-                    color: tokens.colors.text.secondary,
-                    fontWeight: 700,
-                    fontSize: 14,
-                    cursor: 'pointer',
-                    transition: 'all 0.2s ease',
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = tokens.colors.bg.hover
-                    e.currentTarget.style.color = tokens.colors.text.primary
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = 'transparent'
-                    e.currentTarget.style.color = tokens.colors.text.secondary
-                  }}
-                >
-                  {state.options.cancelText || '取消'}
-                </button>
-              )}
-              <button
-                onClick={handleConfirm}
+            {/* Header with gradient accent */}
+            <div
+              style={{
+                height: 4,
+                background: state.options.type === 'danger' 
+                  ? tokens.gradient.error 
+                  : tokens.gradient.primary,
+              }}
+            />
+            
+            {/* Content */}
+            <div style={{ padding: tokens.spacing[6] }}>
+              {/* Icon */}
+              <div
                 style={{
-                  padding: '10px 20px',
-                  borderRadius: 10,
-                  border: 'none',
-                  background: getButtonColor(),
-                  color: tokens.colors.white,
-                  fontWeight: 900,
-                  fontSize: 14,
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.opacity = '0.9'
-                  e.currentTarget.style.transform = 'scale(1.02)'
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.opacity = '1'
-                  e.currentTarget.style.transform = 'scale(1)'
+                  width: 56,
+                  height: 56,
+                  borderRadius: tokens.radius.full,
+                  background: state.options.type === 'danger'
+                    ? tokens.gradient.errorSubtle
+                    : tokens.gradient.primarySubtle,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  margin: '0 auto',
+                  marginBottom: tokens.spacing[4],
+                  border: `1px solid ${state.options.type === 'danger' 
+                    ? `${tokens.colors.accent.error}30` 
+                    : `${tokens.colors.accent.primary}30`}`,
                 }}
               >
-                {state.options.confirmText || '确定'}
-              </button>
+                <span style={{ 
+                  fontSize: 24,
+                  color: state.options.type === 'danger' 
+                    ? tokens.colors.accent.error 
+                    : tokens.colors.accent.primary,
+                }}>
+                  {state.options.type === 'danger' ? '⚠' : state.options.type === 'alert' ? 'ℹ' : '?'}
+                </span>
+              </div>
+              
+              {/* Title */}
+              <h2 style={{
+                fontSize: tokens.typography.fontSize.xl,
+                fontWeight: tokens.typography.fontWeight.black,
+                color: tokens.colors.text.primary,
+                marginBottom: tokens.spacing[2],
+                textAlign: 'center',
+              }}>
+                {state.options.title}
+              </h2>
+
+              {/* Message */}
+              <p style={{
+                fontSize: tokens.typography.fontSize.sm,
+                color: tokens.colors.text.secondary,
+                lineHeight: 1.6,
+                marginBottom: tokens.spacing[6],
+                textAlign: 'center',
+              }}>
+                {state.options.message}
+              </p>
+
+              {/* Buttons */}
+              <div style={{
+                display: 'flex',
+                gap: tokens.spacing[3],
+                justifyContent: 'center',
+              }}>
+                {state.options.type !== 'alert' && (
+                  <button
+                    onClick={handleCancel}
+                    className="btn-press"
+                    style={{
+                      padding: `${tokens.spacing[3]} ${tokens.spacing[6]}`,
+                      borderRadius: tokens.radius.lg,
+                      border: tokens.glass.border.light,
+                      background: tokens.glass.bg.light,
+                      color: tokens.colors.text.secondary,
+                      fontWeight: tokens.typography.fontWeight.bold,
+                      fontSize: tokens.typography.fontSize.sm,
+                      cursor: 'pointer',
+                      transition: tokens.transition.base,
+                      minWidth: 100,
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = tokens.glass.bg.medium
+                      e.currentTarget.style.color = tokens.colors.text.primary
+                      e.currentTarget.style.borderColor = 'var(--glass-border-heavy)'
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = tokens.glass.bg.light
+                      e.currentTarget.style.color = tokens.colors.text.secondary
+                      e.currentTarget.style.borderColor = 'var(--glass-border-light)'
+                    }}
+                  >
+                    {state.options.cancelText || '取消'}
+                  </button>
+                )}
+                <button
+                  onClick={handleConfirm}
+                  disabled={isLoading}
+                  className="btn-press"
+                  style={{
+                    padding: `${tokens.spacing[3]} ${tokens.spacing[6]}`,
+                    borderRadius: tokens.radius.lg,
+                    border: 'none',
+                    background: buttonConfig.gradient,
+                    color: '#ffffff',
+                    fontWeight: tokens.typography.fontWeight.black,
+                    fontSize: tokens.typography.fontSize.sm,
+                    cursor: isLoading ? 'not-allowed' : 'pointer',
+                    transition: tokens.transition.base,
+                    minWidth: 100,
+                    boxShadow: `0 4px 12px ${buttonConfig.shadowColor}`,
+                    opacity: isLoading ? 0.7 : 1,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: tokens.spacing[2],
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isLoading) {
+                      e.currentTarget.style.transform = 'translateY(-2px)'
+                      e.currentTarget.style.boxShadow = buttonConfig.hoverShadow
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'translateY(0)'
+                    e.currentTarget.style.boxShadow = `0 4px 12px ${buttonConfig.shadowColor}`
+                  }}
+                >
+                  {isLoading && (
+                    <span 
+                      className="spinner-sm" 
+                      style={{ 
+                        borderColor: 'rgba(255,255,255,0.3)',
+                        borderTopColor: '#fff',
+                      }} 
+                    />
+                  )}
+                  {state.options.confirmText || '确定'}
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -288,4 +360,3 @@ export function DialogProvider({ children }: { children: ReactNode }) {
 }
 
 export default DialogProvider
-

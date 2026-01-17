@@ -493,21 +493,39 @@ export default function SettingsPage() {
   }
 
   return (
-    <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
+    <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary, position: 'relative' }}>
+      {/* Background mesh */}
+      <Box
+        style={{
+          position: 'fixed',
+          inset: 0,
+          background: tokens.gradient.mesh,
+          opacity: 0.4,
+          pointerEvents: 'none',
+          zIndex: 0,
+        }}
+      />
+      
       <TopNav email={email} />
       
-      <Box style={{ maxWidth: 800, margin: '0 auto', padding: tokens.spacing[6] }}>
-        <Text size="2xl" weight="black" style={{ marginBottom: tokens.spacing[6] }}>
+      <Box className="page-enter" style={{ maxWidth: 800, margin: '0 auto', padding: tokens.spacing[6], position: 'relative', zIndex: 1 }}>
+        <Text size="2xl" weight="black" className="gradient-text" style={{ marginBottom: tokens.spacing[6] }}>
           编辑个人资料
         </Text>
 
         {/* Avatar Section */}
         <Box
-          bg="secondary"
+          className="glass-card card-enter"
           p={6}
           radius="xl"
-          border="primary"
-          style={{ marginBottom: tokens.spacing[6] }}
+          style={{ 
+            marginBottom: tokens.spacing[6],
+            background: tokens.glass.bg.secondary,
+            backdropFilter: tokens.glass.blur.lg,
+            WebkitBackdropFilter: tokens.glass.blur.lg,
+            border: tokens.glass.border.light,
+            animationDelay: '0.1s',
+          }}
         >
           <Text size="lg" weight="black" style={{ marginBottom: tokens.spacing[4] }}>
             头像
@@ -578,11 +596,17 @@ export default function SettingsPage() {
 
         {/* Handle Section */}
         <Box
-          bg="secondary"
+          className="glass-card card-enter"
           p={6}
           radius="xl"
-          border="primary"
-          style={{ marginBottom: tokens.spacing[6] }}
+          style={{ 
+            marginBottom: tokens.spacing[6],
+            background: tokens.glass.bg.secondary,
+            backdropFilter: tokens.glass.blur.lg,
+            WebkitBackdropFilter: tokens.glass.blur.lg,
+            border: tokens.glass.border.light,
+            animationDelay: '0.15s',
+          }}
         >
           <Text size="lg" weight="black" style={{ marginBottom: tokens.spacing[4] }}>
             用户名
@@ -626,11 +650,17 @@ export default function SettingsPage() {
 
         {/* Bio Section */}
         <Box
-          bg="secondary"
+          className="glass-card card-enter"
           p={6}
           radius="xl"
-          border="primary"
-          style={{ marginBottom: tokens.spacing[6] }}
+          style={{ 
+            marginBottom: tokens.spacing[6],
+            background: tokens.glass.bg.secondary,
+            backdropFilter: tokens.glass.blur.lg,
+            WebkitBackdropFilter: tokens.glass.blur.lg,
+            border: tokens.glass.border.light,
+            animationDelay: '0.2s',
+          }}
         >
           <Text size="lg" weight="black" style={{ marginBottom: tokens.spacing[4] }}>
             个人简介
@@ -657,11 +687,17 @@ export default function SettingsPage() {
 
         {/* Exchange Connection Section */}
         <Box
-          bg="secondary"
+          className="glass-card card-enter"
           p={6}
           radius="xl"
-          border="primary"
-          style={{ marginBottom: tokens.spacing[6] }}
+          style={{ 
+            marginBottom: tokens.spacing[6],
+            background: tokens.glass.bg.secondary,
+            backdropFilter: tokens.glass.blur.lg,
+            WebkitBackdropFilter: tokens.glass.blur.lg,
+            border: tokens.glass.border.light,
+            animationDelay: '0.25s',
+          }}
         >
           {userId && (
             <ExchangeConnectionManager userId={userId} />

@@ -133,20 +133,23 @@ export function useFeatureFlags() {
 export function useFeatureFlag(flag: FeatureFlagName): boolean {
   const context = useContext(FeatureFlagContext)
   
-  // 如果没有 Provider，直接计算
-  if (!context) {
-    const [enabled, setEnabled] = useState(() => 
-      isFeatureEnabledWithOverrides(flag)
-    )
-    
-    useEffect(() => {
-      setEnabled(isFeatureEnabledWithOverrides(flag))
-    }, [flag])
-    
-    return enabled
+  // Always call hooks unconditionally
+  const [fallbackEnabled, setFallbackEnabled] = useState(() => 
+    isFeatureEnabledWithOverrides(flag)
+  )
+  
+  useEffect(() => {
+    if (!context) {
+      setFallbackEnabled(isFeatureEnabledWithOverrides(flag))
+    }
+  }, [flag, context])
+  
+  // Use context if available, otherwise use fallback
+  if (context) {
+    return context.isEnabled(flag)
   }
   
-  return context.isEnabled(flag)
+  return fallbackEnabled
 }
 
 /**

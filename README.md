@@ -1,4 +1,4 @@
-# Ranking Arena
+# Arena
 
 加密货币交易员排行榜与社区平台。聚合 Binance、Bybit、Bitget、MEXC 等交易所的跟单数据，提供透明的交易员排名和社区讨论功能。
 

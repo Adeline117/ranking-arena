@@ -89,7 +89,7 @@ export default function FollowListModal({
 
   if (!isOpen) return null
 
-  const title = type === 'followers' ? '关注者' : '关注中'
+  const title = type === 'followers' ? '被关注' : '关注中'
 
   return (
     <Box
@@ -193,7 +193,7 @@ export default function FollowListModal({
           ) : users.length === 0 ? (
             <Box style={{ textAlign: 'center', padding: tokens.spacing[6] }}>
               <Text size="sm" color="tertiary">
-                {type === 'followers' ? '暂无关注者' : '暂未关注任何人'}
+                {type === 'followers' ? '暂无人关注 TA' : '暂未关注任何人'}
               </Text>
             </Box>
           ) : (

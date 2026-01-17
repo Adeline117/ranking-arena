@@ -46,7 +46,7 @@ function renderContentWithLinks(text: string) {
   
   // 分割内容，保留图片和链接
   const parts: { type: 'text' | 'image' | 'link'; content: string; url?: string }[] = []
-  let lastIndex = 0
+  const lastIndex = 0
   let match
   
   // 先找出所有图片
@@ -380,25 +380,28 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
 
   // 加载用户收藏状态 - 必须在使用它的 useEffect 之前定义
   // 注意：转发状态不再需要检查，因为新设计允许多次转发
+  // 使用批量 API 一次性获取所有帖子的收藏状态
   const loadUserBookmarksAndReposts = useCallback(async (postIds: string[]) => {
     if (!accessToken || postIds.length === 0) return
 
     try {
-      // 获取收藏状态
-      const bookmarkResults = await Promise.all(postIds.map(async (postId) => {
-        const res = await fetch(`/api/posts/${postId}/bookmark`, {
-          headers: { 'Authorization': `Bearer ${accessToken}` },
-        })
-        const data = await res.json()
-        return { postId, bookmarked: data.bookmarked || false }
-      }))
+      // 使用批量 API 获取收藏状态
+      const res = await fetch('/api/posts/bookmarks/status', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ postIds }),
+      })
+      const data = await res.json()
+      const bookmarks = data.bookmarks || {}
 
       // 批量更新用户收藏状态
-      setUserBookmarks(prev => {
-        const updated = { ...prev }
-        bookmarkResults.forEach(r => { updated[r.postId] = r.bookmarked })
-        return updated
-      })
+      setUserBookmarks(prev => ({
+        ...prev,
+        ...bookmarks,
+      }))
     } catch (err) {
       console.error('[PostFeed] 加载收藏状态失败:', err)
     }

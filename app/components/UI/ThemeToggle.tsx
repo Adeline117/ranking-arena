@@ -1,11 +1,12 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useTransition } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Utils/LanguageProvider'
 
 export default function ThemeToggle() {
   const [theme, setTheme] = useState<'dark' | 'light'>('dark')
+  const [isPending, startTransition] = useTransition()
   const { t } = useLanguage()
 
   useEffect(() => {
@@ -25,11 +26,16 @@ export default function ThemeToggle() {
 
   const toggleTheme = () => {
     const newTheme = theme === 'dark' ? 'light' : 'dark'
-    setTheme(newTheme)
-    localStorage.setItem('theme', newTheme)
+    // 立即更新 DOM 属性以避免闪烁
     document.documentElement.setAttribute('data-theme', newTheme)
-    // 触发重新渲染
-    window.dispatchEvent(new CustomEvent('themeChange', { detail: newTheme }))
+    localStorage.setItem('theme', newTheme)
+    
+    // 使用 startTransition 避免阻塞UI
+    startTransition(() => {
+      setTheme(newTheme)
+      // 触发重新渲染
+      window.dispatchEvent(new CustomEvent('themeChange', { detail: newTheme }))
+    })
   }
 
   return (
@@ -48,8 +54,9 @@ export default function ThemeToggle() {
         border: `1px solid ${tokens.colors.border.primary}`,
         borderRadius: tokens.radius.md,
         color: tokens.colors.text.secondary,
-        cursor: 'pointer',
+        cursor: isPending ? 'wait' : 'pointer',
         transition: `all ${tokens.transition.fast}`,
+        opacity: isPending ? 0.6 : 1,
       }}
     >
       {theme === 'dark' ? (

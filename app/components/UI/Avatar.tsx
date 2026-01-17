@@ -68,7 +68,7 @@ export default function Avatar({
 
   return (
     <Box
-      className={className}
+      className={`${className || ''}`}
       style={{
         width: size,
         height: size,
@@ -79,6 +79,8 @@ export default function Avatar({
         background: showDefault ? backgroundGradient : tokens.colors.bg.secondary,
         display: 'grid',
         placeItems: 'center',
+        transition: tokens.transition.base,
+        boxShadow: tokens.shadow.sm,
         ...style,
       }}
     >

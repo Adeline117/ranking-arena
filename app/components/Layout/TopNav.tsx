@@ -229,16 +229,17 @@ export default function TopNav({ email }: { email: string | null }) {
   return (
     <Box
       as="header"
-      className="top-nav"
+      className="top-nav glass"
       style={{
         position: 'sticky',
         top: 0,
         zIndex: tokens.zIndex.sticky,
-        background: tokens.colors.bg.primary,
+        background: tokens.glass.bg.primary,
         borderBottom: `1px solid ${tokens.colors.border.primary}`,
         height: 64,
-        backdropFilter: 'blur(10px)',
-        boxShadow: tokens.shadow.xs,
+        backdropFilter: tokens.glass.blur.lg,
+        WebkitBackdropFilter: tokens.glass.blur.lg,
+        boxShadow: `${tokens.shadow.sm}, 0 0 0 1px rgba(255, 255, 255, 0.05)`,
       }}
     >
       <Box
@@ -415,19 +416,23 @@ export default function TopNav({ email }: { email: string | null }) {
                 height: 40,
                 borderRadius: tokens.radius.full,
                 border: `1px solid ${tokens.colors.border.primary}`,
-                background: tokens.colors.bg.secondary,
+                background: tokens.glass.bg.light,
+                backdropFilter: tokens.glass.blur.sm,
+                WebkitBackdropFilter: tokens.glass.blur.sm,
                 color: tokens.colors.text.primary,
                 padding: `0 ${tokens.spacing[4]} 0 40px`,
                 outline: 'none',
                 fontWeight: tokens.typography.fontWeight.bold,
                 fontSize: tokens.typography.fontSize.sm,
-                transition: `all ${tokens.transition.base}`,
+                transition: tokens.transition.all,
                 fontFamily: tokens.typography.fontFamily.sans.join(', '),
               }}
               onFocus={(e) => {
                 setShowSearchDropdown(true)
-                e.currentTarget.style.borderColor = tokens.colors.border.focus
-                e.currentTarget.style.background = tokens.colors.bg.tertiary
+                e.currentTarget.style.borderColor = tokens.colors.accent.primary
+                e.currentTarget.style.background = tokens.glass.bg.medium
+                e.currentTarget.style.boxShadow = `0 0 0 3px ${tokens.colors.accent.primary}20`
+                e.currentTarget.style.transform = 'scale(1.02)'
               }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
@@ -440,7 +445,9 @@ export default function TopNav({ email }: { email: string | null }) {
               }}
               onBlur={(e) => {
                 e.currentTarget.style.borderColor = tokens.colors.border.primary
-                e.currentTarget.style.background = tokens.colors.bg.secondary
+                e.currentTarget.style.background = tokens.glass.bg.light
+                e.currentTarget.style.boxShadow = 'none'
+                e.currentTarget.style.transform = 'scale(1)'
               }}
             />
             <Box
@@ -525,14 +532,15 @@ export default function TopNav({ email }: { email: string | null }) {
                 <NotificationIcon size={20} />
                 {(unreadCount + unreadMessageCount) > 0 && (
                   <Box
+                    className="highlight-pulse"
                     style={{
                       position: 'absolute',
-                      top: 4,
-                      right: 4,
-                      minWidth: 16,
-                      height: 16,
+                      top: 2,
+                      right: 2,
+                      minWidth: 18,
+                      height: 18,
                       borderRadius: '50%',
-                      background: '#ff4d4d',
+                      background: tokens.gradient.error,
                       color: '#fff',
                       fontSize: 10,
                       fontWeight: 900,
@@ -541,6 +549,7 @@ export default function TopNav({ email }: { email: string | null }) {
                       justifyContent: 'center',
                       padding: '0 4px',
                       border: `2px solid ${tokens.colors.bg.primary}`,
+                      boxShadow: tokens.shadow.glowError,
                     }}
                   >
                     {(unreadCount + unreadMessageCount) > 99 ? '99+' : (unreadCount + unreadMessageCount)}
@@ -614,16 +623,19 @@ export default function TopNav({ email }: { email: string | null }) {
                 <Box
                   role="menu"
                   aria-label="用户菜单选项"
+                  className="dropdown-enter glass-card"
                   style={{
                     position: 'absolute',
                     top: `calc(100% + ${tokens.spacing[2]})`,
                     right: 0,
-                    background: tokens.colors.bg.primary,
-                    border: `1px solid ${tokens.colors.border.primary}`,
-                    borderRadius: tokens.radius.lg,
+                    background: tokens.glass.bg.secondary,
+                    backdropFilter: tokens.glass.blur.xl,
+                    WebkitBackdropFilter: tokens.glass.blur.xl,
+                    border: tokens.glass.border.light,
+                    borderRadius: tokens.radius.xl,
                     padding: tokens.spacing[2],
-                    minWidth: 200,
-                    boxShadow: tokens.shadow.lg,
+                    minWidth: 220,
+                    boxShadow: `${tokens.shadow.xl}, 0 0 40px rgba(0, 0, 0, 0.2)`,
                     zIndex: tokens.zIndex.dropdown,
                   }}
                 >
@@ -827,29 +839,31 @@ export default function TopNav({ email }: { email: string | null }) {
               aria-label={t('login')}
               tabIndex={0}
               role="button"
+              className="btn-press"
               style={{
-                padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
-                borderRadius: tokens.radius.md,
-                background: tokens.colors.accent.primary,
-                color: tokens.colors.black || '#000000',
+                padding: `${tokens.spacing[2]} ${tokens.spacing[5]}`,
+                borderRadius: tokens.radius.lg,
+                background: tokens.gradient.primary,
+                color: '#ffffff',
                 textDecoration: 'none',
                 fontWeight: tokens.typography.fontWeight.black,
-                fontSize: tokens.typography.fontSize.base,
-                transition: `all ${tokens.transition.base}`,
+                fontSize: tokens.typography.fontSize.sm,
+                transition: tokens.transition.all,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 minWidth: 80,
-                height: 36,
-                border: `1px solid ${tokens.colors.accent.primary}`,
+                height: 38,
+                border: 'none',
+                boxShadow: `0 4px 12px ${tokens.colors.accent.primary}40`,
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.background = tokens.colors.text.secondary || '#ffffff'
-                e.currentTarget.style.opacity = '0.9'
+                e.currentTarget.style.transform = 'translateY(-2px)'
+                e.currentTarget.style.boxShadow = tokens.shadow.glow
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.background = tokens.colors.accent.primary
-                e.currentTarget.style.opacity = '1'
+                e.currentTarget.style.transform = 'translateY(0)'
+                e.currentTarget.style.boxShadow = `0 4px 12px ${tokens.colors.accent.primary}40`
               }}
             >
               {t('login')}

@@ -1,5 +1,6 @@
 'use client'
 
+import { useState, useRef, useEffect } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '../Utils/LanguageProvider'
 import { Box, Text } from '../Base'
@@ -12,13 +13,30 @@ interface TraderTabsProps {
 }
 
 export default function TraderTabs({ activeTab, onTabChange }: TraderTabsProps) {
-  const { t, language } = useLanguage()
-  // 使用 useMemo 确保语言变化时重新计算
+  const { t } = useLanguage()
+  const [indicatorStyle, setIndicatorStyle] = useState({ left: 0, width: 0 })
+  const tabRefs = useRef<Map<TabKey, HTMLButtonElement>>(new Map())
+  
   const tabs: Array<{ key: TabKey; label: string }> = [
     { key: 'overview', label: t('overview') },
     { key: 'stats', label: t('stats') },
     { key: 'portfolio', label: t('portfolio') },
   ]
+
+  // 更新指示器位置
+  useEffect(() => {
+    const activeRef = tabRefs.current.get(activeTab)
+    if (activeRef) {
+      const rect = activeRef.getBoundingClientRect()
+      const containerRect = activeRef.parentElement?.getBoundingClientRect()
+      if (containerRect) {
+        setIndicatorStyle({
+          left: rect.left - containerRect.left,
+          width: rect.width,
+        })
+      }
+    }
+  }, [activeTab])
 
   return (
     <Box
@@ -27,16 +45,21 @@ export default function TraderTabs({ activeTab, onTabChange }: TraderTabsProps) 
       aria-label="交易员资料标签页"
       style={{
         display: 'flex',
-        gap: tokens.spacing[6],
+        gap: tokens.spacing[2],
         marginBottom: tokens.spacing[6],
         paddingBottom: tokens.spacing[4],
         borderBottom: `1px solid ${tokens.colors.border.primary}`,
+        position: 'relative',
+        background: `linear-gradient(180deg, transparent 0%, ${tokens.colors.bg.secondary}40 100%)`,
+        padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+        borderRadius: `${tokens.radius.lg} ${tokens.radius.lg} 0 0`,
       }}
     >
       {tabs.map((tab) => (
         <button
           key={tab.key}
-          className="profile-tab-button"
+          ref={(el) => { if (el) tabRefs.current.set(tab.key, el) }}
+          className="profile-tab-button interactive-scale"
           onClick={() => onTabChange(tab.key)}
           onKeyDown={(e) => {
             if (e.key === 'Enter' || e.key === ' ') {
@@ -55,36 +78,61 @@ export default function TraderTabs({ activeTab, onTabChange }: TraderTabsProps) 
           role="tab"
           tabIndex={activeTab === tab.key ? 0 : -1}
           style={{
-            background: 'transparent',
-            border: 'none',
-            padding: 0,
+            background: activeTab === tab.key 
+              ? `linear-gradient(135deg, ${tokens.colors.accent.primary}15, ${tokens.colors.accent.primary}08)`
+              : 'transparent',
+            border: activeTab === tab.key 
+              ? `1px solid ${tokens.colors.accent.primary}30`
+              : '1px solid transparent',
+            padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
             cursor: 'pointer',
             position: 'relative',
-            paddingBottom: tokens.spacing[1],
+            borderRadius: tokens.radius.lg,
+            transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: tokens.spacing[2],
+          }}
+          onMouseEnter={(e) => {
+            if (activeTab !== tab.key) {
+              e.currentTarget.style.background = `${tokens.colors.bg.tertiary}80`
+              e.currentTarget.style.transform = 'translateY(-2px)'
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (activeTab !== tab.key) {
+              e.currentTarget.style.background = 'transparent'
+              e.currentTarget.style.transform = 'translateY(0)'
+            }
           }}
         >
           <Text
-            size="base"
-            weight={activeTab === tab.key ? 'black' : 'bold'}
-            color={activeTab === tab.key ? 'primary' : 'secondary'}
-            style={{}}
+            size="sm"
+            weight={activeTab === tab.key ? 'black' : 'medium'}
+            style={{
+              color: activeTab === tab.key ? tokens.colors.text.primary : tokens.colors.text.secondary,
+              transition: 'color 0.3s ease',
+            }}
           >
             {tab.label}
           </Text>
-          {activeTab === tab.key && (
-            <Box
-              style={{
-                position: 'absolute',
-                bottom: -16,
-                left: 0,
-                right: 0,
-                height: 2,
-                background: tokens.colors.text.primary,
-              }}
-            />
-          )}
         </button>
       ))}
+      
+      {/* 滑动指示器 */}
+      <Box
+        style={{
+          position: 'absolute',
+          bottom: 0,
+          left: indicatorStyle.left,
+          width: indicatorStyle.width,
+          height: 3,
+          background: `linear-gradient(90deg, ${tokens.colors.accent.primary}, ${tokens.colors.accent.brand})`,
+          borderRadius: '3px 3px 0 0',
+          transition: 'all 0.35s cubic-bezier(0.4, 0, 0.2, 1)',
+          boxShadow: `0 0 12px ${tokens.colors.accent.primary}60`,
+        }}
+      />
     </Box>
   )
 }

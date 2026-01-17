@@ -163,7 +163,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     }
 
     // 手动更新投票计数（因为触发器可能不工作）
-    let updatedOptions = [...poll.options]
+    const updatedOptions = [...poll.options]
     
     // 减少旧投票的计数
     for (const oldIdx of existingIndexes) {

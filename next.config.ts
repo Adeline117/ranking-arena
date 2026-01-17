@@ -2,9 +2,11 @@ import type { NextConfig } from "next";
 import { withSentryConfig } from "@sentry/nextjs";
 
 // Bundle Analyzer 条件导入
+/* eslint-disable @typescript-eslint/no-require-imports */
 const withBundleAnalyzer = process.env.ANALYZE === 'true'
   ? require('@next/bundle-analyzer')({ enabled: true })
   : (config: NextConfig) => config;
+/* eslint-enable @typescript-eslint/no-require-imports */
 
 const nextConfig: NextConfig = {
   /* config options here */

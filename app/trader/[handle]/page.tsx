@@ -35,6 +35,35 @@ import {
 
 type TabKey = 'overview' | 'stats' | 'portfolio'
 
+// 新数据类型
+interface AssetBreakdownData {
+  '90D': Array<{ symbol: string; weightPct: number }>
+  '30D': Array<{ symbol: string; weightPct: number }>
+  '7D': Array<{ symbol: string; weightPct: number }>
+}
+
+interface EquityCurveData {
+  '90D': Array<{ date: string; roi: number; pnl: number }>
+  '30D': Array<{ date: string; roi: number; pnl: number }>
+  '7D': Array<{ date: string; roi: number; pnl: number }>
+}
+
+interface ExtendedPositionHistoryItem {
+  symbol: string
+  direction: string
+  positionType: string
+  marginMode: string
+  openTime: string
+  closeTime: string
+  entryPrice: number
+  exitPrice: number
+  maxPositionSize: number
+  closedSize: number
+  pnlUsd: number
+  pnlPct: number
+  status: string
+}
+
 function TraderContent(props: { params: { handle: string } | Promise<{ handle: string }> }) {
   const { t } = useLanguage()
   const searchParams = useSearchParams()
@@ -48,9 +77,14 @@ function TraderContent(props: { params: { handle: string } | Promise<{ handle: s
   const [stats, setStats] = useState<TraderStats | null>(null)
   const [portfolio, setPortfolio] = useState<PortfolioItem[]>([])
   const [positionHistory, setPositionHistory] = useState<PositionHistoryItem[]>([])
+  const [extendedPositionHistory, setExtendedPositionHistory] = useState<ExtendedPositionHistoryItem[]>([])
   const [feed, setFeed] = useState<TraderFeedItem[]>([])
   const [similarTraders, setSimilarTraders] = useState<TraderProfile[]>([])
   const [loading, setLoading] = useState(true)
+  
+  // 新数据状态
+  const [assetBreakdown, setAssetBreakdown] = useState<AssetBreakdownData | undefined>(undefined)
+  const [equityCurve, setEquityCurve] = useState<EquityCurveData | undefined>(undefined)
   
   // Read tab from URL, default to 'overview'
   const urlTab = searchParams.get('tab') as TabKey | null
@@ -132,8 +166,13 @@ function TraderContent(props: { params: { handle: string } | Promise<{ handle: s
         setStats(data.stats)
         setPortfolio(data.portfolio || [])
         setPositionHistory(data.positionHistory || [])
+        setExtendedPositionHistory(data.positionHistory || [])
         setFeed(data.feed || [])
         setSimilarTraders(data.similarTraders || [])
+        
+        // 设置新数据
+        setAssetBreakdown(data.assetBreakdown)
+        setEquityCurve(data.equityCurve)
       } catch (error) {
         console.error('Error loading trader data:', error)
         setProfile(null)
@@ -194,7 +233,14 @@ function TraderContent(props: { params: { handle: string } | Promise<{ handle: s
   ) : null
 
   return (
-    <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
+    <Box 
+      className="trader-page-container"
+      style={{ 
+        minHeight: '100vh', 
+        background: `linear-gradient(180deg, ${tokens.colors.bg.primary} 0%, ${tokens.colors.bg.secondary}30 100%)`,
+        color: tokens.colors.text.primary,
+      }}
+    >
       {/* 结构化数据（JSON-LD） */}
       {structuredData && <JsonLd data={structuredData} />}
       
@@ -214,45 +260,58 @@ function TraderContent(props: { params: { handle: string } | Promise<{ handle: s
         {/* Tabs */}
         <TraderTabs activeTab={activeTab} onTabChange={handleTabChange} />
 
-        {/* Tab Content */}
-        {activeTab === 'overview' && (
-          <Box
-            className="profile-grid"
-            style={{
-              display: 'grid',
-              gridTemplateColumns: '1fr 320px',
-              gap: tokens.spacing[8],
-            }}
-          >
-            {/* Left Column - 核心绩效指标和动态 */}
-            <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[6] }}>
-              {performance && (
-                <OverviewPerformanceCard performance={performance} />
-              )}
-              {/* 交易员动态（置顶帖子自动显示在最上面） */}
-              <TraderFeed items={feed.filter((f) => f.type !== 'group_post')} title={t('activities')} />
+        {/* Tab Content with animation */}
+        <Box
+          key={activeTab}
+          style={{
+            animation: 'fadeInUp 0.4s ease-out forwards',
+          }}
+        >
+          {activeTab === 'overview' && (
+            <Box
+              className="profile-grid main-grid"
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 340px',
+                gap: tokens.spacing[8],
+              }}
+            >
+              {/* Left Column - 核心绩效指标和动态 */}
+              <Box className="stagger-enter" style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[6] }}>
+                {performance && (
+                  <OverviewPerformanceCard performance={performance} />
+                )}
+                {/* 交易员动态（置顶帖子自动显示在最上面） */}
+                <TraderFeed items={feed.filter((f) => f.type !== 'group_post')} title={t('activities')} />
+              </Box>
+
+              {/* Right Column - 交易员卡片 */}
+              <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[6] }}>
+                <TraderAboutCard
+                  handle={profile.handle}
+                  traderId={profile.id}
+                  avatarUrl={profile.avatar_url}
+                  bio={profile.bio}
+                  followers={profile.followers}
+                  isRegistered={profile.isRegistered}
+                />
+                {similarTraders.length > 0 && <SimilarTraders traders={similarTraders} />}
+              </Box>
             </Box>
+          )}
 
-            {/* Right Column - 交易员卡片 */}
-            <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[6] }}>
-              <TraderAboutCard
-                handle={profile.handle}
-                traderId={profile.id}
-                avatarUrl={profile.avatar_url}
-                bio={profile.bio}
-                followers={profile.followers}
-                isRegistered={profile.isRegistered}
-              />
-              {similarTraders.length > 0 && <SimilarTraders traders={similarTraders} />}
-            </Box>
-          </Box>
-        )}
+          {activeTab === 'stats' && stats && (
+            <StatsPage 
+              stats={stats} 
+              traderHandle={profile.handle}
+              assetBreakdown={assetBreakdown}
+              equityCurve={equityCurve}
+              positionHistory={extendedPositionHistory}
+            />
+          )}
 
-        {activeTab === 'stats' && stats && (
-          <StatsPage stats={stats} traderHandle={profile.handle} />
-        )}
-
-        {activeTab === 'portfolio' && <PortfolioTable items={portfolio} history={positionHistory} />}
+          {activeTab === 'portfolio' && <PortfolioTable items={portfolio} history={positionHistory} />}
+        </Box>
       </Box>
     </Box>
   )
@@ -272,4 +331,3 @@ export default function TraderPage(props: { params: { handle: string } | Promise
     </Suspense>
   )
 }
-

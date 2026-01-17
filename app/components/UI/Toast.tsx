@@ -1,30 +1,7 @@
 'use client'
 
-import { createContext, useContext, useState, useCallback, ReactNode, useEffect } from 'react'
+import { createContext, useContext, useState, useCallback, ReactNode, useEffect, useRef } from 'react'
 import { tokens } from '@/lib/design-tokens'
-
-// 注入全局动画样式
-const TOAST_STYLES_ID = 'toast-animation-styles'
-const injectToastStyles = () => {
-  if (typeof document === 'undefined') return
-  if (document.getElementById(TOAST_STYLES_ID)) return
-  
-  const style = document.createElement('style')
-  style.id = TOAST_STYLES_ID
-  style.textContent = `
-    @keyframes toastSlideIn {
-      from {
-        transform: translateX(100%);
-        opacity: 0;
-      }
-      to {
-        transform: translateX(0);
-        opacity: 1;
-      }
-    }
-  `
-  document.head.appendChild(style)
-}
 
 type ToastType = 'success' | 'error' | 'warning' | 'info'
 
@@ -32,7 +9,8 @@ interface Toast {
   id: string
   message: string
   type: ToastType
-  duration?: number
+  duration: number
+  createdAt: number
 }
 
 interface ToastContextType {
@@ -50,85 +28,189 @@ export function useToast() {
   return context
 }
 
-const getToastStyles = (type: ToastType) => {
-  const successColor = tokens.colors.accent.success
-  const errorColor = tokens.colors.accent.error
-  const warningColor = tokens.colors.accent.warning
-  
+const getToastConfig = (type: ToastType) => {
   switch (type) {
     case 'success':
       return {
-        background: `${successColor}20`,
-        border: `1px solid ${successColor}66`,
-        color: successColor,
+        gradient: tokens.gradient.successSubtle,
+        borderColor: `${tokens.colors.accent.success}50`,
+        iconBg: tokens.gradient.success,
+        textColor: tokens.colors.accent.success,
         icon: '✓',
+        progressColor: tokens.colors.accent.success,
       }
     case 'error':
       return {
-        background: `${errorColor}20`,
-        border: `1px solid ${errorColor}66`,
-        color: errorColor,
+        gradient: tokens.gradient.errorSubtle,
+        borderColor: `${tokens.colors.accent.error}50`,
+        iconBg: tokens.gradient.error,
+        textColor: tokens.colors.accent.error,
         icon: '✕',
+        progressColor: tokens.colors.accent.error,
       }
     case 'warning':
       return {
-        background: `${warningColor}20`,
-        border: `1px solid ${warningColor}66`,
-        color: warningColor,
+        gradient: tokens.gradient.warningSubtle,
+        borderColor: `${tokens.colors.accent.warning}50`,
+        iconBg: tokens.gradient.warning,
+        textColor: tokens.colors.accent.warning,
         icon: '⚠',
+        progressColor: tokens.colors.accent.warning,
       }
     case 'info':
     default:
       return {
-        background: `${tokens.colors.accent.primary}20`,
-        border: `1px solid ${tokens.colors.accent.primary}66`,
-        color: tokens.colors.accent.primary,
+        gradient: tokens.gradient.primarySubtle,
+        borderColor: `${tokens.colors.accent.primary}50`,
+        iconBg: tokens.gradient.primary,
+        textColor: tokens.colors.accent.primary,
         icon: 'ℹ',
+        progressColor: tokens.colors.accent.primary,
       }
   }
 }
 
 function ToastItem({ toast, onClose }: { toast: Toast; onClose: () => void }) {
-  const styles = getToastStyles(toast.type)
+  const config = getToastConfig(toast.type)
+  const [isExiting, setIsExiting] = useState(false)
+  const [progress, setProgress] = useState(100)
+  const startTimeRef = useRef(Date.now())
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const elapsed = Date.now() - startTimeRef.current
+      const remaining = Math.max(0, 100 - (elapsed / toast.duration) * 100)
+      setProgress(remaining)
+      
+      if (remaining <= 0) {
+        clearInterval(interval)
+      }
+    }, 50)
+
+    return () => clearInterval(interval)
+  }, [toast.duration])
+
+  const handleClose = () => {
+    setIsExiting(true)
+    setTimeout(onClose, 200)
+  }
 
   return (
     <div
+      className={isExiting ? 'toast-exit' : 'toast-enter'}
       style={{
         display: 'flex',
-        alignItems: 'center',
-        gap: 12,
-        padding: '12px 16px',
-        borderRadius: 12,
-        background: styles.background,
-        border: styles.border,
-        color: styles.color,
-        fontSize: 14,
-        fontWeight: 600,
-        minWidth: 280,
-        maxWidth: 400,
-        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
-        animation: 'toastSlideIn 0.3s ease-out',
+        flexDirection: 'column',
+        background: tokens.glass.bg.secondary,
+        backdropFilter: tokens.glass.blur.lg,
+        WebkitBackdropFilter: tokens.glass.blur.lg,
+        border: `1px solid ${config.borderColor}`,
+        borderRadius: tokens.radius.xl,
+        overflow: 'hidden',
+        minWidth: 320,
+        maxWidth: 420,
+        boxShadow: `${tokens.shadow.xl}, 0 0 20px ${config.textColor}15`,
       }}
     >
-      <span style={{ fontSize: 16, fontWeight: 900 }}>{styles.icon}</span>
-      <span style={{ flex: 1 }}>{toast.message}</span>
-      <button
-        onClick={onClose}
+      {/* Content */}
+      <div
         style={{
-          background: 'transparent',
-          border: 'none',
-          color: styles.color,
-          cursor: 'pointer',
-          padding: 4,
-          fontSize: 18,
-          lineHeight: 1,
-          opacity: 0.7,
+          display: 'flex',
+          alignItems: 'center',
+          gap: tokens.spacing[3],
+          padding: `${tokens.spacing[4]} ${tokens.spacing[4]}`,
         }}
-        onMouseEnter={(e) => { e.currentTarget.style.opacity = '1' }}
-        onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.7' }}
       >
-        ×
-      </button>
+        {/* Icon */}
+        <div
+          style={{
+            width: 32,
+            height: 32,
+            borderRadius: tokens.radius.full,
+            background: config.iconBg,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0,
+            boxShadow: `0 4px 12px ${config.textColor}40`,
+          }}
+        >
+          <span style={{ 
+            color: '#fff', 
+            fontSize: 14, 
+            fontWeight: 900,
+            textShadow: '0 1px 2px rgba(0,0,0,0.2)',
+          }}>
+            {config.icon}
+          </span>
+        </div>
+        
+        {/* Message */}
+        <span style={{ 
+          flex: 1, 
+          color: tokens.colors.text.primary,
+          fontSize: tokens.typography.fontSize.sm,
+          fontWeight: tokens.typography.fontWeight.semibold,
+          lineHeight: 1.4,
+        }}>
+          {toast.message}
+        </span>
+        
+        {/* Close Button */}
+        <button
+          onClick={handleClose}
+          className="btn-press"
+          style={{
+            background: 'transparent',
+            border: 'none',
+            color: tokens.colors.text.tertiary,
+            cursor: 'pointer',
+            padding: tokens.spacing[1],
+            fontSize: 18,
+            lineHeight: 1,
+            borderRadius: tokens.radius.full,
+            width: 28,
+            height: 28,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            transition: tokens.transition.fast,
+          }}
+          onMouseEnter={(e) => { 
+            e.currentTarget.style.background = tokens.colors.bg.tertiary
+            e.currentTarget.style.color = tokens.colors.text.primary
+          }}
+          onMouseLeave={(e) => { 
+            e.currentTarget.style.background = 'transparent'
+            e.currentTarget.style.color = tokens.colors.text.tertiary
+          }}
+        >
+          ×
+        </button>
+      </div>
+      
+      {/* Progress Bar */}
+      <div
+        style={{
+          height: 3,
+          background: tokens.colors.bg.tertiary,
+          position: 'relative',
+          overflow: 'hidden',
+        }}
+      >
+        <div
+          style={{
+            position: 'absolute',
+            left: 0,
+            top: 0,
+            bottom: 0,
+            width: `${progress}%`,
+            background: `linear-gradient(90deg, ${config.progressColor}, ${config.progressColor}80)`,
+            transition: 'width 0.05s linear',
+            borderRadius: '0 2px 2px 0',
+          }}
+        />
+      </div>
     </div>
   )
 }
@@ -136,19 +218,17 @@ function ToastItem({ toast, onClose }: { toast: Toast; onClose: () => void }) {
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([])
 
-  // 注入动画样式
-  useEffect(() => {
-    injectToastStyles()
-  }, [])
-
-  const showToast = useCallback((message: string | { message?: string; code?: string; error?: string } | unknown, type: ToastType = 'info', duration: number = 3000) => {
-    // 处理各种类型的消息输入
+  const showToast = useCallback((
+    message: string | { message?: string; code?: string; error?: string } | unknown, 
+    type: ToastType = 'info', 
+    duration: number = 4000
+  ) => {
+    // Parse message
     let finalMessage: string
     if (typeof message === 'string') {
       finalMessage = message
     } else if (message && typeof message === 'object') {
       const msgObj = message as Record<string, unknown>
-      // 尝试多种常见的错误消息字段
       if (typeof msgObj.message === 'string') {
         finalMessage = msgObj.message
       } else if (typeof msgObj.error === 'string') {
@@ -163,9 +243,9 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     }
     
     const id = `toast-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-    const newToast: Toast = { id, message: finalMessage, type, duration }
+    const newToast: Toast = { id, message: finalMessage, type, duration, createdAt: Date.now() }
     
-    setToasts((prev) => [...prev, newToast])
+    setToasts((prev) => [...prev.slice(-4), newToast]) // Keep max 5 toasts
 
     if (duration > 0) {
       setTimeout(() => {
@@ -189,18 +269,20 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             position: 'fixed',
             top: 80,
             right: 20,
-            zIndex: 1300,
+            zIndex: tokens.zIndex.toast,
             display: 'flex',
             flexDirection: 'column',
-            gap: 8,
+            gap: tokens.spacing[3],
+            pointerEvents: 'none',
           }}
         >
           {toasts.map((toast) => (
-            <ToastItem
-              key={toast.id}
-              toast={toast}
-              onClose={() => hideToast(toast.id)}
-            />
+            <div key={toast.id} style={{ pointerEvents: 'auto' }}>
+              <ToastItem
+                toast={toast}
+                onClose={() => hideToast(toast.id)}
+              />
+            </div>
           ))}
         </div>
       )}
@@ -209,4 +291,3 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 }
 
 export default ToastProvider
-

@@ -158,7 +158,11 @@ export function useInfiniteScroll(options: {
   const { onLoadMore, hasMore, threshold = 0, rootMargin = '100px' } = options
   const [isLoading, setIsLoading] = useState(false)
   const loadMoreRef = useRef(onLoadMore)
-  loadMoreRef.current = onLoadMore
+  
+  // Update ref in useEffect to avoid updating during render
+  useEffect(() => {
+    loadMoreRef.current = onLoadMore
+  }, [onLoadMore])
 
   const { ref, isIntersecting } = useIntersectionObserver({
     threshold,

@@ -145,7 +145,7 @@ export const PREMIUM_FEATURES: PremiumFeature[] = [
     id: 'advanced_analytics',
     name: '高级数据分析',
     description: '深度分析交易员绩效，包含夏普率、波动率等专业指标',
-    icon: '📊',
+    icon: '',
     tier: ['pro', 'elite', 'enterprise'],
   },
   {
@@ -166,7 +166,7 @@ export const PREMIUM_FEATURES: PremiumFeature[] = [
     id: 'realtime_alerts',
     name: '实时告警',
     description: '关注的交易员有重大变动时，实时推送通知',
-    icon: '🔔',
+    icon: '',
     tier: ['pro', 'elite', 'enterprise'],
   },
   {
@@ -180,7 +180,7 @@ export const PREMIUM_FEATURES: PremiumFeature[] = [
     id: 'custom_rankings',
     name: '自定义排行榜',
     description: '自定义筛选条件，创建专属排行榜',
-    icon: '🏆',
+    icon: '',
     tier: ['pro', 'elite', 'enterprise'],
   },
   {
@@ -215,7 +215,7 @@ export const PREMIUM_FEATURES: PremiumFeature[] = [
     id: 'priority_support',
     name: '优先客服',
     description: '专属客服通道，优先响应您的问题',
-    icon: '💎',
+    icon: '',
     tier: ['elite', 'enterprise'],
   },
   {

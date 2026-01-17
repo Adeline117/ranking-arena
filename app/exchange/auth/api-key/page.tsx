@@ -434,7 +434,7 @@ function ApiKeyAuthContent() {
                           • API Key 不能提币、不能下单<br />
                           • 您可以随时在交易所撤销授权</>
                         ) : (
-                          <>• Only "Read-Only" permission is needed, no trading operations possible<br />
+                          <>• Only &ldquo;Read-Only&rdquo; permission is needed, no trading operations possible<br />
                           • API Key cannot withdraw or place orders<br />
                           • You can revoke access anytime from the exchange</>
                         )}
@@ -498,7 +498,7 @@ function ApiKeyAuthContent() {
                         onClick={() => handlePaste('apiKey')}
                         style={{ whiteSpace: 'nowrap' }}
                       >
-                        📋 {language === 'zh' ? '粘贴' : 'Paste'}
+                        {language === 'zh' ? '粘贴' : 'Paste'}
                       </Button>
                     </Box>
                   </Box>
@@ -531,7 +531,7 @@ function ApiKeyAuthContent() {
                         onClick={() => handlePaste('apiSecret')}
                         style={{ whiteSpace: 'nowrap' }}
                       >
-                        📋 {language === 'zh' ? '粘贴' : 'Paste'}
+                        {language === 'zh' ? '粘贴' : 'Paste'}
                       </Button>
                     </Box>
                   </Box>
@@ -565,7 +565,7 @@ function ApiKeyAuthContent() {
                           onClick={() => handlePaste('passphrase')}
                           style={{ whiteSpace: 'nowrap' }}
                         >
-                          📋 {language === 'zh' ? '粘贴' : 'Paste'}
+                          {language === 'zh' ? '粘贴' : 'Paste'}
                         </Button>
                       </Box>
                       <Text size="xs" color="tertiary" style={{ marginTop: tokens.spacing[2] }}>

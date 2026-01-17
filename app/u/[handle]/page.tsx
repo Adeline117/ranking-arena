@@ -617,8 +617,7 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
                 avatarUrl={profile.avatar_url}
                 bio={profile.bio}
                 followers={profile.followers}
-                following={profile.following}
-                followingTraders={profile.followingTraders}
+                following={(profile.following || 0) + (profile.followingTraders || 0)}
                 isRegistered={profile.isRegistered}
                 isOwnProfile={isOwnProfile}
                 showFollowers={profile.showFollowers}

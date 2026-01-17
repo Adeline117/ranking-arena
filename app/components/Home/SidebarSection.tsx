@@ -29,13 +29,14 @@ export default function SidebarSection({ position }: SidebarSectionProps) {
     return (
       <Box
         as="section"
-        className="home-left-section"
+        className="home-left-section card-enter"
         style={{
           position: 'sticky',
-          top: tokens.spacing[4],
+          top: 80,
+          animationDelay: '0.1s',
         }}
       >
-        <Card title={t('hotDiscussion')}>
+        <Card title={t('hotDiscussion')} variant="glass">
           <ErrorBoundary>
             <Suspense fallback={<SkeletonCard />}>
               <PostFeed />
@@ -44,35 +45,42 @@ export default function SidebarSection({ position }: SidebarSectionProps) {
         </Card>
         <Link
           href="/groups"
+          className="btn-press"
           style={{
-            display: 'block',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: tokens.spacing[2],
             marginTop: tokens.spacing[3],
             textAlign: 'center',
-            padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
-            background: tokens.colors.bg.secondary,
+            padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+            background: tokens.glass.bg.light,
+            backdropFilter: tokens.glass.blur.sm,
+            WebkitBackdropFilter: tokens.glass.blur.sm,
             color: tokens.colors.text.primary,
-            borderRadius: tokens.radius.md,
-            border: `1px solid ${tokens.colors.border.primary}`,
+            borderRadius: tokens.radius.lg,
+            border: tokens.glass.border.light,
             textDecoration: 'none',
             fontSize: tokens.typography.fontSize.sm,
-            fontWeight: tokens.typography.fontWeight.semibold,
-            transition: `all ${tokens.transition.base}`,
-            boxShadow: tokens.shadow.xs,
+            fontWeight: tokens.typography.fontWeight.bold,
+            transition: tokens.transition.all,
+            boxShadow: tokens.shadow.sm,
           }}
           onMouseEnter={(e) => {
-            e.currentTarget.style.background = tokens.colors.bg.tertiary || tokens.colors.bg.hover
-            e.currentTarget.style.borderColor = tokens.colors.border.secondary || tokens.colors.border.primary
-            e.currentTarget.style.transform = 'translateY(-1px)'
-            e.currentTarget.style.boxShadow = tokens.shadow.sm
+            e.currentTarget.style.background = tokens.glass.bg.medium
+            e.currentTarget.style.transform = 'translateY(-2px)'
+            e.currentTarget.style.boxShadow = tokens.shadow.md
+            e.currentTarget.style.borderColor = `${tokens.colors.accent.primary}40`
           }}
           onMouseLeave={(e) => {
-            e.currentTarget.style.background = tokens.colors.bg.secondary
-            e.currentTarget.style.borderColor = tokens.colors.border.primary
+            e.currentTarget.style.background = tokens.glass.bg.light
             e.currentTarget.style.transform = 'translateY(0)'
-            e.currentTarget.style.boxShadow = tokens.shadow.xs
+            e.currentTarget.style.boxShadow = tokens.shadow.sm
+            e.currentTarget.style.borderColor = 'var(--glass-border-light)'
           }}
         >
-          {t('more')} →
+          {t('more')} 
+          <span style={{ transition: 'transform 0.2s', display: 'inline-block' }}>→</span>
         </Link>
       </Box>
     )
@@ -81,12 +89,13 @@ export default function SidebarSection({ position }: SidebarSectionProps) {
   return (
     <Box
       as="section"
-      className="home-right-section"
+      className="home-right-section card-enter"
       style={{
         position: 'sticky',
-        top: tokens.spacing[4],
+        top: 80,
         maxHeight: 'calc(100vh - 100px)',
         overflowY: 'auto',
+        animationDelay: '0.2s',
       }}
     >
       <ErrorBoundary>

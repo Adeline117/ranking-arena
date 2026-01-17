@@ -51,7 +51,7 @@ describe('Feature Flags', () => {
     })
     
     it('should return false for unknown flag', () => {
-      // @ts-ignore - 测试未知 flag
+      // @ts-expect-error - 测试未知 flag
       const result = isFeatureEnabled('unknown_flag')
       expect(result).toBe(false)
     })

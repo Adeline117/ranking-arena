@@ -521,7 +521,6 @@ export default function TraderDrawer({
                     <select style={select}>
                       <option>SPX500</option>
                       <option>BTC</option>
-                      <option>ETH</option>
                     </select>
                   </div>
 
@@ -772,6 +771,25 @@ function RiskChart({ scores, height }: { scores: number[]; height: number }) {
   )
 }
 function CompareChart({ height }: { height: number }) {
+  // 生成随机曲线路径数据
+  const generatePath = (baseY: number, variance: number, isUp: boolean) => {
+    const points: string[] = []
+    const steps = 10
+    let y = baseY
+    for (let i = 0; i <= steps; i++) {
+      const x = (i / steps) * 600
+      const change = (Math.random() - 0.4) * variance
+      y = Math.max(40, Math.min(220, y + change + (isUp ? -2 : 0.5)))
+      points.push(i === 0 ? `M${x},${y}` : `L${x},${y}`)
+    }
+    return points.join(' ')
+  }
+
+  // 用户ROI曲线（绿色，趋势向上）
+  const traderPath = "M0,200 C60,180 120,160 180,140 C240,120 300,100 360,90 C420,80 480,70 540,60 C570,55 600,50 600,45"
+  // 比较资产曲线（白色，较平稳）
+  const comparePath = "M0,190 C60,185 120,180 180,175 C240,170 300,165 360,160 C420,155 480,150 540,145 C570,142 600,140 600,138"
+
   return (
     <div
       style={{
@@ -795,12 +813,26 @@ function CompareChart({ height }: { height: number }) {
         }}
       />
       <div style={{ position: 'absolute', left: 12, bottom: 12, display: 'flex', gap: 10, color: tokens.colors.text.secondary, fontSize: 12 }}>
-        <span>1W</span><span>1M</span><span>6M</span><span style={{ color: tokens.colors.text.primary }}>1Y</span><span>5Y</span>
+        <span>1W</span><span>1M</span><span style={{ color: tokens.colors.text.primary }}>3M</span>
+      </div>
+
+      {/* 图例 */}
+      <div style={{ position: 'absolute', right: 12, top: 12, display: 'flex', gap: 12, fontSize: 11 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <div style={{ width: 12, height: 3, background: tokens.colors.accent.success, borderRadius: 2 }} />
+          <span style={{ color: tokens.colors.text.secondary }}>ROI</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <div style={{ width: 12, height: 3, background: 'rgba(255,255,255,0.5)', borderRadius: 2 }} />
+          <span style={{ color: tokens.colors.text.secondary }}>BTC/SPX</span>
+        </div>
       </div>
 
       <svg width="100%" height="100%" viewBox="0 0 600 260" preserveAspectRatio="none" style={{ position: 'absolute', inset: 0 }}>
-        <path d="M0,180 C80,120 140,210 220,160 C300,110 340,140 420,90 C500,70 540,130 600,100" fill="none" stroke="rgba(47,229,125,0.85)" strokeWidth="2" />
-        <path d="M0,190 C120,180 180,200 260,185 C340,170 420,175 520,165 C560,160 590,158 600,156" fill="none" stroke="rgba(255,255,255,0.45)" strokeWidth="2" />
+        {/* 用户ROI曲线 - 绿色 */}
+        <path d={traderPath} fill="none" stroke={tokens.colors.accent.success} strokeWidth="2.5" strokeLinecap="round" />
+        {/* 比较资产曲线 - 白色半透明 */}
+        <path d={comparePath} fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="2" strokeLinecap="round" strokeDasharray="4,4" />
       </svg>
     </div>
   )
