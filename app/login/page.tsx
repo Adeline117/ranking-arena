@@ -353,7 +353,14 @@ export default function LoginPage() {
   useEffect(() => {
     injectStyles()
     setMounted(true)
-  }, [])
+    
+    // 检查是否已完成初始设置
+    const hasOnboarded = localStorage.getItem('hasOnboarded')
+    if (hasOnboarded !== 'true') {
+      router.push('/onboarding')
+      return
+    }
+  }, [router])
 
   useEffect(() => {
     if (typeof window !== 'undefined') {

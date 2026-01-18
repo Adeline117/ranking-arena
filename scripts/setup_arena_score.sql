@@ -77,24 +77,25 @@ DECLARE
   max_stability CONSTANT NUMERIC := 7;
 BEGIN
   -- 根据时间段设置参数
+  -- 注：tanh_coeff 越小，曲线越平缓，高收益者分数压缩更明显
   CASE period
     WHEN '7D' THEN
       pnl_threshold := 300;
-      tanh_coeff := 0.12;
+      tanh_coeff := 0.08;    -- 从 0.12 降低，减少满分
       roi_exponent := 1.8;
       mdd_threshold := 15;
       win_rate_cap := 62;
       days := 7;
     WHEN '30D' THEN
       pnl_threshold := 1000;
-      tanh_coeff := 0.22;
+      tanh_coeff := 0.15;    -- 从 0.22 降低，减少满分
       roi_exponent := 1.6;
       mdd_threshold := 30;
       win_rate_cap := 68;
       days := 30;
     WHEN '90D' THEN
       pnl_threshold := 3000;
-      tanh_coeff := 0.18;
+      tanh_coeff := 0.18;    -- 保持不变
       roi_exponent := 1.6;
       mdd_threshold := 40;
       win_rate_cap := 70;
