@@ -49,21 +49,22 @@ export const ARENA_CONFIG = {
   },
   
   // 评分参数
+  // 注：tanh 系数越小，曲线越平缓，高收益者分数压缩更明显
   PARAMS: {
     '7D': {
-      tanhCoeff: 0.12,      // tanh 系数
+      tanhCoeff: 0.08,      // tanh 系数（从 0.12 降低，减少满分）
       roiExponent: 1.8,     // ROI 指数
       mddThreshold: 15,     // 回撤阈值（百分比）
       winRateCap: 62,       // 胜率满分线（百分比）
     },
     '30D': {
-      tanhCoeff: 0.22,
+      tanhCoeff: 0.15,      // tanh 系数（从 0.22 降低，减少满分）
       roiExponent: 1.6,
       mddThreshold: 30,
       winRateCap: 68,
     },
     '90D': {
-      tanhCoeff: 0.18,
+      tanhCoeff: 0.18,      // 保持不变
       roiExponent: 1.6,
       mddThreshold: 40,
       winRateCap: 70,

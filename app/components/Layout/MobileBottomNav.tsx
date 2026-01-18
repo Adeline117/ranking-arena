@@ -16,32 +16,32 @@ const NAV_ITEMS: NavItem[] = [
   {
     href: '/',
     labelKey: 'home',
-    icon: '🏠',
-    activeIcon: '🏠',
+    icon: '',
+    activeIcon: '',
   },
   {
     href: '/hot',
     labelKey: 'hot',
-    icon: '🔥',
-    activeIcon: '🔥',
+    icon: '',
+    activeIcon: '',
   },
   {
     href: '/groups',
     labelKey: 'groups',
-    icon: '💬',
-    activeIcon: '💬',
+    icon: '',
+    activeIcon: '',
   },
   {
     href: '/favorites',
     labelKey: 'favorites',
-    icon: '⭐',
-    activeIcon: '⭐',
+    icon: '',
+    activeIcon: '',
   },
   {
     href: '/settings',
     labelKey: 'settings',
-    icon: '⚙️',
-    activeIcon: '⚙️',
+    icon: '',
+    activeIcon: '',
   },
 ]
 

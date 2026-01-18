@@ -4,7 +4,34 @@
 
 import { SupabaseClient } from '@supabase/supabase-js'
 
-export type TraderSource = 'binance' | 'binance_web3' | 'bybit' | 'bitget' | 'mexc' | 'coinex' | 'okx' | 'kucoin' | 'gate'
+// 完整的 source 名称，与导入脚本保持一致
+export type TraderSource = 
+  | 'binance_futures' 
+  | 'binance_spot' 
+  | 'binance_web3' 
+  | 'bybit' 
+  | 'bitget_futures' 
+  | 'bitget_spot' 
+  | 'mexc' 
+  | 'coinex' 
+  | 'okx_web3' 
+  | 'kucoin' 
+  | 'gmx'
+
+// 所有支持的 source 列表
+export const ALL_SOURCES: TraderSource[] = [
+  'binance_futures',
+  'binance_spot',
+  'binance_web3',
+  'bybit',
+  'bitget_futures',
+  'bitget_spot',
+  'mexc',
+  'coinex',
+  'okx_web3',
+  'kucoin',
+  'gmx',
+]
 
 export interface TraderSnapshot {
   source_trader_id: string
@@ -90,20 +117,14 @@ export async function getAllLatestTimestamps(
   supabase: SupabaseClient,
   seasonId: string | null = null
 ): Promise<Record<TraderSource, string | null>> {
-  const sources: TraderSource[] = ['binance', 'bybit', 'bitget', 'okx', 'kucoin', 'gate', 'mexc', 'coinex']
-  const results = await Promise.all(sources.map(s => getLatestTimestamp(supabase, s, seasonId)))
+  const results = await Promise.all(ALL_SOURCES.map(s => getLatestTimestamp(supabase, s, seasonId)))
   
-  return {
-    binance: results[0],
-    binance_web3: null,
-    bybit: results[1],
-    bitget: results[2],
-    mexc: results[6],
-    coinex: results[7],
-    okx: results[3],
-    kucoin: results[4],
-    gate: results[5],
-  }
+  const timestamps: Record<TraderSource, string | null> = {} as Record<TraderSource, string | null>
+  ALL_SOURCES.forEach((source, index) => {
+    timestamps[source] = results[index]
+  })
+  
+  return timestamps
 }
 
 export async function getAllLatestSnapshots(
@@ -112,22 +133,16 @@ export async function getAllLatestSnapshots(
   seasonId: string | null = null,
   limit: number = 100
 ): Promise<Record<TraderSource, TraderSnapshot[]>> {
-  const sources: TraderSource[] = ['binance', 'bybit', 'bitget', 'okx', 'kucoin', 'gate', 'mexc', 'coinex']
   const results = await Promise.all(
-    sources.map(s => getLatestSnapshots(supabase, s, timestamps[s], seasonId, limit))
+    ALL_SOURCES.map(s => getLatestSnapshots(supabase, s, timestamps[s], seasonId, limit))
   )
 
-  return {
-    binance: results[0],
-    binance_web3: [],
-    bybit: results[1],
-    bitget: results[2],
-    mexc: results[6],
-    coinex: results[7],
-    okx: results[3],
-    kucoin: results[4],
-    gate: results[5],
-  }
+  const snapshots: Record<TraderSource, TraderSnapshot[]> = {} as Record<TraderSource, TraderSnapshot[]>
+  ALL_SOURCES.forEach((source, index) => {
+    snapshots[source] = results[index]
+  })
+  
+  return snapshots
 }
 
 export async function getAllTraderHandles(
@@ -137,20 +152,13 @@ export async function getAllTraderHandles(
   const { data } = await supabase
     .from('trader_sources')
     .select('source, source_trader_id, handle, profile_url')
-    .in('source', ['binance', 'bybit', 'bitget', 'okx', 'kucoin', 'gate', 'mexc', 'coinex'])
-    .limit(1000)
+    .in('source', ALL_SOURCES)
+    .limit(1500)
 
-  const result: Record<TraderSource, Map<string, TraderHandle>> = {
-    binance: new Map(),
-    binance_web3: new Map(),
-    bybit: new Map(),
-    bitget: new Map(),
-    mexc: new Map(),
-    coinex: new Map(),
-    okx: new Map(),
-    kucoin: new Map(),
-    gate: new Map(),
-  }
+  const result: Record<TraderSource, Map<string, TraderHandle>> = {} as Record<TraderSource, Map<string, TraderHandle>>
+  ALL_SOURCES.forEach(source => {
+    result[source] = new Map()
+  })
 
   data?.forEach((item: { source: string; source_trader_id: string; handle: string | null; profile_url: string | null }) => {
     const source = item.source as TraderSource

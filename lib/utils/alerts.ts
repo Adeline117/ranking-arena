@@ -64,12 +64,12 @@ const SEVERITY_COLORS: Record<AlertSeverity, string> = {
   critical: '#dc3545', // 深红色
 }
 
-// 严重性级别对应的 emoji
-const SEVERITY_EMOJI: Record<AlertSeverity, string> = {
-  info: 'ℹ️',
-  warning: '⚠️',
-  error: '❌',
-  critical: '🚨',
+// 严重性级别对应的标签
+const SEVERITY_LABEL: Record<AlertSeverity, string> = {
+  info: '[信息]',
+  warning: '[警告]',
+  error: '[错误]',
+  critical: '[紧急]',
 }
 
 /**
@@ -83,11 +83,11 @@ async function sendSlackAlert(payload: AlertPayload, config: NotificationConfig[
   const slackPayload = {
     channel: config.channel,
     username: config.username,
-    icon_emoji: SEVERITY_EMOJI[payload.severity],
+    icon_emoji: SEVERITY_LABEL[payload.severity],
     attachments: [
       {
         color: SEVERITY_COLORS[payload.severity],
-        title: `${SEVERITY_EMOJI[payload.severity]} ${payload.title}`,
+        title: `${SEVERITY_LABEL[payload.severity]} ${payload.title}`,
         text: payload.message,
         fields: [
           {
@@ -151,7 +151,7 @@ async function sendDiscordAlert(payload: AlertPayload, config: NotificationConfi
   const discordPayload = {
     embeds: [
       {
-        title: `${SEVERITY_EMOJI[payload.severity]} ${payload.title}`,
+        title: `${SEVERITY_LABEL[payload.severity]} ${payload.title}`,
         description: payload.message,
         color: parseInt(SEVERITY_COLORS[payload.severity].replace('#', ''), 16),
         fields: [
