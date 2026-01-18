@@ -155,7 +155,50 @@ export default function RankingTable(props: {
   const endIndex = startIndex + itemsPerPage
   const paginatedTraders = sortedTraders.slice(startIndex, endIndex)
   
-  // 数据来源标签映射
+  // 解析 source 为交易所名称和类型
+  type SourceInfo = { exchange: string; type: string; typeColor: string }
+  
+  const parseSourceInfo = (src: string): SourceInfo => {
+    // 交易所名称映射
+    const exchangeMap: Record<string, string> = {
+      'binance': 'Binance',
+      'bybit': 'Bybit',
+      'bitget': 'Bitget',
+      'mexc': 'MEXC',
+      'coinex': 'CoinEx',
+      'okx': 'OKX',
+      'kucoin': 'KuCoin',
+      'gmx': 'GMX',
+    }
+    
+    // 类型映射（中英文）
+    const typeMap: Record<string, { label: string; color: string }> = {
+      'futures': { label: '合约', color: tokens.colors.accent.primary },
+      'spot': { label: '现货', color: tokens.colors.accent.warning },
+      'web3': { label: '链上', color: tokens.colors.accent.success },
+    }
+    
+    // 解析 source 字符串
+    const parts = src.toLowerCase().split('_')
+    let exchange = parts[0]
+    let type = parts[1] || 'futures' // 默认合约
+    
+    // 特殊处理 bybit（默认合约）、gmx（链上）
+    if (src === 'bybit') type = 'futures'
+    if (src === 'gmx') type = 'web3'
+    if (src === 'mexc' || src === 'coinex' || src === 'kucoin') type = 'futures'
+    
+    const exchangeName = exchangeMap[exchange] || exchange.charAt(0).toUpperCase() + exchange.slice(1)
+    const typeInfo = typeMap[type] || { label: type, color: tokens.colors.text.tertiary }
+    
+    return {
+      exchange: exchangeName,
+      type: typeInfo.label,
+      typeColor: typeInfo.color,
+    }
+  }
+  
+  // 保留原有的完整标签映射（用于可访问性）
   const sourceLabels: Record<string, string> = {
     'binance_futures': 'Binance 合约',
     'binance_spot': 'Binance 现货',
@@ -450,7 +493,7 @@ export default function RankingTable(props: {
                           />
                         )}
                       </Box>
-                      {/* 名字 + 交易所标签 */}
+                      {/* 名字 + 交易所标签（拆分为交易所名 + 类型） */}
                       <Box style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0, flex: 1 }}>
                         <Text 
                           size="sm"
@@ -465,18 +508,50 @@ export default function RankingTable(props: {
                         >
                           {displayName}
                         </Text>
-                        <Text
-                          size="xs"
-                          weight="semibold"
-                          style={{
-                            color: tokens.colors.accent.primary,
-                            fontSize: '9px',
-                            textTransform: 'uppercase',
-                            opacity: 0.85,
-                          }}
-                        >
-                          {sourceLabelText}
-                        </Text>
+                        {/* 拆分的交易所标签：交易所名 + 类型 */}
+                        <Box style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                          {(() => {
+                            const info = parseSourceInfo(trader.source || source || '')
+                            return (
+                              <>
+                                {/* 交易所名称标签 */}
+                                <Text
+                                  size="xs"
+                                  weight="bold"
+                                  style={{
+                                    color: tokens.colors.text.secondary,
+                                    fontSize: '9px',
+                                    textTransform: 'uppercase',
+                                    letterSpacing: '0.3px',
+                                  }}
+                                >
+                                  {info.exchange}
+                                </Text>
+                                {/* 类型标签（合约/现货/链上） */}
+                                <Box
+                                  style={{
+                                    padding: '1px 4px',
+                                    borderRadius: tokens.radius.sm,
+                                    background: `${info.typeColor}15`,
+                                    border: `1px solid ${info.typeColor}30`,
+                                  }}
+                                >
+                                  <Text
+                                    size="xs"
+                                    weight="bold"
+                                    style={{
+                                      color: info.typeColor,
+                                      fontSize: '8px',
+                                      lineHeight: 1.2,
+                                    }}
+                                  >
+                                    {info.type}
+                                  </Text>
+                                </Box>
+                              </>
+                            )
+                          })()}
+                        </Box>
                       </Box>
                     </Box>
 

@@ -8,6 +8,7 @@ import {
   getAllLatestTimestamps,
   getAllLatestSnapshots,
   getAllTraderHandles,
+  ALL_SOURCES,
   type TraderSource,
 } from './trader-snapshots'
 import type { Trader } from '@/app/components/Features/RankingTable'
@@ -98,9 +99,8 @@ async function loadTradersFromDB(
 
     // 收集所有 trader IDs
     const allTraderIds: string[] = []
-    const sources: TraderSource[] = ['binance', 'bybit', 'bitget', 'okx', 'kucoin', 'gate', 'mexc', 'coinex']
     
-    for (const source of sources) {
+    for (const source of ALL_SOURCES) {
       const sourceSnapshots = snapshots[source] || []
       sourceSnapshots.forEach(s => allTraderIds.push(s.source_trader_id))
     }
@@ -111,7 +111,7 @@ async function loadTradersFromDB(
     // 转换数据
     const traders: Trader[] = []
     
-    for (const source of sources) {
+    for (const source of ALL_SOURCES) {
       const sourceSnapshots = snapshots[source] || []
       const handleMap = allHandles[source] || new Map()
 
