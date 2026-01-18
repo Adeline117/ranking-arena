@@ -629,7 +629,7 @@ async function importToSupabase(normalizedData, period = '90D') {
     const batch = snapshotsData.slice(i, i + BATCH_SIZE)
     const { error } = await supabase
       .from('trader_snapshots')
-      .insert(batch)
+      .upsert(batch, { onConflict: 'source,source_trader_id,season_id,captured_at' })
     
     if (error) {
       console.error(`trader_snapshots 批次 ${Math.floor(i / BATCH_SIZE) + 1} 错误:`, error.message)

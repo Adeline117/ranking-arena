@@ -52,13 +52,13 @@ export async function getTraderListData(options: TraderListServerProps = {}): Pr
       .order('roi', { ascending: false })
       .limit(limit)
 
-    // 根据时间范围过滤
+    // 根据时间范围过滤，统一使用 season_id 查询
     if (timeRange === '7D') {
       query = query.eq('season_id', '7D')
     } else if (timeRange === '30D') {
       query = query.eq('season_id', '30D')
     } else {
-      query = query.or('season_id.is.null,season_id.eq.90D')
+      query = query.eq('season_id', '90D')
     }
 
     // 按交易所过滤

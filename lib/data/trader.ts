@@ -397,7 +397,7 @@ export async function getTraderPerformance(
             .select('roi, pnl, win_rate, max_drawdown')
             .eq('source', source.source)
             .eq('source_trader_id', source.source_trader_id)
-            .or('season_id.is.null,season_id.eq.90D')
+            .eq('season_id', '90D')
             .order('captured_at', { ascending: false })
             .limit(1)
             .maybeSingle(),

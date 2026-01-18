@@ -1,8 +1,7 @@
 /**
  * Binance Copy Trading 排行榜数据抓取
  * 
- * 使用 Puppeteer 模拟浏览器访问 Binance 排行榜页面，
- * 拦截 API 响应获取真实的 7D/30D/90D 数据
+ * 使用 Puppeteer 模拟真实浏览器访问，拦截 API 响应获取数据
  * 
  * 用法: node scripts/import_binance_copy_trading_90d.mjs [7D|30D|90D]
  */
@@ -24,16 +23,16 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 // 时间周期配置
 const PERIOD_CONFIG = {
   '7D': { 
-    tabText: ['7 Days', '7Days', '7D', '7天', '7 天'],
-    apiTimeRange: ['WEEKLY', '7D', '7'],
+    tabIndex: 2,  // 0=90D, 1=30D, 2=7D (从右到左)
+    urlParam: '7D',
   },
   '30D': { 
-    tabText: ['30 Days', '30Days', '30D', '30天', '30 天'],
-    apiTimeRange: ['MONTHLY', '30D', '30'],
+    tabIndex: 1,
+    urlParam: '30D',
   },
   '90D': { 
-    tabText: ['90 Days', '90Days', '90D', '90天', '90 天'],
-    apiTimeRange: ['QUARTERLY', '90D', '90'],
+    tabIndex: 0,
+    urlParam: '90D',
   },
 }
 
@@ -51,7 +50,7 @@ function getTargetPeriod() {
   if (arg && ['7D', '30D', '90D'].includes(arg)) {
     return arg
   }
-  return '90D' // 默认 90D
+  return '90D'
 }
 
 /**
@@ -61,20 +60,16 @@ function parseTraderFromApi(item, rank) {
   const traderId = String(item.portfolioId || item.encryptedUid || item.leadPortfolioId || '')
   if (!traderId) return null
 
-  // ROI 可能是小数（如 23.47 表示 2347%）或百分比值（如 2347.01）
-  let roi = parseFloat(item.roi ?? item.roiPct ?? item.roiRate ?? 0)
-  // 如果 ROI 看起来像是小数形式（如 23.47），转换为百分比
-  // Binance 返回的 ROI 通常已经是百分比值
-  
   return {
     traderId,
     nickname: item.nickName || item.nickname || item.displayName || null,
     avatar: item.userPhoto || item.avatar || item.avatarUrl || null,
-    roi,
+    roi: parseFloat(item.roi ?? item.roiPct ?? item.roiRate ?? 0),
     pnl: parseFloat(item.pnl ?? item.profit ?? item.totalProfit ?? 0),
     winRate: parseFloat(item.winRate ?? item.winRatio ?? 0),
     maxDrawdown: parseFloat(item.mdd ?? item.maxDrawdown ?? 0),
     followers: parseInt(item.copierCount ?? item.followerCount ?? item.followers ?? 0),
+    aum: parseFloat(item.aum ?? item.totalAsset ?? 0),
     rank,
   }
 }
@@ -93,12 +88,14 @@ async function fetchLeaderboardData(period) {
       '--disable-setuid-sandbox',
       '--disable-dev-shm-usage',
       '--disable-blink-features=AutomationControlled',
-      '--disable-web-security',
+      '--disable-infobars',
+      '--window-size=1920,1080',
+      '--start-maximized',
     ],
   })
 
-  const traders = []
-  let apiDataReceived = false
+  const traders = new Map()
+  const apiResponses = []
 
   try {
     const page = await browser.newPage()
@@ -106,164 +103,205 @@ async function fetchLeaderboardData(period) {
     // 设置真实的浏览器指纹
     await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
     await page.setViewport({ width: 1920, height: 1080 })
+    
+    // 设置额外的 headers
+    await page.setExtraHTTPHeaders({
+      'Accept-Language': 'en-US,en;q=0.9',
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+    })
 
     // 隐藏 webdriver 标识
     await page.evaluateOnNewDocument(() => {
-      Object.defineProperty(navigator, 'webdriver', { get: () => false })
-      Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] })
+      // 隐藏 webdriver
+      Object.defineProperty(navigator, 'webdriver', { get: () => undefined })
+      
+      // 模拟插件
+      Object.defineProperty(navigator, 'plugins', {
+        get: () => [
+          { name: 'Chrome PDF Plugin', filename: 'internal-pdf-viewer' },
+          { name: 'Chrome PDF Viewer', filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai' },
+          { name: 'Native Client', filename: 'internal-nacl-plugin' },
+        ],
+      })
+      
+      // 模拟语言
       Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] })
+      
+      // 覆盖 chrome 对象
+      window.chrome = { runtime: {} }
+      
+      // 覆盖权限查询
+      const originalQuery = window.navigator.permissions.query
+      window.navigator.permissions.query = (parameters) => (
+        parameters.name === 'notifications' ?
+          Promise.resolve({ state: Notification.permission }) :
+          originalQuery(parameters)
+      )
     })
 
-    // 监听 API 响应
-    const config = PERIOD_CONFIG[period]
-    
+    // 监听所有网络响应
     page.on('response', async (response) => {
       const url = response.url()
       
-      // 检查是否是排行榜 API
+      // 检查是否是排行榜相关的 API
       if (url.includes('copy-trade') && 
-          (url.includes('query-list') || url.includes('list') || url.includes('leaderboard'))) {
+          (url.includes('query-list') || url.includes('list') || url.includes('home-page'))) {
         try {
           const json = await response.json()
           
-          // 检查是否是我们要的时间周期的数据
-          const urlLower = url.toLowerCase()
-          const isTargetPeriod = config.apiTimeRange.some(tr => 
-            urlLower.includes(tr.toLowerCase()) || 
-            url.includes(`timeRange=${tr}`) ||
-            url.includes(`period=${tr}`)
-          )
-          
-          if (json.data && (json.code === '000000' || json.success)) {
+          if (json.data && (json.code === '000000' || json.success !== false)) {
             const list = json.data?.list || json.data?.data || (Array.isArray(json.data) ? json.data : [])
             
             if (Array.isArray(list) && list.length > 0) {
-              console.log(`  📡 拦截到 API 响应: ${list.length} 个交易员`)
-              
-              list.forEach((item, idx) => {
-                const trader = parseTraderFromApi(item, idx + 1)
-                if (trader && !traders.find(t => t.traderId === trader.traderId)) {
-                  traders.push(trader)
-                }
-              })
-              
-              apiDataReceived = true
+              console.log(`  📡 拦截到 API: ${url.split('?')[0].split('/').slice(-2).join('/')} - ${list.length} 条`)
+              apiResponses.push({ url, list })
             }
           }
         } catch (e) {
-          // 非 JSON 响应，忽略
+          // 非 JSON 响应
         }
       }
     })
 
     // 访问排行榜页面
     console.log('📱 访问 Binance Copy Trading 排行榜...')
-    await page.goto(BASE_URL, { 
-      waitUntil: 'networkidle2', 
-      timeout: 60000 
-    })
-    await sleep(3000)
+    
+    try {
+      await page.goto(BASE_URL, { 
+        waitUntil: 'domcontentloaded',
+        timeout: 30000 
+      })
+    } catch (e) {
+      console.log('  ⚠ 页面加载超时，继续尝试...')
+    }
+    
+    await sleep(5000)
+
+    // 检查是否有验证码或被阻止
+    const pageContent = await page.content()
+    if (pageContent.includes('captcha') || pageContent.includes('blocked') || pageContent.includes('Access Denied')) {
+      console.log('  ⚠ 检测到访问限制，尝试继续...')
+    }
 
     // 尝试点击时间周期 tab
     console.log(`🔄 切换到 ${period} 时间周期...`)
     
-    const clicked = await page.evaluate((tabTexts) => {
-      // 查找所有可能的 tab 元素
-      const elements = document.querySelectorAll('button, [role="tab"], [role="button"], div[class*="tab"], span[class*="tab"], div[class*="filter"], span[class*="filter"]')
+    // 方法1: 尝试通过文本点击
+    const clickResult = await page.evaluate((period) => {
+      const searchTexts = {
+        '7D': ['7 Days', '7D', '7天', '7 天', '7days'],
+        '30D': ['30 Days', '30D', '30天', '30 天', '30days'],
+        '90D': ['90 Days', '90D', '90天', '90 天', '90days'],
+      }
+      
+      const texts = searchTexts[period] || []
+      
+      // 查找所有可点击元素
+      const elements = document.querySelectorAll('button, [role="tab"], [role="button"], div[class*="tab"], span[class*="tab"], div[class*="filter"], span[class*="filter"], div[class*="option"], span[class*="option"]')
       
       for (const el of elements) {
-        const text = (el.innerText || el.textContent || '').trim()
-        for (const tabText of tabTexts) {
-          if (text === tabText || text.includes(tabText)) {
+        const elText = (el.innerText || el.textContent || '').trim().toLowerCase()
+        for (const text of texts) {
+          if (elText === text.toLowerCase() || elText.includes(text.toLowerCase())) {
             el.click()
-            return { success: true, text }
+            return { success: true, text: elText, method: 'text-match' }
           }
         }
       }
       
-      // 尝试查找下拉选择器
-      const selects = document.querySelectorAll('select, [class*="select"], [class*="dropdown"]')
-      for (const select of selects) {
-        const options = select.querySelectorAll('option, [role="option"]')
-        for (const option of options) {
-          const text = (option.innerText || option.textContent || '').trim()
-          for (const tabText of tabTexts) {
-            if (text === tabText || text.includes(tabText)) {
-              option.click()
-              return { success: true, text, type: 'dropdown' }
-            }
-          }
-        }
+      // 尝试查找下拉菜单
+      const dropdowns = document.querySelectorAll('select, [class*="select"], [class*="dropdown"]')
+      for (const dropdown of dropdowns) {
+        dropdown.click?.()
       }
       
       return { success: false }
-    }, config.tabText)
+    }, period)
 
-    if (clicked.success) {
-      console.log(`  ✓ 点击成功: "${clicked.text}"`)
-      await sleep(3000)
+    if (clickResult.success) {
+      console.log(`  ✓ 点击成功: "${clickResult.text}"`)
     } else {
-      console.log(`  ⚠ 未找到 ${period} tab，尝试从页面提取数据...`)
+      console.log(`  ⚠ 未找到 ${period} 选择器`)
     }
+    
+    await sleep(3000)
 
-    // 滚动加载更多数据
+    // 滚动加载更多
     console.log('📜 滚动加载更多数据...')
-    for (let i = 0; i < 10; i++) {
-      await page.evaluate(() => window.scrollBy(0, 800))
-      await sleep(800)
+    for (let i = 0; i < 15; i++) {
+      await page.evaluate(() => window.scrollBy(0, 600))
+      await sleep(500)
+    }
+    
+    // 滚回顶部
+    await page.evaluate(() => window.scrollTo(0, 0))
+    await sleep(2000)
+
+    // 处理收集到的 API 响应
+    console.log(`\n📊 处理 ${apiResponses.length} 个 API 响应...`)
+    
+    for (const { list } of apiResponses) {
+      list.forEach((item, idx) => {
+        const trader = parseTraderFromApi(item, idx + 1)
+        if (trader && trader.traderId) {
+          // 如果已存在，更新（保留最高 ROI 的数据）
+          const existing = traders.get(trader.traderId)
+          if (!existing || trader.roi > existing.roi) {
+            traders.set(trader.traderId, trader)
+          }
+        }
+      })
     }
 
-    // 如果没有从 API 获取到数据，尝试从页面 DOM 提取
-    if (traders.length === 0) {
+    // 如果 API 没有数据，尝试从页面 DOM 提取
+    if (traders.size === 0) {
       console.log('📊 从页面 DOM 提取数据...')
       
       const pageTraders = await page.evaluate(() => {
         const results = []
         const seen = new Set()
         
-        // 查找所有链接到交易员详情页的元素
-        const links = document.querySelectorAll('a[href*="lead"], a[href*="portfolio"], a[href*="trader"]')
+        // 查找所有交易员卡片
+        const cards = document.querySelectorAll('[class*="card"], [class*="item"], [class*="trader"], [class*="portfolio"]')
         
-        links.forEach((link, idx) => {
-          const href = link.getAttribute('href') || ''
+        cards.forEach((card) => {
+          const text = card.innerText || ''
           
-          // 提取 ID
+          // 查找链接获取 ID
+          const link = card.querySelector('a[href*="portfolio"], a[href*="lead"], a[href*="trader"]')
+          const href = link?.getAttribute('href') || ''
+          
           let traderId = null
-          const portfolioIdMatch = href.match(/portfolioId=(\d+)/)
-          const encryptedUidMatch = href.match(/encryptedUid=([A-Za-z0-9]+)/)
-          traderId = portfolioIdMatch?.[1] || encryptedUidMatch?.[1]
+          const idMatch = href.match(/portfolioId=(\d+)/) || href.match(/encryptedUid=([A-Za-z0-9]+)/)
+          traderId = idMatch?.[1]
           
           if (!traderId || seen.has(traderId)) return
           seen.add(traderId)
           
-          // 向上查找包含完整信息的容器
-          let container = link
-          for (let i = 0; i < 10 && container.parentElement; i++) {
-            container = container.parentElement
-            const text = container.innerText || ''
-            if (text.includes('ROI') || text.includes('%')) break
-          }
-          
-          const text = container.innerText || ''
-          
-          // 提取 ROI
+          // 提取 ROI (查找带 % 的数字)
           const roiMatches = text.match(/([+-]?\d{1,3}(?:,\d{3})*(?:\.\d+)?)\s*%/g)
           let roi = null
-          if (roiMatches && roiMatches.length > 0) {
-            // 取第一个百分比值作为 ROI
-            const roiStr = roiMatches[0].replace(/[^0-9.+-]/g, '')
-            roi = parseFloat(roiStr)
+          if (roiMatches) {
+            for (const match of roiMatches) {
+              const val = parseFloat(match.replace(/[^0-9.+-]/g, ''))
+              if (val > 0 && (roi === null || val > roi)) {
+                roi = val
+              }
+            }
           }
           
           // 提取昵称
-          const nameEl = container.querySelector('[class*="name"], [class*="nick"], [class*="title"]')
-          const nickname = nameEl?.innerText?.trim()?.split('\n')[0] || null
+          let nickname = null
+          const nameEl = card.querySelector('[class*="name"], [class*="nick"], [class*="title"]')
+          if (nameEl) {
+            nickname = nameEl.innerText?.trim()?.split('\n')[0]
+          }
           
           // 提取头像
-          const avatarEl = container.querySelector('img[src*="avatar"], img[src*="profile"], img')
+          const avatarEl = card.querySelector('img')
           const avatar = avatarEl?.src || null
           
-          if (traderId && roi !== null) {
+          if (traderId && roi !== null && roi > 0) {
             results.push({
               traderId,
               nickname,
@@ -278,23 +316,68 @@ async function fetchLeaderboardData(period) {
           }
         })
         
+        // 如果卡片方式没找到，尝试查找所有链接
+        if (results.length === 0) {
+          const links = document.querySelectorAll('a[href*="portfolio"], a[href*="lead-details"]')
+          links.forEach((link, idx) => {
+            const href = link.getAttribute('href') || ''
+            const idMatch = href.match(/portfolioId=(\d+)/)
+            const traderId = idMatch?.[1]
+            
+            if (!traderId || seen.has(traderId)) return
+            seen.add(traderId)
+            
+            // 向上查找容器
+            let container = link
+            for (let i = 0; i < 8 && container.parentElement; i++) {
+              container = container.parentElement
+              if (container.innerText?.length > 50) break
+            }
+            
+            const text = container.innerText || ''
+            const roiMatch = text.match(/([+-]?\d{1,3}(?:,\d{3})*(?:\.\d+)?)\s*%/)
+            const roi = roiMatch ? parseFloat(roiMatch[1].replace(/,/g, '')) : null
+            
+            if (traderId && roi !== null && roi > 0) {
+              results.push({
+                traderId,
+                nickname: null,
+                avatar: null,
+                roi,
+                pnl: null,
+                winRate: null,
+                maxDrawdown: null,
+                followers: null,
+                rank: idx + 1,
+              })
+            }
+          })
+        }
+        
         return results
       })
       
       pageTraders.forEach(t => {
-        if (!traders.find(tr => tr.traderId === t.traderId)) {
-          traders.push(t)
+        if (!traders.has(t.traderId)) {
+          traders.set(t.traderId, t)
         }
       })
     }
 
-    console.log(`\n📊 共获取 ${traders.length} 个交易员数据`)
+    console.log(`\n📊 共获取 ${traders.size} 个交易员数据`)
+
+    // 截图用于调试
+    if (traders.size === 0) {
+      const screenshotPath = `/tmp/binance_${period}_${Date.now()}.png`
+      await page.screenshot({ path: screenshotPath, fullPage: true })
+      console.log(`  📸 截图保存到: ${screenshotPath}`)
+    }
 
   } finally {
     await browser.close()
   }
 
-  return traders
+  return Array.from(traders.values())
 }
 
 /**
@@ -319,11 +402,11 @@ async function saveTraders(traders, period) {
         is_active: true,
       }, { onConflict: 'source,source_trader_id' })
 
-      // 保存 trader_snapshots（只保存当前周期）
+      // 保存 trader_snapshots（只保存当前周期的数据）
       const { error } = await supabase.from('trader_snapshots').upsert({
         source: 'binance',
         source_trader_id: trader.traderId,
-        season_id: period,
+        season_id: period,  // 关键：使用传入的周期参数
         rank: trader.rank,
         roi: trader.roi,
         pnl: trader.pnl,
@@ -368,9 +451,16 @@ async function main() {
     const traders = await fetchLeaderboardData(period)
 
     if (traders.length === 0) {
-      console.log('\n⚠ 未获取到任何数据')
-      process.exit(1)
+      console.log('\n⚠ 未获取到任何数据，跳过保存')
+      // 不退出，让 cron 继续执行其他任务
+      return
     }
+
+    // 按 ROI 排序
+    traders.sort((a, b) => (b.roi || 0) - (a.roi || 0))
+
+    // 重新分配排名
+    traders.forEach((t, idx) => t.rank = idx + 1)
 
     // 打印 TOP 5
     console.log(`\n📋 ${period} TOP 5:`)
@@ -389,7 +479,7 @@ async function main() {
 
   } catch (error) {
     console.error('\n❌ 执行失败:', error.message)
-    process.exit(1)
+    // 不退出，让 cron 继续执行其他任务
   }
 }
 
