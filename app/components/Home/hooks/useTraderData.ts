@@ -8,18 +8,24 @@ export type TimeRange = '90D' | '30D' | '7D'
 // 本地存储 key
 const TIME_RANGE_STORAGE_KEY = 'ranking_time_range'
 
+interface CachedData {
+  traders: Trader[]
+  lastUpdated: string | null
+}
+
 interface UseTraderDataOptions {
   autoRefreshInterval?: number // 自动刷新间隔（毫秒）
-  onDataUpdated?: () => void
 }
 
 export function useTraderData(options: UseTraderDataOptions = {}) {
-  const { autoRefreshInterval = 5 * 60 * 1000, onDataUpdated } = options
+  // 默认 10 分钟自动刷新（数据每 2 小时更新一次，无需频繁刷新）
+  const { autoRefreshInterval = 10 * 60 * 1000 } = options
   
   // 使用 Map 缓存已加载的数据
-  const tradersCache = useRef<Map<string, Trader[]>>(new Map())
+  const tradersCache = useRef<Map<string, CachedData>>(new Map())
   const [currentTraders, setCurrentTraders] = useState<Trader[]>([])
   const [loading, setLoading] = useState(true)
+  const [lastUpdated, setLastUpdated] = useState<string | null>(null)
   
   // 从 localStorage 读取用户偏好的时间段
   const [activeTimeRange, setActiveTimeRange] = useState<TimeRange>(() => {
@@ -33,28 +39,31 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
   })
 
   // 加载单个时间段数据
-  const loadTimeRange = useCallback(async (timeRange: TimeRange, forceRefresh = false): Promise<Trader[]> => {
+  const loadTimeRange = useCallback(async (timeRange: TimeRange, forceRefresh = false): Promise<CachedData> => {
     // 检查缓存（非强制刷新时）
     if (!forceRefresh && tradersCache.current.has(timeRange)) {
-      return tradersCache.current.get(timeRange) || []
+      return tradersCache.current.get(timeRange) || { traders: [], lastUpdated: null }
     }
     
     try {
       const response = await fetch(`/api/traders?timeRange=${timeRange}`)
       if (!response.ok) {
         console.error(`[useTraderData] ${timeRange} API 错误`)
-        return tradersCache.current.get(timeRange) || []
+        return tradersCache.current.get(timeRange) || { traders: [], lastUpdated: null }
       }
       const data = await response.json()
-      const traders = data.traders || []
+      const cached: CachedData = {
+        traders: data.traders || [],
+        lastUpdated: data.lastUpdated || null,
+      }
       
       // 更新缓存
-      tradersCache.current.set(timeRange, traders)
+      tradersCache.current.set(timeRange, cached)
       
-      return traders
+      return cached
     } catch (error) {
       console.error(`[useTraderData] 加载 ${timeRange} 数据失败:`, error)
-      return tradersCache.current.get(timeRange) || []
+      return tradersCache.current.get(timeRange) || { traders: [], lastUpdated: null }
     }
   }, [])
 
@@ -62,19 +71,17 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
   const loadCurrentData = useCallback(async (forceRefresh = false) => {
     setLoading(true)
     try {
-      const traders = await loadTimeRange(activeTimeRange, forceRefresh)
-      setCurrentTraders(traders)
-      
-      if (forceRefresh && onDataUpdated) {
-        onDataUpdated()
-      }
+      const cached = await loadTimeRange(activeTimeRange, forceRefresh)
+      setCurrentTraders(cached.traders)
+      setLastUpdated(cached.lastUpdated)
     } catch (error) {
       console.error('[useTraderData] 加载交易者数据失败:', error)
       setCurrentTraders([])
+      setLastUpdated(null)
     } finally {
       setLoading(false)
     }
-  }, [activeTimeRange, loadTimeRange, onDataUpdated])
+  }, [activeTimeRange, loadTimeRange])
 
   // 初次加载和时间段切换时加载数据
   useEffect(() => {
@@ -88,16 +95,20 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
     }
   }, [activeTimeRange])
   
-  // 自动刷新
+  // 自动刷新（静默刷新，不显示 loading）
   useEffect(() => {
     if (autoRefreshInterval > 0) {
       const interval = setInterval(() => {
-        loadCurrentData(true)
+        // 静默刷新：不设置 loading 状态
+        loadTimeRange(activeTimeRange, true).then(cached => {
+          setCurrentTraders(cached.traders)
+          setLastUpdated(cached.lastUpdated)
+        })
       }, autoRefreshInterval)
       
       return () => clearInterval(interval)
     }
-  }, [autoRefreshInterval, loadCurrentData])
+  }, [autoRefreshInterval, activeTimeRange, loadTimeRange])
 
   // 切换时间段
   const changeTimeRange = useCallback((range: TimeRange) => {
@@ -118,6 +129,7 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
     traders: currentTraders,
     loading,
     activeTimeRange,
+    lastUpdated,
     changeTimeRange,
     refresh,
     clearCache,

@@ -32,22 +32,60 @@ type GroupApplication = {
   }
 }
 
-type AdminTab = 'snapshots' | 'applications'
+type TraderData = {
+  traderId: string
+  handle: string | null
+  roi: number
+  pnl: number | null
+  winRate: number | null
+  rank: number
+}
+
+type PeriodReport = {
+  period: string
+  lastUpdate: string | null
+  isStale: boolean
+  traderCount: number
+  top10: TraderData[]
+}
+
+type SourceReport = {
+  source: string
+  displayName: string
+  type: string
+  periods: PeriodReport[]
+}
+
+type DataReport = {
+  ok: boolean
+  stats: {
+    totalSources: number
+    healthySources: number
+    staleSources: number
+    lastGenerated: string
+  }
+  reports: SourceReport[]
+}
+
+type AdminTab = 'snapshots' | 'applications' | 'dataReport'
 
 export default function AdminPage() {
   const router = useRouter()
   const [rows, setRows] = useState<any[]>([])
   const [applications, setApplications] = useState<GroupApplication[]>([])
+  const [dataReport, setDataReport] = useState<DataReport | null>(null)
   const [loading, setLoading] = useState(true)
   const [applicationsLoading, setApplicationsLoading] = useState(true)
+  const [reportLoading, setReportLoading] = useState(false)
   const [email, setEmail] = useState<string | null>(null)
   const [accessToken, setAccessToken] = useState<string | null>(null)
   const [isAdmin, setIsAdmin] = useState(false)
   const [authChecking, setAuthChecking] = useState(true)
-  const [activeTab, setActiveTab] = useState<AdminTab>('applications')
+  const [activeTab, setActiveTab] = useState<AdminTab>('dataReport')
   const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({})
   const [rejectReason, setRejectReason] = useState<Record<string, string>>({})
   const [showRejectInput, setShowRejectInput] = useState<Record<string, boolean>>({})
+  const [expandedSources, setExpandedSources] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     checkAuth()
@@ -88,6 +126,7 @@ export default function AdminPage() {
       setAuthChecking(false)
       loadSnapshots()
       loadApplications(session.access_token)
+      loadDataReport()
     } catch (error) {
       console.error('Auth check failed:', error)
       router.push('/login')
@@ -123,6 +162,23 @@ export default function AdminPage() {
       console.error('Error loading applications:', err)
     } finally {
       setApplicationsLoading(false)
+    }
+  }
+
+  async function loadDataReport() {
+    setReportLoading(true)
+    
+    try {
+      const res = await fetch('/api/admin/data-report')
+      const data = await res.json()
+      
+      if (data.ok) {
+        setDataReport(data)
+      }
+    } catch (err) {
+      console.error('Error loading data report:', err)
+    } finally {
+      setReportLoading(false)
     }
   }
 
@@ -186,6 +242,27 @@ export default function AdminPage() {
     }
   }
 
+  function toggleSourceExpand(source: string) {
+    setExpandedSources(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(source)) {
+        newSet.delete(source)
+      } else {
+        newSet.add(source)
+      }
+      return newSet
+    })
+  }
+
+  function getSourceTypeColor(type: string) {
+    switch (type) {
+      case 'futures': return tokens.colors.accent.warning
+      case 'spot': return tokens.colors.accent.success
+      case 'web3': return '#3B82F6'
+      default: return tokens.colors.text.tertiary
+    }
+  }
+
   if (authChecking) {
     return (
       <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
@@ -228,7 +305,13 @@ export default function AdminPage() {
         </Box>
 
         {/* Tabs */}
-        <Box style={{ display: 'flex', gap: tokens.spacing[2], marginBottom: tokens.spacing[6] }}>
+        <Box style={{ display: 'flex', gap: tokens.spacing[2], marginBottom: tokens.spacing[6], flexWrap: 'wrap' }}>
+          <Button
+            variant={activeTab === 'dataReport' ? 'primary' : 'secondary'}
+            onClick={() => setActiveTab('dataReport')}
+          >
+            数据校验报告
+          </Button>
           <Button
             variant={activeTab === 'applications' ? 'primary' : 'secondary'}
             onClick={() => setActiveTab('applications')}
@@ -242,6 +325,167 @@ export default function AdminPage() {
             交易员快照
           </Button>
         </Box>
+
+        {/* Data Report Tab */}
+        {activeTab === 'dataReport' && (
+          <Card title="数据校验报告">
+            <Box style={{ marginBottom: tokens.spacing[4], display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Box>
+                {dataReport && (
+                  <Box style={{ display: 'flex', gap: tokens.spacing[4], flexWrap: 'wrap' }}>
+                    <Text size="sm" color="secondary">
+                      数据源: {dataReport.stats.totalSources}
+                    </Text>
+                    <Text size="sm" style={{ color: tokens.colors.accent.success }}>
+                      正常: {dataReport.stats.healthySources}
+                    </Text>
+                    <Text size="sm" style={{ color: tokens.colors.accent.error }}>
+                      陈旧: {dataReport.stats.staleSources}
+                    </Text>
+                    <Text size="sm" color="tertiary">
+                      生成时间: {dataReport.stats.lastGenerated ? new Date(dataReport.stats.lastGenerated).toLocaleString('zh-CN') : '-'}
+                    </Text>
+                  </Box>
+                )}
+              </Box>
+              <Button variant="secondary" size="sm" onClick={loadDataReport} disabled={reportLoading}>
+                {reportLoading ? '刷新中...' : '刷新报告'}
+              </Button>
+            </Box>
+
+            {reportLoading && !dataReport ? (
+              <Box style={{ padding: tokens.spacing[8], textAlign: 'center' }}>
+                <Text color="tertiary">加载中...</Text>
+              </Box>
+            ) : dataReport ? (
+              <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}>
+                {dataReport.reports.map((report) => (
+                  <Box
+                    key={report.source}
+                    style={{
+                      background: tokens.colors.bg.secondary,
+                      borderRadius: tokens.radius.lg,
+                      border: `1px solid ${tokens.colors.border.primary}`,
+                      overflow: 'hidden',
+                    }}
+                  >
+                    {/* 数据源标题 */}
+                    <Box
+                      style={{
+                        padding: tokens.spacing[4],
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        cursor: 'pointer',
+                        background: expandedSources.has(report.source) ? tokens.colors.bg.tertiary : 'transparent',
+                      }}
+                      onClick={() => toggleSourceExpand(report.source)}
+                    >
+                      <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3] }}>
+                        <Text size="lg" weight="bold">{report.displayName}</Text>
+                        <Box
+                          style={{
+                            padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
+                            borderRadius: tokens.radius.sm,
+                            background: getSourceTypeColor(report.type),
+                            color: '#fff',
+                            fontSize: tokens.typography.fontSize.xs,
+                            fontWeight: tokens.typography.fontWeight.bold,
+                            textTransform: 'uppercase',
+                          }}
+                        >
+                          {report.type}
+                        </Box>
+                      </Box>
+                      <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[4] }}>
+                        {report.periods.map((p) => (
+                          <Box key={p.period} style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1] }}>
+                            <Box
+                              style={{
+                                width: 8,
+                                height: 8,
+                                borderRadius: '50%',
+                                background: p.isStale ? tokens.colors.accent.error : tokens.colors.accent.success,
+                              }}
+                            />
+                            <Text size="sm" color={p.isStale ? 'tertiary' : 'secondary'}>
+                              {p.period}
+                            </Text>
+                          </Box>
+                        ))}
+                        <Text size="lg" color="tertiary">
+                          {expandedSources.has(report.source) ? '▼' : '▶'}
+                        </Text>
+                      </Box>
+                    </Box>
+
+                    {/* 展开内容 */}
+                    {expandedSources.has(report.source) && (
+                      <Box style={{ padding: tokens.spacing[4], borderTop: `1px solid ${tokens.colors.border.primary}` }}>
+                        {report.periods.map((p) => (
+                          <Box key={p.period} style={{ marginBottom: tokens.spacing[4] }}>
+                            <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: tokens.spacing[2] }}>
+                              <Text size="md" weight="bold">
+                                {p.period} 排行榜
+                              </Text>
+                              <Box style={{ display: 'flex', gap: tokens.spacing[3] }}>
+                                <Text size="xs" color={p.isStale ? 'tertiary' : 'secondary'}>
+                                  {p.lastUpdate ? `更新: ${new Date(p.lastUpdate).toLocaleString('zh-CN')}` : '无数据'}
+                                </Text>
+                                <Text size="xs" color="tertiary">
+                                  共 {p.traderCount} 人
+                                </Text>
+                              </Box>
+                            </Box>
+
+                            {p.top10.length > 0 ? (
+                              <Box style={{ overflowX: 'auto' }}>
+                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: tokens.typography.fontSize.sm }}>
+                                  <thead>
+                                    <tr style={{ borderBottom: `1px solid ${tokens.colors.border.primary}` }}>
+                                      <th style={{ padding: tokens.spacing[2], textAlign: 'left', color: tokens.colors.text.tertiary }}>排名</th>
+                                      <th style={{ padding: tokens.spacing[2], textAlign: 'left', color: tokens.colors.text.tertiary }}>交易员</th>
+                                      <th style={{ padding: tokens.spacing[2], textAlign: 'right', color: tokens.colors.text.tertiary }}>ROI</th>
+                                      <th style={{ padding: tokens.spacing[2], textAlign: 'right', color: tokens.colors.text.tertiary }}>胜率</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {p.top10.map((trader, idx) => (
+                                      <tr key={trader.traderId} style={{ borderBottom: `1px solid ${tokens.colors.border.primary}` }}>
+                                        <td style={{ padding: tokens.spacing[2] }}>{idx + 1}</td>
+                                        <td style={{ padding: tokens.spacing[2], fontFamily: 'monospace', fontSize: tokens.typography.fontSize.xs }}>
+                                          {trader.handle || trader.traderId.slice(0, 16) + '...'}
+                                        </td>
+                                        <td style={{ padding: tokens.spacing[2], textAlign: 'right', color: trader.roi >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error, fontWeight: 'bold' }}>
+                                          {trader.roi >= 0 ? '+' : ''}{trader.roi.toFixed(2)}%
+                                        </td>
+                                        <td style={{ padding: tokens.spacing[2], textAlign: 'right' }}>
+                                          {trader.winRate != null ? `${trader.winRate.toFixed(1)}%` : '-'}
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </Box>
+                            ) : (
+                              <Text size="sm" color="tertiary" style={{ padding: tokens.spacing[2] }}>
+                                暂无数据
+                              </Text>
+                            )}
+                          </Box>
+                        ))}
+                      </Box>
+                    )}
+                  </Box>
+                ))}
+              </Box>
+            ) : (
+              <Box style={{ padding: tokens.spacing[8], textAlign: 'center' }}>
+                <Text color="tertiary">暂无报告数据</Text>
+              </Box>
+            )}
+          </Card>
+        )}
 
         {/* Applications Tab */}
         {activeTab === 'applications' && (

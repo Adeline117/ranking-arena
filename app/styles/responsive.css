@@ -48,21 +48,22 @@
 
 @media (min-width: 768px) {
   .main-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr 280px;
     gap: 20px;
   }
 }
 
 @media (min-width: 1024px) {
   .main-grid {
-    grid-template-columns: 1fr 320px;
-    gap: 24px;
+    grid-template-columns: 240px 1fr 280px;
+    gap: 20px;
   }
 }
 
 @media (min-width: 1280px) {
   .main-grid {
-    grid-template-columns: 1fr 360px;
+    grid-template-columns: 260px 1fr 300px;
+    gap: 24px;
   }
 }
 
@@ -141,6 +142,45 @@
     width: 60px;
     flex-shrink: 0;
     text-align: right;
+  }
+}
+
+/* ============================================
+   响应式排行榜网格
+   ============================================ */
+
+/* 移动端：只显示 Rank | Trader | ROI */
+.ranking-table-grid {
+  grid-template-columns: 36px 1fr 80px !important;
+}
+
+.ranking-table-grid .col-score,
+.ranking-table-grid .col-winrate,
+.ranking-table-grid .col-mdd {
+  display: none;
+}
+
+/* 平板：显示 Rank | Trader | Score | ROI */
+@media (min-width: 640px) {
+  .ranking-table-grid {
+    grid-template-columns: 40px 1fr 60px 80px !important;
+  }
+  
+  .ranking-table-grid .col-score {
+    display: flex;
+  }
+}
+
+/* 桌面：显示所有列 */
+@media (min-width: 768px) {
+  .ranking-table-grid {
+    grid-template-columns: 44px minmax(140px, 1.5fr) 64px 90px 70px 70px !important;
+  }
+  
+  .ranking-table-grid .col-score,
+  .ranking-table-grid .col-winrate,
+  .ranking-table-grid .col-mdd {
+    display: flex;
   }
 }
 

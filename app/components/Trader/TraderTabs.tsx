@@ -46,13 +46,10 @@ export default function TraderTabs({ activeTab, onTabChange }: TraderTabsProps) 
       style={{
         display: 'flex',
         gap: tokens.spacing[2],
-        marginBottom: tokens.spacing[6],
-        paddingBottom: tokens.spacing[4],
-        borderBottom: `1px solid ${tokens.colors.border.primary}`,
+        marginBottom: tokens.spacing[4],
         position: 'relative',
-        background: `linear-gradient(180deg, transparent 0%, ${tokens.colors.bg.secondary}40 100%)`,
         padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-        borderRadius: `${tokens.radius.lg} ${tokens.radius.lg} 0 0`,
+        paddingBottom: tokens.spacing[3],
       }}
     >
       {tabs.map((tab) => (
@@ -126,11 +123,10 @@ export default function TraderTabs({ activeTab, onTabChange }: TraderTabsProps) 
           bottom: 0,
           left: indicatorStyle.left,
           width: indicatorStyle.width,
-          height: 3,
-          background: `linear-gradient(90deg, ${tokens.colors.accent.primary}, ${tokens.colors.accent.brand})`,
-          borderRadius: '3px 3px 0 0',
+          height: 2,
+          background: tokens.colors.accent.primary,
+          borderRadius: '2px 2px 0 0',
           transition: 'all 0.35s cubic-bezier(0.4, 0, 0.2, 1)',
-          boxShadow: `0 0 12px ${tokens.colors.accent.primary}60`,
         }}
       />
     </Box>

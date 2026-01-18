@@ -244,16 +244,16 @@ export default function RankingTable(props: {
             ?
           </button>
         </Box>
-        <Text size="sm" weight="bold" color="tertiary" style={{ textAlign: 'center', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap', fontSize: '12px' }}>
+        <Text className="col-score" size="sm" weight="bold" color="tertiary" style={{ textAlign: 'center', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap', fontSize: '12px', alignItems: 'center', justifyContent: 'center' }}>
           Score
         </Text>
         <Text size="sm" weight="bold" color="tertiary" style={{ textAlign: 'right', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap', fontSize: '12px' }}>
           ROI
         </Text>
-        <Text size="sm" weight="bold" color="tertiary" style={{ textAlign: 'right', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap', fontSize: '12px' }}>
+        <Text className="col-winrate" size="sm" weight="bold" color="tertiary" style={{ textAlign: 'right', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap', fontSize: '12px', alignItems: 'center', justifyContent: 'flex-end' }}>
           Win%
         </Text>
-        <Text size="sm" weight="bold" color="tertiary" style={{ textAlign: 'right', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap', fontSize: '12px' }}>
+        <Text className="col-mdd" size="sm" weight="bold" color="tertiary" style={{ textAlign: 'right', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap', fontSize: '12px', alignItems: 'center', justifyContent: 'flex-end' }}>
           MDD
         </Text>
       </Box>
@@ -368,11 +368,10 @@ export default function RankingTable(props: {
                   }}
                 >
                   <Box
-                    className="ranking-row"
+                    className="ranking-row ranking-table-grid"
                     role="row"
                     style={{
                       display: 'grid',
-                      gridTemplateColumns: '44px minmax(140px, 1.5fr) 64px 90px 70px 70px',
                       alignItems: 'center',
                       gap: tokens.spacing[2],
                       padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
@@ -478,7 +477,7 @@ export default function RankingTable(props: {
                     </Box>
 
                     {/* Arena Score - 前三名带光效 */}
-                    <Box style={{ textAlign: 'center', display: 'flex', justifyContent: 'center' }}>
+                    <Box className="col-score" style={{ textAlign: 'center', display: 'flex', justifyContent: 'center' }}>
                       <Box
                         style={{
                           position: 'relative',
@@ -574,7 +573,7 @@ export default function RankingTable(props: {
                     </Box>
 
                     {/* 胜率 - 增大字体 */}
-                    <Box style={{ textAlign: 'right' }}>
+                    <Box className="col-winrate" style={{ textAlign: 'right', alignItems: 'center', justifyContent: 'flex-end' }}>
                       <Text 
                         size="sm"
                         weight="semibold" 
@@ -589,7 +588,7 @@ export default function RankingTable(props: {
                     </Box>
 
                     {/* 最大回撤 - 增大字体 */}
-                    <Box style={{ textAlign: 'right' }}>
+                    <Box className="col-mdd" style={{ textAlign: 'right', alignItems: 'center', justifyContent: 'flex-end' }}>
                       <Text 
                         size="sm"
                         weight="semibold" 

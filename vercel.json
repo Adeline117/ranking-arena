@@ -1,8 +1,64 @@
 {
   "crons": [
     {
-      "path": "/api/cron/fetch-traders",
+      "path": "/api/cron/fetch-hot-traders",
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cron/fetch-followed-traders",
+      "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/check-alerts?shard=1/2",
+      "schedule": "*/30 * * * *"
+    },
+    {
+      "path": "/api/cron/check-alerts?shard=2/2",
+      "schedule": "15,45 * * * *"
+    },
+    {
+      "path": "/api/cron/fetch-traders/binance_futures",
       "schedule": "0 */6 * * *"
+    },
+    {
+      "path": "/api/cron/fetch-traders/binance_spot",
+      "schedule": "5 */6 * * *"
+    },
+    {
+      "path": "/api/cron/fetch-traders/binance_web3",
+      "schedule": "10 */6 * * *"
+    },
+    {
+      "path": "/api/cron/fetch-traders/bybit",
+      "schedule": "15 */6 * * *"
+    },
+    {
+      "path": "/api/cron/fetch-traders/bitget_futures",
+      "schedule": "20 */6 * * *"
+    },
+    {
+      "path": "/api/cron/fetch-traders/bitget_spot",
+      "schedule": "25 */6 * * *"
+    },
+    {
+      "path": "/api/cron/fetch-traders/mexc",
+      "schedule": "30 */6 * * *"
+    },
+    {
+      "path": "/api/cron/fetch-traders/coinex",
+      "schedule": "35 */6 * * *"
+    },
+    {
+      "path": "/api/cron/fetch-traders/okx_web3",
+      "schedule": "40 */6 * * *"
+    },
+    {
+      "path": "/api/cron/fetch-traders/kucoin",
+      "schedule": "45 */6 * * *"
+    },
+    {
+      "path": "/api/cron/fetch-traders/gmx",
+      "schedule": "50 */6 * * *"
     }
   ],
   "headers": [
@@ -39,6 +95,42 @@
         {
           "key": "Cache-Control",
           "value": "s-maxage=60, stale-while-revalidate=300"
+        }
+      ]
+    },
+    {
+      "source": "/api/reviews",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "s-maxage=60, stale-while-revalidate=300"
+        }
+      ]
+    },
+    {
+      "source": "/api/avoid-list",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "s-maxage=120, stale-while-revalidate=600"
+        }
+      ]
+    },
+    {
+      "source": "/api/journals",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "s-maxage=30, stale-while-revalidate=120"
+        }
+      ]
+    },
+    {
+      "source": "/api/portfolio/suggestions",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "s-maxage=300, stale-while-revalidate=900"
         }
       ]
     },
