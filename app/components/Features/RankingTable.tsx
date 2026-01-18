@@ -157,13 +157,17 @@ export default function RankingTable(props: {
   
   // 数据来源标签映射
   const sourceLabels: Record<string, string> = {
-    'binance': 'Binance',
-    'binance_web3': 'Binance Web3',
-    'bybit': 'Bybit',
-    'bitget': 'Bitget',
-    'mexc': 'MEXC',
-    'coinex': 'CoinEx',
-    'okx': 'OKX',
+    'binance_futures': 'Binance 合约',
+    'binance_spot': 'Binance 现货',
+    'binance_web3': 'Binance 链上',
+    'bybit': 'Bybit 合约',
+    'bitget_futures': 'Bitget 合约',
+    'bitget_spot': 'Bitget 现货',
+    'mexc': 'MEXC 合约',
+    'coinex': 'CoinEx 合约',
+    'okx_web3': 'OKX 链上',
+    'kucoin': 'KuCoin 合约',
+    'gmx': 'GMX 链上',
   }
   
   const sourceLabel = source ? sourceLabels[source] || source : t('unknownSource')

@@ -94,7 +94,6 @@ export default function PortfolioTable({ items, history = [] }: PortfolioTablePr
           }}
         >
           <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
-            
             <Text size="lg" weight="black" style={{ color: tokens.colors.text.primary }}>
               {t('portfolio')}
             </Text>
@@ -279,7 +278,6 @@ export default function PortfolioTable({ items, history = [] }: PortfolioTablePr
               <EmptyState 
                 message={t('noCurrentPositions')} 
                 subMessage={t('noCurrentPositionsDesc')} 
-                
               />
             )
           ) : (
@@ -348,116 +346,122 @@ export default function PortfolioTable({ items, history = [] }: PortfolioTablePr
                       <button
                         onClick={() => setHistoryExpanded(!historyExpanded)}
                         style={{
-                          padding: '12px 16px',
-                          borderRadius: '12px',
-                          border: '1px solid ' + tokens.colors.border.primary,
+                          padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+                          borderRadius: tokens.radius.lg,
+                          border: `1px solid ${tokens.colors.border.primary}`,
                           background: tokens.colors.bg.tertiary,
                           color: tokens.colors.text.secondary,
-                          fontSize: '14px',
-                          fontWeight: 500,
+                          fontSize: tokens.typography.fontSize.sm,
+                          fontWeight: tokens.typography.fontWeight.medium,
                           cursor: 'pointer',
+                          transition: 'all 0.2s ease',
+                          fontFamily: tokens.typography.fontFamily.sans.join(', '),
                           width: '100%',
                           textAlign: 'center',
                         }}
                       >
-                        {historyExpanded ? '收起' : '展开全部 (' + sortedHistory.length + ' 条)'}
+                        {historyExpanded ? `收起` : `展开全部 (${sortedHistory.length} 条)`}
                       </button>
                     )}
                   </Box>
                 ) : (
-                  <Box style={{ overflowX: 'auto' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                      <thead>
-                        <tr>
-                          <th style={{ ...thStyle, textAlign: 'left' }}>{t('symbol')}</th>
-                          <th style={{ ...thStyle, textAlign: 'left' }}>{t('direction')}</th>
-                          <th style={{ ...thStyle, textAlign: 'right' }}>{t('entryPrice')}</th>
-                          <th style={{ ...thStyle, textAlign: 'right' }}>{t('exitPrice')}</th>
-                          <th style={{ ...thStyle, textAlign: 'right' }}>{t('pnl')}</th>
-                          <th style={{ ...thStyle, textAlign: 'right' }}>{t('closeTime')}</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {(historyExpanded ? sortedHistory : sortedHistory.slice(0, COLLAPSED_COUNT)).map((item, idx) => (
-                          <tr
-                            key={idx}
-                            className="portfolio-row"
-                            style={{
-                              background: hoveredRow === 100 + idx ? `${tokens.colors.accent.primary}05` : 'transparent',
-                              transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
-                            }}
-                            onMouseEnter={() => setHoveredRow(100 + idx)}
-                            onMouseLeave={() => setHoveredRow(null)}
-                          >
-                            <td style={{ padding: tokens.spacing[4] }}>
-                              <Text size="sm" weight="bold" style={{ color: tokens.colors.text.primary }}>
-                                {item.symbol}
-                              </Text>
-                            </td>
-                            <td style={{ padding: tokens.spacing[4] }}>
-                              <Box style={{ 
-                                display: 'inline-flex',
-                                padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
-                                borderRadius: tokens.radius.full,
-                                background: item.direction === 'long' ? `${tokens.colors.accent.success}15` : `${tokens.colors.accent.error}15`,
-                              }}>
-                                <Text size="xs" style={{ 
-                                  color: item.direction === 'long' ? tokens.colors.accent.success : tokens.colors.accent.error,
-                                  fontWeight: tokens.typography.fontWeight.bold,
-                                }}>
-                                  {item.direction === 'long' ? '做多' : '做空'}
-                                </Text>
-                              </Box>
-                            </td>
-                            <td style={{ padding: tokens.spacing[4], textAlign: 'right' }}>
-                              <Text size="sm" style={{ color: tokens.colors.text.secondary, fontFamily: tokens.typography.fontFamily.mono.join(', ') }}>
-                                {formatPrice(item.entryPrice)}
-                              </Text>
-                            </td>
-                            <td style={{ padding: tokens.spacing[4], textAlign: 'right' }}>
-                              <Text size="sm" style={{ color: tokens.colors.text.secondary, fontFamily: tokens.typography.fontFamily.mono.join(', ') }}>
-                                {formatPrice(item.exitPrice)}
-                              </Text>
-                            </td>
-                            <td style={{ padding: tokens.spacing[4], textAlign: 'right' }}>
-                              <Text
-                                size="sm"
-                                weight="bold"
-                                style={{ 
-                                  color: item.pnlPct >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error,
-                                  fontFamily: tokens.typography.fontFamily.mono.join(', '),
-                                }}
-                              >
-                                {item.pnlPct >= 0 ? '+' : ''}{item.pnlPct.toFixed(2)}%
-                              </Text>
-                            </td>
-                            <td style={{ padding: tokens.spacing[4], textAlign: 'right' }}>
-                              <Text size="xs" style={{ color: tokens.colors.text.tertiary }}>
-                                {item.closeTime ? formatDateTime(item.closeTime) : '-'}
-                              </Text>
-                            </td>
+                  <Box>
+                    <Box style={{ overflowX: 'auto' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                        <thead>
+                          <tr>
+                            <th style={{ ...thStyle, textAlign: 'left' }}>{t('symbol')}</th>
+                            <th style={{ ...thStyle, textAlign: 'left' }}>{t('direction')}</th>
+                            <th style={{ ...thStyle, textAlign: 'right' }}>{t('entryPrice')}</th>
+                            <th style={{ ...thStyle, textAlign: 'right' }}>{t('exitPrice')}</th>
+                            <th style={{ ...thStyle, textAlign: 'right' }}>{t('pnl')}</th>
+                            <th style={{ ...thStyle, textAlign: 'right' }}>{t('closeTime')}</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                        </thead>
+                        <tbody>
+                          {(historyExpanded ? sortedHistory : sortedHistory.slice(0, COLLAPSED_COUNT)).map((item, idx) => (
+                            <tr
+                              key={idx}
+                              className="portfolio-row"
+                              style={{
+                                background: hoveredRow === 100 + idx ? `${tokens.colors.accent.primary}05` : 'transparent',
+                                transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+                              }}
+                              onMouseEnter={() => setHoveredRow(100 + idx)}
+                              onMouseLeave={() => setHoveredRow(null)}
+                            >
+                              <td style={{ padding: tokens.spacing[4] }}>
+                                <Text size="sm" weight="bold" style={{ color: tokens.colors.text.primary }}>
+                                  {item.symbol}
+                                </Text>
+                              </td>
+                              <td style={{ padding: tokens.spacing[4] }}>
+                                <Box style={{ 
+                                  display: 'inline-flex',
+                                  padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
+                                  borderRadius: tokens.radius.full,
+                                  background: item.direction === 'long' ? `${tokens.colors.accent.success}15` : `${tokens.colors.accent.error}15`,
+                                }}>
+                                  <Text size="xs" style={{ 
+                                    color: item.direction === 'long' ? tokens.colors.accent.success : tokens.colors.accent.error,
+                                    fontWeight: tokens.typography.fontWeight.bold,
+                                  }}>
+                                    {item.direction === 'long' ? '做多' : '做空'}
+                                  </Text>
+                                </Box>
+                              </td>
+                              <td style={{ padding: tokens.spacing[4], textAlign: 'right' }}>
+                                <Text size="sm" style={{ color: tokens.colors.text.secondary, fontFamily: tokens.typography.fontFamily.mono.join(', ') }}>
+                                  {formatPrice(item.entryPrice)}
+                                </Text>
+                              </td>
+                              <td style={{ padding: tokens.spacing[4], textAlign: 'right' }}>
+                                <Text size="sm" style={{ color: tokens.colors.text.secondary, fontFamily: tokens.typography.fontFamily.mono.join(', ') }}>
+                                  {formatPrice(item.exitPrice)}
+                                </Text>
+                              </td>
+                              <td style={{ padding: tokens.spacing[4], textAlign: 'right' }}>
+                                <Text
+                                  size="sm"
+                                  weight="bold"
+                                  style={{ 
+                                    color: item.pnlPct >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error,
+                                    fontFamily: tokens.typography.fontFamily.mono.join(', '),
+                                  }}
+                                >
+                                  {item.pnlPct >= 0 ? '+' : ''}{item.pnlPct.toFixed(2)}%
+                                </Text>
+                              </td>
+                              <td style={{ padding: tokens.spacing[4], textAlign: 'right' }}>
+                                <Text size="xs" style={{ color: tokens.colors.text.tertiary }}>
+                                  {item.closeTime ? formatDateTime(item.closeTime) : '-'}
+                                </Text>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </Box>
                     {sortedHistory.length > COLLAPSED_COUNT && (
                       <button
                         onClick={() => setHistoryExpanded(!historyExpanded)}
                         style={{
-                          padding: '12px 16px',
-                          borderRadius: '12px',
-                          border: '1px solid ' + tokens.colors.border.primary,
+                          padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+                          borderRadius: tokens.radius.lg,
+                          border: `1px solid ${tokens.colors.border.primary}`,
                           background: tokens.colors.bg.tertiary,
                           color: tokens.colors.text.secondary,
-                          fontSize: '14px',
-                          fontWeight: 500,
+                          fontSize: tokens.typography.fontSize.sm,
+                          fontWeight: tokens.typography.fontWeight.medium,
                           cursor: 'pointer',
+                          transition: 'all 0.2s ease',
+                          fontFamily: tokens.typography.fontFamily.sans.join(', '),
                           width: '100%',
                           textAlign: 'center',
-                          marginTop: '12px',
+                          marginTop: tokens.spacing[3],
                         }}
                       >
-                        {historyExpanded ? '收起' : '展开全部 (' + sortedHistory.length + ' 条)'}
+                        {historyExpanded ? `收起` : `展开全部 (${sortedHistory.length} 条)`}
                       </button>
                     )}
                   </Box>
@@ -467,7 +471,6 @@ export default function PortfolioTable({ items, history = [] }: PortfolioTablePr
               <EmptyState 
                 message={t('noPositionHistory')} 
                 subMessage={t('noPositionHistoryDesc')}
-                
               />
             )
           )}
@@ -749,7 +752,7 @@ const thStyle = {
   borderBottom: `1px solid ${tokens.colors.border.primary}40`,
 }
 
-function EmptyState({ message, subMessage, icon = "📊" }: { message: string; subMessage: string; icon?: string }) {
+function EmptyState({ message, subMessage }: { message: string; subMessage: string }) {
   return (
     <Box style={{ 
       padding: tokens.spacing[10], 
@@ -759,20 +762,6 @@ function EmptyState({ message, subMessage, icon = "📊" }: { message: string; s
       alignItems: 'center',
       gap: tokens.spacing[3],
     }}>
-      <Box
-        style={{
-          width: 64,
-          height: 64,
-          borderRadius: tokens.radius.full,
-          background: tokens.colors.bg.tertiary,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          fontSize: '28px',
-        }}
-      >
-        {icon}
-      </Box>
       <Text size="base" color="secondary" style={{ fontWeight: tokens.typography.fontWeight.medium }}>
         {message}
       </Text>

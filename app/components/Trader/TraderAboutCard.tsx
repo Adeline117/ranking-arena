@@ -12,6 +12,9 @@ import MessageButton from '../UI/MessageButton'
 import FollowListModal from '../UI/FollowListModal'
 import { getAvatarGradient, getAvatarInitial } from '@/lib/utils/avatar'
 
+/**
+ * 带动画的头像组件
+ */
 function AnimatedAvatar({ 
   avatarUrl, 
   handle, 
@@ -53,6 +56,7 @@ function AnimatedAvatar({
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
+      {/* 光环效果 */}
       <Box
         style={{
           position: 'absolute',
@@ -64,6 +68,7 @@ function AnimatedAvatar({
           animation: isHovered ? 'spin 3s linear infinite' : 'none',
         }}
       />
+      {/* 头像图片 */}
       {avatarUrl && !imageError && (
         <img 
           src={avatarUrl} 
@@ -84,6 +89,7 @@ function AnimatedAvatar({
           onError={() => setImageError(true)}
         />
       )}
+      {/* 首字母 fallback */}
       {showFallback && (
         <Text 
           size="2xl" 
@@ -110,13 +116,17 @@ interface TraderAboutCardProps {
   avatarUrl?: string
   bio?: string
   followers?: number
-  following?: number
+  following?: number  // 合并后的总关注数（用户 + 交易员）
   isRegistered?: boolean
   isOwnProfile?: boolean
   showFollowers?: boolean
   showFollowing?: boolean
 }
 
+/**
+ * 交易员卡片 - 右侧固定卡片
+ * 现代化玻璃质感设计
+ */
 export default function TraderAboutCard({
   handle,
   traderId,
@@ -176,6 +186,7 @@ export default function TraderAboutCard({
         e.currentTarget.style.boxShadow = '0 8px 32px rgba(0, 0, 0, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.06)'
       }}
     >
+      {/* 装饰背景 */}
       <Box
         style={{
           position: 'absolute',
@@ -188,6 +199,7 @@ export default function TraderAboutCard({
         }}
       />
       
+      {/* 头像 */}
       <Box style={{ display: 'flex', justifyContent: 'center', position: 'relative', zIndex: 1 }}>
         <AnimatedAvatar 
           avatarUrl={avatarUrl}
@@ -197,6 +209,7 @@ export default function TraderAboutCard({
         />
       </Box>
 
+      {/* 交易员ID */}
       <Text 
         size="xl" 
         weight="black" 
@@ -212,6 +225,7 @@ export default function TraderAboutCard({
         {handle}
       </Text>
 
+      {/* Bio */}
       {bio && (
         <Text 
           size="sm" 
@@ -228,6 +242,7 @@ export default function TraderAboutCard({
         </Text>
       )}
 
+      {/* 操作按钮 */}
       <Box style={{ position: 'relative', zIndex: 1 }}>
         {isOwnProfile ? (
           <Button
@@ -279,6 +294,7 @@ export default function TraderAboutCard({
         ) : null}
       </Box>
 
+      {/* 统计数据 - 只有两项：关注中 和 被关注 */}
       <Box
         style={{
           paddingTop: tokens.spacing[5],
@@ -290,6 +306,7 @@ export default function TraderAboutCard({
           zIndex: 1,
         }}
       >
+        {/* 关注中（用户 + 交易员合并） - 点击跳转到关注页面 */}
         <Link href="/following" style={{ textDecoration: 'none' }}>
           <StatItem
             label="关注中"
@@ -298,6 +315,7 @@ export default function TraderAboutCard({
           />
         </Link>
 
+        {/* 被关注 */}
         <StatItem
           label="被关注"
           value={followersCount}
@@ -306,6 +324,7 @@ export default function TraderAboutCard({
         />
       </Box>
 
+      {/* 被关注列表弹窗 */}
       {isRegistered && (
         <FollowListModal
           isOpen={modalType === 'followers'}
@@ -318,16 +337,11 @@ export default function TraderAboutCard({
         />
       )}
       
-      <style jsx>{`
-        @keyframes spin {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
-        }
-      `}</style>
     </Box>
   )
 }
 
+// 统计项组件
 function StatItem({
   label,
   value,
