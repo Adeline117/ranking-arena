@@ -1,3 +1,22 @@
+/**
+ * Binance Copy Trading 数据抓取脚本 - 修复版
+ * 
+ * 使用正确的 API endpoint 和字段映射
+ * 
+ * API Endpoints (已验证):
+ * - Performance: /bapi/futures/v1/public/future/copy-trade/lead-portfolio/performance
+ *   返回: { timeRange, roi, pnl, mdd, copierPnl, winRate, winOrders, totalOrder, sharpRatio }
+ * 
+ * - Asset Breakdown: /bapi/futures/v1/public/future/copy-trade/lead-portfolio/performance/coin
+ *   返回: { timeRange, updateTime, data: [{ asset, volume }] }
+ * 
+ * - ROI Chart: /bapi/futures/v1/public/future/copy-trade/lead-portfolio/chart-data?dataType=ROI
+ *   返回: [{ value, dataType, dateTime }]
+ * 
+ * - PnL Chart: /bapi/futures/v1/public/future/copy-trade/lead-portfolio/chart-data?dataType=PNL
+ *   返回: [{ value, dataType, dateTime }]
+ */
+
 import 'dotenv/config'
 import puppeteer from 'puppeteer'
 import { createClient } from '@supabase/supabase-js'
@@ -12,10 +31,53 @@ if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
-const DETAIL_URL_TEMPLATE = 'https://www.binance.com/en/copy-trading/lead-detail?encryptedUid='
+// Binance API Base URL
+const BINANCE_API_BASE = 'https://www.binance.com'
 
 // 时间段配置
-const PERIODS = ['7D', '30D', '90D']
+const TIME_RANGES = ['7D', '30D', '90D']
+
+// HTTP 请求头
+const DEFAULT_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  'Accept': 'application/json',
+  'Accept-Language': 'en-US,en;q=0.9',
+}
+
+/**
+ * 延迟函数
+ */
+function delay(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+/**
+ * 发起 HTTP 请求
+ */
+async function fetchApi(url, retries = 3) {
+  for (let i = 0; i < retries; i++) {
+    try {
+      const response = await fetch(url, { headers: DEFAULT_HEADERS })
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`)
+      }
+      
+      const data = await response.json()
+      
+      if (data.code === '000000' && data.data !== null) {
+        return data.data
+      }
+      
+      return null
+    } catch (error) {
+      if (i < retries - 1) {
+        await delay(1000 * (i + 1))
+      }
+    }
+  }
+  return null
+}
 
 /**
  * 获取所有 Binance 交易员列表
@@ -26,7 +88,7 @@ async function getAllBinanceTraders() {
     .select('source_trader_id, handle')
     .eq('source', 'binance')
     .eq('is_active', true)
-    .limit(200) // 限制数量，避免抓取过多
+    .limit(200)
 
   if (error) {
     console.error('Error fetching traders:', error)
@@ -37,519 +99,383 @@ async function getAllBinanceTraders() {
 }
 
 /**
- * 使用 Puppeteer 抓取交易员详情页数据
- * 优化版：抓取更多详细数据包括资产偏好、收益率曲线、仓位历史等
+ * 获取 Performance 数据
+ * API: /bapi/futures/v1/public/future/copy-trade/lead-portfolio/performance
+ * 返回: { timeRange, roi, pnl, mdd, copierPnl, winRate, winOrders, totalOrder, sharpRatio }
  */
-async function fetchTraderDetails(encryptedUid, browser) {
-  const page = await browser.newPage()
+async function fetchPerformance(portfolioId, timeRange) {
+  const url = `${BINANCE_API_BASE}/bapi/futures/v1/public/future/copy-trade/lead-portfolio/performance?portfolioId=${portfolioId}&timeRange=${timeRange}`
+  const data = await fetchApi(url)
   
-  await page.setUserAgent(
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-  )
-
-  const url = `${DETAIL_URL_TEMPLATE}${encryptedUid}`
-  console.log(`  访问: ${url}`)
-
-  // 收集所有捕获的数据
-  const collectedData = {
-    detail: null,           // 基本详情
-    performance: {},        // 项目表现（按时间段）
-    assetBreakdown: {},     // 资产偏好（按时间段）
-    equityCurve: {},        // 收益率曲线（按时间段）
-    positionHistory: [],    // 仓位历史记录
+  if (data) {
+    console.log(`    ✓ Performance ${timeRange}: ROI=${data.roi?.toFixed(2)}%, WinRate=${data.winRate?.toFixed(2)}%`)
   }
+  
+  return data
+}
 
-  // 监听网络请求，捕获详情页 API 调用
-  page.on('response', async (response) => {
-    const responseUrl = response.url()
-    
-    try {
-      // 1. 捕获基本详情
-      if (responseUrl.includes('/bapi/futures/v1/friendly/future/copy-trade/lead-detail') ||
-          responseUrl.includes('/bapi/futures/v2/public/future/copyTrade/lead-portfolio/detail')) {
-        const data = await response.json()
-        if (data.code === '000000' && data.data) {
-          collectedData.detail = data.data
-          console.log(`    ✓ 捕获到基本详情`)
-        }
-      }
-      
-      // 2. 捕获项目表现数据（包括夏普比率、胜率等）
-      if (responseUrl.includes('/bapi/futures/v1/friendly/future/copy-trade/lead-performance') ||
-          responseUrl.includes('/bapi/futures/v2/public/future/copyTrade/lead-portfolio/performance')) {
-        const data = await response.json()
-        if (data.code === '000000' && data.data) {
-          // 从 URL 参数中提取时间段
-          const urlParams = new URL(responseUrl).searchParams
-          const period = urlParams.get('period') || urlParams.get('timeRange') || '90D'
-          const normalizedPeriod = normalizePeriod(period)
-          collectedData.performance[normalizedPeriod] = data.data
-          console.log(`    ✓ 捕获到项目表现 (${normalizedPeriod})`)
-        }
-      }
-      
-      // 3. 捕获资产偏好/持仓分布
-      if (responseUrl.includes('/bapi/futures/v1/friendly/future/copy-trade/lead-portfolio') ||
-          responseUrl.includes('/bapi/futures/v2/public/future/copyTrade/lead-portfolio/symbol-preference') ||
-          responseUrl.includes('symbol-preference') ||
-          responseUrl.includes('asset-preference')) {
-        const data = await response.json()
-        if (data.code === '000000' && data.data) {
-          const urlParams = new URL(responseUrl).searchParams
-          const period = urlParams.get('period') || urlParams.get('timeRange') || '90D'
-          const normalizedPeriod = normalizePeriod(period)
-          collectedData.assetBreakdown[normalizedPeriod] = data.data
-          console.log(`    ✓ 捕获到资产偏好 (${normalizedPeriod})`)
-        }
-      }
-      
-      // 4. 捕获收益率曲线数据
-      if (responseUrl.includes('/bapi/futures/v1/friendly/future/copy-trade/lead-chart') ||
-          responseUrl.includes('/bapi/futures/v2/public/future/copyTrade/lead-portfolio/pnl-chart') ||
-          responseUrl.includes('pnl-chart') ||
-          responseUrl.includes('roi-chart') ||
-          responseUrl.includes('equity-curve')) {
-        const data = await response.json()
-        if (data.code === '000000' && data.data) {
-          const urlParams = new URL(responseUrl).searchParams
-          const period = urlParams.get('period') || urlParams.get('timeRange') || '90D'
-          const normalizedPeriod = normalizePeriod(period)
-          collectedData.equityCurve[normalizedPeriod] = data.data
-          console.log(`    ✓ 捕获到收益率曲线 (${normalizedPeriod})`)
-        }
-      }
-      
-      // 5. 捕获仓位历史记录
-      if (responseUrl.includes('/bapi/futures/v1/friendly/future/copy-trade/lead-position-history') ||
-          responseUrl.includes('/bapi/futures/v2/public/future/copyTrade/lead-portfolio/position-history') ||
-          responseUrl.includes('position-history')) {
-        const data = await response.json()
-        if (data.code === '000000' && data.data) {
-          const positions = Array.isArray(data.data) ? data.data : (data.data.list || data.data.positions || [])
-          collectedData.positionHistory.push(...positions)
-          console.log(`    ✓ 捕获到仓位历史 (${positions.length} 条)`)
-        }
-      }
-      
-    } catch (e) {
-      // 忽略 JSON 解析错误
-    }
-  })
+/**
+ * 获取资产偏好数据 (Asset Breakdown)
+ * API: /bapi/futures/v1/public/future/copy-trade/lead-portfolio/performance/coin
+ * 返回: { timeRange, updateTime, data: [{ asset, volume }] }
+ * 注意: volume 是交易量占比百分比
+ */
+async function fetchAssetBreakdown(portfolioId, timeRange) {
+  const url = `${BINANCE_API_BASE}/bapi/futures/v1/public/future/copy-trade/lead-portfolio/performance/coin?portfolioId=${portfolioId}&timeRange=${timeRange}`
+  const data = await fetchApi(url)
+  
+  if (data && data.data) {
+    console.log(`    ✓ Asset Breakdown ${timeRange}: ${data.data.length} 资产`)
+  }
+  
+  return data
+}
 
+/**
+ * 获取 ROI 图表数据
+ * API: /bapi/futures/v1/public/future/copy-trade/lead-portfolio/chart-data?dataType=ROI
+ * 返回: [{ value, dataType, dateTime }]
+ */
+async function fetchRoiChart(portfolioId, timeRange) {
+  const url = `${BINANCE_API_BASE}/bapi/futures/v1/public/future/copy-trade/lead-portfolio/chart-data?dataType=ROI&portfolioId=${portfolioId}&timeRange=${timeRange}`
+  const data = await fetchApi(url)
+  
+  if (data && Array.isArray(data)) {
+    console.log(`    ✓ ROI Chart ${timeRange}: ${data.length} 数据点`)
+  }
+  
+  return data
+}
+
+/**
+ * 获取 PnL 图表数据
+ * API: /bapi/futures/v1/public/future/copy-trade/lead-portfolio/chart-data?dataType=PNL
+ * 返回: [{ value, dataType, dateTime }]
+ */
+async function fetchPnlChart(portfolioId, timeRange) {
+  const url = `${BINANCE_API_BASE}/bapi/futures/v1/public/future/copy-trade/lead-portfolio/chart-data?dataType=PNL&portfolioId=${portfolioId}&timeRange=${timeRange}`
+  const data = await fetchApi(url)
+  
+  if (data && Array.isArray(data)) {
+    console.log(`    ✓ PnL Chart ${timeRange}: ${data.length} 数据点`)
+  }
+  
+  return data
+}
+
+/**
+ * 使用 Puppeteer 获取 Position History
+ * Position History API 需要通过网页会话访问
+ */
+async function fetchPositionHistoryWithPuppeteer(portfolioId) {
+  console.log(`    获取 Position History (Puppeteer)...`)
+  
+  let browser
   try {
-    await page.goto(url, {
-      waitUntil: 'networkidle2',
-      timeout: 30000,
+    browser = await puppeteer.launch({
+      headless: true,
+      args: ['--no-sandbox', '--disable-setuid-sandbox'],
     })
-
-    // 等待页面加载和初始 API 调用
-    await new Promise(resolve => setTimeout(resolve, 3000))
-
-    // 尝试切换时间段以获取不同时间段的数据
-    for (const period of PERIODS) {
-      try {
-        // 尝试点击时间段选择器
-        const periodSelectors = [
-          `button:has-text("${period}")`,
-          `[data-period="${period}"]`,
-          `.period-selector button:nth-child(${PERIODS.indexOf(period) + 1})`,
-          `//button[contains(text(), "${period}")]`,
-        ]
-        
-        for (const selector of periodSelectors) {
-          try {
-            const element = await page.$(selector)
-            if (element) {
-              await element.click()
-              await new Promise(resolve => setTimeout(resolve, 1500))
-              break
-            }
-          } catch {
-            // 继续尝试下一个选择器
-          }
-        }
-      } catch (e) {
-        // 忽略点击错误
-      }
-    }
-
-    // 尝试获取更多仓位历史（滚动加载或点击"加载更多"）
-    try {
-      // 点击"仓位历史记录" tab
-      const historyTabSelectors = [
-        'button:has-text("仓位历史记录")',
-        'button:has-text("Position History")',
-        '[role="tab"]:nth-child(2)',
-      ]
+    
+    const page = await browser.newPage()
+    
+    await page.setUserAgent(
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    )
+    
+    let positions = []
+    
+    // 监听 Position History API 响应
+    page.on('response', async (response) => {
+      const url = response.url()
       
-      for (const selector of historyTabSelectors) {
+      if (url.includes('position-history') || url.includes('position/history')) {
         try {
-          const element = await page.$(selector)
-          if (element) {
-            await element.click()
-            await new Promise(resolve => setTimeout(resolve, 2000))
-            break
+          const data = await response.json()
+          if (data.code === '000000' && data.data) {
+            const list = data.data.list || data.data || []
+            if (Array.isArray(list)) {
+              positions = list
+              console.log(`    ✓ Position History: ${positions.length} 条记录`)
+            }
           }
         } catch {
-          // 继续尝试
+          // 忽略解析错误
         }
       }
-    } catch (e) {
+    })
+    
+    // 访问交易员详情页
+    const url = `https://www.binance.com/en/copy-trading/lead-details/${portfolioId}`
+    await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 })
+    
+    // 等待页面加载完成
+    await delay(3000)
+    
+    // 尝试点击 Position History 相关的按钮或 tab
+    try {
+      // 查找并点击 "Position" 或 "History" tab
+      const tabs = await page.$$('button, [role="tab"], .tab')
+      for (const tab of tabs) {
+        const text = await page.evaluate(el => el.textContent?.toLowerCase() || '', tab)
+        if (text.includes('position') || text.includes('history')) {
+          await tab.click()
+          await delay(2000)
+          break
+        }
+      }
+    } catch {
       // 忽略
     }
-
-    // 最后等待确保所有数据加载完成
-    await new Promise(resolve => setTimeout(resolve, 2000))
-
+    
+    await browser.close()
+    return positions
+    
   } catch (error) {
-    console.error(`    ✗ 访问失败: ${error.message}`)
-  } finally {
-    await page.close()
+    console.error(`    ✗ Position History 获取失败:`, error.message)
+    if (browser) await browser.close()
+    return []
   }
-
-  return collectedData
 }
 
 /**
- * 标准化时间段字符串
+ * 存储 Performance 数据到 trader_snapshots 和 trader_stats_detail
+ * 注意：由于数据库唯一约束是 (source, source_trader_id, captured_at)，不包含 season_id
+ * 所以我们需要为每个周期使用不同的 captured_at 时间戳
  */
-function normalizePeriod(period) {
-  const normalized = String(period).toUpperCase().replace(/\s+/g, '')
-  if (normalized.includes('7') || normalized.includes('WEEK')) return '7D'
-  if (normalized.includes('30') || normalized.includes('MONTH')) return '30D'
-  if (normalized.includes('90') || normalized.includes('3MONTH')) return '90D'
-  return '90D' // 默认
+async function storePerformance(portfolioId, timeRange, perfData, baseCapturedAt) {
+  if (!perfData) return
+  
+  // 根据周期调整 captured_at，使每个周期有不同的时间戳
+  // 7D: -2秒, 30D: -1秒, 90D: 0秒
+  const offset = timeRange === '7D' ? -2000 : timeRange === '30D' ? -1000 : 0
+  const capturedAt = new Date(new Date(baseCapturedAt).getTime() + offset).toISOString()
+  
+  // 存储到 trader_snapshots - 使用 delete + insert 避免约束问题
+  const snapshotItem = {
+    source: 'binance',
+    source_trader_id: portfolioId,
+    season_id: timeRange,
+    // ROI - Binance 返回的是百分比值，如 -14.86 表示 -14.86%
+    roi: parseFloat(perfData.roi || 0),
+    // PnL - 美元值
+    pnl: parseFloat(perfData.pnl || 0),
+    // Win Rate - 百分比值
+    win_rate: parseFloat(perfData.winRate || 0),
+    // Max Drawdown - 百分比值
+    max_drawdown: parseFloat(perfData.mdd || 0),
+    // Followers/Copiers
+    followers: 0, // 需要从 detail API 获取
+    captured_at: capturedAt,
+  }
+
+  // 先删除相同 source + source_trader_id + season_id 的旧数据
+  await supabase
+    .from('trader_snapshots')
+    .delete()
+    .eq('source', 'binance')
+    .eq('source_trader_id', portfolioId)
+    .eq('season_id', timeRange)
+
+  const { error: snapshotError } = await supabase
+    .from('trader_snapshots')
+    .insert(snapshotItem)
+
+  if (snapshotError) {
+    console.error(`    ✗ 存储 Snapshot ${timeRange} 失败:`, snapshotError.message)
+  }
+  
+  // 存储到 trader_stats_detail - 同样使用 delete + insert
+  const statsItem = {
+    source: 'binance',
+    source_trader_id: portfolioId,
+    period: timeRange,
+    sharpe_ratio: parseFloat(perfData.sharpRatio || 0),
+    max_drawdown: parseFloat(perfData.mdd || 0),
+    copiers_pnl: parseFloat(perfData.copierPnl || 0),
+    winning_positions: parseInt(perfData.winOrders || 0),
+    total_positions: parseInt(perfData.totalOrder || 0),
+    captured_at: capturedAt,
+  }
+
+  // 先删除相同 source + source_trader_id + period 的旧数据
+  await supabase
+    .from('trader_stats_detail')
+    .delete()
+    .eq('source', 'binance')
+    .eq('source_trader_id', portfolioId)
+    .eq('period', timeRange)
+
+  const { error: statsError } = await supabase
+    .from('trader_stats_detail')
+    .insert(statsItem)
+
+  if (statsError) {
+    console.error(`    ✗ 存储 Stats ${timeRange} 失败:`, statsError.message)
+  }
 }
 
 /**
- * 解析详情数据并存储
+ * 存储资产偏好数据到 trader_asset_breakdown
+ * Binance 返回的 volume 是交易量占比百分比
  */
-async function parseAndStoreDetails(encryptedUid, collectedData, capturedAt) {
-  if (!collectedData) {
-    return
+async function storeAssetBreakdown(portfolioId, timeRange, assetData, capturedAt) {
+  if (!assetData || !assetData.data || !Array.isArray(assetData.data)) return
+  
+  const assetItems = assetData.data.map(item => ({
+    source: 'binance',
+    source_trader_id: portfolioId,
+    period: timeRange,
+    // asset 是交易对/资产名称，如 "BTC", "ETH"
+    symbol: item.asset || '',
+    // volume 是交易量占比百分比，如 80.42 表示 80.42%
+    weight_pct: parseFloat(item.volume || 0),
+    captured_at: capturedAt,
+  })).filter(item => item.symbol && item.weight_pct > 0)
+
+  if (assetItems.length === 0) return
+
+  // 先删除该时间段的旧数据
+  await supabase
+    .from('trader_asset_breakdown')
+    .delete()
+    .eq('source', 'binance')
+    .eq('source_trader_id', portfolioId)
+    .eq('period', timeRange)
+
+  const { error } = await supabase
+    .from('trader_asset_breakdown')
+    .insert(assetItems)
+
+  if (error) {
+    console.error(`    ✗ 存储 Asset Breakdown ${timeRange} 失败:`, error.message)
   }
+}
 
-  try {
-    const detailData = collectedData.detail || {}
-    
-    // ==========================================
-    // 1. 存储资产偏好数据（按时间段）
-    // ==========================================
-    for (const period of PERIODS) {
-      // 不再使用回退逻辑，确保每个周期有独立的数据
-      const assetData = collectedData.assetBreakdown[period]
-      
-      if (!assetData) {
-        console.log(`    ⚠ 资产偏好(${period}) 无数据，跳过`)
-        continue
-      }
-      
-      const assetList = Array.isArray(assetData) ? assetData : (assetData.list || assetData.symbols || [])
-      
-      if (assetList.length > 0) {
-        const assetItems = assetList.map((item) => ({
-          source: 'binance',
-          source_trader_id: encryptedUid,
-          period: period,
-          symbol: item.symbol || item.asset || item.coin || '',
-          weight_pct: parseFloat(item.weightPct || item.weight || item.ratio || item.percentage || 0),
-          captured_at: capturedAt,
-        })).filter(item => item.symbol && item.weight_pct > 0)
-
-        if (assetItems.length > 0) {
-          const { error } = await supabase
-            .from('trader_asset_breakdown')
-            .upsert(assetItems, { onConflict: 'source,source_trader_id,period,symbol,captured_at' })
-
-          if (error) {
-            console.error(`    ✗ 存储资产偏好(${period})失败: ${error.message}`)
-          } else {
-            console.log(`    ✓ 存储资产偏好(${period}): ${assetItems.length} 条`)
-          }
-        }
-      }
-    }
-
-    // ==========================================
-    // 2. 存储收益率曲线数据（按时间段）
-    // ==========================================
-    for (const period of PERIODS) {
-      const curveData = collectedData.equityCurve[period] || []
-      const curveList = Array.isArray(curveData) ? curveData : (curveData.list || curveData.dataPoints || [])
-      
-      if (curveList.length > 0) {
-        const curveItems = curveList.map((item) => {
-          // 解析日期
-          let dataDate
-          if (item.date) {
-            dataDate = item.date
-          } else if (item.time || item.timestamp) {
-            const ts = item.time || item.timestamp
-            dataDate = new Date(typeof ts === 'number' ? ts : parseInt(ts)).toISOString().split('T')[0]
-          } else {
-            return null
-          }
-          
-          return {
-            source: 'binance',
-            source_trader_id: encryptedUid,
-            period: period,
-            data_date: dataDate,
-            roi_pct: parseFloat(item.roi || item.roiPct || item.value || 0),
-            pnl_usd: parseFloat(item.pnl || item.pnlUsd || item.profit || 0),
-            captured_at: capturedAt,
-          }
-        }).filter(item => item !== null)
-
-        if (curveItems.length > 0) {
-          const { error } = await supabase
-            .from('trader_equity_curve')
-            .upsert(curveItems, { onConflict: 'source,source_trader_id,period,data_date' })
-
-          if (error) {
-            console.error(`    ✗ 存储收益率曲线(${period})失败: ${error.message}`)
-          } else {
-            console.log(`    ✓ 存储收益率曲线(${period}): ${curveItems.length} 条`)
-          }
-        }
-      }
-    }
-
-    // ==========================================
-    // 3. 存储仓位历史记录
-    // ==========================================
-    const positionHistory = collectedData.positionHistory || []
-    if (positionHistory.length > 0) {
-      const positionItems = positionHistory.map((item) => {
-        // 解析方向
-        let direction = 'long'
-        if (item.direction) {
-          direction = item.direction.toLowerCase().includes('short') ? 'short' : 'long'
-        } else if (item.side) {
-          direction = item.side.toLowerCase().includes('sell') || item.side.toLowerCase().includes('short') ? 'short' : 'long'
-        }
-        
-        // 解析时间
-        const openTime = item.openTime || item.entryTime || item.createTime
-        const closeTime = item.closeTime || item.exitTime || item.updateTime
-        
-        // 解析状态
-        let status = 'closed'
-        if (item.status) {
-          status = item.status.toLowerCase().includes('partial') ? 'partial' : 'closed'
-        } else if (item.closedSize && item.maxPositionSize && 
-                   parseFloat(item.closedSize) < parseFloat(item.maxPositionSize)) {
-          status = 'partial'
-        }
-        
-        return {
-          source: 'binance',
-          source_trader_id: encryptedUid,
-          symbol: item.symbol || item.pair || '',
-          direction: direction,
-          position_type: item.positionType || item.type || 'perpetual',
-          margin_mode: item.marginMode || item.marginType || 'cross',
-          open_time: openTime ? new Date(typeof openTime === 'number' ? openTime : parseInt(openTime)).toISOString() : null,
-          close_time: closeTime ? new Date(typeof closeTime === 'number' ? closeTime : parseInt(closeTime)).toISOString() : null,
-          entry_price: parseFloat(item.entryPrice || item.openPrice || item.avgEntryPrice || 0),
-          exit_price: parseFloat(item.exitPrice || item.closePrice || item.avgExitPrice || 0),
-          max_position_size: parseFloat(item.maxPositionSize || item.maxSize || item.qty || 0),
-          closed_size: parseFloat(item.closedSize || item.closedQty || item.filledQty || 0),
-          pnl_usd: parseFloat(item.pnl || item.realizedPnl || item.profit || 0),
-          pnl_pct: parseFloat(item.pnlPct || item.roePct || item.roe || 0),
-          status: status,
-          captured_at: capturedAt,
-        }
-      }).filter(item => item.symbol && item.open_time)
-
-      if (positionItems.length > 0) {
-        const { error } = await supabase
-          .from('trader_position_history')
-          .upsert(positionItems, { onConflict: 'source,source_trader_id,symbol,open_time' })
-
-        if (error) {
-          console.error(`    ✗ 存储仓位历史失败: ${error.message}`)
-        } else {
-          console.log(`    ✓ 存储仓位历史: ${positionItems.length} 条`)
-        }
-      }
-    }
-
-    // ==========================================
-    // 4. 存储项目表现详细数据（包括夏普比率等）
-    // ==========================================
-    for (const period of PERIODS) {
-      // 不再使用回退逻辑，确保每个周期有独立的数据
-      const perfData = collectedData.performance[period]
-      
-      if (!perfData || Object.keys(perfData).length === 0) {
-        console.log(`    ⚠ 周期 ${period} 无数据，跳过`)
-        continue
-      }
-      
-      if (perfData && Object.keys(perfData).length > 0) {
-        const statsItem = {
-          source: 'binance',
-          source_trader_id: encryptedUid,
-          period: period,
-          // ROI 数据
-          roi_7d: period === '7D' ? parseFloat(perfData.roi || perfData.roiPct || 0) : null,
-          roi_30d: period === '30D' ? parseFloat(perfData.roi || perfData.roiPct || 0) : null,
-          roi_90d: period === '90D' ? parseFloat(perfData.roi || perfData.roiPct || 0) : null,
-          // 交易统计
-          total_trades: parseInt(perfData.totalTrades || perfData.tradeCount || perfData.totalPositions || 0),
-          profitable_trades_pct: parseFloat(perfData.winRate || perfData.profitablePct || perfData.winRatio || 0),
-          avg_holding_time_hours: parseFloat(perfData.avgHoldingTime || perfData.avgHoldTime || 0),
-          avg_profit: parseFloat(perfData.avgProfit || perfData.avgWin || 0),
-          avg_loss: parseFloat(perfData.avgLoss || 0),
-          // 风险指标
-          sharpe_ratio: parseFloat(perfData.sharpeRatio || perfData.sharpe || 0),
-          max_drawdown: parseFloat(perfData.maxDrawdown || perfData.mdd || 0),
-          // 跟单数据
-          copiers_count: parseInt(perfData.copiersCount || perfData.copiers || perfData.followerCount || 0),
-          copiers_pnl: parseFloat(perfData.copiersPnl || perfData.followerPnl || perfData.copierProfit || 0),
-          aum: parseFloat(perfData.aum || perfData.totalAssets || 0),
-          // 获胜仓位
-          winning_positions: parseInt(perfData.winningPositions || perfData.profitablePositions || perfData.winCount || 0),
-          total_positions: parseInt(perfData.totalPositions || perfData.positionCount || 0),
-          captured_at: capturedAt,
-        }
-
-        // 移除 null 值
-        Object.keys(statsItem).forEach(key => {
-          if (statsItem[key] === null || statsItem[key] === 0 || Number.isNaN(statsItem[key])) {
-            if (!['source', 'source_trader_id', 'period', 'captured_at'].includes(key)) {
-              delete statsItem[key]
-            }
-          }
-        })
-
-        if (Object.keys(statsItem).length > 4) { // 至少有一些有效数据
-          const { error } = await supabase
-            .from('trader_stats_detail')
-            .upsert(statsItem, { onConflict: 'source,source_trader_id,captured_at' })
-
-          if (error) {
-            console.error(`    ✗ 存储项目表现(${period})失败: ${error.message}`)
-          } else {
-            console.log(`    ✓ 存储项目表现(${period})`)
-          }
-        }
-      }
-    }
-
-    // ==========================================
-    // 5. 存储原有的持仓数据（trader_portfolio）
-    // ==========================================
-    const portfolioData = detailData.portfolio || detailData.positions || detailData.currentPositions || []
-    const portfolioList = Array.isArray(portfolioData) ? portfolioData : (portfolioData.list || [])
-    
-    if (portfolioList.length > 0) {
-      const portfolioItems = portfolioList.map((item) => ({
-        source: 'binance',
-        source_trader_id: encryptedUid,
-        symbol: item.symbol || item.market || '',
-        direction: (item.direction || item.side || 'long').toLowerCase().includes('short') ? 'short' : 'long',
-        invested_pct: parseFloat(item.investedPct || item.invested || item.weight || 0),
-        entry_price: parseFloat(item.entryPrice || item.price || 0),
-        current_price: parseFloat(item.currentPrice || item.marketPrice || 0),
-        pnl: parseFloat(item.pnl || item.profit || item.unrealizedPnl || 0),
-        holding_time_days: parseInt(item.holdingTimeDays || item.holdingTime || 0),
-        captured_at: capturedAt,
-      })).filter(item => item.symbol)
-
-      if (portfolioItems.length > 0) {
-        const { error } = await supabase
-          .from('trader_portfolio')
-          .upsert(portfolioItems, { onConflict: 'source,source_trader_id,symbol,captured_at' })
-
-        if (error) {
-          console.error(`    ✗ 存储当前持仓失败: ${error.message}`)
-        } else {
-          console.log(`    ✓ 存储当前持仓: ${portfolioItems.length} 条`)
-        }
-      }
-    }
-
-    // ==========================================
-    // 6. 存储常用交易币种（trader_frequently_traded）
-    // ==========================================
-    const frequentlyTraded = detailData.frequentlyTraded || detailData.topSymbols || detailData.frequentSymbols || []
-    const frequentlyList = Array.isArray(frequentlyTraded) ? frequentlyTraded : (frequentlyTraded.list || [])
-    
-    if (frequentlyList.length > 0) {
-      const frequentlyTradedItems = frequentlyList.map((item) => ({
-        source: 'binance',
-        source_trader_id: encryptedUid,
-        symbol: item.symbol || item.market || '',
-        weight_pct: parseFloat(item.weightPct || item.weight || item.ratio || 0),
-        trade_count: parseInt(item.tradeCount || item.count || 0),
-        avg_profit: parseFloat(item.avgProfit || item.avgWin || 0),
-        avg_loss: parseFloat(item.avgLoss || 0),
-        profitable_pct: parseFloat(item.profitablePct || item.winRate || 0),
-        captured_at: capturedAt,
-      })).filter(item => item.symbol)
-
-      if (frequentlyTradedItems.length > 0) {
-        const { error } = await supabase
-          .from('trader_frequently_traded')
-          .upsert(frequentlyTradedItems, { onConflict: 'source,source_trader_id,symbol,captured_at' })
-
-        if (error) {
-          console.error(`    ✗ 存储常用交易币种失败: ${error.message}`)
-        } else {
-          console.log(`    ✓ 存储常用交易币种: ${frequentlyTradedItems.length} 条`)
-        }
-      }
-    }
-
-    // ==========================================
-    // 7. 存储月度表现数据
-    // ==========================================
-    const monthlyData = detailData.monthlyPerformance || detailData.monthlyRoi || []
-    const monthlyList = Array.isArray(monthlyData) ? monthlyData : (monthlyData.list || [])
-    
-    if (monthlyList.length > 0) {
-      const monthlyItems = monthlyList.map((item) => {
-        let year, month
-        if (item.year && item.month) {
-          year = item.year
-          month = item.month
-        } else if (item.date || item.time) {
-          const date = new Date(item.date || item.time)
-          year = date.getFullYear()
-          month = date.getMonth() + 1
-        } else {
-          return null
-        }
-        
-        return {
-          source: 'binance',
-          source_trader_id: encryptedUid,
-          year: year,
-          month: month,
-          roi: parseFloat(item.roi || item.value || item.roiPct || 0),
-          pnl: parseFloat(item.pnl || item.profit || 0),
-          captured_at: capturedAt,
-        }
-      }).filter(item => item !== null)
-
-      if (monthlyItems.length > 0) {
-        const { error } = await supabase
-          .from('trader_monthly_performance')
-          .upsert(monthlyItems, { onConflict: 'source,source_trader_id,year,month' })
-
-        if (error) {
-          console.error(`    ✗ 存储月度表现失败: ${error.message}`)
-        } else {
-          console.log(`    ✓ 存储月度表现: ${monthlyItems.length} 条`)
-        }
-      }
-    }
-
-  } catch (error) {
-    console.error(`    ✗ 解析数据失败: ${error.message}`)
+/**
+ * 存储 ROI 曲线数据到 trader_equity_curve
+ */
+async function storeEquityCurve(portfolioId, timeRange, roiData, pnlData, capturedAt) {
+  if (!roiData || !Array.isArray(roiData) || roiData.length === 0) return
+  
+  // 创建 PnL 数据的映射表
+  const pnlMap = new Map()
+  if (pnlData && Array.isArray(pnlData)) {
+    pnlData.forEach(item => {
+      pnlMap.set(item.dateTime, item.value)
+    })
   }
+  
+  const curveItems = roiData.map(item => {
+    // dateTime 是毫秒时间戳
+    const dateObj = new Date(item.dateTime)
+    const dataDate = dateObj.toISOString().split('T')[0]
+    
+    return {
+      source: 'binance',
+      source_trader_id: portfolioId,
+      period: timeRange,
+      data_date: dataDate,
+      // value 是 ROI 百分比值
+      roi_pct: parseFloat(item.value || 0),
+      // 从 PnL 数据中获取对应的 PnL 值
+      pnl_usd: parseFloat(pnlMap.get(item.dateTime) || 0),
+      captured_at: capturedAt,
+    }
+  }).filter(item => item.data_date)
+
+  if (curveItems.length === 0) return
+
+  // 先删除该时间段的旧数据
+  await supabase
+    .from('trader_equity_curve')
+    .delete()
+    .eq('source', 'binance')
+    .eq('source_trader_id', portfolioId)
+    .eq('period', timeRange)
+
+  const { error } = await supabase
+    .from('trader_equity_curve')
+    .insert(curveItems)
+
+  if (error) {
+    console.error(`    ✗ 存储 Equity Curve ${timeRange} 失败:`, error.message)
+  }
+}
+
+/**
+ * 存储仓位历史到 trader_position_history
+ */
+async function storePositionHistory(portfolioId, positions, capturedAt) {
+  if (!positions || positions.length === 0) return
+  
+  const positionItems = positions.map(item => {
+    // 解析方向
+    let direction = 'long'
+    if (item.direction) {
+      direction = item.direction.toLowerCase().includes('short') ? 'short' : 'long'
+    } else if (item.side) {
+      direction = item.side.toLowerCase().includes('sell') || item.side.toLowerCase().includes('short') ? 'short' : 'long'
+    }
+    
+    return {
+      source: 'binance',
+      source_trader_id: portfolioId,
+      symbol: item.symbol || item.pair || '',
+      direction: direction,
+      open_time: item.openTime ? new Date(parseInt(item.openTime)).toISOString() : null,
+      close_time: item.closeTime ? new Date(parseInt(item.closeTime)).toISOString() : null,
+      entry_price: parseFloat(item.entryPrice || item.openPrice || 0),
+      exit_price: parseFloat(item.exitPrice || item.closePrice || 0),
+      pnl_usd: parseFloat(item.pnl || item.realizedPnl || 0),
+      pnl_pct: parseFloat(item.roe || item.pnlPct || 0),
+      status: 'closed',
+      captured_at: capturedAt,
+    }
+  }).filter(item => item.symbol && item.open_time)
+
+  if (positionItems.length === 0) return
+
+  const { error } = await supabase
+    .from('trader_position_history')
+    .upsert(positionItems, { onConflict: 'source,source_trader_id,symbol,open_time' })
+
+  if (error) {
+    console.error(`    ✗ 存储 Position History 失败:`, error.message)
+  }
+}
+
+/**
+ * 处理单个交易员
+ */
+async function processTrader(trader, capturedAt) {
+  const portfolioId = trader.source_trader_id
+  console.log(`\n处理交易员: ${trader.handle || portfolioId}`)
+  
+  // 遍历所有时间段获取数据
+  for (const timeRange of TIME_RANGES) {
+    console.log(`  === ${timeRange} ===`)
+    
+    // 1. 获取并存储 Performance
+    const perfData = await fetchPerformance(portfolioId, timeRange)
+    await storePerformance(portfolioId, timeRange, perfData, capturedAt)
+    await delay(300)
+    
+    // 2. 获取并存储 Asset Breakdown
+    const assetData = await fetchAssetBreakdown(portfolioId, timeRange)
+    await storeAssetBreakdown(portfolioId, timeRange, assetData, capturedAt)
+    await delay(300)
+    
+    // 3. 获取 ROI 和 PnL 图表数据
+    const roiData = await fetchRoiChart(portfolioId, timeRange)
+    const pnlData = await fetchPnlChart(portfolioId, timeRange)
+    await storeEquityCurve(portfolioId, timeRange, roiData, pnlData, capturedAt)
+    await delay(300)
+  }
+  
+  // 4. 获取 Position History (使用 Puppeteer)
+  const positions = await fetchPositionHistoryWithPuppeteer(portfolioId)
+  await storePositionHistory(portfolioId, positions, capturedAt)
 }
 
 /**
@@ -557,70 +483,47 @@ async function parseAndStoreDetails(encryptedUid, collectedData, capturedAt) {
  */
 async function main() {
   try {
-    console.log('=== Binance 交易员详情页数据抓取（优化版） ===')
-    console.log('抓取内容: 资产偏好、收益率曲线、仓位历史、项目表现等')
+    console.log('=== Binance 交易员数据抓取 (修复版) ===')
+    console.log('数据类型: Performance, Asset Breakdown, ROI/PnL Chart, Position History')
     console.log('')
 
     // 获取所有交易员
     console.log('获取交易员列表...')
     const traders = await getAllBinanceTraders()
     console.log(`找到 ${traders.length} 个交易员`)
-    console.log('')
-
+    
     if (traders.length === 0) {
       console.log('没有交易员可抓取')
       return
     }
 
-    // 启动浏览器
-    console.log('启动浏览器...')
-    const browser = await puppeteer.launch({
-      headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox'],
-    })
-
     const capturedAt = new Date().toISOString()
     console.log(`统一 captured_at: ${capturedAt}`)
-    console.log('')
 
     let successCount = 0
     let failCount = 0
 
-    // 串行抓取每个交易员的详情（避免请求过快）
+    // 处理每个交易员
     for (let i = 0; i < traders.length; i++) {
       const trader = traders[i]
-      console.log(`[${i + 1}/${traders.length}] ${trader.handle || trader.source_trader_id}`)
-
+      console.log(`\n[${i + 1}/${traders.length}] ================================`)
+      
       try {
-        const collectedData = await fetchTraderDetails(trader.source_trader_id, browser)
-
-        if (collectedData && (collectedData.detail || 
-            Object.keys(collectedData.performance).length > 0 ||
-            Object.keys(collectedData.assetBreakdown).length > 0 ||
-            collectedData.positionHistory.length > 0)) {
-          await parseAndStoreDetails(trader.source_trader_id, collectedData, capturedAt)
-          successCount++
-        } else {
-          console.log(`    ⚠️ 未获取到数据`)
-          failCount++
-        }
-
-        // 延迟避免请求过快（每个请求间隔 3 秒）
-        if (i < traders.length - 1) {
-          await new Promise(resolve => setTimeout(resolve, 3000))
-        }
-
+        await processTrader(trader, capturedAt)
+        successCount++
       } catch (error) {
-        console.error(`    ✗ 抓取失败: ${error.message}`)
+        console.error(`  ✗ 处理失败:`, error.message)
         failCount++
+      }
+      
+      // 请求间隔
+      if (i < traders.length - 1) {
+        await delay(1500)
       }
     }
 
-    await browser.close()
-
-    console.log('')
+    console.log('\n========================================')
     console.log(`✅ 完成！成功: ${successCount}, 失败: ${failCount}`)
-    console.log(`✅ 统一 captured_at: ${capturedAt}`)
 
   } catch (error) {
     console.error('执行失败:', error)
