@@ -34,7 +34,7 @@ interface DisclaimerProps {
 const DISCLAIMER_CONTENT = {
   investment: {
     title: '投资风险提示',
-    icon: '⚠️',
+    icon: '',
     content: `本平台提供的所有内容（包括但不限于排名、评价、组合建议）仅供参考，不构成任何投资建议或推荐。
 
 加密货币交易具有极高风险，您可能损失全部投入资金。过往业绩不代表未来表现。
@@ -44,7 +44,7 @@ const DISCLAIMER_CONTENT = {
   },
   risk: {
     title: '风险警告',
-    icon: '🛑',
+    icon: '',
     content: `跟单交易存在显著风险：
 
 • 交易员过往表现不能保证未来收益
@@ -57,7 +57,7 @@ const DISCLAIMER_CONTENT = {
   },
   general: {
     title: '免责声明',
-    icon: 'ℹ️',
+    icon: '',
     content: `本平台汇集来自多个交易所的公开数据。我们不对数据的准确性、完整性或时效性做任何保证。
 
 用户生成的内容（评价、日记等）代表发布者个人观点，不代表本平台立场。
@@ -370,9 +370,8 @@ export function RiskWarningBadge({
         borderRadius: tokens.radius.md,
       }}
     >
-      <Text size={size}>⚠️</Text>
       <Text size={size} style={{ color: tokens.colors.accent.warning }}>
-        投资有风险
+        [风险提示] 投资有风险
       </Text>
     </Box>
   )

@@ -561,7 +561,6 @@ function ComparePortfolioSection({ traderHandle, delay }: { traderHandle: string
     >
       <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: tokens.spacing[4] }}>
         <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
-          
           <Text size="lg" weight="black">Compare</Text>
         </Box>
         <Box style={{ display: 'flex', gap: tokens.spacing[2] }}>
@@ -601,26 +600,37 @@ function ComparePortfolioSection({ traderHandle, delay }: { traderHandle: string
   )
 }
 
-function CompareChart({ height, period, compareWith }: { height: number; period: string; compareWith: 'BTC' | 'SPX500' }) {
+function CompareChart({ 
+  height, 
+  period,
+  compareWith
+}: { 
+  height: number
+  period: string
+  compareWith: 'BTC' | 'SPX500'
+}) {
   const chartContainerRef = useRef<HTMLDivElement>(null)
   const [mounted, setMounted] = useState(false)
   
+  // 确保客户端渲染
   useEffect(() => {
     setMounted(true)
   }, [])
   
-  // 生成对比数据
+  // 生成对比数据（基于周期）- 使用固定种子避免重复渲染
   const chartData = useMemo(() => {
     const days = period === '7D' ? 7 : period === '30D' ? 30 : 90
     const now = new Date()
     const traderData: LineData[] = []
     const compareData: LineData[] = []
     
+    // 用户ROI曲线 - 假设交易员有较好表现
     let traderValue = 100
+    // 比较资产曲线
     const compareBaseReturn = compareWith === 'BTC' ? 12 : 6
     let compareValue = 100
     
-    // 确定性伪随机
+    // 使用确定性的伪随机数
     const seed = days + (compareWith === 'BTC' ? 1 : 2)
     const seededRandom = (i: number) => {
       const x = Math.sin(seed * 9999 + i * 7777) * 10000
@@ -632,9 +642,11 @@ function CompareChart({ height, period, compareWith }: { height: number; period:
       date.setDate(date.getDate() - i)
       const dateStr = date.toISOString().split('T')[0]
       
+      // 用户ROI（趋势向上，波动较大）
       const traderDailyChange = (seededRandom(i * 2) - 0.4) * 2.5 + (20 / days)
       traderValue = Math.max(90, traderValue + traderDailyChange)
       
+      // 比较资产（趋势平稳）
       const compareDailyChange = (seededRandom(i * 2 + 1) - 0.45) * 1.5 + (compareBaseReturn / days)
       compareValue = Math.max(95, compareValue + compareDailyChange)
       
@@ -652,6 +664,7 @@ function CompareChart({ height, period, compareWith }: { height: number; period:
     const containerWidth = container.clientWidth || 400
     const chartHeight = height - 16
 
+    // 创建图表
     const chart = createChart(container, {
       layout: {
         background: { type: ColorType.Solid, color: 'transparent' },
@@ -661,8 +674,8 @@ function CompareChart({ height, period, compareWith }: { height: number; period:
       width: containerWidth,
       height: chartHeight,
       grid: {
-        vertLines: { color: tokens.colors.border.primary + '30' },
-        horzLines: { color: tokens.colors.border.primary + '30' },
+        vertLines: { color: `${tokens.colors.border.primary}30` },
+        horzLines: { color: `${tokens.colors.border.primary}30` },
       },
       rightPriceScale: {
         borderColor: tokens.colors.border.primary,
@@ -674,32 +687,50 @@ function CompareChart({ height, period, compareWith }: { height: number; period:
       },
       crosshair: {
         mode: 1,
-        vertLine: { color: tokens.colors.text.tertiary, width: 1, labelBackgroundColor: tokens.colors.bg.tertiary },
-        horzLine: { color: tokens.colors.text.tertiary, width: 1, labelBackgroundColor: tokens.colors.bg.tertiary },
+        vertLine: {
+          color: tokens.colors.text.tertiary,
+          width: 1,
+          labelBackgroundColor: tokens.colors.bg.tertiary,
+        },
+        horzLine: {
+          color: tokens.colors.text.tertiary,
+          width: 1,
+          labelBackgroundColor: tokens.colors.bg.tertiary,
+        },
       },
     })
 
-    // 用户ROI线（紫色）
+    // 添加用户ROI线（紫色）
     const traderSeries = chart.addSeries(LineSeries, {
       color: tokens.colors.accent.primary,
       lineWidth: 2,
-      priceFormat: { type: 'custom', formatter: (price: number) => (price - 100).toFixed(1) + '%' },
+      priceFormat: {
+        type: 'custom',
+        formatter: (price: number) => `${(price - 100).toFixed(1)}%`,
+      },
     })
     traderSeries.setData(chartData.traderData)
 
-    // 比较资产线（橙色）
+    // 添加比较资产线（橙色）
     const compareSeries = chart.addSeries(LineSeries, {
       color: tokens.colors.accent.warning,
       lineWidth: 2,
-      priceFormat: { type: 'custom', formatter: (price: number) => (price - 100).toFixed(1) + '%' },
+      priceFormat: {
+        type: 'custom',
+        formatter: (price: number) => `${(price - 100).toFixed(1)}%`,
+      },
     })
     compareSeries.setData(chartData.compareData)
 
     chart.timeScale().fitContent()
 
+    // 响应式调整
     const handleResize = () => {
-      if (container) chart.applyOptions({ width: container.clientWidth })
+      if (container) {
+        chart.applyOptions({ width: container.clientWidth })
+      }
     }
+
     window.addEventListener('resize', handleResize)
 
     return () => {
@@ -708,14 +739,15 @@ function CompareChart({ height, period, compareWith }: { height: number; period:
     }
   }, [mounted, chartData, height])
 
+  // 服务端或未挂载时显示占位符
   if (!mounted) {
     return (
       <Box
         style={{
           height,
           borderRadius: tokens.radius.xl,
-          border: '1px solid ' + tokens.colors.border.primary + '40',
-          background: 'linear-gradient(180deg, ' + tokens.colors.bg.primary + ' 0%, ' + tokens.colors.bg.secondary + '30 100%)',
+          border: `1px solid ${tokens.colors.border.primary}40`,
+          background: `linear-gradient(180deg, ${tokens.colors.bg.primary} 0%, ${tokens.colors.bg.secondary}30 100%)`,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -731,8 +763,8 @@ function CompareChart({ height, period, compareWith }: { height: number; period:
       style={{
         height,
         borderRadius: tokens.radius.xl,
-        border: '1px solid ' + tokens.colors.border.primary + '40',
-        background: 'linear-gradient(180deg, ' + tokens.colors.bg.primary + ' 0%, ' + tokens.colors.bg.secondary + '30 100%)',
+        border: `1px solid ${tokens.colors.border.primary}40`,
+        background: `linear-gradient(180deg, ${tokens.colors.bg.primary} 0%, ${tokens.colors.bg.secondary}30 100%)`,
         position: 'relative',
         overflow: 'hidden',
         padding: 8,
@@ -942,6 +974,8 @@ function BreakdownSection({
 // Position History Section
 function PositionHistorySection({ positionHistory, t }: { positionHistory: PositionHistoryItem[]; t: (key: string) => string }) {
   const [sortBy, setSortBy] = useState<'openTime' | 'closeTime'>('openTime')
+  const [expanded, setExpanded] = useState(false)
+  const COLLAPSED_COUNT = 3
   
   const sortedHistory = [...positionHistory].sort((a, b) => {
     const dateA = new Date(a[sortBy] || 0).getTime()
@@ -949,11 +983,12 @@ function PositionHistorySection({ positionHistory, t }: { positionHistory: Posit
     return dateB - dateA
   })
 
+  const displayedHistory = expanded ? sortedHistory : sortedHistory.slice(0, COLLAPSED_COUNT)
+
   return (
     <Box style={{ marginBottom: tokens.spacing[6] }}>
       <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: tokens.spacing[4] }}>
         <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
-          <span style={{ fontSize: '16px' }}>📜</span>
           <Text size="lg" weight="black">{t('positionHistory')}</Text>
         </Box>
         <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
@@ -980,17 +1015,39 @@ function PositionHistorySection({ positionHistory, t }: { positionHistory: Posit
       </Box>
 
       <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
-        {sortedHistory.slice(0, 10).map((item, idx) => (
-          <PositionHistoryCard key={idx} position={item} index={idx} />
+        {displayedHistory.map((item, idx) => (
+          <PositionHistoryCard key={idx} position={item} />
         ))}
       </Box>
+
+      {sortedHistory.length > COLLAPSED_COUNT && (
+        <button
+          onClick={() => setExpanded(!expanded)}
+          style={{
+            width: '100%',
+            padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+            marginTop: tokens.spacing[3],
+            borderRadius: tokens.radius.lg,
+            border: `1px solid ${tokens.colors.border.primary}`,
+            background: tokens.colors.bg.tertiary,
+            color: tokens.colors.text.secondary,
+            fontSize: tokens.typography.fontSize.sm,
+            fontWeight: tokens.typography.fontWeight.medium,
+            cursor: 'pointer',
+            transition: 'all 0.2s ease',
+            fontFamily: tokens.typography.fontFamily.sans.join(', '),
+            textAlign: 'center',
+          }}
+        >
+          {expanded ? '收起' : `展开全部 (${sortedHistory.length} 条)`}
+        </button>
+      )}
     </Box>
   )
 }
 
 // Position History Card
-function PositionHistoryCard({ position, index }: { position: PositionHistoryItem; index: number }) {
-  const [isHovered, setIsHovered] = useState(false)
+function PositionHistoryCard({ position }: { position: PositionHistoryItem }) {
   const isLong = position.direction === 'long'
   const isProfit = position.pnlUsd >= 0
   
@@ -1014,19 +1071,11 @@ function PositionHistoryCard({ position, index }: { position: PositionHistoryIte
     <Box 
       className="position-card"
       style={{ 
-        background: isHovered 
-          ? `linear-gradient(135deg, ${tokens.colors.bg.primary}F0, ${tokens.colors.bg.secondary}E0)`
-          : tokens.colors.bg.primary,
-        border: `1px solid ${isHovered ? tokens.colors.accent.primary + '40' : tokens.colors.border.primary}`,
+        background: tokens.colors.bg.primary,
+        border: `1px solid ${tokens.colors.border.primary}`,
         borderRadius: tokens.radius.xl,
         padding: tokens.spacing[4],
-        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-        transform: isHovered ? 'translateY(-2px)' : 'translateY(0)',
-        boxShadow: isHovered ? `0 8px 24px rgba(0, 0, 0, 0.1)` : 'none',
-        animationDelay: `${index * 0.05}s`,
       }}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
     >
       {/* Header */}
       <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], marginBottom: tokens.spacing[3] }}>

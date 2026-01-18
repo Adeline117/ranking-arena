@@ -67,7 +67,7 @@ interface ReviewSectionProps {
 const QUICK_REVIEW_PRESETS = [
   { 
     id: 'excellent',
-    label: '🌟 强烈推荐', 
+    label: '强烈推荐', 
     rating: 5, 
     recommend: true,
     color: tokens.colors.accent.success,
@@ -75,7 +75,7 @@ const QUICK_REVIEW_PRESETS = [
   },
   { 
     id: 'good',
-    label: '👍 还不错', 
+    label: '还不错', 
     rating: 4, 
     recommend: true,
     color: '#4CAF50',
@@ -83,7 +83,7 @@ const QUICK_REVIEW_PRESETS = [
   },
   { 
     id: 'average',
-    label: '😐 一般', 
+    label: '一般', 
     rating: 3, 
     recommend: null,
     color: tokens.colors.text.secondary,
@@ -91,7 +91,7 @@ const QUICK_REVIEW_PRESETS = [
   },
   { 
     id: 'poor',
-    label: '👎 不推荐', 
+    label: '不推荐', 
     rating: 2, 
     recommend: false,
     color: tokens.colors.accent.warning,
@@ -99,7 +99,7 @@ const QUICK_REVIEW_PRESETS = [
   },
   { 
     id: 'avoid',
-    label: '⚠️ 避雷', 
+    label: '避雷', 
     rating: 1, 
     recommend: false,
     color: tokens.colors.accent.error,
@@ -475,8 +475,8 @@ function QuickReviewForm({
             </Text>
             <Box style={{ display: 'flex', gap: tokens.spacing[2] }}>
               {[
-                { value: true, label: '👍 推荐' },
-                { value: false, label: '👎 不推荐' },
+                { value: true, label: '推荐' },
+                { value: false, label: '不推荐' },
               ].map(({ value, label }) => (
                 <Button
                   key={label}
@@ -706,7 +706,7 @@ function ReviewCard({
           }}
         >
           <Text size="sm">
-            {review.would_recommend ? '👍' : '👎'}
+            {review.would_recommend ? '推荐' : '不推荐'}
           </Text>
           <Text 
             size="xs" 
@@ -781,7 +781,7 @@ function ReviewCard({
                 : tokens.colors.text.secondary,
             }}
           >
-            👍 {review.helpful_count}
+            有帮助 {review.helpful_count}
           </Button>
           <Button
             variant="ghost"
@@ -798,7 +798,7 @@ function ReviewCard({
                 : tokens.colors.text.secondary,
             }}
           >
-            👎 {review.unhelpful_count}
+            没帮助 {review.unhelpful_count}
           </Button>
         </Box>
       </Box>
@@ -929,7 +929,7 @@ export default function ReviewSection({ traderId, source, traderData }: ReviewSe
               size="sm"
               onClick={() => setShowForm(true)}
             >
-              ✨ 快速评价
+              快速评价
             </Button>
           )}
         </Box>
@@ -1063,7 +1063,7 @@ export default function ReviewSection({ traderId, source, traderData }: ReviewSe
                 size="sm"
                 onClick={() => setShowForm(true)}
               >
-                ✨ 成为第一个评价者
+                成为第一个评价者
               </Button>
             ) : !currentUserId && (
               <Text size="xs" color="tertiary">

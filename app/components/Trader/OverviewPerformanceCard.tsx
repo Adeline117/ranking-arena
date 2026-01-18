@@ -15,9 +15,12 @@ interface ExtendedPerformance extends TraderPerformance {
   sharpe_ratio?: number
   sharpe_ratio_30d?: number
   sharpe_ratio_7d?: number
-  copiers_count?: number
   winning_positions?: number
+  winning_positions_7d?: number
+  winning_positions_30d?: number
   total_positions?: number
+  total_positions_7d?: number
+  total_positions_30d?: number
 }
 
 export interface OverviewPerformanceCardProps {
@@ -29,7 +32,7 @@ type Period = '7D' | '30D' | '90D'
 
 /**
  * Performance卡片 - 交易员主页核心指标
- * 现代化设计，流畅动画
+ * 简洁清晰的布局设计
  */
 export default function OverviewPerformanceCard({ performance, profitableWeeksPct }: OverviewPerformanceCardProps) {
   void profitableWeeksPct
@@ -63,6 +66,8 @@ export default function OverviewPerformanceCard({ performance, profitableWeeksPc
           maxDrawdown: performance.max_drawdown_7d,
           arenaScore: performance.arena_score_7d,
           sharpeRatio: performance.sharpe_ratio_7d,
+          winningPositions: performance.winning_positions_7d ?? performance.winning_positions,
+          totalPositions: performance.total_positions_7d ?? performance.total_positions,
         }
       case '30D':
         return {
@@ -72,6 +77,8 @@ export default function OverviewPerformanceCard({ performance, profitableWeeksPc
           maxDrawdown: performance.max_drawdown_30d,
           arenaScore: performance.arena_score_30d,
           sharpeRatio: performance.sharpe_ratio_30d,
+          winningPositions: performance.winning_positions_30d ?? performance.winning_positions,
+          totalPositions: performance.total_positions_30d ?? performance.total_positions,
         }
       case '90D':
       default:
@@ -82,39 +89,28 @@ export default function OverviewPerformanceCard({ performance, profitableWeeksPc
           maxDrawdown: performance.max_drawdown,
           arenaScore: performance.arena_score_90d,
           sharpeRatio: performance.sharpe_ratio,
+          winningPositions: performance.winning_positions,
+          totalPositions: performance.total_positions,
         }
     }
   }
 
   const data = getData()
-  const { roi, pnl, winRate, maxDrawdown, arenaScore, sharpeRatio } = data
-  const overallScore = performance.overall_score
-  const copiersCount = performance.copiers_count
-  const winningPositions = performance.winning_positions
-  const totalPositions = performance.total_positions
+  const { roi, pnl, winRate, maxDrawdown, sharpeRatio, winningPositions, totalPositions } = data
 
-  const formatCurrency = (value: number | undefined) => {
-    if (value === undefined) return t('na')
+  const formatPnl = (value: number | undefined) => {
+    if (value === undefined) return '—'
     const absValue = Math.abs(value)
-    const sign = value >= 0 ? '+' : ''
+    const sign = value >= 0 ? '+' : '-'
     if (absValue >= 1000000) {
-      return `${sign}$${(value / 1000000).toFixed(2)}M`
+      return `${sign}${(absValue / 1000000).toFixed(2)}M`
     } else if (absValue >= 1000) {
-      return `${sign}$${(value / 1000).toFixed(2)}K`
+      return `${sign}${absValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
     }
-    return `${sign}$${value.toFixed(2)}`
+    return `${sign}${absValue.toFixed(2)}`
   }
 
-  // 获取 Arena Score 颜色
-  const getScoreColor = (score: number | undefined) => {
-    if (score === undefined) return { bg: tokens.colors.bg.tertiary, border: tokens.colors.border.primary, text: tokens.colors.text.secondary }
-    if (score >= 60) return { bg: `${tokens.colors.accent.success}18`, border: `${tokens.colors.accent.success}50`, text: tokens.colors.accent.success }
-    if (score >= 40) return { bg: `${tokens.colors.accent.warning}12`, border: `${tokens.colors.accent.warning}40`, text: tokens.colors.accent.warning }
-    return { bg: tokens.colors.bg.tertiary, border: tokens.colors.border.primary, text: tokens.colors.text.secondary }
-  }
-
-  const scoreColors = getScoreColor(arenaScore)
-  const overallScoreColors = getScoreColor(overallScore)
+  const periodLabel = period === '7D' ? '7 天' : period === '30D' ? '30 天' : '90 天'
 
   return (
     <Box
@@ -130,350 +126,202 @@ export default function OverviewPerformanceCard({ performance, profitableWeeksPc
         boxShadow: `0 4px 24px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.05)`,
       }}
     >
-      {/* 顶部渐变装饰 */}
-      <Box
-        style={{
-          height: 3,
-          background: roi !== undefined && roi >= 0
-            ? `linear-gradient(90deg, ${tokens.colors.accent.success}, ${tokens.colors.accent.success}60)`
-            : `linear-gradient(90deg, ${tokens.colors.accent.error}, ${tokens.colors.accent.error}60)`,
-          transition: 'background 0.3s ease',
-        }}
-      />
-      
-      <Box style={{ padding: tokens.spacing[6] }}>
+      <Box style={{ padding: tokens.spacing[5] }}>
         {/* Header */}
         <Box
           style={{
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
-            marginBottom: tokens.spacing[6],
+            marginBottom: tokens.spacing[5],
           }}
         >
           <Text size="lg" weight="black" style={{ color: tokens.colors.text.primary }}>
             {t('performance')}
           </Text>
           
-          {/* Period Selector - Pills Style */}
+          {/* Period Selector */}
           <Box
             style={{
               display: 'flex',
-              gap: tokens.spacing[1],
+              gap: 4,
               background: tokens.colors.bg.tertiary,
               padding: 3,
               borderRadius: tokens.radius.lg,
+              border: `1px solid ${tokens.colors.border.primary}`,
             }}
           >
-            {(['7D', '30D', '90D'] as Period[]).map((p) => (
-              <button
-                key={p}
-                onClick={() => handlePeriodChange(p)}
-                style={{
-                  padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
-                  borderRadius: tokens.radius.md,
-                  border: 'none',
-                  background: period === p 
-                    ? `linear-gradient(135deg, ${tokens.colors.accent.primary}, ${tokens.colors.accent.brand})`
-                    : 'transparent',
-                  color: period === p ? '#ffffff' : tokens.colors.text.tertiary,
-                  fontSize: tokens.typography.fontSize.xs,
-                  fontWeight: tokens.typography.fontWeight.bold,
-                  cursor: 'pointer',
-                  transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
-                  fontFamily: tokens.typography.fontFamily.sans.join(', '),
-                }}
-              >
-                {p}
-              </button>
-            ))}
+            {(['7D', '30D', '90D'] as Period[]).map((p) => {
+              const label = p === '7D' ? '7 天' : p === '30D' ? '30 天' : '90 天'
+              return (
+                <button
+                  key={p}
+                  onClick={() => handlePeriodChange(p)}
+                  style={{
+                    padding: `6px 12px`,
+                    borderRadius: tokens.radius.md,
+                    border: 'none',
+                    background: period === p ? tokens.colors.bg.primary : 'transparent',
+                    color: period === p ? tokens.colors.text.primary : tokens.colors.text.secondary,
+                    fontSize: 13,
+                    fontWeight: period === p ? 600 : 400,
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                    fontFamily: tokens.typography.fontFamily.sans.join(', '),
+                  }}
+                >
+                  {label}
+                </button>
+              )
+            })}
           </Box>
         </Box>
 
-        {/* Main Metrics - Arena Score + ROI */}
+        {/* Content */}
         <Box
           style={{
-            display: 'flex',
-            gap: tokens.spacing[6],
-            marginBottom: tokens.spacing[6],
-            alignItems: 'flex-end',
             opacity: isAnimating ? 0.5 : 1,
-            transform: isAnimating ? 'scale(0.98)' : 'scale(1)',
+            transform: isAnimating ? 'scale(0.99)' : 'scale(1)',
             transition: 'all 0.15s ease',
           }}
         >
-          {/* Arena Score Badge */}
-          <Box style={{ flex: '0 0 auto' }}>
-            <Box
-              className="arena-score-badge"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                width: 80,
-                height: 80,
-                borderRadius: tokens.radius.xl,
-                background: scoreColors.bg,
-                border: `2px solid ${scoreColors.border}`,
-                marginBottom: tokens.spacing[2],
-                position: 'relative',
-                overflow: 'hidden',
-              }}
-            >
-              {/* 光泽效果 */}
-              <Box
-                style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  height: '50%',
-                  background: 'linear-gradient(180deg, rgba(255,255,255,0.1) 0%, transparent 100%)',
-                  borderRadius: `${tokens.radius.xl} ${tokens.radius.xl} 0 0`,
-                }}
-              />
-              <Text
-                size="2xl"
-                weight="black"
-                style={{
-                  color: scoreColors.text,
-                  lineHeight: 1,
-                  fontSize: '28px',
-                  position: 'relative',
-                  zIndex: 1,
-                }}
-              >
-                {arenaScore !== undefined ? arenaScore.toFixed(1) : '—'}
-              </Text>
-            </Box>
-            <Text
-              size="xs"
-              color="tertiary"
-              style={{ textAlign: 'center', display: 'block' }}
-            >
-              Score ({period})
-            </Text>
+          {/* ROI & PnL - 主指标 */}
+          <Box
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr 1fr',
+              gap: tokens.spacing[4],
+              marginBottom: tokens.spacing[4],
+            }}
+          >
+            <StatRow
+              label={t('roi')}
+              value={roi !== undefined ? `${roi >= 0 ? '+' : ''}${roi.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%` : '—'}
+              valueColor={roi !== undefined ? (roi >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error) : tokens.colors.text.secondary}
+              large
+            />
+            <StatRow
+              label={t('pnl')}
+              value={formatPnl(pnl)}
+              valueColor={pnl !== undefined ? (pnl >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error) : tokens.colors.text.secondary}
+              large
+              align="right"
+            />
           </Box>
 
-          {/* ROI Display */}
-          <Box className="roi-display" style={{ flex: 1 }}>
-            <Text
-              style={{
-                fontSize: '42px',
-                fontWeight: tokens.typography.fontWeight.black,
-                color: roi !== undefined
-                  ? (roi >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error)
-                  : tokens.colors.text.tertiary,
-                lineHeight: 1,
-                marginBottom: tokens.spacing[2],
-                letterSpacing: '-0.03em',
-                fontFamily: tokens.typography.fontFamily.mono.join(', '),
-              }}
-            >
-              {roi !== undefined ? `${roi >= 0 ? '+' : ''}${roi.toFixed(2)}%` : t('na')}
-            </Text>
-            <Text size="xs" color="tertiary">
-              {t('roi')} ({period})
-            </Text>
+          {/* 分隔线 */}
+          <Box style={{ height: 1, background: tokens.colors.border.primary, marginBottom: tokens.spacing[4] }} />
+
+          {/* Secondary Metrics */}
+          <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
+            <StatRow
+              label={t('sharpeRatio')}
+              value={sharpeRatio !== undefined ? sharpeRatio.toFixed(2) : '—'}
+              valueColor={sharpeRatio !== undefined && sharpeRatio > 1 ? tokens.colors.accent.success : tokens.colors.text.primary}
+            />
+            <StatRow
+              label={t('maxDrawdown')}
+              value={maxDrawdown !== undefined ? `${Math.abs(maxDrawdown).toFixed(2)}%` : '—'}
+              valueColor={tokens.colors.text.primary}
+            />
+            <StatRow
+              label={t('winRate')}
+              value={winRate !== undefined ? `${winRate.toFixed(2)}%` : '—'}
+              valueColor={tokens.colors.text.primary}
+            />
+            <StatRow
+              label={t('winningPositions')}
+              value={winningPositions !== undefined ? String(winningPositions) : '—'}
+              valueColor={tokens.colors.text.primary}
+            />
+            <StatRow
+              label={t('totalPositions')}
+              value={totalPositions !== undefined ? String(totalPositions) : '—'}
+              valueColor={tokens.colors.text.primary}
+            />
           </Box>
-
-          {/* Overall Score */}
-          {overallScore !== undefined && (
-            <Box style={{ flex: '0 0 auto', textAlign: 'right' }}>
-              <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[1], display: 'block' }}>
-                Overall
-              </Text>
-              <Box
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
-                  borderRadius: tokens.radius.lg,
-                  background: overallScoreColors.bg,
-                  border: `1px solid ${overallScoreColors.border}`,
-                }}
-              >
-                <Text
-                  size="xl"
-                  weight="black"
-                  style={{
-                    color: overallScoreColors.text,
-                    lineHeight: 1,
-                  }}
-                >
-                  {overallScore.toFixed(1)}
-                </Text>
-              </Box>
-            </Box>
-          )}
-        </Box>
-
-        {/* Metrics Grid - 统一布局 */}
-        <Box
-          className="metrics-grid"
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(3, 1fr)',
-            gap: tokens.spacing[4],
-            paddingTop: tokens.spacing[5],
-            borderTop: `1px solid ${tokens.colors.border.primary}`,
-            opacity: isAnimating ? 0.5 : 1,
-            transition: 'opacity 0.15s ease',
-          }}
-        >
-          <MetricItem
-            label={t('pnl')}
-            value={formatCurrency(pnl)}
-            valueColor={pnl !== undefined ? (pnl >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error) : tokens.colors.text.secondary}
-            tooltip={t('pnl')}
-          />
-          <MetricItem
-            label={t('sharpeRatio')}
-            value={sharpeRatio !== undefined ? sharpeRatio.toFixed(2) : t('na')}
-            valueColor={sharpeRatio !== undefined && sharpeRatio > 1 ? tokens.colors.accent.success : tokens.colors.text.secondary}
-            tooltip={t('sharpeRatioDesc')}
-          />
-          <MetricItem
-            label={t('maxDrawdown')}
-            value={maxDrawdown !== undefined ? `-${Math.abs(maxDrawdown).toFixed(2)}%` : t('na')}
-            valueColor={maxDrawdown !== undefined ? tokens.colors.accent.error : tokens.colors.text.secondary}
-            tooltip={t('maxDrawdown')}
-          />
-          <MetricItem
-            label={t('winRate')}
-            value={winRate !== undefined ? `${winRate.toFixed(1)}%` : t('na')}
-            valueColor={winRate !== undefined && winRate > 50 ? tokens.colors.accent.success : tokens.colors.text.secondary}
-            tooltip={t('winRate')}
-            showProgress
-            progressValue={winRate}
-          />
-          <MetricItem
-            label={t('winningPositions')}
-            value={winningPositions !== undefined && totalPositions !== undefined
-              ? `${winningPositions} / ${totalPositions}`
-              : (copiersCount !== undefined ? `${copiersCount} copiers` : t('na'))}
-            valueColor={tokens.colors.text.primary}
-            tooltip={t('winningPositionsDesc')}
-          />
         </Box>
       </Box>
     </Box>
   )
 }
 
-// Metric Item Component
-function MetricItem({
+// 统计行组件
+function StatRow({
   label,
   value,
   valueColor,
-  tooltip,
-  showProgress,
-  progressValue,
+  large = false,
+  align = 'left',
 }: {
   label: string
   value: string
   valueColor: string
-  tooltip: string
-  showProgress?: boolean
-  progressValue?: number
+  large?: boolean
+  align?: 'left' | 'right'
 }) {
-  const [showTooltip, setShowTooltip] = useState(false)
-
   return (
     <Box
-      className="metric-item"
       style={{
-        padding: tokens.spacing[3],
-        borderRadius: tokens.radius.lg,
-        transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: large ? 6 : 0,
+        ...(align === 'right' ? { alignItems: 'flex-end' } : {}),
       }}
     >
-      <Box
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: tokens.spacing[1],
-          marginBottom: tokens.spacing[2],
-        }}
-      >
-        <Text size="xs" color="tertiary">
-          {label}
-        </Text>
-        <Box
-          style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}
-          onMouseEnter={() => setShowTooltip(true)}
-          onMouseLeave={() => setShowTooltip(false)}
-        >
-          <Box
+      {large ? (
+        <>
+          <Text
+            size="xs"
             style={{
-              width: 14,
-              height: 14,
-              borderRadius: '50%',
-              border: `1px solid ${tokens.colors.text.tertiary}40`,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              cursor: 'help',
-              fontSize: '9px',
               color: tokens.colors.text.tertiary,
-              transition: 'all 0.2s ease',
+              borderBottom: `1px dashed ${tokens.colors.text.tertiary}40`,
+              paddingBottom: 2,
             }}
           >
-            ?
-          </Box>
-          {showTooltip && (
-            <Box
-              style={{
-                position: 'absolute',
-                bottom: '100%',
-                left: '50%',
-                transform: 'translateX(-50%)',
-                marginBottom: tokens.spacing[1],
-                padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-                background: tokens.colors.bg.tertiary,
-                border: `1px solid ${tokens.colors.border.primary}`,
-                borderRadius: tokens.radius.md,
-                fontSize: tokens.typography.fontSize.xs,
-                color: tokens.colors.text.primary,
-                zIndex: 1000,
-                pointerEvents: 'none',
-                maxWidth: 180,
-                whiteSpace: 'normal',
-                textAlign: 'center',
-                boxShadow: tokens.shadow.lg,
-              }}
-            >
-              {tooltip}
-            </Box>
-          )}
-        </Box>
-      </Box>
-      <Text size="base" weight="bold" style={{ color: valueColor }}>
-        {value}
-      </Text>
-      {showProgress && progressValue !== undefined && (
+            {label}
+          </Text>
+          <Text
+            style={{
+              fontSize: 24,
+              fontWeight: 700,
+              color: valueColor,
+              fontFamily: tokens.typography.fontFamily.mono.join(', '),
+              letterSpacing: '-0.02em',
+            }}
+          >
+            {value}
+          </Text>
+        </>
+      ) : (
         <Box
           style={{
-            marginTop: tokens.spacing[2],
-            height: 4,
-            background: tokens.colors.bg.tertiary,
-            borderRadius: tokens.radius.full,
-            overflow: 'hidden',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            width: '100%',
           }}
         >
-          <Box
-            className="asset-bar"
+          <Text
+            size="sm"
             style={{
-              height: '100%',
-              width: `${Math.min(progressValue, 100)}%`,
-              background: progressValue > 50 
-                ? `linear-gradient(90deg, ${tokens.colors.accent.success}, ${tokens.colors.accent.success}80)`
-                : `linear-gradient(90deg, ${tokens.colors.accent.warning}, ${tokens.colors.accent.warning}80)`,
-              borderRadius: tokens.radius.full,
-              transition: 'width 1s cubic-bezier(0.4, 0, 0.2, 1)',
+              color: tokens.colors.text.tertiary,
+              borderBottom: `1px dashed ${tokens.colors.text.tertiary}30`,
+              paddingBottom: 1,
             }}
-          />
+          >
+            {label}
+          </Text>
+          <Text
+            size="base"
+            weight="bold"
+            style={{
+              color: valueColor,
+              fontFamily: tokens.typography.fontFamily.mono.join(', '),
+            }}
+          >
+            {value}
+          </Text>
         </Box>
       )}
     </Box>

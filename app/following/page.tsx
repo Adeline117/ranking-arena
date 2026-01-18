@@ -12,15 +12,17 @@ import Avatar from '@/app/components/UI/Avatar'
 
 // 平台配置
 const sourceConfig: Record<string, { label: string; color: string }> = {
-  binance: { label: 'Binance', color: '#F0B90B' },
-  binance_web3: { label: 'Binance Web3', color: '#F0B90B' },
-  bybit: { label: 'Bybit', color: '#F7A600' },
-  bitget: { label: 'Bitget', color: '#00C853' },
-  okx: { label: 'OKX', color: '#000000' },
-  kucoin: { label: 'KuCoin', color: '#23AF91' },
-  gate: { label: 'Gate.io', color: '#17E6A1' },
-  mexc: { label: 'MEXC', color: '#1972E2' },
-  coinex: { label: 'CoinEx', color: '#5799F7' },
+  binance_futures: { label: 'Binance 合约', color: '#F0B90B' },
+  binance_spot: { label: 'Binance 现货', color: '#F0B90B' },
+  binance_web3: { label: 'Binance 链上', color: '#F0B90B' },
+  bybit: { label: 'Bybit 合约', color: '#F7A600' },
+  bitget_futures: { label: 'Bitget 合约', color: '#00C853' },
+  bitget_spot: { label: 'Bitget 现货', color: '#00C853' },
+  okx_web3: { label: 'OKX 链上', color: '#000000' },
+  kucoin: { label: 'KuCoin 合约', color: '#23AF91' },
+  mexc: { label: 'MEXC 合约', color: '#1972E2' },
+  coinex: { label: 'CoinEx 合约', color: '#5799F7' },
+  gmx: { label: 'GMX 链上', color: '#4589FF' },
 }
 
 const getSourceDisplayName = (source: string) => sourceConfig[source]?.label || source
