@@ -279,7 +279,7 @@ async function storePerformance(portfolioId, timeRange, perfData, baseCapturedAt
 
   const { error: snapshotError } = await supabase
     .from('trader_snapshots')
-    .insert(snapshotItem)
+    .upsert(snapshotItem, { onConflict: 'source,source_trader_id,season_id,captured_at' })
 
   if (snapshotError) {
     console.error(`    ✗ 存储 Snapshot ${timeRange} 失败:`, snapshotError.message)
@@ -308,7 +308,7 @@ async function storePerformance(portfolioId, timeRange, perfData, baseCapturedAt
 
   const { error: statsError } = await supabase
     .from('trader_stats_detail')
-    .insert(statsItem)
+    .upsert(statsItem, { onConflict: 'source,source_trader_id,period,captured_at' })
 
   if (statsError) {
     console.error(`    ✗ 存储 Stats ${timeRange} 失败:`, statsError.message)

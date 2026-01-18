@@ -35,11 +35,8 @@ export async function getLatestTimestamp(
     .order('captured_at', { ascending: false })
     .limit(1)
 
-  if (seasonId) {
-    query = query.eq('season_id', seasonId)
-  } else {
-    query = query.or('season_id.is.null,season_id.eq.90D')
-  }
+  // 统一使用 season_id 查询，默认为 '90D'
+  query = query.eq('season_id', seasonId || '90D')
 
   const { data } = await query.maybeSingle()
   return data?.captured_at || null
@@ -62,11 +59,8 @@ export async function getLatestSnapshots(
     .order('rank', { ascending: true })
     .limit(limit)
 
-  if (seasonId) {
-    query = query.eq('season_id', seasonId)
-  } else {
-    query = query.or('season_id.is.null,season_id.eq.90D')
-  }
+  // 统一使用 season_id 查询，默认为 '90D'
+  query = query.eq('season_id', seasonId || '90D')
 
   const { data } = await query
   return (data || []) as TraderSnapshot[]
