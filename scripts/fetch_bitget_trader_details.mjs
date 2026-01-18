@@ -19,7 +19,7 @@ async function main() {
   const { data: traders } = await supabase
     .from('trader_sources')
     .select('source, source_trader_id, handle, profile_url')
-    .in('source', ['bitget', 'bitget_spot'])
+    .in('source', ['bitget_futures', 'bitget_spot'])
     .limit(100)
 
   if (!traders || traders.length === 0) {

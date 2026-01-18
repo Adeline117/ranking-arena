@@ -80,7 +80,6 @@ export default function TraderFeed({ items, title, showPostButton = false, onPos
         }}
       >
         <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
-          
           <Text size="lg" weight="black" style={{ color: tokens.colors.text.primary }}>
             {title}
           </Text>
@@ -179,20 +178,6 @@ export default function TraderFeed({ items, title, showPostButton = false, onPos
             gap: tokens.spacing[3],
           }}
         >
-          <Box
-            style={{
-              width: 64,
-              height: 64,
-              borderRadius: tokens.radius.full,
-              background: tokens.colors.bg.tertiary,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '28px',
-            }}
-          >
-            
-          </Box>
           <Text size="base" color="tertiary">
             暂无动态
           </Text>
@@ -242,7 +227,6 @@ export default function TraderFeed({ items, title, showPostButton = false, onPos
                       borderRadius: tokens.radius.full,
                     }}
                   >
-                    
                     <Text size="xs" color="tertiary">
                       转发自{' '}
                       <Link
@@ -297,7 +281,6 @@ export default function TraderFeed({ items, title, showPostButton = false, onPos
                           border: `1px solid ${tokens.colors.accent.warning}30`,
                         }}
                       >
-                        
                         <Text size="xs" weight="bold" style={{ color: tokens.colors.accent.warning }}>
                           置顶
                         </Text>
@@ -327,7 +310,6 @@ export default function TraderFeed({ items, title, showPostButton = false, onPos
                           borderRadius: tokens.radius.full,
                         }}
                       >
-                        
                         <Text size="xs" weight="medium" style={{ color: tokens.colors.accent.error }}>
                           {item.like_count}
                         </Text>
@@ -373,7 +355,6 @@ export default function TraderFeed({ items, title, showPostButton = false, onPos
                       transition: 'all 0.2s ease',
                     }}
                   >
-                    
                     <Text size="xs" weight="medium" style={{ color: tokens.colors.accent.primary }}>
                       {item.groupName}
                     </Text>

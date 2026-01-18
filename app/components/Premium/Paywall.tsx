@@ -58,7 +58,7 @@ export function Paywall({
 }: PaywallProps) {
   const { tier: currentTier } = usePremium()
   // Always call hook unconditionally with a default feature
-  const featureAccess = useFeatureAccess(feature || 'advanced_analytics')
+  const featureAccess = useFeatureAccess(feature || 'advanced_alerts')
   const featureInfo = feature ? getFeature(feature) : null
 
   // 检查是否需要显示付费墙

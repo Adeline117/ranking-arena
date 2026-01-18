@@ -1,22 +1,20 @@
 /**
  * 详细健康检查 API
- * 提供更全面的系统状态信息
+ * 提供更全面的系统状态信息，用于监控和调试
+ * 
+ * GET /api/health/detailed
  */
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { Redis } from '@upstash/redis'
+import { checkHealth as checkCacheHealth, getCacheStats } from '@/lib/cache'
+import { getSupportedPlatforms } from '@/lib/cron/utils'
 
-// ============================================
-// 类型定义
-// ============================================
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
 
-interface DetailedCheckResult {
-  status: 'pass' | 'fail' | 'warn' | 'skip'
-  message?: string
-  latency?: number
-  details?: Record<string, unknown>
-}
+// 应用启动时间
+const startTime = Date.now()
 
 interface DetailedHealthResponse {
   status: 'healthy' | 'degraded' | 'unhealthy'
@@ -25,375 +23,304 @@ interface DetailedHealthResponse {
   environment: string
   uptime: number
   checks: {
-    database: DetailedCheckResult
-    redis: DetailedCheckResult
-    memory: DetailedCheckResult
-    cpu: DetailedCheckResult
-    disk: DetailedCheckResult
-    externalApis: Record<string, DetailedCheckResult>
+    database: ServiceStatus
+    redis: ServiceStatus
+    cache: CacheStatus
+    memory: MemoryStatus
+    cron: CronStatus
   }
-  metrics: {
-    requestsPerMinute?: number
-    averageLatency?: number
-    errorRate?: number
-    activeConnections?: number
+  metrics: SystemMetrics
+}
+
+interface ServiceStatus {
+  status: 'pass' | 'fail' | 'skip'
+  latency?: number
+  message?: string
+}
+
+interface CacheStatus {
+  redis: boolean
+  memoryFallbackActive: boolean
+  stats: {
+    hits: number
+    misses: number
+    errors: number
+    hitRate: string
+  }
+  memoryCache: {
+    size: number
+    maxSize: number
   }
 }
 
-// ============================================
-// 常量
-// ============================================
-
-const startTime = Date.now()
-const version = process.env.npm_package_version || '0.1.0'
-const environment = process.env.NODE_ENV || 'development'
-
-// 内存缓存的指标（可从外部服务更新）
-const metricsCache = new Map<string, number>()
-
-/**
- * 获取指标值
- * 可从 Prometheus、Datadog 等外部服务获取
- */
-function getMetric(name: string): number | undefined {
-  return metricsCache.get(name)
+interface MemoryStatus {
+  status: 'pass' | 'fail'
+  heapUsed: number
+  heapTotal: number
+  external: number
+  rss: number
+  usagePercent: number
 }
 
-// 外部 API 列表
-const EXTERNAL_APIS = [
-  { name: 'binance', url: 'https://api.binance.com/api/v3/ping', timeout: 5000 },
-  { name: 'coingecko', url: 'https://api.coingecko.com/api/v3/ping', timeout: 5000 },
-]
+interface CronStatus {
+  platforms: string[]
+  lastRuns: CronRunInfo[]
+  status: 'pass' | 'fail' | 'unknown'
+}
 
-// ============================================
-// 检查函数
-// ============================================
+interface CronRunInfo {
+  platform: string
+  ran_at: string | null
+  success: boolean | null
+}
+
+interface SystemMetrics {
+  requestsPerMinute?: number
+  averageResponseTime?: number
+  errorRate?: number
+  activeConnections?: number
+}
 
 /**
- * 检查数据库（详细版）
+ * 检查数据库连接并获取 Cron 运行状态
  */
-async function checkDatabaseDetailed(): Promise<DetailedCheckResult> {
+async function checkDatabaseAndCron(): Promise<{
+  database: ServiceStatus
+  cronRuns: CronRunInfo[]
+}> {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-  
+
   if (!url || !key) {
-    return { status: 'skip', message: '未配置数据库连接' }
+    return {
+      database: { status: 'skip', message: '未配置数据库连接' },
+      cronRuns: [],
+    }
   }
-  
-  const checkStart = Date.now()
-  
+
+  const start = Date.now()
+
   try {
     const supabase = createClient(url, key, {
       auth: { persistSession: false },
     })
-    
-    // 多个检查
-    const checks = await Promise.all([
-      // 连接测试
-      supabase.from('trader_snapshots').select('count').limit(1),
-      // 查询延迟测试
-      supabase.from('posts').select('id').limit(1),
-    ])
-    
-    const latency = Date.now() - checkStart
-    const errors = checks.filter(c => c.error)
-    
-    if (errors.length > 0) {
+
+    // 1. 测试数据库连接
+    const { error: dbError } = await supabase
+      .from('trader_snapshots')
+      .select('count')
+      .limit(1)
+
+    if (dbError) {
       return {
-        status: 'fail',
-        message: errors.map(e => e.error?.message).join('; '),
-        latency,
-        details: {
-          failedChecks: errors.length,
-          totalChecks: checks.length,
-        },
+        database: { status: 'fail', message: dbError.message, latency: Date.now() - start },
+        cronRuns: [],
       }
     }
-    
-    // 延迟警告
-    if (latency > 1000) {
-      return {
-        status: 'warn',
-        message: '数据库响应较慢',
-        latency,
-        details: {
-          threshold: 1000,
-        },
-      }
-    }
-    
-    return {
-      status: 'pass',
-      latency,
-      details: {
-        checksCompleted: checks.length,
-      },
-    }
-  } catch (error) {
-    return {
-      status: 'fail',
-      message: error instanceof Error ? error.message : 'Unknown error',
-      latency: Date.now() - checkStart,
-    }
-  }
-}
 
-/**
- * 检查 Redis（详细版）
- */
-async function checkRedisDetailed(): Promise<DetailedCheckResult> {
-  const url = process.env.UPSTASH_REDIS_REST_URL
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN
-  
-  if (!url || !token) {
-    return { status: 'skip', message: '未配置 Redis 连接' }
-  }
-  
-  const checkStart = Date.now()
-  
-  try {
-    const redis = new Redis({ url, token })
-    
-    // 检查连接
-    const pingResult = await redis.ping()
-    
-    const latency = Date.now() - checkStart
-    
-    if (pingResult !== 'PONG') {
-      return { status: 'fail', message: 'Ping 失败', latency }
-    }
-    
-    return {
-      status: 'pass',
-      latency,
-      details: {
-        connected: true,
-      },
-    }
-  } catch (error) {
-    return {
-      status: 'fail',
-      message: error instanceof Error ? error.message : 'Unknown error',
-      latency: Date.now() - checkStart,
-    }
-  }
-}
+    // 2. 获取最近的 Cron 运行记录
+    const platforms = getSupportedPlatforms()
+    const cronRuns: CronRunInfo[] = []
 
-/**
- * 检查内存（详细版）
- */
-function checkMemoryDetailed(): DetailedCheckResult {
-  if (typeof process === 'undefined' || !process.memoryUsage) {
-    return { status: 'skip', message: '无法获取内存信息' }
-  }
-  
-  try {
-    const memory = process.memoryUsage()
-    const heapUsedMB = Math.round(memory.heapUsed / 1024 / 1024)
-    const heapTotalMB = Math.round(memory.heapTotal / 1024 / 1024)
-    const rssMB = Math.round(memory.rss / 1024 / 1024)
-    const externalMB = Math.round(memory.external / 1024 / 1024)
-    const usagePercent = Math.round((memory.heapUsed / memory.heapTotal) * 100)
-    
-    const details = {
-      heapUsed: `${heapUsedMB}MB`,
-      heapTotal: `${heapTotalMB}MB`,
-      rss: `${rssMB}MB`,
-      external: `${externalMB}MB`,
-      usagePercent: `${usagePercent}%`,
-    }
-    
-    if (usagePercent > 90) {
-      return {
-        status: 'fail',
-        message: `内存使用过高: ${usagePercent}%`,
-        details,
-      }
-    }
-    
-    if (usagePercent > 75) {
-      return {
-        status: 'warn',
-        message: `内存使用较高: ${usagePercent}%`,
-        details,
-      }
-    }
-    
-    return { status: 'pass', details }
-  } catch (error) {
-    return {
-      status: 'fail',
-      message: error instanceof Error ? error.message : 'Unknown error',
-    }
-  }
-}
+    try {
+      const { data: cronLogs } = await supabase
+        .from('cron_logs')
+        .select('name, ran_at, result')
+        .order('ran_at', { ascending: false })
+        .limit(20)
 
-/**
- * 检查 CPU（仅 Node.js 环境）
- */
-function checkCpuDetailed(): DetailedCheckResult {
-  if (typeof process === 'undefined' || !process.cpuUsage) {
-    return { status: 'skip', message: '无法获取 CPU 信息' }
-  }
-  
-  try {
-    const cpuUsage = process.cpuUsage()
-    const userMicros = cpuUsage.user
-    const systemMicros = cpuUsage.system
-    const totalMicros = userMicros + systemMicros
-    
-    return {
-      status: 'pass',
-      details: {
-        userTime: `${Math.round(userMicros / 1000)}ms`,
-        systemTime: `${Math.round(systemMicros / 1000)}ms`,
-        totalTime: `${Math.round(totalMicros / 1000)}ms`,
-      },
-    }
-  } catch (error) {
-    return {
-      status: 'fail',
-      message: error instanceof Error ? error.message : 'Unknown error',
-    }
-  }
-}
+      if (cronLogs) {
+        // 为每个平台找到最近的运行记录
+        for (const platform of platforms) {
+          const platformLog = cronLogs.find(
+            (log) => log.name === `fetch-traders-${platform}` || log.name === 'fetch-traders-all'
+          )
 
-/**
- * 检查磁盘（Vercel 环境不适用）
- */
-function checkDiskDetailed(): DetailedCheckResult {
-  // Vercel 等无服务器环境无法检查磁盘
-  return { status: 'skip', message: '无服务器环境不支持磁盘检查' }
-}
+          if (platformLog) {
+            let success = true
+            try {
+              const result = JSON.parse(platformLog.result || '[]')
+              success = Array.isArray(result) && result.every((r: { success?: boolean }) => r.success)
+            } catch {
+              success = false
+            }
 
-/**
- * 检查外部 API
- */
-async function checkExternalApis(): Promise<Record<string, DetailedCheckResult>> {
-  const results: Record<string, DetailedCheckResult> = {}
-  
-  await Promise.all(
-    EXTERNAL_APIS.map(async (api) => {
-      const checkStart = Date.now()
-      
-      try {
-        const controller = new AbortController()
-        const timeoutId = setTimeout(() => controller.abort(), api.timeout)
-        
-        const response = await fetch(api.url, {
-          method: 'GET',
-          signal: controller.signal,
-        })
-        
-        clearTimeout(timeoutId)
-        const latency = Date.now() - checkStart
-        
-        if (response.ok) {
-          results[api.name] = {
-            status: latency > 2000 ? 'warn' : 'pass',
-            latency,
-            message: latency > 2000 ? '响应较慢' : undefined,
-          }
-        } else {
-          results[api.name] = {
-            status: 'fail',
-            message: `HTTP ${response.status}`,
-            latency,
+            cronRuns.push({
+              platform,
+              ran_at: platformLog.ran_at,
+              success,
+            })
+          } else {
+            cronRuns.push({
+              platform,
+              ran_at: null,
+              success: null,
+            })
           }
         }
-      } catch (error) {
-        results[api.name] = {
-          status: 'fail',
-          message: error instanceof Error ? error.message : 'Unknown error',
-          latency: Date.now() - checkStart,
-        }
       }
-    })
-  )
-  
-  return results
+    } catch {
+      // cron_logs 表可能不存在，忽略错误
+      for (const platform of platforms) {
+        cronRuns.push({ platform, ran_at: null, success: null })
+      }
+    }
+
+    return {
+      database: { status: 'pass', latency: Date.now() - start },
+      cronRuns,
+    }
+  } catch (error) {
+    return {
+      database: {
+        status: 'fail',
+        message: error instanceof Error ? error.message : 'Unknown error',
+        latency: Date.now() - start,
+      },
+      cronRuns: [],
+    }
+  }
+}
+
+/**
+ * 获取内存状态
+ */
+function getMemoryStatus(): MemoryStatus {
+  const memory = process.memoryUsage()
+  const heapUsed = Math.round(memory.heapUsed / 1024 / 1024)
+  const heapTotal = Math.round(memory.heapTotal / 1024 / 1024)
+  const external = Math.round(memory.external / 1024 / 1024)
+  const rss = Math.round(memory.rss / 1024 / 1024)
+  const usagePercent = Math.round((memory.heapUsed / memory.heapTotal) * 100)
+
+  return {
+    status: usagePercent > 90 ? 'fail' : 'pass',
+    heapUsed,
+    heapTotal,
+    external,
+    rss,
+    usagePercent,
+  }
+}
+
+/**
+ * 获取缓存状态
+ */
+async function getCacheStatus(): Promise<CacheStatus> {
+  const health = await checkCacheHealth()
+  const stats = getCacheStats()
+
+  const totalRequests = stats.hits + stats.misses
+  const hitRate = totalRequests > 0 ? ((stats.hits / totalRequests) * 100).toFixed(1) + '%' : 'N/A'
+
+  return {
+    redis: health.redis,
+    memoryFallbackActive: stats.memoryFallbackActive,
+    stats: {
+      hits: stats.hits,
+      misses: stats.misses,
+      errors: stats.errors,
+      hitRate,
+    },
+    memoryCache: health.memory,
+  }
 }
 
 /**
  * 计算整体状态
  */
-function calculateOverallStatus(checks: DetailedHealthResponse['checks']): DetailedHealthResponse['status'] {
-  const coreChecks = [checks.database, checks.redis]
-  const allChecks = [
-    ...coreChecks,
-    checks.memory,
-    checks.cpu,
-    ...Object.values(checks.externalApis),
-  ]
-  
-  // 核心服务失败 = 不健康
-  if (coreChecks.some(c => c.status === 'fail')) {
+function calculateStatus(checks: DetailedHealthResponse['checks']): DetailedHealthResponse['status'] {
+  // 数据库失败 = 不健康
+  if (checks.database.status === 'fail') {
     return 'unhealthy'
   }
-  
-  // 任何失败或警告 = 降级
-  if (allChecks.some(c => c.status === 'fail' || c.status === 'warn')) {
+
+  // Redis 失败但内存缓存工作 = 降级
+  if (!checks.cache.redis && checks.cache.memoryFallbackActive) {
     return 'degraded'
   }
-  
+
+  // 内存过高 = 降级
+  if (checks.memory.status === 'fail') {
+    return 'degraded'
+  }
+
+  // Cron 失败 = 降级
+  if (checks.cron.status === 'fail') {
+    return 'degraded'
+  }
+
   return 'healthy'
 }
 
-// ============================================
-// API 路由
-// ============================================
-
-/**
- * GET /api/health/detailed
- * 返回详细健康状态
- */
 export async function GET() {
-  // 并行执行所有检查
-  const [database, redis, externalApis] = await Promise.all([
-    checkDatabaseDetailed(),
-    checkRedisDetailed(),
-    checkExternalApis(),
-  ])
-  
-  const memory = checkMemoryDetailed()
-  const cpu = checkCpuDetailed()
-  const disk = checkDiskDetailed()
-  
-  const checks = {
-    database,
-    redis,
-    memory,
-    cpu,
-    disk,
-    externalApis,
+  try {
+    // 并行执行检查
+    const [{ database, cronRuns }, cacheStatus] = await Promise.all([
+      checkDatabaseAndCron(),
+      getCacheStatus(),
+    ])
+
+    const memory = getMemoryStatus()
+
+    // 计算 Cron 状态
+    const cronHasFailures = cronRuns.some((r) => r.success === false)
+    const cronHasRecent = cronRuns.some((r) => {
+      if (!r.ran_at) return false
+      const hourAgo = Date.now() - 7 * 60 * 60 * 1000 // 7 小时内（允许 6 小时间隔 + 1 小时容差）
+      return new Date(r.ran_at).getTime() > hourAgo
+    })
+
+    const cronStatus: CronStatus = {
+      platforms: getSupportedPlatforms(),
+      lastRuns: cronRuns,
+      status: cronHasFailures ? 'fail' : cronHasRecent ? 'pass' : 'unknown',
+    }
+
+    const checks = {
+      database,
+      redis: { status: cacheStatus.redis ? 'pass' : 'fail' } as ServiceStatus,
+      cache: cacheStatus,
+      memory,
+      cron: cronStatus,
+    }
+
+    const response: DetailedHealthResponse = {
+      status: calculateStatus(checks),
+      timestamp: new Date().toISOString(),
+      version: process.env.npm_package_version || '0.1.0',
+      environment: process.env.NODE_ENV || 'development',
+      uptime: Math.round((Date.now() - startTime) / 1000),
+      checks,
+      metrics: {
+        // 这些指标需要单独的监控系统收集
+        // 这里只提供占位
+      },
+    }
+
+    const httpStatus = response.status === 'healthy' ? 200 : response.status === 'degraded' ? 200 : 503
+
+    return NextResponse.json(response, {
+      status: httpStatus,
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate',
+        'Content-Type': 'application/json',
+      },
+    })
+  } catch (error) {
+    return NextResponse.json(
+      {
+        status: 'unhealthy',
+        timestamp: new Date().toISOString(),
+        error: error instanceof Error ? error.message : 'Unknown error',
+      },
+      {
+        status: 503,
+        headers: {
+          'Cache-Control': 'no-store',
+          'Content-Type': 'application/json',
+        },
+      }
+    )
   }
-  
-  const status = calculateOverallStatus(checks)
-  
-  const response: DetailedHealthResponse = {
-    status,
-    timestamp: new Date().toISOString(),
-    version,
-    environment,
-    uptime: Math.round((Date.now() - startTime) / 1000),
-    checks,
-    metrics: {
-      // 这些指标可从外部监控服务获取（如 Prometheus、Datadog）
-      // 配置 METRICS_ENDPOINT 环境变量启用指标采集
-      requestsPerMinute: getMetric('requests_per_minute'),
-      averageLatency: getMetric('average_latency'),
-      errorRate: getMetric('error_rate'),
-      activeConnections: getMetric('active_connections'),
-    },
-  }
-  
-  const httpStatus = status === 'healthy' ? 200 : status === 'degraded' ? 200 : 503
-  
-  return NextResponse.json(response, {
-    status: httpStatus,
-    headers: {
-      'Cache-Control': 'no-store, no-cache, must-revalidate',
-      'Content-Type': 'application/json',
-    },
-  })
 }

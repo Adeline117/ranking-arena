@@ -86,7 +86,7 @@ async function getAllBinanceTraders() {
   const { data, error } = await supabase
     .from('trader_sources')
     .select('source_trader_id, handle')
-    .eq('source', 'binance')
+    .eq('source', 'binance_futures')
     .eq('is_active', true)
     .limit(200)
 
@@ -273,7 +273,7 @@ async function storePerformance(portfolioId, timeRange, perfData, baseCapturedAt
   await supabase
     .from('trader_snapshots')
     .delete()
-    .eq('source', 'binance')
+    .eq('source', 'binance_futures')
     .eq('source_trader_id', portfolioId)
     .eq('season_id', timeRange)
 
@@ -302,7 +302,7 @@ async function storePerformance(portfolioId, timeRange, perfData, baseCapturedAt
   await supabase
     .from('trader_stats_detail')
     .delete()
-    .eq('source', 'binance')
+    .eq('source', 'binance_futures')
     .eq('source_trader_id', portfolioId)
     .eq('period', timeRange)
 
@@ -339,7 +339,7 @@ async function storeAssetBreakdown(portfolioId, timeRange, assetData, capturedAt
   await supabase
     .from('trader_asset_breakdown')
     .delete()
-    .eq('source', 'binance')
+    .eq('source', 'binance_futures')
     .eq('source_trader_id', portfolioId)
     .eq('period', timeRange)
 
@@ -390,7 +390,7 @@ async function storeEquityCurve(portfolioId, timeRange, roiData, pnlData, captur
   await supabase
     .from('trader_equity_curve')
     .delete()
-    .eq('source', 'binance')
+    .eq('source', 'binance_futures')
     .eq('source_trader_id', portfolioId)
     .eq('period', timeRange)
 

@@ -34,24 +34,24 @@ export function Skeleton({
   }
 
   const getAnimationStyle = (): React.CSSProperties => {
-    // 使用 background 简写属性，避免简写与非简写属性（如 backgroundSize）冲突
-    const bgColor = tokens.colors.bg.tertiary
     switch (animation) {
       case 'shimmer':
-        // 合并所有背景属性到 background 简写中：gradient position / size repeat
         return {
-          background: `linear-gradient(90deg, ${bgColor} 0%, rgba(255, 255, 255, 0.08) 50%, ${bgColor} 100%) 0% 0% / 200% 100% no-repeat`,
+          backgroundImage: `linear-gradient(90deg, ${tokens.colors.bg.tertiary} 0%, rgba(255, 255, 255, 0.08) 50%, ${tokens.colors.bg.tertiary} 100%)`,
+          backgroundSize: '200% 100%',
+          backgroundRepeat: 'no-repeat',
+          backgroundColor: tokens.colors.bg.tertiary,
           animation: 'shimmer 1.5s ease-in-out infinite',
         }
       case 'pulse':
         return {
-          background: bgColor,
+          backgroundColor: tokens.colors.bg.tertiary,
           animation: 'skeletonPulse 1.5s ease-in-out infinite',
         }
       case 'none':
       default:
         return {
-          background: bgColor,
+          backgroundColor: tokens.colors.bg.tertiary,
         }
     }
   }

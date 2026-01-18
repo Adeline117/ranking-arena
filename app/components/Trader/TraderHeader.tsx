@@ -6,8 +6,15 @@ import { tokens } from '@/lib/design-tokens'
 import { supabase } from '@/lib/supabase/client'
 import { Box, Text, Button } from '../Base'
 import FollowButton from '../UI/FollowButton'
+import UserFollowButton from '../UI/UserFollowButton'
 import ClaimTraderButton from './ClaimTraderButton'
 import { getAvatarGradient, getAvatarInitial } from '@/lib/utils/avatar'
+
+interface CommunityScore {
+  avg_rating: number
+  review_count: number
+  recommend_rate: number
+}
 
 interface TraderHeaderProps {
   handle: string
@@ -17,6 +24,7 @@ interface TraderHeaderProps {
   followers?: number
   isOwnProfile?: boolean
   source?: string
+  communityScore?: CommunityScore | null
 }
 
 // 来源平台配置
@@ -33,7 +41,8 @@ export default function TraderHeader({
   isRegistered, 
   followers = 0, 
   isOwnProfile = false, 
-  source 
+  source,
+  communityScore,
 }: TraderHeaderProps) {
   const [userId, setUserId] = useState<string | null>(null)
   const [mounted, setMounted] = useState(false)
@@ -230,6 +239,43 @@ export default function TraderHeader({
                 </svg>
               </Box>
             )}
+            
+            {/* Community Score Badge */}
+            {communityScore && communityScore.review_count > 0 && (
+              <Box
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: tokens.spacing[1],
+                  padding: `4px ${tokens.spacing[3]}`,
+                  background: `rgba(255, 215, 0, 0.12)`,
+                  borderRadius: tokens.radius.full,
+                  border: `1px solid rgba(255, 215, 0, 0.3)`,
+                }}
+                title={`${communityScore.review_count} 条用户评价`}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="#FFD700" stroke="#FFD700" strokeWidth="1">
+                  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                </svg>
+                <Text 
+                  size="xs" 
+                  weight="bold" 
+                  style={{ 
+                    color: '#FFD700',
+                  }}
+                >
+                  {communityScore.avg_rating.toFixed(1)}
+                </Text>
+                <Text 
+                  size="xs" 
+                  style={{ 
+                    color: 'rgba(255, 215, 0, 0.7)',
+                  }}
+                >
+                  ({communityScore.review_count})
+                </Text>
+              </Box>
+            )}
           </Box>
           
           <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[4] }}>
@@ -292,7 +338,17 @@ export default function TraderHeader({
             {!isRegistered && userId && (
               <ClaimTraderButton traderId={traderId} handle={handle} userId={userId} source={source} />
             )}
-            {userId && <FollowButton traderId={traderId} userId={userId} />}
+            {userId && (
+              isRegistered ? (
+                <UserFollowButton 
+                  targetUserId={traderId} 
+                  currentUserId={userId} 
+                  size="md"
+                />
+              ) : (
+                <FollowButton traderId={traderId} userId={userId} />
+              )
+            )}
           </>
         )}
       </Box>

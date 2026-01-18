@@ -4,9 +4,9 @@ import { useState, lazy, Suspense } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box } from '../Base'
 import TopNav from '../Layout/TopNav'
+import MobileBottomNav from '../Layout/MobileBottomNav'
 import ExchangeQuickConnect from '../ExchangeQuickConnect'
 import { ErrorBoundary } from '../Utils/ErrorBoundary'
-import { useToast } from '../UI/Toast'
 import { useLanguage } from '../Utils/LanguageProvider'
 import { JsonLd } from '../Utils/JsonLd'
 import { generateWebSiteSchema, generateOrganizationSchema, combineSchemas } from '@/lib/seo'
@@ -25,7 +25,6 @@ const CompareTraders = lazy(() => import('../Features/CompareTraders'))
  */
 export default function HomePage() {
   const { t } = useLanguage()
-  const { showToast } = useToast()
   const { email, isLoggedIn } = useAuth()
   
   // 交易者数据管理
@@ -34,11 +33,7 @@ export default function HomePage() {
     loading,
     activeTimeRange,
     changeTimeRange,
-  } = useTraderData({
-    onDataUpdated: () => {
-      showToast(t('dataUpdated') || '数据已更新', 'success')
-    },
-  })
+  } = useTraderData()
 
   // 交易者对比状态
   const [compareTraders, setCompareTraders] = useState<Trader[]>([])
@@ -86,19 +81,16 @@ export default function HomePage() {
         {/* 快速绑定交易所 */}
         <ExchangeQuickConnect />
         
+        {/* 响应式三栏布局 */}
         <Box
           className="main-grid stagger-children"
-          style={{
-            display: 'grid',
-            gridTemplateColumns: '260px minmax(0, 1fr) 280px',
-            gap: tokens.spacing[4],
-            alignItems: 'start',
-          }}
         >
-          {/* 左侧：热门讨论 */}
-          <SidebarSection position="left" />
+          {/* 左侧：热门讨论（移动端隐藏） */}
+          <Box className="hide-mobile">
+            <SidebarSection position="left" />
+          </Box>
 
-          {/* 中间：排名榜 */}
+          {/* 中间：排名榜（始终显示） */}
           <RankingSection
             traders={traders}
             loading={loading}
@@ -107,8 +99,10 @@ export default function HomePage() {
             onTimeRangeChange={changeTimeRange}
           />
 
-          {/* 右侧：市场数据 */}
-          <SidebarSection position="right" />
+          {/* 右侧：市场数据（移动端隐藏） */}
+          <Box className="hide-mobile">
+            <SidebarSection position="right" />
+          </Box>
         </Box>
       </Box>
 
@@ -124,6 +118,9 @@ export default function HomePage() {
           </Suspense>
         </ErrorBoundary>
       )}
+
+      {/* 移动端底部导航 */}
+      <MobileBottomNav />
     </Box>
   )
 }

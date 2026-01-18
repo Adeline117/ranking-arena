@@ -1,10 +1,12 @@
 /**
  * 缓存管理器
  * 统一管理 Redis 缓存，支持分布式部署环境
+ * 当 Redis 不可用时自动回退到内存缓存
  */
 
 import { Redis } from '@upstash/redis'
 import { dataLogger } from '@/lib/utils/logger'
+import { getMemoryCache, MemoryCache } from './memory-fallback'
 
 // ============================================
 // 类型定义
@@ -15,21 +17,30 @@ interface CacheOptions {
   ttl?: number
   /** 缓存标签，用于批量失效 */
   tags?: string[]
+  /** 是否跳过内存缓存 */
+  skipMemory?: boolean
 }
 
 interface CacheStats {
   hits: number
   misses: number
   errors: number
+  redisAvailable: boolean
+  memoryFallbackActive: boolean
   lastError?: string
 }
 
 // ============================================
-// Redis 客户端
+// Redis 客户端状态
 // ============================================
 
 let redisClient: Redis | null = null
 let isInitialized = false
+let redisHealthy = true
+let lastHealthCheck = 0
+const HEALTH_CHECK_INTERVAL = 30000 // 30 秒健康检查间隔
+const MAX_CONSECUTIVE_ERRORS = 3
+let consecutiveErrors = 0
 
 function getRedis(): Redis | null {
   if (!isInitialized) {
@@ -38,7 +49,8 @@ function getRedis(): Redis | null {
     const token = process.env.UPSTASH_REDIS_REST_TOKEN
 
     if (!url || !token) {
-      dataLogger.warn('Redis 环境变量未配置，使用内存回退')
+      dataLogger.warn('Redis 环境变量未配置，使用内存缓存')
+      redisHealthy = false
       return null
     }
 
@@ -46,10 +58,67 @@ function getRedis(): Redis | null {
       redisClient = new Redis({ url, token })
     } catch (error) {
       dataLogger.error('Redis 初始化失败:', error)
+      redisHealthy = false
       return null
     }
   }
-  return redisClient
+
+  // 如果 Redis 被标记为不健康，检查是否需要重试
+  if (!redisHealthy && redisClient) {
+    const now = Date.now()
+    if (now - lastHealthCheck > HEALTH_CHECK_INTERVAL) {
+      lastHealthCheck = now
+      // 异步进行健康检查
+      checkRedisHealth().catch(() => {})
+    }
+  }
+
+  return redisHealthy ? redisClient : null
+}
+
+/**
+ * 检查 Redis 健康状态
+ */
+async function checkRedisHealth(): Promise<boolean> {
+  if (!redisClient) return false
+
+  try {
+    await redisClient.ping()
+    if (!redisHealthy) {
+      dataLogger.info('Redis 连接已恢复')
+    }
+    redisHealthy = true
+    consecutiveErrors = 0
+    return true
+  } catch (error) {
+    redisHealthy = false
+    dataLogger.warn('Redis 健康检查失败:', error)
+    return false
+  }
+}
+
+/**
+ * 处理 Redis 错误，决定是否启用回退
+ */
+function handleRedisError(error: unknown): void {
+  consecutiveErrors++
+  stats.errors++
+  stats.lastError = String(error)
+
+  if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
+    if (redisHealthy) {
+      dataLogger.warn(`Redis 连续 ${consecutiveErrors} 次错误，切换到内存缓存`)
+      redisHealthy = false
+      lastHealthCheck = Date.now()
+    }
+  }
+}
+
+/**
+ * 获取内存缓存实例
+ */
+function getMemoryCacheFallback(): MemoryCache {
+  return getMemoryCache()
 }
 
 // ============================================
@@ -60,10 +129,16 @@ const stats: CacheStats = {
   hits: 0,
   misses: 0,
   errors: 0,
+  redisAvailable: true,
+  memoryFallbackActive: false,
 }
 
 export function getCacheStats(): CacheStats {
-  return { ...stats }
+  return {
+    ...stats,
+    redisAvailable: redisHealthy,
+    memoryFallbackActive: !redisHealthy,
+  }
 }
 
 export function resetCacheStats(): void {
@@ -74,137 +149,166 @@ export function resetCacheStats(): void {
 }
 
 // ============================================
-// 缓存操作
+// 缓存操作（带回退）
 // ============================================
 
 /**
  * 从缓存获取数据
- * @param key 缓存键
- * @returns 缓存数据或 null
+ * 优先使用 Redis，失败时回退到内存缓存
  */
 export async function get<T>(key: string): Promise<T | null> {
   const redis = getRedis()
-  if (!redis) return null
+  const memoryCache = getMemoryCacheFallback()
 
-  try {
-    const data = await redis.get<T>(key)
-    if (data !== null) {
-      stats.hits++
-      return data
+  // 1. 尝试从 Redis 获取
+  if (redis) {
+    try {
+      const data = await redis.get<T>(key)
+      if (data !== null) {
+        stats.hits++
+        // 同时更新内存缓存（加速后续访问）
+        memoryCache.set(key, data, 60)
+        return data
+      }
+    } catch (error) {
+      handleRedisError(error)
+      dataLogger.error('Redis 读取失败，尝试内存缓存:', { key, error })
     }
-    stats.misses++
-    return null
-  } catch (error) {
-    stats.errors++
-    stats.lastError = String(error)
-    dataLogger.error('缓存读取失败:', { key, error })
-    return null
   }
+
+  // 2. 从内存缓存获取
+  const memoryData = memoryCache.get<T>(key)
+  if (memoryData !== null) {
+    stats.hits++
+    return memoryData
+  }
+
+  stats.misses++
+  return null
 }
 
 /**
  * 设置缓存数据
- * @param key 缓存键
- * @param value 缓存值
- * @param options 选项
+ * 同时写入 Redis 和内存缓存
  */
 export async function set<T>(key: string, value: T, options: CacheOptions = {}): Promise<boolean> {
   const redis = getRedis()
-  if (!redis) return false
+  const memoryCache = getMemoryCacheFallback()
+  const { ttl = 60, tags, skipMemory = false } = options
 
-  const { ttl = 60, tags } = options
-
-  try {
-    await redis.setex(key, ttl, value)
-
-    // 如果有标签，将键添加到标签集合中
-    if (tags && tags.length > 0) {
-      const pipeline = redis.pipeline()
-      for (const tag of tags) {
-        pipeline.sadd(`tag:${tag}`, key)
-        // 标签集合的 TTL 设为缓存 TTL 的两倍
-        pipeline.expire(`tag:${tag}`, ttl * 2)
-      }
-      await pipeline.exec()
-    }
-
-    return true
-  } catch (error) {
-    stats.errors++
-    stats.lastError = String(error)
-    dataLogger.error('缓存写入失败:', { key, error })
-    return false
+  // 1. 写入内存缓存（始终成功）
+  if (!skipMemory) {
+    memoryCache.set(key, value, ttl)
   }
+
+  // 2. 尝试写入 Redis
+  if (redis) {
+    try {
+      await redis.setex(key, ttl, value)
+
+      // 如果有标签，将键添加到标签集合中
+      if (tags && tags.length > 0) {
+        const pipeline = redis.pipeline()
+        for (const tag of tags) {
+          pipeline.sadd(`tag:${tag}`, key)
+          pipeline.expire(`tag:${tag}`, ttl * 2)
+        }
+        await pipeline.exec()
+      }
+
+      return true
+    } catch (error) {
+      handleRedisError(error)
+      dataLogger.error('Redis 写入失败:', { key, error })
+      // 内存缓存已写入，返回 true
+      return !skipMemory
+    }
+  }
+
+  return !skipMemory
 }
 
 /**
  * 删除缓存
- * @param key 缓存键
  */
 export async function del(key: string): Promise<boolean> {
   const redis = getRedis()
-  if (!redis) return false
+  const memoryCache = getMemoryCacheFallback()
 
-  try {
-    await redis.del(key)
-    return true
-  } catch (error) {
-    stats.errors++
-    stats.lastError = String(error)
-    dataLogger.error('缓存删除失败:', { key, error })
-    return false
+  // 删除内存缓存
+  memoryCache.delete(key)
+
+  // 删除 Redis 缓存
+  if (redis) {
+    try {
+      await redis.del(key)
+      return true
+    } catch (error) {
+      handleRedisError(error)
+      dataLogger.error('Redis 删除失败:', { key, error })
+    }
   }
+
+  return true
 }
 
 /**
  * 批量删除缓存（按模式）
- * @param pattern 匹配模式
  */
 export async function delByPattern(pattern: string): Promise<number> {
   const redis = getRedis()
-  if (!redis) return 0
+  const memoryCache = getMemoryCacheFallback()
 
-  try {
-    const keys = await redis.keys(pattern)
-    if (keys.length === 0) return 0
+  // 删除内存缓存（按前缀）
+  const prefix = pattern.replace(/\*/g, '')
+  const memoryDeleted = memoryCache.deleteByPrefix(prefix)
 
-    await redis.del(...keys)
-    return keys.length
-  } catch (error) {
-    stats.errors++
-    stats.lastError = String(error)
-    dataLogger.error('批量删除缓存失败:', { pattern, error })
-    return 0
+  // 删除 Redis 缓存
+  if (redis) {
+    try {
+      const keys = await redis.keys(pattern)
+      if (keys.length > 0) {
+        await redis.del(...keys)
+        return keys.length
+      }
+    } catch (error) {
+      handleRedisError(error)
+      dataLogger.error('Redis 批量删除失败:', { pattern, error })
+    }
   }
+
+  return memoryDeleted
 }
 
 /**
  * 按标签删除缓存
- * @param tag 标签名
  */
 export async function delByTag(tag: string): Promise<number> {
   const redis = getRedis()
+
   if (!redis) return 0
 
   try {
     const keys = await redis.smembers(`tag:${tag}`)
     if (keys.length === 0) return 0
 
+    // 同时删除内存缓存
+    const memoryCache = getMemoryCacheFallback()
+    for (const key of keys) {
+      memoryCache.delete(key)
+    }
+
     await redis.del(...keys, `tag:${tag}`)
     return keys.length
   } catch (error) {
-    stats.errors++
-    stats.lastError = String(error)
-    dataLogger.error('按标签删除缓存失败:', { tag, error })
+    handleRedisError(error)
+    dataLogger.error('按标签删除失败:', { tag, error })
     return 0
   }
 }
 
 /**
  * 获取或设置缓存（stale-while-revalidate 模式）
- * @param key 缓存键
- * @param fetcher 数据获取函数
- * @param options 选项
  */
 export async function getOrSet<T>(
   key: string,
@@ -230,9 +334,6 @@ export async function getOrSet<T>(
 
 /**
  * 带锁的获取或设置（防止缓存击穿）
- * @param key 缓存键
- * @param fetcher 数据获取函数
- * @param options 选项
  */
 export async function getOrSetWithLock<T>(
   key: string,
@@ -248,9 +349,11 @@ export async function getOrSetWithLock<T>(
     return cached
   }
 
-  // 如果 Redis 不可用，直接获取数据
+  // 如果 Redis 不可用，直接获取数据并缓存到内存
   if (!redis) {
-    return await fetcher()
+    const data = await fetcher()
+    await set(key, data, { ttl })
+    return data
   }
 
   // 尝试获取锁
@@ -284,23 +387,31 @@ export async function getOrSetWithLock<T>(
 
 /**
  * 检查缓存是否存在
- * @param key 缓存键
  */
 export async function exists(key: string): Promise<boolean> {
   const redis = getRedis()
-  if (!redis) return false
+  const memoryCache = getMemoryCacheFallback()
 
-  try {
-    const result = await redis.exists(key)
-    return result === 1
-  } catch (error) {
-    return false
+  // 先检查内存缓存
+  if (memoryCache.has(key)) {
+    return true
   }
+
+  // 再检查 Redis
+  if (redis) {
+    try {
+      const result = await redis.exists(key)
+      return result === 1
+    } catch (error) {
+      handleRedisError(error)
+    }
+  }
+
+  return false
 }
 
 /**
  * 获取缓存剩余 TTL
- * @param key 缓存键
  */
 export async function ttl(key: string): Promise<number> {
   const redis = getRedis()
@@ -309,14 +420,13 @@ export async function ttl(key: string): Promise<number> {
   try {
     return await redis.ttl(key)
   } catch (error) {
+    handleRedisError(error)
     return -2
   }
 }
 
 /**
  * 增量操作
- * @param key 缓存键
- * @param delta 增量值
  */
 export async function incr(key: string, delta: number = 1): Promise<number | null> {
   const redis = getRedis()
@@ -325,6 +435,7 @@ export async function incr(key: string, delta: number = 1): Promise<number | nul
   try {
     return await redis.incrby(key, delta)
   } catch (error) {
+    handleRedisError(error)
     return null
   }
 }
@@ -335,47 +446,99 @@ export async function incr(key: string, delta: number = 1): Promise<number | nul
 
 /**
  * 批量获取
- * @param keys 缓存键数组
  */
 export async function mget<T>(keys: string[]): Promise<(T | null)[]> {
   const redis = getRedis()
-  if (!redis) return keys.map(() => null)
+  const memoryCache = getMemoryCacheFallback()
 
-  try {
-    const results = await redis.mget<T[]>(...keys)
-    results.forEach(r => {
-      if (r !== null) stats.hits++
-      else stats.misses++
-    })
-    return results
-  } catch (error) {
-    stats.errors++
-    return keys.map(() => null)
+  if (redis) {
+    try {
+      const results = await redis.mget<T[]>(...keys)
+      results.forEach((r, i) => {
+        if (r !== null) {
+          stats.hits++
+          // 同步到内存缓存
+          memoryCache.set(keys[i], r, 60)
+        } else {
+          stats.misses++
+        }
+      })
+      return results
+    } catch (error) {
+      handleRedisError(error)
+    }
   }
+
+  // 从内存缓存获取
+  return keys.map(key => {
+    const data = memoryCache.get<T>(key)
+    if (data !== null) stats.hits++
+    else stats.misses++
+    return data
+  })
 }
 
 /**
  * 批量设置
- * @param entries 键值对数组
- * @param ttl TTL（秒）
  */
 export async function mset(
   entries: Array<{ key: string; value: unknown }>,
   ttl: number = 60
 ): Promise<boolean> {
   const redis = getRedis()
-  if (!redis) return false
+  const memoryCache = getMemoryCacheFallback()
 
-  try {
-    const pipeline = redis.pipeline()
-    for (const { key, value } of entries) {
-      pipeline.setex(key, ttl, value)
+  // 写入内存缓存
+  for (const { key, value } of entries) {
+    memoryCache.set(key, value, ttl)
+  }
+
+  // 写入 Redis
+  if (redis) {
+    try {
+      const pipeline = redis.pipeline()
+      for (const { key, value } of entries) {
+        pipeline.setex(key, ttl, value)
+      }
+      await pipeline.exec()
+      return true
+    } catch (error) {
+      handleRedisError(error)
     }
-    await pipeline.exec()
-    return true
-  } catch (error) {
-    stats.errors++
-    return false
+  }
+
+  return true
+}
+
+// ============================================
+// 健康检查
+// ============================================
+
+/**
+ * 手动触发 Redis 健康检查
+ */
+export async function checkHealth(): Promise<{
+  redis: boolean
+  memory: { size: number; maxSize: number }
+}> {
+  const memoryCache = getMemoryCacheFallback()
+  const redisOk = await checkRedisHealth()
+
+  return {
+    redis: redisOk,
+    memory: memoryCache.getStats(),
+  }
+}
+
+/**
+ * 强制使用内存缓存（用于测试或紧急情况）
+ */
+export function forceMemoryOnly(enabled: boolean): void {
+  if (enabled) {
+    redisHealthy = false
+  } else {
+    // 尝试恢复 Redis
+    checkRedisHealth().catch(() => {})
   }
 }
 
@@ -384,3 +547,4 @@ export async function mset(
 // ============================================
 
 export { CacheKey, CachePattern, CACHE_TTL, CACHE_PREFIX } from './keys'
+export { MemoryCache, getMemoryCache, resetMemoryCache } from './memory-fallback'

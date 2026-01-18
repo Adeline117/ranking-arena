@@ -1,154 +1,144 @@
-import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
-import { exec } from "child_process";
-import { promisify } from "util";
+/**
+ * 交易员数据抓取 Cron 主入口
+ * 
+ * GET /api/cron/fetch-traders - 健康检查
+ * POST /api/cron/fetch-traders - 触发所有平台抓取（仅用于手动触发/调试）
+ * 
+ * 生产环境推荐使用各平台独立端点:
+ * POST /api/cron/fetch-traders/[platform]
+ * 
+ * 支持的平台:
+ * - binance_futures, binance_spot, binance_web3
+ * - bybit
+ * - bitget_futures, bitget_spot
+ * - mexc, coinex
+ * - okx_web3, kucoin, gmx
+ */
 
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
+import { NextResponse } from 'next/server'
+import {
+  isAuthorized,
+  createSupabaseAdmin,
+  executePlatformScripts,
+  logCronExecution,
+  getSupportedPlatforms,
+  getSupabaseEnv,
+  type ScriptResult,
+} from '@/lib/cron/utils'
 
-const execAsync = promisify(exec);
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
 
 /**
- * We support BOTH naming styles:
- * - SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY (server-only)
- * - NEXT_PUBLIC_SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY (your current Vercel setup)
+ * GET - 健康检查
  */
-function getSupabaseEnv() {
-  const url =
-    process.env.SUPABASE_URL ||
-    process.env.NEXT_PUBLIC_SUPABASE_URL ||
-    "";
-
-  const serviceKey =
-    process.env.SUPABASE_SERVICE_ROLE_KEY || "";
-
-  return { url, serviceKey };
-}
-
-function isAuthorized(req: Request) {
-  const header = req.headers.get("x-cron-secret") || "";
-  const secret = process.env.CRON_SECRET || "";
-  return Boolean(secret) && header === secret;
-}
-
 export async function GET() {
-  return NextResponse.json({ ok: true, message: "cron endpoint alive" });
+  const platforms = getSupportedPlatforms()
+  const { url, serviceKey } = getSupabaseEnv()
+
+  return NextResponse.json({
+    ok: true,
+    message: 'Cron 端点正常',
+    platforms,
+    config: {
+      hasSupabaseUrl: !!url,
+      hasServiceKey: !!serviceKey,
+      hasCronSecret: !!process.env.CRON_SECRET,
+    },
+  })
 }
 
+/**
+ * POST - 触发所有平台抓取
+ * 警告: 此端点会执行所有平台的抓取脚本，可能超时
+ * 生产环境建议使用 /api/cron/fetch-traders/[platform] 分别调度
+ */
 export async function POST(req: Request) {
   try {
-    // 1) auth
+    // 1) 验证授权
     if (!isAuthorized(req)) {
-      return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
     }
 
-    // 2) env
-    const { url, serviceKey } = getSupabaseEnv();
+    // 2) 验证环境变量
+    const { url, serviceKey } = getSupabaseEnv()
     if (!url || !serviceKey) {
       return NextResponse.json(
         {
-          error: "Supabase env missing",
-          missing: {
-            url: !url,
-            serviceKey: !serviceKey,
-          },
+          error: 'Supabase 环境变量缺失',
+          missing: { url: !url, serviceKey: !serviceKey },
         },
         { status: 500 }
-      );
+      )
     }
 
-    const supabase = createClient(url, serviceKey, {
-      auth: { persistSession: false },
-    });
+    // 3) 检查是否只运行特定平台（通过 query param）
+    const requestUrl = new URL(req.url)
+    const platformParam = requestUrl.searchParams.get('platform')
+    const platforms = platformParam
+      ? platformParam.split(',').filter((p) => getSupportedPlatforms().includes(p))
+      : getSupportedPlatforms()
 
-    const now = new Date().toISOString();
-    const results: any[] = [];
+    if (platforms.length === 0) {
+      return NextResponse.json(
+        {
+          error: '无有效平台',
+          supported: getSupportedPlatforms(),
+        },
+        { status: 400 }
+      )
+    }
 
-    // 执行数据抓取脚本
-    const scripts = [
-      // Binance 多时间段排行榜抓取
-      { name: "binance_7d", script: "scripts/import_binance_copy_trading_90d.mjs", args: ["7D"] },
-      { name: "binance_30d", script: "scripts/import_binance_copy_trading_90d.mjs", args: ["30D"] },
-      { name: "binance_90d", script: "scripts/import_binance_copy_trading_90d.mjs", args: ["90D"] },
-      // Binance 交易员详情页抓取
-      { name: "binance_details", script: "scripts/fetch_binance_trader_details.mjs", args: [] },
-      // Binance Web3 多时间段排行榜抓取
-      { name: "binance_web3_7d", script: "scripts/fetch_binance_web3_all_pages.mjs", args: ["7D"] },
-      { name: "binance_web3_30d", script: "scripts/fetch_binance_web3_all_pages.mjs", args: ["30D"] },
-      { name: "binance_web3_90d", script: "scripts/fetch_binance_web3_all_pages.mjs", args: ["90D"] },
-      // Binance Web3 交易员详情页抓取
-      { name: "binance_web3_details", script: "scripts/fetch_binance_web3_trader_details.mjs", args: [] },
-      // Bybit 多时间段排行榜抓取
-      { name: "bybit_7d", script: "scripts/import_bybit_90d_roi.mjs", args: ["7D"] },
-      { name: "bybit_30d", script: "scripts/import_bybit_90d_roi.mjs", args: ["30D"] },
-      { name: "bybit_90d", script: "scripts/import_bybit_90d_roi.mjs", args: ["90D"] },
-      // Bybit 交易员详情页抓取
-      { name: "bybit_details", script: "scripts/fetch_bybit_trader_details.mjs", args: [] },
-      // 其他数据源
-      { name: "bitget", script: "scripts/import_bitget_90d_roi.mjs", args: [] },
-      { name: "mexc", script: "scripts/import_mexc_90d_roi.mjs", args: [] },
-      { name: "coinex", script: "scripts/import_coinex_90d_roi.mjs", args: [] },
-      { name: "okx", script: "scripts/import_okx_90d_roi.mjs", args: [] },
-      { name: "kucoin", script: "scripts/import_kucoin_90d_roi.mjs", args: [] },
-      { name: "gate", script: "scripts/import_gate_90d_roi.mjs", args: [] },
-    ];
+    const now = new Date().toISOString()
+    const allResults: Array<{ platform: string; results: ScriptResult[] }> = []
+    let totalSuccess = 0
+    let totalFailed = 0
 
-    for (const { name, script, args = [] } of scripts) {
+    // 4) 顺序执行各平台脚本
+    for (const platform of platforms) {
       try {
-        console.log(`开始执行 ${name} 数据抓取...`);
-        const command = `node ${script}${args.length > 0 ? ` ${args.join(' ')}` : ''}`
-        const { stdout } = await execAsync(
-          command,
-          {
-            cwd: process.cwd(),
-            timeout: 300000, // 5分钟超时（详情页抓取可能需要更长时间）
-            env: {
-              ...process.env,
-              SUPABASE_URL: url,
-              SUPABASE_SERVICE_ROLE_KEY: serviceKey,
-            },
-          }
-        );
+        console.log(`[Cron] 开始执行平台: ${platform}`)
+        const { results } = await executePlatformScripts(platform)
+        allResults.push({ platform, results })
 
-        results.push({
-          name,
-          success: true,
-          output: stdout.substring(0, 500), // 只保存前500字符
-        });
-        console.log(`${name} 数据抓取完成`);
-      } catch (error: any) {
-        results.push({
-          name,
-          success: false,
-          error: error.message || String(error),
-        });
-        console.error(`${name} 数据抓取失败:`, error.message);
+        const successCount = results.filter((r) => r.success).length
+        totalSuccess += successCount
+        totalFailed += results.length - successCount
+      } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : String(error)
+        console.error(`[Cron] 平台 ${platform} 执行失败:`, errorMessage)
+        allResults.push({
+          platform,
+          results: [{ name: platform, success: false, error: errorMessage }],
+        })
+        totalFailed++
       }
     }
 
-    // 记录执行日志
-    try {
-      await supabase.from("cron_logs").insert([
-        {
-          name: "fetch-traders",
-          ran_at: now,
-          result: JSON.stringify(results),
-        },
-      ]);
-    } catch (error) {
-      // 如果 cron_logs 表不存在，忽略错误
-      console.warn("Failed to log to cron_logs:", error);
-    }
+    // 5) 记录日志
+    const supabase = createSupabaseAdmin()
+    const flatResults = allResults.flatMap((p) => p.results)
+    await logCronExecution(supabase, 'fetch-traders-all', flatResults)
 
+    // 6) 返回结果
     return NextResponse.json({
-      ok: true,
+      ok: totalFailed === 0,
       ran_at: now,
-      results,
-    });
-  } catch (e: any) {
+      summary: {
+        platforms: platforms.length,
+        total: totalSuccess + totalFailed,
+        success: totalSuccess,
+        failed: totalFailed,
+      },
+      results: allResults,
+    })
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    console.error('[Cron] 执行失败:', errorMessage)
+
     return NextResponse.json(
-      { ok: false, error: e?.message || String(e) },
+      { ok: false, error: errorMessage },
       { status: 500 }
-    );
+    )
   }
 }

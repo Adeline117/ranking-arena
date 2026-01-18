@@ -71,7 +71,9 @@ export async function GET(request: NextRequest) {
         }
 
         if (period !== 'all') {
-          tradersQuery = tradersQuery.or(`season_id.is.null,season_id.eq.${period}`)
+          tradersQuery = tradersQuery.eq('season_id', period)
+        } else {
+          tradersQuery = tradersQuery.eq('season_id', '90D')
         }
 
         const { data: traders, error } = await tradersQuery

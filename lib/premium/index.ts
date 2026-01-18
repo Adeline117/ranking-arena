@@ -179,7 +179,7 @@ class PremiumService {
             }
           }
           break
-        case 'realtime_alerts':
+        case 'advanced_alerts':
           if (limits.alertsLimit > 0) {
             remaining = limits.alertsLimit - usage.currentAlerts
             isLimitReached = remaining <= 0
