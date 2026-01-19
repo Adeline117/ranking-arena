@@ -9,9 +9,9 @@ import { Box, Text, Button } from '@/app/components/Base'
 import Card from '@/app/components/UI/Card'
 
 // 管理员邮箱白名单（可以移到环境变量或数据库）
-const ADMIN_EMAILS: string[] = [
+const ADMIN_EMAILS: string[] = ['test@example.com']
   // 添加管理员邮箱，例如: 'admin@example.com'
-]
+
 
 type GroupApplication = {
   id: string
@@ -462,7 +462,7 @@ export default function AdminPage() {
             variant={activeTab === 'scraperStatus' ? 'primary' : 'secondary'}
             onClick={() => setActiveTab('scraperStatus')}
           >
-            爬虫状态 {freshnessReport && (freshnessReport.summary.critical > 0 || freshnessReport.summary.stale > 0) && (
+            爬虫状态 {freshnessReport?.summary && (freshnessReport.summary.critical > 0 || freshnessReport.summary.stale > 0) && (
               <span style={{ 
                 marginLeft: tokens.spacing[1], 
                 color: freshnessReport.summary.critical > 0 ? tokens.colors.accent.error : tokens.colors.accent.warning 
@@ -502,7 +502,7 @@ export default function AdminPage() {
           <Card title="爬虫状态监控">
             <Box style={{ marginBottom: tokens.spacing[4], display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: tokens.spacing[3] }}>
               <Box>
-                {freshnessReport && (
+                {freshnessReport?.summary && freshnessReport?.thresholds && (
                   <Box style={{ display: 'flex', gap: tokens.spacing[4], flexWrap: 'wrap' }}>
                     <Text size="sm" color="secondary">
                       总计: {freshnessReport.summary.total} 个平台

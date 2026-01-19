@@ -107,29 +107,9 @@ export default function ConversationPage({ params }: { params: { conversationId:
       if (data.messages) {
         setMessages(data.messages)
         
-        // 获取对方用户信息
-        if (data.messages.length > 0) {
-          const otherUserId = data.messages[0].sender_id === uid 
-            ? data.messages[0].receiver_id 
-            : data.messages[0].sender_id
-          
-          const { data: userData } = await supabase
-            .from('user_profiles')
-            .select('id, handle, avatar_url, bio')
-            .eq('id', otherUserId)
-            .maybeSingle()
-          
-          if (userData) {
-            setOtherUser(userData)
-          }
-        } else {
-          // 如果没有消息，从会话信息获取对方用户
-          const convRes = await fetch(`/api/conversations?userId=${uid}`)
-          const convData = await convRes.json()
-          const conv = convData.conversations?.find((c: any) => c.id === convId)
-          if (conv?.other_user) {
-            setOtherUser(conv.other_user)
-          }
+        // 使用 API 返回的对方用户信息
+        if (data.otherUser) {
+          setOtherUser(data.otherUser)
         }
       }
     } catch (error) {

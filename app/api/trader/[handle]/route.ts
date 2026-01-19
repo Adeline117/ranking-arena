@@ -26,8 +26,23 @@ export const revalidate = 300 // 5分钟
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
 
-// 支持的交易所
-const TRADER_SOURCES = ['binance', 'binance_web3', 'bybit', 'bitget', 'okx', 'kucoin', 'gate', 'mexc', 'coinex'] as const
+// 支持的交易所 - 需要与数据库中的 source 值保持一致
+// 注意：更具体的 source（如 binance_futures）要放在通用 source（binance）之前
+// 这样查询时会优先匹配到新数据
+const TRADER_SOURCES = [
+  'binance_futures',  // 放在 binance 之前
+  'binance_spot',
+  'binance_web3',
+  'binance',          // 旧版 source（兼容）
+  'bitget_futures',
+  'bitget_spot',
+  'bybit',
+  'mexc',
+  'coinex',
+  'okx_web3',
+  'kucoin',
+  'gmx',
+] as const
 type SourceType = typeof TRADER_SOURCES[number]
 
 // 缓存键前缀
@@ -430,30 +445,39 @@ async function getTraderDetails(
   }
   
   // 计算各时间段的 Arena Score
+  // 注意数据转换：数据库中 roi 和 win_rate 需要 *100 转为百分比
+  // max_drawdown 已经是百分比形式
+  // 辅助函数：标准化 win_rate 为百分比
+  // binance_futures 存储小数(0.85)，bitget/bybit 存储百分比(85)
+  const normalizeWinRate = (wr: number | null): number | null => {
+    if (wr == null) return null
+    return wr <= 1 ? wr * 100 : wr  // 如果 <= 1 则是小数，需要 * 100
+  }
+
   const score90d = snapshot?.roi != null && snapshot?.pnl != null
     ? calculateArenaScore({
-        roi: snapshot.roi,
+        roi: snapshot.roi * 100,              // 数据库存储的是 ROI/100
         pnl: snapshot.pnl,
-        maxDrawdown: snapshot.max_drawdown,
-        winRate: snapshot.win_rate,
+        maxDrawdown: snapshot.max_drawdown,   // 已经是百分比
+        winRate: normalizeWinRate(snapshot.win_rate),
       }, '90D')
     : null
 
   const score30d = snapshot30d?.roi != null && snapshot30d?.pnl != null
     ? calculateArenaScore({
-        roi: snapshot30d.roi,
+        roi: snapshot30d.roi * 100,
         pnl: snapshot30d.pnl,
         maxDrawdown: snapshot30d.max_drawdown,
-        winRate: snapshot30d.win_rate,
+        winRate: normalizeWinRate(snapshot30d.win_rate),
       }, '30D')
     : null
 
   const score7d = snapshot7d?.roi != null && snapshot7d?.pnl != null
     ? calculateArenaScore({
-        roi: snapshot7d.roi,
+        roi: snapshot7d.roi * 100,
         pnl: snapshot7d.pnl,
         maxDrawdown: snapshot7d.max_drawdown,
-        winRate: snapshot7d.win_rate,
+        winRate: normalizeWinRate(snapshot7d.win_rate),
       }, '7D')
     : null
 
@@ -479,12 +503,12 @@ async function getTraderDetails(
       roi_7d: snapshot7d?.roi ?? undefined,
       roi_30d: snapshot30d?.roi ?? undefined,
       pnl: snapshot?.pnl ?? undefined,
-      win_rate: snapshot?.win_rate ?? undefined,
+      win_rate: normalizeWinRate(snapshot?.win_rate ?? null) ?? undefined,
       max_drawdown: snapshot?.max_drawdown ?? undefined,
       pnl_7d: snapshot7d?.pnl ?? undefined,
       pnl_30d: snapshot30d?.pnl ?? undefined,
-      win_rate_7d: snapshot7d?.win_rate ?? undefined,
-      win_rate_30d: snapshot30d?.win_rate ?? undefined,
+      win_rate_7d: normalizeWinRate(snapshot7d?.win_rate ?? null) ?? undefined,
+      win_rate_30d: normalizeWinRate(snapshot30d?.win_rate ?? null) ?? undefined,
       max_drawdown_7d: snapshot7d?.max_drawdown ?? undefined,
       max_drawdown_30d: snapshot30d?.max_drawdown ?? undefined,
       // Arena Score
@@ -521,7 +545,7 @@ async function getTraderDetails(
         totalTrades12M: snapshot?.trades_count ?? 0,
         avgProfit: statsDetail90d?.avg_profit ?? 0,
         avgLoss: statsDetail90d?.avg_loss ?? 0,
-        profitableTradesPct: snapshot?.win_rate ?? 0,
+        profitableTradesPct: normalizeWinRate(snapshot?.win_rate ?? null) ?? 0,
         winningPositions: statsDetail90d?.winning_positions ?? undefined,
         totalPositions: statsDetail90d?.total_positions ?? undefined,
       },
@@ -669,31 +693,38 @@ async function getTraderDetailsFromSnapshots(
   const arenaFollowers = arenaFollowersResult.count || 0
   const trackedSince = trackedSinceResult.data?.captured_at || null
   
+  // 辅助函数：标准化 win_rate 为百分比
+  // binance_futures 存储小数(0.85)，bitget/bybit 存储百分比(85)
+  const normalizeWinRate = (wr: number | null): number | null => {
+    if (wr == null) return null
+    return wr <= 1 ? wr * 100 : wr  // 如果 <= 1 则是小数，需要 * 100
+  }
+
   // 计算各时间段的 Arena Score
   const score90d = snapshot?.roi != null && snapshot?.pnl != null
     ? calculateArenaScore({
-        roi: snapshot.roi,
+        roi: snapshot.roi * 100,
         pnl: snapshot.pnl,
         maxDrawdown: snapshot.max_drawdown,
-        winRate: snapshot.win_rate,
+        winRate: normalizeWinRate(snapshot.win_rate),
       }, '90D')
     : null
 
   const score30d = snapshot30d?.roi != null && snapshot30d?.pnl != null
     ? calculateArenaScore({
-        roi: snapshot30d.roi,
+        roi: snapshot30d.roi * 100,
         pnl: snapshot30d.pnl,
         maxDrawdown: snapshot30d.max_drawdown,
-        winRate: snapshot30d.win_rate,
+        winRate: normalizeWinRate(snapshot30d.win_rate),
       }, '30D')
     : null
 
   const score7d = snapshot7d?.roi != null && snapshot7d?.pnl != null
     ? calculateArenaScore({
-        roi: snapshot7d.roi,
+        roi: snapshot7d.roi * 100,
         pnl: snapshot7d.pnl,
         maxDrawdown: snapshot7d.max_drawdown,
-        winRate: snapshot7d.win_rate,
+        winRate: normalizeWinRate(snapshot7d.win_rate),
       }, '7D')
     : null
 
@@ -719,12 +750,12 @@ async function getTraderDetailsFromSnapshots(
       roi_7d: snapshot7d?.roi ?? undefined,
       roi_30d: snapshot30d?.roi ?? undefined,
       pnl: snapshot?.pnl ?? undefined,
-      win_rate: snapshot?.win_rate ?? undefined,
+      win_rate: normalizeWinRate(snapshot?.win_rate ?? null) ?? undefined,
       max_drawdown: snapshot?.max_drawdown ?? undefined,
       pnl_7d: snapshot7d?.pnl ?? undefined,
       pnl_30d: snapshot30d?.pnl ?? undefined,
-      win_rate_7d: snapshot7d?.win_rate ?? undefined,
-      win_rate_30d: snapshot30d?.win_rate ?? undefined,
+      win_rate_7d: normalizeWinRate(snapshot7d?.win_rate ?? null) ?? undefined,
+      win_rate_30d: normalizeWinRate(snapshot30d?.win_rate ?? null) ?? undefined,
       max_drawdown_7d: snapshot7d?.max_drawdown ?? undefined,
       max_drawdown_30d: snapshot30d?.max_drawdown ?? undefined,
       // Arena Score
@@ -745,7 +776,7 @@ async function getTraderDetailsFromSnapshots(
         totalTrades12M: snapshot?.trades_count ?? 0,
         avgProfit: 0,
         avgLoss: 0,
-        profitableTradesPct: snapshot?.win_rate ?? 0,
+        profitableTradesPct: normalizeWinRate(snapshot?.win_rate ?? null) ?? 0,
       },
       frequentlyTraded: [],
     },

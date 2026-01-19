@@ -1,11 +1,12 @@
 /**
  * Binance Spot Copy Trading 排行榜数据抓取
  * 
- * 和 Futures 一样：选择时间 -> 选择收益率 -> 底下数字选页码
+ * 通过拦截 API 请求，获取 ROI 排序的数据
  * 
  * 用法: node scripts/import_binance_spot.mjs [7D|30D|90D]
  * 
  * 数据源: https://www.binance.com/zh-CN/copy-trading/spot
+ * API: https://www.binance.com/bapi/futures/v1/friendly/future/spot-copy-trade/common/home-page-list
  */
 
 import 'dotenv/config'
@@ -27,14 +28,8 @@ const SOURCE = 'binance_spot'
 const BASE_URL = 'https://www.binance.com/zh-CN/copy-trading/spot'
 
 const TARGET_COUNT = 100
-const PER_PAGE = 18
-const MAX_PAGES = Math.ceil(TARGET_COUNT / PER_PAGE) + 1
-
-const PERIOD_CONFIG = {
-  '7D': { tabTexts: ['7天', '7 Days', '7D'], sortText: '收益率' },
-  '30D': { tabTexts: ['30天', '30 Days', '30D'], sortText: '收益率' },
-  '90D': { tabTexts: ['90天', '90 Days', '90D'], sortText: '收益率' },
-}
+const PER_PAGE = 100  // 一次请求 100 条
+const MAX_PAGES = 2   // 最多请求 2 页（200 条）
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms))
@@ -49,23 +44,27 @@ function getTargetPeriod() {
 }
 
 function parseTraderFromApi(item, rank) {
-  const traderId = String(item.portfolioId || item.encryptedUid || item.leadPortfolioId || '')
+  const traderId = String(item.leadPortfolioId || item.portfolioId || item.encryptedUid || '')
   if (!traderId) return null
 
-  let roi = parseFloat(item.roi ?? item.roiPct ?? item.roiRate ?? 0)
-  if (roi > 0 && roi < 10) {
-    roi = roi * 100
+  // Binance API 返回的 ROI 已经是百分比形式
+  const roi = parseFloat(item.roi ?? 0)
+
+  // winRate 是 0-100 的数值，需要转换为 0-1
+  let winRate = parseFloat(item.winRate ?? 0)
+  if (winRate > 1) {
+    winRate = winRate / 100
   }
 
   return {
     traderId,
-    nickname: item.nickName || item.nickname || item.displayName || null,
-    avatar: item.userPhoto || item.avatar || item.avatarUrl || null,
+    nickname: item.nickname || item.nickName || item.displayName || null,
+    avatar: item.avatarUrl || item.userPhoto || item.avatar || null,
     roi,
-    pnl: parseFloat(item.pnl ?? item.profit ?? item.totalProfit ?? 0),
-    winRate: parseFloat(item.winRate ?? item.winRatio ?? 0),
+    pnl: parseFloat(item.pnl ?? item.profit ?? 0),
+    winRate,
     maxDrawdown: parseFloat(item.mdd ?? item.maxDrawdown ?? 0),
-    followers: parseInt(item.copierCount ?? item.followerCount ?? item.followers ?? 0),
+    followers: parseInt(item.currentCopyCount ?? item.copierCount ?? item.followerCount ?? 0),
     aum: parseFloat(item.aum ?? item.totalAsset ?? 0),
     rank,
   }
@@ -78,7 +77,6 @@ async function fetchLeaderboardData(period) {
   console.log(`目标: ${TARGET_COUNT} 个交易员，最多翻 ${MAX_PAGES} 页`)
 
   const traders = new Map()
-  const apiResponses = []
 
   const browser = await chromium.launch({
     headless: true,
@@ -103,21 +101,56 @@ async function fetchLeaderboardData(period) {
     })
 
     const page = await context.newPage()
-    const config = PERIOD_CONFIG[period]
+    
+    // 核心改进：拦截 API 请求并修改参数
+    let currentPageNum = 1
+    await page.route('**/home-page-list', async (route) => {
+      const request = route.request()
+      const postData = request.postData()
+      
+      if (postData) {
+        try {
+          const data = JSON.parse(postData)
+          // 修改为目标时间段和 ROI 排序
+          data.timeRange = period
+          data.dataType = 'ROI'
+          data.order = 'DESC'
+          data.pageNumber = currentPageNum
+          data.pageSize = PER_PAGE
+          data.portfolioType = 'ALL'  // 获取所有交易员，不只是推荐的
+          
+          console.log(`  📡 API 请求: 第 ${data.pageNumber} 页, ${data.timeRange}, 排序: ${data.dataType}`)
+          
+          await route.continue({
+            postData: JSON.stringify(data)
+          })
+        } catch (e) {
+          await route.continue()
+        }
+      } else {
+        await route.continue()
+      }
+    })
 
+    // 存储 API 响应数据
+    const apiResponses = []
+    
+    // 监听 API 响应
     page.on('response', async (response) => {
       const url = response.url()
-      if (url.includes('copy-trade') && (url.includes('query-list') || url.includes('list') || url.includes('spot') || url.includes('rank'))) {
+      if (url.includes('home-page-list')) {
         try {
           const json = await response.json()
           if (json.data && (json.code === '000000' || json.success !== false)) {
-            const list = json.data?.list || json.data?.data || (Array.isArray(json.data) ? json.data : [])
+            const list = json.data?.list || json.data?.data || []
             if (Array.isArray(list) && list.length > 0) {
-              console.log(`  📡 拦截到 API: ${list.length} 条数据`)
-              apiResponses.push({ url, list, timestamp: Date.now() })
+              console.log(`  ✓ 收到 ${list.length} 条数据`)
+              apiResponses.push({ list, pageNum: currentPageNum })
             }
           }
-        } catch (e) {}
+        } catch (e) {
+          console.log(`  ⚠ 解析响应失败: ${e.message}`)
+        }
       }
     })
 
@@ -127,169 +160,102 @@ async function fetchLeaderboardData(period) {
     } catch (e) {
       console.log('  ⚠ 页面加载超时，继续尝试...')
     }
-    await sleep(5000)
+    await sleep(10000)
+    
+    // 处理第一页数据
+    for (const { list, pageNum } of apiResponses) {
+      list.forEach((item, idx) => {
+        const rank = (pageNum - 1) * PER_PAGE + idx + 1
+        const trader = parseTraderFromApi(item, rank)
+        if (trader && trader.traderId && !traders.has(trader.traderId)) {
+          traders.set(trader.traderId, trader)
+          if (traders.size <= 3) {
+            console.log(`    #${rank}: ROI ${trader.roi.toFixed(2)}%, 昵称: ${trader.nickname || '未知'}`)
+          }
+        }
+      })
+    }
+    apiResponses.length = 0
+    
+    console.log(`\n📄 当前已获取: ${traders.size} 个交易员`)
 
-    // 步骤 1: 点击收益率排序
-    console.log('\n🔄 点击收益率排序...')
-    const sortClicked = await page.evaluate((sortText) => {
-      const elements = document.querySelectorAll('span, div, button, th')
-      for (const el of elements) {
-        const text = el.textContent?.trim()
-        if (text === sortText || text?.includes(sortText)) {
-          const rect = el.getBoundingClientRect()
-          if (rect.width > 0 && rect.height > 0 && rect.top < 500) {
-            el.click()
+    // 分页获取更多数据
+    while (traders.size < TARGET_COUNT && currentPageNum < MAX_PAGES) {
+      currentPageNum++
+      console.log(`\n📄 翻页到第 ${currentPageNum} 页...`)
+      
+      await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight))
+      await sleep(1000)
+      
+      let pageClicked = false
+      
+      pageClicked = await page.evaluate((targetPage) => {
+        const paginationContainers = document.querySelectorAll('[class*="pagination"], [class*="Pagination"], nav')
+        
+        for (const container of paginationContainers) {
+          const buttons = container.querySelectorAll('button, a, span, li')
+          for (const btn of buttons) {
+            const text = btn.textContent?.trim()
+            if (text === String(targetPage)) {
+              btn.click()
+              return true
+            }
+          }
+        }
+        
+        const nextBtns = document.querySelectorAll('[class*="next"], [aria-label*="next"]')
+        for (const btn of nextBtns) {
+          if (btn.offsetParent !== null) {
+            btn.click()
             return true
           }
         }
-      }
-      return false
-    }, config.sortText)
-    
-    if (sortClicked) {
-      console.log(`  ✓ 收益率排序点击成功`)
-      await sleep(2000)
-    }
-
-    // 步骤 2: 切换时间周期（下拉菜单）
-    console.log(`\n🔄 切换到 ${period} 时间周期...`)
-    let periodSwitched = false
-    
-    try {
-      await page.evaluate(() => window.scrollTo(0, 0))
-      await sleep(1000)
-      
-      const selectTrigger = page.locator('[class*="bn-select"]:has-text("天")').first()
-      
-      if (await selectTrigger.count() > 0) {
-        console.log(`  找到时间下拉菜单，点击打开...`)
-        await selectTrigger.click()
-        await sleep(1000)
         
-        for (const tabText of config.tabTexts) {
-          const option = page.locator(`[class*="bn-select-option"]:has-text("${tabText}")`).first()
-          
-          if (await option.count() > 0) {
-            await option.click()
-            console.log(`  ✓ 时间切换成功: "${tabText}"`)
-            periodSwitched = true
-            await sleep(3000)
-            apiResponses.length = 0
-            break
-          }
+        return false
+      }, currentPageNum)
+      
+      if (pageClicked) {
+        console.log(`  ✓ 翻页成功`)
+        await sleep(3000)
+      } else {
+        const pageSelectors = [
+          `button:text-is("${currentPageNum}")`,
+          `[class*="pagination"] >> text="${currentPageNum}"`,
+        ]
+        
+        for (const selector of pageSelectors) {
+          try {
+            const element = await page.$(selector)
+            if (element && await element.isVisible()) {
+              await element.click()
+              console.log(`  ✓ 翻页成功`)
+              pageClicked = true
+              await sleep(3000)
+              break
+            }
+          } catch (e) {}
         }
       }
       
-      if (!periodSwitched) {
-        for (const tabText of config.tabTexts) {
-          const timeElements = page.locator(`text=${tabText}`).all()
-          const elements = await timeElements
-          
-          for (const el of elements) {
-            try {
-              const box = await el.boundingBox()
-              if (box && box.y < 600 && box.y > 100) {
-                await el.click()
-                console.log(`  ✓ 时间切换成功（备用方案）: "${tabText}"`)
-                periodSwitched = true
-                await sleep(3000)
-                apiResponses.length = 0
-                break
-              }
-            } catch (e) {}
-          }
-          if (periodSwitched) break
-        }
+      if (!pageClicked) {
+        console.log(`  ⚠ 翻页失败，停止分页`)
+        break
       }
-    } catch (e) {
-      console.log(`  ⚠ 切换时间失败: ${e.message}`)
-    }
-    
-    if (!periodSwitched) {
-      console.log(`  ⚠ 未找到时间切换按钮，使用默认数据`)
-    }
-
-    // 步骤 3: 分页获取数据
-    console.log('\n📄 开始分页获取数据...')
-    
-    for (let pageNum = 1; pageNum <= MAX_PAGES; pageNum++) {
-      console.log(`\n  === 第 ${pageNum} 页 ===`)
       
+      // 处理新页数据
       await sleep(2000)
-      await page.evaluate(() => window.scrollBy(0, 500))
-      await sleep(1000)
-      
-      // 处理 API 响应
-      for (const { list } of apiResponses) {
+      for (const { list, pageNum } of apiResponses) {
         list.forEach((item, idx) => {
-          const trader = parseTraderFromApi(item, traders.size + idx + 1)
+          const rank = (pageNum - 1) * PER_PAGE + idx + 1
+          const trader = parseTraderFromApi(item, rank)
           if (trader && trader.traderId && !traders.has(trader.traderId)) {
             traders.set(trader.traderId, trader)
           }
         })
       }
+      apiResponses.length = 0
       
       console.log(`  当前已获取: ${traders.size} 个交易员`)
-      
-      if (traders.size >= TARGET_COUNT) {
-        console.log(`  ✓ 已达到目标数量 ${TARGET_COUNT}`)
-        break
-      }
-      
-      // 点击下一页
-      if (pageNum < MAX_PAGES) {
-        const nextPageNum = pageNum + 1
-        console.log(`  尝试翻到第 ${nextPageNum} 页...`)
-        
-        await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight))
-        await sleep(1000)
-        
-        let pageClicked = false
-        
-        pageClicked = await page.evaluate((targetPage) => {
-          const paginationContainers = document.querySelectorAll('[class*="pagination"], [class*="Pagination"], [class*="page-nav"], nav')
-          
-          for (const container of paginationContainers) {
-            const buttons = container.querySelectorAll('button, a, span, li')
-            for (const btn of buttons) {
-              const text = btn.textContent?.trim()
-              if (text === String(targetPage)) {
-                btn.click()
-                return true
-              }
-            }
-          }
-          
-          const allElements = document.querySelectorAll('button, a, span, li')
-          for (const el of allElements) {
-            const text = el.textContent?.trim()
-            if (text === String(targetPage) && el.offsetParent !== null) {
-              const rect = el.getBoundingClientRect()
-              if (rect.top > window.innerHeight * 0.5) {
-                el.click()
-                return true
-              }
-            }
-          }
-          
-          const nextBtns = document.querySelectorAll('[class*="next"], [aria-label*="next"], [aria-label*="Next"]')
-          for (const btn of nextBtns) {
-            if (btn.offsetParent !== null) {
-              btn.click()
-              return true
-            }
-          }
-          
-          return false
-        }, nextPageNum)
-        
-        if (pageClicked) {
-          console.log(`  ✓ 翻页成功`)
-          await sleep(3000)
-        } else {
-          console.log(`  ⚠ 未找到分页按钮`)
-        }
-      }
     }
 
     console.log(`\n📊 共获取 ${traders.size} 个交易员数据`)
@@ -372,7 +338,6 @@ async function main() {
       process.exit(1)
     }
 
-    // 去重
     const uniqueTraders = deduplicateTraders(traders)
     
     uniqueTraders.sort((a, b) => (b.roi || 0) - (a.roi || 0))
@@ -385,7 +350,6 @@ async function main() {
       console.log(`  ${idx + 1}. ${t.nickname || t.traderId}: ROI ${t.roi?.toFixed(2)}%`)
     })
 
-    // 数据质量验证
     const validation = validateTraderData(top100, {}, SOURCE)
     const isValid = printValidationResult(validation, SOURCE)
 

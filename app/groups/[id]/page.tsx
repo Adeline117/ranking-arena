@@ -1096,8 +1096,8 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
                           </Button>
                         </Link>
                       )}
-                      {/* 投诉按钮（普通成员可见） */}
-                      {userRole === 'member' && (
+                      {/* 投诉按钮（普通成员可见，且小组成员数大于100） */}
+                      {userRole === 'member' && (group?.member_count ?? 0) > 100 && (
                         <Button
                           variant="secondary"
                           size="sm"

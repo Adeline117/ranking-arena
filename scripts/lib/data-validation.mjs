@@ -44,7 +44,7 @@ export const PLATFORM_VALIDATION_CONFIGS = {
   },
   bitget_spot: {
     minTopRoi: 100,
-    minCount: 40,
+    minCount: 15,  // Bitget Spot 页面数据较少
   },
   mexc: {
     minTopRoi: 100,
@@ -56,7 +56,7 @@ export const PLATFORM_VALIDATION_CONFIGS = {
   },
   okx_web3: {
     minTopRoi: 50,
-    minCount: 20,
+    minCount: 15,  // OKX Web3 页面数据较少
   },
   kucoin: {
     minTopRoi: 100,

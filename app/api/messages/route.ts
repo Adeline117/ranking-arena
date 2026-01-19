@@ -80,7 +80,18 @@ export async function GET(request: NextRequest) {
       .eq('receiver_id', userId)
       .eq('read', false)
 
-    return NextResponse.json({ messages: messages || [] })
+    // 获取对方用户信息
+    const otherUserId = conversation.user1_id === userId ? conversation.user2_id : conversation.user1_id
+    const { data: otherUser } = await supabase
+      .from('user_profiles')
+      .select('id, handle, avatar_url, bio')
+      .eq('id', otherUserId)
+      .maybeSingle()
+
+    return NextResponse.json({ 
+      messages: messages || [],
+      otherUser: otherUser || { id: otherUserId, handle: '未知用户' }
+    })
   } catch (error) {
     logger.error('GET error', { error: String(error) })
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

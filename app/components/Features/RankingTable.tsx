@@ -657,7 +657,7 @@ export default function RankingTable(props: {
                         size="sm"
                         weight="semibold" 
                         style={{ 
-                          color: trader.win_rate != null && trader.win_rate > 50 ? tokens.colors.accent.success : tokens.colors.text.secondary,
+                          color: trader.win_rate != null && trader.win_rate > 0.5 ? tokens.colors.accent.success : tokens.colors.text.secondary,
                           lineHeight: 1,
                           fontSize: '13px',
                         }}
