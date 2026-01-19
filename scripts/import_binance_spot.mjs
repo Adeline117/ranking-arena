@@ -11,6 +11,7 @@
 import 'dotenv/config'
 import { chromium } from 'playwright'
 import { createClient } from '@supabase/supabase-js'
+import { validateTraderData, deduplicateTraders, printValidationResult } from './lib/data-validation.mjs'
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -368,26 +369,30 @@ async function main() {
     if (traders.length === 0) {
       console.log('\n⚠ 未获取到任何数据')
       console.log('请检查截图文件查看页面状态')
-      return
+      process.exit(1)
     }
 
-    traders.sort((a, b) => (b.roi || 0) - (a.roi || 0))
-    traders.forEach((t, idx) => t.rank = idx + 1)
+    // 去重
+    const uniqueTraders = deduplicateTraders(traders)
+    
+    uniqueTraders.sort((a, b) => (b.roi || 0) - (a.roi || 0))
+    uniqueTraders.forEach((t, idx) => t.rank = idx + 1)
 
-    const top100 = traders.slice(0, TARGET_COUNT)
+    const top100 = uniqueTraders.slice(0, TARGET_COUNT)
 
     console.log(`\n📋 ${period} TOP 10 (按 ROI 排序):`)
     top100.slice(0, 10).forEach((t, idx) => {
       console.log(`  ${idx + 1}. ${t.nickname || t.traderId}: ROI ${t.roi?.toFixed(2)}%`)
     })
 
-    const topRoi = top100[0]?.roi || 0
-    if (topRoi < 500) {
-      console.log(`\n⚠️ 警告: TOP 1 ROI (${topRoi.toFixed(2)}%) 低于 500%，数据可能有问题！`)
-    }
+    // 数据质量验证
+    const validation = validateTraderData(top100, {}, SOURCE)
+    const isValid = printValidationResult(validation, SOURCE)
 
-    if (top100.length < TARGET_COUNT) {
-      console.log(`\n⚠️ 警告: 只获取到 ${top100.length} 个交易员，未达到目标 ${TARGET_COUNT}`)
+    if (!isValid) {
+      console.log('\n❌ 数据质量验证失败，不保存数据')
+      console.log('请检查截图文件查看页面状态')
+      process.exit(1)
     }
 
     const result = await saveTraders(top100, period)
@@ -397,13 +402,15 @@ async function main() {
     console.log(`   来源: ${SOURCE}`)
     console.log(`   周期: ${period}`)
     console.log(`   总数: ${top100.length}`)
-    console.log(`   TOP ROI: ${topRoi.toFixed(2)}%`)
+    console.log(`   TOP ROI: ${validation.stats.topRoi.toFixed(2)}%`)
+    console.log(`   平均 ROI: ${validation.stats.avgRoi.toFixed(2)}%`)
     console.log(`   保存: ${result.saved}`)
     console.log(`   时间: ${new Date().toISOString()}`)
     console.log(`========================================`)
   } catch (error) {
     console.error('\n❌ 执行失败:', error.message)
     console.error(error.stack)
+    process.exit(1)
   }
 }
 

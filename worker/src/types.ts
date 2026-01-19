@@ -6,10 +6,12 @@ export type TimeRange = '7D' | '30D' | '90D'
 
 export type DataSource =
   | 'binance'
+  | 'binance_futures'
   | 'binance_spot'
   | 'binance_web3'
   | 'bybit'
   | 'bitget'
+  | 'bitget_futures'
   | 'bitget_spot'
   | 'mexc'
   | 'coinex'

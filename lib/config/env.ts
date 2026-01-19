@@ -18,9 +18,11 @@ const envSchema = z.object({
   NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().min(1, '缺少 Supabase Anon Key'),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1, '缺少 Supabase Service Role Key').optional(),
 
-  // Upstash Redis 配置
-  UPSTASH_REDIS_REST_URL: z.string().url('Redis URL 格式无效').optional(),
-  UPSTASH_REDIS_REST_TOKEN: z.string().min(1, '缺少 Redis Token').optional(),
+  // Redis Cloud 配置
+  REDIS_HOST: z.string().min(1, '缺少 Redis Host').optional(),
+  REDIS_PORT: z.string().optional(),
+  REDIS_PASSWORD: z.string().min(1, '缺少 Redis Password').optional(),
+  REDIS_USERNAME: z.string().optional(),
 
   // 应用配置
   NEXT_PUBLIC_APP_URL: z.string().url().default('http://localhost:3000'),
@@ -120,7 +122,7 @@ export function getAppUrl(): string {
  * 检查 Redis 是否可用
  */
 export function isRedisAvailable(): boolean {
-  return !!(env.UPSTASH_REDIS_REST_URL && env.UPSTASH_REDIS_REST_TOKEN)
+  return !!(env.REDIS_HOST && env.REDIS_PASSWORD)
 }
 
 /**

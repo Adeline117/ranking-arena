@@ -27,11 +27,19 @@ interface TraderHeaderProps {
   communityScore?: CommunityScore | null
 }
 
-// 来源平台配置
+// 来源平台配置 - 统一颜色，不做颜色区分
 const sourceConfig: Record<string, { label: string; color: string }> = {
-  binance: { label: 'Binance', color: '#F0B90B' },
-  bybit: { label: 'Bybit', color: '#F7A600' },
-  bitget: { label: 'Bitget', color: '#00C853' },
+  binance_futures: { label: 'Binance 合约', color: tokens.colors.text.secondary },
+  binance_spot: { label: 'Binance 现货', color: tokens.colors.text.secondary },
+  binance_web3: { label: 'Binance 链上', color: tokens.colors.text.secondary },
+  bybit: { label: 'Bybit 合约', color: tokens.colors.text.secondary },
+  bitget_futures: { label: 'Bitget 合约', color: tokens.colors.text.secondary },
+  bitget_spot: { label: 'Bitget 现货', color: tokens.colors.text.secondary },
+  mexc: { label: 'MEXC 合约', color: tokens.colors.text.secondary },
+  coinex: { label: 'CoinEx 合约', color: tokens.colors.text.secondary },
+  okx_web3: { label: 'OKX 链上', color: tokens.colors.text.secondary },
+  kucoin: { label: 'KuCoin 合约', color: tokens.colors.text.secondary },
+  gmx: { label: 'GMX 链上', color: tokens.colors.text.secondary },
 }
 
 export default function TraderHeader({ 
@@ -297,7 +305,7 @@ export default function TraderHeader({
 
       {/* 右侧：Buttons */}
       <Box
-        className="profile-header-actions"
+        className="profile-header-actions action-buttons"
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -339,15 +347,52 @@ export default function TraderHeader({
               <ClaimTraderButton traderId={traderId} handle={handle} userId={userId} source={source} />
             )}
             {userId && (
-              isRegistered ? (
-                <UserFollowButton 
-                  targetUserId={traderId} 
-                  currentUserId={userId} 
-                  size="md"
-                />
-              ) : (
-                <FollowButton traderId={traderId} userId={userId} />
-              )
+              <>
+                {isRegistered ? (
+                  <UserFollowButton 
+                    targetUserId={traderId} 
+                    currentUserId={userId} 
+                    size="md"
+                  />
+                ) : (
+                  <FollowButton traderId={traderId} userId={userId} />
+                )}
+                {/* 设置告警按钮 */}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => router.push(`/dashboard#alerts?trader=${traderId}`)}
+                  style={{
+                    color: tokens.colors.text.secondary,
+                    fontSize: tokens.typography.fontSize.sm,
+                    padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+                    borderRadius: tokens.radius.lg,
+                    background: tokens.colors.bg.tertiary,
+                    border: `1px solid ${tokens.colors.border.primary}`,
+                    transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: tokens.spacing[1],
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = tokens.colors.bg.secondary
+                    e.currentTarget.style.borderColor = tokens.colors.accent.warning + '40'
+                    e.currentTarget.style.color = tokens.colors.accent.warning
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = tokens.colors.bg.tertiary
+                    e.currentTarget.style.borderColor = tokens.colors.border.primary
+                    e.currentTarget.style.color = tokens.colors.text.secondary
+                  }}
+                  title="设置此交易员的风险告警"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                    <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                  </svg>
+                  设置告警
+                </Button>
+              </>
             )}
           </>
         )}

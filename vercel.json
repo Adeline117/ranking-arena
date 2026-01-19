@@ -17,6 +17,10 @@
       "schedule": "15,45 * * * *"
     },
     {
+      "path": "/api/cron/check-data-freshness",
+      "schedule": "0 */3 * * *"
+    },
+    {
       "path": "/api/cron/fetch-traders/binance_futures",
       "schedule": "0 */6 * * *"
     },

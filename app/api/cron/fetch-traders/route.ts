@@ -23,6 +23,7 @@ import {
   logCronExecution,
   getSupportedPlatforms,
   getSupabaseEnv,
+  sendScrapeSummaryAlert,
   type ScriptResult,
 } from '@/lib/cron/utils'
 
@@ -54,6 +55,8 @@ export async function GET() {
  * 生产环境建议使用 /api/cron/fetch-traders/[platform] 分别调度
  */
 export async function POST(req: Request) {
+  const startTime = Date.now()
+  
   try {
     // 1) 验证授权
     if (!isAuthorized(req)) {
@@ -93,6 +96,7 @@ export async function POST(req: Request) {
     const allResults: Array<{ platform: string; results: ScriptResult[] }> = []
     let totalSuccess = 0
     let totalFailed = 0
+    const failedDetails: Array<{ platform: string; scripts: string[] }> = []
 
     // 4) 顺序执行各平台脚本
     for (const platform of platforms) {
@@ -102,8 +106,14 @@ export async function POST(req: Request) {
         allResults.push({ platform, results })
 
         const successCount = results.filter((r) => r.success).length
+        const failedScripts = results.filter((r) => !r.success).map((r) => r.name)
+        
         totalSuccess += successCount
         totalFailed += results.length - successCount
+        
+        if (failedScripts.length > 0) {
+          failedDetails.push({ platform, scripts: failedScripts })
+        }
       } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : String(error)
         console.error(`[Cron] 平台 ${platform} 执行失败:`, errorMessage)
@@ -112,6 +122,7 @@ export async function POST(req: Request) {
           results: [{ name: platform, success: false, error: errorMessage }],
         })
         totalFailed++
+        failedDetails.push({ platform, scripts: [platform] })
       }
     }
 
@@ -120,7 +131,22 @@ export async function POST(req: Request) {
     const flatResults = allResults.flatMap((p) => p.results)
     await logCronExecution(supabase, 'fetch-traders-all', flatResults)
 
-    // 6) 返回结果
+    // 6) 发送批量执行摘要告警（如果有失败）
+    const duration = Date.now() - startTime
+    const successPlatforms = platforms.length - failedDetails.length
+    
+    await sendScrapeSummaryAlert({
+      totalPlatforms: platforms.length,
+      successPlatforms,
+      failedPlatforms: failedDetails.length,
+      totalScripts: totalSuccess + totalFailed,
+      successScripts: totalSuccess,
+      failedScripts: totalFailed,
+      duration,
+      failedDetails: failedDetails.length > 0 ? failedDetails : undefined,
+    })
+
+    // 7) 返回结果
     return NextResponse.json({
       ok: totalFailed === 0,
       ran_at: now,
@@ -129,6 +155,7 @@ export async function POST(req: Request) {
         total: totalSuccess + totalFailed,
         success: totalSuccess,
         failed: totalFailed,
+        duration,
       },
       results: allResults,
     })

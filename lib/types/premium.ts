@@ -130,15 +130,7 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
     },
     badge: '最受欢迎',
     recommended: true,
-    highlights: [
-      '监控 20 个交易员',
-      '邮件 + 推送通知',
-      '自定义止盈止损',
-      '回撤急剧加深预警',
-      '胜率下降预警',
-      '基础组合建议',
-      '90 天历史数据',
-    ],
+    highlights: [],
   },
   {
     id: 'elite',
@@ -157,17 +149,7 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
       emailNotificationsPerMonth: -1,    // 无限邮件
       portfolioSuggestionsLimit: -1,     // 无限组合
     },
-    highlights: [
-      '无限交易员监控',
-      '即时推送通知',
-      'AI 智能组合建议',
-      '交易员私信功能',
-      '跟单者撤离预警',
-      '风险分析报告',
-      '策略回测功能',
-      '365 天历史数据',
-      '优先客服支持',
-    ],
+    highlights: [],
   },
   {
     id: 'enterprise',

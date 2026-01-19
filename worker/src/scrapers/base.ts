@@ -1,11 +1,135 @@
 /**
  * 爬虫基础类
  * 提供通用的浏览器自动化和错误处理
+ * 支持代理池轮换
  */
 
 import { chromium, Browser, BrowserContext, Page } from 'playwright'
 import { logger, withRetry, sleep } from '../logger.js'
 import type { TraderData, DataSource, TimeRange, ScrapeResult, ScraperOptions } from '../types.js'
+
+/**
+ * 代理配置
+ */
+interface ProxyConfig {
+  server: string
+  username?: string
+  password?: string
+}
+
+/**
+ * 代理池管理器
+ */
+class ProxyPool {
+  private proxies: ProxyConfig[] = []
+  private currentIndex = 0
+  private failedProxies = new Set<string>()
+
+  constructor() {
+    this.loadProxiesFromEnv()
+  }
+
+  /**
+   * 从环境变量加载代理列表
+   * 格式: PROXY_LIST=server1|user1|pass1,server2|user2|pass2
+   * 或简单格式: PROXY_LIST=http://proxy1:port,http://proxy2:port
+   */
+  private loadProxiesFromEnv(): void {
+    const proxyList = process.env.PROXY_LIST
+    if (!proxyList) {
+      return
+    }
+
+    const proxyStrings = proxyList.split(',').map(s => s.trim()).filter(Boolean)
+    
+    for (const proxyStr of proxyStrings) {
+      const parts = proxyStr.split('|')
+      if (parts.length >= 1) {
+        this.proxies.push({
+          server: parts[0],
+          username: parts[1] || undefined,
+          password: parts[2] || undefined,
+        })
+      }
+    }
+
+    if (this.proxies.length > 0) {
+      logger.info('Proxy pool initialized', { count: this.proxies.length })
+    }
+  }
+
+  /**
+   * 获取下一个可用的代理
+   */
+  getNextProxy(): ProxyConfig | null {
+    if (this.proxies.length === 0) {
+      return null
+    }
+
+    // 找到一个未失败的代理
+    let attempts = 0
+    while (attempts < this.proxies.length) {
+      const proxy = this.proxies[this.currentIndex]
+      this.currentIndex = (this.currentIndex + 1) % this.proxies.length
+
+      if (!this.failedProxies.has(proxy.server)) {
+        logger.debug('Using proxy', { server: proxy.server })
+        return proxy
+      }
+
+      attempts++
+    }
+
+    // 如果所有代理都失败了，重置失败列表再试一次
+    if (this.failedProxies.size > 0) {
+      logger.warn('All proxies failed, resetting failed list')
+      this.failedProxies.clear()
+      return this.proxies[0]
+    }
+
+    return null
+  }
+
+  /**
+   * 标记代理为失败
+   */
+  markProxyFailed(proxy: ProxyConfig): void {
+    this.failedProxies.add(proxy.server)
+    logger.warn('Proxy marked as failed', { 
+      server: proxy.server,
+      failedCount: this.failedProxies.size,
+      totalCount: this.proxies.length,
+    })
+  }
+
+  /**
+   * 是否有可用代理
+   */
+  hasProxies(): boolean {
+    return this.proxies.length > 0
+  }
+
+  /**
+   * 获取代理池状态
+   */
+  getStats(): { total: number; failed: number; available: number } {
+    return {
+      total: this.proxies.length,
+      failed: this.failedProxies.size,
+      available: this.proxies.length - this.failedProxies.size,
+    }
+  }
+}
+
+// 全局代理池实例
+const proxyPool = new ProxyPool()
+
+/**
+ * 获取代理池状态
+ */
+export function getProxyPoolStats() {
+  return proxyPool.getStats()
+}
 
 export abstract class BaseScraper {
   protected source: DataSource
@@ -14,6 +138,7 @@ export abstract class BaseScraper {
   protected context: BrowserContext | null = null
   protected page: Page | null = null
   protected log: ReturnType<typeof logger.withContext>
+  protected currentProxy: ProxyConfig | null = null
 
   constructor(source: DataSource, options: ScraperOptions = {}) {
     this.source = source
@@ -26,23 +151,64 @@ export abstract class BaseScraper {
   }
 
   /**
+   * 获取下一个代理
+   */
+  protected getNextProxy(): ProxyConfig | null {
+    return proxyPool.getNextProxy()
+  }
+
+  /**
+   * 标记当前代理为失败
+   */
+  protected markCurrentProxyFailed(): void {
+    if (this.currentProxy) {
+      proxyPool.markProxyFailed(this.currentProxy)
+    }
+  }
+
+  /**
    * 初始化浏览器
    */
   protected async initBrowser(): Promise<void> {
-    this.log.info('Initializing browser')
+    // 获取代理（如果可用）
+    this.currentProxy = this.getNextProxy()
 
-    this.browser = await chromium.launch({
+    const launchOptions: Parameters<typeof chromium.launch>[0] = {
       headless: this.options.headless,
       args: [
         '--disable-blink-features=AutomationControlled',
         '--disable-dev-shm-usage',
         '--no-sandbox',
       ],
-    })
+    }
+
+    // 如果有代理，添加代理配置
+    if (this.currentProxy) {
+      this.log.info('Initializing browser with proxy', { 
+        server: this.currentProxy.server,
+      })
+      launchOptions.proxy = {
+        server: this.currentProxy.server,
+        username: this.currentProxy.username,
+        password: this.currentProxy.password,
+      }
+    } else {
+      this.log.info('Initializing browser without proxy')
+    }
+
+    this.browser = await chromium.launch(launchOptions)
+
+    // 随机化 User-Agent
+    const userAgents = [
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15',
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0',
+    ]
+    const userAgent = userAgents[Math.floor(Math.random() * userAgents.length)]
 
     this.context = await this.browser.newContext({
-      userAgent:
-        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      userAgent,
       viewport: { width: 1920, height: 1080 },
       locale: 'zh-CN',
       timezoneId: 'Asia/Shanghai',
@@ -149,51 +315,93 @@ export abstract class BaseScraper {
   protected abstract scrapeData(timeRange: TimeRange): Promise<TraderData[]>
 
   /**
+   * 添加随机延迟（降低被检测风险）
+   */
+  protected async randomDelay(minMs: number = 1000, maxMs: number = 3000): Promise<void> {
+    const delay = Math.floor(Math.random() * (maxMs - minMs)) + minMs
+    await sleep(delay)
+  }
+
+  /**
    * 执行抓取（带完整的生命周期管理）
+   * 支持代理失败重试
    */
   async scrape(timeRange: TimeRange): Promise<ScrapeResult> {
     const startTime = Date.now()
-    this.log.info('Starting scrape', { timeRange })
+    this.log.info('Starting scrape', { 
+      timeRange,
+      proxyAvailable: proxyPool.hasProxies(),
+    })
 
-    try {
-      await this.initBrowser()
-      const traders = await this.scrapeData(timeRange)
+    let lastError: Error | null = null
+    const maxProxyRetries = proxyPool.hasProxies() ? 3 : 1
 
-      const duration = Date.now() - startTime
-      this.log.info('Scrape completed', {
-        timeRange,
-        tradersCount: traders.length,
-        duration,
-      })
+    for (let attempt = 1; attempt <= maxProxyRetries; attempt++) {
+      try {
+        await this.initBrowser()
+        
+        // 添加随机延迟
+        await this.randomDelay(2000, 5000)
+        
+        const traders = await this.scrapeData(timeRange)
 
-      return {
-        source: this.source,
-        timeRange,
-        traders,
-        scrapedAt: new Date().toISOString(),
-        duration,
-        success: true,
+        const duration = Date.now() - startTime
+        this.log.info('Scrape completed', {
+          timeRange,
+          tradersCount: traders.length,
+          duration,
+          proxyUsed: this.currentProxy?.server || 'none',
+        })
+
+        return {
+          source: this.source,
+          timeRange,
+          traders,
+          scrapedAt: new Date().toISOString(),
+          duration,
+          success: true,
+        }
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error))
+        
+        this.log.error('Scrape attempt failed', lastError, { 
+          timeRange, 
+          attempt,
+          maxAttempts: maxProxyRetries,
+          proxyUsed: this.currentProxy?.server || 'none',
+        })
+
+        // 如果使用了代理且失败，标记代理为失败
+        if (this.currentProxy) {
+          this.markCurrentProxyFailed()
+        }
+
+        // 保存失败截图
+        await this.takeScreenshot(`error_${timeRange}_attempt${attempt}`)
+
+        // 如果还有重试机会，等待后重试
+        if (attempt < maxProxyRetries) {
+          this.log.info('Retrying with different proxy', { 
+            attempt: attempt + 1,
+            maxAttempts: maxProxyRetries,
+          })
+          await sleep(5000) // 等待 5 秒后重试
+        }
+      } finally {
+        await this.closeBrowser()
       }
-    } catch (error) {
-      const err = error instanceof Error ? error : new Error(String(error))
-      const duration = Date.now() - startTime
+    }
 
-      this.log.error('Scrape failed', err, { timeRange, duration })
-
-      // 保存失败截图
-      await this.takeScreenshot(`error_${timeRange}`)
-
-      return {
-        source: this.source,
-        timeRange,
-        traders: [],
-        scrapedAt: new Date().toISOString(),
-        duration,
-        success: false,
-        error: err.message,
-      }
-    } finally {
-      await this.closeBrowser()
+    // 所有重试都失败
+    const duration = Date.now() - startTime
+    return {
+      source: this.source,
+      timeRange,
+      traders: [],
+      scrapedAt: new Date().toISOString(),
+      duration,
+      success: false,
+      error: lastError?.message || 'Unknown error',
     }
   }
 }

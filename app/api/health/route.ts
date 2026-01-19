@@ -5,7 +5,7 @@
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { Redis } from '@upstash/redis'
+import { createClient as createRedisClient, RedisClientType } from 'redis'
 
 // 健康检查响应类型
 interface HealthCheckResponse {
@@ -74,22 +74,35 @@ async function checkDatabase(): Promise<CheckResult> {
  * 检查 Redis 连接
  */
 async function checkRedis(): Promise<CheckResult> {
-  const url = process.env.UPSTASH_REDIS_REST_URL
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN
+  const host = process.env.REDIS_HOST
+  const password = process.env.REDIS_PASSWORD
+  const port = process.env.REDIS_PORT
+  const username = process.env.REDIS_USERNAME || 'default'
   
-  if (!url || !token) {
+  if (!host || !password) {
     return { status: 'skip', message: '未配置 Redis 连接' }
   }
   
-  const startTime = Date.now()
+  const checkStartTime = Date.now()
+  let redis: RedisClientType | null = null
   
   try {
-    const redis = new Redis({ url, token })
+    redis = createRedisClient({
+      username,
+      password,
+      socket: {
+        host,
+        port: parseInt(port || '6379', 10),
+        connectTimeout: 5000,
+      },
+    })
+    
+    await redis.connect()
     
     // Ping 测试
     const result = await redis.ping()
     
-    const latency = Date.now() - startTime
+    const latency = Date.now() - checkStartTime
     
     if (result !== 'PONG') {
       return { status: 'fail', message: 'Ping 失败', latency }
@@ -97,11 +110,15 @@ async function checkRedis(): Promise<CheckResult> {
     
     return { status: 'pass', latency }
   } catch (error) {
-    const latency = Date.now() - startTime
+    const latency = Date.now() - checkStartTime
     return {
       status: 'fail',
       message: error instanceof Error ? error.message : 'Unknown error',
       latency,
+    }
+  } finally {
+    if (redis && redis.isOpen) {
+      await redis.quit()
     }
   }
 }

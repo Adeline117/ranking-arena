@@ -11,6 +11,22 @@ const withBundleAnalyzer = process.env.ANALYZE === 'true'
 const nextConfig: NextConfig = {
   /* config options here */
   
+  // Webpack 配置 - 处理服务端专用模块在客户端的导入
+  webpack: (config, { isServer }) => {
+    if (!isServer) {
+      // 为客户端构建提供空的模拟模块
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        dns: false,
+        'dns/promises': false,
+        net: false,
+        tls: false,
+        fs: false,
+      }
+    }
+    return config
+  },
+  
   // 性能优化
   compress: true,
   
@@ -51,6 +67,9 @@ const nextConfig: NextConfig = {
     contentDispositionType: 'attachment',
     contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
   },
+  
+  // 服务端专用包（不打包到客户端）
+  serverExternalPackages: ['redis', '@redis/client'],
   
   // 实验性功能
   experimental: {
