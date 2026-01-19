@@ -208,10 +208,6 @@ export function useFeatureQuota(featureId: PremiumFeatureId): {
       used = usage.exportsThisMonth
       limit = premiumService.checkFeatureAccess('export_data').remaining + used
       break
-    case 'advanced_alerts':
-      used = usage.currentAlerts
-      limit = premiumService.checkFeatureAccess('advanced_alerts').remaining + used
-      break
     case 'custom_rankings':
       used = usage.currentCustomRankings
       limit = premiumService.checkFeatureAccess('custom_rankings').remaining + used

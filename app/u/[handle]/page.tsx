@@ -147,7 +147,7 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
           // 先尝试解码后的 handle
           const { data: profileByHandle, error: handleError } = await supabase
             .from('user_profiles')
-            .select('*, show_followers, show_following')
+            .select('*, show_followers, show_following, uid, cover_url')
             .eq('handle', decodedHandle)
             .maybeSingle()
 
@@ -160,7 +160,7 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
             if (uuidRegex.test(handle)) {
               const { data: profileById, error: idError } = await supabase
                 .from('user_profiles')
-                .select('*')
+                .select('*, uid, cover_url')
                 .eq('id', handle)
                 .maybeSingle()
               
@@ -180,7 +180,7 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
               if (currentUser) {
                 const { data: currentUserProfile } = await supabase
                   .from('user_profiles')
-                  .select('*')
+                  .select('*, uid, cover_url')
                   .eq('id', currentUser.id)
                   .maybeSingle()
                 
@@ -216,6 +216,7 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
             profileData = {
               handle: userProfile.handle || decodedHandle,
               id: userProfile.id,
+              uid: userProfile.uid || undefined, // 数字用户编号
               bio: userProfile.bio || null,
               followers: followersCount || 0,
               following: followingCount || 0,
@@ -223,6 +224,7 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
               // 如果用户在排行榜上但没有设置头像，不生成头像（avatar_url为null）
               // 如果用户不在排行榜上且没有设置头像，在Avatar组件中会生成头像
               avatar_url: userProfile.avatar_url || (foundInRanking ? null : undefined),
+              cover_url: userProfile.cover_url || undefined,
               isRegistered: true,
               // 隐私设置
               showFollowers: userProfile.show_followers !== false,
@@ -322,12 +324,14 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
                   profileData = {
                     handle: newProfile.handle || defaultHandle,
                     id: newProfile.id,
+                    uid: newProfile.uid || undefined,
                     bio: newProfile.bio || null,
                     followers: followersCount || 0,
                     following: followingCount || 0,
                     copiers: 0,
                     // 如果设置了头像使用设置的头像，否则根据是否在排行榜上决定是否生成头像
                     avatar_url: newProfile.avatar_url || (foundInRankingForNewProfile ? null : undefined),
+                    cover_url: newProfile.cover_url || undefined,
                     isRegistered: true,
                     // 新创建的用户默认公开
                     showFollowers: true,
@@ -339,12 +343,12 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
               }
             } else {
               // 如果 handle 不匹配，尝试通过 ID 查找
-              // 直接使用 user_profiles 表（因为 profiles 表不存在）
-              const { data: profileById } = await supabase
-                .from('user_profiles')
-                .select('*')
-                .eq('id', user.id)
-                .maybeSingle()
+                  // 直接使用 user_profiles 表（因为 profiles 表不存在）
+                  const { data: profileById } = await supabase
+                    .from('user_profiles')
+                    .select('*, cover_url')
+                    .eq('id', user.id)
+                    .maybeSingle()
               
               if (profileById) {
                 // 如果找到用户且有 handle，重定向到正确的 handle
@@ -366,11 +370,13 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
                 profileData = {
                   handle: profileById.handle || decodedHandle,
                   id: profileById.id,
+                  uid: profileById.uid || undefined,
                   bio: profileById.bio || null,
                   followers: followersCount || 0,
                   following: followingCount || 0,
                   copiers: 0,
                   avatar_url: profileById.avatar_url || undefined,
+                  cover_url: profileById.cover_url || undefined,
                   isRegistered: true,
                   showFollowers: profileById.show_followers !== false,
                   showFollowing: profileById.show_following !== false,
@@ -407,11 +413,13 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
                     profileData = {
                       handle: userProfileData.handle || decodedHandle,
                       id: userProfileData.id,
+                      uid: userProfileData.uid || undefined,
                       bio: userProfileData.bio || null,
                       followers: followersCount || 0,
                       following: followingCount || 0,
                       copiers: 0,
                       avatar_url: userProfileData.avatar_url || undefined,
+                      cover_url: userProfileData.cover_url || undefined,
                       isRegistered: true,
                       // 新创建的用户默认公开
                       showFollowers: true,
@@ -556,11 +564,13 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
       <TopNav email={email} />
 
       <Box style={{ maxWidth: 1200, margin: '0 auto', padding: tokens.spacing[6] }}>
-        {/* Header */}
+          {/* Header */}
         <TraderHeader
           handle={profile.handle}
           traderId={profile.id}
+          uid={profile.uid}
           avatarUrl={profile.avatar_url}
+          coverUrl={profile.cover_url}
           isRegistered={profile.isRegistered}
           followers={profile.followers}
           isOwnProfile={isOwnProfile}

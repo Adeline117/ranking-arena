@@ -103,9 +103,15 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
   const [posts, setPosts] = useState<Post[]>([])
   const [sortedPosts, setSortedPosts] = useState<Post[]>([])
   const [isMember, setIsMember] = useState(false)
+  const [userRole, setUserRole] = useState<'owner' | 'admin' | 'member' | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [joining, setJoining] = useState(false)
+  // 投诉相关
+  const [showComplaintModal, setShowComplaintModal] = useState(false)
+  const [complaintReason, setComplaintReason] = useState('')
+  const [complaintTarget, setComplaintTarget] = useState<string | null>(null)
+  const [submittingComplaint, setSubmittingComplaint] = useState(false)
   const [sortMode, setSortMode] = useState<'latest' | 'hot'>('latest')
   const [likeLoading, setLikeLoading] = useState<Record<string, boolean>>({})
   const [bookmarkLoading, setBookmarkLoading] = useState<Record<string, boolean>>({})
@@ -441,15 +447,16 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
           setPosts(postsList)
         }
 
-        // 检查用户是否是成员
+        // 检查用户是否是成员及角色
         if (userId) {
           const { data: membership } = await supabase
             .from('group_members')
-            .select('*')
+            .select('role')
             .eq('group_id', groupId)
             .eq('user_id', userId)
             .maybeSingle()
           setIsMember(!!membership)
+          setUserRole(membership?.role as 'owner' | 'admin' | 'member' | null)
         }
       } catch (err: any) {
         setError(err?.message || '加载失败')
@@ -1073,7 +1080,7 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
               <Box style={{ marginTop: tokens.spacing[4] }}>
                 {userId ? (
                   isMember ? (
-                    <Box style={{ display: 'flex', gap: tokens.spacing[2] }}>
+                    <Box style={{ display: 'flex', gap: tokens.spacing[2], flexWrap: 'wrap' }}>
                       <Button
                         variant="primary"
                         size="sm"
@@ -1081,6 +1088,28 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
                       >
                         + 发新帖
                       </Button>
+                      {/* 管理入口（组长/管理员可见） */}
+                      {(userRole === 'owner' || userRole === 'admin') && (
+                        <Link href={`/groups/${groupId}/manage`}>
+                          <Button variant="secondary" size="sm">
+                            ⚙️ {language === 'zh' ? '管理' : 'Manage'}
+                          </Button>
+                        </Link>
+                      )}
+                      {/* 投诉按钮（普通成员可见） */}
+                      {userRole === 'member' && (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => {
+                            setComplaintTarget(group?.created_by || null)
+                            setShowComplaintModal(true)
+                          }}
+                          style={{ color: '#ff6b6b' }}
+                        >
+                          ⚠️ {language === 'zh' ? '投诉' : 'Report'}
+                        </Button>
+                      )}
                       <Button
                         variant="secondary"
                         size="sm"
@@ -1844,6 +1873,122 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
                   onClick={() => setShowMembersList(false)}
                 >
                   {language === 'zh' ? '关闭' : 'Close'}
+                </Button>
+              </Box>
+            </Box>
+          </Box>
+        )}
+
+        {/* 投诉弹窗 */}
+        {showComplaintModal && (
+          <Box
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: 'rgba(0, 0, 0, 0.6)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 2000,
+            }}
+            onClick={() => setShowComplaintModal(false)}
+          >
+            <Box
+              style={{
+                background: tokens.colors.bg.primary,
+                borderRadius: tokens.radius.xl,
+                padding: tokens.spacing[6],
+                width: '90%',
+                maxWidth: 500,
+                border: `1px solid ${tokens.colors.border.primary}`,
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <Text size="xl" weight="bold" style={{ marginBottom: tokens.spacing[4] }}>
+                {language === 'zh' ? '投诉组长/管理员' : 'Report Admin/Owner'}
+              </Text>
+              
+              <Text size="sm" color="tertiary" style={{ marginBottom: tokens.spacing[4] }}>
+                {language === 'zh' 
+                  ? '当投诉人数达到小组成员的10%时，将自动发起投票。超过50%的人支持投诉，组长/管理员将被撤职。' 
+                  : 'When 10% of members report, a vote will be triggered. If over 50% vote in favor, the admin/owner will be removed.'}
+              </Text>
+
+              <Box style={{ marginBottom: tokens.spacing[4] }}>
+                <Text size="sm" weight="bold" color="secondary" style={{ marginBottom: tokens.spacing[2] }}>
+                  {language === 'zh' ? '投诉原因（至少30字）' : 'Reason (min 30 characters)'}
+                </Text>
+                <textarea
+                  value={complaintReason}
+                  onChange={(e) => setComplaintReason(e.target.value)}
+                  placeholder={language === 'zh' ? '请详细描述您投诉的原因...' : 'Please describe your complaint in detail...'}
+                  style={{
+                    width: '100%',
+                    minHeight: 120,
+                    padding: tokens.spacing[3],
+                    borderRadius: tokens.radius.lg,
+                    border: `1px solid ${tokens.colors.border.primary}`,
+                    background: tokens.colors.bg.secondary,
+                    color: tokens.colors.text.primary,
+                    fontSize: tokens.typography.fontSize.sm,
+                    resize: 'vertical',
+                  }}
+                />
+                <Text size="xs" color="tertiary" style={{ marginTop: tokens.spacing[1] }}>
+                  {complaintReason.length}/30 {language === 'zh' ? '字' : 'chars'}
+                </Text>
+              </Box>
+
+              <Box style={{ display: 'flex', gap: tokens.spacing[3], justifyContent: 'flex-end' }}>
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    setShowComplaintModal(false)
+                    setComplaintReason('')
+                  }}
+                >
+                  {language === 'zh' ? '取消' : 'Cancel'}
+                </Button>
+                <Button
+                  variant="primary"
+                  disabled={complaintReason.length < 30 || submittingComplaint}
+                  onClick={async () => {
+                    if (!accessToken || !complaintTarget) return
+                    setSubmittingComplaint(true)
+                    try {
+                      const res = await fetch(`/api/groups/${groupId}/complaints`, {
+                        method: 'POST',
+                        headers: {
+                          'Content-Type': 'application/json',
+                          Authorization: `Bearer ${accessToken}`
+                        },
+                        body: JSON.stringify({
+                          target_user_id: complaintTarget,
+                          reason: complaintReason
+                        })
+                      })
+                      const data = await res.json()
+                      if (res.ok) {
+                        alert(language === 'zh' ? '投诉已提交' : 'Complaint submitted')
+                        setShowComplaintModal(false)
+                        setComplaintReason('')
+                      } else {
+                        alert(data.error || (language === 'zh' ? '提交失败' : 'Submission failed'))
+                      }
+                    } catch (err) {
+                      alert(language === 'zh' ? '网络错误' : 'Network error')
+                    } finally {
+                      setSubmittingComplaint(false)
+                    }
+                  }}
+                  style={{ background: '#ff6b6b' }}
+                >
+                  {submittingComplaint 
+                    ? (language === 'zh' ? '提交中...' : 'Submitting...') 
+                    : (language === 'zh' ? '提交投诉' : 'Submit Complaint')}
                 </Button>
               </Box>
             </Box>

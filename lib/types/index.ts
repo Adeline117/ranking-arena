@@ -31,6 +31,7 @@ export interface ApiResponse<T = unknown> {
  */
 export interface UserBasicInfo {
   id: string
+  uid?: number | null // 数字用户编号
   handle: string
   avatar_url?: string | null
   email?: string

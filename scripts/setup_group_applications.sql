@@ -161,14 +161,22 @@ DECLARE
 BEGIN
   -- 只在状态从非 approved 变为 approved 时触发
   IF NEW.status = 'approved' AND (OLD.status IS NULL OR OLD.status != 'approved') THEN
-    -- 创建小组
-    INSERT INTO groups (name, name_en, description, description_en, avatar_url, role_names, created_by, application_id, member_count)
-    VALUES (NEW.name, NEW.name_en, NEW.description, NEW.description_en, NEW.avatar_url, NEW.role_names, NEW.applicant_id, NEW.id, 1)
+    -- 创建小组（包含规则字段）
+    INSERT INTO groups (
+      name, name_en, description, description_en, avatar_url, 
+      role_names, created_by, application_id, member_count,
+      rules, rules_en, rules_json
+    )
+    VALUES (
+      NEW.name, NEW.name_en, NEW.description, NEW.description_en, NEW.avatar_url, 
+      NEW.role_names, NEW.applicant_id, NEW.id, 1,
+      NEW.rules, NEW.rules_en, COALESCE(NEW.rules_json, '[]'::jsonb)
+    )
     RETURNING id INTO new_group_id;
     
-    -- 将申请者添加为管理员（组长）
+    -- 将申请者添加为组长（owner）
     INSERT INTO group_members (group_id, user_id, role)
-    VALUES (new_group_id, NEW.applicant_id, 'admin');
+    VALUES (new_group_id, NEW.applicant_id, 'owner');
     
     -- 创建通知
     INSERT INTO notifications (user_id, type, title, message, link)

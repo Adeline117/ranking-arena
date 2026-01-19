@@ -32,12 +32,8 @@ export interface SubscriptionPlan {
 // ============================================
 
 export type PremiumFeatureId = 
-  | 'basic_alerts'            // 基础告警（免费用户）
-  | 'advanced_alerts'         // 高级告警（回撤、胜率、跟单者撤离等）
   | 'email_notifications'     // 邮件通知
   | 'push_notifications'      // 推送通知
-  | 'custom_thresholds'       // 自定义告警阈值
-  | 'profit_loss_targets'     // 止盈止损提醒
   | 'portfolio_suggestions'   // 跟单组合建议
   | 'ai_portfolio'            // AI 智能组合
   | 'trader_comparison'       // 交易员对比报告
@@ -74,8 +70,6 @@ export interface FeatureLimits {
   historicalDataDays: number
   /** 自定义排行榜数量 */
   customRankingsLimit: number
-  /** 风险预警交易员数量（核心限制） */
-  alertsLimit: number
   /** 邮件通知额度（每月） */
   emailNotificationsPerMonth: number
   /** 跟单组合数量 */
@@ -100,15 +94,13 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
       exportsPerMonth: 0,
       historicalDataDays: 7,
       customRankingsLimit: 0,
-      alertsLimit: 3,                    // 免费用户：最多监控 3 个交易员
-      emailNotificationsPerMonth: 0,     // 无邮件通知
-      portfolioSuggestionsLimit: 0,      // 无组合建议
+      emailNotificationsPerMonth: 0,
+      portfolioSuggestionsLimit: 0,
     },
     highlights: [
       '排行榜完整浏览',
       '社区讨论参与',
-      '监控 3 个交易员',
-      '应用内告警通知',
+      '关注交易员',
     ],
   },
   {
@@ -124,9 +116,8 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
       exportsPerMonth: 10,
       historicalDataDays: 90,
       customRankingsLimit: 3,
-      alertsLimit: 20,                   // Pro：监控 20 个交易员
-      emailNotificationsPerMonth: 100,   // 每月 100 封邮件通知
-      portfolioSuggestionsLimit: 3,      // 基础组合建议
+      emailNotificationsPerMonth: 100,
+      portfolioSuggestionsLimit: 3,
     },
     badge: '最受欢迎',
     recommended: true,
@@ -145,9 +136,8 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
       exportsPerMonth: 50,
       historicalDataDays: 365,
       customRankingsLimit: 10,
-      alertsLimit: -1,                   // Elite：无限监控
-      emailNotificationsPerMonth: -1,    // 无限邮件
-      portfolioSuggestionsLimit: -1,     // 无限组合
+      emailNotificationsPerMonth: -1,
+      portfolioSuggestionsLimit: -1,
     },
     highlights: [],
   },
@@ -164,7 +154,6 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
       exportsPerMonth: -1,
       historicalDataDays: -1,
       customRankingsLimit: -1,
-      alertsLimit: -1,
       emailNotificationsPerMonth: -1,
       portfolioSuggestionsLimit: -1,
     },
@@ -183,27 +172,11 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
 // ============================================
 
 export const PREMIUM_FEATURES: PremiumFeature[] = [
-  // 核心功能：风险预警系统
-  {
-    id: 'basic_alerts',
-    name: '基础告警',
-    description: '监控交易员回撤，应用内提醒',
-    icon: '',
-    tier: ['free', 'pro', 'elite', 'enterprise'],
-    isCore: true,
-  },
-  {
-    id: 'advanced_alerts',
-    name: '高级告警',
-    description: '回撤急剧加深、胜率下降、跟单者撤离等多维度预警',
-    icon: '',
-    tier: ['pro', 'elite', 'enterprise'],
-    isCore: true,
-  },
+  // 通知功能
   {
     id: 'email_notifications',
     name: '邮件通知',
-    description: '重要告警通过邮件及时推送',
+    description: '重要信息通过邮件及时推送',
     icon: '',
     tier: ['pro', 'elite', 'enterprise'],
     isCore: true,
@@ -211,25 +184,9 @@ export const PREMIUM_FEATURES: PremiumFeature[] = [
   {
     id: 'push_notifications',
     name: '即时推送',
-    description: '移动端即时推送，不错过任何预警',
+    description: '移动端即时推送',
     icon: '',
     tier: ['elite', 'enterprise'],
-    isCore: true,
-  },
-  {
-    id: 'custom_thresholds',
-    name: '自定义阈值',
-    description: '根据风险偏好自定义告警触发条件',
-    icon: '',
-    tier: ['pro', 'elite', 'enterprise'],
-    isCore: true,
-  },
-  {
-    id: 'profit_loss_targets',
-    name: '止盈止损提醒',
-    description: '设置目标收益和止损线，达标自动提醒',
-    icon: '',
-    tier: ['pro', 'elite', 'enterprise'],
     isCore: true,
   },
   
@@ -364,23 +321,6 @@ export function formatPrice(price: number, currency: string = 'USD'): string {
   if (price === -1) return '联系销售'
   if (price === 0) return '免费'
   return `$${price}/${currency === 'USD' ? 'mo' : currency}`
-}
-
-/**
- * 检查用户是否可以添加更多告警配置
- */
-export function canAddMoreAlerts(tier: SubscriptionTier, currentCount: number): boolean {
-  const limits = getFeatureLimits(tier)
-  if (limits.alertsLimit === -1) return true  // 无限
-  return currentCount < limits.alertsLimit
-}
-
-/**
- * 获取告警限制数量
- */
-export function getAlertsLimit(tier: SubscriptionTier): number | 'unlimited' {
-  const limits = getFeatureLimits(tier)
-  return limits.alertsLimit === -1 ? 'unlimited' : limits.alertsLimit
 }
 
 /**

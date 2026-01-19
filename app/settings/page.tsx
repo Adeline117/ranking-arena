@@ -64,12 +64,16 @@ export default function SettingsPage() {
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [avatarFile, setAvatarFile] = useState<File | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const [coverUrl, setCoverUrl] = useState<string | null>(null)
+  const [coverFile, setCoverFile] = useState<File | null>(null)
+  const [coverPreviewUrl, setCoverPreviewUrl] = useState<string | null>(null)
   
   // Initial values for tracking changes
   const initialValuesRef = useRef<{
     handle: string
     bio: string
     avatarUrl: string | null
+    coverUrl: string | null
     notifyFollow: boolean
     notifyLike: boolean
     notifyComment: boolean
@@ -85,6 +89,11 @@ export default function SettingsPage() {
   const [newPassword, setNewPassword] = useState('')
   const [confirmNewPassword, setConfirmNewPassword] = useState('')
   const [savingPassword, setSavingPassword] = useState(false)
+  const [passwordResetMode, setPasswordResetMode] = useState<'password' | 'code'>('password')
+  const [resetCode, setResetCode] = useState('')
+  const [resetCodeSent, setResetCodeSent] = useState(false)
+  const [sendingResetCode, setSendingResetCode] = useState(false)
+  const [resetCountdown, setResetCountdown] = useState(0)
   
   // Email change
   const [newEmail, setNewEmail] = useState('')
@@ -130,6 +139,7 @@ export default function SettingsPage() {
       handle !== initial.handle ||
       bio !== initial.bio ||
       avatarFile !== null ||
+      coverFile !== null ||
       notifyFollow !== initial.notifyFollow ||
       notifyLike !== initial.notifyLike ||
       notifyComment !== initial.notifyComment ||
@@ -139,7 +149,7 @@ export default function SettingsPage() {
       showFollowing !== initial.showFollowing ||
       dmPermission !== initial.dmPermission
     )
-  }, [handle, bio, avatarFile, notifyFollow, notifyLike, notifyComment, notifyMention, notifyMessage, showFollowers, showFollowing, dmPermission])
+  }, [handle, bio, avatarFile, coverFile, notifyFollow, notifyLike, notifyComment, notifyMention, notifyMessage, showFollowers, showFollowing, dmPermission])
 
   // Warn before leaving with unsaved changes
   useEffect(() => {
@@ -178,7 +188,7 @@ export default function SettingsPage() {
       // Note: dm_permission 暂时移除，等运行迁移后再添加
       const { data: userProfile } = await supabase
         .from('user_profiles')
-        .select('handle, bio, avatar_url, notify_follow, notify_like, notify_comment, notify_mention, notify_message, show_followers, show_following')
+        .select('handle, bio, avatar_url, cover_url, notify_follow, notify_like, notify_comment, notify_mention, notify_message, show_followers, show_following')
         .eq('id', uid)
         .maybeSingle()
       
@@ -186,6 +196,7 @@ export default function SettingsPage() {
         const profileHandle = userProfile.handle || ''
         const profileBio = userProfile.bio || ''
         const profileAvatarUrl = userProfile.avatar_url || null
+        const profileCoverUrl = userProfile.cover_url || null
         const profileNotifyFollow = userProfile.notify_follow !== false
         const profileNotifyLike = userProfile.notify_like !== false
         const profileNotifyComment = userProfile.notify_comment !== false
@@ -199,6 +210,8 @@ export default function SettingsPage() {
         setBio(profileBio)
         setAvatarUrl(profileAvatarUrl)
         setPreviewUrl(profileAvatarUrl)
+        setCoverUrl(profileCoverUrl)
+        setCoverPreviewUrl(profileCoverUrl)
         setNotifyFollow(profileNotifyFollow)
         setNotifyLike(profileNotifyLike)
         setNotifyComment(profileNotifyComment)
@@ -213,6 +226,7 @@ export default function SettingsPage() {
           handle: profileHandle,
           bio: profileBio,
           avatarUrl: profileAvatarUrl,
+          coverUrl: profileCoverUrl,
           notifyFollow: profileNotifyFollow,
           notifyLike: profileNotifyLike,
           notifyComment: profileNotifyComment,
@@ -240,6 +254,60 @@ export default function SettingsPage() {
         setPreviewUrl(reader.result as string)
       }
       reader.readAsDataURL(file)
+    }
+  }
+
+  const handleCoverChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      setCoverFile(file)
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        setCoverPreviewUrl(reader.result as string)
+      }
+      reader.readAsDataURL(file)
+    }
+  }
+
+  const uploadCover = async (file: File, userId: string): Promise<string | null> => {
+    try {
+      // 检查文件大小（最大 10MB - 背景图片可以更大一些）
+      if (file.size > 10 * 1024 * 1024) {
+        showToast('图片大小不能超过 10MB', 'error')
+        return null
+      }
+
+      const fileExt = file.name.split('.').pop()?.toLowerCase()
+      // 检查文件类型
+      if (!['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(fileExt || '')) {
+        showToast('只支持 JPG、PNG、GIF、WebP 格式', 'error')
+        return null
+      }
+
+      const fileName = `${userId}-${Date.now()}.${fileExt}`
+      const filePath = `${fileName}`
+
+      const { error: uploadError } = await supabase.storage
+        .from('covers')
+        .upload(filePath, file, { upsert: true })
+
+      if (uploadError) {
+        uiLogger.error('Cover upload error:', uploadError)
+        if (uploadError.message?.includes('Bucket not found')) {
+          showToast('存储服务未配置，请联系管理员运行 setup_cover_storage.sql', 'error')
+        } else if (uploadError.message?.includes('security') || uploadError.message?.includes('policy')) {
+          showToast('没有上传权限，请联系管理员', 'error')
+        } else {
+          showToast(`上传失败: ${uploadError.message}`, 'error')
+        }
+        return null
+      }
+
+      const { data } = supabase.storage.from('covers').getPublicUrl(filePath)
+      return data.publicUrl
+    } catch (error: any) {
+      showToast(`上传异常: ${error?.message || '未知错误'}`, 'error')
+      return null
     }
   }
 
@@ -292,6 +360,7 @@ export default function SettingsPage() {
     setSaving(true)
     try {
       let finalAvatarUrl = avatarUrl
+      let finalCoverUrl = coverUrl
       
       // Upload avatar if changed
       if (avatarFile) {
@@ -300,6 +369,15 @@ export default function SettingsPage() {
           finalAvatarUrl = uploadedUrl
         }
         // 上传失败时不阻止其他数据保存，继续使用旧头像
+      }
+      
+      // Upload cover if changed
+      if (coverFile) {
+        const uploadedUrl = await uploadCover(coverFile, userId)
+        if (uploadedUrl) {
+          finalCoverUrl = uploadedUrl
+        }
+        // 上传失败时不阻止其他数据保存，继续使用旧背景
       }
       
       // Update profile and notification preferences in user_profiles (consolidated save)
@@ -312,6 +390,7 @@ export default function SettingsPage() {
             handle: handle || null,
             bio: bio || null,
             avatar_url: finalAvatarUrl || null,
+            cover_url: finalCoverUrl || null,
             notify_follow: notifyFollow,
             notify_like: notifyLike,
             notify_comment: notifyComment,
@@ -341,6 +420,7 @@ export default function SettingsPage() {
         handle,
         bio,
         avatarUrl: finalAvatarUrl,
+        coverUrl: finalCoverUrl,
         notifyFollow,
         notifyLike,
         notifyComment,
@@ -351,6 +431,7 @@ export default function SettingsPage() {
         dmPermission,
       }
       setAvatarFile(null) // Clear avatar file state
+      setCoverFile(null) // Clear cover file state
       
       showToast('保存成功！', 'success')
       router.push(`/u/${handle || userId}`)
@@ -362,7 +443,43 @@ export default function SettingsPage() {
     }
   }
 
-  // 修改密码
+  // 重置验证码倒计时
+  useEffect(() => {
+    if (resetCountdown > 0) {
+      const timer = setTimeout(() => setResetCountdown(resetCountdown - 1), 1000)
+      return () => clearTimeout(timer)
+    }
+  }, [resetCountdown])
+
+  // 发送密码重置验证码
+  const handleSendResetCode = async () => {
+    if (!email) {
+      showToast('无法获取用户邮箱', 'error')
+      return
+    }
+
+    setSendingResetCode(true)
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      })
+
+      if (error) {
+        showToast(error.message, 'error')
+        return
+      }
+
+      setResetCodeSent(true)
+      setResetCountdown(60)
+      showToast('密码重置邮件已发送，请查收邮箱', 'success')
+    } catch (error: any) {
+      showToast(error?.message || '发送失败', 'error')
+    } finally {
+      setSendingResetCode(false)
+    }
+  }
+
+  // 修改密码（通过当前密码）
   const handleChangePassword = async () => {
     if (!currentPassword) {
       showToast('请输入当前密码', 'warning')
@@ -594,6 +711,101 @@ export default function SettingsPage() {
           </Box>
         </Box>
 
+        {/* Cover Section */}
+        <Box
+          className="glass-card card-enter"
+          p={6}
+          radius="xl"
+          style={{ 
+            marginBottom: tokens.spacing[6],
+            background: tokens.glass.bg.secondary,
+            backdropFilter: tokens.glass.blur.lg,
+            WebkitBackdropFilter: tokens.glass.blur.lg,
+            border: tokens.glass.border.light,
+            animationDelay: '0.12s',
+          }}
+        >
+          <Text size="lg" weight="black" style={{ marginBottom: tokens.spacing[4] }}>
+            背景图片
+          </Text>
+          
+          <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}>
+            {/* Cover Preview */}
+            <Box
+              style={{
+                width: '100%',
+                height: 160,
+                borderRadius: tokens.radius.lg,
+                background: coverPreviewUrl 
+                  ? `url(${coverPreviewUrl}) center/cover no-repeat`
+                  : `linear-gradient(135deg, ${tokens.colors.bg.tertiary} 0%, ${tokens.colors.bg.secondary} 100%)`,
+                border: `1px solid ${tokens.colors.border.primary}`,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                position: 'relative',
+                overflow: 'hidden',
+              }}
+            >
+              {!coverPreviewUrl && (
+                <Text size="sm" color="tertiary">
+                  暂无背景图片
+                </Text>
+              )}
+            </Box>
+            
+            <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3] }}>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleCoverChange}
+                style={{ display: 'none' }}
+                id="cover-input"
+              />
+              <label
+                htmlFor="cover-input"
+                style={{
+                  display: 'inline-block',
+                  padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
+                  borderRadius: tokens.radius.md,
+                  border: `1px solid ${tokens.colors.border.primary}`,
+                  background: tokens.colors.bg.secondary,
+                  color: tokens.colors.text.primary,
+                  cursor: 'pointer',
+                  fontWeight: tokens.typography.fontWeight.bold,
+                  fontSize: tokens.typography.fontSize.sm,
+                }}
+              >
+                选择图片
+              </label>
+              {coverPreviewUrl && (
+                <button
+                  onClick={() => {
+                    setCoverFile(null)
+                    setCoverPreviewUrl(null)
+                    setCoverUrl(null)
+                  }}
+                  style={{
+                    padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
+                    borderRadius: tokens.radius.md,
+                    border: `1px solid ${tokens.colors.accent.error}40`,
+                    background: 'transparent',
+                    color: tokens.colors.accent.error,
+                    cursor: 'pointer',
+                    fontWeight: tokens.typography.fontWeight.bold,
+                    fontSize: tokens.typography.fontSize.sm,
+                  }}
+                >
+                  移除背景
+                </button>
+              )}
+            </Box>
+            <Text size="xs" color="tertiary">
+              支持 JPG、PNG、GIF、WebP 格式，最大 10MB，建议尺寸 1200×400
+            </Text>
+          </Box>
+        </Box>
+
         {/* Handle Section */}
         <Box
           className="glass-card card-enter"
@@ -663,7 +875,7 @@ export default function SettingsPage() {
           }}
         >
           <Text size="lg" weight="black" style={{ marginBottom: tokens.spacing[4] }}>
-            个人简介
+            关于我
           </Text>
           <textarea
             value={bio}

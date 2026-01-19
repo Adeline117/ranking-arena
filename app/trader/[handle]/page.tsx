@@ -252,6 +252,7 @@ function TraderContent(props: { params: { handle: string } | Promise<{ handle: s
           handle={profile.handle}
           traderId={profile.id}
           avatarUrl={profile.avatar_url}
+          coverUrl={profile.cover_url}
           isRegistered={profile.isRegistered}
           followers={profile.followers}
           source={profile.source}

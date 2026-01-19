@@ -19,17 +19,8 @@ export interface FeatureFlags {
   traderDetail: boolean
   /** 用户评价系统 */
   reviews: boolean
-  /** 基础告警功能 */
-  basicAlerts: boolean
   /** 用户收藏/关注 */
   favorites: boolean
-  
-  // ============================================
-  // 次要功能（MVP 阶段可隐藏）
-  // ============================================
-  
-  /** 跟单日记 - MVP 阶段隐藏入口 */
-  followJournals: boolean
   /** 组合建议 - 标记为 Beta */
   portfolioSuggestions: boolean
   /** 交易员认领 - 仅后台审核 */
@@ -45,8 +36,6 @@ export interface FeatureFlags {
   aiPortfolio: boolean
   /** 交易员私信 */
   traderMessaging: boolean
-  /** 高级告警（止盈止损等）*/
-  advancedAlerts: boolean
   /** 社交功能（关注用户、动态等）*/
   socialFeatures: boolean
   
@@ -68,11 +57,7 @@ export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   ranking: true,
   traderDetail: true,
   reviews: true,
-  basicAlerts: true,
   favorites: true,
-  
-  // 次要功能 - MVP 阶段精简
-  followJournals: false,      // 隐藏入口
   portfolioSuggestions: true, // 显示但标记 Beta
   traderClaim: false,         // 仅后台审核
   avoidList: true,            // 改名为"风险提示"后开启
@@ -80,7 +65,6 @@ export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   // 实验性功能
   aiPortfolio: false,
   traderMessaging: false,
-  advancedAlerts: false,
   socialFeatures: false,
   
   // 开发功能
@@ -109,18 +93,9 @@ export const FEATURE_META: Record<keyof FeatureFlags, {
     name: '用户评价',
     description: '查看和发布交易员评价',
   },
-  basicAlerts: {
-    name: '基础告警',
-    description: '回撤、胜率等基础告警',
-  },
   favorites: {
     name: '收藏关注',
     description: '收藏和关注交易员',
-  },
-  followJournals: {
-    name: '跟单日记',
-    description: '记录和分享跟单体验',
-    badge: 'coming_soon',
   },
   portfolioSuggestions: {
     name: '组合建议',
@@ -148,12 +123,6 @@ export const FEATURE_META: Record<keyof FeatureFlags, {
     description: '与认证交易员私信交流',
     badge: 'coming_soon',
     tier: 'elite',
-  },
-  advancedAlerts: {
-    name: '高级告警',
-    description: '止盈止损、自定义阈值',
-    badge: 'premium',
-    tier: 'pro',
   },
   socialFeatures: {
     name: '社交功能',

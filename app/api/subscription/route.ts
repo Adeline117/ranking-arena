@@ -76,7 +76,6 @@ export async function GET(request: NextRequest) {
           comparisonReportsThisMonth: 0,
           exportsThisMonth: 0,
           currentFollows: 0,
-          currentAlerts: 0,
           currentCustomRankings: 0,
         },
       }
@@ -99,7 +98,6 @@ export async function GET(request: NextRequest) {
         comparisonReportsThisMonth: subscription.comparison_reports_this_month || 0,
         exportsThisMonth: subscription.exports_this_month || 0,
         currentFollows: 0, // TODO: 从 trader_follows 表统计
-        currentAlerts: 0, // TODO: 从 alerts 表统计
         currentCustomRankings: 0, // TODO: 从 custom_rankings 表统计
       },
     }

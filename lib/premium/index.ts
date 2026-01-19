@@ -47,8 +47,6 @@ export interface FeatureUsage {
   exportsThisMonth: number
   /** 当前关注数 */
   currentFollows: number
-  /** 当前告警数 */
-  currentAlerts: number
   /** 当前自定义排行榜数 */
   currentCustomRankings: number
 }
@@ -83,7 +81,6 @@ const DEFAULT_SUBSCRIPTION: UserSubscription = {
     comparisonReportsThisMonth: 0,
     exportsThisMonth: 0,
     currentFollows: 0,
-    currentAlerts: 0,
     currentCustomRankings: 0,
   },
 }
@@ -176,15 +173,6 @@ class PremiumService {
             isLimitReached = remaining <= 0
             if (isLimitReached) {
               message = `本月导出次数已达上限 (${limits.exportsPerMonth})`
-            }
-          }
-          break
-        case 'advanced_alerts':
-          if (limits.alertsLimit > 0) {
-            remaining = limits.alertsLimit - usage.currentAlerts
-            isLimitReached = remaining <= 0
-            if (isLimitReached) {
-              message = `告警数量已达上限 (${limits.alertsLimit})`
             }
           }
           break
