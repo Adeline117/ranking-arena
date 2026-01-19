@@ -40,26 +40,6 @@ export interface UserDataExport {
     source: string
     added_at: string
   }>
-  alertConfigs: Array<{
-    trader_id: string
-    source: string
-    drawdown_threshold: number
-    created_at: string
-  }>
-  alerts: Array<{
-    id: string
-    type: string
-    title: string
-    created_at: string
-  }>
-  followJournals: Array<{
-    id: string
-    trader_id: string
-    source: string
-    title: string | null
-    content: string
-    created_at: string
-  }>
   avoidVotes: Array<{
     trader_id: string
     source: string
@@ -79,9 +59,6 @@ export interface DataDeletionResult {
   deletedItems: {
     reviews: number
     favorites: number
-    alertConfigs: number
-    alerts: number
-    followJournals: number
     avoidVotes: number
     inviteCodes: number
     profile: boolean
@@ -105,9 +82,6 @@ export async function exportUserData(
     subscription: null,
     reviews: [],
     favorites: [],
-    alertConfigs: [],
-    alerts: [],
-    followJournals: [],
     avoidVotes: [],
     inviteCodes: [],
   }
@@ -166,32 +140,7 @@ export async function exportUserData(
     added_at: f.created_at,
   }))
 
-  // 6. 获取告警配置
-  const { data: alertConfigs } = await supabase
-    .from('user_alert_configs')
-    .select('trader_id, source, drawdown_threshold, created_at')
-    .eq('user_id', userId)
-  
-  exportData.alertConfigs = alertConfigs || []
-
-  // 7. 获取告警历史
-  const { data: alerts } = await supabase
-    .from('trader_alerts')
-    .select('id, type, title, created_at')
-    .eq('user_id', userId)
-    .limit(1000)  // 限制数量
-  
-  exportData.alerts = alerts || []
-
-  // 8. 获取跟单日记
-  const { data: journals } = await supabase
-    .from('follow_journals')
-    .select('id, trader_id, source, title, content, created_at')
-    .eq('user_id', userId)
-  
-  exportData.followJournals = journals || []
-
-  // 9. 获取避雷投票
+  // 6. 获取避雷投票
   const { data: avoidVotes } = await supabase
     .from('avoid_votes')
     .select('trader_id, source, reason, created_at')
@@ -199,7 +148,7 @@ export async function exportUserData(
   
   exportData.avoidVotes = avoidVotes || []
 
-  // 10. 获取邀请码
+  // 7. 获取邀请码
   const { data: inviteCodes } = await supabase
     .from('invite_codes')
     .select('code, current_uses, created_at')
@@ -232,9 +181,6 @@ export async function deleteUserData(
     deletedItems: {
       reviews: 0,
       favorites: 0,
-      alertConfigs: 0,
-      alerts: 0,
-      followJournals: 0,
       avoidVotes: 0,
       inviteCodes: 0,
       profile: false,
@@ -284,34 +230,7 @@ export async function deleteUserData(
     
     result.deletedItems.favorites = favorites?.length || 0
 
-    // 4. 删除告警配置
-    const { data: alertConfigs } = await supabase
-      .from('user_alert_configs')
-      .delete()
-      .eq('user_id', userId)
-      .select('id')
-    
-    result.deletedItems.alertConfigs = alertConfigs?.length || 0
-
-    // 5. 删除告警历史
-    const { data: alerts } = await supabase
-      .from('trader_alerts')
-      .delete()
-      .eq('user_id', userId)
-      .select('id')
-    
-    result.deletedItems.alerts = alerts?.length || 0
-
-    // 6. 删除跟单日记
-    const { data: journals } = await supabase
-      .from('follow_journals')
-      .delete()
-      .eq('user_id', userId)
-      .select('id')
-    
-    result.deletedItems.followJournals = journals?.length || 0
-
-    // 7. 删除避雷投票
+    // 4. 删除避雷投票
     const { data: avoidVotes } = await supabase
       .from('avoid_votes')
       .delete()
@@ -320,7 +239,7 @@ export async function deleteUserData(
     
     result.deletedItems.avoidVotes = avoidVotes?.length || 0
 
-    // 8. 停用邀请码
+    // 5. 停用邀请码
     const { data: inviteCodes } = await supabase
       .from('invite_codes')
       .update({ is_active: false })
@@ -329,7 +248,7 @@ export async function deleteUserData(
     
     result.deletedItems.inviteCodes = inviteCodes?.length || 0
 
-    // 9. 删除用户资料
+    // 6. 删除用户资料
     const { error: profileError } = await supabase
       .from('user_profiles')
       .delete()
@@ -337,7 +256,7 @@ export async function deleteUserData(
     
     result.deletedItems.profile = !profileError
 
-    // 10. 取消订阅
+    // 7. 取消订阅
     const { error: subError } = await supabase
       .from('user_subscriptions')
       .update({ 
@@ -348,7 +267,7 @@ export async function deleteUserData(
     
     result.deletedItems.subscription = !subError
 
-    // 11. 更新删除日志
+    // 8. 更新删除日志
     await supabase
       .from('data_deletion_logs')
       .update({

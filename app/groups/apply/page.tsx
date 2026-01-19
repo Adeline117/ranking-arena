@@ -11,8 +11,13 @@ import { Box, Text, Button } from '@/app/components/Base'
 import { useLanguage } from '@/app/components/Utils/LanguageProvider'
 
 type RoleNames = {
-  admin: { zh: string; en: string }  // 管理员（包含组长和管理员）
+  admin: { zh: string; en: string }
   member: { zh: string; en: string }
+}
+
+type Rule = {
+  zh: string
+  en: string
 }
 
 export default function ApplyGroupPage() {
@@ -24,17 +29,29 @@ export default function ApplyGroupPage() {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
 
-  // 表单状态
-  const [primaryLang, setPrimaryLang] = useState<'zh' | 'en'>('zh')
+  // 当前编辑的语言标签
+  const [activeTab, setActiveTab] = useState<'zh' | 'en'>('zh')
+  // 是否显示多语言（英文）
   const [showMultiLang, setShowMultiLang] = useState(false)
-  const [name, setName] = useState('')
-  const [nameSecondary, setNameSecondary] = useState('')
-  const [description, setDescription] = useState('')
-  const [descriptionSecondary, setDescriptionSecondary] = useState('')
+
+  // 表单状态 - 中文
+  const [nameZh, setNameZh] = useState('')
+  const [descriptionZh, setDescriptionZh] = useState('')
+  
+  // 表单状态 - 英文
+  const [nameEn, setNameEn] = useState('')
+  const [descriptionEn, setDescriptionEn] = useState('')
+  
+  // 小组规则（支持多条，中英文）
+  const [rules, setRules] = useState<Rule[]>([])
+  const [newRuleZh, setNewRuleZh] = useState('')
+  const [newRuleEn, setNewRuleEn] = useState('')
+
+  // 头像和角色称呼
   const [avatarUrl, setAvatarUrl] = useState('')
   const [roleNames, setRoleNames] = useState<RoleNames>({
-    admin: { zh: '管理员', en: '' },  // 管理员（包含组长和管理员）
-    member: { zh: '成员', en: '' }
+    admin: { zh: '管理员', en: 'Admin' },
+    member: { zh: '成员', en: 'Member' }
   })
 
   // 用户已有的申请
@@ -65,6 +82,30 @@ export default function ApplyGroupPage() {
     }
   }
 
+  // 添加规则
+  const addRule = () => {
+    const zhText = newRuleZh.trim()
+    const enText = newRuleEn.trim()
+    
+    if (!zhText && !enText) return
+    
+    setRules([...rules, { zh: zhText, en: enText }])
+    setNewRuleZh('')
+    setNewRuleEn('')
+  }
+
+  // 删除规则
+  const removeRule = (index: number) => {
+    setRules(rules.filter((_, i) => i !== index))
+  }
+
+  // 编辑规则
+  const updateRule = (index: number, lang: 'zh' | 'en', value: string) => {
+    const newRules = [...rules]
+    newRules[index] = { ...newRules[index], [lang]: value }
+    setRules(newRules)
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
@@ -73,8 +114,9 @@ export default function ApplyGroupPage() {
       return
     }
 
-    if (!name.trim()) {
-      setError(language === 'zh' ? '请填写小组名称' : 'Please enter group name')
+    // 至少需要填写中文或英文名称
+    if (!nameZh.trim() && !nameEn.trim()) {
+      setError(language === 'zh' ? '请填写小组名称（中文或英文）' : 'Please enter group name (Chinese or English)')
       return
     }
 
@@ -89,12 +131,16 @@ export default function ApplyGroupPage() {
           Authorization: `Bearer ${accessToken}`
         },
         body: JSON.stringify({
-          name: primaryLang === 'zh' ? name.trim() : (nameSecondary.trim() || name.trim()),
-          name_en: primaryLang === 'en' ? name.trim() : (nameSecondary.trim() || null),
-          description: primaryLang === 'zh' ? (description.trim() || null) : (descriptionSecondary.trim() || null),
-          description_en: primaryLang === 'en' ? (description.trim() || null) : (descriptionSecondary.trim() || null),
+          name: nameZh.trim() || nameEn.trim(),
+          name_en: nameEn.trim() || null,
+          description: descriptionZh.trim() || null,
+          description_en: descriptionEn.trim() || null,
           avatar_url: avatarUrl.trim() || null,
-          role_names: roleNames
+          role_names: roleNames,
+          rules_json: rules.length > 0 ? rules : null,
+          // 兼容旧版：将规则合并为文本
+          rules: rules.map(r => r.zh).filter(Boolean).join('\n') || null,
+          rules_en: rules.map(r => r.en).filter(Boolean).join('\n') || null,
         })
       })
 
@@ -106,7 +152,6 @@ export default function ApplyGroupPage() {
       }
 
       setSuccess(true)
-      // 刷新申请列表
       if (accessToken) {
         fetchMyApplications(accessToken)
       }
@@ -136,6 +181,18 @@ export default function ApplyGroupPage() {
     fontWeight: tokens.typography.fontWeight.semibold,
     color: tokens.colors.text.secondary,
   }
+
+  const tabStyle = (isActive: boolean): React.CSSProperties => ({
+    padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
+    borderRadius: `${tokens.radius.lg} ${tokens.radius.lg} 0 0`,
+    border: `1px solid ${isActive ? tokens.colors.border.primary : 'transparent'}`,
+    borderBottom: isActive ? 'none' : `1px solid ${tokens.colors.border.primary}`,
+    background: isActive ? tokens.colors.bg.secondary : 'transparent',
+    color: isActive ? tokens.colors.text.primary : tokens.colors.text.tertiary,
+    cursor: 'pointer',
+    fontWeight: isActive ? tokens.typography.fontWeight.bold : tokens.typography.fontWeight.medium,
+    transition: `all ${tokens.transition.base}`,
+  })
 
   const getStatusBadge = (status: string) => {
     const styles: Record<string, { bg: string; color: string; text: { zh: string; en: string } }> = {
@@ -286,132 +343,273 @@ export default function ApplyGroupPage() {
         <Card title={language === 'zh' ? '申请创办小组' : 'Apply to Create Group'}>
           <form onSubmit={handleSubmit}>
             <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[5] }}>
-              {/* 语言选择 */}
+              
+              {/* 语言标签页 */}
               <Box>
-                <label style={labelStyle}>
-                  {language === 'zh' ? '小组语言' : 'Group Language'}
-                </label>
-                <Box style={{ display: 'flex', gap: tokens.spacing[2] }}>
-                  <Button
+                <Box style={{ display: 'flex', borderBottom: `1px solid ${tokens.colors.border.primary}` }}>
+                  <button
                     type="button"
-                    variant={primaryLang === 'zh' ? 'primary' : 'secondary'}
-                    size="sm"
-                    onClick={() => setPrimaryLang('zh')}
+                    style={tabStyle(activeTab === 'zh')}
+                    onClick={() => setActiveTab('zh')}
                   >
                     中文
-                  </Button>
-                  <Button
-                    type="button"
-                    variant={primaryLang === 'en' ? 'primary' : 'secondary'}
-                    size="sm"
-                    onClick={() => setPrimaryLang('en')}
-                  >
-                    English
-                  </Button>
+                  </button>
+                  {showMultiLang && (
+                    <button
+                      type="button"
+                      style={tabStyle(activeTab === 'en')}
+                      onClick={() => setActiveTab('en')}
+                    >
+                      English
+                    </button>
+                  )}
+                  {!showMultiLang && (
+                    <button
+                      type="button"
+                      style={{
+                        ...tabStyle(false),
+                        color: tokens.colors.accent?.primary || '#8b6fa8',
+                        border: 'none',
+                      }}
+                      onClick={() => {
+                        setShowMultiLang(true)
+                        setActiveTab('en')
+                      }}
+                    >
+                      + {language === 'zh' ? '添加多语言' : 'Add Language'}
+                    </button>
+                  )}
                 </Box>
-              </Box>
 
-              {/* 小组名称 */}
-              <Box>
-                <label style={labelStyle}>
-                  {language === 'zh' ? '小组名称 *' : 'Group Name *'}
-                </label>
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder={primaryLang === 'zh' ? '例如：BTC 交易讨论组' : 'e.g., BTC Trading Discussion'}
-                  style={inputStyle}
-                  maxLength={50}
-                  required
-                />
-              </Box>
-
-              {/* 小组简介 */}
-              <Box>
-                <label style={labelStyle}>
-                  {language === 'zh' ? '小组简介' : 'Group Description'}
-                </label>
-                <textarea
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder={primaryLang === 'zh' ? '介绍一下你的小组...' : 'Describe your group...'}
-                  style={{ ...inputStyle, minHeight: 100, resize: 'vertical' }}
-                  maxLength={500}
-                />
-              </Box>
-
-              {/* 多语言切换 */}
-              {!showMultiLang ? (
-                <Button
-                  type="button"
-                  variant="text"
-                  size="sm"
-                  onClick={() => setShowMultiLang(true)}
+                {/* 中文表单 */}
+                <Box 
                   style={{ 
-                    alignSelf: 'flex-start',
-                    color: tokens.colors.accent?.primary || tokens.colors.text.secondary,
-                    padding: 0,
+                    display: activeTab === 'zh' ? 'flex' : 'none',
+                    flexDirection: 'column',
+                    gap: tokens.spacing[4],
+                    padding: tokens.spacing[4],
+                    background: tokens.colors.bg.secondary,
+                    borderRadius: `0 0 ${tokens.radius.lg} ${tokens.radius.lg}`,
+                    border: `1px solid ${tokens.colors.border.primary}`,
+                    borderTop: 'none',
                   }}
                 >
-                  + {language === 'zh' ? '添加多语言' : 'Add another language'}
-                </Button>
-              ) : (
-                <Box style={{ 
-                  padding: tokens.spacing[4], 
-                  background: tokens.colors.bg.secondary, 
-                  borderRadius: tokens.radius.lg,
-                  border: `1px solid ${tokens.colors.border.primary}`,
-                }}>
-                  <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: tokens.spacing[3] }}>
-                    <Text size="sm" weight="bold" color="secondary">
-                      {primaryLang === 'zh' ? 'English Version' : '中文版本'}
-                    </Text>
-                    <Button
-                      type="button"
-                      variant="text"
-                      size="sm"
-                      onClick={() => {
-                        setShowMultiLang(false)
-                        setNameSecondary('')
-                        setDescriptionSecondary('')
-                      }}
-                      style={{ padding: 0, color: tokens.colors.text.tertiary }}
-                    >
-                      {language === 'zh' ? '移除' : 'Remove'}
-                    </Button>
-                  </Box>
-
-                  {/* 第二语言小组名称 */}
-                  <Box style={{ marginBottom: tokens.spacing[3] }}>
+                  {/* 小组名称（中文） */}
+                  <Box>
                     <label style={labelStyle}>
-                      {primaryLang === 'zh' ? 'Group Name (English)' : '小组名称（中文）'}
+                      小组名称 *
                     </label>
                     <input
                       type="text"
-                      value={nameSecondary}
-                      onChange={(e) => setNameSecondary(e.target.value)}
-                      placeholder={primaryLang === 'zh' ? 'e.g., BTC Trading Discussion' : '例如：BTC 交易讨论组'}
+                      value={nameZh}
+                      onChange={(e) => setNameZh(e.target.value)}
+                      placeholder="例如：BTC 交易讨论组"
                       style={inputStyle}
                       maxLength={50}
                     />
                   </Box>
 
-                  {/* 第二语言小组简介 */}
+                  {/* 小组简介（中文） */}
                   <Box>
                     <label style={labelStyle}>
-                      {primaryLang === 'zh' ? 'Group Description (English)' : '小组简介（中文）'}
+                      小组简介
                     </label>
                     <textarea
-                      value={descriptionSecondary}
-                      onChange={(e) => setDescriptionSecondary(e.target.value)}
-                      placeholder={primaryLang === 'zh' ? 'Describe your group...' : '介绍一下你的小组...'}
-                      style={{ ...inputStyle, minHeight: 80, resize: 'vertical' }}
+                      value={descriptionZh}
+                      onChange={(e) => setDescriptionZh(e.target.value)}
+                      placeholder="介绍一下你的小组..."
+                      style={{ ...inputStyle, minHeight: 100, resize: 'vertical' }}
                       maxLength={500}
                     />
                   </Box>
                 </Box>
-              )}
+
+                {/* 英文表单 */}
+                {showMultiLang && (
+                  <Box 
+                    style={{ 
+                      display: activeTab === 'en' ? 'flex' : 'none',
+                      flexDirection: 'column',
+                      gap: tokens.spacing[4],
+                      padding: tokens.spacing[4],
+                      background: tokens.colors.bg.secondary,
+                      borderRadius: `0 0 ${tokens.radius.lg} ${tokens.radius.lg}`,
+                      border: `1px solid ${tokens.colors.border.primary}`,
+                      borderTop: 'none',
+                    }}
+                  >
+                    <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Text size="sm" color="tertiary">English Version</Text>
+                      <Button
+                        type="button"
+                        variant="text"
+                        size="sm"
+                        onClick={() => {
+                          setShowMultiLang(false)
+                          setActiveTab('zh')
+                          setNameEn('')
+                          setDescriptionEn('')
+                        }}
+                        style={{ padding: 0, color: tokens.colors.text.tertiary }}
+                      >
+                        {language === 'zh' ? '移除英文' : 'Remove English'}
+                      </Button>
+                    </Box>
+
+                    {/* 小组名称（英文） */}
+                    <Box>
+                      <label style={labelStyle}>
+                        Group Name
+                      </label>
+                      <input
+                        type="text"
+                        value={nameEn}
+                        onChange={(e) => setNameEn(e.target.value)}
+                        placeholder="e.g., BTC Trading Discussion"
+                        style={inputStyle}
+                        maxLength={50}
+                      />
+                    </Box>
+
+                    {/* 小组简介（英文） */}
+                    <Box>
+                      <label style={labelStyle}>
+                        Group Description
+                      </label>
+                      <textarea
+                        value={descriptionEn}
+                        onChange={(e) => setDescriptionEn(e.target.value)}
+                        placeholder="Describe your group..."
+                        style={{ ...inputStyle, minHeight: 100, resize: 'vertical' }}
+                        maxLength={500}
+                      />
+                    </Box>
+                  </Box>
+                )}
+              </Box>
+
+              {/* 小组规则 */}
+              <Box>
+                <Text weight="bold" style={{ marginBottom: tokens.spacing[3] }}>
+                  {language === 'zh' ? '小组规则' : 'Group Rules'}
+                </Text>
+                <Text size="sm" color="tertiary" style={{ marginBottom: tokens.spacing[3] }}>
+                  {language === 'zh' 
+                    ? '一条一条添加小组规则，成员需要遵守这些规则' 
+                    : 'Add rules one by one that members must follow'}
+                </Text>
+
+                {/* 已添加的规则列表 */}
+                {rules.length > 0 && (
+                  <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2], marginBottom: tokens.spacing[3] }}>
+                    {rules.map((rule, index) => (
+                      <Box
+                        key={index}
+                        style={{
+                          padding: tokens.spacing[3],
+                          background: tokens.colors.bg.secondary,
+                          borderRadius: tokens.radius.lg,
+                          border: `1px solid ${tokens.colors.border.primary}`,
+                        }}
+                      >
+                        <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: tokens.spacing[2] }}>
+                          <Text size="sm" weight="bold" color="secondary">
+                            {language === 'zh' ? `规则 ${index + 1}` : `Rule ${index + 1}`}
+                          </Text>
+                          <Button
+                            type="button"
+                            variant="text"
+                            size="sm"
+                            onClick={() => removeRule(index)}
+                            style={{ padding: 0, color: '#ff6b6b', fontSize: tokens.typography.fontSize.xs }}
+                          >
+                            {language === 'zh' ? '删除' : 'Delete'}
+                          </Button>
+                        </Box>
+                        
+                        <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
+                          <Box>
+                            <Text size="xs" color="tertiary" style={{ marginBottom: 4 }}>中文</Text>
+                            <input
+                              type="text"
+                              value={rule.zh}
+                              onChange={(e) => updateRule(index, 'zh', e.target.value)}
+                              style={{ ...inputStyle, padding: tokens.spacing[2], fontSize: tokens.typography.fontSize.sm }}
+                              placeholder="规则内容（中文）"
+                            />
+                          </Box>
+                          {showMultiLang && (
+                            <Box>
+                              <Text size="xs" color="tertiary" style={{ marginBottom: 4 }}>English</Text>
+                              <input
+                                type="text"
+                                value={rule.en}
+                                onChange={(e) => updateRule(index, 'en', e.target.value)}
+                                style={{ ...inputStyle, padding: tokens.spacing[2], fontSize: tokens.typography.fontSize.sm }}
+                                placeholder="Rule content (English)"
+                              />
+                            </Box>
+                          )}
+                        </Box>
+                      </Box>
+                    ))}
+                  </Box>
+                )}
+
+                {/* 添加新规则 */}
+                <Box
+                  style={{
+                    padding: tokens.spacing[3],
+                    background: tokens.colors.bg.secondary,
+                    borderRadius: tokens.radius.lg,
+                    border: `1px dashed ${tokens.colors.border.primary}`,
+                  }}
+                >
+                  <Text size="sm" color="tertiary" style={{ marginBottom: tokens.spacing[2] }}>
+                    {language === 'zh' ? '添加新规则' : 'Add New Rule'}
+                  </Text>
+                  <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
+                    <input
+                      type="text"
+                      value={newRuleZh}
+                      onChange={(e) => setNewRuleZh(e.target.value)}
+                      style={{ ...inputStyle, padding: tokens.spacing[2], fontSize: tokens.typography.fontSize.sm }}
+                      placeholder={language === 'zh' ? '输入规则内容（中文）' : 'Enter rule (Chinese)'}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault()
+                          addRule()
+                        }
+                      }}
+                    />
+                    {showMultiLang && (
+                      <input
+                        type="text"
+                        value={newRuleEn}
+                        onChange={(e) => setNewRuleEn(e.target.value)}
+                        style={{ ...inputStyle, padding: tokens.spacing[2], fontSize: tokens.typography.fontSize.sm }}
+                        placeholder="Enter rule (English)"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault()
+                            addRule()
+                          }
+                        }}
+                      />
+                    )}
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      onClick={addRule}
+                      disabled={!newRuleZh.trim() && !newRuleEn.trim()}
+                      style={{ alignSelf: 'flex-start' }}
+                    >
+                      + {language === 'zh' ? '添加规则' : 'Add Rule'}
+                    </Button>
+                  </Box>
+                </Box>
+              </Box>
 
               {/* 小组头像 URL */}
               <Box>
@@ -452,15 +650,15 @@ export default function ApplyGroupPage() {
                 </Text>
                 <Text size="sm" color="tertiary" style={{ marginBottom: tokens.spacing[3] }}>
                   {language === 'zh' 
-                    ? '自定义小组内角色的称呼（可选，中英文至少填一种）' 
-                    : 'Customize role names for your group (optional, fill at least one language)'}
+                    ? '自定义小组内角色的称呼（可选）' 
+                    : 'Customize role names for your group (optional)'}
                 </Text>
 
                 <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}>
-                  {/* 管理员（包含组长和管理员） */}
+                  {/* 管理员 */}
                   <Box style={{ display: 'grid', gridTemplateColumns: '100px 1fr 1fr', gap: tokens.spacing[2], alignItems: 'center' }}>
                     <Text size="sm" color="secondary">
-                      {language === 'zh' ? '组长/管理员' : 'Admin'}
+                      {language === 'zh' ? '管理员' : 'Admin'}
                     </Text>
                     <input
                       type="text"
@@ -541,4 +739,3 @@ export default function ApplyGroupPage() {
     </Box>
   )
 }
-

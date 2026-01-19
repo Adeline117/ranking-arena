@@ -9,14 +9,6 @@
       "schedule": "0 * * * *"
     },
     {
-      "path": "/api/cron/check-alerts?shard=1/2",
-      "schedule": "*/30 * * * *"
-    },
-    {
-      "path": "/api/cron/check-alerts?shard=2/2",
-      "schedule": "15,45 * * * *"
-    },
-    {
       "path": "/api/cron/check-data-freshness",
       "schedule": "0 */3 * * *"
     },
@@ -117,15 +109,6 @@
         {
           "key": "Cache-Control",
           "value": "s-maxage=120, stale-while-revalidate=600"
-        }
-      ]
-    },
-    {
-      "source": "/api/journals",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "s-maxage=30, stale-while-revalidate=120"
         }
       ]
     },

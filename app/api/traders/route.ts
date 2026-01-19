@@ -40,8 +40,17 @@ const ALL_SOURCES = [
 ]
 
 // 需要特殊处理 PnL 门槛的交易所
-// Bybit 的 PnL 是跟单者盈亏，不是交易员自身盈亏
-const SKIP_PNL_THRESHOLD_SOURCES = ['bybit']
+// 这些交易所的 API 不返回 PnL 数据或 PnL 含义不同
+const SKIP_PNL_THRESHOLD_SOURCES = [
+  'bybit',          // PnL 是跟单者盈亏，不是交易员自身盈亏
+  'bitget_futures', // API 不返回 PnL 数据
+  'bitget_spot',    // API 不返回 PnL 数据
+  'kucoin',         // API 不返回 PnL 数据
+  'coinex',         // PnL 数据不完整
+  'mexc',           // API 不返回 PnL 数据
+  'gmx',            // 链上数据，PnL 计算方式不同
+  'okx_web3',       // 链上数据，PnL 计算方式不同
+]
 
 // 数据时效性：只取最近 24 小时内的数据
 const DATA_FRESHNESS_HOURS = 24
@@ -66,7 +75,7 @@ interface TraderData {
   handle: string
   roi: number
   pnl: number
-  win_rate: number
+  win_rate: number | null
   max_drawdown: number | null
   trades_count: number | null
   followers: number
@@ -178,7 +187,7 @@ export const GET = withPublic(
           handle: info.handle || item.source_trader_id,
           roi: item.roi ?? 0,
           pnl: item.pnl ?? 0,
-          win_rate: item.win_rate ?? 0,
+          win_rate: item.win_rate,  // 保留 null，让 Arena Score 计算函数处理
           max_drawdown: item.max_drawdown,
           trades_count: item.trades_count,
           followers: item.followers || 0,
@@ -192,6 +201,7 @@ export const GET = withPublic(
     // 等待所有查询完成
     const results = await Promise.all(sourcePromises)
     results.forEach(traders => allTraders.push(...traders))
+    
 
     // 统一排名计算逻辑：
     // 1. 计算每个交易员的 Arena Score

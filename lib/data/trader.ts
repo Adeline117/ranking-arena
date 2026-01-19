@@ -34,12 +34,14 @@ export interface TraderSourceRecord {
 export interface TraderProfile {
   handle: string
   id: string
+  uid?: number // 数字用户编号，用于展示和搜索
   bio?: string
   followers?: number
   following?: number // 关注的用户数量 (user_follows)
   followingTraders?: number // 关注的交易员数量 (trader_follows)
   copiers?: number
   avatar_url?: string
+  cover_url?: string // 用户主页背景图片
   isRegistered?: boolean
   source?: string
   // 隐私设置

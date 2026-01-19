@@ -11,7 +11,6 @@
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { alertWarning, alertError } from '@/lib/utils/alerts'
 import { isAuthorized, getSupabaseEnv, getSupportedPlatforms } from '@/lib/cron/utils'
 
 export const runtime = 'nodejs'
@@ -139,39 +138,19 @@ export async function GET(req: Request) {
     }
   }
 
-  // 发送告警
+  // 记录过期数据信息
   if (criticalPlatforms.length > 0) {
     const criticalList = criticalPlatforms
       .map(p => `${PLATFORM_NAMES[p] || p}`)
       .join(', ')
     
-    await alertError(
-      '数据严重过期警告',
-      `以下平台数据超过 24 小时未更新:\n${criticalList}\n\n请立即检查爬虫状态！`,
-      {
-        criticalPlatforms,
-        threshold: '24小时',
-        type: 'data_freshness_critical',
-      }
-    ).catch(err => {
-      console.error('[DataFreshness] 发送告警失败:', err)
-    })
+    console.error(`[DataFreshness] 数据严重过期: ${criticalList} - 超过 24 小时未更新`)
   } else if (stalePlatforms.length > 0) {
     const staleList = stalePlatforms
       .map(p => `${PLATFORM_NAMES[p] || p}`)
       .join(', ')
     
-    await alertWarning(
-      '数据过期警告',
-      `以下平台数据超过 12 小时未更新:\n${staleList}\n\n建议检查爬虫运行状态`,
-      {
-        stalePlatforms,
-        threshold: '12小时',
-        type: 'data_freshness_warning',
-      }
-    ).catch(err => {
-      console.error('[DataFreshness] 发送告警失败:', err)
-    })
+    console.warn(`[DataFreshness] 数据过期: ${staleList} - 超过 12 小时未更新`)
   }
 
   // 统计

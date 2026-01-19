@@ -259,6 +259,7 @@ export const RiskMetricsSchema = z.object({
 /** 用户资料 */
 export const UserProfileSchema = z.object({
   id: UUIDSchema,
+  uid: z.number().int().positive().optional().nullable(), // 数字用户编号
   handle: z.string().min(3).max(30),
   display_name: z.string().max(50).optional().nullable(),
   bio: z.string().max(500).optional().nullable(),

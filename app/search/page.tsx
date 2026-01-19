@@ -10,11 +10,12 @@ import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 
 type SearchResult = {
-  type: 'trader' | 'post' | 'group'
+  type: 'trader' | 'post' | 'group' | 'user'
   id: string
   title: string
   subtitle?: string
   meta?: string
+  uid?: number // 用户数字编号
 }
 
 // 高亮样式 - 使用 CSS 变量实现主题一致性
@@ -32,7 +33,7 @@ function SearchContent() {
   const [results, setResults] = useState<SearchResult[]>([])
   const [loading, setLoading] = useState(false)
   const [email, setEmail] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<'all' | 'traders' | 'posts' | 'groups'>('all')
+  const [activeTab, setActiveTab] = useState<'all' | 'users' | 'traders' | 'posts' | 'groups'>('all')
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -85,6 +86,51 @@ function SearchContent() {
       const results: SearchResult[] = []
 
       try {
+        // 搜索用户（通过 handle 或 UID）
+        const isNumericQuery = /^\d+$/.test(query.trim())
+        
+        if (isNumericQuery) {
+          // 按 UID 搜索
+          const { data: usersByUid } = await supabase
+            .from('user_profiles')
+            .select('id, handle, avatar_url, bio, uid')
+            .eq('uid', parseInt(query.trim()))
+            .limit(10)
+          
+          if (usersByUid) {
+            usersByUid.forEach((u: any) => {
+              results.push({
+                type: 'user',
+                id: u.id,
+                title: u.handle || '未设置昵称',
+                subtitle: u.bio?.substring(0, 80) || '',
+                meta: `UID: ${u.uid}`,
+                uid: u.uid,
+              })
+            })
+          }
+        } else {
+          // 按 handle 搜索
+          const { data: usersByHandle } = await supabase
+            .from('user_profiles')
+            .select('id, handle, avatar_url, bio, uid')
+            .ilike('handle', `%${query}%`)
+            .limit(10)
+          
+          if (usersByHandle) {
+            usersByHandle.forEach((u: any) => {
+              results.push({
+                type: 'user',
+                id: u.id,
+                title: u.handle || '未设置昵称',
+                subtitle: u.bio?.substring(0, 80) || '',
+                meta: u.uid ? `UID: ${u.uid}` : undefined,
+                uid: u.uid,
+              })
+            })
+          }
+        }
+
         // 搜索交易者
         // 交易员数据来自 trader_sources（避免不存在的 traders 表）
         const { data: traders } = await supabase
@@ -156,6 +202,7 @@ function SearchContent() {
   const filteredResults = activeTab === 'all' 
     ? results 
     : results.filter(r => {
+        if (activeTab === 'users') return r.type === 'user'
         if (activeTab === 'traders') return r.type === 'trader'
         if (activeTab === 'groups') return r.type === 'group'
         if (activeTab === 'posts') return r.type === 'post'
@@ -163,6 +210,7 @@ function SearchContent() {
       })
 
   const getHref = (result: SearchResult) => {
+    if (result.type === 'user') return `/u/${encodeURIComponent(result.title)}`
     if (result.type === 'trader') return `/trader/${encodeURIComponent(result.title)}`
     if (result.type === 'post') return `/post/${result.id}`
     if (result.type === 'group') return `/groups/${result.id}`
@@ -170,6 +218,7 @@ function SearchContent() {
   }
 
   const getIcon = (type: string) => {
+    if (type === 'user') return 'U'
     if (type === 'trader') return 'T'
     if (type === 'post') return 'P'
     if (type === 'group') return 'G'
@@ -209,7 +258,7 @@ function SearchContent() {
             marginBottom: '20px',
             paddingBottom: '12px',
           }}>
-            {(['all', 'traders', 'posts', 'groups'] as const).map((tab) => (
+            {(['all', 'users', 'traders', 'posts', 'groups'] as const).map((tab) => (
               <button
                 key={tab}
                 className="search-tab-button btn-press"
@@ -241,7 +290,7 @@ function SearchContent() {
                   }
                 }}
               >
-                {tab === 'all' ? '全部' : tab === 'traders' ? '交易者' : tab === 'posts' ? '帖子' : '小组'}
+                {tab === 'all' ? '全部' : tab === 'users' ? '用户' : tab === 'traders' ? '交易者' : tab === 'posts' ? '帖子' : '小组'}
               </button>
             ))}
           </div>
@@ -297,21 +346,25 @@ function SearchContent() {
                     width: 44,
                     height: 44,
                     borderRadius: tokens.radius.lg,
-                    background: result.type === 'trader' 
-                      ? tokens.gradient.successSubtle 
-                      : result.type === 'post' 
-                        ? tokens.gradient.primarySubtle 
-                        : tokens.gradient.warningSubtle,
+                    background: result.type === 'user'
+                      ? 'linear-gradient(135deg, rgba(139, 111, 168, 0.2), rgba(139, 111, 168, 0.1))'
+                      : result.type === 'trader' 
+                        ? tokens.gradient.successSubtle 
+                        : result.type === 'post' 
+                          ? tokens.gradient.primarySubtle 
+                          : tokens.gradient.warningSubtle,
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     fontSize: '18px',
                     fontWeight: 900,
-                    color: result.type === 'trader' 
-                      ? tokens.colors.accent.success 
-                      : result.type === 'post' 
-                        ? tokens.colors.accent.primary 
-                        : tokens.colors.accent.warning,
+                    color: result.type === 'user'
+                      ? '#8b6fa8'
+                      : result.type === 'trader' 
+                        ? tokens.colors.accent.success 
+                        : result.type === 'post' 
+                          ? tokens.colors.accent.primary 
+                          : tokens.colors.accent.warning,
                     flexShrink: 0,
                   }}>
                     {getIcon(result.type)}

@@ -23,7 +23,17 @@ export async function POST(request: NextRequest) {
 
     // 解析请求体
     const body = await request.json()
-    const { name, name_en, description, description_en, avatar_url, role_names } = body
+    const { 
+      name, 
+      name_en, 
+      description, 
+      description_en, 
+      avatar_url, 
+      role_names,
+      rules_json,
+      rules,
+      rules_en
+    } = body
 
     // 验证必填字段
     if (!name || typeof name !== 'string' || name.trim().length === 0) {
@@ -84,6 +94,9 @@ export async function POST(request: NextRequest) {
         description_en: description_en?.trim() || null,
         avatar_url: avatar_url || null,
         role_names: finalRoleNames,
+        rules_json: rules_json || null,
+        rules: rules?.trim() || null,
+        rules_en: rules_en?.trim() || null,
         status: 'pending'
       })
       .select()
@@ -141,4 +154,3 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: '服务器错误' }, { status: 500 })
   }
 }
-
