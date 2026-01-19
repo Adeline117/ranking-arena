@@ -927,97 +927,178 @@ export default function SettingsPage() {
           <Text size="lg" weight="black" style={{ marginBottom: tokens.spacing[4] }}>
             修改密码
           </Text>
-          <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
-            <input
-              type="password"
-              value={currentPassword}
-              onChange={(e) => setCurrentPassword(e.target.value)}
-              placeholder="当前密码"
+          
+          {/* 切换修改方式 */}
+          <Box style={{ display: 'flex', gap: tokens.spacing[2], marginBottom: tokens.spacing[4] }}>
+            <button
+              onClick={() => setPasswordResetMode('password')}
               style={{
-                width: '100%',
-                padding: tokens.spacing[3],
+                flex: 1,
+                padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
                 borderRadius: tokens.radius.md,
-                border: `1px solid ${tokens.colors.border.primary}`,
-                background: tokens.colors.bg.primary,
-                color: tokens.colors.text.primary,
-                fontSize: tokens.typography.fontSize.base,
-                fontFamily: tokens.typography.fontFamily.sans.join(', '),
-                outline: 'none',
+                border: `1px solid ${passwordResetMode === 'password' ? tokens.colors.accent.primary : tokens.colors.border.primary}`,
+                background: passwordResetMode === 'password' ? `${tokens.colors.accent.primary}15` : 'transparent',
+                color: passwordResetMode === 'password' ? tokens.colors.accent.primary : tokens.colors.text.secondary,
+                fontSize: tokens.typography.fontSize.sm,
+                fontWeight: tokens.typography.fontWeight.bold,
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
               }}
-            />
-            <Box>
+            >
+              使用当前密码
+            </button>
+            <button
+              onClick={() => setPasswordResetMode('code')}
+              style={{
+                flex: 1,
+                padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+                borderRadius: tokens.radius.md,
+                border: `1px solid ${passwordResetMode === 'code' ? tokens.colors.accent.primary : tokens.colors.border.primary}`,
+                background: passwordResetMode === 'code' ? `${tokens.colors.accent.primary}15` : 'transparent',
+                color: passwordResetMode === 'code' ? tokens.colors.accent.primary : tokens.colors.text.secondary,
+                fontSize: tokens.typography.fontSize.sm,
+                fontWeight: tokens.typography.fontWeight.bold,
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+              }}
+            >
+              忘记密码？邮箱验证
+            </button>
+          </Box>
+
+          {passwordResetMode === 'password' ? (
+            /* 通过当前密码修改 */
+            <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
               <input
                 type="password"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                onBlur={() => markTouched('newPassword')}
-                placeholder="新密码（至少6位）"
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                placeholder="当前密码"
                 style={{
                   width: '100%',
                   padding: tokens.spacing[3],
                   borderRadius: tokens.radius.md,
-                  border: `1px solid ${touchedFields.newPassword && !newPasswordValidation.valid ? '#ff7c7c' : tokens.colors.border.primary}`,
+                  border: `1px solid ${tokens.colors.border.primary}`,
                   background: tokens.colors.bg.primary,
                   color: tokens.colors.text.primary,
                   fontSize: tokens.typography.fontSize.base,
                   fontFamily: tokens.typography.fontFamily.sans.join(', '),
                   outline: 'none',
-                  transition: 'border-color 0.2s ease',
                 }}
               />
-              {/* 实时密码验证 */}
-              {touchedFields.newPassword && newPassword && !newPasswordValidation.valid && (
-                <Text size="xs" style={{ color: '#ff7c7c', marginTop: tokens.spacing[1] }}>
-                  ✕ {newPasswordValidation.message}
-                </Text>
-              )}
-              {newPassword && (
-                <Text size="xs" color="tertiary" style={{ marginTop: tokens.spacing[1] }}>
-                  {newPassword.length}/6 字符
-                </Text>
-              )}
+              <Box>
+                <input
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  onBlur={() => markTouched('newPassword')}
+                  placeholder="新密码（至少6位）"
+                  style={{
+                    width: '100%',
+                    padding: tokens.spacing[3],
+                    borderRadius: tokens.radius.md,
+                    border: `1px solid ${touchedFields.newPassword && !newPasswordValidation.valid ? '#ff7c7c' : tokens.colors.border.primary}`,
+                    background: tokens.colors.bg.primary,
+                    color: tokens.colors.text.primary,
+                    fontSize: tokens.typography.fontSize.base,
+                    fontFamily: tokens.typography.fontFamily.sans.join(', '),
+                    outline: 'none',
+                    transition: 'border-color 0.2s ease',
+                  }}
+                />
+                {/* 实时密码验证 */}
+                {touchedFields.newPassword && newPassword && !newPasswordValidation.valid && (
+                  <Text size="xs" style={{ color: '#ff7c7c', marginTop: tokens.spacing[1] }}>
+                    ✕ {newPasswordValidation.message}
+                  </Text>
+                )}
+                {newPassword && (
+                  <Text size="xs" color="tertiary" style={{ marginTop: tokens.spacing[1] }}>
+                    {newPassword.length}/6 字符
+                  </Text>
+                )}
+              </Box>
+              <Box>
+                <input
+                  type="password"
+                  value={confirmNewPassword}
+                  onChange={(e) => setConfirmNewPassword(e.target.value)}
+                  onBlur={() => markTouched('confirmPassword')}
+                  placeholder="确认新密码"
+                  style={{
+                    width: '100%',
+                    padding: tokens.spacing[3],
+                    borderRadius: tokens.radius.md,
+                    border: `1px solid ${touchedFields.confirmPassword && !confirmPasswordValidation.valid ? '#ff7c7c' : tokens.colors.border.primary}`,
+                    background: tokens.colors.bg.primary,
+                    color: tokens.colors.text.primary,
+                    fontSize: tokens.typography.fontSize.base,
+                    fontFamily: tokens.typography.fontFamily.sans.join(', '),
+                    outline: 'none',
+                    transition: 'border-color 0.2s ease',
+                  }}
+                />
+                {/* 确认密码匹配验证 */}
+                {touchedFields.confirmPassword && confirmNewPassword && (
+                  <Box style={{ marginTop: tokens.spacing[1] }}>
+                    {confirmPasswordValidation.valid ? (
+                      <Text size="xs" style={{ color: '#2fe57d' }}>✓ 密码匹配</Text>
+                    ) : (
+                      <Text size="xs" style={{ color: '#ff7c7c' }}>✕ {confirmPasswordValidation.message}</Text>
+                    )}
+                  </Box>
+                )}
+              </Box>
+              <Box style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <Button
+                  variant="secondary"
+                  onClick={handleChangePassword}
+                  disabled={savingPassword || !currentPassword || !newPasswordValidation.valid || !confirmPasswordValidation.valid}
+                >
+                  {savingPassword ? '保存中...' : '修改密码'}
+                </Button>
+              </Box>
             </Box>
-            <Box>
-              <input
-                type="password"
-                value={confirmNewPassword}
-                onChange={(e) => setConfirmNewPassword(e.target.value)}
-                onBlur={() => markTouched('confirmPassword')}
-                placeholder="确认新密码"
-                style={{
-                  width: '100%',
-                  padding: tokens.spacing[3],
-                  borderRadius: tokens.radius.md,
-                  border: `1px solid ${touchedFields.confirmPassword && !confirmPasswordValidation.valid ? '#ff7c7c' : tokens.colors.border.primary}`,
-                  background: tokens.colors.bg.primary,
-                  color: tokens.colors.text.primary,
-                  fontSize: tokens.typography.fontSize.base,
-                  fontFamily: tokens.typography.fontFamily.sans.join(', '),
-                  outline: 'none',
-                  transition: 'border-color 0.2s ease',
-                }}
-              />
-              {/* 确认密码匹配验证 */}
-              {touchedFields.confirmPassword && confirmNewPassword && (
-                <Box style={{ marginTop: tokens.spacing[1] }}>
-                  {confirmPasswordValidation.valid ? (
-                    <Text size="xs" style={{ color: '#2fe57d' }}>✓ 密码匹配</Text>
-                  ) : (
-                    <Text size="xs" style={{ color: '#ff7c7c' }}>✕ {confirmPasswordValidation.message}</Text>
-                  )}
+          ) : (
+            /* 通过邮箱验证码修改 */
+            <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
+              <Text size="sm" color="secondary">
+                将发送密码重置链接到您的邮箱：{email}
+              </Text>
+              <Text size="xs" color="tertiary">
+                点击邮件中的链接即可设置新密码，链接有效期为 1 小时
+              </Text>
+              <Box style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <Button
+                  variant="secondary"
+                  onClick={handleSendResetCode}
+                  disabled={sendingResetCode || resetCountdown > 0}
+                >
+                  {sendingResetCode 
+                    ? '发送中...' 
+                    : resetCountdown > 0 
+                      ? `${resetCountdown}秒后重发` 
+                      : resetCodeSent 
+                        ? '重新发送' 
+                        : '发送重置邮件'}
+                </Button>
+              </Box>
+              {resetCodeSent && (
+                <Box
+                  style={{
+                    padding: tokens.spacing[3],
+                    borderRadius: tokens.radius.md,
+                    background: `${tokens.colors.accent.success}15`,
+                    border: `1px solid ${tokens.colors.accent.success}30`,
+                  }}
+                >
+                  <Text size="sm" style={{ color: tokens.colors.accent.success }}>
+                    ✓ 重置邮件已发送，请查收邮箱并点击链接重置密码
+                  </Text>
                 </Box>
               )}
             </Box>
-            <Box style={{ display: 'flex', justifyContent: 'flex-end' }}>
-              <Button
-                variant="secondary"
-                onClick={handleChangePassword}
-                disabled={savingPassword || !currentPassword || !newPasswordValidation.valid || !confirmPasswordValidation.valid}
-              >
-                {savingPassword ? '保存中...' : '修改密码'}
-              </Button>
-            </Box>
-          </Box>
+          )}
         </Box>
 
         {/* Email Change Section */}

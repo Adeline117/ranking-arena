@@ -48,6 +48,8 @@ type Group = {
   rules_en?: string | null
   rules_json?: Array<{ zh: string; en: string }> | null
   role_names?: { admin: { zh: string; en: string }; member: { zh: string; en: string } } | null
+  created_by?: string | null
+  created_at?: string | null
 }
 
 type Rule = {
@@ -139,12 +141,16 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
           setUserRole(memberData.role as 'owner' | 'admin' | 'member')
         }
 
-        // 获取成员列表
-        const { data: membersData } = await supabase
+        // 获取成员列表（只查询基础字段，避免依赖新字段）
+        const { data: membersData, error: membersError } = await supabase
           .from('group_members')
-          .select('user_id, role, joined_at, muted_until, mute_reason')
+          .select('user_id, role, joined_at')
           .eq('group_id', groupId)
           .order('role', { ascending: true })
+
+        if (membersError) {
+          console.error('Error loading members:', membersError)
+        }
 
         if (membersData && membersData.length > 0) {
           const userIds = membersData.map(m => m.user_id)
@@ -170,29 +176,50 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
             })
 
           setMembers(sortedMembers as GroupMember[])
+        } else if (groupData?.created_by) {
+          // 如果没有成员数据但有创建者，添加创建者作为组长
+          const { data: ownerProfile } = await supabase
+            .from('user_profiles')
+            .select('id, handle, avatar_url')
+            .eq('id', groupData.created_by)
+            .single()
+
+          if (ownerProfile) {
+            setMembers([{
+              user_id: groupData.created_by,
+              role: 'owner',
+              handle: ownerProfile.handle,
+              avatar_url: ownerProfile.avatar_url,
+              joined_at: groupData.created_at || null,
+            }])
+          }
         }
 
-        // 获取帖子（包括已删除的）
-        const { data: postsData } = await supabase
+        // 获取帖子
+        const { data: postsData, error: postsError } = await supabase
           .from('posts')
-          .select('id, title, content, author_handle, created_at, deleted_at')
+          .select('id, title, content, author_handle, created_at')
           .eq('group_id', groupId)
           .order('created_at', { ascending: false })
           .limit(50)
 
-        setPosts((postsData || []) as Post[])
+        if (postsError) {
+          console.error('Error loading posts:', postsError)
+        }
+
+        setPosts((postsData || []).map(p => ({ ...p, deleted_at: null })) as Post[])
 
         // 获取评论
         const postIds = (postsData || []).map(p => p.id)
         if (postIds.length > 0) {
           const { data: commentsData } = await supabase
             .from('comments')
-            .select('id, content, author_handle, created_at, deleted_at, post_id')
+            .select('id, content, author_handle, created_at, post_id')
             .in('post_id', postIds)
             .order('created_at', { ascending: false })
             .limit(100)
 
-          setComments((commentsData || []) as Comment[])
+          setComments((commentsData || []).map(c => ({ ...c, deleted_at: null })) as Comment[])
         }
       } catch (err) {
         console.error('Error loading data:', err)
@@ -204,9 +231,10 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
     load()
   }, [groupId, userId])
 
-  // 检查权限
+  // 检查权限（兼容旧数据：admin 在旧系统中可能就是组长）
   const canManage = userRole === 'owner' || userRole === 'admin'
-  const isOwner = userRole === 'owner'
+  // 如果小组是当前用户创建的，或者角色是 owner，则是组长
+  const isOwner = userRole === 'owner' || (userRole === 'admin' && group?.created_by === userId)
 
   // 禁言成员
   const handleMute = async (targetUserId: string) => {
@@ -499,9 +527,16 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
         {activeTab === 'members' && (
           <Card title={language === 'zh' ? `成员列表 (${members.length})` : `Members (${members.length})`}>
             <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
+              {members.length === 0 && (
+                <Text color="tertiary" style={{ textAlign: 'center', padding: tokens.spacing[4] }}>
+                  {language === 'zh' ? '暂无成员数据' : 'No members data'}
+                </Text>
+              )}
               {members.map((member) => {
                 const isMuted = member.muted_until && new Date(member.muted_until) > new Date()
-                const canManageMember = (isOwner || (userRole === 'admin' && member.role === 'member')) && member.user_id !== userId
+                // 兼容旧数据：在没有 owner 角色的情况下，如果用户是创建者就是组长
+                const memberIsOwner = member.role === 'owner' || (member.role === 'admin' && group?.created_by === member.user_id)
+                const canManageMember = (isOwner || (userRole === 'admin' && member.role === 'member')) && member.user_id !== userId && !memberIsOwner
 
                 return (
                   <Box
@@ -546,15 +581,15 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
                             fontSize: tokens.typography.fontSize.xs,
                             padding: `2px ${tokens.spacing[2]}`,
                             borderRadius: tokens.radius.full,
-                            background: member.role === 'owner' 
+                            background: memberIsOwner
                               ? 'linear-gradient(135deg, #FFD700, #FFA500)'
                               : member.role === 'admin'
                                 ? 'rgba(139, 111, 168, 0.3)'
                                 : tokens.colors.bg.primary,
-                            color: member.role === 'owner' ? '#000' : tokens.colors.text.secondary,
+                            color: memberIsOwner ? '#000' : tokens.colors.text.secondary,
                           }}
                         >
-                          {member.role === 'owner' 
+                          {memberIsOwner
                             ? (language === 'zh' ? '组长' : 'Owner')
                             : member.role === 'admin'
                               ? (language === 'zh' ? '管理员' : 'Admin')
@@ -602,13 +637,13 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
                         )}
 
                         {/* 设置管理员（仅组长可操作） */}
-                        {isOwner && member.role !== 'owner' && (
+                        {isOwner && !memberIsOwner && (
                           <Button
                             variant="secondary"
                             size="sm"
                             onClick={() => handleSetRole(member.user_id, member.role === 'admin' ? 'member' : 'admin')}
                           >
-                            {member.role === 'admin' 
+                            {member.role === 'admin' && !memberIsOwner
                               ? (language === 'zh' ? '撤销管理员' : 'Remove Admin')
                               : (language === 'zh' ? '设为管理员' : 'Make Admin')}
                           </Button>

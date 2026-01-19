@@ -1092,7 +1092,7 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
                       {(userRole === 'owner' || userRole === 'admin') && (
                         <Link href={`/groups/${groupId}/manage`}>
                           <Button variant="secondary" size="sm">
-                            ⚙️ {language === 'zh' ? '管理' : 'Manage'}
+                            {language === 'zh' ? '管理' : 'Manage'}
                           </Button>
                         </Link>
                       )}
@@ -1107,7 +1107,7 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
                           }}
                           style={{ color: '#ff6b6b' }}
                         >
-                          ⚠️ {language === 'zh' ? '投诉' : 'Report'}
+                          {language === 'zh' ? '投诉' : 'Report'}
                         </Button>
                       )}
                       <Button
