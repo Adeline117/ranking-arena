@@ -260,12 +260,12 @@ function SearchContent() {
             description={`没有找到与"${query}"相关的内容`}
           />
         ) : (
-          <div className="stagger-children" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div className="stagger-children search-results" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             {filteredResults.map((result) => (
               <Link
                 key={`${result.type}-${result.id}`}
                 href={getHref(result)}
-                className="search-result-item glass-card-hover list-item-indicator"
+                className="search-result-item search-result-card glass-card-hover list-item-indicator"
                 style={{
                   display: 'block',
                   padding: '20px',

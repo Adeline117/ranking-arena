@@ -82,9 +82,9 @@ export default function StatsPage({
       />
 
       {/* Chart + Compare Two Columns */}
-      <Box style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: tokens.spacing[6] }}>
+      <Box className="stats-two-col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: tokens.spacing[6] }}>
         <EquityCurveSection equityCurve={equityCurve} traderHandle={traderHandle} delay={0.1} />
-        <ComparePortfolioSection traderHandle={traderHandle} delay={0.15} />
+        <ComparePortfolioSection traderHandle={traderHandle} equityCurve={equityCurve} delay={0.15} />
       </Box>
 
       {/* Trading Section */}
@@ -142,6 +142,7 @@ function TradingSection({
 
       {trading && (trading.totalTrades12M > 0 || trading.profitableTradesPct > 0) ? (
         <Box
+          className="trading-grid"
           style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(3, 1fr)',
@@ -184,7 +185,7 @@ function TradingSection({
             Additional stats
           </Text>
         </Box>
-        <Box style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: tokens.spacing[4] }}>
+        <Box className="trading-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: tokens.spacing[4] }}>
           <MiniKpi 
             label={t('avgHoldingTime')} 
             value={additionalStats?.avgHoldingTime || 'N/A'} 
@@ -534,7 +535,15 @@ function SimpleLineChart({
 }
 
 // Compare Portfolio Section
-function ComparePortfolioSection({ traderHandle, delay }: { traderHandle: string; delay: number }) {
+function ComparePortfolioSection({ 
+  traderHandle, 
+  equityCurve,
+  delay 
+}: { 
+  traderHandle: string
+  equityCurve?: EquityCurveData
+  delay: number 
+}) {
   const { t } = useLanguage()
   const [period, setPeriod] = useState<'7D' | '30D' | '90D'>('90D')
   const [compareWith, setCompareWith] = useState<'BTC' | 'SPX500'>('BTC')
@@ -544,6 +553,15 @@ function ComparePortfolioSection({ traderHandle, delay }: { traderHandle: string
     const timer = setTimeout(() => setMounted(true), delay * 1000)
     return () => clearTimeout(timer)
   }, [delay])
+
+  // 获取当前周期的交易员数据
+  const currentData = equityCurve?.[period] || []
+  const hasData = currentData.length > 0
+  
+  // 计算交易员的总ROI
+  const traderTotalRoi = hasData 
+    ? currentData[currentData.length - 1]?.roi || 0
+    : undefined
 
   return (
     <Box 
@@ -586,16 +604,36 @@ function ComparePortfolioSection({ traderHandle, delay }: { traderHandle: string
         </Box>
       </Box>
 
-      <CompareChart height={220} period={period} compareWith={compareWith} />
+      {hasData ? (
+        <>
+          <CompareChart 
+            height={220} 
+            period={period} 
+            compareWith={compareWith} 
+            traderData={currentData}
+            traderHandle={traderHandle}
+          />
 
-      <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3], marginTop: tokens.spacing[4] }}>
-        <CompareRow name={traderHandle} pct={undefined} color={tokens.colors.accent.primary} />
-        <CompareRow name={compareWith} pct={undefined} color={tokens.colors.accent.warning} />
-      </Box>
-      
-      <Text size="xs" color="tertiary" style={{ marginTop: tokens.spacing[4], fontStyle: 'italic' }}>
-        对比数据需要更多历史数据支持
-      </Text>
+          <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3], marginTop: tokens.spacing[4] }}>
+            <CompareRow name={traderHandle} pct={traderTotalRoi} color={tokens.colors.accent.primary} />
+            <CompareRow name={compareWith} pct={undefined} color={tokens.colors.accent.warning} />
+          </Box>
+        </>
+      ) : (
+        <Box style={{ 
+          padding: tokens.spacing[8], 
+          textAlign: 'center',
+          background: tokens.colors.bg.tertiary,
+          borderRadius: tokens.radius.lg,
+        }}>
+          <Text size="sm" color="tertiary">
+            暂无对比数据
+          </Text>
+          <Text size="xs" color="tertiary" style={{ marginTop: tokens.spacing[2] }}>
+            需要更多历史收益数据才能生成对比图表
+          </Text>
+        </Box>
+      )}
     </Box>
   )
 }
@@ -603,11 +641,15 @@ function ComparePortfolioSection({ traderHandle, delay }: { traderHandle: string
 function CompareChart({ 
   height, 
   period,
-  compareWith
+  compareWith,
+  traderData: rawTraderData,
+  traderHandle
 }: { 
   height: number
   period: string
   compareWith: 'BTC' | 'SPX500'
+  traderData: Array<{ date: string; roi: number; pnl: number }>
+  traderHandle: string
 }) {
   const chartContainerRef = useRef<HTMLDivElement>(null)
   const [mounted, setMounted] = useState(false)
@@ -617,45 +659,40 @@ function CompareChart({
     setMounted(true)
   }, [])
   
-  // 生成对比数据（基于周期）- 使用固定种子避免重复渲染
+  // 使用真实交易员数据 + 生成对比资产数据
   const chartData = useMemo(() => {
     const days = period === '7D' ? 7 : period === '30D' ? 30 : 90
-    const now = new Date()
-    const traderData: LineData[] = []
-    const compareData: LineData[] = []
     
-    // 用户ROI曲线 - 假设交易员有较好表现
-    let traderValue = 100
-    // 比较资产曲线
+    // 转换交易员真实数据为图表格式
+    const traderChartData: LineData[] = rawTraderData.map(item => ({
+      time: item.date as Time,
+      value: 100 + item.roi, // ROI转换为以100为基准的值
+    }))
+    
+    // 生成对比资产曲线（BTC/SPX500）
+    const compareData: LineData[] = []
     const compareBaseReturn = compareWith === 'BTC' ? 12 : 6
     let compareValue = 100
     
-    // 使用确定性的伪随机数
-    const seed = days + (compareWith === 'BTC' ? 1 : 2)
+    // 使用确定性的伪随机数，基于 traderHandle 生成不同的种子
+    const handleHash = traderHandle.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)
+    const seed = days + (compareWith === 'BTC' ? 1 : 2) + handleHash
     const seededRandom = (i: number) => {
       const x = Math.sin(seed * 9999 + i * 7777) * 10000
       return x - Math.floor(x)
     }
     
-    for (let i = days; i >= 0; i--) {
-      const date = new Date(now)
-      date.setDate(date.getDate() - i)
-      const dateStr = date.toISOString().split('T')[0]
-      
-      // 用户ROI（趋势向上，波动较大）
-      const traderDailyChange = (seededRandom(i * 2) - 0.4) * 2.5 + (20 / days)
-      traderValue = Math.max(90, traderValue + traderDailyChange)
-      
-      // 比较资产（趋势平稳）
-      const compareDailyChange = (seededRandom(i * 2 + 1) - 0.45) * 1.5 + (compareBaseReturn / days)
-      compareValue = Math.max(95, compareValue + compareDailyChange)
-      
-      traderData.push({ time: dateStr as Time, value: traderValue })
-      compareData.push({ time: dateStr as Time, value: compareValue })
+    // 使用交易员数据的日期范围
+    if (rawTraderData.length > 0) {
+      rawTraderData.forEach((item, i) => {
+        const compareDailyChange = (seededRandom(i * 2 + 1) - 0.45) * 1.5 + (compareBaseReturn / days)
+        compareValue = Math.max(95, compareValue + compareDailyChange)
+        compareData.push({ time: item.date as Time, value: compareValue })
+      })
     }
     
-    return { traderData, compareData }
-  }, [period, compareWith])
+    return { traderData: traderChartData, compareData }
+  }, [period, compareWith, rawTraderData, traderHandle])
 
   useEffect(() => {
     if (!mounted || !chartContainerRef.current) return
@@ -919,7 +956,7 @@ function BreakdownSection({
       </Box>
 
       {/* Asset List */}
-      <Box style={{ 
+      <Box className="asset-grid" style={{ 
         display: 'grid', 
         gridTemplateColumns: 'repeat(3, 1fr)', 
         gap: tokens.spacing[3],

@@ -4,8 +4,12 @@
 
 export { BaseScraper, parseTraderFromApi } from './base.js'
 export { BinanceSpotScraper } from './binance-spot.js'
+export { BinanceFuturesScraper } from './binance-futures.js'
+export { BybitScraper } from './bybit.js'
 
 import { BinanceSpotScraper } from './binance-spot.js'
+import { BinanceFuturesScraper } from './binance-futures.js'
+import { BybitScraper } from './bybit.js'
 import type { DataSource } from '../types.js'
 import type { BaseScraper } from './base.js'
 
@@ -16,11 +20,15 @@ export function getScraperForSource(source: DataSource): BaseScraper | null {
   switch (source) {
     case 'binance_spot':
       return new BinanceSpotScraper()
+    case 'binance':
+      return new BinanceFuturesScraper()
+    case 'bybit':
+      return new BybitScraper()
     // TODO: 添加其他爬虫
-    // case 'binance':
-    //   return new BinanceFuturesScraper()
-    // case 'bybit':
-    //   return new BybitScraper()
+    // case 'bitget':
+    //   return new BitgetFuturesScraper()
+    // case 'bitget_spot':
+    //   return new BitgetSpotScraper()
     default:
       return null
   }
@@ -31,10 +39,13 @@ export function getScraperForSource(source: DataSource): BaseScraper | null {
  */
 export function getAvailableSources(): DataSource[] {
   return [
+    'binance',
     'binance_spot',
+    'bybit',
     // TODO: 添加其他数据源
-    // 'binance',
-    // 'bybit',
     // 'bitget',
+    // 'bitget_spot',
+    // 'mexc',
+    // 'coinex',
   ]
 }

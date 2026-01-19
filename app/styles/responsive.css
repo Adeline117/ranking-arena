@@ -85,7 +85,31 @@
   }
   
   .show-mobile {
-    display: none;
+    display: none !important;
+  }
+}
+
+/* ============================================
+   移动端底部导航栏
+   ============================================ */
+
+/* 移动端显示为 flex */
+.mobile-bottom-nav {
+  display: flex;
+}
+
+.mobile-bottom-nav-spacer {
+  display: block;
+}
+
+/* 桌面端完全隐藏 */
+@media (min-width: 768px) {
+  .mobile-bottom-nav {
+    display: none !important;
+  }
+  
+  .mobile-bottom-nav-spacer {
+    display: none !important;
   }
 }
 
@@ -368,5 +392,213 @@
   .fab {
     bottom: 24px;
     right: 24px;
+  }
+}
+
+/* ============================================
+   Stats 页面响应式布局
+   ============================================ */
+
+/* 移动端：双栏改为单栏 */
+.stats-two-col {
+  grid-template-columns: 1fr !important;
+}
+
+@media (min-width: 768px) {
+  .stats-two-col {
+    grid-template-columns: 1fr 1fr !important;
+  }
+}
+
+/* Stats 卡片在移动端减少内边距 */
+.stats-card {
+  padding: 16px !important;
+}
+
+@media (min-width: 768px) {
+  .stats-card {
+    padding: 24px !important;
+  }
+}
+
+/* Asset Breakdown 网格在移动端改为2列 */
+.stats-card .asset-grid {
+  grid-template-columns: repeat(2, 1fr) !important;
+}
+
+@media (min-width: 640px) {
+  .stats-card .asset-grid {
+    grid-template-columns: repeat(3, 1fr) !important;
+  }
+}
+
+/* Trading 统计在移动端改为单列 */
+.stats-card .trading-grid {
+  grid-template-columns: 1fr !important;
+}
+
+@media (min-width: 640px) {
+  .stats-card .trading-grid {
+    grid-template-columns: repeat(3, 1fr) !important;
+  }
+}
+
+/* ============================================
+   交易员头部响应式布局
+   ============================================ */
+
+.profile-header {
+  flex-direction: column !important;
+  align-items: center !important;
+  text-align: center;
+  padding: 16px !important;
+  gap: 16px;
+}
+
+@media (min-width: 768px) {
+  .profile-header {
+    flex-direction: row !important;
+    align-items: flex-start !important;
+    text-align: left;
+    padding: 24px !important;
+    gap: 0;
+  }
+}
+
+/* 头部操作按钮在移动端堆叠显示 */
+.profile-header .action-buttons {
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+@media (min-width: 768px) {
+  .profile-header .action-buttons {
+    justify-content: flex-start;
+  }
+}
+
+/* ============================================
+   Overview Performance Card 响应式
+   ============================================ */
+
+.performance-grid {
+  grid-template-columns: repeat(2, 1fr) !important;
+  gap: 12px !important;
+}
+
+@media (min-width: 640px) {
+  .performance-grid {
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 16px !important;
+  }
+}
+
+@media (min-width: 1024px) {
+  .performance-grid {
+    grid-template-columns: repeat(4, 1fr) !important;
+  }
+}
+
+/* ============================================
+   移动端数据显示优化
+   ============================================ */
+
+/* 确保数字不被截断 */
+.number-display {
+  white-space: nowrap;
+  overflow: visible;
+}
+
+/* 长文本使用省略号 */
+.text-truncate {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+/* 移动端表格横向滚动 */
+.table-scroll-mobile {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.table-scroll-mobile::-webkit-scrollbar {
+  height: 4px;
+}
+
+.table-scroll-mobile::-webkit-scrollbar-thumb {
+  background: var(--color-border-secondary);
+  border-radius: 2px;
+}
+
+/* ============================================
+   小组页面响应式
+   ============================================ */
+
+/* 小组页面三栏布局在移动端改为单栏 */
+.groups-grid {
+  grid-template-columns: 1fr !important;
+  gap: 16px !important;
+}
+
+/* 平板：两栏布局 */
+@media (min-width: 768px) {
+  .groups-grid {
+    grid-template-columns: 1fr 280px !important;
+    gap: 20px !important;
+  }
+}
+
+/* 桌面：三栏布局 */
+@media (min-width: 1024px) {
+  .groups-grid {
+    grid-template-columns: 260px 1fr 280px !important;
+    gap: 20px !important;
+  }
+}
+
+/* 小组卡片网格（用于小组列表页面的网格布局）*/
+.groups-card-grid {
+  grid-template-columns: 1fr !important;
+  gap: 12px !important;
+}
+
+@media (min-width: 640px) {
+  .groups-card-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 16px !important;
+  }
+}
+
+@media (min-width: 1024px) {
+  .groups-card-grid {
+    grid-template-columns: repeat(3, 1fr) !important;
+  }
+}
+
+/* ============================================
+   搜索页面响应式
+   ============================================ */
+
+.search-results {
+  gap: 12px !important;
+}
+
+@media (min-width: 768px) {
+  .search-results {
+    gap: 16px !important;
+  }
+}
+
+/* 搜索结果卡片在移动端更紧凑 */
+.search-result-card {
+  padding: 12px !important;
+}
+
+@media (min-width: 768px) {
+  .search-result-card {
+    padding: 16px !important;
   }
 }

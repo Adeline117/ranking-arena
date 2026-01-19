@@ -2,11 +2,18 @@
  * 缓存管理器
  * 统一管理 Redis 缓存，支持分布式部署环境
  * 当 Redis 不可用时自动回退到内存缓存
+ * 
+ * 注意：在客户端环境下只使用内存缓存，不加载 Redis
  */
 
-import { Redis } from '@upstash/redis'
 import { dataLogger } from '@/lib/utils/logger'
 import { getMemoryCache, MemoryCache } from './memory-fallback'
+
+// 检测是否在客户端环境
+const isClient = typeof window !== 'undefined'
+
+// 动态导入 Redis（仅服务端）
+type RedisClientType = Awaited<ReturnType<typeof import('redis')['createClient']>>
 
 // ============================================
 // 类型定义
@@ -34,53 +41,97 @@ interface CacheStats {
 // Redis 客户端状态
 // ============================================
 
-let redisClient: Redis | null = null
+let redisClient: RedisClientType | null = null
 let isInitialized = false
+let isConnecting = false
 let redisHealthy = true
 let lastHealthCheck = 0
 const HEALTH_CHECK_INTERVAL = 30000 // 30 秒健康检查间隔
 const MAX_CONSECUTIVE_ERRORS = 3
 let consecutiveErrors = 0
 
-function getRedis(): Redis | null {
-  if (!isInitialized) {
-    isInitialized = true
-    const url = process.env.UPSTASH_REDIS_REST_URL
-    const token = process.env.UPSTASH_REDIS_REST_TOKEN
-
-    if (!url || !token) {
-      dataLogger.warn('Redis 环境变量未配置，使用内存缓存')
-      redisHealthy = false
-      return null
-    }
-
-    try {
-      redisClient = new Redis({ url, token })
-    } catch (error) {
-      dataLogger.error('Redis 初始化失败:', error)
-      redisHealthy = false
-      return null
-    }
+async function getRedis(): Promise<RedisClientType | null> {
+  // 客户端环境直接返回 null，使用内存缓存
+  if (isClient) {
+    return null
   }
 
-  // 如果 Redis 被标记为不健康，检查是否需要重试
-  if (!redisHealthy && redisClient) {
-    const now = Date.now()
-    if (now - lastHealthCheck > HEALTH_CHECK_INTERVAL) {
-      lastHealthCheck = now
-      // 异步进行健康检查
-      checkRedisHealth().catch(() => {})
+  if (isInitialized && redisClient && redisClient.isOpen) {
+    if (!redisHealthy) {
+      const now = Date.now()
+      if (now - lastHealthCheck > HEALTH_CHECK_INTERVAL) {
+        lastHealthCheck = now
+        checkRedisHealth().catch(() => {})
+      }
     }
+    return redisHealthy ? redisClient : null
   }
 
-  return redisHealthy ? redisClient : null
+  if (isConnecting) {
+    await new Promise(resolve => setTimeout(resolve, 100))
+    return redisClient && redisClient.isOpen && redisHealthy ? redisClient : null
+  }
+
+  if (isInitialized && !redisClient) {
+    return null
+  }
+
+  isConnecting = true
+  isInitialized = true
+
+  const host = process.env.REDIS_HOST
+  const port = process.env.REDIS_PORT
+  const password = process.env.REDIS_PASSWORD
+  const username = process.env.REDIS_USERNAME || 'default'
+
+  if (!host || !password) {
+    dataLogger.warn('Redis 环境变量未配置，使用内存缓存')
+    redisHealthy = false
+    isConnecting = false
+    return null
+  }
+
+  try {
+    // 动态导入 Redis（仅服务端）
+    const { createClient } = await import('redis')
+    
+    redisClient = createClient({
+      username,
+      password,
+      socket: {
+        host,
+        port: parseInt(port || '6379', 10),
+        reconnectStrategy: (retries) => {
+          if (retries > 3) {
+            redisHealthy = false
+            return false
+          }
+          return Math.min(retries * 100, 1000)
+        },
+      },
+    })
+
+    redisClient.on('error', (err) => {
+      dataLogger.error('Redis 连接错误:', err.message)
+    })
+
+    await redisClient.connect()
+    dataLogger.info('Redis 缓存连接成功')
+    return redisClient
+  } catch (error) {
+    dataLogger.error('Redis 初始化失败:', error)
+    redisHealthy = false
+    return null
+  } finally {
+    isConnecting = false
+  }
 }
 
 /**
  * 检查 Redis 健康状态
  */
 async function checkRedisHealth(): Promise<boolean> {
-  if (!redisClient) return false
+  if (!redisClient || !redisClient.isOpen) return false
 
   try {
     await redisClient.ping()
@@ -157,18 +208,19 @@ export function resetCacheStats(): void {
  * 优先使用 Redis，失败时回退到内存缓存
  */
 export async function get<T>(key: string): Promise<T | null> {
-  const redis = getRedis()
+  const redis = await getRedis()
   const memoryCache = getMemoryCacheFallback()
 
   // 1. 尝试从 Redis 获取
   if (redis) {
     try {
-      const data = await redis.get<T>(key)
+      const data = await redis.get(key)
       if (data !== null) {
         stats.hits++
+        const parsed = JSON.parse(data) as T
         // 同时更新内存缓存（加速后续访问）
-        memoryCache.set(key, data, 60)
-        return data
+        memoryCache.set(key, parsed, 60)
+        return parsed
       }
     } catch (error) {
       handleRedisError(error)
@@ -192,7 +244,7 @@ export async function get<T>(key: string): Promise<T | null> {
  * 同时写入 Redis 和内存缓存
  */
 export async function set<T>(key: string, value: T, options: CacheOptions = {}): Promise<boolean> {
-  const redis = getRedis()
+  const redis = await getRedis()
   const memoryCache = getMemoryCacheFallback()
   const { ttl = 60, tags, skipMemory = false } = options
 
@@ -204,16 +256,16 @@ export async function set<T>(key: string, value: T, options: CacheOptions = {}):
   // 2. 尝试写入 Redis
   if (redis) {
     try {
-      await redis.setex(key, ttl, value)
+      await redis.setEx(key, ttl, JSON.stringify(value))
 
       // 如果有标签，将键添加到标签集合中
       if (tags && tags.length > 0) {
-        const pipeline = redis.pipeline()
+        const multi = redis.multi()
         for (const tag of tags) {
-          pipeline.sadd(`tag:${tag}`, key)
-          pipeline.expire(`tag:${tag}`, ttl * 2)
+          multi.sAdd(`tag:${tag}`, key)
+          multi.expire(`tag:${tag}`, ttl * 2)
         }
-        await pipeline.exec()
+        await multi.exec()
       }
 
       return true
@@ -232,7 +284,7 @@ export async function set<T>(key: string, value: T, options: CacheOptions = {}):
  * 删除缓存
  */
 export async function del(key: string): Promise<boolean> {
-  const redis = getRedis()
+  const redis = await getRedis()
   const memoryCache = getMemoryCacheFallback()
 
   // 删除内存缓存
@@ -256,7 +308,7 @@ export async function del(key: string): Promise<boolean> {
  * 批量删除缓存（按模式）
  */
 export async function delByPattern(pattern: string): Promise<number> {
-  const redis = getRedis()
+  const redis = await getRedis()
   const memoryCache = getMemoryCacheFallback()
 
   // 删除内存缓存（按前缀）
@@ -268,7 +320,7 @@ export async function delByPattern(pattern: string): Promise<number> {
     try {
       const keys = await redis.keys(pattern)
       if (keys.length > 0) {
-        await redis.del(...keys)
+        await redis.del(keys)
         return keys.length
       }
     } catch (error) {
@@ -284,12 +336,12 @@ export async function delByPattern(pattern: string): Promise<number> {
  * 按标签删除缓存
  */
 export async function delByTag(tag: string): Promise<number> {
-  const redis = getRedis()
+  const redis = await getRedis()
 
   if (!redis) return 0
 
   try {
-    const keys = await redis.smembers(`tag:${tag}`)
+    const keys = await redis.sMembers(`tag:${tag}`)
     if (keys.length === 0) return 0
 
     // 同时删除内存缓存
@@ -298,7 +350,7 @@ export async function delByTag(tag: string): Promise<number> {
       memoryCache.delete(key)
     }
 
-    await redis.del(...keys, `tag:${tag}`)
+    await redis.del([...keys, `tag:${tag}`])
     return keys.length
   } catch (error) {
     handleRedisError(error)
@@ -340,7 +392,7 @@ export async function getOrSetWithLock<T>(
   fetcher: () => Promise<T>,
   options: CacheOptions & { lockTtl?: number } = {}
 ): Promise<T> {
-  const redis = getRedis()
+  const redis = await getRedis()
   const { ttl = 60, lockTtl = 5 } = options
 
   // 尝试从缓存获取
@@ -359,8 +411,8 @@ export async function getOrSetWithLock<T>(
   // 尝试获取锁
   const lockKey = `lock:${key}`
   const lockAcquired = await redis.set(lockKey, '1', {
-    ex: lockTtl,
-    nx: true,
+    EX: lockTtl,
+    NX: true,
   })
 
   if (!lockAcquired) {
@@ -389,7 +441,7 @@ export async function getOrSetWithLock<T>(
  * 检查缓存是否存在
  */
 export async function exists(key: string): Promise<boolean> {
-  const redis = getRedis()
+  const redis = await getRedis()
   const memoryCache = getMemoryCacheFallback()
 
   // 先检查内存缓存
@@ -414,7 +466,7 @@ export async function exists(key: string): Promise<boolean> {
  * 获取缓存剩余 TTL
  */
 export async function ttl(key: string): Promise<number> {
-  const redis = getRedis()
+  const redis = await getRedis()
   if (!redis) return -2
 
   try {
@@ -429,11 +481,11 @@ export async function ttl(key: string): Promise<number> {
  * 增量操作
  */
 export async function incr(key: string, delta: number = 1): Promise<number | null> {
-  const redis = getRedis()
+  const redis = await getRedis()
   if (!redis) return null
 
   try {
-    return await redis.incrby(key, delta)
+    return await redis.incrBy(key, delta)
   } catch (error) {
     handleRedisError(error)
     return null
@@ -448,22 +500,24 @@ export async function incr(key: string, delta: number = 1): Promise<number | nul
  * 批量获取
  */
 export async function mget<T>(keys: string[]): Promise<(T | null)[]> {
-  const redis = getRedis()
+  const redis = await getRedis()
   const memoryCache = getMemoryCacheFallback()
 
   if (redis) {
     try {
-      const results = await redis.mget<T[]>(...keys)
-      results.forEach((r, i) => {
+      const results = await redis.mGet(keys)
+      return results.map((r, i) => {
         if (r !== null) {
           stats.hits++
+          const parsed = JSON.parse(r) as T
           // 同步到内存缓存
-          memoryCache.set(keys[i], r, 60)
+          memoryCache.set(keys[i], parsed, 60)
+          return parsed
         } else {
           stats.misses++
+          return null
         }
       })
-      return results
     } catch (error) {
       handleRedisError(error)
     }
@@ -483,24 +537,24 @@ export async function mget<T>(keys: string[]): Promise<(T | null)[]> {
  */
 export async function mset(
   entries: Array<{ key: string; value: unknown }>,
-  ttl: number = 60
+  ttlSeconds: number = 60
 ): Promise<boolean> {
-  const redis = getRedis()
+  const redis = await getRedis()
   const memoryCache = getMemoryCacheFallback()
 
   // 写入内存缓存
   for (const { key, value } of entries) {
-    memoryCache.set(key, value, ttl)
+    memoryCache.set(key, value, ttlSeconds)
   }
 
   // 写入 Redis
   if (redis) {
     try {
-      const pipeline = redis.pipeline()
+      const multi = redis.multi()
       for (const { key, value } of entries) {
-        pipeline.setex(key, ttl, value)
+        multi.setEx(key, ttlSeconds, JSON.stringify(value))
       }
-      await pipeline.exec()
+      await multi.exec()
       return true
     } catch (error) {
       handleRedisError(error)

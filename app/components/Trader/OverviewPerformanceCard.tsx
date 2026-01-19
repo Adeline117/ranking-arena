@@ -187,6 +187,7 @@ export default function OverviewPerformanceCard({ performance, profitableWeeksPc
         >
           {/* ROI & PnL - 主指标 */}
           <Box
+            className="performance-main-grid"
             style={{
               display: 'grid',
               gridTemplateColumns: '1fr 1fr',

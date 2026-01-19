@@ -171,11 +171,11 @@ export default function RankingTable(props: {
       'gmx': 'GMX',
     }
     
-    // 类型映射（中英文）
+    // 类型映射（中英文）- 统一颜色，不做颜色区分
     const typeMap: Record<string, { label: string; color: string }> = {
-      'futures': { label: '合约', color: tokens.colors.accent.primary },
-      'spot': { label: '现货', color: tokens.colors.accent.warning },
-      'web3': { label: '链上', color: tokens.colors.accent.success },
+      'futures': { label: '合约', color: tokens.colors.text.secondary },
+      'spot': { label: '现货', color: tokens.colors.text.secondary },
+      'web3': { label: '链上', color: tokens.colors.text.secondary },
     }
     
     // 解析 source 字符串
