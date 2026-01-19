@@ -93,6 +93,7 @@ export const GET = withPublic(
     // 获取查询参数
     const searchParams = request.nextUrl.searchParams
     const timeRange = (searchParams.get('timeRange') || '90D') as Period
+    const exchangeFilter = searchParams.get('exchange') // 可选：筛选特定交易所
 
     const allTraders: TraderData[] = []
     
@@ -102,9 +103,14 @@ export const GET = withPublic(
     const freshnessISO = freshnessThreshold.toISOString()
 
     // GMX 特殊处理：只有 7D 和 30D 数据
-    const sourcesToQuery = timeRange === '90D' 
+    let sourcesToQuery = timeRange === '90D' 
       ? ALL_SOURCES.filter(s => s !== 'gmx')
       : ALL_SOURCES
+    
+    // 如果指定了 exchange 参数，只查询该交易所
+    if (exchangeFilter && ALL_SOURCES.includes(exchangeFilter as typeof ALL_SOURCES[number])) {
+      sourcesToQuery = [exchangeFilter as typeof ALL_SOURCES[number]]
+    }
 
     // 并行获取所有交易所数据
     const sourcePromises = sourcesToQuery.map(async (source) => {
@@ -150,13 +156,19 @@ export const GET = withPublic(
 
       if (!capturedAt) return []
 
-      // 查询快照数据（不依赖数据库中的 rank 字段）
+      // 计算时间窗口：captured_at 前后 5 分钟内的数据都算作同一批次
+      const capturedTime = new Date(capturedAt)
+      const windowStart = new Date(capturedTime.getTime() - 5 * 60 * 1000).toISOString()
+      const windowEnd = new Date(capturedTime.getTime() + 5 * 60 * 1000).toISOString()
+
+      // 查询快照数据（使用时间窗口而非精确匹配，支持不同毫秒的记录）
       const { data: snapshots, error } = await supabase
         .from('trader_snapshots')
         .select('source_trader_id, roi, pnl, followers, win_rate, max_drawdown, trades_count')
         .eq('source', source)
         .eq('season_id', seasonId)
-        .eq('captured_at', capturedAt)
+        .gte('captured_at', windowStart)
+        .lte('captured_at', windowEnd)
         .order('roi', { ascending: false })
         .limit(150)
 
@@ -182,12 +194,17 @@ export const GET = withPublic(
       // 构建交易员数据（不包含数据库 rank，排名将在后面统一计算）
       return snapshots.map(item => {
         const info = handleMap.get(item.source_trader_id) || { handle: null, avatar_url: null }
+        // 标准化 win_rate 为百分比形式
+        // binance_futures 存储小数(0.85)，bitget/bybit 存储百分比(85)
+        const normalizedWinRate = item.win_rate != null 
+          ? (item.win_rate <= 1 ? item.win_rate * 100 : item.win_rate)
+          : null
         return {
           id: item.source_trader_id,
           handle: info.handle || item.source_trader_id,
           roi: item.roi ?? 0,
           pnl: item.pnl ?? 0,
-          win_rate: item.win_rate,  // 保留 null，让 Arena Score 计算函数处理
+          win_rate: normalizedWinRate,  // 统一为百分比形式
           max_drawdown: item.max_drawdown,
           trades_count: item.trades_count,
           followers: item.followers || 0,

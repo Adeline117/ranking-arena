@@ -1,76 +1,43 @@
 /**
  * API 限流工具
- * 使用 Redis Cloud 实现分布式限流（滑动窗口算法）
+ * 使用 Upstash Redis 实现分布式限流（滑动窗口算法）
  */
 
-import { createClient, RedisClientType } from 'redis'
+import { Ratelimit } from '@upstash/ratelimit'
+import { Redis } from '@upstash/redis'
 import { NextRequest, NextResponse } from 'next/server'
 
-// Redis 客户端（限流专用）
-let redis: RedisClientType | null = null
-let isConnecting = false
+// Upstash Redis 客户端（限流专用）
+let redis: Redis | null = null
 let connectionFailed = false
 
-async function getRedisForRateLimit(): Promise<RedisClientType | null> {
-  // 如果已经连接失败，不再重试（避免每次请求都尝试连接）
+function getUpstashRedis(): Redis | null {
+  // 如果已经连接失败，不再重试
   if (connectionFailed) {
     return null
   }
 
-  if (redis && redis.isOpen) {
+  if (redis) {
     return redis
   }
 
-  // 防止并发连接
-  if (isConnecting) {
-    // 等待连接完成
-    await new Promise(resolve => setTimeout(resolve, 100))
-    return redis && redis.isOpen ? redis : null
-  }
+  const url = process.env.UPSTASH_REDIS_REST_URL
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN
 
-  const host = process.env.REDIS_HOST
-  const port = process.env.REDIS_PORT
-  const password = process.env.REDIS_PASSWORD
-  const username = process.env.REDIS_USERNAME || 'default'
-
-  if (!host || !password) {
+  if (!url || !token) {
     // 开发环境可能没有 Redis，静默跳过
     connectionFailed = true
     return null
   }
 
-  isConnecting = true
-
   try {
-    redis = createClient({
-      username,
-      password,
-      socket: {
-        host,
-        port: parseInt(port || '6379', 10),
-        reconnectStrategy: (retries) => {
-          if (retries > 3) {
-            connectionFailed = true
-            return false // 停止重连
-          }
-          return Math.min(retries * 100, 1000)
-        },
-      },
-    })
-
-    redis.on('error', (err) => {
-      console.error('[RateLimit] Redis 连接错误:', err.message)
-    })
-
-    await redis.connect()
-    console.log('[RateLimit] Redis 连接成功')
+    redis = new Redis({ url, token })
+    console.log('[RateLimit] Upstash Redis 连接成功')
     return redis
   } catch (error) {
-    console.warn('[RateLimit] Redis 连接失败，限流功能已禁用:', error)
+    console.warn('[RateLimit] Upstash Redis 连接失败，限流功能已禁用:', error)
     connectionFailed = true
     return null
-  } finally {
-    isConnecting = false
   }
 }
 
@@ -93,59 +60,27 @@ const defaultConfig: RateLimitConfig = {
   prefix: 'api',
 }
 
+// 缓存已创建的限流器实例
+const rateLimiters = new Map<string, Ratelimit>()
+
 /**
- * 滑动窗口限流算法实现
- * 使用 Redis sorted set 实现精确的滑动窗口
+ * 获取或创建限流器实例
  */
-async function slidingWindowRateLimit(
-  redis: RedisClientType,
-  identifier: string,
-  config: RateLimitConfig
-): Promise<{ success: boolean; limit: number; remaining: number; reset: number }> {
-  const key = `ratelimit:${config.prefix}:${identifier}`
-  const now = Date.now()
-  const windowStart = now - config.window * 1000
-  const windowEnd = now + config.window * 1000
-
-  try {
-    // 使用事务保证原子性
-    const multi = redis.multi()
-    
-    // 1. 移除过期的请求记录
-    multi.zRemRangeByScore(key, 0, windowStart)
-    
-    // 2. 添加当前请求
-    multi.zAdd(key, { score: now, value: `${now}-${Math.random()}` })
-    
-    // 3. 获取窗口内的请求数
-    multi.zCard(key)
-    
-    // 4. 设置键的过期时间
-    multi.expire(key, config.window * 2)
-    
-    const results = await multi.exec()
-    
-    // results[2] 是 zCard 的结果
-    const count = Number(results[2]) || 0
-    const remaining = Math.max(0, config.requests - count)
-    const success = count <= config.requests
-
-    return {
-      success,
-      limit: config.requests,
-      remaining,
-      reset: windowEnd,
-    }
-  } catch (error) {
-    console.error('[RateLimit] 限流检查出错:', error)
-    // 出错时允许通过
-    return {
-      success: true,
-      limit: config.requests,
-      remaining: config.requests,
-      reset: windowEnd,
-    }
+function getRateLimiter(config: RateLimitConfig, redisClient: Redis): Ratelimit {
+  const key = `${config.prefix}:${config.requests}:${config.window}`
+  
+  let limiter = rateLimiters.get(key)
+  if (!limiter) {
+    limiter = new Ratelimit({
+      redis: redisClient,
+      limiter: Ratelimit.slidingWindow(config.requests, `${config.window} s`),
+      prefix: `ratelimit:${config.prefix}`,
+      analytics: false, // 禁用分析以提高性能
+    })
+    rateLimiters.set(key, limiter)
   }
+  
+  return limiter
 }
 
 /**
@@ -175,21 +110,18 @@ export async function checkRateLimit(
   userId?: string
 ): Promise<NextResponse | null> {
   try {
-    const redis = await getRedisForRateLimit()
+    const redisClient = getUpstashRedis()
     
     // Redis 不可用时，跳过限流检查（fail-open）
-    if (!redis) {
+    if (!redisClient) {
       return null
     }
 
     const finalConfig = { ...defaultConfig, ...config }
     const identifier = getIdentifier(request, userId)
     
-    const { success, limit, remaining, reset } = await slidingWindowRateLimit(
-      redis,
-      identifier,
-      finalConfig
-    )
+    const limiter = getRateLimiter(finalConfig, redisClient)
+    const { success, limit, remaining, reset } = await limiter.limit(identifier)
     
     if (!success) {
       const retryAfter = Math.ceil((reset - Date.now()) / 1000)
@@ -269,10 +201,10 @@ export const RateLimitPresets = {
 
 /**
  * 关闭 Redis 连接（用于优雅关闭）
+ * 注意：Upstash Redis 使用 REST API，无需显式关闭连接
  */
 export async function closeRateLimitRedis(): Promise<void> {
-  if (redis && redis.isOpen) {
-    await redis.quit()
-    redis = null
-  }
+  // Upstash Redis 使用 HTTP REST API，无需关闭连接
+  redis = null
+  rateLimiters.clear()
 }

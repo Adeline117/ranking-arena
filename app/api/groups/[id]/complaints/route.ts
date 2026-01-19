@@ -97,6 +97,12 @@ export async function POST(
       return NextResponse.json({ error: '只有小组成员可以投诉' }, { status: 403 })
     }
 
+    // 检查小组成员数是否大于100
+    const memberCount = await getGroupMemberCount(supabase, groupId)
+    if (memberCount <= 100) {
+      return NextResponse.json({ error: '投诉功能仅对成员数大于100人的小组开放' }, { status: 403 })
+    }
+
     const body = await request.json()
     const { target_user_id, reason } = body
 

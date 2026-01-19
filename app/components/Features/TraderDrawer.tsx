@@ -275,7 +275,7 @@ export default function TraderDrawer({
               </div>
 
               <div style={{ fontSize: 12, color: tokens.colors.text.secondary }}>
-                ROI {trader.roi.toFixed(1)}% · Win {trader.win_rate.toFixed(1)}% · Followers{' '}
+                ROI {trader.roi.toFixed(1)}% · Win {(trader.win_rate ?? 0).toFixed(1)}% · Followers{' '}
                 {compact(trader.followers)}
               </div>
             </div>
@@ -362,7 +362,7 @@ export default function TraderDrawer({
                     }}
                   >
                     <StatRow label="Return (selected)" value={fmtPct(trader.roi)} />
-                    <StatRow label="Win rate" value={`${trader.win_rate.toFixed(1)}%`} />
+                    <StatRow label="Win rate" value={`${(trader.win_rate ?? 0).toFixed(1)}%`} />
                     <StatRow label="Avg. Risk Score (7D)" value={String(4 + Math.floor(rng() * 4))} />
                     <StatRow label="Profitable weeks" value={`${(35 + rng() * 30).toFixed(2)}%`} />
                   </div>

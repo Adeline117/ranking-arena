@@ -20,14 +20,15 @@ export default function TrustStats({ stats }: TrustStatsProps) {
   // 从 additionalStats 获取 maxDrawdown
   const maxDrawdown = stats.additionalStats?.maxDrawdown ?? 0
   
-  // 计算 Profit Factor: avgProfit * profitableTradesPct / (avgLoss * (100 - profitableTradesPct))
+  // 计算 Profit Factor: avgProfit * profitableTradesPct / (avgLoss * (1 - profitableTradesPct))
   // 如果没有足够数据，显示 N/A
+  // 注意：profitableTradesPct 是小数形式（如 0.85 表示 85%）
   let profitFactor = 0
   if (stats.trading) {
     const { avgProfit, avgLoss, profitableTradesPct } = stats.trading
-    if (avgProfit > 0 && avgLoss > 0 && profitableTradesPct > 0 && profitableTradesPct < 100) {
+    if (avgProfit > 0 && avgLoss > 0 && profitableTradesPct > 0 && profitableTradesPct < 1) {
       // Profit Factor = (胜率 * 平均盈利) / ((1-胜率) * 平均亏损)
-      const winPct = profitableTradesPct / 100
+      const winPct = profitableTradesPct  // 已经是小数形式
       const lossPct = 1 - winPct
       if (lossPct > 0 && avgLoss > 0) {
         profitFactor = (winPct * avgProfit) / (lossPct * avgLoss)
@@ -63,7 +64,7 @@ export default function TrustStats({ stats }: TrustStatsProps) {
             size="2xl" 
             weight="black" 
             style={{ 
-              color: winRate > 50 ? tokens.colors.accent.success : 
+              color: winRate > 0.5 ? tokens.colors.accent.success : 
                      winRate > 0 ? tokens.colors.text.primary : 
                      tokens.colors.text.tertiary 
             }}

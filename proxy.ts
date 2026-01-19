@@ -1,6 +1,8 @@
 /**
- * Next.js 全局中间件
+ * Next.js 16 全局代理
  * 实现统一的认证、CORS、安全头、CSRF 保护、请求追踪
+ * 
+ * 注意：Next.js 16 已将 middleware 约定弃用，改用 proxy
  */
 
 import { NextResponse, type NextRequest } from 'next/server'
@@ -215,7 +217,7 @@ function isProtectedRoute(pathname: string, method: string): boolean {
 }
 
 /**
- * 检查是否应跳过中间件
+ * 检查是否应跳过代理
  */
 function shouldSkip(pathname: string): boolean {
   return SKIP_ROUTES.some(route => pathname.startsWith(route))
@@ -325,8 +327,12 @@ function hasSessionCookie(request: NextRequest): boolean {
   )
 }
 
-export async function middleware(request: NextRequest) {
-  const { pathname, searchParams } = request.nextUrl
+/**
+ * Next.js 16 Proxy 函数
+ * 替代原来的 middleware
+ */
+export async function proxy(request: NextRequest) {
+  const { pathname } = request.nextUrl
   const method = request.method
   
   // 跳过不需要处理的路由
@@ -411,7 +417,7 @@ export async function middleware(request: NextRequest) {
   return response
 }
 
-// 配置中间件匹配的路由
+// 配置代理匹配的路由
 export const config = {
   matcher: [
     /*

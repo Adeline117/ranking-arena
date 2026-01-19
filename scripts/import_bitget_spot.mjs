@@ -1,16 +1,18 @@
 /**
  * Bitget Spot Copy Trading 排行榜数据抓取
  * 
- * 使用 Playwright 抓取 Bitget 现货跟单排行榜
+ * 通过拦截 API 请求，获取 ROI 排序的数据
  * 
  * 用法: node scripts/import_bitget_spot.mjs [7D|30D|90D]
  * 
- * 数据源: https://www.bitget.com/asia/copy-trading/spot
+ * 数据源: https://www.bitget.com/zh-CN/copy-trading/leaderboard-ranking/spot-roi/1
+ * API: https://www.bitget.com/v1/trace/spot/public/traderRankingList
  */
 
 import 'dotenv/config'
 import { chromium } from 'playwright'
 import { createClient } from '@supabase/supabase-js'
+import { validateTraderData, deduplicateTraders, printValidationResult } from './lib/data-validation.mjs'
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -24,20 +26,15 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
 const SOURCE = 'bitget_spot'
 
+// 时间段配置（Bitget 使用天数）
 const PERIOD_CONFIG = {
-  '7D': { 
-    url: 'https://www.bitget.com/zh-CN/copy-trading/leaderboard-ranking/spot-roi/1?dateType=7',
-    tabTexts: ['7天', '7D', '7 Days']
-  },
-  '30D': { 
-    url: 'https://www.bitget.com/zh-CN/copy-trading/leaderboard-ranking/spot-roi/1?dateType=30',
-    tabTexts: ['30天', '30D', '30 Days']
-  },
-  '90D': { 
-    url: 'https://www.bitget.com/zh-CN/copy-trading/leaderboard-ranking/spot-roi/1?dateType=90',
-    tabTexts: ['90天', '90D', '90 Days']
-  },
+  '7D': { days: '7', url: 'https://www.bitget.com/zh-CN/copy-trading/leaderboard-ranking/spot-roi/1?dateType=7' },
+  '30D': { days: '30', url: 'https://www.bitget.com/zh-CN/copy-trading/leaderboard-ranking/spot-roi/1?dateType=30' },
+  '90D': { days: '90', url: 'https://www.bitget.com/zh-CN/copy-trading/leaderboard-ranking/spot-roi/1?dateType=90' },
 }
+
+const TARGET_COUNT = 100
+const PER_PAGE = 20
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms))
@@ -51,14 +48,35 @@ function getTargetPeriod() {
   return '90D'
 }
 
+function parseTraderFromApi(item, rank) {
+  const traderId = String(item.traderId || item.traderUid || '')
+  if (!traderId) return null
+
+  // Bitget API 返回的 ROI 是字符串形式的百分比值，如 "7583.61" 表示 7583.61%
+  const roi = parseFloat(item.roi ?? 0)
+
+  return {
+    traderId,
+    nickname: item.nickName || item.displayName || item.userName || null,
+    avatar: item.headPic || null,
+    roi,
+    pnl: parseFloat(item.totalPnl ?? 0),
+    winRate: null,  // Bitget Spot API 不返回 winRate
+    maxDrawdown: null,
+    followers: parseInt(item.followCount ?? 0),
+    aum: parseFloat(item.aum ?? 0),
+    rank: item.rankingNo || rank,
+  }
+}
+
 async function fetchLeaderboardData(period) {
   const config = PERIOD_CONFIG[period]
   console.log(`\n=== 抓取 Bitget Spot ${period} 排行榜 ===`)
   console.log('时间:', new Date().toISOString())
   console.log('URL:', config.url)
+  console.log(`目标: ${TARGET_COUNT} 个交易员`)
 
   const traders = new Map()
-  const apiResponses = []
 
   const browser = await chromium.launch({
     headless: true,
@@ -82,106 +100,67 @@ async function fetchLeaderboardData(period) {
     // 监听 API 响应
     page.on('response', async (response) => {
       const url = response.url()
-      if (url.includes('copy-trading') && (url.includes('ranking') || url.includes('list') || url.includes('spot'))) {
+      if (url.includes('traderRankingList')) {
         try {
           const json = await response.json()
-          const list = json.data?.list || json.data || json.list || []
-          if (Array.isArray(list) && list.length > 0) {
-            console.log(`  📡 拦截到 API: ${list.length} 条数据`)
-            apiResponses.push({ url, list })
+          const rows = json.data?.rows || []
+          if (rows.length > 0) {
+            console.log(`  ✓ 收到 ${rows.length} 条数据`)
+            
+            rows.forEach((item, idx) => {
+              const trader = parseTraderFromApi(item, traders.size + idx + 1)
+              if (trader && trader.traderId && !traders.has(trader.traderId)) {
+                traders.set(trader.traderId, trader)
+                if (traders.size <= 3) {
+                  console.log(`    #${trader.rank}: ROI ${trader.roi.toFixed(2)}%, 昵称: ${trader.nickname || '未知'}`)
+                }
+              }
+            })
           }
-        } catch (e) {}
+        } catch (e) {
+          console.log(`  ⚠ 解析响应失败: ${e.message}`)
+        }
       }
     })
 
-    console.log('📱 访问页面...')
+    console.log('\n📱 访问页面...')
     try {
-      await page.goto(config.url, { waitUntil: 'domcontentloaded', timeout: 30000 })
+      await page.goto(config.url, { waitUntil: 'networkidle', timeout: 60000 })
     } catch (e) {
       console.log('  ⚠ 页面加载超时，继续尝试...')
     }
     await sleep(5000)
+    
+    console.log(`\n📄 当前已获取: ${traders.size} 个交易员`)
 
-    // 滚动加载更多
-    console.log('📜 滚动加载更多数据...')
-    for (let i = 0; i < 10; i++) {
-      await page.evaluate(() => window.scrollBy(0, 600))
-      await sleep(500)
-    }
-    await sleep(2000)
-
-    // 处理 API 响应
-    console.log(`\n📊 处理 ${apiResponses.length} 个 API 响应...`)
-    for (const { list } of apiResponses) {
-      list.forEach((item, idx) => {
-        const traderId = String(item.traderId || item.uid || item.id || '')
-        if (!traderId) return
-        
-        const roi = parseFloat(item.roi ?? item.roiRate ?? item.profit ?? 0)
-        const existing = traders.get(traderId)
-        
-        if (!existing || roi > existing.roi) {
-          traders.set(traderId, {
-            traderId,
-            nickname: item.nickName || item.nickname || item.name || null,
-            avatar: item.avatar || item.avatarUrl || item.headUrl || null,
-            roi,
-            pnl: parseFloat(item.totalProfit ?? item.pnl ?? 0),
-            winRate: parseFloat(item.winRate ?? item.winRatio ?? 0),
-            maxDrawdown: parseFloat(item.mdd ?? item.maxDrawdown ?? 0),
-            followers: parseInt(item.followerCount ?? item.followers ?? 0),
-            rank: idx + 1,
-          })
-        }
-      })
-    }
-
-    // 从 DOM 提取
-    if (traders.size === 0) {
-      console.log('📊 从页面 DOM 提取数据...')
-      const pageTraders = await page.evaluate(() => {
-        const results = []
-        const seen = new Set()
-        const links = document.querySelectorAll('a[href*="trader"], a[href*="copy-trading"]')
-        links.forEach((link, idx) => {
-          const href = link.getAttribute('href') || ''
-          const idMatch = href.match(/trader\/(\w+)/) || href.match(/traderId=(\w+)/)
-          const traderId = idMatch?.[1]
-          if (!traderId || seen.has(traderId)) return
-          seen.add(traderId)
-          let container = link
-          for (let i = 0; i < 8 && container.parentElement; i++) {
-            container = container.parentElement
-            if (container.innerText?.length > 100) break
-          }
-          const text = container.innerText || ''
-          const roiMatches = text.match(/([+-]?\d{1,3}(?:,\d{3})*(?:\.\d+)?)\s*%/g)
-          let roi = null
-          if (roiMatches) {
-            for (const match of roiMatches) {
-              const val = parseFloat(match.replace(/[^0-9.+-]/g, ''))
-              if (val > 0 && (roi === null || val > roi)) roi = val
-            }
-          }
-          let nickname = null
-          const nameEl = container.querySelector('[class*="name"], [class*="nick"]')
-          if (nameEl) nickname = nameEl.innerText?.trim()?.split('\n')[0]
-          if (traderId && roi !== null) {
-            results.push({ traderId, nickname, avatar: null, roi, pnl: null, winRate: null, maxDrawdown: null, followers: null, rank: results.length + 1 })
-          }
-        })
-        return results
-      })
-      pageTraders.forEach(t => { if (!traders.has(t.traderId)) traders.set(t.traderId, t) })
+    // 分页获取更多数据（滚动加载）
+    let lastCount = 0
+    let scrollAttempts = 0
+    const maxScrollAttempts = 10
+    
+    while (traders.size < TARGET_COUNT && scrollAttempts < maxScrollAttempts) {
+      lastCount = traders.size
+      
+      // 滚动到底部
+      await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight))
+      await sleep(2000)
+      
+      // 检查是否有新数据
+      if (traders.size === lastCount) {
+        scrollAttempts++
+        console.log(`  滚动尝试 ${scrollAttempts}/${maxScrollAttempts}，无新数据`)
+      } else {
+        scrollAttempts = 0
+        console.log(`  当前已获取: ${traders.size} 个交易员`)
+      }
     }
 
     console.log(`\n📊 共获取 ${traders.size} 个交易员数据`)
 
-    if (traders.size === 0) {
-      const screenshotPath = `/tmp/bitget_spot_${period}_${Date.now()}.png`
-      await page.screenshot({ path: screenshotPath, fullPage: true })
-      console.log(`  📸 截图保存到: ${screenshotPath}`)
-    }
+    const screenshotPath = `/tmp/bitget_spot_${period}_${Date.now()}.png`
+    await page.screenshot({ path: screenshotPath, fullPage: true })
+    console.log(`📸 截图保存到: ${screenshotPath}`)
+
   } finally {
     await browser.close()
   }
@@ -198,7 +177,7 @@ async function saveTraders(traders, period) {
 
   for (const trader of traders) {
     try {
-      await supabase.from('trader_sources').insert({
+      await supabase.from('trader_sources').upsert({
         source: SOURCE,
         source_type: 'leaderboard',
         source_trader_id: trader.traderId,
@@ -220,9 +199,14 @@ async function saveTraders(traders, period) {
         captured_at: capturedAt,
       })
 
-      if (error) errors++
-      else saved++
+      if (error) {
+        console.log(`    ✗ 保存失败 ${trader.traderId}: ${error.message}`)
+        errors++
+      } else {
+        saved++
+      }
     } catch (error) {
+      console.log(`    ✗ 异常 ${trader.traderId}: ${error.message}`)
       errors++
     }
   }
@@ -239,6 +223,7 @@ async function main() {
   console.log(`Bitget Spot Copy Trading 数据抓取`)
   console.log(`目标周期: ${period}`)
   console.log(`数据源: ${SOURCE}`)
+  console.log(`目标数量: ${TARGET_COUNT} 个交易员`)
   console.log(`========================================`)
 
   try {
@@ -246,27 +231,45 @@ async function main() {
 
     if (traders.length === 0) {
       console.log('\n⚠ 未获取到任何数据')
-      return
+      console.log('请检查截图文件查看页面状态')
+      process.exit(1)
     }
 
-    traders.sort((a, b) => (b.roi || 0) - (a.roi || 0))
-    traders.forEach((t, idx) => t.rank = idx + 1)
+    const uniqueTraders = deduplicateTraders(traders)
+    
+    uniqueTraders.sort((a, b) => (b.roi || 0) - (a.roi || 0))
+    uniqueTraders.forEach((t, idx) => t.rank = idx + 1)
 
-    console.log(`\n📋 ${period} TOP 10:`)
-    traders.slice(0, 10).forEach((t, idx) => {
+    const topTraders = uniqueTraders.slice(0, TARGET_COUNT)
+
+    console.log(`\n📋 ${period} TOP 10 (按 ROI 排序):`)
+    topTraders.slice(0, 10).forEach((t, idx) => {
       console.log(`  ${idx + 1}. ${t.nickname || t.traderId}: ROI ${t.roi?.toFixed(2)}%`)
     })
 
-    const result = await saveTraders(traders, period)
+    const validation = validateTraderData(topTraders, {}, SOURCE)
+    const isValid = printValidationResult(validation, SOURCE)
 
-    console.log(`\n✅ 完成！`)
+    if (!isValid) {
+      console.log('\n⚠️ 数据验证未完全通过，但仍保存数据')
+    }
+
+    const result = await saveTraders(topTraders, period)
+
+    console.log(`\n========================================`)
+    console.log(`✅ 完成！`)
     console.log(`   来源: ${SOURCE}`)
     console.log(`   周期: ${period}`)
-    console.log(`   总数: ${traders.length}`)
+    console.log(`   总数: ${topTraders.length}`)
+    console.log(`   TOP ROI: ${validation.stats.topRoi.toFixed(2)}%`)
+    console.log(`   平均 ROI: ${validation.stats.avgRoi.toFixed(2)}%`)
     console.log(`   保存: ${result.saved}`)
     console.log(`   时间: ${new Date().toISOString()}`)
+    console.log(`========================================`)
   } catch (error) {
     console.error('\n❌ 执行失败:', error.message)
+    console.error(error.stack)
+    process.exit(1)
   }
 }
 

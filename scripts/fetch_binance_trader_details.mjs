@@ -253,7 +253,7 @@ async function storePerformance(portfolioId, timeRange, perfData, baseCapturedAt
   
   // 存储到 trader_snapshots - 使用 delete + insert 避免约束问题
   const snapshotItem = {
-    source: 'binance',
+    source: 'binance_futures',
     source_trader_id: portfolioId,
     season_id: timeRange,
     // ROI - Binance 返回的是百分比值，如 -14.86 表示 -14.86%
@@ -287,7 +287,7 @@ async function storePerformance(portfolioId, timeRange, perfData, baseCapturedAt
   
   // 存储到 trader_stats_detail - 同样使用 delete + insert
   const statsItem = {
-    source: 'binance',
+    source: 'binance_futures',
     source_trader_id: portfolioId,
     period: timeRange,
     sharpe_ratio: parseFloat(perfData.sharpRatio || 0),
@@ -323,7 +323,7 @@ async function storeAssetBreakdown(portfolioId, timeRange, assetData, capturedAt
   if (!assetData || !assetData.data || !Array.isArray(assetData.data)) return
   
   const assetItems = assetData.data.map(item => ({
-    source: 'binance',
+    source: 'binance_futures',
     source_trader_id: portfolioId,
     period: timeRange,
     // asset 是交易对/资产名称，如 "BTC", "ETH"
@@ -372,7 +372,7 @@ async function storeEquityCurve(portfolioId, timeRange, roiData, pnlData, captur
     const dataDate = dateObj.toISOString().split('T')[0]
     
     return {
-      source: 'binance',
+      source: 'binance_futures',
       source_trader_id: portfolioId,
       period: timeRange,
       data_date: dataDate,
@@ -419,7 +419,7 @@ async function storePositionHistory(portfolioId, positions, capturedAt) {
     }
     
     return {
-      source: 'binance',
+      source: 'binance_futures',
       source_trader_id: portfolioId,
       symbol: item.symbol || item.pair || '',
       direction: direction,

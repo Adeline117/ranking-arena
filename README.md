@@ -35,9 +35,21 @@ cp .env.example .env.local
 编辑 `.env.local`：
 
 ```env
+# Supabase
 NEXT_PUBLIC_SUPABASE_URL=your-supabase-url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+
+# Upstash Redis 缓存（可选，不配置则使用内存缓存）
+UPSTASH_REDIS_REST_URL=your-upstash-redis-rest-url
+UPSTASH_REDIS_REST_TOKEN=your-upstash-redis-rest-token
+
+# Sentry 错误监控（可选）
+NEXT_PUBLIC_SENTRY_DSN=your-sentry-dsn
+SENTRY_DSN=your-sentry-dsn
+SENTRY_ORG=your-sentry-org
+SENTRY_PROJECT=your-sentry-project
+SENTRY_AUTH_TOKEN=your-sentry-auth-token
 ```
 
 在 Supabase SQL Editor 执行数据库脚本：

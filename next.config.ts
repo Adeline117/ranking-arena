@@ -69,7 +69,8 @@ const nextConfig: NextConfig = {
   },
   
   // 服务端专用包（不打包到客户端）
-  serverExternalPackages: ['redis', '@redis/client'],
+  // 注意：@upstash/redis 使用 REST API，不需要在此配置
+  serverExternalPackages: [],
   
   // 实验性功能
   experimental: {
@@ -113,10 +114,14 @@ const nextConfig: NextConfig = {
 };
 
 // Sentry 配置选项
+// 注意：Next.js 16 + Sentry 已移除弃用的 disableLogger 和 automaticVercelMonitors
 const sentryWebpackPluginOptions = {
   // 组织和项目名称（从环境变量获取）
   org: process.env.SENTRY_ORG,
   project: process.env.SENTRY_PROJECT,
+  
+  // Auth token 用于上传 source maps 和创建 release
+  authToken: process.env.SENTRY_AUTH_TOKEN,
   
   // 只在生产环境上传 source maps
   silent: !process.env.CI,
@@ -124,19 +129,22 @@ const sentryWebpackPluginOptions = {
   // 上传 source maps 到 Sentry
   widenClientFileUpload: true,
   
-  // 自动检测 release
-  automaticVercelMonitors: true,
-  
   // 隐藏 source maps 不暴露给客户端
   hideSourceMaps: true,
-  
-  // 禁用日志（减少噪音）
-  disableLogger: true,
   
   // 跳过没有 DSN 配置时的上传
   sourcemaps: {
     disable: !process.env.SENTRY_DSN,
   },
+  
+  // Webpack 相关配置（替代弃用的顶级选项）
+  bundleSizeOptimizations: {
+    // 移除 debug 日志（替代 disableLogger）
+    excludeDebugStatements: true,
+  },
+  
+  // 关闭遥测（可选）
+  telemetry: false,
 };
 
 // 导出配置（包装 Bundle Analyzer + Sentry）
