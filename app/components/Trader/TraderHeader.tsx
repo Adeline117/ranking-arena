@@ -19,7 +19,9 @@ interface CommunityScore {
 interface TraderHeaderProps {
   handle: string
   traderId: string
+  uid?: number // 数字用户编号
   avatarUrl?: string
+  coverUrl?: string // 用户背景图片
   isRegistered?: boolean
   followers?: number
   isOwnProfile?: boolean
@@ -45,7 +47,9 @@ const sourceConfig: Record<string, { label: string; color: string }> = {
 export default function TraderHeader({ 
   handle, 
   traderId, 
+  uid,
   avatarUrl, 
+  coverUrl,
   isRegistered, 
   followers = 0, 
   isOwnProfile = false, 
@@ -75,7 +79,9 @@ export default function TraderHeader({
         alignItems: 'flex-start',
         marginBottom: tokens.spacing[6],
         padding: tokens.spacing[6],
-        background: `linear-gradient(135deg, ${tokens.colors.bg.secondary}F8 0%, ${tokens.colors.bg.primary}E8 100%)`,
+        background: coverUrl 
+          ? `linear-gradient(to bottom, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0.6) 100%), url(${coverUrl}) center/cover no-repeat`
+          : `linear-gradient(135deg, ${tokens.colors.bg.secondary}F8 0%, ${tokens.colors.bg.primary}E8 100%)`,
         borderRadius: tokens.radius.xl,
         border: `1px solid ${tokens.colors.border.primary}50`,
         boxShadow: `0 8px 32px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.05)`,
@@ -84,31 +90,36 @@ export default function TraderHeader({
         opacity: mounted ? 1 : 0,
         transform: mounted ? 'translateY(0)' : 'translateY(-20px)',
         transition: 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
+        minHeight: coverUrl ? 180 : undefined,
       }}
     >
-      {/* 背景装饰 */}
-      <Box
-        style={{
-          position: 'absolute',
-          top: -100,
-          left: -100,
-          width: 300,
-          height: 300,
-          background: `radial-gradient(circle, ${tokens.colors.accent.primary}08 0%, transparent 70%)`,
-          pointerEvents: 'none',
-        }}
-      />
-      <Box
-        style={{
-          position: 'absolute',
-          bottom: -80,
-          right: -80,
-          width: 200,
-          height: 200,
-          background: `radial-gradient(circle, ${tokens.colors.accent.brand}06 0%, transparent 70%)`,
-          pointerEvents: 'none',
-        }}
-      />
+      {/* 背景装饰 - 只在没有自定义背景时显示 */}
+      {!coverUrl && (
+        <>
+          <Box
+            style={{
+              position: 'absolute',
+              top: -100,
+              left: -100,
+              width: 300,
+              height: 300,
+              background: `radial-gradient(circle, ${tokens.colors.accent.primary}08 0%, transparent 70%)`,
+              pointerEvents: 'none',
+            }}
+          />
+          <Box
+            style={{
+              position: 'absolute',
+              bottom: -80,
+              right: -80,
+              width: 200,
+              height: 200,
+              background: `radial-gradient(circle, ${tokens.colors.accent.brand}06 0%, transparent 70%)`,
+              pointerEvents: 'none',
+            }}
+          />
+        </>
+      )}
       
       {/* 左侧：Avatar + Handle */}
       <Box
@@ -194,12 +205,40 @@ export default function TraderHeader({
               size="2xl" 
               weight="black" 
               style={{ 
-                color: tokens.colors.text.primary,
+                color: coverUrl ? '#ffffff' : tokens.colors.text.primary,
                 lineHeight: tokens.typography.lineHeight.tight,
+                textShadow: coverUrl ? '0 2px 8px rgba(0,0,0,0.5)' : undefined,
               }}
             >
               {handle}
             </Text>
+            
+            {/* UID Badge */}
+            {uid && (
+              <Box
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  padding: `3px ${tokens.spacing[2]}`,
+                  background: `${tokens.colors.accent.primary}15`,
+                  borderRadius: tokens.radius.full,
+                  border: `1px solid ${tokens.colors.accent.primary}30`,
+                }}
+                title="用户编号"
+              >
+                <Text 
+                  size="xs" 
+                  weight="bold" 
+                  style={{ 
+                    color: tokens.colors.accent.primary,
+                    fontFamily: 'monospace',
+                    letterSpacing: '0.5px',
+                  }}
+                >
+                  #{uid.toString().padStart(6, '0')}
+                </Text>
+              </Box>
+            )}
             
             {/* Source Badge */}
             {sourceInfo && (
@@ -288,11 +327,22 @@ export default function TraderHeader({
           
           <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[4] }}>
             <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
-              <Text size="sm" color="secondary" style={{ fontWeight: tokens.typography.fontWeight.semibold }}>
+              <Text 
+                size="sm" 
+                style={{ 
+                  fontWeight: tokens.typography.fontWeight.semibold,
+                  color: coverUrl ? 'rgba(255,255,255,0.8)' : tokens.colors.text.secondary,
+                  textShadow: coverUrl ? '0 1px 4px rgba(0,0,0,0.5)' : undefined,
+                }}
+              >
                 <Text
                   as="span"
                   weight="black"
-                  style={{ color: tokens.colors.text.primary, marginRight: 4 }}
+                  style={{ 
+                    color: coverUrl ? '#ffffff' : tokens.colors.text.primary, 
+                    marginRight: 4,
+                    textShadow: coverUrl ? '0 1px 4px rgba(0,0,0,0.5)' : undefined,
+                  }}
                 >
                   {followers.toLocaleString()}
                 </Text>
@@ -357,41 +407,6 @@ export default function TraderHeader({
                 ) : (
                   <FollowButton traderId={traderId} userId={userId} />
                 )}
-                {/* 设置告警按钮 */}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => router.push(`/dashboard#alerts?trader=${traderId}`)}
-                  style={{
-                    color: tokens.colors.text.secondary,
-                    fontSize: tokens.typography.fontSize.sm,
-                    padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-                    borderRadius: tokens.radius.lg,
-                    background: tokens.colors.bg.tertiary,
-                    border: `1px solid ${tokens.colors.border.primary}`,
-                    transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: tokens.spacing[1],
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = tokens.colors.bg.secondary
-                    e.currentTarget.style.borderColor = tokens.colors.accent.warning + '40'
-                    e.currentTarget.style.color = tokens.colors.accent.warning
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = tokens.colors.bg.tertiary
-                    e.currentTarget.style.borderColor = tokens.colors.border.primary
-                    e.currentTarget.style.color = tokens.colors.text.secondary
-                  }}
-                  title="设置此交易员的风险告警"
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-                    <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-                  </svg>
-                  设置告警
-                </Button>
               </>
             )}
           </>
