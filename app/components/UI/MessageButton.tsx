@@ -1,16 +1,26 @@
 'use client'
 
-import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useToast } from './Toast'
-import { tokens } from '@/lib/design-tokens'
-import { getCsrfHeaders } from '@/lib/api/client'
+import { useApiMutation } from '@/lib/hooks/useApiMutation'
+import { apiRequest } from '@/lib/api/client'
 
 type MessageButtonProps = {
   targetUserId: string
   currentUserId: string | null
   size?: 'sm' | 'md' | 'lg'
   fullWidth?: boolean
+}
+
+type StartMessageResponse = {
+  conversation_id: string
+  message_limit?: {
+    max: number
+    sent: number
+  }
+  is_mutual_follow?: boolean
+  error?: string
+  limit_reached?: boolean
 }
 
 export default function MessageButton({ 
@@ -21,9 +31,42 @@ export default function MessageButton({
 }: MessageButtonProps) {
   const router = useRouter()
   const { showToast } = useToast()
-  const [loading, setLoading] = useState(false)
 
-  const handleClick = async () => {
+  const { mutate, isLoading } = useApiMutation<StartMessageResponse, void>(
+    async () => {
+      return apiRequest<StartMessageResponse>('/api/messages/start', {
+        method: 'POST',
+        body: {
+          senderId: currentUserId,
+          receiverId: targetUserId,
+        },
+      })
+    },
+    {
+      onSuccess: (data) => {
+        // 显示消息限制提示
+        if (data.message_limit && !data.is_mutual_follow) {
+          const remaining = data.message_limit.max - data.message_limit.sent
+          if (remaining > 0 && remaining < 3) {
+            showToast(`你们还不是互相关注，你还可以发送 ${remaining} 条消息`, 'info')
+          }
+        }
+        // 跳转到会话页面
+        router.push(`/messages/${data.conversation_id}`)
+      },
+      onError: (error) => {
+        if (error.message === '该用户已关闭私信功能') {
+          showToast('该用户已关闭私信功能', 'warning')
+        } else if (error.limitReached) {
+          showToast('在对方回复前，你最多只能发送3条消息', 'warning')
+        }
+      },
+      showToast: false, // 使用自定义错误处理
+      retryCount: 1,
+    }
+  )
+
+  const handleClick = () => {
     if (!currentUserId) {
       showToast('请先登录', 'warning')
       window.location.href = '/login'
@@ -35,45 +78,7 @@ export default function MessageButton({
       return
     }
 
-    setLoading(true)
-    try {
-      const response = await fetch('/api/messages/start', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...getCsrfHeaders() },
-        body: JSON.stringify({
-          senderId: currentUserId,
-          receiverId: targetUserId,
-        }),
-      })
-
-      const data = await response.json()
-      
-      if (response.ok) {
-        // 显示消息限制提示
-        if (data.message_limit && !data.is_mutual_follow) {
-          const remaining = data.message_limit.max - data.message_limit.sent
-          if (remaining > 0 && remaining < 3) {
-            showToast(`你们还不是互相关注，你还可以发送 ${remaining} 条消息`, 'info')
-          }
-        }
-        
-        // 跳转到会话页面
-        router.push(`/messages/${data.conversation_id}`)
-      } else {
-        if (data.error === '该用户已关闭私信功能') {
-          showToast('该用户已关闭私信功能', 'warning')
-        } else if (data.limit_reached) {
-          showToast('在对方回复前，你最多只能发送3条消息', 'warning')
-        } else {
-          showToast(data.error || '无法发起私信', 'error')
-        }
-      }
-    } catch (error) {
-      console.error('Start message error:', error)
-      showToast('操作失败，请重试', 'error')
-    } finally {
-      setLoading(false)
-    }
+    mutate()
   }
 
   const sizeStyles = {
@@ -114,7 +119,7 @@ export default function MessageButton({
   return (
     <button
       onClick={handleClick}
-      disabled={loading}
+      disabled={isLoading}
       style={{
         ...sizeStyles[size],
         width: fullWidth ? '100%' : 'auto',
@@ -122,8 +127,8 @@ export default function MessageButton({
         background: 'rgba(255,255,255,0.05)',
         color: '#eaeaea',
         fontWeight: 700,
-        cursor: loading ? 'not-allowed' : 'pointer',
-        opacity: loading ? 0.6 : 1,
+        cursor: isLoading ? 'not-allowed' : 'pointer',
+        opacity: isLoading ? 0.6 : 1,
         transition: 'all 200ms ease',
         display: 'flex',
         alignItems: 'center',
@@ -131,8 +136,12 @@ export default function MessageButton({
         gap: '6px',
       }}
     >
-      <MessageIcon size={size === 'sm' ? 14 : 16} />
-      {loading ? '...' : '私信'}
+      {isLoading ? (
+        <LoadingSpinner size={size === 'sm' ? 12 : 14} />
+      ) : (
+        <MessageIcon size={size === 'sm' ? 14 : 16} />
+      )}
+      {isLoading ? '...' : '私信'}
     </button>
   )
 }
@@ -146,4 +155,35 @@ function MessageIcon({ size = 16 }: { size?: number }) {
   )
 }
 
-
+// 加载指示器
+function LoadingSpinner({ size = 14 }: { size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      style={{ animation: 'spin 1s linear infinite' }}
+    >
+      <circle
+        cx="12"
+        cy="12"
+        r="10"
+        stroke="currentColor"
+        strokeWidth="3"
+        strokeLinecap="round"
+        strokeDasharray="31.4 31.4"
+        strokeDashoffset="31.4"
+        style={{ animation: 'spinner-dash 1.5s ease-in-out infinite' }}
+      />
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes spinner-dash {
+          0% { stroke-dashoffset: 31.4; }
+          50% { stroke-dashoffset: 0; }
+          100% { stroke-dashoffset: -31.4; }
+        }
+      `}</style>
+    </svg>
+  )
+}

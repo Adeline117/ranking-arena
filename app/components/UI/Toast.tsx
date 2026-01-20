@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useState, useCallback, ReactNode, useEffect, useRef } from 'react'
 import { tokens } from '@/lib/design-tokens'
+import { setGlobalToast } from '@/lib/hooks/useApiMutation'
 
 type ToastType = 'success' | 'error' | 'warning' | 'info'
 
@@ -257,6 +258,11 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const hideToast = useCallback((id: string) => {
     setToasts((prev) => prev.filter((t) => t.id !== id))
   }, [])
+
+  // 设置全局 toast 供 useApiMutation 使用
+  useEffect(() => {
+    setGlobalToast(showToast)
+  }, [showToast])
 
   return (
     <ToastContext.Provider value={{ showToast, hideToast }}>

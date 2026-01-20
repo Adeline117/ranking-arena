@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import { useToast } from './Toast'
-import { getCsrfHeaders } from '@/lib/api/client'
+import { useApiMutation } from '@/lib/hooks/useApiMutation'
+import { apiRequest } from '@/lib/api/client'
 
 type FollowButtonProps = {
   traderId: string
@@ -11,16 +12,43 @@ type FollowButtonProps = {
   onFollowChange?: (following: boolean) => void
 }
 
+type FollowResponse = {
+  following: boolean
+  success?: boolean
+  tableNotFound?: boolean
+}
+
 export default function FollowButton({ traderId, userId, initialFollowing = false, onFollowChange }: FollowButtonProps) {
   const { showToast } = useToast()
   const [following, setFollowing] = useState(initialFollowing)
-  const [loading, setLoading] = useState(false)
+
+  // 使用 useApiMutation 处理关注/取消关注
+  const { mutate, isLoading } = useApiMutation<FollowResponse, { action: 'follow' | 'unfollow' }>(
+    async ({ action }) => {
+      return apiRequest<FollowResponse>('/api/follow', {
+        method: 'POST',
+        body: { userId, traderId, action },
+      })
+    },
+    {
+      onSuccess: (data) => {
+        setFollowing(data.following)
+        onFollowChange?.(data.following)
+      },
+      onError: (error) => {
+        if (error.tableNotFound) {
+          showToast('关注功能暂未开放', 'warning')
+        }
+      },
+      showToast: true,
+      retryCount: 1,
+    }
+  )
 
   useEffect(() => {
     if (!userId) return
     ;(async () => {
       try {
-        // 通过 API 检查关注状态
         const response = await fetch(`/api/follow?userId=${userId}&traderId=${traderId}`)
         if (response.ok) {
           const data = await response.json()
@@ -32,41 +60,12 @@ export default function FollowButton({ traderId, userId, initialFollowing = fals
     })()
   }, [userId, traderId])
 
-  const handleToggle = async () => {
+  const handleToggle = () => {
     if (!userId) {
       showToast('请先登录', 'warning')
       return
     }
-
-    setLoading(true)
-    try {
-      const response = await fetch('/api/follow', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...getCsrfHeaders() },
-        body: JSON.stringify({
-          userId,
-          traderId,
-          action: following ? 'unfollow' : 'follow',
-        }),
-      })
-
-      const data = await response.json()
-      if (response.ok) {
-        setFollowing(data.following)
-        onFollowChange?.(data.following)
-      } else if (data.tableNotFound) {
-        // 表不存在，静默处理，不记录错误
-        showToast('关注功能暂未开放', 'warning')
-      } else {
-        console.error('Toggle follow error:', data)
-        showToast('操作失败，请重试', 'error')
-      }
-    } catch (error) {
-      console.error('Toggle follow error:', error)
-      showToast('操作失败，请重试', 'error')
-    } finally {
-      setLoading(false)
-    }
+    mutate({ action: following ? 'unfollow' : 'follow' })
   }
 
   if (!userId) {
@@ -92,7 +91,7 @@ export default function FollowButton({ traderId, userId, initialFollowing = fals
   return (
     <button
       onClick={handleToggle}
-      disabled={loading}
+      disabled={isLoading}
       style={{
         width: '100%',
         padding: '12px 16px',
@@ -102,12 +101,52 @@ export default function FollowButton({ traderId, userId, initialFollowing = fals
         color: '#fff',
         fontWeight: 900,
         fontSize: '14px',
-        cursor: loading ? 'not-allowed' : 'pointer',
-        opacity: loading ? 0.6 : 1,
+        cursor: isLoading ? 'not-allowed' : 'pointer',
+        opacity: isLoading ? 0.6 : 1,
         transition: 'all 200ms ease',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: '8px',
       }}
     >
-      {loading ? '...' : following ? '取消关注' : '关注'}
+      {isLoading && <LoadingSpinner size={14} />}
+      {isLoading ? '处理中...' : following ? '取消关注' : '关注'}
     </button>
+  )
+}
+
+// 小型加载指示器
+function LoadingSpinner({ size = 16 }: { size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      style={{ animation: 'spin 1s linear infinite' }}
+    >
+      <circle
+        cx="12"
+        cy="12"
+        r="10"
+        stroke="currentColor"
+        strokeWidth="3"
+        strokeLinecap="round"
+        strokeDasharray="31.4 31.4"
+        strokeDashoffset="31.4"
+        style={{ animation: 'spinner-dash 1.5s ease-in-out infinite' }}
+      />
+      <style>{`
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+        @keyframes spinner-dash {
+          0% { stroke-dashoffset: 31.4; }
+          50% { stroke-dashoffset: 0; }
+          100% { stroke-dashoffset: -31.4; }
+        }
+      `}</style>
+    </svg>
   )
 }
