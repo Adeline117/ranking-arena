@@ -42,10 +42,11 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
-function getTargetPeriod() {
+function getTargetPeriods() {
   const arg = process.argv[2]?.toUpperCase()
-  if (arg && ['7D', '30D', '90D'].includes(arg)) return arg
-  return '90D'
+  if (arg === 'ALL') return ['7D', '30D', '90D']
+  if (arg && ['7D', '30D', '90D'].includes(arg)) return [arg]
+  return ['7D', '30D', '90D'] // 默认抓取所有时间段
 }
 
 async function fetchLeaderboard(browser, period) {
@@ -367,11 +368,12 @@ async function saveTradersBatch(traders, period) {
 }
 
 async function main() {
-  const period = getTargetPeriod()
-  const startTime = Date.now()
+  const periods = getTargetPeriods()
+  const totalStartTime = Date.now()
   
   console.log(`\n========================================`)
-  console.log(`Bitget Spot 数据抓取 v2 (优化版) - ${period}`)
+  console.log(`Bitget Spot 数据抓取 v2 (优化版)`)
+  console.log(`目标周期: ${periods.join(', ')}`)
   console.log(`========================================`)
   console.log('时间:', new Date().toISOString())
   
@@ -379,40 +381,57 @@ async function main() {
     headless: 'new',
     args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-blink-features=AutomationControlled'],
   })
+
+  const results = []
   
   try {
-    // 1. 获取排行榜
-    const traders = await fetchLeaderboard(browser, period)
-    
-    if (traders.length === 0) {
-      console.log('\n⚠ 未获取到交易员列表')
-      return
+    for (const period of periods) {
+      console.log(`\n${'='.repeat(50)}`)
+      console.log(`📊 开始抓取 ${period} 排行榜...`)
+      console.log(`${'='.repeat(50)}`)
+      
+      // 1. 获取排行榜
+      const traders = await fetchLeaderboard(browser, period)
+      
+      if (traders.length === 0) {
+        console.log(`\n⚠ ${period} 未获取到交易员列表，跳过`)
+        continue
+      }
+      
+      // 2. 排序
+      traders.sort((a, b) => (b.roi || 0) - (a.roi || 0))
+      
+      console.log(`\n📋 ${period} TOP 5:`)
+      traders.slice(0, 5).forEach((t, i) => {
+        console.log(`  ${i + 1}. ${t.nickname} (${t.traderId.slice(0, 8)}...): ROI ${t.roi?.toFixed(2) || 0}%`)
+      })
+      
+      // 3. 并行获取详情
+      const enrichedTraders = await fetchAllDetailsParallel(browser, traders, period)
+      
+      // 4. 保存
+      const saved = await saveTradersBatch(enrichedTraders, period)
+      results.push({ period, count: traders.length, saved, topRoi: traders[0]?.roi || 0 })
+      
+      console.log(`\n✅ ${period} 完成！保存了 ${saved} 条数据`)
+      
+      if (periods.indexOf(period) < periods.length - 1) {
+        console.log(`\n⏳ 等待 5 秒后抓取下一个时间段...`)
+        await sleep(5000)
+      }
     }
     
-    // 2. 排序
-    traders.sort((a, b) => (b.roi || 0) - (a.roi || 0))
+    const totalTime = ((Date.now() - totalStartTime) / 1000).toFixed(1)
     
-    console.log(`\n📋 TOP 5:`)
-    traders.slice(0, 5).forEach((t, i) => {
-      console.log(`  ${i + 1}. ${t.nickname} (${t.traderId.slice(0, 8)}...): ROI ${t.roi?.toFixed(2) || 0}%`)
-    })
-    
-    // 3. 并行获取详情
-    const enrichedTraders = await fetchAllDetailsParallel(browser, traders, period)
-    
-    // 4. 保存
-    const saved = await saveTradersBatch(enrichedTraders, period)
-    
-    const totalTime = ((Date.now() - startTime) / 1000).toFixed(1)
-    
-    console.log(`\n========================================`)
-    console.log(`✅ 完成！`)
-    console.log(`   来源: ${SOURCE}`)
-    console.log(`   周期: ${period}`)
-    console.log(`   获取: ${traders.length}`)
-    console.log(`   保存: ${saved}`)
-    console.log(`   耗时: ${totalTime}s`)
-    console.log(`========================================`)
+    console.log(`\n${'='.repeat(60)}`)
+    console.log(`✅ 全部完成！`)
+    console.log(`${'='.repeat(60)}`)
+    console.log(`📊 抓取结果:`)
+    for (const r of results) {
+      console.log(`   ${r.period}: ${r.saved} 条, TOP ROI ${r.topRoi?.toFixed?.(2) || r.topRoi}%`)
+    }
+    console.log(`   总耗时: ${totalTime}s`)
+    console.log(`${'='.repeat(60)}`)
     
   } finally {
     await browser.close()
