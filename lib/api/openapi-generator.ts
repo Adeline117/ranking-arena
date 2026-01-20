@@ -108,51 +108,110 @@ interface RouteDefinition {
 // ============================================
 
 /**
+ * 获取 Zod schema 的内部类型
+ * 兼容 Zod v3 和 v4
+ */
+function getZodInnerType(schema: z.ZodTypeAny): z.ZodTypeAny | null {
+  const def = schema._def as Record<string, unknown>
+  // Zod v4 使用 innerType，v3 使用 innerType 或 schema
+  return (def.innerType ?? def.schema ?? null) as z.ZodTypeAny | null
+}
+
+/**
+ * 获取 ZodDefault 的默认值
+ */
+function getDefaultValue(schema: z.ZodDefault<z.ZodTypeAny>): unknown {
+  const def = schema._def as Record<string, unknown>
+  // Zod v4 使用 defaultValue 函数
+  if (typeof def.defaultValue === 'function') {
+    return def.defaultValue()
+  }
+  return def.defaultValue
+}
+
+/**
+ * 获取 ZodLiteral 的值
+ */
+function getLiteralValue(schema: z.ZodLiteral<unknown>): unknown {
+  const def = schema._def as Record<string, unknown>
+  return def.value
+}
+
+/**
  * 将 Zod schema 转换为 JSON Schema
+ * 使用 instanceof 检查，兼容 Zod v4
  */
 function zodToJsonSchema(schema: z.ZodTypeAny): Record<string, unknown> {
-  const typeName = schema._def.typeName
-
-  switch (typeName) {
-    case 'ZodString':
-      return handleStringSchema(schema as z.ZodString)
-    case 'ZodNumber':
-      return handleNumberSchema(schema as z.ZodNumber)
-    case 'ZodBoolean':
-      return { type: 'boolean' }
-    case 'ZodArray':
-      return handleArraySchema(schema as z.ZodArray<any>)
-    case 'ZodObject':
-      return handleObjectSchema(schema as z.ZodObject<any>)
-    case 'ZodEnum':
-      return handleEnumSchema(schema as z.ZodEnum<any>)
-    case 'ZodUnion':
-      return handleUnionSchema(schema as z.ZodUnion<any>)
-    case 'ZodOptional':
-      return zodToJsonSchema((schema as z.ZodOptional<any>)._def.innerType)
-    case 'ZodNullable':
-      return {
-        ...zodToJsonSchema((schema as z.ZodNullable<any>)._def.innerType),
-        nullable: true,
-      }
-    case 'ZodDefault':
-      return {
-        ...zodToJsonSchema((schema as z.ZodDefault<any>)._def.innerType),
-        default: (schema as z.ZodDefault<any>)._def.defaultValue(),
-      }
-    case 'ZodLiteral':
-      return { const: (schema as z.ZodLiteral<any>)._def.value }
-    case 'ZodEffects':
-      return zodToJsonSchema((schema as z.ZodEffects<any>)._def.schema)
-    default:
-      return { type: 'object' }
+  // String
+  if (schema instanceof z.ZodString) {
+    return handleStringSchema(schema)
   }
+  // Number
+  if (schema instanceof z.ZodNumber) {
+    return handleNumberSchema(schema)
+  }
+  // Boolean
+  if (schema instanceof z.ZodBoolean) {
+    return { type: 'boolean' }
+  }
+  // Array
+  if (schema instanceof z.ZodArray) {
+    return handleArraySchema(schema)
+  }
+  // Object
+  if (schema instanceof z.ZodObject) {
+    return handleObjectSchema(schema)
+  }
+  // Enum
+  if (schema instanceof z.ZodEnum) {
+    return handleEnumSchema(schema)
+  }
+  // Union
+  if (schema instanceof z.ZodUnion) {
+    return handleUnionSchema(schema)
+  }
+  // Optional
+  if (schema instanceof z.ZodOptional) {
+    const inner = getZodInnerType(schema)
+    return inner ? zodToJsonSchema(inner) : { type: 'object' }
+  }
+  // Nullable
+  if (schema instanceof z.ZodNullable) {
+    const inner = getZodInnerType(schema)
+    return {
+      ...(inner ? zodToJsonSchema(inner) : {}),
+      nullable: true,
+    }
+  }
+  // Default
+  if (schema instanceof z.ZodDefault) {
+    const inner = getZodInnerType(schema)
+    return {
+      ...(inner ? zodToJsonSchema(inner) : {}),
+      default: getDefaultValue(schema),
+    }
+  }
+  // Literal
+  if (schema instanceof z.ZodLiteral) {
+    return { const: getLiteralValue(schema) }
+  }
+  // Effects (transforms, refinements)
+  if (schema instanceof z.ZodEffects) {
+    const inner = getZodInnerType(schema)
+    return inner ? zodToJsonSchema(inner) : { type: 'object' }
+  }
+  // Default fallback
+  return { type: 'object' }
 }
 
 function handleStringSchema(schema: z.ZodString): Record<string, unknown> {
   const result: Record<string, unknown> = { type: 'string' }
   
-  for (const check of schema._def.checks) {
+  // 安全访问 checks，兼容 Zod v3 和 v4
+  const def = schema._def as Record<string, unknown>
+  const checks = (def.checks ?? []) as Array<{ kind: string; value?: number; regex?: RegExp }>
+  
+  for (const check of checks) {
     switch (check.kind) {
       case 'min':
         result.minLength = check.value
@@ -173,7 +232,9 @@ function handleStringSchema(schema: z.ZodString): Record<string, unknown> {
         result.format = 'date-time'
         break
       case 'regex':
-        result.pattern = check.regex.source
+        if (check.regex) {
+          result.pattern = check.regex.source
+        }
         break
     }
   }
@@ -184,7 +245,11 @@ function handleStringSchema(schema: z.ZodString): Record<string, unknown> {
 function handleNumberSchema(schema: z.ZodNumber): Record<string, unknown> {
   const result: Record<string, unknown> = { type: 'number' }
   
-  for (const check of schema._def.checks) {
+  // 安全访问 checks，兼容 Zod v3 和 v4
+  const def = schema._def as Record<string, unknown>
+  const checks = (def.checks ?? []) as Array<{ kind: string; value?: number }>
+  
+  for (const check of checks) {
     switch (check.kind) {
       case 'min':
         result.minimum = check.value
@@ -201,25 +266,42 @@ function handleNumberSchema(schema: z.ZodNumber): Record<string, unknown> {
   return result
 }
 
-function handleArraySchema(schema: z.ZodArray<any>): Record<string, unknown> {
+function handleArraySchema(schema: z.ZodArray<z.ZodTypeAny>): Record<string, unknown> {
+  const def = schema._def as Record<string, unknown>
+  // Zod v4 使用 element，v3 使用 type
+  const itemType = (def.element ?? def.type) as z.ZodTypeAny | undefined
+  const minLength = def.minLength as { value: number } | undefined
+  const maxLength = def.maxLength as { value: number } | undefined
+  
   return {
     type: 'array',
-    items: zodToJsonSchema(schema._def.type),
-    ...(schema._def.minLength && { minItems: schema._def.minLength.value }),
-    ...(schema._def.maxLength && { maxItems: schema._def.maxLength.value }),
+    ...(itemType && { items: zodToJsonSchema(itemType) }),
+    ...(minLength && { minItems: minLength.value }),
+    ...(maxLength && { maxItems: maxLength.value }),
   }
 }
 
-function handleObjectSchema(schema: z.ZodObject<any>): Record<string, unknown> {
-  const shape = schema._def.shape()
+function handleObjectSchema(schema: z.ZodObject<z.ZodRawShape>): Record<string, unknown> {
+  const def = schema._def as Record<string, unknown>
+  // shape 可能是函数（v3）或直接对象（v4）
+  const shapeOrFn = def.shape
+  const shape = typeof shapeOrFn === 'function' ? shapeOrFn() : shapeOrFn
+  
+  if (!shape || typeof shape !== 'object') {
+    return { type: 'object' }
+  }
+  
   const properties: Record<string, unknown> = {}
   const required: string[] = []
 
   for (const [key, value] of Object.entries(shape)) {
-    properties[key] = zodToJsonSchema(value as z.ZodTypeAny)
+    const zodValue = value as z.ZodTypeAny
+    properties[key] = zodToJsonSchema(zodValue)
     
     // 检查是否必填
-    if (!((value as z.ZodTypeAny).isOptional() || (value as z.ZodTypeAny).isNullable())) {
+    const isOptional = typeof zodValue.isOptional === 'function' ? zodValue.isOptional() : false
+    const isNullable = typeof zodValue.isNullable === 'function' ? zodValue.isNullable() : false
+    if (!isOptional && !isNullable) {
       required.push(key)
     }
   }
@@ -231,16 +313,26 @@ function handleObjectSchema(schema: z.ZodObject<any>): Record<string, unknown> {
   }
 }
 
-function handleEnumSchema(schema: z.ZodEnum<any>): Record<string, unknown> {
+function handleEnumSchema(schema: z.ZodEnum<[string, ...string[]]>): Record<string, unknown> {
+  const def = schema._def as Record<string, unknown>
+  // Zod v4 使用 entries，v3 使用 values
+  const values = (def.entries ?? def.values) as string[] | Record<string, string> | undefined
+  
+  // entries 可能是对象 { a: 'a', b: 'b' }，需要获取值
+  const enumValues = Array.isArray(values) ? values : values ? Object.values(values) : []
+  
   return {
     type: 'string',
-    enum: schema._def.values,
+    enum: enumValues,
   }
 }
 
-function handleUnionSchema(schema: z.ZodUnion<any>): Record<string, unknown> {
+function handleUnionSchema(schema: z.ZodUnion<readonly [z.ZodTypeAny, ...z.ZodTypeAny[]]>): Record<string, unknown> {
+  const def = schema._def as Record<string, unknown>
+  const options = (def.options ?? []) as z.ZodTypeAny[]
+  
   return {
-    oneOf: schema._def.options.map((opt: z.ZodTypeAny) => zodToJsonSchema(opt)),
+    oneOf: options.map((opt: z.ZodTypeAny) => zodToJsonSchema(opt)),
   }
 }
 
@@ -442,17 +534,23 @@ export class OpenAPIGenerator {
   private extractQueryParams(schema: z.ZodTypeAny): OpenAPIParameter[] {
     const params: OpenAPIParameter[] = []
     
-    if (schema._def.typeName === 'ZodObject') {
-      const shape = (schema as z.ZodObject<any>)._def.shape()
+    if (schema instanceof z.ZodObject) {
+      const def = schema._def as Record<string, unknown>
+      // shape 可能是函数（v3）或直接对象（v4）
+      const shapeOrFn = def.shape
+      const shape = typeof shapeOrFn === 'function' ? shapeOrFn() : shapeOrFn
       
-      for (const [key, value] of Object.entries(shape)) {
-        const zodValue = value as z.ZodTypeAny
-        params.push({
-          name: key,
-          in: 'query',
-          required: !zodValue.isOptional(),
-          schema: zodToJsonSchema(zodValue),
-        })
+      if (shape && typeof shape === 'object') {
+        for (const [key, value] of Object.entries(shape)) {
+          const zodValue = value as z.ZodTypeAny
+          const isOptional = typeof zodValue.isOptional === 'function' ? zodValue.isOptional() : false
+          params.push({
+            name: key,
+            in: 'query',
+            required: !isOptional,
+            schema: zodToJsonSchema(zodValue),
+          })
+        }
       }
     }
 
