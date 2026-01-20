@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2732 2732">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0B0A10"/>
+      <stop offset="100%" style="stop-color:#1a1825"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#8b6fa8"/>
+      <stop offset="100%" style="stop-color:#a88bc4"/>
+    </linearGradient>
+  </defs>
+  
+  <!-- 背景 -->
+  <rect width="2732" height="2732" fill="url(#bg)"/>
+  
+  <!-- Arena 标志居中 -->
+  <g transform="translate(1366, 1200)">
+    <!-- 三个柱状图代表排行榜 -->
+    <rect x="-300" y="-50" width="150" height="300" rx="20" fill="url(#accent)" opacity="0.7"/>
+    <rect x="-75" y="-200" width="150" height="450" rx="20" fill="url(#accent)"/>
+    <rect x="150" y="50" width="150" height="200" rx="20" fill="url(#accent)" opacity="0.5"/>
+    
+    <!-- 顶部皇冠/奖杯效果 -->
+    <circle cx="0" cy="-280" r="50" fill="#FFD700"/>
+    <polygon points="0,-350 -40,-300 40,-300" fill="#FFD700"/>
+  </g>
+  
+  <!-- Arena 文字 -->
+  <text x="1366" y="1650" font-family="Arial, sans-serif" font-size="180" font-weight="bold" fill="#EDEDED" text-anchor="middle">ARENA</text>
+  
+  <!-- 副标题 -->
+  <text x="1366" y="1780" font-family="Arial, sans-serif" font-size="60" fill="#8b6fa8" text-anchor="middle">加密交易员排行榜</text>
+</svg>

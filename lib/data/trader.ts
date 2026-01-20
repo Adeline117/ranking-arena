@@ -70,6 +70,11 @@ export interface TraderPerformance {
   profitable_weeks?: number
   monthlyPerformance?: Array<{ month: string; value: number }>
   yearlyPerformance?: Array<{ year: number; value: number }>
+  // Arena Score 评分系统
+  arena_score?: number | null
+  return_score?: number | null
+  drawdown_score?: number | null
+  stability_score?: number | null
 }
 
 export interface TraderStats {

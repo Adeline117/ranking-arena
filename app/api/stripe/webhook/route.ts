@@ -13,6 +13,27 @@ const supabase = createClient(
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
+// 带重试的数据库操作
+async function withRetry<T>(
+  operation: () => Promise<T>,
+  maxRetries: number = 3,
+  delay: number = 1000
+): Promise<T> {
+  let lastError: Error | null = null
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      return await operation()
+    } catch (error) {
+      lastError = error as Error
+      console.warn(`[Webhook] Retry ${i + 1}/${maxRetries} failed:`, error)
+      if (i < maxRetries - 1) {
+        await new Promise(resolve => setTimeout(resolve, delay * (i + 1)))
+      }
+    }
+  }
+  throw lastError
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.text()
@@ -99,31 +120,30 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
     return
   }
 
-  // 立即更新 user_profiles 的 subscription_tier 和 stripe_customer_id
-  // 这样即使后续 webhook 失败，用户也能立即获得会员权限
-  const { error: profileError } = await supabase
-    .from('user_profiles')
-    .upsert({
-      id: userId,
-      subscription_tier: 'pro',
-      stripe_customer_id: customerId,
-      updated_at: new Date().toISOString(),
-    }, {
-      onConflict: 'id',
-    })
+  // 使用重试机制更新 user_profiles
+  await withRetry(async () => {
+    const { error: profileError } = await supabase
+      .from('user_profiles')
+      .upsert({
+        id: userId,
+        subscription_tier: 'pro',
+        stripe_customer_id: customerId,
+        updated_at: new Date().toISOString(),
+      }, {
+        onConflict: 'id',
+      })
 
-  if (profileError) {
-    console.error('[Webhook] Failed to update user_profiles:', profileError)
-  } else {
+    if (profileError) {
+      throw new Error(`Failed to update user_profiles: ${profileError.message}`)
+    }
     console.log(`[Webhook] Updated user_profiles for ${userId}, tier: pro`)
-  }
+  })
 
   // 获取订阅信息
   const subscriptionId = session.subscription as string
   if (subscriptionId) {
     try {
       const subscription = await stripe.subscriptions.retrieve(subscriptionId)
-      // 更新用户订阅状态
       await updateUserSubscription(userId, subscription, plan || 'monthly')
     } catch (err) {
       console.error('[Webhook] Failed to retrieve subscription:', err)

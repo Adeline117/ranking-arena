@@ -303,10 +303,10 @@ function TraderContent(props: { params: { handle: string } | Promise<{ handle: s
                 {/* 评分详情 - Pro 功能 */}
                 {performance && (
                   <ScoreBreakdown
-                    arenaScore={(performance as any).arena_score ?? null}
-                    returnScore={(performance as any).return_score ?? null}
-                    drawdownScore={(performance as any).drawdown_score ?? null}
-                    stabilityScore={(performance as any).stability_score ?? null}
+                    arenaScore={performance.arena_score ?? null}
+                    returnScore={performance.return_score ?? null}
+                    drawdownScore={performance.drawdown_score ?? null}
+                    stabilityScore={performance.stability_score ?? null}
                     source={profile.source}
                     isPro={isPro}
                     onUnlock={() => router.push('/pricing')}

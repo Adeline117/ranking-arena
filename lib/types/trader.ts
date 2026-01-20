@@ -90,6 +90,14 @@ export interface TraderPerformance {
   arena_score_90d?: number
   /** 总体评分 (0-100) - 加权计算：70% 90D + 25% 30D + 5% 7D */
   overall_score?: number
+  /** Arena Score 综合评分 */
+  arena_score?: number | null
+  /** 收益评分 (0-100) */
+  return_score?: number | null
+  /** 回撤评分 (0-100) */
+  drawdown_score?: number | null
+  /** 稳定性评分 (0-100) */
+  stability_score?: number | null
 }
 
 /** 月度绩效 */

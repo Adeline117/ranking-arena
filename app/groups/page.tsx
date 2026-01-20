@@ -247,16 +247,45 @@ function GroupsContent() {
       <TopNav email={email} />
       
       <Box as="main" className="container-padding" px={4} py={6} style={{ maxWidth: 1200, margin: '0 auto' }}>
-        <Box className="groups-grid" style={{ display: 'grid', gridTemplateColumns: '260px 1fr 280px', gap: tokens.spacing[4] }}>
-          {/* 左：排名前十 */}
-          <Box as="section">
+        {/* 响应式三栏布局 */}
+        <style jsx global>{`
+          .groups-page-grid {
+            display: grid;
+            gap: 16px;
+            grid-template-columns: 1fr;
+          }
+          @media (min-width: 768px) {
+            .groups-page-grid {
+              grid-template-columns: 1fr 280px;
+            }
+            .groups-page-grid .left-sidebar {
+              display: none;
+            }
+          }
+          @media (min-width: 1024px) {
+            .groups-page-grid {
+              grid-template-columns: 260px 1fr 280px;
+            }
+            .groups-page-grid .left-sidebar {
+              display: block;
+            }
+          }
+          @media (max-width: 767px) {
+            .groups-page-grid .right-sidebar {
+              order: -1;
+            }
+          }
+        `}</style>
+        <Box className="groups-page-grid">
+          {/* 左：排名前十 - 仅桌面端显示 */}
+          <Box as="section" className="left-sidebar">
             <Card title={t('top10')}>
               <RankingTableCompact traders={traders} loading={loadingTraders} loggedIn={loggedIn} />
             </Card>
           </Box>
 
           {/* 中：算法推荐帖子 */}
-          <Box as="section">
+          <Box as="section" className="main-content">
             <Card title={t('recommendedPosts')}>
               <Text size="sm" color="secondary" style={{ marginBottom: tokens.spacing[3] }}>
                 {loggedIn ? t('loggedInShowAll') : t('notLoggedInShowLimited')}
@@ -266,7 +295,7 @@ function GroupsContent() {
           </Box>
 
           {/* 右：小组推荐 */}
-          <Box as="section" style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}>
+          <Box as="section" className="right-sidebar" style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}>
             {/* 小组推荐 */}
             <Card title={t('groupRecommendations')}>
               <Text size="sm" color="secondary" style={{ marginBottom: tokens.spacing[3] }}>
