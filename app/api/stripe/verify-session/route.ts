@@ -7,14 +7,24 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import Stripe from 'stripe'
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2025-12-15.clover',
-})
+// 懒加载 Stripe 客户端
+function getStripe() {
+  const secretKey = process.env.STRIPE_SECRET_KEY
+  if (!secretKey) {
+    throw new Error('STRIPE_SECRET_KEY is not configured')
+  }
+  return new Stripe(secretKey, {
+    apiVersion: '2025-12-15.clover',
+  })
+}
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+// 懒加载 Supabase Admin 客户端
+function getSupabaseAdmin() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  )
+}
 
 // 从价格 ID 获取订阅等级
 function getTierFromPriceId(priceId: string): 'free' | 'pro' | 'elite' {
@@ -34,6 +44,9 @@ export async function POST(request: NextRequest) {
     if (!sessionId) {
       return NextResponse.json({ error: 'Missing session ID' }, { status: 400 })
     }
+
+    const stripe = getStripe()
+    const supabaseAdmin = getSupabaseAdmin()
 
     // 获取 Checkout Session
     const session = await stripe.checkout.sessions.retrieve(sessionId, {
