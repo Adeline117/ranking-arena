@@ -82,6 +82,7 @@ export default function SettingsPage() {
     showFollowers: boolean
     showFollowing: boolean
     dmPermission: string
+    showProBadge: boolean
   } | null>(null)
   
   // Password change
@@ -111,6 +112,7 @@ export default function SettingsPage() {
   const [showFollowers, setShowFollowers] = useState(true)
   const [showFollowing, setShowFollowing] = useState(true)
   const [dmPermission, setDmPermission] = useState<'all' | 'mutual' | 'none'>('all')
+  const [showProBadge, setShowProBadge] = useState(true)
 
   // 实时验证状态
   const [touchedFields, setTouchedFields] = useState<{
@@ -147,9 +149,10 @@ export default function SettingsPage() {
       notifyMessage !== initial.notifyMessage ||
       showFollowers !== initial.showFollowers ||
       showFollowing !== initial.showFollowing ||
-      dmPermission !== initial.dmPermission
+      dmPermission !== initial.dmPermission ||
+      showProBadge !== initial.showProBadge
     )
-  }, [handle, bio, avatarFile, coverFile, notifyFollow, notifyLike, notifyComment, notifyMention, notifyMessage, showFollowers, showFollowing, dmPermission])
+  }, [handle, bio, avatarFile, coverFile, notifyFollow, notifyLike, notifyComment, notifyMention, notifyMessage, showFollowers, showFollowing, dmPermission, showProBadge])
 
   // Warn before leaving with unsaved changes
   useEffect(() => {
@@ -185,10 +188,9 @@ export default function SettingsPage() {
       setLoading(true)
       
       // 只使用 user_profiles（避免访问不存在的 profiles 表）
-      // Note: dm_permission 暂时移除，等运行迁移后再添加
       const { data: userProfile } = await supabase
         .from('user_profiles')
-        .select('handle, bio, avatar_url, cover_url, notify_follow, notify_like, notify_comment, notify_mention, notify_message, show_followers, show_following')
+        .select('handle, bio, avatar_url, cover_url, notify_follow, notify_like, notify_comment, notify_mention, notify_message, show_followers, show_following, dm_permission, show_pro_badge')
         .eq('id', uid)
         .maybeSingle()
       
@@ -204,7 +206,8 @@ export default function SettingsPage() {
         const profileNotifyMessage = userProfile.notify_message !== false
         const profileShowFollowers = userProfile.show_followers !== false
         const profileShowFollowing = userProfile.show_following !== false
-        const profileDmPermission = 'all' // TODO: 运行迁移后改为 userProfile.dm_permission || 'all'
+        const profileDmPermission = userProfile.dm_permission || 'all'
+        const profileShowProBadge = userProfile.show_pro_badge !== false
         
         setHandle(profileHandle)
         setBio(profileBio)
@@ -220,6 +223,7 @@ export default function SettingsPage() {
         setShowFollowers(profileShowFollowers)
         setShowFollowing(profileShowFollowing)
         setDmPermission(profileDmPermission)
+        setShowProBadge(profileShowProBadge)
         
         // Store initial values for change detection
         initialValuesRef.current = {
@@ -235,6 +239,7 @@ export default function SettingsPage() {
           showFollowers: profileShowFollowers,
           showFollowing: profileShowFollowing,
           dmPermission: profileDmPermission,
+          showProBadge: profileShowProBadge,
         }
       }
 
@@ -381,7 +386,6 @@ export default function SettingsPage() {
       }
       
       // Update profile and notification preferences in user_profiles (consolidated save)
-      // Note: dm_permission is excluded to avoid errors if column doesn't exist
       const { error: userProfilesError } = await supabase
         .from('user_profiles')
         .upsert(
@@ -398,7 +402,8 @@ export default function SettingsPage() {
             notify_message: notifyMessage,
             show_followers: showFollowers,
             show_following: showFollowing,
-            // dm_permission: dmPermission, // TODO: 运行 setup_user_messaging.sql 后取消注释
+            dm_permission: dmPermission,
+            show_pro_badge: showProBadge,
           },
           { onConflict: 'id' }
         )
@@ -429,6 +434,7 @@ export default function SettingsPage() {
         showFollowers,
         showFollowing,
         dmPermission,
+        showProBadge,
       }
       setAvatarFile(null) // Clear avatar file state
       setCoverFile(null) // Clear cover file state
@@ -1260,6 +1266,25 @@ export default function SettingsPage() {
               <Text size="xs" color="tertiary" style={{ marginTop: tokens.spacing[1] }}>
                 关闭后，其他用户将无法查看你的关注/粉丝列表
               </Text>
+            </Box>
+
+            {/* Pro 徽章显示 */}
+            <Box>
+              <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>
+                Pro 会员徽章
+              </Text>
+              <label style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3], cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={showProBadge}
+                  onChange={(e) => setShowProBadge(e.target.checked)}
+                  style={{ width: 18, height: 18, accentColor: '#8b6fa8' }}
+                />
+                <Box>
+                  <Text size="sm">在主页显示 Pro 徽章</Text>
+                  <Text size="xs" color="tertiary">关闭后，其他用户将看不到你的会员徽章</Text>
+                </Box>
+              </label>
             </Box>
 
             {/* 私信权限 */}

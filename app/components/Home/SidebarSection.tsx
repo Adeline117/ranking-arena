@@ -8,6 +8,7 @@ import Card from '../UI/Card'
 import { ErrorBoundary } from '../Utils/ErrorBoundary'
 import { SkeletonCard } from '../UI/Skeleton'
 import { useLanguage } from '../Utils/LanguageProvider'
+import ProFeaturesPanel from '../Pro/ProFeaturesPanel'
 
 // 懒加载组件
 const PostFeed = lazy(() => import('../Features/PostFeed'))
@@ -96,8 +97,15 @@ export default function SidebarSection({ position }: SidebarSectionProps) {
         maxHeight: 'calc(100vh - 100px)',
         overflowY: 'auto',
         animationDelay: '0.2s',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: tokens.spacing[4],
       }}
     >
+      {/* Pro 功能面板 */}
+      <ProFeaturesPanel compact />
+      
+      {/* 市场数据 */}
       <ErrorBoundary>
         <Suspense fallback={<SkeletonCard />}>
           <MarketPanel />

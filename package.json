@@ -24,6 +24,7 @@
   },
   "dependencies": {
     "@sentry/nextjs": "^10.34.0",
+    "@stripe/stripe-js": "^8.6.3",
     "@supabase/supabase-js": "^2.89.0",
     "@upstash/ratelimit": "^2.0.8",
     "@upstash/redis": "^1.36.1",
@@ -32,6 +33,7 @@
     "lightweight-charts": "^5.1.0",
     "next": "16.1.1",
     "node-fetch": "^3.3.2",
+    "p-limit": "^7.2.0",
     "puppeteer": "^24.35.0",
     "puppeteer-extra": "^3.3.6",
     "puppeteer-extra-plugin-stealth": "^2.11.2",

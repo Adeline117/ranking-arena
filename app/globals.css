@@ -59,6 +59,19 @@
   /* Overlay and shadow colors - Dark */
   --shadow-color: rgba(0, 0, 0, 0.25);
   --overlay-hover: rgba(255, 255, 255, 0.05);
+  
+  /* Pro/Premium colors - Dark */
+  --color-pro-gradient-start: #8b6fa8;
+  --color-pro-gradient-end: #6B5B95;
+  --color-pro-badge-bg: linear-gradient(135deg, #8b6fa8 0%, #6B5B95 100%);
+  --color-pro-badge-shadow: rgba(139, 111, 168, 0.4);
+  --color-pro-glow: rgba(139, 111, 168, 0.3);
+  --color-elite-gradient-start: #FFD700;
+  --color-elite-gradient-end: #FFA500;
+  --color-enterprise-gradient-start: #00CED1;
+  --color-enterprise-gradient-end: #20B2AA;
+  --color-blur-overlay: rgba(11, 10, 16, 0.85);
+  --color-lock-bg: rgba(20, 18, 28, 0.95);
 }
 
 /* Light theme */
@@ -101,6 +114,19 @@
   /* Overlay and shadow colors - Light */
   --shadow-color: rgba(0, 0, 0, 0.1);
   --overlay-hover: rgba(0, 0, 0, 0.03);
+  
+  /* Pro/Premium colors - Light */
+  --color-pro-gradient-start: #7B5F98;
+  --color-pro-gradient-end: #5B4575;
+  --color-pro-badge-bg: linear-gradient(135deg, #7B5F98 0%, #5B4575 100%);
+  --color-pro-badge-shadow: rgba(123, 95, 152, 0.35);
+  --color-pro-glow: rgba(123, 95, 152, 0.2);
+  --color-elite-gradient-start: #DAA520;
+  --color-elite-gradient-end: #CD853F;
+  --color-enterprise-gradient-start: #00B4B4;
+  --color-enterprise-gradient-end: #008B8B;
+  --color-blur-overlay: rgba(255, 255, 255, 0.85);
+  --color-lock-bg: rgba(248, 248, 250, 0.95);
 }
 
 @theme inline {

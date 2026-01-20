@@ -9,6 +9,7 @@ import FollowButton from '../UI/FollowButton'
 import UserFollowButton from '../UI/UserFollowButton'
 import ClaimTraderButton from './ClaimTraderButton'
 import { getAvatarGradient, getAvatarInitial } from '@/lib/utils/avatar'
+import { ProBadgeOverlay } from '../UI/ProBadge'
 
 interface CommunityScore {
   avg_rating: number
@@ -27,6 +28,7 @@ interface TraderHeaderProps {
   isOwnProfile?: boolean
   source?: string
   communityScore?: CommunityScore | null
+  proBadgeTier?: 'pro' | 'elite' | 'enterprise' | null // Pro 徽章等级
 }
 
 // 来源平台配置 - 统一颜色，不做颜色区分
@@ -55,6 +57,7 @@ export default function TraderHeader({
   isOwnProfile = false, 
   source,
   communityScore,
+  proBadgeTier,
 }: TraderHeaderProps) {
   const [userId, setUserId] = useState<string | null>(null)
   const [mounted, setMounted] = useState(false)
@@ -195,6 +198,10 @@ export default function TraderHeader({
             >
               {getAvatarInitial(handle)}
             </Text>
+          )}
+          {/* Pro 徽章 */}
+          {proBadgeTier && (
+            <ProBadgeOverlay tier={proBadgeTier} position="bottom-right" />
           )}
         </Box>
 

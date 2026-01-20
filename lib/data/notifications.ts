@@ -7,7 +7,7 @@ import { SupabaseClient } from '@supabase/supabase-js'
 export interface Notification {
   id: string
   user_id: string
-  type: 'follow' | 'like' | 'comment' | 'system' | 'mention'
+  type: 'follow' | 'like' | 'comment' | 'system' | 'mention' | 'message' | 'trader_alert'
   title: string
   message: string
   link?: string
@@ -30,7 +30,7 @@ export interface NotificationListOptions {
 interface NotificationRow {
   id: string
   user_id: string
-  type: 'follow' | 'like' | 'comment' | 'system' | 'mention'
+  type: 'follow' | 'like' | 'comment' | 'system' | 'mention' | 'message' | 'trader_alert'
   title: string
   message: string
   link?: string
@@ -169,7 +169,7 @@ export async function createNotification(
   supabase: SupabaseClient,
   notification: {
     user_id: string
-    type: 'follow' | 'like' | 'comment' | 'system' | 'mention'
+    type: 'follow' | 'like' | 'comment' | 'system' | 'mention' | 'message' | 'trader_alert'
     title: string
     message: string
     link?: string

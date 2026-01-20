@@ -52,6 +52,7 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
   const [feed, setFeed] = useState<TraderFeedItem[]>([])
   const [similarTraders, setSimilarTraders] = useState<TraderProfile[]>([])
   const [loading, setLoading] = useState(true)
+  const [proBadgeTier, setProBadgeTier] = useState<'pro' | 'elite' | 'enterprise' | null>(null)
   
   // Read tab from URL, default to 'overview'
   const urlTab = searchParams.get('tab') as TabKey | null
@@ -459,6 +460,29 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
           getSimilarTraders(handle).catch(() => []),
         ])
 
+        // 获取用户的 Pro 徽章显示状态
+        if (profileData?.id) {
+          const { data: userSettings } = await supabase
+            .from('user_profiles')
+            .select('show_pro_badge')
+            .eq('id', profileData.id)
+            .maybeSingle()
+          
+          if (userSettings?.show_pro_badge !== false) {
+            // 获取订阅等级
+            const { data: subscription } = await supabase
+              .from('subscriptions')
+              .select('tier, status')
+              .eq('user_id', profileData.id)
+              .eq('status', 'active')
+              .maybeSingle()
+            
+            if (subscription && ['pro', 'elite', 'enterprise'].includes(subscription.tier)) {
+              setProBadgeTier(subscription.tier as 'pro' | 'elite' | 'enterprise')
+            }
+          }
+        }
+
         setProfile(profileData)
         setPerformance(performanceData)
         setStats(statsData)
@@ -575,6 +599,7 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
           followers={profile.followers}
           isOwnProfile={isOwnProfile}
           source={profile.source}
+          proBadgeTier={proBadgeTier}
         />
 
         {/* Tabs */}

@@ -9,6 +9,8 @@ import { Box, Text } from '../Base'
 import { useLanguage } from '../Utils/LanguageProvider'
 import { getAvatarGradient, getAvatarInitial } from '@/lib/utils/avatar'
 import { ScoreRulesModal } from '../UI/ScoreRulesModal'
+import CategoryRankingTabs, { CategoryType, filterByCategory } from './CategoryRankingTabs'
+import { ProLabel } from '../Pro/PremiumGate'
 
 // 格式化 PnL 显示
 function formatPnL(pnl: number): string {
@@ -130,9 +132,13 @@ export default function RankingTable(props: {
   loggedIn: boolean
   source?: string // 数据来源
   timeRange?: '7D' | '30D' | '90D' // 时间段
+  isPro?: boolean // 是否为 Pro 会员
+  category?: CategoryType // 当前分类
+  onCategoryChange?: (category: CategoryType) => void // 分类切换回调
+  onProRequired?: () => void // 需要升级 Pro 时的回调
 }) {
-  const { traders, loading, source, timeRange = '90D' } = props
-  const { t } = useLanguage()
+  const { traders, loading, source, timeRange = '90D', isPro = false, category = 'all', onCategoryChange, onProRequired } = props
+  const { t, language } = useLanguage()
   
   // 分页状态
   const [currentPage, setCurrentPage] = useState(1)
@@ -237,6 +243,35 @@ export default function RankingTable(props: {
         border: tokens.glass.border.light,
       }}
     >
+      {/* Category Tabs - Pro 功能 */}
+      {onCategoryChange && (
+        <Box
+          style={{
+            padding: `${tokens.spacing[4]} ${tokens.spacing[4]} ${tokens.spacing[2]}`,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: tokens.spacing[3],
+            borderBottom: `1px solid var(--glass-border-light)`,
+            background: tokens.glass.bg.light,
+            borderRadius: `${tokens.radius.xl} ${tokens.radius.xl} 0 0`,
+          }}
+        >
+          <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
+            <Text size="sm" weight="bold" color="secondary">
+              {language === 'en' ? 'Category' : '分类'}
+            </Text>
+            <ProLabel size="xs" />
+          </Box>
+          <CategoryRankingTabs
+            currentCategory={category}
+            onCategoryChange={onCategoryChange}
+            isPro={isPro}
+            onProRequired={onProRequired}
+          />
+        </Box>
+      )}
+
       {/* Header - 增大字体和间距 */}
       <Box
         className="ranking-table-header ranking-table-grid"
@@ -247,8 +282,8 @@ export default function RankingTable(props: {
           gap: tokens.spacing[2],
           padding: `${tokens.spacing[4]} ${tokens.spacing[4]}`,
           borderBottom: `1px solid var(--glass-border-light)`,
-          background: tokens.glass.bg.light,
-          borderRadius: `${tokens.radius.xl} ${tokens.radius.xl} 0 0`,
+          background: onCategoryChange ? 'transparent' : tokens.glass.bg.light,
+          borderRadius: onCategoryChange ? '0' : `${tokens.radius.xl} ${tokens.radius.xl} 0 0`,
         }}
       >
         <Text size="sm" weight="bold" color="tertiary" style={{ textAlign: 'center', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap', fontSize: '12px' }}>

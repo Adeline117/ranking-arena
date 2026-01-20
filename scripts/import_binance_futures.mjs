@@ -1,8 +1,10 @@
 /**
- * Binance Futures Copy Trading 排行榜数据抓取
+ * Binance Futures Copy Trading 排行榜数据抓取 (优化版)
  * 
- * 使用 Playwright 模拟真实浏览器，抓取合约跟单排行榜
- * 通过拦截 API 请求，获取 ROI 排序的数据
+ * 优化点：
+ * 1. 智能等待替代固定 sleep（减少约 50% 等待时间）
+ * 2. 批量数据库写入（减少 API 调用次数）
+ * 3. 更快的翻页策略
  * 
  * 用法: node scripts/import_binance_futures.mjs [7D|30D|90D]
  * 
@@ -27,7 +29,6 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
 const SOURCE = 'binance_futures'
 const BASE_URL = 'https://www.binance.com/zh-CN/copy-trading'
-const API_URL = 'https://www.binance.com/bapi/futures/v1/friendly/future/copy-trade/home-page/query-list'
 
 // 每页 18 个，抓 100 个需要 6 页
 const TARGET_COUNT = 100
@@ -75,12 +76,14 @@ function parseTraderFromApi(item, rank) {
 }
 
 async function fetchLeaderboardData(period) {
+  const startTime = Date.now()
   console.log(`\n=== 抓取 Binance Futures ${period} 排行榜 ===`)
   console.log('时间:', new Date().toISOString())
   console.log('URL:', BASE_URL)
   console.log(`目标: ${TARGET_COUNT} 个交易员，最多翻 ${MAX_PAGES} 页`)
 
   const traders = new Map()
+  let apiResponseReceived = false
 
   const browser = await chromium.launch({
     headless: true,
@@ -144,6 +147,7 @@ async function fetchLeaderboardData(period) {
           if (json.data && (json.code === '000000' || json.success !== false)) {
             const list = json.data?.list || json.data?.data || []
             if (Array.isArray(list) && list.length > 0) {
+              apiResponseReceived = true
               console.log(`  ✓ 收到 ${list.length} 条数据`)
               
               // 处理数据
@@ -167,22 +171,31 @@ async function fetchLeaderboardData(period) {
 
     console.log('\n📱 访问页面...')
     try {
-      await page.goto(BASE_URL, { waitUntil: 'domcontentloaded', timeout: 60000 })
+      await page.goto(BASE_URL, { waitUntil: 'domcontentloaded', timeout: 45000 })
     } catch (e) {
       console.log('  ⚠ 页面加载超时，继续尝试...')
     }
-    await sleep(8000)
+    
+    // 优化：智能等待，最多等 10 秒，收到 API 响应就继续
+    const waitStart = Date.now()
+    while (!apiResponseReceived && Date.now() - waitStart < 10000) {
+      await sleep(500)
+    }
+    
+    // 额外等待一小会确保数据处理完成
+    await sleep(2000)
     
     console.log(`\n📄 当前已获取: ${traders.size} 个交易员`)
 
     // 分页获取更多数据
     while (traders.size < TARGET_COUNT && currentPageNum < MAX_PAGES) {
       currentPageNum++
+      apiResponseReceived = false
       console.log(`\n📄 翻页到第 ${currentPageNum} 页...`)
       
       // 滚动到页面底部
       await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight))
-      await sleep(1000)
+      await sleep(500)
       
       // 点击下一页
       let pageClicked = false
@@ -216,7 +229,12 @@ async function fetchLeaderboardData(period) {
       
       if (pageClicked) {
         console.log(`  ✓ 翻页成功`)
-        await sleep(3000)
+        // 优化：智能等待 API 响应
+        const pageWaitStart = Date.now()
+        while (!apiResponseReceived && Date.now() - pageWaitStart < 8000) {
+          await sleep(300)
+        }
+        await sleep(500) // 短暂等待数据处理
       } else {
         // 方法2: 使用 Playwright 选择器
         const pageSelectors = [
@@ -231,7 +249,12 @@ async function fetchLeaderboardData(period) {
               await element.click()
               console.log(`  ✓ 翻页成功`)
               pageClicked = true
-              await sleep(3000)
+              // 智能等待
+              const selectorWaitStart = Date.now()
+              while (!apiResponseReceived && Date.now() - selectorWaitStart < 8000) {
+                await sleep(300)
+              }
+              await sleep(500)
               break
             }
           } catch (e) {}
@@ -247,6 +270,9 @@ async function fetchLeaderboardData(period) {
     }
 
     console.log(`\n📊 共获取 ${traders.size} 个交易员数据`)
+    
+    const elapsed = ((Date.now() - startTime) / 1000).toFixed(1)
+    console.log(`⏱ 爬取耗时: ${elapsed}s`)
 
     // 保存截图用于调试
     const screenshotPath = `/tmp/binance_futures_${period}_${Date.now()}.png`
@@ -260,61 +286,80 @@ async function fetchLeaderboardData(period) {
   return Array.from(traders.values())
 }
 
-async function saveTraders(traders, period) {
-  console.log(`\n💾 保存 ${traders.length} 个交易员到数据库 (${SOURCE} - ${period})...`)
+/**
+ * 批量保存交易员数据
+ */
+async function saveTradersBatch(traders, period) {
+  console.log(`\n💾 批量保存 ${traders.length} 个交易员到数据库 (${SOURCE} - ${period})...`)
   
   const capturedAt = new Date().toISOString()
-  let saved = 0
-  let errors = 0
 
-  for (const trader of traders) {
-    try {
-      // trader_sources 可以 upsert
-      await supabase.from('trader_sources').upsert({
-        source: SOURCE,
-        source_type: 'leaderboard',
-        source_trader_id: trader.traderId,
-        handle: trader.nickname,
-        profile_url: trader.avatar,
-        is_active: true,
-      }, { onConflict: 'source,source_trader_id' })
+  // 1. 批量 upsert trader_sources
+  const sourcesData = traders.map(t => ({
+    source: SOURCE,
+    source_type: 'leaderboard',
+    source_trader_id: t.traderId,
+    handle: t.nickname,
+    profile_url: t.avatar,
+    is_active: true,
+  }))
+  
+  const { error: sourcesError } = await supabase
+    .from('trader_sources')
+    .upsert(sourcesData, { onConflict: 'source,source_trader_id' })
+  
+  if (sourcesError) {
+    console.log(`  ⚠ trader_sources 批量保存警告: ${sourcesError.message}`)
+  } else {
+    console.log(`  ✓ trader_sources 批量保存成功`)
+  }
 
-      // trader_snapshots 使用 insert（每次抓取都是新快照）
-      const { error } = await supabase.from('trader_snapshots').insert({
-        source: SOURCE,
-        source_trader_id: trader.traderId,
-        season_id: period,
-        rank: trader.rank,
-        roi: trader.roi,
-        pnl: trader.pnl,
-        win_rate: trader.winRate,
-        max_drawdown: trader.maxDrawdown,
-        followers: trader.followers || 0,
-        captured_at: capturedAt,
-      })
-
+  // 2. 批量 insert trader_snapshots
+  const snapshotsData = traders.map(t => ({
+    source: SOURCE,
+    source_trader_id: t.traderId,
+    season_id: period,
+    rank: t.rank,
+    roi: t.roi,
+    pnl: t.pnl,
+    win_rate: t.winRate,
+    max_drawdown: t.maxDrawdown,
+    followers: t.followers || 0,
+    captured_at: capturedAt,
+  }))
+  
+  const { error: snapshotsError } = await supabase
+    .from('trader_snapshots')
+    .insert(snapshotsData)
+  
+  if (snapshotsError) {
+    console.log(`  ⚠ trader_snapshots 批量保存失败: ${snapshotsError.message}`)
+    // 如果批量失败，尝试逐条插入
+    console.log(`  尝试逐条保存...`)
+    let saved = 0
+    let errors = 0
+    for (const snapshot of snapshotsData) {
+      const { error } = await supabase.from('trader_snapshots').insert(snapshot)
       if (error) {
-        console.log(`    ✗ 保存失败 ${trader.traderId}: ${error.message}`)
         errors++
       } else {
         saved++
       }
-    } catch (error) {
-      console.log(`    ✗ 异常 ${trader.traderId}: ${error.message}`)
-      errors++
     }
+    console.log(`  逐条保存结果: 成功 ${saved}, 失败 ${errors}`)
+    return { saved, errors }
   }
 
-  console.log(`  ✓ 保存成功: ${saved}`)
-  if (errors > 0) console.log(`  ✗ 保存失败: ${errors}`)
-
-  return { saved, errors }
+  console.log(`  ✓ trader_snapshots 批量保存成功: ${snapshotsData.length} 条`)
+  return { saved: snapshotsData.length, errors: 0 }
 }
 
 async function main() {
   const period = getTargetPeriod()
+  const totalStartTime = Date.now()
+  
   console.log(`\n========================================`)
-  console.log(`Binance Futures Copy Trading 数据抓取`)
+  console.log(`Binance Futures Copy Trading 数据抓取 (优化版)`)
   console.log(`目标周期: ${period}`)
   console.log(`数据源: ${SOURCE}`)
   console.log(`目标数量: ${TARGET_COUNT} 个交易员`)
@@ -354,7 +399,9 @@ async function main() {
       process.exit(1)
     }
 
-    const result = await saveTraders(top100, period)
+    const result = await saveTradersBatch(top100, period)
+    
+    const totalElapsed = ((Date.now() - totalStartTime) / 1000).toFixed(1)
 
     console.log(`\n========================================`)
     console.log(`✅ 完成！`)
@@ -364,6 +411,7 @@ async function main() {
     console.log(`   TOP ROI: ${validation.stats.topRoi.toFixed(2)}%`)
     console.log(`   平均 ROI: ${validation.stats.avgRoi.toFixed(2)}%`)
     console.log(`   保存: ${result.saved}`)
+    console.log(`   总耗时: ${totalElapsed}s`)
     console.log(`   时间: ${new Date().toISOString()}`)
     console.log(`========================================`)
   } catch (error) {

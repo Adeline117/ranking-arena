@@ -341,9 +341,11 @@ export default function TopNav({ email }: { email: string | null }) {
               { href: '/', labelKey: 'home' as const },
               { href: '/groups', labelKey: 'groups' as const },
               { href: '/hot', labelKey: 'hot' as const },
+              { href: '/pricing', labelKey: 'pro' as const, isPro: true },
             ].map((item) => {
               const label = t(item.labelKey)
               const isActive = pathname === item.href || (item.href === '/' && pathname === '/')
+              const isPro = 'isPro' in item && item.isPro
               return (
                 <Link
                   key={item.href}
@@ -355,22 +357,44 @@ export default function TopNav({ email }: { email: string | null }) {
                   style={{
                     padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
                     borderRadius: tokens.radius.md,
-                    color: isActive ? tokens.colors.text.primary : tokens.colors.text.secondary,
+                    color: isPro 
+                      ? 'var(--color-pro-gradient-start)'
+                      : isActive 
+                        ? tokens.colors.text.primary 
+                        : tokens.colors.text.secondary,
                     textDecoration: 'none',
-                    fontWeight: isActive ? tokens.typography.fontWeight.black : tokens.typography.fontWeight.semibold,
+                    fontWeight: isActive || isPro ? tokens.typography.fontWeight.black : tokens.typography.fontWeight.semibold,
                     fontSize: tokens.typography.fontSize.sm,
-                    background: isActive ? tokens.colors.bg.secondary : 'transparent',
+                    background: isPro 
+                      ? 'var(--color-pro-glow)'
+                      : isActive 
+                        ? tokens.colors.bg.secondary 
+                        : 'transparent',
                     transition: `all ${tokens.transition.base}`,
+                    border: isPro ? '1px solid var(--color-pro-gradient-start)' : 'none',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 4,
                   }}
                   onMouseEnter={(e) => {
-                    if (!isActive) {
+                    if (isPro) {
+                      e.currentTarget.style.background = 'var(--color-pro-badge-bg)'
+                      e.currentTarget.style.color = '#fff'
+                      e.currentTarget.style.transform = 'translateY(-1px)'
+                      e.currentTarget.style.boxShadow = '0 4px 12px var(--color-pro-badge-shadow)'
+                    } else if (!isActive) {
                       e.currentTarget.style.color = tokens.colors.text.primary
                       e.currentTarget.style.background = tokens.colors.bg.secondary
                       e.currentTarget.style.transform = 'translateY(-1px)'
                     }
                   }}
                   onMouseLeave={(e) => {
-                    if (!isActive) {
+                    if (isPro) {
+                      e.currentTarget.style.background = 'var(--color-pro-glow)'
+                      e.currentTarget.style.color = 'var(--color-pro-gradient-start)'
+                      e.currentTarget.style.transform = 'translateY(0)'
+                      e.currentTarget.style.boxShadow = 'none'
+                    } else if (!isActive) {
                       e.currentTarget.style.color = tokens.colors.text.secondary
                       e.currentTarget.style.background = 'transparent'
                       e.currentTarget.style.transform = 'translateY(0)'
@@ -383,6 +407,11 @@ export default function TopNav({ email }: { email: string | null }) {
                     }
                   }}
                 >
+                  {isPro && (
+                    <svg width={12} height={12} viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
+                    </svg>
+                  )}
                   {label}
                 </Link>
               )

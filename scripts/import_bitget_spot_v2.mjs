@@ -1,5 +1,10 @@
 /**
- * Bitget Spot Copy Trading 完整数据抓取 v2
+ * Bitget Spot Copy Trading 完整数据抓取 v2 (优化版)
+ * 
+ * 优化点：
+ * 1. 并行获取详情
+ * 2. 批量保存
+ * 3. 更好的分页处理
  * 
  * 用法: node scripts/import_bitget_spot_v2.mjs [7D|30D|90D]
  */
@@ -8,6 +13,7 @@ import 'dotenv/config'
 import puppeteer from 'puppeteer-extra'
 import StealthPlugin from 'puppeteer-extra-plugin-stealth'
 import { createClient } from '@supabase/supabase-js'
+import pLimit from 'p-limit'
 
 puppeteer.use(StealthPlugin())
 
@@ -23,12 +29,13 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
 const SOURCE = 'bitget_spot'
 const TARGET_COUNT = 100
+const CONCURRENCY = 5
 
-// Spot URL
+// Spot URL - rule=2 是按 ROI 排序
 const PERIOD_CONFIG = {
-  '7D': { url: 'https://www.bitget.com/copy-trading/spot/all?sort=1' },
-  '30D': { url: 'https://www.bitget.com/copy-trading/spot/all?sort=2' },
-  '90D': { url: 'https://www.bitget.com/copy-trading/spot/all?sort=0' },
+  '7D': { url: 'https://www.bitget.com/copy-trading/spot/all?rule=2&sort=1' },
+  '30D': { url: 'https://www.bitget.com/copy-trading/spot/all?rule=2&sort=2' },
+  '90D': { url: 'https://www.bitget.com/copy-trading/spot/all?rule=2&sort=0' },
 }
 
 function sleep(ms) {
@@ -49,7 +56,37 @@ async function fetchLeaderboard(browser, period) {
   await page.setViewport({ width: 1920, height: 1080 })
   await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36')
   
-  const traders = []
+  const traders = new Map()
+  
+  // 监听 API 响应
+  page.on('response', async (response) => {
+    const url = response.url()
+    if (url.includes('trader') && (url.includes('list') || url.includes('rank'))) {
+      try {
+        const json = await response.json()
+        const list = json.data?.list || json.data?.traderList || json.data || []
+        if (Array.isArray(list) && list.length > 0) {
+          console.log(`  📡 拦截到 API 数据: ${list.length} 条`)
+          
+          list.forEach(item => {
+            const traderId = item.traderId || item.traderUid || item.uid || ''
+            if (!traderId || traders.has(traderId)) return
+            
+            traders.set(traderId, {
+              traderId: String(traderId),
+              nickname: item.nickName || item.traderName || null,
+              avatar: item.headUrl || item.avatar || null,
+              roi: parseFloat(item.roi || item.yieldRate || 0) * (Math.abs(item.roi || 0) > 10 ? 1 : 100),
+              pnl: parseFloat(item.totalProfit || item.profit || 0),
+              winRate: parseFloat(item.winRate || 0),
+              maxDrawdown: parseFloat(item.maxDrawdown || item.mdd || 0),
+              followers: parseInt(item.followerCount || item.copyTraderCount || 0),
+            })
+          })
+        }
+      } catch {}
+    }
+  })
   
   try {
     await page.goto(config.url, { waitUntil: 'networkidle2', timeout: 45000 })
@@ -59,14 +96,16 @@ async function fetchLeaderboard(browser, period) {
     await page.evaluate(() => {
       document.querySelectorAll('button').forEach(btn => {
         const text = btn.textContent || ''
-        if (text.includes('OK') || text.includes('Got') || text.includes('Accept')) {
+        if (text.includes('OK') || text.includes('Got') || text.includes('Accept') || text.includes('Confirm')) {
           try { btn.click() } catch {}
         }
       })
     }).catch(() => {})
     await sleep(2000)
     
-    // 获取交易员链接
+    console.log(`  API 拦截到: ${traders.size} 个`)
+    
+    // 获取交易员链接作为备份
     const links = await page.evaluate(() => {
       const anchors = document.querySelectorAll('a[href*="/trader/"]')
       return Array.from(anchors).map(a => {
@@ -82,49 +121,64 @@ async function fetchLeaderboard(browser, period) {
       }).filter(Boolean)
     })
     
-    // 去重
-    const seen = new Set()
+    // 合并链接数据
     for (const link of links) {
-      if (!seen.has(link.traderId)) {
-        seen.add(link.traderId)
-        
+      if (!traders.has(link.traderId)) {
         const text = link.text || ''
         const nickMatch = text.match(/^([^@]+)@/)
         const roiMatch = text.match(/([+-]?[\d,]+\.?\d*)%/)
         
-        traders.push({
+        traders.set(link.traderId, {
           traderId: link.traderId,
-          nickname: nickMatch ? nickMatch[1].trim() : link.traderId,
+          nickname: nickMatch ? nickMatch[1].trim() : link.traderId.slice(0, 8),
           roi: roiMatch ? parseFloat(roiMatch[1].replace(/,/g, '')) : 0,
         })
       }
     }
     
-    console.log(`  获取到 ${traders.length} 个交易员`)
+    console.log(`  合并后: ${traders.size} 个`)
     
-    // 分页
-    if (traders.length < TARGET_COUNT) {
-      for (let pageNum = 2; pageNum <= 5; pageNum++) {
-        if (traders.length >= TARGET_COUNT) break
+    // 分页获取更多
+    if (traders.size < TARGET_COUNT) {
+      console.log('\n📄 分页获取更多...')
+      
+      for (let pageNum = 2; pageNum <= 10; pageNum++) {
+        if (traders.size >= TARGET_COUNT) break
         
-        await page.evaluate(() => window.scrollTo(0, 3500))
+        await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight))
         await sleep(1000)
         
+        // 尝试多种分页选择器
         const clicked = await page.evaluate((pageNum) => {
-          const items = document.querySelectorAll('.bit-pagination-item a, .bit-pagination-item')
+          // 方法1: 标准分页
+          const items = document.querySelectorAll('.bit-pagination-item a, .bit-pagination-item, [class*="pagination"] button, [class*="pagination"] a')
           for (const item of items) {
             if (item.textContent?.trim() === String(pageNum)) {
               item.click()
               return true
             }
           }
+          
+          // 方法2: 下一页按钮
+          const nextBtns = document.querySelectorAll('[class*="next"], [aria-label*="next"], button:has(svg)')
+          for (const btn of nextBtns) {
+            if (btn.offsetParent !== null) {
+              btn.click()
+              return true
+            }
+          }
+          
           return false
         }, pageNum)
         
-        if (!clicked) break
+        if (!clicked) {
+          console.log(`  无法翻到第 ${pageNum} 页`)
+          break
+        }
         
-        await sleep(4000)
+        await sleep(3000)
         
+        // 重新获取链接
         const moreLinks = await page.evaluate(() => {
           const anchors = document.querySelectorAll('a[href*="/trader/"]')
           return Array.from(anchors).map(a => {
@@ -140,27 +194,37 @@ async function fetchLeaderboard(browser, period) {
           }).filter(Boolean)
         })
         
+        let newCount = 0
         for (const link of moreLinks) {
-          if (!seen.has(link.traderId)) {
-            seen.add(link.traderId)
+          if (!traders.has(link.traderId)) {
             const text = link.text || ''
             const nickMatch = text.match(/^([^@]+)@/)
             const roiMatch = text.match(/([+-]?[\d,]+\.?\d*)%/)
-            traders.push({
+            traders.set(link.traderId, {
               traderId: link.traderId,
-              nickname: nickMatch ? nickMatch[1].trim() : link.traderId,
+              nickname: nickMatch ? nickMatch[1].trim() : link.traderId.slice(0, 8),
               roi: roiMatch ? parseFloat(roiMatch[1].replace(/,/g, '')) : 0,
             })
+            newCount++
           }
         }
-        console.log(`  第${pageNum}页后: ${traders.length} 个`)
+        
+        console.log(`  第${pageNum}页: 新增 ${newCount}, 累计 ${traders.size}`)
+        
+        if (newCount === 0) {
+          console.log('  无新数据，停止翻页')
+          break
+        }
       }
     }
+    
+    await page.screenshot({ path: `/tmp/bitget_spot_${period}_${Date.now()}.png`, fullPage: true })
+    
   } finally {
     await page.close()
   }
   
-  return traders.slice(0, TARGET_COUNT)
+  return Array.from(traders.values()).slice(0, TARGET_COUNT)
 }
 
 async function fetchTraderDetails(browser, traderId, period) {
@@ -171,33 +235,32 @@ async function fetchTraderDetails(browser, traderId, period) {
   let details = {}
   
   try {
-    // Spot 详情页
     const url = `https://www.bitget.com/copy-trading/trader/${traderId}/spot`
-    await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 }).catch(() => {})
-    await sleep(4000)
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 20000 }).catch(() => {})
+    
+    // 等待数据加载
+    await Promise.race([
+      page.waitForSelector('[class*="roi"], [class*="ROI"]', { timeout: 5000 }),
+      sleep(3000)
+    ]).catch(() => {})
     
     // 从页面提取数据
     const pageData = await page.evaluate(() => {
       const text = document.body.innerText
       const result = {}
       
-      // ROI
       const roiMatch = text.match(/ROI[\s\n:]*([+-]?[\d,]+\.?\d*)%/i)
       if (roiMatch) result.roi = parseFloat(roiMatch[1].replace(/,/g, ''))
       
-      // Total P&L
       const pnlMatch = text.match(/(?:Total P&?L|总收益|Profit)[\s\n:]*\$?([\d,]+\.?\d*)/i)
       if (pnlMatch) result.pnl = parseFloat(pnlMatch[1].replace(/,/g, ''))
       
-      // Win Rate
       const winMatch = text.match(/(?:Win rate|胜率)[\s\n:]*(\d+\.?\d*)%/i)
       if (winMatch) result.winRate = parseFloat(winMatch[1])
       
-      // MDD
       const mddMatch = text.match(/(?:MDD|Max(?:imum)? Drawdown|最大回撤)[\s\n:]*(\d+\.?\d*)%/i)
       if (mddMatch) result.maxDrawdown = parseFloat(mddMatch[1])
       
-      // Followers
       const followMatch = text.match(/(?:Followers?|跟随者|Copiers?)[\s\n:]*(\d+)/i)
       if (followMatch) result.followers = parseInt(followMatch[1])
       
@@ -215,45 +278,95 @@ async function fetchTraderDetails(browser, traderId, period) {
   return details
 }
 
-async function saveTrader(trader, details, period, capturedAt, rank) {
-  try {
-    await supabase.from('trader_sources').upsert({
-      source: SOURCE,
-      source_type: 'leaderboard',
-      source_trader_id: trader.traderId,
-      handle: trader.nickname,
-      is_active: true,
-    }, { onConflict: 'source,source_trader_id' })
-    
-    const { error } = await supabase.from('trader_snapshots').insert({
-      source: SOURCE,
-      source_trader_id: trader.traderId,
-      season_id: period,
-      rank,
-      roi: details.roi || trader.roi || 0,
-      pnl: details.pnl || null,
-      win_rate: details.winRate || null,
-      max_drawdown: details.maxDrawdown || null,
-      followers: details.followers || null,
-      captured_at: capturedAt,
-    })
-    
-    return !error
-  } catch {
-    return false
+async function fetchAllDetailsParallel(browser, traders, period) {
+  const limit = pLimit(CONCURRENCY)
+  const startTime = Date.now()
+  
+  console.log(`\n🚀 并行获取详情 (并发: ${CONCURRENCY})...`)
+  
+  let completed = 0
+  const total = traders.length
+  
+  const results = await Promise.all(
+    traders.map((trader, index) =>
+      limit(async () => {
+        const details = await fetchTraderDetails(browser, trader.traderId, period)
+        completed++
+        
+        if (completed % 10 === 0 || completed === total) {
+          const elapsed = ((Date.now() - startTime) / 1000).toFixed(1)
+          console.log(`  进度: ${completed}/${total} | 耗时: ${elapsed}s`)
+        }
+        
+        return {
+          ...trader,
+          ...details,
+          rank: index + 1,
+        }
+      })
+    )
+  )
+  
+  const elapsed = ((Date.now() - startTime) / 1000).toFixed(1)
+  console.log(`  ✓ 详情获取完成，耗时: ${elapsed}s`)
+  
+  return results
+}
+
+async function saveTradersBatch(traders, period) {
+  console.log(`\n💾 批量保存 ${traders.length} 条数据...`)
+  
+  const capturedAt = new Date().toISOString()
+  
+  // 批量 upsert trader_sources
+  const sourcesData = traders.map(t => ({
+    source: SOURCE,
+    source_type: 'leaderboard',
+    source_trader_id: t.traderId,
+    handle: t.nickname,
+    is_active: true,
+  }))
+  
+  await supabase.from('trader_sources').upsert(sourcesData, { onConflict: 'source,source_trader_id' })
+  
+  // 批量 insert trader_snapshots
+  const snapshotsData = traders.map(t => ({
+    source: SOURCE,
+    source_trader_id: t.traderId,
+    season_id: period,
+    rank: t.rank,
+    roi: t.roi || 0,
+    pnl: t.pnl || null,
+    win_rate: t.winRate || null,
+    max_drawdown: t.maxDrawdown || null,
+    followers: t.followers || null,
+    captured_at: capturedAt,
+  }))
+  
+  const { error } = await supabase.from('trader_snapshots').insert(snapshotsData)
+  
+  if (error) {
+    console.log(`  ⚠ 批量保存失败: ${error.message}`)
+    let saved = 0
+    for (const s of snapshotsData) {
+      const { error: e } = await supabase.from('trader_snapshots').insert(s)
+      if (!e) saved++
+    }
+    return saved
   }
+  
+  console.log(`  ✓ 保存成功: ${snapshotsData.length} 条`)
+  return snapshotsData.length
 }
 
 async function main() {
   const period = getTargetPeriod()
+  const startTime = Date.now()
+  
   console.log(`\n========================================`)
-  console.log(`Bitget Spot 完整数据抓取 v2 - ${period}`)
+  console.log(`Bitget Spot 数据抓取 v2 (优化版) - ${period}`)
   console.log(`========================================`)
   console.log('时间:', new Date().toISOString())
-  
-  // 先清理旧数据
-  console.log('\n🧹 清理旧数据...')
-  await supabase.from('trader_snapshots').delete().eq('source', SOURCE).eq('season_id', period)
   
   const browser = await puppeteer.launch({
     headless: 'new',
@@ -261,6 +374,7 @@ async function main() {
   })
   
   try {
+    // 1. 获取排行榜
     const traders = await fetchLeaderboard(browser, period)
     
     if (traders.length === 0) {
@@ -268,36 +382,29 @@ async function main() {
       return
     }
     
+    // 2. 排序
+    traders.sort((a, b) => (b.roi || 0) - (a.roi || 0))
+    
     console.log(`\n📋 TOP 5:`)
     traders.slice(0, 5).forEach((t, i) => {
-      console.log(`  ${i + 1}. ${t.nickname} (${t.traderId.slice(0, 8)}...): ROI ${t.roi}%`)
+      console.log(`  ${i + 1}. ${t.nickname} (${t.traderId.slice(0, 8)}...): ROI ${t.roi?.toFixed(2) || 0}%`)
     })
     
-    console.log(`\n🔍 获取详情数据...`)
-    const capturedAt = new Date().toISOString()
-    let saved = 0
+    // 3. 并行获取详情
+    const enrichedTraders = await fetchAllDetailsParallel(browser, traders, period)
     
-    for (let i = 0; i < traders.length; i++) {
-      const trader = traders[i]
-      process.stdout.write(`  ${i + 1}/${traders.length} ${trader.nickname.slice(0, 15).padEnd(15)} `)
-      
-      const details = await fetchTraderDetails(browser, trader.traderId, period)
-      const success = await saveTrader(trader, details, period, capturedAt, i + 1)
-      
-      if (success) {
-        saved++
-        console.log(`✓ ROI:${(details.roi || trader.roi || 0).toFixed(1)}% PnL:$${(details.pnl || 0).toFixed(0)} WR:${(details.winRate || 0)}% MDD:${(details.maxDrawdown || 0)}%`)
-      } else {
-        console.log(`✗ 保存失败`)
-      }
-      
-      if (i > 0 && i % 10 === 0) {
-        await sleep(2000)
-      }
-    }
+    // 4. 保存
+    const saved = await saveTradersBatch(enrichedTraders, period)
+    
+    const totalTime = ((Date.now() - startTime) / 1000).toFixed(1)
     
     console.log(`\n========================================`)
-    console.log(`✅ 完成！保存: ${saved}/${traders.length}`)
+    console.log(`✅ 完成！`)
+    console.log(`   来源: ${SOURCE}`)
+    console.log(`   周期: ${period}`)
+    console.log(`   获取: ${traders.length}`)
+    console.log(`   保存: ${saved}`)
+    console.log(`   耗时: ${totalTime}s`)
     console.log(`========================================`)
     
   } finally {
