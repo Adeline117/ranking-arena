@@ -174,24 +174,14 @@ async function fetchApi(url, config, retries = 3) {
 
 // 获取需要更新的交易员列表
 async function getTraders(options) {
-  const { source, limit, skipRecentHours, force } = options
-  
-  // 计算时间阈值
-  const threshold = new Date()
-  threshold.setHours(threshold.getHours() - skipRecentHours)
-  const thresholdISO = threshold.toISOString()
+  const { source, limit } = options
   
   let query = supabase
     .from('trader_sources')
-    .select('source, source_trader_id, handle, updated_at')
+    .select('source, source_trader_id, handle')
     .eq('is_active', true)
-    .order('updated_at', { ascending: true, nullsFirst: true }) // 优先更新最旧的
+    .order('created_at', { ascending: false }) // 优先更新最新的
     .limit(limit)
-  
-  // 增量更新: 只获取超过阈值时间未更新的
-  if (!force) {
-    query = query.or(`updated_at.is.null,updated_at.lt.${thresholdISO}`)
-  }
   
   // 来源过滤
   if (source) {
@@ -229,6 +219,7 @@ async function processBinanceTrader(traderId, source) {
     curves: [],
     positions: [],
     portfolio: [],
+    snapshots: [], // 新增：保存三个时间段的 ROI/PnL 快照
   }
   
   // 并行获取所有时间段的数据
@@ -253,6 +244,26 @@ async function processBinanceTrader(traderId, source) {
         total_positions: parseInt(perf.totalOrder) || 0,
         captured_at: capturedAt,
       })
+      
+      // 新增：保存 ROI/PnL 快照到 trader_snapshots
+      // 为每个时间段生成不同的 captured_at (避免唯一约束冲突)
+      const roi = parseFloat(perf.roi) || 0
+      const pnl = parseFloat(perf.pnl) || 0
+      if (roi !== 0 || pnl !== 0) {
+        const periodOffset = period === '7D' ? 0 : (period === '30D' ? 1 : 2)
+        const snapshotTime = new Date(Date.now() + periodOffset).toISOString()
+        results.snapshots.push({
+          source,
+          source_trader_id: traderId,
+          season_id: period,
+          roi,
+          pnl,
+          win_rate: parseFloat(perf.winRate) / 100 || 0, // API 返回的是百分比形式
+          max_drawdown: parseFloat(perf.mdd) || 0,
+          followers: parseInt(perf.copierCount || perf.currentCopyCount) || 0,
+          captured_at: snapshotTime,
+        })
+      }
     }
     
     // Assets
@@ -341,20 +352,8 @@ async function processBinanceTrader(traderId, source) {
   return results
 }
 
-// 更新 trader_sources 的 updated_at
-async function updateTraderTimestamps(traderIds, source) {
-  if (traderIds.length === 0) return
-  
-  const { error } = await supabase
-    .from('trader_sources')
-    .update({ updated_at: new Date().toISOString() })
-    .eq('source', source)
-    .in('source_trader_id', traderIds)
-  
-  if (error) {
-    console.error(`更新时间戳失败 (${source}):`, error.message)
-  }
-}
+// 更新 trader_sources 的时间戳 (已禁用 - 表没有 updated_at 列)
+// async function updateTraderTimestamps(traderIds, source) { ... }
 
 // 批量保存数据 (优化版)
 async function saveBatch(allResults) {
@@ -363,6 +362,7 @@ async function saveBatch(allResults) {
   const curves = []
   const positions = []
   const portfolios = []
+  const snapshots = [] // 新增：ROI/PnL 快照
   const updatedTraders = new Map() // source -> [trader_ids]
   
   for (const r of allResults) {
@@ -372,6 +372,7 @@ async function saveBatch(allResults) {
     curves.push(...r.curves)
     positions.push(...r.positions)
     portfolios.push(...r.portfolio)
+    if (r.snapshots) snapshots.push(...r.snapshots)
     
     // 收集成功更新的交易员
     if (r.stats.length > 0) {
@@ -382,7 +383,7 @@ async function saveBatch(allResults) {
     }
   }
   
-  const counts = { stats: 0, assets: 0, curves: 0, positions: 0, portfolios: 0 }
+  const counts = { stats: 0, assets: 0, curves: 0, positions: 0, portfolios: 0, snapshots: 0 }
   const batchSize = 500
   
   // 并行执行所有保存操作
@@ -476,12 +477,23 @@ async function saveBatch(allResults) {
     })())
   }
   
-  await Promise.all(savePromises)
-  
-  // 更新成功交易员的时间戳
-  for (const [source, traderIds] of updatedTraders) {
-    await updateTraderTimestamps(traderIds, source)
+  // 新增：保存 ROI/PnL 快照到 trader_snapshots (使用 upsert)
+  if (snapshots.length > 0) {
+    savePromises.push((async () => {
+      for (let i = 0; i < snapshots.length; i += batchSize) {
+        const batch = snapshots.slice(i, i + batchSize)
+        // 直接插入新记录（每次 captured_at 都不同，所以不会冲突）
+        const { error, data } = await supabase.from('trader_snapshots').insert(batch).select('id')
+        if (!error) {
+          counts.snapshots += data?.length || batch.length
+        } else {
+          console.error('保存快照失败:', error.message, error.code)
+        }
+      }
+    })())
   }
+  
+  await Promise.all(savePromises)
   
   return counts
 }
@@ -589,6 +601,7 @@ async function main() {
   console.log(`  失败: ${errors.length}`)
   console.log(``)
   console.log(`💾 数据保存 (耗时: ${saveElapsed}s)`)
+  console.log(`  - Snapshots: ${counts.snapshots} 条 (ROI/PnL 快照)`)
   console.log(`  - Stats: ${counts.stats} 条`)
   console.log(`  - Assets: ${counts.assets} 条`)
   console.log(`  - Curves: ${counts.curves} 条`)
