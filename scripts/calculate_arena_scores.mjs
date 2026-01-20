@@ -42,7 +42,12 @@ function calculateArenaScore(snap, period) {
   const roi = parseFloat(snap.roi) || 0
   const pnl = parseFloat(snap.pnl) || 0
   const mdd = snap.max_drawdown !== null ? parseFloat(snap.max_drawdown) : null
-  const wr = snap.win_rate !== null ? parseFloat(snap.win_rate) : null
+  let wr = snap.win_rate !== null ? parseFloat(snap.win_rate) : null
+  
+  // 标准化 win_rate：如果 <= 1 则认为是小数，需要乘以 100
+  if (wr !== null && wr <= 1) {
+    wr = wr * 100
+  }
   
   const params = ARENA_CONFIG.PARAMS[period] || ARENA_CONFIG.PARAMS['90D']
   const days = getPeriodDays(period)

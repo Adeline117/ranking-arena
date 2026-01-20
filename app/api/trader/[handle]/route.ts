@@ -27,13 +27,11 @@ const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABAS
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
 
 // 支持的交易所 - 需要与数据库中的 source 值保持一致
-// 注意：更具体的 source（如 binance_futures）要放在通用 source（binance）之前
-// 这样查询时会优先匹配到新数据
+// 支持的交易所 source 列表
 const TRADER_SOURCES = [
-  'binance_futures',  // 放在 binance 之前
+  'binance_futures',
   'binance_spot',
   'binance_web3',
-  'binance',          // 旧版 source（兼容）
   'bitget_futures',
   'bitget_spot',
   'bybit',

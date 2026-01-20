@@ -153,7 +153,7 @@ export async function GET(request: NextRequest) {
           pnl: snapshot?.pnl !== null && snapshot?.pnl !== undefined ? snapshot.pnl : undefined,
           win_rate: snapshot?.win_rate !== null && snapshot?.win_rate !== undefined ? snapshot.win_rate : 0,
           followers: snapshot?.followers || 0,
-          source: snapshot?.source || sourceInfo?.source || 'binance',
+          source: snapshot?.source || sourceInfo?.source || 'binance_futures',
           followed_at: followedAtMap.get(traderId)
         })
       }

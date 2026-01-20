@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import Stripe from 'stripe'
 import { stripe, constructWebhookEvent, SUBSCRIPTION_STATUS_MAP } from '@/lib/stripe'
+import { joinProOfficialGroup, leaveProOfficialGroup } from '@/app/api/pro-official-group/route'
 
 // 创建服务端 Supabase 客户端
 const supabase = createClient(
@@ -150,6 +151,18 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
     }
   }
 
+  // 自动加入 Pro 会员官方群
+  try {
+    const joinResult = await joinProOfficialGroup(userId)
+    if (joinResult.success) {
+      console.log(`[Webhook] User ${userId} joined Pro official group: ${joinResult.groupId}`)
+    } else {
+      console.warn(`[Webhook] Failed to join Pro official group: ${joinResult.message}`)
+    }
+  } catch (joinError) {
+    console.error('[Webhook] Error joining Pro official group:', joinError)
+  }
+
   console.log(`[Webhook] Checkout completed for user ${userId}, plan: ${plan}`)
 }
 
@@ -209,6 +222,16 @@ async function handleSubscriptionCanceled(subscription: Stripe.Subscription) {
       updated_at: new Date().toISOString(),
     })
     .eq('id', profile.id)
+
+  // 离开 Pro 会员官方群
+  try {
+    const leftGroup = await leaveProOfficialGroup(profile.id)
+    if (leftGroup) {
+      console.log(`[Webhook] User ${profile.id} left Pro official group`)
+    }
+  } catch (leaveError) {
+    console.error('[Webhook] Error leaving Pro official group:', leaveError)
+  }
 
   console.log(`Subscription canceled for user ${profile.id}`)
 }

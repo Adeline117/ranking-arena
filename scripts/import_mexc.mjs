@@ -31,6 +31,31 @@ const BASE_URL = 'https://www.mexc.com/futures/copyTrade/home'
 const TARGET_COUNT = 100
 const MAX_PAGES = 20
 
+// Arena Score 计算逻辑
+const ARENA_CONFIG = {
+  PARAMS: {
+    '7D': { tanhCoeff: 0.08, roiExponent: 1.8, mddThreshold: 15, winRateCap: 62 },
+    '30D': { tanhCoeff: 0.15, roiExponent: 1.6, mddThreshold: 30, winRateCap: 68 },
+    '90D': { tanhCoeff: 0.18, roiExponent: 1.6, mddThreshold: 40, winRateCap: 70 },
+  },
+  MAX_RETURN_SCORE: 85, MAX_DRAWDOWN_SCORE: 8, MAX_STABILITY_SCORE: 7,
+}
+const clip = (v, min, max) => Math.max(min, Math.min(max, v))
+const safeLog1p = x => x <= -1 ? 0 : Math.log(1 + x)
+const getPeriodDays = p => p === '7D' ? 7 : p === '30D' ? 30 : 90
+
+function calculateArenaScore(roi, pnl, maxDrawdown, winRate, period) {
+  const params = ARENA_CONFIG.PARAMS[period] || ARENA_CONFIG.PARAMS['90D']
+  const days = getPeriodDays(period)
+  const wr = winRate !== null && winRate !== undefined ? (winRate <= 1 ? winRate * 100 : winRate) : null
+  const intensity = (365 / days) * safeLog1p(roi / 100)
+  const r0 = Math.tanh(params.tanhCoeff * intensity)
+  const returnScore = r0 > 0 ? clip(ARENA_CONFIG.MAX_RETURN_SCORE * Math.pow(r0, params.roiExponent), 0, 85) : 0
+  const drawdownScore = maxDrawdown !== null ? clip(ARENA_CONFIG.MAX_DRAWDOWN_SCORE * clip(1 - Math.abs(maxDrawdown) / params.mddThreshold, 0, 1), 0, 8) : 4
+  const stabilityScore = wr !== null ? clip(ARENA_CONFIG.MAX_STABILITY_SCORE * clip((wr - 45) / (params.winRateCap - 45), 0, 1), 0, 7) : 3.5
+  return Math.round((returnScore + drawdownScore + stabilityScore) * 100) / 100
+}
+
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
@@ -508,18 +533,22 @@ async function saveTraders(traders, period) {
     }
   })
 
-  const snapshotsData = traders.map((t, idx) => ({
-    source: SOURCE,
-    source_trader_id: t.traderId,
-    season_id: period,
-    rank: idx + 1,
-    roi: t.roi,
-    pnl: t.pnl,
-    win_rate: t.winRate,
-    max_drawdown: t.maxDrawdown,
-    followers: t.followers || 0,
-    captured_at: capturedAt,
-  }))
+  const snapshotsData = traders.map((t, idx) => {
+    const normalizedWr = t.winRate !== null ? (t.winRate <= 1 ? t.winRate * 100 : t.winRate) : null
+    return {
+      source: SOURCE,
+      source_trader_id: t.traderId,
+      season_id: period,
+      rank: idx + 1,
+      roi: t.roi,
+      pnl: t.pnl,
+      win_rate: normalizedWr,
+      max_drawdown: t.maxDrawdown,
+      followers: t.followers || 0,
+      arena_score: calculateArenaScore(t.roi, t.pnl, t.maxDrawdown, normalizedWr, period),
+      captured_at: capturedAt,
+    }
+  })
 
   await supabase.from('trader_sources').upsert(sourcesData, { onConflict: 'source,source_trader_id' })
 

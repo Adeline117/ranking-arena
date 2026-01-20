@@ -33,6 +33,48 @@ const TARGET_COUNT = 100
 // 并发配置 - 可通过命令行参数调整
 const DEFAULT_CONCURRENCY = 5
 
+// ============================================
+// Arena Score 计算逻辑
+// ============================================
+
+const ARENA_CONFIG = {
+  PARAMS: {
+    '7D': { tanhCoeff: 0.08, roiExponent: 1.8, mddThreshold: 15, winRateCap: 62 },
+    '30D': { tanhCoeff: 0.15, roiExponent: 1.6, mddThreshold: 30, winRateCap: 68 },
+    '90D': { tanhCoeff: 0.18, roiExponent: 1.6, mddThreshold: 40, winRateCap: 70 },
+  },
+  MAX_RETURN_SCORE: 85,
+  MAX_DRAWDOWN_SCORE: 8,
+  MAX_STABILITY_SCORE: 7,
+}
+
+const clip = (v, min, max) => Math.max(min, Math.min(max, v))
+const safeLog1p = x => x <= -1 ? 0 : Math.log(1 + x)
+const getPeriodDays = p => p === '7D' ? 7 : p === '30D' ? 30 : 90
+
+function calculateArenaScore(roi, pnl, maxDrawdown, winRate, period) {
+  const params = ARENA_CONFIG.PARAMS[period] || ARENA_CONFIG.PARAMS['90D']
+  const days = getPeriodDays(period)
+  
+  const wr = winRate !== null && winRate !== undefined 
+    ? (winRate <= 1 ? winRate * 100 : winRate) 
+    : null
+  
+  const intensity = (365 / days) * safeLog1p(roi / 100)
+  const r0 = Math.tanh(params.tanhCoeff * intensity)
+  const returnScore = r0 > 0 ? clip(ARENA_CONFIG.MAX_RETURN_SCORE * Math.pow(r0, params.roiExponent), 0, 85) : 0
+  
+  const drawdownScore = maxDrawdown !== null && maxDrawdown !== undefined
+    ? clip(ARENA_CONFIG.MAX_DRAWDOWN_SCORE * clip(1 - Math.abs(maxDrawdown) / params.mddThreshold, 0, 1), 0, 8)
+    : 4
+  
+  const stabilityScore = wr !== null
+    ? clip(ARENA_CONFIG.MAX_STABILITY_SCORE * clip((wr - 45) / (params.winRateCap - 45), 0, 1), 0, 7)
+    : 3.5
+  
+  return Math.round((returnScore + drawdownScore + stabilityScore) * 100) / 100
+}
+
 // URL 参数: rule=2 (ROI排序)
 // sort: 1=7D, 2=30D, 0=all/90D
 const PERIOD_CONFIG = {
@@ -364,19 +406,31 @@ async function saveTradersBatch(results, period, capturedAt) {
     console.log(`  ⚠ trader_sources 保存警告: ${sourcesError.message}`)
   }
   
-  // 2. 批量 insert trader_snapshots
-  const snapshotsData = results.map(r => ({
-    source: SOURCE,
-    source_trader_id: r.trader.traderId,
-    season_id: period,
-    rank: r.rank,
-    roi: r.details.roi || r.trader.roi || 0,
-    pnl: r.details.pnl || r.details.totalProfit || null,
-    win_rate: r.details.winRate || null,
-    max_drawdown: r.details.maxDrawdown || null,
-    followers: r.details.followers || r.details.currentCopiers || null,
-    captured_at: capturedAt,
-  }))
+  // 2. 批量 insert trader_snapshots (包含 arena_score)
+  const snapshotsData = results.map(r => {
+    const roi = r.details.roi || r.trader.roi || 0
+    const pnl = r.details.pnl || r.details.totalProfit || null
+    const maxDrawdown = r.details.maxDrawdown || null
+    const winRate = r.details.winRate !== null && r.details.winRate !== undefined
+      ? (r.details.winRate <= 1 ? r.details.winRate * 100 : r.details.winRate)
+      : null
+    
+    const arenaScore = calculateArenaScore(roi, pnl, maxDrawdown, winRate, period)
+    
+    return {
+      source: SOURCE,
+      source_trader_id: r.trader.traderId,
+      season_id: period,
+      rank: r.rank,
+      roi,
+      pnl,
+      win_rate: winRate,
+      max_drawdown: maxDrawdown,
+      followers: r.details.followers || r.details.currentCopiers || null,
+      arena_score: arenaScore,
+      captured_at: capturedAt,
+    }
+  })
   
   const { error: snapshotsError } = await supabase
     .from('trader_snapshots')

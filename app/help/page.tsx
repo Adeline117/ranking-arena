@@ -88,6 +88,12 @@ const getFaqData = (language: string) => {
             ? 'Pro 群组是仅限 Pro 会员参与的专属社群。群组创建者和成员都需要是 Pro 会员才能加入。' 
             : 'Pro Groups are exclusive communities for Pro members only. Both group creators and members need to be Pro members to join.',
         },
+        {
+          q: isZh ? 'Pro 会员官方群是什么？' : 'What is the Pro Member Official Group?',
+          a: isZh 
+            ? '成为 Pro 会员后，你会自动加入 Arena 官方会员群（每群上限 500 人）。在群里可以与其他会员交流、反馈问题，官方团队会直接在群里回复。取消订阅后会自动退群。' 
+            : 'After becoming a Pro member, you will automatically join the Arena official member group (max 500 members per group). You can chat with other members, give feedback, and get direct responses from the official team. You will be automatically removed when you cancel your subscription.',
+        },
       ],
     },
     account: {
@@ -390,17 +396,16 @@ export default function HelpPage() {
         </Box>
 
         {/* 底部 */}
-        <Box style={{ textAlign: 'center', marginTop: tokens.spacing[8] }}>
+        <Box style={{ textAlign: 'center', marginTop: tokens.spacing[8], display: 'flex', alignItems: 'center', justifyContent: 'center', gap: tokens.spacing[2] }}>
           <Text size="sm" color="tertiary">
             {language === 'zh' 
               ? '没有找到答案？' 
               : 'Didn\'t find an answer?'}
-            {' '}
-            <ContactSupportButton 
-              variant="link" 
-              label={language === 'zh' ? '发送私信给我们' : 'Message us'} 
-            />
           </Text>
+          <ContactSupportButton 
+            variant="link" 
+            label={language === 'zh' ? '发送私信给我们' : 'Message us'} 
+          />
         </Box>
       </Box>
 
