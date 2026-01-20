@@ -69,37 +69,18 @@ export default function MessagesPage() {
 
   // 监听 auth state 变化，确保在 session 恢复后正确获取用户信息
   useEffect(() => {
-    // #region agent log
-    console.log('[DEBUG] Auth check useEffect started');
-    // #endregion
-    
     // 首先获取当前 session
-    supabase.auth.getSession().then(({ data, error }) => {
-      // #region agent log
-      console.log('[DEBUG] getSession result:', { hasSession: !!data.session, hasUser: !!data.session?.user, userId: data.session?.user?.id, error: error?.message });
-      // #endregion
-      
+    supabase.auth.getSession().then(({ data }) => {
       if (data.session?.user) {
         setEmail(data.session.user.email ?? null)
         setUserId(data.session.user.id)
-        // #region agent log
-        console.log('[DEBUG] Setting userId:', data.session.user.id);
-        // #endregion
         loadConversations(data.session.user.id)
-      } else {
-        // #region agent log
-        console.log('[DEBUG] No session found!');
-        // #endregion
       }
       setAuthChecked(true)
     })
 
     // 监听 auth 状态变化（处理 session 恢复的情况）
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      // #region agent log
-      console.log('[DEBUG] onAuthStateChange:', { event, hasSession: !!session, userId: session?.user?.id });
-      // #endregion
-      
       if (session?.user) {
         setEmail(session.user.email ?? null)
         setUserId(session.user.id)
@@ -184,13 +165,8 @@ export default function MessagesPage() {
     }
   }
 
-  // #region agent log
-  console.log('[DEBUG] Messages render state:', { authChecked, userId, loading, willShowLogin: authChecked && !userId });
-  // #endregion
-
   // 等待认证检查完成
   if (!authChecked || (authChecked && !userId && loading)) {
-    console.log('[DEBUG] Showing loading state');
     return (
       <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
         <TopNav email={email} />
@@ -203,7 +179,6 @@ export default function MessagesPage() {
 
   // 认证检查完成但用户未登录
   if (authChecked && !userId) {
-    console.log('[DEBUG] Showing login required page because authChecked=true and userId=null');
     return (
       <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
         <TopNav email={email} />

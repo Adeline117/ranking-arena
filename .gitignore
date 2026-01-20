@@ -49,3 +49,20 @@ bitget_*.json
 bybit_*.json
 mexc_*.json
 coinex_*.json
+
+# Capacitor / Native App
+# Android
+android/app/build/
+android/.gradle/
+android/build/
+android/local.properties
+android/*.iml
+android/.idea/
+*.keystore
+
+# iOS
+ios/App/Pods/
+ios/App/App.xcworkspace/xcuserdata/
+ios/App/build/
+ios/DerivedData/
+*.xcuserstate

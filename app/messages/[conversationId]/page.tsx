@@ -90,9 +90,6 @@ export default function ConversationPage({ params }: { params: { conversationId:
   const loadMessages = useCallback(async (uid: string, convId: string, token?: string) => {
     try {
       setLoading(true)
-      // #region agent log
-      console.log('[DEBUG] loadMessages called with token:', !!token);
-      // #endregion
       const res = await fetch(`/api/messages?conversationId=${convId}&userId=${uid}`, {
         headers: token ? { 'Authorization': `Bearer ${token}` } : {},
       })
