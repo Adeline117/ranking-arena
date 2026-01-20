@@ -613,13 +613,11 @@ export default function RankingTable(props: {
                         }}>
                           {getAvatarInitial(displayName)}
                         </span>
-                        {/* 头像图片（如果有的话会覆盖首字母） */}
+                        {/* 头像图片（通过代理加载，解决跨域问题） */}
                         {trader.avatar_url && (
                           <img 
-                            src={trader.avatar_url} 
+                            src={`/api/avatar?url=${encodeURIComponent(trader.avatar_url)}`}
                             alt={displayName} 
-                            referrerPolicy="no-referrer"
-                            crossOrigin="anonymous"
                             loading="lazy"
                             style={{ 
                               width: '100%', 
