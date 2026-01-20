@@ -16,8 +16,10 @@ import TraderFeed from '@/app/components/Trader/TraderFeed'
 import StatsPage from '@/app/components/Trader/stats/StatsPage'
 // PinnedPost 组件已集成到 TraderFeed 中（置顶帖子自动显示在动态列表最上方）
 import PortfolioTable from '@/app/components/Trader/PortfolioTable'
+import ScoreBreakdown from '@/app/components/Pro/ScoreBreakdown'
 import { Box, Text } from '@/app/components/Base'
 import { RankingSkeleton } from '@/app/components/UI/Skeleton'
+import { useSubscription } from '@/app/components/Home/hooks/useSubscription'
 import type {
   TraderProfile,
   TraderPerformance,
@@ -69,6 +71,7 @@ function TraderContent(props: { params: { handle: string } | Promise<{ handle: s
   const searchParams = useSearchParams()
   const router = useRouter()
   const pathname = usePathname()
+  const { isPro } = useSubscription()
   
   const [handle, setHandle] = useState<string>('')
   const [email, setEmail] = useState<string | null>(null)
@@ -296,6 +299,20 @@ function TraderContent(props: { params: { handle: string } | Promise<{ handle: s
                   followers={profile.followers}
                   isRegistered={profile.isRegistered}
                 />
+                
+                {/* 评分详情 - Pro 功能 */}
+                {performance && (
+                  <ScoreBreakdown
+                    arenaScore={(performance as any).arena_score ?? null}
+                    returnScore={(performance as any).return_score ?? null}
+                    drawdownScore={(performance as any).drawdown_score ?? null}
+                    stabilityScore={(performance as any).stability_score ?? null}
+                    source={profile.source}
+                    isPro={isPro}
+                    onUnlock={() => router.push('/pricing')}
+                  />
+                )}
+                
                 {similarTraders.length > 0 && <SimilarTraders traders={similarTraders} />}
               </Box>
             </Box>

@@ -2,6 +2,7 @@
 
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/Base'
+import ContactSupportButton from '@/app/components/UI/ContactSupportButton'
 
 export default function PrivacyPolicyPage() {
   return (
@@ -112,7 +113,10 @@ export default function PrivacyPolicyPage() {
           '撤回同意：撤回您之前给予的任何同意',
         ]} />
         <Paragraph>
-          如需行使这些权利，请通过 privacy@arena.app 联系我们。
+          如需行使这些权利，请通过站内私信联系我们：
+          <Box style={{ marginTop: tokens.spacing[2] }}>
+            <ContactSupportButton variant="link" label="发送私信" />
+          </Box>
         </Paragraph>
       </Section>
 
@@ -162,7 +166,7 @@ export default function PrivacyPolicyPage() {
 
       <Section title="12. 联系我们">
         <Paragraph>
-          如果您对本隐私政策有任何疑问或需要行使您的权利，请联系我们：
+          如果您对本隐私政策有任何疑问或需要行使您的权利，请通过站内私信联系我们：
         </Paragraph>
         <Box
           style={{
@@ -170,12 +174,13 @@ export default function PrivacyPolicyPage() {
             background: tokens.colors.bg.secondary,
             borderRadius: tokens.radius.lg,
             marginTop: tokens.spacing[3],
+            display: 'flex',
+            flexDirection: 'column',
+            gap: tokens.spacing[2],
           }}
         >
-          <Text size="sm">电子邮件: privacy@arena.app</Text>
-          <Text size="sm" style={{ marginTop: tokens.spacing[2] }}>
-            数据保护官 (DPO): dpo@arena.app
-          </Text>
+          <Text size="sm">联系客服处理隐私相关问题：</Text>
+          <ContactSupportButton size="sm" label="发送私信给客服" />
         </Box>
       </Section>
     </Box>

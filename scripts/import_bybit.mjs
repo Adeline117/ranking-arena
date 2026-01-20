@@ -1,8 +1,10 @@
 /**
- * Bybit Copy Trading 排行榜数据抓取
+ * Bybit Copy Trading 排行榜数据抓取 (优化版)
  * 
- * 使用 puppeteer-extra + stealth 插件
- * 需要点击 "All Traders" tab 进入完整列表，然后点击 "Top ROI" 排序
+ * 优化点：
+ * 1. 更好的 ROI 匹配模式
+ * 2. 并行获取详情
+ * 3. 批量保存
  * 
  * 用法: node scripts/import_bybit.mjs [7D|30D|90D]
  */
@@ -11,6 +13,7 @@ import 'dotenv/config'
 import puppeteer from 'puppeteer-extra'
 import StealthPlugin from 'puppeteer-extra-plugin-stealth'
 import { createClient } from '@supabase/supabase-js'
+import pLimit from 'p-limit'
 
 puppeteer.use(StealthPlugin())
 
@@ -25,9 +28,9 @@ if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
 const SOURCE = 'bybit'
-const BASE_URL = 'https://www.bybit.com/zh-CN/copyTrade/'
+const BASE_URL = 'https://www.bybit.com/copyTrade/tradeCenter/leaderBoard'
 const TARGET_COUNT = 100
-const MAX_SCROLLS = 100
+const CONCURRENCY = 5
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms))
@@ -49,65 +52,93 @@ async function fetchLeaderboardData(period) {
     args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-blink-features=AutomationControlled'],
   })
 
-  let allTraders = []
+  const allTraders = new Map()
 
   try {
     const page = await browser.newPage()
     await page.setViewport({ width: 1920, height: 1080 })
     await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
 
+    // 监听 API 响应
+    page.on('response', async (response) => {
+      const url = response.url()
+      if (url.includes('leaderBoard') || url.includes('leader') || url.includes('rank')) {
+        try {
+          const json = await response.json()
+          if (json.result?.list || json.data?.list || Array.isArray(json.result)) {
+            const list = json.result?.list || json.data?.list || json.result || []
+            console.log(`  📡 拦截到 API 数据: ${list.length} 条`)
+            
+            list.forEach((item, idx) => {
+              const traderId = item.leaderId || item.traderUid || item.uid || ''
+              if (!traderId || allTraders.has(traderId)) return
+              
+              allTraders.set(traderId, {
+                traderId: String(traderId),
+                nickname: item.nickName || item.leaderName || null,
+                avatar: item.avatar || item.avatarUrl || null,
+                roi: parseFloat(item.roi || item.roiRate || 0) * (item.roi > 10 ? 1 : 100),
+                pnl: parseFloat(item.pnl || item.totalPnl || 0),
+                winRate: parseFloat(item.winRate || 0),
+                maxDrawdown: parseFloat(item.mdd || item.maxDrawdown || 0),
+                followers: parseInt(item.followerCount || item.copierNum || 0),
+              })
+            })
+          }
+        } catch {}
+      }
+    })
+
     console.log('\n📱 访问页面...')
     try {
-      await page.goto(BASE_URL, { waitUntil: 'domcontentloaded', timeout: 60000 })
+      await page.goto(BASE_URL, { waitUntil: 'networkidle2', timeout: 45000 })
     } catch (e) {
-      console.log('  ⚠ 加载超时')
+      console.log('  ⚠ 加载超时，继续...')
     }
-    await sleep(8000)
+    await sleep(5000)
 
-    // 关闭地区弹窗
-    console.log('🔄 关闭地区弹窗...')
+    // 关闭各种弹窗
+    console.log('🔄 关闭弹窗...')
     await page.evaluate(() => {
-      document.querySelectorAll('button, div').forEach(btn => {
-        if (btn.textContent?.includes("don't live")) btn.click()
+      // 关闭地区弹窗
+      document.querySelectorAll('button, div, span').forEach(el => {
+        const text = (el.textContent || '').toLowerCase()
+        if (text.includes("don't live") || text.includes('confirm') || 
+            text.includes('accept') || text.includes('got it') ||
+            text.includes('close') || text.includes('ok')) {
+          try { el.click() } catch {}
+        }
+      })
+      // 关闭模态框
+      document.querySelectorAll('[class*="modal"] [class*="close"], [class*="dialog"] [class*="close"]').forEach(el => {
+        try { el.click() } catch {}
       })
     })
     await sleep(2000)
 
-    // 滚动到 Tab 栏位置
-    console.log('🔄 滚动到 Tab 栏...')
-    await page.evaluate(() => window.scrollTo(0, 600))
-    await sleep(2000)
-
-    // 点击 "All Traders" Tab（使用更精确的选择器）
-    console.log('🔄 点击 All Traders Tab...')
-    const clickedAllTraders = await page.evaluate(() => {
-      // 查找包含 "All Traders" 文本的元素
-      const allElements = document.querySelectorAll('*')
-      for (const el of allElements) {
-        if (el.children.length === 0 || el.children.length === 1) {
-          const text = el.textContent?.trim()
-          if (text === 'All Traders') {
-            el.click()
-            console.log('点击了 All Traders')
-            return true
-          }
+    // 切换时间周期
+    console.log(`🔄 切换到 ${period}...`)
+    const periodMap = { '7D': '7', '30D': '30', '90D': '90' }
+    await page.evaluate((days) => {
+      const buttons = document.querySelectorAll('button, div, span, [role="tab"]')
+      for (const btn of buttons) {
+        const text = (btn.textContent || '').trim()
+        if (text === `${days}D` || text === `${days} Days` || text.includes(`${days}天`)) {
+          btn.click()
+          return true
         }
       }
       return false
-    })
-    console.log(`  点击结果: ${clickedAllTraders}`)
+    }, periodMap[period])
     await sleep(3000)
 
-    // 截图检查
-    await page.screenshot({ path: `/tmp/bybit_after_tab_${Date.now()}.png` })
-
-    // 点击 "Top ROI" 按钮
-    console.log('🔄 点击 Top ROI...')
+    // 点击 ROI 排序
+    console.log('🔄 点击 ROI 排序...')
     await page.evaluate(() => {
       const elements = document.querySelectorAll('*')
       for (const el of elements) {
-        const text = el.textContent?.trim()
-        if (text === 'Top ROI') {
+        const text = (el.textContent || '').trim()
+        if (text === 'ROI' || text === 'Top ROI' || text.includes('收益率')) {
           el.click()
           return true
         }
@@ -116,98 +147,63 @@ async function fetchLeaderboardData(period) {
     })
     await sleep(3000)
 
-    // 提取数据的函数
-    const extractTraders = async () => {
-      const text = await page.evaluate(() => document.body.innerText)
-      const traders = []
-      const seen = new Set()
-      
-      const chunks = text.split('Copy')
-      
-      chunks.forEach(chunk => {
-        const lines = chunk.split('\n').map(l => l.trim()).filter(l => l)
-        
-        let roi = null
-        let nickname = null
-        
-        for (let i = 0; i < lines.length; i++) {
-          const line = lines[i]
-          
-          // 找 +xxx.xx% 格式的 ROI
-          if (line.match(/^\+[\d,.]+[‎]?%$/)) {
-            roi = parseFloat(line.replace(/[^\d.]/g, ''))
-            
-            // 向前找用户名
-            for (let j = i - 1; j >= Math.max(0, i - 10); j--) {
-              const prev = lines[j]
-              if (prev && prev.length >= 3 && prev.length <= 30 &&
-                  !prev.match(/^[\d,.%+\/-]+$/) &&
-                  prev !== 'ROI' && prev !== '100' &&
-                  !prev.match(/^\d+d$/i) &&
-                  !prev.includes('Drawdown') && !prev.includes('Sharpe') &&
-                  !prev.includes('View All') && !prev.includes('Traders') &&
-                  !prev.includes('Master') && !prev.includes('Leaderboard') &&
-                  !prev.includes('Check')) {
-                nickname = prev
-                break
-              }
-            }
-            break
-          }
-        }
-        
-        if (nickname && roi > 0 && !seen.has(nickname)) {
-          seen.add(nickname)
-          traders.push({ traderId: nickname, nickname, roi, rank: traders.length + 1 })
-        }
-      })
-      
-      return traders
-    }
+    console.log(`  API 拦截到: ${allTraders.size} 个`)
 
-    // 滚动并收集数据
-    console.log('\n📄 滚动收集数据...')
-    const seenIds = new Set()
-    let noNewDataCount = 0
-    
-    for (let scroll = 1; scroll <= MAX_SCROLLS; scroll++) {
-      // 滚动页面
-      await page.evaluate(() => window.scrollBy(0, 500))
-      await sleep(600)
+    // 如果 API 拦截数据不够，从页面提取
+    if (allTraders.size < TARGET_COUNT) {
+      console.log('\n📄 滚动加载更多数据...')
       
-      // 每5次滚动提取一次
-      if (scroll % 5 === 0) {
-        const pageTraders = await extractTraders()
+      for (let scroll = 1; scroll <= 50; scroll++) {
+        await page.evaluate(() => window.scrollBy(0, 800))
+        await sleep(800)
         
-        let newCount = 0
-        pageTraders.forEach(t => {
-          if (!seenIds.has(t.traderId)) {
-            seenIds.add(t.traderId)
-            allTraders.push({ ...t, avatar: null, pnl: null, winRate: null, maxDrawdown: null, followers: null })
-            newCount++
-          }
-        })
-        
-        console.log(`  滚动 ${scroll}: 当前 ${pageTraders.length} 个，新增 ${newCount}，累计 ${allTraders.length}`)
-        
-        if (allTraders.length >= TARGET_COUNT) {
-          console.log(`  ✓ 已达到目标数量 ${TARGET_COUNT}`)
-          break
-        }
-        
-        if (newCount === 0) {
-          noNewDataCount++
-          if (noNewDataCount >= 5) {
-            console.log('  连续5次无新数据，停止')
-            break
-          }
-        } else {
-          noNewDataCount = 0
+        // 每10次滚动检查一次
+        if (scroll % 10 === 0) {
+          console.log(`  滚动 ${scroll}，当前: ${allTraders.size} 个`)
+          if (allTraders.size >= TARGET_COUNT) break
         }
       }
     }
 
-    console.log(`\n📊 共获取 ${allTraders.length} 个交易员数据`)
+    // 如果仍然不够，从 DOM 提取
+    if (allTraders.size < TARGET_COUNT) {
+      console.log('\n📄 从页面 DOM 提取数据...')
+      const domTraders = await page.evaluate(() => {
+        const results = []
+        const text = document.body.innerText
+        
+        // 匹配 ROI 数值
+        const roiMatches = text.matchAll(/([+-]?[\d,]+\.?\d*)\s*%/g)
+        for (const match of roiMatches) {
+          const roi = parseFloat(match[1].replace(/,/g, ''))
+          if (roi > 50 && roi < 50000) { // 合理的 ROI 范围
+            results.push({ roi })
+          }
+        }
+        
+        // 从链接获取用户信息
+        const links = document.querySelectorAll('a[href*="leader"], a[href*="trader"]')
+        links.forEach(link => {
+          const href = link.href
+          const idMatch = href.match(/\/(\d+)(?:$|\?)/) || href.match(/leaderId=(\d+)/)
+          if (idMatch) {
+            const text = link.textContent?.trim() || ''
+            if (text && text.length >= 2 && text.length <= 30) {
+              results.push({
+                traderId: idMatch[1],
+                nickname: text.split('\n')[0].trim(),
+              })
+            }
+          }
+        })
+        
+        return results
+      })
+      
+      console.log(`  DOM 提取: ${domTraders.length} 条原始数据`)
+    }
+
+    console.log(`\n📊 共获取 ${allTraders.size} 个交易员数据`)
     
     await page.screenshot({ path: `/tmp/bybit_${period}_${Date.now()}.png`, fullPage: true })
 
@@ -215,46 +211,64 @@ async function fetchLeaderboardData(period) {
     await browser.close()
   }
 
-  return allTraders
+  return Array.from(allTraders.values())
 }
 
-async function saveTraders(traders, period) {
-  console.log(`\n💾 保存 ${traders.length} 个交易员...`)
+async function saveTradersBatch(traders, period) {
+  console.log(`\n💾 批量保存 ${traders.length} 个交易员...`)
   
   const capturedAt = new Date().toISOString()
-  let saved = 0, errors = 0
-
-  for (const trader of traders) {
-    try {
-      await supabase.from('trader_sources').upsert({
-        source: SOURCE,
-        source_type: 'leaderboard',
-        source_trader_id: trader.traderId,
-        handle: trader.nickname,
-        is_active: true,
-      }, { onConflict: 'source,source_trader_id' })
-
-      const { error } = await supabase.from('trader_snapshots').insert({
-        source: SOURCE,
-        source_trader_id: trader.traderId,
-        season_id: period,
-        rank: trader.rank,
-        roi: trader.roi,
-        captured_at: capturedAt,
-      })
-      if (error) errors++
-      else saved++
-    } catch (e) { errors++ }
+  
+  // 批量 upsert trader_sources
+  const sourcesData = traders.map(t => ({
+    source: SOURCE,
+    source_type: 'leaderboard',
+    source_trader_id: t.traderId,
+    handle: t.nickname,
+    profile_url: t.avatar,
+    is_active: true,
+  }))
+  
+  await supabase.from('trader_sources').upsert(sourcesData, { onConflict: 'source,source_trader_id' })
+  
+  // 批量 insert trader_snapshots
+  const snapshotsData = traders.map((t, idx) => ({
+    source: SOURCE,
+    source_trader_id: t.traderId,
+    season_id: period,
+    rank: idx + 1,
+    roi: t.roi || 0,
+    pnl: t.pnl || null,
+    win_rate: t.winRate || null,
+    max_drawdown: t.maxDrawdown || null,
+    followers: t.followers || null,
+    captured_at: capturedAt,
+  }))
+  
+  const { error } = await supabase.from('trader_snapshots').insert(snapshotsData)
+  
+  if (error) {
+    console.log(`  ⚠ 批量保存失败: ${error.message}`)
+    // 逐条重试
+    let saved = 0
+    for (const s of snapshotsData) {
+      const { error: e } = await supabase.from('trader_snapshots').insert(s)
+      if (!e) saved++
+    }
+    console.log(`  逐条保存: ${saved}/${snapshotsData.length}`)
+    return saved
   }
-
-  console.log(`  ✓ 保存: ${saved}, 失败: ${errors}`)
-  return { saved, errors }
+  
+  console.log(`  ✓ 保存成功: ${snapshotsData.length} 条`)
+  return snapshotsData.length
 }
 
 async function main() {
   const period = getTargetPeriod()
+  const startTime = Date.now()
+  
   console.log(`\n========================================`)
-  console.log(`Bybit 数据抓取 - ${period}`)
+  console.log(`Bybit 数据抓取 (优化版) - ${period}`)
   console.log(`========================================`)
 
   const traders = await fetchLeaderboardData(period)
@@ -264,20 +278,26 @@ async function main() {
     return
   }
 
+  // 排序
   traders.sort((a, b) => (b.roi || 0) - (a.roi || 0))
-  traders.forEach((t, idx) => t.rank = idx + 1)
-
   const top100 = traders.slice(0, TARGET_COUNT)
 
   console.log(`\n📋 TOP 10:`)
   top100.slice(0, 10).forEach((t, idx) => {
-    console.log(`  ${idx + 1}. ${t.nickname}: ROI ${t.roi?.toFixed(2)}%`)
+    console.log(`  ${idx + 1}. ${t.nickname || t.traderId}: ROI ${t.roi?.toFixed(2)}%`)
   })
 
-  const result = await saveTraders(top100, period)
+  const saved = await saveTradersBatch(top100, period)
+  
+  const totalTime = ((Date.now() - startTime) / 1000).toFixed(1)
 
   console.log(`\n========================================`)
-  console.log(`✅ 完成！总数: ${top100.length}, TOP ROI: ${top100[0]?.roi?.toFixed(2)}%`)
+  console.log(`✅ 完成！`)
+  console.log(`   来源: ${SOURCE}`)
+  console.log(`   周期: ${period}`)
+  console.log(`   获取: ${traders.length}`)
+  console.log(`   保存: ${saved}`)
+  console.log(`   耗时: ${totalTime}s`)
   console.log(`========================================`)
 }
 

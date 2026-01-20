@@ -47,6 +47,13 @@ export type PremiumFeatureId =
   | 'priority_support'        // 优先客服支持
   | 'trader_messaging'        // 交易员私信
   | 'white_label'             // 白标定制
+  // Pro 新功能
+  | 'category_ranking'        // 分类排行
+  | 'trader_alerts'           // 交易员变动提醒
+  | 'score_breakdown'         // 评分详情
+  | 'pro_badge'               // Pro 徽章
+  | 'advanced_filter'         // 高级筛选
+  | 'premium_groups'          // 付费群组
 
 export interface PremiumFeature {
   id: PremiumFeatureId
@@ -287,6 +294,51 @@ export const PREMIUM_FEATURES: PremiumFeature[] = [
     description: '完全定制化品牌',
     icon: '',
     tier: ['enterprise'],
+  },
+  
+  // Pro 新功能
+  {
+    id: 'category_ranking',
+    name: '分类排行',
+    description: '按现货/合约/链上分类查看排行榜',
+    icon: '',
+    tier: ['pro', 'elite', 'enterprise'],
+  },
+  {
+    id: 'trader_alerts',
+    name: '交易员变动提醒',
+    description: '关注的交易员大幅变动时自动私信提醒',
+    icon: '',
+    tier: ['pro', 'elite', 'enterprise'],
+    isCore: true,
+  },
+  {
+    id: 'score_breakdown',
+    name: '评分详情',
+    description: '查看 Arena Score 各项子分数和同类分位',
+    icon: '',
+    tier: ['pro', 'elite', 'enterprise'],
+  },
+  {
+    id: 'pro_badge',
+    name: 'Pro 徽章',
+    description: '主页头像显示 Pro 会员徽章',
+    icon: '',
+    tier: ['pro', 'elite', 'enterprise'],
+  },
+  {
+    id: 'advanced_filter',
+    name: '高级筛选',
+    description: '多条件叠加筛选，保存筛选配置一键复用',
+    icon: '',
+    tier: ['pro', 'elite', 'enterprise'],
+  },
+  {
+    id: 'premium_groups',
+    name: 'Pro 专属群组',
+    description: '创建或加入会员专属群组，组长和组员均需为 Pro 会员',
+    icon: '',
+    tier: ['pro', 'elite', 'enterprise'],
   },
 ]
 

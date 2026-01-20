@@ -1,19 +1,17 @@
 /**
- * OKX Web3 排行榜数据抓取
+ * OKX Web3 排行榜数据抓取 (修复版)
  * 
- * 使用 Playwright 抓取 OKX Web3 链上跟单排行榜
- * 从 DOM 提取数据（SSR 渲染）
+ * 优化：
+ * 1. 拦截 API 响应获取数据
+ * 2. 更完善的无限滚动加载
+ * 3. 支持正负收益率
  * 
  * 用法: node scripts/import_okx_web3.mjs [7D|30D|90D]
- * 
- * 数据源: https://web3.okx.com/zh-hans/copy-trade/leaderboard/solana
- * 注意: OKX Web3 默认显示 7 日数据，时间段切换可能受限
  */
 
 import 'dotenv/config'
 import { chromium } from 'playwright'
 import { createClient } from '@supabase/supabase-js'
-import { validateTraderData, deduplicateTraders, printValidationResult } from './lib/data-validation.mjs'
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -26,9 +24,7 @@ if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
 const SOURCE = 'okx_web3'
-// 使用英文版（中文版有地区限制）
 const BASE_URL = 'https://web3.okx.com/copy-trade/leaderboard/solana'
-
 const TARGET_COUNT = 100
 
 function sleep(ms) {
@@ -37,31 +33,27 @@ function sleep(ms) {
 
 function getTargetPeriod() {
   const arg = process.argv[2]?.toUpperCase()
-  if (arg && ['7D', '30D', '90D'].includes(arg)) {
-    return arg
-  }
-  return '7D'  // OKX Web3 默认 7D
+  if (arg && ['7D', '30D', '90D'].includes(arg)) return arg
+  return '7D'
 }
 
 async function fetchLeaderboardData(period) {
   console.log(`\n=== 抓取 OKX Web3 ${period} 排行榜 ===`)
   console.log('时间:', new Date().toISOString())
-  console.log('URL:', BASE_URL)
   console.log(`目标: ${TARGET_COUNT} 个交易员`)
-  console.log('⚠️ 注意: OKX Web3 主要显示 7 日数据')
 
   const traders = new Map()
 
   const browser = await chromium.launch({
     headless: true,
-    args: ['--disable-blink-features=AutomationControlled', '--disable-dev-shm-usage', '--no-sandbox'],
+    args: ['--disable-blink-features=AutomationControlled', '--no-sandbox'],
   })
 
   try {
     const context = await browser.newContext({
       userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
       viewport: { width: 1920, height: 1080 },
-      locale: 'en-US',  // 使用英文避免地区限制
+      locale: 'en-US',
     })
 
     await context.addInitScript(() => {
@@ -70,156 +62,195 @@ async function fetchLeaderboardData(period) {
 
     const page = await context.newPage()
 
-    console.log('\n📱 访问页面...')
-    try {
-      await page.goto(BASE_URL, { waitUntil: 'domcontentloaded', timeout: 60000 })
-    } catch (e) {
-      console.log('  ⚠ 页面加载超时，继续尝试...')
-    }
-    await sleep(8000)
-
-    // 关闭弹窗
-    try {
-      await page.click('text=I understand', { timeout: 3000 })
-      console.log('  已关闭提示弹窗')
-    } catch (e) {}
-    
-    try {
-      await page.click('text=Accept All Cookies', { timeout: 3000 })
-      console.log('  已关闭 Cookie 弹窗')
-    } catch (e) {}
-    
-    await sleep(2000)
-
-    // 从 DOM 提取数据
-    console.log('\n📊 从页面提取数据...')
-    
-    const pageTraders = await page.evaluate(() => {
-      const results = []
-      const pageText = document.body.innerText
-      
-      // 使用正则匹配交易员数据模式
-      // 格式: 昵称/地址 \n +$xxx.xxK \n +xx.xx%
-      const lines = pageText.split('\n').map(l => l.trim()).filter(l => l)
-      
-      for (let i = 0; i < lines.length - 2; i++) {
-        const line = lines[i]
-        const nextLine = lines[i + 1]
-        const nextNextLine = lines[i + 2]
-        
-        // 检查是否是收益额格式 (+$xxx.xxK 或 +$xxx.xxM)
-        const pnlMatch = nextLine?.match(/^\+\$([0-9,.]+)([KM])?$/)
-        
-        // 检查是否是收益率格式 (+xx.xx%)
-        const roiMatch = nextNextLine?.match(/^\+([0-9.]+)%$/)
-        
-        if (pnlMatch && roiMatch) {
-          // 提取昵称/地址
-          let address = line
-          let nickname = line
-          
-          // 如果是缩略地址格式 (xxxx...xxxx)
-          const addrMatch = line.match(/([A-Za-z0-9]{4,8}\.\.\.[A-Za-z0-9]{4})/)
-          if (addrMatch) {
-            address = addrMatch[1]
-          }
-          
-          // 解析 PnL
-          let pnl = parseFloat(pnlMatch[1].replace(/,/g, ''))
-          if (pnlMatch[2] === 'K') pnl *= 1000
-          if (pnlMatch[2] === 'M') pnl *= 1000000
-          
-          // 解析 ROI
-          const roi = parseFloat(roiMatch[1])
-          
-          // 过滤掉无效数据
-          if (roi > 0 && !results.find(r => r.address === address)) {
-            results.push({
-              address,
-              nickname,
-              roi,
-              pnl,
-            })
-          }
-        }
-      }
-      
-      return results
-    })
-    
-    console.log(`  从页面提取到 ${pageTraders.length} 个交易员`)
-    
-    // 转换为标准格式
-    pageTraders.forEach((item, idx) => {
-      const traderId = item.address
-      if (!traders.has(traderId)) {
-        traders.set(traderId, {
-          traderId,
-          nickname: item.nickname,
-          avatar: null,
-          roi: item.roi,
-          pnl: item.pnl,
-          winRate: null,
-          maxDrawdown: null,
-          followers: null,
-          rank: idx + 1,
-        })
-        
-        if (traders.size <= 3) {
-          console.log(`    #${idx + 1}: ROI ${item.roi.toFixed(2)}%, PnL $${item.pnl.toFixed(0)}, 昵称: ${item.nickname}`)
-        }
-      }
-    })
-
-    // 滚动页面获取更多数据
-    let scrollAttempts = 0
-    const maxScrollAttempts = 10
-    
-    while (traders.size < TARGET_COUNT && scrollAttempts < maxScrollAttempts) {
-      const lastCount = traders.size
-      
-      await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight))
-      await sleep(3000)
-      
-      // 再次提取数据
-      const moreTraders = await page.evaluate(() => {
-        const results = []
-        const pageText = document.body.innerText
-        const lines = pageText.split('\n').map(l => l.trim()).filter(l => l)
-        
-        for (let i = 0; i < lines.length - 2; i++) {
-          const line = lines[i]
-          const nextLine = lines[i + 1]
-          const nextNextLine = lines[i + 2]
-          
-          const pnlMatch = nextLine?.match(/^\+\$([0-9,.]+)([KM])?$/)
-          const roiMatch = nextNextLine?.match(/^\+([0-9.]+)%$/)
-          
-          if (pnlMatch && roiMatch) {
-            let address = line
-            const addrMatch = line.match(/([A-Za-z0-9]{4,8}\.\.\.[A-Za-z0-9]{4})/)
-            if (addrMatch) address = addrMatch[1]
+    // 拦截 API 响应
+    page.on('response', async (response) => {
+      const url = response.url()
+      // OKX Web3 API 通常包含这些关键词
+      if (url.includes('leaderboard') || url.includes('rank') || url.includes('trader') || url.includes('copy-trade')) {
+        try {
+          const contentType = response.headers()['content-type'] || ''
+          if (contentType.includes('json')) {
+            const data = await response.json()
             
-            let pnl = parseFloat(pnlMatch[1].replace(/,/g, ''))
-            if (pnlMatch[2] === 'K') pnl *= 1000
-            if (pnlMatch[2] === 'M') pnl *= 1000000
+            // 尝试从各种可能的数据结构中提取
+            let list = data?.data?.list || data?.data?.traders || data?.list || data?.traders || []
+            if (data?.data && Array.isArray(data.data)) list = data.data
             
-            const roi = parseFloat(roiMatch[1])
-            
-            if (roi > 0) {
-              results.push({ address, nickname: line, roi, pnl })
+            if (Array.isArray(list) && list.length > 0) {
+              console.log(`  📡 API 拦截: ${url.split('?')[0].split('/').slice(-2).join('/')} - ${list.length} 条`)
+              
+              list.forEach(item => {
+                const traderId = item.address || item.traderId || item.uid || item.id || ''
+                if (!traderId || traders.has(traderId)) return
+                
+                // 解析 ROI - 可能是小数或百分比
+                let roi = parseFloat(item.roi || item.pnlRate || item.profitRate || 0)
+                if (Math.abs(roi) < 10) roi = roi * 100 // 如果是小数形式，转为百分比
+                
+                // 解析 PnL
+                let pnl = parseFloat(item.pnl || item.profit || item.totalPnl || 0)
+                
+                traders.set(traderId, {
+                  traderId,
+                  nickname: item.nickname || item.name || item.displayName || traderId.slice(0, 8) + '...',
+                  avatar: item.avatar || item.avatarUrl || null,
+                  roi,
+                  pnl,
+                  winRate: parseFloat(item.winRate || 0) * (item.winRate > 1 ? 1 : 100),
+                  maxDrawdown: parseFloat(item.mdd || item.maxDrawdown || 0),
+                  followers: parseInt(item.followers || item.copierCount || 0),
+                })
+              })
+              
+              console.log(`    累计: ${traders.size} 个`)
             }
           }
+        } catch (e) {
+          // 忽略解析错误
         }
-        
-        return results
-      })
+      }
+    })
+
+    console.log('\n📱 访问页面...')
+    try {
+      await page.goto(BASE_URL, { waitUntil: 'networkidle', timeout: 60000 })
+    } catch (e) {
+      console.log('  ⚠ 加载超时，继续...')
+    }
+    await sleep(5000)
+
+    // 关闭弹窗
+    const closeButtons = ['I understand', 'Accept All Cookies', 'Got it', 'OK', 'Close']
+    for (const text of closeButtons) {
+      try {
+        await page.click(`text=${text}`, { timeout: 1000 })
+        console.log(`  关闭弹窗: ${text}`)
+      } catch {}
+    }
+    await sleep(2000)
+
+    // 如果 API 拦截数据不够，从 DOM 提取
+    if (traders.size < TARGET_COUNT) {
+      console.log('\n📊 从 DOM 提取数据...')
       
-      moreTraders.forEach((item, idx) => {
-        const traderId = item.address
-        if (!traders.has(traderId)) {
-          traders.set(traderId, {
-            traderId,
+      const extractFromDOM = async () => {
+        return await page.evaluate(() => {
+          const results = []
+          const seen = new Set()
+          
+          // 方法1: 查找所有可能的交易员卡片/行
+          const cards = document.querySelectorAll('[class*="trader"], [class*="card"], [class*="item"], [class*="row"], [class*="user"], [class*="leader"]')
+          cards.forEach(card => {
+            const text = card.innerText || ''
+            const lines = text.split('\n').map(l => l.trim()).filter(l => l)
+            
+            // 找地址 (xxxx...xxxx 格式)
+            let address = null
+            for (const line of lines) {
+              const addrMatch = line.match(/([A-Za-z0-9]{4,8}\.\.\.[A-Za-z0-9]{4})/)
+              if (addrMatch) {
+                address = addrMatch[1]
+                break
+              }
+            }
+            
+            // 找 ROI (任意 xxx.xx% 格式)
+            let roi = null
+            const roiMatches = text.match(/([+-]?[\d,]+\.?\d*)\s*%/g) || []
+            for (const m of roiMatches) {
+              const val = parseFloat(m.replace(/[,%]/g, ''))
+              if (!isNaN(val) && Math.abs(val) > 0.01 && Math.abs(val) < 100000) {
+                roi = val
+                break
+              }
+            }
+            
+            // 找 PnL ($xxx 或 xxx USDT)
+            let pnl = 0
+            const pnlMatch = text.match(/\$\s*([\d,]+\.?\d*)([KM])?/) || text.match(/([\d,]+\.?\d*)\s*USDT/)
+            if (pnlMatch) {
+              pnl = parseFloat(pnlMatch[1].replace(/,/g, ''))
+              if (pnlMatch[2] === 'K') pnl *= 1000
+              if (pnlMatch[2] === 'M') pnl *= 1000000
+            }
+            
+            if (address && roi !== null && !seen.has(address)) {
+              seen.add(address)
+              results.push({ address, nickname: address, roi, pnl })
+            }
+          })
+          
+          // 方法2: 从整个页面文本中提取
+          if (results.length < 20) {
+            const bodyText = document.body.innerText
+            const lines = bodyText.split('\n').map(l => l.trim()).filter(l => l)
+            
+            for (let i = 0; i < lines.length; i++) {
+              const line = lines[i]
+              
+              // 检查是否是地址格式
+              const addrMatch = line.match(/^([A-Za-z0-9]{4,8}\.\.\.[A-Za-z0-9]{4})$/)
+              if (addrMatch && !seen.has(addrMatch[1])) {
+                // 在周围行查找 ROI
+                const context = lines.slice(Math.max(0, i-3), i+6).join(' ')
+                const roiMatch = context.match(/([+-]?[\d,]+\.?\d*)\s*%/)
+                
+                if (roiMatch) {
+                  const roi = parseFloat(roiMatch[1].replace(/,/g, ''))
+                  if (!isNaN(roi) && Math.abs(roi) > 0.01 && Math.abs(roi) < 100000) {
+                    seen.add(addrMatch[1])
+                    results.push({
+                      address: addrMatch[1],
+                      nickname: addrMatch[1],
+                      roi,
+                      pnl: 0,
+                    })
+                  }
+                }
+              }
+            }
+          }
+          
+          // 方法3: 查找所有包含 % 的元素并回溯找地址
+          if (results.length < 20) {
+            const allElements = document.querySelectorAll('*')
+            allElements.forEach(el => {
+              const text = el.textContent || ''
+              if (text.match(/^[+-]?[\d.]+%$/) && !text.includes('\n')) {
+                const roi = parseFloat(text.replace(/[%,]/g, ''))
+                if (isNaN(roi) || Math.abs(roi) < 0.01 || Math.abs(roi) > 100000) return
+                
+                // 向上查找地址
+                let parent = el.parentElement
+                for (let j = 0; j < 10 && parent; j++) {
+                  const parentText = parent.innerText || ''
+                  const addrMatch = parentText.match(/([A-Za-z0-9]{4,8}\.\.\.[A-Za-z0-9]{4})/)
+                  if (addrMatch && !seen.has(addrMatch[1])) {
+                    seen.add(addrMatch[1])
+                    results.push({
+                      address: addrMatch[1],
+                      nickname: addrMatch[1],
+                      roi,
+                      pnl: 0,
+                    })
+                    break
+                  }
+                  parent = parent.parentElement
+                }
+              }
+            })
+          }
+          
+          return results
+        })
+      }
+      
+      // 先提取初始数据
+      const initialTraders = await extractFromDOM()
+      initialTraders.forEach(item => {
+        if (!traders.has(item.address)) {
+          traders.set(item.address, {
+            traderId: item.address,
             nickname: item.nickname,
             avatar: null,
             roi: item.roi,
@@ -227,25 +258,98 @@ async function fetchLeaderboardData(period) {
             winRate: null,
             maxDrawdown: null,
             followers: null,
-            rank: traders.size + 1,
           })
         }
       })
+      console.log(`  初始提取: ${traders.size} 个`)
       
-      if (traders.size === lastCount) {
-        scrollAttempts++
-        console.log(`  滚动尝试 ${scrollAttempts}/${maxScrollAttempts}，无新数据`)
-      } else {
-        scrollAttempts = 0
-        console.log(`  当前已获取: ${traders.size} 个交易员`)
+      // 滚动加载更多
+      let noNewDataCount = 0
+      const maxScrollAttempts = 50
+      
+      for (let scroll = 1; scroll <= maxScrollAttempts && traders.size < TARGET_COUNT; scroll++) {
+        const lastCount = traders.size
+        
+        // 多种滚动方式
+        await page.evaluate(() => {
+          // 滚动到底部
+          window.scrollTo(0, document.body.scrollHeight)
+        })
+        await sleep(1500)
+        
+        // 尝试点击加载更多按钮
+        const loadMoreClicked = await page.evaluate(() => {
+          const buttons = document.querySelectorAll('button, [class*="more"], [class*="load"]')
+          for (const btn of buttons) {
+            const text = (btn.textContent || '').toLowerCase()
+            if (text.includes('load more') || text.includes('加载更多') || text.includes('show more') || text.includes('view more')) {
+              btn.click()
+              return true
+            }
+          }
+          return false
+        })
+        
+        if (loadMoreClicked) {
+          await sleep(2000)
+        }
+        
+        // 尝试点击分页
+        await page.evaluate((page) => {
+          const pagers = document.querySelectorAll('[class*="page"], [class*="pagination"] *')
+          for (const p of pagers) {
+            if (p.textContent?.trim() === String(page)) {
+              p.click()
+              return true
+            }
+          }
+          // 下一页按钮
+          const nexts = document.querySelectorAll('[class*="next"]')
+          for (const n of nexts) {
+            if (n.offsetParent) {
+              n.click()
+              return true
+            }
+          }
+          return false
+        }, scroll + 1)
+        await sleep(1500)
+        
+        // 提取数据
+        const domTraders = await extractFromDOM()
+        domTraders.forEach(item => {
+          if (!traders.has(item.address)) {
+            traders.set(item.address, {
+              traderId: item.address,
+              nickname: item.nickname,
+              avatar: null,
+              roi: item.roi,
+              pnl: item.pnl,
+              winRate: null,
+              maxDrawdown: null,
+              followers: null,
+            })
+          }
+        })
+        
+        if (traders.size === lastCount) {
+          noNewDataCount++
+          if (noNewDataCount >= 8) {
+            console.log(`  滚动 ${scroll}: 连续 ${noNewDataCount} 次无新数据，停止`)
+            break
+          }
+        } else {
+          noNewDataCount = 0
+          if (scroll % 5 === 0 || traders.size >= TARGET_COUNT) {
+            console.log(`  滚动 ${scroll}: 当前 ${traders.size} 个`)
+          }
+        }
       }
     }
 
-    console.log(`\n📊 共获取 ${traders.size} 个交易员数据`)
-
-    const screenshotPath = `/tmp/okx_web3_${period}_${Date.now()}.png`
-    await page.screenshot({ path: screenshotPath, fullPage: true })
-    console.log(`📸 截图保存到: ${screenshotPath}`)
+    console.log(`\n📊 共获取 ${traders.size} 个交易员`)
+    
+    await page.screenshot({ path: `/tmp/okx_web3_${period}_${Date.now()}.png`, fullPage: true })
 
   } finally {
     await browser.close()
@@ -255,108 +359,93 @@ async function fetchLeaderboardData(period) {
 }
 
 async function saveTraders(traders, period) {
-  console.log(`\n💾 保存 ${traders.length} 个交易员到数据库 (${SOURCE} - ${period})...`)
+  console.log(`\n💾 批量保存 ${traders.length} 个交易员...`)
   
   const capturedAt = new Date().toISOString()
-  let saved = 0
-  let errors = 0
 
-  for (const trader of traders) {
-    try {
-      await supabase.from('trader_sources').upsert({
-        source: SOURCE,
-        source_type: 'leaderboard',
-        source_trader_id: trader.traderId,
-        handle: trader.nickname,
-        profile_url: trader.avatar,
-        is_active: true,
-      }, { onConflict: 'source,source_trader_id' })
+  // 批量 upsert
+  const sourcesData = traders.map(t => ({
+    source: SOURCE,
+    source_type: 'leaderboard',
+    source_trader_id: t.traderId,
+    handle: t.nickname,
+    profile_url: t.avatar,
+    is_active: true,
+  }))
 
-      const { error } = await supabase.from('trader_snapshots').insert({
-        source: SOURCE,
-        source_trader_id: trader.traderId,
-        season_id: period,
-        rank: trader.rank,
-        roi: trader.roi,
-        pnl: trader.pnl,
-        win_rate: trader.winRate,
-        max_drawdown: trader.maxDrawdown,
-        followers: trader.followers || 0,
-        captured_at: capturedAt,
-      })
+  const snapshotsData = traders.map((t, idx) => ({
+    source: SOURCE,
+    source_trader_id: t.traderId,
+    season_id: period,
+    rank: idx + 1,
+    roi: t.roi,
+    pnl: t.pnl,
+    win_rate: t.winRate,
+    max_drawdown: t.maxDrawdown,
+    followers: t.followers || 0,
+    captured_at: capturedAt,
+  }))
 
-      if (error) {
-        console.log(`    ✗ 保存失败 ${trader.traderId}: ${error.message}`)
-        errors++
-      } else {
-        saved++
-      }
-    } catch (error) {
-      console.log(`    ✗ 异常 ${trader.traderId}: ${error.message}`)
-      errors++
-    }
+  const { error: sourceError } = await supabase
+    .from('trader_sources')
+    .upsert(sourcesData, { onConflict: 'source,source_trader_id' })
+
+  if (sourceError) {
+    console.log(`  ⚠ Sources 保存失败: ${sourceError.message}`)
   }
 
-  console.log(`  ✓ 保存成功: ${saved}`)
-  if (errors > 0) console.log(`  ✗ 保存失败: ${errors}`)
+  const { error: snapshotError } = await supabase
+    .from('trader_snapshots')
+    .insert(snapshotsData)
 
-  return { saved, errors }
+  if (snapshotError) {
+    console.log(`  ⚠ Snapshots 保存失败: ${snapshotError.message}`)
+    // 逐条重试
+    let saved = 0
+    for (const s of snapshotsData) {
+      const { error } = await supabase.from('trader_snapshots').insert(s)
+      if (!error) saved++
+    }
+    console.log(`  逐条保存: ${saved}/${snapshotsData.length}`)
+    return { saved, errors: snapshotsData.length - saved }
+  }
+
+  console.log(`  ✓ 保存成功: ${snapshotsData.length}`)
+  return { saved: snapshotsData.length, errors: 0 }
 }
 
 async function main() {
   const period = getTargetPeriod()
   console.log(`\n========================================`)
-  console.log(`OKX Web3 排行榜数据抓取`)
+  console.log(`OKX Web3 排行榜数据抓取 (修复版)`)
   console.log(`目标周期: ${period}`)
-  console.log(`数据源: ${SOURCE}`)
-  console.log(`目标数量: ${TARGET_COUNT} 个交易员`)
   console.log(`========================================`)
 
-  try {
-    const traders = await fetchLeaderboardData(period)
+  const traders = await fetchLeaderboardData(period)
 
-    if (traders.length === 0) {
-      console.log('\n⚠ 未获取到任何数据')
-      console.log('请检查截图文件查看页面状态')
-      process.exit(1)
-    }
-
-    const uniqueTraders = deduplicateTraders(traders)
-    
-    uniqueTraders.sort((a, b) => (b.roi || 0) - (a.roi || 0))
-    uniqueTraders.forEach((t, idx) => t.rank = idx + 1)
-
-    const topTraders = uniqueTraders.slice(0, TARGET_COUNT)
-
-    console.log(`\n📋 ${period} TOP 10 (按 ROI 排序):`)
-    topTraders.slice(0, 10).forEach((t, idx) => {
-      console.log(`  ${idx + 1}. ${t.nickname || t.traderId}: ROI ${t.roi?.toFixed(2)}%`)
-    })
-
-    const validation = validateTraderData(topTraders, {}, SOURCE)
-    const isValid = printValidationResult(validation, SOURCE)
-
-    if (!isValid) {
-      console.log('\n⚠️ 数据验证未完全通过，但仍保存数据')
-    }
-
-    const result = await saveTraders(topTraders, period)
-
-    console.log(`\n========================================`)
-    console.log(`✅ 完成！`)
-    console.log(`   来源: ${SOURCE}`)
-    console.log(`   周期: ${period}`)
-    console.log(`   总数: ${topTraders.length}`)
-    console.log(`   TOP ROI: ${validation.stats.topRoi.toFixed(2)}%`)
-    console.log(`   平均 ROI: ${validation.stats.avgRoi.toFixed(2)}%`)
-    console.log(`   保存: ${result.saved}`)
-    console.log(`   时间: ${new Date().toISOString()}`)
-    console.log(`========================================`)
-  } catch (error) {
-    console.error('\n❌ 执行失败:', error.message)
-    console.error(error.stack)
+  if (traders.length === 0) {
+    console.log('\n⚠ 未获取到数据')
     process.exit(1)
   }
+
+  // 按 ROI 排序
+  traders.sort((a, b) => (b.roi || 0) - (a.roi || 0))
+  traders.forEach((t, idx) => t.rank = idx + 1)
+
+  const topTraders = traders.slice(0, TARGET_COUNT)
+
+  console.log(`\n📋 TOP 10:`)
+  topTraders.slice(0, 10).forEach((t, idx) => {
+    console.log(`  ${idx + 1}. ${t.nickname}: ROI ${t.roi?.toFixed(2)}%`)
+  })
+
+  const result = await saveTraders(topTraders, period)
+
+  console.log(`\n========================================`)
+  console.log(`✅ 完成！`)
+  console.log(`   获取: ${traders.length}`)
+  console.log(`   保存: ${result.saved}`)
+  console.log(`========================================`)
 }
 
 main()

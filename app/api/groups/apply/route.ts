@@ -32,7 +32,8 @@ export async function POST(request: NextRequest) {
       role_names,
       rules_json,
       rules,
-      rules_en
+      rules_en,
+      is_premium_only
     } = body
 
     // 验证必填字段
@@ -46,6 +47,21 @@ export async function POST(request: NextRequest) {
 
     if (description && description.length > 500) {
       return NextResponse.json({ error: '小组简介不能超过500个字符' }, { status: 400 })
+    }
+
+    // 如果要创建 Pro 专属小组，需要验证用户是 Pro 会员
+    if (is_premium_only) {
+      const { data: profile } = await supabase
+        .from('user_profiles')
+        .select('subscription_tier')
+        .eq('id', user.id)
+        .single()
+
+      const isPro = profile?.subscription_tier && ['pro', 'elite', 'enterprise'].includes(profile.subscription_tier)
+      
+      if (!isPro) {
+        return NextResponse.json({ error: '只有 Pro 会员才能创建专属小组' }, { status: 403 })
+      }
     }
 
     // 检查是否已有待审核的申请
@@ -97,6 +113,7 @@ export async function POST(request: NextRequest) {
         rules_json: rules_json || null,
         rules: rules?.trim() || null,
         rules_en: rules_en?.trim() || null,
+        is_premium_only: is_premium_only || false,
         status: 'pending'
       })
       .select()

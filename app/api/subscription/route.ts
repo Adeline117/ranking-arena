@@ -61,6 +61,16 @@ export async function GET(request: NextRequest) {
       )
     }
 
+    // 统计用户关注的交易员数量
+    const { count: followsCount } = await supabase
+      .from('trader_follows')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+
+    const currentFollows = followsCount || 0
+    // custom_rankings 表尚未创建，暂时返回 0
+    const currentCustomRankings = 0
+
     // 如果没有订阅记录，返回免费版默认值
     if (!subscription) {
       const defaultSubscription: UserSubscription = {
@@ -75,8 +85,8 @@ export async function GET(request: NextRequest) {
           apiCallsToday: 0,
           comparisonReportsThisMonth: 0,
           exportsThisMonth: 0,
-          currentFollows: 0,
-          currentCustomRankings: 0,
+          currentFollows,
+          currentCustomRankings,
         },
       }
 
@@ -97,8 +107,8 @@ export async function GET(request: NextRequest) {
         apiCallsToday: subscription.api_calls_today || 0,
         comparisonReportsThisMonth: subscription.comparison_reports_this_month || 0,
         exportsThisMonth: subscription.exports_this_month || 0,
-        currentFollows: 0, // TODO: 从 trader_follows 表统计
-        currentCustomRankings: 0, // TODO: 从 custom_rankings 表统计
+        currentFollows,
+        currentCustomRankings,
       },
     }
 

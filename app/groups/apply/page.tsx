@@ -9,6 +9,7 @@ import TopNav from '@/app/components/Layout/TopNav'
 import Card from '@/app/components/UI/Card'
 import { Box, Text, Button } from '@/app/components/Base'
 import { useLanguage } from '@/app/components/Utils/LanguageProvider'
+import { useSubscription } from '@/app/components/Home/hooks/useSubscription'
 
 type RoleNames = {
   admin: { zh: string; en: string }
@@ -23,6 +24,7 @@ type Rule = {
 export default function ApplyGroupPage() {
   const router = useRouter()
   const { t, language } = useLanguage()
+  const { isPro } = useSubscription()
   const [email, setEmail] = useState<string | null>(null)
   const [accessToken, setAccessToken] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -53,6 +55,9 @@ export default function ApplyGroupPage() {
     admin: { zh: '管理员', en: 'Admin' },
     member: { zh: '成员', en: 'Member' }
   })
+  
+  // Pro 专属小组选项
+  const [isPremiumOnly, setIsPremiumOnly] = useState(false)
 
   // 用户已有的申请
   const [existingApplications, setExistingApplications] = useState<any[]>([])
@@ -141,6 +146,8 @@ export default function ApplyGroupPage() {
           // 兼容旧版：将规则合并为文本
           rules: rules.map(r => r.zh).filter(Boolean).join('\n') || null,
           rules_en: rules.map(r => r.en).filter(Boolean).join('\n') || null,
+          // Pro 专属小组选项
+          is_premium_only: isPro && isPremiumOnly,
         })
       })
 
@@ -642,6 +649,125 @@ export default function ApplyGroupPage() {
                   </Box>
                 )}
               </Box>
+
+              {/* Pro 专属小组选项 */}
+              {isPro && (
+                <Box
+                  style={{
+                    padding: tokens.spacing[4],
+                    background: 'var(--color-pro-glow)',
+                    borderRadius: tokens.radius.lg,
+                    border: '1px solid var(--color-pro-gradient-start)',
+                  }}
+                >
+                  <Box style={{ display: 'flex', alignItems: 'flex-start', gap: tokens.spacing[3] }}>
+                    <Box
+                      onClick={() => setIsPremiumOnly(!isPremiumOnly)}
+                      style={{
+                        width: 20,
+                        height: 20,
+                        borderRadius: tokens.radius.sm,
+                        border: isPremiumOnly 
+                          ? '2px solid var(--color-pro-gradient-start)' 
+                          : '2px solid var(--color-border-secondary)',
+                        background: isPremiumOnly ? 'var(--color-pro-gradient-start)' : 'transparent',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        cursor: 'pointer',
+                        flexShrink: 0,
+                        marginTop: 2,
+                        transition: 'all 0.2s',
+                      }}
+                    >
+                      {isPremiumOnly && (
+                        <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3">
+                          <path d="M20 6L9 17l-5-5" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      )}
+                    </Box>
+                    <Box style={{ flex: 1 }}>
+                      <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], marginBottom: 4 }}>
+                        <Text weight="bold" style={{ color: 'var(--color-pro-gradient-start)' }}>
+                          {language === 'zh' ? 'Pro 专属小组' : 'Pro Exclusive Group'}
+                        </Text>
+                        <Box
+                          style={{
+                            padding: '2px 6px',
+                            borderRadius: tokens.radius.full,
+                            background: 'var(--color-pro-badge-bg)',
+                            fontSize: 10,
+                            fontWeight: 700,
+                            color: '#fff',
+                          }}
+                        >
+                          Pro
+                        </Box>
+                      </Box>
+                      <Text size="sm" color="secondary" style={{ lineHeight: 1.5 }}>
+                        {language === 'zh' 
+                          ? '开启后，只有 Pro 会员才能加入此小组。组长和组员都需要是 Pro 会员。' 
+                          : 'When enabled, only Pro members can join this group. Both the leader and members must be Pro members.'}
+                      </Text>
+                    </Box>
+                  </Box>
+                </Box>
+              )}
+
+              {/* 非 Pro 用户提示 */}
+              {!isPro && (
+                <Box
+                  style={{
+                    padding: tokens.spacing[4],
+                    background: 'var(--color-bg-secondary)',
+                    borderRadius: tokens.radius.lg,
+                    border: '1px solid var(--color-border-primary)',
+                  }}
+                >
+                  <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3] }}>
+                    <Box
+                      style={{
+                        width: 36,
+                        height: 36,
+                        borderRadius: tokens.radius.md,
+                        background: 'var(--color-pro-glow)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                      }}
+                    >
+                      <svg width={18} height={18} viewBox="0 0 24 24" fill="var(--color-pro-gradient-start)">
+                        <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
+                      </svg>
+                    </Box>
+                    <Box style={{ flex: 1 }}>
+                      <Text size="sm" weight="semibold" style={{ marginBottom: 2 }}>
+                        {language === 'zh' ? '升级 Pro 创建专属小组' : 'Upgrade to Pro for Exclusive Groups'}
+                      </Text>
+                      <Text size="xs" color="tertiary">
+                        {language === 'zh' 
+                          ? 'Pro 会员可以创建只允许会员加入的专属小组' 
+                          : 'Pro members can create exclusive groups that only members can join'}
+                      </Text>
+                    </Box>
+                    <Link href="/pricing" style={{ textDecoration: 'none' }}>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        style={{
+                          background: 'var(--color-pro-glow)',
+                          border: '1px solid var(--color-pro-gradient-start)',
+                          color: 'var(--color-pro-gradient-start)',
+                          fontWeight: 600,
+                        }}
+                      >
+                        {language === 'zh' ? '升级' : 'Upgrade'}
+                      </Button>
+                    </Link>
+                  </Box>
+                </Box>
+              )}
 
               {/* 角色称呼设置 */}
               <Box>

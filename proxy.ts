@@ -22,6 +22,7 @@ const CSRF_EXEMPT_ROUTES = [
   '/api/cron',
   '/api/health',
   '/api/webhook',
+  '/api/stripe',           // Stripe API 通过 Authorization header 验证
   '/api/translate',        // 翻译 API 使用 rate limiting 保护
   '/api/posts',            // 帖子相关 API 需要认证
   '/api/comments',         // 评论相关 API 需要认证

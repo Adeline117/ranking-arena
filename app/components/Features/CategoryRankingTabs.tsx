@@ -1,0 +1,152 @@
+'use client'
+
+import { useState } from 'react'
+import { tokens } from '@/lib/design-tokens'
+import { Box, Text } from '../Base'
+import { useLanguage } from '../Utils/LanguageProvider'
+
+export type CategoryType = 'all' | 'futures' | 'spot' | 'web3'
+
+interface CategoryRankingTabsProps {
+  currentCategory: CategoryType
+  onCategoryChange: (category: CategoryType) => void
+  isPro: boolean
+  onProRequired?: () => void
+}
+
+// 锁图标
+const LockIcon = ({ size = 10 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path
+      d="M19 11H5C3.9 11 3 11.9 3 13V20C3 21.1 3.9 22 5 22H19C20.1 22 21 21.1 21 20V13C21 11.9 20.1 11 19 11Z"
+      fill="currentColor"
+    />
+    <path
+      d="M7 11V7C7 4.2 9.2 2 12 2C14.8 2 17 4.2 17 7V11"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+    />
+  </svg>
+)
+
+export default function CategoryRankingTabs({
+  currentCategory,
+  onCategoryChange,
+  isPro,
+  onProRequired,
+}: CategoryRankingTabsProps) {
+  const { language, t } = useLanguage()
+  const [hoveredTab, setHoveredTab] = useState<CategoryType | null>(null)
+
+  // 使用翻译的分类配置
+  const CATEGORIES: Array<{ value: CategoryType; label: string }> = [
+    { value: 'all', label: t('categoryAll') },
+    { value: 'futures', label: t('categoryFutures') },
+    { value: 'spot', label: t('categorySpot') },
+    { value: 'web3', label: t('categoryWeb3') },
+  ]
+
+  const handleTabClick = (category: CategoryType) => {
+    if (category !== 'all' && !isPro) {
+      onProRequired?.()
+      return
+    }
+    onCategoryChange(category)
+  }
+
+  return (
+    <Box
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 2,
+        padding: 3,
+        background: 'var(--color-bg-tertiary)',
+        borderRadius: tokens.radius.lg,
+        border: '1px solid var(--color-border-secondary)',
+      }}
+    >
+      {CATEGORIES.map((cat) => {
+        const isActive = currentCategory === cat.value
+        const isHovered = hoveredTab === cat.value
+        const isLocked = cat.value !== 'all' && !isPro
+
+        return (
+          <button
+            key={cat.value}
+            onClick={() => handleTabClick(cat.value)}
+            onMouseEnter={() => setHoveredTab(cat.value)}
+            onMouseLeave={() => setHoveredTab(null)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+              borderRadius: tokens.radius.md,
+              border: 'none',
+              background: isActive
+                ? 'var(--color-pro-badge-bg)'
+                : isHovered && !isLocked
+                  ? 'var(--color-bg-secondary)'
+                  : 'transparent',
+              color: isActive
+                ? '#ffffff'
+                : isLocked
+                  ? 'var(--color-text-quaternary)'
+                  : 'var(--color-text-secondary)',
+              cursor: isLocked ? 'not-allowed' : 'pointer',
+              fontSize: tokens.typography.fontSize.sm,
+              fontWeight: isActive ? 600 : 500,
+              transition: 'all 0.2s ease',
+              opacity: isLocked ? 0.5 : 1,
+              boxShadow: isActive ? '0 2px 8px var(--color-pro-badge-shadow)' : 'none',
+            }}
+          >
+            <span>{cat.label}</span>
+            {isLocked && (
+              <LockIcon size={10} />
+            )}
+          </button>
+        )
+      })}
+    </Box>
+  )
+}
+
+// 过滤函数
+export function filterByCategory(source: string, category: CategoryType): boolean {
+  if (category === 'all') return true
+  
+  const sourceLower = source.toLowerCase()
+  
+  switch (category) {
+    case 'futures':
+      return sourceLower.includes('futures') || 
+             sourceLower === 'bybit' || 
+             sourceLower === 'mexc' || 
+             sourceLower === 'coinex' || 
+             sourceLower === 'kucoin'
+    case 'spot':
+      return sourceLower.includes('spot')
+    case 'web3':
+      return sourceLower.includes('web3') || sourceLower === 'gmx'
+    default:
+      return true
+  }
+}
+
+// 获取分类的来源列表
+export function getSourcesForCategory(category: CategoryType): string[] {
+  switch (category) {
+    case 'futures':
+      return ['binance_futures', 'bybit', 'bitget_futures', 'mexc', 'coinex', 'kucoin']
+    case 'spot':
+      return ['binance_spot', 'bitget_spot']
+    case 'web3':
+      return ['binance_web3', 'okx_web3', 'gmx']
+    case 'all':
+    default:
+      return []
+  }
+}

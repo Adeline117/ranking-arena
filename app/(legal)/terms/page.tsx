@@ -1,9 +1,6 @@
-import { Metadata } from 'next'
+'use client'
 
-export const metadata: Metadata = {
-  title: '服务条款',
-  description: 'Arena 服务条款',
-}
+import ContactSupportButton from '@/app/components/UI/ContactSupportButton'
 
 export default function TermsOfServicePage() {
   return (
@@ -179,11 +176,11 @@ export default function TermsOfServicePage() {
               11. 联系我们
             </h2>
             <p>
-              如果您对本服务条款有任何问题，请通过以下方式联系我们：
+              如果您对本服务条款有任何问题，请通过站内私信联系我们：
             </p>
-            <p className="mt-4">
-              电子邮件：legal@arenafi.org
-            </p>
+            <div className="mt-4">
+              <ContactSupportButton size="sm" label="发送私信给客服" />
+            </div>
           </section>
         </div>
         

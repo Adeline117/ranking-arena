@@ -80,6 +80,17 @@ const nextConfig: NextConfig = {
   // 生产环境不生成 source maps（减少构建大小）
   productionBrowserSourceMaps: false,
   
+  // API 版本控制 - 将 /api/v1/* 重写到 /api/*
+  // 这样可以保持向后兼容，同时支持版本化的 API 端点
+  async rewrites() {
+    return [
+      {
+        source: '/api/v1/:path*',
+        destination: '/api/:path*',
+      },
+    ];
+  },
+  
   // 响应头配置 - 缓存优化
   async headers() {
     return [
@@ -94,7 +105,7 @@ const nextConfig: NextConfig = {
         ],
       },
       {
-        // API 响应添加安全头
+        // API 响应添加安全头（包括 v1 版本）
         source: '/api/:path*',
         headers: [
           {
@@ -104,6 +115,10 @@ const nextConfig: NextConfig = {
           {
             key: 'X-Frame-Options',
             value: 'DENY',
+          },
+          {
+            key: 'X-API-Version',
+            value: 'v1',
           },
         ],
       },
