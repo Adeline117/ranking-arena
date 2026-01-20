@@ -214,12 +214,12 @@ async function processBinanceTrader(traderId, source) {
   
   const capturedAt = new Date().toISOString()
   const results = {
-    stats: [],
-    assets: [],
-    curves: [],
-    positions: [],
-    portfolio: [],
-    snapshots: [], // 新增：保存三个时间段的 ROI/PnL 快照
+    stats: [],     // 保存到 trader_stats_detail (用于展示，不参与排行)
+    assets: [],    // 保存到 trader_asset_breakdown
+    curves: [],    // 保存到 trader_equity_curve
+    positions: [], // 保存到 trader_position_history
+    portfolio: [], // 保存到 trader_portfolio
+    // 注意：Performance 数据不保存到 trader_snapshots，排行榜数据由排行榜脚本单独抓取
   }
   
   // 并行获取所有时间段的数据
@@ -245,27 +245,9 @@ async function processBinanceTrader(traderId, source) {
         captured_at: capturedAt,
       })
       
-      // 新增：保存 ROI/PnL 快照到 trader_snapshots
-      // 为每个时间段和交易员生成唯一的 captured_at (避免唯一约束冲突)
-      const roi = parseFloat(perf.roi) || 0
-      const pnl = parseFloat(perf.pnl) || 0
-      if (roi !== 0 || pnl !== 0) {
-        // 使用 trader ID 的最后几位和时间段来生成唯一偏移
-        const idOffset = parseInt(traderId.slice(-6)) % 100000
-        const periodOffset = period === '7D' ? 0 : (period === '30D' ? 100000 : 200000)
-        const snapshotTime = new Date(Date.now() + idOffset + periodOffset).toISOString()
-        results.snapshots.push({
-          source,
-          source_trader_id: traderId,
-          season_id: period,
-          roi,
-          pnl,
-          win_rate: parseFloat(perf.winRate) / 100 || 0, // API 返回的是百分比形式
-          max_drawdown: parseFloat(perf.mdd) || 0,
-          followers: parseInt(perf.copierCount || perf.currentCopyCount) || 0,
-          captured_at: snapshotTime,
-        })
-      }
+      // 注意：Performance 数据不保存到 trader_snapshots
+      // 排行榜数据由排行榜脚本 (import_binance_futures.mjs) 单独抓取
+      // Performance 数据仅用于展示详情，保存在 trader_stats_detail 中
     }
     
     // Assets
@@ -364,7 +346,6 @@ async function saveBatch(allResults) {
   const curves = []
   const positions = []
   const portfolios = []
-  const snapshots = [] // 新增：ROI/PnL 快照
   const updatedTraders = new Map() // source -> [trader_ids]
   
   for (const r of allResults) {
@@ -374,7 +355,6 @@ async function saveBatch(allResults) {
     curves.push(...r.curves)
     positions.push(...r.positions)
     portfolios.push(...r.portfolio)
-    if (r.snapshots) snapshots.push(...r.snapshots)
     
     // 收集成功更新的交易员
     if (r.stats.length > 0) {
@@ -385,7 +365,7 @@ async function saveBatch(allResults) {
     }
   }
   
-  const counts = { stats: 0, assets: 0, curves: 0, positions: 0, portfolios: 0, snapshots: 0 }
+  const counts = { stats: 0, assets: 0, curves: 0, positions: 0, portfolios: 0 }
   const batchSize = 500
   
   // 并行执行所有保存操作
@@ -479,21 +459,6 @@ async function saveBatch(allResults) {
     })())
   }
   
-  // 新增：保存 ROI/PnL 快照到 trader_snapshots (使用 upsert)
-  if (snapshots.length > 0) {
-    savePromises.push((async () => {
-      for (let i = 0; i < snapshots.length; i += batchSize) {
-        const batch = snapshots.slice(i, i + batchSize)
-        // 直接插入新记录（每次 captured_at 都不同，所以不会冲突）
-        const { error, data } = await supabase.from('trader_snapshots').insert(batch).select('id')
-        if (!error) {
-          counts.snapshots += data?.length || batch.length
-        } else {
-          console.error('保存快照失败:', error.message, error.code)
-        }
-      }
-    })())
-  }
   
   await Promise.all(savePromises)
   
@@ -603,8 +568,7 @@ async function main() {
   console.log(`  失败: ${errors.length}`)
   console.log(``)
   console.log(`💾 数据保存 (耗时: ${saveElapsed}s)`)
-  console.log(`  - Snapshots: ${counts.snapshots} 条 (ROI/PnL 快照)`)
-  console.log(`  - Stats: ${counts.stats} 条`)
+  console.log(`  - Stats: ${counts.stats} 条 (详情统计，不参与排行)`)
   console.log(`  - Assets: ${counts.assets} 条`)
   console.log(`  - Curves: ${counts.curves} 条`)
   console.log(`  - Positions: ${counts.positions} 条`)

@@ -39,12 +39,15 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
-function getTargetPeriod() {
+function getTargetPeriods() {
   const arg = process.argv[2]?.toUpperCase()
-  if (arg && ['7D', '30D', '90D'].includes(arg)) {
-    return arg
+  if (arg === 'ALL') {
+    return ['7D', '30D', '90D'] // 抓取所有时间段
   }
-  return '90D'
+  if (arg && ['7D', '30D', '90D'].includes(arg)) {
+    return [arg]
+  }
+  return ['7D', '30D', '90D'] // 默认抓取所有时间段
 }
 
 function parseTraderFromApi(item, rank) {
@@ -478,65 +481,80 @@ async function saveTradersBatch(traders, period) {
 }
 
 async function main() {
-  const period = getTargetPeriod()
+  const periods = getTargetPeriods()
   const totalStartTime = Date.now()
   
   console.log(`\n========================================`)
   console.log(`Binance Futures Copy Trading 数据抓取 (优化版)`)
-  console.log(`目标周期: ${period}`)
+  console.log(`目标周期: ${periods.join(', ')}`)
   console.log(`数据源: ${SOURCE}`)
-  console.log(`目标数量: ${TARGET_COUNT} 个交易员`)
+  console.log(`目标数量: ${TARGET_COUNT} 个交易员/周期`)
   console.log(`========================================`)
 
+  const results = []
+
   try {
-    const traders = await fetchLeaderboardData(period)
+    // 依次抓取每个时间段的排行榜
+    for (const period of periods) {
+      console.log(`\n${'='.repeat(50)}`)
+      console.log(`📊 开始抓取 ${period} 排行榜...`)
+      console.log(`${'='.repeat(50)}`)
+      
+      const traders = await fetchLeaderboardData(period)
 
-    if (traders.length === 0) {
-      console.log('\n⚠ 未获取到任何数据')
-      console.log('请检查截图文件查看页面状态')
-      process.exit(1)
+      if (traders.length === 0) {
+        console.log(`\n⚠ ${period} 未获取到任何数据，跳过`)
+        continue
+      }
+
+      // 去重
+      const uniqueTraders = deduplicateTraders(traders)
+      
+      // 按 ROI 从高到低排序
+      uniqueTraders.sort((a, b) => (b.roi || 0) - (a.roi || 0))
+      uniqueTraders.forEach((t, idx) => t.rank = idx + 1)
+
+      // 只保留前 100 个
+      const top100 = uniqueTraders.slice(0, TARGET_COUNT)
+
+      console.log(`\n📋 ${period} TOP 10 (按 ROI 排序):`)
+      top100.slice(0, 10).forEach((t, idx) => {
+        console.log(`  ${idx + 1}. ${t.nickname || t.traderId}: ROI ${t.roi?.toFixed(2)}%`)
+      })
+
+      // 数据质量验证
+      const validation = validateTraderData(top100, {}, SOURCE)
+      const isValid = printValidationResult(validation, SOURCE)
+
+      if (!isValid) {
+        console.log(`\n⚠ ${period} 数据质量验证失败，跳过保存`)
+        continue
+      }
+
+      const result = await saveTradersBatch(top100, period)
+      results.push({ period, count: top100.length, saved: result.saved, topRoi: validation.stats.topRoi })
+      
+      console.log(`\n✅ ${period} 完成！保存了 ${result.saved} 条数据`)
+      
+      // 短暂等待避免请求过快
+      if (periods.indexOf(period) < periods.length - 1) {
+        console.log(`\n⏳ 等待 5 秒后抓取下一个时间段...`)
+        await sleep(5000)
+      }
     }
-
-    // 去重
-    const uniqueTraders = deduplicateTraders(traders)
-    
-    // 按 ROI 从高到低排序
-    uniqueTraders.sort((a, b) => (b.roi || 0) - (a.roi || 0))
-    uniqueTraders.forEach((t, idx) => t.rank = idx + 1)
-
-    // 只保留前 100 个
-    const top100 = uniqueTraders.slice(0, TARGET_COUNT)
-
-    console.log(`\n📋 ${period} TOP 10 (按 ROI 排序):`)
-    top100.slice(0, 10).forEach((t, idx) => {
-      console.log(`  ${idx + 1}. ${t.nickname || t.traderId}: ROI ${t.roi?.toFixed(2)}%`)
-    })
-
-    // 数据质量验证
-    const validation = validateTraderData(top100, {}, SOURCE)
-    const isValid = printValidationResult(validation, SOURCE)
-
-    if (!isValid) {
-      console.log('\n❌ 数据质量验证失败，不保存数据')
-      console.log('请检查截图文件查看页面状态')
-      process.exit(1)
-    }
-
-    const result = await saveTradersBatch(top100, period)
     
     const totalElapsed = ((Date.now() - totalStartTime) / 1000).toFixed(1)
 
-    console.log(`\n========================================`)
-    console.log(`✅ 完成！`)
-    console.log(`   来源: ${SOURCE}`)
-    console.log(`   周期: ${period}`)
-    console.log(`   总数: ${top100.length}`)
-    console.log(`   TOP ROI: ${validation.stats.topRoi.toFixed(2)}%`)
-    console.log(`   平均 ROI: ${validation.stats.avgRoi.toFixed(2)}%`)
-    console.log(`   保存: ${result.saved}`)
-    console.log(`   总耗时: ${totalElapsed}s`)
+    console.log(`\n${'='.repeat(60)}`)
+    console.log(`✅ 全部完成！`)
+    console.log(`${'='.repeat(60)}`)
+    console.log(`📊 抓取结果:`)
+    for (const r of results) {
+      console.log(`   ${r.period}: ${r.saved} 条, TOP ROI ${r.topRoi?.toFixed(2)}%`)
+    }
+    console.log(`   总耗时: ${totalElapsed}s (${(parseFloat(totalElapsed)/60).toFixed(1)}分钟)`)
     console.log(`   时间: ${new Date().toISOString()}`)
-    console.log(`========================================`)
+    console.log(`${'='.repeat(60)}`)
   } catch (error) {
     console.error('\n❌ 执行失败:', error.message)
     console.error(error.stack)
