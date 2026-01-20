@@ -105,7 +105,7 @@ export default function PricingPage() {
         },
         body: JSON.stringify({ 
           plan: selectedPlan,
-          successUrl: `${window.location.origin}/pricing/success`,
+          successUrl: `${window.location.origin}/pricing/success?session_id={CHECKOUT_SESSION_ID}`,
           cancelUrl: `${window.location.origin}/pricing`,
         }),
       })
