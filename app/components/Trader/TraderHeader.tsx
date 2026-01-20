@@ -165,10 +165,8 @@ export default function TraderHeader({
         >
           {avatarUrl ? (
             <img 
-              src={avatarUrl} 
+              src={`/api/avatar?url=${encodeURIComponent(avatarUrl)}`}
               alt={handle} 
-              referrerPolicy="no-referrer"
-              crossOrigin="anonymous"
               loading="lazy"
               style={{ 
                 width: '100%', 

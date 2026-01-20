@@ -170,22 +170,24 @@ async function fetchLeaderboardData(period) {
         cards.forEach(card => {
           const text = card.innerText || ''
           
-          // 提取头像 - 使用多种选择器
+          // 提取头像 - 只选择真正的用户头像
           let avatar = null
           const imgSelectors = [
             'img[src*="avatar"]',
-            'img[src*="head"]',
             'img[src*="user"]',
-            'img[src*="mocortech"]',
-            'img[src*="banner"]',
+            'img[src*="head"]',
             '[class*="avatar"] img',
-            '[class*="head"] img',
-            'img'
+            '[class*="head"] img'
           ]
           for (const sel of imgSelectors) {
             const img = card.querySelector(sel)
-            if (img?.src && !img.src.includes('placeholder') && !img.src.includes('default') && !img.src.includes('icon')) {
-              if (img.src.includes('mocortech') || img.src.includes('avatar') || img.src.includes('user') || img.width > 20) {
+            if (img?.src && 
+                !img.src.includes('placeholder') && 
+                !img.src.includes('default') && 
+                !img.src.includes('icon') &&
+                !img.src.includes('banner') &&  // 排除广告 banner
+                !img.src.includes('F202411')) { // 排除固定日期的广告图片
+              if (img.src.includes('avatar') || img.src.includes('user') || img.src.includes('head')) {
                 avatar = img.src
                 break
               }
