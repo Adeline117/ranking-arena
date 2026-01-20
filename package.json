@@ -25,7 +25,7 @@
     "scrape:details:force": "node scripts/fetch_details_fast.mjs --force"
   },
   "dependencies": {
-    "@sentry/nextjs": "^10.34.0",
+    "@sentry/nextjs": "^10.35.0",
     "@stripe/stripe-js": "^8.6.3",
     "@supabase/supabase-js": "^2.89.0",
     "@upstash/ratelimit": "^2.0.8",
