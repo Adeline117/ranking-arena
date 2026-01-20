@@ -40,12 +40,11 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
-function getTargetPeriod() {
+function getTargetPeriods() {
   const arg = process.argv[2]?.toUpperCase()
-  if (arg && ['7D', '30D', '90D'].includes(arg)) {
-    return arg
-  }
-  return '90D'
+  if (arg === 'ALL') return ['7D', '30D', '90D']
+  if (arg && ['7D', '30D', '90D'].includes(arg)) return [arg]
+  return ['7D', '30D', '90D'] // 默认抓取所有时间段
 }
 
 function parseTraderFromApi(item, rank) {
@@ -218,54 +217,67 @@ async function saveTraders(traders, period) {
 }
 
 async function main() {
-  const period = getTargetPeriod()
+  const periods = getTargetPeriods()
+  const totalStartTime = Date.now()
+  
   console.log(`\n========================================`)
   console.log(`Bitget Spot Copy Trading 数据抓取`)
-  console.log(`目标周期: ${period}`)
+  console.log(`目标周期: ${periods.join(', ')}`)
   console.log(`数据源: ${SOURCE}`)
-  console.log(`目标数量: ${TARGET_COUNT} 个交易员`)
+  console.log(`目标数量: ${TARGET_COUNT} 个交易员/周期`)
   console.log(`========================================`)
 
+  const results = []
+
   try {
-    const traders = await fetchLeaderboardData(period)
+    for (const period of periods) {
+      console.log(`\n${'='.repeat(50)}`)
+      console.log(`📊 开始抓取 ${period} 排行榜...`)
+      console.log(`${'='.repeat(50)}`)
+      
+      const traders = await fetchLeaderboardData(period)
 
-    if (traders.length === 0) {
-      console.log('\n⚠ 未获取到任何数据')
-      console.log('请检查截图文件查看页面状态')
-      process.exit(1)
+      if (traders.length === 0) {
+        console.log(`\n⚠ ${period} 未获取到任何数据，跳过`)
+        continue
+      }
+
+      const uniqueTraders = deduplicateTraders(traders)
+      uniqueTraders.sort((a, b) => (b.roi || 0) - (a.roi || 0))
+      uniqueTraders.forEach((t, idx) => t.rank = idx + 1)
+
+      const topTraders = uniqueTraders.slice(0, TARGET_COUNT)
+
+      console.log(`\n📋 ${period} TOP 10 (按 ROI 排序):`)
+      topTraders.slice(0, 10).forEach((t, idx) => {
+        console.log(`  ${idx + 1}. ${t.nickname || t.traderId}: ROI ${t.roi?.toFixed(2)}%`)
+      })
+
+      const validation = validateTraderData(topTraders, {}, SOURCE)
+      printValidationResult(validation, SOURCE)
+
+      const result = await saveTraders(topTraders, period)
+      results.push({ period, count: topTraders.length, saved: result.saved, topRoi: validation.stats.topRoi })
+      
+      console.log(`\n✅ ${period} 完成！保存了 ${result.saved} 条数据`)
+      
+      if (periods.indexOf(period) < periods.length - 1) {
+        console.log(`\n⏳ 等待 5 秒后抓取下一个时间段...`)
+        await sleep(5000)
+      }
     }
-
-    const uniqueTraders = deduplicateTraders(traders)
     
-    uniqueTraders.sort((a, b) => (b.roi || 0) - (a.roi || 0))
-    uniqueTraders.forEach((t, idx) => t.rank = idx + 1)
+    const totalTime = ((Date.now() - totalStartTime) / 1000).toFixed(1)
 
-    const topTraders = uniqueTraders.slice(0, TARGET_COUNT)
-
-    console.log(`\n📋 ${period} TOP 10 (按 ROI 排序):`)
-    topTraders.slice(0, 10).forEach((t, idx) => {
-      console.log(`  ${idx + 1}. ${t.nickname || t.traderId}: ROI ${t.roi?.toFixed(2)}%`)
-    })
-
-    const validation = validateTraderData(topTraders, {}, SOURCE)
-    const isValid = printValidationResult(validation, SOURCE)
-
-    if (!isValid) {
-      console.log('\n⚠️ 数据验证未完全通过，但仍保存数据')
+    console.log(`\n${'='.repeat(60)}`)
+    console.log(`✅ 全部完成！`)
+    console.log(`${'='.repeat(60)}`)
+    console.log(`📊 抓取结果:`)
+    for (const r of results) {
+      console.log(`   ${r.period}: ${r.saved} 条, TOP ROI ${r.topRoi?.toFixed(2)}%`)
     }
-
-    const result = await saveTraders(topTraders, period)
-
-    console.log(`\n========================================`)
-    console.log(`✅ 完成！`)
-    console.log(`   来源: ${SOURCE}`)
-    console.log(`   周期: ${period}`)
-    console.log(`   总数: ${topTraders.length}`)
-    console.log(`   TOP ROI: ${validation.stats.topRoi.toFixed(2)}%`)
-    console.log(`   平均 ROI: ${validation.stats.avgRoi.toFixed(2)}%`)
-    console.log(`   保存: ${result.saved}`)
-    console.log(`   时间: ${new Date().toISOString()}`)
-    console.log(`========================================`)
+    console.log(`   总耗时: ${totalTime}s`)
+    console.log(`${'='.repeat(60)}`)
   } catch (error) {
     console.error('\n❌ 执行失败:', error.message)
     console.error(error.stack)
