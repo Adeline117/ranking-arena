@@ -51,10 +51,11 @@ function randomDelay(min = 500, max = 1500) {
   return sleep(delay)
 }
 
-function getTargetPeriod() {
+function getTargetPeriods() {
   const arg = process.argv[2]?.toUpperCase()
-  if (arg && ['7D', '30D', '90D'].includes(arg)) return arg
-  return '90D'
+  if (arg === 'ALL') return ['7D', '30D', '90D']
+  if (arg && ['7D', '30D', '90D'].includes(arg)) return [arg]
+  return ['7D', '30D', '90D'] // 默认抓取所有时间段
 }
 
 function getConcurrency() {
@@ -399,17 +400,17 @@ async function saveTradersBatch(results, period, capturedAt) {
 }
 
 async function main() {
-  const period = getTargetPeriod()
+  const periods = getTargetPeriods()
   const concurrency = getConcurrency()
-  const startTime = Date.now()
+  const totalStartTime = Date.now()
   
   console.log(`\n========================================`)
   console.log(`Bitget Futures 数据抓取 v2 (优化版)`)
   console.log(`========================================`)
   console.log(`时间: ${new Date().toISOString()}`)
-  console.log(`周期: ${period}`)
+  console.log(`目标周期: ${periods.join(', ')}`)
   console.log(`并发: ${concurrency}`)
-  console.log(`目标: ${TARGET_COUNT} 个交易员`)
+  console.log(`目标: ${TARGET_COUNT} 个交易员/周期`)
   
   const browser = await puppeteer.launch({
     headless: 'new',
@@ -420,47 +421,63 @@ async function main() {
       '--disable-dev-shm-usage',
     ],
   })
+
+  const results = []
   
   try {
-    // 1. 获取排行榜
-    const traders = await fetchLeaderboard(browser, period)
-    
-    if (traders.length === 0) {
-      console.log('\n⚠ 未获取到交易员列表')
-      return
+    for (const period of periods) {
+      console.log(`\n${'='.repeat(50)}`)
+      console.log(`📊 开始抓取 ${period} 排行榜...`)
+      console.log(`${'='.repeat(50)}`)
+      
+      // 1. 获取排行榜
+      const traders = await fetchLeaderboard(browser, period)
+      
+      if (traders.length === 0) {
+        console.log(`\n⚠ ${period} 未获取到交易员列表，跳过`)
+        continue
+      }
+      
+      console.log(`\n📋 ${period} TOP 5:`)
+      traders.slice(0, 5).forEach((t, i) => {
+        console.log(`  ${i + 1}. ${t.nickname} (${t.traderId.slice(0, 8)}...): ROI ${t.roi}%`)
+      })
+      
+      // 2. 并行获取所有交易员的详情
+      const capturedAt = new Date().toISOString()
+      const detailResults = await fetchAllDetailsParallel(browser, traders, period, concurrency)
+      
+      // 3. 打印部分详情
+      console.log(`\n📊 详情数据示例:`)
+      detailResults.slice(0, 3).forEach((r, i) => {
+        const d = r.details
+        console.log(`  ${i + 1}. ${r.trader.nickname}: ROI:${(d.roi || r.trader.roi || 0).toFixed(1)}% PnL:$${(d.pnl || 0).toFixed(0)} WR:${(d.winRate || 0)}%`)
+      })
+      
+      // 4. 批量保存
+      const saved = await saveTradersBatch(detailResults, period, capturedAt)
+      const successCount = detailResults.filter(r => r.success).length
+      results.push({ period, count: successCount, saved, topRoi: traders[0]?.roi || 0 })
+      
+      console.log(`\n✅ ${period} 完成！保存了 ${saved} 条数据`)
+      
+      if (periods.indexOf(period) < periods.length - 1) {
+        console.log(`\n⏳ 等待 5 秒后抓取下一个时间段...`)
+        await sleep(5000)
+      }
     }
     
-    console.log(`\n📋 TOP 5:`)
-    traders.slice(0, 5).forEach((t, i) => {
-      console.log(`  ${i + 1}. ${t.nickname} (${t.traderId.slice(0, 8)}...): ROI ${t.roi}%`)
-    })
+    const totalTime = ((Date.now() - totalStartTime) / 1000).toFixed(1)
     
-    // 2. 并行获取所有交易员的详情
-    const capturedAt = new Date().toISOString()
-    const results = await fetchAllDetailsParallel(browser, traders, period, concurrency)
-    
-    // 3. 打印部分详情
-    console.log(`\n📊 详情数据示例:`)
-    results.slice(0, 3).forEach((r, i) => {
-      const d = r.details
-      console.log(`  ${i + 1}. ${r.trader.nickname}: ROI:${(d.roi || r.trader.roi || 0).toFixed(1)}% PnL:$${(d.pnl || 0).toFixed(0)} WR:${(d.winRate || 0)}%`)
-    })
-    
-    // 4. 批量保存
-    const saved = await saveTradersBatch(results, period, capturedAt)
-    
-    // 5. 统计
-    const totalTime = ((Date.now() - startTime) / 1000).toFixed(1)
-    const successCount = results.filter(r => r.success).length
-    
-    console.log(`\n========================================`)
-    console.log(`✅ 完成！`)
-    console.log(`   来源: ${SOURCE}`)
-    console.log(`   周期: ${period}`)
-    console.log(`   获取: ${successCount}/${traders.length}`)
-    console.log(`   保存: ${saved}`)
-    console.log(`   耗时: ${totalTime}s`)
-    console.log(`========================================`)
+    console.log(`\n${'='.repeat(60)}`)
+    console.log(`✅ 全部完成！`)
+    console.log(`${'='.repeat(60)}`)
+    console.log(`📊 抓取结果:`)
+    for (const r of results) {
+      console.log(`   ${r.period}: ${r.saved} 条, TOP ROI ${r.topRoi?.toFixed?.(2) || r.topRoi}%`)
+    }
+    console.log(`   总耗时: ${totalTime}s`)
+    console.log(`${'='.repeat(60)}`)
     
   } finally {
     await browser.close()

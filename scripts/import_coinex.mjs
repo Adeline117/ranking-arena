@@ -33,10 +33,11 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
-function getTargetPeriod() {
+function getTargetPeriods() {
   const arg = process.argv[2]?.toUpperCase()
-  if (arg && ['7D', '30D', '90D'].includes(arg)) return arg
-  return '90D'
+  if (arg === 'ALL') return ['7D', '30D', '90D']
+  if (arg && ['7D', '30D', '90D'].includes(arg)) return [arg]
+  return ['7D', '30D', '90D'] // 默认抓取所有时间段
 }
 
 async function fetchLeaderboardData(period) {
@@ -221,33 +222,60 @@ async function saveTraders(traders, period) {
 }
 
 async function main() {
-  const period = getTargetPeriod()
+  const periods = getTargetPeriods()
+  const totalStartTime = Date.now()
+  
   console.log(`\n========================================`)
-  console.log(`CoinEx 数据抓取 - ${period}`)
+  console.log(`CoinEx 数据抓取`)
+  console.log(`目标周期: ${periods.join(', ')}`)
   console.log(`========================================`)
 
-  const traders = await fetchLeaderboardData(period)
+  const results = []
 
-  if (traders.length === 0) {
-    console.log('\n⚠ 未获取到数据')
-    return
+  for (const period of periods) {
+    console.log(`\n${'='.repeat(50)}`)
+    console.log(`📊 开始抓取 ${period} 排行榜...`)
+    console.log(`${'='.repeat(50)}`)
+    
+    const traders = await fetchLeaderboardData(period)
+
+    if (traders.length === 0) {
+      console.log(`\n⚠ ${period} 未获取到数据，跳过`)
+      continue
+    }
+
+    traders.sort((a, b) => (b.roi || 0) - (a.roi || 0))
+    traders.forEach((t, idx) => t.rank = idx + 1)
+
+    const top100 = traders.slice(0, TARGET_COUNT)
+
+    console.log(`\n📋 ${period} TOP 10:`)
+    top100.slice(0, 10).forEach((t, idx) => {
+      console.log(`  ${idx + 1}. ${t.nickname}: ROI ${t.roi?.toFixed(2)}%`)
+    })
+
+    const result = await saveTraders(top100, period)
+    results.push({ period, count: top100.length, topRoi: top100[0]?.roi || 0 })
+    
+    console.log(`\n✅ ${period} 完成！`)
+    
+    if (periods.indexOf(period) < periods.length - 1) {
+      console.log(`\n⏳ 等待 5 秒后抓取下一个时间段...`)
+      await sleep(5000)
+    }
   }
+  
+  const totalTime = ((Date.now() - totalStartTime) / 1000).toFixed(1)
 
-  traders.sort((a, b) => (b.roi || 0) - (a.roi || 0))
-  traders.forEach((t, idx) => t.rank = idx + 1)
-
-  const top100 = traders.slice(0, TARGET_COUNT)
-
-  console.log(`\n📋 TOP 10:`)
-  top100.slice(0, 10).forEach((t, idx) => {
-    console.log(`  ${idx + 1}. ${t.nickname}: ROI ${t.roi?.toFixed(2)}%`)
-  })
-
-  const result = await saveTraders(top100, period)
-
-  console.log(`\n========================================`)
-  console.log(`✅ 完成！总数: ${top100.length}, TOP ROI: ${top100[0]?.roi?.toFixed(2)}%`)
-  console.log(`========================================`)
+  console.log(`\n${'='.repeat(60)}`)
+  console.log(`✅ 全部完成！`)
+  console.log(`${'='.repeat(60)}`)
+  console.log(`📊 抓取结果:`)
+  for (const r of results) {
+    console.log(`   ${r.period}: ${r.count} 条, TOP ROI ${r.topRoi?.toFixed(2)}%`)
+  }
+  console.log(`   总耗时: ${totalTime}s`)
+  console.log(`${'='.repeat(60)}`)
 }
 
 main().catch(console.error)
