@@ -317,47 +317,15 @@ body {
    ============================================ */
 
 @media (max-width: 1024px) {
-  .main-grid {
+  .main-grid,
+  .profile-grid {
     grid-template-columns: 1fr !important;
-  }
-}
-
-/* 用户个人主页两栏布局 */
-.profile-grid {
-  display: grid;
-  gap: 20px;
-  grid-template-columns: 1fr;
-}
-
-@media (min-width: 768px) {
-  .profile-grid {
-    grid-template-columns: 1fr 320px;
-  }
-  
-  .profile-grid > *:first-child {
-    order: 1;
-  }
-  
-  .profile-grid > *:last-child {
-    order: 2;
-  }
-}
-
-@media (min-width: 1024px) {
-  .profile-grid {
-    grid-template-columns: 1fr 340px;
-    gap: 24px;
   }
 }
 
 @media (max-width: 768px) {
   body {
     font-size: 13px;
-  }
-  
-  /* 移动端右侧栏显示在上方 */
-  .profile-grid > *:last-child {
-    order: -1;
   }
 }
 
