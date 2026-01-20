@@ -94,49 +94,44 @@ const getComparisonData = (language: string) => [
     pro: true,
   },
   {
-    feature: language === 'zh' ? '社区讨论' : 'Community Discussion',
-    free: language === 'zh' ? '每日3条' : '3/day',
-    pro: language === 'zh' ? '无限制' : 'Unlimited',
-  },
-  {
-    feature: language === 'zh' ? '关注交易员' : 'Follow Traders',
-    free: '10',
-    pro: '50',
-  },
-  {
-    feature: language === 'zh' ? '历史数据' : 'Historical Data',
-    free: language === 'zh' ? '7天' : '7 days',
-    pro: language === 'zh' ? '90天' : '90 days',
-  },
-  {
-    feature: language === 'zh' ? '风险预警提醒' : 'Risk Alerts',
+    feature: language === 'zh' ? '分类别排行（现货/链上/合约）' : 'Category Ranking (Spot/On-chain/Futures)',
     free: false,
     pro: true,
   },
   {
-    feature: language === 'zh' ? 'Arena Score 详情' : 'Score Breakdown',
+    feature: language === 'zh' ? 'Arena Score 评分' : 'Arena Score',
+    free: language === 'zh' ? '总分' : 'Total Score',
+    pro: language === 'zh' ? '子分数 + 同类分位' : 'Breakdown + Percentile',
+  },
+  {
+    feature: language === 'zh' ? '关注交易员变动提醒' : 'Trader Change Alerts',
     free: false,
-    pro: true,
+    pro: language === 'zh' ? '站内私信自动提醒' : 'Auto DM Alerts',
   },
   {
     feature: language === 'zh' ? '交易员对比' : 'Trader Comparison',
     free: false,
-    pro: language === 'zh' ? '每月10次' : '10/month',
+    pro: language === 'zh' ? '最多5个交易员' : 'Up to 5 traders',
   },
   {
     feature: language === 'zh' ? '高级筛选' : 'Advanced Filters',
     free: false,
-    pro: true,
-  },
-  {
-    feature: language === 'zh' ? '数据导出' : 'Data Export',
-    free: false,
-    pro: language === 'zh' ? '每月10次' : '10/month',
+    pro: language === 'zh' ? '多条件叠加 + 保存复用' : 'Multi-filter + Save & Reuse',
   },
   {
     feature: language === 'zh' ? 'Pro 徽章' : 'Pro Badge',
     free: false,
-    pro: true,
+    pro: language === 'zh' ? '可在隐私设置关闭' : 'Can hide in settings',
+  },
+  {
+    feature: language === 'zh' ? 'Pro 专属群组' : 'Pro-only Groups',
+    free: false,
+    pro: language === 'zh' ? '可创建/加入' : 'Create/Join',
+  },
+  {
+    feature: language === 'zh' ? 'Pro 会员官方群' : 'Pro Member Official Group',
+    free: false,
+    pro: language === 'zh' ? '自动加入（500人/群）' : 'Auto-join (500/group)',
   },
 ]
 
@@ -170,8 +165,8 @@ const getFaqData = (language: string) => [
 
 // 价格配置 - 与 Stripe 保持一致
 const PRICING = {
-  monthly: { price: 9.99, original: 15 },
-  yearly: { price: 99.99, original: 180 },
+  monthly: { price: 9.9, original: 15 },
+  yearly: { price: 99.9, original: 180 },
 }
 
 // Pro 功能配置

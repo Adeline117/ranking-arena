@@ -35,6 +35,63 @@ const TARGET_COUNT = 200
 const PER_PAGE = 18
 const MAX_PAGES = Math.ceil(TARGET_COUNT / PER_PAGE) + 1
 
+// ============================================
+// Arena Score 计算逻辑
+// ============================================
+
+const ARENA_CONFIG = {
+  PNL_THRESHOLD: { '7D': 300, '30D': 1000, '90D': 3000 },
+  PARAMS: {
+    '7D': { tanhCoeff: 0.08, roiExponent: 1.8, mddThreshold: 15, winRateCap: 62 },
+    '30D': { tanhCoeff: 0.15, roiExponent: 1.6, mddThreshold: 30, winRateCap: 68 },
+    '90D': { tanhCoeff: 0.18, roiExponent: 1.6, mddThreshold: 40, winRateCap: 70 },
+  },
+  WIN_RATE_BASELINE: 45,
+  MAX_RETURN_SCORE: 85,
+  MAX_DRAWDOWN_SCORE: 8,
+  MAX_STABILITY_SCORE: 7,
+}
+
+const clip = (v, min, max) => Math.max(min, Math.min(max, v))
+const safeLog1p = x => x <= -1 ? 0 : Math.log(1 + x)
+const getPeriodDays = p => p === '7D' ? 7 : p === '30D' ? 30 : 90
+
+/**
+ * 计算 Arena Score
+ * @param {number} roi - 收益率（百分比）
+ * @param {number} pnl - 盈亏金额
+ * @param {number|null} maxDrawdown - 最大回撤（百分比）
+ * @param {number|null} winRate - 胜率（百分比，0-100）
+ * @param {string} period - 时间段
+ * @returns {number} Arena Score
+ */
+function calculateArenaScore(roi, pnl, maxDrawdown, winRate, period) {
+  const params = ARENA_CONFIG.PARAMS[period] || ARENA_CONFIG.PARAMS['90D']
+  const days = getPeriodDays(period)
+  
+  // 标准化 winRate 为百分比格式
+  const wr = winRate !== null && winRate !== undefined 
+    ? (winRate <= 1 ? winRate * 100 : winRate) 
+    : null
+  
+  // Return score
+  const intensity = (365 / days) * safeLog1p(roi / 100)
+  const r0 = Math.tanh(params.tanhCoeff * intensity)
+  const returnScore = r0 > 0 ? clip(ARENA_CONFIG.MAX_RETURN_SCORE * Math.pow(r0, params.roiExponent), 0, 85) : 0
+  
+  // Drawdown score
+  const drawdownScore = maxDrawdown !== null && maxDrawdown !== undefined
+    ? clip(ARENA_CONFIG.MAX_DRAWDOWN_SCORE * clip(1 - Math.abs(maxDrawdown) / params.mddThreshold, 0, 1), 0, 8)
+    : 4
+  
+  // Stability score
+  const stabilityScore = wr !== null
+    ? clip(ARENA_CONFIG.MAX_STABILITY_SCORE * clip((wr - 45) / (params.winRateCap - 45), 0, 1), 0, 7)
+    : 3.5
+  
+  return Math.round((returnScore + drawdownScore + stabilityScore) * 100) / 100
+}
+
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
@@ -58,11 +115,9 @@ function parseTraderFromApi(item, rank) {
   // Binance API 返回的 ROI 已经是百分比形式，如 7720.69 表示 7720.69%
   const roi = parseFloat(item.roi ?? 0)
 
-  // winRate 是 0-100 的数值，需要转换为 0-1
-  let winRate = parseFloat(item.winRate ?? 0)
-  if (winRate > 1) {
-    winRate = winRate / 100
-  }
+  // winRate 保持原样，在 saveTradersBatch 中统一标准化
+  // Binance API 返回的 winRate 可能是 0-100 或 0-1 格式
+  const winRate = parseFloat(item.winRate ?? 0)
 
   return {
     traderId,
@@ -440,19 +495,30 @@ async function saveTradersBatch(traders, period) {
     console.log(`  ✓ trader_sources 批量保存成功`)
   }
 
-  // 2. 批量 insert trader_snapshots
-  const snapshotsData = traders.map(t => ({
-    source: SOURCE,
-    source_trader_id: t.traderId,
-    season_id: period,
-    rank: t.rank,
-    roi: t.roi,
-    pnl: t.pnl,
-    win_rate: t.winRate,
-    max_drawdown: t.maxDrawdown,
-    followers: t.followers || 0,
-    captured_at: capturedAt,
-  }))
+  // 2. 批量 insert trader_snapshots (包含 arena_score)
+  const snapshotsData = traders.map(t => {
+    // 标准化 winRate 为百分比格式
+    const normalizedWinRate = t.winRate !== null && t.winRate !== undefined
+      ? (t.winRate <= 1 ? t.winRate * 100 : t.winRate)
+      : null
+    
+    // 计算 Arena Score
+    const arenaScore = calculateArenaScore(t.roi, t.pnl, t.maxDrawdown, normalizedWinRate, period)
+    
+    return {
+      source: SOURCE,
+      source_trader_id: t.traderId,
+      season_id: period,
+      rank: t.rank,
+      roi: t.roi,
+      pnl: t.pnl,
+      win_rate: normalizedWinRate,  // 保存标准化后的百分比格式
+      max_drawdown: t.maxDrawdown,
+      followers: t.followers || 0,
+      arena_score: arenaScore,  // 自动计算并保存
+      captured_at: capturedAt,
+    }
+  })
   
   const { error: snapshotsError } = await supabase
     .from('trader_snapshots')
