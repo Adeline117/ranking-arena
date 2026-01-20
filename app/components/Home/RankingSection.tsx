@@ -91,13 +91,13 @@ export default function RankingSection({
           marginBottom: tokens.spacing[4],
           gap: tokens.spacing[3],
           flexWrap: 'wrap',
-        }}
-      >
-        <TimeRangeSelector
-          activeRange={activeTimeRange}
-          onChange={onTimeRangeChange}
-          disabled={loading}
-        />
+      }}
+    >
+      <TimeRangeSelector
+        activeRange={activeTimeRange}
+        onChange={onTimeRangeChange}
+        disabled={loading}
+      />
         
         {/* Pro 工具按钮 */}
         <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>

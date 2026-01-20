@@ -608,10 +608,15 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
         {/* Tab Content */}
         {activeTab === 'overview' && (
           <Box
-            className="main-grid"
+            style={{
+              display: 'grid',
+              gap: tokens.spacing[5],
+              gridTemplateColumns: '1fr',
+            }}
+            className="profile-grid"
           >
             {/* Left Column - 核心绩效指标和动态 */}
-            <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[6] }}>
+            <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[6], order: 1 }}>
               {performance && (
                 <OverviewPerformanceCard
                   performance={performance}
@@ -645,7 +650,7 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
             </Box>
 
             {/* Right Column - 交易员卡片 */}
-            <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[6] }}>
+            <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[6], order: 2 }}>
               <TraderAboutCard
                 handle={profile.handle}
                 traderId={profile.id}

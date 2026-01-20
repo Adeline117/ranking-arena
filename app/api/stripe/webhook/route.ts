@@ -88,22 +88,49 @@ export async function POST(request: NextRequest) {
 
 // 处理 Checkout 完成
 async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
-  const userId = session.metadata?.userId
+  const userId = session.metadata?.userId || session.metadata?.supabase_user_id
   const plan = session.metadata?.plan
+  const customerId = session.customer as string
+
+  console.log('[Webhook] Checkout completed:', { userId, plan, customerId, sessionId: session.id })
 
   if (!userId) {
-    console.error('No userId in session metadata')
+    console.error('[Webhook] No userId in session metadata:', session.metadata)
     return
+  }
+
+  // 立即更新 user_profiles 的 subscription_tier 和 stripe_customer_id
+  // 这样即使后续 webhook 失败，用户也能立即获得会员权限
+  const { error: profileError } = await supabase
+    .from('user_profiles')
+    .upsert({
+      id: userId,
+      subscription_tier: 'pro',
+      stripe_customer_id: customerId,
+      updated_at: new Date().toISOString(),
+    }, {
+      onConflict: 'id',
+    })
+
+  if (profileError) {
+    console.error('[Webhook] Failed to update user_profiles:', profileError)
+  } else {
+    console.log(`[Webhook] Updated user_profiles for ${userId}, tier: pro`)
   }
 
   // 获取订阅信息
   const subscriptionId = session.subscription as string
-  const subscription = await stripe.subscriptions.retrieve(subscriptionId)
+  if (subscriptionId) {
+    try {
+      const subscription = await stripe.subscriptions.retrieve(subscriptionId)
+      // 更新用户订阅状态
+      await updateUserSubscription(userId, subscription, plan || 'monthly')
+    } catch (err) {
+      console.error('[Webhook] Failed to retrieve subscription:', err)
+    }
+  }
 
-  // 更新用户订阅状态
-  await updateUserSubscription(userId, subscription, plan || 'monthly')
-
-  console.log(`Checkout completed for user ${userId}, plan: ${plan}`)
+  console.log(`[Webhook] Checkout completed for user ${userId}, plan: ${plan}`)
 }
 
 // 处理订阅更新
@@ -240,8 +267,10 @@ async function updateUserSubscription(
   const currentPeriodEnd = new Date(subscriptionData.current_period_end * 1000)
   const currentPeriodStart = new Date(subscriptionData.current_period_start * 1000)
 
+  console.log(`[Webhook] updateUserSubscription: userId=${userId}, status=${status}, plan=${plan}`)
+
   // 更新或创建订阅记录
-  await supabase
+  const { error: subscriptionError } = await supabase
     .from('subscriptions')
     .upsert({
       user_id: userId,
@@ -258,14 +287,25 @@ async function updateUserSubscription(
       onConflict: 'user_id',
     })
 
+  if (subscriptionError) {
+    console.error('[Webhook] Failed to upsert subscriptions:', subscriptionError)
+  } else {
+    console.log(`[Webhook] Subscriptions table updated for user ${userId}`)
+  }
+
   // 更新用户 profile 的订阅 tier
-  await supabase
+  const { error: profileError } = await supabase
     .from('user_profiles')
     .update({
       subscription_tier: status === 'active' ? 'pro' : 'free',
+      stripe_customer_id: subscription.customer as string,
       updated_at: new Date().toISOString(),
     })
     .eq('id', userId)
 
-  console.log(`Updated subscription for user ${userId}, status: ${status}, plan: ${plan}`)
+  if (profileError) {
+    console.error('[Webhook] Failed to update user_profiles:', profileError)
+  } else {
+    console.log(`[Webhook] user_profiles updated for user ${userId}, tier: ${status === 'active' ? 'pro' : 'free'}`)
+  }
 }
