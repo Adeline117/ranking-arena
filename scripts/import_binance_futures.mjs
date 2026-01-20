@@ -30,8 +30,8 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 const SOURCE = 'binance_futures'
 const BASE_URL = 'https://www.binance.com/zh-CN/copy-trading'
 
-// 每页 18 个，抓 100 个需要 6 页
-const TARGET_COUNT = 100
+// 每页 18 个，抓 200 个需要 12 页（扩大范围确保全面）
+const TARGET_COUNT = 200
 const PER_PAGE = 18
 const MAX_PAGES = Math.ceil(TARGET_COUNT / PER_PAGE) + 1
 
@@ -138,9 +138,33 @@ async function fetchLeaderboardData(period) {
       }
     })
 
-    // 监听 API 响应
+    // 存储每日精选数据
+    const dailyPicks = new Map()
+    
+    // 监听所有 API 响应（包括每日精选等）
     page.on('response', async (response) => {
       const url = response.url()
+      
+      // 处理每日精选数据
+      if (url.includes('daily-picks')) {
+        try {
+          const json = await response.json()
+          if (json.code === '000000') {
+            const list = Array.isArray(json.data) ? json.data : (json.data?.list || json.data?.data || [])
+            console.log(`  ✨ 每日精选: 收到 ${list.length} 个推荐交易员`)
+            list.forEach((item, idx) => {
+              const trader = parseTraderFromApi(item, idx + 1)
+              if (trader && trader.traderId) {
+                dailyPicks.set(trader.traderId, trader)
+                if (idx < 3) {
+                  console.log(`    [精选] ROI ${trader.roi.toFixed(2)}%, 跟单: ${trader.followers}, 昵称: ${trader.nickname || '未知'}`)
+                }
+              }
+            })
+          }
+        } catch (e) {}
+      }
+      
       if (url.includes('query-list')) {
         try {
           const json = await response.json()
@@ -169,6 +193,48 @@ async function fetchLeaderboardData(period) {
       }
     })
 
+    // 同时从页面 DOM 提取数据（作为补充）
+    async function extractTradersFromDom() {
+      return await page.evaluate(() => {
+        const results = []
+        // 找到所有交易员卡片
+        const cards = document.querySelectorAll('[class*="copy-trade"] [class*="card"], [class*="TraderCard"], [class*="trader-item"]')
+        
+        cards.forEach((card, idx) => {
+          try {
+            const text = card.innerText || ''
+            // 提取昵称 - 通常在卡片顶部
+            const nameEl = card.querySelector('[class*="nick"], [class*="name"], [class*="title"]')
+            const nickname = nameEl?.innerText?.trim() || ''
+            
+            // 提取 ROI - 查找包含 % 的数字
+            const roiMatch = text.match(/([+-]?[\d,]+\.?\d*)\s*%/)
+            const roi = roiMatch ? parseFloat(roiMatch[1].replace(/,/g, '')) : 0
+            
+            // 提取 PnL - 查找 USD 或 $ 开头的数字
+            const pnlMatch = text.match(/([+-]?[\d,]+\.?\d+)\s*(?:USD|USDT|\$)/) || text.match(/\$\s*([+-]?[\d,]+\.?\d+)/)
+            const pnl = pnlMatch ? parseFloat(pnlMatch[1].replace(/,/g, '')) : 0
+            
+            // 提取跟单者数量 - 查找 "38/200" 或类似格式
+            const followersMatch = text.match(/(\d+)\s*\/\s*\d+/)
+            const followers = followersMatch ? parseInt(followersMatch[1]) : 0
+            
+            // 提取 trader ID（从链接或数据属性）
+            const link = card.querySelector('a[href*="portfolio"]')
+            const href = link?.getAttribute('href') || ''
+            const idMatch = href.match(/portfolio\/(\d+)/)
+            const traderId = idMatch ? idMatch[1] : null
+            
+            if (nickname && (roi !== 0 || pnl !== 0)) {
+              results.push({ nickname, roi, pnl, followers, traderId, rank: idx + 1 })
+            }
+          } catch (e) {}
+        })
+        
+        return results
+      })
+    }
+
     console.log('\n📱 访问页面...')
     try {
       await page.goto(BASE_URL, { waitUntil: 'domcontentloaded', timeout: 45000 })
@@ -184,6 +250,63 @@ async function fetchLeaderboardData(period) {
     
     // 额外等待一小会确保数据处理完成
     await sleep(2000)
+    
+    // 合并每日精选数据
+    if (dailyPicks.size > 0) {
+      console.log('\n✨ 合并每日精选数据...')
+      let picksAdded = 0
+      for (const [id, trader] of dailyPicks) {
+        if (!traders.has(id)) {
+          traders.set(id, trader)
+          picksAdded++
+          console.log(`  [精选新增] ROI ${trader.roi.toFixed(2)}%, 跟单: ${trader.followers}, 昵称: ${trader.nickname}`)
+        }
+      }
+      if (picksAdded > 0) {
+        console.log(`  ✓ 从每日精选新增了 ${picksAdded} 个交易员`)
+      } else {
+        console.log('  ✓ 每日精选交易员已全部包含在排行榜中')
+      }
+    }
+    
+    // 从 DOM 补充数据（备用）
+    const domTraders = await extractTradersFromDom()
+    let domAdded = 0
+    for (const dt of domTraders) {
+      if (dt.traderId && !traders.has(dt.traderId)) {
+        traders.set(dt.traderId, {
+          traderId: dt.traderId,
+          nickname: dt.nickname,
+          roi: dt.roi,
+          pnl: dt.pnl,
+          followers: dt.followers,
+          rank: traders.size + 1,
+          winRate: 0,
+          maxDrawdown: 0,
+          aum: 0,
+          avatar: null,
+        })
+        domAdded++
+        if (domAdded <= 3) {
+          console.log(`  [DOM] #${dt.rank}: ROI ${dt.roi.toFixed(2)}%, 跟单: ${dt.followers}, 昵称: ${dt.nickname}`)
+        }
+      }
+    }
+    if (domAdded > 0) {
+      console.log(`  ✓ 从 DOM 补充了 ${domAdded} 个交易员`)
+    }
+    
+    // 检查是否包含特定交易员
+    console.log('\n🔎 检查关键交易员:')
+    const keyTraders = ['张邻', '千江水', 'Doraemoo', 'Timmo']
+    for (const name of keyTraders) {
+      const found = [...traders.values()].find(t => t.nickname?.includes(name))
+      if (found) {
+        console.log(`  ✓ ${name}: ROI ${found.roi.toFixed(2)}%, 跟单: ${found.followers}`)
+      } else {
+        console.log(`  ❌ ${name}: 未找到`)
+      }
+    }
     
     console.log(`\n📄 当前已获取: ${traders.size} 个交易员`)
 
