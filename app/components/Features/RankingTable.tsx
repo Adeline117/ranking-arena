@@ -589,35 +589,33 @@ export default function RankingTable(props: {
                           width: 36,
                           height: 36,
                           borderRadius: tokens.radius.full,
-                          background: trader.avatar_url ? tokens.colors.bg.secondary : getAvatarGradient(trader.id),
+                          background: getAvatarGradient(trader.id),
                           border: `2px solid ${tokens.colors.border.primary}`,
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
                           fontWeight: tokens.typography.fontWeight.black,
-                          fontSize: '12px',
+                          fontSize: '13px',
                           color: '#ffffff',
                           overflow: 'hidden',
                           flexShrink: 0,
                           position: 'relative',
                           boxShadow: rank <= 3 ? `0 0 12px ${rank === 1 ? 'rgba(255, 215, 0, 0.4)' : rank === 2 ? 'rgba(192, 192, 192, 0.4)' : 'rgba(205, 127, 50, 0.4)'}` : 'none',
+                          textShadow: '0 1px 2px rgba(0,0,0,0.5)',
                         }}
                       >
-                        {/* 备用文字（仅在没有头像时显示） */}
-                        {!trader.avatar_url && (
-                          <Text 
-                            size="xs" 
-                            weight="black" 
-                            style={{ 
-                              color: '#ffffff',
-                              fontSize: '12px',
-                              lineHeight: '1',
-                            }}
-                          >
-                            {getAvatarInitial(displayName)}
-                          </Text>
-                        )}
-                        {/* 头像图片 */}
+                        {/* 首字母（始终渲染，头像图片会覆盖它） */}
+                        <span style={{ 
+                          color: '#ffffff',
+                          fontSize: '13px',
+                          fontWeight: 900,
+                          lineHeight: 1,
+                          textShadow: '0 1px 3px rgba(0,0,0,0.6)',
+                          zIndex: 0,
+                        }}>
+                          {getAvatarInitial(displayName)}
+                        </span>
+                        {/* 头像图片（如果有的话会覆盖首字母） */}
                         {trader.avatar_url && (
                           <img 
                             src={trader.avatar_url} 
@@ -636,16 +634,6 @@ export default function RankingTable(props: {
                             onError={(e) => {
                               const img = e.target as HTMLImageElement
                               img.style.display = 'none'
-                              // 显示备用文字
-                              const container = img.parentElement
-                              if (container) {
-                                container.style.background = getAvatarGradient(trader.id)
-                                // 添加备用文字
-                                const fallback = document.createElement('span')
-                                fallback.textContent = getAvatarInitial(displayName)
-                                fallback.style.cssText = 'color: #fff; font-size: 12px; font-weight: 900; line-height: 1;'
-                                container.appendChild(fallback)
-                              }
                             }}
                           />
                         )}

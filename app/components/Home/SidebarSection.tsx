@@ -101,21 +101,21 @@ export default function SidebarSection({ position }: SidebarSectionProps) {
         gap: tokens.spacing[4],
       }}
     >
-      {/* Pro 功能面板 - 固定在顶部，始终可见 */}
-      <Box style={{ flexShrink: 0 }}>
-        <ProFeaturesPanel compact />
-      </Box>
-      
-      {/* 市场数据 - 可滚动区域 */}
+      {/* Pro 功能面板 - 可滚动区域 */}
       <Box
         style={{
           flex: 1,
           overflowY: 'auto',
-          minHeight: 0, // 重要：让 flex 子元素可以收缩
-          paddingRight: tokens.spacing[1], // 滚动条间距
+          minHeight: 0,
+          paddingRight: tokens.spacing[1],
         }}
         className="scrollbar-thin"
       >
+        <ProFeaturesPanel compact />
+      </Box>
+      
+      {/* 市场数据 - 固定在底部 */}
+      <Box style={{ flexShrink: 0 }}>
         <ErrorBoundary>
           <Suspense fallback={<SkeletonCard />}>
             <MarketPanel />
