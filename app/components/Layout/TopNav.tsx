@@ -236,7 +236,7 @@ export default function TopNav({ email }: { email: string | null }) {
         zIndex: tokens.zIndex.sticky,
         background: tokens.glass.bg.primary,
         borderBottom: `1px solid ${tokens.colors.border.primary}`,
-        height: 64,
+        height: 56,
         backdropFilter: tokens.glass.blur.lg,
         WebkitBackdropFilter: tokens.glass.blur.lg,
         boxShadow: `${tokens.shadow.sm}, 0 0 0 1px rgba(255, 255, 255, 0.05)`,
@@ -247,20 +247,20 @@ export default function TopNav({ email }: { email: string | null }) {
         style={{
           maxWidth: 1200,
           margin: '0 auto',
-          paddingLeft: tokens.spacing[4],
-          paddingRight: tokens.spacing[4],
+          paddingLeft: tokens.spacing[3],
+          paddingRight: tokens.spacing[3],
           height: '100%',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          gap: tokens.spacing[4],
+          gap: tokens.spacing[2],
         }}
       >
         {/* 左：Logo + Nav */}
-        <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[4] }}>
+        <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3] }}>
           <Link 
             href="/" 
-            className="top-nav-logo"
+            className="top-nav-logo touch-target"
             aria-label="返回首页"
             tabIndex={0}
             style={{ 
@@ -269,6 +269,8 @@ export default function TopNav({ email }: { email: string | null }) {
               gap: tokens.spacing[2],
               textDecoration: 'none',
               transition: `all ${tokens.transition.base}`,
+              padding: '4px',
+              marginLeft: '-4px',
             }}
             onMouseEnter={(e) => {
               e.currentTarget.style.transform = 'translateY(-1px)'
@@ -291,14 +293,14 @@ export default function TopNav({ email }: { email: string | null }) {
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: '8px',
+                gap: '6px',
                 transition: `all ${tokens.transition.base}`,
               }}
             >
               {/* 无限符号 ∞ - 两个水滴尖端相连 */}
               <svg
-                width="28"
-                height="14"
+                width="24"
+                height="12"
                 viewBox="0 0 56 28"
                 fill="none"
                 style={{ flexShrink: 0 }}
@@ -323,7 +325,7 @@ export default function TopNav({ email }: { email: string | null }) {
               {/* 文字：arena - 首字母变色 */}
               <Box
                 style={{
-                  fontSize: '22px',
+                  fontSize: '20px',
                   fontWeight: 700,
                   color: tokens.colors.text.primary,
                   letterSpacing: '-0.3px',
@@ -335,8 +337,8 @@ export default function TopNav({ email }: { email: string | null }) {
             </Box>
           </Link>
           
-          {/* 导航链接 */}
-          <Box as="nav" style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1] }}>
+          {/* 导航链接 - 移动端隐藏 */}
+          <Box as="nav" className="hide-mobile" style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1] }}>
             {[
               { href: '/', labelKey: 'home' as const },
               { href: '/groups', labelKey: 'groups' as const },
@@ -419,15 +421,15 @@ export default function TopNav({ email }: { email: string | null }) {
           </Box>
         </Box>
 
-        {/* 中：搜索 */}
+        {/* 中：搜索 - 移动端隐藏 */}
         <div
           ref={searchRef}
-          className="top-nav-search"
+          className="top-nav-search hide-mobile"
           style={{
             flex: 1,
             display: 'flex',
             justifyContent: 'center',
-            maxWidth: 520,
+            maxWidth: 480,
             position: 'relative',
           }}
         >
@@ -507,27 +509,31 @@ export default function TopNav({ email }: { email: string | null }) {
             position: 'relative',
           }}
         >
-          {/* 移动端搜索按钮 */}
+          {/* 移动端搜索按钮 - 显示在移动端 */}
           <Link
             href="/search"
-            className="mobile-search-button"
+            className="show-mobile-flex touch-target"
             aria-label="搜索"
             style={{
               display: 'none',
               alignItems: 'center',
               justifyContent: 'center',
-              width: 36,
-              height: 36,
+              width: 40,
+              height: 40,
               borderRadius: tokens.radius.full,
-              background: 'transparent',
+              background: tokens.glass.bg.light,
               color: tokens.colors.text.secondary,
               transition: `all ${tokens.transition.base}`,
               textDecoration: 'none',
+              border: `1px solid ${tokens.colors.border.primary}`,
             }}
           >
             <SearchIcon size={20} />
           </Link>
-          <LanguageSwitcher />
+          {/* 语言切换 - 移动端隐藏 */}
+          <Box className="hide-mobile">
+            <LanguageSwitcher />
+          </Box>
           <ThemeToggle />
           {myId ? (
             <>
@@ -868,9 +874,9 @@ export default function TopNav({ email }: { email: string | null }) {
               aria-label={t('login')}
               tabIndex={0}
               role="button"
-              className="btn-press"
+              className="btn-press touch-target"
               style={{
-                padding: `${tokens.spacing[2]} ${tokens.spacing[5]}`,
+                padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
                 borderRadius: tokens.radius.lg,
                 background: tokens.gradient.primary,
                 color: '#ffffff',
@@ -881,8 +887,8 @@ export default function TopNav({ email }: { email: string | null }) {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                minWidth: 80,
-                height: 38,
+                minWidth: 72,
+                height: 36,
                 border: 'none',
                 boxShadow: `0 4px 12px ${tokens.colors.accent.primary}40`,
               }}

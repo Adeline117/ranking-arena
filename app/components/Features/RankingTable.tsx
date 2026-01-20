@@ -439,7 +439,8 @@ export default function RankingTable(props: {
                 <Link
                   key={uniqueKey}
                   href={href}
-                  style={{ textDecoration: 'none' }}
+                  className="ranking-row-link"
+                  style={{ textDecoration: 'none', display: 'block' }}
                   aria-label={ariaLabel}
                   tabIndex={0}
                   onKeyDown={(e) => {
@@ -450,16 +451,17 @@ export default function RankingTable(props: {
                   }}
                 >
                   <Box
-                    className="ranking-row ranking-table-grid"
+                    className="ranking-row ranking-table-grid touch-target"
                     role="row"
                     style={{
                       display: 'grid',
                       alignItems: 'center',
                       gap: tokens.spacing[2],
-                      padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+                      padding: `${tokens.spacing[4]} ${tokens.spacing[3]}`,
                       borderBottom: `1px solid var(--glass-border-light)`,
                       cursor: 'pointer',
                       position: 'relative',
+                      minHeight: 72,
                     }}
                   >
                     {/* 排名 - 前三名发光特效 */}
