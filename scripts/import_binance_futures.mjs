@@ -69,7 +69,7 @@ function parseTraderFromApi(item, rank) {
     pnl: parseFloat(item.pnl ?? item.profit ?? 0),
     winRate,
     maxDrawdown: parseFloat(item.mdd ?? item.maxDrawdown ?? 0),
-    followers: parseInt(item.copierCount ?? item.followerCount ?? item.followers ?? 0),
+    followers: parseInt(item.currentCopyCount ?? item.copierCount ?? item.followerCount ?? item.followers ?? 0),
     aum: parseFloat(item.aum ?? item.totalAsset ?? 0),
     rank,
   }
@@ -157,7 +157,7 @@ async function fetchLeaderboardData(period) {
                 if (trader && trader.traderId && !traders.has(trader.traderId)) {
                   traders.set(trader.traderId, trader)
                   if (traders.size <= 3) {
-                    console.log(`    #${rank}: ROI ${trader.roi.toFixed(2)}%, 昵称: ${trader.nickname || '未知'}`)
+                    console.log(`    #${rank}: ROI ${trader.roi.toFixed(2)}%, 跟单: ${trader.followers}, 昵称: ${trader.nickname || '未知'}`)
                   }
                 }
               })
