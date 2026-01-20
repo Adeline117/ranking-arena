@@ -131,8 +131,7 @@ function SearchContent() {
           }
         }
 
-        // 搜索交易者
-        // 交易员数据来自 trader_sources（避免不存在的 traders 表）
+        // 搜索交易者（包含排行榜数据）
         const { data: traders } = await supabase
           .from('trader_sources')
           .select('source_trader_id, handle, source')
@@ -140,14 +139,55 @@ function SearchContent() {
           .limit(10)
 
         if (traders) {
-          traders.forEach((t: any) => {
+          // 获取交易员的最新排行榜数据
+          for (const trader of traders) {
+            // 获取最新的90D数据（优先显示90D）
+            let { data: snapshots } = await supabase
+              .from('trader_snapshots')
+              .select('season_id, roi, pnl, arena_score, win_rate, max_drawdown')
+              .eq('source_trader_id', trader.source_trader_id)
+              .eq('season_id', '90D')
+              .not('arena_score', 'is', null)
+              .order('captured_at', { ascending: false })
+              .limit(1)
+            
+            // 如果没有90D数据，尝试30D
+            if (!snapshots?.length) {
+              snapshots = (await supabase
+                .from('trader_snapshots')
+                .select('season_id, roi, pnl, arena_score, win_rate, max_drawdown')
+                .eq('source_trader_id', trader.source_trader_id)
+                .eq('season_id', '30D')
+                .not('arena_score', 'is', null)
+                .order('captured_at', { ascending: false })
+                .limit(1)).data
+            }
+            
+            // 如果还没有，尝试7D
+            if (!snapshots?.length) {
+              snapshots = (await supabase
+                .from('trader_snapshots')
+                .select('season_id, roi, pnl, arena_score, win_rate, max_drawdown')
+                .eq('source_trader_id', trader.source_trader_id)
+                .eq('season_id', '7D')
+                .not('arena_score', 'is', null)
+                .order('captured_at', { ascending: false })
+                .limit(1)).data
+            }
+            
+            const latest = snapshots?.[0]
+            const subtitle = latest 
+              ? `${latest.season_id}: ROI ${latest.roi?.toFixed(1)}% • Score ${latest.arena_score?.toFixed(1)}`
+              : `来源: ${String(trader.source || '').toUpperCase()}`
+            
             results.push({
               type: 'trader',
-              id: t.source_trader_id,
-              title: t.handle,
-              subtitle: `来源: ${String(t.source || '').toUpperCase()}`,
+              id: trader.source_trader_id,
+              title: trader.handle,
+              subtitle,
+              meta: latest ? `来源: ${String(trader.source || '').toUpperCase()}` : undefined,
             })
-          })
+          }
         }
 
         // 搜索帖子
