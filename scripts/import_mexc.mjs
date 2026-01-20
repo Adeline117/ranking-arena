@@ -170,11 +170,26 @@ async function fetchLeaderboardData(period) {
         cards.forEach(card => {
           const text = card.innerText || ''
           
-          // 提取头像
-          const img = card.querySelector('img[src*="avatar"], img[src*="head"], img[class*="avatar"], img')
+          // 提取头像 - 使用多种选择器
           let avatar = null
-          if (img?.src && (img.src.includes('avatar') || img.src.includes('head') || img.src.includes('user'))) {
-            avatar = img.src
+          const imgSelectors = [
+            'img[src*="avatar"]',
+            'img[src*="head"]',
+            'img[src*="user"]',
+            'img[src*="mocortech"]',
+            'img[src*="banner"]',
+            '[class*="avatar"] img',
+            '[class*="head"] img',
+            'img'
+          ]
+          for (const sel of imgSelectors) {
+            const img = card.querySelector(sel)
+            if (img?.src && !img.src.includes('placeholder') && !img.src.includes('default') && !img.src.includes('icon')) {
+              if (img.src.includes('mocortech') || img.src.includes('avatar') || img.src.includes('user') || img.width > 20) {
+                avatar = img.src
+                break
+              }
+            }
           }
           
           // 提取用户名

@@ -60,6 +60,22 @@ async function fetchLeaderboardData(period) {
     const extractTraders = async () => {
       return await page.evaluate(() => {
         const results = []
+        
+        // 首先收集所有头像
+        const avatarMap = {}
+        document.querySelectorAll('img').forEach(img => {
+          const src = img.src || ''
+          if (src.includes('avatar') || src.includes('user') || src.includes('head')) {
+            const parent = img.closest('a, div, li')
+            if (parent) {
+              const text = parent.innerText?.split('\n')[0]?.trim()
+              if (text && text.length > 1 && text.length < 30) {
+                avatarMap[text] = src
+              }
+            }
+          }
+        })
+        
         document.body.innerText.split(/\nCopy\n/).forEach((chunk, idx) => {
           if (idx === 0) return
           const roiMatch = chunk.match(/([\d,]+\.\d+)%/)
@@ -67,7 +83,11 @@ async function fetchLeaderboardData(period) {
             const roi = parseFloat(roiMatch[1].replace(/,/g, ''))
             const lines = chunk.split('\n').map(l => l.trim()).filter(l => l && l.length > 2 && l.length < 25 && !l.includes('%'))
             if (lines[0] && roi > 0) {
-              results.push({ nickName: lines[0], roi })
+              results.push({ 
+                nickName: lines[0], 
+                roi,
+                avatar: avatarMap[lines[0]] || null
+              })
             }
           }
         })
@@ -156,7 +176,7 @@ async function fetchLeaderboardData(period) {
   return Array.from(allTraders.values()).map((t, idx) => ({
     traderId: t.nickName,
     nickname: t.nickName,
-    avatar: null,
+    avatar: t.avatar || null,
     roi: t.roi,
     pnl: null,
     winRate: null,
@@ -179,6 +199,7 @@ async function saveTraders(traders, period) {
         source_type: 'leaderboard',
         source_trader_id: trader.traderId,
         handle: trader.nickname,
+        profile_url: trader.avatar,
         is_active: true,
       }, { onConflict: 'source,source_trader_id' })
 

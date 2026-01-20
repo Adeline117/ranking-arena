@@ -170,37 +170,89 @@ async function fetchLeaderboardData(period) {
       console.log('\n📄 从页面 DOM 提取数据...')
       const domTraders = await page.evaluate(() => {
         const results = []
-        const text = document.body.innerText
         
-        // 匹配 ROI 数值
-        const roiMatches = text.matchAll(/([+-]?[\d,]+\.?\d*)\s*%/g)
-        for (const match of roiMatches) {
-          const roi = parseFloat(match[1].replace(/,/g, ''))
-          if (roi > 50 && roi < 50000) { // 合理的 ROI 范围
-            results.push({ roi })
+        // 方法1: 从卡片提取完整数据
+        const cards = document.querySelectorAll('[class*="trader"], [class*="leader"], [class*="card"], [class*="item"]')
+        cards.forEach(card => {
+          const text = card.innerText || ''
+          
+          // 提取头像
+          const img = card.querySelector('img[src*="avatar"], img[src*="user"], img[class*="avatar"]')
+          let avatar = null
+          if (img?.src && !img.src.includes('placeholder') && !img.src.includes('default')) {
+            avatar = img.src
           }
-        }
-        
-        // 从链接获取用户信息
-        const links = document.querySelectorAll('a[href*="leader"], a[href*="trader"]')
-        links.forEach(link => {
-          const href = link.href
+          
+          // 提取链接和 ID
+          const link = card.querySelector('a[href*="leader"], a[href*="trader"]')
+          const href = link?.href || ''
           const idMatch = href.match(/\/(\d+)(?:$|\?)/) || href.match(/leaderId=(\d+)/)
-          if (idMatch) {
-            const text = link.textContent?.trim() || ''
-            if (text && text.length >= 2 && text.length <= 30) {
-              results.push({
-                traderId: idMatch[1],
-                nickname: text.split('\n')[0].trim(),
-              })
-            }
+          
+          // 提取名字
+          const nameEl = card.querySelector('[class*="name"], [class*="nick"]')
+          const nickname = nameEl?.innerText?.trim()?.split('\n')[0] || ''
+          
+          // 提取 ROI
+          const roiMatch = text.match(/([+-]?[\d,]+\.?\d*)\s*%/)
+          const roi = roiMatch ? parseFloat(roiMatch[1].replace(/,/g, '')) : 0
+          
+          if (idMatch && nickname && roi > 0) {
+            results.push({
+              traderId: idMatch[1],
+              nickname,
+              avatar,
+              roi,
+            })
           }
         })
+        
+        // 方法2: 从链接获取基础信息
+        if (results.length < 10) {
+          const links = document.querySelectorAll('a[href*="leader"], a[href*="trader"]')
+          links.forEach(link => {
+            const href = link.href
+            const idMatch = href.match(/\/(\d+)(?:$|\?)/) || href.match(/leaderId=(\d+)/)
+            if (idMatch) {
+              const text = link.textContent?.trim() || ''
+              // 尝试获取附近的头像
+              const parent = link.closest('[class*="card"], [class*="item"], div')
+              const img = parent?.querySelector('img')
+              let avatar = null
+              if (img?.src && img.src.includes('avatar')) {
+                avatar = img.src
+              }
+              
+              if (text && text.length >= 2 && text.length <= 30) {
+                results.push({
+                  traderId: idMatch[1],
+                  nickname: text.split('\n')[0].trim(),
+                  avatar,
+                })
+              }
+            }
+          })
+        }
         
         return results
       })
       
       console.log(`  DOM 提取: ${domTraders.length} 条原始数据`)
+      
+      // 合并 DOM 数据
+      domTraders.forEach(t => {
+        if (t.traderId && !allTraders.has(t.traderId)) {
+          allTraders.set(t.traderId, {
+            traderId: t.traderId,
+            nickname: t.nickname,
+            avatar: t.avatar || null,
+            roi: t.roi || 0,
+            pnl: 0,
+            winRate: 0,
+            maxDrawdown: 0,
+            followers: 0,
+          })
+        }
+      })
     }
 
     console.log(`\n📊 共获取 ${allTraders.size} 个交易员数据`)
