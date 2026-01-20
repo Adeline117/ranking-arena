@@ -12,6 +12,27 @@ import { ScoreRulesModal } from '../UI/ScoreRulesModal'
 import CategoryRankingTabs, { CategoryType, filterByCategory } from './CategoryRankingTabs'
 import { ProLabel } from '../Pro/PremiumGate'
 
+// 图标组件
+const FilterIcon = ({ size = 14 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+)
+
+const CompareIcon = ({ size = 14 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <rect x="3" y="3" width="7" height="18" rx="1" />
+    <rect x="14" y="3" width="7" height="18" rx="1" />
+  </svg>
+)
+
+const LockIconSmall = ({ size = 10 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
+    <path d="M19 11H5C3.9 11 3 11.9 3 13V20C3 21.1 3.9 22 5 22H19C20.1 22 21 21.1 21 20V13C21 11.9 20.1 11 19 11Z" />
+    <path d="M7 11V7C7 4.2 9.2 2 12 2C14.8 2 17 4.2 17 7V11" stroke="currentColor" strokeWidth="2" fill="none" />
+  </svg>
+)
+
 // 格式化 PnL 显示
 function formatPnL(pnl: number): string {
   const absPnL = Math.abs(pnl)
@@ -243,11 +264,11 @@ export default function RankingTable(props: {
         border: tokens.glass.border.light,
       }}
     >
-      {/* Category Tabs - Pro 功能 */}
+      {/* Category Tabs - Pro 功能 + 工具按钮 */}
       {onCategoryChange && (
         <Box
           style={{
-            padding: `${tokens.spacing[4]} ${tokens.spacing[4]} ${tokens.spacing[2]}`,
+            padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
@@ -255,20 +276,102 @@ export default function RankingTable(props: {
             borderBottom: `1px solid var(--glass-border-light)`,
             background: tokens.glass.bg.light,
             borderRadius: `${tokens.radius.xl} ${tokens.radius.xl} 0 0`,
+            flexWrap: 'wrap',
           }}
         >
-          <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
-            <Text size="sm" weight="bold" color="secondary">
-              {language === 'en' ? 'Category' : '分类'}
-            </Text>
-            <ProLabel size="xs" />
+          {/* 左侧：分类标签 */}
+          <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], flex: '1 1 auto', minWidth: 0 }}>
+            <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], flexShrink: 0 }}>
+              <Text size="sm" weight="bold" color="secondary">
+                {language === 'en' ? 'Category' : '分类'}
+              </Text>
+              <ProLabel size="xs" />
+            </Box>
+            <CategoryRankingTabs
+              currentCategory={category}
+              onCategoryChange={onCategoryChange}
+              isPro={isPro}
+              onProRequired={onProRequired}
+            />
           </Box>
-          <CategoryRankingTabs
-            currentCategory={category}
-            onCategoryChange={onCategoryChange}
-            isPro={isPro}
-            onProRequired={onProRequired}
-          />
+          
+          {/* 右侧：工具按钮 */}
+          <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], flexShrink: 0 }}>
+            {/* 高级筛选按钮 */}
+            <Box
+              onClick={isPro ? () => {} : onProRequired}
+              title={language === 'en' ? 'Advanced Filter' : '高级筛选'}
+              className="touch-target-sm"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 4,
+                width: 32,
+                height: 32,
+                borderRadius: tokens.radius.md,
+                background: 'var(--color-bg-tertiary)',
+                border: '1px solid var(--color-border-secondary)',
+                color: isPro ? 'var(--color-text-secondary)' : 'var(--color-text-tertiary)',
+                cursor: isPro ? 'pointer' : 'not-allowed',
+                transition: 'all 0.2s',
+                opacity: isPro ? 1 : 0.5,
+              }}
+              onMouseEnter={(e) => {
+                if (isPro) {
+                  e.currentTarget.style.borderColor = 'var(--color-pro-gradient-start)'
+                  e.currentTarget.style.color = 'var(--color-pro-gradient-start)'
+                  e.currentTarget.style.background = 'var(--color-pro-glow)'
+                }
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = 'var(--color-border-secondary)'
+                e.currentTarget.style.color = isPro ? 'var(--color-text-secondary)' : 'var(--color-text-tertiary)'
+                e.currentTarget.style.background = 'var(--color-bg-tertiary)'
+              }}
+            >
+              <FilterIcon size={14} />
+              {!isPro && <LockIconSmall size={8} />}
+            </Box>
+
+            {/* 对比按钮 */}
+            <Link
+              href={isPro ? '/compare' : '/pricing'}
+              title={language === 'en' ? 'Compare Traders' : '交易员对比'}
+              className="touch-target-sm"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 4,
+                width: 32,
+                height: 32,
+                borderRadius: tokens.radius.md,
+                background: isPro ? 'var(--color-pro-glow)' : 'var(--color-bg-tertiary)',
+                border: isPro ? '1px solid var(--color-pro-gradient-start)' : '1px solid var(--color-border-secondary)',
+                color: isPro ? 'var(--color-pro-gradient-start)' : 'var(--color-text-tertiary)',
+                textDecoration: 'none',
+                cursor: isPro ? 'pointer' : 'not-allowed',
+                transition: 'all 0.2s',
+                opacity: isPro ? 1 : 0.5,
+              }}
+              onMouseEnter={(e) => {
+                if (isPro) {
+                  e.currentTarget.style.background = 'var(--color-pro-badge-bg)'
+                  e.currentTarget.style.color = '#fff'
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (isPro) {
+                  e.currentTarget.style.background = 'var(--color-pro-glow)'
+                  e.currentTarget.style.color = 'var(--color-pro-gradient-start)'
+                }
+              }}
+            >
+              <CompareIcon size={14} />
+              {!isPro && <LockIconSmall size={8} />}
+            </Link>
+          </Box>
         </Box>
       )}
 
@@ -486,7 +589,7 @@ export default function RankingTable(props: {
                           width: 36,
                           height: 36,
                           borderRadius: tokens.radius.full,
-                          background: getAvatarGradient(trader.id),
+                          background: trader.avatar_url ? tokens.colors.bg.secondary : getAvatarGradient(trader.id),
                           border: `2px solid ${tokens.colors.border.primary}`,
                           display: 'flex',
                           alignItems: 'center',
@@ -500,22 +603,27 @@ export default function RankingTable(props: {
                           boxShadow: rank <= 3 ? `0 0 12px ${rank === 1 ? 'rgba(255, 215, 0, 0.4)' : rank === 2 ? 'rgba(192, 192, 192, 0.4)' : 'rgba(205, 127, 50, 0.4)'}` : 'none',
                         }}
                       >
-                        <Text 
-                          size="xs" 
-                          weight="black" 
-                          style={{ 
-                            color: '#ffffff',
-                            fontSize: '12px',
-                            lineHeight: '1',
-                          }}
-                        >
-                          {getAvatarInitial(displayName)}
-                        </Text>
+                        {/* 备用文字（仅在没有头像时显示） */}
+                        {!trader.avatar_url && (
+                          <Text 
+                            size="xs" 
+                            weight="black" 
+                            style={{ 
+                              color: '#ffffff',
+                              fontSize: '12px',
+                              lineHeight: '1',
+                            }}
+                          >
+                            {getAvatarInitial(displayName)}
+                          </Text>
+                        )}
+                        {/* 头像图片 */}
                         {trader.avatar_url && (
                           <img 
                             src={trader.avatar_url} 
                             alt={displayName} 
                             referrerPolicy="no-referrer"
+                            crossOrigin="anonymous"
                             loading="lazy"
                             style={{ 
                               width: '100%', 
@@ -523,10 +631,20 @@ export default function RankingTable(props: {
                               objectFit: 'cover',
                               position: 'absolute',
                               inset: 0,
+                              zIndex: 1,
                             }}
                             onError={(e) => {
-                              if (e.target) {
-                                (e.target as HTMLImageElement).style.display = 'none'
+                              const img = e.target as HTMLImageElement
+                              img.style.display = 'none'
+                              // 显示备用文字
+                              const container = img.parentElement
+                              if (container) {
+                                container.style.background = getAvatarGradient(trader.id)
+                                // 添加备用文字
+                                const fallback = document.createElement('span')
+                                fallback.textContent = getAvatarInitial(displayName)
+                                fallback.style.cssText = 'color: #fff; font-size: 12px; font-weight: 900; line-height: 1;'
+                                container.appendChild(fallback)
                               }
                             }}
                           />

@@ -26,10 +26,10 @@ export const stripe = {
   get webhooks() { return getStripe().webhooks },
 }
 
-// 价格 ID 配置 - 使用环境变量中的 Stripe Price ID
+// 价格 ID 配置 - Pro 会员的月付/年付价格
 export const STRIPE_PRICE_IDS = {
-  monthly: process.env.STRIPE_PRO_PRICE_ID || process.env.STRIPE_PRICE_MONTHLY_ID || 'price_monthly',
-  yearly: process.env.STRIPE_ELITE_PRICE_ID || process.env.STRIPE_PRICE_YEARLY_ID || 'price_yearly',
+  monthly: process.env.STRIPE_PRO_MONTHLY_PRICE_ID || process.env.STRIPE_PRICE_MONTHLY_ID || 'price_pro_monthly',
+  yearly: process.env.STRIPE_PRO_YEARLY_PRICE_ID || process.env.STRIPE_PRICE_YEARLY_ID || 'price_pro_yearly',
 }
 
 // 订阅计划配置 - 与 Stripe 价格保持一致

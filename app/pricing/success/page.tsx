@@ -1,13 +1,16 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/Base'
 import { useLanguage } from '@/app/components/Utils/LanguageProvider'
+import { useToast } from '@/app/components/UI/Toast'
 import TopNav from '@/app/components/Layout/TopNav'
 import { supabase } from '@/lib/supabase/client'
+import { usePremium } from '@/lib/premium/hooks'
+import { clearSubscriptionCache } from '@/app/components/Home/hooks/useSubscription'
 
 // 图标组件
 const CheckCircleIcon = ({ size = 64 }: { size?: number }) => (
@@ -24,12 +27,25 @@ const StarIcon = ({ size = 20 }: { size?: number }) => (
   </svg>
 )
 
+const LoadingSpinner = ({ size = 24 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" style={{ animation: 'spin 1s linear infinite' }}>
+    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" strokeOpacity="0.25" />
+    <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+  </svg>
+)
+
 export default function PaymentSuccessPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { language, t } = useLanguage()
+  const { showToast } = useToast()
+  const { refresh: refreshPremium, isPremium, tier } = usePremium()
+  
   const [email, setEmail] = useState<string | null>(null)
-  const [countdown, setCountdown] = useState(5)
+  const [countdown, setCountdown] = useState(8) // 增加倒计时给验证留更多时间
+  const [verificationStatus, setVerificationStatus] = useState<'verifying' | 'success' | 'error'>('verifying')
+  const [hasVerified, setHasVerified] = useState(false)
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -38,36 +54,78 @@ export default function PaymentSuccessPage() {
   }, [])
 
   // 验证并同步订阅状态
-  useEffect(() => {
+  const verifyAndRefresh = useCallback(async () => {
     const sessionId = searchParams.get('session_id')
-    if (!sessionId) return
+    if (!sessionId || hasVerified) return
 
-    const verifySubscription = async () => {
-      try {
-        const { data: { session } } = await supabase.auth.getSession()
-        
-        const response = await fetch('/api/stripe/verify-session', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': session?.access_token ? `Bearer ${session.access_token}` : '',
-          },
-          body: JSON.stringify({ sessionId }),
-        })
+    setHasVerified(true)
+    setVerificationStatus('verifying')
 
-        if (response.ok) {
-          console.log('Subscription verified successfully')
-        }
-      } catch (error) {
-        console.error('Failed to verify subscription:', error)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      
+      if (!session?.access_token) {
+        console.error('No session found')
+        setVerificationStatus('error')
+        return
       }
+
+      // 调用验证 API 更新数据库
+      const response = await fetch('/api/stripe/verify-session', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ sessionId }),
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        console.log('Subscription verified:', data)
+        
+        // 清除本地订阅缓存
+        clearSubscriptionCache()
+        
+        // 关键：刷新 Premium 上下文以更新界面状态
+        await refreshPremium()
+        
+        setVerificationStatus('success')
+        showToast(
+          language === 'zh' ? '会员已激活！' : 'Membership activated!',
+          'success'
+        )
+      } else {
+        const errorData = await response.json().catch(() => ({}))
+        console.error('Verification failed:', errorData)
+        setVerificationStatus('error')
+        
+        // 清除本地订阅缓存
+        clearSubscriptionCache()
+        
+        // 即使验证失败也尝试刷新状态（可能 webhook 已经处理了）
+        await refreshPremium()
+      }
+    } catch (error) {
+      console.error('Failed to verify subscription:', error)
+      setVerificationStatus('error')
+      
+      // 清除本地订阅缓存
+      clearSubscriptionCache()
+      
+      // 尝试刷新状态
+      await refreshPremium()
     }
+  }, [searchParams, hasVerified, refreshPremium, showToast, language])
 
-    verifySubscription()
-  }, [searchParams])
-
-  // 自动跳转倒计时
   useEffect(() => {
+    verifyAndRefresh()
+  }, [verifyAndRefresh])
+
+  // 自动跳转倒计时（只在验证完成后开始）
+  useEffect(() => {
+    if (verificationStatus === 'verifying') return
+    
     if (countdown <= 0) {
       router.push('/')
       return
@@ -78,7 +136,7 @@ export default function PaymentSuccessPage() {
     }, 1000)
 
     return () => clearTimeout(timer)
-  }, [countdown, router])
+  }, [countdown, router, verificationStatus])
 
   const sessionId = searchParams.get('session_id')
 
@@ -112,120 +170,146 @@ export default function PaymentSuccessPage() {
           position: 'relative',
         }}
       >
-        {/* 成功图标 */}
-        <Box style={{ marginBottom: tokens.spacing[6] }}>
-          <CheckCircleIcon size={80} />
-        </Box>
+        {/* 验证中状态 */}
+        {verificationStatus === 'verifying' && (
+          <>
+            <Box style={{ marginBottom: tokens.spacing[6], color: 'var(--color-pro-gradient-start)' }}>
+              <LoadingSpinner size={80} />
+            </Box>
+            <Text
+              as="h1"
+              size="2xl"
+              weight="black"
+              style={{ marginBottom: tokens.spacing[3] }}
+            >
+              {language === 'zh' ? '正在激活会员...' : 'Activating membership...'}
+            </Text>
+            <Text size="md" color="secondary">
+              {language === 'zh' ? '请稍候，正在同步您的订阅状态' : 'Please wait while we sync your subscription'}
+            </Text>
+          </>
+        )}
 
-        {/* 标题 */}
-        <Text
-          as="h1"
-          size="2xl"
-          weight="black"
-          style={{
-            marginBottom: tokens.spacing[3],
-          }}
-        >
-          {t('paymentSuccess')}
-        </Text>
+        {/* 验证成功状态 */}
+        {verificationStatus !== 'verifying' && (
+          <>
+            {/* 成功图标 */}
+            <Box style={{ marginBottom: tokens.spacing[6] }}>
+              <CheckCircleIcon size={80} />
+            </Box>
 
-        <Text size="md" color="secondary" style={{ marginBottom: tokens.spacing[6] }}>
-          {language === 'zh' 
-            ? '恭喜！你已成功升级为 Pro 会员' 
-            : 'Congratulations! You are now a Pro member'
-          }
-        </Text>
+            {/* 标题 */}
+            <Text
+              as="h1"
+              size="2xl"
+              weight="black"
+              style={{
+                marginBottom: tokens.spacing[3],
+              }}
+            >
+              {t('paymentSuccess')}
+            </Text>
 
-        {/* Pro 徽章 */}
-        <Box
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 8,
-            padding: '12px 24px',
-            background: 'var(--color-pro-badge-bg)',
-            borderRadius: tokens.radius.full,
-            boxShadow: '0 4px 20px var(--color-pro-badge-shadow)',
-            marginBottom: tokens.spacing[6],
-          }}
-        >
-          <StarIcon size={18} />
-          <Text size="md" weight="bold" style={{ color: '#fff' }}>
-            Pro Member
-          </Text>
-        </Box>
+            <Text size="md" color="secondary" style={{ marginBottom: tokens.spacing[6] }}>
+              {language === 'zh' 
+                ? '恭喜！你已成功升级为 Pro 会员' 
+                : 'Congratulations! You are now a Pro member'
+              }
+            </Text>
 
-        {/* 功能提示 */}
-        <Box
-          style={{
-            background: 'var(--color-bg-secondary)',
-            borderRadius: tokens.radius.xl,
-            border: '1px solid var(--color-border-primary)',
-            padding: tokens.spacing[5],
-            marginBottom: tokens.spacing[6],
-            textAlign: 'left',
-          }}
-        >
-          <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[3] }}>
-            {language === 'zh' ? '现在你可以：' : 'Now you can:'}
-          </Text>
-          <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
-            {[
-              language === 'zh' ? '按分类查看交易员排行' : 'View rankings by category',
-              language === 'zh' ? '接收交易员变动提醒' : 'Get trader change alerts',
-              language === 'zh' ? '查看详细评分分析' : 'View detailed score analysis',
-              language === 'zh' ? '使用高级筛选功能' : 'Use advanced filters',
-              language === 'zh' ? '对比多位交易员' : 'Compare multiple traders',
-            ].map((text, i) => (
-              <Box key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Box
-                  style={{
-                    width: 6,
-                    height: 6,
-                    borderRadius: '50%',
-                    background: 'var(--color-accent-success)',
-                  }}
-                />
-                <Text size="sm" color="secondary">{text}</Text>
+            {/* Pro 徽章 - 显示实时状态 */}
+            <Box
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '12px 24px',
+                background: isPremium ? 'var(--color-pro-badge-bg)' : 'var(--color-bg-secondary)',
+                borderRadius: tokens.radius.full,
+                boxShadow: isPremium ? '0 4px 20px var(--color-pro-badge-shadow)' : 'none',
+                border: isPremium ? 'none' : '1px solid var(--color-border-primary)',
+                marginBottom: tokens.spacing[6],
+              }}
+            >
+              <StarIcon size={18} />
+              <Text size="md" weight="bold" style={{ color: isPremium ? '#fff' : 'var(--color-text-secondary)' }}>
+                {isPremium ? 'Pro Member' : (tier === 'pro' ? 'Pro Member' : 'Activating...')}
+              </Text>
+            </Box>
+
+            {/* 功能提示 */}
+            <Box
+              style={{
+                background: 'var(--color-bg-secondary)',
+                borderRadius: tokens.radius.xl,
+                border: '1px solid var(--color-border-primary)',
+                padding: tokens.spacing[5],
+                marginBottom: tokens.spacing[6],
+                textAlign: 'left',
+              }}
+            >
+              <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[3] }}>
+                {language === 'zh' ? '现在你可以：' : 'Now you can:'}
+              </Text>
+              <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
+                {[
+                  language === 'zh' ? '按分类查看交易员排行' : 'View rankings by category',
+                  language === 'zh' ? '接收交易员变动提醒' : 'Get trader change alerts',
+                  language === 'zh' ? '查看详细评分分析' : 'View detailed score analysis',
+                  language === 'zh' ? '使用高级筛选功能' : 'Use advanced filters',
+                  language === 'zh' ? '对比多位交易员' : 'Compare multiple traders',
+                ].map((text, i) => (
+                  <Box key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <Box
+                      style={{
+                        width: 6,
+                        height: 6,
+                        borderRadius: '50%',
+                        background: 'var(--color-accent-success)',
+                      }}
+                    />
+                    <Text size="sm" color="secondary">{text}</Text>
+                  </Box>
+                ))}
               </Box>
-            ))}
-          </Box>
-        </Box>
+            </Box>
 
-        {/* 按钮 */}
-        <Box style={{ display: 'flex', gap: tokens.spacing[3], justifyContent: 'center' }}>
-          <Link href="/" style={{ textDecoration: 'none' }}>
-            <Button
-              variant="primary"
-              style={{
-                padding: `${tokens.spacing[3]} ${tokens.spacing[6]}`,
-                background: 'var(--color-pro-badge-bg)',
-                border: 'none',
-                boxShadow: '0 4px 12px var(--color-pro-badge-shadow)',
-              }}
-            >
-              {language === 'zh' ? '开始探索' : 'Start Exploring'}
-            </Button>
-          </Link>
-          <Link href="/settings" style={{ textDecoration: 'none' }}>
-            <Button
-              variant="secondary"
-              style={{
-                padding: `${tokens.spacing[3]} ${tokens.spacing[6]}`,
-              }}
-            >
-              {t('settings')}
-            </Button>
-          </Link>
-        </Box>
+            {/* 按钮 */}
+            <Box style={{ display: 'flex', gap: tokens.spacing[3], justifyContent: 'center' }}>
+              <Link href="/" style={{ textDecoration: 'none' }}>
+                <Button
+                  variant="primary"
+                  style={{
+                    padding: `${tokens.spacing[3]} ${tokens.spacing[6]}`,
+                    background: 'var(--color-pro-badge-bg)',
+                    border: 'none',
+                    boxShadow: '0 4px 12px var(--color-pro-badge-shadow)',
+                  }}
+                >
+                  {language === 'zh' ? '开始探索' : 'Start Exploring'}
+                </Button>
+              </Link>
+              <Link href="/settings" style={{ textDecoration: 'none' }}>
+                <Button
+                  variant="secondary"
+                  style={{
+                    padding: `${tokens.spacing[3]} ${tokens.spacing[6]}`,
+                  }}
+                >
+                  {t('settings')}
+                </Button>
+              </Link>
+            </Box>
 
-        {/* 倒计时提示 */}
-        <Text size="xs" color="tertiary" style={{ marginTop: tokens.spacing[6] }}>
-          {language === 'zh' 
-            ? `${countdown} 秒后自动返回首页...` 
-            : `Redirecting to home in ${countdown} seconds...`
-          }
-        </Text>
+            {/* 倒计时提示 */}
+            <Text size="xs" color="tertiary" style={{ marginTop: tokens.spacing[6] }}>
+              {language === 'zh' 
+                ? `${countdown} 秒后自动返回首页...` 
+                : `Redirecting to home in ${countdown} seconds...`
+              }
+            </Text>
+          </>
+        )}
       </Box>
     </Box>
   )

@@ -28,7 +28,7 @@ interface TraderHeaderProps {
   isOwnProfile?: boolean
   source?: string
   communityScore?: CommunityScore | null
-  proBadgeTier?: 'pro' | 'elite' | 'enterprise' | null // Pro 徽章等级
+  proBadgeTier?: 'pro' | null // Pro 徽章等级
 }
 
 // 来源平台配置 - 统一颜色，不做颜色区分
@@ -167,7 +167,8 @@ export default function TraderHeader({
             <img 
               src={avatarUrl} 
               alt={handle} 
-              referrerPolicy="origin-when-cross-origin"
+              referrerPolicy="no-referrer"
+              crossOrigin="anonymous"
               loading="lazy"
               style={{ 
                 width: '100%', 
@@ -176,12 +177,16 @@ export default function TraderHeader({
                 transition: 'all 0.4s ease',
               }}
               onError={(e) => {
-                if (e.target) {
-                  (e.target as HTMLImageElement).style.display = 'none'
-                  const container = e.currentTarget.parentElement
-                  if (container) {
-                    container.style.background = getAvatarGradient(traderId)
-                  }
+                const img = e.target as HTMLImageElement
+                img.style.display = 'none'
+                const container = img.parentElement
+                if (container) {
+                  container.style.background = getAvatarGradient(traderId)
+                  // 添加备用文字
+                  const fallback = document.createElement('span')
+                  fallback.textContent = getAvatarInitial(handle)
+                  fallback.style.cssText = 'color: #fff; font-size: 32px; font-weight: 900; line-height: 1; text-shadow: 0 2px 8px rgba(0,0,0,0.4);'
+                  container.appendChild(fallback)
                 }
               }}
             />
@@ -200,8 +205,8 @@ export default function TraderHeader({
             </Text>
           )}
           {/* Pro 徽章 */}
-          {proBadgeTier && (
-            <ProBadgeOverlay tier={proBadgeTier} position="bottom-right" />
+          {proBadgeTier === 'pro' && (
+            <ProBadgeOverlay position="bottom-right" />
           )}
         </Box>
 

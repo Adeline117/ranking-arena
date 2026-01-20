@@ -2,9 +2,8 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
-import { Box, Text, Button } from '../Base'
+import { Box } from '../Base'
 import { useToast } from '../UI/Toast'
 import RankingTable, { type Trader } from '../Features/RankingTable'
 import TimeRangeSelector from './TimeRangeSelector'
@@ -25,26 +24,6 @@ interface RankingSectionProps {
  * 排行榜区域组件
  * 包含时间选择器和排行榜表格
  */
-// 图标组件
-const FilterIcon = ({ size = 14 }: { size?: number }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z" strokeLinecap="round" strokeLinejoin="round" />
-  </svg>
-)
-
-const CompareIcon = ({ size = 14 }: { size?: number }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <rect x="3" y="3" width="7" height="18" rx="1" />
-    <rect x="14" y="3" width="7" height="18" rx="1" />
-  </svg>
-)
-
-const LockIcon = ({ size = 10 }: { size?: number }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
-    <path d="M19 11H5C3.9 11 3 11.9 3 13V20C3 21.1 3.9 22 5 22H19C20.1 22 21 21.1 21 20V13C21 11.9 20.1 11 19 11Z" />
-    <path d="M7 11V7C7 4.2 9.2 2 12 2C14.8 2 17 4.2 17 7V11" stroke="currentColor" strokeWidth="2" fill="none" />
-  </svg>
-)
 
 export default function RankingSection({
   traders,
@@ -82,98 +61,18 @@ export default function RankingSection({
         minWidth: 0,
       }}
     >
-      {/* 顶部工具栏 - 移动端优化布局 */}
+      {/* 顶部工具栏 - 时间选择器 */}
       <Box
         className="ranking-toolbar"
         style={{
-          display: 'flex',
-          flexDirection: 'column',
-          gap: tokens.spacing[3],
           marginBottom: tokens.spacing[3],
       }}
     >
-      {/* 时间选择器 - 移动端全宽 */}
       <TimeRangeSelector
         activeRange={activeTimeRange}
         onChange={onTimeRangeChange}
         disabled={loading}
       />
-        
-        {/* Pro 工具按钮 - 移动端隐藏文字 */}
-        <Box className="hide-mobile" style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
-          {/* 高级筛选按钮 */}
-          <Box
-            onClick={isPro ? () => {} : handleProRequired}
-            className="touch-target-sm"
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-              borderRadius: tokens.radius.md,
-              background: 'var(--color-bg-secondary)',
-              border: '1px solid var(--color-border-primary)',
-              color: isPro ? 'var(--color-text-secondary)' : 'var(--color-text-tertiary)',
-              cursor: 'pointer',
-              transition: 'all 0.2s',
-              opacity: isPro ? 1 : 0.6,
-              fontSize: tokens.typography.fontSize.xs,
-              fontWeight: 600,
-            }}
-            onMouseEnter={(e) => {
-              if (isPro) {
-                e.currentTarget.style.borderColor = 'var(--color-pro-gradient-start)'
-                e.currentTarget.style.color = 'var(--color-pro-gradient-start)'
-              }
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.borderColor = 'var(--color-border-primary)'
-              e.currentTarget.style.color = isPro ? 'var(--color-text-secondary)' : 'var(--color-text-tertiary)'
-            }}
-          >
-            <FilterIcon size={14} />
-            <span>{t('advancedFilter')}</span>
-            {!isPro && <LockIcon size={10} />}
-          </Box>
-
-          {/* 对比按钮 */}
-          <Link
-            href={isPro ? '/compare' : '/pricing'}
-            className="touch-target-sm"
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-              borderRadius: tokens.radius.md,
-              background: isPro ? 'var(--color-pro-glow)' : 'var(--color-bg-secondary)',
-              border: isPro ? '1px solid var(--color-pro-gradient-start)' : '1px solid var(--color-border-primary)',
-              color: isPro ? 'var(--color-pro-gradient-start)' : 'var(--color-text-tertiary)',
-              textDecoration: 'none',
-              cursor: 'pointer',
-              transition: 'all 0.2s',
-              opacity: isPro ? 1 : 0.6,
-              fontSize: tokens.typography.fontSize.xs,
-              fontWeight: 600,
-            }}
-            onMouseEnter={(e) => {
-              if (isPro) {
-                e.currentTarget.style.background = 'var(--color-pro-badge-bg)'
-                e.currentTarget.style.color = '#fff'
-              }
-            }}
-            onMouseLeave={(e) => {
-              if (isPro) {
-                e.currentTarget.style.background = 'var(--color-pro-glow)'
-                e.currentTarget.style.color = 'var(--color-pro-gradient-start)'
-              }
-            }}
-          >
-            <CompareIcon size={14} />
-            <span>{t('traderCompare')}</span>
-            {!isPro && <LockIcon size={10} />}
-          </Link>
-        </Box>
       </Box>
       
       <RankingTable

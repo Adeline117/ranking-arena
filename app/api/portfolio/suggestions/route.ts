@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
     const user = await getAuthUser(request)
     
     // 获取用户订阅信息
-    let userTier: 'free' | 'pro' | 'elite' | 'enterprise' = 'free'
+    let userTier: 'free' | 'pro' = 'free'
     if (user) {
       const { data: subscription } = await supabase
         .from('subscriptions')

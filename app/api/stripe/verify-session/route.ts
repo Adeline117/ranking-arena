@@ -27,12 +27,11 @@ function getSupabaseAdmin() {
 }
 
 // 从价格 ID 获取订阅等级
-function getTierFromPriceId(priceId: string): 'free' | 'pro' | 'elite' {
-  if (priceId === process.env.STRIPE_PRO_PRICE_ID) {
+function getTierFromPriceId(priceId: string): 'free' | 'pro' {
+  if (priceId === process.env.STRIPE_PRO_MONTHLY_PRICE_ID || 
+      priceId === process.env.STRIPE_PRO_YEARLY_PRICE_ID ||
+      priceId === process.env.STRIPE_PRO_PRICE_ID) {
     return 'pro'
-  }
-  if (priceId === process.env.STRIPE_ELITE_PRICE_ID) {
-    return 'elite'
   }
   return 'free'
 }
@@ -66,7 +65,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 获取订阅详情
-    let tier: 'free' | 'pro' | 'elite' = 'pro'
+    let tier: 'free' | 'pro' = 'pro'
     let subscriptionId = ''
     let periodStart: string | null = null
     let periodEnd: string | null = null

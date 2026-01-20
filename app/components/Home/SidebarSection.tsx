@@ -95,22 +95,33 @@ export default function SidebarSection({ position }: SidebarSectionProps) {
         position: 'sticky',
         top: 80,
         maxHeight: 'calc(100vh - 100px)',
-        overflowY: 'auto',
         animationDelay: '0.2s',
         display: 'flex',
         flexDirection: 'column',
         gap: tokens.spacing[4],
       }}
     >
-      {/* Pro 功能面板 */}
-      <ProFeaturesPanel compact />
+      {/* Pro 功能面板 - 固定在顶部，始终可见 */}
+      <Box style={{ flexShrink: 0 }}>
+        <ProFeaturesPanel compact />
+      </Box>
       
-      {/* 市场数据 */}
-      <ErrorBoundary>
-        <Suspense fallback={<SkeletonCard />}>
-          <MarketPanel />
-        </Suspense>
-      </ErrorBoundary>
+      {/* 市场数据 - 可滚动区域 */}
+      <Box
+        style={{
+          flex: 1,
+          overflowY: 'auto',
+          minHeight: 0, // 重要：让 flex 子元素可以收缩
+          paddingRight: tokens.spacing[1], // 滚动条间距
+        }}
+        className="scrollbar-thin"
+      >
+        <ErrorBoundary>
+          <Suspense fallback={<SkeletonCard />}>
+            <MarketPanel />
+          </Suspense>
+        </ErrorBoundary>
+      </Box>
     </Box>
   )
 }

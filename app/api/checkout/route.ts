@@ -34,15 +34,11 @@ function getSupabase() {
   })
 }
 
-// 订阅计划配置
+// 订阅计划配置 - 只有 Pro 会员
 const PLANS: Record<string, { priceId: string; name: string }> = {
   pro: {
-    priceId: process.env.STRIPE_PRO_PRICE_ID || '',
+    priceId: process.env.STRIPE_PRO_PRICE_ID || process.env.STRIPE_PRO_MONTHLY_PRICE_ID || '',
     name: 'Pro',
-  },
-  elite: {
-    priceId: process.env.STRIPE_ELITE_PRICE_ID || '',
-    name: 'Elite',
   },
 }
 
@@ -54,7 +50,7 @@ export async function POST(request: NextRequest) {
 
     if (!plan || !PLANS[plan]) {
       return NextResponse.json(
-        { error: 'Invalid plan. Valid options: pro, elite' },
+        { error: 'Invalid plan. Valid option: pro' },
         { status: 400 }
       )
     }

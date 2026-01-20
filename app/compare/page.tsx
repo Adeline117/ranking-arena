@@ -70,7 +70,7 @@ function CompareContent() {
         if (subRes.ok) {
           const subData = await subRes.json()
           const tier = subData.subscription?.tier || 'free'
-          setIsPro(['pro', 'elite', 'enterprise'].includes(tier))
+          setIsPro(tier === 'pro')
         }
 
         // 从 URL 获取初始交易员 ID
