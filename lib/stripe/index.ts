@@ -1,10 +1,30 @@
 import Stripe from 'stripe'
 
-// Stripe 服务端实例
-export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2025-12-15.clover',
-  typescript: true,
-})
+// Stripe 服务端实例 - 懒加载以避免构建时环境变量未定义的问题
+let _stripe: Stripe | null = null
+
+export function getStripe(): Stripe {
+  if (!_stripe) {
+    const secretKey = process.env.STRIPE_SECRET_KEY
+    if (!secretKey) {
+      throw new Error('STRIPE_SECRET_KEY is not defined')
+    }
+    _stripe = new Stripe(secretKey, {
+      apiVersion: '2025-12-15.clover',
+      typescript: true,
+    })
+  }
+  return _stripe
+}
+
+// 保留 stripe 导出以保持兼容性（但现在是 getter）
+export const stripe = {
+  get customers() { return getStripe().customers },
+  get subscriptions() { return getStripe().subscriptions },
+  get checkout() { return getStripe().checkout },
+  get billingPortal() { return getStripe().billingPortal },
+  get webhooks() { return getStripe().webhooks },
+}
 
 // 价格 ID 配置 - 使用环境变量中的 Stripe Price ID
 export const STRIPE_PRICE_IDS = {
