@@ -216,9 +216,19 @@ export const GET = withPublic(
       })
     })
 
-    // 等待所有查询完成
+    // 等待所有查询完成并去重
     const results = await Promise.all(sourcePromises)
-    results.forEach(traders => allTraders.push(...traders))
+    const seenTraders = new Set<string>()
+    results.forEach(traders => {
+      traders.forEach(trader => {
+        // 使用 source + id 作为唯一键去重
+        const key = `${trader.source}:${trader.id}`
+        if (!seenTraders.has(key)) {
+          seenTraders.add(key)
+          allTraders.push(trader)
+        }
+      })
+    })
     
 
     // 统一排名计算逻辑：
