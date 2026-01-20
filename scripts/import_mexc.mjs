@@ -83,16 +83,41 @@ async function fetchLeaderboardData(period) {
                 // 如果 ROI 是小数形式（如 0.5432），转换为百分比
                 if (Math.abs(roi) < 10) roi = roi * 100
                 
-                traders.set(traderId, {
-                  traderId: String(traderId),
-                  nickname: item.nickName || item.nickname || item.name || item.displayName || `Trader_${traderId}`,
-                  avatar: item.avatar || item.avatarUrl || null,
-                  roi,
-                  pnl: parseFloat(item.pnl || item.totalPnl || item.profit || 0),
-                  winRate: parseFloat(item.winRate || 0) * (item.winRate > 1 ? 1 : 100),
-                  maxDrawdown: parseFloat(item.mdd || item.maxDrawdown || 0),
-                  followers: parseInt(item.followerCount || item.copierCount || item.followers || 0),
-                })
+                // 从 API 响应提取真实用户名
+                let realNickname = item.nickName || item.nickname || item.name || item.displayName || item.traderName
+                
+                // 过滤无效用户名
+                // - 脱敏格式: 87*****5, abc***def
+                // - 占位符: Mexctrader-XXX, Trader_XXX
+                const isValidNickname = realNickname && 
+                  realNickname.length >= 2 &&
+                  !realNickname.includes('*****') &&  // 脱敏
+                  !realNickname.startsWith('Trader_') &&
+                  !realNickname.startsWith('Mexctrader-')
+                
+                // 提取头像 - 排除 banner 广告
+                let avatarUrl = item.avatar || item.avatarUrl || item.headImg || item.photoUrl || item.userPhoto || item.img || null
+                if (avatarUrl && (
+                  avatarUrl.includes('/banner/') ||  // 广告 banner
+                  avatarUrl.includes('placeholder') ||
+                  avatarUrl.includes('default')
+                )) {
+                  avatarUrl = null
+                }
+                
+                // 只保存有真实用户名的交易员
+                if (isValidNickname) {
+                  traders.set(traderId, {
+                    traderId: String(traderId),
+                    nickname: realNickname,
+                    avatar: avatarUrl,
+                    roi,
+                    pnl: parseFloat(item.pnl || item.totalPnl || item.profit || 0),
+                    winRate: parseFloat(item.winRate || 0) * (item.winRate > 1 ? 1 : 100),
+                    maxDrawdown: parseFloat(item.mdd || item.maxDrawdown || 0),
+                    followers: parseInt(item.followerCount || item.copierCount || item.followers || 0),
+                  })
+                }
               })
               
               console.log(`    累计: ${traders.size} 个`)
@@ -164,94 +189,185 @@ async function fetchLeaderboardData(period) {
     const extractFromDOM = async () => {
       return await page.evaluate(() => {
         const results = []
+        const seen = new Set()
         
-        // 方法1: 查找交易员卡片
-        const cards = document.querySelectorAll('[class*="trader"], [class*="card"], [class*="item"], [class*="row"]')
+        // MEXC 交易员卡片选择器 - 根据截图分析
+        const cardSelectors = [
+          '[class*="traderCard"]',
+          '[class*="TraderCard"]', 
+          '[class*="trader-card"]',
+          '[class*="copy-trader"]',
+          '[class*="leader-item"]',
+          '[class*="rank-item"]',
+          'div[class*="Card_card"]'
+        ]
+        
+        let cards = []
+        for (const sel of cardSelectors) {
+          const found = document.querySelectorAll(sel)
+          if (found.length > 0) {
+            cards = [...cards, ...found]
+          }
+        }
+        
+        // 如果找不到特定卡片，用更通用的方法
+        if (cards.length < 5) {
+          // 查找包含 ROI 和用户信息的容器
+          cards = [...document.querySelectorAll('div')].filter(div => {
+            const text = div.innerText || ''
+            const hasRoi = text.includes('%') && text.match(/\d{2,}\.?\d*\s*%/)
+            const hasName = text.length > 20 && text.length < 500
+            const isCard = div.offsetWidth > 150 && div.offsetWidth < 400 && div.offsetHeight > 100
+            return hasRoi && hasName && isCard
+          })
+        }
+        
+        console.log('找到卡片数:', cards.length)
+        
         cards.forEach(card => {
-          const text = card.innerText || ''
-          
-          // 提取头像 - 只选择真正的用户头像
-          let avatar = null
-          const imgSelectors = [
-            'img[src*="avatar"]',
-            'img[src*="user"]',
-            'img[src*="head"]',
-            '[class*="avatar"] img',
-            '[class*="head"] img'
-          ]
-          for (const sel of imgSelectors) {
-            const img = card.querySelector(sel)
-            if (img?.src && 
-                !img.src.includes('placeholder') && 
-                !img.src.includes('default') && 
-                !img.src.includes('icon') &&
-                !img.src.includes('banner') &&  // 排除广告 banner
-                !img.src.includes('F202411')) { // 排除固定日期的广告图片
-              if (img.src.includes('avatar') || img.src.includes('user') || img.src.includes('head')) {
-                avatar = img.src
+          try {
+            const text = card.innerText || ''
+            
+            // 提取头像 - 查找第一个有效的图片
+            let avatar = null
+            const imgs = card.querySelectorAll('img')
+            for (const img of imgs) {
+              const src = img.src || ''
+              // 排除无效图片
+              if (!src || 
+                  src.includes('data:') ||
+                  src.includes('placeholder') ||
+                  src.includes('default') ||
+                  src.includes('banner') ||
+                  src.includes('icon') ||
+                  src.includes('logo') ||
+                  src.includes('t.co') ||  // Twitter 追踪
+                  src.includes('google') ||
+                  src.includes('facebook') ||
+                  src.length < 20) {
+                continue
+              }
+              // 检查图片尺寸 - 头像通常是小的正方形
+              if (img.width > 20 && img.width < 100 && img.height > 20 && img.height < 100) {
+                avatar = src
+                break
+              }
+              // 如果没有尺寸信息，检查 URL 模式
+              if (src.includes('avatar') || src.includes('user') || src.includes('head') || src.includes('photo')) {
+                avatar = src
                 break
               }
             }
-          }
-          
-          // 提取用户名
-          const nameEl = card.querySelector('[class*="name"], [class*="nick"], [class*="title"]')
-          const nickname = nameEl?.innerText?.trim() || ''
-          
-          // 提取 ROI (找最大的百分比数值)
-          const roiMatches = text.match(/([+-]?\d{1,6}(?:,?\d{3})*(?:\.\d+)?)\s*%/g) || []
-          let maxRoi = 0
-          roiMatches.forEach(m => {
-            const val = parseFloat(m.replace(/[,%]/g, ''))
-            if (Math.abs(val) > Math.abs(maxRoi) && Math.abs(val) < 100000) {
-              maxRoi = val
-            }
-          })
-          
-          if (nickname && nickname.length >= 2 && nickname.length <= 30 && maxRoi !== 0) {
-            // 过滤掉明显不是用户名的文本
-            if (!nickname.match(/^[+-]?\d/) && 
-                !nickname.includes('%') && 
-                !nickname.includes('ROI') && 
-                !nickname.includes('USDT') &&
-                !nickname.includes('Days')) {
-              results.push({ nickname, roi: maxRoi, avatar })
-            }
-          }
-        })
-        
-        // 方法2: 从纯文本提取
-        if (results.length < 10) {
-          const bodyText = document.body.innerText
-          const lines = bodyText.split('\n').map(l => l.trim()).filter(l => l)
-          
-          for (let i = 0; i < lines.length; i++) {
-            const line = lines[i]
-            // 检查是否是用户名格式
-            if (line.length >= 2 && line.length <= 25 &&
-                !line.match(/^[+-]?\d/) && 
-                !line.includes('%') &&
-                !line.includes('ROI') && 
-                !line.includes('USDT') &&
-                !line.includes('Days') &&
-                !line.includes('MDD') &&
-                !line.includes('Followers')) {
-              
-              // 在后面几行找 ROI
-              for (let j = 1; j <= 5; j++) {
-                const nextLine = lines[i + j] || ''
-                const roiMatch = nextLine.match(/^([+-]?\d{1,6}(?:,?\d{3})*(?:\.\d+)?)\s*%$/)
-                if (roiMatch) {
-                  const roi = parseFloat(roiMatch[1].replace(/,/g, ''))
-                  if (Math.abs(roi) < 100000 && !results.find(r => r.nickname === line)) {
-                    results.push({ nickname: line, roi })
-                  }
+            
+            // 提取用户名 - 优先查找特定类名
+            let nickname = ''
+            const nameSelectors = [
+              '[class*="nickName"]',
+              '[class*="nick-name"]',
+              '[class*="userName"]',
+              '[class*="user-name"]',
+              '[class*="traderName"]',
+              '[class*="trader-name"]',
+              '[class*="name"]',
+              'h3', 'h4', 'h5'
+            ]
+            for (const sel of nameSelectors) {
+              const el = card.querySelector(sel)
+              if (el) {
+                const txt = el.innerText?.trim()
+                if (txt && txt.length >= 2 && txt.length <= 30 && 
+                    !txt.includes('%') && !txt.includes('ROI') && 
+                    !txt.includes('USDT') && !txt.includes('Days') &&
+                    !txt.match(/^[+-]?\d/)) {
+                  nickname = txt
                   break
                 }
               }
             }
+            
+            // 备用：从卡片文本的第一行提取
+            if (!nickname) {
+              const lines = text.split('\n').map(l => l.trim()).filter(l => l)
+              for (const line of lines) {
+                // 严格过滤：必须像用户名
+                if (line.length >= 2 && line.length <= 25 &&
+                    !line.startsWith('$') &&  // 排除金额
+                    !line.includes('%') && 
+                    !line.includes('ROI') &&
+                    !line.includes('USDT') && 
+                    !line.includes('USD') &&
+                    !line.includes('Days') &&
+                    !line.includes('MDD') && 
+                    !line.includes('Followers') &&
+                    !line.includes('Copy') &&
+                    !line.includes('Trade') &&
+                    !line.match(/^[+-]?\d/) &&  // 不以数字开头
+                    !line.match(/^\d{1,3}(,\d{3})*(\.\d+)?$/)) { // 不是格式化数字
+                  nickname = line
+                  break
+                }
+              }
+            }
+            
+            // 提取 ROI - 优先找标记为 ROI 的数值
+            let maxRoi = 0
+            
+            // 方法1: 找 "ROI" 标签旁边的数值
+            const roiLabelMatch = text.match(/ROI[:\s]*([+-]?\d{1,6}(?:,?\d{3})*(?:\.\d+)?)\s*%/i)
+            if (roiLabelMatch) {
+              maxRoi = parseFloat(roiLabelMatch[1].replace(/,/g, ''))
+            }
+            
+            // 方法2: 如果没找到，取第一个合理的百分比（通常是 ROI）
+            if (maxRoi === 0) {
+              const roiMatches = text.match(/([+-]?\d{1,6}(?:,?\d{3})*(?:\.\d+)?)\s*%/g) || []
+              for (const m of roiMatches) {
+                const val = parseFloat(m.replace(/[,%]/g, ''))
+                // 合理的 ROI 范围：-100% 到 50000%
+                if (val > -100 && val < 50000) {
+                  maxRoi = val
+                  break // 取第一个合理的值
+                }
+              }
+            }
+            
+            // 调试：打印前几个抓取的 ROI
+            if (results.length < 5 && maxRoi > 0) {
+              console.log('  ROI抓取:', nickname, '->', maxRoi + '%')
+            }
+            
+            // 验证用户名 - 排除金额、数字等
+            const isValidName = nickname && 
+              nickname.length >= 2 && 
+              nickname.length <= 25 &&
+              !nickname.startsWith('$') &&  // 排除金额
+              !nickname.match(/^[\d,.$+-]+$/) &&  // 排除纯数字/金额
+              !nickname.includes('USDT') &&
+              !nickname.includes('USD') &&
+              !nickname.includes('%') &&
+              !nickname.includes('ROI') &&
+              !nickname.includes('MDD') &&
+              !nickname.includes('Days') &&
+              !nickname.includes('Followers') &&
+              !nickname.match(/^\d{1,3}(,\d{3})*(\.\d+)?$/) // 排除格式化数字
+            
+            // 验证并添加
+            if (isValidName && maxRoi > 0 && !seen.has(nickname)) {
+              seen.add(nickname)
+              // 调试：打印有头像的记录
+              if (avatar && results.length < 3) {
+                console.log('DOM头像:', nickname, '->', avatar.substring(0, 60))
+              }
+              results.push({ 
+                nickname, 
+                roi: maxRoi, 
+                avatar: avatar || null 
+              })
+            }
+          } catch (e) {
+            // 忽略单个卡片的错误
           }
-        }
+        })
         
         return results
       })
@@ -267,8 +383,16 @@ async function fetchLeaderboardData(period) {
       // 从 DOM 提取
       const domTraders = await extractFromDOM()
       domTraders.forEach(t => {
-        const id = t.nickname // 使用昵称作为临时 ID
-        if (!traders.has(id) && t.roi !== 0) {
+        // 验证昵称是有效的真实名字，不是占位符
+        if (!t.nickname || 
+            t.nickname.startsWith('Mexctrader-') || 
+            t.nickname.startsWith('Trader_') ||
+            t.nickname.match(/^[A-Za-z]+-[A-Za-z0-9]{6}$/)) { // 排除像 "Mexctrader-3R65aJ" 这样的格式
+          return
+        }
+        
+        const id = t.nickname // 使用昵称作为 ID
+        if (!traders.has(id) && t.roi > 0) {
           traders.set(id, {
             traderId: id,
             nickname: t.nickname,
@@ -359,14 +483,29 @@ async function saveTraders(traders, period) {
   
   const capturedAt = new Date().toISOString()
 
-  const sourcesData = traders.map(t => ({
-    source: SOURCE,
-    source_type: 'leaderboard',
-    source_trader_id: t.traderId,
-    handle: t.nickname,
-    profile_url: t.avatar,
-    is_active: true,
-  }))
+  const sourcesData = traders.map(t => {
+    // 验证头像 URL - 排除 banner 和无效链接
+    let avatarUrl = t.avatar
+    if (avatarUrl && (
+      avatarUrl.includes('/banner/') ||
+      avatarUrl.includes('placeholder') ||
+      avatarUrl.includes('default') ||
+      avatarUrl.includes('t.co') ||  // Twitter 追踪
+      avatarUrl.includes('google') ||
+      avatarUrl.includes('facebook')
+    )) {
+      avatarUrl = null
+    }
+    
+    return {
+      source: SOURCE,
+      source_type: 'leaderboard',
+      source_trader_id: t.traderId,
+      handle: t.nickname,
+      profile_url: avatarUrl,
+      is_active: true,
+    }
+  })
 
   const snapshotsData = traders.map((t, idx) => ({
     source: SOURCE,

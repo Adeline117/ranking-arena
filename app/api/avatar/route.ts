@@ -24,11 +24,20 @@ export async function GET(request: Request) {
     
     // 验证 URL 是否来自允许的域名
     const allowedDomains = [
+      // MEXC
       'public.mocortech.com',
+      'images.mocortech.com',
+      // Bitget
       'qrc.bgstatic.com',
       'img.bgstatic.com',
+      // Binance (多个 CDN 域名)
       'public.bnbstatic.com',
       'bin.bnbstatic.com',
+      'public.tylhh.net',
+      'public.nftstatic.com',
+      'public.bscdnweb.com',
+      'myqcloud.com',
+      // Bybit
       'api.bybit.com',
       'assets.staticimg.com',
     ]

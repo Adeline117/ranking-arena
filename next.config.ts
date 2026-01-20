@@ -47,11 +47,42 @@ const nextConfig: NextConfig = {
       },
       {
         protocol: 'https',
-        hostname: 'api.dicebear.com', // 用于生成头像
+        hostname: 'api.dicebear.com',
       },
       {
         protocol: 'https',
         hostname: 'avatars.githubusercontent.com',
+      },
+      // Binance 头像 CDN
+      {
+        protocol: 'https',
+        hostname: '**.bnbstatic.com',
+      },
+      {
+        protocol: 'https',
+        hostname: '**.tylhh.net',
+      },
+      {
+        protocol: 'https',
+        hostname: '**.nftstatic.com',
+      },
+      {
+        protocol: 'https',
+        hostname: '**.bscdnweb.com',
+      },
+      {
+        protocol: 'https',
+        hostname: '**.myqcloud.com',
+      },
+      // Bitget 头像 CDN
+      {
+        protocol: 'https',
+        hostname: '**.bgstatic.com',
+      },
+      // MEXC 头像 CDN
+      {
+        protocol: 'https',
+        hostname: '**.mocortech.com',
       },
     ],
     

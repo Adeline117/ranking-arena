@@ -613,11 +613,12 @@ export default function RankingTable(props: {
                         }}>
                           {getAvatarInitial(displayName)}
                         </span>
-                        {/* 头像图片（通过代理加载，解决跨域问题） */}
-                        {trader.avatar_url && (
+                        {/* 头像图片 */}
+                        {trader.avatar_url && !trader.avatar_url.includes('t.co') && !trader.avatar_url.includes('/banner/') && (
                           <img 
-                            src={`/api/avatar?url=${encodeURIComponent(trader.avatar_url)}`}
+                            src={trader.avatar_url}
                             alt={displayName} 
+                            referrerPolicy="no-referrer"
                             loading="lazy"
                             style={{ 
                               width: '100%', 
