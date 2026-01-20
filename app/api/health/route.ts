@@ -5,7 +5,6 @@
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { createClient as createRedisClient, RedisClientType } from 'redis'
 
 // 健康检查响应类型
 interface HealthCheckResponse {
@@ -15,7 +14,6 @@ interface HealthCheckResponse {
   uptime: number
   checks: {
     database: CheckResult
-    redis: CheckResult
     memory: CheckResult
   }
 }
@@ -66,59 +64,6 @@ async function checkDatabase(): Promise<CheckResult> {
       status: 'fail',
       message: error instanceof Error ? error.message : 'Unknown error',
       latency,
-    }
-  }
-}
-
-/**
- * 检查 Redis 连接
- */
-async function checkRedis(): Promise<CheckResult> {
-  const host = process.env.REDIS_HOST
-  const password = process.env.REDIS_PASSWORD
-  const port = process.env.REDIS_PORT
-  const username = process.env.REDIS_USERNAME || 'default'
-  
-  if (!host || !password) {
-    return { status: 'skip', message: '未配置 Redis 连接' }
-  }
-  
-  const checkStartTime = Date.now()
-  let redis: RedisClientType | null = null
-  
-  try {
-    redis = createRedisClient({
-      username,
-      password,
-      socket: {
-        host,
-        port: parseInt(port || '6379', 10),
-        connectTimeout: 5000,
-      },
-    })
-    
-    await redis.connect()
-    
-    // Ping 测试
-    const result = await redis.ping()
-    
-    const latency = Date.now() - checkStartTime
-    
-    if (result !== 'PONG') {
-      return { status: 'fail', message: 'Ping 失败', latency }
-    }
-    
-    return { status: 'pass', latency }
-  } catch (error) {
-    const latency = Date.now() - checkStartTime
-    return {
-      status: 'fail',
-      message: error instanceof Error ? error.message : 'Unknown error',
-      latency,
-    }
-  } finally {
-    if (redis && redis.isOpen) {
-      await redis.quit()
     }
   }
 }
@@ -181,15 +126,11 @@ function calculateOverallStatus(checks: HealthCheckResponse['checks']): HealthCh
  * 返回应用健康状态
  */
 export async function GET() {
-  // 并行执行所有健康检查
-  const [database, redis] = await Promise.all([
-    checkDatabase(),
-    checkRedis(),
-  ])
-  
+  // 执行健康检查
+  const database = await checkDatabase()
   const memory = checkMemory()
   
-  const checks = { database, redis, memory }
+  const checks = { database, memory }
   const status = calculateOverallStatus(checks)
   
   const response: HealthCheckResponse = {
