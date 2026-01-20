@@ -181,7 +181,7 @@ export type User = {
   nickname?: string
   avatar_url?: string
   bio?: string
-  subscription_tier?: 'free' | 'pro' | 'elite' | 'enterprise'
+  subscription_tier?: 'free' | 'pro'
   follower_count?: number
   following_count?: number
 }

@@ -17,8 +17,7 @@ describe('SUBSCRIPTION_PLANS', () => {
     const tiers = SUBSCRIPTION_PLANS.map(plan => plan.id)
     expect(tiers).toContain('free')
     expect(tiers).toContain('pro')
-    expect(tiers).toContain('elite')
-    expect(tiers).toContain('enterprise')
+    expect(tiers.length).toBe(2)
   })
 
   test('每个计划都有名称和描述', () => {
@@ -45,9 +44,10 @@ describe('SUBSCRIPTION_PLANS', () => {
 describe('PREMIUM_FEATURES', () => {
   test('包含核心功能', () => {
     const featureIds = PREMIUM_FEATURES.map(f => f.id)
-    expect(featureIds).toContain('advanced_analytics')
     expect(featureIds).toContain('trader_comparison')
     expect(featureIds).toContain('api_access')
+    expect(featureIds).toContain('trader_alerts')
+    expect(featureIds).toContain('advanced_filter')
   })
 
   test('每个功能都有名称和描述', () => {
@@ -79,9 +79,11 @@ describe('hasFeatureAccess', () => {
     })
   })
 
-  test('企业用户可以访问所有功能', () => {
+  test('Pro 用户可以访问所有 Pro 功能', () => {
     PREMIUM_FEATURES.forEach(feature => {
-      expect(hasFeatureAccess('enterprise', feature.id)).toBe(true)
+      if (feature.tier.includes('pro')) {
+        expect(hasFeatureAccess('pro', feature.id)).toBe(true)
+      }
     })
   })
 
@@ -98,18 +100,13 @@ describe('getFeatureLimits', () => {
     expect(freeLimits).toHaveProperty('exportsPerMonth')
   })
 
-  test('更高等级有更高的限制', () => {
+  test('Pro 等级有更高的限制', () => {
     const freeLimits = getFeatureLimits('free')
     const proLimits = getFeatureLimits('pro')
-    const eliteLimits = getFeatureLimits('elite')
 
     expect(proLimits.apiCallsPerDay).toBeGreaterThan(freeLimits.apiCallsPerDay)
-    expect(eliteLimits.apiCallsPerDay).toBeGreaterThanOrEqual(proLimits.apiCallsPerDay)
-  })
-
-  test('企业版有最高或无限制', () => {
-    const enterpriseLimits = getFeatureLimits('enterprise')
-    expect(enterpriseLimits.apiCallsPerDay).toBeGreaterThanOrEqual(10000)
+    expect(proLimits.followLimit).toBeGreaterThan(freeLimits.followLimit)
+    expect(proLimits.historicalDataDays).toBeGreaterThan(freeLimits.historicalDataDays)
   })
 })
 

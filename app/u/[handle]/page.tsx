@@ -52,7 +52,7 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
   const [feed, setFeed] = useState<TraderFeedItem[]>([])
   const [similarTraders, setSimilarTraders] = useState<TraderProfile[]>([])
   const [loading, setLoading] = useState(true)
-  const [proBadgeTier, setProBadgeTier] = useState<'pro' | 'elite' | 'enterprise' | null>(null)
+  const [proBadgeTier, setProBadgeTier] = useState<'pro' | null>(null)
   
   // Read tab from URL, default to 'overview'
   const urlTab = searchParams.get('tab') as TabKey | null
@@ -477,8 +477,8 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
               .eq('status', 'active')
               .maybeSingle()
             
-            if (subscription && ['pro', 'elite', 'enterprise'].includes(subscription.tier)) {
-              setProBadgeTier(subscription.tier as 'pro' | 'elite' | 'enterprise')
+            if (subscription && subscription.tier === 'pro') {
+              setProBadgeTier('pro')
             }
           }
         }

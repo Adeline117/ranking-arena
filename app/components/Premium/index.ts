@@ -8,8 +8,6 @@ export type { PaywallProps } from './Paywall'
 export {
   PremiumBadge,
   ProBadge,
-  EliteBadge,
-  EnterpriseBadge,
   UserPremiumBadge,
   FeatureTag,
 } from './PremiumBadge'

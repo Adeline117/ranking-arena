@@ -69,7 +69,7 @@ export function Paywall({
     shouldShowPaywall = !featureAccess.hasAccess || featureAccess.isLimitReached
     requiredTier = featureInfo?.tier[0] || 'pro'
   } else if (tier) {
-    const tierOrder: SubscriptionTier[] = ['free', 'pro', 'elite', 'enterprise']
+    const tierOrder: SubscriptionTier[] = ['free', 'pro']
     shouldShowPaywall = tierOrder.indexOf(currentTier) < tierOrder.indexOf(tier)
     requiredTier = tier
   }

@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
         .eq('id', user.id)
         .single()
 
-      const isPro = profile?.subscription_tier && ['pro', 'elite', 'enterprise'].includes(profile.subscription_tier)
+      const isPro = profile?.subscription_tier === 'pro'
       
       if (!isPro) {
         return NextResponse.json({ error: '只有 Pro 会员才能创建专属小组' }, { status: 403 })

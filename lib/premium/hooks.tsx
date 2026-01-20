@@ -53,10 +53,24 @@ export function PremiumProvider({ children, initialSubscription }: PremiumProvid
     try {
       setIsLoading(true)
       
-      // 尝试从 API 获取订阅状态
+      // 动态导入 supabase 避免服务端问题
+      const { supabase } = await import('@/lib/supabase/client')
+      const { data: { session } } = await supabase.auth.getSession()
+      
+      if (!session?.access_token) {
+        // 未登录，使用默认免费订阅
+        const defaultSub = premiumService.getSubscription()
+        setSubscription(defaultSub)
+        return
+      }
+      
+      // 尝试从 API 获取订阅状态（携带认证信息）
       const response = await fetch('/api/subscription', {
         method: 'GET',
         credentials: 'include',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+        },
       }).catch(() => null)
       
       if (response?.ok) {
@@ -247,7 +261,7 @@ export function PremiumGate({ feature, tier, children, fallback = null }: Premiu
 
   // 检查等级
   if (tier) {
-    const tierOrder: SubscriptionTier[] = ['free', 'pro', 'elite', 'enterprise']
+    const tierOrder: SubscriptionTier[] = ['free', 'pro']
     const currentIndex = tierOrder.indexOf(currentTier)
     const requiredIndex = tierOrder.indexOf(tier)
     

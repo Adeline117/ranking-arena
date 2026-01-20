@@ -66,7 +66,7 @@ export function useSubscription() {
         .eq('status', 'active')
         .maybeSingle()
 
-      if (subscription && ['pro', 'elite', 'enterprise'].includes(subscription.tier)) {
+      if (subscription && subscription.tier === 'pro') {
         // 更新缓存
         cache.userId = user.id
         cache.isPro = true
@@ -87,7 +87,7 @@ export function useSubscription() {
         .eq('id', user.id)
         .maybeSingle()
 
-      const hasPro = profile && ['pro', 'elite', 'enterprise'].includes(profile.subscription_tier)
+      const hasPro = profile && profile.subscription_tier === 'pro'
       
       // 更新缓存
       cache.userId = user.id

@@ -55,20 +55,6 @@ const TIER_CONFIG: Record<SubscriptionTier, {
     bgColor: 'rgba(245, 158, 11, 0.1)',
     borderColor: 'rgba(245, 158, 11, 0.3)',
   },
-  elite: {
-    label: 'Elite',
-    icon: '',
-    color: '#8b5cf6',
-    bgColor: 'rgba(139, 92, 246, 0.1)',
-    borderColor: 'rgba(139, 92, 246, 0.3)',
-  },
-  enterprise: {
-    label: 'Enterprise',
-    icon: '',
-    color: '#ec4899',
-    bgColor: 'rgba(236, 72, 153, 0.1)',
-    borderColor: 'rgba(236, 72, 153, 0.3)',
-  },
 }
 
 const SIZE_CONFIG = {
@@ -188,20 +174,6 @@ export function PremiumBadge({
  */
 export function ProBadge(props: Omit<PremiumBadgeProps, 'tier'>) {
   return <PremiumBadge tier="pro" {...props} />
-}
-
-/**
- * Elite 徽章
- */
-export function EliteBadge(props: Omit<PremiumBadgeProps, 'tier'>) {
-  return <PremiumBadge tier="elite" {...props} />
-}
-
-/**
- * Enterprise 徽章
- */
-export function EnterpriseBadge(props: Omit<PremiumBadgeProps, 'tier'>) {
-  return <PremiumBadge tier="enterprise" {...props} />
 }
 
 /**

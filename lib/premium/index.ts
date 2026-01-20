@@ -142,9 +142,7 @@ class PremiumService {
     let upgradeMessage: string | undefined
 
     if (!hasAccess) {
-      const feature = PREMIUM_FEATURES.find(f => f.id === featureId)
-      const requiredTier = feature?.tier[0]
-      upgradeMessage = `升级到 ${requiredTier?.toUpperCase() || 'Pro'} 解锁此功能`
+      upgradeMessage = '升级到 Pro 解锁此功能'
       message = '此功能需要升级订阅'
     } else {
       // 检查具体功能的配额
@@ -298,17 +296,17 @@ export const premiumService = new PremiumService()
 // ============================================
 
 /**
- * 检查用户是否为 Pro 或以上
+ * 检查用户是否为 Pro 会员
  */
 export function isProOrAbove(tier: SubscriptionTier): boolean {
-  return ['pro', 'elite', 'enterprise'].includes(tier)
+  return tier === 'pro'
 }
 
 /**
- * 检查用户是否为 Elite 或以上
+ * 检查用户是否为 Pro 会员（别名，保持向后兼容）
  */
-export function isEliteOrAbove(tier: SubscriptionTier): boolean {
-  return ['elite', 'enterprise'].includes(tier)
+export function isPro(tier: SubscriptionTier): boolean {
+  return tier === 'pro'
 }
 
 /**

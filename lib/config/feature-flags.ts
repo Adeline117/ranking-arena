@@ -79,7 +79,7 @@ export const FEATURE_META: Record<keyof FeatureFlags, {
   name: string
   description: string
   badge?: 'beta' | 'new' | 'coming_soon' | 'premium'
-  tier?: 'free' | 'pro' | 'elite'
+  tier?: 'free' | 'pro'
 }> = {
   ranking: {
     name: '排行榜',
@@ -116,13 +116,13 @@ export const FEATURE_META: Record<keyof FeatureFlags, {
     name: 'AI 组合',
     description: 'AI 驱动的组合优化',
     badge: 'coming_soon',
-    tier: 'elite',
+    tier: 'pro',
   },
   traderMessaging: {
     name: '交易员私信',
     description: '与认证交易员私信交流',
     badge: 'coming_soon',
-    tier: 'elite',
+    tier: 'pro',
   },
   socialFeatures: {
     name: '社交功能',

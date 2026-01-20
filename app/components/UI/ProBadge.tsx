@@ -5,35 +5,19 @@ import { Box, Text } from '../Base'
 import { useLanguage } from '../Utils/LanguageProvider'
 
 interface ProBadgeProps {
-  tier: 'pro' | 'elite' | 'enterprise'
+  tier?: 'pro'
   size?: 'sm' | 'md' | 'lg'
   showLabel?: boolean
   style?: React.CSSProperties
 }
 
-// 各等级配置 - 使用 CSS 变量支持主题切换
-const TIER_CONFIG = {
-  pro: {
-    label: 'Pro',
-    labelZh: 'Pro',
-    gradient: 'var(--color-pro-badge-bg)',
-    glow: 'var(--color-pro-badge-shadow)',
-    iconColor: '#fff',
-  },
-  elite: {
-    label: 'Elite',
-    labelZh: 'Elite',
-    gradient: 'linear-gradient(135deg, var(--color-elite-gradient-start) 0%, var(--color-elite-gradient-end) 100%)',
-    glow: 'rgba(218, 165, 32, 0.35)',
-    iconColor: '#fff',
-  },
-  enterprise: {
-    label: 'Enterprise',
-    labelZh: 'Enterprise',
-    gradient: 'linear-gradient(135deg, var(--color-enterprise-gradient-start) 0%, var(--color-enterprise-gradient-end) 100%)',
-    glow: 'rgba(0, 180, 180, 0.35)',
-    iconColor: '#fff',
-  },
+// Pro 会员徽章配置
+const PRO_CONFIG = {
+  label: 'Pro',
+  labelZh: 'Pro',
+  gradient: 'var(--color-pro-badge-bg)',
+  glow: 'var(--color-pro-badge-shadow)',
+  iconColor: '#fff',
 }
 
 // 尺寸配置
@@ -50,9 +34,9 @@ const StarIcon = ({ size = 12, color = '#fff' }: { size?: number; color?: string
   </svg>
 )
 
-export default function ProBadge({ tier, size = 'md', showLabel = true, style }: ProBadgeProps) {
+export default function ProBadge({ size = 'md', showLabel = true, style }: ProBadgeProps) {
   const { language } = useLanguage()
-  const config = TIER_CONFIG[tier]
+  const config = PRO_CONFIG
   const sizeConfig = SIZE_CONFIG[size]
   const label = language === 'zh' ? config.labelZh : config.label
 
@@ -109,13 +93,11 @@ export default function ProBadge({ tier, size = 'md', showLabel = true, style }:
 
 // 头像角标徽章
 export function ProBadgeOverlay({ 
-  tier, 
   position = 'bottom-right' 
 }: { 
-  tier: 'pro' | 'elite' | 'enterprise'
   position?: 'top-right' | 'bottom-right' | 'top-left' | 'bottom-left'
 }) {
-  const config = TIER_CONFIG[tier]
+  const config = PRO_CONFIG
   
   const positionStyles: Record<string, React.CSSProperties> = {
     'top-right': { top: -3, right: -3 },

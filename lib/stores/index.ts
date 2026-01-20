@@ -61,13 +61,13 @@ interface UserState {
   userId: string | null
   handle: string | null
   avatarUrl: string | null
-  subscriptionTier: 'free' | 'pro' | 'elite' | 'enterprise'
+  subscriptionTier: 'free' | 'pro'
   
   // 关注列表（本地缓存）
   followedTraders: string[]
   
   // 操作
-  setUser: (user: { id: string; handle: string; avatarUrl?: string; tier?: 'free' | 'pro' | 'elite' | 'enterprise' } | null) => void
+  setUser: (user: { id: string; handle: string; avatarUrl?: string; tier?: 'free' | 'pro' } | null) => void
   setFollowedTraders: (traders: string[]) => void
   followTrader: (traderId: string) => void
   unfollowTrader: (traderId: string) => void

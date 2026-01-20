@@ -4,6 +4,7 @@ import { ReactNode, useEffect } from 'react'
 import { LanguageProvider } from './Utils/LanguageProvider'
 import { ToastProvider } from './UI/Toast'
 import { DialogProvider } from './UI/Dialog'
+import { PremiumProvider } from '@/lib/premium/hooks'
 import { initCsrfToken } from '@/lib/api/client'
 
 export default function Providers({ children }: { children: ReactNode }) {
@@ -14,11 +15,13 @@ export default function Providers({ children }: { children: ReactNode }) {
   
   return (
     <LanguageProvider>
-      <ToastProvider>
-        <DialogProvider>
-          {children}
-        </DialogProvider>
-      </ToastProvider>
+      <PremiumProvider>
+        <ToastProvider>
+          <DialogProvider>
+            {children}
+          </DialogProvider>
+        </ToastProvider>
+      </PremiumProvider>
     </LanguageProvider>
   )
 }

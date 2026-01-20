@@ -35,6 +35,139 @@ const LockIcon = ({ size = 16 }: { size?: number }) => (
   </svg>
 )
 
+const UserIcon = ({ size = 16 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
+    <path d="M12 12C14.21 12 16 10.21 16 8C16 5.79 14.21 4 12 4C9.79 4 8 5.79 8 8C8 10.21 9.79 12 12 12ZM12 14C9.33 14 4 15.34 4 18V20H20V18C20 15.34 14.67 14 12 14Z" />
+  </svg>
+)
+
+const QuoteIcon = ({ size = 20 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" opacity={0.3}>
+    <path d="M6 17H9L11 13V7H5V13H8L6 17ZM14 17H17L19 13V7H13V13H16L14 17Z" />
+  </svg>
+)
+
+const CloseIcon = ({ size = 16 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+    <path d="M18 6L6 18M6 6L18 18" />
+  </svg>
+)
+
+// 用户评价数据
+const TESTIMONIALS = [
+  {
+    name: 'Alex T.',
+    avatar: '🧑‍💻',
+    role: '全职交易员',
+    roleEn: 'Full-time Trader',
+    content: '风险预警功能帮我避免了一次大亏损，物超所值！',
+    contentEn: 'Risk alerts helped me avoid a major loss. Worth every penny!',
+  },
+  {
+    name: 'Michael K.',
+    avatar: '👨‍💼',
+    role: '投资顾问',
+    roleEn: 'Investment Advisor',
+    content: 'Arena Score 评分系统非常专业，让筛选交易员变得简单',
+    contentEn: 'Arena Score is very professional, makes screening traders easy',
+  },
+  {
+    name: 'Sarah L.',
+    avatar: '👩‍🦰',
+    role: '兼职跟单',
+    roleEn: 'Part-time Copier',
+    content: '对比功能很实用，省去了大量手动计算的时间',
+    contentEn: 'Comparison feature is very useful, saves a lot of manual calculation time',
+  },
+]
+
+// Free vs Pro 对比数据
+const getComparisonData = (language: string) => [
+  {
+    feature: language === 'zh' ? '排行榜浏览' : 'Leaderboard Access',
+    free: true,
+    pro: true,
+  },
+  {
+    feature: language === 'zh' ? '基础交易员详情' : 'Basic Trader Details',
+    free: true,
+    pro: true,
+  },
+  {
+    feature: language === 'zh' ? '社区讨论' : 'Community Discussion',
+    free: language === 'zh' ? '每日3条' : '3/day',
+    pro: language === 'zh' ? '无限制' : 'Unlimited',
+  },
+  {
+    feature: language === 'zh' ? '关注交易员' : 'Follow Traders',
+    free: '10',
+    pro: '50',
+  },
+  {
+    feature: language === 'zh' ? '历史数据' : 'Historical Data',
+    free: language === 'zh' ? '7天' : '7 days',
+    pro: language === 'zh' ? '90天' : '90 days',
+  },
+  {
+    feature: language === 'zh' ? '风险预警提醒' : 'Risk Alerts',
+    free: false,
+    pro: true,
+  },
+  {
+    feature: language === 'zh' ? 'Arena Score 详情' : 'Score Breakdown',
+    free: false,
+    pro: true,
+  },
+  {
+    feature: language === 'zh' ? '交易员对比' : 'Trader Comparison',
+    free: false,
+    pro: language === 'zh' ? '每月10次' : '10/month',
+  },
+  {
+    feature: language === 'zh' ? '高级筛选' : 'Advanced Filters',
+    free: false,
+    pro: true,
+  },
+  {
+    feature: language === 'zh' ? '数据导出' : 'Data Export',
+    free: false,
+    pro: language === 'zh' ? '每月10次' : '10/month',
+  },
+  {
+    feature: language === 'zh' ? 'Pro 徽章' : 'Pro Badge',
+    free: false,
+    pro: true,
+  },
+]
+
+// FAQ 数据
+const getFaqData = (language: string) => [
+  {
+    q: language === 'zh' ? '可以随时取消订阅吗？' : 'Can I cancel anytime?',
+    a: language === 'zh' 
+      ? '是的，您可以随时取消订阅。取消后，您仍可享受 Pro 权益直到当前计费周期结束。'
+      : 'Yes, you can cancel anytime. After cancellation, you will still enjoy Pro benefits until the end of the current billing cycle.',
+  },
+  {
+    q: language === 'zh' ? '支持哪些支付方式？' : 'What payment methods are supported?',
+    a: language === 'zh' 
+      ? '我们支持 Visa、MasterCard、American Express 等主流信用卡。付款由 Stripe 安全处理。'
+      : 'We support major credit cards including Visa, MasterCard, and American Express. Payments are securely processed by Stripe.',
+  },
+  {
+    q: language === 'zh' ? '有退款政策吗？' : 'Is there a refund policy?',
+    a: language === 'zh' 
+      ? '首次订阅后7天内如不满意，可申请全额退款。请联系 support@arenafi.org。'
+      : 'Within 7 days of your first subscription, you can request a full refund if not satisfied. Contact support@arenafi.org.',
+  },
+  {
+    q: language === 'zh' ? '年付可以切换为月付吗？' : 'Can I switch from yearly to monthly?',
+    a: language === 'zh' 
+      ? '当前订阅到期后，您可以选择不同的计费周期续订。'
+      : 'After your current subscription expires, you can choose a different billing cycle to renew.',
+  },
+]
+
 // 价格配置 - 与 Stripe 保持一致
 const PRICING = {
   monthly: { price: 9.99, original: 15 },
@@ -440,10 +573,248 @@ export default function PricingPage() {
           </Box>
         </Box>
 
-        {/* 底部 FAQ */}
-        <Box style={{ marginTop: tokens.spacing[8], textAlign: 'center' }}>
+        {/* 社会证明区块 */}
+        <Box
+          style={{
+            marginTop: tokens.spacing[10],
+            textAlign: 'center',
+          }}
+        >
+          {/* 统计数据 */}
+          <Box
+            style={{
+              display: 'flex',
+              justifyContent: 'center',
+              gap: tokens.spacing[8],
+              marginBottom: tokens.spacing[8],
+              flexWrap: 'wrap',
+            }}
+          >
+            <Box>
+              <Text size="3xl" weight="black" style={{ color: 'var(--color-pro-gradient-start)' }}>
+                500+
+              </Text>
+              <Text size="sm" color="secondary">
+                {language === 'zh' ? 'Pro 会员' : 'Pro Members'}
+              </Text>
+            </Box>
+            <Box>
+              <Text size="3xl" weight="black" style={{ color: 'var(--color-pro-gradient-start)' }}>
+                10K+
+              </Text>
+              <Text size="sm" color="secondary">
+                {language === 'zh' ? '交易员数据' : 'Traders Tracked'}
+              </Text>
+            </Box>
+            <Box>
+              <Text size="3xl" weight="black" style={{ color: 'var(--color-pro-gradient-start)' }}>
+                7
+              </Text>
+              <Text size="sm" color="secondary">
+                {language === 'zh' ? '交易所覆盖' : 'Exchanges'}
+              </Text>
+            </Box>
+          </Box>
+
+          {/* 用户评价 */}
+          <Text size="lg" weight="bold" style={{ marginBottom: tokens.spacing[5] }}>
+            {language === 'zh' ? '用户评价' : 'What Our Users Say'}
+          </Text>
+          
+          <Box
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+              gap: tokens.spacing[4],
+              maxWidth: 900,
+              margin: '0 auto',
+            }}
+          >
+            {TESTIMONIALS.map((testimonial, index) => (
+              <Box
+                key={index}
+                style={{
+                  background: 'var(--color-bg-secondary)',
+                  borderRadius: tokens.radius.lg,
+                  padding: tokens.spacing[5],
+                  border: '1px solid var(--color-border-primary)',
+                  textAlign: 'left',
+                  position: 'relative',
+                }}
+              >
+                <Box style={{ position: 'absolute', top: 12, right: 16 }}>
+                  <QuoteIcon size={24} />
+                </Box>
+                <Text size="sm" color="secondary" style={{ marginBottom: tokens.spacing[4], lineHeight: 1.6 }}>
+                  "{language === 'zh' ? testimonial.content : testimonial.contentEn}"
+                </Text>
+                <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3] }}>
+                  <Box
+                    style={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: tokens.radius.full,
+                      background: 'var(--color-bg-tertiary)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: 18,
+                    }}
+                  >
+                    {testimonial.avatar}
+                  </Box>
+                  <Box>
+                    <Text size="sm" weight="bold">{testimonial.name}</Text>
+                    <Text size="xs" color="tertiary">
+                      {language === 'zh' ? testimonial.role : testimonial.roleEn}
+                    </Text>
+                  </Box>
+                </Box>
+              </Box>
+            ))}
+          </Box>
+        </Box>
+
+        {/* Free vs Pro 功能对比表 */}
+        <Box
+          style={{
+            marginTop: tokens.spacing[10],
+            background: 'var(--color-bg-secondary)',
+            borderRadius: tokens.radius.xl,
+            padding: tokens.spacing[6],
+            border: '1px solid var(--color-border-primary)',
+          }}
+        >
+          <Text size="lg" weight="bold" style={{ textAlign: 'center', marginBottom: tokens.spacing[6] }}>
+            {language === 'zh' ? 'Free vs Pro 功能对比' : 'Free vs Pro Comparison'}
+          </Text>
+          
+          <Box style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr>
+                  <th style={{ 
+                    textAlign: 'left', 
+                    padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+                    borderBottom: '2px solid var(--color-border-primary)',
+                    color: 'var(--color-text-secondary)',
+                    fontSize: tokens.typography.fontSize.sm,
+                    fontWeight: 600,
+                  }}>
+                    {language === 'zh' ? '功能' : 'Feature'}
+                  </th>
+                  <th style={{ 
+                    textAlign: 'center', 
+                    padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+                    borderBottom: '2px solid var(--color-border-primary)',
+                    color: 'var(--color-text-secondary)',
+                    fontSize: tokens.typography.fontSize.sm,
+                    fontWeight: 600,
+                    width: 100,
+                  }}>
+                    Free
+                  </th>
+                  <th style={{ 
+                    textAlign: 'center', 
+                    padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+                    borderBottom: '2px solid var(--color-border-primary)',
+                    color: 'var(--color-pro-gradient-start)',
+                    fontSize: tokens.typography.fontSize.sm,
+                    fontWeight: 700,
+                    width: 100,
+                  }}>
+                    Pro
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {getComparisonData(language).map((row, index) => (
+                  <tr key={index}>
+                    <td style={{ 
+                      padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+                      borderBottom: '1px solid var(--color-border-secondary)',
+                      fontSize: tokens.typography.fontSize.sm,
+                    }}>
+                      {row.feature}
+                    </td>
+                    <td style={{ 
+                      textAlign: 'center',
+                      padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+                      borderBottom: '1px solid var(--color-border-secondary)',
+                    }}>
+                      {row.free === true ? (
+                        <Box style={{ color: 'var(--color-accent-success)', display: 'inline-flex' }}>
+                          <CheckIcon size={18} />
+                        </Box>
+                      ) : row.free === false ? (
+                        <Box style={{ color: 'var(--color-text-tertiary)', display: 'inline-flex' }}>
+                          <CloseIcon size={18} />
+                        </Box>
+                      ) : (
+                        <Text size="sm" color="secondary">{row.free}</Text>
+                      )}
+                    </td>
+                    <td style={{ 
+                      textAlign: 'center',
+                      padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+                      borderBottom: '1px solid var(--color-border-secondary)',
+                      background: 'var(--color-pro-glow)',
+                    }}>
+                      {row.pro === true ? (
+                        <Box style={{ color: 'var(--color-pro-gradient-start)', display: 'inline-flex' }}>
+                          <CheckIcon size={18} />
+                        </Box>
+                      ) : (
+                        <Text size="sm" weight="bold" style={{ color: 'var(--color-pro-gradient-start)' }}>
+                          {row.pro}
+                        </Text>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </Box>
+        </Box>
+
+        {/* FAQ 区块 */}
+        <Box
+          style={{
+            marginTop: tokens.spacing[10],
+            maxWidth: 700,
+            margin: `${tokens.spacing[10]} auto 0`,
+          }}
+        >
+          <Text size="lg" weight="bold" style={{ textAlign: 'center', marginBottom: tokens.spacing[6] }}>
+            {language === 'zh' ? '常见问题' : 'Frequently Asked Questions'}
+          </Text>
+          
+          <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}>
+            {getFaqData(language).map((faq, index) => (
+              <Box
+                key={index}
+                style={{
+                  background: 'var(--color-bg-secondary)',
+                  borderRadius: tokens.radius.lg,
+                  padding: tokens.spacing[5],
+                  border: '1px solid var(--color-border-primary)',
+                }}
+              >
+                <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>
+                  {faq.q}
+                </Text>
+                <Text size="sm" color="secondary" style={{ lineHeight: 1.6 }}>
+                  {faq.a}
+                </Text>
+              </Box>
+            ))}
+          </Box>
+        </Box>
+
+        {/* 底部 CTA */}
+        <Box style={{ marginTop: tokens.spacing[10], textAlign: 'center' }}>
           <Text size="sm" color="tertiary">
-            {language === 'zh' ? '有任何问题？' : 'Have questions?'}
+            {language === 'zh' ? '还有其他问题？' : 'Have more questions?'}
             <Link 
               href="/help" 
               style={{ 
@@ -452,7 +823,7 @@ export default function PricingPage() {
                 textDecoration: 'none',
               }}
             >
-              {language === 'zh' ? '查看帮助中心' : 'View Help Center'}
+              {language === 'zh' ? '联系我们' : 'Contact Us'}
             </Link>
           </Text>
         </Box>

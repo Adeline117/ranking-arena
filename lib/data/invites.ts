@@ -17,7 +17,7 @@ export interface InviteCode {
   max_uses: number
   current_uses: number
   trial_days: number
-  trial_tier: 'pro' | 'elite'
+  trial_tier: 'pro'
   expires_at: string | null
   created_at: string
   is_active: boolean
@@ -34,7 +34,7 @@ export interface InviteRedemption {
 export interface CreateInviteOptions {
   maxUses?: number
   trialDays?: number
-  trialTier?: 'pro' | 'elite'
+  trialTier?: 'pro'
   expiresInDays?: number
 }
 
@@ -287,7 +287,7 @@ export async function checkUserTrialStatus(
   userId: string
 ): Promise<{
   isTrial: boolean
-  tier?: 'pro' | 'elite'
+  tier?: 'pro'
   expiresAt?: string
   daysRemaining?: number
 }> {
