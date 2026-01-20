@@ -68,14 +68,13 @@ export default function HomePage() {
       {/* 主体 */}
       <Box
         as="main"
-        className="container-padding page-enter"
-        px={4}
-        py={6}
+        className="container-padding page-enter has-mobile-nav"
         style={{
           maxWidth: 1200,
           margin: '0 auto',
           position: 'relative',
           zIndex: 1,
+          padding: '16px 12px',
         }}
       >
         {/* 快速绑定交易所 */}

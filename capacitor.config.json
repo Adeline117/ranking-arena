@@ -3,17 +3,18 @@
   "appName": "Arena",
   "webDir": "public",
   "server": {
-    "url": "https://www.arenafi.org",
-    "cleartext": false,
+    "url": "http://10.18.245.4:3000",
+    "cleartext": true,
     "allowNavigation": [
       "www.arenafi.org",
       "*.supabase.co",
       "accounts.google.com",
-      "*.stripe.com"
+      "*.stripe.com",
+      "10.18.245.4:3000"
     ]
   },
   "android": {
-    "allowMixedContent": false
+    "allowMixedContent": true
   },
   "ios": {
     "contentInset": "automatic"
