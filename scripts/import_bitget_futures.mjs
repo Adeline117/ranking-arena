@@ -66,21 +66,68 @@ async function fetchLeaderboardData(period) {
     await page.setViewport({ width: 1920, height: 1080 })
     await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
 
-    // 提取交易员函数
+    // 提取交易员函数（包含头像）
     const extractTraders = async () => {
       return await page.evaluate(() => {
         const results = []
-        document.body.innerText.split(/Copy(?!right)/).forEach((chunk, idx) => {
-          if (idx === 0) return
-          const roiMatch = chunk.match(/([+-]?[\d,]+\.\d+)%/)
-          if (roiMatch) {
-            const roi = parseFloat(roiMatch[1].replace(/,/g, ''))
-            const lines = chunk.split('\n').map(l => l.trim()).filter(l => l && l.length > 2 && l.length < 30)
-            if (lines[0] && roi > 0) {
-              results.push({ nickName: lines[0], roi })
-            }
+        
+        // 方法1: 找交易员卡片
+        const cards = document.querySelectorAll('[class*="trader-card"], [class*="copy-card"], [class*="list-item"], [class*="trader-item"]')
+        cards.forEach(card => {
+          // 提取头像
+          const img = card.querySelector('img[src*="avatar"], img[src*="head"], img[class*="avatar"]')
+          const avatar = img?.src || null
+          
+          // 提取名字
+          const nameEl = card.querySelector('[class*="name"], [class*="nick"]')
+          const nickName = nameEl?.textContent?.trim() || null
+          
+          // 提取 ROI
+          const roiText = card.textContent || ''
+          const roiMatch = roiText.match(/([+-]?[\d,]+\.\d+)%/)
+          const roi = roiMatch ? parseFloat(roiMatch[1].replace(/,/g, '')) : 0
+          
+          if (nickName && roi > 0) {
+            results.push({ nickName, roi, avatar })
           }
         })
+        
+        // 方法2: 如果方法1没找到，用文本分割
+        if (results.length === 0) {
+          // 找所有头像
+          const avatars = {}
+          document.querySelectorAll('img').forEach(img => {
+            const src = img.src || ''
+            if (src.includes('avatar') || src.includes('head') || src.includes('qrc.bgstatic') || src.includes('img.bgstatic')) {
+              // 找附近的文本作为名字
+              const parent = img.closest('a, div, li')
+              if (parent) {
+                const text = parent.textContent?.trim() || ''
+                const name = text.split('\n')[0]?.trim()
+                if (name && name.length > 1 && name.length < 30) {
+                  avatars[name] = src
+                }
+              }
+            }
+          })
+          
+          document.body.innerText.split(/Copy(?!right)/).forEach((chunk, idx) => {
+            if (idx === 0) return
+            const roiMatch = chunk.match(/([+-]?[\d,]+\.\d+)%/)
+            if (roiMatch) {
+              const roi = parseFloat(roiMatch[1].replace(/,/g, ''))
+              const lines = chunk.split('\n').map(l => l.trim()).filter(l => l && l.length > 2 && l.length < 30)
+              if (lines[0] && roi > 0) {
+                results.push({ 
+                  nickName: lines[0], 
+                  roi,
+                  avatar: avatars[lines[0]] || null
+                })
+              }
+            }
+          })
+        }
+        
         return results
       })
     }
@@ -159,14 +206,14 @@ async function fetchLeaderboardData(period) {
 
   // 转换格式
   return Array.from(allTraders.values()).map((t, idx) => ({
-    traderId: t.nickName,
+    traderId: t.nickName || t.traderId,
     nickname: t.nickName,
-    avatar: null,
+    avatar: t.avatar || t.headUrl || t.headPic || null,
     roi: t.roi,
-    pnl: null,
-    winRate: null,
-    maxDrawdown: null,
-    followers: null,
+    pnl: t.totalProfit || t.profit || null,
+    winRate: t.winRate || null,
+    maxDrawdown: t.maxDrawdown || t.mdd || null,
+    followers: t.followerCount || t.copyTraderCount || null,
     rank: idx + 1,
   }))
 }
@@ -184,6 +231,7 @@ async function saveTraders(traders, period) {
         source_type: 'leaderboard',
         source_trader_id: trader.traderId,
         handle: trader.nickname,
+        profile_url: trader.avatar,
         is_active: true,
       }, { onConflict: 'source,source_trader_id' })
 
