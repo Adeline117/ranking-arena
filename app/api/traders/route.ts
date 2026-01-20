@@ -156,21 +156,29 @@ export const GET = withPublic(
 
       if (!capturedAt) return []
 
-      // 计算时间窗口：captured_at 前后 5 分钟内的数据都算作同一批次
-      const capturedTime = new Date(capturedAt)
-      const windowStart = new Date(capturedTime.getTime() - 5 * 60 * 1000).toISOString()
-      const windowEnd = new Date(capturedTime.getTime() + 5 * 60 * 1000).toISOString()
-
-      // 查询快照数据（使用时间窗口而非精确匹配，支持不同毫秒的记录）
-      const { data: snapshots, error } = await supabase
+      // 查询该来源所有快照数据，按 arena_score 排序
+      // 每个交易员只取最新一条（通过后续去重实现）
+      const { data: allSnapshots, error } = await supabase
         .from('trader_snapshots')
-        .select('source_trader_id, roi, pnl, followers, win_rate, max_drawdown, trades_count')
+        .select('source_trader_id, roi, pnl, followers, win_rate, max_drawdown, trades_count, arena_score, captured_at')
         .eq('source', source)
         .eq('season_id', seasonId)
-        .gte('captured_at', windowStart)
-        .lte('captured_at', windowEnd)
-        .order('roi', { ascending: false })
-        .limit(150)
+        .order('captured_at', { ascending: false })
+        .limit(1000)
+      
+      if (error || !allSnapshots?.length) {
+        if (error) console.error(`[Traders API] ${source} 查询错误:`, error.message)
+        return []
+      }
+      
+      // 去重：每个交易员只保留最新的一条记录
+      const traderMap = new Map()
+      allSnapshots.forEach(snap => {
+        if (!traderMap.has(snap.source_trader_id)) {
+          traderMap.set(snap.source_trader_id, snap)
+        }
+      })
+      const snapshots = Array.from(traderMap.values())
 
       if (error || !snapshots?.length) {
         if (error) console.error(`[Traders API] ${source} 查询错误:`, error.message)
