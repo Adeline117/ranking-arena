@@ -13,48 +13,52 @@
       "schedule": "0 */3 * * *"
     },
     {
-      "path": "/api/cron/fetch-traders/binance_futures",
-      "schedule": "0 */6 * * *"
+      "path": "/api/scrape/binance?period=all",
+      "schedule": "0 */4 * * *"
     },
     {
       "path": "/api/cron/fetch-traders/binance_spot",
-      "schedule": "5 */6 * * *"
+      "schedule": "5 */4 * * *"
     },
     {
       "path": "/api/cron/fetch-traders/binance_web3",
-      "schedule": "10 */6 * * *"
+      "schedule": "10 */4 * * *"
     },
     {
       "path": "/api/cron/fetch-traders/bybit",
-      "schedule": "15 */6 * * *"
+      "schedule": "15 */4 * * *"
     },
     {
       "path": "/api/cron/fetch-traders/bitget_futures",
-      "schedule": "20 */6 * * *"
+      "schedule": "20 */4 * * *"
     },
     {
       "path": "/api/cron/fetch-traders/bitget_spot",
-      "schedule": "25 */6 * * *"
+      "schedule": "25 */4 * * *"
     },
     {
       "path": "/api/cron/fetch-traders/mexc",
-      "schedule": "30 */6 * * *"
+      "schedule": "30 */4 * * *"
     },
     {
       "path": "/api/cron/fetch-traders/coinex",
-      "schedule": "35 */6 * * *"
+      "schedule": "35 */4 * * *"
     },
     {
       "path": "/api/cron/fetch-traders/okx_web3",
-      "schedule": "40 */6 * * *"
+      "schedule": "40 */4 * * *"
     },
     {
       "path": "/api/cron/fetch-traders/kucoin",
-      "schedule": "45 */6 * * *"
+      "schedule": "45 */4 * * *"
     },
     {
       "path": "/api/cron/fetch-traders/gmx",
-      "schedule": "50 */6 * * *"
+      "schedule": "50 */4 * * *"
+    },
+    {
+      "path": "/api/cron/fetch-details?concurrency=50&limit=300",
+      "schedule": "30 */2 * * *"
     }
   ],
   "headers": [
