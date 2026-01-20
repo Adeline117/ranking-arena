@@ -4,8 +4,10 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 
-// 管理员邮箱白名单（可以移到环境变量或数据库）
-const ADMIN_EMAILS: string[] = ['test@example.com']
+// 管理员邮箱白名单（可通过环境变量 NEXT_PUBLIC_ADMIN_EMAILS 配置，逗号分隔）
+const ADMIN_EMAILS: string[] = process.env.NEXT_PUBLIC_ADMIN_EMAILS
+  ? process.env.NEXT_PUBLIC_ADMIN_EMAILS.split(',').map(e => e.trim())
+  : ['test@example.com']
 
 export function useAdminAuth() {
   const router = useRouter()
