@@ -27,6 +27,14 @@ export default function ScraperStatusTab() {
     unknown: '未知',
   }
 
+  // 安全格式化日期
+  const formatDate = (dateStr: string | null | undefined): string => {
+    if (!dateStr) return '无数据'
+    const date = new Date(dateStr)
+    if (isNaN(date.getTime())) return '无数据'
+    return date.toLocaleString('zh-CN')
+  }
+
   return (
     <Card title="爬虫状态监控">
       <Box style={{ marginBottom: tokens.spacing[4], display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: tokens.spacing[3] }}>
@@ -66,7 +74,7 @@ export default function ScraperStatusTab() {
             gap: tokens.spacing[4],
             marginBottom: tokens.spacing[4],
           }}>
-            {freshnessReport.platforms.map((platform) => (
+            {(freshnessReport.platforms || []).map((platform) => (
               <Box
                 key={platform.platform}
                 style={{
@@ -95,9 +103,7 @@ export default function ScraperStatusTab() {
                 
                 <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[1] }}>
                   <Text size="sm" color="secondary">
-                    最后更新: {platform.lastUpdate 
-                      ? new Date(platform.lastUpdate).toLocaleString('zh-CN') 
-                      : '无数据'}
+                    最后更新: {formatDate(platform.lastUpdate)}
                   </Text>
                   {platform.ageHours !== null && (
                     <Text size="sm" color={platform.status === 'fresh' ? 'secondary' : 'tertiary'}>
@@ -115,7 +121,7 @@ export default function ScraperStatusTab() {
           {/* 检查时间 */}
           <Box style={{ textAlign: 'center', marginTop: tokens.spacing[4] }}>
             <Text size="xs" color="tertiary">
-              检查时间: {new Date(freshnessReport.checked_at).toLocaleString('zh-CN')}
+              检查时间: {formatDate(freshnessReport.checked_at)}
             </Text>
           </Box>
         </Box>

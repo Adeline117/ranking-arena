@@ -15,6 +15,7 @@ export default function UserManagementTab({ accessToken }: UserManagementTabProp
     users,
     pagination,
     loading,
+    error,
     actionLoading,
     loadUsers,
     banUser,
@@ -93,6 +94,13 @@ export default function UserManagementTab({ accessToken }: UserManagementTabProp
       {loading ? (
         <Box style={{ padding: tokens.spacing[8], textAlign: 'center' }}>
           <Text color="tertiary">加载中...</Text>
+        </Box>
+      ) : error ? (
+        <Box style={{ padding: tokens.spacing[8], textAlign: 'center' }}>
+          <Text style={{ color: tokens.colors.accent.error }}>{error}</Text>
+          <Button variant="secondary" size="sm" onClick={() => loadUsers(1, search, filter)} style={{ marginTop: tokens.spacing[3] }}>
+            重试
+          </Button>
         </Box>
       ) : users.length === 0 ? (
         <Box style={{ padding: tokens.spacing[8], textAlign: 'center' }}>

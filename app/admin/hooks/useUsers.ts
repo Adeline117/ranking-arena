@@ -34,6 +34,7 @@ export function useUsers(accessToken: string | null) {
     totalPages: 0,
   })
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({})
 
   const loadUsers = useCallback(async (
@@ -41,9 +42,13 @@ export function useUsers(accessToken: string | null) {
     search: string = '',
     filter: 'all' | 'banned' | 'active' = 'all'
   ) => {
-    if (!accessToken) return
+    if (!accessToken) {
+      setError('未登录或无权限')
+      return
+    }
     
     setLoading(true)
+    setError(null)
     
     try {
       const params = new URLSearchParams({
@@ -59,11 +64,16 @@ export function useUsers(accessToken: string | null) {
       const data = await res.json()
       
       if (data.ok) {
-        setUsers(data.users)
+        setUsers(data.users || [])
         setPagination(data.pagination)
+      } else {
+        setError(data.error || '加载失败')
+        setUsers([])
       }
     } catch (err) {
       console.error('Error loading users:', err)
+      setError('网络错误，请稍后重试')
+      setUsers([])
     } finally {
       setLoading(false)
     }
@@ -141,6 +151,7 @@ export function useUsers(accessToken: string | null) {
     users,
     pagination,
     loading,
+    error,
     actionLoading,
     loadUsers,
     banUser,

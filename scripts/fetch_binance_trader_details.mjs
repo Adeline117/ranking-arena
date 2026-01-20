@@ -277,12 +277,15 @@ async function storePerformance(portfolioId, timeRange, perfData, baseCapturedAt
     .eq('source_trader_id', portfolioId)
     .eq('season_id', timeRange)
 
+  // 使用 insert 而不是 upsert，因为我们已经删除了旧数据
   const { error: snapshotError } = await supabase
     .from('trader_snapshots')
-    .upsert(snapshotItem, { onConflict: 'source,source_trader_id,season_id,captured_at' })
+    .insert(snapshotItem)
 
   if (snapshotError) {
     console.error(`    ✗ 存储 Snapshot ${timeRange} 失败:`, snapshotError.message)
+  } else {
+    console.log(`    ✓ Snapshot ${timeRange} 已存储`)
   }
   
   // 存储到 trader_stats_detail - 同样使用 delete + insert
@@ -306,12 +309,15 @@ async function storePerformance(portfolioId, timeRange, perfData, baseCapturedAt
     .eq('source_trader_id', portfolioId)
     .eq('period', timeRange)
 
+  // 使用 insert 而不是 upsert，因为我们已经删除了旧数据
   const { error: statsError } = await supabase
     .from('trader_stats_detail')
-    .upsert(statsItem, { onConflict: 'source,source_trader_id,period,captured_at' })
+    .insert(statsItem)
 
   if (statsError) {
     console.error(`    ✗ 存储 Stats ${timeRange} 失败:`, statsError.message)
+  } else {
+    console.log(`    ✓ Stats ${timeRange} 已存储 (Sharpe: ${statsItem.sharpe_ratio}, Win: ${statsItem.winning_positions}/${statsItem.total_positions})`)
   }
 }
 
