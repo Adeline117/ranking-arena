@@ -14,16 +14,16 @@ function getStripe() {
     throw new Error('STRIPE_SECRET_KEY is not configured')
   }
   return new Stripe(secretKey, {
-    apiVersion: '2025-12-15.clover',
-  })
+  apiVersion: '2025-12-15.clover',
+})
 }
 
 // 懒加载 Supabase Admin 客户端
 function getSupabaseAdmin() {
   return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
 }
 
 // 从价格 ID 获取订阅等级
@@ -87,7 +87,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 更新订阅记录
-    const { error } = await supabaseAdmin
+    const { error: subscriptionError } = await supabaseAdmin
       .from('subscriptions')
       .upsert({
         user_id: userId,
@@ -102,10 +102,28 @@ export async function POST(request: NextRequest) {
         onConflict: 'user_id',
       })
 
-    if (error) {
-      console.error('Failed to update subscription:', error)
-      return NextResponse.json({ error: 'Failed to update subscription' }, { status: 500 })
+    if (subscriptionError) {
+      console.error('Failed to update subscriptions table:', subscriptionError)
     }
+
+    // 同时更新 user_profiles 的 subscription_tier
+    const { error: profileError } = await supabaseAdmin
+      .from('user_profiles')
+      .upsert({
+        id: userId,
+        subscription_tier: tier,
+        stripe_customer_id: customerId,
+        updated_at: new Date().toISOString(),
+      }, {
+        onConflict: 'id',
+      })
+
+    if (profileError) {
+      console.error('Failed to update user_profiles:', profileError)
+      return NextResponse.json({ error: 'Failed to update user profile' }, { status: 500 })
+    }
+
+    console.log(`[verify-session] Updated subscription for user ${userId}, tier: ${tier}`)
 
     return NextResponse.json({
       success: true,

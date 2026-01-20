@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase/client'
 
 /**
  * 简单的订阅状态 hook - 不需要 Provider
+ * 检查 subscriptions 表和 user_profiles.subscription_tier
  */
 export function useSubscription() {
   const [isPro, setIsPro] = useState(false)
@@ -21,7 +22,7 @@ export function useSubscription() {
           return
         }
 
-        // 检查订阅状态
+        // 方法1: 检查 subscriptions 表
         const { data: subscription } = await supabase
           .from('subscriptions')
           .select('tier, status')
@@ -30,6 +31,19 @@ export function useSubscription() {
           .maybeSingle()
 
         if (subscription && ['pro', 'elite', 'enterprise'].includes(subscription.tier)) {
+          setIsPro(true)
+          setIsLoading(false)
+          return
+        }
+
+        // 方法2: 检查 user_profiles.subscription_tier 作为备用
+        const { data: profile } = await supabase
+          .from('user_profiles')
+          .select('subscription_tier')
+          .eq('id', user.id)
+          .maybeSingle()
+
+        if (profile && ['pro', 'elite', 'enterprise'].includes(profile.subscription_tier)) {
           setIsPro(true)
         } else {
           setIsPro(false)

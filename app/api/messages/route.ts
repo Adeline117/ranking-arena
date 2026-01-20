@@ -88,9 +88,22 @@ export async function GET(request: NextRequest) {
       .eq('id', otherUserId)
       .maybeSingle()
 
+    // 确保 handle 有效值，如果用户没有设置 handle，使用 ID 前 8 位
+    const otherUserData = otherUser 
+      ? {
+          ...otherUser,
+          handle: otherUser.handle || otherUserId.slice(0, 8)
+        }
+      : { 
+          id: otherUserId, 
+          handle: otherUserId.slice(0, 8),
+          avatar_url: null,
+          bio: null
+        }
+
     return NextResponse.json({ 
       messages: messages || [],
-      otherUser: otherUser || { id: otherUserId, handle: '未知用户' }
+      otherUser: otherUserData
     })
   } catch (error) {
     logger.error('GET error', { error: String(error) })

@@ -32,7 +32,7 @@ export async function getCachedData<T>(
   // 缓存未命中或已过期，获取数据
   const data = await fetcher()
 
-  // 缓存数据
+    // 缓存数据
   try {
     memoryCache.set(key, {
       data: JSON.stringify(data),
@@ -72,8 +72,8 @@ export async function getCache<T>(key: string): Promise<T | null> {
     try {
       return JSON.parse(cached.data) as T
     } catch {
-      return null
-    }
+    return null
+  }
   }
   return null
 }
