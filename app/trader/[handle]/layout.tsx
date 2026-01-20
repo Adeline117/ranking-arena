@@ -70,39 +70,30 @@ export async function generateMetadata({ params }: { params: { handle: string } 
   }
 }
 
-/**
- * 为热门交易员预生成静态页面
- * 减少首次访问时的服务端渲染时间
- */
-export async function generateStaticParams() {
-  // 只有在有数据库连接时才预生成
-  if (!adminSupabase) {
-    return []
-  }
+// 注释掉静态生成，使用 force-dynamic 动态渲染
+// 原因：静态生成时 Upstash Redis 缓存调用会导致构建失败
+// 
+// export async function generateStaticParams() {
+//   if (!adminSupabase) return []
+//   try {
+//     const { data } = await adminSupabase
+//       .from('trader_sources')
+//       .select('handle')
+//       .not('handle', 'is', null)
+//       .limit(50)
+//     if (!data) return []
+//     return data.filter(t => t.handle).map(t => ({ handle: encodeURIComponent(t.handle) }))
+//   } catch (error) {
+//     console.error('[generateStaticParams] Error:', error)
+//     return []
+//   }
+// }
 
-  try {
-    // 获取 ROI 排名前 50 的交易员
-    const { data } = await adminSupabase
-      .from('trader_sources')
-      .select('handle')
-      .not('handle', 'is', null)
-      .limit(50)
+// 强制动态渲染，避免静态生成时 Upstash Redis 调用问题
+export const dynamic = 'force-dynamic'
 
-    if (!data) return []
-
-    return data
-      .filter(t => t.handle)
-      .map(t => ({
-        handle: encodeURIComponent(t.handle),
-      }))
-  } catch (error) {
-    console.error('[generateStaticParams] Error:', error)
-    return []
-  }
-}
-
-// ISR: 每小时重新生成静态页面
-export const revalidate = 3600
+// ISR: 每小时重新生成静态页面（暂时禁用）
+// export const revalidate = 3600
 
 export default function TraderLayout({
   children,
