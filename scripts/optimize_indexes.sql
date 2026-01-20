@@ -1,286 +1,223 @@
 -- ============================================
 -- 数据库索引优化脚本
--- 在 Supabase Dashboard 的 SQL Editor 中运行
 -- 
--- 使用说明：
--- 1. 登录 Supabase Dashboard
--- 2. 进入 SQL Editor
--- 3. 复制此脚本并执行
+-- 用途: 优化常用查询的性能
+-- 运行: 在 Supabase SQL Editor 中执行
 -- ============================================
 
--- ============================================
--- 第一部分：帖子相关索引
--- ============================================
-
--- 帖子按创建时间倒序索引（用于首页展示）
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_posts_created_at_desc 
-  ON posts(created_at DESC);
-
--- 帖子按小组和创建时间索引（用于小组内帖子列表）
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_posts_group_created 
-  ON posts(group_id, created_at DESC);
-
--- 帖子按作者索引（用于用户个人主页）
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_posts_author_handle 
-  ON posts(author_handle, created_at DESC);
-
--- 帖子热度分数索引（用于热门排序）
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_posts_hot_score 
-  ON posts(hot_score DESC, created_at DESC);
-
--- 帖子点赞数排序索引
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_posts_like_count 
-  ON posts(like_count DESC, created_at DESC);
-
--- ============================================
--- 第二部分：评论相关索引
+-- 1. trader_sources 表优化
 -- ============================================
 
--- 评论按帖子和创建时间索引
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_comments_post_created 
-  ON comments(post_id, created_at DESC);
+-- 按来源和活跃状态查询 (排行榜页面)
+CREATE INDEX IF NOT EXISTS idx_trader_sources_source_active 
+ON trader_sources(source, is_active) 
+WHERE is_active = true;
 
--- 评论按作者索引
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_comments_author 
-  ON comments(author_id, created_at DESC);
+-- 按 arena_score 排序 (排行榜排序)
+CREATE INDEX IF NOT EXISTS idx_trader_sources_arena_score 
+ON trader_sources(arena_score DESC NULLS LAST) 
+WHERE is_active = true;
 
--- ============================================
--- 第三部分：交易员快照索引（关键性能优化）
--- ============================================
+-- 按 ROI 排序 (各时间段)
+CREATE INDEX IF NOT EXISTS idx_trader_sources_roi_7d 
+ON trader_sources(roi_7d DESC NULLS LAST) 
+WHERE is_active = true;
 
--- 交易员快照复合索引（优化排行榜查询）
--- 注意：字段名是 captured_at 而非 fetched_at
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_trader_snapshots_composite 
-  ON trader_snapshots(source, season_id, captured_at DESC, roi DESC);
+CREATE INDEX IF NOT EXISTS idx_trader_sources_roi_30d 
+ON trader_sources(roi_30d DESC NULLS LAST) 
+WHERE is_active = true;
 
--- 按 source 和最新时间查询
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_trader_snapshots_source_time 
-  ON trader_snapshots(source, captured_at DESC);
+CREATE INDEX IF NOT EXISTS idx_trader_sources_roi_90d 
+ON trader_sources(roi_90d DESC NULLS LAST) 
+WHERE is_active = true;
 
--- 按 source 和 season_id 查询（用于时间段筛选）
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_trader_snapshots_source_season 
-  ON trader_snapshots(source, season_id, captured_at DESC);
+-- Handle 查询 (单个交易员页面)
+CREATE UNIQUE INDEX IF NOT EXISTS idx_trader_sources_handle 
+ON trader_sources(handle) 
+WHERE handle IS NOT NULL;
 
--- 按 ROI 排序索引（部分索引，只包含有效数据）
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_trader_snapshots_roi 
-  ON trader_snapshots(source, roi DESC) 
-  WHERE roi IS NOT NULL;
+-- 增量更新查询 (cron 任务)
+CREATE INDEX IF NOT EXISTS idx_trader_sources_updated_at 
+ON trader_sources(updated_at ASC NULLS FIRST) 
+WHERE is_active = true;
 
--- 按 PnL 过滤索引（排除 Bybit，用于 PnL >= 1000 过滤）
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_trader_snapshots_pnl 
-  ON trader_snapshots(source, pnl DESC) 
-  WHERE pnl >= 1000;
+-- 复合索引: 来源 + 交易员 ID (详情查询)
+CREATE UNIQUE INDEX IF NOT EXISTS idx_trader_sources_source_id 
+ON trader_sources(source, source_trader_id);
 
--- ============================================
--- 第四部分：交易员来源索引
--- ============================================
 
--- trader_sources 按 source 和 source_trader_id 索引
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_trader_sources_lookup 
-  ON trader_sources(source, source_trader_id);
-
--- ============================================
--- 第五部分：用户相关索引
+-- 2. trader_stats_detail 表优化
 -- ============================================
 
--- 用户 profile 按 handle 索引
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_user_profiles_handle 
-  ON user_profiles(handle);
+-- 按来源和交易员查询
+CREATE INDEX IF NOT EXISTS idx_trader_stats_source_trader 
+ON trader_stats_detail(source, source_trader_id);
 
--- 用户 profile 按 ID 索引（主键通常已有，但确保存在）
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_user_profiles_id 
-  ON user_profiles(id);
+-- 按时间段筛选
+CREATE INDEX IF NOT EXISTS idx_trader_stats_period 
+ON trader_stats_detail(source, source_trader_id, period);
 
--- 用户 profile 按创建时间索引
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_user_profiles_created 
-  ON user_profiles(created_at DESC);
 
--- ============================================
--- 第六部分：社交功能索引
+-- 3. trader_portfolio 表优化
 -- ============================================
 
--- 帖子点赞记录（注意：表名可能是 post_likes 或 post_reactions）
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_post_likes_post 
-  ON post_likes(post_id);
+-- 按来源和交易员查询当前持仓
+CREATE INDEX IF NOT EXISTS idx_trader_portfolio_source_trader 
+ON trader_portfolio(source, source_trader_id);
 
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_post_likes_user 
-  ON post_likes(user_id);
+-- 按捕获时间排序
+CREATE INDEX IF NOT EXISTS idx_trader_portfolio_captured 
+ON trader_portfolio(source, source_trader_id, captured_at DESC);
 
--- 复合索引用于查询用户是否点赞某帖子
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_post_likes_user_post 
-  ON post_likes(user_id, post_id);
 
--- 帖子投票记录
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_post_votes_post 
-  ON post_votes(post_id);
-
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_post_votes_user 
-  ON post_votes(user_id);
-
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_post_votes_user_post 
-  ON post_votes(user_id, post_id);
-
--- 关注记录按关注者索引
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_trader_followers_follower 
-  ON trader_followers(follower_id, created_at DESC);
-
--- 关注记录按被关注者索引
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_trader_followers_trader 
-  ON trader_followers(trader_id);
-
--- ============================================
--- 第七部分：小组相关索引
+-- 4. trader_position_history 表优化
 -- ============================================
 
--- 小组成员按小组索引
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_group_members_group 
-  ON group_members(group_id);
+-- 按来源和交易员查询历史仓位
+CREATE INDEX IF NOT EXISTS idx_trader_positions_source_trader 
+ON trader_position_history(source, source_trader_id);
 
--- 小组成员按用户索引
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_group_members_user 
-  ON group_members(user_id);
+-- 按关闭时间排序 (最近交易)
+CREATE INDEX IF NOT EXISTS idx_trader_positions_close_time 
+ON trader_position_history(source, source_trader_id, close_time DESC);
 
--- 复合索引用于检查用户是否是小组成员
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_group_members_user_group 
-  ON group_members(user_id, group_id);
 
--- ============================================
--- 第八部分：通知索引
+-- 5. trader_equity_curve 表优化
 -- ============================================
 
--- 通知按用户和未读状态索引（用于通知中心）
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_notifications_user_unread 
-  ON notifications(user_id, is_read, created_at DESC);
+-- 按来源、交易员和时间段查询
+CREATE INDEX IF NOT EXISTS idx_equity_curve_source_period 
+ON trader_equity_curve(source, source_trader_id, period);
 
--- 通知按用户索引（获取所有通知）
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_notifications_user 
-  ON notifications(user_id, created_at DESC);
+-- 按日期排序
+CREATE INDEX IF NOT EXISTS idx_equity_curve_date 
+ON trader_equity_curve(source, source_trader_id, period, data_date);
 
--- ============================================
--- 第九部分：消息相关索引
--- ============================================
 
--- 会话按参与者索引
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_conversations_participants 
-  ON conversations USING GIN (participant_ids);
-
--- 消息按会话索引
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_messages_conversation 
-  ON messages(conversation_id, created_at DESC);
-
--- ============================================
--- 第十部分：收藏相关索引
+-- 6. trader_asset_breakdown 表优化
 -- ============================================
 
--- 收藏按用户索引
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_bookmarks_user 
-  ON bookmarks(user_id, created_at DESC);
+-- 按来源、交易员和时间段查询
+CREATE INDEX IF NOT EXISTS idx_asset_breakdown_source_period 
+ON trader_asset_breakdown(source, source_trader_id, period);
 
--- 收藏按帖子索引
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_bookmarks_post 
-  ON bookmarks(post_id);
 
--- ============================================
--- 分析索引使用情况（可选运行）
+-- 7. posts 表优化
 -- ============================================
 
--- 查看索引使用统计（运行此查询查看哪些索引被使用）
--- SELECT 
---   schemaname,
---   tablename,
---   indexname,
---   idx_scan,
---   idx_tup_read,
---   idx_tup_fetch
--- FROM pg_stat_user_indexes
--- ORDER BY idx_scan DESC;
+-- 按创建时间排序 (时间线)
+CREATE INDEX IF NOT EXISTS idx_posts_created_at 
+ON posts(created_at DESC);
 
--- 查看表大小和索引大小
--- SELECT
---   relname AS table_name,
---   pg_size_pretty(pg_total_relation_size(relid)) AS total_size,
---   pg_size_pretty(pg_relation_size(relid)) AS table_size,
---   pg_size_pretty(pg_total_relation_size(relid) - pg_relation_size(relid)) AS index_size
--- FROM pg_catalog.pg_statio_user_tables
--- ORDER BY pg_total_relation_size(relid) DESC;
+-- 按小组筛选
+CREATE INDEX IF NOT EXISTS idx_posts_group_id 
+ON posts(group_id, created_at DESC) 
+WHERE group_id IS NOT NULL;
 
--- ============================================
--- 第十一部分：物化视图（可选 - 高级优化）
+-- 按作者筛选
+CREATE INDEX IF NOT EXISTS idx_posts_author 
+ON posts(author_id, created_at DESC);
+
+-- 热门帖子 (点赞数排序)
+CREATE INDEX IF NOT EXISTS idx_posts_like_count 
+ON posts(like_count DESC);
+
+
+-- 8. comments 表优化
 -- ============================================
 
--- 创建排行榜物化视图（缓存 Top 100 交易员）
--- 注意：需要定期刷新
-CREATE MATERIALIZED VIEW IF NOT EXISTS mv_top_traders_90d AS
+-- 按帖子查询评论
+CREATE INDEX IF NOT EXISTS idx_comments_post_id 
+ON comments(post_id, created_at ASC);
+
+-- 按用户查询评论
+CREATE INDEX IF NOT EXISTS idx_comments_user_id 
+ON comments(user_id, created_at DESC);
+
+
+-- 9. user_profiles 表优化
+-- ============================================
+
+-- 按 handle 查询
+CREATE UNIQUE INDEX IF NOT EXISTS idx_user_profiles_handle 
+ON user_profiles(handle) 
+WHERE handle IS NOT NULL;
+
+-- 订阅状态查询
+CREATE INDEX IF NOT EXISTS idx_user_profiles_subscription 
+ON user_profiles(subscription_tier) 
+WHERE subscription_tier != 'free';
+
+
+-- 10. notifications 表优化
+-- ============================================
+
+-- 按用户和未读状态查询
+CREATE INDEX IF NOT EXISTS idx_notifications_user_unread 
+ON notifications(user_id, read, created_at DESC);
+
+
+-- 11. trader_follows 表优化
+-- ============================================
+
+-- 按用户查询关注列表
+CREATE INDEX IF NOT EXISTS idx_trader_follows_user 
+ON trader_follows(user_id);
+
+-- 按交易员查询粉丝
+CREATE INDEX IF NOT EXISTS idx_trader_follows_trader 
+ON trader_follows(trader_id);
+
+
+-- 12. groups 表优化
+-- ============================================
+
+-- 按成员数排序
+CREATE INDEX IF NOT EXISTS idx_groups_member_count 
+ON groups(member_count DESC);
+
+-- 按创建时间排序
+CREATE INDEX IF NOT EXISTS idx_groups_created_at 
+ON groups(created_at DESC);
+
+
+-- ============================================
+-- 验证索引创建
+-- ============================================
+
+-- 查看所有自定义索引
 SELECT 
-  ts.source,
-  ts.source_trader_id,
-  ts.roi,
-  ts.pnl,
-  ts.win_rate,
-  ts.max_drawdown,
-  ts.trades_count,
-  ts.captured_at,
-  tsrc.handle,
-  tsrc.profile_url
-FROM trader_snapshots ts
-LEFT JOIN trader_sources tsrc 
-  ON ts.source = tsrc.source AND ts.source_trader_id = tsrc.source_trader_id
-WHERE ts.season_id = '90D'
-  AND ts.captured_at = (
-    SELECT MAX(captured_at) 
-    FROM trader_snapshots 
-    WHERE source = ts.source AND season_id = '90D'
-  )
-ORDER BY ts.roi DESC
-LIMIT 500;
+  schemaname,
+  tablename,
+  indexname,
+  indexdef
+FROM pg_indexes 
+WHERE schemaname = 'public' 
+  AND indexname LIKE 'idx_%'
+ORDER BY tablename, indexname;
 
--- 物化视图索引
-CREATE INDEX IF NOT EXISTS idx_mv_top_traders_roi 
-  ON mv_top_traders_90d(roi DESC);
-
-CREATE INDEX IF NOT EXISTS idx_mv_top_traders_source 
-  ON mv_top_traders_90d(source, roi DESC);
-
--- 刷新物化视图的函数
-CREATE OR REPLACE FUNCTION refresh_top_traders_view()
-RETURNS void AS $$
-BEGIN
-  REFRESH MATERIALIZED VIEW CONCURRENTLY mv_top_traders_90d;
-END;
-$$ LANGUAGE plpgsql;
 
 -- ============================================
--- 第十二部分：查询性能分析函数
+-- 性能分析建议
 -- ============================================
 
--- 获取慢查询统计
-CREATE OR REPLACE FUNCTION get_slow_queries(threshold_ms int DEFAULT 100)
-RETURNS TABLE(
-  query text,
-  calls bigint,
-  mean_time float,
-  total_time float
-) AS $$
-BEGIN
-  RETURN QUERY
-  SELECT 
-    pg_stat_statements.query,
-    pg_stat_statements.calls,
-    pg_stat_statements.mean_exec_time,
-    pg_stat_statements.total_exec_time
-  FROM pg_stat_statements
-  WHERE pg_stat_statements.mean_exec_time > threshold_ms
-  ORDER BY pg_stat_statements.total_exec_time DESC
-  LIMIT 20;
-EXCEPTION
-  WHEN undefined_table THEN
-    -- pg_stat_statements 扩展未启用
-    RETURN;
-END;
-$$ LANGUAGE plpgsql;
+-- 1. 定期运行 ANALYZE 更新统计信息
+-- ANALYZE trader_sources;
+-- ANALYZE posts;
+-- ANALYZE user_profiles;
 
--- ============================================
--- 完成
--- ============================================
+-- 2. 监控慢查询
+-- SELECT * FROM pg_stat_statements 
+-- ORDER BY total_exec_time DESC 
+-- LIMIT 20;
 
-SELECT '✅ 索引优化完成！请在 Supabase Dashboard 中运行此脚本。' AS status;
+-- 3. 检查索引使用情况
+-- SELECT 
+--   relname as table,
+--   indexrelname as index,
+--   idx_scan as scans,
+--   idx_tup_read as tuples_read,
+--   idx_tup_fetch as tuples_fetched
+-- FROM pg_stat_user_indexes
+-- WHERE schemaname = 'public'
+-- ORDER BY idx_scan DESC;

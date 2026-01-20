@@ -286,4 +286,116 @@ export function ProfileSkeleton() {
   )
 }
 
+// 通知列表骨架屏
+export function NotificationSkeleton() {
+  return (
+    <Box
+      className="glass-card"
+      p={3}
+      radius="lg"
+      style={{ display: 'flex', alignItems: 'flex-start', gap: tokens.spacing[3] }}
+    >
+      <SkeletonAvatar size={40} />
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
+        <Skeleton width="80%" height="14px" />
+        <Skeleton width="60%" height="12px" />
+        <Skeleton width="40%" height="10px" />
+      </div>
+    </Box>
+  )
+}
+
+// 小组卡片骨架屏
+export function GroupCardSkeleton() {
+  return (
+    <Box
+      className="glass-card"
+      p={4}
+      radius="xl"
+      style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3] }}>
+        <SkeletonAvatar size={48} />
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: tokens.spacing[1] }}>
+          <Skeleton width="70%" height="16px" />
+          <Skeleton width="40%" height="12px" />
+        </div>
+      </div>
+      <Skeleton width="100%" height="40px" />
+      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+        <Skeleton width="60px" height="12px" />
+        <Skeleton width="60px" height="12px" />
+      </div>
+    </Box>
+  )
+}
+
+// 列表加载骨架屏 (通用)
+export function ListSkeleton({ count = 5, gap = 12 }: { count?: number; gap?: number }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap }}>
+      {Array.from({ length: count }).map((_, i) => (
+        <Box
+          key={i}
+          className="glass-card"
+          p={3}
+          radius="lg"
+          style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3] }}
+        >
+          <SkeletonAvatar size={40} />
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: tokens.spacing[1] }}>
+            <Skeleton width="60%" height="14px" />
+            <Skeleton width="40%" height="10px" />
+          </div>
+          <Skeleton width="50px" height="24px" />
+        </Box>
+      ))}
+    </div>
+  )
+}
+
+// 表格骨架屏
+export function TableSkeleton({ rows = 5, columns = 5 }: { rows?: number; columns?: number }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
+      {/* 表头 */}
+      <div style={{ 
+        display: 'grid', 
+        gridTemplateColumns: `repeat(${columns}, 1fr)`,
+        gap: tokens.spacing[3],
+        padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+        background: tokens.colors.bg.tertiary,
+        borderRadius: tokens.radius.md,
+      }}>
+        {Array.from({ length: columns }).map((_, i) => (
+          <Skeleton key={i} width="60%" height="12px" />
+        ))}
+      </div>
+      
+      {/* 表行 */}
+      {Array.from({ length: rows }).map((_, rowIndex) => (
+        <div 
+          key={rowIndex}
+          style={{ 
+            display: 'grid', 
+            gridTemplateColumns: `repeat(${columns}, 1fr)`,
+            gap: tokens.spacing[3],
+            padding: `${tokens.spacing[3]} ${tokens.spacing[3]}`,
+            background: tokens.colors.bg.secondary,
+            borderRadius: tokens.radius.md,
+          }}
+        >
+          {Array.from({ length: columns }).map((_, colIndex) => (
+            <Skeleton 
+              key={colIndex} 
+              width={colIndex === 0 ? '40px' : '80%'} 
+              height="16px" 
+            />
+          ))}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 export default Skeleton
