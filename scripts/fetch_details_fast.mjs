@@ -246,12 +246,14 @@ async function processBinanceTrader(traderId, source) {
       })
       
       // 新增：保存 ROI/PnL 快照到 trader_snapshots
-      // 为每个时间段生成不同的 captured_at (避免唯一约束冲突)
+      // 为每个时间段和交易员生成唯一的 captured_at (避免唯一约束冲突)
       const roi = parseFloat(perf.roi) || 0
       const pnl = parseFloat(perf.pnl) || 0
       if (roi !== 0 || pnl !== 0) {
-        const periodOffset = period === '7D' ? 0 : (period === '30D' ? 1 : 2)
-        const snapshotTime = new Date(Date.now() + periodOffset).toISOString()
+        // 使用 trader ID 的最后几位和时间段来生成唯一偏移
+        const idOffset = parseInt(traderId.slice(-6)) % 100000
+        const periodOffset = period === '7D' ? 0 : (period === '30D' ? 100000 : 200000)
+        const snapshotTime = new Date(Date.now() + idOffset + periodOffset).toISOString()
         results.snapshots.push({
           source,
           source_trader_id: traderId,
