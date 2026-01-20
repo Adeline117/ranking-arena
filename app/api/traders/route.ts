@@ -191,6 +191,15 @@ export const GET = withPublic(
         handleMap.set(s.source_trader_id, { handle: s.handle, avatar_url: s.profile_url })
       })
 
+      // 生成确定性头像 URL（使用 DiceBear）
+      const generateAvatarUrl = (traderId: string, handle: string | null): string => {
+        // 使用 DiceBear Avatars 生成基于 seed 的确定性头像
+        // 选用 "avataaars" 风格，看起来像真实的人物头像
+        const seed = traderId.substring(0, 20) // 限制长度
+        const name = handle || traderId.substring(0, 8)
+        return `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(seed)}&mouth=smile,default&eyes=default,happy&eyebrows=default,defaultNatural`
+      }
+
       // 构建交易员数据（不包含数据库 rank，排名将在后面统一计算）
       return snapshots.map(item => {
         const info = handleMap.get(item.source_trader_id) || { handle: null, avatar_url: null }
@@ -199,6 +208,10 @@ export const GET = withPublic(
         const normalizedWinRate = item.win_rate != null 
           ? (item.win_rate <= 1 ? item.win_rate * 100 : item.win_rate)
           : null
+        
+        // 优先使用数据库中的头像，否则自动生成
+        const avatarUrl = info.avatar_url || generateAvatarUrl(item.source_trader_id, info.handle)
+        
         return {
           id: item.source_trader_id,
           handle: info.handle || item.source_trader_id,
@@ -210,7 +223,7 @@ export const GET = withPublic(
           followers: item.followers || 0,
           source,
           source_type: SOURCE_TYPE_MAP[source] || 'futures',
-          avatar_url: info.avatar_url,
+          avatar_url: avatarUrl,
         }
       })
     })
