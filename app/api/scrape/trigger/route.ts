@@ -205,14 +205,6 @@ async function saveTraders(source: string, traders: TraderData[], period: string
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
-  const secret = searchParams.get('secret')
-  
-  // 验证密钥（如果设置了的话）
-  // 允许无密钥访问以便测试
-  if (CRON_SECRET && secret !== CRON_SECRET && secret !== 'test') {
-    // 暂时允许所有访问
-    // return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
   
   const period = searchParams.get('period') || '90D'
   const results: Array<{ source: string; fetched: number; avatars: number; saved: number }> = []
