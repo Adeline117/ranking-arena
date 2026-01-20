@@ -12,6 +12,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { isAuthorized, getSupabaseEnv, getSupportedPlatforms } from '@/lib/cron/utils'
+import { sendScraperAlert } from '@/lib/alerts/send-alert'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -151,6 +152,18 @@ export async function GET(req: Request) {
       .join(', ')
     
     console.warn(`[DataFreshness] 数据过期: ${staleList} - 超过 12 小时未更新`)
+  }
+
+  // 发送报警通知
+  if (criticalPlatforms.length > 0 || stalePlatforms.length > 0) {
+    try {
+      const alertResult = await sendScraperAlert(criticalPlatforms, stalePlatforms, PLATFORM_NAMES)
+      if (alertResult.sent) {
+        console.log(`[DataFreshness] 报警已发送到: ${alertResult.channels.join(', ')}`)
+      }
+    } catch (error) {
+      console.error('[DataFreshness] 发送报警失败:', error)
+    }
   }
 
   // 统计

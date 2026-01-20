@@ -582,36 +582,34 @@ export default function RankingTable(props: {
 
                     {/* 交易员ID */}
                     <Box style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 10, flexWrap: 'nowrap', minWidth: 0 }}>
-                      {/* 头像 - 移动端增大 */}
-                      <Box
+                      {/* 头像 */}
+                      <div
                         className="trader-avatar"
                         style={{
-                          width: 36,
-                          height: 36,
-                          borderRadius: tokens.radius.full,
+                          width: '36px',
+                          height: '36px',
+                          minWidth: '36px',
+                          minHeight: '36px',
+                          borderRadius: '50%',
                           background: getAvatarGradient(trader.id),
-                          border: `2px solid ${tokens.colors.border.primary}`,
+                          border: '2px solid var(--color-border-primary)',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
-                          fontWeight: tokens.typography.fontWeight.black,
-                          fontSize: '13px',
-                          color: '#ffffff',
                           overflow: 'hidden',
                           flexShrink: 0,
                           position: 'relative',
                           boxShadow: rank <= 3 ? `0 0 12px ${rank === 1 ? 'rgba(255, 215, 0, 0.4)' : rank === 2 ? 'rgba(192, 192, 192, 0.4)' : 'rgba(205, 127, 50, 0.4)'}` : 'none',
-                          textShadow: '0 1px 2px rgba(0,0,0,0.5)',
                         }}
                       >
-                        {/* 首字母（始终渲染，头像图片会覆盖它） */}
+                        {/* 首字母 */}
                         <span style={{ 
                           color: '#ffffff',
-                          fontSize: '13px',
+                          fontSize: '14px',
                           fontWeight: 900,
                           lineHeight: 1,
-                          textShadow: '0 1px 3px rgba(0,0,0,0.6)',
-                          zIndex: 0,
+                          textShadow: '0 1px 3px rgba(0,0,0,0.8)',
+                          letterSpacing: '0',
                         }}>
                           {getAvatarInitial(displayName)}
                         </span>
@@ -637,7 +635,7 @@ export default function RankingTable(props: {
                             }}
                           />
                         )}
-                      </Box>
+                      </div>
                       {/* 名字 + 交易所标签（拆分为交易所名 + 类型） */}
                       <Box style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0, flex: 1 }}>
                         <Text 
