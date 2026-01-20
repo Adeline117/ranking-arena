@@ -57,14 +57,19 @@ export default function CategoryRankingTabs({
 
   return (
     <Box
+      className="category-tabs swipe-container"
       style={{
         display: 'flex',
         alignItems: 'center',
-        gap: 2,
-        padding: 3,
+        gap: 6,
+        padding: 4,
         background: 'var(--color-bg-tertiary)',
-        borderRadius: tokens.radius.lg,
+        borderRadius: tokens.radius.xl,
         border: '1px solid var(--color-border-secondary)',
+        overflowX: 'auto',
+        WebkitOverflowScrolling: 'touch',
+        scrollbarWidth: 'none',
+        msOverflowStyle: 'none',
       }}
     >
       {CATEGORIES.map((cat) => {
@@ -78,12 +83,17 @@ export default function CategoryRankingTabs({
             onClick={() => handleTabClick(cat.value)}
             onMouseEnter={() => setHoveredTab(cat.value)}
             onMouseLeave={() => setHoveredTab(null)}
+            className="touch-target-sm"
             style={{
               display: 'flex',
               alignItems: 'center',
+              justifyContent: 'center',
               gap: 6,
-              padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-              borderRadius: tokens.radius.md,
+              padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
+              minHeight: 36,
+              minWidth: 'fit-content',
+              whiteSpace: 'nowrap',
+              borderRadius: tokens.radius.lg,
               border: 'none',
               background: isActive
                 ? 'var(--color-pro-badge-bg)'
@@ -97,15 +107,16 @@ export default function CategoryRankingTabs({
                   : 'var(--color-text-secondary)',
               cursor: isLocked ? 'not-allowed' : 'pointer',
               fontSize: tokens.typography.fontSize.sm,
-              fontWeight: isActive ? 600 : 500,
+              fontWeight: isActive ? 700 : 500,
               transition: 'all 0.2s ease',
               opacity: isLocked ? 0.5 : 1,
               boxShadow: isActive ? '0 2px 8px var(--color-pro-badge-shadow)' : 'none',
+              flexShrink: 0,
             }}
           >
             <span>{cat.label}</span>
             {isLocked && (
-              <LockIcon size={10} />
+              <LockIcon size={12} />
             )}
           </button>
         )

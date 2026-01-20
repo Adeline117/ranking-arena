@@ -602,3 +602,179 @@
     padding: 16px !important;
   }
 }
+
+/* ============================================
+   顶部导航移动端优化
+   ============================================ */
+
+/* 移动端导航简化 */
+@media (max-width: 767px) {
+  .top-nav {
+    height: 56px !important;
+  }
+  
+  .top-nav-container {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+  }
+  
+  .top-nav-search {
+    display: none !important;
+  }
+  
+  .top-nav-logo [data-logo-box] {
+    gap: 6px !important;
+  }
+  
+  .top-nav-logo svg {
+    width: 24px !important;
+    height: 12px !important;
+  }
+}
+
+/* ============================================
+   排行榜列表移动端优化
+   ============================================ */
+
+@media (max-width: 639px) {
+  .ranking-row {
+    min-height: 72px !important;
+    padding: 16px 12px !important;
+  }
+  
+  .ranking-row .trader-avatar {
+    width: 40px !important;
+    height: 40px !important;
+  }
+  
+  .ranking-row .roi-value {
+    font-size: 17px !important;
+  }
+  
+  .ranking-row .pnl-value {
+    font-size: 12px !important;
+  }
+  
+  /* 排行榜卡片 */
+  .ranking-table-header {
+    padding: 12px !important;
+  }
+}
+
+/* ============================================
+   时间选择器移动端优化
+   ============================================ */
+
+@media (max-width: 639px) {
+  .time-range-selector {
+    margin-bottom: 16px !important;
+  }
+  
+  .time-range-selector button {
+    font-size: 14px !important;
+    padding: 12px 16px !important;
+  }
+}
+
+/* ============================================
+   分类标签栏移动端优化
+   ============================================ */
+
+@media (max-width: 639px) {
+  .category-tabs {
+    margin: 0 -12px !important;
+    padding: 4px 12px !important;
+    border-radius: 0 !important;
+    border-left: none !important;
+    border-right: none !important;
+  }
+  
+  .category-tabs button {
+    padding: 10px 16px !important;
+    font-size: 13px !important;
+  }
+}
+
+/* ============================================
+   触摸反馈动画
+   ============================================ */
+
+@media (hover: none) and (pointer: coarse) {
+  /* 触摸设备上的反馈效果 */
+  .ranking-row:active {
+    background: var(--glass-bg-medium) !important;
+    transform: scale(0.99);
+  }
+  
+  .touch-target:active,
+  .touch-target-sm:active {
+    transform: scale(0.95);
+    opacity: 0.8;
+  }
+  
+  /* 禁用 hover 效果 */
+  .ranking-row:hover {
+    background: transparent !important;
+  }
+}
+
+/* ============================================
+   玻璃卡片移动端优化
+   ============================================ */
+
+@media (max-width: 767px) {
+  .glass-card {
+    border-radius: 16px !important;
+  }
+  
+  /* 减少移动端的模糊效果以提升性能 */
+  .glass {
+    backdrop-filter: blur(8px) !important;
+    -webkit-backdrop-filter: blur(8px) !important;
+  }
+}
+
+/* ============================================
+   容器内边距移动端优化
+   ============================================ */
+
+@media (max-width: 767px) {
+  .container-padding {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+    padding-top: 16px !important;
+  }
+}
+
+/* ============================================
+   隐藏滚动条但保持滚动功能
+   ============================================ */
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* ============================================
+   iPad 适配
+   ============================================ */
+
+@media (min-width: 768px) and (max-width: 1024px) {
+  .main-grid {
+    grid-template-columns: 1fr 260px !important;
+    gap: 16px !important;
+  }
+  
+  .ranking-table-grid {
+    grid-template-columns: 40px 1fr 56px 80px !important;
+  }
+  
+  .ranking-table-grid .col-winrate,
+  .ranking-table-grid .col-mdd {
+    display: none !important;
+  }
+}

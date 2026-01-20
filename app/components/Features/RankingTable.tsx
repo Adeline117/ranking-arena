@@ -467,35 +467,37 @@ export default function RankingTable(props: {
                     {/* 排名 - 前三名发光特效 */}
                     <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                       {rank <= 3 ? (
-                        <Box className={getMedalGlowClass(rank)}>
-                          <RankingBadge rank={rank as 1 | 2 | 3} size={24} />
+                        <Box className={getMedalGlowClass(rank)} style={{ transform: 'scale(1.1)' }}>
+                          <RankingBadge rank={rank as 1 | 2 | 3} size={28} />
                         </Box>
                       ) : (
-                        <Text size="sm" weight="bold" color="tertiary" style={{ fontSize: '13px' }}>
+                        <Text size="sm" weight="bold" color="tertiary" style={{ fontSize: '14px' }}>
                           #{rank}
                         </Text>
                       )}
                     </Box>
 
                     {/* 交易员ID */}
-                    <Box style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'nowrap', minWidth: 0 }}>
-                      {/* 头像 */}
+                    <Box style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 10, flexWrap: 'nowrap', minWidth: 0 }}>
+                      {/* 头像 - 移动端增大 */}
                       <Box
+                        className="trader-avatar"
                         style={{
-                          width: 30,
-                          height: 30,
+                          width: 36,
+                          height: 36,
                           borderRadius: tokens.radius.full,
                           background: getAvatarGradient(trader.id),
-                          border: `1px solid ${tokens.colors.border.primary}`,
+                          border: `2px solid ${tokens.colors.border.primary}`,
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
                           fontWeight: tokens.typography.fontWeight.black,
-                          fontSize: '10px',
+                          fontSize: '12px',
                           color: '#ffffff',
                           overflow: 'hidden',
                           flexShrink: 0,
                           position: 'relative',
+                          boxShadow: rank <= 3 ? `0 0 12px ${rank === 1 ? 'rgba(255, 215, 0, 0.4)' : rank === 2 ? 'rgba(192, 192, 192, 0.4)' : 'rgba(205, 127, 50, 0.4)'}` : 'none',
                         }}
                       >
                         <Text 
@@ -503,7 +505,7 @@ export default function RankingTable(props: {
                           weight="black" 
                           style={{ 
                             color: '#ffffff',
-                            fontSize: '10px',
+                            fontSize: '12px',
                             lineHeight: '1',
                           }}
                         >
@@ -531,7 +533,7 @@ export default function RankingTable(props: {
                         )}
                       </Box>
                       {/* 名字 + 交易所标签（拆分为交易所名 + 类型） */}
-                      <Box style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0, flex: 1 }}>
+                      <Box style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0, flex: 1 }}>
                         <Text 
                           size="sm"
                           weight="bold" 
@@ -540,13 +542,13 @@ export default function RankingTable(props: {
                             overflow: 'hidden',
                             textOverflow: 'ellipsis',
                             whiteSpace: 'nowrap',
-                            fontSize: '13px',
+                            fontSize: '14px',
                           }}
                         >
                           {displayName}
                         </Text>
                         {/* 拆分的交易所标签：交易所名 + 类型 */}
-                        <Box style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <Box style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                           {(() => {
                             const info = parseSourceInfo(trader.source || source || '')
                             return (
@@ -557,7 +559,7 @@ export default function RankingTable(props: {
                                   weight="bold"
                                   style={{
                                     color: tokens.colors.text.secondary,
-                                    fontSize: '9px',
+                                    fontSize: '10px',
                                     textTransform: 'uppercase',
                                     letterSpacing: '0.3px',
                                   }}
@@ -567,7 +569,7 @@ export default function RankingTable(props: {
                                 {/* 类型标签（合约/现货/链上） */}
                                 <Box
                                   style={{
-                                    padding: '1px 4px',
+                                    padding: '2px 6px',
                                     borderRadius: tokens.radius.sm,
                                     background: `${info.typeColor}15`,
                                     border: `1px solid ${info.typeColor}30`,
@@ -578,7 +580,7 @@ export default function RankingTable(props: {
                                     weight="bold"
                                     style={{
                                       color: info.typeColor,
-                                      fontSize: '8px',
+                                      fontSize: '9px',
                                       lineHeight: 1.2,
                                     }}
                                   >
@@ -655,15 +657,16 @@ export default function RankingTable(props: {
                       </Box>
                     </Box>
 
-                    {/* ROI - 增大字体 */}
-                    <Box style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1 }}>
+                    {/* ROI - 移动端增大字体 */}
+                    <Box className="roi-cell" style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
                       <Text
                         size="md"
                         weight="black"
+                        className="roi-value"
                         style={{
                           color: (trader.roi || 0) >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error,
                           lineHeight: 1.2,
-                          fontSize: '14px',
+                          fontSize: '16px',
                         }}
                       >
                         {(trader.roi || 0) >= 0 ? '+' : ''}
@@ -672,12 +675,13 @@ export default function RankingTable(props: {
                       <Text
                         size="xs"
                         weight="semibold"
+                        className="pnl-value"
                         style={{
                           color: trader.pnl != null 
                             ? (trader.pnl >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error)
                             : tokens.colors.text.tertiary,
                           lineHeight: 1.2,
-                          fontSize: '10px',
+                          fontSize: '11px',
                           opacity: trader.pnl != null ? 0.85 : 0.5,
                         }}
                       >

@@ -82,28 +82,29 @@ export default function RankingSection({
         minWidth: 0,
       }}
     >
-      {/* 顶部工具栏 */}
+      {/* 顶部工具栏 - 移动端优化布局 */}
       <Box
+        className="ranking-toolbar"
         style={{
           display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          marginBottom: tokens.spacing[4],
+          flexDirection: 'column',
           gap: tokens.spacing[3],
-          flexWrap: 'wrap',
+          marginBottom: tokens.spacing[3],
       }}
     >
+      {/* 时间选择器 - 移动端全宽 */}
       <TimeRangeSelector
         activeRange={activeTimeRange}
         onChange={onTimeRangeChange}
         disabled={loading}
       />
         
-        {/* Pro 工具按钮 */}
-        <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
+        {/* Pro 工具按钮 - 移动端隐藏文字 */}
+        <Box className="hide-mobile" style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
           {/* 高级筛选按钮 */}
           <Box
             onClick={isPro ? () => {} : handleProRequired}
+            className="touch-target-sm"
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -130,7 +131,7 @@ export default function RankingSection({
               e.currentTarget.style.color = isPro ? 'var(--color-text-secondary)' : 'var(--color-text-tertiary)'
             }}
           >
-            <FilterIcon size={12} />
+            <FilterIcon size={14} />
             <span>{t('advancedFilter')}</span>
             {!isPro && <LockIcon size={10} />}
           </Box>
@@ -138,6 +139,7 @@ export default function RankingSection({
           {/* 对比按钮 */}
           <Link
             href={isPro ? '/compare' : '/pricing'}
+            className="touch-target-sm"
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -167,7 +169,7 @@ export default function RankingSection({
               }
             }}
           >
-            <CompareIcon size={12} />
+            <CompareIcon size={14} />
             <span>{t('traderCompare')}</span>
             {!isPro && <LockIcon size={10} />}
           </Link>
