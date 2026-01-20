@@ -244,10 +244,16 @@ async function fetchTraderDetails(browser, traderId, period) {
       sleep(3000)
     ]).catch(() => {})
     
-    // 从页面提取数据
+    // 从页面提取数据（包含头像）
     const pageData = await page.evaluate(() => {
       const text = document.body.innerText
       const result = {}
+      
+      // 获取头像
+      const avatarImg = document.querySelector('img[src*="avatar"], img[src*="head"], img[class*="avatar"], [class*="avatar"] img')
+      if (avatarImg?.src && (avatarImg.src.includes('qrc.bgstatic') || avatarImg.src.includes('img.bgstatic'))) {
+        result.avatar = avatarImg.src
+      }
       
       const roiMatch = text.match(/ROI[\s\n:]*([+-]?[\d,]+\.?\d*)%/i)
       if (roiMatch) result.roi = parseFloat(roiMatch[1].replace(/,/g, ''))
@@ -324,6 +330,7 @@ async function saveTradersBatch(traders, period) {
     source_type: 'leaderboard',
     source_trader_id: t.traderId,
     handle: t.nickname,
+    profile_url: t.avatar || null,
     is_active: true,
   }))
   

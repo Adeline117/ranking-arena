@@ -160,7 +160,7 @@ async function fetchLeaderboardData(period) {
     })
     await sleep(3000)
 
-    // 从 DOM 提取数据的函数
+    // 从 DOM 提取数据的函数（包含头像）
     const extractFromDOM = async () => {
       return await page.evaluate(() => {
         const results = []
@@ -169,6 +169,13 @@ async function fetchLeaderboardData(period) {
         const cards = document.querySelectorAll('[class*="trader"], [class*="card"], [class*="item"], [class*="row"]')
         cards.forEach(card => {
           const text = card.innerText || ''
+          
+          // 提取头像
+          const img = card.querySelector('img[src*="avatar"], img[src*="head"], img[class*="avatar"], img')
+          let avatar = null
+          if (img?.src && (img.src.includes('avatar') || img.src.includes('head') || img.src.includes('user'))) {
+            avatar = img.src
+          }
           
           // 提取用户名
           const nameEl = card.querySelector('[class*="name"], [class*="nick"], [class*="title"]')
@@ -191,7 +198,7 @@ async function fetchLeaderboardData(period) {
                 !nickname.includes('ROI') && 
                 !nickname.includes('USDT') &&
                 !nickname.includes('Days')) {
-              results.push({ nickname, roi: maxRoi })
+              results.push({ nickname, roi: maxRoi, avatar })
             }
           }
         })
@@ -248,7 +255,7 @@ async function fetchLeaderboardData(period) {
           traders.set(id, {
             traderId: id,
             nickname: t.nickname,
-            avatar: null,
+            avatar: t.avatar || null,
             roi: t.roi,
             pnl: null,
             winRate: null,
@@ -340,6 +347,7 @@ async function saveTraders(traders, period) {
     source_type: 'leaderboard',
     source_trader_id: t.traderId,
     handle: t.nickname,
+    profile_url: t.avatar,
     is_active: true,
   }))
 
