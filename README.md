@@ -579,4 +579,4 @@ MIT License
 
 ---
 
-如有问题或建议，请联系 support@arenafi.org
+如有问题或建议，请联系 Adelinewen1107@outlook.com
