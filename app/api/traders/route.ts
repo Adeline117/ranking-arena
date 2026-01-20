@@ -156,20 +156,33 @@ export const GET = withPublic(
 
       if (!capturedAt) return []
 
-      // 查询该来源所有快照数据，按 arena_score 排序
-      // 每个交易员只取最新一条（通过后续去重实现）
-      const { data: allSnapshots, error } = await supabase
-        .from('trader_snapshots')
-        .select('source_trader_id, roi, pnl, followers, win_rate, max_drawdown, trades_count, arena_score, captured_at')
-        .eq('source', source)
-        .eq('season_id', seasonId)
-        .order('captured_at', { ascending: false })
-        .limit(1000)
+      // 使用分页查询获取所有数据（Supabase默认限制1000条）
+      let allSnapshots = []
+      let page = 0
+      const pageSize = 1000
       
-      if (error || !allSnapshots?.length) {
-        if (error) console.error(`[Traders API] ${source} 查询错误:`, error.message)
-        return []
+      while (true) {
+        const { data, error } = await supabase
+          .from('trader_snapshots')
+          .select('source_trader_id, roi, pnl, followers, win_rate, max_drawdown, trades_count, arena_score, captured_at')
+          .eq('source', source)
+          .eq('season_id', seasonId)
+          .order('captured_at', { ascending: false })
+          .range(page * pageSize, (page + 1) * pageSize - 1)
+        
+        if (error) {
+          console.error(`[Traders API] ${source} 查询错误:`, error.message)
+          break
+        }
+        
+        if (!data?.length) break
+        
+        allSnapshots.push(...data)
+        if (data.length < pageSize) break
+        page++
       }
+      
+      if (!allSnapshots.length) return []
       
       // 去重：每个交易员只保留最新的一条记录
       const traderMap = new Map()
