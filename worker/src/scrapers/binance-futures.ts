@@ -47,6 +47,9 @@ export class BinanceFuturesScraper extends BaseScraper {
     }
     await this.wait(5000)
 
+    // 关闭可能出现的弹窗（每日精选等）
+    await this.closeModals()
+
     // 点击收益率排序
     this.log.info('Clicking ROI sort')
     await this.clickSortByRoi(config.sortText)
@@ -142,6 +145,68 @@ export class BinanceFuturesScraper extends BaseScraper {
     }
   }
 
+  /**
+   * 关闭页面上可能出现的弹窗（每日精选、公告等）
+   */
+  private async closeModals(): Promise<void> {
+    this.log.debug('Checking for modals to close')
+    
+    // 尝试多种方式关闭弹窗
+    const closed = await this.page!.evaluate(() => {
+      let closedCount = 0
+      
+      // 方法1：点击所有关闭按钮
+      const closeSelectors = [
+        '[class*="modal"] [class*="close"]',
+        '[class*="Modal"] [class*="Close"]',
+        '[class*="modal"] button[aria-label*="close"]',
+        '[class*="modal"] button[aria-label*="Close"]',
+        '[class*="bn-modal"] [class*="close"]',
+        '[class*="DailyModal"] [class*="close"]',
+        '.bn-modal-wrap button.bn-modal-close',
+        '[class*="modal"] svg[class*="close"]',
+        '[role="dialog"] button[aria-label="Close"]',
+      ]
+      
+      for (const selector of closeSelectors) {
+        const elements = document.querySelectorAll(selector)
+        elements.forEach(el => {
+          try {
+            ;(el as HTMLElement).click()
+            closedCount++
+          } catch {}
+        })
+      }
+      
+      // 方法2：点击遮罩层外部区域
+      const masks = document.querySelectorAll('[class*="mask"], [class*="Mask"], [class*="overlay"]')
+      masks.forEach(mask => {
+        try {
+          const rect = mask.getBoundingClientRect()
+          if (rect.width > window.innerWidth * 0.5) {
+            // 点击遮罩层的边缘区域
+            ;(mask as HTMLElement).click()
+            closedCount++
+          }
+        } catch {}
+      })
+      
+      // 方法3：按 ESC 键
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', keyCode: 27 }))
+      
+      return closedCount
+    })
+    
+    if (closed > 0) {
+      this.log.info('Closed modals', { count: closed })
+      await this.wait(1000)
+    }
+    
+    // 再次尝试按 ESC 键关闭
+    await this.page!.keyboard.press('Escape')
+    await this.wait(500)
+  }
+
   private async clickSortByRoi(sortText: string): Promise<boolean> {
     const clicked = await this.page!.evaluate((text: string) => {
       const elements = document.querySelectorAll('span, div, button, th')
@@ -168,46 +233,94 @@ export class BinanceFuturesScraper extends BaseScraper {
     await this.page!.evaluate(() => window.scrollTo(0, 0))
     await this.wait(1000)
 
-    // 尝试通过下拉菜单切换
-    const selectTrigger = this.page!.locator('[class*="bn-select"]:has-text("天")').first()
+    // 先关闭可能存在的弹窗
+    await this.closeModals()
+    await this.wait(500)
 
-    if ((await selectTrigger.count()) > 0) {
-      this.log.debug('Found time dropdown, clicking')
-      await selectTrigger.click()
+    // 方法1：通过 JavaScript 直接操作下拉菜单
+    const jsClicked = await this.page!.evaluate((texts: string[]) => {
+      // 找到时间选择器
+      const selects = document.querySelectorAll('[class*="bn-select"]')
+      for (const select of selects) {
+        const text = (select as HTMLElement).innerText || ''
+        if (text.includes('天') || text.includes('Days') || text.includes('D')) {
+          // 点击选择器
+          ;(select as HTMLElement).click()
+          return 'opened'
+        }
+      }
+      return 'not_found'
+    }, tabTexts)
+
+    if (jsClicked === 'opened') {
       await this.wait(1000)
-
+      
+      // 点击对应选项
       for (const tabText of tabTexts) {
-        const option = this.page!.locator(
-          `[class*="bn-select-option"]:has-text("${tabText}")`
-        ).first()
+        const optionClicked = await this.page!.evaluate((text: string) => {
+          const options = document.querySelectorAll('[class*="bn-select-option"], [class*="option"], [role="option"]')
+          for (const opt of options) {
+            const optText = (opt as HTMLElement).innerText?.trim() || ''
+            if (optText.includes(text) || optText === text) {
+              ;(opt as HTMLElement).click()
+              return true
+            }
+          }
+          return false
+        }, tabText)
 
-        if ((await option.count()) > 0) {
-          await option.click()
-          this.log.info('Time period switched', { period: tabText })
+        if (optionClicked) {
+          this.log.info('Time period switched (JS)', { period: tabText })
           await this.wait(3000)
-          this.apiResponses = [] // 清空旧数据
+          this.apiResponses = []
           return true
         }
       }
     }
 
-    // 备用方案：直接点击文本
-    for (const tabText of tabTexts) {
-      const elements = await this.page!.locator(`text=${tabText}`).all()
+    // 方法2：尝试通过 Playwright locator（带更长超时和强制点击）
+    try {
+      const selectTrigger = this.page!.locator('[class*="bn-select"]:has-text("天")').first()
+      if ((await selectTrigger.count()) > 0) {
+        this.log.debug('Found time dropdown via locator, clicking')
+        await selectTrigger.click({ force: true, timeout: 5000 })
+        await this.wait(1000)
 
-      for (const el of elements) {
-        try {
-          const box = await el.boundingBox()
-          if (box && box.y < 600 && box.y > 100) {
-            await el.click()
-            this.log.info('Time period switched (fallback)', { period: tabText })
+        for (const tabText of tabTexts) {
+          const option = this.page!.locator(
+            `[class*="bn-select-option"]:has-text("${tabText}")`
+          ).first()
+
+          if ((await option.count()) > 0) {
+            await option.click({ force: true, timeout: 5000 })
+            this.log.info('Time period switched (locator)', { period: tabText })
             await this.wait(3000)
             this.apiResponses = []
             return true
           }
-        } catch {
-          // Ignore click errors
         }
+      }
+    } catch (e) {
+      this.log.debug('Locator method failed', { error: (e as Error).message })
+    }
+
+    // 方法3：直接点击文本
+    for (const tabText of tabTexts) {
+      try {
+        const elements = await this.page!.locator(`text=${tabText}`).all()
+
+        for (const el of elements) {
+          const box = await el.boundingBox()
+          if (box && box.y < 600 && box.y > 100) {
+            await el.click({ force: true, timeout: 5000 })
+            this.log.info('Time period switched (text)', { period: tabText })
+            await this.wait(3000)
+            this.apiResponses = []
+            return true
+          }
+        }
+      } catch {
+        // Ignore click errors
       }
     }
 
