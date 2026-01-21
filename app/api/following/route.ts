@@ -1,10 +1,14 @@
 /**
  * 获取用户关注列表 API（统一返回交易员和用户）
+ *
+ * SECURITY: Requires authentication and verifies userId matches authenticated user.
+ * This prevents users from accessing other users' private following lists.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { createLogger } from '@/lib/utils/logger'
+import { getAuthUser } from '@/lib/supabase/server'
 
 export const dynamic = 'force-dynamic'
 
@@ -34,10 +38,26 @@ type FollowItem = {
 
 export async function GET(request: NextRequest) {
   try {
+    // SECURITY: Require authentication
+    const authUser = await getAuthUser(request)
+    if (!authUser) {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+    }
+
     const userId = request.nextUrl.searchParams.get('userId')
-    
+
     if (!userId) {
       return NextResponse.json({ error: 'Missing userId' }, { status: 400 })
+    }
+
+    // SECURITY: Verify that userId matches authenticated user
+    // This prevents users from accessing other users' following lists
+    if (userId !== authUser.id) {
+      logger.warn('User attempted to access another user\'s following list', {
+        authUserId: authUser.id,
+        requestedUserId: userId
+      })
+      return NextResponse.json({ error: 'Unauthorized: Cannot access other users\' following lists' }, { status: 403 })
     }
 
     if (!SUPABASE_URL || !SUPABASE_KEY) {

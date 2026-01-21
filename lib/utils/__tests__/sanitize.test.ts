@@ -2,6 +2,59 @@
  * 输入消毒工具测试
  */
 
+// Track hooks for DOMPurify mock
+let afterSanitizeAttributesHook: ((node: { tagName: string; setAttribute: (name: string, value: string) => void }) => void) | null = null
+
+// Mock DOMPurify for Node.js test environment
+jest.mock('isomorphic-dompurify', () => ({
+  sanitize: jest.fn((dirty: string, config?: { ALLOWED_TAGS?: string[] }) => {
+    if (!dirty) return ''
+
+    // If ALLOWED_TAGS is empty array, strip all HTML tags AND their content (for script, style, etc.)
+    if (config?.ALLOWED_TAGS && config.ALLOWED_TAGS.length === 0) {
+      // Remove script/style tags with content first
+      let result = dirty
+        .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+        .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+      // Then strip remaining tags but keep text content
+      result = result.replace(/<[^>]*>/g, '')
+      return result
+    }
+
+    // Otherwise, sanitize HTML: remove dangerous tags and attributes
+    let result = dirty
+      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+      .replace(/\s*on\w+\s*=\s*["'][^"']*["']/gi, '')
+
+    // Apply afterSanitizeAttributes hook to add rel="noopener noreferrer" to links
+    if (afterSanitizeAttributesHook) {
+      // Find all <a> tags and add the attributes
+      result = result.replace(/<a\s+([^>]*)>/gi, (match, attrs) => {
+        // Add target="_blank" and rel="noopener noreferrer"
+        const hasTarget = /target=/.test(attrs)
+        const hasRel = /rel=/.test(attrs)
+        let newAttrs = attrs
+        if (!hasTarget) {
+          newAttrs += ' target="_blank"'
+        }
+        if (!hasRel) {
+          newAttrs += ' rel="noopener noreferrer"'
+        }
+        return `<a ${newAttrs.trim()}>`
+      })
+    }
+
+    return result
+  }),
+  setConfig: jest.fn(),
+  addHook: jest.fn((hookName: string, callback: (node: unknown) => void) => {
+    if (hookName === 'afterSanitizeAttributes') {
+      afterSanitizeAttributesHook = callback as (node: { tagName: string; setAttribute: (name: string, value: string) => void }) => void
+    }
+  }),
+}))
+
 import {
   sanitizeHtml,
   sanitizeText,

@@ -1,10 +1,13 @@
 /**
  * 开始新对话 API
  * POST: 创建或获取与指定用户的会话
+ *
+ * SECURITY: Requires authentication and verifies senderId matches authenticated user.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { getAuthUser } from '@/lib/supabase/server'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,11 +16,26 @@ const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
 
 export async function POST(request: NextRequest) {
   try {
+    // SECURITY: Require authentication
+    const authUser = await getAuthUser(request)
+    if (!authUser) {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+    }
+
     const body = await request.json()
     const { senderId, receiverId } = body
 
     if (!senderId || !receiverId) {
       return NextResponse.json({ error: 'Missing senderId or receiverId' }, { status: 400 })
+    }
+
+    // SECURITY: Verify that senderId matches authenticated user
+    if (senderId !== authUser.id) {
+      console.warn('[Start Message API] User attempted to start conversation as another user', {
+        authUserId: authUser.id,
+        requestedSenderId: senderId
+      })
+      return NextResponse.json({ error: 'Unauthorized: Cannot start conversations on behalf of other users' }, { status: 403 })
     }
 
     if (senderId === receiverId) {

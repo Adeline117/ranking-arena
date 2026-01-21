@@ -224,6 +224,7 @@ describe('RankingConfig', () => {
       RankingConfig.WEIGHTS.RISK_ADJUSTED +
       RankingConfig.WEIGHTS.STABILITY +
       RankingConfig.WEIGHTS.VOLUME
-    expect(totalWeight).toBe(1)
+    // Use toBeCloseTo for floating point comparison
+    expect(totalWeight).toBeCloseTo(1, 10)
   })
 })
