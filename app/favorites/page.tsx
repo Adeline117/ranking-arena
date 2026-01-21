@@ -9,6 +9,7 @@ import { Box, Text, Button } from '@/app/components/Base'
 import { RankingSkeleton } from '@/app/components/UI/Skeleton'
 import EmptyState from '@/app/components/UI/EmptyState'
 import { getCsrfHeaders } from '@/lib/api/client'
+import { useToast } from '@/app/components/UI/Toast'
 
 interface BookmarkFolder {
   id: string
@@ -33,6 +34,7 @@ interface SubscribedFolder {
 }
 
 export default function FavoritesPage() {
+  const { showToast } = useToast()
   const [email, setEmail] = useState<string | null>(null)
   const [accessToken, setAccessToken] = useState<string | null>(null)
   const [authChecked, setAuthChecked] = useState(false)  // 追踪认证检查是否完成
@@ -40,7 +42,7 @@ export default function FavoritesPage() {
   const [subscribedFolders, setSubscribedFolders] = useState<SubscribedFolder[]>([])
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<'my' | 'subscribed'>('my')
-  
+
   // 新建收藏夹
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [newFolderName, setNewFolderName] = useState('')
@@ -133,10 +135,10 @@ export default function FavoritesPage() {
         setNewFolderPublic(false)
         setShowCreateForm(false)
       } else {
-        alert(data.error || '创建失败')
+        showToast(data.error || '创建失败', 'error')
       }
     } catch (error) {
-      alert('创建失败')
+      showToast('创建失败', 'error')
     } finally {
       setCreating(false)
     }

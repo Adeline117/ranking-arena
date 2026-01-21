@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import { Button } from '../Base'
 import { getCsrfHeaders } from '@/lib/api/client'
+import { useToast } from '../UI/Toast'
 
 interface ClaimTraderButtonProps {
   traderId: string
@@ -15,6 +16,7 @@ interface ClaimTraderButtonProps {
 
 export default function ClaimTraderButton({ traderId, handle, userId, source = 'binance' }: ClaimTraderButtonProps) {
   const router = useRouter()
+  const { showToast } = useToast()
   const [loading, setLoading] = useState(false)
   const [claimed, setClaimed] = useState(false)
   const [hasConnection, setHasConnection] = useState(false)
@@ -97,7 +99,7 @@ export default function ClaimTraderButton({ traderId, handle, userId, source = '
       // 3. 获取用户token
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) {
-        alert('请先登录')
+        showToast('请先登录', 'warning')
         return
       }
 
@@ -127,13 +129,13 @@ export default function ClaimTraderButton({ traderId, handle, userId, source = '
             router.push('/settings')
           }
         } else {
-          alert(verifyResult.message || '账号验证失败，请确保您拥有此交易员账号。')
+          showToast(verifyResult.message || '账号验证失败，请确保您拥有此交易员账号。', 'error')
         }
         return
       }
 
       if (!verifyResult.verified) {
-        alert('账号验证失败：您可能不拥有此交易员账号，或者API凭证无效。')
+        showToast('账号验证失败：您可能不拥有此交易员账号，或者API凭证无效。', 'error')
         return
       }
 
@@ -152,19 +154,19 @@ export default function ClaimTraderButton({ traderId, handle, userId, source = '
       if (error) {
         if (error.code === '23505') {
           // 已存在认领申请
-          alert('您已经认领过此交易员账号。')
+          showToast('您已经认领过此交易员账号。', 'warning')
         } else {
           throw error
         }
       } else {
         setClaimed(true)
-        alert('认领成功！您的账号已与此交易员账号合并。')
+        showToast('认领成功！您的账号已与此交易员账号合并。', 'success')
         // 刷新页面
         window.location.reload()
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : '未知错误'
-      alert('认领失败：' + errorMessage)
+      showToast('认领失败：' + errorMessage, 'error')
     } finally {
       setLoading(false)
     }
