@@ -87,6 +87,8 @@ type ApiResponse<T = unknown> = {
     code: string
     message: string
     details?: unknown
+    retryable?: boolean
+    retryAfter?: number
   }
 }
 
@@ -124,19 +126,45 @@ export async function apiRequest<T = unknown>(
       body: body ? JSON.stringify(body) : undefined,
       credentials: 'include', // 确保发送 cookies
     })
-    
+
     const data = await response.json()
-    
+
     if (!response.ok) {
+      // Extract retry-after header if present
+      const retryAfterHeader = response.headers.get('Retry-After')
+      let retryAfter: number | undefined
+      if (retryAfterHeader) {
+        retryAfter = parseInt(retryAfterHeader, 10)
+        if (isNaN(retryAfter)) {
+          // Could be a date string
+          const retryDate = Date.parse(retryAfterHeader)
+          if (!isNaN(retryDate)) {
+            retryAfter = Math.ceil((retryDate - Date.now()) / 1000)
+          }
+        }
+      }
+
+      // Check for provider rate limit error
+      const isRateLimited = response.status === 429 || isProviderRateLimitResponse(data)
+      const isRetryable = isRateLimited || [500, 502, 503, 504].includes(response.status)
+
+      // Extract retryAfter from error response if not in header
+      if (!retryAfter && data?.error?.details?.retryAfter) {
+        retryAfter = data.error.details.retryAfter
+      }
+
       return {
         success: false,
-        error: data.error || {
-          code: 'REQUEST_FAILED',
-          message: data.message || '请求失败',
+        error: {
+          code: isRateLimited ? 'RATE_LIMITED' : (data.error?.code || 'REQUEST_FAILED'),
+          message: data.error?.message || data.message || (isRateLimited ? '请求频率超限' : '请求失败'),
+          details: data.error?.details,
+          retryable: isRetryable,
+          retryAfter,
         },
       }
     }
-    
+
     return {
       success: true,
       data: data as T,
@@ -148,9 +176,33 @@ export async function apiRequest<T = unknown>(
       error: {
         code: 'NETWORK_ERROR',
         message: '网络错误，请检查网络连接',
+        retryable: true,
       },
     }
   }
+}
+
+/**
+ * Check if a response indicates a provider rate limit error
+ */
+function isProviderRateLimitResponse(data: unknown): boolean {
+  if (!data || typeof data !== 'object') return false
+
+  const obj = data as Record<string, unknown>
+  const error = (obj.error as Record<string, unknown>) || obj
+
+  // Check for provider error type
+  if (error.type === 'provider' && error.reason === 'provider_error') {
+    const message = String(error.message || '').toLowerCase()
+    const providerStatus = (error.provider as Record<string, unknown>)?.status
+    return (
+      message.includes('rate limit') ||
+      message.includes('rate_limit') ||
+      providerStatus === 429
+    )
+  }
+
+  return false
 }
 
 /**

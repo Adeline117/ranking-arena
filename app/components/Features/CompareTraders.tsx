@@ -157,7 +157,7 @@ function CompareFloatingBar({
         borderRadius: 16,
         padding: 16,
         boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)',
-        zIndex: 1000,
+        zIndex: tokens.zIndex.popover,
         minWidth: 280,
         maxWidth: 400,
         backdropFilter: 'blur(12px)',
@@ -454,7 +454,7 @@ function CompareTraders({ traders, onRemove, onClear, maxTraders = 5 }: CompareT
           border: `1px solid ${tokens.colors.border.primary}`,
           borderRadius: 16,
           boxShadow: '0 16px 48px rgba(0, 0, 0, 0.4)',
-          zIndex: 1000,
+          zIndex: tokens.zIndex.modal,
           overflow: 'hidden',
         }}
       >

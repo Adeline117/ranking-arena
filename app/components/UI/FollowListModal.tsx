@@ -103,7 +103,7 @@ export default function FollowListModal({
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        zIndex: 1100,
+        zIndex: tokens.zIndex.modal,
       }}
       onClick={onClose}
     >

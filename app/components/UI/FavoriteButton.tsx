@@ -36,23 +36,34 @@ export default function FavoriteButton({ traderId, userId, initialFavorited = fa
       return
     }
 
+    // 保存当前状态用于回滚
+    const previousState = favorited
+    const newState = !favorited
+
+    // 乐观更新 UI
+    setFavorited(newState)
     setLoading(true)
+
     try {
-      if (favorited) {
-        await supabase
+      if (previousState) {
+        // 取消收藏
+        const { error } = await supabase
           .from('favorites')
           .delete()
           .eq('user_id', userId)
           .eq('trader_id', traderId)
-        setFavorited(false)
+        if (error) throw error
       } else {
-        await supabase
+        // 添加收藏
+        const { error } = await supabase
           .from('favorites')
           .insert({ user_id: userId, trader_id: traderId })
-        setFavorited(true)
+        if (error) throw error
       }
     } catch (error) {
       console.error('Toggle favorite error:', error)
+      // 回滚乐观更新
+      setFavorited(previousState)
       alert('操作失败，请重试')
     } finally {
       setLoading(false)

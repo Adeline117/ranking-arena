@@ -11,6 +11,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { tokens } from '@/lib/design-tokens'
 
 // ============================================
 // useNetworkStatus - 网络状态检测
@@ -368,7 +369,7 @@ export function OfflineBanner() {
         textAlign: 'center',
         fontSize: 14,
         fontWeight: 600,
-        zIndex: 9999,
+        zIndex: tokens.zIndex.toast, // 网络状态提示需要高优先级
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
