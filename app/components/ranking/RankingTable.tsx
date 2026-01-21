@@ -58,6 +58,33 @@ function formatROI(roi: number): string {
   }
 }
 
+/**
+ * 获取 PnL 数据来源提示
+ * 不同交易所的 PnL 含义不同：
+ * - Binance: 交易员本人盈亏
+ * - Bybit/Bitget/KuCoin/MEXC: 跟单者收益（非交易员本人）
+ */
+function getPnLTooltip(source: string, language: string): string {
+  const traderPnlSources = ['binance', 'binance_futures', 'binance_spot', 'binance_web3']
+  const followerPnlSources = ['bybit', 'bitget', 'bitget_futures', 'bitget_spot', 'kucoin', 'mexc']
+
+  const sourceLower = source.toLowerCase()
+
+  if (traderPnlSources.some(s => sourceLower.includes(s))) {
+    return language === 'zh'
+      ? 'PnL = 交易员本人盈亏'
+      : 'PnL = Trader\'s own profit/loss'
+  }
+
+  if (followerPnlSources.some(s => sourceLower.includes(s))) {
+    return language === 'zh'
+      ? 'PnL = 跟单者收益（非交易员本人）'
+      : 'PnL = Followers\' profit (not trader\'s own)'
+  }
+
+  return language === 'zh' ? 'PnL = 盈亏金额' : 'PnL = Profit/Loss'
+}
+
 export interface Trader {
   id: string
   handle: string | null
@@ -777,20 +804,23 @@ export default function RankingTable(props: {
                       >
                         {formatROI(trader.roi || 0)}
                       </Text>
+                      {/* PnL - 带数据来源提示 */}
                       <Text
                         size="xs"
                         weight="semibold"
                         className="pnl-value"
                         style={{
-                          color: trader.pnl != null 
+                          color: trader.pnl != null
                             ? (trader.pnl >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error)
                             : tokens.colors.text.tertiary,
                           lineHeight: 1.2,
                           fontSize: '11px',
                           opacity: trader.pnl != null ? 0.85 : 0.5,
+                          cursor: trader.pnl != null ? 'help' : 'default',
                         }}
+                        title={trader.pnl != null ? getPnLTooltip(trader.source || source || '', language) : undefined}
                       >
-                        {trader.pnl != null 
+                        {trader.pnl != null
                           ? `${trader.pnl >= 0 ? '+' : ''}${formatPnL(trader.pnl)}`
                           : '—'
                         }

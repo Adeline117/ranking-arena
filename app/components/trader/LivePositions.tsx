@@ -26,8 +26,8 @@ interface LivePositionsProps {
 }
 
 /**
- * 实时持仓组件
- * 显示交易员当前持仓，支持自动刷新
+ * 持仓快照组件
+ * 显示交易员当前持仓，默认每 30 秒轮询更新（非 WebSocket 实时）
  */
 export default function LivePositions({
   handle,
@@ -135,6 +135,10 @@ export default function LivePositions({
         <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
           <Text size="sm" weight="semibold" color="primary">
             {t('livePositions')}
+          </Text>
+          {/* 轮询刷新说明 */}
+          <Text size="xs" color="tertiary" style={{ opacity: 0.7 }}>
+            ({refreshInterval / 1000}s polling)
           </Text>
           <Box
             style={{
