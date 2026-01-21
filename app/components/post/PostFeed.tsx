@@ -726,7 +726,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
           totalVotes: data.data.poll.totalVotes,
         } : null)
         setCustomPollUserVotes(data.data.userVotes)
-        showToast('投票成功', 'success')
+        showToast('已投票', 'success')
       } else {
         showToast(data.error || '投票失败', 'error')
       }
@@ -762,7 +762,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
       if (response.ok) {
         setUserBookmarks(prev => ({ ...prev, [postId]: result.bookmarked }))
         setBookmarkCounts(prev => ({ ...prev, [postId]: result.bookmark_count }))
-        showToast(result.bookmarked ? '已收藏到默认收藏夹' : '已取消收藏', 'success')
+        showToast(result.bookmarked ? '已收藏' : '已取消收藏', 'success')
       } else {
         showToast(result.error || '操作失败', 'error')
       }
@@ -806,7 +806,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
       if (response.ok) {
         setUserBookmarks(prev => ({ ...prev, [bookmarkingPostId]: result.bookmarked }))
         setBookmarkCounts(prev => ({ ...prev, [bookmarkingPostId]: result.bookmark_count }))
-        showToast('已收藏到指定收藏夹', 'success')
+        showToast('已收藏', 'success')
       } else {
         showToast(result.error || '操作失败', 'error')
       }
@@ -852,7 +852,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
       if (response.ok) {
         setShowRepostModal(null)
         setRepostComment('')
-        showToast('转发成功！已发布到你的主页', 'success')
+        showToast('已转发', 'success')
       } else {
         showToast(result.error || '转发失败', 'error')
       }
@@ -959,16 +959,16 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
       } else {
         // 处理API错误
         if (response.status === 429) {
-          showToast('操作过于频繁，请稍后再试', 'warning')
+          showToast('操作太快，稍等一下', 'warning')
         } else if (response.status === 401) {
-          showToast('登录已过期，请重新登录', 'warning')
+          showToast('登录已过期', 'warning')
         } else {
           showToast(json.error || '点赞失败', 'error')
         }
       }
     } catch (err) {
       // 错误已在 showToast 中处理
-      showToast('网络错误，请稍后重试', 'error')
+      showToast('网络错误', 'error')
     } finally {
       setCommentLikeLoading(prev => ({ ...prev, [commentId]: false }))
     }
@@ -1026,7 +1026,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
           setOpenPost(prev => prev ? { ...prev, comment_count: prev.comment_count + 1 } : null)
         }
         
-        showToast('回复成功', 'success')
+        showToast('已回复', 'success')
       } else {
         showToast(json.error || '回复失败', 'error')
       }
@@ -1091,7 +1091,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
           setOpenPost(prev => prev ? { ...prev, comment_count: Math.max(0, prev.comment_count - 1) } : null)
         }
         
-        showToast('评论已删除', 'success')
+        showToast('已删除', 'success')
       } else {
         showToast(json.error || '删除评论失败', 'error')
       }
@@ -1151,7 +1151,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
         }
         
         setEditingPost(null)
-        showToast('编辑成功', 'success')
+        showToast('已保存', 'success')
       } else {
         showToast(data.error || '编辑失败', 'error')
       }
@@ -1195,7 +1195,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
           setOpenPost(null)
         }
         
-        showToast('删除成功', 'success')
+        showToast('已删除', 'success')
       } else {
         showToast(data.error || '删除失败', 'error')
       }

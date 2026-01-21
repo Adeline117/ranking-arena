@@ -303,12 +303,12 @@ const ERROR_TITLES: Record<ErrorType, string> = {
 }
 
 const ERROR_DESCRIPTIONS: Record<ErrorType, string> = {
-  default: '发生了未知错误，请稍后重试',
-  network: '请检查网络连接后重试',
-  server: '服务器暂时不可用，请稍后重试',
-  notFound: '您访问的资源不存在',
-  forbidden: '您没有权限访问此内容',
-  timeout: '请求超时，请稍后重试',
+  default: '加载失败，刷新试试',
+  network: '网络不稳定，请重试',
+  server: '服务繁忙，稍后再试',
+  notFound: '内容不存在',
+  forbidden: '无权限访问',
+  timeout: '加载超时，请重试',
 }
 
 export function ErrorState({
