@@ -1406,7 +1406,7 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              zIndex: 2000,
+              zIndex: tokens.zIndex.modal,
             }}
             onClick={() => setShowMuteModal(null)}
           >

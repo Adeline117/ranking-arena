@@ -211,7 +211,7 @@ export default function EquityCurve({
             borderRadius: tokens.radius.md,
             padding: tokens.spacing[2],
             pointerEvents: 'none',
-            zIndex: 100,
+            zIndex: tokens.zIndex.dropdown,
             minWidth: 120,
           }}
         >
