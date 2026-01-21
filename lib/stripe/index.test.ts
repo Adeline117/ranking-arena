@@ -104,6 +104,7 @@ describe('getStripe', () => {
     // Clear the cached instance
     jest.resetModules()
     expect(() => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { getStripe: getStripeNew } = require('./index')
       getStripeNew()
     }).toThrow('STRIPE_SECRET_KEY is not defined')

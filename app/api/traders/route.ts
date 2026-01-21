@@ -162,7 +162,7 @@ export const GET = withPublic(
       if (!capturedAt) return { traders: [], isStale: false }
 
       // 使用分页查询获取所有数据（Supabase默认限制1000条）
-      let allSnapshots = []
+      const allSnapshots = []
       let page = 0
       const pageSize = 1000
       
