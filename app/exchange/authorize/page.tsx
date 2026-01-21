@@ -6,10 +6,12 @@ import { supabase } from '@/lib/supabase/client'
 import { Box, Text, Button } from '@/app/components/Base'
 import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/Layout/TopNav'
+import { useToast } from '@/app/components/UI/Toast'
 
 function ExchangeAuthorizePageContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
+  const { showToast } = useToast()
   const [exchange, setExchange] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [authUrl, setAuthUrl] = useState<string | null>(null)
@@ -44,16 +46,16 @@ function ExchangeAuthorizePageContent() {
       const result = await response.json()
 
       if (!response.ok) {
-        alert(result.error || '加载授权页面失败')
+        showToast(result.error || '加载授权页面失败', 'error')
         router.push('/settings')
         return
       }
 
       setAuthUrl(result.authUrl)
       setInstructions(result.instructions || [])
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[ExchangeAuthorize] 加载失败:', error)
-      alert('加载失败，请重试')
+      showToast('加载失败，请重试', 'error')
       router.push('/settings')
     } finally {
       setLoading(false)
