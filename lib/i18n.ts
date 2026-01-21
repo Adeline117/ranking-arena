@@ -467,6 +467,12 @@ export const translations = {
     errorMessage: '抱歉，页面遇到了问题',
     errorRefresh: '请尝试刷新页面或返回首页',
     refreshPage: '刷新页面',
+    // 私信
+    orphanMessages: '有 {count} 条历史未读消息（对话可能已被删除）',
+    clearAll: '全部清除',
+    clearing: '清除中...',
+    cleared: '已清除',
+    clearFailed: '清除失败',
   },
   en: {
     home: 'Home',
@@ -933,6 +939,12 @@ export const translations = {
     errorMessage: 'Sorry, an error occurred',
     errorRefresh: 'Please try refreshing the page or return home',
     refreshPage: 'Refresh Page',
+    // Messages
+    orphanMessages: '{count} unread messages from deleted conversations',
+    clearAll: 'Clear All',
+    clearing: 'Clearing...',
+    cleared: 'Cleared',
+    clearFailed: 'Failed to clear',
   },
 }
 

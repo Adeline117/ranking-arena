@@ -9,6 +9,7 @@ import TopNav from '@/app/components/Layout/TopNav'
 import { Box, Text } from '@/app/components/Base'
 import Avatar from '@/app/components/UI/Avatar'
 import { useToast } from '@/app/components/UI/Toast'
+import { useLanguage } from '@/app/components/Utils/LanguageProvider'
 
 type Conversation = {
   id: string
@@ -26,12 +27,14 @@ type Conversation = {
 export default function MessagesPage() {
   const router = useRouter()
   const { showToast } = useToast()
+  const { t } = useLanguage()
   const [email, setEmail] = useState<string | null>(null)
   const [userId, setUserId] = useState<string | null>(null)
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [loading, setLoading] = useState(true)
   const [authChecked, setAuthChecked] = useState(false) // 追踪认证检查是否完成
   const [orphanUnreadCount, setOrphanUnreadCount] = useState(0) // 孤立的未读消息数
+  const [clearingOrphan, setClearingOrphan] = useState(false) // 清除中状态
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
 
   // 加载会话列表
@@ -299,12 +302,14 @@ export default function MessagesPage() {
           >
             <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
               <Text size="sm" color="primary">
-                有 {orphanUnreadCount} 条历史未读消息（对话可能已被删除）
+                {t('orphanMessages').replace('{count}', String(orphanUnreadCount))}
               </Text>
             </Box>
             <button
+              disabled={clearingOrphan}
               onClick={async () => {
-                if (!userId) return
+                if (!userId || clearingOrphan) return
+                setClearingOrphan(true)
                 try {
                   // 标记所有未读消息为已读
                   await supabase
@@ -313,24 +318,27 @@ export default function MessagesPage() {
                     .eq('receiver_id', userId)
                     .eq('read', false)
                   setOrphanUnreadCount(0)
-                  showToast('已清除', 'success')
+                  showToast(t('cleared'), 'success')
                 } catch {
-                  showToast('清除失败', 'error')
+                  showToast(t('clearFailed'), 'error')
+                } finally {
+                  setClearingOrphan(false)
                 }
               }}
               style={{
                 padding: '6px 12px',
-                background: 'rgba(255, 193, 7, 0.2)',
+                background: clearingOrphan ? 'rgba(255, 193, 7, 0.1)' : 'rgba(255, 193, 7, 0.2)',
                 border: '1px solid rgba(255, 193, 7, 0.4)',
                 borderRadius: 8,
                 color: tokens.colors.text.primary,
                 fontSize: 13,
                 fontWeight: 600,
-                cursor: 'pointer',
+                cursor: clearingOrphan ? 'not-allowed' : 'pointer',
                 whiteSpace: 'nowrap',
+                opacity: clearingOrphan ? 0.6 : 1,
               }}
             >
-              全部清除
+              {clearingOrphan ? t('clearing') : t('clearAll')}
             </button>
           </Box>
         )}
