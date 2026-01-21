@@ -136,10 +136,12 @@ export function usePostActions(accessToken: string | null) {
   const toggleReaction = useCallback(async (
     postId: string,
     reactionType: 'up' | 'down',
-    onSuccess?: (result: { like_count: number; dislike_count: number; reaction: 'up' | 'down' | null }) => void
+    onSuccess?: (result: { like_count: number; dislike_count: number; reaction: 'up' | 'down' | null }) => void,
+    onError?: (error: string) => void
   ) => {
     if (!accessToken) {
       console.warn('[usePostActions] 需要登录')
+      onError?.('请先登录')
       return
     }
 
@@ -162,9 +164,15 @@ export function usePostActions(accessToken: string | null) {
 
       if (response.ok && json.success) {
         onSuccess?.(json.data)
+      } else {
+        const errorMsg = json.error || '点赞失败'
+        console.error('[usePostActions] 点赞失败:', errorMsg)
+        onError?.(errorMsg)
       }
     } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : '网络错误，请重试'
       console.error('[usePostActions] 点赞失败:', err)
+      onError?.(errorMsg)
     } finally {
       setTimeout(() => processingRef.current.delete(key), 300)
     }
@@ -174,10 +182,12 @@ export function usePostActions(accessToken: string | null) {
   const toggleVote = useCallback(async (
     postId: string,
     choice: 'bull' | 'bear' | 'wait',
-    onSuccess?: (result: { poll: { bull: number; bear: number; wait: number }; vote: 'bull' | 'bear' | 'wait' | null }) => void
+    onSuccess?: (result: { poll: { bull: number; bear: number; wait: number }; vote: 'bull' | 'bear' | 'wait' | null }) => void,
+    onError?: (error: string) => void
   ) => {
     if (!accessToken) {
       console.warn('[usePostActions] 需要登录')
+      onError?.('请先登录')
       return
     }
 
@@ -200,9 +210,15 @@ export function usePostActions(accessToken: string | null) {
 
       if (response.ok && json.success) {
         onSuccess?.(json.data)
+      } else {
+        const errorMsg = json.error || '投票失败'
+        console.error('[usePostActions] 投票失败:', errorMsg)
+        onError?.(errorMsg)
       }
     } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : '网络错误，请重试'
       console.error('[usePostActions] 投票失败:', err)
+      onError?.(errorMsg)
     } finally {
       setTimeout(() => processingRef.current.delete(key), 300)
     }
