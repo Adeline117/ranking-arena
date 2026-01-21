@@ -182,3 +182,221 @@ export function useAnalyticsCleanup() {
     }
   }, [])
 }
+
+// ============================================
+// 新增：增强型埋点 Hooks
+// ============================================
+
+/**
+ * 用户行为追踪 Hook
+ * 追踪用户在页面上的关键操作
+ */
+export function useUserBehaviorTracking() {
+  const pathname = usePathname()
+
+  // 追踪滚动深度
+  const trackScrollDepth = useCallback((depth: number) => {
+    track('performance', {
+      metric_name: 'scroll_depth',
+      value: depth,
+      page: pathname,
+    })
+  }, [pathname])
+
+  // 追踪点击事件
+  const trackClick = useCallback((
+    elementName: string,
+    elementType: 'button' | 'link' | 'card' | 'tab' | 'other',
+    metadata?: Record<string, unknown>
+  ) => {
+    track('performance', {
+      metric_name: `click.${elementType}.${elementName}`,
+      value: 1,
+      page: pathname,
+      ...metadata,
+    })
+  }, [pathname])
+
+  // 追踪表单提交
+  const trackFormSubmit = useCallback((
+    formName: string,
+    success: boolean,
+    errorMessage?: string
+  ) => {
+    track('performance', {
+      metric_name: `form.${formName}.${success ? 'success' : 'error'}`,
+      value: success ? 1 : 0,
+      page: pathname,
+      ...(errorMessage && { error: errorMessage }),
+    })
+  }, [pathname])
+
+  return { trackScrollDepth, trackClick, trackFormSubmit }
+}
+
+/**
+ * Premium 功能追踪 Hook
+ * 追踪 Premium 相关的用户行为
+ */
+export function usePremiumTracking() {
+  // 追踪 Premium 功能触达
+  const trackPremiumFeatureView = useCallback((
+    featureName: string,
+    userTier: 'free' | 'pro' | 'elite' | 'enterprise'
+  ) => {
+    track('performance', {
+      metric_name: `premium.feature_view.${featureName}`,
+      value: 1,
+      page: 'premium',
+      tier: userTier,
+    })
+  }, [])
+
+  // 追踪 Premium 升级点击
+  const trackUpgradeClick = useCallback((
+    source: string,
+    targetTier: 'pro' | 'elite' | 'enterprise'
+  ) => {
+    track('performance', {
+      metric_name: `premium.upgrade_click.${targetTier}`,
+      value: 1,
+      page: source,
+    })
+  }, [])
+
+  // 追踪 Premium 功能受限提示
+  const trackFeatureGate = useCallback((
+    featureName: string,
+    requiredTier: 'pro' | 'elite' | 'enterprise'
+  ) => {
+    track('performance', {
+      metric_name: `premium.feature_gate.${featureName}`,
+      value: 1,
+      page: 'feature_gate',
+      required_tier: requiredTier,
+    })
+  }, [])
+
+  return { trackPremiumFeatureView, trackUpgradeClick, trackFeatureGate }
+}
+
+/**
+ * 筛选追踪 Hook
+ * 追踪用户的筛选行为
+ */
+export function useFilterTracking() {
+  const pathname = usePathname()
+
+  const trackFilter = useCallback((
+    filterType: 'time_range' | 'exchange' | 'sort' | 'category' | 'other',
+    filterValue: string,
+    previousValue?: string
+  ) => {
+    track('performance', {
+      metric_name: `filter.${filterType}`,
+      value: 1,
+      page: pathname,
+      filter_value: filterValue,
+      previous_value: previousValue,
+    })
+  }, [pathname])
+
+  return { trackFilter }
+}
+
+/**
+ * 页面停留时间追踪 Hook
+ * 自动追踪用户在页面上的停留时间
+ */
+export function useTimeOnPage(pageName: string) {
+  const startTime = useRef(Date.now())
+  const pathname = usePathname()
+
+  useEffect(() => {
+    startTime.current = Date.now()
+
+    return () => {
+      const duration = Date.now() - startTime.current
+      // 只追踪超过 3 秒的停留
+      if (duration > 3000) {
+        track('performance', {
+          metric_name: `time_on_page.${pageName}`,
+          value: Math.round(duration / 1000), // 转换为秒
+          page: pathname,
+        })
+      }
+    }
+  }, [pageName, pathname])
+}
+
+/**
+ * 交易员比较追踪 Hook
+ */
+export function useCompareTracking() {
+  const trackCompareAction = useCallback((
+    action: 'add' | 'remove' | 'view' | 'share',
+    traderIds: string[],
+    source?: string
+  ) => {
+    track('performance', {
+      metric_name: `compare.${action}`,
+      value: traderIds.length,
+      page: source || 'compare',
+      trader_ids: traderIds.join(','),
+    })
+  }, [])
+
+  return { trackCompareAction }
+}
+
+/**
+ * 通知追踪 Hook
+ */
+export function useNotificationTracking() {
+  const trackNotificationAction = useCallback((
+    action: 'view' | 'click' | 'dismiss' | 'settings_change',
+    notificationType?: string,
+    notificationId?: string
+  ) => {
+    track('performance', {
+      metric_name: `notification.${action}`,
+      value: 1,
+      page: 'notifications',
+      notification_type: notificationType,
+      notification_id: notificationId,
+    })
+  }, [])
+
+  return { trackNotificationAction }
+}
+
+/**
+ * 用户引导追踪 Hook
+ */
+export function useOnboardingTracking() {
+  const trackOnboardingStep = useCallback((
+    step: number,
+    stepName: string,
+    action: 'view' | 'complete' | 'skip'
+  ) => {
+    track('performance', {
+      metric_name: `onboarding.step_${step}.${action}`,
+      value: 1,
+      page: 'onboarding',
+      step_name: stepName,
+    })
+  }, [])
+
+  const trackOnboardingComplete = useCallback((
+    totalSteps: number,
+    skipped: boolean
+  ) => {
+    track('performance', {
+      metric_name: skipped ? 'onboarding.skipped' : 'onboarding.completed',
+      value: totalSteps,
+      page: 'onboarding',
+    })
+  }, [])
+
+  return { trackOnboardingStep, trackOnboardingComplete }
+}
