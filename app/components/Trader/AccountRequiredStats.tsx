@@ -9,6 +9,7 @@ import ExchangeLogo from '@/app/components/UI/ExchangeLogo'
 import Link from 'next/link'
 import { getCsrfHeaders } from '@/lib/api/client'
 import type { Exchange } from '@/lib/exchange'
+import { useToast } from '@/app/components/UI/Toast'
 
 interface TradingData {
   total_trades: number
@@ -28,6 +29,7 @@ interface ExchangeConnection {
 }
 
 export default function AccountRequiredStats({ userId }: { userId: string }) {
+  const { showToast } = useToast()
   const [connections, setConnections] = useState<ExchangeConnection[]>([])
   const [tradingData, setTradingData] = useState<Record<string, TradingData>>({})
   const [loading, setLoading] = useState(true)
@@ -87,16 +89,16 @@ export default function AccountRequiredStats({ userId }: { userId: string }) {
 
       if (!response.ok) {
         const error = await response.json()
-        alert('同步失败: ' + (error.error || 'Unknown error'))
+        showToast('同步失败: ' + (error.error || 'Unknown error'), 'error')
         return
       }
 
       // 重新加载数据
       await loadData()
-      alert('同步成功！')
+      showToast('同步成功！', 'success')
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : '同步失败'
-      alert('同步失败: ' + errorMessage)
+      showToast('同步失败: ' + errorMessage, 'error')
     } finally {
       setSyncing({ ...syncing, [exchange]: false })
     }
