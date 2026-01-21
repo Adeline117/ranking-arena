@@ -1,6 +1,16 @@
 /**
  * Zustand 状态管理
  * 提供轻量级的全局状态管理
+ *
+ * ⚠️ 重要说明 (2026-01-21 审计):
+ * 这些 stores 目前已定义但未在生产中使用。
+ * 实际状态管理通过以下方式实现:
+ * - 排行榜数据: useTraderData hook (app/components/Home/hooks/useTraderData.ts)
+ * - 用户认证: Supabase Auth + useAuth hook
+ * - UI 状态: LanguageProvider + 各组件 useState
+ * - 数据缓存: SWR
+ *
+ * 如需迁移到 Zustand，请参考 docs/AUDIT_REPORT_2026-01-21.md
  */
 
 import { create } from 'zustand'

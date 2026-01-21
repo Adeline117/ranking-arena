@@ -24,22 +24,20 @@ interface HotSearch {
 }
 
 // ============================================
-// 模拟数据（实际应从 API 获取）
+// 热门搜索（可后续接入 API）
 // ============================================
 
-const MOCK_HOT_SEARCHES: HotSearch[] = [
+const HOT_SEARCHES: HotSearch[] = [
   { keyword: 'BTC', count: 12500, trend: 'up' },
   { keyword: 'ETH', count: 8900, trend: 'up' },
-  { keyword: '高收益交易员', count: 6700, trend: 'stable' },
-  { keyword: 'Binance Top', count: 5400, trend: 'down' },
   { keyword: 'SOL', count: 4200, trend: 'up' },
-  { keyword: '低回撤策略', count: 3800, trend: 'stable' },
+  { keyword: 'PEPE', count: 3800, trend: 'stable' },
 ]
 
-const MOCK_RECENT_SEARCHES = ['CryptoKing', 'PEPE', 'BTC 大户']
+const DEFAULT_RECENT_SEARCHES: string[] = []
 
 // ============================================
-// 搜索建议 Hook - 从数据库获取真实交易员数据
+// 搜索建议 Hook - 使用真实 API
 // ============================================
 
 function useSearchSuggestions(query: string) {
@@ -52,57 +50,47 @@ function useSearchSuggestions(query: string) {
       return
     }
 
-    const abortController = new AbortController()
     setLoading(true)
+    const abortController = new AbortController()
 
-    // 防抖 200ms
     const timer = setTimeout(async () => {
       try {
-        // 调用 traders API 并根据 handle 过滤
-        const response = await fetch('/api/traders?timeRange=90D', {
-          signal: abortController.signal,
-        })
+        const response = await fetch(
+          `/api/search/suggestions?q=${encodeURIComponent(query)}&limit=10`,
+          { signal: abortController.signal }
+        )
 
         if (!response.ok) {
-          throw new Error('Failed to fetch traders')
+          throw new Error('Search failed')
         }
 
         const data = await response.json()
-        const traders = data.traders || []
 
-        // 过滤匹配的交易员（模糊匹配 handle）
-        const queryLower = query.toLowerCase()
-        const matchedTraders = traders
-          .filter((t: { handle: string }) =>
-            t.handle?.toLowerCase().includes(queryLower)
-          )
-          .slice(0, 5)  // 最多显示 5 个建议
-          .map((t: { handle: string; source: string; roi: number; avatar?: string }) => ({
-            type: 'trader' as const,
-            value: t.handle,
-            label: `@${t.handle}`,
-            subLabel: `${t.source} · ROI ${t.roi >= 0 ? '+' : ''}${t.roi.toFixed(1)}%`,
-            avatar: t.avatar,
-          }))
-
-        // 如果没有匹配的交易员，添加关键词搜索建议
-        const finalSuggestions: SearchSuggestion[] = matchedTraders.length > 0
-          ? matchedTraders
-          : [
+        if (data.success && data.data?.suggestions) {
+          // 使用 API 返回的建议
+          const apiSuggestions = data.data.suggestions
+          // 如果没有结果，添加关键词搜索建议
+          if (apiSuggestions.length === 0) {
+            setSuggestions([
               { type: 'keyword', value: query, label: query, subLabel: '搜索关键词' },
-            ]
-
-        // 如果有匹配的交易员，也添加关键词搜索选项
-        if (matchedTraders.length > 0 && matchedTraders.length < 5) {
-          finalSuggestions.push({
-            type: 'keyword',
-            value: query,
-            label: `搜索 "${query}"`,
-            subLabel: '查看所有结果',
-          })
+            ])
+          } else {
+            // 如果有结果但不多，添加一个"查看所有结果"选项
+            if (apiSuggestions.length > 0 && apiSuggestions.length < 10) {
+              apiSuggestions.push({
+                type: 'keyword',
+                value: query,
+                label: `搜索 "${query}"`,
+                subLabel: '查看所有结果',
+              })
+            }
+            setSuggestions(apiSuggestions)
+          }
+        } else {
+          setSuggestions([
+            { type: 'keyword', value: query, label: query, subLabel: '搜索关键词' },
+          ])
         }
-
-        setSuggestions(finalSuggestions)
       } catch (error) {
         if ((error as Error).name !== 'AbortError') {
           console.error('Search suggestions error:', error)
@@ -114,7 +102,7 @@ function useSearchSuggestions(query: string) {
       } finally {
         setLoading(false)
       }
-    }, 200)
+    }, 200) // 200ms 防抖
 
     return () => {
       clearTimeout(timer)
@@ -160,10 +148,10 @@ export function EnhancedSearch({
       try {
         setRecentSearches(JSON.parse(stored).slice(0, 5))
       } catch {
-        setRecentSearches(MOCK_RECENT_SEARCHES)
+        setRecentSearches(DEFAULT_RECENT_SEARCHES)
       }
     } else {
-      setRecentSearches(MOCK_RECENT_SEARCHES)
+      setRecentSearches(DEFAULT_RECENT_SEARCHES)
     }
   }, [])
 
@@ -317,7 +305,7 @@ export function EnhancedSearch({
             <div className="p-3">
               <div className="text-xs font-semibold text-[var(--color-text-tertiary)] mb-2">热门搜索</div>
               <div className="space-y-1">
-                {MOCK_HOT_SEARCHES.map((hot, idx) => (
+                {HOT_SEARCHES.map((hot, idx) => (
                   <button
                     key={idx}
                     onClick={() => handleSearch(hot.keyword)}
