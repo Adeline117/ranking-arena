@@ -11,19 +11,39 @@ export const dynamic = 'force-dynamic'
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
 
+/**
+ * 验证用户身份并返回用户ID
+ */
+async function authenticateUser(request: NextRequest, supabase: ReturnType<typeof createClient>): Promise<{ userId: string } | { error: string; status: number }> {
+  const authHeader = request.headers.get('Authorization')
+  if (!authHeader?.startsWith('Bearer ')) {
+    return { error: '未授权：缺少认证令牌', status: 401 }
+  }
+
+  const token = authHeader.slice(7)
+  const { data: { user }, error: authError } = await supabase.auth.getUser(token)
+
+  if (authError || !user) {
+    return { error: '身份验证失败', status: 401 }
+  }
+
+  return { userId: user.id }
+}
+
 export async function GET(request: NextRequest) {
   try {
-    const userId = request.nextUrl.searchParams.get('userId')
-
-    if (!userId) {
-      return NextResponse.json({ error: 'Missing userId' }, { status: 400 })
-    }
-
     if (!SUPABASE_URL || !SUPABASE_KEY) {
       return NextResponse.json({ error: 'Missing Supabase config' }, { status: 500 })
     }
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
+
+    // 验证用户身份
+    const authResult = await authenticateUser(request, supabase)
+    if ('error' in authResult) {
+      return NextResponse.json({ error: authResult.error }, { status: authResult.status })
+    }
+    const userId = authResult.userId
 
     // 获取用户的所有会话
     const { data: conversations, error } = await supabase
@@ -49,7 +69,8 @@ export async function GET(request: NextRequest) {
     }
 
     // 获取每个会话中另一方用户的信息和未读消息数
-    const enhancedConversations = await Promise.all(
+    // 使用 Promise.allSettled 确保单个查询失败不会导致整个列表失败
+    const enhancedResults = await Promise.allSettled(
       (conversations || []).map(async (conv: any) => {
         const otherUserId = conv.user1_id === userId ? conv.user2_id : conv.user1_id
 
@@ -70,7 +91,7 @@ export async function GET(request: NextRequest) {
 
         return {
           id: conv.id,
-          other_user: otherUser || { id: otherUserId, handle: '未知用户' },
+          other_user: otherUser || { id: otherUserId, handle: '未知用户', avatar_url: null, bio: null },
           last_message_at: conv.last_message_at,
           last_message_preview: conv.last_message_preview,
           unread_count: unreadCount || 0,
@@ -78,6 +99,17 @@ export async function GET(request: NextRequest) {
         }
       })
     )
+
+    // 过滤出成功的结果，记录失败的
+    const enhancedConversations = enhancedResults
+      .filter((result): result is PromiseFulfilledResult<any> => {
+        if (result.status === 'rejected') {
+          console.error('[Conversations API] 增强会话数据失败:', result.reason)
+          return false
+        }
+        return true
+      })
+      .map(result => result.value)
 
     return NextResponse.json({ conversations: enhancedConversations })
   } catch (error) {
