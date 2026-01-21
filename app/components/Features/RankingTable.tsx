@@ -57,6 +57,18 @@ function formatAmount(amount: number): string {
   }
 }
 
+// 格式化 ROI 显示（处理极端值）
+function formatROI(roi: number): string {
+  const absRoi = Math.abs(roi)
+  if (absRoi >= 10000) {
+    return `${roi >= 0 ? '+' : ''}${(roi / 1000).toFixed(0)}K%`
+  } else if (absRoi >= 1000) {
+    return `${roi >= 0 ? '+' : ''}${roi.toFixed(0)}%`
+  } else {
+    return `${roi >= 0 ? '+' : ''}${roi.toFixed(1)}%`
+  }
+}
+
 export interface Trader {
   id: string
   handle: string | null
@@ -770,10 +782,13 @@ export default function RankingTable(props: {
                           color: (trader.roi || 0) >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error,
                           lineHeight: 1.2,
                           fontSize: '16px',
+                          maxWidth: '100%',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
                         }}
+                        title={`${(trader.roi || 0) >= 0 ? '+' : ''}${(trader.roi || 0).toFixed(2)}%`}
                       >
-                        {(trader.roi || 0) >= 0 ? '+' : ''}
-                        {(trader.roi || 0).toFixed(1)}%
+                        {formatROI(trader.roi || 0)}
                       </Text>
                       <Text
                         size="xs"
