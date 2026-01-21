@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
 import { RankingSkeleton } from '../UI/Skeleton'
 import { RankingBadge } from '../Icons'
@@ -159,6 +160,7 @@ export default function RankingTable(props: {
 }) {
   const { traders, loading, source, timeRange = '90D', isPro = false, category = 'all', onCategoryChange, onProRequired } = props
   const { t, language } = useLanguage()
+  const router = useRouter()
   
   // 分页状态
   const [currentPage, setCurrentPage] = useState(1)
@@ -548,7 +550,7 @@ export default function RankingTable(props: {
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
                       e.preventDefault()
-                      window.location.href = href
+                      router.push(href)
                     }
                   }}
                 >

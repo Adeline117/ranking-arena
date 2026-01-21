@@ -967,7 +967,6 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
             <GroupCardSkeleton key={i} />
           ))}
         </Box>
-        </Text>
       ) : relatedGroups.length === 0 ? (
         <Text size="sm" color="tertiary" style={{ textAlign: 'center', padding: tokens.spacing[4] }}>
           {language === 'zh' ? '暂无推荐' : 'No recommendations'}
