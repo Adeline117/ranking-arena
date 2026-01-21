@@ -261,7 +261,7 @@ export default function TopNav({ email }: { email: string | null }) {
           <Link 
             href="/" 
             className="top-nav-logo touch-target"
-            aria-label="返回首页"
+            aria-label={t('backToHome')}
             tabIndex={0}
             style={{ 
               display: 'flex', 

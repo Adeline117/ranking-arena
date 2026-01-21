@@ -125,7 +125,7 @@ export default function ExchangeConnectionManager({ userId }: ExchangeConnection
   }
 
   const handleDisconnect = async (exchange: string) => {
-    const confirmed = await showConfirm('断开连接', t('confirmDisconnect').replace('{exchange}', exchange))
+    const confirmed = await showConfirm(t('disconnect'), t('confirmDisconnect').replace('{exchange}', exchange))
     if (!confirmed) {
       return
     }
