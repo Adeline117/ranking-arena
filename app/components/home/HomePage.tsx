@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, lazy, Suspense, useMemo } from 'react'
+import { useState, lazy, Suspense, useMemo, useEffect } from 'react'
+import { useSearchParams, useRouter } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
 import { Box } from '../base'
 import TopNav from '../layout/TopNav'
@@ -16,6 +17,7 @@ import SidebarSection from './SidebarSection'
 import StatsBar from './StatsBar'
 import { useTraderData, useAuth } from './hooks'
 import type { Trader } from '../ranking/RankingTable'
+import type { TimeRange } from './hooks/useTraderData'
 
 // 懒加载对比组件
 const CompareTraders = lazy(() => import('../trader/CompareTraders'))
@@ -25,9 +27,11 @@ const CompareTraders = lazy(() => import('../trader/CompareTraders'))
  * 管理整体布局和状态协调
  */
 export default function HomePage() {
-  const { t } = useLanguage()
+  useLanguage() // Initialize language context
   const { email, isLoggedIn } = useAuth()
-  
+  const searchParams = useSearchParams()
+  const router = useRouter()
+
   // 交易者数据管理
   const {
     traders,
@@ -35,6 +39,24 @@ export default function HomePage() {
     activeTimeRange,
     changeTimeRange,
   } = useTraderData()
+
+  // Sync time range with URL on initial load
+  useEffect(() => {
+    const urlTimeRange = searchParams.get('range') as TimeRange | null
+    if (urlTimeRange && ['90D', '30D', '7D'].includes(urlTimeRange) && urlTimeRange !== activeTimeRange) {
+      changeTimeRange(urlTimeRange)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []) // Only run once on mount - intentionally exclude deps to prevent re-runs
+
+  // Custom handler to update both state and URL
+  const handleTimeRangeChange = (range: TimeRange) => {
+    changeTimeRange(range)
+    // Update URL without full navigation
+    const params = new URLSearchParams(searchParams.toString())
+    params.set('range', range)
+    router.replace(`?${params.toString()}`, { scroll: false })
+  }
 
   // 交易者对比状态
   const [compareTraders, setCompareTraders] = useState<Trader[]>([])
@@ -133,7 +155,7 @@ export default function HomePage() {
             loading={loading}
             isLoggedIn={isLoggedIn}
             activeTimeRange={activeTimeRange}
-            onTimeRangeChange={changeTimeRange}
+            onTimeRangeChange={handleTimeRangeChange}
           />
 
           {/* 右侧：市场数据（移动端隐藏） */}
