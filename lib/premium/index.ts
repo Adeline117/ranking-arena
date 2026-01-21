@@ -11,6 +11,7 @@ import {
   PREMIUM_FEATURES,
   hasFeatureAccess,
   getFeatureLimits,
+  normalizeSubscriptionTier,
 } from '@/lib/types/premium'
 
 // ============================================
@@ -238,8 +239,9 @@ class PremiumService {
    * 获取可用功能列表
    */
   getAvailableFeatures(): PremiumFeatureId[] {
+    const normalizedTier = normalizeSubscriptionTier(this.subscription.tier)
     return PREMIUM_FEATURES
-      .filter(f => f.tier.includes(this.subscription.tier))
+      .filter(f => f.tier.includes(normalizedTier))
       .map(f => f.id)
   }
 
@@ -247,7 +249,8 @@ class PremiumService {
    * 获取升级建议
    */
   getUpgradeSuggestion(): { targetTier: SubscriptionTier; message: string } | null {
-    const currentIndex = SUBSCRIPTION_PLANS.findIndex(p => p.id === this.subscription.tier)
+    const normalizedTier = normalizeSubscriptionTier(this.subscription.tier)
+    const currentIndex = SUBSCRIPTION_PLANS.findIndex(p => p.id === normalizedTier)
     if (currentIndex === -1 || currentIndex >= SUBSCRIPTION_PLANS.length - 1) {
       return null
     }
