@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import Stripe from 'stripe'
 import { stripe, constructWebhookEvent, SUBSCRIPTION_STATUS_MAP } from '@/lib/stripe'
 import { joinProOfficialGroup, leaveProOfficialGroup } from '@/app/api/pro-official-group/route'
+import { createLogger } from '@/lib/utils/logger'
 
 // 创建服务端 Supabase 客户端
 const supabase = createClient(
@@ -13,6 +14,8 @@ const supabase = createClient(
 // 禁用 body 解析，因为我们需要原始 body 来验证签名
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
+
+const logger = createLogger('stripe-webhook')
 
 // 带重试的数据库操作
 async function withRetry<T>(
@@ -26,7 +29,7 @@ async function withRetry<T>(
       return await operation()
     } catch (error) {
       lastError = error as Error
-      console.warn(`[Webhook] Retry ${i + 1}/${maxRetries} failed:`, error)
+      logger.warn(`Retry ${i + 1}/${maxRetries} failed`, { error })
       if (i < maxRetries - 1) {
         await new Promise(resolve => setTimeout(resolve, delay * (i + 1)))
       }
@@ -53,7 +56,7 @@ export async function POST(request: NextRequest) {
     try {
       event = constructWebhookEvent(body, signature)
     } catch (err) {
-      console.error('Webhook signature verification failed:', err)
+      logger.error('Webhook signature verification failed', { error: err })
       return NextResponse.json(
         { error: 'Invalid signature' },
         { status: 400 }
@@ -94,13 +97,13 @@ export async function POST(request: NextRequest) {
       }
 
       default:
-        console.log(`Unhandled event type: ${event.type}`)
+        logger.info(`Unhandled event type: ${event.type}`)
     }
 
     return NextResponse.json({ received: true })
 
   } catch (error) {
-    console.error('Webhook error:', error)
+    logger.error('Webhook error', { error })
     return NextResponse.json(
       { error: 'Webhook handler failed' },
       { status: 500 }
@@ -114,56 +117,87 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
   const plan = session.metadata?.plan
   const customerId = session.customer as string
 
-  console.log('[Webhook] Checkout completed:', { userId, plan, customerId, sessionId: session.id })
+  logger.info('Checkout completed', { 
+    userId, 
+    plan, 
+    customerId, 
+    sessionId: session.id,
+    paymentStatus: session.payment_status,
+    mode: session.mode,
+    subscription: session.subscription 
+  })
 
   if (!userId) {
-    console.error('[Webhook] No userId in session metadata:', session.metadata)
+    logger.error('No userId in session metadata', { metadata: session.metadata })
     return
   }
 
-  // 使用重试机制更新 user_profiles
-  await withRetry(async () => {
-    const { error: profileError } = await supabase
-      .from('user_profiles')
-      .upsert({
-        id: userId,
-        subscription_tier: 'pro',
-        stripe_customer_id: customerId,
-        updated_at: new Date().toISOString(),
-      }, {
-        onConflict: 'id',
-      })
+  // 检查支付状态 - 只有已支付才更新订阅
+  if (session.payment_status !== 'paid') {
+    logger.warn(`Payment not completed for session ${session.id}`, { status: session.payment_status })
+    return
+  }
 
-    if (profileError) {
-      throw new Error(`Failed to update user_profiles: ${profileError.message}`)
-    }
-    console.log(`[Webhook] Updated user_profiles for ${userId}, tier: pro`)
-  })
+  // 检查是否为订阅模式
+  if (session.mode !== 'subscription') {
+    logger.warn(`Session ${session.id} is not a subscription`, { mode: session.mode })
+    return
+  }
 
   // 获取订阅信息
   const subscriptionId = session.subscription as string
-  if (subscriptionId) {
-    try {
-      const subscription = await stripe.subscriptions.retrieve(subscriptionId)
-      await updateUserSubscription(userId, subscription, plan || 'monthly')
-    } catch (err) {
-      console.error('[Webhook] Failed to retrieve subscription:', err)
-    }
+  if (!subscriptionId) {
+    logger.error('No subscription ID in checkout session')
+    return
   }
 
-  // 自动加入 Pro 会员官方群
   try {
-    const joinResult = await joinProOfficialGroup(userId)
-    if (joinResult.success) {
-      console.log(`[Webhook] User ${userId} joined Pro official group: ${joinResult.groupId}`)
-    } else {
-      console.warn(`[Webhook] Failed to join Pro official group: ${joinResult.message}`)
+    // 先获取订阅详情，确保订阅存在且有效
+    const subscription = await stripe.subscriptions.retrieve(subscriptionId)
+    
+    // 检查订阅状态
+    if (subscription.status !== 'active' && subscription.status !== 'trialing') {
+      logger.warn(`Subscription ${subscriptionId} is not active`, { status: subscription.status })
+      return
     }
-  } catch (joinError) {
-    console.error('[Webhook] Error joining Pro official group:', joinError)
-  }
 
-  console.log(`[Webhook] Checkout completed for user ${userId}, plan: ${plan}`)
+    // 更新订阅记录（这会同时更新 subscriptions 表和 user_profiles）
+    await updateUserSubscription(userId, subscription, plan || 'monthly')
+
+    // 自动加入 Pro 会员官方群
+    try {
+      const joinResult = await joinProOfficialGroup(userId)
+      if (joinResult.success) {
+        logger.info(`User ${userId} joined Pro official group`, { groupId: joinResult.groupId })
+      } else {
+        logger.warn(`Failed to join Pro official group`, { message: joinResult.message })
+      }
+    } catch (joinError) {
+      logger.error('Error joining Pro official group', { error: joinError })
+    }
+
+    logger.info(`Checkout completed for user ${userId}`, { plan, subscriptionId })
+  } catch (err) {
+    logger.error('Failed to process checkout completion', { error: err })
+    // 即使获取订阅失败，也尝试更新 user_profiles（作为降级方案）
+    await withRetry(async () => {
+      const { error: profileError } = await supabase
+        .from('user_profiles')
+        .upsert({
+          id: userId,
+          subscription_tier: 'pro',
+          stripe_customer_id: customerId,
+          updated_at: new Date().toISOString(),
+        }, {
+          onConflict: 'id',
+        })
+
+      if (profileError) {
+        throw new Error(`Failed to update user_profiles: ${profileError.message}`)
+      }
+      logger.info(`Fallback: Updated user_profiles for ${userId}`, { tier: 'pro' })
+    })
+  }
 }
 
 // 处理订阅更新
@@ -178,7 +212,7 @@ async function handleSubscriptionUpdate(subscription: Stripe.Subscription) {
     .single()
 
   if (!profile) {
-    console.error('No user found for customer:', customerId)
+    logger.error('No user found for customer', { customerId })
     return
   }
 
@@ -227,24 +261,26 @@ async function handleSubscriptionCanceled(subscription: Stripe.Subscription) {
   try {
     const leftGroup = await leaveProOfficialGroup(profile.id)
     if (leftGroup) {
-      console.log(`[Webhook] User ${profile.id} left Pro official group`)
+      logger.info(`User ${profile.id} left Pro official group`)
     }
   } catch (leaveError) {
-    console.error('[Webhook] Error leaving Pro official group:', leaveError)
+    logger.error('Error leaving Pro official group', { error: leaveError })
   }
 
-  console.log(`Subscription canceled for user ${profile.id}`)
+  logger.info(`Subscription canceled for user ${profile.id}`)
 }
 
 // 处理付款成功
 async function handlePaymentSucceeded(invoice: Stripe.Invoice) {
-  const invoiceData = invoice as any
-  const subscriptionId = invoiceData.subscription as string
+  // Stripe Invoice 的 subscription 可能是 string 或 Subscription 对象
+  const subscriptionId = typeof invoice.subscription === 'string' 
+    ? invoice.subscription 
+    : invoice.subscription?.id || null
   
   if (!subscriptionId) return
 
   const subscription = await stripe.subscriptions.retrieve(subscriptionId)
-  const customerId = invoice.customer as string
+  const customerId = typeof invoice.customer === 'string' ? invoice.customer : invoice.customer?.id || ''
 
   const { data: profile } = await supabase
     .from('user_profiles')
@@ -254,20 +290,25 @@ async function handlePaymentSucceeded(invoice: Stripe.Invoice) {
 
   if (!profile) return
 
+  // 获取 payment_intent，可能是 string 或 PaymentIntent 对象
+  const paymentIntentId = typeof invoice.payment_intent === 'string'
+    ? invoice.payment_intent
+    : invoice.payment_intent?.id || null
+
   // 记录付款历史
   await supabase
     .from('payment_history')
     .insert({
       user_id: profile.id,
       stripe_invoice_id: invoice.id,
-      stripe_payment_intent_id: invoiceData.payment_intent as string,
+      stripe_payment_intent_id: paymentIntentId,
       amount: invoice.amount_paid,
       currency: invoice.currency,
       status: 'succeeded',
       created_at: new Date().toISOString(),
     })
 
-  console.log(`Payment succeeded for user ${profile.id}, amount: ${invoice.amount_paid}`)
+  logger.info(`Payment succeeded for user ${profile.id}`, { amount: invoice.amount_paid })
 }
 
 // 处理付款失败
@@ -276,27 +317,54 @@ async function handlePaymentFailed(invoice: Stripe.Invoice) {
 
   const { data: profile } = await supabase
     .from('user_profiles')
-    .select('id')
+    .select('id, subscription_tier')
     .eq('stripe_customer_id', customerId)
     .single()
 
-  if (!profile) return
+  if (!profile) {
+    logger.warn(`Payment failed but no user found for customer`, { customerId })
+    return
+  }
 
   // 记录失败的付款
-  await supabase
-    .from('payment_history')
-    .insert({
-      user_id: profile.id,
-      stripe_invoice_id: invoice.id,
-      amount: invoice.amount_due,
-      currency: invoice.currency,
-      status: 'failed',
-      created_at: new Date().toISOString(),
-    })
+  try {
+    await supabase
+      .from('payment_history')
+      .insert({
+        user_id: profile.id,
+        stripe_invoice_id: invoice.id,
+        amount: invoice.amount_due,
+        currency: invoice.currency,
+        status: 'failed',
+        created_at: new Date().toISOString(),
+      })
+  } catch (err) {
+    logger.error('Failed to record payment failure', { error: err })
+  }
 
-  // 可以在这里发送通知给用户
+  // 如果订阅状态是 past_due，更新订阅状态但不取消 Pro 权限（给用户宽限期）
+  const subscriptionId = typeof invoice.subscription === 'string' 
+    ? invoice.subscription 
+    : invoice.subscription?.id || null
+  if (subscriptionId) {
+    try {
+      const subscription = await stripe.subscriptions.retrieve(subscriptionId)
+      if (subscription.status === 'past_due') {
+        // 更新订阅状态为 past_due，但保持 Pro 权限直到真正取消
+        await supabase
+          .from('subscriptions')
+          .update({
+            status: 'past_due',
+            updated_at: new Date().toISOString(),
+          })
+          .eq('stripe_subscription_id', subscriptionId)
+      }
+    } catch (err) {
+      logger.error('Failed to update subscription status on payment failure', { error: err })
+    }
+  }
 
-  console.log(`Payment failed for user ${profile.id}`)
+  logger.info(`Payment failed for user ${profile.id}`, { invoiceId: invoice.id })
 }
 
 // 更新用户订阅信息
@@ -305,50 +373,52 @@ async function updateUserSubscription(
   subscription: Stripe.Subscription,
   plan: string
 ) {
-  const subscriptionData = subscription as any
   const status = SUBSCRIPTION_STATUS_MAP[subscription.status] || subscription.status
-  const currentPeriodEnd = new Date(subscriptionData.current_period_end * 1000)
-  const currentPeriodStart = new Date(subscriptionData.current_period_start * 1000)
+  const currentPeriodEnd = new Date(subscription.current_period_end * 1000)
+  const currentPeriodStart = new Date(subscription.current_period_start * 1000)
 
-  console.log(`[Webhook] updateUserSubscription: userId=${userId}, status=${status}, plan=${plan}`)
+  logger.info(`updateUserSubscription`, { userId, status, plan })
 
-  // 更新或创建订阅记录
-  const { error: subscriptionError } = await supabase
-    .from('subscriptions')
-    .upsert({
-      user_id: userId,
-      stripe_subscription_id: subscription.id,
-      stripe_customer_id: subscription.customer as string,
-      status: status,
-      tier: 'pro',
-      plan: plan,
-      current_period_start: currentPeriodStart.toISOString(),
-      current_period_end: currentPeriodEnd.toISOString(),
-      cancel_at_period_end: subscription.cancel_at_period_end,
-      updated_at: new Date().toISOString(),
-    }, {
-      onConflict: 'user_id',
-    })
+  // 使用重试机制更新订阅记录
+  await withRetry(async () => {
+    const { error: subscriptionError } = await supabase
+      .from('subscriptions')
+      .upsert({
+        user_id: userId,
+        stripe_subscription_id: subscription.id,
+        stripe_customer_id: subscription.customer as string,
+        status: status,
+        tier: 'pro',
+        plan: plan,
+        current_period_start: currentPeriodStart.toISOString(),
+        current_period_end: currentPeriodEnd.toISOString(),
+        cancel_at_period_end: subscription.cancel_at_period_end,
+        updated_at: new Date().toISOString(),
+      }, {
+        onConflict: 'user_id',
+      })
 
-  if (subscriptionError) {
-    console.error('[Webhook] Failed to upsert subscriptions:', subscriptionError)
-  } else {
-    console.log(`[Webhook] Subscriptions table updated for user ${userId}`)
-  }
+    if (subscriptionError) {
+      throw new Error(`Failed to upsert subscriptions: ${subscriptionError.message}`)
+    }
+    logger.info(`Subscriptions table updated for user ${userId}`)
+  })
 
-  // 更新用户 profile 的订阅 tier
-  const { error: profileError } = await supabase
-    .from('user_profiles')
-    .update({
-      subscription_tier: status === 'active' ? 'pro' : 'free',
-      stripe_customer_id: subscription.customer as string,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', userId)
+  // 使用重试机制更新用户 profile 的订阅 tier
+  const shouldBePro = status === 'active' || status === 'trialing'
+  await withRetry(async () => {
+    const { error: profileError } = await supabase
+      .from('user_profiles')
+      .update({
+        subscription_tier: shouldBePro ? 'pro' : 'free',
+        stripe_customer_id: subscription.customer as string,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', userId)
 
-  if (profileError) {
-    console.error('[Webhook] Failed to update user_profiles:', profileError)
-  } else {
-    console.log(`[Webhook] user_profiles updated for user ${userId}, tier: ${status === 'active' ? 'pro' : 'free'}`)
-  }
+    if (profileError) {
+      throw new Error(`Failed to update user_profiles: ${profileError.message}`)
+    }
+    logger.info(`user_profiles updated for user ${userId}`, { tier: shouldBePro ? 'pro' : 'free' })
+  })
 }

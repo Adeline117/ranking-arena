@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import { type PostWithUserState } from '@/lib/types'
+import { getCsrfHeaders } from '@/lib/api/client'
 
 type Post = PostWithUserState
 type SortType = 'time' | 'likes' | 'hot'
@@ -91,9 +92,9 @@ export function usePosts(options: UsePostsOptions = {}): UsePostsResult {
       }
 
       setPosts(data.data?.posts || [])
-    } catch (err: any) {
-      console.error('[usePosts] 加载失败:', err)
-      setError(err.message || '加载失败')
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : '加载失败'
+      setError(errorMessage)
     } finally {
       setLoading(false)
     }
@@ -152,6 +153,7 @@ export function usePostActions(accessToken: string | null) {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${accessToken}`,
+          ...getCsrfHeaders()
         },
         body: JSON.stringify({ reaction_type: reactionType }),
       })
@@ -189,6 +191,7 @@ export function usePostActions(accessToken: string | null) {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${accessToken}`,
+          ...getCsrfHeaders()
         },
         body: JSON.stringify({ choice }),
       })

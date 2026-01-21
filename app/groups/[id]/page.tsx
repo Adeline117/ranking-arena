@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
@@ -10,6 +10,8 @@ import Card from '@/app/components/UI/Card'
 import { Box, Text, Button } from '@/app/components/Base'
 import { useLanguage } from '@/app/components/Utils/LanguageProvider'
 import { ThumbsUpIcon, ThumbsDownIcon, CommentIcon } from '@/app/components/Icons'
+import { useToast } from '@/app/components/UI/Toast'
+import { getCsrfHeaders } from '@/lib/api/client'
 
 const ARENA_PURPLE = '#8b6fa8'
 
@@ -84,6 +86,7 @@ type Post = {
 
 export default function GroupDetailPage({ params }: { params: { id: string } | Promise<{ id: string }> }) {
   const [groupId, setGroupId] = useState<string>('')
+  const abortControllerRef = useRef<AbortController | null>(null)
   
   useEffect(() => {
     if (params && typeof params === 'object' && 'then' in params) {
@@ -96,6 +99,7 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
   }, [params])
   
   const { t, language } = useLanguage()
+  const { showToast } = useToast()
   const [email, setEmail] = useState<string | null>(null)
   const [userId, setUserId] = useState<string | null>(null)
   const [accessToken, setAccessToken] = useState<string | null>(null)
@@ -124,8 +128,20 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
   const [members, setMembers] = useState<GroupMember[]>([])
   const [loadingMembers, setLoadingMembers] = useState(false)
   // 评论相关状态
+  type CommentWithAuthor = {
+    id: string
+    post_id: string
+    user_id: string
+    content: string
+    parent_id?: string | null
+    like_count: number
+    created_at: string
+    updated_at: string
+    author_handle?: string | null
+    author_avatar_url?: string | null
+  }
   const [expandedComments, setExpandedComments] = useState<Record<string, boolean>>({})
-  const [comments, setComments] = useState<Record<string, any[]>>({})
+  const [comments, setComments] = useState<Record<string, CommentWithAuthor[]>>({})
   const [newComment, setNewComment] = useState<Record<string, string>>({})
   const [commentLoading, setCommentLoading] = useState<Record<string, boolean>>({})
   // 翻译相关状态
@@ -207,18 +223,25 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
 
   // 批量翻译帖子（使用批量API，带缓存）
   const translatePosts = useCallback(async (postsToTranslate: Post[], targetLang: 'zh' | 'en') => {
-    if (translatingPosts) return
+    // 使用函数式更新来访问最新状态，避免依赖项问题
+    setTranslatingPosts(prev => {
+      if (prev) return prev // 如果正在翻译，直接返回
+      return true
+    })
     
+    // 获取当前翻译状态
+    const currentTranslated = translatedPosts
     const needsTranslation = postsToTranslate.filter(p => {
-      if (translatedPosts[p.id]?.title) return false
+      if (currentTranslated[p.id]?.title) return false
       if (!p.title) return false
       const titleIsChinese = isChineseText(p.title)
       return targetLang === 'en' ? titleIsChinese : !titleIsChinese
     })
     
-    if (needsTranslation.length === 0) return
-    
-    setTranslatingPosts(true)
+    if (needsTranslation.length === 0) {
+      setTranslatingPosts(false)
+      return
+    }
     
     try {
       // 批量翻译标题和内容
@@ -252,12 +275,23 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
 
       const response = await fetch('/api/translate', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          ...getCsrfHeaders()
+        },
         body: JSON.stringify({ items, targetLang }),
       })
+      
+      if (!response.ok) {
+        // 翻译 API 失败，静默降级（显示原始内容）
+        console.warn('Translation API failed:', response.status, 'Falling back to original content')
+        setTranslatingPosts(false)
+        return
+      }
+
       const data = await response.json()
       
-      if (response.ok && data.success && data.data?.results) {
+      if (data.success && data.data?.results) {
         const results = data.data.results as Record<string, { translatedText: string; cached: boolean }>
         
         setTranslatedPosts(prev => {
@@ -272,21 +306,26 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
           })
           return updated
         })
-        
+      } else {
+        // 翻译服务返回失败，静默降级
+        console.warn('Translation service returned error:', data.error || 'Unknown error')
       }
-    } catch {
-      // 翻译失败，静默处理
+    } catch (error) {
+      // 翻译失败（网络错误等），静默降级（显示原始内容）
+      // 不显示错误提示，因为翻译不是关键功能，失败时显示原始内容即可
+      console.warn('Translation failed, falling back to original content:', error)
     } finally {
       setTranslatingPosts(false)
     }
-  }, [translatingPosts, translatedPosts, isChineseText])
+  }, [isChineseText])
 
   // 当帖子加载或语言变化时触发翻译
   useEffect(() => {
-    if (posts.length > 0) {
+    if (posts.length > 0 && !translatingPosts) {
       translatePosts(posts, language as 'zh' | 'en')
     }
-  }, [posts, language, translatePosts])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [posts.length, language])
 
   // 获取相关小组 - 常来这个小组的人也爱去的小组
   useEffect(() => {
@@ -372,6 +411,7 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
         setRelatedGroups(sortedGroups)
       } catch (err) {
         console.error('Error fetching related groups:', err)
+        // 相关小组加载失败不影响主功能，静默处理
         setRelatedGroups([])
       } finally {
         setLoadingRelatedGroups(false)
@@ -384,6 +424,14 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
   useEffect(() => {
     // 等待 groupId 加载完成
     if (!groupId || groupId === 'loading') return
+
+    // 取消之前的请求
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+    }
+    
+    const controller = new AbortController()
+    abortControllerRef.current = controller
 
     const load = async () => {
       setLoading(true)
@@ -458,15 +506,31 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
           setIsMember(!!membership)
           setUserRole(membership?.role as 'owner' | 'admin' | 'member' | null)
         }
-      } catch (err: any) {
-        setError(err?.message || '加载失败')
+    } catch (err) {
+      // 如果是取消的请求，不处理错误
+      if (controller.signal.aborted) return
+      
+      const errorMsg = err instanceof Error ? err.message : (language === 'zh' ? '加载失败' : 'Failed to load')
+      setError(errorMsg)
+      showToast(errorMsg, 'error')
       } finally {
-        setLoading(false)
+        // 只有在请求未被取消时更新loading状态
+        if (!controller.signal.aborted) {
+          setLoading(false)
+        }
       }
     }
 
     load()
-  }, [groupId, userId, fetchUserLikes, fetchUserBookmarks, fetchUserReposts])
+    
+    // 清理函数：组件卸载时取消请求
+    return () => {
+      if (controller && !controller.signal.aborted) {
+        controller.abort()
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groupId, userId])
 
   // 计算帖子排序
   useEffect(() => {
@@ -515,7 +579,7 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
   // 点赞功能
   const handleLike = async (postId: string) => {
     if (!accessToken) {
-      alert('请先登录')
+      showToast(language === 'zh' ? '请先登录' : 'Please login first', 'warning')
       return
     }
 
@@ -527,6 +591,7 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${accessToken}`,
+          ...getCsrfHeaders()
         },
         body: JSON.stringify({ reaction_type: 'up' }),
       })
@@ -549,10 +614,11 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
           return p
         }))
       } else {
-        alert(result.error || '操作失败')
+        showToast(result.error || (language === 'zh' ? '操作失败' : 'Operation failed'), 'error')
       }
-    } catch (err: any) {
-      alert('网络错误: ' + err.message)
+    } catch (err) {
+      console.error('Like error:', err)
+      showToast(language === 'zh' ? '网络错误，请稍后重试' : 'Network error, please try again later', 'error')
     } finally {
       setLikeLoading(prev => ({ ...prev, [postId]: false }))
     }
@@ -561,7 +627,7 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
   // 收藏功能
   const handleBookmark = async (postId: string) => {
     if (!accessToken) {
-      alert(language === 'zh' ? '请先登录' : 'Please login first')
+      showToast(language === 'zh' ? '请先登录' : 'Please login first', 'warning')
       return
     }
 
@@ -572,6 +638,7 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${accessToken}`,
+          ...getCsrfHeaders()
         },
       })
 
@@ -589,10 +656,11 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
           return p
         }))
       } else {
-        alert(result.error || (language === 'zh' ? '操作失败' : 'Operation failed'))
+        showToast(result.error || (language === 'zh' ? '操作失败' : 'Operation failed'), 'error')
       }
-    } catch (err: any) {
-      alert((language === 'zh' ? '网络错误: ' : 'Network error: ') + err.message)
+    } catch (err) {
+      console.error('Bookmark error:', err)
+      showToast(language === 'zh' ? '网络错误，请稍后重试' : 'Network error, please try again later', 'error')
     } finally {
       setBookmarkLoading(prev => ({ ...prev, [postId]: false }))
     }
@@ -601,19 +669,19 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
   // 转发功能
   const handleRepost = async (postId: string, comment?: string) => {
     if (!accessToken) {
-      alert(language === 'zh' ? '请先登录' : 'Please login first')
+      showToast(language === 'zh' ? '请先登录' : 'Please login first', 'warning')
       return
     }
 
     // 检查是否是自己的帖子
     const post = posts.find(p => p.id === postId)
     if (post?.author_id === userId) {
-      alert(language === 'zh' ? '不能转发自己的帖子' : 'Cannot repost your own post')
+      showToast(language === 'zh' ? '不能转发自己的帖子' : 'Cannot repost your own post', 'warning')
       return
     }
 
     if (post?.user_reposted) {
-      alert(language === 'zh' ? '已经转发过此帖子' : 'Already reposted')
+      showToast(language === 'zh' ? '已经转发过此帖子' : 'Already reposted', 'warning')
       return
     }
 
@@ -625,6 +693,7 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${accessToken}`,
+          ...getCsrfHeaders()
         },
         body: JSON.stringify({ comment }),
       })
@@ -644,12 +713,13 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
         }))
         setShowRepostModal(null)
         setRepostComment('')
-        alert(language === 'zh' ? '转发成功！' : 'Reposted successfully!')
+        showToast(language === 'zh' ? '转发成功！' : 'Reposted successfully!', 'success')
       } else {
-        alert(result.error || (language === 'zh' ? '转发失败' : 'Repost failed'))
+        showToast(result.error || (language === 'zh' ? '转发失败' : 'Repost failed'), 'error')
       }
-    } catch (err: any) {
-      alert((language === 'zh' ? '网络错误: ' : 'Network error: ') + err.message)
+    } catch (err) {
+      console.error('Repost error:', err)
+      showToast(language === 'zh' ? '网络错误，请稍后重试' : 'Network error, please try again later', 'error')
     } finally {
       setRepostLoading(prev => ({ ...prev, [postId]: false }))
     }
@@ -697,6 +767,8 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
       }
     } catch (err) {
       console.error('加载成员失败:', err)
+      const errorMsg = language === 'zh' ? '加载成员列表失败' : 'Failed to load members'
+      showToast(errorMsg, 'error')
     } finally {
       setLoadingMembers(false)
     }
@@ -712,9 +784,14 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
       
       if (response.ok) {
         setComments(prev => ({ ...prev, [postId]: result.comments || [] }))
+      } else {
+        const errorMsg = language === 'zh' ? '加载评论失败' : 'Failed to load comments'
+        showToast(errorMsg, 'error')
       }
     } catch (err) {
       console.error('加载评论失败:', err)
+      const errorMsg = language === 'zh' ? '网络错误，无法加载评论' : 'Network error, failed to load comments'
+      showToast(errorMsg, 'error')
     } finally {
       setCommentLoading(prev => ({ ...prev, [postId]: false }))
     }
@@ -733,7 +810,7 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
   // 提交评论
   const submitComment = async (postId: string) => {
     if (!accessToken) {
-      alert('请先登录')
+      showToast(language === 'zh' ? '请先登录' : 'Please login first', 'warning')
       return
     }
     
@@ -748,6 +825,7 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${accessToken}`,
+          ...getCsrfHeaders()
         },
         body: JSON.stringify({ content }),
       })
@@ -768,10 +846,13 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
           return p
         }))
       } else {
-        alert(result.error || '评论失败')
+        const errorMsg = result.error || (language === 'zh' ? '评论发布失败' : 'Failed to post comment')
+        showToast(errorMsg, 'error')
       }
-    } catch (err: any) {
-      alert('网络错误: ' + err.message)
+    } catch (err) {
+      console.error('提交评论失败:', err)
+      const errorMsg = language === 'zh' ? '网络错误，请稍后重试' : 'Network error, please try again later'
+      showToast(errorMsg, 'error')
     } finally {
       setCommentLoading(prev => ({ ...prev, [postId]: false }))
     }
@@ -794,10 +875,10 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
         <TopNav email={email} />
         <Box as="main" style={{ maxWidth: 900, margin: '0 auto', padding: tokens.spacing[10] }}>
           <Text size="lg" weight="bold" style={{ marginBottom: tokens.spacing[2], color: '#ff7c7c' }}>
-            错误: {error || '小组不存在'}
+            {language === 'zh' ? '错误' : 'Error'}: {error || (language === 'zh' ? '小组不存在' : 'Group not found')}
           </Text>
           <Link href="/groups" style={{ color: tokens.colors.accent?.primary || tokens.colors.text.secondary, textDecoration: 'none', marginTop: tokens.spacing[3], display: 'inline-block' }}>
-            ← 返回小组列表
+            ← {language === 'zh' ? '返回小组列表' : 'Back to Groups'}
           </Link>
         </Box>
       </Box>
@@ -806,7 +887,7 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
 
   const handleJoin = async () => {
     if (!userId) {
-      alert('请先登录')
+      showToast(language === 'zh' ? '请先登录' : 'Please login first', 'warning')
       return
     }
     setJoining(true)
@@ -816,8 +897,11 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
         .insert({ group_id: groupId, user_id: userId })
       if (error) throw error
       setIsMember(true)
-    } catch (err: any) {
-      alert('加入失败: ' + err.message)
+      showToast(language === 'zh' ? '加入成功' : 'Joined successfully', 'success')
+    } catch (err) {
+      console.error('Join error:', err)
+      const errorMsg = err instanceof Error ? err.message : (language === 'zh' ? '加入失败' : 'Failed to join')
+      showToast(errorMsg, 'error')
     } finally {
       setJoining(false)
     }
@@ -834,8 +918,11 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
         .eq('user_id', userId)
       if (error) throw error
       setIsMember(false)
-    } catch (err: any) {
-      alert('退出失败: ' + err.message)
+      showToast(language === 'zh' ? '已退出小组' : 'Left group successfully', 'success')
+    } catch (err) {
+      console.error('Leave error:', err)
+      const errorMsg = err instanceof Error ? err.message : (language === 'zh' ? '退出失败' : 'Failed to leave')
+      showToast(errorMsg, 'error')
     } finally {
       setJoining(false)
     }
@@ -1161,7 +1248,7 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
             </Button>
           </Box>
 
-          <Card title={`帖子 (${sortedPosts.length})`}>
+          <Card title={language === 'zh' ? `帖子 (${sortedPosts.length})` : `Posts (${sortedPosts.length})`}>
             {sortedPosts.length === 0 ? (
               <Box style={{ 
                 color: tokens.colors.text.tertiary, 
@@ -1354,11 +1441,11 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
                         size="sm"
                         onClick={() => {
                           if (post.author_id === userId) {
-                            alert(language === 'zh' ? '不能转发自己的帖子' : 'Cannot repost your own post')
+                            showToast(language === 'zh' ? '不能转发自己的帖子' : 'Cannot repost your own post', 'warning')
                             return
                           }
                           if (post.user_reposted) {
-                            alert(language === 'zh' ? '已经转发过此帖子' : 'Already reposted')
+                            showToast(language === 'zh' ? '已经转发过此帖子' : 'Already reposted', 'warning')
                             return
                           }
                           setShowRepostModal(post.id)
@@ -1426,7 +1513,7 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
                           <Text size="xs" color="tertiary">加载中...</Text>
                         ) : comments[post.id]?.length > 0 ? (
                           <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
-                            {comments[post.id].map((comment: any) => (
+                            {comments[post.id].map((comment) => (
                               <Box 
                                 key={comment.id}
                                 style={{ 
@@ -1963,7 +2050,8 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
                         method: 'POST',
                         headers: {
                           'Content-Type': 'application/json',
-                          Authorization: `Bearer ${accessToken}`
+                          Authorization: `Bearer ${accessToken}`,
+                          ...getCsrfHeaders()
                         },
                         body: JSON.stringify({
                           target_user_id: complaintTarget,
@@ -1972,14 +2060,15 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
                       })
                       const data = await res.json()
                       if (res.ok) {
-                        alert(language === 'zh' ? '投诉已提交' : 'Complaint submitted')
+                        showToast(language === 'zh' ? '投诉已提交' : 'Complaint submitted', 'success')
                         setShowComplaintModal(false)
                         setComplaintReason('')
                       } else {
-                        alert(data.error || (language === 'zh' ? '提交失败' : 'Submission failed'))
+                        showToast(data.error || (language === 'zh' ? '提交失败' : 'Submission failed'), 'error')
                       }
                     } catch (err) {
-                      alert(language === 'zh' ? '网络错误' : 'Network error')
+                      console.error('Complaint error:', err)
+                      showToast(language === 'zh' ? '网络错误，请稍后重试' : 'Network error, please try again later', 'error')
                     } finally {
                       setSubmittingComplaint(false)
                     }

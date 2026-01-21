@@ -10,6 +10,7 @@ import { tokens } from '@/lib/design-tokens'
 import { formatTimeAgo } from '@/lib/utils/date'
 import { type NotificationWithActor } from '@/lib/types'
 import { useToast } from '@/app/components/UI/Toast'
+import { getCsrfHeaders } from '@/lib/api/client'
 
 type Notification = NotificationWithActor
 type NotificationType = 'all' | 'follow' | 'like' | 'comment' | 'mention'
@@ -153,10 +154,11 @@ export default function NotificationsPage() {
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${accessToken}`,
+        ...getCsrfHeaders()
       },
       body: JSON.stringify({ notification_id: notificationId }),
-    }).catch(err => {
-      console.error('[Notifications] 标记已读失败:', err)
+    }).catch(() => {
+      // 静默处理错误，不影响 UI
     })
   }, [accessToken])
 
@@ -174,10 +176,11 @@ export default function NotificationsPage() {
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${accessToken}`,
+        ...getCsrfHeaders()
       },
       body: JSON.stringify({ mark_all: true }),
-    }).catch(err => {
-      console.error('[Notifications] 标记全部已读失败:', err)
+    }).catch(() => {
+      // 静默处理错误，不影响 UI
     })
   }, [accessToken])
 
@@ -235,6 +238,7 @@ export default function NotificationsPage() {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${accessToken}`,
+          ...getCsrfHeaders()
         },
         body: JSON.stringify({ notification_id: notificationId }),
       })
@@ -251,8 +255,7 @@ export default function NotificationsPage() {
         setUnreadCount(prev => Math.max(0, prev - 1))
       }
       showToast('已删除', 'success')
-    } catch (err: any) {
-      console.error('[Notifications] 删除失败:', err)
+    } catch (err) {
       showToast('删除失败', 'error')
     } finally {
       setDeletingId(null)

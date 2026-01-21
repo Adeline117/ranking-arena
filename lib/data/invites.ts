@@ -95,7 +95,6 @@ export async function createInviteCode(
     .single()
 
   if (error) {
-    console.error('[invites] 创建邀请码失败:', error)
     throw error
   }
 
@@ -188,7 +187,6 @@ export async function redeemInviteCode(
     })
 
   if (redemptionError) {
-    console.error('[invites] 记录兑换失败:', redemptionError)
     return { success: false, error: '兑换失败，请稍后重试' }
   }
 
@@ -229,7 +227,6 @@ export async function getUserInviteCodes(
     .order('created_at', { ascending: false })
 
   if (error) {
-    console.error('[invites] 获取邀请码列表失败:', error)
     throw error
   }
 
@@ -250,7 +247,6 @@ export async function getInviteRedemptions(
     .order('redeemed_at', { ascending: false })
 
   if (error) {
-    console.error('[invites] 获取兑换记录失败:', error)
     throw error
   }
 
@@ -272,7 +268,6 @@ export async function deactivateInviteCode(
     .eq('creator_id', userId)
 
   if (error) {
-    console.error('[invites] 停用邀请码失败:', error)
     return false
   }
 

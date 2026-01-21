@@ -11,6 +11,7 @@ import { Box, Text, Button } from '@/app/components/Base'
 import { RankingSkeleton } from '@/app/components/UI/Skeleton'
 import EmptyState from '@/app/components/UI/EmptyState'
 import { formatTimeAgo } from '@/lib/utils/date'
+import { getCsrfHeaders } from '@/lib/api/client'
 
 interface BookmarkFolder {
   id: string
@@ -144,6 +145,7 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${accessToken}`,
+          ...getCsrfHeaders()
         },
         body: JSON.stringify({
           name: editName,
@@ -179,6 +181,7 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${accessToken}`,
+          ...getCsrfHeaders()
         },
       })
 
@@ -208,6 +211,7 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
         method: isSubscribed ? 'DELETE' : 'POST',
         headers: {
           'Authorization': `Bearer ${accessToken}`,
+          ...getCsrfHeaders()
         },
       })
 
@@ -273,6 +277,7 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${accessToken}`,
+          ...getCsrfHeaders()
         },
       })
       

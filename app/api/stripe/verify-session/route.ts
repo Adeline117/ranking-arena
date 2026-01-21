@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import Stripe from 'stripe'
+import { createLogger } from '@/lib/utils/logger'
 
 // 懒加载 Stripe 客户端
 function getStripe() {
@@ -36,6 +37,8 @@ function getTierFromPriceId(priceId: string): 'free' | 'pro' {
   return 'free'
 }
 
+const logger = createLogger('stripe-verify-session')
+
 export async function POST(request: NextRequest) {
   try {
     const { sessionId } = await request.json()
@@ -53,27 +56,51 @@ export async function POST(request: NextRequest) {
     })
 
     if (session.payment_status !== 'paid') {
-      return NextResponse.json({ error: 'Payment not completed' }, { status: 400 })
+      return NextResponse.json({ 
+        error: 'Payment not completed',
+        paymentStatus: session.payment_status 
+      }, { status: 400 })
+    }
+
+    // 检查是否为订阅模式
+    if (session.mode !== 'subscription') {
+      return NextResponse.json({ 
+        error: 'Session is not a subscription',
+        mode: session.mode 
+      }, { status: 400 })
     }
 
     const userId = session.metadata?.supabase_user_id || session.metadata?.userId
     const customerId = session.customer as string
-    const subscription = session.subscription as Stripe.Subscription | null
+    const subscriptionId = session.subscription as string
 
     if (!userId) {
       return NextResponse.json({ error: 'User ID not found in session' }, { status: 400 })
     }
 
+    if (!subscriptionId) {
+      return NextResponse.json({ error: 'Subscription ID not found in session' }, { status: 400 })
+    }
+
     // 获取订阅详情
     let tier: 'free' | 'pro' = 'pro'
-    let subscriptionId = ''
     let periodStart: string | null = null
     let periodEnd: string | null = null
+    let subscriptionStatus = 'active'
 
-    if (subscription) {
-      subscriptionId = subscription.id
+    try {
+      const subscription = await stripe.subscriptions.retrieve(subscriptionId)
       const priceId = subscription.items.data[0]?.price.id || ''
       tier = getTierFromPriceId(priceId)
+      subscriptionStatus = subscription.status
+      
+      // 检查订阅状态
+      if (subscription.status !== 'active' && subscription.status !== 'trialing') {
+        return NextResponse.json({ 
+          error: 'Subscription is not active',
+          status: subscription.status 
+        }, { status: 400 })
+      }
       
       // 获取周期信息
       const subAny = subscription as unknown as { current_period_start?: number; current_period_end?: number }
@@ -83,6 +110,13 @@ export async function POST(request: NextRequest) {
       if (subAny.current_period_end) {
         periodEnd = new Date(subAny.current_period_end * 1000).toISOString()
       }
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error'
+      logger.error('Failed to retrieve subscription', { error: errorMessage })
+      return NextResponse.json({ 
+        error: 'Failed to retrieve subscription',
+        details: errorMessage 
+      }, { status: 500 })
     }
 
     // 更新订阅记录
@@ -93,7 +127,7 @@ export async function POST(request: NextRequest) {
         stripe_customer_id: customerId,
         stripe_subscription_id: subscriptionId,
         tier,
-        status: 'active',
+        status: subscriptionStatus,
         current_period_start: periodStart,
         current_period_end: periodEnd,
         updated_at: new Date().toISOString(),
@@ -102,7 +136,10 @@ export async function POST(request: NextRequest) {
       })
 
     if (subscriptionError) {
-      console.error('Failed to update subscriptions table:', subscriptionError)
+      logger.error('Failed to update subscriptions table', { error: subscriptionError, userId })
+      // 继续执行，因为 user_profiles 更新可能成功
+    } else {
+      logger.info('Updated subscriptions table', { userId })
     }
 
     // 同时更新 user_profiles 的 subscription_tier
@@ -118,20 +155,21 @@ export async function POST(request: NextRequest) {
       })
 
     if (profileError) {
-      console.error('Failed to update user_profiles:', profileError)
+      logger.error('Failed to update user_profiles', { error: profileError, userId })
       return NextResponse.json({ error: 'Failed to update user profile' }, { status: 500 })
     }
 
-    console.log(`[verify-session] Updated subscription for user ${userId}, tier: ${tier}`)
+    logger.info('Updated subscription', { userId, tier })
 
     return NextResponse.json({
       success: true,
       tier,
-      status: 'active',
+      status: subscriptionStatus,
+      subscriptionId,
     })
 
   } catch (error) {
-    console.error('Verify session error:', error)
+    logger.error('Verify session error', { error })
     return NextResponse.json({ error: 'Failed to verify session' }, { status: 500 })
   }
 }

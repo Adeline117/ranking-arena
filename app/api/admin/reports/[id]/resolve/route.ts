@@ -5,6 +5,9 @@
 
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin, verifyAdmin } from '@/lib/admin/auth'
+import { createLogger } from '@/lib/utils/logger'
+
+const logger = createLogger('admin-resolve-report')
 
 export const dynamic = 'force-dynamic'
 
@@ -57,7 +60,7 @@ export async function POST(
           .eq('id', report.content_id)
         
         if (deleteError) {
-          console.error('Error deleting post:', deleteError)
+          logger.warn('Error deleting post', { error: deleteError, postId: report.content_id })
           // Content might already be deleted, continue
         }
         actionTaken = 'content_deleted'
@@ -68,7 +71,7 @@ export async function POST(
           .eq('id', report.content_id)
         
         if (deleteError) {
-          console.error('Error deleting comment:', deleteError)
+          logger.warn('Error deleting comment', { error: deleteError, commentId: report.content_id })
           // Content might already be deleted, continue
         }
         actionTaken = 'content_deleted'
@@ -89,7 +92,7 @@ export async function POST(
       .eq('id', reportId)
     
     if (updateError) {
-      console.error('Error updating report:', updateError)
+      logger.error('Error updating report', { error: updateError, reportId, action })
       return NextResponse.json({ error: updateError.message }, { status: 500 })
     }
     
@@ -111,8 +114,9 @@ export async function POST(
       ok: true,
       message: action === 'resolve' ? 'Report resolved and content deleted' : 'Report dismissed',
     })
-  } catch (error: any) {
-    console.error('Resolve report API error:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+  } catch (error) {
+    logger.error('Resolve report API error', { error, reportId })
+    const errorMessage = error instanceof Error ? error.message : 'Internal server error'
+    return NextResponse.json({ error: errorMessage }, { status: 500 })
   }
 }

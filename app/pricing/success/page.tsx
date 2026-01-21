@@ -11,6 +11,7 @@ import TopNav from '@/app/components/Layout/TopNav'
 import { supabase } from '@/lib/supabase/client'
 import { usePremium } from '@/lib/premium/hooks'
 import { clearSubscriptionCache } from '@/app/components/Home/hooks/useSubscription'
+import { getCsrfHeaders } from '@/lib/api/client'
 
 // 图标组件
 const CheckCircleIcon = ({ size = 64 }: { size?: number }) => (
@@ -76,35 +77,78 @@ export default function PaymentSuccessPage() {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${session.access_token}`,
+          ...getCsrfHeaders()
         },
         body: JSON.stringify({ sessionId }),
       })
 
-      if (response.ok) {
-        const data = await response.json()
-        console.log('Subscription verified:', data)
+      if (!response.ok) {
+        let errorMsg = language === 'zh' ? '验证支付失败' : 'Payment verification failed'
+        try {
+          const errorData = await response.json()
+          errorMsg = errorData.error || errorMsg
+          console.error('[Payment Success] Verification failed:', errorData)
+        } catch {
+          errorMsg = `${errorMsg} (${response.status})`
+        }
         
-        // 清除本地订阅缓存
+        // 即使验证失败也尝试刷新状态（可能 webhook 已经处理了）
         clearSubscriptionCache()
-        
-        // 关键：刷新 Premium 上下文以更新界面状态
         await refreshPremium()
         
+        // 等待一下再检查状态（给 webhook 时间处理）
+        await new Promise(resolve => setTimeout(resolve, 2000))
+        await refreshPremium()
+        
+        // 再次刷新以获取最新状态
+        await refreshPremium()
+        
+        // 如果刷新后是 pro，说明 webhook 已经处理了
+        const currentIsPremium = isPremium || tier === 'pro'
+        if (currentIsPremium) {
+          setVerificationStatus('success')
+          showToast(
+            language === 'zh' ? '会员已激活！' : 'Membership activated!',
+            'success'
+          )
+        } else {
+          setVerificationStatus('error')
+          showToast(
+            language === 'zh' ? '验证失败，请稍后刷新页面或联系客服' : 'Verification failed, please refresh or contact support',
+            'warning'
+          )
+        }
+        return
+      }
+
+      const data = await response.json()
+      console.log('[Payment Success] Subscription verified:', data)
+      
+      // 清除本地订阅缓存
+      clearSubscriptionCache()
+      
+      // 关键：刷新 Premium 上下文以更新界面状态
+      await refreshPremium()
+      
+      // 等待一下确保状态更新
+      await new Promise(resolve => setTimeout(resolve, 500))
+      await refreshPremium()
+      
+      // 检查最终状态
+      const finalIsPremium = data.tier === 'pro' || isPremium || tier === 'pro'
+      if (finalIsPremium) {
         setVerificationStatus('success')
         showToast(
           language === 'zh' ? '会员已激活！' : 'Membership activated!',
           'success'
         )
       } else {
-        const errorData = await response.json().catch(() => ({}))
-        console.error('Verification failed:', errorData)
-        setVerificationStatus('error')
-        
-        // 清除本地订阅缓存
-        clearSubscriptionCache()
-        
-        // 即使验证失败也尝试刷新状态（可能 webhook 已经处理了）
-        await refreshPremium()
+        // 状态可能还没完全同步，但 API 返回成功，标记为成功
+        setVerificationStatus('success')
+        showToast(
+          language === 'zh' ? '支付成功，正在激活会员...' : 'Payment successful, activating membership...',
+          'info'
+        )
       }
     } catch (error) {
       console.error('Failed to verify subscription:', error)

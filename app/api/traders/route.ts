@@ -17,6 +17,9 @@ import {
   ARENA_CONFIG, 
   type Period,
 } from '@/lib/utils/arena-score'
+import { createLogger } from '@/lib/utils/logger'
+
+const logger = createLogger('traders-api')
 
 export const dynamic = 'force-dynamic'
 
@@ -142,7 +145,7 @@ export const GET = withPublic(
         if (!fallbackSnapshot) return []
         
         // 使用陈旧数据但继续处理
-        console.warn(`[Traders API] ${source} 数据陈旧，最后更新: ${fallbackSnapshot.captured_at}`)
+        logger.warn(`${source} 数据陈旧，最后更新: ${fallbackSnapshot.captured_at}`)
       }
       
       const capturedAt = latestSnapshot?.captured_at || (await supabase
@@ -194,7 +197,7 @@ export const GET = withPublic(
       const snapshots = Array.from(traderMap.values())
 
       if (!snapshots?.length) {
-        console.warn(`[Traders API] ${source} 无有效数据`)
+        logger.warn(`${source} 无有效数据`)
         return []
       }
 

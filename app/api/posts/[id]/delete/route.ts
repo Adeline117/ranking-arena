@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { createLogger } from '@/lib/utils/logger'
+
+const logger = createLogger('posts-delete')
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -60,14 +63,15 @@ export async function DELETE(
       .eq('id', postId)
 
     if (deleteError) {
-      console.error('Delete error:', deleteError)
+      logger.error('Delete error', { error: deleteError, postId, userId: user.id })
       return NextResponse.json({ error: '删除失败' }, { status: 500 })
     }
 
     return NextResponse.json({ success: true })
-  } catch (error: any) {
-    console.error('Error deleting post:', error)
-    return NextResponse.json({ error: error.message || '服务器错误' }, { status: 500 })
+  } catch (error) {
+    logger.error('Error deleting post', { error, postId })
+    const errorMessage = error instanceof Error ? error.message : '服务器错误'
+    return NextResponse.json({ error: errorMessage }, { status: 500 })
   }
 }
 

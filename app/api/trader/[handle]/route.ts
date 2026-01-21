@@ -19,6 +19,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import { getServerCache, setServerCache, CacheTTL } from '@/lib/utils/server-cache'
 import { calculateArenaScore, calculateOverallScore } from '@/lib/utils/arena-score'
+import { createLogger } from '@/lib/utils/logger'
+
+const logger = createLogger('trader-api')
 
 // Next.js 缓存配置
 export const revalidate = 300 // 5分钟
@@ -73,6 +76,14 @@ interface EquityCurvePoint {
   data_date: string
   roi_pct: number | null
   pnl_usd: number | null
+}
+
+interface PortfolioItem {
+  symbol: string | null
+  direction: string | null
+  invested_pct: number | null
+  entry_price: number | null
+  pnl: number | null
 }
 
 interface PositionHistoryItem {
@@ -383,7 +394,7 @@ async function getTraderDetails(
   const arenaFollowers = arenaFollowersResult.count || 0
   const userProfile = userProfileResult.data
   // 使用 safeQuery 返回的结果（可能是 null 或数据数组）
-  const portfolioData = (portfolioResult || []) as any[]
+  const portfolioData = (portfolioResult || []) as PortfolioItem[]
   const positionHistoryData = (positionHistoryResult || []) as PositionHistoryItem[]
   const posts = postsResult.data || []
   
@@ -581,7 +592,7 @@ async function getTraderDetails(
       })),
     },
     // 当前持仓
-    portfolio: portfolioData.map((item: any) => ({
+    portfolio: portfolioData.map((item) => ({
       market: item.symbol || '',
       direction: item.direction === 'short' ? 'short' : 'long',
       invested: item.invested_pct ?? 0,
@@ -834,7 +845,7 @@ export async function GET(
     const snapshotFound = await findTraderFromSnapshots(supabase, handle)
     
     if (!snapshotFound) {
-      console.warn(`[trader] No trader found for handle: ${decodedHandle}`)
+      logger.warn(`No trader found for handle: ${decodedHandle}`)
       return NextResponse.json({ 
         error: 'Trader not found',
         handle: decodedHandle,
@@ -850,8 +861,9 @@ export async function GET(
     const duration = Date.now() - startTime
     return NextResponse.json({ ...data, cached: false, fetchTime: duration })
 
-  } catch (error) {
-    console.error('[Trader API] 错误:', error)
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+    logger.error('Trader API error', { error: errorMessage })
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

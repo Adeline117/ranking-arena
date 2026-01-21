@@ -8,6 +8,7 @@ import { Box, Text, Button } from '@/app/components/Base'
 import { tokens } from '@/lib/design-tokens'
 import { useToast } from '@/app/components/UI/Toast'
 import { RankingSkeleton } from '@/app/components/UI/Skeleton'
+import { getCsrfHeaders } from '@/lib/api/client'
 
 interface UploadedImage {
   url: string
@@ -331,6 +332,9 @@ export default function EditPostPage() {
 
         const response = await fetch('/api/posts/upload-image', {
           method: 'POST',
+          headers: {
+            ...getCsrfHeaders()
+          },
           body: formData,
         })
 
@@ -510,8 +514,9 @@ export default function EditPostPage() {
 
       showToast('更新成功！', 'success')
       router.push('/my-posts')
-    } catch (error: any) {
-      showToast(error?.message || '更新失败', 'error')
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : '更新失败'
+      showToast(errorMessage, 'error')
     } finally {
       setSaving(false)
     }

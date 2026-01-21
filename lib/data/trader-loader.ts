@@ -72,7 +72,6 @@ export async function loadAllTraders(
 
     return traders
   } catch (error) {
-    console.error('[trader-loader] Redis 缓存失败，尝试直接加载:', error)
     // Redis 失败时，直接从数据库加载
     return await loadTradersFromDB(supabase, timeRange)
   }
@@ -126,7 +125,6 @@ async function loadTradersFromDB(
 
     return traders
   } catch (error) {
-    console.error('[trader-loader] 数据库加载失败:', error)
     return []
   }
 }

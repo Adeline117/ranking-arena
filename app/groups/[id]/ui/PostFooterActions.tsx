@@ -2,6 +2,9 @@
 
 import React, { useState } from "react";
 import { ThumbsUpIcon, CommentIcon } from "@/app/components/Icons";
+import { useToast } from '@/app/components/UI/Toast';
+import { useLanguage } from '@/app/components/Utils/LanguageProvider';
+import { getCsrfHeaders } from '@/lib/api/client';
 
 type Post = {
   id: string
@@ -19,6 +22,8 @@ const TIP_AMOUNTS = [
 ]
 
 export default function PostFooterActions({ post }: { post: Post }) {
+  const { showToast } = useToast()
+  const { language } = useLanguage()
   const [showTipModal, setShowTipModal] = useState(false)
   const [selectedAmount, setSelectedAmount] = useState(100)
   const [loading, setLoading] = useState(false)
@@ -31,7 +36,8 @@ export default function PostFooterActions({ post }: { post: Post }) {
         document.cookie.split('; ').find(row => row.startsWith('sb-access-token='))?.split('=')[1]
       
       if (!token) {
-        alert('请先登录后再打赏')
+        const errorMsg = language === 'zh' ? '请先登录后再打赏' : 'Please login to tip'
+        showToast(errorMsg, 'warning')
         setShowTipModal(false)
         return
       }
@@ -41,6 +47,7 @@ export default function PostFooterActions({ post }: { post: Post }) {
         headers: { 
           "Content-Type": "application/json",
           "Authorization": `Bearer ${token}`,
+          ...getCsrfHeaders(),
         },
         body: JSON.stringify({
           post_id: post.id,
@@ -51,7 +58,8 @@ export default function PostFooterActions({ post }: { post: Post }) {
       const json = await res.json()
       
       if (!res.ok) {
-        alert(json.error || "创建支付失败")
+        const errorMsg = json.error || (language === 'zh' ? '创建支付失败' : 'Failed to create payment')
+        showToast(errorMsg, 'error')
         return
       }
 
@@ -61,7 +69,8 @@ export default function PostFooterActions({ post }: { post: Post }) {
       }
     } catch (error) {
       console.error('Tip error:', error)
-      alert('打赏失败，请稍后重试')
+      const errorMsg = language === 'zh' ? '打赏失败，请稍后重试' : 'Tip failed, please try again later'
+      showToast(errorMsg, 'error')
     } finally {
       setLoading(false)
     }
@@ -82,7 +91,7 @@ export default function PostFooterActions({ post }: { post: Post }) {
           className="ml-auto rounded-md border border-white/10 bg-white/5 px-2 py-1 hover:bg-white/10 transition-colors"
           onClick={() => setShowTipModal(true)}
         >
-          💰 打赏
+          💰 {language === 'zh' ? '打赏' : 'Tip'}
         </button>
       </div>
 
@@ -97,11 +106,11 @@ export default function PostFooterActions({ post }: { post: Post }) {
             onClick={e => e.stopPropagation()}
           >
             <h3 className="mb-4 text-lg font-semibold text-white">
-              打赏 @{post.author_handle ?? "anonymous"}
+              {language === 'zh' ? '打赏' : 'Tip'} @{post.author_handle ?? "anonymous"}
             </h3>
             
             <p className="mb-4 text-sm text-gray-400">
-              选择打赏金额，感谢创作者的分享
+              {language === 'zh' ? '选择打赏金额，感谢创作者的分享' : 'Select tip amount to thank the creator'}
             </p>
 
             <div className="mb-6 grid grid-cols-4 gap-2">
@@ -125,14 +134,16 @@ export default function PostFooterActions({ post }: { post: Post }) {
                 className="flex-1 rounded-lg bg-white/10 py-2.5 text-sm font-medium text-gray-300 hover:bg-white/20 transition-colors"
                 onClick={() => setShowTipModal(false)}
               >
-                取消
+                {language === 'zh' ? '取消' : 'Cancel'}
               </button>
               <button
                 className="flex-1 rounded-lg bg-purple-600 py-2.5 text-sm font-medium text-white hover:bg-purple-700 transition-colors disabled:opacity-50"
                 onClick={handleTip}
                 disabled={loading}
               >
-                {loading ? '处理中...' : `支付 ${TIP_AMOUNTS.find(a => a.cents === selectedAmount)?.label}`}
+                {loading 
+                  ? (language === 'zh' ? '处理中...' : 'Processing...')
+                  : `${language === 'zh' ? '支付' : 'Pay'} ${TIP_AMOUNTS.find(a => a.cents === selectedAmount)?.label}`}
               </button>
             </div>
           </div>

@@ -9,6 +9,7 @@ import TopNav from '@/app/components/Layout/TopNav'
 import { Box, Text, Button } from '@/app/components/Base'
 import Avatar from '@/app/components/UI/Avatar'
 import { useToast } from '@/app/components/UI/Toast'
+import { getCsrfHeaders } from '@/lib/api/client'
 
 type Message = {
   id: string
@@ -166,7 +167,10 @@ export default function ConversationPage({ params }: { params: { conversationId:
     try {
       const res = await fetch('/api/messages', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          ...getCsrfHeaders()
+        },
         body: JSON.stringify({
           senderId: userId,
           receiverId: otherUser.id,

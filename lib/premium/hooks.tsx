@@ -65,24 +65,95 @@ export function PremiumProvider({ children, initialSubscription }: PremiumProvid
       }
       
       // 尝试从 API 获取订阅状态（携带认证信息）
-      const response = await fetch('/api/subscription', {
-        method: 'GET',
-        credentials: 'include',
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-        },
-      }).catch(() => null)
-      
-      if (response?.ok) {
-        const data = await response.json()
-        if (data.subscription) {
-          setSubscription(data.subscription)
-          premiumService.setSubscription(data.subscription)
-          return
+      try {
+        const response = await fetch('/api/subscription', {
+          method: 'GET',
+          credentials: 'include',
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+          },
+        })
+
+        if (response.ok) {
+          const data = await response.json()
+          if (data.subscription) {
+            setSubscription(data.subscription)
+            premiumService.setSubscription(data.subscription)
+            return
+          }
+        } else {
+          console.warn('[PremiumProvider] Subscription API returned error:', response.status)
         }
+      } catch (fetchError) {
+        console.error('[PremiumProvider] Failed to fetch subscription:', fetchError)
       }
       
-      // API 未实现或失败时使用默认值
+      // API 未实现或失败时，尝试直接从数据库查询（降级方案）
+      try {
+        const { data: subscription } = await supabase
+          .from('subscriptions')
+          .select('tier, status')
+          .eq('user_id', session.user.id)
+          .in('status', ['active', 'trialing'])
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+
+        if (subscription && subscription.tier === 'pro') {
+          const fallbackSub: UserSubscription = {
+            userId: session.user.id,
+            tier: 'pro',
+            status: subscription.status as any,
+            startDate: new Date().toISOString(),
+            endDate: null,
+            trialEndDate: null,
+            autoRenew: subscription.status === 'active',
+            usage: {
+              apiCallsToday: 0,
+              comparisonReportsThisMonth: 0,
+              exportsThisMonth: 0,
+              currentFollows: 0,
+              currentCustomRankings: 0,
+            },
+          }
+          setSubscription(fallbackSub)
+          premiumService.setSubscription(fallbackSub)
+          return
+        }
+
+        // 最后检查 user_profiles
+        const { data: profile } = await supabase
+          .from('user_profiles')
+          .select('subscription_tier')
+          .eq('id', session.user.id)
+          .maybeSingle()
+
+        if (profile?.subscription_tier === 'pro') {
+          const fallbackSub: UserSubscription = {
+            userId: session.user.id,
+            tier: 'pro',
+            status: 'active',
+            startDate: new Date().toISOString(),
+            endDate: null,
+            trialEndDate: null,
+            autoRenew: true,
+            usage: {
+              apiCallsToday: 0,
+              comparisonReportsThisMonth: 0,
+              exportsThisMonth: 0,
+              currentFollows: 0,
+              currentCustomRankings: 0,
+            },
+          }
+          setSubscription(fallbackSub)
+          premiumService.setSubscription(fallbackSub)
+          return
+        }
+      } catch (dbError) {
+        console.error('[PremiumProvider] Failed to query database:', dbError)
+      }
+      
+      // 所有方法都失败时使用默认值
       const defaultSub = premiumService.getSubscription()
       setSubscription(defaultSub)
     } catch (error) {

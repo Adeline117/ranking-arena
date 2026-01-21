@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { createLogger } from '@/lib/utils/logger'
+
+const logger = createLogger('posts-edit')
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -62,14 +65,15 @@ export async function PUT(
       .single()
 
     if (updateError) {
-      console.error('Update error:', updateError)
+      logger.error('Update error', { error: updateError, postId, userId: user.id })
       return NextResponse.json({ error: '更新失败' }, { status: 500 })
     }
 
     return NextResponse.json({ success: true, post: updatedPost })
-  } catch (error: any) {
-    console.error('Error editing post:', error)
-    return NextResponse.json({ error: error.message || '服务器错误' }, { status: 500 })
+  } catch (error) {
+    logger.error('Error editing post', { error, postId })
+    const errorMessage = error instanceof Error ? error.message : '服务器错误'
+    return NextResponse.json({ error: errorMessage }, { status: 500 })
   }
 }
 

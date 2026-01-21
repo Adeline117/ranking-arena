@@ -9,15 +9,57 @@ import useSWR, { SWRConfiguration, mutate as globalMutate, SWRResponse } from 's
 import useSWRInfinite, { SWRInfiniteConfiguration } from 'swr/infinite'
 
 // ============================================
+// 请求超时配置
+// ============================================
+
+const FETCH_TIMEOUT = 15000 // 15 秒超时
+
+/**
+ * 带超时的 fetch 请求
+ */
+async function fetchWithTimeout(
+  url: string,
+  options: RequestInit = {},
+  timeout: number = FETCH_TIMEOUT
+): Promise<Response> {
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), timeout)
+
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    })
+    clearTimeout(timeoutId)
+    return response
+  } catch (error) {
+    clearTimeout(timeoutId)
+    if (error instanceof Error && (error.name === 'AbortError' || error.message === 'The user aborted a request.')) {
+      const timeoutError = new Error('请求超时，请检查网络连接')
+      timeoutError.name = 'TimeoutError'
+      throw timeoutError
+    }
+    throw error
+  }
+}
+
+// ============================================
 // 默认配置
 // ============================================
 
 const defaultConfig: SWRConfiguration = {
   revalidateOnFocus: false,
   revalidateOnReconnect: true,
-  dedupingInterval: 2000,
-  errorRetryCount: 3,
-  errorRetryInterval: 5000,
+  dedupingInterval: 5000, // 增加到 5 秒，减少重复请求
+  errorRetryCount: 2, // 减少重试次数，避免长时间等待
+  errorRetryInterval: 3000, // 减少重试间隔
+  shouldRetryOnError: (error) => {
+    // 只对网络错误和 5xx 错误重试，不对 4xx 错误重试
+    if (error?.status >= 400 && error?.status < 500) {
+      return false
+    }
+    return true
+  },
 }
 
 // ============================================
@@ -25,22 +67,35 @@ const defaultConfig: SWRConfiguration = {
 // ============================================
 
 export async function fetcher<T>(url: string): Promise<T> {
-  const response = await fetch(url, {
-    credentials: 'include',
-  })
+  try {
+    const response = await fetchWithTimeout(url, {
+      credentials: 'include',
+    })
 
-  if (!response.ok) {
-    const error = new Error('请求失败') as Error & { status: number; info: unknown }
-    error.status = response.status
-    try {
-      error.info = await response.json()
-    } catch {
-      error.info = await response.text()
+    if (!response.ok) {
+      const error = new Error('请求失败') as Error & { status: number; info: unknown }
+      error.status = response.status
+      try {
+        error.info = await response.json()
+      } catch {
+        error.info = await response.text()
+      }
+      throw error
+    }
+
+    return response.json()
+  } catch (error) {
+    // 处理超时和网络错误
+    if (error instanceof Error) {
+      if (error.name === 'TimeoutError' || error.message.includes('请求超时')) {
+        throw new Error('请求超时，请稍后重试')
+      }
+      if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+        throw new Error('网络连接失败，请检查网络')
+      }
     }
     throw error
   }
-
-  return response.json()
 }
 
 export async function fetcherWithAuth<T>(url: string, token?: string): Promise<T> {
@@ -49,18 +104,31 @@ export async function fetcherWithAuth<T>(url: string, token?: string): Promise<T
     headers['Authorization'] = `Bearer ${token}`
   }
 
-  const response = await fetch(url, {
-    credentials: 'include',
-    headers,
-  })
+  try {
+    const response = await fetchWithTimeout(url, {
+      credentials: 'include',
+      headers,
+    })
 
-  if (!response.ok) {
-    const error = new Error('请求失败') as Error & { status: number }
-    error.status = response.status
+    if (!response.ok) {
+      const error = new Error('请求失败') as Error & { status: number }
+      error.status = response.status
+      throw error
+    }
+
+    return response.json()
+  } catch (error) {
+    // 处理超时和网络错误
+    if (error instanceof Error) {
+      if (error.name === 'TimeoutError' || error.message.includes('请求超时')) {
+        throw new Error('请求超时，请稍后重试')
+      }
+      if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+        throw new Error('网络连接失败，请检查网络')
+      }
+    }
     throw error
   }
-
-  return response.json()
 }
 
 // ============================================
@@ -192,7 +260,7 @@ export function useTraderPositions(handle: string | undefined) {
     fetcher,
     {
       ...defaultConfig,
-      refreshInterval: 30 * 1000, // 30 秒刷新
+      refreshInterval: 60 * 1000, // 优化为 1 分钟刷新，减少请求频率
     }
   )
 }
@@ -248,7 +316,7 @@ export function usePosts(options: UsePostsOptions = {}) {
     {
       ...defaultConfig,
       revalidateOnFocus: false,
-      refreshInterval: 30 * 1000, // 30 秒刷新
+      refreshInterval: 60 * 1000, // 优化为 1 分钟刷新，减少请求频率
     }
   )
 }
@@ -338,7 +406,7 @@ export function useMarketData() {
     fetcher,
     {
       ...defaultConfig,
-      refreshInterval: 10 * 1000, // 10 秒刷新
+      refreshInterval: 30 * 1000, // 优化为 30 秒刷新，减少请求频率
       revalidateOnFocus: true,
     }
   )
@@ -402,7 +470,7 @@ export function useNotifications(userId: string | undefined, token?: string) {
     () => (url ? fetcherWithAuth(url, token) : Promise.reject('No URL')),
     {
       ...defaultConfig,
-      refreshInterval: 30 * 1000, // 30 秒刷新
+      refreshInterval: 60 * 1000, // 优化为 1 分钟刷新，减少请求频率
       revalidateOnFocus: true,
     }
   )

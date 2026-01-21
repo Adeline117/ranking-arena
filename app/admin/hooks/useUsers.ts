@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useCallback } from 'react'
+import { getCsrfHeaders } from '@/lib/api/client'
 
 export interface AdminUser {
   id: string
@@ -90,6 +91,7 @@ export function useUsers(accessToken: string | null) {
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${accessToken}`,
+          ...getCsrfHeaders()
         },
         body: JSON.stringify({ reason }),
       })
@@ -123,7 +125,10 @@ export function useUsers(accessToken: string | null) {
     try {
       const res = await fetch(`/api/admin/users/${userId}/unban`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${accessToken}` },
+        headers: { 
+          Authorization: `Bearer ${accessToken}`,
+          ...getCsrfHeaders()
+        },
       })
       const data = await res.json()
       

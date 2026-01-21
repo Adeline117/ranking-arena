@@ -280,9 +280,8 @@ export class ApiError extends Error {
       const statusCode = (error as Error & { statusCode?: number }).statusCode
       const code = (error as Error & { code?: string }).code as ErrorCodeType | undefined
 
-      if (context) {
-        console.error(`[${context}] Error:`, error.message)
-      }
+      // 注意：这里不直接使用 logger，因为 errors.ts 可能被 logger 本身使用
+      // 如果需要日志，应该在调用 ApiError.from 的地方记录
 
       return new ApiError(error.message, {
         code: code || ErrorCode.INTERNAL_ERROR,
@@ -298,18 +297,16 @@ export class ApiError extends Error {
       const statusCode = typeof errorObj.statusCode === 'number' ? errorObj.statusCode : 500
       const code = (errorObj.code as ErrorCodeType) || ErrorCode.UNKNOWN_ERROR
 
-      if (context) {
-        console.error(`[${context}] Error:`, message)
-      }
+      // 注意：这里不直接使用 logger，因为 errors.ts 可能被 logger 本身使用
+      // 如果需要日志，应该在调用 ApiError.from 的地方记录
 
       return new ApiError(message, { code, statusCode })
     }
 
     // 其他情况
     const message = typeof error === 'string' ? error : '未知错误'
-    if (context) {
-      console.error(`[${context}] Error:`, message)
-    }
+    // 注意：这里不直接使用 logger，因为 errors.ts 可能被 logger 本身使用
+    // 如果需要日志，应该在调用 ApiError.from 的地方记录
 
     return new ApiError(message, { code: ErrorCode.UNKNOWN_ERROR })
   }

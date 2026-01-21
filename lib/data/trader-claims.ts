@@ -87,7 +87,6 @@ export async function isTraderClaimed(
     .maybeSingle()
 
   if (error) {
-    console.error('[trader-claims] 检查认领状态失败:', error)
     throw error
   }
 
@@ -133,7 +132,6 @@ export async function getVerifiedTrader(
     .maybeSingle()
 
   if (error) {
-    console.error('[trader-claims] 获取认证信息失败:', error)
     throw error
   }
 
@@ -177,7 +175,6 @@ export async function getUserVerifiedTrader(
     .maybeSingle()
 
   if (error) {
-    console.error('[trader-claims] 获取用户认证资料失败:', error)
     throw error
   }
 
@@ -245,7 +242,6 @@ export async function createClaim(
     .single()
 
   if (error) {
-    console.error('[trader-claims] 创建认领申请失败:', error)
     throw error
   }
 
@@ -302,7 +298,6 @@ export async function reviewClaim(
       })
 
     if (verifyError) {
-      console.error('[trader-claims] 创建认证记录失败:', verifyError)
       throw verifyError
     }
   }
@@ -360,7 +355,6 @@ export async function cancelClaim(
     .eq('status', 'pending')
 
   if (error) {
-    console.error('[trader-claims] 取消认领失败:', error)
     throw error
   }
 }

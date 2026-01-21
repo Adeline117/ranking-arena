@@ -8,6 +8,9 @@ import TopNav from '@/app/components/Layout/TopNav'
 import Card from '@/app/components/UI/Card'
 import { Box, Text, Button } from '@/app/components/Base'
 import { useLanguage } from '@/app/components/Utils/LanguageProvider'
+import { useSubscription } from '@/app/components/Home/hooks/useSubscription'
+import { useToast } from '@/app/components/UI/Toast'
+import { getCsrfHeaders } from '@/lib/api/client'
 
 type GroupMember = {
   user_id: string
@@ -48,6 +51,7 @@ type Group = {
   rules_en?: string | null
   rules_json?: Array<{ zh: string; en: string }> | null
   role_names?: { admin: { zh: string; en: string }; member: { zh: string; en: string } } | null
+  is_premium_only?: boolean | null
   created_by?: string | null
   created_at?: string | null
 }
@@ -71,6 +75,8 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
   }, [params])
 
   const { language } = useLanguage()
+  const { isPro } = useSubscription()
+  const { showToast } = useToast()
   const [email, setEmail] = useState<string | null>(null)
   const [userId, setUserId] = useState<string | null>(null)
   const [accessToken, setAccessToken] = useState<string | null>(null)
@@ -92,6 +98,20 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
   const [newRuleZh, setNewRuleZh] = useState('')
   const [newRuleEn, setNewRuleEn] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  
+  // 语言标签页状态
+  const [langTab, setLangTab] = useState<'zh' | 'en'>('zh')
+  const [showMultiLang, setShowMultiLang] = useState(false)
+  
+  // 头像和角色称呼
+  const [editAvatarUrl, setEditAvatarUrl] = useState('')
+  const [editRoleNames, setEditRoleNames] = useState<{ admin: { zh: string; en: string }; member: { zh: string; en: string } }>({
+    admin: { zh: '管理员', en: 'Admin' },
+    member: { zh: '成员', en: 'Member' }
+  })
+  
+  // Pro 专属小组选项
+  const [isPremiumOnly, setIsPremiumOnly] = useState(false)
 
   // 禁言弹窗状态
   const [showMuteModal, setShowMuteModal] = useState<string | null>(null)
@@ -127,6 +147,28 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
           setEditDescription(groupData.description || '')
           setEditDescriptionEn(groupData.description_en || '')
           setEditRules(groupData.rules_json || [])
+          setEditAvatarUrl(groupData.avatar_url || '')
+          // 安全地合并 role_names，确保所有字段都存在
+          const defaultRoleNames = {
+            admin: { zh: '管理员', en: 'Admin' },
+            member: { zh: '成员', en: 'Member' }
+          }
+          const loadedRoleNames = (groupData.role_names || {}) as { admin?: { zh?: string; en?: string }; member?: { zh?: string; en?: string } }
+          setEditRoleNames({
+            admin: {
+              zh: loadedRoleNames.admin?.zh || defaultRoleNames.admin.zh,
+              en: loadedRoleNames.admin?.en || defaultRoleNames.admin.en,
+            },
+            member: {
+              zh: loadedRoleNames.member?.zh || defaultRoleNames.member.zh,
+              en: loadedRoleNames.member?.en || defaultRoleNames.member.en,
+            }
+          })
+          setIsPremiumOnly(groupData.is_premium_only || false)
+          // 如果有英文内容，显示多语言选项
+          if (groupData.name_en || groupData.description_en) {
+            setShowMultiLang(true)
+          }
         }
 
         // 获取当前用户的角色
@@ -263,7 +305,8 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${accessToken}`
+          Authorization: `Bearer ${accessToken}`,
+          ...getCsrfHeaders()
         },
         body: JSON.stringify({ muted_until: muteUntil, reason: muteReason })
       })
@@ -277,14 +320,14 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
         ))
         setShowMuteModal(null)
         setMuteReason('')
-        alert(language === 'zh' ? '禁言成功' : 'Muted successfully')
+        showToast(language === 'zh' ? '禁言成功' : 'Muted successfully', 'success')
       } else {
         const data = await res.json()
-        alert(data.error || (language === 'zh' ? '操作失败' : 'Operation failed'))
+        showToast(data.error || (language === 'zh' ? '操作失败' : 'Operation failed'), 'error')
       }
     } catch (err) {
       console.error('Mute error:', err)
-      alert(language === 'zh' ? '网络错误' : 'Network error')
+      showToast(language === 'zh' ? '网络错误，请稍后重试' : 'Network error, please try again later', 'error')
     }
   }
 
@@ -295,7 +338,10 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
     try {
       const res = await fetch(`/api/groups/${groupId}/members/${targetUserId}/mute`, {
         method: 'DELETE',
-        headers: { Authorization: `Bearer ${accessToken}` }
+        headers: { 
+          Authorization: `Bearer ${accessToken}`,
+          ...getCsrfHeaders()
+        }
       })
 
       if (res.ok) {
@@ -304,10 +350,14 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
             ? { ...m, muted_until: null, mute_reason: null }
             : m
         ))
-        alert(language === 'zh' ? '已解除禁言' : 'Unmuted successfully')
+        showToast(language === 'zh' ? '已解除禁言' : 'Unmuted successfully', 'success')
+      } else {
+        const data = await res.json()
+        showToast(data.error || (language === 'zh' ? '操作失败' : 'Operation failed'), 'error')
       }
     } catch (err) {
       console.error('Unmute error:', err)
+      showToast(language === 'zh' ? '网络错误，请稍后重试' : 'Network error, please try again later', 'error')
     }
   }
 
@@ -320,7 +370,8 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${accessToken}`
+          Authorization: `Bearer ${accessToken}`,
+          ...getCsrfHeaders()
         },
         body: JSON.stringify({ role: newRole })
       })
@@ -329,13 +380,14 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
         setMembers(prev => prev.map(m => 
           m.user_id === targetUserId ? { ...m, role: newRole } : m
         ))
-        alert(language === 'zh' ? '角色更新成功' : 'Role updated successfully')
+        showToast(language === 'zh' ? '角色更新成功' : 'Role updated successfully', 'success')
       } else {
         const data = await res.json()
-        alert(data.error || (language === 'zh' ? '操作失败' : 'Operation failed'))
+        showToast(data.error || (language === 'zh' ? '操作失败' : 'Operation failed'), 'error')
       }
     } catch (err) {
       console.error('Set role error:', err)
+      showToast(language === 'zh' ? '网络错误，请稍后重试' : 'Network error, please try again later', 'error')
     }
   }
 
@@ -347,17 +399,24 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
     try {
       const res = await fetch(`/api/groups/${groupId}/posts/${postId}/delete`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${accessToken}` }
+        headers: { 
+          Authorization: `Bearer ${accessToken}`,
+          ...getCsrfHeaders()
+        }
       })
 
       if (res.ok) {
         setPosts(prev => prev.map(p => 
           p.id === postId ? { ...p, deleted_at: new Date().toISOString() } : p
         ))
-        alert(language === 'zh' ? '帖子已删除' : 'Post deleted')
+        showToast(language === 'zh' ? '帖子已删除' : 'Post deleted', 'success')
+      } else {
+        const data = await res.json()
+        showToast(data.error || (language === 'zh' ? '删除失败' : 'Delete failed'), 'error')
       }
     } catch (err) {
       console.error('Delete post error:', err)
+      showToast(language === 'zh' ? '网络错误，请稍后重试' : 'Network error, please try again later', 'error')
     }
   }
 
@@ -369,24 +428,35 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
     try {
       const res = await fetch(`/api/groups/${groupId}/comments/${commentId}/delete`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${accessToken}` }
+        headers: { 
+          Authorization: `Bearer ${accessToken}`,
+          ...getCsrfHeaders()
+        }
       })
 
       if (res.ok) {
         setComments(prev => prev.map(c => 
           c.id === commentId ? { ...c, deleted_at: new Date().toISOString() } : c
         ))
-        alert(language === 'zh' ? '评论已删除' : 'Comment deleted')
+        showToast(language === 'zh' ? '评论已删除' : 'Comment deleted', 'success')
+      } else {
+        const data = await res.json()
+        showToast(data.error || (language === 'zh' ? '删除失败' : 'Delete failed'), 'error')
       }
     } catch (err) {
       console.error('Delete comment error:', err)
+      showToast(language === 'zh' ? '网络错误，请稍后重试' : 'Network error, please try again later', 'error')
     }
   }
 
   // 添加规则
   const addRule = () => {
-    if (!newRuleZh.trim() && !newRuleEn.trim()) return
-    setEditRules([...editRules, { zh: newRuleZh.trim(), en: newRuleEn.trim() }])
+    const zhText = newRuleZh.trim()
+    const enText = newRuleEn.trim()
+    
+    if (!zhText && !enText) return
+    
+    setEditRules([...editRules, { zh: zhText, en: enText }])
     setNewRuleZh('')
     setNewRuleEn('')
   }
@@ -394,6 +464,13 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
   // 删除规则
   const removeRule = (index: number) => {
     setEditRules(editRules.filter((_, i) => i !== index))
+  }
+
+  // 编辑规则
+  const updateRule = (index: number, lang: 'zh' | 'en', value: string) => {
+    const newRules = [...editRules]
+    newRules[index] = { ...newRules[index], [lang]: value }
+    setEditRules(newRules)
   }
 
   // 提交修改申请
@@ -406,30 +483,34 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${accessToken}`
+          Authorization: `Bearer ${accessToken}`,
+          ...getCsrfHeaders()
         },
         body: JSON.stringify({
           name: editName.trim() || null,
           name_en: editNameEn.trim() || null,
           description: editDescription.trim() || null,
           description_en: editDescriptionEn.trim() || null,
+          avatar_url: editAvatarUrl.trim() || null,
+          role_names: editRoleNames,
           rules_json: editRules.length > 0 ? editRules : null,
           rules: editRules.map(r => r.zh).filter(Boolean).join('\n') || null,
           rules_en: editRules.map(r => r.en).filter(Boolean).join('\n') || null,
+          is_premium_only: isPro && isPremiumOnly,
         })
       })
 
       const data = await res.json()
 
       if (res.ok) {
-        alert(language === 'zh' ? '修改申请已提交，等待管理员审核' : 'Edit request submitted, pending admin review')
+        showToast(language === 'zh' ? '修改申请已提交，等待管理员审核' : 'Edit request submitted, pending admin review', 'success')
         setEditMode(false)
       } else {
-        alert(data.error || (language === 'zh' ? '提交失败' : 'Submission failed'))
+        showToast(data.error || (language === 'zh' ? '提交失败' : 'Submission failed'), 'error')
       }
     } catch (err) {
       console.error('Submit edit error:', err)
-      alert(language === 'zh' ? '网络错误' : 'Network error')
+      showToast(language === 'zh' ? '网络错误，请稍后重试' : 'Network error, please try again later', 'error')
     } finally {
       setSubmitting(false)
     }
@@ -437,13 +518,22 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
 
   const inputStyle: React.CSSProperties = {
     width: '100%',
-    padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+    padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
     borderRadius: tokens.radius.lg,
     border: `1px solid ${tokens.colors.border.primary}`,
     background: tokens.colors.bg.primary,
     color: tokens.colors.text.primary,
-    fontSize: tokens.typography.fontSize.sm,
+    fontSize: tokens.typography.fontSize.base,
     outline: 'none',
+    transition: `border-color ${tokens.transition.base}`,
+  }
+
+  const labelStyle: React.CSSProperties = {
+    display: 'block',
+    marginBottom: tokens.spacing[2],
+    fontSize: tokens.typography.fontSize.sm,
+    fontWeight: tokens.typography.fontWeight.semibold,
+    color: tokens.colors.text.secondary,
   }
 
   const tabStyle = (isActive: boolean): React.CSSProperties => ({
@@ -454,6 +544,18 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
     cursor: 'pointer',
     fontWeight: isActive ? tokens.typography.fontWeight.bold : tokens.typography.fontWeight.medium,
     border: 'none',
+    transition: `all ${tokens.transition.base}`,
+  })
+
+  const langTabStyle = (isActive: boolean): React.CSSProperties => ({
+    padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
+    borderRadius: `${tokens.radius.lg} ${tokens.radius.lg} 0 0`,
+    border: `1px solid ${isActive ? tokens.colors.border.primary : 'transparent'}`,
+    borderBottom: isActive ? 'none' : `1px solid ${tokens.colors.border.primary}`,
+    background: isActive ? tokens.colors.bg.secondary : 'transparent',
+    color: isActive ? tokens.colors.text.primary : tokens.colors.text.tertiary,
+    cursor: 'pointer',
+    fontWeight: isActive ? tokens.typography.fontWeight.bold : tokens.typography.fontWeight.medium,
     transition: `all ${tokens.transition.base}`,
   })
 
@@ -767,130 +869,512 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
                 : 'Changes to group info require admin approval'}
             </Text>
 
-            <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}>
-              {/* 中文名称 */}
+            <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[5] }}>
+              {/* 语言标签页 */}
               <Box>
-                <Text size="sm" weight="bold" color="secondary" style={{ marginBottom: tokens.spacing[1] }}>
-                  {language === 'zh' ? '小组名称（中文）' : 'Group Name (Chinese)'}
-                </Text>
-                <input
-                  type="text"
-                  value={editName}
-                  onChange={(e) => setEditName(e.target.value)}
-                  style={inputStyle}
-                  disabled={!editMode}
-                />
-              </Box>
+                <Box style={{ display: 'flex', borderBottom: `1px solid ${tokens.colors.border.primary}` }}>
+                  <button
+                    type="button"
+                    style={langTabStyle(langTab === 'zh')}
+                    onClick={() => setLangTab('zh')}
+                    disabled={!editMode}
+                  >
+                    中文
+                  </button>
+                  {showMultiLang && (
+                    <button
+                      type="button"
+                      style={langTabStyle(langTab === 'en')}
+                      onClick={() => setLangTab('en')}
+                      disabled={!editMode}
+                    >
+                      English
+                    </button>
+                  )}
+                  {!showMultiLang && editMode && (
+                    <button
+                      type="button"
+                      style={{
+                        ...langTabStyle(false),
+                        color: tokens.colors.accent?.primary || '#8b6fa8',
+                        border: 'none',
+                      }}
+                      onClick={() => {
+                        setShowMultiLang(true)
+                        setLangTab('en')
+                      }}
+                    >
+                      + {language === 'zh' ? '添加多语言' : 'Add Language'}
+                    </button>
+                  )}
+                </Box>
 
-              {/* 英文名称 */}
-              <Box>
-                <Text size="sm" weight="bold" color="secondary" style={{ marginBottom: tokens.spacing[1] }}>
-                  {language === 'zh' ? '小组名称（英文）' : 'Group Name (English)'}
-                </Text>
-                <input
-                  type="text"
-                  value={editNameEn}
-                  onChange={(e) => setEditNameEn(e.target.value)}
-                  style={inputStyle}
-                  disabled={!editMode}
-                />
-              </Box>
+                {/* 中文表单 */}
+                <Box 
+                  style={{ 
+                    display: langTab === 'zh' ? 'flex' : 'none',
+                    flexDirection: 'column',
+                    gap: tokens.spacing[4],
+                    padding: tokens.spacing[4],
+                    background: tokens.colors.bg.secondary,
+                    borderRadius: `0 0 ${tokens.radius.lg} ${tokens.radius.lg}`,
+                    border: `1px solid ${tokens.colors.border.primary}`,
+                    borderTop: 'none',
+                  }}
+                >
+                  {/* 小组名称（中文） */}
+                  <Box>
+                    <label style={labelStyle}>
+                      小组名称 *
+                    </label>
+                    <input
+                      type="text"
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                      placeholder="例如：BTC 交易讨论组"
+                      style={inputStyle}
+                      disabled={!editMode}
+                      maxLength={50}
+                    />
+                  </Box>
 
-              {/* 中文简介 */}
-              <Box>
-                <Text size="sm" weight="bold" color="secondary" style={{ marginBottom: tokens.spacing[1] }}>
-                  {language === 'zh' ? '小组简介（中文）' : 'Description (Chinese)'}
-                </Text>
-                <textarea
-                  value={editDescription}
-                  onChange={(e) => setEditDescription(e.target.value)}
-                  style={{ ...inputStyle, minHeight: 80, resize: 'vertical' }}
-                  disabled={!editMode}
-                />
-              </Box>
+                  {/* 小组简介（中文） */}
+                  <Box>
+                    <label style={labelStyle}>
+                      小组简介
+                    </label>
+                    <textarea
+                      value={editDescription}
+                      onChange={(e) => setEditDescription(e.target.value)}
+                      placeholder="介绍一下你的小组..."
+                      style={{ ...inputStyle, minHeight: 100, resize: 'vertical' }}
+                      disabled={!editMode}
+                      maxLength={500}
+                    />
+                  </Box>
+                </Box>
 
-              {/* 英文简介 */}
-              <Box>
-                <Text size="sm" weight="bold" color="secondary" style={{ marginBottom: tokens.spacing[1] }}>
-                  {language === 'zh' ? '小组简介（英文）' : 'Description (English)'}
-                </Text>
-                <textarea
-                  value={editDescriptionEn}
-                  onChange={(e) => setEditDescriptionEn(e.target.value)}
-                  style={{ ...inputStyle, minHeight: 80, resize: 'vertical' }}
-                  disabled={!editMode}
-                />
+                {/* 英文表单 */}
+                {showMultiLang && (
+                  <Box 
+                    style={{ 
+                      display: langTab === 'en' ? 'flex' : 'none',
+                      flexDirection: 'column',
+                      gap: tokens.spacing[4],
+                      padding: tokens.spacing[4],
+                      background: tokens.colors.bg.secondary,
+                      borderRadius: `0 0 ${tokens.radius.lg} ${tokens.radius.lg}`,
+                      border: `1px solid ${tokens.colors.border.primary}`,
+                      borderTop: 'none',
+                    }}
+                  >
+                    <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Text size="sm" color="tertiary">English Version</Text>
+                      {editMode && (
+                        <Button
+                          type="button"
+                          variant="text"
+                          size="sm"
+                          onClick={() => {
+                            setShowMultiLang(false)
+                            setLangTab('zh')
+                            setEditNameEn('')
+                            setEditDescriptionEn('')
+                          }}
+                          style={{ padding: 0, color: tokens.colors.text.tertiary }}
+                        >
+                          {language === 'zh' ? '移除英文' : 'Remove English'}
+                        </Button>
+                      )}
+                    </Box>
+
+                    {/* 小组名称（英文） */}
+                    <Box>
+                      <label style={labelStyle}>
+                        Group Name
+                      </label>
+                      <input
+                        type="text"
+                        value={editNameEn}
+                        onChange={(e) => setEditNameEn(e.target.value)}
+                        placeholder="e.g., BTC Trading Discussion"
+                        style={inputStyle}
+                        disabled={!editMode}
+                        maxLength={50}
+                      />
+                    </Box>
+
+                    {/* 小组简介（英文） */}
+                    <Box>
+                      <label style={labelStyle}>
+                        Group Description
+                      </label>
+                      <textarea
+                        value={editDescriptionEn}
+                        onChange={(e) => setEditDescriptionEn(e.target.value)}
+                        placeholder="Describe your group..."
+                        style={{ ...inputStyle, minHeight: 100, resize: 'vertical' }}
+                        disabled={!editMode}
+                        maxLength={500}
+                      />
+                    </Box>
+                  </Box>
+                )}
               </Box>
 
               {/* 小组规则 */}
               <Box>
-                <Text size="sm" weight="bold" color="secondary" style={{ marginBottom: tokens.spacing[2] }}>
+                <Text weight="bold" style={{ marginBottom: tokens.spacing[3] }}>
                   {language === 'zh' ? '小组规则' : 'Group Rules'}
                 </Text>
+                <Text size="sm" color="tertiary" style={{ marginBottom: tokens.spacing[3] }}>
+                  {language === 'zh' 
+                    ? '一条一条添加小组规则，成员需要遵守这些规则' 
+                    : 'Add rules one by one that members must follow'}
+                </Text>
 
-                {editRules.map((rule, index) => (
+                {/* 已添加的规则列表 */}
+                {editRules.length > 0 && (
+                  <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2], marginBottom: tokens.spacing[3] }}>
+                    {editRules.map((rule, index) => (
+                      <Box
+                        key={index}
+                        style={{
+                          padding: tokens.spacing[3],
+                          background: tokens.colors.bg.secondary,
+                          borderRadius: tokens.radius.lg,
+                          border: `1px solid ${tokens.colors.border.primary}`,
+                        }}
+                      >
+                        <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: tokens.spacing[2] }}>
+                          <Text size="sm" weight="bold" color="secondary">
+                            {language === 'zh' ? `规则 ${index + 1}` : `Rule ${index + 1}`}
+                          </Text>
+                          {editMode && (
+                            <Button
+                              type="button"
+                              variant="text"
+                              size="sm"
+                              onClick={() => removeRule(index)}
+                              style={{ padding: 0, color: '#ff6b6b', fontSize: tokens.typography.fontSize.xs }}
+                            >
+                              {language === 'zh' ? '删除' : 'Delete'}
+                            </Button>
+                          )}
+                        </Box>
+                        
+                        {editMode ? (
+                          <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
+                            <Box>
+                              <Text size="xs" color="tertiary" style={{ marginBottom: 4 }}>中文</Text>
+                              <input
+                                type="text"
+                                value={rule.zh}
+                                onChange={(e) => updateRule(index, 'zh', e.target.value)}
+                                style={{ ...inputStyle, padding: tokens.spacing[2], fontSize: tokens.typography.fontSize.sm }}
+                                placeholder="规则内容（中文）"
+                              />
+                            </Box>
+                            {showMultiLang && (
+                              <Box>
+                                <Text size="xs" color="tertiary" style={{ marginBottom: 4 }}>English</Text>
+                                <input
+                                  type="text"
+                                  value={rule.en}
+                                  onChange={(e) => updateRule(index, 'en', e.target.value)}
+                                  style={{ ...inputStyle, padding: tokens.spacing[2], fontSize: tokens.typography.fontSize.sm }}
+                                  placeholder="Rule content (English)"
+                                />
+                              </Box>
+                            )}
+                          </Box>
+                        ) : (
+                          <Box>
+                            <Text size="sm">{rule.zh || rule.en}</Text>
+                            {rule.en && rule.zh && <Text size="xs" color="tertiary">{rule.en}</Text>}
+                          </Box>
+                        )}
+                      </Box>
+                    ))}
+                  </Box>
+                )}
+
+                {/* 添加新规则 */}
+                {editMode && (
                   <Box
-                    key={index}
                     style={{
                       padding: tokens.spacing[3],
-                      background: tokens.colors.bg.primary,
+                      background: tokens.colors.bg.secondary,
                       borderRadius: tokens.radius.lg,
-                      marginBottom: tokens.spacing[2],
-                      border: `1px solid ${tokens.colors.border.primary}`,
+                      border: `1px dashed ${tokens.colors.border.primary}`,
                     }}
                   >
-                    <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: tokens.spacing[2] }}>
-                      <Text size="xs" color="tertiary">{language === 'zh' ? `规则 ${index + 1}` : `Rule ${index + 1}`}</Text>
-                      {editMode && (
-                        <button
-                          onClick={() => removeRule(index)}
-                          style={{ background: 'none', border: 'none', color: '#ff6b6b', cursor: 'pointer', fontSize: 12 }}
-                        >
-                          {language === 'zh' ? '删除' : 'Delete'}
-                        </button>
-                      )}
-                    </Box>
-                    <Text size="sm">{rule.zh || rule.en}</Text>
-                    {rule.en && rule.zh && <Text size="xs" color="tertiary">{rule.en}</Text>}
-                  </Box>
-                ))}
-
-                {editMode && (
-                  <Box style={{ 
-                    padding: tokens.spacing[3], 
-                    background: tokens.colors.bg.primary, 
-                    borderRadius: tokens.radius.lg,
-                    border: `1px dashed ${tokens.colors.border.primary}`,
-                  }}>
-                    <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[2] }}>
+                    <Text size="sm" color="tertiary" style={{ marginBottom: tokens.spacing[2] }}>
                       {language === 'zh' ? '添加新规则' : 'Add New Rule'}
                     </Text>
-                    <input
-                      type="text"
-                      value={newRuleZh}
-                      onChange={(e) => setNewRuleZh(e.target.value)}
-                      placeholder={language === 'zh' ? '规则内容（中文）' : 'Rule (Chinese)'}
-                      style={{ ...inputStyle, marginBottom: tokens.spacing[2] }}
-                    />
-                    <input
-                      type="text"
-                      value={newRuleEn}
-                      onChange={(e) => setNewRuleEn(e.target.value)}
-                      placeholder="Rule (English)"
-                      style={{ ...inputStyle, marginBottom: tokens.spacing[2] }}
-                    />
-                    <Button variant="secondary" size="sm" onClick={addRule}>
-                      + {language === 'zh' ? '添加' : 'Add'}
-                    </Button>
+                    <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
+                      <input
+                        type="text"
+                        value={newRuleZh}
+                        onChange={(e) => setNewRuleZh(e.target.value)}
+                        style={{ ...inputStyle, padding: tokens.spacing[2], fontSize: tokens.typography.fontSize.sm }}
+                        placeholder={language === 'zh' ? '输入规则内容（中文）' : 'Enter rule (Chinese)'}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault()
+                            addRule()
+                          }
+                        }}
+                      />
+                      {showMultiLang && (
+                        <input
+                          type="text"
+                          value={newRuleEn}
+                          onChange={(e) => setNewRuleEn(e.target.value)}
+                          style={{ ...inputStyle, padding: tokens.spacing[2], fontSize: tokens.typography.fontSize.sm }}
+                          placeholder="Enter rule (English)"
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault()
+                              addRule()
+                            }
+                          }}
+                        />
+                      )}
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        onClick={addRule}
+                        disabled={!newRuleZh.trim() && !newRuleEn.trim()}
+                        style={{ alignSelf: 'flex-start' }}
+                      >
+                        + {language === 'zh' ? '添加规则' : 'Add Rule'}
+                      </Button>
+                    </Box>
                   </Box>
                 )}
               </Box>
+
+              {/* 小组头像 URL */}
+              {editMode && (
+                <Box>
+                  <label style={labelStyle}>
+                    {language === 'zh' ? '小组头像 URL' : 'Group Avatar URL'}
+                  </label>
+                  <input
+                    type="url"
+                    value={editAvatarUrl}
+                    onChange={(e) => setEditAvatarUrl(e.target.value)}
+                    placeholder="https://example.com/avatar.png"
+                    style={inputStyle}
+                  />
+                  {editAvatarUrl && (
+                    <Box style={{ marginTop: tokens.spacing[2] }}>
+                      <img
+                        src={editAvatarUrl}
+                        alt="Preview"
+                        style={{
+                          width: 60,
+                          height: 60,
+                          borderRadius: tokens.radius.lg,
+                          objectFit: 'cover',
+                          border: `1px solid ${tokens.colors.border.primary}`,
+                        }}
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).style.display = 'none'
+                        }}
+                      />
+                    </Box>
+                  )}
+                </Box>
+              )}
+
+              {/* Pro 专属小组选项 */}
+              {editMode && isPro && (
+                <Box
+                  style={{
+                    padding: tokens.spacing[4],
+                    background: 'var(--color-pro-glow)',
+                    borderRadius: tokens.radius.lg,
+                    border: '1px solid var(--color-pro-gradient-start)',
+                  }}
+                >
+                  <Box style={{ display: 'flex', alignItems: 'flex-start', gap: tokens.spacing[3] }}>
+                    <Box
+                      onClick={() => setIsPremiumOnly(!isPremiumOnly)}
+                      style={{
+                        width: 20,
+                        height: 20,
+                        borderRadius: tokens.radius.sm,
+                        border: isPremiumOnly 
+                          ? '2px solid var(--color-pro-gradient-start)' 
+                          : '2px solid var(--color-border-secondary)',
+                        background: isPremiumOnly ? 'var(--color-pro-gradient-start)' : 'transparent',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        cursor: 'pointer',
+                        flexShrink: 0,
+                        marginTop: 2,
+                        transition: 'all 0.2s',
+                      }}
+                    >
+                      {isPremiumOnly && (
+                        <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3">
+                          <path d="M20 6L9 17l-5-5" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      )}
+                    </Box>
+                    <Box style={{ flex: 1 }}>
+                      <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], marginBottom: 4 }}>
+                        <Text weight="bold" style={{ color: 'var(--color-pro-gradient-start)' }}>
+                          {language === 'zh' ? 'Pro 专属小组' : 'Pro Exclusive Group'}
+                        </Text>
+                        <Box
+                          style={{
+                            padding: '2px 6px',
+                            borderRadius: tokens.radius.full,
+                            background: 'var(--color-pro-badge-bg)',
+                            fontSize: 10,
+                            fontWeight: 700,
+                            color: '#fff',
+                          }}
+                        >
+                          Pro
+                        </Box>
+                      </Box>
+                      <Text size="sm" color="secondary" style={{ lineHeight: 1.5 }}>
+                        {language === 'zh' 
+                          ? '开启后，只有 Pro 会员才能加入此小组。组长和组员都需要是 Pro 会员。' 
+                          : 'When enabled, only Pro members can join this group. Both the leader and members must be Pro members.'}
+                      </Text>
+                    </Box>
+                  </Box>
+                </Box>
+              )}
+
+              {/* 角色称呼设置 */}
+              {editMode && (
+                <Box>
+                  <Text weight="bold" style={{ marginBottom: tokens.spacing[3] }}>
+                    {language === 'zh' ? '角色称呼设置' : 'Role Names'}
+                  </Text>
+                  <Text size="sm" color="tertiary" style={{ marginBottom: tokens.spacing[3] }}>
+                    {language === 'zh' 
+                      ? '自定义小组内角色的称呼（可选）' 
+                      : 'Customize role names for your group (optional)'}
+                  </Text>
+
+                  <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}>
+                    {/* 管理员 */}
+                    <Box style={{ display: 'grid', gridTemplateColumns: '100px 1fr 1fr', gap: tokens.spacing[2], alignItems: 'center' }}>
+                      <Text size="sm" color="secondary">
+                        {language === 'zh' ? '管理员' : 'Admin'}
+                      </Text>
+                      <input
+                        type="text"
+                        value={editRoleNames?.admin?.zh || ''}
+                        onChange={(e) => setEditRoleNames({ 
+                          ...editRoleNames, 
+                          admin: { 
+                            ...(editRoleNames?.admin || { zh: '', en: '' }), 
+                            zh: e.target.value 
+                          } 
+                        })}
+                        placeholder="中文（如：掌门）"
+                        style={{ ...inputStyle, padding: tokens.spacing[2] }}
+                        maxLength={20}
+                      />
+                      <input
+                        type="text"
+                        value={editRoleNames?.admin?.en || ''}
+                        onChange={(e) => setEditRoleNames({ 
+                          ...editRoleNames, 
+                          admin: { 
+                            ...(editRoleNames?.admin || { zh: '', en: '' }), 
+                            en: e.target.value 
+                          } 
+                        })}
+                        placeholder="English (e.g., Leader)"
+                        style={{ ...inputStyle, padding: tokens.spacing[2] }}
+                        maxLength={20}
+                      />
+                    </Box>
+
+                    {/* 成员 */}
+                    <Box style={{ display: 'grid', gridTemplateColumns: '100px 1fr 1fr', gap: tokens.spacing[2], alignItems: 'center' }}>
+                      <Text size="sm" color="secondary">
+                        {language === 'zh' ? '成员' : 'Member'}
+                      </Text>
+                      <input
+                        type="text"
+                        value={editRoleNames?.member?.zh || ''}
+                        onChange={(e) => setEditRoleNames({ 
+                          ...editRoleNames, 
+                          member: { 
+                            ...(editRoleNames?.member || { zh: '', en: '' }), 
+                            zh: e.target.value 
+                          } 
+                        })}
+                        placeholder="中文（如：弟子）"
+                        style={{ ...inputStyle, padding: tokens.spacing[2] }}
+                        maxLength={20}
+                      />
+                      <input
+                        type="text"
+                        value={editRoleNames?.member?.en || ''}
+                        onChange={(e) => setEditRoleNames({ 
+                          ...editRoleNames, 
+                          member: { 
+                            ...(editRoleNames?.member || { zh: '', en: '' }), 
+                            en: e.target.value 
+                          } 
+                        })}
+                        placeholder="English (e.g., Disciple)"
+                        style={{ ...inputStyle, padding: tokens.spacing[2] }}
+                        maxLength={20}
+                      />
+                    </Box>
+                  </Box>
+                </Box>
+              )}
 
               {/* 操作按钮 */}
               <Box style={{ display: 'flex', gap: tokens.spacing[3], justifyContent: 'flex-end', marginTop: tokens.spacing[4] }}>
                 {editMode ? (
                   <>
-                    <Button variant="secondary" onClick={() => setEditMode(false)} disabled={submitting}>
+                    <Button variant="secondary" onClick={() => {
+                      setEditMode(false)
+                      // 重置表单到原始值
+                      if (group) {
+                        setEditName(group.name || '')
+                        setEditNameEn(group.name_en || '')
+                        setEditDescription(group.description || '')
+                        setEditDescriptionEn(group.description_en || '')
+                        setEditRules(group.rules_json || [])
+                        setEditAvatarUrl(group.avatar_url || '')
+                        // 安全地合并 role_names，确保所有字段都存在
+                        const defaultRoleNames = {
+                          admin: { zh: '管理员', en: 'Admin' },
+                          member: { zh: '成员', en: 'Member' }
+                        }
+                        const loadedRoleNames = (group.role_names || {}) as { admin?: { zh?: string; en?: string }; member?: { zh?: string; en?: string } }
+                        setEditRoleNames({
+                          admin: {
+                            zh: loadedRoleNames.admin?.zh || defaultRoleNames.admin.zh,
+                            en: loadedRoleNames.admin?.en || defaultRoleNames.admin.en,
+                          },
+                          member: {
+                            zh: loadedRoleNames.member?.zh || defaultRoleNames.member.zh,
+                            en: loadedRoleNames.member?.en || defaultRoleNames.member.en,
+                          }
+                        })
+                        setIsPremiumOnly(group.is_premium_only || false)
+                        setShowMultiLang(!!(group.name_en || group.description_en))
+                        setLangTab('zh')
+                      }
+                    }} disabled={submitting}>
                       {language === 'zh' ? '取消' : 'Cancel'}
                     </Button>
                     <Button variant="primary" onClick={handleSubmitEdit} disabled={submitting}>

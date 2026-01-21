@@ -165,10 +165,11 @@ export async function GET(req: Request) {
       stats,
       reports,
     })
-  } catch (error: any) {
-    console.error('Data report error:', error)
+  } catch (error) {
+    logger.error('Data report error', { error })
+    const errorMessage = error instanceof Error ? error.message : 'Internal server error'
     return NextResponse.json(
-      { ok: false, error: error.message },
+      { ok: false, error: errorMessage },
       { status: 500 }
     )
   }

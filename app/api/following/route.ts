@@ -4,8 +4,11 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { createLogger } from '@/lib/utils/logger'
 
 export const dynamic = 'force-dynamic'
+
+const logger = createLogger('following-api')
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
@@ -72,14 +75,17 @@ export async function GET(request: NextRequest) {
 
     // 处理关注的用户
     for (const follow of userFollows) {
-      const user = follow.following as any
-      if (user && user.id) {
+      // Supabase 返回的 following 可能是单个对象或数组，需要处理
+      const following = follow.following
+      const user = Array.isArray(following) ? following[0] : following
+      if (user && typeof user === 'object' && 'id' in user) {
+        const userObj = user as { id: string; handle?: string; bio?: string; avatar_url?: string }
         items.push({
-          id: user.id,
-          handle: user.handle || '未命名用户',
+          id: userObj.id,
+          handle: userObj.handle || '未命名用户',
           type: 'user',
-          avatar_url: user.avatar_url,
-          bio: user.bio,
+          avatar_url: userObj.avatar_url,
+          bio: userObj.bio,
           followed_at: follow.created_at
         })
       }
@@ -140,7 +146,7 @@ export async function GET(request: NextRequest) {
         // 如果在 trader_sources 和 trader_snapshots 中都找不到，跳过这个记录
         // （可能是错误存入的用户 UUID）
         if (!sourceInfo && !snapshot) {
-          console.warn(`[Following API] Trader not found in trader_sources or trader_snapshots: ${traderId}`)
+          logger.warn(`Trader not found in trader_sources or trader_snapshots: ${traderId}`)
           continue
         }
         
@@ -172,8 +178,9 @@ export async function GET(request: NextRequest) {
       traderCount: traderFollows.length,
       userCount: userFollows.length
     })
-  } catch (error) {
-    console.error('[Following API] Error:', error)
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+    logger.error('Following API error', { error: errorMessage })
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

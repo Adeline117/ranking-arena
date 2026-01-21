@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useCallback } from 'react'
+import { getCsrfHeaders } from '@/lib/api/client'
 
 export interface GroupApplication {
   id: string
@@ -105,7 +106,10 @@ export function useApplications(accessToken: string | null) {
     try {
       const res = await fetch(`/api/groups/applications/${applicationId}/approve`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${accessToken}` }
+        headers: { 
+          Authorization: `Bearer ${accessToken}`,
+          ...getCsrfHeaders()
+        }
       })
       const data = await res.json()
       
@@ -135,6 +139,7 @@ export function useApplications(accessToken: string | null) {
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${accessToken}`,
+          ...getCsrfHeaders()
         },
         body: JSON.stringify({ reason })
       })
@@ -163,7 +168,10 @@ export function useApplications(accessToken: string | null) {
     try {
       const res = await fetch(`/api/groups/edit-applications/${applicationId}/approve`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${accessToken}` }
+        headers: { 
+          Authorization: `Bearer ${accessToken}`,
+          ...getCsrfHeaders()
+        }
       })
       const data = await res.json()
       
@@ -193,6 +201,7 @@ export function useApplications(accessToken: string | null) {
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${accessToken}`,
+          ...getCsrfHeaders()
         },
         body: JSON.stringify({ reason })
       })

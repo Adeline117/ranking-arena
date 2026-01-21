@@ -6,8 +6,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import type { UserSubscription } from '@/lib/premium'
+import { createLogger } from '@/lib/utils/logger'
 
 export const dynamic = 'force-dynamic'
+
+const logger = createLogger('subscription-api')
 
 function getSupabase() {
   const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -46,19 +49,16 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // 查询订阅信息
-    const { data: subscription, error } = await supabase
+    // 查询订阅信息 - 优先检查 subscriptions 表
+    const { data: subscription, error: subscriptionError } = await supabase
       .from('subscriptions')
       .select('*')
       .eq('user_id', user.id)
+      .eq('status', 'active')
       .maybeSingle()
 
-    if (error) {
-      console.error('[Subscription API] Query error:', error)
-      return NextResponse.json(
-        { error: 'Failed to fetch subscription' },
-        { status: 500 }
-      )
+    if (subscriptionError) {
+      logger.warn('Query error', { error: subscriptionError, userId: user.id })
     }
 
     // 统计用户关注的交易员数量
@@ -71,8 +71,27 @@ export async function GET(request: NextRequest) {
     // custom_rankings 表尚未创建，暂时返回 0
     const currentCustomRankings = 0
 
-    // 如果没有订阅记录，返回免费版默认值
+    // 如果没有活跃订阅记录，检查 user_profiles 作为备用
+    let tier: 'free' | 'pro' = 'free'
     if (!subscription) {
+      const { data: profile } = await supabase
+        .from('user_profiles')
+        .select('subscription_tier')
+        .eq('id', user.id)
+        .maybeSingle()
+      
+      // 如果 user_profiles 显示是 pro，但 subscriptions 表没有记录，可能是 webhook 延迟
+      // 这种情况下返回 pro，但标记为需要同步
+      if (profile?.subscription_tier === 'pro') {
+        tier = 'pro'
+        logger.warn('User has pro tier in profile but no active subscription record', { userId: user.id })
+      }
+    } else {
+      tier = subscription.tier as 'free' | 'pro'
+    }
+
+    // 如果没有订阅记录或不是 pro，返回免费版默认值
+    if (!subscription && tier === 'free') {
       const defaultSubscription: UserSubscription = {
         userId: user.id,
         tier: 'free',
@@ -96,9 +115,9 @@ export async function GET(request: NextRequest) {
     // 转换为 UserSubscription 格式
     const userSubscription: UserSubscription = {
       userId: subscription.user_id,
-      tier: subscription.tier,
+      tier: subscription.tier || tier,
       status: subscription.status,
-      startDate: subscription.created_at,
+      startDate: subscription.created_at || subscription.current_period_start || new Date().toISOString(),
       endDate: subscription.current_period_end,
       trialEndDate: null,
       autoRenew: subscription.status === 'active',
@@ -114,7 +133,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ subscription: userSubscription })
   } catch (error) {
-    console.error('[Subscription API] Error:', error)
+    logger.error('Subscription API error', { error })
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

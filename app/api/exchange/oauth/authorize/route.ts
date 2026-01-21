@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import crypto from 'crypto'
+import { createLogger } from '@/lib/utils/logger'
+
+const logger = createLogger('exchange-oauth-authorize')
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -93,7 +96,7 @@ export async function GET(request: NextRequest) {
       })
 
     if (insertError) {
-      console.error('Error storing OAuth state:', insertError)
+      logger.error('Error storing OAuth state', { error: insertError, userId, exchange })
       return NextResponse.json({ error: 'Failed to initialize OAuth flow' }, { status: 500 })
     }
 
@@ -119,8 +122,9 @@ export async function GET(request: NextRequest) {
       state,
       usePKCE: !!codeChallenge,
     })
-  } catch (error: any) {
-    console.error('Error generating OAuth URL:', error)
-    return NextResponse.json({ error: error.message || 'Failed to generate OAuth URL' }, { status: 500 })
+  } catch (error) {
+    logger.error('Error generating OAuth URL', { error, exchange })
+    const errorMessage = error instanceof Error ? error.message : 'Failed to generate OAuth URL'
+    return NextResponse.json({ error: errorMessage }, { status: 500 })
   }
 }

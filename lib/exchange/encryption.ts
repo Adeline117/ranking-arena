@@ -5,6 +5,9 @@
  */
 
 import crypto from 'crypto'
+import { createLogger } from '@/lib/utils/logger'
+
+const logger = createLogger('encryption')
 
 const ALGORITHM = 'aes-256-gcm'
 const IV_LENGTH = 16
@@ -52,7 +55,7 @@ export function encrypt(text: string, key?: string): string {
     // 返回格式: iv:tag:encrypted
     return `${iv.toString('hex')}:${tag.toString('hex')}:${encrypted}`
   } catch (error) {
-    console.error('[encryption] 加密失败:', error)
+    logger.error('加密失败', { error })
     throw new Error('加密失败')
   }
 }
@@ -98,7 +101,7 @@ export function decrypt(encrypted: string, key?: string): string {
     
     return decrypted
   } catch (error) {
-    console.error('[encryption] 解密失败:', error)
+    logger.error('解密失败', { error })
     throw new Error('解密失败')
   }
 }

@@ -162,7 +162,6 @@ export async function getPosts(
   const { data, error } = await query
 
   if (error) {
-    console.error('[posts] 获取帖子列表失败:', error)
     throw error
   }
 
@@ -308,7 +307,6 @@ export async function getPostById(
     .maybeSingle()
 
   if (error) {
-    console.error('[posts] 获取帖子失败:', error)
     throw error
   }
 
@@ -418,7 +416,6 @@ export async function createPost(
     .single()
 
   if (error) {
-    console.error('[posts] 创建帖子失败:', error)
     throw error
   }
 
@@ -446,7 +443,6 @@ export async function updatePost(
     .single()
 
   if (error) {
-    console.error('[posts] 更新帖子失败:', error)
     throw error
   }
 
@@ -468,7 +464,6 @@ export async function deletePost(
     .eq('author_id', userId) // 确保只能删除自己的帖子
 
   if (error) {
-    console.error('[posts] 删除帖子失败:', error)
     throw error
   }
 }

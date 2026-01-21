@@ -14,6 +14,9 @@ import {
   checkRateLimit,
   RateLimitPresets,
 } from '@/lib/api'
+import { createLogger } from '@/lib/utils/logger'
+
+const logger = createLogger('tip-api')
 
 export const runtime = 'nodejs'
 
@@ -68,7 +71,7 @@ export async function POST(request: NextRequest) {
     })
 
     if (insertError) {
-      console.error('[tip] Insert error:', insertError)
+      logger.error('Insert error', { error: insertError, postId, userId: user.id, amountCents: amount_cents })
       return error('打赏失败: ' + insertError.message, 500)
     }
 

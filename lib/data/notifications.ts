@@ -64,7 +64,6 @@ export async function getUserNotifications(
   const { data, error } = await query
 
   if (error) {
-    console.error('[notifications] 获取通知失败:', error)
     throw error
   }
 
@@ -138,7 +137,6 @@ export async function markNotificationAsRead(
     .eq('user_id', userId)
 
   if (error) {
-    console.error('[notifications] 标记已读失败:', error)
     throw error
   }
 }
@@ -184,7 +182,6 @@ export async function createNotification(
     .single()
 
   if (error) {
-    console.error('[notifications] 创建通知失败:', error)
     throw error
   }
 
@@ -225,7 +222,6 @@ export async function clearReadNotifications(
     .eq('read', true)
 
   if (error) {
-    console.error('[notifications] 清空已读通知失败:', error)
     throw error
   }
 }

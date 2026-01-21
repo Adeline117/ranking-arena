@@ -5,6 +5,9 @@
 
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin, verifyAdmin } from '@/lib/admin/auth'
+import { createLogger } from '@/lib/utils/logger'
+
+const logger = createLogger('admin-ban-user')
 
 export const dynamic = 'force-dynamic'
 
@@ -57,7 +60,7 @@ export async function POST(
       .eq('id', userId)
     
     if (banError) {
-      console.error('Error banning user:', banError)
+      logger.error('Error banning user', { error: banError, userId, adminId: admin.id })
       return NextResponse.json({ error: banError.message }, { status: 500 })
     }
     
@@ -70,12 +73,15 @@ export async function POST(
       details: { reason, handle: targetUser.handle },
     })
     
+    logger.info('User banned', { userId, adminId: admin.id, reason })
+    
     return NextResponse.json({
       ok: true,
       message: 'User banned successfully',
     })
-  } catch (error: any) {
-    console.error('Ban user API error:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+  } catch (error) {
+    logger.error('Ban user API error', { error, userId })
+    const errorMessage = error instanceof Error ? error.message : 'Internal server error'
+    return NextResponse.json({ error: errorMessage }, { status: 500 })
   }
 }

@@ -14,6 +14,9 @@ import {
 } from '@/lib/api'
 import { validateExchangeCredentials, SUPPORTED_EXCHANGES, type Exchange } from '@/lib/exchange'
 import { encrypt } from '@/lib/exchange/encryption'
+import { createLogger } from '@/lib/utils/logger'
+
+const logger = createLogger('exchange-connect')
 
 export async function POST(req: NextRequest) {
   try {
@@ -40,8 +43,8 @@ export async function POST(req: NextRequest) {
 
     // Bitget 需要 passphrase
     if (exchange === 'bitget' && !passphrase) {
-      const error = new Error('Bitget 需要提供 passphrase')
-      ;(error as any).statusCode = 400
+      const error = new Error('Bitget 需要提供 passphrase') as Error & { statusCode?: number }
+      error.statusCode = 400
       throw error
     }
 
@@ -54,15 +57,15 @@ export async function POST(req: NextRequest) {
       })
       
       if (!isValid) {
-        const error = new Error('API Key 或 Secret 无效，请检查您的凭证')
-        ;(error as any).statusCode = 400
+        const error = new Error('API Key 或 Secret 无效，请检查您的凭证') as Error & { statusCode?: number }
+        error.statusCode = 400
         throw error
       }
-    } catch (err: any) {
-      if (err.statusCode) throw err
-      console.error('[exchange/connect] 验证凭证失败:', err)
-      const error = new Error(err.message || 'API 凭证验证失败')
-      ;(error as any).statusCode = 400
+    } catch (err) {
+      if (err instanceof Error && 'statusCode' in err && err.statusCode) throw err
+      logger.error('验证凭证失败', { error: err, exchange, userId: user.id })
+      const error = new Error(err instanceof Error ? err.message : 'API 凭证验证失败')
+      ;(error as Error & { statusCode?: number }).statusCode = 400
       throw error
     }
 

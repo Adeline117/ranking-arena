@@ -5,6 +5,9 @@
 
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin, verifyAdmin } from '@/lib/admin/auth'
+import { createLogger } from '@/lib/utils/logger'
+
+const logger = createLogger('admin-unban-user')
 
 export const dynamic = 'force-dynamic'
 
@@ -50,7 +53,7 @@ export async function POST(
       .eq('id', userId)
     
     if (unbanError) {
-      console.error('Error unbanning user:', unbanError)
+      logger.error('Error unbanning user', { error: unbanError, userId, adminId: admin.id })
       return NextResponse.json({ error: unbanError.message }, { status: 500 })
     }
     
@@ -63,12 +66,15 @@ export async function POST(
       details: { handle: targetUser.handle },
     })
     
+    logger.info('User unbanned', { userId, adminId: admin.id })
+    
     return NextResponse.json({
       ok: true,
       message: 'User unbanned successfully',
     })
-  } catch (error: any) {
-    console.error('Unban user API error:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+  } catch (error) {
+    logger.error('Unban user API error', { error, userId })
+    const errorMessage = error instanceof Error ? error.message : 'Internal server error'
+    return NextResponse.json({ error: errorMessage }, { status: 500 })
   }
 }

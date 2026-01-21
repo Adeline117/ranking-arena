@@ -58,27 +58,15 @@ export function useSubscription() {
         return
       }
 
-      // 方法1: 检查 subscriptions 表
+      // 方法1: 检查 subscriptions 表（优先）
       const { data: subscription } = await supabase
         .from('subscriptions')
         .select('tier, status')
         .eq('user_id', user.id)
-        .eq('status', 'active')
+        .in('status', ['active', 'trialing']) // 包括试用状态
+        .order('created_at', { ascending: false })
+        .limit(1)
         .maybeSingle()
-
-      if (subscription && subscription.tier === 'pro') {
-        // 更新缓存
-        cache.userId = user.id
-        cache.isPro = true
-        cache.timestamp = now
-        
-        if (isMountedRef.current) {
-          setIsPro(true)
-          setTier(subscription.tier)
-          setIsLoading(false)
-        }
-        return
-      }
 
       // 方法2: 检查 user_profiles.subscription_tier 作为备用
       const { data: profile } = await supabase
@@ -87,16 +75,28 @@ export function useSubscription() {
         .eq('id', user.id)
         .maybeSingle()
 
-      const hasPro = profile && profile.subscription_tier === 'pro'
+      // 优先使用 subscriptions 表的结果，如果没有则使用 user_profiles
+      let finalTier: 'free' | 'pro' = 'free'
+      let isPro = false
+
+      if (subscription && (subscription.tier === 'pro' || subscription.status === 'active' || subscription.status === 'trialing')) {
+        finalTier = subscription.tier as 'free' | 'pro'
+        isPro = finalTier === 'pro'
+      } else if (profile?.subscription_tier === 'pro') {
+        // subscriptions 表可能还没更新（webhook 延迟），使用 user_profiles 作为备用
+        finalTier = 'pro'
+        isPro = true
+        console.warn(`[useSubscription] User ${user.id} has pro tier in profile but no active subscription record - webhook may be delayed`)
+      }
       
       // 更新缓存
       cache.userId = user.id
-      cache.isPro = hasPro || false
+      cache.isPro = isPro
       cache.timestamp = now
       
       if (isMountedRef.current) {
-        setIsPro(hasPro || false)
-        setTier(profile?.subscription_tier || 'free')
+        setIsPro(isPro)
+        setTier(finalTier)
       }
     } catch (error) {
       console.error('Error checking subscription:', error)

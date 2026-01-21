@@ -6,6 +6,7 @@ import {
   getOrCreateStripeCustomer,
   createCheckoutSession 
 } from '@/lib/stripe'
+import { createLogger } from '@/lib/utils/logger'
 
 // 创建服务端 Supabase 客户端（用于写入操作）
 const supabaseAdmin = createClient(
@@ -51,8 +52,10 @@ export async function POST(request: NextRequest) {
       userError = error
     }
     
+    const logger = createLogger('stripe-create-checkout')
+    
     if (userError || !user) {
-      console.log('Auth error:', userError)
+      logger.warn('Auth error', { error: userError })
       return NextResponse.json(
         { error: 'Unauthorized - Please login first' },
         { status: 401 }
@@ -107,10 +110,31 @@ export async function POST(request: NextRequest) {
       sessionId: checkoutSession.id,
     })
 
-  } catch (error) {
-    console.error('Stripe checkout error:', error)
+  } catch (error: unknown) {
+    const logger = createLogger('stripe-create-checkout')
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    logger.error('Error creating checkout session', { error: errorMessage })
+    
+    // 提供更详细的错误信息
+    let userFacingMessage = 'Failed to create checkout session'
+    if (error instanceof Error) {
+      if (error.message) {
+        userFacingMessage = error.message
+      }
+      // 检查 Stripe 错误类型
+      const stripeError = error as Error & { type?: string; code?: string }
+      if (stripeError.type === 'StripeInvalidRequestError') {
+        userFacingMessage = 'Invalid payment configuration. Please contact support.'
+      } else if (stripeError.code === 'ENOTFOUND' || stripeError.code === 'ECONNREFUSED') {
+        userFacingMessage = 'Network error. Please check your connection and try again.'
+      }
+    }
+    
     return NextResponse.json(
-      { error: 'Failed to create checkout session' },
+      { 
+        error: userFacingMessage,
+        details: process.env.NODE_ENV === 'development' && error instanceof Error ? error.stack : undefined
+      },
       { status: 500 }
     )
   }

@@ -8,6 +8,7 @@ import { Box, Text, Button } from '@/app/components/Base'
 import { tokens } from '@/lib/design-tokens'
 import { useToast } from '@/app/components/UI/Toast'
 import { useLanguage } from '@/app/components/Utils/LanguageProvider'
+import { getCsrfHeaders } from '@/lib/api/client'
 
 interface UploadedImage {
   url: string
@@ -410,6 +411,9 @@ export default function NewPostPage() {
 
         const response = await fetch('/api/posts/upload-image', {
           method: 'POST',
+          headers: {
+            ...getCsrfHeaders()
+          },
           body: formData,
         })
 
@@ -667,9 +671,9 @@ export default function NewPostPage() {
       clearDraft()
       showToast(t('publishSuccess'), 'success')
       router.push(`/u/${encodeURIComponent(decodedHandle)}`)
-    } catch (error: any) {
-      console.error('发布异常:', error)
-      showToast(error?.message || '发布失败', 'error')
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : '发布失败'
+      showToast(errorMessage, 'error')
     } finally {
       setLoading(false)
     }

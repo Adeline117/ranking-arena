@@ -13,6 +13,7 @@ import { Box, Text, Button } from '@/app/components/Base'
 import type { Trader } from '@/app/components/Features/RankingTable'
 import { useLanguage } from '@/app/components/Utils/LanguageProvider'
 import { RankingSkeleton } from '@/app/components/UI/Skeleton'
+import { useToast } from '@/app/components/UI/Toast'
 
 type Group = {
   id: string
@@ -22,45 +23,106 @@ type Group = {
 }
 
 function GroupsList() {
+  const { language } = useLanguage()
+  const { showToast } = useToast()
   const [groups, setGroups] = useState<Group[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [hoveredGroup, setHoveredGroup] = useState<string | null>(null)
 
   useEffect(() => {
     const load = async () => {
       try {
-        const { data, error } = await supabase
+        setError(null)
+        const { data, error: supabaseError } = await supabase
           .from('groups')
           .select('id, name, avatar_url, member_count')
           .order('member_count', { ascending: false, nullsFirst: false })
           .limit(10)
 
-        if (error) {
-          console.error('Error loading groups:', JSON.stringify(error))
+        if (supabaseError) {
+          const errorMsg = language === 'zh' 
+            ? '加载小组列表失败，请稍后重试' 
+            : 'Failed to load groups, please try again later'
+          setError(errorMsg)
+          showToast(errorMsg, 'error')
+          console.error('Error loading groups:', JSON.stringify(supabaseError))
         }
         setGroups(data || [])
       } catch (err) {
-        console.error('Error:', err)
+        const errorMsg = language === 'zh'
+          ? '网络错误，请检查网络连接后重试'
+          : 'Network error, please check your connection and try again'
+        setError(errorMsg)
+        showToast(errorMsg, 'error')
+        console.error('Error loading groups:', err)
       } finally {
         setLoading(false)
       }
     }
 
     load()
-  }, [])
+  }, [language, showToast])
 
   if (loading) {
     return (
       <Text size="sm" color="tertiary" style={{ padding: tokens.spacing[4], textAlign: 'center' }}>
-        加载中...
+        {language === 'zh' ? '加载中...' : 'Loading...'}
       </Text>
+    )
+  }
+
+  if (error) {
+    return (
+      <Box style={{ padding: tokens.spacing[4], textAlign: 'center' }}>
+        <Text size="sm" style={{ color: '#DC2626', marginBottom: tokens.spacing[2] }}>
+          {error}
+        </Text>
+        <Button 
+          variant="secondary" 
+          size="sm"
+          onClick={() => {
+            setLoading(true)
+            setError(null)
+            const load = async () => {
+              try {
+                const { data, error: supabaseError } = await supabase
+                  .from('groups')
+                  .select('id, name, avatar_url, member_count')
+                  .order('member_count', { ascending: false, nullsFirst: false })
+                  .limit(10)
+                if (supabaseError) {
+                  const errorMsg = language === 'zh' 
+                    ? '加载小组列表失败，请稍后重试' 
+                    : 'Failed to load groups, please try again later'
+                  setError(errorMsg)
+                  showToast(errorMsg, 'error')
+                } else {
+                  setGroups(data || [])
+                }
+              } catch (err) {
+                const errorMsg = language === 'zh'
+                  ? '网络错误，请检查网络连接后重试'
+                  : 'Network error, please check your connection and try again'
+                setError(errorMsg)
+                showToast(errorMsg, 'error')
+              } finally {
+                setLoading(false)
+              }
+            }
+            load()
+          }}
+        >
+          {language === 'zh' ? '重试' : 'Retry'}
+        </Button>
+      </Box>
     )
   }
 
   if (groups.length === 0) {
     return (
       <Text size="sm" color="tertiary" style={{ padding: tokens.spacing[4], textAlign: 'center' }}>
-        暂无小组
+        {language === 'zh' ? '暂无小组' : 'No groups available'}
       </Text>
     )
   }
@@ -166,7 +228,7 @@ function GroupsList() {
                     background: isHovered ? '#8b6fa8' : tokens.colors.text.tertiary,
                     transition: 'background 0.2s ease',
                   }} />
-                  {group.member_count} 位成员
+                  {group.member_count} {language === 'zh' ? '位成员' : 'members'}
                 </Text>
               )}
             </Box>
@@ -234,6 +296,7 @@ function GroupsContent() {
         }
       } catch (error) {
         console.error('加载排行榜失败:', error)
+        // 排行榜加载失败不影响页面，静默处理
         setTraders([])
       } finally {
         setLoadingTraders(false)

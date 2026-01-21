@@ -58,7 +58,6 @@ export async function getPostComments(
     .is('parent_id', null)
 
   if (error) {
-    console.error('[comments] 获取评论失败:', error)
     throw error
   }
 
@@ -229,7 +228,6 @@ export async function createComment(
     .single()
 
   if (error) {
-    console.error('[comments] 创建评论失败:', error)
     throw error
   }
 
@@ -275,7 +273,6 @@ export async function updateComment(
     .single()
 
   if (error) {
-    console.error('[comments] 更新评论失败:', error)
     throw error
   }
 
@@ -297,7 +294,6 @@ export async function deleteComment(
     .eq('user_id', userId) // 确保只能删除自己的评论
 
   if (error) {
-    console.error('[comments] 删除评论失败:', error)
     throw error
   }
 }

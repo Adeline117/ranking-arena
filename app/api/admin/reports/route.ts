@@ -5,6 +5,9 @@
 
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin, verifyAdmin } from '@/lib/admin/auth'
+import { createLogger } from '@/lib/utils/logger'
+
+const logger = createLogger('admin-reports')
 
 export const dynamic = 'force-dynamic'
 
@@ -46,7 +49,7 @@ export async function GET(req: Request) {
       .range(offset, offset + limit - 1)
     
     if (error) {
-      console.error('Error fetching reports:', error)
+      logger.error('Error fetching reports', { error, page, limit, status, contentType })
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
     
@@ -118,8 +121,9 @@ export async function GET(req: Request) {
         totalPages: Math.ceil((count || 0) / limit),
       },
     })
-  } catch (error: any) {
-    console.error('Reports API error:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+  } catch (error) {
+    logger.error('Reports API error', { error })
+    const errorMessage = error instanceof Error ? error.message : 'Internal server error'
+    return NextResponse.json({ error: errorMessage }, { status: 500 })
   }
 }

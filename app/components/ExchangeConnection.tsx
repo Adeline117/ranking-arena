@@ -9,6 +9,7 @@ import ExchangeLogo from './UI/ExchangeLogo'
 import { useLanguage } from './Utils/LanguageProvider'
 import { useToast } from './UI/Toast'
 import { useDialog } from './UI/Dialog'
+import { getCsrfHeaders } from '@/lib/api/client'
 
 interface ExchangeConnectionProps {
   userId: string
@@ -73,13 +74,8 @@ export default function ExchangeConnectionManager({ userId }: ExchangeConnection
       }
 
       setConnections(data || [])
-    } catch (err: any) {
-      console.error('[ExchangeConnection] 加载连接异常:', {
-        error: err,
-        message: err?.message,
-        stack: err?.stack,
-        userId,
-      })
+    } catch (err) {
+      // 静默处理错误，设置空数组
       setConnections([])
     } finally {
       setLoading(false)
@@ -107,6 +103,7 @@ export default function ExchangeConnectionManager({ userId }: ExchangeConnection
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${session.access_token}`,
+          ...getCsrfHeaders()
         },
         body: JSON.stringify({ exchange }),
       })
@@ -145,6 +142,7 @@ export default function ExchangeConnectionManager({ userId }: ExchangeConnection
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${session.access_token}`,
+          ...getCsrfHeaders()
         },
         body: JSON.stringify({ exchange }),
       })
@@ -158,8 +156,9 @@ export default function ExchangeConnectionManager({ userId }: ExchangeConnection
 
       showToast(t('disconnected'), 'success')
       await loadConnections()
-    } catch (err: any) {
-      showToast(err.message || t('disconnectFailed'), 'error')
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : t('disconnectFailed')
+      showToast(errorMessage, 'error')
     }
   }
 
@@ -194,7 +193,7 @@ export default function ExchangeConnectionManager({ userId }: ExchangeConnection
           >
             <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: tokens.spacing[4] }}>
               <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3] }}>
-                <ExchangeLogo exchange={exchange.id as any} size={32} />
+                <ExchangeLogo exchange={exchange.id as 'binance' | 'bybit' | 'bitget' | 'mexc' | 'coinex'} size={32} />
                 <Text size="lg" weight="bold">{exchange.name}</Text>
                 {connection && (
                   <Box
