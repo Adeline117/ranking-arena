@@ -7,9 +7,17 @@
 // 交易所和数据源
 // ============================================
 
-/** 支持的交易所 */
-export const EXCHANGES = ['binance', 'bybit', 'bitget', 'okx', 'kucoin', 'gate', 'mexc', 'coinex'] as const
+/**
+ * 支持的交易所
+ * v2.0: 精简为 4 个核心交易所，移除低使用率交易所 (kucoin, gate, mexc, coinex)
+ * 理由：维护成本高、数据质量参差不齐、用户需求集中在头部交易所
+ */
+export const EXCHANGES = ['binance', 'bybit', 'bitget', 'okx'] as const
 export const EXCHANGES_WITH_WEB3 = ['binance_web3', ...EXCHANGES] as const
+
+/** 已下线的交易所（保留类型定义用于数据迁移） */
+export const DEPRECATED_EXCHANGES = ['kucoin', 'gate', 'mexc', 'coinex'] as const
+export type DeprecatedExchange = typeof DEPRECATED_EXCHANGES[number]
 
 export type Exchange = typeof EXCHANGES[number]
 export type ExchangeWithWeb3 = typeof EXCHANGES_WITH_WEB3[number]

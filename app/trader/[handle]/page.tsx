@@ -6,20 +6,21 @@ import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
 import { supabase } from '@/lib/supabase/client'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
-import TopNav from '@/app/components/layout/TopNav'
-import TraderHeader from '@/app/components/trader/TraderHeader'
-import TraderTabs from '@/app/components/trader/TraderTabs'
-import OverviewPerformanceCard from '@/app/components/trader/OverviewPerformanceCard'
-import TraderAboutCard from '@/app/components/trader/TraderAboutCard'
-import SimilarTraders from '@/app/components/trader/SimilarTraders'
-import TraderFeed from '@/app/components/trader/TraderFeed'
-import StatsPage from '@/app/components/trader/stats/StatsPage'
+import TopNav from '@/app/components/Layout/TopNav'
+import TraderHeader from '@/app/components/Trader/TraderHeader'
+import TraderTabs from '@/app/components/Trader/TraderTabs'
+import OverviewPerformanceCard from '@/app/components/Trader/OverviewPerformanceCard'
+import TraderAboutCard from '@/app/components/Trader/TraderAboutCard'
+import SimilarTraders from '@/app/components/Trader/SimilarTraders'
+import TraderFeed from '@/app/components/Trader/TraderFeed'
+import StatsPage from '@/app/components/Trader/stats/StatsPage'
 // PinnedPost 组件已集成到 TraderFeed 中（置顶帖子自动显示在动态列表最上方）
-import PortfolioTable from '@/app/components/trader/PortfolioTable'
-import ScoreBreakdown from '@/app/components/premium/ScoreBreakdown'
-import { Box, Text } from '@/app/components/base'
-import { RankingSkeleton } from '@/app/components/ui/Skeleton'
-import { useSubscription } from '@/app/components/home/hooks/useSubscription'
+import PortfolioTable from '@/app/components/Trader/PortfolioTable'
+import TraderDiscussion from '@/app/components/Trader/TraderDiscussion'
+import ScoreBreakdown from '@/app/components/Pro/ScoreBreakdown'
+import { Box, Text } from '@/app/components/Base'
+import { RankingSkeleton } from '@/app/components/UI/Skeleton'
+import { useSubscription } from '@/app/components/Home/hooks/useSubscription'
 import type {
   TraderProfile,
   TraderPerformance,
@@ -28,14 +29,14 @@ import type {
   PositionHistoryItem,
   TraderFeedItem,
 } from '@/lib/data/trader'
-import { JsonLd } from '@/app/components/Providers/JsonLd'
+import { JsonLd } from '@/app/components/Utils/JsonLd'
 import {
   generateTraderProfilePageSchema,
   generateBreadcrumbSchema,
   combineSchemas,
 } from '@/lib/seo'
 
-type TabKey = 'overview' | 'stats' | 'portfolio'
+type TabKey = 'overview' | 'stats' | 'portfolio' | 'discussion'
 
 // 新数据类型
 interface AssetBreakdownData {
@@ -92,8 +93,9 @@ function TraderContent(props: { params: { handle: string } | Promise<{ handle: s
   // Read tab from URL, default to 'overview'
   const urlTab = searchParams.get('tab') as TabKey | null
   const [activeTab, setActiveTab] = useState<TabKey>(
-    urlTab && ['overview', 'stats', 'portfolio'].includes(urlTab) ? urlTab : 'overview'
+    urlTab && ['overview', 'stats', 'portfolio', 'discussion'].includes(urlTab) ? urlTab : 'overview'
   )
+  const [discussionCount, setDiscussionCount] = useState(0)
 
   // Update URL when tab changes
   const handleTabChange = (tab: TabKey) => {
@@ -111,7 +113,7 @@ function TraderContent(props: { params: { handle: string } | Promise<{ handle: s
   // Sync with URL changes
   useEffect(() => {
     const tab = searchParams.get('tab') as TabKey | null
-    if (tab && ['overview', 'stats', 'portfolio'].includes(tab)) {
+    if (tab && ['overview', 'stats', 'portfolio', 'discussion'].includes(tab)) {
       setActiveTab(tab)
     } else if (!tab) {
       setActiveTab('overview')
@@ -176,6 +178,17 @@ function TraderContent(props: { params: { handle: string } | Promise<{ handle: s
         // 设置新数据
         setAssetBreakdown(data.assetBreakdown)
         setEquityCurve(data.equityCurve)
+
+        // 获取讨论数量
+        try {
+          const discResponse = await fetch(`/api/traders/${encodeURIComponent(handle)}/discussions?count_only=true`)
+          if (discResponse.ok) {
+            const discData = await discResponse.json()
+            setDiscussionCount(discData.count || 0)
+          }
+        } catch {
+          // Silently fail for discussion count
+        }
       } catch (error) {
         console.error('Error loading trader data:', error)
         setProfile(null)
@@ -262,7 +275,7 @@ function TraderContent(props: { params: { handle: string } | Promise<{ handle: s
         />
 
         {/* Tabs */}
-        <TraderTabs activeTab={activeTab} onTabChange={handleTabChange} />
+        <TraderTabs activeTab={activeTab} onTabChange={handleTabChange} discussionCount={discussionCount} />
 
         {/* Tab Content with animation */}
         <Box
@@ -329,6 +342,10 @@ function TraderContent(props: { params: { handle: string } | Promise<{ handle: s
           )}
 
           {activeTab === 'portfolio' && <PortfolioTable items={portfolio} history={positionHistory} />}
+
+          {activeTab === 'discussion' && (
+            <TraderDiscussion traderId={profile.id} traderHandle={profile.handle} />
+          )}
         </Box>
       </Box>
     </Box>
