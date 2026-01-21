@@ -98,10 +98,18 @@ async function fetchLeaderboardData(period) {
         rows.forEach(row => {
           const text = row.innerText
           const addrMatch = text.match(/0x[a-fA-F0-9]+\.{3}[a-fA-F0-9]+/)
-          const pnlMatch = text.match(/([+-])\s*([\d,]+\.\d+)\s*%/)
-          if (addrMatch && pnlMatch) {
-            const roi = parseFloat(pnlMatch[2].replace(/,/g, '')) * (pnlMatch[1] === '-' ? -1 : 1)
-            results.push({ address: addrMatch[0], roi })
+          // 提取 ROI (百分比)
+          const roiMatch = text.match(/([+-])\s*([\d,]+\.\d+)\s*%/)
+          // 提取 PnL (金额，通常是 $xxx 格式)
+          const pnlMatch = text.match(/\$\s*([+-]?[\d,]+\.?\d*)/)
+
+          if (addrMatch && roiMatch) {
+            const roi = parseFloat(roiMatch[2].replace(/,/g, '')) * (roiMatch[1] === '-' ? -1 : 1)
+            let pnl = null
+            if (pnlMatch) {
+              pnl = parseFloat(pnlMatch[1].replace(/,/g, ''))
+            }
+            results.push({ address: addrMatch[0], roi, pnl })
           }
         })
         return results
@@ -196,10 +204,10 @@ async function fetchLeaderboardData(period) {
     nickname: t.address,
     avatar: null,
     roi: t.roi,
-    pnl: null,
-    winRate: null,
-    maxDrawdown: null,
-    followers: null,
+    pnl: t.pnl,  // 从页面提取的 PnL，可能为 null
+    winRate: null,      // GMX 不提供胜率
+    maxDrawdown: null,  // GMX 不提供最大回撤
+    followers: null,    // GMX 无跟单功能
     rank: idx + 1,
   }))
 }
@@ -226,7 +234,11 @@ async function saveTraders(traders, period) {
         season_id: period,
         rank: trader.rank,
         roi: trader.roi,
-        arena_score: calculateArenaScore(trader.roi, null, null, null, period),
+        pnl: trader.pnl,  // 可能为 null
+        win_rate: null,   // GMX 不提供
+        max_drawdown: null,  // GMX 不提供
+        followers: null,  // GMX 无跟单功能
+        arena_score: calculateArenaScore(trader.roi, trader.pnl, null, null, period),
         captured_at: capturedAt,
       })
       if (error) errors++

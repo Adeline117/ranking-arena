@@ -76,10 +76,13 @@ export const RankedTraderSchema = z.object({
   handle: z.string(),
   roi: z.number(),
   pnl: z.number().optional(),
-  win_rate: z.number().optional(),
+  /** 胜率 (0-100)，GMX 等交易所无此字段，可能为 null */
+  win_rate: z.number().nullable().optional(),
+  /** 最大回撤 (%)，GMX 等交易所无此字段，可能为 null */
   max_drawdown: z.number().nullable().optional(),
   trades_count: z.number().int().nonnegative().nullable().optional(),
-  followers: z.number().int().nonnegative().default(0),
+  /** 跟单人数，GMX 无跟单功能，可能为 null */
+  followers: z.number().int().nonnegative().nullable().optional(),
   source: ExchangeSchema,
   avatar_url: z.string().url().nullable().optional(),
   risk_adjusted_score: z.number().optional(),
