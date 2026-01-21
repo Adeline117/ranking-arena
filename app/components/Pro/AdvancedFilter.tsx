@@ -506,7 +506,7 @@ export default function AdvancedFilter({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            zIndex: 1000,
+            zIndex: tokens.zIndex.modal,
           }}
           onClick={() => setShowSaveModal(false)}
         >

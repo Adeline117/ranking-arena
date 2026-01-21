@@ -6,7 +6,7 @@ import { tokens } from '@/lib/design-tokens'
 const ARENA_PURPLE = '#8b6fa8'
 
 interface ReactButtonProps {
-  onClick: (e: React.MouseEvent) => void
+  onClick: (e: React.MouseEvent) => void | Promise<void>
   active: boolean
   icon: React.ReactNode
   count: number
@@ -26,12 +26,26 @@ export function ReactButton({ onClick, active, icon, count, showCount = true }: 
     e.stopPropagation()
 
     setIsAnimating(true)
+
+    // 执行点击回调，支持异步操作
+    const result = onClick(e)
+
+    // 动画结束后重置动画状态
     setTimeout(() => {
       setIsAnimating(false)
-      processingRef.current = false
     }, 300)
 
-    onClick(e)
+    // 如果 onClick 返回 Promise，等待完成后才解锁
+    // 否则使用 500ms 作为最小防抖时间
+    if (result && typeof (result as Promise<void>).then === 'function') {
+      (result as Promise<void>).finally(() => {
+        processingRef.current = false
+      })
+    } else {
+      setTimeout(() => {
+        processingRef.current = false
+      }, 500)
+    }
   }
 
   return (
@@ -86,7 +100,7 @@ export function ReactButton({ onClick, active, icon, count, showCount = true }: 
 interface ActionProps {
   icon?: React.ReactNode
   text: string
-  onClick: (e?: React.MouseEvent) => void
+  onClick: (e?: React.MouseEvent) => void | Promise<void>
   active?: boolean
   count?: number
   showCount?: boolean

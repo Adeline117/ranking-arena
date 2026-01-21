@@ -212,7 +212,7 @@ export default function TraderDrawer({
           position: 'fixed',
           inset: 0,
           background: 'rgba(0,0,0,0.55)',
-          zIndex: 1000,
+          zIndex: tokens.zIndex.overlay,
         }}
       />
 

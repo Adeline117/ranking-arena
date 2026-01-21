@@ -61,7 +61,7 @@ export default function PerformanceChart({ monthlyData }: PerformanceChartProps)
                   fontSize: tokens.typography.fontSize.xs,
                   color: tokens.colors.text.secondary,
                   whiteSpace: 'nowrap',
-                  zIndex: 1000,
+                  zIndex: tokens.zIndex.tooltip,
                   maxWidth: '300px',
                 }}
               >

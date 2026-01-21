@@ -2759,7 +2759,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
             alignItems: 'center',
             justifyContent: 'center',
             padding: 20,
-            zIndex: 10000,
+            zIndex: tokens.zIndex.modal, // 使用 design tokens (400)
           }}
         >
           <div
@@ -2872,7 +2872,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
             alignItems: 'center',
             justifyContent: 'center',
             padding: 20,
-            zIndex: 99999,
+            zIndex: tokens.zIndex.modal, // 使用 design tokens (400)
           }}
         >
           <div
@@ -3119,7 +3119,7 @@ function Modal(props: { children: React.ReactNode; onClose: () => void }) {
         display: 'grid',
         placeItems: 'center',
         padding: 16,
-        zIndex: 1000,
+        zIndex: tokens.zIndex.modal,
         overflowY: 'auto',
       }}
     >
