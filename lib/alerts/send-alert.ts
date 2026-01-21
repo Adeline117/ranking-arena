@@ -137,6 +137,78 @@ async function sendFeishuAlert(webhookUrl: string, payload: AlertPayload) {
   }
 }
 
+async function sendEmailAlert(toEmail: string, payload: AlertPayload) {
+  const resendApiKey = process.env.RESEND_API_KEY
+  if (!resendApiKey) {
+    console.error('[Alert] RESEND_API_KEY not configured')
+    return false
+  }
+
+  const fromEmail = process.env.RESEND_FROM_EMAIL || 'alerts@ranking-arena.com'
+
+  const levelEmoji = {
+    info: 'ℹ️',
+    warning: '⚠️',
+    critical: '🚨',
+  }
+
+  const detailsHtml = payload.details
+    ? `<table style="border-collapse: collapse; margin-top: 16px;">
+        ${Object.entries(payload.details)
+          .map(
+            ([key, value]) =>
+              `<tr>
+                <td style="padding: 8px; border: 1px solid #ddd; font-weight: bold;">${key}</td>
+                <td style="padding: 8px; border: 1px solid #ddd;">${value}</td>
+              </tr>`
+          )
+          .join('')}
+      </table>`
+    : ''
+
+  const emailPayload = {
+    from: fromEmail,
+    to: [toEmail],
+    subject: `${levelEmoji[payload.level]} ${payload.title}`,
+    html: `
+      <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: ${payload.level === 'critical' ? '#dc2626' : payload.level === 'warning' ? '#ca8a04' : '#16a34a'};">
+          ${levelEmoji[payload.level]} ${payload.title}
+        </h2>
+        <p style="color: #374151; font-size: 16px; line-height: 1.6;">
+          ${payload.message.replace(/\n/g, '<br>')}
+        </p>
+        ${detailsHtml}
+        <hr style="margin-top: 24px; border: none; border-top: 1px solid #e5e7eb;">
+        <p style="color: #6b7280; font-size: 12px;">
+          此邮件由 Ranking Arena 报警系统自动发送
+        </p>
+      </div>
+    `,
+  }
+
+  try {
+    const response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${resendApiKey}`,
+      },
+      body: JSON.stringify(emailPayload),
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error('[Alert] Email send failed:', response.status, errorText)
+      return false
+    }
+    return true
+  } catch (error) {
+    console.error('[Alert] Email send error:', error)
+    return false
+  }
+}
+
 export async function sendAlert(payload: AlertPayload): Promise<{ sent: boolean; channels: string[] }> {
   const config = await getAlertConfig()
   if (!config) {
@@ -158,10 +230,11 @@ export async function sendAlert(payload: AlertPayload): Promise<{ sent: boolean;
     if (success) sentChannels.push('feishu')
   }
   
-  // TODO: Add email support via Resend/SendGrid if needed
-  // if (config.alert_email?.enabled && config.alert_email?.value) {
-  //   await sendEmailAlert(config.alert_email.value, payload)
-  // }
+  // Send email via Resend
+  if (config.alert_email?.enabled && config.alert_email?.value) {
+    const success = await sendEmailAlert(config.alert_email.value, payload)
+    if (success) sentChannels.push('email')
+  }
   
   return {
     sent: sentChannels.length > 0,
