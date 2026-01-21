@@ -33,20 +33,32 @@ export default function UserFollowButton({
       setInitialLoading(false)
       return
     }
+
+    const abortController = new AbortController()
+
     ;(async () => {
       try {
-        const response = await fetch(`/api/users/follow?followerId=${currentUserId}&followingId=${targetUserId}`)
+        const response = await fetch(
+          `/api/users/follow?followerId=${currentUserId}&followingId=${targetUserId}`,
+          { signal: abortController.signal }
+        )
         if (response.ok) {
           const data = await response.json()
           setFollowing(data.following)
           setFollowedBy(data.followedBy)
         }
       } catch (error) {
-        console.error('Check following error:', error)
+        if ((error as Error).name !== 'AbortError') {
+          console.error('Check following error:', error)
+        }
       } finally {
         setInitialLoading(false)
       }
     })()
+
+    return () => {
+      abortController.abort()
+    }
   }, [currentUserId, targetUserId])
 
   const handleToggle = async () => {

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { tokens } from '@/lib/design-tokens'
 
 const ARENA_PURPLE = '#8b6fa8'
@@ -17,6 +17,16 @@ export function ReactButton({ onClick, active, icon, count, showCount = true }: 
   const [isPressed, setIsPressed] = useState(false)
   const [isAnimating, setIsAnimating] = useState(false)
   const processingRef = useRef(false)
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  // 清理 timeout 防止内存泄漏
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current)
+      }
+    }
+  }, [])
 
   const handleClick = (e: React.MouseEvent) => {
     if (processingRef.current) return
@@ -26,7 +36,12 @@ export function ReactButton({ onClick, active, icon, count, showCount = true }: 
     e.stopPropagation()
 
     setIsAnimating(true)
-    setTimeout(() => {
+
+    // 清理之前的 timeout
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current)
+    }
+    timeoutRef.current = setTimeout(() => {
       setIsAnimating(false)
       processingRef.current = false
     }, 300)
@@ -95,12 +110,35 @@ interface ActionProps {
 export function Action({ icon, text, onClick, active, count, showCount }: ActionProps) {
   const [isPressed, setIsPressed] = useState(false)
   const [isAnimating, setIsAnimating] = useState(false)
+  const processingRef = useRef(false)
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  // 清理 timeout 防止内存泄漏
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current)
+      }
+    }
+  }, [])
 
   const handleClick = (e: React.MouseEvent) => {
+    if (processingRef.current) return
+    processingRef.current = true
+
     e.preventDefault()
     e.stopPropagation()
     setIsAnimating(true)
-    setTimeout(() => setIsAnimating(false), 300)
+
+    // 清理之前的 timeout
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current)
+    }
+    timeoutRef.current = setTimeout(() => {
+      setIsAnimating(false)
+      processingRef.current = false
+    }, 300)
+
     onClick(e)
   }
 

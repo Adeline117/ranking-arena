@@ -111,16 +111,25 @@ export default function UserBookmarkFolders({ userId, isOwnProfile = false }: Us
   const handleSubscribe = useCallback(async (e: React.MouseEvent, folderId: string) => {
     e.preventDefault()
     e.stopPropagation()
-    
+
     if (!accessToken) {
       router.push('/login')
       return
     }
-    
+
+    const isSubscribed = subscriptions[folderId]
+    const previousCount = folders.find(f => f.id === folderId)?.subscriber_count || 0
+
+    // 乐观更新
+    setSubscriptions(prev => ({ ...prev, [folderId]: !isSubscribed }))
+    setFolders(prev => prev.map(f =>
+      f.id === folderId
+        ? { ...f, subscriber_count: isSubscribed ? Math.max(0, previousCount - 1) : previousCount + 1 }
+        : f
+    ))
     setSubscribing(prev => ({ ...prev, [folderId]: true }))
-    
+
     try {
-      const isSubscribed = subscriptions[folderId]
       const response = await fetch(`/api/bookmark-folders/${folderId}/subscribe`, {
         method: isSubscribed ? 'DELETE' : 'POST',
         headers: {
@@ -129,22 +138,36 @@ export default function UserBookmarkFolders({ userId, isOwnProfile = false }: Us
       })
 
       const data = await response.json()
-      
+
       if (response.ok) {
-        setSubscriptions(prev => ({ ...prev, [folderId]: !isSubscribed }))
-        // 更新订阅者数量
-        setFolders(prev => prev.map(f => 
-          f.id === folderId 
+        // 使用服务器返回的准确数据更新
+        setFolders(prev => prev.map(f =>
+          f.id === folderId
             ? { ...f, subscriber_count: data.data?.subscriber_count ?? (f.subscriber_count || 0) }
+            : f
+        ))
+      } else {
+        // 请求失败，回滚乐观更新
+        setSubscriptions(prev => ({ ...prev, [folderId]: isSubscribed }))
+        setFolders(prev => prev.map(f =>
+          f.id === folderId
+            ? { ...f, subscriber_count: previousCount }
             : f
         ))
       }
     } catch (err) {
       console.error('Error toggling subscription:', err)
+      // 发生异常，回滚乐观更新
+      setSubscriptions(prev => ({ ...prev, [folderId]: isSubscribed }))
+      setFolders(prev => prev.map(f =>
+        f.id === folderId
+          ? { ...f, subscriber_count: previousCount }
+          : f
+      ))
     } finally {
       setSubscribing(prev => ({ ...prev, [folderId]: false }))
     }
-  }, [accessToken, subscriptions, router])
+  }, [accessToken, subscriptions, folders, router])
 
   if (loading) {
     return null
