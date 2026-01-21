@@ -8,35 +8,24 @@ import { ApiError, ErrorCode, ErrorCodeType, ErrorCodeToHttpStatus } from './err
 import { logger } from '../logger'
 
 // ============================================
-// 响应类型定义
+// 响应类型定义（从 lib/types/index.ts 重新导出以保证一致性）
 // ============================================
 
-export interface ApiSuccessResponse<T = unknown> {
-  success: true
-  data: T
-  meta?: {
-    pagination?: {
-      limit: number
-      offset: number
-      has_more: boolean
-      total?: number
-    }
-    timestamp?: string
-    requestId?: string
-  }
-}
+// 重新导出统一的 API 响应类型
+export type {
+  ApiSuccessResponse,
+  ApiErrorResponse,
+  ApiResponse,
+  ResponseMeta,
+  PaginationMeta,
+  ApiErrorDetail,
+} from '../types/index'
 
-export interface ApiErrorResponse {
-  success: false
-  error: {
-    code: string
-    message: string
-    details?: Record<string, unknown>
-    timestamp: string
-  }
-}
-
-export type ApiResponse<T = unknown> = ApiSuccessResponse<T> | ApiErrorResponse
+// 导入供内部使用
+import type {
+  ApiSuccessResponse,
+  ApiErrorResponse,
+} from '../types/index'
 
 // ============================================
 // 成功响应
