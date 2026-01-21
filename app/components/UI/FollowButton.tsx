@@ -136,7 +136,7 @@ export default function FollowButton({ traderId, userId, initialFollowing = fals
           setFollowing(!expectedStateRef.current)
           expectedStateRef.current = null
         }
-        showToast('操作超时，请重试', 'warning')
+        showToast('超时了，请重试', 'warning')
       }
     }, 10000)
 
@@ -189,7 +189,7 @@ export default function FollowButton({ traderId, userId, initialFollowing = fals
       }}
     >
       {isLoading && <LoadingSpinner size={14} />}
-      {isLoading ? '处理中...' : following ? '取消关注' : '关注'}
+      {isLoading ? (following ? '取消中' : '关注中') : following ? '取消关注' : '关注'}
     </button>
   )
 }
