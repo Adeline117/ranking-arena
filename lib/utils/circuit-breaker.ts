@@ -418,10 +418,84 @@ export function isNetworkError(error: unknown): boolean {
 }
 
 /**
+ * 判断是否是提供商限流错误
+ */
+export function isProviderRateLimitError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false
+
+  const errorObj = error as Record<string, unknown>
+
+  // Check nested error structure: { error: { type: 'provider', ... } }
+  const providerData = (errorObj.error as Record<string, unknown>) || errorObj
+
+  // Check for provider error type with rate limit
+  if (providerData.type === 'provider' || providerData.reason === 'provider_error') {
+    const message = String(providerData.message || '').toLowerCase()
+    const providerStatus = (providerData.provider as Record<string, unknown>)?.status
+    return (
+      providerData.reason === 'rate_limit' ||
+      message.includes('rate limit') ||
+      message.includes('rate_limit') ||
+      providerStatus === 429
+    )
+  }
+
+  // Check for standard HTTP 429
+  if ('status' in errorObj && errorObj.status === 429) {
+    return true
+  }
+
+  return false
+}
+
+/**
+ * 从错误中提取重试等待时间（秒）
+ */
+export function extractRetryAfter(error: unknown): number | null {
+  if (!error || typeof error !== 'object') return null
+
+  const errorObj = error as Record<string, unknown>
+  const providerData = (errorObj.error as Record<string, unknown>) || errorObj
+
+  // Check for explicit retryAfter field
+  if (typeof providerData.retryAfter === 'number') {
+    return providerData.retryAfter
+  }
+
+  // Check in details
+  const details = providerData.details as Record<string, unknown> | undefined
+  if (details && typeof details.retryAfter === 'number') {
+    return details.retryAfter
+  }
+
+  // Try to parse from message
+  const message = String(providerData.message || '')
+  const retryMatch = message.match(/try again (?:in |after )?(\d+)\s*(?:second|sec|s|minute|min|m)/i)
+  if (retryMatch) {
+    const value = parseInt(retryMatch[1], 10)
+    // If it mentions minutes, convert to seconds
+    if (/minute|min|m/i.test(retryMatch[0])) {
+      return value * 60
+    }
+    return value
+  }
+
+  return null
+}
+
+/**
  * 判断是否是临时错误（可重试）
  */
 export function isTransientError(error: unknown): boolean {
   if (isNetworkError(error)) return true
+  if (isProviderRateLimitError(error)) return true
+
+  // Check for retryable flag
+  if (error && typeof error === 'object') {
+    const errorObj = error as Record<string, unknown>
+    const providerData = (errorObj.error as Record<string, unknown>) || errorObj
+    if (providerData.retryable === true) return true
+  }
 
   // HTTP 状态码判断
   if (error && typeof error === 'object' && 'status' in error) {
