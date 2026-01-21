@@ -1,10 +1,14 @@
 /**
  * 会话列表 API
  * GET: 获取当前用户的所有会话
+ *
+ * SECURITY: Requires authentication and verifies userId matches authenticated user.
+ * This prevents users from reading other users' conversation lists.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { getAuthUser } from '@/lib/supabase/server'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,10 +17,26 @@ const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
 
 export async function GET(request: NextRequest) {
   try {
+    // SECURITY: Require authentication
+    const authUser = await getAuthUser(request)
+    if (!authUser) {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+    }
+
     const userId = request.nextUrl.searchParams.get('userId')
 
     if (!userId) {
       return NextResponse.json({ error: 'Missing userId' }, { status: 400 })
+    }
+
+    // SECURITY: Verify that userId matches authenticated user
+    // This prevents users from accessing other users' conversations
+    if (userId !== authUser.id) {
+      console.warn('[Conversations API] User attempted to access another user\'s conversations', {
+        authUserId: authUser.id,
+        requestedUserId: userId
+      })
+      return NextResponse.json({ error: 'Unauthorized: Cannot access other users\' conversations' }, { status: 403 })
     }
 
     if (!SUPABASE_URL || !SUPABASE_KEY) {
