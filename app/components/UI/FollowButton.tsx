@@ -26,6 +26,17 @@ export default function FollowButton({ traderId, userId, initialFollowing = fals
   const pendingRef = useRef(false)
   // 跟踪期望的状态（用于乐观更新）
   const expectedStateRef = useRef<boolean | null>(null)
+  // 超时保护计时器
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  // 清理超时计时器
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current)
+      }
+    }
+  }, [])
 
   // 使用 useApiMutation 处理关注/取消关注
   const { mutate, isLoading } = useApiMutation<FollowResponse, { action: 'follow' | 'unfollow' }>(
@@ -37,12 +48,22 @@ export default function FollowButton({ traderId, userId, initialFollowing = fals
     },
     {
       onSuccess: (data) => {
+        // 清除超时保护
+        if (timeoutRef.current) {
+          clearTimeout(timeoutRef.current)
+          timeoutRef.current = null
+        }
         pendingRef.current = false
         expectedStateRef.current = null
         setFollowing(data.following)
         onFollowChange?.(data.following)
       },
       onError: (error) => {
+        // 清除超时保护
+        if (timeoutRef.current) {
+          clearTimeout(timeoutRef.current)
+          timeoutRef.current = null
+        }
         pendingRef.current = false
         // 回滚乐观更新
         if (expectedStateRef.current !== null) {
@@ -102,6 +123,22 @@ export default function FollowButton({ traderId, userId, initialFollowing = fals
     pendingRef.current = true
     const newState = !following
     expectedStateRef.current = newState
+
+    // 超时保护：10秒后自动解锁，防止永久锁定
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current)
+    }
+    timeoutRef.current = setTimeout(() => {
+      if (pendingRef.current) {
+        pendingRef.current = false
+        // 回滚乐观更新
+        if (expectedStateRef.current !== null) {
+          setFollowing(!expectedStateRef.current)
+          expectedStateRef.current = null
+        }
+        showToast('操作超时，请重试', 'warning')
+      }
+    }, 10000)
 
     // 乐观更新 UI
     setFollowing(newState)
