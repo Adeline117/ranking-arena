@@ -99,7 +99,8 @@ export const GET = withPublic(
     const exchangeFilter = searchParams.get('exchange') // 可选：筛选特定交易所
 
     const allTraders: TraderData[] = []
-    
+    const staleSources: string[] = [] // 跟踪陈旧数据的交易所
+
     // 计算数据时效性阈值
     const freshnessThreshold = new Date()
     freshnessThreshold.setHours(freshnessThreshold.getHours() - DATA_FRESHNESS_HOURS)
@@ -141,11 +142,12 @@ export const GET = withPublic(
           .order('captured_at', { ascending: false })
           .limit(1)
           .maybeSingle()
-        
-        if (!fallbackSnapshot) return []
-        
-        // 使用陈旧数据但继续处理
+
+        if (!fallbackSnapshot) return { traders: [], isStale: false }
+
+        // 使用陈旧数据但继续处理，标记该交易所数据为陈旧
         logger.warn(`${source} 数据陈旧，最后更新: ${fallbackSnapshot.captured_at}`)
+        staleSources.push(source)
       }
       
       const capturedAt = latestSnapshot?.captured_at || (await supabase
@@ -157,7 +159,7 @@ export const GET = withPublic(
         .limit(1)
         .maybeSingle()).data?.captured_at
 
-      if (!capturedAt) return []
+      if (!capturedAt) return { traders: [], isStale: false }
 
       // 使用分页查询获取所有数据（Supabase默认限制1000条）
       let allSnapshots = []
@@ -185,7 +187,7 @@ export const GET = withPublic(
         page++
       }
       
-      if (!allSnapshots.length) return []
+      if (!allSnapshots.length) return { traders: [], isStale: false }
       
       // 去重：每个交易员只保留最新的一条记录
       const traderMap = new Map()
@@ -198,7 +200,7 @@ export const GET = withPublic(
 
       if (!snapshots?.length) {
         logger.warn(`${source} 无有效数据`)
-        return []
+        return { traders: [], isStale: false }
       }
 
       // 批量获取 handles
@@ -216,14 +218,14 @@ export const GET = withPublic(
       })
 
       // 构建交易员数据（不包含数据库 rank，排名将在后面统一计算）
-      return snapshots.map(item => {
+      const traders = snapshots.map(item => {
         const info = handleMap.get(item.source_trader_id) || { handle: null, avatar_url: null }
         // 标准化 win_rate 为百分比形式
         // binance_futures 存储小数(0.85)，bitget/bybit 存储百分比(85)
-        const normalizedWinRate = item.win_rate != null 
+        const normalizedWinRate = item.win_rate != null
           ? (item.win_rate <= 1 ? item.win_rate * 100 : item.win_rate)
           : null
-        
+
         return {
           id: item.source_trader_id,
           handle: info.handle || item.source_trader_id,
@@ -238,13 +240,14 @@ export const GET = withPublic(
           avatar_url: info.avatar_url,  // 只使用数据库中的原始头像
         }
       })
+      return { traders, isStale: !latestSnapshot }
     })
 
     // 等待所有查询完成并去重
     const results = await Promise.all(sourcePromises)
     const seenTraders = new Set<string>()
-    results.forEach(traders => {
-      traders.forEach(trader => {
+    results.forEach(result => {
+      result.traders.forEach(trader => {
         // 使用 source + id 作为唯一键去重
         const key = `${trader.source}:${trader.id}`
         if (!seenTraders.has(key)) {
@@ -327,13 +330,19 @@ export const GET = withPublic(
       .limit(1)
       .maybeSingle()
 
-    const response = NextResponse.json({ 
+    // 检查数据是否陈旧（有任何交易所数据超过 24 小时）
+    const isStale = staleSources.length > 0
+
+    const response = NextResponse.json({
       traders: topTraders,
       timeRange,
       totalCount: allTraders.length,
       rankingMode: 'arena_score',
       pnlThreshold,
       lastUpdated: latestData?.captured_at || new Date().toISOString(),
+      // 数据新鲜度标识
+      isStale,
+      staleSources: isStale ? staleSources : undefined,
     })
     
     // 添加缓存头，提高页面加载速度
