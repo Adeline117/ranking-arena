@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../Base'
-import { useLanguage } from '../Utils/LanguageProvider'
+import { useLanguage } from '../Providers/LanguageProvider'
 
 interface LivePosition {
   id: string
@@ -55,7 +55,7 @@ export default function LivePositions({
 
   const fetchPositions = useCallback(async () => {
     try {
-      const response = await fetch(`/api/trader/${encodeURIComponent(handle)}/positions`)
+      const response = await fetch(`/api/traders/${encodeURIComponent(handle)}/positions`)
       if (!response.ok) {
         throw new Error('Failed to fetch positions')
       }

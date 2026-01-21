@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/Layout/TopNav'
 import { Box, Text, Button } from '@/app/components/Base'
-import { useLanguage } from '@/app/components/Utils/LanguageProvider'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import ContactSupportButton from '@/app/components/UI/ContactSupportButton'
 
 // FAQ 数据

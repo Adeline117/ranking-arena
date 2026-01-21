@@ -5,7 +5,7 @@ import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../../Base'
 import type { TraderStats } from '@/lib/data/trader'
 import TradingViewShell from '../TradingViewShell'
-import { useLanguage } from '../../Utils/LanguageProvider'
+import { useLanguage } from '../../Providers/LanguageProvider'
 import { createChart, ColorType, IChartApi, LineSeries, LineData, Time } from 'lightweight-charts'
 
 // 扩展类型以支持新数据

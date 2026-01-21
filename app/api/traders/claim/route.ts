@@ -1,7 +1,7 @@
 /**
  * 交易员认领 API
- * GET /api/trader/claim - 获取用户的认领状态
- * POST /api/trader/claim - 提交认领申请
+ * GET /api/traders/claim - 获取用户的认领状态
+ * POST /api/traders/claim - 提交认领申请
  */
 
 import { NextRequest } from 'next/server'
@@ -24,7 +24,7 @@ import {
 } from '@/lib/data/trader-claims'
 
 /**
- * GET /api/trader/claim
+ * GET /api/traders/claim
  * 获取用户的认领状态
  */
 export async function GET(request: NextRequest) {
@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
 }
 
 /**
- * POST /api/trader/claim
+ * POST /api/traders/claim
  * 提交认领申请
  */
 export async function POST(request: NextRequest) {

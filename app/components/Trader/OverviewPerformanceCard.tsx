@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../Base'
-import { useLanguage } from '../Utils/LanguageProvider'
+import { useLanguage } from '../Providers/LanguageProvider'
 import type { TraderPerformance } from '@/lib/data/trader'
 
 // 扩展 TraderPerformance 类型
