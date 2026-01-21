@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '../base'
 import type { TraderPerformance } from '@/lib/data/trader'
@@ -30,6 +31,12 @@ export default function UserHomeLayout({
   groups = [],
   isOwnProfile = false,
 }: UserHomeLayoutProps) {
+  const router = useRouter()
+
+  const handleEditProfile = () => {
+    router.push('/settings')
+  }
+
   const handleViewPerformance = () => {
     // 跳转到交易员外部主页
     window.location.href = `/trader/${handle}?tab=overview&focus=performance`
@@ -173,7 +180,7 @@ export default function UserHomeLayout({
             </Box>
           </Box>
           {isOwnProfile && (
-            <Button variant="ghost" size="md" style={{ width: '100%', marginTop: tokens.spacing[4] }} onClick={() => alert('编辑个人资料')}>
+            <Button variant="ghost" size="md" style={{ width: '100%', marginTop: tokens.spacing[4] }} onClick={handleEditProfile}>
               编辑个人资料
             </Button>
           )}

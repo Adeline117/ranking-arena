@@ -10,6 +10,7 @@ import { Box, Text, Button } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useSubscription } from '@/app/components/home/hooks/useSubscription'
 import { useToast } from '@/app/components/ui/Toast'
+import { useDialog } from '@/app/components/ui/Dialog'
 import { getCsrfHeaders } from '@/lib/api/client'
 
 type GroupMember = {
@@ -77,6 +78,7 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
   const { language } = useLanguage()
   const { isPro } = useSubscription()
   const { showToast } = useToast()
+  const { showDangerConfirm } = useDialog()
   const [email, setEmail] = useState<string | null>(null)
   const [userId, setUserId] = useState<string | null>(null)
   const [accessToken, setAccessToken] = useState<string | null>(null)
@@ -394,7 +396,11 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
   // 删除帖子
   const handleDeletePost = async (postId: string) => {
     if (!accessToken || !canManage) return
-    if (!confirm(language === 'zh' ? '确定删除此帖子吗？' : 'Are you sure to delete this post?')) return
+    const confirmed = await showDangerConfirm(
+      language === 'zh' ? '删除帖子' : 'Delete Post',
+      language === 'zh' ? '确定删除此帖子吗？' : 'Are you sure to delete this post?'
+    )
+    if (!confirmed) return
 
     try {
       const res = await fetch(`/api/groups/${groupId}/posts/${postId}/delete`, {
@@ -423,7 +429,11 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
   // 删除评论
   const handleDeleteComment = async (commentId: string) => {
     if (!accessToken || !canManage) return
-    if (!confirm(language === 'zh' ? '确定删除此评论吗？' : 'Are you sure to delete this comment?')) return
+    const confirmed = await showDangerConfirm(
+      language === 'zh' ? '删除评论' : 'Delete Comment',
+      language === 'zh' ? '确定删除此评论吗？' : 'Are you sure to delete this comment?'
+    )
+    if (!confirmed) return
 
     try {
       const res = await fetch(`/api/groups/${groupId}/comments/${commentId}/delete`, {
