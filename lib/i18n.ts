@@ -460,6 +460,13 @@ export const translations = {
     searchHistory: '历史搜索',
     clear: '清除',
     hotSearches: '热门搜索',
+    // 导出
+    export: '导出',
+    // 错误边界
+    errorTitle: '出错了',
+    errorMessage: '抱歉，页面遇到了问题',
+    errorRefresh: '请尝试刷新页面或返回首页',
+    refreshPage: '刷新页面',
   },
   en: {
     home: 'Home',
@@ -919,6 +926,13 @@ export const translations = {
     searchHistory: 'Search History',
     clear: 'Clear',
     hotSearches: 'Hot Searches',
+    // Export
+    export: 'Export',
+    // Error Boundary
+    errorTitle: 'Something went wrong',
+    errorMessage: 'Sorry, an error occurred',
+    errorRefresh: 'Please try refreshing the page or return home',
+    refreshPage: 'Refresh Page',
   },
 }
 

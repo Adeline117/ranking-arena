@@ -94,7 +94,7 @@ export default function ExchangeConnectionManager({ userId }: ExchangeConnection
     try {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) {
-        showToast('请先登录', 'warning')
+        showToast(t('pleaseLogin'), 'warning')
         return
       }
 
