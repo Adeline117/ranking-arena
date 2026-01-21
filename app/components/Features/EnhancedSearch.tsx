@@ -117,6 +117,7 @@ export function EnhancedSearch({
   const router = useRouter()
   const { t } = useLanguage()
   const inputRef = useRef<HTMLInputElement>(null)
+  const blurTimerRef = useRef<NodeJS.Timeout | null>(null)
   
   const [query, setQuery] = useState('')
   const [isFocused, setIsFocused] = useState(false)
@@ -124,6 +125,15 @@ export function EnhancedSearch({
   
   const { suggestions, loading } = useSearchSuggestions(query)
   const showDropdown = isFocused && (query.length > 0 || recentSearches.length > 0)
+
+  // Cleanup blur timer on unmount
+  useEffect(() => {
+    return () => {
+      if (blurTimerRef.current) {
+        clearTimeout(blurTimerRef.current)
+      }
+    }
+  }, [])
 
   // 加载历史搜索
   useEffect(() => {
@@ -203,7 +213,13 @@ export function EnhancedSearch({
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onFocus={() => setIsFocused(true)}
-          onBlur={() => setTimeout(() => setIsFocused(false), 200)}
+          onBlur={() => {
+            // Clear any existing blur timer
+            if (blurTimerRef.current) {
+              clearTimeout(blurTimerRef.current)
+            }
+            blurTimerRef.current = setTimeout(() => setIsFocused(false), 200)
+          }}
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
           autoFocus={autoFocus}
