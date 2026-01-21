@@ -1,8 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import React, { useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
-import { Box, Text, Button } from '../base'
+import { Box, Text } from '../base'
 import { useLanguage } from '../Providers/LanguageProvider'
 import PremiumGate, { ProLabel } from '../premium/PremiumGate'
 
@@ -30,12 +30,6 @@ const TrendDownIcon = ({ size = 16 }: { size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
     <path d="M23 18l-9.5-9.5-5 5L1 6" />
     <path d="M17 18h6v-6" />
-  </svg>
-)
-
-const ShieldIcon = ({ size = 16 }: { size?: number }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
   </svg>
 )
 
@@ -108,7 +102,7 @@ interface AdvancedAlertsProps {
 export default function AdvancedAlerts({
   isPro,
   isLoggedIn = true,
-  traderId,
+  traderId: _traderId,
   traderHandle,
   existingConditions = [],
   onConditionsChange,
@@ -151,7 +145,7 @@ export default function AdvancedAlerts({
     isActive: true,
   })
 
-  const alertTypes: { type: AlertType; label: string; icon: JSX.Element; description: string }[] = [
+  const alertTypes: { type: AlertType; label: string; icon: React.ReactNode; description: string }[] = [
     {
       type: 'roi_change',
       label: language === 'zh' ? 'ROI 变化' : 'ROI Change',

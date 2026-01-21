@@ -164,12 +164,12 @@ export function usePushNotifications(): UsePushNotificationsReturn {
         
         // 监听 token
         const tokenResult = await new Promise<string>((resolve, reject) => {
-          let registrationHandle: { remove: () => Promise<void> } | null = null
-          let errorHandle: { remove: () => Promise<void> } | null = null
+          let registrationHandle: { remove: () => void | Promise<void> } | null = null
+          let errorHandle: { remove: () => void | Promise<void> } | null = null
 
           const cleanup = async () => {
-            await registrationHandle?.remove()
-            await errorHandle?.remove()
+            await Promise.resolve(registrationHandle?.remove())
+            await Promise.resolve(errorHandle?.remove())
           }
 
           const timeout = setTimeout(async () => {

@@ -11,8 +11,8 @@
  */
 
 import { NextResponse } from 'next/server'
-import { withAuth, withPublic } from '@/lib/api/middleware'
-import { getFeatureLimits, normalizeSubscriptionTier } from '@/lib/types/premium'
+import { withAuth } from '@/lib/api/middleware'
+import { normalizeSubscriptionTier } from '@/lib/types/premium'
 import type { TimeRange } from '@/lib/types/trader'
 import { createLogger } from '@/lib/utils/logger'
 
@@ -43,7 +43,7 @@ export const POST = withAuth(
   async ({ user, supabase }) => {
     try {
       // Parse request body
-      const body = await new Promise<CreateSnapshotBody>((resolve, reject) => {
+      const body = await new Promise<CreateSnapshotBody>((resolve) => {
         // Get body from context - this is a workaround since we can't access request directly
         resolve({} as CreateSnapshotBody)
       }).catch(() => ({} as CreateSnapshotBody))
@@ -125,7 +125,6 @@ export const POST = withAuth(
 
       // Find top trader
       const topTrader = traders[0]
-      const topArenaScore = (topTrader as Record<string, unknown>).trader_scores as Record<string, unknown> | undefined
       const topTraderHandle = ((topTrader as Record<string, unknown>).trader_sources as Record<string, unknown> | undefined)?.handle as string || topTrader.source_trader_id
 
       // Create the snapshot record

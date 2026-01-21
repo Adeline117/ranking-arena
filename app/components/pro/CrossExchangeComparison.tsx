@@ -5,7 +5,6 @@ import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
 import { useLanguage } from '../Providers/LanguageProvider'
 import PremiumGate, { ProLabel } from '../premium/PremiumGate'
-import { DataOrPlaceholder } from '../ui/MissingDataPlaceholder'
 import { DataSourceBadge } from '../ui/DataSourceTooltip'
 
 // Icons
@@ -16,23 +15,10 @@ const CompareIcon = ({ size = 16 }: { size?: number }) => (
   </svg>
 )
 
-const ArrowRightIcon = ({ size = 16 }: { size?: number }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <path d="M5 12h14M12 5l7 7-7 7" />
-  </svg>
-)
-
 const CheckCircleIcon = ({ size = 16, color = 'currentColor' }: { size?: number; color?: string }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2">
     <circle cx="12" cy="12" r="10" />
     <path d="M9 12l2 2 4-4" />
-  </svg>
-)
-
-const XCircleIcon = ({ size = 16, color = 'currentColor' }: { size?: number; color?: string }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2">
-    <circle cx="12" cy="12" r="10" />
-    <path d="M15 9l-6 6M9 9l6 6" />
   </svg>
 )
 
@@ -66,7 +52,7 @@ interface CrossExchangeComparisonProps {
 export default function CrossExchangeComparison({
   isPro,
   isLoggedIn = true,
-  traderId,
+  traderId: _traderId,
   traderHandle,
   exchangeData = [],
 }: CrossExchangeComparisonProps) {

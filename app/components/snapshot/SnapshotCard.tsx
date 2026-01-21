@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
-import { Box, Text, Button } from '../base'
+import { Box, Text } from '../base'
 import { useLanguage } from '../Providers/LanguageProvider'
 
 // Icons
@@ -25,14 +25,6 @@ const CopyIcon = ({ size = 16 }: { size?: number }) => (
 const CheckIcon = ({ size = 16 }: { size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
     <path d="M5 12l5 5L20 7" strokeLinecap="round" strokeLinejoin="round" />
-  </svg>
-)
-
-const DownloadIcon = ({ size = 16 }: { size?: number }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
-    <polyline points="7,10 12,15 17,10" />
-    <line x1="12" y1="15" x2="12" y2="3" />
   </svg>
 )
 
@@ -483,7 +475,7 @@ export function CreateSnapshotButton({
   onSuccess?: (snapshot: { shareToken: string; shareUrl: string }) => void
   disabled?: boolean
 }) {
-  const { t, language } = useLanguage()
+  const { t } = useLanguage()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
