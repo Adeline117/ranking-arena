@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react'
-import { Box, Text } from '@/app/components/Base'
+import { Box, Text } from '@/app/components/base'
 import { tokens } from '@/lib/design-tokens'
 
 const meta: Meta<typeof Box> = {

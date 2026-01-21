@@ -2,12 +2,12 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono, ZCOOL_KuaiLe } from "next/font/google";
 import { Suspense } from "react";
 import "./globals.css";
-import KeyboardShortcuts from "./components/Utils/KeyboardShortcuts";
+import KeyboardShortcuts from "./components/utils/KeyboardShortcuts";
 import Providers from "./components/Providers";
-import { GlobalProgress } from "./components/UI/GlobalProgress";
-import { ServiceWorkerRegistration } from "./components/Utils/ServiceWorkerRegistration";
-import CookieConsent from "./components/UI/CookieConsent";
-import { SkipLink } from "./components/Utils/Accessibility";
+import { GlobalProgress } from "./components/ui/GlobalProgress";
+import { ServiceWorkerRegistration } from "./components/utils/ServiceWorkerRegistration";
+import CookieConsent from "./components/ui/CookieConsent";
+import { SkipLink } from "./components/utils/Accessibility";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
