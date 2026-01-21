@@ -5,7 +5,7 @@ import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
 import { EquityCurve, PnLChart, DrawdownChart } from '../charts'
 import type { EquityDataPoint, PnLDataPoint, DrawdownDataPoint } from '../charts'
-import { useLanguage } from '../utils/LanguageProvider'
+import { useLanguage } from '../Providers/LanguageProvider'
 
 interface PerformanceChartsProps {
   handle: string

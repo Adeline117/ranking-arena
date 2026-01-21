@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { useLanguage } from '../utils/LanguageProvider'
+import { useLanguage } from '../Providers/LanguageProvider'
 
 // ============================================
 // 类型定义

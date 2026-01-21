@@ -1,12 +1,12 @@
 'use client'
 
 import { ReactNode, useEffect } from 'react'
-import { LanguageProvider } from './utils/LanguageProvider'
-import { ToastProvider } from './ui/Toast'
-import { DialogProvider } from './ui/Dialog'
+import { LanguageProvider } from './LanguageProvider'
+import { ToastProvider } from '../ui/Toast'
+import { DialogProvider } from '../ui/Dialog'
 import { PremiumProvider } from '@/lib/premium/hooks'
 import { initCsrfToken } from '@/lib/api/client'
-import { ErrorBoundary } from './utils/ErrorBoundary'
+import { ErrorBoundary } from './ErrorBoundary'
 import { SWRConfigProvider } from '@/lib/hooks/SWRConfig'
 
 export default function Providers({ children }: { children: ReactNode }) {

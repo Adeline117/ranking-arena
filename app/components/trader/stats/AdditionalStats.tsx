@@ -1,7 +1,7 @@
 'use client'
 
 import { tokens } from '@/lib/design-tokens'
-import { useLanguage } from '../../utils/LanguageProvider'
+import { useLanguage } from '../../Providers/LanguageProvider'
 import { Box, Text } from '../../base'
 import type { TraderStats } from '@/lib/data/trader'
 

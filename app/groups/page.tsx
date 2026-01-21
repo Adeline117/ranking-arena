@@ -11,7 +11,7 @@ import PostFeed from '@/app/components/post/PostFeed'
 import Card from '@/app/components/ui/Card'
 import { Box, Text, Button } from '@/app/components/base'
 import type { Trader } from '@/app/components/ranking/RankingTable'
-import { useLanguage } from '@/app/components/utils/LanguageProvider'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { RankingSkeleton } from '@/app/components/ui/Skeleton'
 import { useToast } from '@/app/components/ui/Toast'
 

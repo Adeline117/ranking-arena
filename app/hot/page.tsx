@@ -58,7 +58,7 @@ type Trader = {
   followers: number
   source?: string
 }
-import { useLanguage } from '@/app/components/utils/LanguageProvider'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 type Post = {
   id: string

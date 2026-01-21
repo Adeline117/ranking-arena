@@ -1,7 +1,7 @@
 'use client'
 
 import { tokens } from '@/lib/design-tokens'
-import { Box, Text } from '../../Base'
+import { Box, Text } from '../../base'
 import type { TraderStats } from '@/lib/data/trader'
 
 interface TrustStatsProps {

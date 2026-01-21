@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
-import { useLanguage } from '../utils/LanguageProvider'
+import { useLanguage } from '../Providers/LanguageProvider'
 
 interface LivePosition {
   id: string

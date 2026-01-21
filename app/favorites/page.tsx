@@ -9,7 +9,7 @@ import { Box, Text, Button } from '@/app/components/base'
 import { RankingSkeleton } from '@/app/components/ui/Skeleton'
 import EmptyState from '@/app/components/ui/EmptyState'
 import { getCsrfHeaders } from '@/lib/api/client'
-import { useToast } from '@/app/components/UI/Toast'
+import { useToast } from '@/app/components/ui/Toast'
 
 interface BookmarkFolder {
   id: string

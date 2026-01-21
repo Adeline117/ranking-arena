@@ -5,9 +5,9 @@ import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import { Box } from '../base'
 import Card from '../ui/Card'
-import { ErrorBoundary } from '../utils/ErrorBoundary'
+import { ErrorBoundary } from '../Providers/ErrorBoundary'
 import { SkeletonCard } from '../ui/Skeleton'
-import { useLanguage } from '../utils/LanguageProvider'
+import { useLanguage } from '../Providers/LanguageProvider'
 import ProFeaturesPanel from '../premium/ProFeaturesPanel'
 
 // 懒加载组件

@@ -2,7 +2,7 @@
 
 import { useState, type CSSProperties } from 'react'
 import { tokens } from '@/lib/design-tokens'
-import { Box, Text } from '../Base'
+import { Box, Text } from '../base'
 
 interface PostImageProps {
   src: string

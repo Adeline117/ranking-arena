@@ -7,7 +7,7 @@ import TopNav from '@/app/components/layout/TopNav'
 import { Box, Text, Button } from '@/app/components/base'
 import { tokens } from '@/lib/design-tokens'
 import { useToast } from '@/app/components/ui/Toast'
-import { useLanguage } from '@/app/components/utils/LanguageProvider'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { renderContentWithLinks } from '@/lib/utils/content'
 
@@ -19,6 +19,7 @@ interface UploadedImage {
 interface UploadedVideo {
   url: string
   fileName: string
+  fileSize?: number
   thumbnail?: string
 }
 
@@ -1023,7 +1024,7 @@ export default function NewGroupPostPage() {
                       padding: '2px 0',
                     }}
                   >
-                    {(video.fileSize / 1024 / 1024).toFixed(1)}MB
+                    {video.fileSize ? (video.fileSize / 1024 / 1024).toFixed(1) : '?'}MB
                   </Box>
                   {/* 删除按钮 */}
                   <button

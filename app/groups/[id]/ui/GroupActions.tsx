@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { Box, Text, Button } from '@/app/components/base'
 import { tokens } from '@/lib/design-tokens'
-import { useLanguage } from '@/app/components/utils/LanguageProvider'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 export default function GroupActions({ groupId }: { groupId: string }) {
   const { language } = useLanguage()

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { tokens } from '@/lib/design-tokens'
-import { useLanguage } from '../utils/LanguageProvider'
+import { useLanguage } from '../Providers/LanguageProvider'
 import { Box, Text } from '../base'
 import type { PortfolioItem, PositionHistoryItem } from '@/lib/data/trader'
 

@@ -7,7 +7,7 @@ import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
 import Card from '@/app/components/ui/Card'
 import { Box, Text } from '@/app/components/base'
-import { useLanguage } from '@/app/components/utils/LanguageProvider'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 type BookmarkFolder = {
   id: string
