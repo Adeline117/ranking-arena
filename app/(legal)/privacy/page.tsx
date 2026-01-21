@@ -1,5 +1,6 @@
 'use client'
 
+import React from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/Base'
 import ContactSupportButton from '@/app/components/UI/ContactSupportButton'
@@ -23,7 +24,7 @@ export default function PrivacyPolicyPage() {
 
       <Section title="1. 概述">
         <Paragraph>
-          Arena（以下简称"我们"或"本平台"）重视您的隐私。本隐私政策说明了我们如何收集、使用、存储和保护您的个人信息。
+          Arena（以下简称&ldquo;我们&rdquo;或&ldquo;本平台&rdquo;）重视您的隐私。本隐私政策说明了我们如何收集、使用、存储和保护您的个人信息。
         </Paragraph>
         <Paragraph>
           使用本平台即表示您同意本隐私政策中描述的数据处理方式。如果您不同意本政策的任何条款，请停止使用本平台。

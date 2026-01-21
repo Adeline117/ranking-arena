@@ -1,5 +1,6 @@
 'use client'
 
+import React from 'react'
 import ContactSupportButton from '@/app/components/UI/ContactSupportButton'
 
 export default function TermsOfServicePage() {
