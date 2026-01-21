@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, ReactNode } from 'react'
+import { tokens } from '@/lib/design-tokens'
 
 // ============================================
 // Skip Link 组件
@@ -25,7 +26,7 @@ export function SkipLink({
         position: 'fixed',
         top: -100,
         left: 16,
-        zIndex: 9999,
+        zIndex: tokens.zIndex.max, // 跳过链接需要最高优先级
         padding: '12px 24px',
         background: 'var(--color-brand)',
         color: '#fff',

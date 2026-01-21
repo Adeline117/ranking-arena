@@ -179,7 +179,7 @@ export default function BookmarkModal({ isOpen, onClose, onSelect, postId }: Boo
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        zIndex: 1200,
+        zIndex: tokens.zIndex.modal,
       }}
       onClick={onClose}
     >

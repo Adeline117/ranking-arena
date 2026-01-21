@@ -2759,7 +2759,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
             alignItems: 'center',
             justifyContent: 'center',
             padding: 20,
-            zIndex: 10000,
+            zIndex: tokens.zIndex.modal, // 使用 design tokens (400)
           }}
         >
           <div
@@ -2872,7 +2872,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
             alignItems: 'center',
             justifyContent: 'center',
             padding: 20,
-            zIndex: 99999,
+            zIndex: tokens.zIndex.modal, // 使用 design tokens (400)
           }}
         >
           <div

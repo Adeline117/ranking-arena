@@ -33,7 +33,7 @@ export function Modal({ children, onClose }: ModalProps) {
         display: 'grid',
         placeItems: 'center',
         padding: 16,
-        zIndex: 1000,
+        zIndex: tokens.zIndex.modal,
         overflowY: 'auto',
       }}
     >
