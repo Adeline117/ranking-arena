@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useContext, useState, useCallback, ReactNode, useEffect } from 'react'
+import { createContext, useContext, useState, useCallback, ReactNode, useEffect, useRef } from 'react'
 import { tokens } from '@/lib/design-tokens'
 
 interface DialogOptions {
@@ -46,17 +46,27 @@ export function DialogProvider({ children }: { children: ReactNode }) {
     resolve: null,
   })
   const [isLoading, setIsLoading] = useState(false)
+  const closeTimerRef = useRef<NodeJS.Timeout | null>(null)
+
+  // Cleanup close timer on unmount
+  useEffect(() => {
+    return () => {
+      if (closeTimerRef.current) {
+        clearTimeout(closeTimerRef.current)
+      }
+    }
+  }, [])
 
   // Handle escape key
   useEffect(() => {
     if (!state.isOpen) return
-    
+
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         handleCancel()
       }
     }
-    
+
     document.addEventListener('keydown', handleEscape)
     return () => document.removeEventListener('keydown', handleEscape)
   }, [state.isOpen])
@@ -109,14 +119,19 @@ export function DialogProvider({ children }: { children: ReactNode }) {
   }, [showDialog])
 
   const closeDialog = useCallback(() => {
+    // Clear any existing close timer
+    if (closeTimerRef.current) {
+      clearTimeout(closeTimerRef.current)
+    }
     setState(prev => ({ ...prev, isExiting: true }))
-    setTimeout(() => {
+    closeTimerRef.current = setTimeout(() => {
       setState({
         isOpen: false,
         isExiting: false,
         options: null,
         resolve: null,
       })
+      closeTimerRef.current = null
     }, 200)
   }, [])
 

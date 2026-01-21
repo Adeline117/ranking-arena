@@ -164,17 +164,30 @@ export function usePushNotifications(): UsePushNotificationsReturn {
         
         // 监听 token
         const tokenResult = await new Promise<string>((resolve, reject) => {
-          const timeout = setTimeout(() => reject(new Error('获取 token 超时')), 10000)
-          
+          let registrationHandle: { remove: () => Promise<void> } | null = null
+          let errorHandle: { remove: () => Promise<void> } | null = null
+
+          const cleanup = async () => {
+            await registrationHandle?.remove()
+            await errorHandle?.remove()
+          }
+
+          const timeout = setTimeout(async () => {
+            await cleanup()
+            reject(new Error('获取 token 超时'))
+          }, 10000)
+
           PushNotifications.addListener('registration', (data) => {
             clearTimeout(timeout)
+            cleanup()
             resolve(data.value)
-          })
-          
+          }).then(handle => { registrationHandle = handle })
+
           PushNotifications.addListener('registrationError', (error) => {
             clearTimeout(timeout)
+            cleanup()
             reject(error)
-          })
+          }).then(handle => { errorHandle = handle })
         })
         
         token = tokenResult
