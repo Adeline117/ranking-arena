@@ -193,8 +193,8 @@ export const GET = withPublic(
       })
       const snapshots = Array.from(traderMap.values())
 
-      if (error || !snapshots?.length) {
-        if (error) console.error(`[Traders API] ${source} 查询错误:`, error.message)
+      if (!snapshots?.length) {
+        console.warn(`[Traders API] ${source} 无有效数据`)
         return []
       }
 
