@@ -8,11 +8,74 @@ import { ReactNode, createElement } from 'react'
 // Arena 主题色
 export const ARENA_PURPLE = '#8b6fa8'
 
+// 视频嵌入信息
+interface VideoEmbed {
+  type: 'youtube' | 'bilibili' | 'direct'
+  embedUrl: string
+  originalUrl: string
+}
+
 // 内容片段类型
 interface ContentPart {
-  type: 'text' | 'image' | 'link'
+  type: 'text' | 'image' | 'link' | 'video'
   content: string
   url?: string
+  video?: VideoEmbed
+}
+
+/**
+ * 解析视频链接，返回嵌入信息
+ * 支持 YouTube、Bilibili 和直接视频URL
+ */
+export function parseVideoUrl(url: string): VideoEmbed | null {
+  // YouTube 链接
+  // 格式: https://www.youtube.com/watch?v=VIDEO_ID 或 https://youtu.be/VIDEO_ID
+  const youtubeMatch = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/)
+  if (youtubeMatch) {
+    return {
+      type: 'youtube',
+      embedUrl: `https://www.youtube.com/embed/${youtubeMatch[1]}`,
+      originalUrl: url,
+    }
+  }
+
+  // Bilibili 链接
+  // 格式: https://www.bilibili.com/video/BV1xxxxx 或 https://b23.tv/xxx
+  const bilibiliMatch = url.match(/bilibili\.com\/video\/(BV[a-zA-Z0-9]+)|bilibili\.com\/video\/av(\d+)|b23\.tv\/([a-zA-Z0-9]+)/)
+  if (bilibiliMatch) {
+    const bvid = bilibiliMatch[1]
+    const aid = bilibiliMatch[2]
+    const shortId = bilibiliMatch[3]
+
+    if (bvid) {
+      return {
+        type: 'bilibili',
+        embedUrl: `//player.bilibili.com/player.html?bvid=${bvid}&autoplay=0`,
+        originalUrl: url,
+      }
+    } else if (aid) {
+      return {
+        type: 'bilibili',
+        embedUrl: `//player.bilibili.com/player.html?aid=${aid}&autoplay=0`,
+        originalUrl: url,
+      }
+    } else if (shortId) {
+      // b23.tv 短链接暂不支持直接嵌入
+      return null
+    }
+  }
+
+  // 直接视频链接 (mp4, webm, mov, etc.)
+  const directVideoMatch = url.match(/\.(mp4|webm|mov|avi|mkv|m4v|ogg)(\?.*)?$/i)
+  if (directVideoMatch) {
+    return {
+      type: 'direct',
+      embedUrl: url,
+      originalUrl: url,
+    }
+  }
+
+  return null
 }
 
 /**
@@ -40,13 +103,19 @@ export function parseContent(text: string): ContentPart[] {
     })
   }
   
-  // 处理文本中的链接
+  // 处理文本中的链接（包括视频链接）
   function processTextWithLinks(str: string): void {
     const linkParts = str.split(urlRegex)
     linkParts.forEach((part) => {
       if (urlRegex.test(part)) {
         urlRegex.lastIndex = 0
-        parts.push({ type: 'link', content: part, url: part })
+        // 检查是否是视频链接
+        const videoEmbed = parseVideoUrl(part)
+        if (videoEmbed) {
+          parts.push({ type: 'video', content: part, url: part, video: videoEmbed })
+        } else {
+          parts.push({ type: 'link', content: part, url: part })
+        }
       } else if (part) {
         parts.push({ type: 'text', content: part })
       }
@@ -144,6 +213,73 @@ export function renderContentParts(parts: ContentPart[]): ReactNode[] {
         },
       }))
     }
+
+    // 渲染视频播放器
+    if (part.type === 'video' && part.video) {
+      // 直接视频URL使用 video 标签
+      if (part.video.type === 'direct') {
+        return createElement('div', {
+          key: index,
+          onClick: (e: React.MouseEvent) => e.stopPropagation(),
+          style: {
+            position: 'relative' as const,
+            width: '100%',
+            maxWidth: 640,
+            marginTop: 8,
+            marginBottom: 8,
+            borderRadius: 8,
+            overflow: 'hidden',
+            background: '#000',
+          },
+        }, createElement('video', {
+          src: part.video.embedUrl,
+          controls: true,
+          preload: 'metadata',
+          style: {
+            width: '100%',
+            maxHeight: 360,
+            display: 'block',
+          },
+          onError: () => {
+            console.error('Video failed to load:', part.video?.originalUrl)
+          },
+        }))
+      }
+
+      // YouTube/Bilibili 使用 iframe 嵌入
+      return createElement('div', {
+        key: index,
+        onClick: (e: React.MouseEvent) => e.stopPropagation(),
+        style: {
+          position: 'relative' as const,
+          width: '100%',
+          paddingBottom: '56.25%', // 16:9 比例
+          marginTop: 8,
+          marginBottom: 8,
+          borderRadius: 8,
+          overflow: 'hidden',
+          background: '#000',
+        },
+      }, createElement('iframe', {
+        src: part.video.embedUrl,
+        style: {
+          position: 'absolute' as const,
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          border: 'none',
+        },
+        allowFullScreen: true,
+        allow: 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture',
+        title: part.video.type === 'youtube' ? 'YouTube 视频' : 'Bilibili 视频',
+        onError: () => {
+          // 视频加载失败时的处理
+          console.error('Video failed to load:', part.video?.originalUrl)
+        },
+      }))
+    }
+
 
     if (part.type === 'link') {
       return createElement('a', {

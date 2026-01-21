@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react'
-import { Text } from '@/app/components/Base'
-import { Box } from '@/app/components/Base'
+import { Text } from '@/app/components/base'
+import { Box } from '@/app/components/base'
 import { tokens } from '@/lib/design-tokens'
 
 const meta: Meta<typeof Text> = {

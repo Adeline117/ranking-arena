@@ -150,7 +150,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
         .eq('id', id)
 
       if (countUpdateError) {
-        apiLogger.error('Error updating bookmark count:', countUpdateError)
+        apiLogger.error('Error updating bookmark count on remove:', countUpdateError)
+        // Continue with success response since the main operation succeeded
       }
 
       return NextResponse.json({
@@ -240,7 +241,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
         .eq('id', id)
 
       if (countUpdateError) {
-        apiLogger.error('Error updating bookmark count:', countUpdateError)
+        apiLogger.error('Error updating bookmark count on add:', countUpdateError)
+        // Continue with success response since the main operation succeeded
       }
 
       return NextResponse.json({

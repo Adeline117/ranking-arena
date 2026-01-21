@@ -1,7 +1,7 @@
 import { tokens } from '@/lib/design-tokens'
-import { Box } from '@/app/components/Base'
-import { SkeletonCard } from '@/app/components/UI/Skeleton'
-import TopNav from '@/app/components/Layout/TopNav'
+import { Box } from '@/app/components/base'
+import { SkeletonCard } from '@/app/components/ui/Skeleton'
+import TopNav from '@/app/components/layout/TopNav'
 
 /**
  * 群组详情页加载状态

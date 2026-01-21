@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react'
-import { Button, Box } from '@/app/components/Base'
+import { Button, Box } from '@/app/components/base'
 import { tokens } from '@/lib/design-tokens'
 
 const meta: Meta<typeof Button> = {

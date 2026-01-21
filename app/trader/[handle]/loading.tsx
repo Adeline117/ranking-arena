@@ -1,7 +1,7 @@
 import { tokens } from '@/lib/design-tokens'
-import { Box } from '@/app/components/Base'
-import { RankingSkeleton } from '@/app/components/UI/Skeleton'
-import TopNav from '@/app/components/Layout/TopNav'
+import { Box } from '@/app/components/base'
+import { RankingSkeleton } from '@/app/components/ui/Skeleton'
+import TopNav from '@/app/components/layout/TopNav'
 
 /**
  * Trader 页面加载状态
