@@ -328,11 +328,17 @@ export interface TraderDetailResponse {
 // 工具类型
 // ============================================
 
-/** 分页参数 */
-export interface PaginationParams {
+/**
+ * 交易员列表分页参数（必填字段版本）
+ * 用于 trader API 调用时需要明确分页的场景
+ */
+export interface TraderPaginationParams {
   limit: number
   offset: number
 }
+
+/** @deprecated 使用 TraderPaginationParams 替代 */
+export type PaginationParams = TraderPaginationParams
 
 /** 分页响应 */
 export interface PaginatedResponse<T> {

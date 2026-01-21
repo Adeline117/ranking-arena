@@ -241,11 +241,18 @@ export const HttpStatus = {
 // 分页规范
 // ============================================
 
-export interface PaginationParams {
+/**
+ * 页码分页参数（支持页码、限制、游标三种分页方式）
+ * 用于 API 版本控制和通用分页解析
+ */
+export interface PageBasedPaginationParams {
   page?: number      // 页码（从 1 开始）
   limit?: number     // 每页数量
   cursor?: string    // 游标（用于游标分页）
 }
+
+/** @deprecated 使用 PageBasedPaginationParams 替代，避免与 lib/types/index.ts 冲突 */
+export type PaginationParams = PageBasedPaginationParams
 
 export interface PaginationMeta {
   page: number

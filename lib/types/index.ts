@@ -5,6 +5,11 @@
 export * from './post'
 export * from './comment'
 export * from './notification'
+export type { SubscriptionTier, ActiveSubscriptionTier } from './premium'
+export { normalizeSubscriptionTier } from './premium'
+
+// 导入供本文件内部使用
+import type { SubscriptionTier } from './premium'
 
 // ============================================
 // 通用响应类型
@@ -98,12 +103,17 @@ export function extractError(response: ApiResponse<unknown>): string | null {
 // ============================================
 
 /**
- * 分页请求参数
+ * 通用分页请求参数（支持多种分页方式）
+ * - offset: 偏移量分页
+ * - cursor: 游标分页
+ * - page: 页码分页（部分 API）
  */
 export interface PaginationParams {
   limit?: number
   offset?: number
   cursor?: string
+  /** 页码（部分 API 使用，从 1 开始） */
+  page?: number
 }
 
 /**
@@ -146,7 +156,7 @@ export interface UserProfile extends UserBasicInfo {
   follower_count: number
   following_count: number
   is_verified?: boolean
-  subscription_tier?: 'free' | 'pro' | 'elite' | 'enterprise'
+  subscription_tier?: SubscriptionTier
 }
 
 /**
