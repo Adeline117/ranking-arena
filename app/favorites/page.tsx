@@ -176,7 +176,7 @@ export default function FavoritesPage() {
             description="登录后可以查看和管理您的收藏夹"
             action={
               <Link
-                href="/login"
+                href="/login?returnUrl=/favorites"
                 style={{
                   padding: '12px 24px',
                   background: tokens.colors.accent.primary,
