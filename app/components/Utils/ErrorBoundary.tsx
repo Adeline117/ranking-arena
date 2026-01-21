@@ -2,6 +2,7 @@
 
 import React, { Component, ReactNode } from 'react'
 import Link from 'next/link'
+import { t } from '@/lib/i18n'
 
 interface Props {
   children: ReactNode
@@ -145,14 +146,14 @@ export class ErrorBoundary extends Component<Props, State> {
                 WebkitTextFillColor: 'transparent',
               }}
             >
-              出错了
+              {t('errorTitle')}
             </h1>
 
             <p style={{ opacity: 0.7, marginBottom: 8, fontSize: 15, lineHeight: 1.6 }}>
-              抱歉，页面遇到了问题
+              {t('errorMessage')}
             </p>
             <p style={{ opacity: 0.5, fontSize: 14, marginBottom: 24 }}>
-              请尝试刷新页面或返回首页
+              {t('errorRefresh')}
             </p>
 
             {showDetails && this.state.error && (

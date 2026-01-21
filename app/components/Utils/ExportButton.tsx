@@ -1,6 +1,7 @@
 'use client'
 
 import React from 'react'
+import { useLanguage } from './LanguageProvider'
 
 type ExportButtonProps = {
   data: any[]
@@ -9,6 +10,7 @@ type ExportButtonProps = {
 }
 
 export default function ExportButton({ data, filename, format = 'csv' }: ExportButtonProps) {
+  const { t } = useLanguage()
   const handleExport = () => {
     if (format === 'csv') {
       const headers = Object.keys(data[0] || {})
@@ -56,7 +58,7 @@ export default function ExportButton({ data, filename, format = 'csv' }: ExportB
         e.currentTarget.style.background = 'rgba(255,255,255,0.05)'
       }}
     >
-      📥 导出 {format.toUpperCase()}
+      📥 {t('export')} {format.toUpperCase()}
     </button>
   )
 }
