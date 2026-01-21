@@ -18,6 +18,7 @@ interface RankingSectionProps {
   isLoggedIn: boolean
   activeTimeRange: TimeRange
   onTimeRangeChange: (range: TimeRange) => void
+  lastUpdated?: string | null
 }
 
 /**
@@ -25,12 +26,35 @@ interface RankingSectionProps {
  * 包含时间选择器和排行榜表格
  */
 
+// 格式化更新时间为相对时间
+function formatLastUpdated(lastUpdated: string | null | undefined, language: string): string {
+  if (!lastUpdated) return ''
+
+  const date = new Date(lastUpdated)
+  const now = new Date()
+  const diffMs = now.getTime() - date.getTime()
+  const diffMins = Math.floor(diffMs / 60000)
+  const diffHours = Math.floor(diffMs / 3600000)
+
+  if (diffMins < 1) {
+    return language === 'zh' ? '刚刚更新' : 'Just updated'
+  } else if (diffMins < 60) {
+    return language === 'zh' ? `${diffMins} 分钟前更新` : `Updated ${diffMins}m ago`
+  } else if (diffHours < 24) {
+    return language === 'zh' ? `${diffHours} 小时前更新` : `Updated ${diffHours}h ago`
+  } else {
+    const diffDays = Math.floor(diffHours / 24)
+    return language === 'zh' ? `${diffDays} 天前更新` : `Updated ${diffDays}d ago`
+  }
+}
+
 export default function RankingSection({
   traders,
   loading,
   isLoggedIn,
   activeTimeRange,
   onTimeRangeChange,
+  lastUpdated,
 }: RankingSectionProps) {
   const router = useRouter()
   const { showToast } = useToast()
@@ -61,18 +85,45 @@ export default function RankingSection({
         minWidth: 0,
       }}
     >
-      {/* 顶部工具栏 - 时间选择器 */}
+      {/* 顶部工具栏 - 时间选择器 + 更新时间 */}
       <Box
         className="ranking-toolbar"
         style={{
           marginBottom: tokens.spacing[3],
-      }}
-    >
-      <TimeRangeSelector
-        activeRange={activeTimeRange}
-        onChange={onTimeRangeChange}
-        disabled={loading}
-      />
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: tokens.spacing[2],
+        }}
+      >
+        <TimeRangeSelector
+          activeRange={activeTimeRange}
+          onChange={onTimeRangeChange}
+          disabled={loading}
+        />
+        {/* 数据更新时间指示器 */}
+        {lastUpdated && !loading && (
+          <Box
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              fontSize: 12,
+              color: tokens.colors.text.tertiary,
+            }}
+          >
+            <Box
+              style={{
+                width: 6,
+                height: 6,
+                borderRadius: '50%',
+                background: tokens.colors.accent.success,
+              }}
+            />
+            {formatLastUpdated(lastUpdated, language)}
+          </Box>
+        )}
       </Box>
       
       <RankingTable

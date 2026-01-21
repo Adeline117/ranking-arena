@@ -468,14 +468,21 @@ export default function RankingTable(props: {
           }}
         >
           <Text size="sm" weight="bold" style={{ color: tokens.colors.accent.primary, marginBottom: 8, display: 'block' }}>
-            Arena Score 排名规则
+            {language === 'zh' ? 'Arena Score 排名规则' : 'Arena Score Ranking Rules'}
           </Text>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <span>① 按 Arena Score 从高到低排序（0-100 分）</span>
-            <span>② 分数构成：收益分（85%）+ 稳定/风险分（15%）</span>
-            <span>③ Score 相同时，回撤更小的靠前</span>
+            <span>{language === 'zh' ? '① 按 Arena Score 从高到低排序（0-100 分）' : '① Ranked by Arena Score (0-100)'}</span>
+            <span>{language === 'zh' ? '② 分数构成：收益分（85%）+ 稳定/风险分（15%）' : '② Score: Return (85%) + Stability/Risk (15%)'}</span>
+            <span>{language === 'zh' ? '③ Score 相同时，回撤更小的靠前' : '③ Lower drawdown ranks higher when Score ties'}</span>
             <span style={{ color: tokens.colors.text.tertiary, marginTop: 6 }}>
-              * 入榜门槛（PNL 收益）：7D &gt; $300 | 30D &gt; $1,000 | 90D &gt; $3,000
+              {language === 'zh'
+                ? '* 入榜门槛（PNL 收益）：7D > $300 | 30D > $1,000 | 90D > $3,000'
+                : '* Entry threshold (PNL): 7D > $300 | 30D > $1,000 | 90D > $3,000'}
+            </span>
+            <span style={{ color: tokens.colors.text.tertiary, marginTop: 4 }}>
+              {language === 'zh'
+                ? '* ROI 计算方式因交易所而异，跨所对比时请注意差异'
+                : '* ROI calculation varies by exchange. Use caution when comparing across exchanges.'}
             </span>
           </div>
           <button
