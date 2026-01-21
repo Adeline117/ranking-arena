@@ -256,10 +256,10 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       } else if (typeof msgObj.msg === 'string') {
         finalMessage = msgObj.msg
       } else {
-        finalMessage = '操作失败'
+        finalMessage = type === 'error' ? '出错了' : '完成'
       }
     } else {
-      finalMessage = String(message || '未知错误')
+      finalMessage = type === 'error' ? '出错了' : String(message || '完成')
     }
 
     const id = `toast-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
