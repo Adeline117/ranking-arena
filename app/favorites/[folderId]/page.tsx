@@ -13,6 +13,7 @@ import EmptyState from '@/app/components/UI/EmptyState'
 import { formatTimeAgo } from '@/lib/utils/date'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { useToast } from '@/app/components/UI/Toast'
+import { useDialog } from '@/app/components/UI/Dialog'
 
 interface BookmarkFolder {
   id: string
@@ -49,7 +50,8 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
   const folderId = resolvedParams.folderId
   const router = useRouter()
   const { showToast } = useToast()
-  
+  const { showDangerConfirm } = useDialog()
+
   const [email, setEmail] = useState<string | null>(null)
   const [accessToken, setAccessToken] = useState<string | null>(null)
   const [folder, setFolder] = useState<BookmarkFolder | null>(null)
@@ -173,8 +175,12 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
 
   const handleDelete = async () => {
     if (!accessToken || !folder) return
-    
-    if (!confirm('确定要删除此收藏夹吗？收藏夹中的所有帖子将被移除。')) {
+
+    const confirmed = await showDangerConfirm(
+      '删除收藏夹',
+      '确定要删除此收藏夹吗？收藏夹中的所有帖子将被移除。'
+    )
+    if (!confirmed) {
       return
     }
 
