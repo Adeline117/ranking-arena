@@ -1,0 +1,10 @@
+{
+  "marketplaces": [
+    {
+      "name": "claude-code-workflows",
+      "source": "local",
+      "path": "./.claude/workflows",
+      "enabled": true
+    }
+  ]
+}
