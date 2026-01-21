@@ -5,21 +5,21 @@ import Link from 'next/link'
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
 import { supabase } from '@/lib/supabase/client'
-import { useLanguage } from '@/app/components/Utils/LanguageProvider'
-import TopNav from '@/app/components/Layout/TopNav'
-import TraderHeader from '@/app/components/Trader/TraderHeader'
-import TraderTabs from '@/app/components/Trader/TraderTabs'
-import OverviewPerformanceCard from '@/app/components/Trader/OverviewPerformanceCard'
-import TraderAboutCard from '@/app/components/Trader/TraderAboutCard'
-import SimilarTraders from '@/app/components/Trader/SimilarTraders'
-import TraderFeed from '@/app/components/Trader/TraderFeed'
-import StatsPage from '@/app/components/Trader/stats/StatsPage'
+import { useLanguage } from '@/app/components/utils/LanguageProvider'
+import TopNav from '@/app/components/layout/TopNav'
+import TraderHeader from '@/app/components/trader/TraderHeader'
+import TraderTabs from '@/app/components/trader/TraderTabs'
+import OverviewPerformanceCard from '@/app/components/trader/OverviewPerformanceCard'
+import TraderAboutCard from '@/app/components/trader/TraderAboutCard'
+import SimilarTraders from '@/app/components/trader/SimilarTraders'
+import TraderFeed from '@/app/components/trader/TraderFeed'
+import StatsPage from '@/app/components/trader/stats/StatsPage'
 // PinnedPost 组件已集成到 TraderFeed 中（置顶帖子自动显示在动态列表最上方）
-import PortfolioTable from '@/app/components/Trader/PortfolioTable'
-import ScoreBreakdown from '@/app/components/Pro/ScoreBreakdown'
-import { Box, Text } from '@/app/components/Base'
-import { RankingSkeleton } from '@/app/components/UI/Skeleton'
-import { useSubscription } from '@/app/components/Home/hooks/useSubscription'
+import PortfolioTable from '@/app/components/trader/PortfolioTable'
+import ScoreBreakdown from '@/app/components/premium/ScoreBreakdown'
+import { Box, Text } from '@/app/components/base'
+import { RankingSkeleton } from '@/app/components/ui/Skeleton'
+import { useSubscription } from '@/app/components/home/hooks/useSubscription'
 import type {
   TraderProfile,
   TraderPerformance,
@@ -28,7 +28,7 @@ import type {
   PositionHistoryItem,
   TraderFeedItem,
 } from '@/lib/data/trader'
-import { JsonLd } from '@/app/components/Utils/JsonLd'
+import { JsonLd } from '@/app/components/utils/JsonLd'
 import {
   generateTraderProfilePageSchema,
   generateBreadcrumbSchema,

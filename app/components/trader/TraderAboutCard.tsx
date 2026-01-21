@@ -1,0 +1,397 @@
+'use client'
+
+import { useState, useEffect } from 'react'
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import { tokens } from '@/lib/design-tokens'
+import { supabase } from '@/lib/supabase/client'
+import { Box, Text, Button } from '../base'
+import FollowButton from '../ui/FollowButton'
+import UserFollowButton from '../ui/UserFollowButton'
+import MessageButton from '../ui/MessageButton'
+import FollowListModal from '../ui/FollowListModal'
+import { getAvatarGradient, getAvatarInitial } from '@/lib/utils/avatar'
+
+/**
+ * 带动画的头像组件
+ */
+function AnimatedAvatar({ 
+  avatarUrl, 
+  handle, 
+  traderId, 
+  size = 80 
+}: { 
+  avatarUrl?: string
+  handle: string
+  traderId: string
+  size?: number
+}) {
+  const [imageLoaded, setImageLoaded] = useState(false)
+  const [imageError, setImageError] = useState(false)
+  const [isHovered, setIsHovered] = useState(false)
+  
+  const showFallback = !avatarUrl || imageError || !imageLoaded
+  
+  return (
+    <Box
+      style={{
+        width: size,
+        height: size,
+        borderRadius: tokens.radius.full,
+        background: getAvatarGradient(traderId),
+        border: `3px solid ${isHovered ? tokens.colors.accent.primary : tokens.colors.border.primary}`,
+        display: 'grid',
+        placeItems: 'center',
+        marginBottom: tokens.spacing[4],
+        overflow: 'hidden',
+        flexShrink: 0,
+        boxShadow: isHovered 
+          ? `0 8px 32px rgba(139, 111, 168, 0.4), 0 0 0 4px ${tokens.colors.accent.primary}20`
+          : tokens.shadow.lg,
+        transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
+        position: 'relative',
+        transform: isHovered ? 'scale(1.08) rotate(2deg)' : 'scale(1) rotate(0deg)',
+        cursor: 'pointer',
+      }}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+    >
+      {/* 光环效果 */}
+      <Box
+        style={{
+          position: 'absolute',
+          inset: -4,
+          borderRadius: tokens.radius.full,
+          background: `conic-gradient(from 0deg, ${tokens.colors.accent.primary}00, ${tokens.colors.accent.primary}40, ${tokens.colors.accent.primary}00)`,
+          opacity: isHovered ? 1 : 0,
+          transition: 'opacity 0.4s ease',
+          animation: isHovered ? 'spin 3s linear infinite' : 'none',
+        }}
+      />
+      {/* 头像图片 */}
+      {avatarUrl && !imageError && (
+        <img 
+          src={avatarUrl} 
+          alt={handle} 
+          referrerPolicy="origin-when-cross-origin"
+          loading="lazy"
+          style={{ 
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: '100%', 
+            height: '100%', 
+            objectFit: 'cover',
+            opacity: imageLoaded ? 1 : 0,
+            transition: 'opacity 0.4s ease',
+          }}
+          onLoad={() => setImageLoaded(true)}
+          onError={() => setImageError(true)}
+        />
+      )}
+      {/* 首字母 fallback */}
+      {showFallback && (
+        <Text 
+          size="2xl" 
+          weight="black" 
+          style={{ 
+            color: '#ffffff',
+            textShadow: '0 2px 8px rgba(0, 0, 0, 0.5)',
+            fontSize: `${Math.round(size * 0.42)}px`,
+            lineHeight: '1',
+            position: 'relative',
+            zIndex: 1,
+          }}
+        >
+          {getAvatarInitial(handle)}
+        </Text>
+      )}
+    </Box>
+  )
+}
+
+interface TraderAboutCardProps {
+  handle: string
+  traderId?: string
+  avatarUrl?: string
+  bio?: string
+  followers?: number
+  following?: number  // 合并后的总关注数（用户 + 交易员）
+  isRegistered?: boolean
+  isOwnProfile?: boolean
+  showFollowers?: boolean
+  showFollowing?: boolean
+}
+
+/**
+ * 交易员卡片 - 右侧固定卡片
+ * 现代化玻璃质感设计
+ */
+export default function TraderAboutCard({
+  handle,
+  traderId,
+  avatarUrl,
+  bio,
+  followers = 0,
+  following = 0,
+  isRegistered,
+  isOwnProfile = false,
+  showFollowers = true,
+}: TraderAboutCardProps) {
+  const [userId, setUserId] = useState<string | null>(null)
+  const [modalType, setModalType] = useState<'followers' | null>(null)
+  const [mounted, setMounted] = useState(false)
+  const [followersCount, setFollowersCount] = useState(followers)
+  const router = useRouter()
+
+  useEffect(() => {
+    setMounted(true)
+    supabase.auth.getUser().then(({ data }) => {
+      setUserId(data.user?.id ?? null)
+    })
+  }, [])
+
+  const handleFollowersClick = () => {
+    if (!isRegistered) return
+    if (isOwnProfile || showFollowers) {
+      setModalType('followers')
+    }
+  }
+
+  return (
+    <Box
+      className="about-card glass-card"
+      style={{
+        position: 'sticky',
+        top: 80,
+        background: `linear-gradient(165deg, ${tokens.colors.bg.secondary}F0 0%, ${tokens.colors.bg.primary}E8 100%)`,
+        backdropFilter: 'blur(20px)',
+        WebkitBackdropFilter: 'blur(20px)',
+        borderRadius: tokens.radius.xl,
+        border: `1px solid ${tokens.colors.border.primary}60`,
+        padding: tokens.spacing[6],
+        boxShadow: `0 8px 32px rgba(0, 0, 0, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.06)`,
+        transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
+        zIndex: 10,
+        opacity: mounted ? 1 : 0,
+        transform: mounted ? 'translateX(0)' : 'translateX(30px)',
+        overflow: 'hidden',
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.transform = 'translateY(-4px)'
+        e.currentTarget.style.boxShadow = '0 20px 48px rgba(0, 0, 0, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.08)'
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.transform = 'translateY(0)'
+        e.currentTarget.style.boxShadow = '0 8px 32px rgba(0, 0, 0, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.06)'
+      }}
+    >
+      {/* 装饰背景 */}
+      <Box
+        style={{
+          position: 'absolute',
+          top: -60,
+          right: -60,
+          width: 180,
+          height: 180,
+          background: `radial-gradient(circle, ${tokens.colors.accent.primary}15 0%, transparent 70%)`,
+          pointerEvents: 'none',
+        }}
+      />
+      
+      {/* 头像 */}
+      <Box style={{ display: 'flex', justifyContent: 'center', position: 'relative', zIndex: 1 }}>
+        <AnimatedAvatar 
+          avatarUrl={avatarUrl}
+          handle={handle}
+          traderId={traderId || handle}
+          size={80}
+        />
+      </Box>
+
+      {/* 交易员ID */}
+      <Text 
+        size="xl" 
+        weight="black" 
+        style={{ 
+          marginBottom: tokens.spacing[2], 
+          color: tokens.colors.text.primary,
+          lineHeight: tokens.typography.lineHeight.tight,
+          textAlign: 'center',
+          position: 'relative',
+          zIndex: 1,
+        }}
+      >
+        {handle}
+      </Text>
+
+      {/* Bio */}
+      {bio && (
+        <Text 
+          size="sm" 
+          color="secondary" 
+          style={{ 
+            marginBottom: tokens.spacing[5], 
+            lineHeight: tokens.typography.lineHeight.relaxed,
+            textAlign: 'center',
+            position: 'relative',
+            zIndex: 1,
+          }}
+        >
+          {bio.length > 60 ? bio.slice(0, 60) + '...' : bio}
+        </Text>
+      )}
+
+      {/* 操作按钮 */}
+      <Box style={{ position: 'relative', zIndex: 1 }}>
+        {isOwnProfile ? (
+          <Button
+            variant="primary"
+            size="md"
+            fullWidth
+            onClick={() => router.push('/settings')}
+            style={{
+              marginBottom: tokens.spacing[5],
+              fontWeight: tokens.typography.fontWeight.black,
+              background: `linear-gradient(135deg, ${tokens.colors.accent.primary}, ${tokens.colors.accent.brand})`,
+              border: 'none',
+              boxShadow: `0 4px 16px ${tokens.colors.accent.primary}40`,
+              transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+            }}
+          >
+            编辑个人资料
+          </Button>
+        ) : traderId && userId ? (
+          <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2], marginBottom: tokens.spacing[5] }}>
+            {isRegistered ? (
+              <>
+                <UserFollowButton 
+                  targetUserId={traderId} 
+                  currentUserId={userId} 
+                  fullWidth 
+                  size="lg"
+                  onFollowChange={(isFollowing) => {
+                    setFollowersCount(prev => isFollowing ? prev + 1 : prev - 1)
+                  }}
+                />
+                <MessageButton 
+                  targetUserId={traderId} 
+                  currentUserId={userId} 
+                  fullWidth 
+                  size="md"
+                />
+              </>
+            ) : (
+              <FollowButton 
+                traderId={traderId} 
+                userId={userId}
+                onFollowChange={(isFollowing) => {
+                  setFollowersCount(prev => isFollowing ? prev + 1 : prev - 1)
+                }}
+              />
+            )}
+          </Box>
+        ) : null}
+      </Box>
+
+      {/* 统计数据 - 只有两项：关注中 和 被关注 */}
+      <Box
+        style={{
+          paddingTop: tokens.spacing[5],
+          borderTop: `1px solid ${tokens.colors.border.primary}40`,
+          display: 'grid',
+          gridTemplateColumns: 'repeat(2, 1fr)',
+          gap: tokens.spacing[3],
+          position: 'relative',
+          zIndex: 1,
+        }}
+      >
+        {/* 关注中（用户 + 交易员合并） - 点击跳转到关注页面 */}
+        <Link href="/following" style={{ textDecoration: 'none' }}>
+          <StatItem
+            label="关注中"
+            value={following}
+            clickable
+          />
+        </Link>
+
+        {/* 被关注 */}
+        <StatItem
+          label="被关注"
+          value={followersCount}
+          onClick={handleFollowersClick}
+          clickable={isRegistered && (isOwnProfile || showFollowers)}
+        />
+      </Box>
+
+      {/* 被关注列表弹窗 */}
+      {isRegistered && (
+        <FollowListModal
+          isOpen={modalType === 'followers'}
+          onClose={() => setModalType(null)}
+          type="followers"
+          handle={handle}
+          currentUserId={userId}
+          isOwnProfile={isOwnProfile}
+          isPublic={showFollowers}
+        />
+      )}
+      
+    </Box>
+  )
+}
+
+// 统计项组件
+function StatItem({
+  label,
+  value,
+  onClick,
+  clickable,
+}: {
+  label: string
+  value: number
+  onClick?: () => void
+  clickable?: boolean
+}) {
+  const [isHovered, setIsHovered] = useState(false)
+
+  return (
+    <Box
+      style={{
+        flex: 1,
+        cursor: clickable ? 'pointer' : 'default',
+        padding: tokens.spacing[3],
+        borderRadius: tokens.radius.lg,
+        background: isHovered && clickable ? `${tokens.colors.accent.primary}10` : 'transparent',
+        transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+        transform: isHovered && clickable ? 'scale(1.02)' : 'scale(1)',
+        textAlign: 'center',
+      }}
+      onClick={onClick}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+    >
+      <Text 
+        size="xs" 
+        color="tertiary" 
+        style={{ 
+          fontWeight: tokens.typography.fontWeight.medium, 
+          marginBottom: tokens.spacing[1],
+          display: 'block',
+        }}
+      >
+        {label}
+      </Text>
+      <Text 
+        size="lg" 
+        weight="black" 
+        style={{ 
+          color: tokens.colors.text.primary,
+          display: 'block',
+        }}
+      >
+        {value.toLocaleString()}
+      </Text>
+    </Box>
+  )
+}

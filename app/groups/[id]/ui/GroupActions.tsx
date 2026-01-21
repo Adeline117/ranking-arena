@@ -1,9 +1,9 @@
 "use client"
 
 import Link from "next/link"
-import { Box, Text, Button } from '@/app/components/Base'
+import { Box, Text, Button } from '@/app/components/base'
 import { tokens } from '@/lib/design-tokens'
-import { useLanguage } from '@/app/components/Utils/LanguageProvider'
+import { useLanguage } from '@/app/components/utils/LanguageProvider'
 
 export default function GroupActions({ groupId }: { groupId: string }) {
   const { language } = useLanguage()

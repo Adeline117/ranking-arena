@@ -4,9 +4,9 @@ import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
-import TopNav from '@/app/components/Layout/TopNav'
-import { Box, Text, Button } from '@/app/components/Base'
-import ExchangeLogo from '@/app/components/UI/ExchangeLogo'
+import TopNav from '@/app/components/layout/TopNav'
+import { Box, Text, Button } from '@/app/components/base'
+import ExchangeLogo from '@/app/components/ui/ExchangeLogo'
 
 const EXCHANGES = [
   { id: 'binance', name: 'Binance', oauthSupported: true },

@@ -1,8 +1,8 @@
 'use client'
 
 import { tokens } from '@/lib/design-tokens'
-import { Box, Text } from '@/app/components/Base'
-import ContactSupportButton from '@/app/components/UI/ContactSupportButton'
+import { Box, Text } from '@/app/components/base'
+import ContactSupportButton from '@/app/components/ui/ContactSupportButton'
 
 export default function PrivacyPolicyPage() {
   return (
