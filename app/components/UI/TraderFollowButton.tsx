@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useToast } from './Toast'
 import { useApiMutation } from '@/lib/hooks/useApiMutation'
 import { apiRequest } from '@/lib/api/client'
+import { useFollowSync, type FollowChangePayload } from '@/lib/hooks/useBroadcastSync'
 
 type TraderFollowButtonProps = {
   traderId: string
@@ -46,6 +47,25 @@ export default function TraderFollowButton({ traderId, userId, initialFollowing 
     }
   }, [])
 
+  // 多窗口同步
+  const { broadcast, on } = useFollowSync()
+
+  // 监听其他窗口的关注状态变化
+  useEffect(() => {
+    const unsubscribe = on('FOLLOW_CHANGED', (payload: FollowChangePayload) => {
+      // 只处理同一交易员的状态变化
+      if (payload.traderId === traderId && payload.userId === userId) {
+        // 避免在有待处理操作时更新
+        if (!pendingRef.current) {
+          setFollowing(payload.following)
+          onFollowChange?.(payload.following)
+        }
+      }
+    })
+
+    return unsubscribe
+  }, [traderId, userId, on, onFollowChange])
+
   // 使用 useApiMutation 处理关注/取消关注
   const { mutate, isLoading } = useApiMutation<FollowResponse, { action: 'follow' | 'unfollow' }>(
     async ({ action }) => {
@@ -70,6 +90,15 @@ export default function TraderFollowButton({ traderId, userId, initialFollowing 
         }
         setFollowing(data.following)
         onFollowChange?.(data.following)
+
+        // 广播状态变化到其他窗口
+        if (userId) {
+          broadcast('FOLLOW_CHANGED', {
+            traderId,
+            following: data.following,
+            userId,
+          })
+        }
       },
       onError: (error: any) => {
         // 清除超时保护
