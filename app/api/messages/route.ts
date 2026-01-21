@@ -2,11 +2,15 @@
  * 私信消息 API
  * GET: 获取会话中的消息
  * POST: 发送私信
+ *
+ * SECURITY: All operations require authentication and verify
+ * that the userId/senderId matches the authenticated user.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { createLogger } from '@/lib/utils/logger'
+import { getAuthUser } from '@/lib/supabase/server'
 
 const logger = createLogger('messages-api')
 
@@ -21,11 +25,26 @@ const NON_MUTUAL_MESSAGE_LIMIT = 3
 // 获取会话消息
 export async function GET(request: NextRequest) {
   try {
+    // SECURITY: Require authentication
+    const authUser = await getAuthUser(request)
+    if (!authUser) {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+    }
+
     const conversationId = request.nextUrl.searchParams.get('conversationId')
     const userId = request.nextUrl.searchParams.get('userId')
 
     if (!conversationId || !userId) {
       return NextResponse.json({ error: 'Missing conversationId or userId' }, { status: 400 })
+    }
+
+    // SECURITY: Verify that userId matches authenticated user
+    if (userId !== authUser.id) {
+      logger.warn('User attempted to read messages for another user', {
+        authUserId: authUser.id,
+        requestedUserId: userId
+      })
+      return NextResponse.json({ error: 'Unauthorized: Cannot read messages for other users' }, { status: 403 })
     }
 
     if (!SUPABASE_URL || !SUPABASE_KEY) {
@@ -114,11 +133,28 @@ export async function GET(request: NextRequest) {
 // 发送私信
 export async function POST(request: NextRequest) {
   try {
+    // SECURITY: Require authentication
+    const authUser = await getAuthUser(request)
+    if (!authUser) {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+    }
+
     const body = await request.json()
     const { senderId, receiverId, content } = body
 
     if (!senderId || !receiverId || !content) {
       return NextResponse.json({ error: 'Missing senderId, receiverId or content' }, { status: 400 })
+    }
+
+    // SECURITY: Verify that senderId matches authenticated user
+    // This prevents users from sending messages impersonating other users
+    if (senderId !== authUser.id) {
+      logger.warn('User attempted to send message as another user', {
+        authUserId: authUser.id,
+        requestedSenderId: senderId,
+        receiverId
+      })
+      return NextResponse.json({ error: 'Unauthorized: Cannot send messages on behalf of other users' }, { status: 403 })
     }
 
     if (senderId === receiverId) {

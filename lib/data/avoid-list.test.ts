@@ -60,7 +60,7 @@ describe('getAvoidList', () => {
 
     await getAvoidList(mockSupabase as any)
 
-    expect(mockSupabase.from).toHaveBeenCalledWith('avoid_list_stats')
+    expect(mockSupabase.from).toHaveBeenCalledWith('trader_avoid_scores')
   })
 })
 
@@ -95,7 +95,7 @@ describe('getTraderAvoidScore', () => {
 
     await getTraderAvoidScore(mockSupabase as any, 'trader123', 'bybit')
 
-    expect(mockSupabase.from).toHaveBeenCalledWith('avoid_list_stats')
+    expect(mockSupabase.from).toHaveBeenCalledWith('trader_avoid_scores')
     expect(mockSupabase.eq).toHaveBeenCalledWith('trader_id', 'trader123')
     expect(mockSupabase.eq).toHaveBeenCalledWith('source', 'bybit')
   })
@@ -116,7 +116,7 @@ describe('getTraderAvoidVotes', () => {
 
     await getTraderAvoidVotes(mockSupabase as any, 'trader123', 'binance')
 
-    expect(mockSupabase.from).toHaveBeenCalledWith('avoid_list_votes')
+    expect(mockSupabase.from).toHaveBeenCalledWith('avoid_votes')
     expect(mockSupabase.eq).toHaveBeenCalledWith('trader_id', 'trader123')
     expect(mockSupabase.eq).toHaveBeenCalledWith('source', 'binance')
   })
@@ -232,14 +232,22 @@ describe('updateAvoidVote', () => {
 describe('deleteAvoidVote', () => {
   test('should delete a vote', async () => {
     const mockSupabase = createMockSupabase()
-    mockSupabase.eq.mockResolvedValueOnce({ error: null })
+    // .delete().eq('id', voteId).eq('user_id', userId) - two eq() calls
+    mockSupabase.eq
+      .mockReturnValueOnce(mockSupabase) // First .eq() returns chain
+      .mockResolvedValueOnce({ error: null }) // Second .eq() returns result
 
     await expect(deleteAvoidVote(mockSupabase as any, 'vote1', 'user1')).resolves.toBeUndefined()
+    expect(mockSupabase.delete).toHaveBeenCalled()
+    expect(mockSupabase.eq).toHaveBeenCalledWith('id', 'vote1')
+    expect(mockSupabase.eq).toHaveBeenCalledWith('user_id', 'user1')
   })
 
   test('should throw error on deletion failure', async () => {
     const mockSupabase = createMockSupabase()
-    mockSupabase.eq.mockResolvedValueOnce({ error: new Error('Delete failed') })
+    mockSupabase.eq
+      .mockReturnValueOnce(mockSupabase) // First .eq() returns chain
+      .mockResolvedValueOnce({ error: new Error('Delete failed') }) // Second .eq() returns error
 
     await expect(deleteAvoidVote(mockSupabase as any, 'vote1', 'user1')).rejects.toThrow()
   })
