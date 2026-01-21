@@ -1,0 +1,10 @@
+{
+  "marketplaces": [
+    {
+      "name": "claude-code-workflows",
+      "source": "local",
+      "path": "./skills/claude-code-workflows",
+      "enabled": true
+    }
+  ]
+}
