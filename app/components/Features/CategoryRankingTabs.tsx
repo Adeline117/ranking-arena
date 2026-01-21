@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../Base'
 import { useLanguage } from '../Utils/LanguageProvider'
+import { useToast } from '../UI/Toast'
 
 export type CategoryType = 'all' | 'futures' | 'spot' | 'web3'
 
@@ -37,6 +38,7 @@ export default function CategoryRankingTabs({
   onProRequired,
 }: CategoryRankingTabsProps) {
   const { language, t } = useLanguage()
+  const { showToast } = useToast()
   const [hoveredTab, setHoveredTab] = useState<CategoryType | null>(null)
 
   // 使用翻译的分类配置
@@ -49,7 +51,15 @@ export default function CategoryRankingTabs({
 
   const handleTabClick = (category: CategoryType) => {
     if (category !== 'all' && !isPro) {
-      onProRequired?.()
+      if (onProRequired) {
+        onProRequired()
+      } else {
+        // 默认提示：如果父组件没有传入 onProRequired
+        showToast(
+          language === 'zh' ? '此功能需要 Pro 会员' : 'Pro membership required',
+          'warning'
+        )
+      }
       return
     }
     onCategoryChange(category)
