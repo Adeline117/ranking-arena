@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useState, useCallback, ReactNode, useEffect } from 'react'
 import { tokens } from '@/lib/design-tokens'
+import { t } from '@/lib/i18n'
 
 interface DialogOptions {
   title: string
@@ -81,7 +82,7 @@ export function DialogProvider({ children }: { children: ReactNode }) {
           title,
           message,
           type: 'alert',
-          confirmText: '确定',
+          confirmText: t('confirm'),
         },
         resolve: () => resolve(),
       })
@@ -93,8 +94,8 @@ export function DialogProvider({ children }: { children: ReactNode }) {
       title,
       message,
       type: 'confirm',
-      confirmText: '确定',
-      cancelText: '取消',
+      confirmText: t('confirm'),
+      cancelText: t('cancel'),
     })
   }, [showDialog])
 
@@ -103,8 +104,8 @@ export function DialogProvider({ children }: { children: ReactNode }) {
       title,
       message,
       type: 'danger',
-      confirmText: '确定',
-      cancelText: '取消',
+      confirmText: t('confirm'),
+      cancelText: t('cancel'),
     })
   }, [showDialog])
 
@@ -303,7 +304,7 @@ export function DialogProvider({ children }: { children: ReactNode }) {
                       e.currentTarget.style.borderColor = 'var(--glass-border-light)'
                     }}
                   >
-                    {state.options.cancelText || '取消'}
+                    {state.options.cancelText || t('cancel')}
                   </button>
                 )}
                 <button
@@ -348,7 +349,7 @@ export function DialogProvider({ children }: { children: ReactNode }) {
                       }} 
                     />
                   )}
-                  {state.options.confirmText || '确定'}
+                  {state.options.confirmText || t('confirm')}
                 </button>
               </div>
             </div>

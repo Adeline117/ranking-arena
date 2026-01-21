@@ -63,14 +63,12 @@ export default function PremiumGate({
     return <>{children}</>
   }
 
-  const loginMessage = language === 'en' 
-    ? 'Please log in to view this content' 
-    : '请登录后查看此内容'
+  const loginMessage = t('pleaseLogin')
 
   const proMessage = customMessage || (
-    language === 'en'
-      ? `${featureName || 'This feature'} is available for Pro members`
-      : `${featureName || '此功能'}仅对 Pro 会员开放`
+    featureName
+      ? `${featureName} · ${t('proOnly')}`
+      : t('proOnly')
   )
 
   const message = !isLoggedIn ? loginMessage : proMessage

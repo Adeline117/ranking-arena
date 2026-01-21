@@ -53,9 +53,9 @@ export default function UpgradePrompt({
   style,
 }: UpgradePromptProps) {
   const router = useRouter()
-  const { language, t } = useLanguage()
+  const { t } = useLanguage()
 
-  const defaultButtonText = language === 'zh' ? '升级 Pro' : 'Upgrade to Pro'
+  const defaultButtonText = t('upgradeToPro')
   const finalButtonText = buttonText || defaultButtonText
 
   const handleClick = () => {
@@ -198,7 +198,7 @@ export default function UpgradePrompt({
           WebkitTextFillColor: 'transparent',
         }}
       >
-        {featureName || (language === 'zh' ? 'Pro 专属功能' : 'Pro Feature')}
+        {featureName || t('proOnly')}
       </Text>
       
       {featureDescription && (
