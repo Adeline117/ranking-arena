@@ -4,10 +4,10 @@ import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
-import TopNav from '@/app/components/Layout/TopNav'
-import { Box, Text, Button } from '@/app/components/Base'
-import TraderComparison from '@/app/components/Pro/TraderComparison'
-import { useLanguage } from '@/app/components/Utils/LanguageProvider'
+import TopNav from '@/app/components/layout/TopNav'
+import { Box, Text, Button } from '@/app/components/base'
+import TraderComparison from '@/app/components/premium/TraderComparison'
+import { useLanguage } from '@/app/components/utils/LanguageProvider'
 
 interface TraderCompareData {
   id: string

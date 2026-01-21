@@ -3,9 +3,9 @@
 import { useEffect, useState, Suspense, useCallback, useMemo } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
-import TopNav from '@/app/components/Layout/TopNav'
-import EmptyState from '@/app/components/UI/EmptyState'
-import { RankingSkeleton } from '@/app/components/UI/Skeleton'
+import TopNav from '@/app/components/layout/TopNav'
+import EmptyState from '@/app/components/ui/EmptyState'
+import { RankingSkeleton } from '@/app/components/ui/Skeleton'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 

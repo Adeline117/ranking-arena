@@ -11,7 +11,7 @@ import {
   ALL_SOURCES,
   type TraderSource,
 } from './trader-snapshots'
-import type { Trader } from '@/app/components/Features/RankingTable'
+import type { Trader } from '@/app/components/ranking/RankingTable'
 import { getTradersArenaFollowersCount } from './trader-followers'
 import { getCachedData, CacheKeys } from '@/lib/utils/redis'
 

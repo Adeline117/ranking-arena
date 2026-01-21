@@ -3,10 +3,10 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
-import TopNav from '@/app/components/Layout/TopNav'
-import PostFeed from '@/app/components/Features/PostFeed'
+import TopNav from '@/app/components/layout/TopNav'
+import PostFeed from '@/app/components/post/PostFeed'
 import { tokens } from '@/lib/design-tokens'
-import { JsonLd } from '@/app/components/Utils/JsonLd'
+import { JsonLd } from '@/app/components/utils/JsonLd'
 import { generatePostArticleSchema, generateBreadcrumbSchema, combineSchemas } from '@/lib/seo'
 
 interface PostData {

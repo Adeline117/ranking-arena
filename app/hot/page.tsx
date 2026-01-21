@@ -5,15 +5,15 @@ import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
-import TopNav from '@/app/components/Layout/TopNav'
-import MarketPanel from '@/app/components/Features/MarketPanel'
-import Card from '@/app/components/UI/Card'
-import RankingTableCompact from '@/app/components/Features/RankingTableCompact'
-import { Box, Text } from '@/app/components/Base'
-import { CommentIcon, ThumbsUpIcon, ThumbsDownIcon } from '@/app/components/Icons'
-import { useToast } from '@/app/components/UI/Toast'
+import TopNav from '@/app/components/layout/TopNav'
+import MarketPanel from '@/app/components/home/MarketPanel'
+import Card from '@/app/components/ui/Card'
+import RankingTableCompact from '@/app/components/ranking/RankingTableCompact'
+import { Box, Text } from '@/app/components/base'
+import { CommentIcon, ThumbsUpIcon, ThumbsDownIcon } from '@/app/components/icons'
+import { useToast } from '@/app/components/ui/Toast'
 import { formatTimeAgo } from '@/lib/utils/date'
-import { RankingSkeleton } from '@/app/components/UI/Skeleton'
+import { RankingSkeleton } from '@/app/components/ui/Skeleton'
 import { getCsrfHeaders } from '@/lib/api/client'
 
 // Use design tokens for brand color
@@ -58,7 +58,7 @@ type Trader = {
   followers: number
   source?: string
 }
-import { useLanguage } from '@/app/components/Utils/LanguageProvider'
+import { useLanguage } from '@/app/components/utils/LanguageProvider'
 
 type Post = {
   id: string
