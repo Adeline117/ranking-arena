@@ -4,10 +4,56 @@
 
 export * from './date'
 export * from './format'
-export * from './logger'
+// Export logger (excluding withRetry which is also in circuit-breaker)
+export {
+  logger,
+  apiLogger,
+  dataLogger,
+  authLogger,
+  perfLogger,
+  exchangeLogger,
+  realtimeLogger,
+  uiLogger,
+  generateRequestId,
+  setCurrentRequestId,
+  getCurrentRequestId,
+  clearCurrentRequestId,
+  logRequest,
+  createTimer,
+  createLogger,
+  silent,
+  logIf,
+  devOnly,
+  captureError,
+  captureMessage,
+  addBreadcrumb,
+  safeExecute,
+  Logger,
+} from './logger'
+export type { LogLevel, LoggerConfig, LogEntry } from './logger'
+
 export * from './rate-limit'
+
+// Export circuit-breaker (this module's withRetry and isProviderRateLimitError take precedence)
 export * from './circuit-breaker'
-export * from './provider-error'
+
+// Export provider-error (excluding isProviderRateLimitError which is also in circuit-breaker)
+export {
+  parseProviderError,
+  isRetryableProviderError,
+  withProviderRetry,
+  createRetryableProviderCall,
+  ProviderRetryPresets,
+  toUserFriendlyError,
+  formatWaitTime,
+} from './provider-error'
+export type {
+  ProviderErrorDetails,
+  ProviderError,
+  ParsedProviderError,
+  UserFriendlyError,
+  ProviderRetryOptions,
+} from './provider-error'
 export * from './validation'
 export * from './content'
 export * from './server-cache'

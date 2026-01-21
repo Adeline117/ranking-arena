@@ -15,12 +15,12 @@ type Trader = {
   id: string
   handle: string | null
   roi: number
-  pnl?: number
-  win_rate?: number
-  max_drawdown?: number
+  pnl?: number | null
+  win_rate?: number | null
+  max_drawdown?: number | null
   followers: number
   source?: string
-  arena_score?: number
+  arena_score?: number | null
   avatar_url?: string | null
 }
 

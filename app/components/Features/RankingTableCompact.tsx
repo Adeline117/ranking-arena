@@ -10,8 +10,13 @@ interface Trader {
   id: string
   handle: string | null
   roi: number // 90天ROI（固定）
-  win_rate?: number // 胜率可选
+  win_rate?: number | null // 胜率可选
+  pnl?: number | null // 盈亏金额
+  max_drawdown?: number | null // 最大回撤
+  trades_count?: number | null // 交易次数
   followers: number
+  source?: string
+  avatar_url?: string | null
 }
 
 /**
