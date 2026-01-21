@@ -9,7 +9,7 @@ import ExchangeLogo from '@/app/components/ui/ExchangeLogo'
 import Link from 'next/link'
 import { getCsrfHeaders } from '@/lib/api/client'
 import type { Exchange } from '@/lib/exchange'
-import { useToast } from '@/app/components/UI/Toast'
+import { useToast } from '@/app/components/ui/Toast'
 
 interface TradingData {
   total_trades: number

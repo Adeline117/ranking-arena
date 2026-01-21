@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
 import { supabase } from '@/lib/supabase/client'
-import { useLanguage } from '@/app/components/utils/LanguageProvider'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import TopNav from '@/app/components/layout/TopNav'
 import TraderHeader from '@/app/components/trader/TraderHeader'
 import TraderTabs from '@/app/components/trader/TraderTabs'
@@ -28,7 +28,7 @@ import type {
   PositionHistoryItem,
   TraderFeedItem,
 } from '@/lib/data/trader'
-import { JsonLd } from '@/app/components/utils/JsonLd'
+import { JsonLd } from '@/app/components/Providers/JsonLd'
 import {
   generateTraderProfilePageSchema,
   generateBreadcrumbSchema,

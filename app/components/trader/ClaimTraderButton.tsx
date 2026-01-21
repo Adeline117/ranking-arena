@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import { Button } from '../base'
 import { getCsrfHeaders } from '@/lib/api/client'
-import { useToast } from '../UI/Toast'
+import { useToast } from '../ui/Toast'
 
 interface ClaimTraderButtonProps {
   traderId: string

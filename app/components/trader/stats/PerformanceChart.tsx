@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../../base'
 import type { TraderStats } from '@/lib/data/trader'
-import { useLanguage } from '../../utils/LanguageProvider'
+import { useLanguage } from '../../Providers/LanguageProvider'
 
 interface PerformanceChartProps {
   monthlyData?: TraderStats['monthlyPerformance']

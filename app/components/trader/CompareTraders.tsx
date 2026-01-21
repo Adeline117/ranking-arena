@@ -6,23 +6,11 @@ import { X, TrendingUp, TrendingDown, Minus, ChevronUp, ChevronDown, BarChart3, 
 import { tokens } from '@/lib/design-tokens'
 import { formatCompact as formatNumber, formatPercent } from '@/lib/utils/format'
 import { Box, Text, Button } from '../base'
+import type { Trader } from '../ranking/RankingTable'
 
 // ============================================
 // 类型定义
 // ============================================
-
-type Trader = {
-  id: string
-  handle: string | null
-  roi: number
-  pnl?: number
-  win_rate?: number
-  max_drawdown?: number
-  followers: number
-  source?: string
-  arena_score?: number
-  avatar_url?: string | null
-}
 
 type CompareTradersProps = {
   traders: Trader[]

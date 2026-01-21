@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useTransition } from 'react'
 import { tokens } from '@/lib/design-tokens'
-import { useLanguage } from '@/app/components/utils/LanguageProvider'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 export default function ThemeToggle() {
   const [theme, setTheme] = useState<'dark' | 'light'>('dark')

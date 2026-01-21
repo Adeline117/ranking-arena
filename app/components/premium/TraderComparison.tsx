@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '../base'
 import { getAvatarGradient, getAvatarInitial } from '@/lib/utils/avatar'
-import { useLanguage } from '../utils/LanguageProvider'
+import { useLanguage } from '../Providers/LanguageProvider'
 
 interface TraderCompareData {
   id: string

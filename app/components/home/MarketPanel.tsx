@@ -8,8 +8,8 @@ import EmptyState from '../ui/EmptyState'
 import ErrorMessage from '../ui/ErrorMessage'
 import { ChartIcon } from '../icons'
 import { Box, Text, Button } from '../base'
-import { useLanguage } from '../utils/LanguageProvider'
-import { getCache, setCache } from '@/lib/utils/cache'
+import { useLanguage } from '../Providers/LanguageProvider'
+import { getCache, setCache } from '@/lib/cache'
 
 type MarketRow = {
   symbol: string

@@ -5,14 +5,7 @@ import { tokens } from '@/lib/design-tokens'
 import { RankingSkeleton } from '../ui/Skeleton'
 import { RankingBadge } from '../icons'
 import { Box, Text } from '../base'
-
-interface Trader {
-  id: string
-  handle: string | null
-  roi: number // 90天ROI（固定）
-  win_rate?: number // 胜率可选
-  followers: number
-}
+import type { Trader } from './RankingTable'
 
 /**
  * 紧凑版排行榜 - 用于侧边栏

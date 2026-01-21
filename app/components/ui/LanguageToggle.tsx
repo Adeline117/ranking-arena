@@ -2,7 +2,7 @@
 
 import { useTransition } from 'react'
 import { tokens } from '@/lib/design-tokens'
-import { useLanguage } from '@/app/components/utils/LanguageProvider'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 export default function LanguageToggle() {
   const { language, setLanguage } = useLanguage()

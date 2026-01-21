@@ -2,7 +2,7 @@
 
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
-import { useLanguage } from '../utils/LanguageProvider'
+import { useLanguage } from '../Providers/LanguageProvider'
 
 interface ProBadgeProps {
   tier?: 'pro'

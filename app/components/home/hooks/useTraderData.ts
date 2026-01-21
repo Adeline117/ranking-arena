@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react'
 import type { Trader } from '../../ranking/RankingTable'
+import { useTraderDataSync, type TraderDataPayload } from '@/lib/hooks/useBroadcastSync'
 
 export type TimeRange = '90D' | '30D' | '7D'
 
