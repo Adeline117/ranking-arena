@@ -16,11 +16,13 @@ type FollowResponse = {
   following: boolean
   success?: boolean
   tableNotFound?: boolean
+  error?: string
 }
 
 export default function FollowButton({ traderId, userId, initialFollowing = false, onFollowChange }: FollowButtonProps) {
   const { showToast } = useToast()
   const [following, setFollowing] = useState(initialFollowing)
+  const [featureDisabled, setFeatureDisabled] = useState(false)
 
   // 防止重复点击的锁
   const pendingRef = useRef(false)
@@ -55,10 +57,15 @@ export default function FollowButton({ traderId, userId, initialFollowing = fals
         }
         pendingRef.current = false
         expectedStateRef.current = null
+        if (data.tableNotFound) {
+          setFeatureDisabled(true)
+          showToast('Follow feature coming soon', 'info')
+          return
+        }
         setFollowing(data.following)
         onFollowChange?.(data.following)
       },
-      onError: (error) => {
+      onError: (error: any) => {
         // 清除超时保护
         if (timeoutRef.current) {
           clearTimeout(timeoutRef.current)
@@ -70,8 +77,9 @@ export default function FollowButton({ traderId, userId, initialFollowing = fals
           setFollowing(!expectedStateRef.current)
           expectedStateRef.current = null
         }
-        if (error.tableNotFound) {
-          showToast('关注功能暂未开放', 'warning')
+        if (error?.tableNotFound || error?.message?.includes('table') || error?.message?.includes('503')) {
+          setFeatureDisabled(true)
+          showToast('Follow feature coming soon', 'info')
         }
       },
       showToast: true,
@@ -146,10 +154,34 @@ export default function FollowButton({ traderId, userId, initialFollowing = fals
     mutate({ action: newState ? 'follow' : 'unfollow' })
   }, [userId, following, isLoading, mutate, showToast])
 
+  // 功能未开放时显示禁用状态
+  if (featureDisabled) {
+    return (
+      <button
+        disabled
+        title="Follow feature coming soon"
+        style={{
+          width: '100%',
+          padding: '12px 16px',
+          borderRadius: '12px',
+          border: '1px solid rgba(255,255,255,0.1)',
+          background: 'rgba(255,255,255,0.02)',
+          color: '#666',
+          fontWeight: 700,
+          fontSize: '14px',
+          cursor: 'not-allowed',
+          opacity: 0.5,
+        }}
+      >
+        Coming Soon
+      </button>
+    )
+  }
+
   if (!userId) {
     return (
       <button
-        onClick={() => window.location.href = '/login'}
+        onClick={() => window.location.href = '/login?returnUrl=' + encodeURIComponent(window.location.pathname)}
         style={{
           padding: '8px 16px',
           borderRadius: '8px',
