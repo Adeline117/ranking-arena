@@ -4,11 +4,11 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
-import TopNav from '@/app/components/Layout/TopNav'
-import { Box, Text } from '@/app/components/Base'
-import { RankingSkeleton } from '@/app/components/UI/Skeleton'
-import EmptyState from '@/app/components/UI/EmptyState'
-import Avatar from '@/app/components/UI/Avatar'
+import TopNav from '@/app/components/layout/TopNav'
+import { Box, Text } from '@/app/components/base'
+import { RankingSkeleton } from '@/app/components/ui/Skeleton'
+import EmptyState from '@/app/components/ui/EmptyState'
+import Avatar from '@/app/components/ui/Avatar'
 
 // 平台配置
 const sourceConfig: Record<string, { label: string; color: string }> = {

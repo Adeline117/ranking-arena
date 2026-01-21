@@ -234,7 +234,7 @@ export const GET = withPublic(
           win_rate: normalizedWinRate,  // 统一为百分比形式
           max_drawdown: item.max_drawdown,
           trades_count: item.trades_count,
-          followers: item.followers || 0,
+          followers: item.followers ?? null,  // 保留 null，GMX 无跟单功能
           source,
           source_type: SOURCE_TYPE_MAP[source] || 'futures',
           avatar_url: info.avatar_url,  // 只使用数据库中的原始头像

@@ -4,10 +4,11 @@ import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
-import TopNav from '@/app/components/Layout/TopNav'
-import { Box, Text, Button } from '@/app/components/Base'
-import TraderComparison from '@/app/components/Pro/TraderComparison'
+import TopNav from '@/app/components/layout/TopNav'
+import { Box, Text, Button } from '@/app/components/base'
+import TraderComparison from '@/app/components/premium/TraderComparison'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { useToast } from '@/app/components/ui/Toast'
 
 interface TraderCompareData {
   id: string
@@ -32,6 +33,7 @@ function CompareContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { t } = useLanguage()
+  const { showToast } = useToast()
   
   const [email, setEmail] = useState<string | null>(null)
   const [userId, setUserId] = useState<string | null>(null)
@@ -141,11 +143,11 @@ function CompareContent() {
   // 添加交易员到对比
   const handleAddTrader = async (traderId: string) => {
     if (traders.length >= 5) {
-      alert('最多只能对比 5 位交易员')
+      showToast('最多只能对比 5 位交易员', 'warning')
       return
     }
     if (traders.some(t => t.id === traderId)) {
-      alert('该交易员已在对比列表中')
+      showToast('该交易员已在对比列表中', 'warning')
       return
     }
 

@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { Box, Text, Button } from '@/app/components/Base'
+import { Box, Text, Button } from '@/app/components/base'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
