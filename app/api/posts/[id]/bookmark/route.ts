@@ -133,17 +133,25 @@ export async function POST(request: NextRequest, context: RouteContext) {
       }
 
       // 手动更新收藏计数（因为触发器可能不工作）
-      const { data: currentPost } = await supabase
+      const { data: currentPost, error: countQueryError } = await supabase
         .from('posts')
         .select('bookmark_count')
         .eq('id', id)
         .single()
-      
+
+      if (countQueryError) {
+        apiLogger.error('Error querying bookmark count:', countQueryError)
+      }
+
       const newCount = Math.max(0, (currentPost?.bookmark_count || 1) - 1)
-      await supabase
+      const { error: countUpdateError } = await supabase
         .from('posts')
         .update({ bookmark_count: newCount })
         .eq('id', id)
+
+      if (countUpdateError) {
+        apiLogger.error('Error updating bookmark count:', countUpdateError)
+      }
 
       return NextResponse.json({
         action: 'removed',
@@ -215,17 +223,25 @@ export async function POST(request: NextRequest, context: RouteContext) {
       }
 
       // 手动更新收藏计数（因为触发器可能不工作）
-      const { data: currentPost } = await supabase
+      const { data: currentPost, error: countQueryError } = await supabase
         .from('posts')
         .select('bookmark_count')
         .eq('id', id)
         .single()
-      
+
+      if (countQueryError) {
+        apiLogger.error('Error querying bookmark count:', countQueryError)
+      }
+
       const newCount = (currentPost?.bookmark_count || 0) + 1
-      await supabase
+      const { error: countUpdateError } = await supabase
         .from('posts')
         .update({ bookmark_count: newCount })
         .eq('id', id)
+
+      if (countUpdateError) {
+        apiLogger.error('Error updating bookmark count:', countUpdateError)
+      }
 
       return NextResponse.json({
         action: 'added',
