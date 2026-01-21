@@ -123,7 +123,7 @@ export async function GET(request: NextRequest) {
       usePKCE: !!codeChallenge,
     })
   } catch (error) {
-    logger.error('Error generating OAuth URL', { error, exchange })
+    logger.error('Error generating OAuth URL', { error })
     const errorMessage = error instanceof Error ? error.message : 'Failed to generate OAuth URL'
     return NextResponse.json({ error: errorMessage }, { status: 500 })
   }

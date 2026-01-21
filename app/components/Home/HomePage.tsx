@@ -62,7 +62,7 @@ export default function HomePage() {
     return {
       totalTraders,
       averageRoi,
-      topPerformer: topTrader ? { handle: topTrader.handle, roi: topTrader.roi || 0 } : undefined,
+      topPerformer: topTrader?.handle ? { handle: topTrader.handle, roi: topTrader.roi || 0 } : undefined,
       activeExchanges: uniqueExchanges.size || 5,
     }
   }, [traders])

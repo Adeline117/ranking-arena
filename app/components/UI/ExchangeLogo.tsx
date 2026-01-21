@@ -3,9 +3,10 @@
 import { useState } from 'react'
 import { Box } from '@/app/components/Base'
 import Image from 'next/image'
+import type { Exchange } from '@/lib/exchange'
 
 interface ExchangeLogoProps {
-  exchange: 'binance' | 'bybit' | 'bitget' | 'mexc' | 'coinex'
+  exchange: Exchange
   size?: number
   className?: string
 }
@@ -17,6 +18,9 @@ const EXCHANGE_LOGOS: Record<string, string> = {
   bitget: 'https://assets.coingecko.com/coins/images/11610/small/photo_2022-01-24_14-14-56.jpg',
   mexc: 'https://assets.coingecko.com/coins/images/12958/small/mexc.png',
   coinex: 'https://assets.coingecko.com/coins/images/4812/small/coinex.png',
+  okx: 'https://assets.coingecko.com/coins/images/13708/small/okb_logo.png',
+  kucoin: 'https://assets.coingecko.com/coins/images/1047/small/kucoin.png',
+  gate: 'https://assets.coingecko.com/coins/images/8183/small/gate.png',
 }
 
 // 如果CDN不可用，使用SVG fallback
@@ -52,6 +56,18 @@ const EXCHANGE_SVG: Record<string, string> = {
     <rect width="24" height="24" rx="4" fill="#5542F6"/>
     <circle cx="12" cy="12" r="8" fill="white"/>
     <path d="M12 4L16 8H12V12H8L12 16V12H16L12 8V4Z" fill="#5542F6"/>
+  </svg>`,
+  okx: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <rect width="24" height="24" rx="4" fill="#000000"/>
+    <circle cx="12" cy="12" r="6" stroke="white" stroke-width="2" fill="none"/>
+  </svg>`,
+  kucoin: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <rect width="24" height="24" rx="4" fill="#23AF91"/>
+    <path d="M12 4L18 8V16L12 20L6 16V8L12 4Z" fill="white"/>
+  </svg>`,
+  gate: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <rect width="24" height="24" rx="4" fill="#2354E6"/>
+    <circle cx="12" cy="12" r="6" fill="white"/>
   </svg>`,
 }
 

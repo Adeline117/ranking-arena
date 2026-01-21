@@ -272,11 +272,12 @@ async function handleSubscriptionCanceled(subscription: Stripe.Subscription) {
 
 // 处理付款成功
 async function handlePaymentSucceeded(invoice: Stripe.Invoice) {
-  // Stripe Invoice 的 subscription 可能是 string 或 Subscription 对象
-  const subscriptionId = typeof invoice.subscription === 'string' 
-    ? invoice.subscription 
-    : invoice.subscription?.id || null
-  
+  // Stripe Invoice 的 subscription 在 parent.subscription_details 下
+  const subscriptionData = invoice.parent?.subscription_details?.subscription
+  const subscriptionId = typeof subscriptionData === 'string'
+    ? subscriptionData
+    : subscriptionData?.id || null
+
   if (!subscriptionId) return
 
   const subscription = await stripe.subscriptions.retrieve(subscriptionId)
@@ -290,18 +291,13 @@ async function handlePaymentSucceeded(invoice: Stripe.Invoice) {
 
   if (!profile) return
 
-  // 获取 payment_intent，可能是 string 或 PaymentIntent 对象
-  const paymentIntentId = typeof invoice.payment_intent === 'string'
-    ? invoice.payment_intent
-    : invoice.payment_intent?.id || null
-
   // 记录付款历史
   await supabase
     .from('payment_history')
     .insert({
       user_id: profile.id,
       stripe_invoice_id: invoice.id,
-      stripe_payment_intent_id: paymentIntentId,
+      stripe_payment_intent_id: null,
       amount: invoice.amount_paid,
       currency: invoice.currency,
       status: 'succeeded',
@@ -343,9 +339,10 @@ async function handlePaymentFailed(invoice: Stripe.Invoice) {
   }
 
   // 如果订阅状态是 past_due，更新订阅状态但不取消 Pro 权限（给用户宽限期）
-  const subscriptionId = typeof invoice.subscription === 'string' 
-    ? invoice.subscription 
-    : invoice.subscription?.id || null
+  const subscriptionData = invoice.parent?.subscription_details?.subscription
+  const subscriptionId = typeof subscriptionData === 'string'
+    ? subscriptionData
+    : subscriptionData?.id || null
   if (subscriptionId) {
     try {
       const subscription = await stripe.subscriptions.retrieve(subscriptionId)
@@ -369,13 +366,14 @@ async function handlePaymentFailed(invoice: Stripe.Invoice) {
 
 // 更新用户订阅信息
 async function updateUserSubscription(
-  userId: string, 
+  userId: string,
   subscription: Stripe.Subscription,
   plan: string
 ) {
   const status = SUBSCRIPTION_STATUS_MAP[subscription.status] || subscription.status
-  const currentPeriodEnd = new Date(subscription.current_period_end * 1000)
-  const currentPeriodStart = new Date(subscription.current_period_start * 1000)
+  // 使用 billing_cycle_anchor 作为周期开始，cancel_at 或 trial_end 作为参考
+  const billingAnchor = new Date(subscription.billing_cycle_anchor * 1000)
+  const startDate = new Date(subscription.start_date * 1000)
 
   logger.info(`updateUserSubscription`, { userId, status, plan })
 
@@ -390,8 +388,8 @@ async function updateUserSubscription(
         status: status,
         tier: 'pro',
         plan: plan,
-        current_period_start: currentPeriodStart.toISOString(),
-        current_period_end: currentPeriodEnd.toISOString(),
+        current_period_start: startDate.toISOString(),
+        current_period_end: billingAnchor.toISOString(),
         cancel_at_period_end: subscription.cancel_at_period_end,
         updated_at: new Date().toISOString(),
       }, {

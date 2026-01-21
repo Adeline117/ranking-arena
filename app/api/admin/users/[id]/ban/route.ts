@@ -80,7 +80,7 @@ export async function POST(
       message: 'User banned successfully',
     })
   } catch (error) {
-    logger.error('Ban user API error', { error, userId })
+    logger.error('Ban user API error', { error })
     const errorMessage = error instanceof Error ? error.message : 'Internal server error'
     return NextResponse.json({ error: errorMessage }, { status: 500 })
   }
