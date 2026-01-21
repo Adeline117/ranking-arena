@@ -196,6 +196,7 @@ describe('RLS Policy Existence', () => {
 
 // 扩展 it 方法支持 skipIf
 declare global {
+  // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace jest {
     interface It {
       skipIf: (condition: boolean) => (name: string, fn: () => Promise<void> | void) => void

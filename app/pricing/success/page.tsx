@@ -1,4 +1,5 @@
 'use client'
+/* eslint-disable react-hooks/preserve-manual-memoization */
 
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
