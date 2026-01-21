@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '../Base'
 import { useLanguage } from '../Providers/LanguageProvider'
+import { useToast } from '../UI/Toast'
 import { supabase } from '@/lib/supabase/client'
 
 interface Comment {
@@ -37,6 +38,7 @@ export default function TraderDiscussion({
   traderHandle,
 }: TraderDiscussionProps) {
   const { language, t } = useLanguage()
+  const { showToast } = useToast()
   const [comments, setComments] = useState<Comment[]>([])
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
@@ -102,15 +104,16 @@ export default function TraderDiscussion({
       if (response.ok) {
         setNewComment('')
         fetchComments()
+        showToast(language === 'zh' ? '评论发送成功' : 'Comment posted', 'success')
       } else {
         // 显示错误提示
         const errorText = language === 'zh' ? '发送失败，请重试' : 'Failed to post, please try again'
-        alert(errorText)
+        showToast(errorText, 'error')
       }
     } catch (error) {
       console.error('Error posting comment:', error)
       const errorText = language === 'zh' ? '网络错误，请稍后重试' : 'Network error, please try again'
-      alert(errorText)
+      showToast(errorText, 'error')
     } finally {
       setSubmitting(false)
     }
