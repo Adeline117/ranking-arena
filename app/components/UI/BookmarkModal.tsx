@@ -6,6 +6,7 @@ import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '../Base'
 import { supabase } from '@/lib/supabase/client'
 import { getCsrfHeaders } from '@/lib/api/client'
+import { useToast } from './Toast'
 
 type BookmarkFolder = {
   id: string
@@ -25,6 +26,7 @@ interface BookmarkModalProps {
 }
 
 export default function BookmarkModal({ isOpen, onClose, onSelect, postId }: BookmarkModalProps) {
+  const { showToast } = useToast()
   const [folders, setFolders] = useState<BookmarkFolder[]>([])
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
@@ -144,10 +146,10 @@ export default function BookmarkModal({ isOpen, onClose, onSelect, postId }: Boo
         setNewFolderPublic(true)  // 重置为默认公开
         setShowCreateForm(false)
       } else {
-        alert(data.error?.message || data.error || '创建失败')
+        showToast(data.error?.message || data.error || '创建失败', 'error')
       }
     } catch (error) {
-      alert('创建失败')
+      showToast('创建失败', 'error')
     } finally {
       setCreating(false)
     }

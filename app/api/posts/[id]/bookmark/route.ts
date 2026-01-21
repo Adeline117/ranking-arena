@@ -138,12 +138,17 @@ export async function POST(request: NextRequest, context: RouteContext) {
         .select('bookmark_count')
         .eq('id', id)
         .single()
-      
+
       const newCount = Math.max(0, (currentPost?.bookmark_count || 1) - 1)
-      await supabase
+      const { error: countUpdateError } = await supabase
         .from('posts')
         .update({ bookmark_count: newCount })
         .eq('id', id)
+
+      if (countUpdateError) {
+        apiLogger.error('Error updating bookmark count on remove:', countUpdateError)
+        // Continue with success response since the main operation succeeded
+      }
 
       return NextResponse.json({
         action: 'removed',
@@ -220,12 +225,17 @@ export async function POST(request: NextRequest, context: RouteContext) {
         .select('bookmark_count')
         .eq('id', id)
         .single()
-      
+
       const newCount = (currentPost?.bookmark_count || 0) + 1
-      await supabase
+      const { error: countUpdateError } = await supabase
         .from('posts')
         .update({ bookmark_count: newCount })
         .eq('id', id)
+
+      if (countUpdateError) {
+        apiLogger.error('Error updating bookmark count on add:', countUpdateError)
+        // Continue with success response since the main operation succeeded
+      }
 
       return NextResponse.json({
         action: 'added',
