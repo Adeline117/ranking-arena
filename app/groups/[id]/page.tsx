@@ -1567,7 +1567,7 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
               fontWeight: 'bold',
               textDecoration: 'none',
               boxShadow: tokens.shadow.lg,
-              zIndex: 1000,
+              zIndex: tokens.zIndex.sticky,
               transition: `all ${tokens.transition.base}`,
             }}
             onMouseEnter={(e) => {

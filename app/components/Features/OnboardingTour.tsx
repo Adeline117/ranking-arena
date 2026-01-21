@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef, createContext, useContext, ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { X, ChevronRight, ChevronLeft, Check } from 'lucide-react'
+import { tokens } from '@/lib/design-tokens'
 
 // ============================================
 // 类型定义
@@ -239,7 +240,7 @@ function TooltipCard({
         borderRadius: 12,
         border: '1px solid var(--color-border-primary)',
         boxShadow: '0 20px 40px rgba(0, 0, 0, 0.3)',
-        zIndex: 9999,
+        zIndex: tokens.zIndex.tooltip, // 使用 design tokens (600)
         animation: 'fadeIn 0.2s ease',
       }}
     >
