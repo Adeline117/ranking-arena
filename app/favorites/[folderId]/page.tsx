@@ -50,10 +50,7 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
   const folderId = resolvedParams.folderId
   const router = useRouter()
   const { showToast } = useToast()
-<<<<<<< HEAD
-=======
   const { showDangerConfirm } = useDialog()
->>>>>>> origin/claude/debug-click-api-issues-9Q4O9
 
   const [email, setEmail] = useState<string | null>(null)
   const [accessToken, setAccessToken] = useState<string | null>(null)

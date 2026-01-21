@@ -7,7 +7,7 @@ import { Box, Text, Button } from '@/app/components/base'
 import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/layout/TopNav'
 import { getCsrfHeaders } from '@/lib/api/client'
-import { useToast } from '@/app/components/UI/Toast'
+import { useToast } from '@/app/components/ui/Toast'
 
 function ExchangeCallbackPageContent() {
   const searchParams = useSearchParams()
