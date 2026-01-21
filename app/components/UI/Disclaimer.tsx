@@ -132,7 +132,7 @@ export function InvestmentDisclaimer({
           alignItems: 'center',
           justifyContent: 'center',
           padding: tokens.spacing[4],
-          zIndex: 1000,
+          zIndex: tokens.zIndex.modal,
         }}
       >
         <Box
@@ -423,7 +423,7 @@ export function FirstTimeDisclaimer({
         alignItems: 'center',
         justifyContent: 'center',
         padding: tokens.spacing[6],
-        zIndex: 9999,
+        zIndex: tokens.zIndex.overlay, // 使用 design tokens (300)
       }}
     >
       <Box style={{ maxWidth: 480, width: '100%' }}>

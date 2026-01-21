@@ -738,7 +738,7 @@ function HotContent() {
             alignItems: 'center',
             justifyContent: 'center',
             padding: 20,
-            zIndex: 1000,
+            zIndex: tokens.zIndex.modal,
           }}
         >
           <div

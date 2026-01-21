@@ -188,14 +188,60 @@ export function rateLimitError(
     '请求过于频繁，请稍后再试',
     429,
     ErrorCode.RATE_LIMIT_EXCEEDED,
-    retryAfter ? { retryAfter } : undefined
+    retryAfter ? { retryAfter, retryable: true } : { retryable: true }
   )
-  
+
   if (retryAfter) {
     response.headers.set('Retry-After', String(retryAfter))
   }
-  
+
   return response
+}
+
+/**
+ * 提供商限流错误响应 (429)
+ * 用于外部 API 提供商（如 AI 服务）返回的限流错误
+ */
+export function providerRateLimitError(
+  retryAfter?: number,
+  providerName?: string
+): NextResponse<ApiErrorResponse> {
+  const message = providerName
+    ? `${providerName} 服务请求频率超限，请稍后再试`
+    : '服务请求频率超限，请稍后再试'
+
+  const response = error(
+    message,
+    429,
+    ErrorCode.PROVIDER_RATE_LIMIT,
+    {
+      retryAfter,
+      provider: providerName,
+      retryable: true,
+    }
+  )
+
+  if (retryAfter) {
+    response.headers.set('Retry-After', String(retryAfter))
+  }
+
+  return response
+}
+
+/**
+ * 提供商错误响应 (502)
+ * 用于外部 API 提供商返回的其他错误
+ */
+export function providerError(
+  message?: string,
+  retryable = false
+): NextResponse<ApiErrorResponse> {
+  return error(
+    message || '外部服务提供商错误',
+    502,
+    ErrorCode.PROVIDER_ERROR,
+    { retryable }
+  )
 }
 
 // ============================================

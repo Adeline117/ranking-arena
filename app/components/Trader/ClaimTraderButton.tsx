@@ -92,15 +92,15 @@ export default function ClaimTraderButton({ traderId, handle, userId, source = '
       return
     }
 
+    // 3. 获取用户token（在 setLoading 之前检查，避免 loading 状态泄漏）
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) {
+      alert('请先登录')
+      return
+    }
+
     setLoading(true)
     try {
-      // 3. 获取用户token
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session) {
-        alert('请先登录')
-        return
-      }
-
       // 4. 验证账号所有权
       const verifyResponse = await fetch('/api/exchange/verify-ownership', {
         method: 'POST',

@@ -292,7 +292,7 @@ export default function SettingsPage() {
       const fileName = `${userId}-${Date.now()}.${fileExt}`
       const filePath = `${fileName}`
 
-      const { error: uploadError } = await supabase.storage
+      const { error: uploadError, data: uploadData } = await supabase.storage
         .from('covers')
         .upload(filePath, file, { upsert: true })
 
@@ -308,10 +308,25 @@ export default function SettingsPage() {
         return null
       }
 
+      // 验证文件确实上传成功 - 检查文件是否存在
+      const { data: fileList, error: listError } = await supabase.storage
+        .from('covers')
+        .list('', {
+          search: fileName,
+          limit: 1,
+        })
+
+      if (listError || !fileList || fileList.length === 0) {
+        uiLogger.error('Cover upload verification failed:', listError)
+        showToast('上传验证失败，请重试', 'error')
+        return null
+      }
+
       const { data } = supabase.storage.from('covers').getPublicUrl(filePath)
       return data.publicUrl
-    } catch (error: any) {
-      showToast(`上传异常: ${error?.message || '未知错误'}`, 'error')
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : '未知错误'
+      showToast(`上传异常: ${errorMessage}`, 'error')
       return null
     }
   }
@@ -342,7 +357,7 @@ export default function SettingsPage() {
         uiLogger.error('Avatar upload error:', uploadError)
         // 显示具体的错误信息
         if (uploadError.message?.includes('Bucket not found')) {
-          showToast('存储服务未配置，请联系管理员', 'error')
+          showToast('存储服务未配置，请联系管理员运行 setup_avatar_storage.sql', 'error')
         } else if (uploadError.message?.includes('security') || uploadError.message?.includes('policy')) {
           showToast('没有上传权限，请联系管理员', 'error')
         } else {
@@ -351,10 +366,25 @@ export default function SettingsPage() {
         return null
       }
 
+      // 验证文件确实上传成功 - 检查文件是否存在
+      const { data: fileList, error: listError } = await supabase.storage
+        .from('avatars')
+        .list('', {
+          search: fileName,
+          limit: 1,
+        })
+
+      if (listError || !fileList || fileList.length === 0) {
+        uiLogger.error('Avatar upload verification failed:', listError)
+        showToast('上传验证失败，请重试', 'error')
+        return null
+      }
+
       const { data } = supabase.storage.from('avatars').getPublicUrl(filePath)
       return data.publicUrl
-    } catch (error: any) {
-      showToast(`上传异常: ${error?.message || '未知错误'}`, 'error')
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : '未知错误'
+      showToast(`上传异常: ${errorMessage}`, 'error')
       return null
     }
   }

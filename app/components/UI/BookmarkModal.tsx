@@ -72,37 +72,36 @@ export default function BookmarkModal({ isOpen, onClose, onSelect, postId }: Boo
   }, [isOpen, onClose])
 
   const loadFolders = async () => {
-    if (!accessToken) {
-      // 如果没有 token，尝试重新获取
-      const { data } = await supabase.auth.getSession()
-      if (!data.session?.access_token) {
-        setLoading(false)
+    setLoading(true)
+
+    try {
+      // 统一获取 token，避免竞争条件
+      let token = accessToken
+      if (!token) {
+        const { data } = await supabase.auth.getSession()
+        token = data.session?.access_token ?? null
+        if (token) {
+          setAccessToken(token)
+        }
+      }
+
+      if (!token) {
+        setFolders([])
         return
       }
-      setAccessToken(data.session.access_token)
-    }
-    
-    const token = accessToken || (await supabase.auth.getSession()).data.session?.access_token
-    if (!token) {
-      setLoading(false)
-      return
-    }
-    
-    setLoading(true)
-    try {
+
       const response = await fetch('/api/bookmark-folders', {
         headers: {
           'Authorization': `Bearer ${token}`
         }
       })
-      
+
       // 如果返回 401，不做重定向，只是清空收藏夹
       if (response.status === 401) {
         setFolders([])
-        setLoading(false)
         return
       }
-      
+
       const data = await response.json()
       if (response.ok) {
         // API 返回格式: { success: true, data: { folders: [...] } }
@@ -110,6 +109,7 @@ export default function BookmarkModal({ isOpen, onClose, onSelect, postId }: Boo
       }
     } catch (error) {
       console.error('加载收藏夹失败:', error)
+      setFolders([])
     } finally {
       setLoading(false)
     }
@@ -179,7 +179,7 @@ export default function BookmarkModal({ isOpen, onClose, onSelect, postId }: Boo
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        zIndex: 1200,
+        zIndex: tokens.zIndex.modal,
       }}
       onClick={onClose}
     >
