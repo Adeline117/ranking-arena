@@ -5,22 +5,23 @@ import Link from 'next/link'
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
 import { supabase } from '@/lib/supabase/client'
-import TopNav from '@/app/components/Layout/TopNav'
-import TraderHeader from '@/app/components/Trader/TraderHeader'
-import TraderTabs from '@/app/components/Trader/TraderTabs'
-import OverviewPerformanceCard from '@/app/components/Trader/OverviewPerformanceCard'
-import TraderAboutCard from '@/app/components/Trader/TraderAboutCard'
-import SimilarTraders from '@/app/components/Trader/SimilarTraders'
-import PostFeed from '@/app/components/Features/PostFeed'
-import StatsPage from '@/app/components/Trader/stats/StatsPage'
+import TopNav from '@/app/components/layout/TopNav'
+import TraderHeader from '@/app/components/trader/TraderHeader'
+import TraderTabs from '@/app/components/trader/TraderTabs'
+import OverviewPerformanceCard from '@/app/components/trader/OverviewPerformanceCard'
+import TraderAboutCard from '@/app/components/trader/TraderAboutCard'
+import SimilarTraders from '@/app/components/trader/SimilarTraders'
+import PostFeed from '@/app/components/post/PostFeed'
+import StatsPage from '@/app/components/trader/stats/StatsPage'
 // PinnedPost 组件已集成到 PostFeed 中（置顶帖子自动显示在动态列表最上方）
-import PortfolioTable from '@/app/components/Trader/PortfolioTable'
-import TradingViewShell from '@/app/components/Trader/TradingViewShell'
-import AccountRequiredStats from '@/app/components/Trader/AccountRequiredStats'
-import CreatedGroups from '@/app/components/Trader/CreatedGroups'
-import UserBookmarkFolders from '@/app/components/Trader/UserBookmarkFolders'
-import { Box, Text } from '@/app/components/Base'
-import { RankingSkeleton } from '@/app/components/UI/Skeleton'
+import PortfolioTable from '@/app/components/trader/PortfolioTable'
+import TradingViewShell from '@/app/components/trader/TradingViewShell'
+import AccountRequiredStats from '@/app/components/trader/AccountRequiredStats'
+import CreatedGroups from '@/app/components/trader/CreatedGroups'
+import UserBookmarkFolders from '@/app/components/trader/UserBookmarkFolders'
+import { Box, Text } from '@/app/components/base'
+import { RankingSkeleton } from '@/app/components/ui/Skeleton'
+import { useToast } from '@/app/components/ui/Toast'
 import {
   getTraderByHandle,
   getTraderPerformance,
@@ -41,7 +42,8 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
   const searchParams = useSearchParams()
   const router = useRouter()
   const pathname = usePathname()
-  
+  const { showToast } = useToast()
+
   const [handle, setHandle] = useState<string>('')
   const [email, setEmail] = useState<string | null>(null)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
@@ -288,7 +290,8 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
                 } else if (userProfileError) {
                   // 如果错误是因为缺少 handle 列，提示用户运行修复脚本
                   if (userProfileError.message?.includes('handle') || userProfileError.code === 'PGRST204') {
-                    alert('数据库表结构不完整，请运行 scripts/fix_user_profiles_complete.sql 来修复')
+                    showToast('数据库表结构不完整，请联系管理员', 'error')
+                    console.error('Database schema issue: Run scripts/fix_user_profiles_complete.sql to fix')
                   }
                 }
 

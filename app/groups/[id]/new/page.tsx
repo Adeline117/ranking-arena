@@ -3,16 +3,24 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
-import TopNav from '@/app/components/Layout/TopNav'
-import { Box, Text, Button } from '@/app/components/Base'
+import TopNav from '@/app/components/layout/TopNav'
+import { Box, Text, Button } from '@/app/components/base'
 import { tokens } from '@/lib/design-tokens'
-import { useToast } from '@/app/components/UI/Toast'
+import { useToast } from '@/app/components/ui/Toast'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { getCsrfHeaders } from '@/lib/api/client'
+import { renderContentWithLinks } from '@/lib/utils/content'
 
 interface UploadedImage {
   url: string
   fileName: string
+}
+
+interface UploadedVideo {
+  url: string
+  fileName: string
+  fileSize?: number
+  thumbnail?: string
 }
 
 interface PollOption {
@@ -33,36 +41,6 @@ const POLL_DURATION_OPTIONS = [
   { label: '3天', value: 72 },
   { label: '7天', value: 168 },
 ]
-
-// 链接解析函数
-function renderContentWithLinks(text: string) {
-  if (!text) return null
-  const urlRegex = /(https?:\/\/[^\s<>"{}|\\^`[\]]+)/g
-  const parts = text.split(urlRegex)
-  
-  return parts.map((part, index) => {
-    if (urlRegex.test(part)) {
-      urlRegex.lastIndex = 0 // Reset regex state
-      return (
-        <a
-          key={index}
-          href={part}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={(e) => e.stopPropagation()}
-          style={{
-            color: '#8b6fa8',
-            textDecoration: 'underline',
-            wordBreak: 'break-all',
-          }}
-        >
-          {part}
-        </a>
-      )
-    }
-    return part
-  })
-}
 
 export default function NewGroupPostPage() {
   const params = useParams<{ id: string }>()
@@ -91,6 +69,11 @@ export default function NewGroupPostPage() {
   ])
   const [pollDuration, setPollDuration] = useState(24) // 默认1天
   const [pollType, setPollType] = useState<'single' | 'multiple'>('single')
+  // 视频相关状态
+  const videoInputRef = useRef<HTMLInputElement>(null)
+  const [videos, setVideos] = useState<UploadedVideo[]>([])
+  const [videoUploading, setVideoUploading] = useState(false)
+  const [videoUploadProgress, setVideoUploadProgress] = useState(0)
 
   const draftKey = `${DRAFT_KEY_PREFIX}${groupId}`
 
@@ -280,6 +263,123 @@ export default function NewGroupPostPage() {
     const imageMarkdown = `\n![image](${url})\n`
     setContent(prev => prev + imageMarkdown)
     showToast(t('imageInserted'), 'info')
+  }
+
+  // 处理视频上传
+  const handleVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (!files || files.length === 0) return
+
+    if (!userId) {
+      showToast(t('pleaseLogin'), 'warning')
+      return
+    }
+
+    // 最多上传1个视频
+    if (videos.length >= 1) {
+      showToast('每篇帖子最多上传1个视频', 'warning')
+      return
+    }
+
+    const file = files[0]
+
+    // 验证文件类型
+    const allowedTypes = ['video/mp4', 'video/webm', 'video/quicktime', 'video/x-msvideo', 'video/x-matroska']
+    if (!allowedTypes.includes(file.type)) {
+      showToast('不支持的视频格式。支持: MP4, WebM, MOV, AVI, MKV', 'error')
+      return
+    }
+
+    // 验证文件大小 (100MB)
+    const maxSize = 100 * 1024 * 1024
+    if (file.size > maxSize) {
+      showToast('视频文件过大，最大允许100MB', 'error')
+      return
+    }
+
+    setVideoUploading(true)
+    setVideoUploadProgress(0)
+
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('userId', userId)
+
+      // 使用 XMLHttpRequest 以支持进度监控
+      const xhr = new XMLHttpRequest()
+
+      const uploadPromise = new Promise<{ url: string; fileName: string; fileSize: number }>((resolve, reject) => {
+        xhr.upload.addEventListener('progress', (event) => {
+          if (event.lengthComputable) {
+            const progress = Math.round((event.loaded / event.total) * 100)
+            setVideoUploadProgress(progress)
+          }
+        })
+
+        xhr.addEventListener('load', () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            try {
+              const data = JSON.parse(xhr.responseText)
+              resolve(data)
+            } catch {
+              reject(new Error('解析响应失败'))
+            }
+          } else {
+            try {
+              const error = JSON.parse(xhr.responseText)
+              reject(new Error(error.error || '上传失败'))
+            } catch {
+              reject(new Error(`上传失败 (${xhr.status})`))
+            }
+          }
+        })
+
+        xhr.addEventListener('error', () => {
+          reject(new Error('网络错误，请稍后重试'))
+        })
+
+        xhr.open('POST', '/api/posts/upload-video')
+
+        // 添加 CSRF headers
+        const csrfHeaders = getCsrfHeaders()
+        Object.entries(csrfHeaders).forEach(([key, value]) => {
+          if (value) xhr.setRequestHeader(key, value)
+        })
+
+        xhr.send(formData)
+      })
+
+      const data = await uploadPromise
+
+      setVideos([{
+        url: data.url,
+        fileName: data.fileName,
+        fileSize: data.fileSize,
+      }])
+
+      // 自动插入视频链接到内容
+      const videoMarkdown = `\n[视频](${data.url})\n`
+      setContent(prev => prev + videoMarkdown)
+
+      showToast('视频上传成功', 'success')
+    } catch (error) {
+      console.error('Video upload error:', error)
+      showToast(error instanceof Error ? error.message : '视频上传失败', 'error')
+    } finally {
+      setVideoUploading(false)
+      setVideoUploadProgress(0)
+      if (videoInputRef.current) {
+        videoInputRef.current.value = ''
+      }
+    }
+  }
+
+  // 移除视频
+  const removeVideo = () => {
+    setVideos([])
+    // 从内容中移除视频链接
+    setContent(prev => prev.replace(/\n?\[视频\]\([^)]+\)\n?/g, ''))
+    showToast('视频已移除', 'info')
   }
 
   const handleSubmit = async () => {
@@ -842,6 +942,172 @@ export default function NewGroupPostPage() {
             
             <Text size="xs" color="tertiary">
               {t('imageSupport')}
+            </Text>
+          </Box>
+
+          {/* 视频上传区域 */}
+          <Box>
+            <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[2], display: 'block' }}>
+              视频（可选，最多1个，100MB以内）
+            </Text>
+
+            <input
+              ref={videoInputRef}
+              type="file"
+              accept="video/mp4,video/webm,video/quicktime,video/x-msvideo,video/x-matroska"
+              onChange={handleVideoUpload}
+              style={{ display: 'none' }}
+              id="video-upload"
+            />
+
+            <Box
+              style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: tokens.spacing[3],
+                marginBottom: tokens.spacing[3],
+              }}
+            >
+              {/* 已上传的视频预览 */}
+              {videos.map((video) => (
+                <Box
+                  key={video.url}
+                  style={{
+                    position: 'relative',
+                    width: 200,
+                    height: 120,
+                    borderRadius: tokens.radius.md,
+                    overflow: 'hidden',
+                    border: `2px solid #8b6fa8`,
+                    background: '#000',
+                  }}
+                >
+                  <video
+                    src={video.url}
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'cover',
+                    }}
+                  />
+                  {/* 播放图标 */}
+                  <Box
+                    style={{
+                      position: 'absolute',
+                      top: '50%',
+                      left: '50%',
+                      transform: 'translate(-50%, -50%)',
+                      width: 40,
+                      height: 40,
+                      borderRadius: '50%',
+                      background: 'rgba(139, 111, 168, 0.9)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#fff',
+                      fontSize: 18,
+                    }}
+                  >
+                    ▶
+                  </Box>
+                  {/* 文件大小标签 */}
+                  <Box
+                    style={{
+                      position: 'absolute',
+                      bottom: 0,
+                      left: 0,
+                      right: 0,
+                      background: 'rgba(139,111,168,0.9)',
+                      color: '#fff',
+                      fontSize: 10,
+                      textAlign: 'center',
+                      padding: '2px 0',
+                    }}
+                  >
+                    {video.fileSize ? (video.fileSize / 1024 / 1024).toFixed(1) : '?'}MB
+                  </Box>
+                  {/* 删除按钮 */}
+                  <button
+                    onClick={removeVideo}
+                    title="删除视频"
+                    style={{
+                      position: 'absolute',
+                      top: 4,
+                      right: 4,
+                      width: 24,
+                      height: 24,
+                      border: 'none',
+                      background: 'rgba(255,77,77,0.9)',
+                      color: '#fff',
+                      cursor: 'pointer',
+                      fontSize: 14,
+                      borderRadius: 4,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    ×
+                  </button>
+                </Box>
+              ))}
+
+              {/* 上传按钮 */}
+              {videos.length < 1 && (
+                <label
+                  htmlFor="video-upload"
+                  style={{
+                    width: 200,
+                    height: 120,
+                    borderRadius: tokens.radius.md,
+                    border: `2px dashed ${tokens.colors.border.primary}`,
+                    background: tokens.colors.bg.secondary,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: videoUploading ? 'not-allowed' : 'pointer',
+                    opacity: videoUploading ? 0.5 : 1,
+                    transition: 'all 0.2s ease',
+                  }}
+                >
+                  {videoUploading ? (
+                    <Box style={{ textAlign: 'center' }}>
+                      <Text size="xs" color="secondary">上传中 {videoUploadProgress}%</Text>
+                      {/* 进度条 */}
+                      <Box
+                        style={{
+                          width: 150,
+                          height: 4,
+                          background: tokens.colors.border.primary,
+                          borderRadius: 2,
+                          marginTop: 8,
+                          overflow: 'hidden',
+                        }}
+                      >
+                        <Box
+                          style={{
+                            width: `${videoUploadProgress}%`,
+                            height: '100%',
+                            background: '#8b6fa8',
+                            transition: 'width 0.3s ease',
+                          }}
+                        />
+                      </Box>
+                    </Box>
+                  ) : (
+                    <>
+                      <Text size="2xl" color="secondary" style={{ lineHeight: 1 }}>🎬</Text>
+                      <Text size="xs" color="secondary" style={{ marginTop: 4 }}>添加视频</Text>
+                      <Text size="xs" color="tertiary" style={{ marginTop: 2 }}>MP4, WebM, MOV</Text>
+                    </>
+                  )}
+                </label>
+              )}
+            </Box>
+
+            <Text size="xs" color="tertiary">
+              支持 MP4、WebM、MOV、AVI、MKV 格式，最大 100MB
             </Text>
           </Box>
 

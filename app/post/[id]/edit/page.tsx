@@ -3,11 +3,11 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
-import TopNav from '@/app/components/Layout/TopNav'
-import { Box, Text, Button } from '@/app/components/Base'
+import TopNav from '@/app/components/layout/TopNav'
+import { Box, Text, Button } from '@/app/components/base'
 import { tokens } from '@/lib/design-tokens'
-import { useToast } from '@/app/components/UI/Toast'
-import { RankingSkeleton } from '@/app/components/UI/Skeleton'
+import { useToast } from '@/app/components/ui/Toast'
+import { RankingSkeleton } from '@/app/components/ui/Skeleton'
 import { getCsrfHeaders } from '@/lib/api/client'
 
 interface UploadedImage {

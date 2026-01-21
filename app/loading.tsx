@@ -1,7 +1,7 @@
 import { tokens } from '@/lib/design-tokens'
-import { Box } from '@/app/components/Base'
-import { RankingSkeleton, SkeletonCard } from '@/app/components/UI/Skeleton'
-import TopNav from '@/app/components/Layout/TopNav'
+import { Box } from '@/app/components/base'
+import { RankingSkeleton, SkeletonCard } from '@/app/components/ui/Skeleton'
+import TopNav from '@/app/components/layout/TopNav'
 
 /**
  * 首页加载状态

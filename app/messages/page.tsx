@@ -5,10 +5,10 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
-import TopNav from '@/app/components/Layout/TopNav'
-import { Box, Text } from '@/app/components/Base'
-import Avatar from '@/app/components/UI/Avatar'
-import { useToast } from '@/app/components/UI/Toast'
+import TopNav from '@/app/components/layout/TopNav'
+import { Box, Text } from '@/app/components/base'
+import Avatar from '@/app/components/ui/Avatar'
+import { useToast } from '@/app/components/ui/Toast'
 
 type Conversation = {
   id: string

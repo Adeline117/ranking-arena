@@ -4,8 +4,8 @@ import { useEffect } from 'react'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
-import TopNav from '@/app/components/Layout/TopNav'
-import { Box, Text, Button } from '@/app/components/Base'
+import TopNav from '@/app/components/layout/TopNav'
+import { Box, Text, Button } from '@/app/components/base'
 
 // Hooks
 import { useAdminAuth } from './hooks/useAdminAuth'
