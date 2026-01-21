@@ -4,7 +4,7 @@
  * 功能开关 React Hooks
  */
 
-import { useState, useEffect, useContext, createContext, useMemo, useCallback } from 'react'
+import { useState, useEffect, useContext, createContext, useMemo, useCallback, useRef } from 'react'
 import {
   isFeatureEnabledWithOverrides,
   getAllFeatureFlags,
@@ -52,6 +52,12 @@ export function FeatureFlagProvider({
   userId,
   initialFlags,
 }: FeatureFlagProviderProps) {
+  // 使用 ref 来稳定 initialFlags，避免不必要的重新计算
+  const initialFlagsRef = useRef(initialFlags)
+  useEffect(() => {
+    initialFlagsRef.current = initialFlags
+  }, [initialFlags])
+
   const [flags, setFlags] = useState<Record<FeatureFlagName, boolean>>(() => ({
     ...getAllFeatureFlags({ userId }),
     ...(initialFlags || {}),
@@ -61,9 +67,9 @@ export function FeatureFlagProvider({
   useEffect(() => {
     setFlags({
       ...getAllFeatureFlags({ userId }),
-      ...(initialFlags || {}),
+      ...(initialFlagsRef.current || {}),
     })
-  }, [userId, initialFlags])
+  }, [userId])
 
   const isEnabled = useCallback((flag: FeatureFlagName) => {
     return flags[flag] ?? isFeatureEnabledWithOverrides(flag, { userId })

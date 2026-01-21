@@ -259,11 +259,12 @@ async function joinProOfficialGroupFallback(userId: string): Promise<{
       return { success: false, message: memberError.message }
     }
     
-    // 加入 group_members
+    // 加入 group_members（使用 upsert 处理冲突）
     await supabase
       .from('group_members')
-      .insert({ group_id: groupId, user_id: userId, role: 'member' })
-      .onConflict('group_id,user_id')
+      .upsert({ group_id: groupId, user_id: userId, role: 'member' }, {
+        onConflict: 'group_id,user_id'
+      })
     
     // 发送欢迎通知
     await sendWelcomeNotification(userId, groupId)
