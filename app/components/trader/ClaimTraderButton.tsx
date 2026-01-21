@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase/client'
 import { Button } from '../base'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { useToast } from '../ui/Toast'
+import { useDialog } from '../ui/Dialog'
 
 interface ClaimTraderButtonProps {
   traderId: string
@@ -17,6 +18,7 @@ interface ClaimTraderButtonProps {
 export default function ClaimTraderButton({ traderId, handle, userId, source = 'binance' }: ClaimTraderButtonProps) {
   const router = useRouter()
   const { showToast } = useToast()
+  const { showConfirm } = useDialog()
   const [loading, setLoading] = useState(false)
   const [claimed, setClaimed] = useState(false)
   const [hasConnection, setHasConnection] = useState(false)
@@ -78,10 +80,9 @@ export default function ClaimTraderButton({ traderId, handle, userId, source = '
   const handleClaim = async () => {
     // 1. 检查是否已绑定交易所账号
     if (!hasConnection) {
-      const goToSettings = confirm(
-        `认领交易员账号需要先绑定您的交易所账号。\n\n` +
-        `请先在设置页面绑定您的 ${source.toUpperCase()} 账号，然后才能认领。\n\n` +
-        `是否前往设置页面？`
+      const goToSettings = await showConfirm(
+        '需要绑定交易所账号',
+        `认领交易员账号需要先绑定您的交易所账号。\n请先在设置页面绑定您的 ${source.toUpperCase()} 账号，然后才能认领。\n是否前往设置页面？`
       )
       if (goToSettings) {
         router.push('/settings')
@@ -90,7 +91,11 @@ export default function ClaimTraderButton({ traderId, handle, userId, source = '
     }
 
     // 2. 确认认领
-    if (!confirm(`确认认领交易员 "@${handle}"？\n\n系统将验证您是否真的拥有此账号，验证通过后才会完成认领。`)) {
+    const confirmed = await showConfirm(
+      '确认认领',
+      `确认认领交易员 "@${handle}"？\n系统将验证您是否真的拥有此账号，验证通过后才会完成认领。`
+    )
+    if (!confirmed) {
       return
     }
 
@@ -122,8 +127,9 @@ export default function ClaimTraderButton({ traderId, handle, userId, source = '
 
       if (!verifyResponse.ok) {
         if (verifyResult.needConnect) {
-          const goToSettings = confirm(
-            verifyResult.message + '\n\n是否前往设置页面绑定账号？'
+          const goToSettings = await showConfirm(
+            '需要绑定账号',
+            verifyResult.message + '\n是否前往设置页面绑定账号？'
           )
           if (goToSettings) {
             router.push('/settings')

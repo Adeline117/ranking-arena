@@ -3,6 +3,8 @@
 import { useState, useCallback } from 'react'
 import { getCsrfHeaders } from '@/lib/api/client'
 
+type ToastFn = (message: string, type: 'success' | 'error' | 'warning' | 'info') => void
+
 export interface AlertConfigItem {
   value: string | null
   enabled: boolean
@@ -14,7 +16,7 @@ export interface AlertConfig {
   alert_email?: AlertConfigItem
 }
 
-export function useAlertConfig(accessToken: string | null) {
+export function useAlertConfig(accessToken: string | null, showToast?: ToastFn) {
   const [config, setConfig] = useState<AlertConfig>({})
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -68,16 +70,16 @@ export function useAlertConfig(accessToken: string | null) {
         }))
         return true
       } else {
-        alert(data.error || '保存失败')
+        showToast?.(data.error || '保存失败', 'error')
         return false
       }
     } catch (err) {
-      alert('网络错误')
+      showToast?.('网络错误', 'error')
       return false
     } finally {
       setSaving(false)
     }
-  }, [accessToken])
+  }, [accessToken, showToast])
 
   return {
     config,

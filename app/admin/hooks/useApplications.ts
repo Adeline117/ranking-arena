@@ -3,6 +3,8 @@
 import { useState, useCallback } from 'react'
 import { getCsrfHeaders } from '@/lib/api/client'
 
+type ToastFn = (message: string, type: 'success' | 'error' | 'warning' | 'info') => void
+
 export interface GroupApplication {
   id: string
   applicant_id: string
@@ -49,7 +51,7 @@ export interface GroupEditApplication {
   }
 }
 
-export function useApplications(accessToken: string | null) {
+export function useApplications(accessToken: string | null, showToast?: ToastFn) {
   const [applications, setApplications] = useState<GroupApplication[]>([])
   const [editApplications, setEditApplications] = useState<GroupEditApplication[]>([])
   const [applicationsLoading, setApplicationsLoading] = useState(false)
@@ -117,16 +119,16 @@ export function useApplications(accessToken: string | null) {
         setApplications(prev => prev.filter(a => a.id !== applicationId))
         return true
       } else {
-        alert(data.error || '操作失败')
+        showToast?.(data.error || '操作失败', 'error')
         return false
       }
     } catch (err) {
-      alert('网络错误')
+      showToast?.('网络错误', 'error')
       return false
     } finally {
       setActionLoading(prev => ({ ...prev, [applicationId]: false }))
     }
-  }, [accessToken])
+  }, [accessToken, showToast])
 
   const rejectApplication = useCallback(async (applicationId: string, reason?: string) => {
     if (!accessToken) return false
@@ -149,16 +151,16 @@ export function useApplications(accessToken: string | null) {
         setApplications(prev => prev.filter(a => a.id !== applicationId))
         return true
       } else {
-        alert(data.error || '操作失败')
+        showToast?.(data.error || '操作失败', 'error')
         return false
       }
     } catch (err) {
-      alert('网络错误')
+      showToast?.('网络错误', 'error')
       return false
     } finally {
       setActionLoading(prev => ({ ...prev, [applicationId]: false }))
     }
-  }, [accessToken])
+  }, [accessToken, showToast])
 
   const approveEditApplication = useCallback(async (applicationId: string) => {
     if (!accessToken) return false
@@ -179,16 +181,16 @@ export function useApplications(accessToken: string | null) {
         setEditApplications(prev => prev.filter(a => a.id !== applicationId))
         return true
       } else {
-        alert(data.error || '操作失败')
+        showToast?.(data.error || '操作失败', 'error')
         return false
       }
     } catch (err) {
-      alert('网络错误')
+      showToast?.('网络错误', 'error')
       return false
     } finally {
       setActionLoading(prev => ({ ...prev, [`edit_${applicationId}`]: false }))
     }
-  }, [accessToken])
+  }, [accessToken, showToast])
 
   const rejectEditApplication = useCallback(async (applicationId: string, reason?: string) => {
     if (!accessToken) return false
@@ -211,16 +213,16 @@ export function useApplications(accessToken: string | null) {
         setEditApplications(prev => prev.filter(a => a.id !== applicationId))
         return true
       } else {
-        alert(data.error || '操作失败')
+        showToast?.(data.error || '操作失败', 'error')
         return false
       }
     } catch (err) {
-      alert('网络错误')
+      showToast?.('网络错误', 'error')
       return false
     } finally {
       setActionLoading(prev => ({ ...prev, [`edit_${applicationId}`]: false }))
     }
-  }, [accessToken])
+  }, [accessToken, showToast])
 
   return {
     applications,

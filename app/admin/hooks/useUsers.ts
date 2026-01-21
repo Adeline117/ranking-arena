@@ -3,6 +3,8 @@
 import { useState, useCallback } from 'react'
 import { getCsrfHeaders } from '@/lib/api/client'
 
+type ToastFn = (message: string, type: 'success' | 'error' | 'warning' | 'info') => void
+
 export interface AdminUser {
   id: string
   handle: string | null
@@ -26,7 +28,7 @@ export interface UsersPagination {
   totalPages: number
 }
 
-export function useUsers(accessToken: string | null) {
+export function useUsers(accessToken: string | null, showToast?: ToastFn) {
   const [users, setUsers] = useState<AdminUser[]>([])
   const [pagination, setPagination] = useState<UsersPagination>({
     page: 1,
@@ -99,23 +101,23 @@ export function useUsers(accessToken: string | null) {
       
       if (data.ok) {
         // Update local state
-        setUsers(prev => prev.map(u => 
-          u.id === userId 
+        setUsers(prev => prev.map(u =>
+          u.id === userId
             ? { ...u, banned_at: new Date().toISOString(), banned_reason: reason || null }
             : u
         ))
         return true
       } else {
-        alert(data.error || '操作失败')
+        showToast?.(data.error || '操作失败', 'error')
         return false
       }
     } catch (err) {
-      alert('网络错误')
+      showToast?.('网络错误', 'error')
       return false
     } finally {
       setActionLoading(prev => ({ ...prev, [userId]: false }))
     }
-  }, [accessToken])
+  }, [accessToken, showToast])
 
   const unbanUser = useCallback(async (userId: string) => {
     if (!accessToken) return false
@@ -134,23 +136,23 @@ export function useUsers(accessToken: string | null) {
       
       if (data.ok) {
         // Update local state
-        setUsers(prev => prev.map(u => 
-          u.id === userId 
+        setUsers(prev => prev.map(u =>
+          u.id === userId
             ? { ...u, banned_at: null, banned_reason: null, banned_by: null }
             : u
         ))
         return true
       } else {
-        alert(data.error || '操作失败')
+        showToast?.(data.error || '操作失败', 'error')
         return false
       }
     } catch (err) {
-      alert('网络错误')
+      showToast?.('网络错误', 'error')
       return false
     } finally {
       setActionLoading(prev => ({ ...prev, [userId]: false }))
     }
-  }, [accessToken])
+  }, [accessToken, showToast])
 
   return {
     users,

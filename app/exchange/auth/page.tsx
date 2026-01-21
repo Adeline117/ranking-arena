@@ -7,6 +7,7 @@ import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/layout/TopNav'
 import { Box, Text, Button } from '@/app/components/base'
 import ExchangeLogo from '@/app/components/ui/ExchangeLogo'
+import { useToast } from '@/app/components/ui/Toast'
 
 const EXCHANGES = [
   { id: 'binance', name: 'Binance', oauthSupported: true },
@@ -19,6 +20,7 @@ const EXCHANGES = [
 function ExchangeAuthContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
+  const { showToast } = useToast()
   const exchangeParam = searchParams.get('exchange')
   const [userId, setUserId] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -36,7 +38,7 @@ function ExchangeAuthContent() {
 
   const handleOAuth = async (exchange: string) => {
     if (!userId) {
-      alert('请先登录')
+      showToast('请先登录', 'warning')
       router.push('/login')
       return
     }
