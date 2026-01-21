@@ -1,10 +1,11 @@
 'use client'
 
 import { useState, useCallback, useRef, useEffect } from 'react'
-import type { Trader } from '../../Features/RankingTable'
+import type { Trader, TimeRange } from '@/lib/types/trader'
 import { useTraderDataSync, type TraderDataPayload } from '@/lib/hooks/useBroadcastSync'
 
-export type TimeRange = '90D' | '30D' | '7D'
+// 重新导出类型以保持向后兼容
+export type { TimeRange } from '@/lib/types/trader'
 
 // 本地存储 key
 const TIME_RANGE_STORAGE_KEY = 'ranking_time_range'
