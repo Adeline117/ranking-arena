@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useToast } from './Toast'
 import { useApiMutation } from '@/lib/hooks/useApiMutation'
 import { apiRequest } from '@/lib/api/client'
@@ -22,6 +22,11 @@ export default function FollowButton({ traderId, userId, initialFollowing = fals
   const { showToast } = useToast()
   const [following, setFollowing] = useState(initialFollowing)
 
+  // 防止重复点击的锁
+  const pendingRef = useRef(false)
+  // 跟踪期望的状态（用于乐观更新）
+  const expectedStateRef = useRef<boolean | null>(null)
+
   // 使用 useApiMutation 处理关注/取消关注
   const { mutate, isLoading } = useApiMutation<FollowResponse, { action: 'follow' | 'unfollow' }>(
     async ({ action }) => {
@@ -32,10 +37,18 @@ export default function FollowButton({ traderId, userId, initialFollowing = fals
     },
     {
       onSuccess: (data) => {
+        pendingRef.current = false
+        expectedStateRef.current = null
         setFollowing(data.following)
         onFollowChange?.(data.following)
       },
       onError: (error) => {
+        pendingRef.current = false
+        // 回滚乐观更新
+        if (expectedStateRef.current !== null) {
+          setFollowing(!expectedStateRef.current)
+          expectedStateRef.current = null
+        }
         if (error.tableNotFound) {
           showToast('关注功能暂未开放', 'warning')
         }
@@ -47,26 +60,54 @@ export default function FollowButton({ traderId, userId, initialFollowing = fals
 
   useEffect(() => {
     if (!userId) return
+
+    const abortController = new AbortController()
+
     ;(async () => {
       try {
-        const response = await fetch(`/api/follow?userId=${userId}&traderId=${traderId}`)
+        const response = await fetch(
+          `/api/follow?userId=${userId}&traderId=${traderId}`,
+          { signal: abortController.signal }
+        )
         if (response.ok) {
           const data = await response.json()
-          setFollowing(data.following)
+          // 只有在没有待处理操作时才更新状态
+          if (!pendingRef.current) {
+            setFollowing(data.following)
+          }
         }
       } catch (error) {
-        console.error('Check following error:', error)
+        if ((error as Error).name !== 'AbortError') {
+          console.error('Check following error:', error)
+        }
       }
     })()
+
+    return () => {
+      abortController.abort()
+    }
   }, [userId, traderId])
 
-  const handleToggle = () => {
+  const handleToggle = useCallback(() => {
     if (!userId) {
       showToast('请先登录', 'warning')
       return
     }
-    mutate({ action: following ? 'unfollow' : 'follow' })
-  }
+
+    // 防止重复点击
+    if (pendingRef.current || isLoading) {
+      return
+    }
+
+    pendingRef.current = true
+    const newState = !following
+    expectedStateRef.current = newState
+
+    // 乐观更新 UI
+    setFollowing(newState)
+
+    mutate({ action: newState ? 'follow' : 'unfollow' })
+  }, [userId, following, isLoading, mutate, showToast])
 
   if (!userId) {
     return (

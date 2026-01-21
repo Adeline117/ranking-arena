@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, lazy, Suspense } from 'react'
+import { useState, lazy, Suspense, useMemo } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box } from '../Base'
 import TopNav from '../Layout/TopNav'
@@ -13,6 +13,7 @@ import { generateWebSiteSchema, generateOrganizationSchema, combineSchemas } fro
 
 import RankingSection from './RankingSection'
 import SidebarSection from './SidebarSection'
+import StatsBar from './StatsBar'
 import { useTraderData, useAuth } from './hooks'
 import type { Trader } from '../Features/RankingTable'
 
@@ -37,6 +38,34 @@ export default function HomePage() {
 
   // 交易者对比状态
   const [compareTraders, setCompareTraders] = useState<Trader[]>([])
+
+  // 计算统计数据
+  const statsData = useMemo(() => {
+    if (!traders || traders.length === 0) {
+      return {
+        totalTraders: 0,
+        averageRoi: 0,
+        topPerformer: undefined,
+        activeExchanges: 5,
+      }
+    }
+
+    const totalTraders = traders.length
+    const averageRoi = traders.reduce((sum, t) => sum + (t.roi || 0), 0) / totalTraders
+
+    const topTrader = traders.reduce((best, current) =>
+      (current.roi || 0) > (best?.roi || 0) ? current : best
+    , traders[0])
+
+    const uniqueExchanges = new Set(traders.map(t => t.source).filter(Boolean))
+
+    return {
+      totalTraders,
+      averageRoi,
+      topPerformer: topTrader ? { handle: topTrader.handle, roi: topTrader.roi || 0 } : undefined,
+      activeExchanges: uniqueExchanges.size || 5,
+    }
+  }, [traders])
 
   return (
     <Box
@@ -79,7 +108,16 @@ export default function HomePage() {
       >
         {/* 快速绑定交易所 */}
         <ExchangeQuickConnect />
-        
+
+        {/* 市场概览统计 */}
+        <StatsBar
+          totalTraders={statsData.totalTraders}
+          averageRoi={statsData.averageRoi}
+          topPerformer={statsData.topPerformer}
+          activeExchanges={statsData.activeExchanges}
+          loading={loading}
+        />
+
         {/* 响应式三栏布局 */}
         <Box
           className="main-grid stagger-children"

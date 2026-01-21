@@ -200,77 +200,249 @@ export const useUIStore = create<UIState>()(
 )
 
 // ============================================
-// 缓存状态
+// 缓存状态（增强版 - 支持持久化和 stale-while-revalidate）
 // ============================================
 
-interface CacheEntry<T> {
+interface CacheEntry<T = unknown> {
   data: T
   timestamp: number
   key: string
+  ttl: number // 每个条目可以有自己的 TTL
+  staleTime?: number // stale-while-revalidate 的过期时间
 }
 
 interface CacheState {
-  // 缓存数据
-  cache: Map<string, CacheEntry<unknown>>
-  
+  // 缓存数据（使用对象而非 Map 以支持持久化）
+  cache: Record<string, CacheEntry>
+
   // 配置
   defaultTTL: number // 默认 TTL（毫秒）
-  
+  defaultStaleTime: number // 默认 stale 时间（毫秒）
+
   // 操作
   get: <T>(key: string) => T | null
-  set: <T>(key: string, data: T, ttl?: number) => void
+  getWithMeta: <T>(key: string) => { data: T | null; isStale: boolean; isFresh: boolean }
+  set: <T>(key: string, data: T, options?: { ttl?: number; staleTime?: number }) => void
   invalidate: (key: string) => void
   invalidatePattern: (pattern: string) => void
+  invalidateAll: (keys: string[]) => void
   clear: () => void
+
+  // 新增：预取和后台刷新
+  prefetch: <T>(key: string, fetcher: () => Promise<T>, options?: { ttl?: number }) => Promise<T>
+  getOrFetch: <T>(key: string, fetcher: () => Promise<T>, options?: { ttl?: number; staleTime?: number }) => Promise<T>
+
+  // 统计
+  getStats: () => { size: number; keys: string[] }
+}
+
+// 缓存持久化存储
+const cacheStorage = {
+  getItem: (name: string): string | null => {
+    if (typeof window === 'undefined') return null
+    try {
+      return localStorage.getItem(name)
+    } catch {
+      return null
+    }
+  },
+  setItem: (name: string, value: string): void => {
+    if (typeof window === 'undefined') return
+    try {
+      localStorage.setItem(name, value)
+    } catch {
+      // localStorage 可能已满或不可用
+      console.warn('Failed to persist cache to localStorage')
+    }
+  },
+  removeItem: (name: string): void => {
+    if (typeof window === 'undefined') return
+    try {
+      localStorage.removeItem(name)
+    } catch {
+      // ignore
+    }
+  },
+}
+
+// 从 localStorage 恢复缓存
+function loadPersistedCache(): Record<string, CacheEntry> {
+  const stored = cacheStorage.getItem('ranking-arena-cache')
+  if (!stored) return {}
+
+  try {
+    const parsed = JSON.parse(stored)
+    const now = Date.now()
+    const validEntries: Record<string, CacheEntry> = {}
+
+    // 只恢复未过期的条目
+    for (const [key, entry] of Object.entries(parsed)) {
+      const e = entry as CacheEntry
+      if (now - e.timestamp < e.ttl) {
+        validEntries[key] = e
+      }
+    }
+
+    return validEntries
+  } catch {
+    return {}
+  }
+}
+
+// 持久化缓存到 localStorage
+function persistCache(cache: Record<string, CacheEntry>): void {
+  // 只持久化重要的缓存数据，限制大小
+  const persistableKeys = Object.keys(cache).filter(key =>
+    key.startsWith('traders:') ||
+    key.startsWith('user:') ||
+    key.startsWith('settings:')
+  )
+
+  const persistableCache: Record<string, CacheEntry> = {}
+  for (const key of persistableKeys.slice(0, 50)) { // 最多持久化 50 条
+    persistableCache[key] = cache[key]
+  }
+
+  cacheStorage.setItem('ranking-arena-cache', JSON.stringify(persistableCache))
 }
 
 export const useCacheStore = create<CacheState>()((set, get) => ({
-  cache: new Map(),
+  cache: typeof window !== 'undefined' ? loadPersistedCache() : {},
   defaultTTL: 5 * 60 * 1000, // 5 分钟
-  
+  defaultStaleTime: 30 * 1000, // 30 秒后标记为 stale
+
   get: <T>(key: string): T | null => {
-    const entry = get().cache.get(key)
+    const entry = get().cache[key]
     if (!entry) return null
-    
-    // 检查是否过期
-    if (Date.now() - entry.timestamp > get().defaultTTL) {
+
+    const now = Date.now()
+    const age = now - entry.timestamp
+
+    // 检查是否完全过期
+    if (age > entry.ttl) {
       get().invalidate(key)
       return null
     }
-    
+
     return entry.data as T
   },
-  
-  set: <T>(key: string, data: T, ttl?: number) => {
-    const cache = new Map(get().cache)
-    cache.set(key, {
+
+  getWithMeta: <T>(key: string) => {
+    const entry = get().cache[key]
+    if (!entry) {
+      return { data: null, isStale: false, isFresh: false }
+    }
+
+    const now = Date.now()
+    const age = now - entry.timestamp
+    const staleTime = entry.staleTime ?? get().defaultStaleTime
+
+    // 完全过期
+    if (age > entry.ttl) {
+      get().invalidate(key)
+      return { data: null, isStale: false, isFresh: false }
+    }
+
+    return {
+      data: entry.data as T,
+      isStale: age > staleTime,
+      isFresh: age <= staleTime,
+    }
+  },
+
+  set: <T>(key: string, data: T, options?: { ttl?: number; staleTime?: number }) => {
+    const cache = { ...get().cache }
+    cache[key] = {
       data,
       timestamp: Date.now(),
       key,
-    })
+      ttl: options?.ttl ?? get().defaultTTL,
+      staleTime: options?.staleTime ?? get().defaultStaleTime,
+    }
     set({ cache })
+
+    // 异步持久化
+    setTimeout(() => persistCache(cache), 0)
   },
-  
+
   invalidate: (key: string) => {
-    const cache = new Map(get().cache)
-    cache.delete(key)
+    const cache = { ...get().cache }
+    delete cache[key]
     set({ cache })
+    setTimeout(() => persistCache(cache), 0)
   },
-  
+
   invalidatePattern: (pattern: string) => {
-    const cache = new Map(get().cache)
+    const cache = { ...get().cache }
     const regex = new RegExp(pattern)
-    
-    for (const key of cache.keys()) {
+
+    for (const key of Object.keys(cache)) {
       if (regex.test(key)) {
-        cache.delete(key)
+        delete cache[key]
       }
     }
-    
+
     set({ cache })
+    setTimeout(() => persistCache(cache), 0)
   },
-  
-  clear: () => set({ cache: new Map() }),
+
+  invalidateAll: (keys: string[]) => {
+    const cache = { ...get().cache }
+    for (const key of keys) {
+      delete cache[key]
+    }
+    set({ cache })
+    setTimeout(() => persistCache(cache), 0)
+  },
+
+  clear: () => {
+    set({ cache: {} })
+    cacheStorage.removeItem('ranking-arena-cache')
+  },
+
+  // 预取数据（后台获取，不阻塞）
+  prefetch: async <T>(key: string, fetcher: () => Promise<T>, options?: { ttl?: number }): Promise<T> => {
+    const data = await fetcher()
+    get().set(key, data, options)
+    return data
+  },
+
+  // 获取或获取数据（支持 stale-while-revalidate）
+  getOrFetch: async <T>(
+    key: string,
+    fetcher: () => Promise<T>,
+    options?: { ttl?: number; staleTime?: number }
+  ): Promise<T> => {
+    const { data, isStale, isFresh } = get().getWithMeta<T>(key)
+
+    // 新鲜数据，直接返回
+    if (isFresh && data !== null) {
+      return data
+    }
+
+    // stale 数据，后台刷新并返回旧数据
+    if (isStale && data !== null) {
+      // 后台刷新
+      fetcher().then(newData => {
+        get().set(key, newData, options)
+      }).catch(console.error)
+
+      return data
+    }
+
+    // 没有数据，同步获取
+    const newData = await fetcher()
+    get().set(key, newData, options)
+    return newData
+  },
+
+  getStats: () => {
+    const cache = get().cache
+    return {
+      size: Object.keys(cache).length,
+      keys: Object.keys(cache),
+    }
+  },
 }))
 
 // ============================================

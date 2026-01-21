@@ -7,6 +7,7 @@ import Providers from "./components/Providers";
 import { GlobalProgress } from "./components/UI/GlobalProgress";
 import { ServiceWorkerRegistration } from "./components/Utils/ServiceWorkerRegistration";
 import CookieConsent from "./components/UI/CookieConsent";
+import { SkipLink } from "./components/Utils/Accessibility";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -94,12 +95,15 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} ${zcoolKuaiLe.variable} antialiased`}
       >
         <Providers>
+          <SkipLink targetId="main-content" />
           <ServiceWorkerRegistration />
           <Suspense fallback={null}>
             <GlobalProgress />
           </Suspense>
           <KeyboardShortcuts />
-          {children}
+          <main id="main-content" tabIndex={-1}>
+            {children}
+          </main>
           <CookieConsent />
         </Providers>
       </body>
