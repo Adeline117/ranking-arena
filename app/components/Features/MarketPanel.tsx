@@ -10,6 +10,7 @@ import { ChartIcon } from '../Icons'
 import { Box, Text, Button } from '../Base'
 import { useLanguage } from '../Utils/LanguageProvider'
 import { getCache, setCache } from '@/lib/utils/cache'
+import { useToast } from '../UI/Toast'
 
 type MarketRow = {
   symbol: string
@@ -20,6 +21,7 @@ type MarketRow = {
 
 export default function MarketPanel() {
   const { t } = useLanguage()
+  const { showToast } = useToast()
   const [market, setMarket] = useState<MarketRow[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -101,7 +103,7 @@ export default function MarketPanel() {
         setShowCustomize(false)
         return
       } catch {}
-      alert(t('saveFailed'))
+      showToast(t('saveFailed') || '保存失败', 'error')
     }
   }
 

@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from 'react'
 import { useLanguage } from '../Utils/LanguageProvider'
+import { useToast } from '../UI/Toast'
 
 // ============================================
 // 类型定义
@@ -47,8 +48,8 @@ interface ShareButtonProps {
   showLabel?: boolean
 }
 
-export function ShareButton({ 
-  data, 
+export function ShareButton({
+  data,
   onShare,
   className = '',
   showLabel = true
@@ -56,6 +57,7 @@ export function ShareButton({
   const [showDropdown, setShowDropdown] = useState(false)
   const [copied, setCopied] = useState(false)
   const { t } = useLanguage()
+  const { showToast } = useToast()
 
   const handleShare = useCallback(async (platform: SharePlatform) => {
     onShare?.(platform)
@@ -88,7 +90,7 @@ export function ShareButton({
 
     if (platform === 'wechat') {
       // 微信需要二维码，这里可以打开一个模态框显示二维码
-      alert('请截图发送给好友或扫描二维码分享')
+      showToast('请截图发送给好友或扫描二维码分享', 'info')
       setShowDropdown(false)
       return
     }
@@ -97,7 +99,7 @@ export function ShareButton({
     const shareUrl = getShareUrl(platform, data)
     window.open(shareUrl, '_blank', 'width=600,height=400')
     setShowDropdown(false)
-  }, [data, onShare])
+  }, [data, onShare, showToast])
 
   // 检查是否支持原生分享
   const supportsNativeShare = typeof navigator !== 'undefined' && !!navigator.share
