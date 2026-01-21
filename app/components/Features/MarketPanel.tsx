@@ -9,7 +9,7 @@ import ErrorMessage from '../UI/ErrorMessage'
 import { ChartIcon } from '../Icons'
 import { Box, Text, Button } from '../Base'
 import { useLanguage } from '../Utils/LanguageProvider'
-import { getCache, setCache } from '@/lib/utils/cache'
+import { getCache, setCache } from '@/lib/cache'
 
 type MarketRow = {
   symbol: string

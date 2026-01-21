@@ -14,9 +14,15 @@ type UserFollowButtonProps = {
   onFollowChange?: (following: boolean, mutual: boolean) => void
 }
 
-export default function UserFollowButton({ 
-  targetUserId, 
-  currentUserId, 
+/**
+ * 关注用户的按钮
+ * 用于用户主页，关注/取消关注平台用户
+ *
+ * 区分于 TraderFollowButton（用于关注交易员）
+ */
+export default function UserFollowButton({
+  targetUserId,
+  currentUserId,
   initialFollowing = false,
   size = 'md',
   fullWidth = false,

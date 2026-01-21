@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
 import { supabase } from '@/lib/supabase/client'
 import { Box, Text, Button } from '../Base'
-import FollowButton from '../UI/FollowButton'
+import TraderFollowButton from '../UI/TraderFollowButton'
 import UserFollowButton from '../UI/UserFollowButton'
 import MessageButton from '../UI/MessageButton'
 import FollowListModal from '../UI/FollowListModal'
@@ -282,8 +282,8 @@ export default function TraderAboutCard({
                 />
               </>
             ) : (
-              <FollowButton 
-                traderId={traderId} 
+              <TraderFollowButton
+                traderId={traderId}
                 userId={userId}
                 onFollowChange={(isFollowing) => {
                   setFollowersCount(prev => isFollowing ? prev + 1 : prev - 1)
