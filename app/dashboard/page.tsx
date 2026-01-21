@@ -48,6 +48,7 @@ export default function DashboardPage() {
   })
   const [activities, setActivities] = useState<Activity[]>([])
   const [loadingActivities, setLoadingActivities] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   // 注入响应式网格样式
   useEffect(() => {
@@ -170,6 +171,7 @@ export default function DashboardPage() {
 
   const loadActivities = async (uid: string) => {
     setLoadingActivities(true)
+    setLoadError(null)
     try {
       const allActivities: Activity[] = []
 
@@ -251,8 +253,17 @@ export default function DashboardPage() {
       setActivities(allActivities.slice(0, 10))
     } catch (error) {
       console.error('Error loading activities:', error)
+      setLoadError('加载动态失败')
     } finally {
       setLoadingActivities(false)
+    }
+  }
+
+  const handleRetry = () => {
+    if (userId) {
+      loadProfile(userId)
+      loadStats(userId)
+      loadActivities(userId)
     }
   }
 
@@ -478,7 +489,7 @@ export default function DashboardPage() {
                 最近动态
               </Text>
               {loadingActivities ? (
-                <Box 
+                <Box
                   bg="secondary"
                   p={8}
                   radius="lg"
@@ -486,6 +497,19 @@ export default function DashboardPage() {
                   style={{ textAlign: 'center' }}
                 >
                   <Text color="secondary">加载中...</Text>
+                </Box>
+              ) : loadError ? (
+                <Box
+                  bg="secondary"
+                  p={8}
+                  radius="lg"
+                  border="primary"
+                  style={{ textAlign: 'center' }}
+                >
+                  <Text color="secondary" style={{ marginBottom: tokens.spacing[3] }}>{loadError}</Text>
+                  <Button variant="primary" size="sm" onClick={handleRetry}>
+                    重试
+                  </Button>
                 </Box>
               ) : activities.length === 0 ? (
                 <EmptyState 
