@@ -47,6 +47,8 @@ export const ErrorCode = {
   EXTERNAL_SERVICE_ERROR: 'EXTERNAL_SERVICE_ERROR',
   DATABASE_ERROR: 'DATABASE_ERROR',
   NETWORK_ERROR: 'NETWORK_ERROR',
+  PROVIDER_RATE_LIMIT: 'PROVIDER_RATE_LIMIT',
+  PROVIDER_ERROR: 'PROVIDER_ERROR',
 } as const
 
 export type ErrorCodeType = typeof ErrorCode[keyof typeof ErrorCode]
@@ -95,6 +97,8 @@ export const ErrorCodeToHttpStatus: Record<ErrorCodeType, number> = {
   [ErrorCode.EXTERNAL_SERVICE_ERROR]: 502,
   [ErrorCode.DATABASE_ERROR]: 500,
   [ErrorCode.NETWORK_ERROR]: 502,
+  [ErrorCode.PROVIDER_RATE_LIMIT]: 429,
+  [ErrorCode.PROVIDER_ERROR]: 502,
 }
 
 // ============================================
@@ -141,6 +145,8 @@ export const ErrorMessages: Record<ErrorCodeType, { zh: string; en: string }> = 
   [ErrorCode.EXTERNAL_SERVICE_ERROR]: { zh: '外部服务错误', en: 'External service error' },
   [ErrorCode.DATABASE_ERROR]: { zh: '数据库错误', en: 'Database error' },
   [ErrorCode.NETWORK_ERROR]: { zh: '网络错误', en: 'Network error' },
+  [ErrorCode.PROVIDER_RATE_LIMIT]: { zh: '服务请求频率超限，请稍后再试', en: 'Provider rate limit exceeded, please try again later' },
+  [ErrorCode.PROVIDER_ERROR]: { zh: '外部服务提供商错误', en: 'External provider error' },
 }
 
 // ============================================
@@ -263,6 +269,34 @@ export class ApiError extends Error {
     return new ApiError(message || ErrorMessages[ErrorCode.INTERNAL_ERROR].zh, {
       code: ErrorCode.INTERNAL_ERROR,
       cause,
+    })
+  }
+
+  /**
+   * 静态工厂方法：提供商限流错误
+   */
+  static providerRateLimit(retryAfter?: number, providerName?: string): ApiError {
+    const message = providerName
+      ? `${providerName} 服务请求频率超限，请稍后再试`
+      : ErrorMessages[ErrorCode.PROVIDER_RATE_LIMIT].zh
+    return new ApiError(message, {
+      code: ErrorCode.PROVIDER_RATE_LIMIT,
+      details: {
+        retryAfter,
+        provider: providerName,
+        retryable: true,
+      },
+    })
+  }
+
+  /**
+   * 静态工厂方法：提供商错误
+   */
+  static providerError(message?: string, cause?: Error, retryable = false): ApiError {
+    return new ApiError(message || ErrorMessages[ErrorCode.PROVIDER_ERROR].zh, {
+      code: ErrorCode.PROVIDER_ERROR,
+      cause,
+      details: { retryable },
     })
   }
 
