@@ -37,16 +37,16 @@ export async function GET(request: NextRequest) {
     if (error) {
       // 如果表不存在，返回未关注状态
       if (error.message?.includes('Could not find the table')) {
-        apiLogger.warn('trader_follows 表不存在，请运行 setup_trader_follows.sql')
+        apiLogger.warn('trader_follows table not found, please run setup_trader_follows.sql')
         return NextResponse.json({ following: false, tableNotFound: true })
       }
-      apiLogger.error('查询错误:', error)
+      apiLogger.error('Query error:', error)
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
     return NextResponse.json({ following: !!data })
   } catch (error) {
-    apiLogger.error('错误:', error)
+    apiLogger.error('GET /api/follow error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
@@ -79,10 +79,10 @@ export async function POST(request: NextRequest) {
         }
         // 如果表不存在
         if (error.message?.includes('Could not find the table')) {
-          apiLogger.warn('trader_follows 表不存在，请运行 setup_trader_follows.sql')
-          return NextResponse.json({ error: '关注功能暂未开放', tableNotFound: true }, { status: 503 })
+          apiLogger.warn('trader_follows table not found, please run setup_trader_follows.sql')
+          return NextResponse.json({ error: 'Follow feature coming soon', tableNotFound: true }, { status: 503 })
         }
-        apiLogger.error('关注错误:', error)
+        apiLogger.error('Follow error:', error)
         return NextResponse.json({ error: error.message }, { status: 500 })
       }
 
@@ -98,10 +98,10 @@ export async function POST(request: NextRequest) {
       if (error) {
         // 如果表不存在
         if (error.message?.includes('Could not find the table')) {
-          apiLogger.warn('trader_follows 表不存在，请运行 setup_trader_follows.sql')
-          return NextResponse.json({ error: '关注功能暂未开放', tableNotFound: true }, { status: 503 })
+          apiLogger.warn('trader_follows table not found, please run setup_trader_follows.sql')
+          return NextResponse.json({ error: 'Follow feature coming soon', tableNotFound: true }, { status: 503 })
         }
-        apiLogger.error('取消关注错误:', error)
+        apiLogger.error('Unfollow error:', error)
         return NextResponse.json({ error: error.message }, { status: 500 })
       }
 
@@ -110,7 +110,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
     }
   } catch (error) {
-    apiLogger.error('错误:', error)
+    apiLogger.error('POST /api/follow error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
