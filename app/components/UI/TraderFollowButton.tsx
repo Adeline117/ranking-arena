@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import { useToast } from './Toast'
 import { useApiMutation } from '@/lib/hooks/useApiMutation'
 import { apiRequest } from '@/lib/api/client'
@@ -27,6 +28,7 @@ type FollowResponse = {
  * 区分于 UserFollowButton（用于关注平台用户）
  */
 export default function TraderFollowButton({ traderId, userId, initialFollowing = false, onFollowChange }: TraderFollowButtonProps) {
+  const router = useRouter()
   const { showToast } = useToast()
   const [following, setFollowing] = useState(initialFollowing)
   const [featureDisabled, setFeatureDisabled] = useState(false)
@@ -216,7 +218,7 @@ export default function TraderFollowButton({ traderId, userId, initialFollowing 
   if (!userId) {
     return (
       <button
-        onClick={() => window.location.href = '/login?returnUrl=' + encodeURIComponent(window.location.pathname)}
+        onClick={() => router.push('/login?returnUrl=' + encodeURIComponent(typeof window !== 'undefined' ? window.location.pathname : '/'))}
         style={{
           padding: '8px 16px',
           borderRadius: '8px',
