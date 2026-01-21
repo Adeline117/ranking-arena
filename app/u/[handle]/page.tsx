@@ -21,6 +21,7 @@ import CreatedGroups from '@/app/components/Trader/CreatedGroups'
 import UserBookmarkFolders from '@/app/components/Trader/UserBookmarkFolders'
 import { Box, Text } from '@/app/components/Base'
 import { RankingSkeleton } from '@/app/components/UI/Skeleton'
+import { useToast } from '@/app/components/UI/Toast'
 import {
   getTraderByHandle,
   getTraderPerformance,
@@ -41,7 +42,8 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
   const searchParams = useSearchParams()
   const router = useRouter()
   const pathname = usePathname()
-  
+  const { showToast } = useToast()
+
   const [handle, setHandle] = useState<string>('')
   const [email, setEmail] = useState<string | null>(null)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
@@ -288,7 +290,8 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
                 } else if (userProfileError) {
                   // 如果错误是因为缺少 handle 列，提示用户运行修复脚本
                   if (userProfileError.message?.includes('handle') || userProfileError.code === 'PGRST204') {
-                    alert('数据库表结构不完整，请运行 scripts/fix_user_profiles_complete.sql 来修复')
+                    showToast('数据库表结构不完整，请联系管理员', 'error')
+                    console.error('Database schema issue: Run scripts/fix_user_profiles_complete.sql to fix')
                   }
                 }
 
