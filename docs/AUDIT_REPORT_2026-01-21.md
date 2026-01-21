@@ -157,7 +157,7 @@ Step 4: API 响应 → 成功确认 / 失败回滚
 | 3 | 陈旧数据无标识 | 中 | ✅ 添加 isStale |
 | 4 | Action 无防重复点击 | 高 | ✅ 添加 processingRef |
 | 5 | 搜索用假数据 | 高 | ✅ 接入真实 API |
-| 6 | 多窗口不同步 | 中 | 🔜 待后续 |
+| 6 | 多窗口不同步 | 中 | ✅ BroadcastChannel |
 | 7 | 错误无 Sentry | 中 | ✅ 集成 logger |
 
 ### 结论: ✅ 可上线 (核心问题已修复)
@@ -177,7 +177,7 @@ Step 4: API 响应 → 成功确认 / 失败回滚
 4. ✅ 陈旧数据 API 响应添加 `isStale: boolean` 和 `staleSources` 字段
 5. ✅ 搜索功能实现真实 API (/api/search/suggestions)
 
-### P2 (后续) - ✅ 部分修复
+### P2 (后续) - ✅ 已修复
 
 6. ⚠️ Zustand stores 添加注释说明，保留待未来迁移
-7. 🔜 WebSocket 实现多窗口同步 (待后续实现)
+7. ✅ 使用 BroadcastChannel API 实现多窗口同步 (lib/hooks/useBroadcastSync.ts)
