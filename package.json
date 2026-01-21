@@ -27,7 +27,7 @@
   "dependencies": {
     "@sentry/nextjs": "10.35.0",
     "@stripe/stripe-js": "^8.6.3",
-    "@supabase/supabase-js": "^2.89.0",
+    "@supabase/supabase-js": "^2.91.0",
     "@upstash/ratelimit": "^2.0.8",
     "@upstash/redis": "^1.36.1",
     "dotenv": "^17.2.3",
