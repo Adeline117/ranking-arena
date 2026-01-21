@@ -223,7 +223,7 @@ function HotContent() {
             const diffMs = now.getTime() - createdAt.getTime()
             const diffHours = Math.floor(diffMs / (1000 * 60 * 60))
             const diffDays = Math.floor(diffHours / 24)
-            
+
             let timeStr = ''
             if (diffDays > 0) {
               timeStr = `${diffDays}d`
@@ -234,9 +234,15 @@ function HotContent() {
               timeStr = `${diffMins}m`
             }
 
+            // groups 是关联查询的结果，可能是对象或数组
+            const groupsData = post.groups as { name?: string } | { name?: string }[] | null
+            const groupName = Array.isArray(groupsData)
+              ? groupsData[0]?.name
+              : groupsData?.name
+
             return {
               id: post.id,
-              group: post.groups?.name || '综合讨论',
+              group: groupName || '综合讨论',
               title: post.title || '无标题',
               author: post.author_handle || '匿名',
               author_handle: post.author_handle,

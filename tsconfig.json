@@ -41,6 +41,11 @@
     "node_modules",
     "**/__tests__/**",
     "**/*.test.ts",
-    "**/*.test.tsx"
+    "**/*.test.tsx",
+    "ranking-arena",
+    ".next",
+    "out",
+    "dist",
+    "build"
   ]
 }

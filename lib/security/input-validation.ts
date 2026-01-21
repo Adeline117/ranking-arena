@@ -332,9 +332,9 @@ export const SafeUsernameSchema = z
   .refine((val) => {
     const result = isValidUsername(val)
     return result.valid
-  }, (val) => ({
-    message: isValidUsername(val).error || '用户名格式无效',
-  }))
+  }, {
+    message: '用户名格式无效',
+  })
 
 /**
  * 安全密码 Schema
@@ -346,9 +346,9 @@ export const SafePasswordSchema = z
   .refine((val) => {
     const result = validatePasswordStrength(val)
     return result.valid
-  }, (val) => ({
-    message: validatePasswordStrength(val).errors.join('; ') || '密码强度不足',
-  }))
+  }, {
+    message: '密码强度不足',
+  })
 
 /**
  * 防 SQL 注入的字符串 Schema

@@ -114,6 +114,17 @@ export interface PerformanceEvent {
     metric_name: string
     value: number
     page: string
+    // 可选的扩展字段
+    tier?: string
+    required_tier?: string
+    trader_ids?: string
+    notification_type?: string
+    notification_id?: string
+    step_name?: string
+    total_steps?: number
+    completed_count?: number
+    filter_value?: string
+    previous_value?: string
   }
 }
 
