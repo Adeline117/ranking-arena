@@ -71,6 +71,7 @@ export default function NewGroupPostPage() {
   const { showToast } = useToast()
   const { t, language } = useLanguage()
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const submitRef = useRef(false) // 防止双重提交
 
   const [email, setEmail] = useState<string | null>(null)
   const [userId, setUserId] = useState<string | null>(null)
@@ -283,6 +284,9 @@ export default function NewGroupPostPage() {
   }
 
   const handleSubmit = async () => {
+    // 防止双重提交
+    if (submitRef.current || loading) return
+
     if (!title.trim()) {
       showToast(t('pleaseEnterTitle'), 'warning')
       return
@@ -294,6 +298,7 @@ export default function NewGroupPostPage() {
       return
     }
 
+    submitRef.current = true
     setLoading(true)
     try {
       // 如果有图片但没有插入到内容中，自动附加到内容末尾
@@ -311,6 +316,8 @@ export default function NewGroupPostPage() {
         const validOptions = pollOptions.filter(opt => opt.text.trim())
         if (validOptions.length < 2) {
           showToast('请至少填写2个投票选项', 'warning')
+          setLoading(false)
+          submitRef.current = false
           return
         }
 
@@ -334,6 +341,8 @@ export default function NewGroupPostPage() {
         if (pollError) {
           const errorMsg = pollError.message || '创建投票失败，请稍后重试'
           showToast(errorMsg, 'error')
+          setLoading(false)
+          submitRef.current = false
           return
         }
         pollId = pollData.id
@@ -352,6 +361,8 @@ export default function NewGroupPostPage() {
 
       if (error) {
         showToast(error.message || '创建失败，请检查权限', 'error')
+        setLoading(false)
+        submitRef.current = false
         return
       }
 
@@ -363,6 +374,7 @@ export default function NewGroupPostPage() {
       showToast(errorMessage, 'error')
     } finally {
       setLoading(false)
+      submitRef.current = false
     }
   }
 

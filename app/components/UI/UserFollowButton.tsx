@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { useToast } from './Toast'
 import { tokens } from '@/lib/design-tokens'
 import { apiPost } from '@/lib/api/client'
@@ -28,6 +29,7 @@ export default function UserFollowButton({
   fullWidth = false,
   onFollowChange
 }: UserFollowButtonProps) {
+  const router = useRouter()
   const { showToast } = useToast()
   const [following, setFollowing] = useState(initialFollowing)
   const [followedBy, setFollowedBy] = useState(false)
@@ -58,7 +60,7 @@ export default function UserFollowButton({
   const handleToggle = async () => {
     if (!currentUserId) {
       showToast('请先登录', 'warning')
-      window.location.href = '/login'
+      router.push('/login')
       return
     }
 
@@ -111,7 +113,7 @@ export default function UserFollowButton({
   if (!currentUserId) {
     return (
       <button
-        onClick={() => window.location.href = '/login'}
+        onClick={() => router.push('/login')}
         style={{
           ...sizeStyles[size],
           width: fullWidth ? '100%' : 'auto',

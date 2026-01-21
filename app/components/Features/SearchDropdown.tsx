@@ -6,6 +6,7 @@ import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../Base'
 import { CloseIcon } from '../Icons'
 import { supabase } from '@/lib/supabase/client'
+import { useToast } from '../UI/Toast'
 
 interface SearchDropdownProps {
   open: boolean
@@ -42,11 +43,13 @@ interface SearchResult {
  * - 显示热榜帖子前十（前三标橙）
  */
 export default function SearchDropdown({ open, query, onClose }: SearchDropdownProps) {
+  const { showToast } = useToast()
   const [searchHistory, setSearchHistory] = useState<SearchHistoryItem[]>([])
   const [hotPosts, setHotPosts] = useState<HotPost[]>([])
   const [loading, setLoading] = useState(false)
   const [searchResults, setSearchResults] = useState<SearchResult[]>([])
   const [searching, setSearching] = useState(false)
+  const [searchError, setSearchError] = useState(false)
 
   // 加载搜索历史
   useEffect(() => {
@@ -79,6 +82,7 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
 
       if (error) {
         console.error('Failed to load hot posts:', error)
+        // 静默处理热榜加载失败，不影响用户搜索体验
         return
       }
 
@@ -175,8 +179,11 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
         }
 
         setSearchResults(results)
+        setSearchError(false)
       } catch (error) {
         console.error('Search error:', error)
+        setSearchError(true)
+        showToast('搜索失败，请稍后重试', 'error')
       } finally {
         setSearching(false)
       }
