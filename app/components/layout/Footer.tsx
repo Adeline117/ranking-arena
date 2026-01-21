@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
-import { Box, Text } from '../Base'
+import { Box, Text } from '../base'
 import { useLanguage } from '../Providers/LanguageProvider'
 
 /**

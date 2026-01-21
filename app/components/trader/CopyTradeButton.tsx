@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
-import { Box, Text, Button } from '../Base'
+import { Box, Text, Button } from '../base'
 import { useLanguage } from '../Providers/LanguageProvider'
 
 // 外部链接图标
@@ -132,11 +132,11 @@ export default function CopyTradeButton({
           gap: tokens.spacing[2],
           transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
         }}
-        onMouseEnter={(e) => {
+        onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => {
           e.currentTarget.style.transform = 'translateY(-2px)'
           e.currentTarget.style.boxShadow = `0 6px 20px ${tokens.colors.accent.success}50`
         }}
-        onMouseLeave={(e) => {
+        onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => {
           e.currentTarget.style.transform = 'translateY(0)'
           e.currentTarget.style.boxShadow = `0 4px 12px ${tokens.colors.accent.success}40`
         }}
@@ -173,7 +173,7 @@ export default function CopyTradeButton({
               boxShadow: '0 24px 48px rgba(0, 0, 0, 0.3)',
               overflow: 'hidden',
             }}
-            onClick={(e) => e.stopPropagation()}
+            onClick={(e: React.MouseEvent<HTMLDivElement>) => e.stopPropagation()}
           >
             {/* 头部 */}
             <Box

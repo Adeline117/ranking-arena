@@ -12,7 +12,7 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { ThumbsUpIcon, ThumbsDownIcon, CommentIcon } from '@/app/components/icons'
 import { useToast } from '@/app/components/ui/Toast'
 import { getCsrfHeaders } from '@/lib/api/client'
-import { GroupCardSkeleton, PostSkeleton, ListSkeleton, SkeletonAvatar, Skeleton } from '@/app/components/UI/Skeleton'
+import { GroupCardSkeleton, PostSkeleton, ListSkeleton, SkeletonAvatar, Skeleton } from '@/app/components/ui/Skeleton'
 
 const ARENA_PURPLE = '#8b6fa8'
 

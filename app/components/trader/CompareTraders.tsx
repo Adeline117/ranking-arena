@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { X, TrendingUp, TrendingDown, Minus, ChevronUp, ChevronDown, BarChart3, Share2, Maximize2 } from 'lucide-react'
 import { tokens } from '@/lib/design-tokens'
 import { formatCompact as formatNumber, formatPercent } from '@/lib/utils/format'
-import { Box, Text, Button } from '../Base'
+import { Box, Text, Button } from '../base'
 
 // ============================================
 // 类型定义

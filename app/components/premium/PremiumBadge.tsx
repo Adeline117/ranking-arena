@@ -55,21 +55,6 @@ const TIER_CONFIG: Record<SubscriptionTier, {
     bgColor: 'rgba(245, 158, 11, 0.1)',
     borderColor: 'rgba(245, 158, 11, 0.3)',
   },
-  // 旧版等级（映射到 pro 样式）
-  elite: {
-    label: 'Elite',
-    icon: '',
-    color: '#f59e0b',
-    bgColor: 'rgba(245, 158, 11, 0.1)',
-    borderColor: 'rgba(245, 158, 11, 0.3)',
-  },
-  enterprise: {
-    label: 'Enterprise',
-    icon: '',
-    color: '#f59e0b',
-    bgColor: 'rgba(245, 158, 11, 0.1)',
-    borderColor: 'rgba(245, 158, 11, 0.3)',
-  },
 }
 
 const SIZE_CONFIG = {
