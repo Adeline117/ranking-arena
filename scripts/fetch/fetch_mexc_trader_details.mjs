@@ -1,6 +1,12 @@
 /**
- * MEXC 交易员详情抓取
- * 
+ * ⚠️ DEPRECATED - v2.0 已废弃
+ *
+ * MEXC 交易所已从平台移除，此脚本不再维护。
+ * 原因：低使用率，维护成本高
+ *
+ * ---
+ * MEXC 交易员详情抓取 (已废弃)
+ *
  * 获取每个交易员的详细数据
  * 
  * 用法: node scripts/fetch_mexc_trader_details.mjs [--limit=N]
