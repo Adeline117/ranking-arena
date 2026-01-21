@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useCallback } from 'react'
+import React, { useState, useCallback, useRef } from 'react'
 import { tokens } from '@/lib/design-tokens'
 
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
@@ -25,16 +25,27 @@ export default function Button({
 }: ButtonProps) {
   const [isPressed, setIsPressed] = useState(false)
   const [isHovered, setIsHovered] = useState(false)
-  const [ripple, setRipple] = useState<{ x: number; y: number } | null>(null)
+  const [ripple, setRipple] = useState<{ x: number; y: number; key: number } | null>(null)
+  const rippleTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   // 创建波纹效果
   const createRipple = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
+    // Clear any existing timeout to prevent old ripple from being cleared prematurely
+    if (rippleTimeoutRef.current) {
+      clearTimeout(rippleTimeoutRef.current)
+    }
+
     const rect = e.currentTarget.getBoundingClientRect()
     setRipple({
       x: e.clientX - rect.left,
       y: e.clientY - rect.top,
+      key: Date.now(), // Unique key for each ripple
     })
-    setTimeout(() => setRipple(null), 600)
+
+    rippleTimeoutRef.current = setTimeout(() => {
+      setRipple(null)
+      rippleTimeoutRef.current = null
+    }, 600)
   }, [])
 
   const isDisabled = props.disabled || loading
@@ -191,6 +202,7 @@ export default function Button({
       {/* 波纹效果 */}
       {ripple && (
         <span
+          key={ripple.key}
           style={{
             position: 'absolute',
             left: ripple.x,
