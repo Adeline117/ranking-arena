@@ -1,0 +1,461 @@
+No,Category,Guideline,Description,Do,Don't,Code Good,Code Bad,Severity,Docs URL
+1,Routing,Use file-based routing,Nuxt automatically generates routes based on the file structure in the pages/ directory,Create pages in the pages/ directory with proper naming,Manually configure routes in a separate config file,"// pages/users/[id].vue
+<template>
+  <div>User {{ $route.params.id }}</div>
+</template>","// Wrong: manual route config
+export default {
+  routes: [{ path: '/users/:id' }]
+}",error,https://nuxt.com/docs/getting-started/routing
+2,Routing,Use NuxtLink for navigation,NuxtLink provides optimized client-side navigation with prefetching,Use NuxtLink component for internal links,Use native anchor tags for internal navigation,"<NuxtLink to=""/about"">About</NuxtLink>","<a href=""/about"">About</a>",error,https://nuxt.com/docs/api/components/nuxt-link
+3,Routing,Implement catch-all routes,Use [...slug].vue for dynamic nested routes that can match multiple path segments,Create catch-all routes for dynamic content like CMS pages,Create individual pages for each possible path,"// pages/docs/[...slug].vue
+const route = useRoute()
+const slug = route.params.slug","// Creating hundreds of static pages
+// pages/docs/intro.vue
+// pages/docs/guide.vue",warning,https://nuxt.com/docs/guide/directory-structure/pages
+4,Routing,Use route middleware,Middleware allows you to run code before navigating to a route for auth guards and redirects,Define middleware in middleware/ directory,Put navigation guards directly in page components,"// middleware/auth.ts
+export default defineNuxtRouteMiddleware((to) => {
+  if (!useAuth().isLoggedIn) {
+    return navigateTo('/login')
+  }
+})","// pages/dashboard.vue
+onMounted(() => {
+  if (!isLoggedIn) redirect('/login')
+})",error,https://nuxt.com/docs/guide/directory-structure/middleware
+5,Routing,Define page metadata,Use definePageMeta to set page-specific configuration like layout and middleware,Use definePageMeta in script setup,Set meta in component options API,"<script setup>
+definePageMeta({
+  layout: 'admin',
+  middleware: 'auth'
+})
+</script>","export default {
+  layout: 'admin',
+  middleware: 'auth'
+}",warning,https://nuxt.com/docs/api/utils/define-page-meta
+6,Rendering,Choose appropriate rendering mode,Select SSR/SSG/SPA based on content type and SEO requirements,Use SSR for dynamic SEO content and SSG for static content,Use client-only rendering for SEO-critical pages,"// nuxt.config.ts
+export default defineNuxtConfig({
+  ssr: true,
+  routeRules: {
+    '/blog/**': { prerender: true }
+  }
+})","export default defineNuxtConfig({
+  ssr: false // for SEO pages
+})",error,https://nuxt.com/docs/guide/concepts/rendering
+7,Rendering,Use hybrid rendering,Configure different rendering strategies per route using routeRules,Define routeRules for optimal performance per page type,Apply same rendering mode to all routes,"export default defineNuxtConfig({
+  routeRules: {
+    '/': { prerender: true },
+    '/api/**': { cors: true },
+    '/admin/**': { ssr: false }
+  }
+})","export default defineNuxtConfig({
+  ssr: true // same for all
+})",warning,https://nuxt.com/docs/guide/concepts/rendering#hybrid-rendering
+8,Rendering,Implement ISR correctly,Use Incremental Static Regeneration for content that changes periodically,Set appropriate swr or isr values in routeRules,Rebuild entire site for minor content changes,"routeRules: {
+  '/products/**': {
+    isr: 3600 // revalidate every hour
+  }
+}","// Triggering full rebuild for
+// each product update",warning,https://nuxt.com/docs/guide/concepts/rendering#incremental-static-regeneration
+9,Rendering,Handle client-only components,Use ClientOnly component for browser-specific functionality,Wrap client-only code in ClientOnly component,Import browser-only libraries at top level,"<ClientOnly>
+  <BrowserOnlyChart :data=""data"" />
+  <template #fallback>
+    <ChartSkeleton />
+  </template>
+</ClientOnly>","<template>
+  <BrowserOnlyChart />
+</template>
+// Causes SSR errors",error,https://nuxt.com/docs/api/components/client-only
+10,Data Fetching,Use useFetch for data fetching,useFetch is the recommended way to fetch data with SSR support and caching,Use useFetch or useAsyncData for API calls,Use raw fetch or axios without composables,"const { data, pending, error } = await useFetch('/api/users')","// No SSR support
+const data = ref(null)
+onMounted(async () => {
+  data.value = await fetch('/api/users')
+})",error,https://nuxt.com/docs/api/composables/use-fetch
+11,Data Fetching,Provide unique keys for data fetching,Ensure each useFetch/useAsyncData call has a unique key for proper caching,Provide explicit unique keys for each data fetch,Rely on auto-generated keys that may conflict,"const { data } = await useFetch('/api/users', {
+  key: 'users-list'
+})","const { data } = await useFetch('/api/users')
+// Another component
+const { data } = await useFetch('/api/users')
+// Key collision",warning,https://nuxt.com/docs/api/composables/use-fetch#params
+12,Data Fetching,Handle loading and error states,Always handle pending and error states from data fetching composables,Display loading indicators and error messages,Assume data is always available,"<template>
+  <div v-if=""pending"">Loading...</div>
+  <div v-else-if=""error"">{{ error.message }}</div>
+  <div v-else>{{ data }}</div>
+</template>","<template>
+  <div>{{ data.name }}</div>
+</template>
+// Crashes when data is null",error,https://nuxt.com/docs/getting-started/data-fetching#handling-errors
+13,Data Fetching,Use lazy fetching when appropriate,Use lazy option to defer data fetching until needed,Use lazy: true for below-fold content,Fetch all data eagerly on page load,"const { data, pending } = await useFetch('/api/comments', {
+  lazy: true
+})","// Fetching all data upfront
+const { data: users } = await useFetch('/api/users')
+const { data: posts } = await useFetch('/api/posts')
+const { data: comments } = await useFetch('/api/comments')",warning,https://nuxt.com/docs/api/composables/use-fetch#params
+14,Data Fetching,Implement proper cache strategies,Configure cache behavior for optimal performance and freshness,Set getCachedData for custom caching logic,Disable caching entirely,"const { data } = await useFetch('/api/data', {
+  getCachedData(key) {
+    return nuxtApp.payload.data[key] || nuxtApp.static.data[key]
+  }
+})","const { data } = await useFetch('/api/data', {
+  cache: false // Always refetch
+})",warning,https://nuxt.com/docs/api/composables/use-fetch#caching
+15,Data Fetching,Transform data at fetch time,Use transform option to shape data before storing in state,Transform API responses to match component needs,Transform data in computed properties repeatedly,"const { data } = await useFetch('/api/users', {
+  transform: (users) => users.map(u => ({
+    id: u.id,
+    fullName: `${u.first} ${u.last}`
+  }))
+})","const { data } = await useFetch('/api/users')
+const users = computed(() =>
+  data.value?.map(u => ({...}))
+)",info,https://nuxt.com/docs/api/composables/use-fetch#params
+16,Lifecycle,Understand Nuxt lifecycle hooks,Nuxt has specific lifecycle hooks that differ from Vue's standard hooks,Use Nuxt-specific hooks like useNuxtApp for app-level operations,Mix Nuxt and Vue lifecycle hooks incorrectly,"// plugins/my-plugin.ts
+export default defineNuxtPlugin((nuxtApp) => {
+  nuxtApp.hook('app:created', () => {
+    console.log('App created')
+  })
+})","// Incorrect usage
+onMounted(() => {
+  // This only runs on client
+  fetchServerData()
+})",warning,https://nuxt.com/docs/api/advanced/hooks
+17,Lifecycle,Use callOnce for one-time operations,callOnce ensures code runs only once during SSR and hydration,Use callOnce for analytics or one-time initializations,Run initialization code that executes multiple times,"await callOnce(async () => {
+  await initializeAnalytics()
+})","// Runs on server AND client
+onMounted(() => {
+  initializeAnalytics()
+})",warning,https://nuxt.com/docs/api/utils/call-once
+18,Lifecycle,Handle hydration properly,Ensure server and client render identical content to avoid hydration mismatches,Use consistent data between server and client,Generate different content on server vs client,"const timestamp = useState('time', () => Date.now())
+// Same value on both sides","<template>
+  <span>{{ new Date().toLocaleString() }}</span>
+</template>
+// Different on server/client",error,https://nuxt.com/docs/guide/concepts/rendering#client-side-rendering
+19,Lifecycle,Use app lifecycle hooks,Register to app:created app:mounted and other app-level hooks for initialization,Use defineNuxtPlugin for app-level setup,Put global setup code in components,"export default defineNuxtPlugin({
+  hooks: {
+    'app:mounted'() {
+      console.log('App mounted')
+    }
+  }
+})","// App.vue
+onMounted(() => {
+  // Global init here - wrong place
+})",info,https://nuxt.com/docs/api/advanced/hooks#app-hooks-runtime
+20,Server,Create API routes in server/api,Nuxt server routes provide a built-in backend API layer,Create API endpoints in server/api/ directory,Create separate backend projects for simple APIs,"// server/api/users.get.ts
+export default defineEventHandler(async () => {
+  const users = await db.query('SELECT * FROM users')
+  return users
+})","// Separate Express server
+app.get('/api/users', (req, res) => {
+  res.json(users)
+})",info,https://nuxt.com/docs/guide/directory-structure/server
+21,Server,Use proper HTTP method naming,Name server routes with HTTP method suffix for clarity,Use .get.ts .post.ts etc for method-specific routes,Handle all methods in single file with conditionals,"// server/api/users.get.ts
+// server/api/users.post.ts
+// server/api/users/[id].delete.ts","// server/api/users.ts
+export default defineEventHandler((event) => {
+  if (event.method === 'GET') {...}
+  if (event.method === 'POST') {...}
+})",warning,https://nuxt.com/docs/guide/directory-structure/server#matching-http-method
+22,Server,Validate request data,Always validate incoming request data on the server,Use zod or similar for request validation,Trust client-side validation alone,"import { z } from 'zod'
+const schema = z.object({
+  email: z.string().email(),
+  name: z.string().min(2)
+})
+export default defineEventHandler(async (event) => {
+  const body = await readValidatedBody(event, schema.parse)
+})","export default defineEventHandler(async (event) => {
+  const body = await readBody(event)
+  // No validation - security risk
+  await db.insert(body)
+})",error,https://nuxt.com/docs/guide/directory-structure/server#handling-request-body
+23,Server,Handle server errors properly,Use createError for consistent error responses,Throw createError with proper status codes,Return plain error objects or strings,"export default defineEventHandler(() => {
+  throw createError({
+    statusCode: 404,
+    statusMessage: 'User not found',
+    data: { userId: 123 }
+  })
+})","export default defineEventHandler(() => {
+  return { error: 'Not found' }
+  // No proper status code
+})",error,https://nuxt.com/docs/api/utils/create-error
+24,Server,Use server utilities,Leverage built-in H3 utilities for common operations,Use getQuery getCookie setHeader and other utilities,Access raw request objects directly,"export default defineEventHandler((event) => {
+  const query = getQuery(event)
+  const cookie = getCookie(event, 'session')
+  setHeader(event, 'X-Custom', 'value')
+})","export default defineEventHandler((event) => {
+  const query = event.node.req.url.split('?')
+  // Manual parsing
+})",warning,https://nuxt.com/docs/guide/directory-structure/server#server-utilities
+25,Server,Implement server middleware,Use server middleware for cross-cutting concerns like logging and auth,Create middleware in server/middleware/ directory,Duplicate auth checks in every API route,"// server/middleware/log.ts
+export default defineEventHandler((event) => {
+  console.log(`${event.method} ${event.path}`)
+})","// Duplicating in every route
+export default defineEventHandler((event) => {
+  console.log('Request received')
+  // ... rest of handler
+})",warning,https://nuxt.com/docs/guide/directory-structure/server#server-middleware
+26,State,Use useState for SSR-safe state,useState provides SSR-friendly reactive state that hydrates properly,Use useState for state that needs to survive SSR,Use ref for state that needs SSR support,"const counter = useState('counter', () => 0)","const counter = ref(0)
+// Lost during hydration",error,https://nuxt.com/docs/api/composables/use-state
+27,State,Create composables for shared state,Extract reusable state logic into composables directory,Create composables in composables/ for shared logic,Duplicate state management across components,"// composables/useAuth.ts
+export const useAuth = () => {
+  const user = useState('user', () => null)
+  const login = async (creds) => {...}
+  return { user, login }
+}","// Duplicated in multiple components
+const user = useState('user')
+const login = async () => {...}",warning,https://nuxt.com/docs/guide/directory-structure/composables
+28,State,Use Pinia for complex state,Pinia integrates seamlessly with Nuxt for complex state management,Use @pinia/nuxt module for stores,Use Vuex or custom state management,"// stores/user.ts
+export const useUserStore = defineStore('user', {
+  state: () => ({ items: [] }),
+  actions: {
+    async fetch() {
+      this.items = await $fetch('/api/users')
+    }
+  }
+})","// Custom global state
+const globalState = reactive({})
+export const useGlobalState = () => globalState",info,https://nuxt.com/docs/getting-started/state-management#using-pinia
+29,State,Avoid state pollution in SSR,Ensure state is scoped per-request in SSR to avoid leaking between users,Use useState or Pinia stores properly scoped,Use module-level reactive state,"// Correct: per-request state
+export const useCart = () => {
+  return useState('cart', () => [])
+}","// DANGEROUS: shared between requests
+const cart = reactive([])
+export const useCart = () => cart",error,https://nuxt.com/docs/getting-started/state-management
+30,State,Clear state on logout,Reset all user-related state when users log out,Use clearNuxtState or manually reset stores,Leave stale user data in state,"const logout = () => {
+  clearNuxtState()
+  // or
+  userStore.$reset()
+  navigateTo('/login')
+}","const logout = () => {
+  navigateTo('/login')
+  // Old user data still in state
+}",error,https://nuxt.com/docs/api/utils/clear-nuxt-state
+31,SEO,Use useSeoMeta for meta tags,useSeoMeta provides type-safe SEO meta tag management,Use useSeoMeta for all SEO-related meta tags,Manually create meta tags with useHead,"useSeoMeta({
+  title: 'My Page',
+  ogTitle: 'My Page',
+  description: 'Page description',
+  ogDescription: 'Page description',
+  ogImage: 'https://example.com/image.png'
+})","useHead({
+  meta: [
+    { name: 'description', content: '...' },
+    { property: 'og:title', content: '...' }
+  ]
+})",warning,https://nuxt.com/docs/api/composables/use-seo-meta
+32,SEO,Implement dynamic meta tags,Update meta tags based on page content for better SEO,Compute meta tags from fetched data,Use static meta tags for dynamic content,"const { data } = await useFetch('/api/product/1')
+useSeoMeta({
+  title: () => data.value?.name,
+  description: () => data.value?.description
+})","useSeoMeta({
+  title: 'Product Page',
+  description: 'A product'
+})",warning,https://nuxt.com/docs/getting-started/seo-meta#dynamic-meta-tags
+33,SEO,Configure robots and sitemap,Set up proper robots.txt and sitemap for search engines,Use @nuxtjs/sitemap and robots modules,Manually create robots.txt and sitemap,"// nuxt.config.ts
+export default defineNuxtConfig({
+  modules: ['@nuxtjs/sitemap', '@nuxtjs/robots'],
+  sitemap: {
+    hostname: 'https://example.com'
+  }
+})","// Manual robots.txt in public/
+// No dynamic sitemap",warning,https://nuxt.com/modules/sitemap
+34,SEO,Add structured data,Implement JSON-LD structured data for rich search results,Use useHead or useSchemaOrg for structured data,Omit structured data for content pages,"useHead({
+  script: [{
+    type: 'application/ld+json',
+    innerHTML: JSON.stringify({
+      '@context': 'https://schema.org',
+      '@type': 'Product',
+      name: product.name
+    })
+  }]
+})","// No structured data
+// Missing rich snippet opportunities",info,https://nuxt.com/docs/getting-started/seo-meta#body-tags
+35,SEO,Implement canonical URLs,Set canonical URLs to avoid duplicate content issues,Define canonical URLs for all pages,Allow duplicate URLs without canonicals,"useSeoMeta({
+  title: 'Page Title'
+})
+useHead({
+  link: [{ rel: 'canonical', href: 'https://example.com/page' }]
+})","// No canonical URL
+// /page and /page/ seen as duplicates",warning,https://nuxt.com/docs/getting-started/seo-meta
+36,Middleware,Organize middleware by scope,Separate global inline and named middleware appropriately,Create named middleware for reusable logic,Put all middleware logic inline in pages,"// middleware/auth.global.ts (runs on all routes)
+// middleware/admin.ts (named, opt-in)
+definePageMeta({
+  middleware: 'admin'
+})","// Inline in every page
+definePageMeta({
+  middleware: (to) => {
+    // Duplicated auth logic
+  }
+})",warning,https://nuxt.com/docs/guide/directory-structure/middleware
+37,Middleware,Handle async operations in middleware,Properly handle async operations and redirects in middleware,Return navigateTo or abortNavigation for redirects,Perform side effects without proper returns,"export default defineNuxtRouteMiddleware(async (to) => {
+  const auth = await checkAuth()
+  if (!auth) {
+    return navigateTo('/login')
+  }
+})","export default defineNuxtRouteMiddleware(async (to) => {
+  const auth = await checkAuth()
+  if (!auth) {
+    window.location.href = '/login'
+  }
+})",error,https://nuxt.com/docs/guide/directory-structure/middleware
+38,Middleware,Order middleware execution,Control middleware execution order with numbered prefixes,Use numbered prefixes for execution order,Rely on alphabetical order accidentally,"// middleware/01.auth.global.ts
+// middleware/02.analytics.global.ts
+// middleware/03.feature-flags.global.ts","// middleware/analytics.global.ts
+// middleware/auth.global.ts
+// Runs in wrong order",warning,https://nuxt.com/docs/guide/directory-structure/middleware#middleware-order
+39,Middleware,Use route rules for simple cases,For simple redirects use routeRules instead of middleware,Configure redirects in nuxt.config.ts routeRules,Create middleware for simple redirects,"export default defineNuxtConfig({
+  routeRules: {
+    '/old-page': { redirect: '/new-page' },
+    '/old/**': { redirect: '/new/**' }
+  }
+})","// middleware/redirect.ts
+if (to.path === '/old-page') {
+  return navigateTo('/new-page')
+}",info,https://nuxt.com/docs/guide/concepts/rendering#route-rules
+40,Error Handling,Create custom error page,Implement error.vue for handling application errors gracefully,Create error.vue in root with proper error display,Let default error page show to users,"// error.vue
+<script setup>
+const props = defineProps(['error'])
+const handleError = () => clearError({ redirect: '/' })
+</script>
+<template>
+  <div>
+    <h1>{{ error.statusCode }}</h1>
+    <button @click=""handleError"">Go home</button>
+  </div>
+</template>","// No error.vue
+// Users see ugly default error",warning,https://nuxt.com/docs/getting-started/error-handling#error-page
+41,Error Handling,Use showError for fatal errors,showError triggers the error page for unrecoverable errors,Use showError for page-level fatal errors,Throw plain errors without proper handling,"if (!product.value) {
+  throw showError({
+    statusCode: 404,
+    statusMessage: 'Product not found'
+  })
+}","if (!product.value) {
+  throw new Error('Not found')
+  // No proper error page
+}",error,https://nuxt.com/docs/api/utils/show-error
+42,Error Handling,Handle component-level errors,Use NuxtErrorBoundary for isolated error handling,Wrap risky components in NuxtErrorBoundary,Let component errors crash the page,"<NuxtErrorBoundary>
+  <RiskyComponent />
+  <template #error=""{ error, clearError }"">
+    <p>Error: {{ error.message }}</p>
+    <button @click=""clearError"">Retry</button>
+  </template>
+</NuxtErrorBoundary>","<template>
+  <RiskyComponent />
+  <!-- Crashes entire page on error -->
+</template>",warning,https://nuxt.com/docs/api/components/nuxt-error-boundary
+43,Error Handling,Log errors to monitoring service,Send errors to external monitoring services like Sentry,Integrate error tracking in plugins,Only log errors to console,"// plugins/sentry.client.ts
+export default defineNuxtPlugin((nuxtApp) => {
+  nuxtApp.hook('vue:error', (error) => {
+    Sentry.captureException(error)
+  })
+})","// Only console logging
+console.error(error)
+// No production visibility",warning,https://nuxt.com/docs/api/advanced/hooks#vue-hooks
+44,Link,Prefetch links intelligently,Control link prefetching for optimal performance,Disable prefetch for low-priority links,Prefetch all links by default,"<NuxtLink to=""/settings"" :prefetch=""false"">
+  Settings
+</NuxtLink>
+<NuxtLink to=""/dashboard"" prefetch>
+  Dashboard (important)
+</NuxtLink>","<NuxtLink to=""/rarely-visited"">
+  <!-- Prefetches unnecessarily -->
+</NuxtLink>",info,https://nuxt.com/docs/api/components/nuxt-link#prefetch
+45,Link,Use external prop for outside links,Properly handle external links with NuxtLink,Set external prop for links outside your app,Use NuxtLink for all external URLs without config,"<NuxtLink to=""https://external.com"" external>
+  External Site
+</NuxtLink>","<NuxtLink to=""https://external.com"">
+  External <!-- May cause issues -->
+</NuxtLink>",warning,https://nuxt.com/docs/api/components/nuxt-link#external
+46,Link,Handle active link states,Style active navigation links properly,Use exact or custom active classes,Ignore active state styling,"<NuxtLink
+  to=""/about""
+  active-class=""text-primary""
+  exact-active-class=""font-bold""
+>
+  About
+</NuxtLink>","<NuxtLink to=""/about"">
+  About <!-- No active indication -->
+</NuxtLink>",info,https://nuxt.com/docs/api/components/nuxt-link#activeclass
+47,Auto Imports,Leverage auto-imports,Nuxt auto-imports composables utils and Vue APIs,Use auto-imported functions directly,Manually import auto-imported items,"<script setup>
+const route = useRoute()
+const { data } = await useFetch('/api/data')
+const count = ref(0)
+</script>","<script setup>
+import { ref } from 'vue'
+import { useRoute } from 'vue-router'
+import { useFetch } from '#app'
+// Unnecessary imports
+</script>",info,https://nuxt.com/docs/guide/concepts/auto-imports
+48,Auto Imports,Configure custom auto-imports,Add custom directories or imports to auto-import configuration,Configure imports in nuxt.config.ts,Import utilities manually everywhere,"// nuxt.config.ts
+export default defineNuxtConfig({
+  imports: {
+    dirs: ['utils', 'stores']
+  }
+})","// Importing manually in every file
+import { formatDate } from '~/utils/date'",info,https://nuxt.com/docs/guide/directory-structure/composables#how-files-are-scanned
+49,Auto Imports,Use explicit imports for clarity,Enable explicit imports in large codebases for better IDE support,Use #imports for explicit imports when needed,Disable auto-imports entirely,"<script setup>
+import { useFetch, useRoute } from '#imports'
+// Explicit for clarity
+</script>","// nuxt.config.ts
+imports: { autoImport: false }
+// Loses Nuxt benefits",info,https://nuxt.com/docs/guide/concepts/auto-imports#explicit-imports
+50,Plugins,Create plugins for global functionality,Use plugins for app-wide initialization and third-party integrations,Register plugins in plugins/ directory,Initialize global code in components,"// plugins/analytics.client.ts
+export default defineNuxtPlugin(() => {
+  // Client-only analytics init
+})","// App.vue
+onMounted(() => {
+  initAnalytics() // Wrong place
+})",warning,https://nuxt.com/docs/guide/directory-structure/plugins
+51,Plugins,Provide and inject dependencies,Use provide/inject pattern in plugins for dependency injection,Provide services through plugins,Create singleton instances in utils,"// plugins/api.ts
+export default defineNuxtPlugin(() => {
+  const api = new ApiClient()
+  return { provide: { api } }
+})
+// Usage: const { $api } = useNuxtApp()","// utils/api.ts
+export const api = new ApiClient()
+// Singleton issues in SSR",warning,https://nuxt.com/docs/guide/directory-structure/plugins#providing-helpers
+52,Plugins,Control plugin execution order,Specify plugin dependencies and ordering,Use dependsOn for plugin dependencies,Rely on file naming for critical order,"// plugins/02.auth.ts
+export default defineNuxtPlugin({
+  dependsOn: ['01.api'],
+  setup() {
+    const { $api } = useNuxtApp()
+  }
+})","// plugins/auth.ts
+const { $api } = useNuxtApp()
+// $api might not exist yet",warning,https://nuxt.com/docs/guide/directory-structure/plugins#plugin-registration-order
+53,Environment,Use runtime config for environment variables,runtimeConfig provides type-safe access to environment variables,Define variables in runtimeConfig,Access process.env directly in components,"// nuxt.config.ts
+export default defineNuxtConfig({
+  runtimeConfig: {
+    apiSecret: '',
+    public: { apiBase: '' }
+  }
+})
+// Usage
+const config = useRuntimeConfig()","// Direct access
+const api = process.env.API_URL
+// Not available client-side",error,https://nuxt.com/docs/guide/going-further/runtime-config
+54,Environment,Separate public and private config,Keep sensitive values in private runtimeConfig,Put client-safe values in runtimeConfig.public only,Expose secrets in public config,"runtimeConfig: {
+  dbPassword: '', // Server only
+  public: {
+    apiBase: '' // Safe for client
+  }
+}","runtimeConfig: {
+  public: {
+    dbPassword: '' // EXPOSED!
+  }
+}",error,https://nuxt.com/docs/guide/going-further/runtime-config#exposing-runtime-config
+55,Environment,Type runtime config,Add TypeScript types for runtime config,Extend RuntimeConfig interface for type safety,Use untyped config access,"// nuxt.config.ts
+declare module 'nuxt/schema' {
+  interface RuntimeConfig {
+    apiSecret: string
+  }
+  interface PublicRuntimeConfig {
+    apiBase: string
+  }
+}","const config = useRuntimeConfig()
+config.unknownKey // No type error",info,https://nuxt.com/docs/guide/going-further/runtime-config#typing-runtime-config
+56,Performance,Optimize component imports,Use dynamic imports for heavy components,Lazy load heavy components with defineAsyncComponent,Import all components statically,"const HeavyChart = defineAsyncComponent(() =>
+  import('~/components/HeavyChart.vue')
+)","import HeavyChart from '~/components/HeavyChart.vue'
+// Loaded even if not shown",warning,https://nuxt.com/docs/guide/directory-structure/components#dynamic-imports
+57,Performance,Enable payload extraction,Extract and cache payloads for static routes,Enable payloadExtraction for prerendered routes,Inline all data in HTML,"export default defineNuxtConfig({
+  experimental: {
+    payloadExtraction: true
+  }
+})","// All data inlined
+// Larger HTML files",info,https://nuxt.com/docs/guide/going-further/experimental-features#payloadextraction
+58,Performance,Use component islands,Isolate interactive components to reduce JS bundle,Use NuxtIsland for isolated interactivity,Ship all JS for every component,"// nuxt.config.ts
+experimental: { componentIslands: true }
+// components/Counter.server.vue
+<NuxtIsland name=""Counter"" :props=""{ initial: 0 }"" />","// All components ship JS
+// Even mostly static pages",info,https://nuxt.com/docs/guide/directory-structure/components#server-components
