@@ -45,31 +45,18 @@ function formatPnL(pnl: number): string {
   }
 }
 
-// 格式化金额（Volume, Avg Buy）
-function formatAmount(amount: number): string {
-  const absAmount = Math.abs(amount)
-  if (absAmount >= 1000000) {
-    return `$${(amount / 1000000).toFixed(2)}M`
-  } else if (absAmount >= 1000) {
-    return `$${(amount / 1000).toFixed(2)}K`
-  } else {
-    return `$${amount.toFixed(2)}`
-  }
-}
 
 export interface Trader {
   id: string
   handle: string | null
   roi: number // ROI（百分比）
-  pnl?: number // 盈亏金额
-  win_rate?: number // 胜率（百分比，如 85.71）- null 时显示 "—"
-  max_drawdown?: number // 最大回撤（百分比）
-  trades_count?: number // 交易次数
-  volume_90d?: number // 交易量
-  avg_buy_90d?: number // 平均买入
+  pnl?: number | null // 盈亏金额 - 某些交易所不返回
+  win_rate?: number | null // 胜率（百分比，如 85.71）- null 时显示 "—"
+  max_drawdown?: number | null // 最大回撤（百分比）
+  trades_count?: number | null // 交易次数
   followers: number // 粉丝数 - 仅来自 Arena 注册用户的关注（trader_follows 表统计）
   source?: string // 数据来源：binance, bybit, okx等
-  avatar_url?: string // 头像URL
+  avatar_url?: string | null // 头像URL
   arena_score?: number // Arena Score (0-100)
   return_score?: number // 收益分
   drawdown_score?: number // 回撤分

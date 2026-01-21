@@ -24,22 +24,20 @@ interface HotSearch {
 }
 
 // ============================================
-// 模拟数据（实际应从 API 获取）
+// 热门搜索（可后续接入 API）
 // ============================================
 
-const MOCK_HOT_SEARCHES: HotSearch[] = [
+const HOT_SEARCHES: HotSearch[] = [
   { keyword: 'BTC', count: 12500, trend: 'up' },
   { keyword: 'ETH', count: 8900, trend: 'up' },
-  { keyword: '高收益交易员', count: 6700, trend: 'stable' },
-  { keyword: 'Binance Top', count: 5400, trend: 'down' },
   { keyword: 'SOL', count: 4200, trend: 'up' },
-  { keyword: '低回撤策略', count: 3800, trend: 'stable' },
+  { keyword: 'PEPE', count: 3800, trend: 'stable' },
 ]
 
-const MOCK_RECENT_SEARCHES = ['CryptoKing', 'PEPE', 'BTC 大户']
+const DEFAULT_RECENT_SEARCHES: string[] = []
 
 // ============================================
-// 搜索建议 Hook
+// 搜索建议 Hook - 使用真实 API
 // ============================================
 
 function useSearchSuggestions(query: string) {
@@ -53,30 +51,40 @@ function useSearchSuggestions(query: string) {
     }
 
     setLoading(true)
-    
-    // 模拟 API 请求延迟
+    const abortController = new AbortController()
+
     const timer = setTimeout(async () => {
       try {
-        // 实际应该调用 API
-        // const response = await fetch(`/api/search/suggestions?q=${encodeURIComponent(query)}`)
-        // const data = await response.json()
-        
-        // 模拟数据
-        const mockSuggestions: SearchSuggestion[] = [
-          { type: 'trader', value: query, label: `@${query}`, subLabel: 'Binance · ROI +125%' },
-          { type: 'symbol', value: query.toUpperCase(), label: `${query.toUpperCase()}/USDT`, subLabel: '热门交易对' },
-          { type: 'keyword', value: `${query} 策略`, label: `${query} 策略`, subLabel: '搜索关键词' },
-        ]
-        
-        setSuggestions(mockSuggestions)
+        const response = await fetch(
+          `/api/search/suggestions?q=${encodeURIComponent(query)}&limit=10`,
+          { signal: abortController.signal }
+        )
+
+        if (!response.ok) {
+          throw new Error('Search failed')
+        }
+
+        const data = await response.json()
+
+        if (data.success && data.data?.suggestions) {
+          setSuggestions(data.data.suggestions)
+        } else {
+          setSuggestions([])
+        }
       } catch (error) {
-        console.error('Search suggestions error:', error)
+        if ((error as Error).name !== 'AbortError') {
+          console.error('Search suggestions error:', error)
+          setSuggestions([])
+        }
       } finally {
         setLoading(false)
       }
-    }, 200)
+    }, 200) // 200ms 防抖
 
-    return () => clearTimeout(timer)
+    return () => {
+      clearTimeout(timer)
+      abortController.abort()
+    }
   }, [query])
 
   return { suggestions, loading }
@@ -117,10 +125,10 @@ export function EnhancedSearch({
       try {
         setRecentSearches(JSON.parse(stored).slice(0, 5))
       } catch {
-        setRecentSearches(MOCK_RECENT_SEARCHES)
+        setRecentSearches(DEFAULT_RECENT_SEARCHES)
       }
     } else {
-      setRecentSearches(MOCK_RECENT_SEARCHES)
+      setRecentSearches(DEFAULT_RECENT_SEARCHES)
     }
   }, [])
 
@@ -273,7 +281,7 @@ export function EnhancedSearch({
             <div className="p-3">
               <div className="text-xs font-semibold text-[var(--color-text-tertiary)] mb-2">热门搜索</div>
               <div className="space-y-1">
-                {MOCK_HOT_SEARCHES.map((hot, idx) => (
+                {HOT_SEARCHES.map((hot, idx) => (
                   <button
                     key={idx}
                     onClick={() => handleSearch(hot.keyword)}
