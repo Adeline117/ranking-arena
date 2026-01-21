@@ -396,6 +396,11 @@ export const translations = {
     paymentSuccess: '支付成功',
     paymentFailed: '支付失败',
     tryAgain: '请重试',
+    // 网络错误
+    errorRequestFailed: '请求失败',
+    errorTimeout: '请求超时，请稍后重试',
+    errorTimeoutCheckNetwork: '请求超时，请检查网络连接',
+    errorNetworkFailed: '网络连接失败，请检查网络',
   },
   en: {
     home: 'Home',
@@ -791,6 +796,11 @@ export const translations = {
     paymentSuccess: 'Payment Successful',
     paymentFailed: 'Payment Failed',
     tryAgain: 'Please try again',
+    // Network errors
+    errorRequestFailed: 'Request failed',
+    errorTimeout: 'Request timed out, please try again',
+    errorTimeoutCheckNetwork: 'Request timed out, please check your connection',
+    errorNetworkFailed: 'Network connection failed, please check your network',
   },
 }
 

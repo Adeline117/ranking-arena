@@ -11,6 +11,10 @@ import { getAvatarGradient, getAvatarInitial } from '@/lib/utils/avatar'
 import { ScoreRulesModal } from '../UI/ScoreRulesModal'
 import CategoryRankingTabs, { CategoryType, filterByCategory } from './CategoryRankingTabs'
 import { ProLabel } from '../Pro/PremiumGate'
+import type { Trader } from '@/lib/types/trader'
+
+// 重新导出 Trader 类型以保持向后兼容
+export type { Trader } from '@/lib/types/trader'
 
 // 图标组件
 const FilterIcon = ({ size = 14 }: { size?: number }) => (
@@ -58,22 +62,7 @@ function formatROI(roi: number): string {
   }
 }
 
-export interface Trader {
-  id: string
-  handle: string | null
-  roi: number // ROI（百分比）
-  pnl?: number | null // 盈亏金额 - 某些交易所不返回
-  win_rate?: number | null // 胜率（百分比，如 85.71）- null 时显示 "—"
-  max_drawdown?: number | null // 最大回撤（百分比）
-  trades_count?: number | null // 交易次数
-  followers: number // 粉丝数 - 仅来自 Arena 注册用户的关注（trader_follows 表统计）
-  source?: string // 数据来源：binance, bybit, okx等
-  avatar_url?: string | null // 头像URL
-  arena_score?: number // Arena Score (0-100)
-  return_score?: number // 收益分
-  drawdown_score?: number // 回撤分
-  stability_score?: number // 稳定分
-}
+// Trader 类型已移至 lib/types/trader.ts
 
 // CSS animations for top 3
 const injectStyles = () => {
