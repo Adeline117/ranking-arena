@@ -4,9 +4,47 @@
 
 export * from './date'
 export * from './format'
-export * from './logger'
+// logger 中的 withRetry 与 circuit-breaker 冲突，排除
+export {
+  logger,
+  apiLogger,
+  dataLogger,
+  authLogger,
+  perfLogger,
+  exchangeLogger,
+  realtimeLogger,
+  uiLogger,
+  createLogger,
+  generateRequestId,
+  setCurrentRequestId,
+  getCurrentRequestId,
+  clearCurrentRequestId,
+  logRequest,
+  createTimer,
+  silent,
+  logIf,
+  devOnly,
+  captureError,
+  captureMessage,
+} from './logger'
+export type { LogLevel, LoggerConfig, LogEntry } from './logger'
 export * from './rate-limit'
-export * from './circuit-breaker'
+// circuit-breaker 的 withRetry 功能更全（指数退避、抖动）
+// circuit-breaker 的 isProviderRateLimitError 与 provider-error 冲突，排除
+export {
+  CircuitBreaker,
+  withRetry,
+  withCircuitBreakerAndRetry,
+  getCircuitBreaker,
+  getAllCircuitBreakerStats,
+  resetAllCircuitBreakers,
+  RetryPresets,
+  isNetworkError,
+  isTransientError,
+  extractRetryAfter,
+} from './circuit-breaker'
+export type { CircuitState, CircuitBreakerOptions, RetryOptions } from './circuit-breaker'
+// provider-error 的 isProviderRateLimitError 为标准版本
 export * from './provider-error'
 export * from './validation'
 export * from './content'
