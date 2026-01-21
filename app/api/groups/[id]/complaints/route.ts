@@ -1,8 +1,26 @@
+/**
+ * 小组投诉 API
+ *
+ * ⚠️ v2.0 已废弃
+ * 此功能已暂停，原因：
+ * 1. 使用率极低（<0.1% 用户使用过）
+ * 2. 维护成本高
+ * 3. 容易被滥用
+ *
+ * 改用：直接联系客服举报
+ */
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+
+// v2.0: 功能已废弃，返回提示信息
+const FEATURE_DEPRECATED = true
+const DEPRECATION_MESSAGE = {
+  zh: '投诉功能已暂停。如需举报，请联系客服。',
+  en: 'Complaint feature is temporarily disabled. Please contact support for reports.',
+}
 
 // 检查用户是否是小组成员
 async function isGroupMember(
@@ -76,9 +94,18 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // v2.0: 功能已废弃
+  if (FEATURE_DEPRECATED) {
+    const lang = request.headers.get('Accept-Language')?.includes('zh') ? 'zh' : 'en'
+    return NextResponse.json(
+      { error: DEPRECATION_MESSAGE[lang], deprecated: true },
+      { status: 410 } // 410 Gone
+    )
+  }
+
   try {
     const { id: groupId } = await params
-    
+
     const authHeader = request.headers.get('Authorization')
     if (!authHeader?.startsWith('Bearer ')) {
       return NextResponse.json({ error: '未登录' }, { status: 401 })
@@ -227,9 +254,14 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // v2.0: 功能已废弃
+  if (FEATURE_DEPRECATED) {
+    return NextResponse.json({ complaints: [], deprecated: true })
+  }
+
   try {
     const { id: groupId } = await params
-    
+
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
     // 获取所有进行中的投诉
