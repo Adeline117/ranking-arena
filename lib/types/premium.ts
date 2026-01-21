@@ -116,7 +116,7 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
       apiCallsPerDay: 1000,
       followLimit: 50,
       comparisonReportsPerMonth: 10,
-      exportsPerMonth: 10,
+      exportsPerMonth: 0, // 暂未开放
       historicalDataDays: 90,
       customRankingsLimit: 3,
       emailNotificationsPerMonth: 100,
@@ -130,7 +130,6 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
       '交易员变动提醒',
       '交易员对比（每月10次）',
       '90天历史数据',
-      '数据导出（每月10次）',
       'Pro 徽章',
       'Pro 专属群组',
     ],

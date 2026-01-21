@@ -34,6 +34,7 @@ export default function HomePage() {
     loading,
     activeTimeRange,
     changeTimeRange,
+    lastUpdated,
   } = useTraderData()
 
   // 交易者对比状态
@@ -134,6 +135,7 @@ export default function HomePage() {
             isLoggedIn={isLoggedIn}
             activeTimeRange={activeTimeRange}
             onTimeRangeChange={changeTimeRange}
+            lastUpdated={lastUpdated}
           />
 
           {/* 右侧：市场数据（移动端隐藏） */}
