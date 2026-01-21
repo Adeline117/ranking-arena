@@ -102,9 +102,15 @@ export default function TraderDiscussion({
       if (response.ok) {
         setNewComment('')
         fetchComments()
+      } else {
+        // 显示错误提示
+        const errorText = language === 'zh' ? '发送失败，请重试' : 'Failed to post, please try again'
+        alert(errorText)
       }
     } catch (error) {
       console.error('Error posting comment:', error)
+      const errorText = language === 'zh' ? '网络错误，请稍后重试' : 'Network error, please try again'
+      alert(errorText)
     } finally {
       setSubmitting(false)
     }
@@ -114,13 +120,25 @@ export default function TraderDiscussion({
   const handleLike = async (commentId: string) => {
     if (!user) return
 
+    // 乐观更新：立即更新 UI
+    setComments(prev => prev.map(c =>
+      c.id === commentId
+        ? { ...c, like_count: c.liked_by_me ? c.like_count - 1 : c.like_count + 1, liked_by_me: !c.liked_by_me }
+        : c
+    ))
+
     try {
-      await fetch(`/api/traders/${encodeURIComponent(traderId)}/discussions/${commentId}/like`, {
+      const response = await fetch(`/api/traders/${encodeURIComponent(traderId)}/discussions/${commentId}/like`, {
         method: 'POST',
       })
-      fetchComments()
+      if (!response.ok) {
+        // 如果失败，回滚乐观更新
+        fetchComments()
+      }
     } catch (error) {
       console.error('Error liking comment:', error)
+      // 网络错误，回滚乐观更新
+      fetchComments()
     }
   }
 
