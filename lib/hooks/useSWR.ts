@@ -201,7 +201,7 @@ interface TraderDetailResponse {
  * 获取交易员详情
  */
 export function useTraderDetail(handle: string | undefined) {
-  const url = handle ? `/api/trader/${encodeURIComponent(handle)}` : null
+  const url = handle ? `/api/traders/${encodeURIComponent(handle)}` : null
 
   return useSWR<TraderDetailResponse>(
     url,
@@ -224,7 +224,7 @@ interface EquityResponse {
  * 获取交易员资金曲线
  */
 export function useTraderEquity(handle: string | undefined) {
-  const url = handle ? `/api/trader/${encodeURIComponent(handle)}/equity` : null
+  const url = handle ? `/api/traders/${encodeURIComponent(handle)}/equity` : null
 
   return useSWR<EquityResponse>(
     url,
@@ -253,7 +253,7 @@ interface PositionsResponse {
  * 获取交易员持仓
  */
 export function useTraderPositions(handle: string | undefined) {
-  const url = handle ? `/api/trader/${encodeURIComponent(handle)}/positions` : null
+  const url = handle ? `/api/traders/${encodeURIComponent(handle)}/positions` : null
 
   return useSWR<PositionsResponse>(
     url,

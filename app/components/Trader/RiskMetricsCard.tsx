@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react'
 import { Box, Text } from '../Base'
 import Card from '../UI/Card'
-import { useLanguage } from '../Utils/LanguageProvider'
+import { useLanguage } from '../Providers/LanguageProvider'
 import { formatRiskMetric, calculateRiskLevel, type RiskMetrics } from '@/lib/services/trading-metrics'
 
 interface RiskMetricsCardProps {

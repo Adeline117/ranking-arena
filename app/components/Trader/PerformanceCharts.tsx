@@ -5,7 +5,7 @@ import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../Base'
 import { EquityCurve, PnLChart, DrawdownChart } from '../Charts'
 import type { EquityDataPoint, PnLDataPoint, DrawdownDataPoint } from '../Charts'
-import { useLanguage } from '../Utils/LanguageProvider'
+import { useLanguage } from '../Providers/LanguageProvider'
 
 interface PerformanceChartsProps {
   handle: string
@@ -29,7 +29,7 @@ export default function PerformanceCharts({ handle }: PerformanceChartsProps) {
   const fetchData = useCallback(async () => {
     try {
       setLoading(true)
-      const response = await fetch(`/api/trader/${encodeURIComponent(handle)}/equity`)
+      const response = await fetch(`/api/traders/${encodeURIComponent(handle)}/equity`)
       if (!response.ok) {
         throw new Error('Failed to fetch chart data')
       }

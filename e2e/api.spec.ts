@@ -46,7 +46,7 @@ test.describe('API 端点测试', () => {
     }
   })
 
-  test('GET /api/trader/[handle] 返回交易员详情', async ({ request }) => {
+  test('GET /api/traders/[handle] 返回交易员详情', async ({ request }) => {
     // 首先获取一个真实的交易员 handle
     const tradersResponse = await request.get('/api/traders')
     const tradersData = await tradersResponse.json()
@@ -54,7 +54,7 @@ test.describe('API 端点测试', () => {
     if (tradersData.traders && tradersData.traders.length > 0) {
       const handle = tradersData.traders[0].handle
       
-      const response = await request.get(`/api/trader/${encodeURIComponent(handle)}`)
+      const response = await request.get(`/api/traders/${encodeURIComponent(handle)}`)
       
       if (response.ok()) {
         const data = await response.json()
@@ -64,14 +64,14 @@ test.describe('API 端点测试', () => {
     }
   })
 
-  test('GET /api/trader/[handle]/equity 返回资金曲线', async ({ request }) => {
+  test('GET /api/traders/[handle]/equity 返回资金曲线', async ({ request }) => {
     const tradersResponse = await request.get('/api/traders')
     const tradersData = await tradersResponse.json()
     
     if (tradersData.traders && tradersData.traders.length > 0) {
       const handle = tradersData.traders[0].handle
       
-      const response = await request.get(`/api/trader/${encodeURIComponent(handle)}/equity`)
+      const response = await request.get(`/api/traders/${encodeURIComponent(handle)}/equity`)
       
       if (response.ok()) {
         const data = await response.json()
@@ -83,14 +83,14 @@ test.describe('API 端点测试', () => {
     }
   })
 
-  test('GET /api/trader/[handle]/positions 返回持仓数据', async ({ request }) => {
+  test('GET /api/traders/[handle]/positions 返回持仓数据', async ({ request }) => {
     const tradersResponse = await request.get('/api/traders')
     const tradersData = await tradersResponse.json()
     
     if (tradersData.traders && tradersData.traders.length > 0) {
       const handle = tradersData.traders[0].handle
       
-      const response = await request.get(`/api/trader/${encodeURIComponent(handle)}/positions`)
+      const response = await request.get(`/api/traders/${encodeURIComponent(handle)}/positions`)
       
       if (response.ok()) {
         const data = await response.json()
@@ -101,7 +101,7 @@ test.describe('API 端点测试', () => {
   })
 
   test('API 错误处理 - 404', async ({ request }) => {
-    const response = await request.get('/api/trader/nonexistent_trader_12345')
+    const response = await request.get('/api/traders/nonexistent_trader_12345')
     
     // 应返回 404 或带有错误信息的响应
     if (!response.ok()) {
@@ -128,7 +128,7 @@ test.describe('API 性能测试', () => {
     expect(responseTime).toBeLessThan(3000)
   })
 
-  test('/api/trader/[handle] 响应时间', async ({ request }) => {
+  test('/api/traders/[handle] 响应时间', async ({ request }) => {
     // 先获取一个交易员
     const tradersResponse = await request.get('/api/traders')
     const tradersData = await tradersResponse.json()
@@ -137,7 +137,7 @@ test.describe('API 性能测试', () => {
       const handle = tradersData.traders[0].handle
       
       const startTime = Date.now()
-      const response = await request.get(`/api/trader/${encodeURIComponent(handle)}`)
+      const response = await request.get(`/api/traders/${encodeURIComponent(handle)}`)
       const responseTime = Date.now() - startTime
       
       expect(response.ok()).toBeTruthy()

@@ -13,12 +13,11 @@ import {
 } from './trader-snapshots'
 import type { Trader } from '@/app/components/Features/RankingTable'
 import { getTradersArenaFollowersCount } from './trader-followers'
-import { getCachedData, CacheKeys } from '@/lib/utils/redis'
+import { getOrSet, CACHE_TTL } from '@/lib/cache'
 
-// 内存缓存（作为 Redis 的二级缓存，减少网络请求）
+// 内存缓存（作为二级缓存，减少网络请求）
 let traderCache: { data: Trader[]; timestamp: number; timeRange: string } | null = null
 const MEMORY_CACHE_TTL = 30 * 1000 // 内存缓存 30 秒
-const REDIS_CACHE_TTL = 120 // Redis 缓存 2 分钟
 
 function snapshotToTrader(
   snapshot: { source_trader_id: string; roi: number; followers: number; pnl: number | null; win_rate: number | null; max_drawdown?: number | null; trades_count?: number | null },
@@ -54,17 +53,17 @@ export async function loadAllTraders(
     return traderCache.data
   }
 
-  // 2. 使用 Redis 分布式缓存
-  const cacheKey = CacheKeys.traders(timeRange)
-  
+  // 2. 使用分布式缓存
+  const cacheKey = `traders:list:${timeRange}`
+
   try {
-    const traders = await getCachedData<Trader[]>(
+    const traders = await getOrSet<Trader[]>(
       cacheKey,
       async () => {
         // 缓存未命中，从数据库加载
         return await loadTradersFromDB(supabase, timeRange)
       },
-      REDIS_CACHE_TTL
+      { ttl: CACHE_TTL.TRADERS_LIST }
     )
 
     // 更新内存缓存

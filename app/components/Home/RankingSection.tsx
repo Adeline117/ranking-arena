@@ -10,7 +10,7 @@ import TimeRangeSelector from './TimeRangeSelector'
 import type { TimeRange } from './hooks/useTraderData'
 import { CategoryType, filterByCategory } from '../Features/CategoryRankingTabs'
 import { useSubscription } from './hooks/useSubscription'
-import { useLanguage } from '../Utils/LanguageProvider'
+import { useLanguage } from '../Providers/LanguageProvider'
 
 interface RankingSectionProps {
   traders: Trader[]
