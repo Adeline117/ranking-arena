@@ -1,8 +1,8 @@
 "use client"
 
 import React, { useState } from "react";
-import { ThumbsUpIcon, CommentIcon } from "@/app/components/Icons";
-import { useToast } from '@/app/components/UI/Toast';
+import { ThumbsUpIcon, CommentIcon } from "@/app/components/icons";
+import { useToast } from '@/app/components/ui/Toast';
 import { useLanguage } from '@/app/components/Providers/LanguageProvider';
 import { getCsrfHeaders } from '@/lib/api/client';
 

@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react'
-import PnLChart from '@/app/components/Charts/PnLChart'
+import PnLChart from '@/app/components/charts/PnLChart'
 
 // 生成模拟 PnL 数据
 function generateMockPnLData(days: number, avgValue: number, winRate: number) {

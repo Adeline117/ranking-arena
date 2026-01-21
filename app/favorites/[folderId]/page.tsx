@@ -6,13 +6,14 @@ import { useRouter } from 'next/navigation'
 import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
-import TopNav from '@/app/components/Layout/TopNav'
-import { Box, Text, Button } from '@/app/components/Base'
-import { RankingSkeleton } from '@/app/components/UI/Skeleton'
-import EmptyState from '@/app/components/UI/EmptyState'
+import TopNav from '@/app/components/layout/TopNav'
+import { Box, Text, Button } from '@/app/components/base'
+import { RankingSkeleton } from '@/app/components/ui/Skeleton'
+import EmptyState from '@/app/components/ui/EmptyState'
 import { formatTimeAgo } from '@/lib/utils/date'
 import { getCsrfHeaders } from '@/lib/api/client'
-import { useToast } from '@/app/components/UI/Toast'
+import { useToast } from '@/app/components/ui/Toast'
+import { useDialog } from '@/app/components/ui/Dialog'
 
 interface BookmarkFolder {
   id: string
@@ -49,6 +50,7 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
   const folderId = resolvedParams.folderId
   const router = useRouter()
   const { showToast } = useToast()
+  const { showDangerConfirm } = useDialog()
 
   const [email, setEmail] = useState<string | null>(null)
   const [accessToken, setAccessToken] = useState<string | null>(null)
@@ -175,8 +177,12 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
 
   const handleDelete = async () => {
     if (!accessToken || !folder) return
-    
-    if (!confirm('确定要删除此收藏夹吗？收藏夹中的所有帖子将被移除。')) {
+
+    const confirmed = await showDangerConfirm(
+      '删除收藏夹',
+      '确定要删除此收藏夹吗？收藏夹中的所有帖子将被移除。'
+    )
+    if (!confirmed) {
       return
     }
 

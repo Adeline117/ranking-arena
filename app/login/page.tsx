@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from "@/lib/supabase/client"
 import { useRouter } from 'next/navigation'
-import { useToast } from '@/app/components/UI/Toast'
+import { useToast } from '@/app/components/ui/Toast'
 
 type Language = 'zh' | 'en'
 

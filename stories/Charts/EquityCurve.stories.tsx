@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react'
-import EquityCurve from '@/app/components/Charts/EquityCurve'
+import EquityCurve from '@/app/components/charts/EquityCurve'
 
 // 生成模拟数据
 function generateMockData(
