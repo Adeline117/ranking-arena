@@ -44,17 +44,35 @@ export async function DELETE(
       return NextResponse.json({ error: '无权删除此帖子' }, { status: 403 })
     }
 
-    // 删除帖子相关的评论
-    await supabase
+    // 删除帖子相关的评论（记录错误但继续删除帖子）
+    const { error: commentsError } = await supabase
       .from('comments')
       .delete()
       .eq('post_id', postId)
 
-    // 删除帖子相关的点赞
-    await supabase
+    if (commentsError) {
+      logger.warn('Failed to delete comments', { error: commentsError.message, postId })
+    }
+
+    // 删除帖子相关的点赞（记录错误但继续删除帖子）
+    const { error: likesError } = await supabase
       .from('post_likes')
       .delete()
       .eq('post_id', postId)
+
+    if (likesError) {
+      logger.warn('Failed to delete likes', { error: likesError.message, postId })
+    }
+
+    // 删除帖子收藏（记录错误但继续删除帖子）
+    const { error: bookmarksError } = await supabase
+      .from('post_bookmarks')
+      .delete()
+      .eq('post_id', postId)
+
+    if (bookmarksError) {
+      logger.warn('Failed to delete bookmarks', { error: bookmarksError.message, postId })
+    }
 
     // 删除帖子
     const { error: deleteError } = await supabase

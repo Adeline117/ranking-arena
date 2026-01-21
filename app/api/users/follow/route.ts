@@ -12,22 +12,47 @@ export const dynamic = 'force-dynamic'
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
 
+/**
+ * 验证用户身份并返回用户ID
+ */
+async function authenticateUser(request: NextRequest, supabase: ReturnType<typeof createClient>): Promise<{ userId: string } | { error: string; status: number }> {
+  const authHeader = request.headers.get('Authorization')
+  if (!authHeader?.startsWith('Bearer ')) {
+    return { error: '未授权：缺少认证令牌', status: 401 }
+  }
+
+  const token = authHeader.slice(7)
+  const { data: { user }, error: authError } = await supabase.auth.getUser(token)
+
+  if (authError || !user) {
+    return { error: '身份验证失败', status: 401 }
+  }
+
+  return { userId: user.id }
+}
+
 // 获取关注状态
 export async function GET(request: NextRequest) {
   try {
-    const searchParams = request.nextUrl.searchParams
-    const followerId = searchParams.get('followerId')
-    const followingId = searchParams.get('followingId')
-
-    if (!followerId || !followingId) {
-      return NextResponse.json({ error: 'Missing followerId or followingId' }, { status: 400 })
-    }
-
     if (!SUPABASE_URL || !SUPABASE_KEY) {
       return NextResponse.json({ error: 'Missing Supabase config' }, { status: 500 })
     }
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
+
+    // 验证用户身份
+    const authResult = await authenticateUser(request, supabase)
+    if ('error' in authResult) {
+      return NextResponse.json({ error: authResult.error }, { status: authResult.status })
+    }
+    const followerId = authResult.userId
+
+    const searchParams = request.nextUrl.searchParams
+    const followingId = searchParams.get('followingId')
+
+    if (!followingId) {
+      return NextResponse.json({ error: 'Missing followingId' }, { status: 400 })
+    }
 
     // 检查 A 是否关注 B
     const { data: followData, error: followError } = await supabase
@@ -64,22 +89,29 @@ export async function GET(request: NextRequest) {
 // 关注/取消关注
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
-    const { followerId, followingId, action } = body
-
-    if (!followerId || !followingId || !action) {
-      return NextResponse.json({ error: 'Missing followerId, followingId or action' }, { status: 400 })
-    }
-
-    if (followerId === followingId) {
-      return NextResponse.json({ error: '不能关注自己' }, { status: 400 })
-    }
-
     if (!SUPABASE_URL || !SUPABASE_KEY) {
       return NextResponse.json({ error: 'Missing Supabase config' }, { status: 500 })
     }
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
+
+    // 验证用户身份 - followerId 必须从认证token获取
+    const authResult = await authenticateUser(request, supabase)
+    if ('error' in authResult) {
+      return NextResponse.json({ error: authResult.error }, { status: authResult.status })
+    }
+    const followerId = authResult.userId
+
+    const body = await request.json()
+    const { followingId, action } = body
+
+    if (!followingId || !action) {
+      return NextResponse.json({ error: 'Missing followingId or action' }, { status: 400 })
+    }
+
+    if (followerId === followingId) {
+      return NextResponse.json({ error: '不能关注自己' }, { status: 400 })
+    }
 
     if (action === 'follow') {
       // 关注用户

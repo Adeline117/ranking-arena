@@ -18,14 +18,33 @@ const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
 // 非互关用户发送消息的限制数量
 const NON_MUTUAL_MESSAGE_LIMIT = 3
 
+/**
+ * 验证用户身份并返回用户ID
+ */
+async function authenticateUser(request: NextRequest, supabase: ReturnType<typeof createClient>): Promise<{ userId: string } | { error: string; status: number }> {
+  const authHeader = request.headers.get('Authorization')
+  if (!authHeader?.startsWith('Bearer ')) {
+    return { error: '未授权：缺少认证令牌', status: 401 }
+  }
+
+  const token = authHeader.slice(7)
+  const { data: { user }, error: authError } = await supabase.auth.getUser(token)
+
+  if (authError || !user) {
+    logger.warn('Authentication failed', { error: authError?.message })
+    return { error: '身份验证失败', status: 401 }
+  }
+
+  return { userId: user.id }
+}
+
 // 获取会话消息
 export async function GET(request: NextRequest) {
   try {
     const conversationId = request.nextUrl.searchParams.get('conversationId')
-    const userId = request.nextUrl.searchParams.get('userId')
 
-    if (!conversationId || !userId) {
-      return NextResponse.json({ error: 'Missing conversationId or userId' }, { status: 400 })
+    if (!conversationId) {
+      return NextResponse.json({ error: 'Missing conversationId' }, { status: 400 })
     }
 
     if (!SUPABASE_URL || !SUPABASE_KEY) {
@@ -33,6 +52,13 @@ export async function GET(request: NextRequest) {
     }
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
+
+    // 验证用户身份
+    const authResult = await authenticateUser(request, supabase)
+    if ('error' in authResult) {
+      return NextResponse.json({ error: authResult.error }, { status: authResult.status })
+    }
+    const userId = authResult.userId
 
     // 验证用户是否有权限访问此会话
     const { data: conversation, error: convError } = await supabase
@@ -73,12 +99,17 @@ export async function GET(request: NextRequest) {
     }
 
     // 标记接收到的消息为已读
-    await supabase
+    const { error: readUpdateError } = await supabase
       .from('direct_messages')
       .update({ read: true })
       .eq('conversation_id', conversationId)
       .eq('receiver_id', userId)
       .eq('read', false)
+
+    if (readUpdateError) {
+      // 记录错误但不阻止返回消息
+      logger.warn('Failed to mark messages as read', { error: readUpdateError.message, conversationId, userId })
+    }
 
     // 获取对方用户信息
     const otherUserId = conversation.user1_id === userId ? conversation.user2_id : conversation.user1_id
@@ -114,11 +145,24 @@ export async function GET(request: NextRequest) {
 // 发送私信
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
-    const { senderId, receiverId, content } = body
+    if (!SUPABASE_URL || !SUPABASE_KEY) {
+      return NextResponse.json({ error: 'Missing Supabase config' }, { status: 500 })
+    }
 
-    if (!senderId || !receiverId || !content) {
-      return NextResponse.json({ error: 'Missing senderId, receiverId or content' }, { status: 400 })
+    const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
+
+    // 验证用户身份 - senderId 必须从认证token获取，不能从body获取
+    const authResult = await authenticateUser(request, supabase)
+    if ('error' in authResult) {
+      return NextResponse.json({ error: authResult.error }, { status: authResult.status })
+    }
+    const senderId = authResult.userId
+
+    const body = await request.json()
+    const { receiverId, content } = body
+
+    if (!receiverId || !content) {
+      return NextResponse.json({ error: 'Missing receiverId or content' }, { status: 400 })
     }
 
     if (senderId === receiverId) {
@@ -132,12 +176,6 @@ export async function POST(request: NextRequest) {
     if (content.length > 2000) {
       return NextResponse.json({ error: '消息内容过长，最多2000字符' }, { status: 400 })
     }
-
-    if (!SUPABASE_URL || !SUPABASE_KEY) {
-      return NextResponse.json({ error: 'Missing Supabase config' }, { status: 500 })
-    }
-
-    const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
 
     // 获取接收者的隐私设置
     const { data: receiverProfile, error: profileError } = await supabase

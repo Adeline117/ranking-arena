@@ -101,18 +101,19 @@ export const useUserStore = create<UserState>()(
       }),
       
       setFollowedTraders: (traders) => set({ followedTraders: traders }),
-      
-      followTrader: (traderId) => {
-        const current = get().followedTraders
-        if (!current.includes(traderId)) {
-          set({ followedTraders: [...current, traderId] })
+
+      // 使用 set 回调函数避免竞态条件
+      followTrader: (traderId) => set((state) => {
+        if (state.followedTraders.includes(traderId)) {
+          return state // 已关注，不做改变
         }
-      },
-      
-      unfollowTrader: (traderId) => {
-        const current = get().followedTraders
-        set({ followedTraders: current.filter(id => id !== traderId) })
-      },
+        return { followedTraders: [...state.followedTraders, traderId] }
+      }),
+
+      // 使用 set 回调函数避免竞态条件
+      unfollowTrader: (traderId) => set((state) => ({
+        followedTraders: state.followedTraders.filter(id => id !== traderId)
+      })),
       
       logout: () => set({
         isLoggedIn: false,
@@ -183,7 +184,8 @@ export const useUIStore = create<UIState>()(
       },
       
       setLanguage: (language) => set({ language }),
-      toggleSidebar: () => set({ sidebarOpen: !get().sidebarOpen }),
+      // 使用 set 回调函数避免竞态条件
+      toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
       setSidebarOpen: (open) => set({ sidebarOpen: open }),
       setSearchQuery: (query) => set({ searchQuery: query }),
       setSearchOpen: (open) => set({ searchOpen: open }),
@@ -350,49 +352,59 @@ export const useCacheStore = create<CacheState>()((set, get) => ({
     }
   },
 
+  // 使用 set 回调函数避免竞态条件
   set: <T>(key: string, data: T, options?: { ttl?: number; staleTime?: number }) => {
-    const cache = { ...get().cache }
-    cache[key] = {
-      data,
-      timestamp: Date.now(),
-      key,
-      ttl: options?.ttl ?? get().defaultTTL,
-      staleTime: options?.staleTime ?? get().defaultStaleTime,
-    }
-    set({ cache })
-
-    // 异步持久化
-    setTimeout(() => persistCache(cache), 0)
-  },
-
-  invalidate: (key: string) => {
-    const cache = { ...get().cache }
-    delete cache[key]
-    set({ cache })
-    setTimeout(() => persistCache(cache), 0)
-  },
-
-  invalidatePattern: (pattern: string) => {
-    const cache = { ...get().cache }
-    const regex = new RegExp(pattern)
-
-    for (const key of Object.keys(cache)) {
-      if (regex.test(key)) {
-        delete cache[key]
+    const { defaultTTL, defaultStaleTime } = get()
+    set((state) => {
+      const newCache = { ...state.cache }
+      newCache[key] = {
+        data,
+        timestamp: Date.now(),
+        key,
+        ttl: options?.ttl ?? defaultTTL,
+        staleTime: options?.staleTime ?? defaultStaleTime,
       }
-    }
-
-    set({ cache })
-    setTimeout(() => persistCache(cache), 0)
+      // 异步持久化使用更新后的缓存
+      setTimeout(() => persistCache(newCache), 0)
+      return { cache: newCache }
+    })
   },
 
+  // 使用 set 回调函数避免竞态条件
+  invalidate: (key: string) => {
+    set((state) => {
+      const newCache = { ...state.cache }
+      delete newCache[key]
+      setTimeout(() => persistCache(newCache), 0)
+      return { cache: newCache }
+    })
+  },
+
+  // 使用 set 回调函数避免竞态条件
+  invalidatePattern: (pattern: string) => {
+    const regex = new RegExp(pattern)
+    set((state) => {
+      const newCache = { ...state.cache }
+      for (const key of Object.keys(newCache)) {
+        if (regex.test(key)) {
+          delete newCache[key]
+        }
+      }
+      setTimeout(() => persistCache(newCache), 0)
+      return { cache: newCache }
+    })
+  },
+
+  // 使用 set 回调函数避免竞态条件
   invalidateAll: (keys: string[]) => {
-    const cache = { ...get().cache }
-    for (const key of keys) {
-      delete cache[key]
-    }
-    set({ cache })
-    setTimeout(() => persistCache(cache), 0)
+    set((state) => {
+      const newCache = { ...state.cache }
+      for (const key of keys) {
+        delete newCache[key]
+      }
+      setTimeout(() => persistCache(newCache), 0)
+      return { cache: newCache }
+    })
   },
 
   clear: () => {
