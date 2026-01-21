@@ -244,7 +244,9 @@ export function validateWithSchema<T extends z.ZodTypeAny>(
   const result = schema.safeParse(data)
 
   if (!result.success) {
-    const errors = result.error.errors
+    // Zod v4 使用 issues，v3 使用 errors
+    const issues = (result.error as { issues?: Array<{ path: (string | number)[]; message: string }> }).issues ?? []
+    const errors = issues
       .map((e) => `${e.path.join('.')}: ${e.message}`)
       .join('; ')
 
@@ -253,7 +255,7 @@ export function validateWithSchema<T extends z.ZodTypeAny>(
       {
         code: ErrorCode.VALIDATION_ERROR,
         details: {
-          errors: result.error.errors.map((e) => ({
+          errors: issues.map((e) => ({
             path: e.path,
             message: e.message,
           })),

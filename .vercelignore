@@ -1,0 +1,62 @@
+# Vercel 忽略文件
+# 这些文件不会上传到 Vercel
+
+# 开发文件
+.env.local
+.env.development
+.env.test
+
+# 测试文件
+**/__tests__/**
+**/*.test.ts
+**/*.test.tsx
+**/*.spec.ts
+**/*.spec.tsx
+coverage/
+.nyc_output/
+
+# 文档
+docs/
+*.md
+!README.md
+
+# 脚本（除非需要）
+scripts/
+!scripts/**/*.mjs
+
+# 构建工具
+.storybook/
+storybook-static/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# 其他
+.DS_Store
+*.log
+node_modules/
+.next/
+out/
+dist/
+build/
+
+# Worker 目录（独立部署）
+worker/
+
+# Android/iOS
+android/
+ios/
+
+# E2E 测试
+e2e/
+playwright-report/
+test-results/

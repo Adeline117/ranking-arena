@@ -120,7 +120,7 @@ function getZodInnerType(schema: z.ZodTypeAny): z.ZodTypeAny | null {
 /**
  * 获取 ZodDefault 的默认值
  */
-function getDefaultValue(schema: z.ZodDefault<z.ZodTypeAny>): unknown {
+function getDefaultValue(schema: z.ZodTypeAny): unknown {
   const def = schema._def as unknown as Record<string, unknown>
   // Zod v4 使用 defaultValue 函数
   if (typeof def.defaultValue === 'function') {
@@ -132,7 +132,7 @@ function getDefaultValue(schema: z.ZodDefault<z.ZodTypeAny>): unknown {
 /**
  * 获取 ZodLiteral 的值
  */
-function getLiteralValue(schema: z.ZodLiteral<unknown>): unknown {
+function getLiteralValue(schema: z.ZodTypeAny): unknown {
   const def = schema._def as unknown as Record<string, unknown>
   return def.value
 }
@@ -195,8 +195,9 @@ function zodToJsonSchema(schema: z.ZodTypeAny): Record<string, unknown> {
   if (schema instanceof z.ZodLiteral) {
     return { const: getLiteralValue(schema) }
   }
-  // Effects (transforms, refinements)
-  if (schema instanceof z.ZodEffects) {
+  // Effects (transforms, refinements) - check by _def.typeName for Zod v4 compatibility
+  const typeName = (schema._def as unknown as Record<string, unknown>)?.typeName
+  if (typeName === 'ZodEffects' || typeName === 'ZodPipeline') {
     const inner = getZodInnerType(schema)
     return inner ? zodToJsonSchema(inner) : { type: 'object' }
   }
@@ -266,13 +267,13 @@ function handleNumberSchema(schema: z.ZodNumber): Record<string, unknown> {
   return result
 }
 
-function handleArraySchema(schema: z.ZodArray<z.ZodTypeAny>): Record<string, unknown> {
+function handleArraySchema(schema: z.ZodTypeAny): Record<string, unknown> {
   const def = schema._def as unknown as Record<string, unknown>
   // Zod v4 使用 element，v3 使用 type
   const itemType = (def.element ?? def.type) as z.ZodTypeAny | undefined
   const minLength = def.minLength as { value: number } | undefined
   const maxLength = def.maxLength as { value: number } | undefined
-  
+
   return {
     type: 'array',
     ...(itemType && { items: zodToJsonSchema(itemType) }),
@@ -281,7 +282,7 @@ function handleArraySchema(schema: z.ZodArray<z.ZodTypeAny>): Record<string, unk
   }
 }
 
-function handleObjectSchema(schema: z.ZodObject<z.ZodRawShape>): Record<string, unknown> {
+function handleObjectSchema(schema: z.ZodTypeAny): Record<string, unknown> {
   const def = schema._def as unknown as Record<string, unknown>
   // shape 可能是函数（v3）或直接对象（v4）
   const shapeOrFn = def.shape
@@ -313,24 +314,24 @@ function handleObjectSchema(schema: z.ZodObject<z.ZodRawShape>): Record<string, 
   }
 }
 
-function handleEnumSchema(schema: z.ZodEnum<[string, ...string[]]>): Record<string, unknown> {
+function handleEnumSchema(schema: z.ZodTypeAny): Record<string, unknown> {
   const def = schema._def as unknown as Record<string, unknown>
   // Zod v4 使用 entries，v3 使用 values
   const values = (def.entries ?? def.values) as string[] | Record<string, string> | undefined
-  
+
   // entries 可能是对象 { a: 'a', b: 'b' }，需要获取值
   const enumValues = Array.isArray(values) ? values : values ? Object.values(values) : []
-  
+
   return {
     type: 'string',
     enum: enumValues,
   }
 }
 
-function handleUnionSchema(schema: z.ZodUnion<readonly [z.ZodTypeAny, ...z.ZodTypeAny[]]>): Record<string, unknown> {
+function handleUnionSchema(schema: z.ZodTypeAny): Record<string, unknown> {
   const def = schema._def as unknown as Record<string, unknown>
   const options = (def.options ?? []) as z.ZodTypeAny[]
-  
+
   return {
     oneOf: options.map((opt: z.ZodTypeAny) => zodToJsonSchema(opt)),
   }

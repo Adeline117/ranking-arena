@@ -226,7 +226,7 @@ export const ApiErrorResponseSchema = z.object({
   error: z.object({
     code: z.string(),
     message: z.string(),
-    details: z.record(z.unknown()).optional(),
+    details: z.record(z.string(), z.unknown()).optional(),
     timestamp: z.string().datetime(),
   }),
 })
@@ -328,7 +328,9 @@ export function validate<T extends z.ZodTypeAny>(
 ): z.infer<T> {
   const result = schema.safeParse(data)
   if (!result.success) {
-    const errors = result.error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join('; ')
+    // Zod v4 使用 issues，v3 使用 errors
+    const issues = (result.error as { issues?: Array<{ path: (string | number)[]; message: string }> }).issues ?? []
+    const errors = issues.map(e => `${e.path.join('.')}: ${e.message}`).join('; ')
     throw new Error(context ? `[${context}] 验证失败: ${errors}` : `验证失败: ${errors}`)
   }
   return result.data
