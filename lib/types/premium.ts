@@ -1,10 +1,26 @@
 /**
  * 付费增值功能类型定义
  * 包含订阅计划、功能权限和 API 配额
- * 
- * 核心付费价值：风险预警系统
- * 
+ *
+ * 核心付费价值：风险预警 + 数据透明
+ *
  * 简化为双层会员体系：Free + Pro
+ *
+ * v2.0 精简版：从 13 个功能精简为 5 个核心功能
+ * - trader_alerts: 交易员变动提醒 (核心)
+ * - trader_comparison: 交易员对比 (核心)
+ * - score_breakdown: 评分详情 + 百分位 (核心)
+ * - historical_data: 历史数据 90天→1年 (扩展)
+ * - api_access: API 访问 (技术用户)
+ *
+ * 已移除/免费化的功能：
+ * - category_ranking → 免费
+ * - pro_badge → 免费彩蛋
+ * - premium_groups → 暂时保留但弱化
+ * - portfolio_suggestions → 下线（合规风险）
+ * - custom_rankings → 合并到 advanced_filter
+ * - export_data → 无限制
+ * - email/push_notifications → 合并到 trader_alerts
  */
 
 // ============================================
@@ -100,144 +116,110 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
     },
     highlights: [
       '排行榜完整浏览',
+      '分类排行（合约/现货/链上）',  // v2.0: 免费化
+      'Arena Score 子分数可见',       // v2.0: 免费化
       '基础交易员详情',
-      '社区参与（每日3条帖子）',
-      '关注10个交易员',
-      '7天历史数据',
+      '社区参与',
+      '关注 10 个交易员',
+      '7 天历史数据',
     ],
   },
   {
     id: 'pro',
     name: 'Pro',
-    description: '专业风险管理，保护你的跟单收益',
+    description: '不再错过异动，保护你的跟单收益',  // v2.0: 强调核心价值
     price: { monthly: 9.99, yearly: 99, currency: 'USD' },
     features: [],
     limits: {
       apiCallsPerDay: 1000,
-      followLimit: 50,
-      comparisonReportsPerMonth: 10,
-      exportsPerMonth: 10,
-      historicalDataDays: 90,
-      customRankingsLimit: 3,
-      emailNotificationsPerMonth: 100,
-      portfolioSuggestionsLimit: 3,
+      followLimit: 100,                     // v2.0: 从 50 提升到 100
+      comparisonReportsPerMonth: -1,        // v2.0: 无限制（-1 表示无限）
+      exportsPerMonth: -1,                  // v2.0: 无限制
+      historicalDataDays: 365,              // v2.0: 从 90 天扩展到 1 年
+      customRankingsLimit: 10,              // v2.0: 提升到 10
+      emailNotificationsPerMonth: -1,       // v2.0: 无限制
+      portfolioSuggestionsLimit: 0,         // v2.0: 已下线
     },
     badge: '推荐',
     recommended: true,
     highlights: [
-      '分类排行 + 高级筛选',
-      'Arena Score 详情分解',
-      '交易员变动提醒',
-      '交易员对比（每月10次）',
-      '90天历史数据',
-      '数据导出（每月10次）',
-      'Pro 徽章',
-      'Pro 专属群组',
+      '🔔 交易员变动提醒（核心）',          // v2.0: 突出核心
+      '📊 交易员对比（无限制）',
+      '📈 评分详情 + 同类百分位',
+      '📅 1 年历史数据',                    // v2.0: 从 90 天扩展
+      '🔌 API 访问',
+      '关注 100 个交易员',                  // v2.0: 从 50 提升
     ],
   },
 ]
 
 // ============================================
-// 功能列表（按核心价值排序）
+// 功能列表（v2.0 精简版 - 按核心价值排序）
 // ============================================
 
 export const PREMIUM_FEATURES: PremiumFeature[] = [
-  // 通知功能
+  // ========== 核心 Pro 功能（5个）==========
+
+  // 1. 交易员变动提醒 - 最核心卖点
   {
-    id: 'email_notifications',
-    name: '邮件通知',
-    description: '重要信息通过邮件及时推送',
+    id: 'trader_alerts',
+    name: '交易员变动提醒',
+    description: '关注的交易员排名、回撤大幅变动时自动通知（站内+邮件+推送）',
     icon: '',
     tier: ['pro'],
     isCore: true,
   },
-  {
-    id: 'push_notifications',
-    name: '即时推送',
-    description: '移动端即时推送',
-    icon: '',
-    tier: ['pro'],
-    isCore: true,
-  },
-  
-  // 组合建议
-  {
-    id: 'portfolio_suggestions',
-    name: '跟单组合建议',
-    description: '智能推荐分散风险的交易员组合',
-    icon: '',
-    tier: ['pro'],
-  },
-  
-  // 数据分析
+
+  // 2. 交易员对比
   {
     id: 'trader_comparison',
     name: '交易员对比',
-    description: '多维度对比分析交易员表现',
+    description: '最多 10 个交易员全维度对比分析',
     icon: '',
     tier: ['pro'],
+    isCore: true,
   },
+
+  // 3. 评分详情 + 百分位（Pro 可见百分位，免费可见子分数）
+  {
+    id: 'score_breakdown',
+    name: '评分详情',
+    description: '查看 Arena Score 各项子分数和同类百分位排名',
+    icon: '',
+    tier: ['pro'],
+    isCore: true,
+  },
+
+  // 4. 历史数据（扩展到 1 年）
   {
     id: 'historical_data',
     name: '历史数据',
-    description: '访问更长时间跨度的历史绩效（90天）',
+    description: '访问长达 1 年的历史绩效数据（免费版仅 7 天）',
     icon: '',
     tier: ['pro'],
   },
-  
-  // 高级功能
-  {
-    id: 'custom_rankings',
-    name: '自定义排行榜',
-    description: '创建专属的筛选排行榜',
-    icon: '',
-    tier: ['pro'],
-  },
-  {
-    id: 'export_data',
-    name: '数据导出',
-    description: '导出交易员数据为 CSV/Excel',
-    icon: '',
-    tier: ['pro'],
-  },
+
+  // 5. API 接口
   {
     id: 'api_access',
     name: 'API 接口',
-    description: '通过 API 获取数据',
+    description: '程序化获取交易员数据，支持自定义监控',
     icon: '',
     tier: ['pro'],
   },
-  
-  // Pro 核心功能
+
+  // ========== 免费化/弱化的功能 ==========
+
+  // 分类排行 - 改为免费
   {
     id: 'category_ranking',
     name: '分类排行',
     description: '按现货/合约/链上分类查看排行榜',
     icon: '',
-    tier: ['pro'],
+    tier: ['free', 'pro'], // 改为免费可用
   },
-  {
-    id: 'trader_alerts',
-    name: '交易员变动提醒',
-    description: '关注的交易员大幅变动时自动提醒',
-    icon: '',
-    tier: ['pro'],
-    isCore: true,
-  },
-  {
-    id: 'score_breakdown',
-    name: '评分详情',
-    description: '查看 Arena Score 各项子分数和同类分位',
-    icon: '',
-    tier: ['pro'],
-  },
-  {
-    id: 'pro_badge',
-    name: 'Pro 徽章',
-    description: '主页头像显示 Pro 会员徽章',
-    icon: '',
-    tier: ['pro'],
-  },
+
+  // 高级筛选（合并了 custom_rankings）
   {
     id: 'advanced_filter',
     name: '高级筛选',
@@ -245,6 +227,26 @@ export const PREMIUM_FEATURES: PremiumFeature[] = [
     icon: '',
     tier: ['pro'],
   },
+
+  // 数据导出 - 改为无限制
+  {
+    id: 'export_data',
+    name: '数据导出',
+    description: '导出交易员数据为 CSV/Excel（无次数限制）',
+    icon: '',
+    tier: ['pro'],
+  },
+
+  // Pro 徽章 - 免费彩蛋
+  {
+    id: 'pro_badge',
+    name: 'Pro 徽章',
+    description: '主页头像显示 Pro 会员徽章（可在设置中关闭）',
+    icon: '',
+    tier: ['pro'],
+  },
+
+  // Pro 专属群组 - 保留但弱化
   {
     id: 'premium_groups',
     name: 'Pro 专属群组',
@@ -252,7 +254,69 @@ export const PREMIUM_FEATURES: PremiumFeature[] = [
     icon: '',
     tier: ['pro'],
   },
+
+  // ========== 已下线/合并的功能 ==========
+
+  // 邮件通知 - 合并到 trader_alerts
+  {
+    id: 'email_notifications',
+    name: '邮件通知',
+    description: '已合并到交易员变动提醒功能',
+    icon: '',
+    tier: ['pro'],
+    isCore: false,
+  },
+
+  // 推送通知 - 合并到 trader_alerts
+  {
+    id: 'push_notifications',
+    name: '即时推送',
+    description: '已合并到交易员变动提醒功能',
+    icon: '',
+    tier: ['pro'],
+    isCore: false,
+  },
+
+  // 自定义排行榜 - 合并到 advanced_filter
+  {
+    id: 'custom_rankings',
+    name: '自定义排行榜',
+    description: '已合并到高级筛选功能',
+    icon: '',
+    tier: ['pro'],
+  },
+
+  // 跟单组合建议 - 已下线（合规风险）
+  {
+    id: 'portfolio_suggestions',
+    name: '跟单组合建议',
+    description: '⚠️ 功能已下线 - 因合规风险暂停服务',
+    icon: '',
+    tier: [], // 空数组 = 所有人都不可用
+  },
 ]
+
+// ============================================
+// v2.0 核心功能快捷访问
+// ============================================
+
+/** 获取 v2.0 核心 Pro 功能（5个） */
+export function getCorePremiumFeatures(): PremiumFeature[] {
+  const coreIds: PremiumFeatureId[] = [
+    'trader_alerts',
+    'trader_comparison',
+    'score_breakdown',
+    'historical_data',
+    'api_access',
+  ]
+  return PREMIUM_FEATURES.filter(f => coreIds.includes(f.id))
+}
+
+/** 检查功能是否已下线 */
+export function isFeatureDeprecated(featureId: PremiumFeatureId): boolean {
+  const feature = PREMIUM_FEATURES.find(f => f.id === featureId)
+  return feature ? feature.tier.length === 0 : true
+}
 
 // ============================================
 // 工具函数

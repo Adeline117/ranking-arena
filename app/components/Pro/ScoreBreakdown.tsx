@@ -213,34 +213,38 @@ export default function ScoreBreakdown({
         <Box>
           <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], marginBottom: 4 }}>
             <Text size="md" weight="bold">{t('scoreBreakdown')}</Text>
-            <Box
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 3,
-                padding: '2px 6px',
-                borderRadius: tokens.radius.full,
-                background: 'var(--color-pro-badge-bg)',
-                color: '#fff',
-                fontSize: 9,
-                fontWeight: 700,
-              }}
-            >
-              <StarIcon size={8} />
-              PRO
-            </Box>
+            {/* v2.0: 子分数免费可见，百分位需要 Pro */}
+            {!isPro && (
+              <Box
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 3,
+                  padding: '2px 6px',
+                  borderRadius: tokens.radius.full,
+                  background: 'var(--color-bg-tertiary)',
+                  border: '1px solid var(--color-border-secondary)',
+                  fontSize: 9,
+                  fontWeight: 600,
+                  color: 'var(--color-text-tertiary)',
+                }}
+              >
+                {language === 'en' ? 'Percentile requires Pro' : '百分位需要 Pro'}
+              </Box>
+            )}
           </Box>
+          {/* Pro 用户显示百分位排名 */}
           {isPro && percentile && (
             <Text size="xs" color="tertiary">
-              {language === 'en' 
+              {language === 'en'
                 ? `Ranks ${getPercentileLabel(percentile.overall, language)} among ${sourceTypeLabel}`
                 : `在同类${sourceTypeLabel}中排名 ${getPercentileLabel(percentile.overall, language)}`
               }
             </Text>
           )}
         </Box>
-        
-        {/* 总分 */}
+
+        {/* 总分 - 所有人可见 */}
         <Box style={{ textAlign: 'right' }}>
           <Text
             size="2xl"
@@ -256,55 +260,69 @@ export default function ScoreBreakdown({
         </Box>
       </Box>
 
-      {/* Pro 锁定遮罩 */}
+      {/* v2.0: 子分数所有人可见，百分位仅 Pro 可见 */}
+      <Box>
+        <ScoreBar
+          label={t('returnScore')}
+          score={returnScore}
+          maxScore={85}
+          percentile={isPro ? percentile?.return : undefined}  // 仅 Pro 显示百分位
+          locked={false}  // v2.0: 子分数不再锁定
+          language={language}
+        />
+        <ScoreBar
+          label={t('drawdownScore')}
+          score={drawdownScore}
+          maxScore={8}
+          percentile={isPro ? percentile?.drawdown : undefined}
+          locked={false}
+          language={language}
+        />
+        <ScoreBar
+          label={t('stabilityScore')}
+          score={stabilityScore}
+          maxScore={7}
+          percentile={isPro ? percentile?.stability : undefined}
+          locked={false}
+          language={language}
+        />
+      </Box>
+
+      {/* Pro 升级提示（非 Pro 用户） */}
       {!isPro && (
         <Box
           style={{
-            position: 'absolute',
-            inset: 0,
-            background: 'var(--color-blur-overlay)',
-            backdropFilter: 'blur(4px)',
+            marginTop: tokens.spacing[4],
+            padding: tokens.spacing[3],
+            background: 'var(--color-pro-glow)',
+            borderRadius: tokens.radius.md,
+            border: '1px solid var(--color-pro-gradient-start)30',
             display: 'flex',
-            flexDirection: 'column',
             alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 10,
-            borderRadius: tokens.radius.xl,
+            justifyContent: 'space-between',
             gap: tokens.spacing[3],
           }}
         >
-          <Box
-            style={{
-              width: 48,
-              height: 48,
-              borderRadius: tokens.radius.lg,
-              background: 'var(--color-pro-glow)',
-              border: '1px solid var(--color-pro-gradient-start)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: 'var(--color-pro-gradient-start)',
-            }}
-          >
-            <LockIcon size={22} />
-          </Box>
-          <Box style={{ textAlign: 'center' }}>
-            <Text size="sm" weight="bold" style={{ marginBottom: 4 }}>
-              {t('proExclusive')}
+          <Box>
+            <Text size="xs" weight="bold" style={{ color: 'var(--color-pro-gradient-start)', marginBottom: 2 }}>
+              {language === 'en' ? 'Want percentile rankings?' : '想看同类百分位排名？'}
             </Text>
-            <Text size="xs" color="tertiary" style={{ maxWidth: 180 }}>
-              {t('scoreBreakdownDesc')}
+            <Text size="xs" color="tertiary">
+              {language === 'en'
+                ? 'Pro members can see where this trader ranks among peers'
+                : 'Pro 会员可查看该交易员在同类中的排名'}
             </Text>
           </Box>
           {onUnlock && (
-            <Link href="/pricing" style={{ textDecoration: 'none' }}>
+            <Link href="/pricing" style={{ textDecoration: 'none', flexShrink: 0 }}>
               <Button
                 variant="primary"
                 size="sm"
                 style={{
                   background: 'var(--color-pro-badge-bg)',
                   border: 'none',
-                  boxShadow: '0 4px 12px var(--color-pro-badge-shadow)',
+                  padding: '6px 12px',
+                  fontSize: '12px',
                 }}
               >
                 {t('upgrade')}
@@ -314,60 +332,30 @@ export default function ScoreBreakdown({
         </Box>
       )}
 
-      {/* 分数详情 */}
-      <Box style={{ filter: isPro ? 'none' : 'blur(6px)', opacity: isPro ? 1 : 0.4 }}>
-        <ScoreBar
-          label={t('returnScore')}
-          score={returnScore}
-          maxScore={85}
-          percentile={percentile?.return}
-          locked={!isPro}
-          language={language}
-        />
-        <ScoreBar
-          label={t('drawdownScore')}
-          score={drawdownScore}
-          maxScore={8}
-          percentile={percentile?.drawdown}
-          locked={!isPro}
-          language={language}
-        />
-        <ScoreBar
-          label={t('stabilityScore')}
-          score={stabilityScore}
-          maxScore={7}
-          percentile={percentile?.stability}
-          locked={!isPro}
-          language={language}
-        />
+      {/* 评分说明 - 所有人可见 */}
+      <Box
+        style={{
+          marginTop: tokens.spacing[4],
+          padding: tokens.spacing[3],
+          background: 'var(--color-bg-tertiary)',
+          borderRadius: tokens.radius.md,
+          borderLeft: `3px solid ${isPro ? 'var(--color-pro-glow)' : 'var(--color-border-primary)'}`,
+        }}
+      >
+        <Text size="xs" color="tertiary" style={{ lineHeight: 1.6 }}>
+          <strong style={{ color: 'var(--color-text-secondary)' }}>
+            {language === 'en' ? 'Score Guide' : '评分说明'}
+          </strong><br />
+          {language === 'en'
+            ? <>Return Score (0-85): Based on ROI performance<br />
+               Drawdown Score (0-8): Lower drawdown = higher score<br />
+               Stability Score (0-7): Based on win rate</>
+            : <>收益分 (0-85)：基于 ROI 强度计算<br />
+               回撤分 (0-8)：回撤越小分数越高<br />
+               稳定分 (0-7)：基于胜率计算</>
+          }
+        </Text>
       </Box>
-
-      {/* 评分说明 */}
-      {isPro && (
-        <Box
-          style={{
-            marginTop: tokens.spacing[4],
-            padding: tokens.spacing[3],
-            background: 'var(--color-bg-tertiary)',
-            borderRadius: tokens.radius.md,
-            borderLeft: '3px solid var(--color-pro-glow)',
-          }}
-        >
-          <Text size="xs" color="tertiary" style={{ lineHeight: 1.6 }}>
-            <strong style={{ color: 'var(--color-text-secondary)' }}>
-              {language === 'en' ? 'Score Guide' : '评分说明'}
-            </strong><br />
-            {language === 'en' 
-              ? <>Return Score (0-85): Based on ROI performance<br />
-                 Drawdown Score (0-8): Lower drawdown = higher score<br />
-                 Stability Score (0-7): Based on win rate</>
-              : <>收益分 (0-85)：基于 ROI 强度计算<br />
-                 回撤分 (0-8)：回撤越小分数越高<br />
-                 稳定分 (0-7)：基于胜率计算</>
-            }
-          </Text>
-        </Box>
-      )}
     </Box>
   )
 }
