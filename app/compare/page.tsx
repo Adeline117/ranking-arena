@@ -7,7 +7,7 @@ import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/Layout/TopNav'
 import { Box, Text, Button } from '@/app/components/Base'
 import TraderComparison from '@/app/components/Pro/TraderComparison'
-import { useLanguage } from '@/app/components/Utils/LanguageProvider'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useToast } from '@/app/components/UI/Toast'
 
 interface TraderCompareData {

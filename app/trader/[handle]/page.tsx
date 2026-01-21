@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
 import { supabase } from '@/lib/supabase/client'
-import { useLanguage } from '@/app/components/Utils/LanguageProvider'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import TopNav from '@/app/components/Layout/TopNav'
 import TraderHeader from '@/app/components/Trader/TraderHeader'
 import TraderTabs from '@/app/components/Trader/TraderTabs'
@@ -154,7 +154,7 @@ function TraderContent(props: { params: { handle: string } | Promise<{ handle: s
 
       try {
         // 通过 API 获取数据（服务端使用正确的 service role key）
-        const response = await fetch(`/api/trader/${encodeURIComponent(handle)}`)
+        const response = await fetch(`/api/traders/${encodeURIComponent(handle)}`)
         
         if (!response.ok) {
           console.error('Error loading trader data:', response.status)

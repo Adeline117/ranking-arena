@@ -419,6 +419,121 @@ export function devOnly(fn: () => void): void {
 }
 
 // ============================================
+// Sentry 集成（从 lib/logger.ts 合并）
+// ============================================
+
+let Sentry: typeof import('@sentry/nextjs') | null = null
+
+// 延迟加载 Sentry（避免客户端导入问题）
+async function getSentry() {
+  if (Sentry) return Sentry
+  try {
+    Sentry = await import('@sentry/nextjs')
+    return Sentry
+  } catch {
+    return null
+  }
+}
+
+/**
+ * 向 Sentry 发送错误
+ */
+export async function captureError(error: Error, context?: Record<string, unknown>): Promise<void> {
+  const sentry = await getSentry()
+  if (sentry) {
+    sentry.captureException(error, { extra: context })
+  }
+}
+
+/**
+ * 向 Sentry 发送消息
+ */
+export async function captureMessage(message: string, level: 'info' | 'warning' | 'error' = 'info', context?: Record<string, unknown>): Promise<void> {
+  const sentry = await getSentry()
+  if (sentry) {
+    sentry.captureMessage(message, { level, extra: context })
+  }
+}
+
+/**
+ * 添加 Sentry breadcrumb
+ */
+export async function addBreadcrumb(message: string, level: 'info' | 'warning' | 'error' = 'info', data?: Record<string, unknown>): Promise<void> {
+  const sentry = await getSentry()
+  if (sentry) {
+    sentry.addBreadcrumb({ message, level, data, timestamp: Date.now() / 1000 })
+  }
+}
+
+// ============================================
+// 重试和安全执行（从 lib/logger.ts 合并）
+// ============================================
+
+/**
+ * 创建带重试机制的异步函数执行器
+ * 支持指数退避和错误日志记录
+ */
+export async function withRetry<T>(
+  fn: () => Promise<T>,
+  options: {
+    maxRetries?: number
+    baseDelayMs?: number
+    context?: string
+    onRetry?: (attempt: number, error: Error) => void
+  } = {}
+): Promise<T> {
+  const { maxRetries = 3, baseDelayMs = 2000, context = 'operation', onRetry } = options
+
+  let lastError: Error | null = null
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn()
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error))
+
+      if (attempt < maxRetries) {
+        const delay = baseDelayMs * attempt // 线性退避
+        logger.warn(`${context} failed, retrying in ${delay}ms`, {
+          attempt,
+          maxRetries,
+          error: lastError.message,
+        })
+
+        onRetry?.(attempt, lastError)
+
+        await new Promise((resolve) => setTimeout(resolve, delay))
+      }
+    }
+  }
+
+  logger.error(`${context} failed after ${maxRetries} attempts`, lastError!)
+  captureError(lastError!, { maxRetries, context })
+
+  throw lastError
+}
+
+/**
+ * 安全执行函数，捕获错误但不抛出
+ * 返回 [result, error] 元组
+ */
+export async function safeExecute<T>(
+  fn: () => Promise<T>,
+  context?: string
+): Promise<[T | null, Error | null]> {
+  try {
+    const result = await fn()
+    return [result, null]
+  } catch (error) {
+    const err = error instanceof Error ? error : new Error(String(error))
+    if (context) {
+      logger.warn(`${context} failed`, { error: err.message })
+    }
+    return [null, err]
+  }
+}
+
+// ============================================
 // 导出
 // ============================================
 

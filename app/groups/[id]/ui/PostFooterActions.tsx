@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import { ThumbsUpIcon, CommentIcon } from "@/app/components/Icons";
 import { useToast } from '@/app/components/UI/Toast';
-import { useLanguage } from '@/app/components/Utils/LanguageProvider';
+import { useLanguage } from '@/app/components/Providers/LanguageProvider';
 import { getCsrfHeaders } from '@/lib/api/client';
 
 type Post = {

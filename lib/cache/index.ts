@@ -572,3 +572,36 @@ export function forceMemoryOnly(enabled: boolean): void {
 
 export { CacheKey, CachePattern, CACHE_TTL, CACHE_PREFIX } from './keys'
 export { MemoryCache, getMemoryCache, resetMemoryCache } from './memory-fallback'
+
+// ============================================
+// 简单客户端缓存 API（兼容旧代码）
+// ============================================
+
+/**
+ * 简单获取客户端缓存
+ * 用于客户端组件的简单缓存需求
+ */
+export function getCache<T>(key: string): T | null {
+  const memoryCache = getMemoryCacheFallback()
+  return memoryCache.get<T>(key)
+}
+
+/**
+ * 简单设置客户端缓存
+ * @param key 缓存键
+ * @param data 缓存数据
+ * @param ttlMs TTL（毫秒），默认 5 分钟
+ */
+export function setCache<T>(key: string, data: T, ttlMs: number = 5 * 60 * 1000): void {
+  const memoryCache = getMemoryCacheFallback()
+  // 转换为秒
+  memoryCache.set(key, data, Math.floor(ttlMs / 1000))
+}
+
+/**
+ * 清除所有客户端缓存
+ */
+export function clearCache(): void {
+  const memoryCache = getMemoryCacheFallback()
+  memoryCache.clear()
+}

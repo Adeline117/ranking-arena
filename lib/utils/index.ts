@@ -5,7 +5,6 @@
 export * from './date'
 export * from './format'
 export * from './logger'
-export * from './redis'
 export * from './rate-limit'
 export * from './circuit-breaker'
 export * from './provider-error'
@@ -14,8 +13,7 @@ export * from './content'
 export * from './server-cache'
 export * from './sanitize'
 export * from './csrf'
-// 注意：cache.ts 是客户端缓存，需要单独导入以避免命名冲突
-// import { getCache, setCache } from '@/lib/utils/cache'
+// 缓存功能请使用 @/lib/cache
 
 /**
  * 安全的 JSON 解析

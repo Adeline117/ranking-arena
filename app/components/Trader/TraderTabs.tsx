@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { tokens } from '@/lib/design-tokens'
-import { useLanguage } from '../Utils/LanguageProvider'
+import { useLanguage } from '../Providers/LanguageProvider'
 import { Box, Text } from '../Base'
 
 type TabKey = 'overview' | 'stats' | 'portfolio'

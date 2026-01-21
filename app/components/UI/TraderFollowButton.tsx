@@ -6,7 +6,7 @@ import { useApiMutation } from '@/lib/hooks/useApiMutation'
 import { apiRequest } from '@/lib/api/client'
 import { useFollowSync, type FollowChangePayload } from '@/lib/hooks/useBroadcastSync'
 
-type FollowButtonProps = {
+type TraderFollowButtonProps = {
   traderId: string
   userId: string | null
   initialFollowing?: boolean
@@ -20,7 +20,13 @@ type FollowResponse = {
   error?: string
 }
 
-export default function FollowButton({ traderId, userId, initialFollowing = false, onFollowChange }: FollowButtonProps) {
+/**
+ * 关注交易员的按钮
+ * 用于 trader 页面，关注/取消关注交易员
+ *
+ * 区分于 UserFollowButton（用于关注平台用户）
+ */
+export default function TraderFollowButton({ traderId, userId, initialFollowing = false, onFollowChange }: TraderFollowButtonProps) {
   const { showToast } = useToast()
   const [following, setFollowing] = useState(initialFollowing)
   const [featureDisabled, setFeatureDisabled] = useState(false)
