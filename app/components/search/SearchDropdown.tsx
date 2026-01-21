@@ -6,7 +6,7 @@ import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
 import { CloseIcon } from '../icons'
 import { supabase } from '@/lib/supabase/client'
-import { useToast } from '../UI/Toast'
+import { useToast } from '../ui/Toast'
 
 interface SearchDropdownProps {
   open: boolean

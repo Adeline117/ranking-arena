@@ -29,6 +29,18 @@
 
 export type SubscriptionTier = 'free' | 'pro'
 
+/** 活跃订阅等级（不包含 free） */
+export type ActiveSubscriptionTier = Exclude<SubscriptionTier, 'free'>
+
+/**
+ * 规范化订阅等级
+ * 处理可能的无效值，返回有效的 SubscriptionTier
+ */
+export function normalizeSubscriptionTier(tier: string | null | undefined): SubscriptionTier {
+  if (tier === 'pro') return 'pro'
+  return 'free'
+}
+
 export interface SubscriptionPlan {
   id: SubscriptionTier
   name: string

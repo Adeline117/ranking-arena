@@ -11,7 +11,7 @@ import type { TimeRange } from './hooks/useTraderData'
 import { CategoryType, filterByCategory } from '../ranking/CategoryRankingTabs'
 import { useSubscription } from './hooks/useSubscription'
 import { useLanguage } from '../Providers/LanguageProvider'
-import DataFreshnessIndicator from '../UI/DataFreshnessIndicator'
+import DataFreshnessIndicator from '../ui/DataFreshnessIndicator'
 
 interface RankingSectionProps {
   traders: Trader[]

@@ -3,9 +3,9 @@
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
-import { Box, Text, Button } from '../Base'
+import { Box, Text, Button } from '../base'
 import { useLanguage } from '../Providers/LanguageProvider'
-import { useToast } from '../UI/Toast'
+import { useToast } from '../ui/Toast'
 import { supabase } from '@/lib/supabase/client'
 
 interface Comment {
@@ -323,7 +323,7 @@ export default function TraderDiscussion({
               {language === 'zh' ? '登录后参与讨论' : 'Sign in to join the discussion'}
             </Text>
             <Link href="/login">
-              <Button variant="outline" size="sm">
+              <Button variant="secondary" size="sm">
                 {language === 'zh' ? '登录' : 'Sign In'}
               </Button>
             </Link>
@@ -362,10 +362,10 @@ export default function TraderDiscussion({
                   : 'none',
                 transition: 'background 0.2s',
               }}
-              onMouseEnter={(e) => {
+              onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => {
                 e.currentTarget.style.background = `${tokens.colors.bg.secondary}50`
               }}
-              onMouseLeave={(e) => {
+              onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => {
                 e.currentTarget.style.background = 'transparent'
               }}
             >
@@ -387,10 +387,10 @@ export default function TraderDiscussion({
                       cursor: 'pointer',
                       transition: 'transform 0.2s',
                     }}
-                    onMouseEnter={(e) => {
+                    onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => {
                       e.currentTarget.style.transform = 'scale(1.1)'
                     }}
-                    onMouseLeave={(e) => {
+                    onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => {
                       e.currentTarget.style.transform = 'scale(1)'
                     }}
                   >

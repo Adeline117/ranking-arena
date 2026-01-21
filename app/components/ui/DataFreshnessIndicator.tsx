@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react'
 import { tokens } from '@/lib/design-tokens'
-import { Box, Text } from '../Base'
+import { Box, Text } from '../base'
 import { useLanguage } from '../Providers/LanguageProvider'
 
 // 时钟图标

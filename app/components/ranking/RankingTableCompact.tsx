@@ -2,9 +2,9 @@
 
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
-import { RankingSkeleton } from '../UI/Skeleton'
-import { RankingBadge } from '../Icons'
-import { Box, Text } from '../Base'
+import { RankingSkeleton } from '../ui/Skeleton'
+import { RankingBadge } from '../icons'
+import { Box, Text } from '../base'
 
 interface Trader {
   id: string
@@ -94,10 +94,10 @@ export default function RankingTableCompact(props: {
                     background: tokens.colors.bg.primary,
                     transition: `background-color ${tokens.transition.fast}`,
                   }}
-                  onMouseEnter={(e) => {
+                  onMouseEnter={(e: React.MouseEvent<HTMLTableRowElement>) => {
                     e.currentTarget.style.background = tokens.colors.bg.secondary
                   }}
-                  onMouseLeave={(e) => {
+                  onMouseLeave={(e: React.MouseEvent<HTMLTableRowElement>) => {
                     e.currentTarget.style.background = tokens.colors.bg.primary
                   }}
                 >
