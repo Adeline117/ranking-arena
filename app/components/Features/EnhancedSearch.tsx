@@ -196,6 +196,7 @@ export function EnhancedSearch({
         />
         {query && (
           <button
+            type="button"
             onClick={() => setQuery('')}
             className="pr-4 text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)]"
           >

@@ -60,7 +60,7 @@ const styles = {
     bottom: 0,
     left: 0,
     right: 0,
-    zIndex: 9999,
+    zIndex: tokens.zIndex.toast, // 使用 design tokens (700)，低于 max(9999) 但高于 modal(400)
     padding: '16px',
     background: 'rgba(0, 0, 0, 0.8)',
     backdropFilter: 'blur(10px)',
