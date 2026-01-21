@@ -87,26 +87,64 @@ export function parseContent(text: string): ContentPart[] {
 export function renderContentParts(parts: ContentPart[]): ReactNode[] {
   return parts.map((part, index) => {
     if (part.type === 'image') {
-      return createElement('img', {
+      // 使用带错误处理的图片容器
+      return createElement('span', {
         key: index,
+        className: 'content-image-wrapper',
+        style: {
+          display: 'inline-block',
+          verticalAlign: 'middle',
+          margin: '4px 6px',
+          position: 'relative',
+        },
+      }, createElement('img', {
         src: part.url,
         alt: part.content || 'image',
+        loading: 'lazy',
+        decoding: 'async',
         onClick: (e: React.MouseEvent) => {
           e.stopPropagation()
           window.open(part.url, '_blank')
+        },
+        onError: (e: React.SyntheticEvent<HTMLImageElement>) => {
+          const img = e.currentTarget
+          const wrapper = img.parentElement
+          if (wrapper) {
+            // 替换为错误占位符
+            wrapper.innerHTML = `
+              <div style="
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+                border-radius: 8px;
+                padding: 16px;
+                min-height: 80px;
+                min-width: 120px;
+                border: 1px dashed #444;
+              ">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ff7c7c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom: 8px;">
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                  <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                  <polyline points="21 15 16 10 5 21"></polyline>
+                  <line x1="4" y1="4" x2="20" y2="20"></line>
+                </svg>
+                <span style="font-size: 11px; color: #888;">图片加载失败</span>
+              </div>
+            `
+          }
         },
         style: {
           maxWidth: '100%',
           maxHeight: 300,
           borderRadius: 8,
           cursor: 'pointer',
-          display: 'inline-block',
-          verticalAlign: 'middle',
-          margin: '4px 6px',
+          display: 'block',
         },
-      })
+      }))
     }
-    
+
     if (part.type === 'link') {
       return createElement('a', {
         key: index,
@@ -121,7 +159,7 @@ export function renderContentParts(parts: ContentPart[]): ReactNode[] {
         },
       }, part.content)
     }
-    
+
     return createElement('span', { key: index }, part.content)
   })
 }

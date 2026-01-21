@@ -33,10 +33,29 @@ export async function POST(request: NextRequest) {
     // 创建 Supabase 客户端（使用 service key 以绕过 RLS）
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
+    // 检查 posts bucket 是否存在
+    const { data: buckets, error: bucketsError } = await supabase.storage.listBuckets()
+    if (bucketsError) {
+      console.error('Error listing buckets:', bucketsError)
+      return NextResponse.json({
+        error: 'Storage service unavailable. Please contact administrator.',
+        details: bucketsError.message
+      }, { status: 503 })
+    }
+
+    const postsBucketExists = buckets?.some(b => b.id === 'posts')
+    if (!postsBucketExists) {
+      console.error('Posts bucket does not exist. Please run scripts/setup_posts_storage.sql')
+      return NextResponse.json({
+        error: 'Storage not configured. Please contact administrator to run setup_posts_storage.sql',
+        code: 'BUCKET_NOT_FOUND'
+      }, { status: 503 })
+    }
+
     // 生成唯一文件名
     const timestamp = Date.now()
     const randomStr = Math.random().toString(36).substring(2, 15)
-    const fileExt = file.name.split('.').pop()
+    const fileExt = file.name.split('.').pop()?.toLowerCase() || 'jpg'
     const fileName = `${userId}/${timestamp}-${randomStr}.${fileExt}`
 
     // 上传到 Supabase Storage
@@ -49,7 +68,36 @@ export async function POST(request: NextRequest) {
 
     if (error) {
       console.error('Upload error:', error)
+      // 提供更详细的错误信息
+      if (error.message?.includes('Bucket not found')) {
+        return NextResponse.json({
+          error: 'Storage bucket not configured. Please run setup_posts_storage.sql',
+          code: 'BUCKET_NOT_FOUND'
+        }, { status: 503 })
+      }
+      if (error.message?.includes('security') || error.message?.includes('policy')) {
+        return NextResponse.json({
+          error: 'Upload permission denied. Please check storage policies.',
+          code: 'PERMISSION_DENIED'
+        }, { status: 403 })
+      }
       return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+
+    // 验证文件确实上传成功 - 检查文件是否存在
+    const { data: fileList, error: listError } = await supabase.storage
+      .from('posts')
+      .list(userId, {
+        search: `${timestamp}-${randomStr}`,
+        limit: 1,
+      })
+
+    if (listError || !fileList || fileList.length === 0) {
+      console.error('Upload verification failed - file not found after upload:', listError)
+      return NextResponse.json({
+        error: 'Upload verification failed. File may not have been saved correctly.',
+        code: 'VERIFICATION_FAILED'
+      }, { status: 500 })
     }
 
     // 获取公共 URL
@@ -57,13 +105,18 @@ export async function POST(request: NextRequest) {
       .from('posts')
       .getPublicUrl(fileName)
 
+    // 验证 URL 是否可访问（可选的额外验证）
+    const publicUrl = urlData.publicUrl
+
     return NextResponse.json({
-      url: urlData.publicUrl,
+      url: publicUrl,
       fileName: data.path,
+      verified: true, // 标记已验证
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error uploading image:', error)
-    return NextResponse.json({ error: error.message || 'Upload failed' }, { status: 500 })
+    const errorMessage = error instanceof Error ? error.message : 'Upload failed'
+    return NextResponse.json({ error: errorMessage }, { status: 500 })
   }
 }
 
