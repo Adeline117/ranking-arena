@@ -90,7 +90,7 @@
       ]
     },
     {
-      "source": "/api/trader/:path*",
+      "source": "/api/traders/:path*",
       "headers": [
         {
           "key": "Cache-Control",

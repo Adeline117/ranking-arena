@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '../Base'
-import { useLanguage } from '../Utils/LanguageProvider'
+import { useLanguage } from '../Providers/LanguageProvider'
 
 interface PremiumGroupCardProps {
   groupId: string

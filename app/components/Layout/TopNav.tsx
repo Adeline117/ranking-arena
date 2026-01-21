@@ -8,7 +8,7 @@ import { tokens } from '@/lib/design-tokens'
 import ThemeToggle from '../UI/ThemeToggle'
 import LanguageSwitcher from '../Utils/LanguageSwitcher'
 import SearchDropdown from '../Features/SearchDropdown'
-import { useLanguage } from '../Utils/LanguageProvider'
+import { useLanguage } from '../Providers/LanguageProvider'
 import { SearchIcon, UserIcon, DashboardIcon, NotificationIcon, MessageIcon } from '../Icons'
 import { Box } from '../Base'
 

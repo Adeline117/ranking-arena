@@ -3,7 +3,7 @@
 import { ReactNode } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '../Base'
-import { useLanguage } from '../Utils/LanguageProvider'
+import { useLanguage } from '../Providers/LanguageProvider'
 import Link from 'next/link'
 
 // 锁图标 SVG

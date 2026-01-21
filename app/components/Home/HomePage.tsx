@@ -7,7 +7,7 @@ import TopNav from '../Layout/TopNav'
 import MobileBottomNav from '../Layout/MobileBottomNav'
 import ExchangeQuickConnect from '../ExchangeQuickConnect'
 import { ErrorBoundary } from '../Utils/ErrorBoundary'
-import { useLanguage } from '../Utils/LanguageProvider'
+import { useLanguage } from '../Providers/LanguageProvider'
 import { JsonLd } from '../Utils/JsonLd'
 import { generateWebSiteSchema, generateOrganizationSchema, combineSchemas } from '@/lib/seo'
 

@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '../Base'
-import { useLanguage } from '../Utils/LanguageProvider'
+import { useLanguage } from '../Providers/LanguageProvider'
 
 // 筛选配置类型
 export interface FilterConfig {
