@@ -2,7 +2,7 @@
 
 import { usePathname } from 'next/navigation'
 import Link from 'next/link'
-import { useLanguage } from '../Utils/LanguageProvider'
+import { useLanguage } from '../Providers/LanguageProvider'
 
 interface NavItem {
   href: string
