@@ -76,13 +76,14 @@ function ToastItem({ toast, onClose }: { toast: Toast; onClose: () => void }) {
   const [isExiting, setIsExiting] = useState(false)
   const [progress, setProgress] = useState(100)
   const startTimeRef = useRef(Date.now())
+  const exitTimerRef = useRef<NodeJS.Timeout | null>(null)
 
   useEffect(() => {
     const interval = setInterval(() => {
       const elapsed = Date.now() - startTimeRef.current
       const remaining = Math.max(0, 100 - (elapsed / toast.duration) * 100)
       setProgress(remaining)
-      
+
       if (remaining <= 0) {
         clearInterval(interval)
       }
@@ -91,9 +92,18 @@ function ToastItem({ toast, onClose }: { toast: Toast; onClose: () => void }) {
     return () => clearInterval(interval)
   }, [toast.duration])
 
+  // Cleanup exit timer on unmount
+  useEffect(() => {
+    return () => {
+      if (exitTimerRef.current) {
+        clearTimeout(exitTimerRef.current)
+      }
+    }
+  }, [])
+
   const handleClose = () => {
     setIsExiting(true)
-    setTimeout(onClose, 200)
+    exitTimerRef.current = setTimeout(onClose, 200)
   }
 
   return (
@@ -218,10 +228,19 @@ function ToastItem({ toast, onClose }: { toast: Toast; onClose: () => void }) {
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([])
+  const dismissTimersRef = useRef<Map<string, NodeJS.Timeout>>(new Map())
+
+  // Cleanup all timers on unmount
+  useEffect(() => {
+    return () => {
+      dismissTimersRef.current.forEach((timer) => clearTimeout(timer))
+      dismissTimersRef.current.clear()
+    }
+  }, [])
 
   const showToast = useCallback((
-    message: string | { message?: string; code?: string; error?: string } | unknown, 
-    type: ToastType = 'info', 
+    message: string | { message?: string; code?: string; error?: string } | unknown,
+    type: ToastType = 'info',
     duration: number = 4000
   ) => {
     // Parse message
@@ -242,20 +261,28 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     } else {
       finalMessage = String(message || '未知错误')
     }
-    
+
     const id = `toast-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
     const newToast: Toast = { id, message: finalMessage, type, duration, createdAt: Date.now() }
-    
+
     setToasts((prev) => [...prev.slice(-4), newToast]) // Keep max 5 toasts
 
     if (duration > 0) {
-      setTimeout(() => {
+      const timer = setTimeout(() => {
         setToasts((prev) => prev.filter((t) => t.id !== id))
+        dismissTimersRef.current.delete(id)
       }, duration)
+      dismissTimersRef.current.set(id, timer)
     }
   }, [])
 
   const hideToast = useCallback((id: string) => {
+    // Clear auto-dismiss timer if exists
+    const timer = dismissTimersRef.current.get(id)
+    if (timer) {
+      clearTimeout(timer)
+      dismissTimersRef.current.delete(id)
+    }
     setToasts((prev) => prev.filter((t) => t.id !== id))
   }, [])
 

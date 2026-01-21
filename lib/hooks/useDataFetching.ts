@@ -341,7 +341,7 @@ export function useTraderDetail(handle: string | undefined) {
   return useFetch(
     handle ? ['trader', handle] : null,
     async () => {
-      const res = await fetch(`/api/trader/${encodeURIComponent(handle!)}`)
+      const res = await fetch(`/api/traders/${encodeURIComponent(handle!)}`)
       if (!res.ok) throw new Error('获取交易员详情失败')
       return res.json()
     },

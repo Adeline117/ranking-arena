@@ -174,11 +174,11 @@
 #### 3.1 交易员相关 API (`/api/traders`, `/api/trader`)
 - **`/api/traders/route.ts`** - 获取交易员列表（支持分页、筛选、排序）
 - **`/api/traders/[handle]/full/route.ts`** - 获取交易员完整信息
-- **`/api/trader/[handle]/route.ts`** - 获取交易员详情
-- **`/api/trader/[handle]/positions/route.ts`** - 获取持仓信息
-- **`/api/trader/[handle]/equity/route.ts`** - 获取权益曲线
-- **`/api/trader/[handle]/percentile/route.ts`** - 获取百分位数排名
-- **`/api/trader/claim/route.ts`** - 认领交易员账户
+- **`/api/traders/[handle]/route.ts`** - 获取交易员详情
+- **`/api/traders/[handle]/positions/route.ts`** - 获取持仓信息
+- **`/api/traders/[handle]/equity/route.ts`** - 获取权益曲线
+- **`/api/traders/[handle]/percentile/route.ts`** - 获取百分位数排名
+- **`/api/traders/claim/route.ts`** - 认领交易员账户
 
 #### 3.2 帖子相关 API (`/api/posts`)
 - **`/api/posts/route.ts`** - 获取帖子列表、创建帖子

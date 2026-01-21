@@ -2,7 +2,7 @@
 
 import { tokens } from '@/lib/design-tokens'
 import { Box } from '../Base'
-import { useLanguage } from '../Utils/LanguageProvider'
+import { useLanguage } from '../Providers/LanguageProvider'
 import type { TimeRange } from './hooks/useTraderData'
 
 interface TimeRangeSelectorProps {

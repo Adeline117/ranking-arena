@@ -109,12 +109,20 @@ interface ActionProps {
 export function Action({ icon, text, onClick, active, count, showCount }: ActionProps) {
   const [isPressed, setIsPressed] = useState(false)
   const [isAnimating, setIsAnimating] = useState(false)
+  const processingRef = useRef(false)
 
   const handleClick = (e: React.MouseEvent) => {
+    // 防止重复点击
+    if (processingRef.current) return
+    processingRef.current = true
+
     e.preventDefault()
     e.stopPropagation()
     setIsAnimating(true)
-    setTimeout(() => setIsAnimating(false), 300)
+    setTimeout(() => {
+      setIsAnimating(false)
+      processingRef.current = false
+    }, 300)
     onClick(e)
   }
 

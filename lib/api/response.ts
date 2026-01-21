@@ -5,6 +5,7 @@
 
 import { NextResponse } from 'next/server'
 import { ApiError, ErrorCode, ErrorCodeType, ErrorCodeToHttpStatus } from './errors'
+import { logger } from '../logger'
 
 // ============================================
 // 响应类型定义
@@ -251,19 +252,33 @@ export function providerError(
 /**
  * 处理异常并返回适当的响应
  * 自动识别错误类型并返回标准化的响应
+ * 错误会自动上报到 Sentry
  */
 export function handleError(err: unknown, context?: string): NextResponse<ApiErrorResponse> {
   // 如果已经是 ApiError，直接转换
   if (err instanceof ApiError) {
-    if (context) {
-      console.error(`[${context}] ApiError:`, err.message, { code: err.code })
+    // 使用 logger.error 上报到 Sentry（仅 500 级别错误）
+    if (err.statusCode >= 500) {
+      logger.error(`[${context || 'API'}] ApiError: ${err.message}`, err, { code: err.code })
+    } else if (context) {
+      // 4xx 错误仅记录 warn
+      logger.warn(`[${context}] ApiError: ${err.message}`, { code: err.code })
     }
     return errorFromApiError(err)
   }
 
   // 转换为 ApiError
   const apiError = ApiError.from(err, context)
-  
+
+  // 上报到 Sentry（仅 500 级别错误）
+  if (apiError.statusCode >= 500) {
+    const originalError = err instanceof Error ? err : new Error(String(err))
+    logger.error(`[${context || 'API'}] ${apiError.message}`, originalError, {
+      code: apiError.code,
+      statusCode: apiError.statusCode
+    })
+  }
+
   // 生产环境隐藏内部错误详情
   const isProduction = process.env.NODE_ENV === 'production'
   if (isProduction && apiError.statusCode >= 500) {

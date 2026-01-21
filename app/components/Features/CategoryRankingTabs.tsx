@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../Base'
-import { useLanguage } from '../Utils/LanguageProvider'
+import { useLanguage } from '../Providers/LanguageProvider'
 import { useToast } from '../UI/Toast'
 
 export type CategoryType = 'all' | 'futures' | 'spot' | 'web3'
