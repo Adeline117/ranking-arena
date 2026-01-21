@@ -296,6 +296,66 @@ export const realtimeLogger = new Logger('Realtime')
 /** UI 组件日志 */
 export const uiLogger = new Logger('UI')
 
+/** 消息系统日志 */
+export const messageLogger = new Logger('Message')
+
+// ============================================
+// 消息追踪辅助函数
+// ============================================
+
+/**
+ * 消息事件类型
+ */
+export type MessageEvent =
+  | 'send'           // 发送消息
+  | 'delivered'      // 消息送达
+  | 'read'           // 消息已读
+  | 'failed'         // 发送失败
+  | 'conversation_created'  // 会话创建
+  | 'notification_sent'     // 通知发送
+
+interface MessageTraceContext {
+  messageId?: string
+  conversationId?: string
+  senderId?: string
+  receiverId?: string
+  event: MessageEvent
+  error?: string
+  metadata?: Record<string, unknown>
+}
+
+/**
+ * 记录消息追踪日志
+ * 用于追踪消息从发送到已读的完整生命周期
+ */
+export function traceMessage(context: MessageTraceContext): void {
+  const { messageId, conversationId, senderId, receiverId, event, error, metadata } = context
+  const timestamp = new Date().toISOString()
+
+  const logData = {
+    messageId,
+    conversationId,
+    senderId,
+    receiverId,
+    event,
+    timestamp,
+    ...metadata,
+  }
+
+  if (error) {
+    messageLogger.error(`Message ${event} failed: ${error}`, logData)
+    captureMessage(`Message ${event} failed`, 'error', { ...logData, error })
+  } else {
+    messageLogger.info(`Message ${event}`, logData)
+  }
+
+  // 添加 Sentry breadcrumb 用于追踪
+  addBreadcrumb(`msg:${event}`, error ? 'error' : 'info', {
+    messageId,
+    conversationId,
+  })
+}
+
 // ============================================
 // 请求 ID 管理
 // ============================================
