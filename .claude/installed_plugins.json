@@ -571,6 +571,14 @@
       "source": "./skills/claude-code-workflows/plugins/ui-design",
       "category": "development",
       "description": "Comprehensive UI/UX design plugin for mobile (iOS, Android, React Native) and web applications with design systems, accessibility, and modern patterns"
+    },
+    {
+      "name": "dotnet-contribution",
+      "version": "1.0.0",
+      "enabled": true,
+      "source": "./skills/claude-code-workflows/plugins/dotnet-contribution",
+      "category": "languages",
+      "description": "C#/.NET backend development patterns for building robust APIs, MCP servers, and enterprise applications with Clean Architecture"
     }
   ]
 }
