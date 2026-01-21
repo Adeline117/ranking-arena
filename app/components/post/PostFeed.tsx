@@ -1515,29 +1515,60 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
 
   if (loading) {
     return (
-      <div style={{ padding: tokens.spacing[4], textAlign: 'center', color: tokens.colors.text.tertiary }}>
-        加载中...
+      <div style={{
+        padding: tokens.spacing[6],
+        textAlign: 'center',
+        color: tokens.colors.text.tertiary,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: tokens.spacing[3],
+      }}>
+        <div style={{
+          width: 24,
+          height: 24,
+          border: `2px solid ${tokens.colors.border.primary}`,
+          borderTopColor: tokens.colors.accent.primary,
+          borderRadius: '50%',
+          animation: 'spin 1s linear infinite',
+        }} />
+        <span>{t('loading')}</span>
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>
     )
   }
 
   if (error) {
     return (
-      <div style={{ padding: tokens.spacing[4], textAlign: 'center', color: tokens.colors.text.tertiary }}>
-        {error}
+      <div style={{
+        padding: tokens.spacing[6],
+        textAlign: 'center',
+        color: tokens.colors.text.tertiary,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: tokens.spacing[3],
+      }}>
+        <div style={{ color: tokens.colors.accent.error, marginBottom: tokens.spacing[2] }}>
+          {error}
+        </div>
         <button
           onClick={loadPosts}
           style={{
-            marginLeft: tokens.spacing[2],
-            padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
+            padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
             background: tokens.colors.accent.primary,
             color: '#fff',
             border: 'none',
-            borderRadius: tokens.radius.sm,
+            borderRadius: tokens.radius.md,
             cursor: 'pointer',
+            fontWeight: tokens.typography.fontWeight.bold,
+            fontSize: tokens.typography.fontSize.sm,
+            transition: tokens.transition.base,
           }}
+          onMouseEnter={(e) => { e.currentTarget.style.opacity = '0.9' }}
+          onMouseLeave={(e) => { e.currentTarget.style.opacity = '1' }}
         >
-          重试
+          {t('tryAgain')}
         </button>
       </div>
     )
@@ -1562,7 +1593,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
                 cursor: 'pointer',
               }}
             >
-              最新
+              {language === 'zh' ? '最新' : 'Latest'}
             </button>
             <button
               onClick={() => setSortType('likes')}
@@ -1577,12 +1608,26 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
                 cursor: 'pointer',
               }}
             >
-              最热
+              {language === 'zh' ? '最热' : 'Hot'}
             </button>
           </div>
         )}
-        <div style={{ padding: tokens.spacing[4], textAlign: 'center', color: tokens.colors.text.tertiary }}>
-          暂无帖子
+        <div style={{
+          padding: tokens.spacing[6],
+          textAlign: 'center',
+          color: tokens.colors.text.tertiary,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: tokens.spacing[2],
+        }}>
+          <span style={{ fontSize: tokens.typography.fontSize.lg }}>
+            {language === 'zh' ? '📝' : '📝'}
+          </span>
+          <span>{language === 'zh' ? '暂无帖子' : 'No posts yet'}</span>
+          <span style={{ fontSize: tokens.typography.fontSize.xs }}>
+            {language === 'zh' ? '成为第一个发帖的人吧！' : 'Be the first to post!'}
+          </span>
         </div>
       </div>
     )

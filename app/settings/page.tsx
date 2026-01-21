@@ -657,12 +657,75 @@ export default function SettingsPage() {
     }
   }
 
+  // Show auth-required state if not logged in (after initial check)
+  if (!loading && !userId) {
+    return (
+      <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
+        <TopNav email={email} />
+        <Box style={{
+          maxWidth: 400,
+          margin: '0 auto',
+          padding: tokens.spacing[8],
+          textAlign: 'center',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: tokens.spacing[4],
+        }}>
+          <Box style={{
+            width: 64,
+            height: 64,
+            borderRadius: tokens.radius.full,
+            background: `${tokens.colors.accent.primary}15`,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginBottom: tokens.spacing[2],
+          }}>
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke={tokens.colors.accent.primary} strokeWidth="2">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+              <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+            </svg>
+          </Box>
+          <Text size="xl" weight="bold">请先登录</Text>
+          <Text size="sm" color="secondary" style={{ lineHeight: 1.6 }}>
+            您需要登录才能访问设置页面
+          </Text>
+          <Button
+            variant="primary"
+            onClick={() => router.push('/login?redirect=/settings')}
+            style={{ marginTop: tokens.spacing[2] }}
+          >
+            前往登录
+          </Button>
+        </Box>
+      </Box>
+    )
+  }
+
   if (loading) {
     return (
       <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
         <TopNav email={email} />
-        <Box style={{ maxWidth: 800, margin: '0 auto', padding: tokens.spacing[6] }}>
-          <Text size="lg">加载中...</Text>
+        <Box style={{
+          maxWidth: 800,
+          margin: '0 auto',
+          padding: tokens.spacing[6],
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: tokens.spacing[3],
+        }}>
+          <Box style={{
+            width: 32,
+            height: 32,
+            border: `3px solid ${tokens.colors.border.primary}`,
+            borderTopColor: tokens.colors.accent.primary,
+            borderRadius: '50%',
+            animation: 'spin 1s linear infinite',
+          }} />
+          <Text size="lg" color="secondary">加载中...</Text>
+          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
         </Box>
       </Box>
     )
