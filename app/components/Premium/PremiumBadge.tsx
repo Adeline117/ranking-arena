@@ -10,6 +10,7 @@ import { Box, Text } from '../Base'
 import { tokens } from '@/lib/design-tokens'
 import { type SubscriptionTier } from '@/lib/premium'
 import { usePremium } from '@/lib/premium/hooks'
+import { t } from '@/lib/i18n'
 
 // ============================================
 // 类型定义
@@ -34,22 +35,24 @@ interface PremiumBadgeProps {
 // 常量
 // ============================================
 
+const getTierLabel = (tier: SubscriptionTier): string => {
+  if (tier === 'free') return t('free')
+  return 'Pro'
+}
+
 const TIER_CONFIG: Record<SubscriptionTier, {
-  label: string
   icon: string
   color: string
   bgColor: string
   borderColor: string
 }> = {
   free: {
-    label: '免费',
     icon: '',
     color: tokens.colors.text.secondary,
     bgColor: tokens.colors.bg.tertiary,
     borderColor: tokens.colors.border.secondary,
   },
   pro: {
-    label: 'Pro',
     icon: '',
     color: '#f59e0b',
     bgColor: 'rgba(245, 158, 11, 0.1)',
@@ -115,6 +118,8 @@ export function PremiumBadge({
 
   const config = TIER_CONFIG[tier]
   const sizeConfig = SIZE_CONFIG[size]
+  const tierLabel = getTierLabel(tier)
+  const memberLabel = t('member')
 
   if (iconOnly) {
     return (
@@ -130,8 +135,8 @@ export function PremiumBadge({
           ...style,
         }}
         className={className}
-        title={config.label}
-        aria-label={`${config.label} 会员`}
+        title={tierLabel}
+        aria-label={`${tierLabel} ${memberLabel}`}
       >
         {config.icon}
       </Box>
@@ -157,10 +162,10 @@ export function PremiumBadge({
         ...style,
       }}
       className={className}
-      aria-label={`${config.label} 会员`}
+      aria-label={`${tierLabel} ${memberLabel}`}
     >
       <span style={{ fontSize: sizeConfig.iconSize }}>{config.icon}</span>
-      {showLabel && <span>{config.label}</span>}
+      {showLabel && <span>{tierLabel}</span>}
     </Box>
   )
 }
@@ -205,6 +210,7 @@ export function FeatureTag({ tier, size = 'xs', style }: FeatureTagProps) {
 
   const config = TIER_CONFIG[tier]
   const sizeConfig = SIZE_CONFIG[size]
+  const tierLabel = getTierLabel(tier)
 
   return (
     <Box
@@ -224,7 +230,7 @@ export function FeatureTag({ tier, size = 'xs', style }: FeatureTagProps) {
         ...style,
       }}
     >
-      {config.icon} {config.label}
+      {config.icon} {tierLabel}
     </Box>
   )
 }

@@ -4,6 +4,7 @@ import React, { ReactNode } from 'react'
 import { RefreshCw, AlertCircle, AlertTriangle, Search, Inbox, WifiOff, Clock, Lock } from 'lucide-react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '../Base'
+import { t } from '@/lib/i18n'
 
 // ============================================
 // 类型定义
@@ -156,7 +157,7 @@ interface LoadingStateProps extends Omit<BaseStateProps, 'icon'> {
 }
 
 export function LoadingState({
-  title = '加载中',
+  title,
   description,
   action,
   size = 'md',
@@ -164,6 +165,7 @@ export function LoadingState({
   spinning = true,
   className,
 }: LoadingStateProps) {
+  const displayTitle = title || t('loadingShort')
   const color = tokens.colors.accent.primary
 
   return (
@@ -187,7 +189,7 @@ export function LoadingState({
           color="primary"
           style={{ marginBottom: description ? tokens.spacing[1] : 0 }}
         >
-          {title}
+          {displayTitle}
         </Text>
         {description && (
           <Text size={size === 'sm' ? 'xs' : 'sm'} color="tertiary">
@@ -218,11 +220,14 @@ const EMPTY_ICONS: Record<EmptyType, ReactNode> = {
   filter: <Search />,
 }
 
-const EMPTY_TITLES: Record<EmptyType, string> = {
-  default: '暂无数据',
-  search: '未找到结果',
-  inbox: '收件箱为空',
-  filter: '没有匹配的结果',
+const getEmptyTitle = (type: EmptyType): string => {
+  const titles: Record<EmptyType, string> = {
+    default: t('noData'),
+    search: t('noResults'),
+    inbox: t('inboxEmpty'),
+    filter: t('noMatchingResults'),
+  }
+  return titles[type]
 }
 
 export function EmptyState({
@@ -252,7 +257,7 @@ export function EmptyState({
           color="primary"
           style={{ marginBottom: description ? tokens.spacing[1] : 0 }}
         >
-          {title || EMPTY_TITLES[type]}
+          {title || getEmptyTitle(type)}
         </Text>
         {description && (
           <Text
@@ -293,22 +298,28 @@ const ERROR_ICONS: Record<ErrorType, ReactNode> = {
   timeout: <Clock />,
 }
 
-const ERROR_TITLES: Record<ErrorType, string> = {
-  default: '出错了',
-  network: '网络错误',
-  server: '服务器错误',
-  notFound: '未找到',
-  forbidden: '无权限',
-  timeout: '请求超时',
+const getErrorTitle = (type: ErrorType): string => {
+  const titles: Record<ErrorType, string> = {
+    default: t('errorOccurred'),
+    network: t('networkError'),
+    server: t('serverError'),
+    notFound: t('notFound'),
+    forbidden: t('noPermission'),
+    timeout: t('requestTimeout'),
+  }
+  return titles[type]
 }
 
-const ERROR_DESCRIPTIONS: Record<ErrorType, string> = {
-  default: '发生了未知错误，请稍后重试',
-  network: '请检查网络连接后重试',
-  server: '服务器暂时不可用，请稍后重试',
-  notFound: '您访问的资源不存在',
-  forbidden: '您没有权限访问此内容',
-  timeout: '请求超时，请稍后重试',
+const getErrorDescription = (type: ErrorType): string => {
+  const descriptions: Record<ErrorType, string> = {
+    default: t('unknownErrorOccurred'),
+    network: t('checkNetworkAndRetry'),
+    server: t('serverUnavailable'),
+    notFound: t('resourceNotFound'),
+    forbidden: t('noAccessPermission'),
+    timeout: t('requestTimeoutRetry'),
+  }
+  return descriptions[type]
 }
 
 export function ErrorState({
@@ -341,14 +352,14 @@ export function ErrorState({
           color="primary"
           style={{ marginBottom: description ? tokens.spacing[1] : 0 }}
         >
-          {title || ERROR_TITLES[type]}
+          {title || getErrorTitle(type)}
         </Text>
         <Text
           size={size === 'sm' ? 'xs' : 'sm'}
           color="tertiary"
           style={{ maxWidth: 320, margin: '0 auto', lineHeight: 1.6 }}
         >
-          {description || ERROR_DESCRIPTIONS[type]}
+          {description || getErrorDescription(type)}
         </Text>
 
         {/* 开发环境显示错误详情 */}
@@ -381,7 +392,7 @@ export function ErrorState({
             style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}
           >
             <RefreshCw size={16} />
-            重试
+            {t('retry')}
           </Button>
         )}
         {action}
