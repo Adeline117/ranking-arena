@@ -75,7 +75,7 @@ export async function saveTraders(
         pnl: trader.pnl,
         win_rate: trader.winRate,
         max_drawdown: trader.maxDrawdown,
-        followers: trader.followers || 0,
+        followers: trader.followers,  // 保留 null，GMX 无跟单功能
         trades_count: trader.tradesCount,
         captured_at: capturedAt,
       }
