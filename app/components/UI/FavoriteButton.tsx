@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase/client'
+import { useToast } from './Toast'
 
 type FavoriteButtonProps = {
   traderId: string
@@ -10,6 +11,7 @@ type FavoriteButtonProps = {
 }
 
 export default function FavoriteButton({ traderId, userId, initialFavorited = false }: FavoriteButtonProps) {
+  const { showToast } = useToast()
   const [favorited, setFavorited] = useState(initialFavorited)
   const [loading, setLoading] = useState(false)
 
@@ -32,7 +34,7 @@ export default function FavoriteButton({ traderId, userId, initialFavorited = fa
 
   const handleToggle = async () => {
     if (!userId) {
-      alert('请先登录')
+      showToast('请先登录', 'warning')
       return
     }
 
@@ -53,18 +55,20 @@ export default function FavoriteButton({ traderId, userId, initialFavorited = fa
           .eq('user_id', userId)
           .eq('trader_id', traderId)
         if (error) throw error
+        showToast('已取消收藏', 'success')
       } else {
         // 添加收藏
         const { error } = await supabase
           .from('favorites')
           .insert({ user_id: userId, trader_id: traderId })
         if (error) throw error
+        showToast('已收藏', 'success')
       }
     } catch (error) {
       console.error('Toggle favorite error:', error)
       // 回滚乐观更新
       setFavorited(previousState)
-      alert('操作失败，请重试')
+      showToast('操作失败，请重试', 'error')
     } finally {
       setLoading(false)
     }

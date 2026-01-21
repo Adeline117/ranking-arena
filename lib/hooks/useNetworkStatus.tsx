@@ -341,6 +341,7 @@ export function OfflineBanner() {
   const { status, online } = useNetworkStatus()
   const [visible, setVisible] = useState(false)
   const [dismissed, setDismissed] = useState(false)
+  const hideTimerRef = useRef<NodeJS.Timeout | null>(null)
 
   useEffect(() => {
     if (!online && !dismissed) {
@@ -348,9 +349,20 @@ export function OfflineBanner() {
     } else if (online) {
       // 网络恢复，短暂显示然后隐藏
       if (visible) {
-        setTimeout(() => setVisible(false), 2000)
+        // Clear any existing timer
+        if (hideTimerRef.current) {
+          clearTimeout(hideTimerRef.current)
+        }
+        hideTimerRef.current = setTimeout(() => setVisible(false), 2000)
       }
       setDismissed(false)
+    }
+
+    // Cleanup timer on unmount or when dependencies change
+    return () => {
+      if (hideTimerRef.current) {
+        clearTimeout(hideTimerRef.current)
+      }
     }
   }, [online, dismissed, visible])
 

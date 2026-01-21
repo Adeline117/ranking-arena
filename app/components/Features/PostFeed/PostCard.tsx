@@ -8,7 +8,7 @@ import { renderContentWithLinks, ARENA_PURPLE, truncateText } from '@/lib/utils/
 import { type PollChoice, type PostWithUserState, getPollWinner } from '@/lib/types'
 import { ReactButton } from './PostActions'
 import { AvatarLink } from './AvatarLink'
-import { useLanguage } from '../../Utils/LanguageProvider'
+import { useLanguage } from '../../Providers/LanguageProvider'
 
 type Post = PostWithUserState
 

@@ -442,10 +442,10 @@ API 遵循 RESTful 设计，主要端点:
 | 方法 | 端点 | 说明 |
 |------|------|------|
 | GET | `/api/traders` | 获取交易员列表 |
-| GET | `/api/trader/[handle]` | 获取交易员详情 |
-| GET | `/api/trader/[handle]/positions` | 获取持仓信息 |
-| GET | `/api/trader/[handle]/equity` | 获取权益曲线 |
-| POST | `/api/trader/claim` | 认领交易员账户 |
+| GET | `/api/traders/[handle]` | 获取交易员详情 |
+| GET | `/api/traders/[handle]/positions` | 获取持仓信息 |
+| GET | `/api/traders/[handle]/equity` | 获取权益曲线 |
+| POST | `/api/traders/claim` | 认领交易员账户 |
 
 ### 帖子 API
 

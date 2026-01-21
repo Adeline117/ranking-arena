@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
 import Card from '@/app/components/UI/Card'
 import { Box, Text } from '@/app/components/Base'
-import { useLanguage } from '@/app/components/Utils/LanguageProvider'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 type Group = {
   id: string
