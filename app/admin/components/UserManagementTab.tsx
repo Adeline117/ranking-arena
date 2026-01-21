@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
-import { Box, Text, Button } from '@/app/components/Base'
-import Card from '@/app/components/UI/Card'
+import { Box, Text, Button } from '@/app/components/base'
+import Card from '@/app/components/ui/Card'
 import { useUsers } from '../hooks/useUsers'
 
 interface UserManagementTabProps {

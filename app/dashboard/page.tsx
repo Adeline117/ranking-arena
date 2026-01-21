@@ -3,10 +3,10 @@
 import { useEffect, useState, useMemo } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
-import TopNav from '@/app/components/Layout/TopNav'
-import { Box, Text, Button } from '@/app/components/Base'
-import Avatar from '@/app/components/UI/Avatar'
-import EmptyState from '@/app/components/UI/EmptyState'
+import TopNav from '@/app/components/layout/TopNav'
+import { Box, Text, Button } from '@/app/components/base'
+import Avatar from '@/app/components/ui/Avatar'
+import EmptyState from '@/app/components/ui/EmptyState'
 import Link from 'next/link'
 import { formatCompact as formatNumber } from '@/lib/utils/format'
 import { formatTimeAgo } from '@/lib/utils/date'
@@ -17,7 +17,7 @@ import {
   MessageIcon,
   SettingsIcon,
   SearchIcon
-} from '@/app/components/Icons'
+} from '@/app/components/icons'
 
 interface Activity {
   id: string

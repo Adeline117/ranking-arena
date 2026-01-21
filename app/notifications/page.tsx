@@ -3,13 +3,13 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
-import TopNav from '@/app/components/Layout/TopNav'
-import EmptyState from '@/app/components/UI/EmptyState'
+import TopNav from '@/app/components/layout/TopNav'
+import EmptyState from '@/app/components/ui/EmptyState'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import { formatTimeAgo } from '@/lib/utils/date'
 import { type NotificationWithActor } from '@/lib/types'
-import { useToast } from '@/app/components/UI/Toast'
+import { useToast } from '@/app/components/ui/Toast'
 import { getCsrfHeaders } from '@/lib/api/client'
 
 type Notification = NotificationWithActor
