@@ -3119,7 +3119,7 @@ function Modal(props: { children: React.ReactNode; onClose: () => void }) {
         display: 'grid',
         placeItems: 'center',
         padding: 16,
-        zIndex: 1000,
+        zIndex: tokens.zIndex.modal,
         overflowY: 'auto',
       }}
     >

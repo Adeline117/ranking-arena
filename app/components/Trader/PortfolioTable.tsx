@@ -503,7 +503,7 @@ export default function PortfolioTable({ items, history = [] }: PortfolioTablePr
               background: `linear-gradient(135deg, ${tokens.colors.bg.primary} 0%, ${tokens.colors.bg.secondary} 100%)`,
               borderLeft: `1px solid ${tokens.colors.border.primary}`,
               padding: tokens.spacing[6],
-              zIndex: 1000,
+              zIndex: tokens.zIndex.modal,
               overflowY: 'auto',
               boxShadow: '-8px 0 32px rgba(0, 0, 0, 0.2)',
               transform: 'translateX(0)',
