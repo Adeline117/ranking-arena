@@ -21,6 +21,8 @@ export type ApiError = {
   details?: unknown
   tableNotFound?: boolean
   limitReached?: boolean
+  retryable?: boolean
+  retryAfter?: number
 }
 
 // 配置选项
@@ -60,13 +62,18 @@ const ERROR_MESSAGES: Record<string, string> = {
   UNAUTHORIZED: '请先登录',
   FORBIDDEN: '没有权限执行此操作',
   NOT_FOUND: '资源不存在',
-  RATE_LIMITED: '操作过于频繁，请稍后再试',
+  RATE_LIMITED: '请求频率超限，请稍后再试',
+  RATE_LIMIT_EXCEEDED: '请求过于频繁，请稍后再试',
+  PROVIDER_RATE_LIMIT: '服务请求频率超限，请稍后再试',
+  TOO_MANY_REQUESTS: '请求次数过多，请稍后再试',
   VALIDATION_ERROR: '输入数据有误',
   NETWORK_ERROR: '网络错误，请检查网络连接',
   TABLE_NOT_FOUND: '功能暂未开放',
   LIMIT_REACHED: '已达到限制',
   CSRF_INVALID: '安全验证失败，请刷新页面重试',
   SERVER_ERROR: '服务器错误，请稍后重试',
+  PROVIDER_ERROR: '外部服务暂时不可用，请稍后重试',
+  EXTERNAL_SERVICE_ERROR: '外部服务错误，请稍后重试',
 }
 
 // Toast 函数类型（兼容现有 toast 系统）
@@ -84,12 +91,13 @@ export function setGlobalToast(fn: ToastFn) {
  */
 function formatErrorMessage(error: ApiError, customMessage?: string): string {
   if (customMessage) return customMessage
-  
+
   // 检查已知错误代码
+  let baseMessage = error.message || '操作失败，请重试'
   if (error.code && ERROR_MESSAGES[error.code]) {
-    return ERROR_MESSAGES[error.code]
+    baseMessage = ERROR_MESSAGES[error.code]
   }
-  
+
   // 特殊错误处理
   if (error.tableNotFound) {
     return ERROR_MESSAGES.TABLE_NOT_FOUND
@@ -97,9 +105,33 @@ function formatErrorMessage(error: ApiError, customMessage?: string): string {
   if (error.limitReached) {
     return ERROR_MESSAGES.LIMIT_REACHED
   }
-  
-  // 返回原始消息或默认消息
-  return error.message || '操作失败，请重试'
+
+  // Add retry information for rate limit errors
+  if (isRateLimitError(error) && error.retryAfter) {
+    const waitTime = formatWaitTime(error.retryAfter)
+    return `${baseMessage}（${waitTime}后可重试）`
+  }
+
+  return baseMessage
+}
+
+/**
+ * Check if an error is a rate limit error
+ */
+function isRateLimitError(error: ApiError): boolean {
+  const rateLimitCodes = ['RATE_LIMITED', 'RATE_LIMIT_EXCEEDED', 'PROVIDER_RATE_LIMIT', 'TOO_MANY_REQUESTS']
+  return rateLimitCodes.includes(error.code)
+}
+
+/**
+ * Format wait time for display
+ */
+function formatWaitTime(seconds: number): string {
+  if (seconds < 60) {
+    return `${seconds}秒`
+  }
+  const minutes = Math.ceil(seconds / 60)
+  return `${minutes}分钟`
 }
 
 /**
@@ -186,16 +218,28 @@ export function useApiMutation<TData = unknown, TVariables = void>(
 
           // 处理错误响应
           lastError = result.error || { code: 'UNKNOWN', message: '未知错误' }
-          
+
           // 某些错误不应重试
           const noRetryErrors = ['UNAUTHORIZED', 'FORBIDDEN', 'VALIDATION_ERROR', 'CSRF_INVALID']
           if (noRetryErrors.includes(lastError.code)) {
             break
           }
 
+          // Check if error is explicitly not retryable
+          if (lastError.retryable === false) {
+            break
+          }
+
           attempt++
           if (attempt <= retryCount) {
-            await delay(retryDelay * attempt)
+            // Use retryAfter if available, otherwise use exponential backoff
+            let waitTime = retryDelay * attempt
+            if (isRateLimitError(lastError) && lastError.retryAfter) {
+              // For rate limits, use the server-provided retry time (in seconds, convert to ms)
+              // but cap it at a reasonable maximum
+              waitTime = Math.min(lastError.retryAfter * 1000, 60000)
+            }
+            await delay(waitTime)
           }
         } catch (err) {
           lastError = {
