@@ -37,16 +37,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     // 切换置顶状态
     const newPinnedState = !post.is_pinned
 
-    // 如果要置顶，先取消该用户其他帖子的置顶
-    if (newPinnedState) {
-      await supabase
-        .from('posts')
-        .update({ is_pinned: false })
-        .eq('author_id', user.id)
-        .eq('is_pinned', true)
-    }
-
-    // 更新当前帖子的置顶状态
+    // 更新当前帖子的置顶状态（先执行主操作）
     const { error: updateError } = await supabase
       .from('posts')
       .update({ is_pinned: newPinnedState })
@@ -54,6 +45,21 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
     if (updateError) {
       throw new Error('更新置顶状态失败: ' + updateError.message)
+    }
+
+    // 如果成功置顶了，取消该用户其他帖子的置顶
+    if (newPinnedState) {
+      const { error: unpinError } = await supabase
+        .from('posts')
+        .update({ is_pinned: false })
+        .eq('author_id', user.id)
+        .eq('is_pinned', true)
+        .neq('id', postId)  // 排除刚刚置顶的帖子
+
+      if (unpinError) {
+        // Log but don't fail - the main operation succeeded
+        console.error('Failed to unpin other posts:', unpinError)
+      }
     }
 
     return success({

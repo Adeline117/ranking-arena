@@ -45,16 +45,26 @@ export async function DELETE(
     }
 
     // 删除帖子相关的评论
-    await supabase
+    const { error: commentsDeleteError } = await supabase
       .from('comments')
       .delete()
       .eq('post_id', postId)
 
+    if (commentsDeleteError) {
+      logger.error('Failed to delete comments', { error: commentsDeleteError, postId })
+      // Continue with deletion - orphaned comments are less critical
+    }
+
     // 删除帖子相关的点赞
-    await supabase
+    const { error: likesDeleteError } = await supabase
       .from('post_likes')
       .delete()
       .eq('post_id', postId)
+
+    if (likesDeleteError) {
+      logger.error('Failed to delete post likes', { error: likesDeleteError, postId })
+      // Continue with deletion - orphaned likes are less critical
+    }
 
     // 删除帖子
     const { error: deleteError } = await supabase
