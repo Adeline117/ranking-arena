@@ -226,10 +226,13 @@ export interface RankedTrader {
   handle: string
   roi: number
   pnl: number
-  win_rate: number
+  /** 胜率 (0-100)，GMX 等交易所无此字段 */
+  win_rate: number | null
+  /** 最大回撤 (%)，GMX 等交易所无此字段 */
   max_drawdown: number | null
   trades_count: number | null
-  followers: number
+  /** 跟单人数，GMX 无跟单功能 */
+  followers: number | null
   source: string
   avatar_url: string | null
   /** Arena Score (0-100) - 核心排名指标 */
