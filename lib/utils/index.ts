@@ -4,7 +4,7 @@
 
 export * from './date'
 export * from './format'
-// Export logger (excluding withRetry which is also in circuit-breaker)
+// logger 中的 withRetry 与 circuit-breaker 冲突，排除
 export {
   logger,
   apiLogger,
@@ -14,46 +14,38 @@ export {
   exchangeLogger,
   realtimeLogger,
   uiLogger,
+  createLogger,
   generateRequestId,
   setCurrentRequestId,
   getCurrentRequestId,
   clearCurrentRequestId,
   logRequest,
   createTimer,
-  createLogger,
   silent,
   logIf,
   devOnly,
   captureError,
   captureMessage,
-  addBreadcrumb,
-  safeExecute,
-  Logger,
 } from './logger'
 export type { LogLevel, LoggerConfig, LogEntry } from './logger'
-
 export * from './rate-limit'
-
-// Export circuit-breaker (this module's withRetry and isProviderRateLimitError take precedence)
-export * from './circuit-breaker'
-
-// Export provider-error (excluding isProviderRateLimitError which is also in circuit-breaker)
+// circuit-breaker 的 withRetry 功能更全（指数退避、抖动）
+// circuit-breaker 的 isProviderRateLimitError 与 provider-error 冲突，排除
 export {
-  parseProviderError,
-  isRetryableProviderError,
-  withProviderRetry,
-  createRetryableProviderCall,
-  ProviderRetryPresets,
-  toUserFriendlyError,
-  formatWaitTime,
-} from './provider-error'
-export type {
-  ProviderErrorDetails,
-  ProviderError,
-  ParsedProviderError,
-  UserFriendlyError,
-  ProviderRetryOptions,
-} from './provider-error'
+  CircuitBreaker,
+  withRetry,
+  withCircuitBreakerAndRetry,
+  getCircuitBreaker,
+  getAllCircuitBreakerStats,
+  resetAllCircuitBreakers,
+  RetryPresets,
+  isNetworkError,
+  isTransientError,
+  extractRetryAfter,
+} from './circuit-breaker'
+export type { CircuitState, CircuitBreakerOptions, RetryOptions } from './circuit-breaker'
+// provider-error 的 isProviderRateLimitError 为标准版本
+export * from './provider-error'
 export * from './validation'
 export * from './content'
 export * from './server-cache'

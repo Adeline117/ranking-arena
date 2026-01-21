@@ -5,6 +5,7 @@
 export * from './post'
 export * from './comment'
 export * from './notification'
+export * from './trader'
 export type { SubscriptionTier, ActiveSubscriptionTier } from './premium'
 export { normalizeSubscriptionTier } from './premium'
 
