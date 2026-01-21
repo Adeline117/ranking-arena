@@ -29,6 +29,32 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
+/**
+ * 标准化 ROI 值
+ * OKX 可能返回小数形式（如 0.25 表示 25%），需要转换为百分比
+ */
+function normalizeROI(value) {
+  if (value === null || value === undefined) return null
+  // 如果绝对值小于 10，可能是小数形式，需要乘以 100
+  if (Math.abs(value) < 10 && Math.abs(value) > 0) {
+    return value * 100
+  }
+  return value
+}
+
+/**
+ * 标准化 Win Rate 值
+ * 确保在 0-100 范围（百分比形式）
+ */
+function normalizeWinRate(value) {
+  if (value === null || value === undefined) return null
+  // 如果在 0-1 范围，转换为百分比
+  if (value > 0 && value <= 1) {
+    return value * 100
+  }
+  return value
+}
+
 function parseLimit() {
   const arg = process.argv.find(a => a.startsWith('--limit='))
   return arg ? parseInt(arg.split('=')[1]) : DEFAULT_LIMIT
@@ -92,8 +118,8 @@ async function fetchTraderDetail(context, traderId, handle) {
       const text = document.body.innerText
       const result = {}
 
-      // ROI
-      const roiMatch = text.match(/(?:ROI|收益率)[:\s]*\+?([+-]?\d+(?:,\d+)*\.?\d*)%/i)
+      // ROI - 注意：OKX 可能返回小数形式，后续会标准化
+      const roiMatch = text.match(/(?:ROI|收益率)[:\s]*\+?([+-]?\d+(?:,\d+)*\.?\d*)%?/i)
       if (roiMatch) result.roi = parseFloat(roiMatch[1].replace(/,/g, ''))
 
       // PnL
@@ -105,8 +131,8 @@ async function fetchTraderDetail(context, traderId, handle) {
         result.pnl = pnl
       }
 
-      // 胜率
-      const winRateMatch = text.match(/(?:Win Rate|胜率)[:\s]*(\d+\.?\d*)%/i)
+      // 胜率 - 注意：可能是 0-1 或 0-100 格式，后续会标准化
+      const winRateMatch = text.match(/(?:Win Rate|胜率)[:\s]*(\d+\.?\d*)%?/i)
       if (winRateMatch) result.winRate = parseFloat(winRateMatch[1])
 
       // 最大回撤
@@ -136,6 +162,14 @@ async function fetchTraderDetail(context, traderId, handle) {
 
       return result
     })
+
+    // 标准化数据
+    if (pageData.roi !== undefined) {
+      pageData.roi = normalizeROI(pageData.roi)
+    }
+    if (pageData.winRate !== undefined) {
+      pageData.winRate = normalizeWinRate(pageData.winRate)
+    }
 
     Object.assign(details.stats, pageData)
     details.assetBreakdown = pageData.assetBreakdown || []

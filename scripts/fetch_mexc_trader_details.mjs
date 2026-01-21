@@ -32,6 +32,19 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
+/**
+ * 标准化 Win Rate 值
+ * 确保在 0-100 范围（百分比形式）
+ */
+function normalizeWinRate(value) {
+  if (value === null || value === undefined) return null
+  // 如果在 0-1 范围，转换为百分比
+  if (value > 0 && value <= 1) {
+    return value * 100
+  }
+  return value
+}
+
 function parseLimit() {
   const arg = process.argv.find(a => a.startsWith('--limit='))
   return arg ? parseInt(arg.split('=')[1]) : DEFAULT_LIMIT
@@ -84,7 +97,9 @@ async function fetchTraderDetail(browser, traderId, handle) {
             const d = data.data
             details.stats.roi = parseFloat(d.roi || d.totalRoi || 0)
             details.stats.pnl = parseFloat(d.totalPnl || d.pnl || 0)
-            details.stats.winRate = parseFloat(d.winRate || 0)
+            // 标准化 Win Rate 到 0-100 范围
+            const rawWinRate = parseFloat(d.winRate || 0)
+            details.stats.winRate = normalizeWinRate(rawWinRate)
             details.stats.maxDrawdown = parseFloat(d.maxDrawdown || d.mdd || 0)
             details.stats.followers = parseInt(d.followerCount || d.copierCount || 0)
             details.stats.totalTrades = parseInt(d.totalTrades || 0)
@@ -193,6 +208,11 @@ async function fetchTraderDetail(browser, traderId, handle) {
 
         return result
       })
+
+      // 标准化 Win Rate
+      if (pageData.winRate !== undefined) {
+        pageData.winRate = normalizeWinRate(pageData.winRate)
+      }
 
       Object.assign(details.stats, pageData)
       details.assetBreakdown = pageData.assetBreakdown || []
