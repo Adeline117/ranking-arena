@@ -364,9 +364,24 @@ export default function MessagesPage() {
             <Text size="lg" weight="bold" style={{ marginBottom: tokens.spacing[2], color: tokens.colors.text.primary }}>
               暂无私信
             </Text>
-            <Text size="sm" color="tertiary" style={{ maxWidth: 280, margin: '0 auto', lineHeight: 1.6 }}>
+            <Text size="sm" color="tertiary" style={{ maxWidth: 280, margin: '0 auto', lineHeight: 1.6, marginBottom: tokens.spacing[4] }}>
               访问用户主页点击「私信」按钮，开始与其他用户交流
             </Text>
+            <Link
+              href="/search?type=users"
+              style={{
+                display: 'inline-block',
+                padding: '12px 20px',
+                background: 'linear-gradient(135deg, #9575cd 0%, #7e57c2 100%)',
+                color: '#fff',
+                borderRadius: 12,
+                textDecoration: 'none',
+                fontWeight: 700,
+                fontSize: '14px',
+              }}
+            >
+              搜索用户发起对话
+            </Link>
           </Box>
         ) : conversations.length > 0 ? (
           <Box style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>

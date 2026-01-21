@@ -34,6 +34,7 @@ export default function EquityCurve({
   const seriesRef = useRef<ISeriesApi<'Line'> | null>(null)
   const [tooltipData, setTooltipData] = useState<{ time: string; value: number } | null>(null)
   const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 })
+  const [chartError, setChartError] = useState<string | null>(null)
 
   // Calculate if overall trend is positive
   const isPositive = data.length >= 2 ? data[data.length - 1].value >= data[0].value : true
@@ -44,6 +45,9 @@ export default function EquityCurve({
   useEffect(() => {
     if (!chartContainerRef.current || data.length === 0) return
 
+    setChartError(null)
+
+    try {
     // Create chart
     const chart = createChart(chartContainerRef.current, {
       layout: {
@@ -151,6 +155,10 @@ export default function EquityCurve({
       window.removeEventListener('resize', handleResize)
       chart.remove()
     }
+    } catch (err) {
+      console.error('Chart creation error:', err)
+      setChartError('Failed to load chart')
+    }
   }, [data, height, lineColor, defaultLineColor, showTooltip])
 
   // Calculate stats
@@ -229,7 +237,7 @@ export default function EquityCurve({
       )}
 
       {/* Empty State */}
-      {data.length === 0 && (
+      {data.length === 0 && !chartError && (
         <Box
           style={{
             position: 'absolute',
@@ -242,6 +250,42 @@ export default function EquityCurve({
           <Text size="sm" color="tertiary">
             No equity data available
           </Text>
+        </Box>
+      )}
+
+      {/* Error State */}
+      {chartError && (
+        <Box
+          style={{
+            position: 'absolute',
+            inset: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: tokens.spacing[3],
+            background: 'rgba(0, 0, 0, 0.3)',
+            borderRadius: tokens.radius.md,
+          }}
+        >
+          <Text size="sm" color="tertiary">
+            {chartError}
+          </Text>
+          <button
+            onClick={() => setChartError(null)}
+            style={{
+              padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
+              background: tokens.colors.accent.primary,
+              color: '#fff',
+              border: 'none',
+              borderRadius: tokens.radius.md,
+              fontSize: tokens.typography.fontSize.sm,
+              fontWeight: 600,
+              cursor: 'pointer',
+            }}
+          >
+            Retry
+          </button>
         </Box>
       )}
     </Box>

@@ -358,10 +358,29 @@ export default function TraderHeader({
           </Box>
           
           <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[4] }}>
-            <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
-              <Text 
-                size="sm" 
-                style={{ 
+            <Box
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: tokens.spacing[2],
+                cursor: 'pointer',
+                padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
+                borderRadius: tokens.radius.md,
+                transition: 'background 0.2s ease',
+              }}
+              title="查看粉丝列表"
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = coverUrl
+                  ? 'rgba(255,255,255,0.1)'
+                  : `${tokens.colors.accent.primary}10`
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'transparent'
+              }}
+            >
+              <Text
+                size="sm"
+                style={{
                   fontWeight: tokens.typography.fontWeight.semibold,
                   color: coverUrl ? 'rgba(255,255,255,0.8)' : tokens.colors.text.secondary,
                   textShadow: coverUrl ? '0 1px 4px rgba(0,0,0,0.5)' : undefined,
@@ -370,8 +389,8 @@ export default function TraderHeader({
                 <Text
                   as="span"
                   weight="black"
-                  style={{ 
-                    color: coverUrl ? '#ffffff' : tokens.colors.text.primary, 
+                  style={{
+                    color: coverUrl ? '#ffffff' : tokens.colors.text.primary,
                     marginRight: 4,
                     textShadow: coverUrl ? '0 1px 4px rgba(0,0,0,0.5)' : undefined,
                   }}
