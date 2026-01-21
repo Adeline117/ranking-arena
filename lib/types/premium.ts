@@ -1,20 +1,40 @@
 /**
  * 付费增值功能类型定义
  * 包含订阅计划、功能权限和 API 配额
- * 
+ *
  * 核心付费价值：风险预警系统
- * 
+ *
  * 简化为双层会员体系：Free + Pro
+ * 支持旧版 elite/enterprise 等级以保证向后兼容
  */
 
 // ============================================
 // 订阅计划
 // ============================================
 
-export type SubscriptionTier = 'free' | 'pro'
+/** 当前活跃的订阅等级 */
+export type ActiveSubscriptionTier = 'free' | 'pro'
+
+/**
+ * 完整订阅等级（包含旧版等级以保证向后兼容）
+ * - free: 免费版
+ * - pro: 专业版
+ * - elite: 旧版精英版（映射到 pro）
+ * - enterprise: 旧版企业版（映射到 pro）
+ */
+export type SubscriptionTier = 'free' | 'pro' | 'elite' | 'enterprise'
+
+/**
+ * 将旧版订阅等级映射到当前等级
+ */
+export function normalizeSubscriptionTier(tier: SubscriptionTier | string | null | undefined): ActiveSubscriptionTier {
+  if (!tier) return 'free'
+  if (tier === 'elite' || tier === 'enterprise' || tier === 'pro') return 'pro'
+  return 'free'
+}
 
 export interface SubscriptionPlan {
-  id: SubscriptionTier
+  id: ActiveSubscriptionTier
   name: string
   description: string
   price: {
@@ -54,8 +74,8 @@ export interface PremiumFeature {
   name: string
   description: string
   icon: string
-  tier: SubscriptionTier[]  // 哪些订阅等级包含此功能
-  isCore?: boolean          // 是否为核心卖点
+  tier: ActiveSubscriptionTier[]  // 哪些订阅等级包含此功能
+  isCore?: boolean                // 是否为核心卖点
 }
 
 export interface FeatureLimits {
@@ -260,6 +280,7 @@ export const PREMIUM_FEATURES: PremiumFeature[] = [
 
 /**
  * 检查用户是否有某个功能的权限
+ * 支持旧版 elite/enterprise 等级（映射到 pro）
  */
 export function hasFeatureAccess(
   userTier: SubscriptionTier,
@@ -267,14 +288,17 @@ export function hasFeatureAccess(
 ): boolean {
   const feature = PREMIUM_FEATURES.find(f => f.id === featureId)
   if (!feature) return false
-  return feature.tier.includes(userTier)
+  const normalizedTier = normalizeSubscriptionTier(userTier)
+  return feature.tier.includes(normalizedTier)
 }
 
 /**
  * 获取用户的功能限制
+ * 支持旧版 elite/enterprise 等级（映射到 pro）
  */
 export function getFeatureLimits(tier: SubscriptionTier): FeatureLimits {
-  const plan = SUBSCRIPTION_PLANS.find(p => p.id === tier)
+  const normalizedTier = normalizeSubscriptionTier(tier)
+  const plan = SUBSCRIPTION_PLANS.find(p => p.id === normalizedTier)
   return plan?.limits || SUBSCRIPTION_PLANS[0].limits
 }
 
@@ -296,17 +320,19 @@ export function getCoreFeatures(): PremiumFeature[] {
 
 /**
  * 获取某等级的新功能（相比上一等级）
+ * 支持旧版 elite/enterprise 等级（映射到 pro）
  */
 export function getNewFeaturesForTier(tier: SubscriptionTier): PremiumFeature[] {
-  const tierOrder: SubscriptionTier[] = ['free', 'pro']
-  const currentIndex = tierOrder.indexOf(tier)
-  
+  const tierOrder: ActiveSubscriptionTier[] = ['free', 'pro']
+  const normalizedTier = normalizeSubscriptionTier(tier)
+  const currentIndex = tierOrder.indexOf(normalizedTier)
+
   if (currentIndex <= 0) {
-    return PREMIUM_FEATURES.filter(f => f.tier.includes(tier))
+    return PREMIUM_FEATURES.filter(f => f.tier.includes(normalizedTier))
   }
-  
+
   const previousTier = tierOrder[currentIndex - 1]
   return PREMIUM_FEATURES.filter(
-    f => f.tier.includes(tier) && !f.tier.includes(previousTier)
+    f => f.tier.includes(normalizedTier) && !f.tier.includes(previousTier)
   )
 }
