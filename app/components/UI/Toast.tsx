@@ -3,6 +3,7 @@
 import { createContext, useContext, useState, useCallback, ReactNode, useEffect, useRef } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { setGlobalToast } from '@/lib/hooks/useApiMutation'
+import { t } from '@/lib/i18n'
 
 type ToastType = 'success' | 'error' | 'warning' | 'info'
 
@@ -237,10 +238,10 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       } else if (typeof msgObj.msg === 'string') {
         finalMessage = msgObj.msg
       } else {
-        finalMessage = '操作失败'
+        finalMessage = t('operationFailed')
       }
     } else {
-      finalMessage = String(message || '未知错误')
+      finalMessage = String(message || t('unknownError'))
     }
     
     const id = `toast-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`

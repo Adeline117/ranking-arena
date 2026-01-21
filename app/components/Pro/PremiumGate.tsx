@@ -57,22 +57,14 @@ export default function PremiumGate({
   lockOnly = false,
   minHeight,
 }: PremiumGateProps) {
-  const { language, t } = useLanguage()
+  const { t } = useLanguage()
 
   if (isPro) {
     return <>{children}</>
   }
 
-  const loginMessage = language === 'en' 
-    ? 'Please log in to view this content' 
-    : '请登录后查看此内容'
-
-  const proMessage = customMessage || (
-    language === 'en'
-      ? `${featureName || 'This feature'} is available for Pro members`
-      : `${featureName || '此功能'}仅对 Pro 会员开放`
-  )
-
+  const loginMessage = t('loginToView')
+  const proMessage = customMessage || (featureName ? `${featureName} - ${t('proRequired')}` : t('proRequired'))
   const message = !isLoggedIn ? loginMessage : proMessage
 
   return (
