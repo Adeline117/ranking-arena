@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase/client'
 import { Box, Text, Button } from '@/app/components/Base'
 import { tokens } from '@/lib/design-tokens'
 import ExchangeLogo from './UI/ExchangeLogo'
-import { useLanguage } from './Utils/LanguageProvider'
+import { useLanguage } from './Providers/LanguageProvider'
 
 const EXCHANGES = [
   { id: 'binance', name: 'Binance' },

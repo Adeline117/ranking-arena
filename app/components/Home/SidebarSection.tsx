@@ -7,7 +7,7 @@ import { Box } from '../Base'
 import Card from '../UI/Card'
 import { ErrorBoundary } from '../Utils/ErrorBoundary'
 import { SkeletonCard } from '../UI/Skeleton'
-import { useLanguage } from '../Utils/LanguageProvider'
+import { useLanguage } from '../Providers/LanguageProvider'
 import ProFeaturesPanel from '../Pro/ProFeaturesPanel'
 
 // 懒加载组件

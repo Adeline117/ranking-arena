@@ -1,6 +1,6 @@
 'use client'
 
-import { useLanguage } from './LanguageProvider'
+import { useLanguage } from '../Providers/LanguageProvider'
 
 export default function LanguageSwitcher() {
   const { language: lang, setLanguage } = useLanguage()

@@ -8,7 +8,7 @@ import EmptyState from '../UI/EmptyState'
 import ErrorMessage from '../UI/ErrorMessage'
 import { ChartIcon } from '../Icons'
 import { Box, Text, Button } from '../Base'
-import { useLanguage } from '../Utils/LanguageProvider'
+import { useLanguage } from '../Providers/LanguageProvider'
 import { getCache, setCache } from '@/lib/cache'
 
 type MarketRow = {
