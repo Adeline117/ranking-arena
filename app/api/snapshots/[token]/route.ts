@@ -112,10 +112,11 @@ export async function GET(request: NextRequest, { params }: Params) {
     }
 
     // Increment view count (fire and forget)
-    supabase
+    void supabase
       .rpc('increment_snapshot_view_count', { snapshot_share_token: token })
-      .then(() => {})
-      .catch((err) => logger.warn('Failed to increment view count', { error: String(err) }))
+      .then(() => {
+        // View count incremented
+      })
 
     return NextResponse.json({
       success: true,

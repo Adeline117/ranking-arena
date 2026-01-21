@@ -10,6 +10,9 @@
 
 import type { Exchange, TimeRange } from './trader'
 
+// Re-export Exchange for convenience
+export type { Exchange, TimeRange }
+
 // ============================================
 // 数据来源定义
 // ============================================
