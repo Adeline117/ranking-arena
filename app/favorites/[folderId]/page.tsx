@@ -12,6 +12,7 @@ import { RankingSkeleton } from '@/app/components/UI/Skeleton'
 import EmptyState from '@/app/components/UI/EmptyState'
 import { formatTimeAgo } from '@/lib/utils/date'
 import { getCsrfHeaders } from '@/lib/api/client'
+import { useToast } from '@/app/components/UI/Toast'
 
 interface BookmarkFolder {
   id: string
@@ -47,7 +48,8 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
   const resolvedParams = use(params)
   const folderId = resolvedParams.folderId
   const router = useRouter()
-  
+  const { showToast } = useToast()
+
   const [email, setEmail] = useState<string | null>(null)
   const [accessToken, setAccessToken] = useState<string | null>(null)
   const [folder, setFolder] = useState<BookmarkFolder | null>(null)
@@ -155,15 +157,17 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
       })
 
       const data = await response.json()
-      
+
       if (response.ok) {
         setFolder(data.data?.folder || folder)
         setIsEditing(false)
+        showToast('保存成功', 'success')
       } else {
-        alert(data.error || '保存失败')
+        showToast(data.error || '保存失败', 'error')
       }
     } catch (err) {
-      alert('网络错误')
+      console.error('保存失败:', err)
+      showToast('网络错误', 'error')
     } finally {
       setSaving(false)
     }
@@ -186,14 +190,16 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
       })
 
       const data = await response.json()
-      
+
       if (response.ok) {
+        showToast('收藏夹已删除', 'success')
         router.push('/favorites')
       } else {
-        alert(data.error || '删除失败')
+        showToast(data.error || '删除失败', 'error')
       }
     } catch (err) {
-      alert('网络错误')
+      console.error('删除失败:', err)
+      showToast('网络错误', 'error')
     }
   }
 
@@ -216,15 +222,17 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
       })
 
       const data = await response.json()
-      
+
       if (response.ok) {
         setIsSubscribed(data.data?.is_subscribed ?? !isSubscribed)
         setSubscriberCount(data.data?.subscriber_count ?? subscriberCount)
+        showToast(data.data?.is_subscribed ? '已收藏' : '已取消收藏', 'success')
       } else {
-        alert(data.error || (isSubscribed ? '取消收藏失败' : '收藏失败'))
+        showToast(data.error || (isSubscribed ? '取消收藏失败' : '收藏失败'), 'error')
       }
     } catch (err) {
-      alert('网络错误')
+      console.error('收藏操作失败:', err)
+      showToast('网络错误', 'error')
     } finally {
       setSubscribing(false)
     }
@@ -288,6 +296,7 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
         if (folder) {
           setFolder({ ...folder, post_count: Math.max(0, folder.post_count - 1) })
         }
+        showToast('已移除收藏', 'success')
       } else {
         const data = await response.json()
         // 如果帖子不存在，也从列表中移除
@@ -297,12 +306,12 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
             setFolder({ ...folder, post_count: Math.max(0, folder.post_count - 1) })
           }
         } else {
-          alert(data.error || '移除失败')
+          showToast(data.error || '移除失败', 'error')
         }
       }
     } catch (err) {
       console.error('Error removing bookmark:', err)
-      alert('网络错误')
+      showToast('网络错误', 'error')
     } finally {
       setRemovingBookmark(prev => ({ ...prev, [postId]: false }))
     }
