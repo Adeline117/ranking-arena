@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
     })
 
     if (insertError) {
-      logger.error('Insert error', { error: insertError, postId, userId: user.id, amountCents: amount_cents })
+      logger.error('Insert error', { error: insertError, postId: post_id, userId: user.id, amountCents: amount_cents })
       return error('打赏失败: ' + insertError.message, 500)
     }
 

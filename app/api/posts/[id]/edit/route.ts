@@ -71,7 +71,7 @@ export async function PUT(
 
     return NextResponse.json({ success: true, post: updatedPost })
   } catch (error) {
-    logger.error('Error editing post', { error, postId })
+    logger.error('Error editing post', { error })
     const errorMessage = error instanceof Error ? error.message : '服务器错误'
     return NextResponse.json({ error: errorMessage }, { status: 500 })
   }

@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import crypto from 'crypto'
+import { createLogger } from '@/lib/utils/logger'
+
+const logger = createLogger('exchange-oauth-callback')
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -201,7 +204,7 @@ export async function POST(request: NextRequest) {
       exchangeUserId,
     })
   } catch (error) {
-    logger.error('Error handling OAuth callback', { error, exchange })
+    logger.error('Error handling OAuth callback', { error })
     const errorMessage = error instanceof Error ? error.message : 'Failed to handle callback'
     return NextResponse.json({ error: errorMessage }, { status: 500 })
   }

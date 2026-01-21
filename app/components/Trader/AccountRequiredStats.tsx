@@ -8,6 +8,7 @@ import Card from '@/app/components/UI/Card'
 import ExchangeLogo from '@/app/components/UI/ExchangeLogo'
 import Link from 'next/link'
 import { getCsrfHeaders } from '@/lib/api/client'
+import type { Exchange } from '@/lib/exchange'
 
 interface TradingData {
   total_trades: number
@@ -20,7 +21,7 @@ interface TradingData {
 
 interface ExchangeConnection {
   id: string
-  exchange: string
+  exchange: Exchange
   is_active: boolean
   last_sync_at: string | null
   last_sync_status: string | null

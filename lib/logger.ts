@@ -91,18 +91,44 @@ export const logger = {
 
   /**
    * Error 级别日志 - 记录错误，发送到 Sentry
+   * 支持两种调用方式：
+   * - logger.error('message', error, context) - 推荐，error 会发送到 Sentry
+   * - logger.error('message', context) - context 中的 error 字段会被提取
    */
-  error: (message: string, error: Error, context?: LogContext): void => {
-    const entry = createLogEntry('error', message, context, error)
+  error: (message: string, errorOrContext?: Error | LogContext, context?: LogContext): void => {
+    let error: Error | undefined
+    let ctx: LogContext | undefined
+
+    if (errorOrContext instanceof Error) {
+      error = errorOrContext
+      ctx = context
+    } else if (errorOrContext) {
+      ctx = errorOrContext
+      // 从 context 中提取 error 字段
+      if (ctx.error instanceof Error) {
+        error = ctx.error
+      } else if (ctx.error) {
+        error = new Error(String(ctx.error))
+      }
+    }
+
+    const entry = createLogEntry('error', message, ctx, error)
     console.error(formatLogEntry(entry))
 
     // 发送到 Sentry
-    Sentry.captureException(error, {
-      extra: {
-        message,
-        ...context,
-      },
-    })
+    if (error) {
+      Sentry.captureException(error, {
+        extra: {
+          message,
+          ...ctx,
+        },
+      })
+    } else {
+      Sentry.captureMessage(message, {
+        level: 'error',
+        extra: ctx,
+      })
+    }
   },
 
   /**
@@ -116,8 +142,13 @@ export const logger = {
       logger.info(message, { ...baseContext, ...context }),
     warn: (message: string, context?: LogContext) =>
       logger.warn(message, { ...baseContext, ...context }),
-    error: (message: string, error: Error, context?: LogContext) =>
-      logger.error(message, error, { ...baseContext, ...context }),
+    error: (message: string, errorOrContext?: Error | LogContext, context?: LogContext) => {
+      if (errorOrContext instanceof Error) {
+        logger.error(message, errorOrContext, { ...baseContext, ...context })
+      } else {
+        logger.error(message, { ...baseContext, ...errorOrContext })
+      }
+    },
   }),
 }
 

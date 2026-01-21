@@ -88,45 +88,53 @@ export async function POST(request: NextRequest) {
     }
 
     // 根据交易所类型获取数据
-    // 不同交易所的 trades 和 stats 类型可能不同，使用 unknown 类型
-    let trades: unknown[] = []
-    let stats: unknown = null
+    // 定义通用统计类型
+    interface TradingStats {
+      totalTrades: number
+      avgProfit: number
+      avgLoss: number
+      profitableTradesPct: number
+      tradesPerWeek: number
+      activeSince?: Date | null
+    }
+    let stats: TradingStats | null = null
 
     try {
       switch (exchange as Exchange) {
-        case 'binance':
+        case 'binance': {
           await getBinanceAccount({ apiKey, apiSecret })
-          trades = await getBinanceTrades({ apiKey, apiSecret })
-          stats = calculateBinanceTradingStats(trades)
+          const binanceTrades = await getBinanceTrades({ apiKey, apiSecret })
+          stats = calculateBinanceTradingStats(binanceTrades)
           break
+        }
 
-        case 'bybit':
+        case 'bybit': {
           await getBybitAccount({ apiKey, apiSecret })
           const bybitTrades = await getBybitTrades({ apiKey, apiSecret })
-          trades = bybitTrades
           stats = calculateBybitTradingStats(bybitTrades)
           break
+        }
 
-        case 'bitget':
+        case 'bitget': {
           await getBitgetAccount({ apiKey, apiSecret, passphrase })
           const bitgetTrades = await getBitgetTrades({ apiKey, apiSecret, passphrase })
-          trades = bitgetTrades
           stats = calculateBitgetTradingStats(bitgetTrades)
           break
+        }
 
-        case 'mexc':
+        case 'mexc': {
           await getMexcAccount({ apiKey, apiSecret })
           const mexcTrades = await getMexcTrades({ apiKey, apiSecret }, 'BTCUSDT')
-          trades = mexcTrades
           stats = calculateMexcTradingStats(mexcTrades)
           break
+        }
 
-        case 'coinex':
+        case 'coinex': {
           await getCoinexAccount({ apiKey, apiSecret })
           const coinexTrades = await getCoinexTrades({ apiKey, apiSecret }, 'BTCUSDT')
-          trades = coinexTrades
           stats = calculateCoinexTradingStats(coinexTrades)
           break
+        }
       }
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : '同步失败'
@@ -182,7 +190,7 @@ export async function POST(request: NextRequest) {
 
     return success({
       message: '同步成功',
-      tradesCount: trades.length,
+      tradesCount: stats?.totalTrades ?? 0,
       stats,
     })
   } catch (error) {

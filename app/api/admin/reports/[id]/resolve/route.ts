@@ -115,7 +115,7 @@ export async function POST(
       message: action === 'resolve' ? 'Report resolved and content deleted' : 'Report dismissed',
     })
   } catch (error) {
-    logger.error('Resolve report API error', { error, reportId })
+    logger.error('Resolve report API error', { error })
     const errorMessage = error instanceof Error ? error.message : 'Internal server error'
     return NextResponse.json({ error: errorMessage }, { status: 500 })
   }

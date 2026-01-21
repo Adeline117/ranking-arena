@@ -147,9 +147,20 @@ function HotContent() {
         const tradersData = json.traders || json.data || []
         if (tradersData.length > 0) {
           // 取前10名
-          const top10 = tradersData.slice(0, 10).map((item) => ({
-            id: item.id || item.source_trader_id,
-            handle: item.handle || item.source_trader_id,
+          interface TraderResponse {
+            id?: string
+            source_trader_id?: string
+            handle?: string
+            roi?: number
+            pnl?: number
+            win_rate?: number
+            max_drawdown?: number
+            followers?: number
+            source?: string
+          }
+          const top10 = tradersData.slice(0, 10).map((item: TraderResponse) => ({
+            id: item.id || item.source_trader_id || '',
+            handle: item.handle || item.source_trader_id || null,
             roi: item.roi || 0,
             pnl: item.pnl || 0,
             win_rate: item.win_rate || 0,

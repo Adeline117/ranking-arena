@@ -22,7 +22,10 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "scrape:details": "node scripts/fetch_details_fast.mjs",
-    "scrape:details:force": "node scripts/fetch_details_fast.mjs --force"
+    "scrape:details:force": "node scripts/fetch_details_fast.mjs --force",
+    "daily-check": "bash scripts/daily-check.sh",
+    "setup:antigravity": "bash scripts/antigravity-setup.sh",
+    "setup:dev": "bash scripts/setup-dev.sh"
   },
   "dependencies": {
     "@sentry/nextjs": "10.35.0",
@@ -33,6 +36,7 @@
     "dotenv": "^17.2.3",
     "isomorphic-dompurify": "^2.35.0",
     "lightweight-charts": "^5.1.0",
+    "lucide-react": "^0.562.0",
     "next": "16.1.4",
     "node-fetch": "^3.3.2",
     "p-limit": "^7.2.0",

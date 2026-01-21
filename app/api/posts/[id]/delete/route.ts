@@ -69,7 +69,7 @@ export async function DELETE(
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    logger.error('Error deleting post', { error, postId })
+    logger.error('Error deleting post', { error })
     const errorMessage = error instanceof Error ? error.message : '服务器错误'
     return NextResponse.json({ error: errorMessage }, { status: 500 })
   }
