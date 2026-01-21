@@ -1,3 +1,5 @@
+import React from 'react'
+
 /**
  * 法律页面布局
  */
