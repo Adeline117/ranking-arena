@@ -112,7 +112,7 @@ interface RouteDefinition {
  * 兼容 Zod v3 和 v4
  */
 function getZodInnerType(schema: z.ZodTypeAny): z.ZodTypeAny | null {
-  const def = schema._def as Record<string, unknown>
+  const def = schema._def as unknown as Record<string, unknown>
   // Zod v4 使用 innerType，v3 使用 innerType 或 schema
   return (def.innerType ?? def.schema ?? null) as z.ZodTypeAny | null
 }
@@ -121,7 +121,7 @@ function getZodInnerType(schema: z.ZodTypeAny): z.ZodTypeAny | null {
  * 获取 ZodDefault 的默认值
  */
 function getDefaultValue(schema: z.ZodDefault<z.ZodTypeAny>): unknown {
-  const def = schema._def as Record<string, unknown>
+  const def = schema._def as unknown as Record<string, unknown>
   // Zod v4 使用 defaultValue 函数
   if (typeof def.defaultValue === 'function') {
     return def.defaultValue()
@@ -133,7 +133,7 @@ function getDefaultValue(schema: z.ZodDefault<z.ZodTypeAny>): unknown {
  * 获取 ZodLiteral 的值
  */
 function getLiteralValue(schema: z.ZodLiteral<unknown>): unknown {
-  const def = schema._def as Record<string, unknown>
+  const def = schema._def as unknown as Record<string, unknown>
   return def.value
 }
 
@@ -208,7 +208,7 @@ function handleStringSchema(schema: z.ZodString): Record<string, unknown> {
   const result: Record<string, unknown> = { type: 'string' }
   
   // 安全访问 checks，兼容 Zod v3 和 v4
-  const def = schema._def as Record<string, unknown>
+  const def = schema._def as unknown as Record<string, unknown>
   const checks = (def.checks ?? []) as Array<{ kind: string; value?: number; regex?: RegExp }>
   
   for (const check of checks) {
@@ -246,7 +246,7 @@ function handleNumberSchema(schema: z.ZodNumber): Record<string, unknown> {
   const result: Record<string, unknown> = { type: 'number' }
   
   // 安全访问 checks，兼容 Zod v3 和 v4
-  const def = schema._def as Record<string, unknown>
+  const def = schema._def as unknown as Record<string, unknown>
   const checks = (def.checks ?? []) as Array<{ kind: string; value?: number }>
   
   for (const check of checks) {
@@ -267,7 +267,7 @@ function handleNumberSchema(schema: z.ZodNumber): Record<string, unknown> {
 }
 
 function handleArraySchema(schema: z.ZodArray<z.ZodTypeAny>): Record<string, unknown> {
-  const def = schema._def as Record<string, unknown>
+  const def = schema._def as unknown as Record<string, unknown>
   // Zod v4 使用 element，v3 使用 type
   const itemType = (def.element ?? def.type) as z.ZodTypeAny | undefined
   const minLength = def.minLength as { value: number } | undefined
@@ -282,7 +282,7 @@ function handleArraySchema(schema: z.ZodArray<z.ZodTypeAny>): Record<string, unk
 }
 
 function handleObjectSchema(schema: z.ZodObject<z.ZodRawShape>): Record<string, unknown> {
-  const def = schema._def as Record<string, unknown>
+  const def = schema._def as unknown as Record<string, unknown>
   // shape 可能是函数（v3）或直接对象（v4）
   const shapeOrFn = def.shape
   const shape = typeof shapeOrFn === 'function' ? shapeOrFn() : shapeOrFn
@@ -314,7 +314,7 @@ function handleObjectSchema(schema: z.ZodObject<z.ZodRawShape>): Record<string, 
 }
 
 function handleEnumSchema(schema: z.ZodEnum<[string, ...string[]]>): Record<string, unknown> {
-  const def = schema._def as Record<string, unknown>
+  const def = schema._def as unknown as Record<string, unknown>
   // Zod v4 使用 entries，v3 使用 values
   const values = (def.entries ?? def.values) as string[] | Record<string, string> | undefined
   
@@ -328,7 +328,7 @@ function handleEnumSchema(schema: z.ZodEnum<[string, ...string[]]>): Record<stri
 }
 
 function handleUnionSchema(schema: z.ZodUnion<readonly [z.ZodTypeAny, ...z.ZodTypeAny[]]>): Record<string, unknown> {
-  const def = schema._def as Record<string, unknown>
+  const def = schema._def as unknown as Record<string, unknown>
   const options = (def.options ?? []) as z.ZodTypeAny[]
   
   return {
@@ -535,7 +535,7 @@ export class OpenAPIGenerator {
     const params: OpenAPIParameter[] = []
     
     if (schema instanceof z.ZodObject) {
-      const def = schema._def as Record<string, unknown>
+      const def = schema._def as unknown as Record<string, unknown>
       // shape 可能是函数（v3）或直接对象（v4）
       const shapeOrFn = def.shape
       const shape = typeof shapeOrFn === 'function' ? shapeOrFn() : shapeOrFn

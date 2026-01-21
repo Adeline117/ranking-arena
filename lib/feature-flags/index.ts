@@ -127,7 +127,7 @@ function getUserPercentile(userId: string, flagName: string): number {
   for (let i = 0; i < str.length; i++) {
     const char = str.charCodeAt(i)
     hash = ((hash << 5) - hash) + char
-    hash = hash & hash // Convert to 32bit integer
+    hash = hash | 0 // Convert to 32bit integer
   }
   return Math.abs(hash) % 100
 }
@@ -165,14 +165,14 @@ export function isFeatureEnabled(
     }
   }
 
-  // 3. 检查用户黑名单
-  if (userId && config.disabledUserIds?.includes(userId)) {
-    return false
-  }
-
-  // 4. 检查用户白名单
+  // 3. 检查用户白名单（优先于黑名单）
   if (userId && config.enabledUserIds?.includes(userId)) {
     return true
+  }
+
+  // 4. 检查用户黑名单
+  if (userId && config.disabledUserIds?.includes(userId)) {
+    return false
   }
 
   // 5. 检查百分比发布
