@@ -10,6 +10,7 @@
  */
 
 'use client'
+/* eslint-disable react-hooks/preserve-manual-memoization */
 
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react'
 
