@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { traceMessage } from '@/lib/utils/logger'
 
 export const dynamic = 'force-dynamic'
 
@@ -169,6 +170,15 @@ export async function POST(request: NextRequest) {
     if (!conversation) {
       return NextResponse.json({ error: '无法创建会话' }, { status: 500 })
     }
+
+    // 追踪会话创建/获取
+    traceMessage({
+      event: 'conversation_created',
+      conversationId: conversation.id,
+      senderId,
+      receiverId,
+      metadata: { isMutualFollow },
+    })
 
     return NextResponse.json({
       conversation_id: conversation.id,
