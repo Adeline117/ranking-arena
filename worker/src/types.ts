@@ -27,7 +27,8 @@ export interface TraderData {
   pnl: number
   winRate: number | null
   maxDrawdown: number | null
-  followers: number
+  /** 跟单人数，GMX 无跟单功能，可能为 null */
+  followers: number | null
   aum: number | null
   tradesCount: number | null
   rank: number
@@ -76,7 +77,8 @@ export interface TraderSnapshotRow {
   pnl: number
   win_rate: number | null
   max_drawdown: number | null
-  followers: number
+  /** 跟单人数，GMX 无跟单功能，可能为 null */
+  followers: number | null
   trades_count: number | null
   captured_at: string
 }
