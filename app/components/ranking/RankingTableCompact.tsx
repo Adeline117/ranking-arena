@@ -2,10 +2,22 @@
 
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
-import { RankingSkeleton } from '../ui/Skeleton'
-import { RankingBadge } from '../icons'
-import { Box, Text } from '../base'
-import type { Trader } from './RankingTable'
+import { RankingSkeleton } from '../UI/Skeleton'
+import { RankingBadge } from '../Icons'
+import { Box, Text } from '../Base'
+
+interface Trader {
+  id: string
+  handle: string | null
+  roi: number // 90天ROI（固定）
+  win_rate?: number | null // 胜率可选
+  pnl?: number | null // 盈亏金额
+  max_drawdown?: number | null // 最大回撤
+  trades_count?: number | null // 交易次数
+  followers: number
+  source?: string
+  avatar_url?: string | null
+}
 
 /**
  * 紧凑版排行榜 - 用于侧边栏

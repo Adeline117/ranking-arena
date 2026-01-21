@@ -5,12 +5,24 @@ import Link from 'next/link'
 import { X, TrendingUp, TrendingDown, Minus, ChevronUp, ChevronDown, BarChart3, Share2, Maximize2 } from 'lucide-react'
 import { tokens } from '@/lib/design-tokens'
 import { formatCompact as formatNumber, formatPercent } from '@/lib/utils/format'
-import { Box, Text, Button } from '../base'
-import type { Trader } from '../ranking/RankingTable'
+import { Box, Text, Button } from '../Base'
 
 // ============================================
 // 类型定义
 // ============================================
+
+type Trader = {
+  id: string
+  handle: string | null
+  roi: number
+  pnl?: number | null
+  win_rate?: number | null
+  max_drawdown?: number | null
+  followers: number
+  source?: string
+  arena_score?: number | null
+  avatar_url?: string | null
+}
 
 type CompareTradersProps = {
   traders: Trader[]
