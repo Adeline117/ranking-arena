@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase/client'
 import { Box, Text, Button } from '@/app/components/Base'
 import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/Layout/TopNav'
+import { getCsrfHeaders } from '@/lib/api/client'
 
 function ExchangeCallbackPageContent() {
   const searchParams = useSearchParams()
@@ -60,6 +61,7 @@ function ExchangeCallbackPageContent() {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${session.access_token}`,
+          ...getCsrfHeaders()
         },
         body: JSON.stringify({
           exchange,
@@ -78,8 +80,9 @@ function ExchangeCallbackPageContent() {
       // 连接成功，跳转到设置页面
       alert('绑定成功！正在同步数据...')
       router.push('/settings')
-    } catch (err: any) {
-      setError(err.message || '连接失败')
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : '连接失败'
+      setError(errorMessage)
     } finally {
       setConnecting(false)
     }

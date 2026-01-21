@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useCallback } from 'react'
+import { getCsrfHeaders } from '@/lib/api/client'
 
 export interface AlertConfigItem {
   value: string | null
@@ -54,6 +55,7 @@ export function useAlertConfig(accessToken: string | null) {
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${accessToken}`,
+          ...getCsrfHeaders()
         },
         body: JSON.stringify({ key, value, enabled }),
       })

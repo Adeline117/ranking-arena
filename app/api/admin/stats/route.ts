@@ -5,6 +5,9 @@
 
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin, verifyAdmin } from '@/lib/admin/auth'
+import { createLogger } from '@/lib/utils/logger'
+
+const logger = createLogger('admin-stats')
 
 export const dynamic = 'force-dynamic'
 
@@ -106,7 +109,7 @@ export async function GET(req: Request) {
         }
       }
     } catch (e) {
-      console.error('Error fetching scraper health:', e)
+      logger.warn('Error fetching scraper health', { error: e })
     }
     
     return NextResponse.json({
@@ -139,8 +142,9 @@ export async function GET(req: Request) {
       },
       generatedAt: now.toISOString(),
     })
-  } catch (error: any) {
-    console.error('Stats API error:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+  } catch (error) {
+    logger.error('Stats API error', { error })
+    const errorMessage = error instanceof Error ? error.message : 'Internal server error'
+    return NextResponse.json({ error: errorMessage }, { status: 500 })
   }
 }

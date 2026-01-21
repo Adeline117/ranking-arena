@@ -49,7 +49,6 @@ export async function getUserExchangeConnections(userId: string): Promise<UserEx
     .order('created_at', { ascending: false })
 
   if (error) {
-    console.error('[user-trading] 获取连接失败:', error)
     return []
   }
 
@@ -79,7 +78,6 @@ export async function getUserTradingData(
   const { data, error } = await query.maybeSingle()
 
   if (error) {
-    console.error('[user-trading] 获取交易数据失败:', error)
     return null
   }
 

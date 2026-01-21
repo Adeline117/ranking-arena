@@ -82,14 +82,15 @@ export async function POST(request: NextRequest) {
       }
     } catch (err) {
       logger.error('Decryption failed', { error: String(err) })
-      const error = new Error('解密凭证失败')
-      ;(error as any).statusCode = 500
+      const error = new Error('解密凭证失败') as Error & { statusCode?: number }
+      error.statusCode = 500
       throw error
     }
 
     // 根据交易所类型获取数据
-    let trades: any[] = []
-    let stats: any = null
+    // 不同交易所的 trades 和 stats 类型可能不同，使用 unknown 类型
+    let trades: unknown[] = []
+    let stats: unknown = null
 
     try {
       switch (exchange as Exchange) {
@@ -127,8 +128,9 @@ export async function POST(request: NextRequest) {
           stats = calculateCoinexTradingStats(coinexTrades)
           break
       }
-    } catch (err: any) {
-      logger.error(`${exchange} sync failed`, { error: err.message })
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : '同步失败'
+      logger.error(`${exchange} sync failed`, { error: errorMessage })
       
       // 更新连接状态为失败
       await supabase
@@ -136,7 +138,7 @@ export async function POST(request: NextRequest) {
         .update({
           last_sync_at: new Date().toISOString(),
           last_sync_status: 'error',
-          last_sync_error: err.message || '同步失败',
+          last_sync_error: errorMessage,
         })
         .eq('id', connection.id)
 

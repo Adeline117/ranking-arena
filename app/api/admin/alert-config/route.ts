@@ -6,6 +6,9 @@
 
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin, verifyAdmin } from '@/lib/admin/auth'
+import { createLogger } from '@/lib/utils/logger'
+
+const logger = createLogger('admin-alert-config')
 
 export const dynamic = 'force-dynamic'
 
@@ -25,7 +28,7 @@ export async function GET(req: Request) {
       .order('key')
     
     if (error) {
-      console.error('Error fetching alert config:', error)
+      logger.error('Error fetching alert config', { error })
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
     
@@ -42,9 +45,10 @@ export async function GET(req: Request) {
       ok: true,
       config: configMap,
     })
-  } catch (error: any) {
-    console.error('Alert config API error:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+    logger.error('Alert config API error', { error: errorMessage })
+    return NextResponse.json({ error: errorMessage }, { status: 500 })
   }
 }
 
@@ -83,7 +87,7 @@ export async function POST(req: Request) {
       }, { onConflict: 'key' })
     
     if (error) {
-      console.error('Error updating alert config:', error)
+      logger.error('Error updating alert config', { error, key, enabled, adminId: admin.id })
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
     
@@ -99,8 +103,9 @@ export async function POST(req: Request) {
       ok: true,
       message: 'Config updated successfully',
     })
-  } catch (error: any) {
-    console.error('Alert config API error:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+    logger.error('Alert config API error', { error: errorMessage })
+    return NextResponse.json({ error: errorMessage }, { status: 500 })
   }
 }

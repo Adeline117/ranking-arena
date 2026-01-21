@@ -12,6 +12,7 @@ import { supabase } from '@/lib/supabase/client'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import * as cache from '@/lib/cache'
 import { CacheKey, CACHE_TTL } from '@/lib/cache'
+import { createLogger } from '@/lib/utils/logger'
 
 // 支持的交易所数据源
 export const TRADER_SOURCES = ['binance', 'bybit', 'bitget', 'okx', 'kucoin', 'gate', 'mexc', 'coinex'] as const
@@ -189,7 +190,6 @@ export async function findTraderAcrossSources(
       .limit(10)
 
     if (error) {
-      console.error('[findTraderAcrossSources] Query error:', error)
       return null
     }
 
@@ -219,7 +219,6 @@ export async function findTraderAcrossSources(
 
     return data[0] as TraderSourceRecord
   } catch (error) {
-    console.error('[findTraderAcrossSources] Error:', error)
     return null
   }
 }
@@ -258,7 +257,6 @@ export async function findTradersAcrossSources(
       .or(`handle.in.(${handleList.join(',')}),source_trader_id.in.(${handleList.join(',')})`)
 
     if (error || !data) {
-      console.error('[findTradersAcrossSources] Query error:', error)
       return result
     }
 
@@ -271,7 +269,6 @@ export async function findTradersAcrossSources(
 
     return result
   } catch (error) {
-    console.error('[findTradersAcrossSources] Error:', error)
     return result
   }
 }
@@ -302,7 +299,6 @@ async function getTraderArenaFollowersCountBatch(
 
     return counts
   } catch (error) {
-    console.error('[getTraderArenaFollowersCountBatch] Error:', error)
     return result
   }
 }
@@ -329,7 +325,6 @@ export async function getTraderByHandle(handle: string): Promise<TraderProfile |
         const source = await findTraderAcrossSources(handle)
         
         if (!source) {
-          console.warn(`[trader] No trader found for handle: ${handle}`)
           return null
         }
 
@@ -367,7 +362,8 @@ export async function getTraderByHandle(handle: string): Promise<TraderProfile |
           source: source.source,
         }
       } catch (error) {
-        console.error('[trader] Error in getTraderByHandle:', error)
+        const logger = createLogger('trader-data')
+        logger.error('Error in getTraderByHandle', { error, handle })
         return null
       }
     },
@@ -451,7 +447,8 @@ export async function getTraderPerformance(
           roi_2y: undefined,
         }
       } catch (error) {
-        console.error('Error in getTraderPerformance:', error)
+        const logger = createLogger('trader-data')
+        logger.error('Error in getTraderPerformance', { error, handle })
         return { roi_90d: 0 }
       }
     },
@@ -604,7 +601,8 @@ export async function getTraderStats(handle: string): Promise<TraderStats> {
       yearlyPerformance: yearlyPerformance.length > 0 ? yearlyPerformance : undefined,
     }
   } catch (error) {
-    console.error('Error in getTraderStats:', error)
+    const logger = createLogger('trader-data')
+    logger.error('Error in getTraderStats', { error, handle })
     return { additionalStats: {} }
   }
 }
@@ -663,7 +661,8 @@ export async function getTraderFrequentlyTraded(handle: string): Promise<Array<{
       profitablePct: item.profitable_pct ?? 0,
     }))
   } catch (error) {
-    console.error('Error in getTraderFrequentlyTraded:', error)
+    const logger = createLogger('trader-data')
+    logger.error('Error in getTraderFrequentlyTraded', { error, handle })
     return []
   }
 }
@@ -692,7 +691,8 @@ export async function getTraderMonthlyPerformance(handle: string): Promise<Array
       value: item.roi ?? 0,
     }))
   } catch (error) {
-    console.error('Error in getTraderMonthlyPerformance:', error)
+    const logger = createLogger('trader-data')
+    logger.error('Error in getTraderMonthlyPerformance', { error, handle })
     return []
   }
 }
@@ -720,7 +720,8 @@ export async function getTraderYearlyPerformance(handle: string): Promise<Array<
       value: item.roi ?? 0,
     }))
   } catch (error) {
-    console.error('Error in getTraderYearlyPerformance:', error)
+    const logger = createLogger('trader-data')
+    logger.error('Error in getTraderYearlyPerformance', { error, handle })
     return []
   }
 }
@@ -759,7 +760,8 @@ export async function getTraderPortfolio(handle: string): Promise<PortfolioItem[
       priceChange: undefined,
     }))
   } catch (error) {
-    console.error('Error in getTraderPortfolio:', error)
+    const logger = createLogger('trader-data')
+    logger.error('Error in getTraderPortfolio', { error, handle })
     return []
   }
 }
@@ -800,7 +802,8 @@ export async function getTraderPositionHistory(handle: string): Promise<Position
       closeTime: item.close_time || '',
     }))
   } catch (error) {
-    console.error('Error in getTraderPositionHistory:', error)
+    const logger = createLogger('trader-data')
+    logger.error('Error in getTraderPositionHistory', { error, handle })
     return []
   }
 }
@@ -908,7 +911,8 @@ export async function getTraderFeed(handle: string): Promise<TraderFeedItem[]> {
 
     return feedItems
   } catch (error) {
-    console.error('Error fetching trader feed:', error)
+    const logger = createLogger('trader-data')
+    logger.error('Error fetching trader feed', { error, handle })
     return []
   }
 }
@@ -1014,7 +1018,8 @@ export async function getSimilarTraders(handle: string, limit: number = 6): Prom
       }
     })
   } catch (error) {
-    console.error('Error fetching similar traders:', error)
+    const logger = createLogger('trader-data')
+    logger.error('Error fetching similar traders', { error, handle })
     return []
   }
 }

@@ -364,6 +364,13 @@ export default function SettingsPage() {
     
     setSaving(true)
     try {
+      // 获取当前 profile 的现有值，防止上传失败时覆盖
+      const { data: currentProfile } = await supabase
+        .from('user_profiles')
+        .select('avatar_url, cover_url')
+        .eq('id', userId)
+        .maybeSingle()
+      
       let finalAvatarUrl = avatarUrl
       let finalCoverUrl = coverUrl
       
@@ -372,8 +379,16 @@ export default function SettingsPage() {
         const uploadedUrl = await uploadAvatar(avatarFile, userId)
         if (uploadedUrl) {
           finalAvatarUrl = uploadedUrl
+          setAvatarUrl(uploadedUrl) // 更新状态，确保 UI 立即显示
+          setPreviewUrl(uploadedUrl) // 更新预览
+        } else {
+          // 上传失败，使用数据库中的现有值
+          if (currentProfile?.avatar_url) {
+            finalAvatarUrl = currentProfile.avatar_url
+          }
+          // 显示警告但继续保存其他数据
+          showToast('头像上传失败，但其他信息已保存', 'warning')
         }
-        // 上传失败时不阻止其他数据保存，继续使用旧头像
       }
       
       // Upload cover if changed
@@ -381,8 +396,16 @@ export default function SettingsPage() {
         const uploadedUrl = await uploadCover(coverFile, userId)
         if (uploadedUrl) {
           finalCoverUrl = uploadedUrl
+          setCoverUrl(uploadedUrl) // 更新状态，确保 UI 立即显示
+          setCoverPreviewUrl(uploadedUrl) // 更新预览
+        } else {
+          // 上传失败，使用数据库中的现有值
+          if (currentProfile?.cover_url) {
+            finalCoverUrl = currentProfile.cover_url
+          }
+          // 显示警告但继续保存其他数据
+          showToast('背景图片上传失败，但其他信息已保存', 'warning')
         }
-        // 上传失败时不阻止其他数据保存，继续使用旧背景
       }
       
       // Update profile and notification preferences in user_profiles (consolidated save)

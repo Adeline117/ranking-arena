@@ -117,7 +117,7 @@ export async function POST(request: NextRequest) {
 
     if (!tokenResponse.ok) {
       const errorText = await tokenResponse.text()
-      console.error('Token exchange failed:', errorText)
+      logger.error('Token exchange failed', { errorText, exchange })
       try {
         const errorJson = JSON.parse(errorText)
         return NextResponse.json({ 
@@ -138,7 +138,7 @@ export async function POST(request: NextRequest) {
     // 加密存储 tokens
     const encryptionKey = process.env.ENCRYPTION_KEY
     if (!encryptionKey) {
-      console.error('ENCRYPTION_KEY not configured')
+      logger.error('ENCRYPTION_KEY not configured')
       return NextResponse.json({ error: 'Server configuration error' }, { status: 500 })
     }
 
@@ -167,7 +167,7 @@ export async function POST(request: NextRequest) {
           }
         }
       } catch (e) {
-        console.error('Failed to fetch user info:', e)
+        logger.warn('Failed to fetch user info', { error: e, exchange })
       }
     }
 
@@ -192,7 +192,7 @@ export async function POST(request: NextRequest) {
       })
 
     if (dbError) {
-      console.error('Error saving connection:', dbError)
+      logger.error('Error saving connection', { error: dbError, userId, exchange })
       return NextResponse.json({ error: 'Failed to save connection' }, { status: 500 })
     }
 
@@ -200,8 +200,9 @@ export async function POST(request: NextRequest) {
       success: true,
       exchangeUserId,
     })
-  } catch (error: any) {
-    console.error('Error handling OAuth callback:', error)
-    return NextResponse.json({ error: error.message || 'Failed to handle callback' }, { status: 500 })
+  } catch (error) {
+    logger.error('Error handling OAuth callback', { error, exchange })
+    const errorMessage = error instanceof Error ? error.message : 'Failed to handle callback'
+    return NextResponse.json({ error: errorMessage }, { status: 500 })
   }
 }

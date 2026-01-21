@@ -14,6 +14,7 @@ import { CommentIcon, ThumbsUpIcon, ThumbsDownIcon } from '@/app/components/Icon
 import { useToast } from '@/app/components/UI/Toast'
 import { formatTimeAgo } from '@/lib/utils/date'
 import { RankingSkeleton } from '@/app/components/UI/Skeleton'
+import { getCsrfHeaders } from '@/lib/api/client'
 
 // Use design tokens for brand color
 const ARENA_PURPLE = '#8b6fa8' // fallback, prefer tokens.colors.accent.brand
@@ -146,7 +147,7 @@ function HotContent() {
         const tradersData = json.traders || json.data || []
         if (tradersData.length > 0) {
           // 取前10名
-          const top10 = tradersData.slice(0, 10).map((item: any) => ({
+          const top10 = tradersData.slice(0, 10).map((item) => ({
             id: item.id || item.source_trader_id,
             handle: item.handle || item.source_trader_id,
             roi: item.roi || 0,
@@ -161,7 +162,6 @@ function HotContent() {
           setTraders([])
         }
       } catch (error) {
-        console.error('加载排行榜失败:', error)
         setTraders([])
       } finally {
         setLoadingTraders(false)
@@ -205,7 +205,7 @@ function HotContent() {
         }
 
         if (data && data.length > 0) {
-          const postsData: Post[] = data.map((post: any) => {
+          const postsData: Post[] = data.map((post) => {
             // 计算时间差
             const createdAt = new Date(post.created_at)
             const now = new Date()
@@ -349,7 +349,10 @@ function HotContent() {
 
       const response = await fetch('/api/translate', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          ...getCsrfHeaders()
+        },
         body: JSON.stringify({ items, targetLang }),
       })
       const data = await response.json()
@@ -395,7 +398,10 @@ function HotContent() {
     try {
       const response = await fetch('/api/translate', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          ...getCsrfHeaders()
+        },
         body: JSON.stringify({ 
           text: content, 
           targetLang,
@@ -496,6 +502,7 @@ function HotContent() {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${accessToken}`,
+          ...getCsrfHeaders()
         },
         body: JSON.stringify({ content: newComment.trim() }),
       })
@@ -537,6 +544,7 @@ function HotContent() {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${accessToken}`,
+          ...getCsrfHeaders()
         },
         body: JSON.stringify({ reaction_type: reactionType }),
       })

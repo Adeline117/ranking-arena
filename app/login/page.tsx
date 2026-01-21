@@ -564,16 +564,31 @@ export default function LoginPage() {
     try {
       const finalHandle = userHandle || userEmail.split('@')[0]
       
+      // 如果提供了 userHandle，强制更新 handle
+      const updateData: any = {
+        id: userId,
+        email: userEmail,
+      }
+      
+      // 只有当提供了 userHandle 时才更新 handle，否则保持现有值
+      if (userHandle) {
+        updateData.handle = finalHandle
+      } else {
+        // 如果没有提供 userHandle，只在 profile 不存在时设置默认值
+        const { data: existingProfile } = await supabase
+          .from('user_profiles')
+          .select('handle')
+          .eq('id', userId)
+          .maybeSingle()
+        
+        if (!existingProfile || !existingProfile.handle) {
+          updateData.handle = finalHandle
+        }
+      }
+      
       await supabase
         .from('user_profiles')
-        .upsert(
-          {
-            id: userId,
-            handle: finalHandle,
-            email: userEmail,
-          },
-          { onConflict: 'id' }
-        )
+        .upsert(updateData, { onConflict: 'id' })
     } catch (err) {
       console.error('Error creating profile:', err)
     }
@@ -605,6 +620,25 @@ export default function LoginPage() {
       }
 
       if (user) {
+        // 先检查现有 profile，确保 handle 能正确更新
+        const { data: existingProfile } = await supabase
+          .from('user_profiles')
+          .select('handle')
+          .eq('id', user.id)
+          .maybeSingle()
+        
+        // 如果已有 profile 且 handle 不同，强制更新
+        if (existingProfile && existingProfile.handle !== handle) {
+          const { error: updateError } = await supabase
+            .from('user_profiles')
+            .update({ handle: handle })
+            .eq('id', user.id)
+          
+          if (updateError) {
+            console.error('Error updating handle:', updateError)
+          }
+        }
+        
         await createUserProfile(user.id, email, handle)
         router.push('/welcome')
       } else {

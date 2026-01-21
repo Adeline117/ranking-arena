@@ -7,7 +7,7 @@ import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/Base'
 import { useToast } from '@/app/components/UI/Toast'
 
-type Step = 'welcome' | 'profile' | 'interests' | 'complete'
+type Step = 'welcome' | 'interests' | 'complete'
 
 const interests = [
   { id: 'btc', label: 'BTC 交易', labelEn: 'BTC Trading', icon: '₿' },
@@ -216,7 +216,6 @@ export default function WelcomePage() {
   
   // Profile setup
   const [handle, setHandle] = useState('')
-  const [bio, setBio] = useState('')
   const [selectedInterests, setSelectedInterests] = useState<string[]>([])
   const [saving, setSaving] = useState(false)
   const [showConfetti, setShowConfetti] = useState(false)
@@ -278,41 +277,12 @@ export default function WelcomePage() {
     )
   }
 
-  const handleSaveProfile = async () => {
-    if (!handle.trim()) {
-      showToast('请输入用户名', 'warning')
-      return
-    }
-
-    if (handle.length < 1) {
-      showToast('用户名至少1个字符', 'warning')
-      return
-    }
-
-    setSaving(true)
-    try {
-      const { error } = await supabase
-        .from('user_profiles')
-        .upsert({
-          id: userId,
-          handle: handle.trim(),
-          bio: bio.trim() || null,
-        }, { onConflict: 'id' })
-
-      if (error) {
-        showToast(error.message, 'error')
-        return
-      }
-
-      goToStep('interests')
-    } catch (error: any) {
-      showToast(error?.message || '保存失败', 'error')
-    } finally {
-      setSaving(false)
-    }
-  }
-
   const handleComplete = async () => {
+    if (!userId) {
+      showToast('用户未登录，请重新登录', 'error')
+      return
+    }
+
     setSaving(true)
     try {
       const { error } = await supabase
@@ -325,31 +295,52 @@ export default function WelcomePage() {
 
       if (error) {
         console.error('Error saving interests:', error)
+        const errorMsg = error.message || '保存失败，请稍后重试'
+        showToast(errorMsg, 'error')
+        setSaving(false)
+        return
       }
 
       setShowConfetti(true)
       goToStep('complete')
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error completing onboarding:', error)
-      goToStep('complete')
+      const errorMsg = error?.message || '网络错误，请稍后重试'
+      showToast(errorMsg, 'error')
     } finally {
       setSaving(false)
     }
   }
 
   const handleSkipInterests = async () => {
+    if (!userId) {
+      showToast('用户未登录，请重新登录', 'error')
+      return
+    }
+
     setSaving(true)
     try {
-      await supabase
+      const { error } = await supabase
         .from('user_profiles')
         .update({ onboarding_completed: true })
         .eq('id', userId)
-    } catch (error) {
-      console.error('Error skipping:', error)
-    } finally {
-      setSaving(false)
+
+      if (error) {
+        console.error('Error skipping:', error)
+        const errorMsg = error.message || '保存失败，请稍后重试'
+        showToast(errorMsg, 'error')
+        setSaving(false)
+        return
+      }
+
       setShowConfetti(true)
       goToStep('complete')
+    } catch (error: any) {
+      console.error('Error skipping:', error)
+      const errorMsg = error?.message || '网络错误，请稍后重试'
+      showToast(errorMsg, 'error')
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -362,7 +353,7 @@ export default function WelcomePage() {
   }
 
   const getStepIndex = (s: Step) => {
-    const steps = ['welcome', 'profile', 'interests', 'complete']
+    const steps = ['welcome', 'interests', 'complete']
     return steps.indexOf(s)
   }
 
@@ -463,7 +454,7 @@ export default function WelcomePage() {
           gap: 12, 
           marginBottom: 40,
         }}>
-          {['welcome', 'profile', 'interests', 'complete'].map((s, i) => {
+          {['welcome', 'interests', 'complete'].map((s, i) => {
             const isActive = s === step
             const isPast = getStepIndex(step) > i
             
@@ -572,7 +563,7 @@ export default function WelcomePage() {
 
               <button
                 className="welcome-button"
-                onClick={() => goToStep('profile')}
+                onClick={() => goToStep('interests')}
                 style={{ 
                   width: '100%',
                   padding: '16px 24px',
@@ -587,132 +578,6 @@ export default function WelcomePage() {
               >
                 开始设置
               </button>
-            </Box>
-          )}
-
-          {/* Profile setup step */}
-          {step === 'profile' && (
-            <Box>
-              <Text 
-                size="2xl" 
-                weight="black" 
-                style={{ 
-                  marginBottom: 8, 
-                  textAlign: 'center',
-                  background: 'linear-gradient(135deg, #f2f2f2 0%, #c9b8db 100%)',
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
-                }}
-              >
-                设置你的资料
-              </Text>
-              <Text color="secondary" style={{ marginBottom: 36, textAlign: 'center', color: '#7a7a7a' }}>
-                让其他用户更容易找到你
-              </Text>
-
-              <Box style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-                <Box>
-                  <Text size="sm" weight="bold" style={{ marginBottom: 10, display: 'block', color: '#b0b0b0' }}>
-                    用户名 *
-                  </Text>
-                  <input
-                    type="text"
-                    className="welcome-input"
-                    value={handle}
-                    onChange={(e) => setHandle(e.target.value)}
-                    placeholder="输入用户名"
-                    style={{
-                      width: '100%',
-                      padding: '14px 18px',
-                      borderRadius: 12,
-                      border: '1px solid rgba(255, 255, 255, 0.1)',
-                      background: 'rgba(0, 0, 0, 0.3)',
-                      color: '#eaeaea',
-                      fontSize: 15,
-                      outline: 'none',
-                    }}
-                  />
-                </Box>
-
-                <Box>
-                  <Text size="sm" weight="bold" style={{ marginBottom: 10, display: 'block', color: '#b0b0b0' }}>
-                    个人简介（可选）
-                  </Text>
-                  <textarea
-                    className="welcome-input"
-                    value={bio}
-                    onChange={(e) => setBio(e.target.value)}
-                    placeholder="介绍一下你自己，比如交易风格、经验等..."
-                    rows={4}
-                    style={{
-                      width: '100%',
-                      padding: '14px 18px',
-                      borderRadius: 12,
-                      border: '1px solid rgba(255, 255, 255, 0.1)',
-                      background: 'rgba(0, 0, 0, 0.3)',
-                      color: '#eaeaea',
-                      fontSize: 15,
-                      outline: 'none',
-                      resize: 'none',
-                      lineHeight: 1.6,
-                    }}
-                  />
-                </Box>
-              </Box>
-
-              <Box style={{ display: 'flex', gap: 14, marginTop: 36 }}>
-                <button
-                  className="welcome-button"
-                  onClick={() => goToStep('welcome')}
-                  style={{ 
-                    flex: 1,
-                    padding: '14px 20px',
-                    borderRadius: 12,
-                    border: '1px solid rgba(255, 255, 255, 0.15)',
-                    background: 'transparent',
-                    color: '#b0b0b0',
-                    fontWeight: 600,
-                    fontSize: 15,
-                    cursor: 'pointer',
-                  }}
-                >
-                  返回
-                </button>
-                <button
-                  className="welcome-button"
-                  onClick={handleSaveProfile}
-                  disabled={saving || !handle.trim() || handle.length < 1}
-                  style={{ 
-                    flex: 2,
-                    padding: '14px 20px',
-                    borderRadius: 12,
-                    border: 'none',
-                    background: saving || !handle.trim() || handle.length < 1 
-                      ? 'rgba(139, 111, 168, 0.2)' 
-                      : 'linear-gradient(135deg, #8b6fa8 0%, #6b4f88 100%)',
-                    color: '#fff',
-                    fontWeight: 700,
-                    fontSize: 15,
-                    cursor: saving || !handle.trim() || handle.length < 1 ? 'not-allowed' : 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: 8,
-                  }}
-                >
-                  {saving && (
-                    <div style={{
-                      width: 16,
-                      height: 16,
-                      border: '2px solid rgba(255,255,255,0.3)',
-                      borderTopColor: '#fff',
-                      borderRadius: '50%',
-                      animation: 'spin 1s linear infinite',
-                    }} />
-                  )}
-                  {saving ? '保存中...' : '下一步'}
-                </button>
-              </Box>
             </Box>
           )}
 

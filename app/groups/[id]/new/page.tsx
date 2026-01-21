@@ -8,6 +8,7 @@ import { Box, Text, Button } from '@/app/components/Base'
 import { tokens } from '@/lib/design-tokens'
 import { useToast } from '@/app/components/UI/Toast'
 import { useLanguage } from '@/app/components/Utils/LanguageProvider'
+import { getCsrfHeaders } from '@/lib/api/client'
 
 interface UploadedImage {
   url: string
@@ -68,7 +69,7 @@ export default function NewGroupPostPage() {
   const groupId = params.id as string
   const router = useRouter()
   const { showToast } = useToast()
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const [email, setEmail] = useState<string | null>(null)
@@ -228,23 +229,33 @@ export default function NewGroupPostPage() {
 
         const response = await fetch('/api/posts/upload-image', {
           method: 'POST',
+          headers: {
+            ...getCsrfHeaders()
+          },
           body: formData,
         })
 
-        const data = await response.json()
-
         if (!response.ok) {
-          showToast(data.error || '上传失败', 'error')
+          let errorMsg = '上传失败'
+          try {
+            const data = await response.json()
+            errorMsg = data.error || errorMsg
+          } catch {
+            // JSON 解析失败，使用默认错误消息
+            errorMsg = `上传失败 (${response.status})`
+          }
+          showToast(`${file.name}: ${errorMsg}`, 'error')
           continue
         }
 
+        const data = await response.json()
         newImages.push({
           url: data.url,
           fileName: data.fileName,
         })
       } catch (error) {
-        console.error('Upload error:', error)
-        showToast('上传失败', 'error')
+        const errorMsg = error instanceof Error ? error.message : '网络错误，请稍后重试'
+        showToast(`${file.name}: ${errorMsg}`, 'error')
       }
     }
 
@@ -300,7 +311,6 @@ export default function NewGroupPostPage() {
         const validOptions = pollOptions.filter(opt => opt.text.trim())
         if (validOptions.length < 2) {
           showToast('请至少填写2个投票选项', 'warning')
-          setLoading(false)
           return
         }
 
@@ -322,9 +332,8 @@ export default function NewGroupPostPage() {
           .single()
 
         if (pollError) {
-          console.error('创建投票失败:', pollError)
-          showToast('创建投票失败: ' + pollError.message, 'error')
-          setLoading(false)
+          const errorMsg = pollError.message || '创建投票失败，请稍后重试'
+          showToast(errorMsg, 'error')
           return
         }
         pollId = pollData.id
@@ -342,7 +351,6 @@ export default function NewGroupPostPage() {
       })
 
       if (error) {
-        console.error('创建帖子失败:', JSON.stringify(error, null, 2))
         showToast(error.message || '创建失败，请检查权限', 'error')
         return
       }
@@ -350,9 +358,9 @@ export default function NewGroupPostPage() {
       clearDraft()
       showToast(t('publishSuccess'), 'success')
       router.push(`/groups/${groupId}`)
-    } catch (error: any) {
-      console.error('发布异常:', error)
-      showToast(error?.message || '发布失败', 'error')
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : '发布失败'
+      showToast(errorMessage, 'error')
     } finally {
       setLoading(false)
     }
@@ -764,7 +772,7 @@ export default function NewGroupPostPage() {
                   >
                     <button
                       onClick={() => insertImageToContent(image.url)}
-                      title="插入到内容"
+                      title={t('imageInserted') || (language === 'zh' ? '插入到内容' : 'Insert to content')}
                       style={{
                         width: 24,
                         height: 24,
@@ -782,7 +790,7 @@ export default function NewGroupPostPage() {
                     </button>
                     <button
                       onClick={() => removeImage(index)}
-                      title="删除"
+                      title={language === 'zh' ? '删除' : 'Delete'}
                       style={{
                         width: 24,
                         height: 24,

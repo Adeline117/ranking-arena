@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import { Button } from '../Base'
+import { getCsrfHeaders } from '@/lib/api/client'
 
 interface ClaimTraderButtonProps {
   traderId: string
@@ -106,6 +107,7 @@ export default function ClaimTraderButton({ traderId, handle, userId, source = '
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${session.access_token}`,
+          ...getCsrfHeaders()
         },
         body: JSON.stringify({
           exchange: source,
@@ -160,9 +162,9 @@ export default function ClaimTraderButton({ traderId, handle, userId, source = '
         // 刷新页面
         window.location.reload()
       }
-    } catch (err: any) {
-      console.error('Claim trader error:', err)
-      alert('认领失败：' + (err.message || '未知错误'))
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : '未知错误'
+      alert('认领失败：' + errorMessage)
     } finally {
       setLoading(false)
     }

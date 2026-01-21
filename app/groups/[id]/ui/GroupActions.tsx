@@ -1,34 +1,33 @@
 "use client"
 
 import Link from "next/link"
+import { Box, Text, Button } from '@/app/components/Base'
+import { tokens } from '@/lib/design-tokens'
+import { useLanguage } from '@/app/components/Utils/LanguageProvider'
 
 export default function GroupActions({ groupId }: { groupId: string }) {
+  const { language } = useLanguage()
+
   return (
-    <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-      <div className="text-sm opacity-80">Group Actions</div>
+    <Box
+      style={{
+        padding: tokens.spacing[4],
+        borderRadius: tokens.radius.xl,
+        border: `1px solid ${tokens.colors.border.primary}`,
+        background: tokens.colors.bg.secondary,
+      }}
+    >
+      <Text size="sm" color="secondary" style={{ marginBottom: tokens.spacing[3] }}>
+        {language === 'zh' ? '小组操作' : 'Group Actions'}
+      </Text>
 
-      <div className="mt-3 flex flex-wrap gap-2">
-        <Link
-          href={`/groups/${groupId}/new`}
-          className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm hover:bg-white/10"
-        >
-          + New Post
+      <Box style={{ display: 'flex', flexWrap: 'wrap', gap: tokens.spacing[2] }}>
+        <Link href={`/groups/${groupId}/new`} style={{ textDecoration: 'none' }}>
+          <Button variant="secondary" size="sm">
+            + {language === 'zh' ? '新帖子' : 'New Post'}
+          </Button>
         </Link>
-
-        <button
-          className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm hover:bg-white/10"
-          onClick={() => alert("下一关：申请入组（做题/小作文）")}
-        >
-          Apply to Join
-        </button>
-
-        <button
-          className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm hover:bg-white/10"
-          onClick={() => alert("下一关：组规/举报")}
-        >
-          Report / Rules
-        </button>
-      </div>
-    </div>
+      </Box>
+    </Box>
   )
 }

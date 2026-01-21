@@ -79,7 +79,6 @@ export async function getAvoidList(
     .range(offset, offset + limit - 1)
 
   if (error) {
-    console.error('[avoid-list] 获取避雷榜失败:', error)
     throw error
   }
 
@@ -118,7 +117,6 @@ export async function getTraderAvoidScore(
     .maybeSingle()
 
   if (error) {
-    console.error('[avoid-list] 获取避雷信息失败:', error)
     throw error
   }
 
@@ -145,7 +143,6 @@ export async function getTraderAvoidVotes(
     .range(offset, offset + limit - 1)
 
   if (error) {
-    console.error('[avoid-list] 获取避雷投票失败:', error)
     throw error
   }
 
@@ -191,7 +188,6 @@ export async function hasUserVoted(
     .maybeSingle()
 
   if (error) {
-    console.error('[avoid-list] 检查投票状态失败:', error)
     throw error
   }
 
@@ -252,7 +248,6 @@ export async function createAvoidVote(
     .single()
 
   if (error) {
-    console.error('[avoid-list] 创建避雷投票失败:', error)
     throw error
   }
 
@@ -308,7 +303,6 @@ export async function deleteAvoidVote(
     .eq('user_id', userId)
 
   if (error) {
-    console.error('[avoid-list] 删除避雷投票失败:', error)
     throw error
   }
 }

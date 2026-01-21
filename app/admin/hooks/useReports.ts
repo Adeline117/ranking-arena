@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useCallback } from 'react'
+import { getCsrfHeaders } from '@/lib/api/client'
 
 export interface ContentReport {
   id: string
@@ -95,6 +96,7 @@ export function useReports(accessToken: string | null) {
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${accessToken}`,
+          ...getCsrfHeaders()
         },
         body: JSON.stringify({ action, reason }),
       })

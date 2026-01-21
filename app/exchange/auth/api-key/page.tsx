@@ -9,6 +9,7 @@ import { Box, Text, Button } from '@/app/components/Base'
 import ExchangeLogo from '@/app/components/UI/ExchangeLogo'
 import { useLanguage } from '@/app/components/Utils/LanguageProvider'
 import { useToast } from '@/app/components/UI/Toast'
+import { getCsrfHeaders } from '@/lib/api/client'
 
 // 交易所配置
 const EXCHANGE_CONFIGS = {
@@ -193,6 +194,7 @@ function ApiKeyAuthContent() {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${session.access_token}`,
+          ...getCsrfHeaders()
         },
         body: JSON.stringify({
           exchange: selectedExchange,
@@ -211,8 +213,9 @@ function ApiKeyAuthContent() {
 
       showToast(t('bindSuccess'), 'success')
       router.push('/settings')
-    } catch (err: any) {
-      setError(err.message || (language === 'zh' ? '绑定失败' : 'Binding failed'))
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : (language === 'zh' ? '绑定失败' : 'Binding failed')
+      setError(errorMessage)
     } finally {
       setLoading(false)
     }

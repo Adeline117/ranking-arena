@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/Layout/TopNav'
 import { Box, Text } from '@/app/components/Base'
+import { getCsrfHeaders } from '@/lib/api/client'
 
 function ExchangeAuthCallbackContent() {
   const searchParams = useSearchParams()
@@ -45,7 +46,10 @@ function ExchangeAuthCallbackContent() {
         // 交换 code 获取 access_token
         const response = await fetch('/api/exchange/oauth/callback', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            ...getCsrfHeaders()
+          },
           body: JSON.stringify({
             exchange,
             code,
@@ -67,9 +71,10 @@ function ExchangeAuthCallbackContent() {
         setTimeout(() => {
           router.push('/settings')
         }, 3000)
-      } catch (err: any) {
+      } catch (err) {
         setStatus('error')
-        setMessage(err.message || '授权失败')
+        const errorMessage = err instanceof Error ? err.message : '授权失败'
+        setMessage(errorMessage)
       }
     }
 

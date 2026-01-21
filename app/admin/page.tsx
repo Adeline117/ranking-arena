@@ -38,7 +38,8 @@ export default function AdminPage() {
       loadApplications()
       loadEditApplications()
     }
-  }, [accessToken, isAdmin, loadFreshnessReport, loadApplications, loadEditApplications])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accessToken, isAdmin])
 
   if (authChecking) {
     return (

@@ -9,6 +9,7 @@ import TopNav from '@/app/components/Layout/TopNav'
 import { Box, Text, Button } from '@/app/components/Base'
 import { useLanguage } from '@/app/components/Utils/LanguageProvider'
 import { useToast } from '@/app/components/UI/Toast'
+import { getCsrfHeaders } from '@/lib/api/client'
 
 // 图标组件
 const StarIcon = ({ size = 16 }: { size?: number }) => (
@@ -230,6 +231,7 @@ export default function PricingPage() {
         headers: { 
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${session.access_token}`,
+          ...getCsrfHeaders()
         },
         body: JSON.stringify({ 
           plan: selectedPlan,
@@ -238,6 +240,18 @@ export default function PricingPage() {
         }),
       })
       
+      if (!response.ok) {
+        let errorMsg = language === 'zh' ? '创建支付会话失败' : 'Failed to create checkout session'
+        try {
+          const errorData = await response.json()
+          errorMsg = errorData.error || errorMsg
+        } catch {
+          errorMsg = `${errorMsg} (${response.status})`
+        }
+        showToast(errorMsg, 'error')
+        return
+      }
+      
       const data = await response.json()
       
       if (data.url) {
@@ -245,6 +259,11 @@ export default function PricingPage() {
         window.location.href = data.url
       } else if (data.error) {
         showToast(data.error, 'error')
+      } else {
+        showToast(
+          language === 'zh' ? '无法获取支付链接，请稍后重试' : 'Failed to get payment link, please try again',
+          'error'
+        )
       }
     } catch (error) {
       showToast(language === 'zh' ? '订阅失败，请稍后重试' : 'Subscription failed, please try again', 'error')

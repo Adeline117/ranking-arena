@@ -7,6 +7,7 @@ import { Box, Text, Button } from '@/app/components/Base'
 import Card from '@/app/components/UI/Card'
 import ExchangeLogo from '@/app/components/UI/ExchangeLogo'
 import Link from 'next/link'
+import { getCsrfHeaders } from '@/lib/api/client'
 
 interface TradingData {
   total_trades: number
@@ -57,15 +58,15 @@ export default function AccountRequiredStats({ userId }: { userId: string }) {
           .order('period_end', { ascending: false })
 
         const dataMap: Record<string, TradingData> = {}
-        tradingDataList?.forEach((item: any) => {
-          if (!dataMap[item.exchange]) {
-            dataMap[item.exchange] = item
+        tradingDataList?.forEach((item) => {
+          if (item && typeof item === 'object' && 'exchange' in item && !dataMap[item.exchange as string]) {
+            dataMap[item.exchange as string] = item as TradingData
           }
         })
         setTradingData(dataMap)
       }
     } catch (err) {
-      console.error('Error loading account data:', err)
+      // 静默处理错误，不影响 UI
     } finally {
       setLoading(false)
     }
@@ -76,7 +77,10 @@ export default function AccountRequiredStats({ userId }: { userId: string }) {
     try {
       const response = await fetch('/api/exchange/sync', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          ...getCsrfHeaders()
+        },
         body: JSON.stringify({ userId, exchange }),
       })
 
@@ -89,8 +93,9 @@ export default function AccountRequiredStats({ userId }: { userId: string }) {
       // 重新加载数据
       await loadData()
       alert('同步成功！')
-    } catch (err: any) {
-      alert('同步失败: ' + err.message)
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : '同步失败'
+      alert('同步失败: ' + errorMessage)
     } finally {
       setSyncing({ ...syncing, [exchange]: false })
     }
@@ -136,7 +141,7 @@ export default function AccountRequiredStats({ userId }: { userId: string }) {
             >
               <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: tokens.spacing[3] }}>
                 <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
-                  <ExchangeLogo exchange={conn.exchange as any} size={24} />
+                  <ExchangeLogo exchange={conn.exchange} size={24} />
                   <Text size="md" weight="bold" style={{ textTransform: 'capitalize' }}>
                     {conn.exchange}
                   </Text>

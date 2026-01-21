@@ -5,6 +5,9 @@
 
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin, verifyAdmin } from '@/lib/admin/auth'
+import { createLogger } from '@/lib/utils/logger'
+
+const logger = createLogger('admin-users')
 
 export const dynamic = 'force-dynamic'
 
@@ -48,7 +51,7 @@ export async function GET(req: Request) {
       .range(offset, offset + limit - 1)
     
     if (error) {
-      console.error('Error fetching users:', error)
+      logger.error('Error fetching users', { error, page, limit, search, filter })
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
     
@@ -62,8 +65,9 @@ export async function GET(req: Request) {
         totalPages: Math.ceil((count || 0) / limit),
       },
     })
-  } catch (error: any) {
-    console.error('Users API error:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+  } catch (error) {
+    logger.error('Users API error', { error })
+    const errorMessage = error instanceof Error ? error.message : 'Internal server error'
+    return NextResponse.json({ error: errorMessage }, { status: 500 })
   }
 }

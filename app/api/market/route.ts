@@ -1,5 +1,6 @@
 import { NextResponse, NextRequest } from 'next/server'
 import { checkRateLimit, RateLimitPresets } from '@/lib/api'
+import { createLogger } from '@/lib/utils/logger'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic' // 禁用静态渲染
@@ -60,6 +61,8 @@ export async function GET(request: NextRequest) {
   const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.public)
   if (rateLimitResponse) return rateLimitResponse
 
+  const logger = createLogger('market-api')
+
   try {
     const { searchParams } = new URL(request.url)
     const pairsParam = searchParams.get('pairs')
@@ -101,13 +104,14 @@ export async function GET(request: NextRequest) {
           },
         }
       )
-    } catch (e1: any) {
+    } catch (e1) {
       // 3) fallback 到 Coinbase（包括 429 速率限制错误）
-      const isRateLimit = e1?.message?.includes('429') || e1?.message?.includes('Rate limit')
+      const errorMessage = e1 instanceof Error ? e1.message : String(e1)
+      const isRateLimit = errorMessage.includes('429') || errorMessage.includes('Rate limit')
       if (isRateLimit) {
-        console.warn('[Market API] CoinGecko 速率限制 (429), 自动切换到 Coinbase...')
+        logger.warn('CoinGecko 速率限制 (429), 自动切换到 Coinbase')
       } else {
-        console.warn('[Market API] CoinGecko 失败:', e1?.message, '尝试 Coinbase...')
+        logger.warn('CoinGecko 失败, 尝试 Coinbase', { error: errorMessage })
       }
       
       try {
@@ -123,7 +127,7 @@ export async function GET(request: NextRequest) {
             cached: false,
             warning: isRateLimit 
               ? 'CoinGecko rate limit exceeded, using Coinbase' 
-              : `Primary failed: ${e1?.message ?? 'unknown'}`,
+              : `Primary failed: ${errorMessage}`,
           },
           {
             headers: {
@@ -131,21 +135,23 @@ export async function GET(request: NextRequest) {
             },
           }
         )
-      } catch (e2: any) {
-        console.error('[Market API] Coinbase 也失败:', e2?.message)
+      } catch (e2: unknown) {
+        const errorMessage = e2 instanceof Error ? e2.message : 'unknown error'
+        logger.error('Coinbase 也失败', { error: errorMessage })
         return NextResponse.json(
           { 
             rows: [], 
-            error: `Both sources failed. CoinGecko: ${e1?.message ?? 'unknown'}, Coinbase: ${e2?.message ?? 'unknown'}` 
+            error: `Both sources failed. CoinGecko: ${e1 instanceof Error ? e1.message : 'unknown'}, Coinbase: ${errorMessage}` 
           },
           { status: 500 }
         )
       }
     }
-  } catch (e: any) {
-    console.error('[Market API] 请求异常:', e)
+  } catch (e: unknown) {
+    const errorMessage = e instanceof Error ? e.message : 'unknown error'
+    logger.error('请求异常', { error: errorMessage })
     return NextResponse.json(
-      { rows: [], error: e?.message ?? 'unknown error' },
+      { rows: [], error: errorMessage },
       { status: 500 }
     )
   }
@@ -187,8 +193,15 @@ async function fetchFromCoinGeckoForPairs(pairs: Pair[]): Promise<MarketRow[]> {
       throw new Error(`CoinGecko HTTP ${res.status}: ${txt.slice(0, 160)}`)
     }
 
-    const data = (await res.json()) as any[]
-    const byId = new Map<string, any>()
+    interface CoinGeckoMarketData {
+      id: string
+      current_price?: number | null
+      price_change_percentage_24h?: number | null
+      price_change_percentage_24h_in_currency?: number | null
+    }
+    
+    const data = (await res.json()) as CoinGeckoMarketData[]
+    const byId = new Map<string, CoinGeckoMarketData>()
     for (const c of data) byId.set(String(c.id), c)
 
     const rows: MarketRow[] = []
@@ -204,12 +217,12 @@ async function fetchFromCoinGeckoForPairs(pairs: Pair[]): Promise<MarketRow[]> {
     }
 
     return rows
-  } catch (error: any) {
+  } catch (error) {
     clearTimeout(timeoutId)
-    if (error.name === 'AbortError') {
+    if (error instanceof Error && error.name === 'AbortError') {
       throw new Error('CoinGecko request timeout')
     }
-    if (error.message?.includes('fetch failed') || error.message?.includes('Failed to fetch')) {
+    if (error instanceof Error && (error.message?.includes('fetch failed') || error.message?.includes('Failed to fetch'))) {
       throw new Error('CoinGecko network error: unable to connect')
     }
     throw error
@@ -237,7 +250,7 @@ async function fetchFromCoinbaseForPairs(pairs: Pair[]): Promise<MarketRow[]> {
         if (!res.ok) {
           return null // 返回null表示失败
         }
-        const s = (await res.json()) as any
+        const s = await res.json() as { open?: number; last?: number }
 
         const open = Number(s.open ?? NaN)
         const last = Number(s.last ?? NaN)
@@ -246,11 +259,11 @@ async function fetchFromCoinbaseForPairs(pairs: Pair[]): Promise<MarketRow[]> {
         }
         const pct = ((last - open) / open) * 100
         return formatRow(p.symbol, last, pct)
-      } catch (error: any) {
-        if (error.name === 'AbortError') {
+      } catch (error) {
+        if (error instanceof Error && error.name === 'AbortError') {
           return null // 超时返回null
         }
-        if (error.message?.includes('fetch failed') || error.message?.includes('Failed to fetch')) {
+        if (error instanceof Error && (error.message?.includes('fetch failed') || error.message?.includes('Failed to fetch'))) {
           return null // 网络错误返回null
         }
         return null // 其他错误也返回null

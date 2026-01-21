@@ -7,12 +7,15 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { verifyAuth } from '@/lib/api/auth'
 import { hasFeatureAccess } from '@/lib/premium'
+import { createLogger } from '@/lib/utils/logger'
 
 // 服务端 Supabase 客户端
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
+
+const logger = createLogger('pro-official-group')
 
 // 群主邮箱
 const OWNER_EMAIL = 'adelinewen1107@outlook.com'
@@ -45,7 +48,7 @@ export async function GET(request: NextRequest) {
     })
     
     if (error) {
-      console.error('[pro-official-group] 获取群信息失败:', error)
+      logger.error('获取群信息失败', { error, userId: user.id })
       return NextResponse.json({ error: '获取群信息失败' }, { status: 500 })
     }
     
@@ -55,7 +58,7 @@ export async function GET(request: NextRequest) {
     })
     
   } catch (error) {
-    console.error('[pro-official-group] GET error:', error)
+    logger.error('GET error', { error })
     return NextResponse.json({ error: '服务器错误' }, { status: 500 })
   }
 }
@@ -87,7 +90,7 @@ export async function POST(request: NextRequest) {
     })
     
     if (error) {
-      console.error('[pro-official-group] 加入群失败:', error)
+      logger.error('加入群失败', { error })
       return NextResponse.json({ error: '加入群失败' }, { status: 500 })
     }
     
@@ -110,7 +113,7 @@ export async function POST(request: NextRequest) {
     }
     
   } catch (error) {
-    console.error('[pro-official-group] POST error:', error)
+    logger.error('POST error', { error })
     return NextResponse.json({ error: '服务器错误' }, { status: 500 })
   }
 }
@@ -134,7 +137,7 @@ export async function DELETE(request: NextRequest) {
     })
     
     if (error) {
-      console.error('[pro-official-group] 离开群失败:', error)
+      logger.error('离开群失败', { error, userId: user.id })
       return NextResponse.json({ error: '离开群失败' }, { status: 500 })
     }
     
@@ -144,7 +147,7 @@ export async function DELETE(request: NextRequest) {
     })
     
   } catch (error) {
-    console.error('[pro-official-group] DELETE error:', error)
+    logger.error('DELETE error', { error })
     return NextResponse.json({ error: '服务器错误' }, { status: 500 })
   }
 }
@@ -168,7 +171,7 @@ export async function joinProOfficialGroup(userId: string): Promise<{
       if (error.message.includes('function') || error.code === '42883') {
         return await joinProOfficialGroupFallback(userId)
       }
-      console.error('[joinProOfficialGroup] 加入群失败:', error)
+      logger.error('加入群失败', { error, userId })
       return { success: false, message: error.message }
     }
     
@@ -188,7 +191,7 @@ export async function joinProOfficialGroup(userId: string): Promise<{
     return { success: false, message: data?.message || 'unknown_error' }
     
   } catch (error) {
-    console.error('[joinProOfficialGroup] error:', error)
+    logger.error('joinProOfficialGroup error', { error, userId })
     return { success: false, message: 'server_error' }
   }
 }
@@ -255,7 +258,7 @@ async function joinProOfficialGroupFallback(userId: string): Promise<{
       .insert({ user_id: userId, pro_group_id: proGroupId })
     
     if (memberError) {
-      console.error('[joinProOfficialGroupFallback] 加入记录失败:', memberError)
+      logger.error('加入记录失败', { error: memberError, userId })
       return { success: false, message: memberError.message }
     }
     
@@ -272,7 +275,7 @@ async function joinProOfficialGroupFallback(userId: string): Promise<{
     return { success: true, message: 'joined', groupId }
     
   } catch (error) {
-    console.error('[joinProOfficialGroupFallback] error:', error)
+    logger.error('joinProOfficialGroupFallback error', { error, userId })
     return { success: false, message: 'server_error' }
   }
 }
@@ -294,7 +297,7 @@ async function createNewProOfficialGroup(): Promise<{
       .single()
     
     if (!owner) {
-      console.error('[createNewProOfficialGroup] 群主账号不存在')
+      logger.error('群主账号不存在', { email: OWNER_EMAIL })
       return { success: false }
     }
     
@@ -324,7 +327,7 @@ async function createNewProOfficialGroup(): Promise<{
       .single()
     
     if (groupError || !newGroup) {
-      console.error('[createNewProOfficialGroup] 创建群组失败:', groupError)
+      logger.error('创建群组失败', { error: groupError })
       return { success: false }
     }
     
@@ -339,7 +342,7 @@ async function createNewProOfficialGroup(): Promise<{
       .single()
     
     if (proGroupError || !proGroup) {
-      console.error('[createNewProOfficialGroup] 创建官方群配置失败:', proGroupError)
+      logger.error('创建官方群配置失败', { error: proGroupError, groupId: newGroup.id })
       return { success: false }
     }
     
@@ -348,7 +351,7 @@ async function createNewProOfficialGroup(): Promise<{
       .from('group_members')
       .insert({ group_id: newGroup.id, user_id: owner.id, role: 'owner' })
     
-    console.log(`[createNewProOfficialGroup] 创建新群成功: #${nextNumber}`)
+    logger.info('创建新群成功', { groupNumber: nextNumber, groupId: newGroup.id })
     
     return {
       success: true,
@@ -357,7 +360,7 @@ async function createNewProOfficialGroup(): Promise<{
     }
     
   } catch (error) {
-    console.error('[createNewProOfficialGroup] error:', error)
+    logger.error('createNewProOfficialGroup error', { error })
     return { success: false }
   }
 }
@@ -378,7 +381,7 @@ async function sendWelcomeNotification(userId: string, groupId: string) {
         read: false
       })
   } catch (error) {
-    console.error('[sendWelcomeNotification] error:', error)
+    logger.error('sendWelcomeNotification error', { error })
   }
 }
 
@@ -426,7 +429,7 @@ export async function leaveProOfficialGroup(userId: string): Promise<boolean> {
     return data === true
     
   } catch (error) {
-    console.error('[leaveProOfficialGroup] error:', error)
+    logger.error('leaveProOfficialGroup error', { error, userId })
     return false
   }
 }

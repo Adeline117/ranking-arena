@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase/client'
@@ -10,6 +10,8 @@ import Card from '@/app/components/UI/Card'
 import { Box, Text, Button } from '@/app/components/Base'
 import { useLanguage } from '@/app/components/Utils/LanguageProvider'
 import { useSubscription } from '@/app/components/Home/hooks/useSubscription'
+import { useToast } from '@/app/components/UI/Toast'
+import { getCsrfHeaders } from '@/lib/api/client'
 
 type RoleNames = {
   admin: { zh: string; en: string }
@@ -25,11 +27,15 @@ export default function ApplyGroupPage() {
   const router = useRouter()
   const { t, language } = useLanguage()
   const { isPro } = useSubscription()
+  const { showToast } = useToast()
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const [email, setEmail] = useState<string | null>(null)
   const [accessToken, setAccessToken] = useState<string | null>(null)
+  const [userId, setUserId] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
+  const [uploading, setUploading] = useState(false)
 
   // 当前编辑的语言标签
   const [activeTab, setActiveTab] = useState<'zh' | 'en'>('zh')
@@ -66,6 +72,7 @@ export default function ApplyGroupPage() {
     supabase.auth.getSession().then(({ data }) => {
       setEmail(data.session?.user?.email ?? null)
       setAccessToken(data.session?.access_token ?? null)
+      setUserId(data.session?.user?.id ?? null)
 
       if (data.session?.access_token) {
         fetchMyApplications(data.session.access_token)
@@ -78,12 +85,19 @@ export default function ApplyGroupPage() {
       const res = await fetch('/api/groups/apply', {
         headers: { Authorization: `Bearer ${token}` }
       })
+      
+      if (!res.ok) {
+        console.warn('Failed to fetch applications:', res.status)
+        return
+      }
+      
       const data = await res.json()
       if (data.applications) {
         setExistingApplications(data.applications)
       }
     } catch (err) {
       console.error('Error fetching applications:', err)
+      // 静默失败，不影响用户操作
     }
   }
 
@@ -111,6 +125,67 @@ export default function ApplyGroupPage() {
     setRules(newRules)
   }
 
+  // 处理图片上传
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (!files || files.length === 0) return
+
+    if (!userId) {
+      showToast(language === 'zh' ? '请先登录' : 'Please login first', 'warning')
+      return
+    }
+
+    const file = files[0] // 头像只支持单张图片
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp']
+    if (!allowedTypes.includes(file.type)) {
+      showToast(language === 'zh' ? '不支持的图片格式，仅支持 jpg, png, gif, webp' : 'Unsupported image format. Only jpg, png, gif, webp are allowed', 'error')
+      return
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      showToast(language === 'zh' ? '图片大小不能超过 5MB' : 'Image size cannot exceed 5MB', 'error')
+      return
+    }
+
+    setUploading(true)
+
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('userId', userId)
+
+      const response = await fetch('/api/posts/upload-image', {
+        method: 'POST',
+        body: formData,
+      })
+
+      if (!response.ok) {
+        let errorMsg = language === 'zh' ? '上传失败' : 'Upload failed'
+        try {
+          const errorData = await response.json()
+          errorMsg = errorData.error || errorMsg
+        } catch {
+          errorMsg = `${errorMsg} (${response.status})`
+        }
+        showToast(errorMsg, 'error')
+        return
+      }
+
+      const data = await response.json()
+      setAvatarUrl(data.url)
+      showToast(language === 'zh' ? '图片上传成功' : 'Image uploaded successfully', 'success')
+    } catch (error: any) {
+      console.error('Upload error:', error)
+      const errorMsg = error?.message || (language === 'zh' ? '网络错误，请稍后重试' : 'Network error, please try again later')
+      showToast(errorMsg, 'error')
+    } finally {
+      setUploading(false)
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
+    }
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
@@ -133,7 +208,8 @@ export default function ApplyGroupPage() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${accessToken}`
+          Authorization: `Bearer ${accessToken}`,
+          ...getCsrfHeaders()
         },
         body: JSON.stringify({
           name: nameZh.trim() || nameEn.trim(),
@@ -151,19 +227,51 @@ export default function ApplyGroupPage() {
         })
       })
 
-      const data = await res.json()
-
+      // 检查响应状态
       if (!res.ok) {
-        setError(data.error || (language === 'zh' ? '提交失败' : 'Submission failed'))
+        let errorMessage = language === 'zh' ? '提交失败' : 'Submission failed'
+        
+        try {
+          const data = await res.json()
+          // 使用API返回的错误信息
+          if (data.error) {
+            errorMessage = data.error
+          } else if (data.message) {
+            errorMessage = data.message
+          }
+        } catch (parseError) {
+          // 如果JSON解析失败，尝试获取状态文本
+          if (res.status === 401) {
+            errorMessage = language === 'zh' ? '身份验证失败，请重新登录' : 'Authentication failed, please login again'
+          } else if (res.status === 403) {
+            errorMessage = language === 'zh' ? '没有权限执行此操作' : 'Permission denied'
+          } else if (res.status === 400) {
+            errorMessage = language === 'zh' ? '请求参数错误' : 'Invalid request parameters'
+          } else if (res.status === 500) {
+            errorMessage = language === 'zh' ? '服务器错误，请稍后重试' : 'Server error, please try again later'
+          }
+        }
+        
+        setError(errorMessage)
         return
       }
+
+      const data = await res.json()
 
       setSuccess(true)
       if (accessToken) {
         fetchMyApplications(accessToken)
       }
     } catch (err) {
-      setError(language === 'zh' ? '网络错误' : 'Network error')
+      // 处理网络错误和其他异常
+      console.error('Submit error:', err)
+      let errorMessage = language === 'zh' ? '网络错误，请检查网络连接' : 'Network error, please check your connection'
+      
+      if (err instanceof TypeError && err.message.includes('fetch')) {
+        errorMessage = language === 'zh' ? '无法连接到服务器，请检查网络连接' : 'Unable to connect to server, please check your connection'
+      }
+      
+      setError(errorMessage)
     } finally {
       setLoading(false)
     }
@@ -618,36 +726,117 @@ export default function ApplyGroupPage() {
                 </Box>
               </Box>
 
-              {/* 小组头像 URL */}
+              {/* 小组头像 */}
               <Box>
                 <label style={labelStyle}>
-                  {language === 'zh' ? '小组头像 URL' : 'Group Avatar URL'}
+                  {language === 'zh' ? '小组头像' : 'Group Avatar'}
                 </label>
-                <input
-                  type="url"
-                  value={avatarUrl}
-                  onChange={(e) => setAvatarUrl(e.target.value)}
-                  placeholder="https://example.com/avatar.png"
-                  style={inputStyle}
-                />
+                <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[2] }}>
+                  {language === 'zh' 
+                    ? '可以直接上传图片或输入图片URL' 
+                    : 'Upload an image directly or enter an image URL'}
+                </Text>
+                
+                {/* 图片预览 */}
                 {avatarUrl && (
-                  <Box style={{ marginTop: tokens.spacing[2] }}>
-                    <img
-                      src={avatarUrl}
-                      alt="Preview"
+                  <Box style={{ marginBottom: tokens.spacing[3] }}>
+                    <Box
                       style={{
-                        width: 60,
-                        height: 60,
-                        borderRadius: tokens.radius.lg,
-                        objectFit: 'cover',
-                        border: `1px solid ${tokens.colors.border.primary}`,
+                        position: 'relative',
+                        display: 'inline-block',
                       }}
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).style.display = 'none'
-                      }}
-                    />
+                    >
+                      <img
+                        src={avatarUrl}
+                        alt="Avatar preview"
+                        style={{
+                          width: 120,
+                          height: 120,
+                          borderRadius: tokens.radius.lg,
+                          objectFit: 'cover',
+                          border: `1px solid ${tokens.colors.border.primary}`,
+                        }}
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).style.display = 'none'
+                        }}
+                      />
+                      <Button
+                        type="button"
+                        variant="text"
+                        size="sm"
+                        onClick={() => setAvatarUrl('')}
+                        style={{
+                          position: 'absolute',
+                          top: -8,
+                          right: -8,
+                          padding: tokens.spacing[1],
+                          minWidth: 'auto',
+                          width: 24,
+                          height: 24,
+                          borderRadius: '50%',
+                          background: '#DC2626',
+                          color: '#fff',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          border: 'none',
+                        }}
+                      >
+                        ×
+                      </Button>
+                    </Box>
                   </Box>
                 )}
+
+                {/* 上传按钮和URL输入 */}
+                <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
+                  <Box style={{ display: 'flex', gap: tokens.spacing[2] }}>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/jpeg,image/jpg,image/png,image/gif,image/webp"
+                      onChange={handleImageUpload}
+                      style={{ display: 'none' }}
+                    />
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={uploading}
+                      style={{ flexShrink: 0 }}
+                    >
+                      {uploading 
+                        ? (language === 'zh' ? '上传中...' : 'Uploading...')
+                        : (language === 'zh' ? '上传图片' : 'Upload Image')}
+                    </Button>
+                    <Box style={{ flex: 1, display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
+                      <Box
+                        style={{
+                          flex: 1,
+                          height: 1,
+                          background: tokens.colors.border.primary,
+                        }}
+                      />
+                      <Text size="xs" color="tertiary" style={{ whiteSpace: 'nowrap' }}>
+                        {language === 'zh' ? '或' : 'or'}
+                      </Text>
+                      <Box
+                        style={{
+                          flex: 1,
+                          height: 1,
+                          background: tokens.colors.border.primary,
+                        }}
+                      />
+                    </Box>
+                  </Box>
+                  <input
+                    type="url"
+                    value={avatarUrl}
+                    onChange={(e) => setAvatarUrl(e.target.value)}
+                    placeholder="https://example.com/avatar.png"
+                    style={inputStyle}
+                  />
+                </Box>
               </Box>
 
               {/* Pro 专属小组选项 */}

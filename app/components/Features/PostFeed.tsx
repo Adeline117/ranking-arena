@@ -253,6 +253,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
   const [editContent, setEditContent] = useState('')
   const [savingEdit, setSavingEdit] = useState(false)
   const processingRef = useRef<Set<string>>(new Set())
+  const abortControllerRef = useRef<AbortController | null>(null)
   // 评论相关状态
   const [replyingTo, setReplyingTo] = useState<{ commentId: string; handle: string } | null>(null)
   const [replyContent, setReplyContent] = useState('')
@@ -316,6 +317,15 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
 
   // 加载帖子
   const loadPosts = useCallback(async () => {
+    // 取消之前的请求
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+    }
+    
+    // 创建新的AbortController
+    const controller = new AbortController()
+    abortControllerRef.current = controller
+    
     try {
       setLoading(true)
       setError(null)
@@ -347,7 +357,16 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
         headers['Authorization'] = `Bearer ${accessToken}`
       }
 
-      const response = await fetch(`/api/posts?${params.toString()}`, { headers })
+      const response = await fetch(`/api/posts?${params.toString()}`, { 
+        headers,
+        signal: controller.signal
+      })
+      
+      // 检查请求是否被取消
+      if (controller.signal.aborted) {
+        return
+      }
+      
       const data = await response.json()
 
       if (!response.ok) {
@@ -370,13 +389,29 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
       })
       setBookmarkCounts(prev => ({ ...prev, ...initialBookmarkCounts }))
       setRepostCounts(prev => ({ ...prev, ...initialRepostCounts }))
-    } catch (err: any) {
-      console.error('[PostFeed] 加载失败:', err)
-      setError(err.message || '加载失败')
+    } catch (err) {
+      // 如果是取消的请求，不处理错误
+      if (err instanceof Error && (err.name === 'AbortError' || controller.signal.aborted)) {
+        return
+      }
+      const errorMessage = err instanceof Error ? err.message : '加载失败'
+      setError(errorMessage)
     } finally {
-      setLoading(false)
+      // 只有在当前请求完成时才更新loading状态
+      if (!controller.signal.aborted) {
+        setLoading(false)
+      }
     }
   }, [props.groupId, props.authorHandle, accessToken, sortType])
+  
+  // 组件卸载时取消所有请求
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort()
+      }
+    }
+  }, [])
 
   // 加载用户收藏状态 - 必须在使用它的 useEffect 之前定义
   // 注意：转发状态不再需要检查，因为新设计允许多次转发
@@ -384,6 +419,8 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
   const loadUserBookmarksAndReposts = useCallback(async (postIds: string[]) => {
     if (!accessToken || postIds.length === 0) return
 
+    const controller = new AbortController()
+    
     try {
       // 使用批量 API 获取收藏状态
       const res = await fetch('/api/posts/bookmarks/status', {
@@ -391,25 +428,34 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${accessToken}`,
+          ...getCsrfHeaders()
         },
         body: JSON.stringify({ postIds }),
+        signal: controller.signal
       })
+      
+      if (controller.signal.aborted) return
+      
       const data = await res.json()
       const bookmarks = data.bookmarks || {}
 
-      // 批量更新用户收藏状态
-      setUserBookmarks(prev => ({
-        ...prev,
-        ...bookmarks,
-      }))
+      // 批量更新用户收藏状态（只有在请求未被取消时）
+      if (!controller.signal.aborted) {
+        setUserBookmarks(prev => ({
+          ...prev,
+          ...bookmarks,
+        }))
+      }
     } catch (err) {
-      console.error('[PostFeed] 加载收藏状态失败:', err)
+      if (err instanceof Error && err.name === 'AbortError') return
+      // 静默处理收藏状态加载失败，不影响主流程
     }
   }, [accessToken])
 
   useEffect(() => {
     loadPosts()
-  }, [loadPosts])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.groupId, props.authorHandle, accessToken, sortType])
 
   // 加载用户收藏和转发状态
   useEffect(() => {
@@ -417,7 +463,8 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
       const postIds = posts.map(p => p.id)
       loadUserBookmarksAndReposts(postIds)
     }
-  }, [posts, accessToken, loadUserBookmarksAndReposts])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [posts.length, accessToken])
 
   // 处理 initialPostId - 自动打开指定帖子
   const initialPostIdRef = useRef<string | null>(null)
@@ -435,7 +482,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
         fetch(`/api/posts/${postToOpen.id}/comments`)
           .then(res => res.json())
           .then(data => { if (data.success && data.data?.comments) setComments(data.data.comments) })
-          .catch(err => console.error('[PostFeed] 加载评论失败:', err))
+          .catch(() => { /* 静默处理评论加载失败 */ })
       } else {
         // 帖子不在当前列表中，单独加载
         const loadSinglePost = async () => {
@@ -474,10 +521,10 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
               fetch(`/api/posts/${props.initialPostId}/comments`)
                 .then(res => res.json())
                 .then(data => { if (data.comments) setComments(data.comments) })
-                .catch(err => console.error('[PostFeed] 加载评论失败:', err))
+                .catch(() => { /* 静默处理评论加载失败 */ })
             }
           } catch (err) {
-            console.error('[PostFeed] 加载帖子失败:', err)
+            // 静默处理帖子加载失败
           }
         }
         loadSinglePost()
@@ -500,11 +547,9 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
         // API 返回格式：{ success: true, data: { comments: [...] } }
         setComments(json.data?.comments || [])
       } else {
-        console.error('[PostFeed] 加载评论失败:', json.error)
         setComments([])
       }
     } catch (err) {
-      console.error('[PostFeed] 加载评论失败:', err)
       setComments([])
     } finally {
       setLoadingComments(false)
@@ -528,6 +573,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${accessToken}`,
+          ...getCsrfHeaders()
         },
         body: JSON.stringify({ reaction_type: reactionType }),
       })
@@ -560,7 +606,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
         }
       }
     } catch (err) {
-      console.error('[PostFeed] 点赞失败:', err)
+      // 错误已在 showToast 中处理
     } finally {
       setTimeout(() => processingRef.current.delete(key), 300)
     }
@@ -583,6 +629,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${accessToken}`,
+          ...getCsrfHeaders()
         },
         body: JSON.stringify({ choice }),
       })
@@ -617,7 +664,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
         }
       }
     } catch (err) {
-      console.error('[PostFeed] 投票失败:', err)
+      // 错误已在 showToast 中处理
     } finally {
       setTimeout(() => processingRef.current.delete(key), 300)
     }
@@ -642,7 +689,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
         setSelectedPollOptions(data.data.userVotes || [])
       }
     } catch (err) {
-      console.error('[PostFeed] 加载投票失败:', err)
+      // 错误已在 showToast 中处理
     } finally {
       setLoadingCustomPoll(false)
     }
@@ -665,6 +712,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${accessToken}`,
+          ...getCsrfHeaders()
         },
         body: JSON.stringify({ optionIndexes: selectedPollOptions }),
       })
@@ -719,7 +767,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
         showToast(result.error || '操作失败', 'error')
       }
     } catch (err) {
-      console.error('[PostFeed] 收藏失败:', err)
+      // 错误已在 showToast 中处理
       showToast('网络错误', 'error')
     } finally {
       setBookmarkLoading(prev => ({ ...prev, [postId]: false }))
@@ -763,7 +811,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
         showToast(result.error || '操作失败', 'error')
       }
     } catch (err) {
-      console.error('[PostFeed] 收藏失败:', err)
+      // 错误已在 showToast 中处理
       showToast('网络错误', 'error')
     } finally {
       setBookmarkLoading(prev => ({ ...prev, [bookmarkingPostId]: false }))
@@ -794,6 +842,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${accessToken}`,
+          ...getCsrfHeaders()
         },
         body: JSON.stringify({ comment }),
       })
@@ -831,6 +880,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${accessToken}`,
+          ...getCsrfHeaders()
         },
         body: JSON.stringify({ content: newComment.trim() }),
       })
@@ -857,7 +907,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
         showToast(json.error || '发表评论失败', 'error')
       }
     } catch (err) {
-      console.error('[PostFeed] 发表评论失败:', err)
+      // 错误已在 showToast 中处理
       showToast('发表评论失败', 'error')
     } finally {
       setSubmittingComment(false)
@@ -880,6 +930,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${accessToken}`,
+          ...getCsrfHeaders()
         },
         body: JSON.stringify({ comment_id: commentId }),
       })
@@ -916,7 +967,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
         }
       }
     } catch (err) {
-      console.error('[PostFeed] 评论点赞失败:', err)
+      // 错误已在 showToast 中处理
       showToast('网络错误，请稍后重试', 'error')
     } finally {
       setCommentLikeLoading(prev => ({ ...prev, [commentId]: false }))
@@ -939,6 +990,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${accessToken}`,
+          ...getCsrfHeaders()
         },
         body: JSON.stringify({ content: replyContent.trim(), parent_id: parentId }),
       })
@@ -1005,6 +1057,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${accessToken}`,
+          ...getCsrfHeaders()
         },
         body: JSON.stringify({ comment_id: commentId }),
       })
@@ -1043,7 +1096,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
         showToast(json.error || '删除评论失败', 'error')
       }
     } catch (err) {
-      console.error('[PostFeed] 删除评论失败:', err)
+      // 错误已在 showToast 中处理
       showToast('删除评论失败', 'error')
     } finally {
       setDeletingCommentId(null)
@@ -1074,6 +1127,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${accessToken}`,
+          ...getCsrfHeaders()
         },
         body: JSON.stringify({
           title: editTitle.trim(),
@@ -1126,6 +1180,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${accessToken}`,
+          ...getCsrfHeaders()
         },
       })
 
@@ -1145,7 +1200,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
         showToast(data.error || '删除失败', 'error')
       }
     } catch (err) {
-      console.error('[PostFeed] 删除失败:', err)
+      // 错误已在 showToast 中处理
       showToast('删除失败', 'error')
     }
   }, [accessToken, openPost?.id, showDangerConfirm, showToast])
@@ -1164,6 +1219,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${accessToken}`,
+          ...getCsrfHeaders()
         },
       })
 
@@ -1242,7 +1298,10 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
       
       const response = await fetch('/api/translate', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          ...getCsrfHeaders()
+        },
         body: JSON.stringify({ 
           text: textToTranslate, 
           targetLang,
@@ -1302,7 +1361,10 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
 
       const response = await fetch('/api/translate', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          ...getCsrfHeaders()
+        },
         body: JSON.stringify({ items, targetLang }),
       })
       const data = await response.json()
@@ -1376,7 +1438,10 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
 
       const response = await fetch('/api/translate', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          ...getCsrfHeaders()
+        },
         body: JSON.stringify({ items, targetLang }),
       })
       const data = await response.json()
