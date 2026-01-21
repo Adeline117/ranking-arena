@@ -26,7 +26,7 @@
     "daily-check": "bash scripts/daily-check.sh",
     "setup:antigravity": "bash scripts/antigravity-setup.sh",
     "setup:dev": "bash scripts/setup-dev.sh",
-    "prepare": "husky install"
+    "prepare": "husky || true"
   },
   "dependencies": {
     "@sentry/nextjs": "10.35.0",
