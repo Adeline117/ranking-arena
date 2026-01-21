@@ -1,0 +1,446 @@
+No,Category,Guideline,Description,Do,Don't,Code Good,Code Bad,Severity,Docs URL
+1,Installation,Install Nuxt UI properly,Add @nuxt/ui module with correct configuration,Use the official @nuxt/ui module,Install individual component packages,"// nuxt.config.ts
+export default defineNuxtConfig({
+  modules: ['@nuxt/ui']
+})","npm install @nuxtjs/tailwindcss
+// Installing separately",error,https://nuxt.com/modules/ui
+2,Installation,Configure Tailwind integration,Nuxt UI includes Tailwind CSS - avoid duplicate config,Let Nuxt UI manage Tailwind configuration,Create separate tailwind.config.js,"// Nuxt UI handles Tailwind
+// No extra config needed","// tailwind.config.js
+module.exports = {
+  // Duplicate/conflicting config
+}",warning,https://ui.nuxt.com/getting-started/installation
+3,Installation,Set up color configuration,Configure primary and gray colors in app.config.ts,Define colors in app.config.ts,Hardcode colors in components,"// app.config.ts
+export default defineAppConfig({
+  ui: {
+    primary: 'green',
+    gray: 'slate'
+  }
+})","<UButton color=""#10b981"">
+  <!-- Hardcoded color -->
+</UButton>",warning,https://ui.nuxt.com/getting-started/theming
+4,Components,Use UButton for actions,UButton provides consistent styling and loading states,Use UButton with appropriate variants,Create custom button components,"<UButton
+  label=""Save""
+  icon=""i-heroicons-check""
+  :loading=""saving""
+  @click=""save""
+/>","<button class=""bg-primary..."" @click=""save"">
+  <span v-if=""saving"">...</span>
+  Save
+</button>",warning,https://ui.nuxt.com/components/button
+5,Components,Apply correct button variants,Use semantic variants for different actions,Match variant to action importance,Use same variant for all buttons,"<UButton variant=""solid"" label=""Primary"" />
+<UButton variant=""outline"" label=""Secondary"" />
+<UButton variant=""ghost"" label=""Tertiary"" />
+<UButton variant=""link"" label=""Link"" />","<UButton label=""Save"" />
+<UButton label=""Cancel"" />
+<UButton label=""Delete"" />
+// All look the same",warning,https://ui.nuxt.com/components/button#variant
+6,Components,Use UInput for form fields,UInput provides validation integration and consistent styling,Use UInput with proper type and validation,Use native input elements directly,"<UInput
+  v-model=""email""
+  type=""email""
+  placeholder=""Enter email""
+  :error=""errors.email""
+  icon=""i-heroicons-envelope""
+/>","<input
+  v-model=""email""
+  type=""email""
+  class=""border rounded...""
+/>",warning,https://ui.nuxt.com/components/input
+7,Components,Implement UCard for content containers,UCard provides consistent card styling with header body and footer,Use UCard slots for structured content,Create custom card divs,"<UCard>
+  <template #header>
+    <h3>Title</h3>
+  </template>
+  <p>Content here</p>
+  <template #footer>
+    <UButton>Action</UButton>
+  </template>
+</UCard>","<div class=""rounded-lg border p-4"">
+  <h3>Title</h3>
+  <p>Content</p>
+</div>",info,https://ui.nuxt.com/components/card
+8,Icons,Use Iconify icons,Nuxt UI integrates with Iconify for thousands of icons,Use icon prop with Iconify format,Import SVG icons manually,"<UButton
+  icon=""i-heroicons-home""
+  label=""Home""
+/>
+<UIcon name=""i-lucide-settings"" />","<UButton>
+  <svg>...</svg>
+  Home
+</UButton>",warning,https://ui.nuxt.com/getting-started/theming#icons
+9,Icons,Configure icon collections,Add required icon collections in nuxt.config,Install and configure icon collections needed,Load all icon collections,"// nuxt.config.ts
+export default defineNuxtConfig({
+  ui: {
+    icons: ['heroicons', 'lucide']
+  }
+})","// Loading all collections
+ui: { icons: 'all' }
+// Huge bundle size",warning,https://ui.nuxt.com/getting-started/installation#icons
+10,Icons,Use dynamic icons properly,Handle dynamic icon names with UIcon component,Use UIcon for dynamic icon rendering,Concatenate icon classes dynamically,"<UIcon
+  :name=""item.icon || 'i-heroicons-cube'""
+  class=""w-5 h-5""
+/>","<i :class=""`i-heroicons-${iconName}`"" />
+// Won't work with purge",error,https://ui.nuxt.com/components/icon
+11,Theming,Customize component defaults,Override default props for consistent styling,Configure defaults in app.config.ts ui section,Override props on every component instance,"// app.config.ts
+export default defineAppConfig({
+  ui: {
+    button: {
+      default: {
+        size: 'lg',
+        color: 'primary'
+      }
+    }
+  }
+})","<UButton size=""lg"" color=""primary"">
+<UButton size=""lg"" color=""primary"">
+// Repeated on every button",info,https://ui.nuxt.com/getting-started/theming#components
+12,Theming,Use design tokens consistently,Leverage Nuxt UI design tokens for spacing colors and typography,Use Tailwind classes that map to UI tokens,Hardcode pixel values and hex colors,"<div class=""p-4 space-y-4 text-gray-700 dark:text-gray-200"">
+  <UCard class=""bg-gray-50 dark:bg-gray-800"" />
+</div>","<div style=""padding: 16px; color: #374151"">
+  <div style=""background: #f9fafb"" />
+</div>",warning,https://ui.nuxt.com/getting-started/theming
+13,Theming,Extend component styles,Add custom variants or modify existing styles,Use ui prop for component-level customization,Override with !important classes,"<UButton
+  :ui=""{
+    rounded: 'rounded-full',
+    padding: { sm: 'px-6 py-3' }
+  }""
+>
+  Custom Button
+</UButton>","<UButton class=""!rounded-full !px-6 !py-3"">
+  <!-- Fighting specificity -->
+</UButton>",warning,https://ui.nuxt.com/getting-started/theming#ui-prop
+14,Forms,Use UForm for form handling,UForm integrates with validation libraries seamlessly,Wrap forms in UForm with schema validation,Handle validation manually,"<UForm :schema=""schema"" :state=""state"" @submit=""onSubmit"">
+  <UFormGroup label=""Email"" name=""email"">
+    <UInput v-model=""state.email"" />
+  </UFormGroup>
+  <UButton type=""submit"">Submit</UButton>
+</UForm>","<form @submit.prevent=""onSubmit"">
+  <input v-model=""email"" />
+  <span v-if=""errors.email"">{{ errors.email }}</span>
+</form>",error,https://ui.nuxt.com/components/form
+15,Forms,Implement form validation with Zod,Use Zod schemas for type-safe validation,Define Zod schema and pass to UForm,Write custom validation functions,"import { z } from 'zod'
+const schema = z.object({
+  email: z.string().email('Invalid email'),
+  password: z.string().min(8, 'Min 8 chars')
+})
+<UForm :schema=""schema"" :state=""state"">","const validate = () => {
+  if (!email.includes('@')) {
+    errors.email = 'Invalid'
+  }
+}",warning,https://ui.nuxt.com/components/form#schema
+16,Forms,Use UFormGroup for field layout,UFormGroup provides label error display and description,Wrap each field in UFormGroup,Create custom field wrappers,"<UFormGroup
+  label=""Username""
+  name=""username""
+  description=""Choose a unique username""
+  required
+>
+  <UInput v-model=""state.username"" />
+</UFormGroup>","<div>
+  <label>Username *</label>
+  <UInput v-model=""username"" />
+  <span v-if=""error"">{{ error }}</span>
+</div>",warning,https://ui.nuxt.com/components/form-group
+17,Forms,Handle form submission states,Manage loading and success states during form submission,Use loading prop and disable during submission,Allow multiple submissions,"<UForm @submit=""onSubmit"">
+  <UButton
+    type=""submit""
+    :loading=""submitting""
+    :disabled=""submitting""
+  >
+    Submit
+  </UButton>
+</UForm>","<UButton type=""submit"" @click=""submit"">
+  Submit
+  <!-- Can be clicked multiple times -->
+</UButton>",error,https://ui.nuxt.com/components/form#submit
+18,Forms,Implement USelect for dropdowns,USelect provides searchable accessible dropdowns,Use USelect with options array,Use native select elements,"<USelect
+  v-model=""selected""
+  :options=""countries""
+  option-attribute=""name""
+  searchable
+  placeholder=""Select country""
+/>","<select v-model=""selected"">
+  <option v-for=""c in countries"">
+    {{ c.name }}
+  </option>
+</select>",warning,https://ui.nuxt.com/components/select
+19,Overlays,Use UModal for dialogs,UModal provides accessible modal dialogs with transitions,Use UModal with v-model for visibility,Create custom modal implementations,"<UModal v-model=""isOpen"">
+  <UCard>
+    <template #header>Confirm</template>
+    <p>Are you sure?</p>
+    <template #footer>
+      <UButton @click=""isOpen = false"">Cancel</UButton>
+      <UButton @click=""confirm"">Confirm</UButton>
+    </template>
+  </UCard>
+</UModal>","<div v-if=""isOpen"" class=""fixed inset-0 z-50"">
+  <div class=""bg-black/50"" />
+  <div class=""bg-white rounded..."">
+  </div>
+</div>",warning,https://ui.nuxt.com/components/modal
+20,Overlays,Implement USlideover for panels,USlideover provides slide-in panels from screen edges,Use USlideover for secondary content panels,Use modals for all overlay content,"<USlideover v-model=""showFilters"" side=""right"">
+  <UCard>
+    <template #header>Filters</template>
+    <FilterForm />
+  </UCard>
+</USlideover>","<UModal v-model=""showFilters"">
+  <!-- Modal for filters - poor UX -->
+</UModal>",info,https://ui.nuxt.com/components/slideover
+21,Overlays,Use UPopover for contextual content,UPopover shows content anchored to a trigger element,Use UPopover for tooltips and contextual menus,Position floating content manually,"<UPopover>
+  <UButton label=""Options"" />
+  <template #panel>
+    <div class=""p-4"">
+      <p>Popover content</p>
+    </div>
+  </template>
+</UPopover>","<div class=""relative"">
+  <button @click=""show = !show"">
+  <div v-if=""show"" class=""absolute top-full..."">
+</div>",warning,https://ui.nuxt.com/components/popover
+22,Overlays,Handle overlay accessibility,Ensure overlays are keyboard accessible and announce properly,Use built-in a11y features and add aria labels,Ignore keyboard and screen reader support,"<UModal
+  v-model=""isOpen""
+  :ui=""{ overlay: { background: 'bg-gray-900/75' } }""
+>
+  <!-- Focus trap and aria handled -->
+</UModal>","<div v-if=""isOpen"" @click.self=""close"">
+  <!-- No focus trap -->
+  <!-- No aria attributes -->
+</div>",error,https://ui.nuxt.com/components/modal#accessibility
+23,Dashboard,Use UDashboardLayout for admin UIs,UDashboardLayout provides complete dashboard structure,Use dashboard components for admin interfaces,Build custom dashboard layouts,"<UDashboardLayout>
+  <UDashboardNavbar />
+  <UDashboardSidebar>
+    <UDashboardSidebarLinks :links=""links"" />
+  </UDashboardSidebar>
+  <UDashboardPage>
+    <slot />
+  </UDashboardPage>
+</UDashboardLayout>","<div class=""flex min-h-screen"">
+  <aside class=""w-64..."">
+  <main class=""flex-1..."">
+</div>",info,https://ui.nuxt.com/components/dashboard-layout
+24,Dashboard,Implement collapsible sidebar,Support sidebar collapse for more content space,Use collapsible prop and persist state,Have fixed-width sidebar always,"<UDashboardSidebar
+  collapsible
+  v-model:collapsed=""collapsed""
+>
+  <!-- Auto-collapses on mobile -->
+</UDashboardSidebar>","<aside class=""w-64"">
+  <!-- Fixed width always -->
+</aside>",info,https://ui.nuxt.com/components/dashboard-sidebar
+25,Dashboard,Use UDashboardCard for stats,UDashboardCard displays metrics with icons and trends,Use UDashboardCard for KPI displays,Create custom stat cards,"<UDashboardCard
+  title=""Revenue""
+  :value=""'$12,345'""
+  icon=""i-heroicons-currency-dollar""
+  :trend=""{
+    value: 12,
+    direction: 'up'
+  }""
+/>","<UCard>
+  <h4>Revenue</h4>
+  <p class=""text-2xl"">$12,345</p>
+  <span class=""text-green-500"">+12%</span>
+</UCard>",info,https://ui.nuxt.com/components/dashboard-card
+26,Tables,Use UTable for data display,UTable provides sortable filterable data tables,Use UTable with columns and rows configuration,Build custom table markup,"<UTable
+  :columns=""columns""
+  :rows=""users""
+  :loading=""loading""
+  @select=""onSelect""
+>
+  <template #actions-data=""{ row }"">
+    <UButton icon=""i-heroicons-pencil"" @click=""edit(row)"" />
+  </template>
+</UTable>","<table class=""w-full"">
+  <thead>...</thead>
+  <tbody>
+    <tr v-for=""user in users"">
+      ...
+    </tr>
+  </tbody>
+</table>",warning,https://ui.nuxt.com/components/table
+27,Tables,Define table columns properly,Configure columns with key label and sortable properties,Define typed column configuration,Pass unstructured column data,"const columns = [
+  { key: 'name', label: 'Name', sortable: true },
+  { key: 'email', label: 'Email' },
+  { key: 'status', label: 'Status', sortable: true },
+  { key: 'actions', label: '' }
+]","<UTable :columns=""['name', 'email', 'status']"" />
+// No labels or config",warning,https://ui.nuxt.com/components/table#columns
+28,Tables,Implement table row selection,Enable row selection for bulk actions,Use v-model:selected for selection state,Handle selection manually,"<UTable
+  v-model:selected=""selected""
+  :columns=""columns""
+  :rows=""users""
+>
+  <template #select-header>
+    <UCheckbox v-model=""selectAll"" />
+  </template>
+</UTable>
+<UButton :disabled=""!selected.length"" @click=""deleteSelected"">","// Manual checkbox handling
+<tr v-for=""row in rows"">
+  <td><input type=""checkbox"" /></td>
+</tr>",info,https://ui.nuxt.com/components/table#selection
+29,Tables,Add table empty and loading states,Handle empty data and loading states gracefully,Use empty-state and loading props,Show nothing when no data,"<UTable
+  :rows=""users""
+  :loading=""loading""
+  :empty-state=""{
+    icon: 'i-heroicons-users',
+    label: 'No users found'
+  }""
+/>","<UTable :rows=""users"" />
+<!-- Shows empty table when no data -->",warning,https://ui.nuxt.com/components/table#empty-state
+30,Navigation,Use UNavigationMenu for nav,UNavigationMenu provides accessible navigation structure,Use navigation components for menus,Build navigation with plain links,"<UNavigationMenu :items=""navItems"">
+  <template #item=""{ item }"">
+    <ULink :to=""item.to"">
+      <UIcon :name=""item.icon"" />
+      {{ item.label }}
+    </ULink>
+  </template>
+</UNavigationMenu>","<nav>
+  <a v-for=""item in items"" :href=""item.to"">
+    {{ item.label }}
+  </a>
+</nav>",info,https://ui.nuxt.com/components/navigation-menu
+31,Navigation,Implement UBreadcrumb for context,UBreadcrumb shows current location in hierarchy,Use UBreadcrumb with proper links array,Build breadcrumbs manually,"<UBreadcrumb :links=""[
+  { label: 'Home', to: '/' },
+  { label: 'Products', to: '/products' },
+  { label: product.name }
+]"" />","<nav class=""flex"">
+  <a href=""/"">Home</a> /
+  <a href=""/products"">Products</a> /
+  <span>{{ name }}</span>
+</nav>",info,https://ui.nuxt.com/components/breadcrumb
+32,Navigation,Use UTabs for tabbed content,UTabs provides accessible tabbed interface,Use UTabs with items configuration,Build custom tab implementations,"<UTabs :items=""tabs"">
+  <template #item=""{ item }"">
+    <UCard>{{ item.content }}</UCard>
+  </template>
+</UTabs>
+const tabs = [
+  { label: 'Overview', content: '...' },
+  { label: 'Settings', content: '...' }
+]","<div>
+  <button v-for=""tab in tabs"" @click=""active = tab"">
+  <div v-if=""active === 'overview'"">
+  <div v-if=""active === 'settings'"">
+</div>",warning,https://ui.nuxt.com/components/tabs
+33,Navigation,Implement UPagination for lists,UPagination provides page navigation with proper a11y,Use UPagination with total and modelValue,Build custom pagination,"<UPagination
+  v-model=""page""
+  :total=""total""
+  :page-count=""pageSize""
+  show-first
+  show-last
+/>","<div class=""flex gap-2"">
+  <button @click=""page--"">Prev</button>
+  <span>{{ page }} / {{ pages }}</span>
+  <button @click=""page++"">Next</button>
+</div>",warning,https://ui.nuxt.com/components/pagination
+34,Feedback,Use UToast for notifications,useToast provides non-blocking notifications,Use useToast composable for feedback,Use alert or custom toasts,"const toast = useToast()
+toast.add({
+  title: 'Success',
+  description: 'Item saved successfully',
+  icon: 'i-heroicons-check-circle',
+  color: 'green'
+})","alert('Item saved!')
+// or
+showCustomToast.value = true",warning,https://ui.nuxt.com/components/toast
+35,Feedback,Configure toast positions,Set toast position based on UI context,Configure toast position in app.config,Let toasts appear in default position only,"// app.config.ts
+export default defineAppConfig({
+  ui: {
+    notifications: {
+      position: 'top-right'
+    }
+  }
+})","// Toasts always bottom-right
+// May conflict with FABs",info,https://ui.nuxt.com/components/toast#position
+36,Feedback,Use UAlert for inline messages,UAlert displays contextual feedback inline,Use UAlert for form errors and info messages,Use toasts for inline messages,"<UAlert
+  title=""Error""
+  description=""Please fix the errors below""
+  color=""red""
+  icon=""i-heroicons-exclamation-triangle""
+/>","toast.add({
+  title: 'Fix errors below'
+})
+// Wrong context for toast",warning,https://ui.nuxt.com/components/alert
+37,Feedback,Implement USkeleton for loading,USkeleton provides content placeholders during loading,Use USkeleton matching content shape,Show spinners for all loading states,"<template v-if=""loading"">
+  <USkeleton class=""h-4 w-3/4"" />
+  <USkeleton class=""h-4 w-1/2"" />
+  <USkeleton class=""h-32 w-full"" />
+</template>","<div v-if=""loading"" class=""flex justify-center"">
+  <USpinner />
+</div>",info,https://ui.nuxt.com/components/skeleton
+38,Color Mode,Implement dark mode support,Use useColorMode for light/dark theme switching,Use Nuxt color mode integration,Implement custom dark mode logic,"const colorMode = useColorMode()
+const isDark = computed(() => colorMode.value === 'dark')
+<UButton
+  :icon=""isDark ? 'i-heroicons-sun' : 'i-heroicons-moon'""
+  @click=""colorMode.preference = isDark ? 'light' : 'dark'""
+/>","const isDark = ref(false)
+onMounted(() => {
+  isDark.value = localStorage.getItem('dark')
+})",warning,https://ui.nuxt.com/getting-started/theming#dark-mode
+39,Color Mode,Support system preference,Respect user's system color preference by default,Allow system preference option,Force light or dark mode only,"<USelect
+  v-model=""colorMode.preference""
+  :options=""['system', 'light', 'dark']""
+/>","// Only light/dark options
+// No system preference",info,https://ui.nuxt.com/getting-started/theming#dark-mode
+40,Color Mode,Style for both modes,Ensure all custom styles work in light and dark modes,Use dark: variant for dark mode styles,Write styles only for light mode,"<div class=""bg-white dark:bg-gray-900 text-gray-900 dark:text-white"">
+  <UCard class=""bg-gray-50 dark:bg-gray-800"" />
+</div>","<div class=""bg-white text-gray-900"">
+  <!-- Unreadable in dark mode -->
+</div>",error,https://ui.nuxt.com/getting-started/theming#dark-mode
+41,Customization,Override component classes,Use ui prop for granular style customization,Pass ui object with class overrides,Use class prop for all customization,"<UButton
+  :ui=""{
+    base: 'font-bold tracking-wide',
+    rounded: 'rounded-none',
+    size: { lg: 'text-lg px-8 py-4' }
+  }""
+>
+  Custom
+</UButton>","<UButton class=""font-bold rounded-none px-8 py-4"">
+  <!-- May not override all styles -->
+</UButton>",info,https://ui.nuxt.com/getting-started/theming#ui-prop
+42,Customization,Create component presets,Define reusable style presets for components,Create preset configurations in composables,Repeat ui props across components,"// composables/useButtonPresets.ts
+export const primaryCta = {
+  rounded: 'rounded-full',
+  size: { lg: 'px-8 py-4' }
+}
+// Usage
+<UButton :ui=""primaryCta"">CTA</UButton>","<UButton :ui=""{ rounded: 'rounded-full', size: { lg: 'px-8 py-4' }}"">
+<UButton :ui=""{ rounded: 'rounded-full', size: { lg: 'px-8 py-4' }}"">
+// Repeated everywhere",info,https://ui.nuxt.com/getting-started/theming#presets
+43,Performance,Lazy load heavy components,Use lazy prefix for components not needed immediately,Use Lazy prefix for below-fold components,Load all components eagerly,"<LazyUModal v-model=""showSettings"">
+  <HeavySettingsPanel />
+</LazyUModal>","<UModal v-model=""showSettings"">
+  <!-- Loaded even if never opened -->
+</UModal>",info,https://ui.nuxt.com/getting-started/installation#lazy-loading
+44,Performance,Minimize bundle with tree-shaking,Only import icons and components you use,Configure specific icon collections,Import entire icon libraries,"// nuxt.config.ts
+ui: {
+  icons: ['heroicons', 'lucide']
+  // Only what you need
+}","ui: {
+  icons: 'all'
+  // Massive bundle
+}",warning,https://ui.nuxt.com/getting-started/installation#icons
+45,Accessibility,Use semantic color variants,Apply color variants that convey meaning accessibly,Use success/error colors semantically,Use colors only for aesthetics,"<UAlert color=""red"" title=""Error"">
+<UAlert color=""green"" title=""Success"">
+<UAlert color=""yellow"" title=""Warning"">","<UAlert color=""purple"" title=""Error"">
+  <!-- Color doesn't convey meaning -->
+</UAlert>",warning,https://ui.nuxt.com/components/alert
+46,Accessibility,Add proper labels to inputs,Ensure all form inputs have accessible labels,Use UFormGroup label or aria-label,Leave inputs without labels,"<UFormGroup label=""Email"" name=""email"">
+  <UInput v-model=""email"" />
+</UFormGroup>","<UInput v-model=""email"" placeholder=""Email"" />
+<!-- Placeholder is not a label -->",error,https://ui.nuxt.com/components/form-group
+47,Accessibility,Ensure keyboard navigation,All interactive elements must be keyboard accessible,Test tab order and focus states,Rely only on mouse interactions,"<UButton @click=""action"" @keydown.enter=""action"">
+  <!-- Focus visible styles included -->
+</UButton>","<div @click=""action"">
+  <!-- Not focusable -->
+</div>",error,https://ui.nuxt.com/components/button
+48,Content,Use UContentDoc for markdown,UContentDoc renders Nuxt Content documents with styling,Use content components for documentation,Render markdown manually,"<UContentDoc path=""/docs/getting-started"" />","<div v-html=""marked(content)"" />
+  <!-- No styling, security risk -->",info,https://ui.nuxt.com/pro/components/content-doc
+49,AI/Chat,Use UChatMessage for AI chat,UChatMessage provides chat bubble styling for AI interfaces,Use chat components for conversational UIs,Build custom chat bubbles,"<UChatMessage
+  :message=""msg""
+  :avatar=""{ src: user.avatar }""
+  :side=""msg.role === 'user' ? 'right' : 'left'""
+/>","<div :class=""msg.role === 'user' ? 'ml-auto' : ''"">
+  {{ msg.content }}
+</div>",info,https://ui.nuxt.com/components/chat-message
+50,AI/Chat,Implement streaming responses,Handle streaming AI responses with proper loading states,Use streaming prop for typewriter effect,Wait for complete response,"<UChatMessage
+  :message=""streamingMessage""
+  :streaming=""isStreaming""
+/>
+// Update message.content as chunks arrive","<UChatMessage
+  v-if=""!loading""
+  :message=""response""
+/>
+// Shows nothing during generation",info,https://ui.nuxt.com/components/chat-message#streaming
