@@ -7,10 +7,12 @@ import { Box, Text, Button } from '@/app/components/Base'
 import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/Layout/TopNav'
 import { getCsrfHeaders } from '@/lib/api/client'
+import { useToast } from '@/app/components/UI/Toast'
 
 function ExchangeCallbackPageContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
+  const { showToast } = useToast()
   const [exchange, setExchange] = useState<string | null>(null)
   const [email, setEmail] = useState<string | null>(null)
   const [apiKey, setApiKey] = useState('')
@@ -78,7 +80,7 @@ function ExchangeCallbackPageContent() {
       }
 
       // 连接成功，跳转到设置页面
-      alert('绑定成功！正在同步数据...')
+      showToast('绑定成功！正在同步数据...', 'success')
       router.push('/settings')
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : '连接失败'
