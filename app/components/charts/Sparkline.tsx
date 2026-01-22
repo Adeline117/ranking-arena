@@ -148,7 +148,7 @@ function SparklineComponent({
   ariaLabel,
 }: SparklineProps) {
   // 计算路径和颜色
-  const { linePath, fillPath, lineColor, trend, endpointY } = useMemo(() => {
+  const { linePath, fillPath, lineColor, trend: _trend, endpointY } = useMemo(() => {
     const trend = getTrend(data)
     const lineColor = color || (
       trend === 'positive' ? positiveColor :

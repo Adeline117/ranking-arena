@@ -21,7 +21,7 @@ const RISK_LEVEL_COLORS = {
 }
 
 // 风险等级描述
-const RISK_LEVEL_LABELS: Record<number, string> = {
+const _RISK_LEVEL_LABELS: Record<number, string> = {
   1: '低风险',
   2: '较低风险',
   3: '中等风险',
