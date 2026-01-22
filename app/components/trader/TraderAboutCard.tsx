@@ -110,6 +110,14 @@ function AnimatedAvatar({
   )
 }
 
+interface SocialLinks {
+  twitter?: string
+  telegram?: string
+  discord?: string
+  github?: string
+  website?: string
+}
+
 interface TraderAboutCardProps {
   handle: string
   traderId?: string
@@ -121,6 +129,7 @@ interface TraderAboutCardProps {
   isOwnProfile?: boolean
   showFollowers?: boolean
   showFollowing?: boolean
+  socialLinks?: SocialLinks
 }
 
 /**
@@ -137,6 +146,7 @@ export default function TraderAboutCard({
   isRegistered,
   isOwnProfile = false,
   showFollowers = true,
+  socialLinks,
 }: TraderAboutCardProps) {
   const [userId, setUserId] = useState<string | null>(null)
   const [modalType, setModalType] = useState<'followers' | null>(null)
@@ -240,6 +250,137 @@ export default function TraderAboutCard({
         >
           {bio.length > 60 ? bio.slice(0, 60) + '...' : bio}
         </Text>
+      )}
+
+      {/* 社交链接 */}
+      {socialLinks && Object.values(socialLinks).some(v => v) && (
+        <Box
+          style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: tokens.spacing[2],
+            justifyContent: 'center',
+            marginBottom: tokens.spacing[4],
+            position: 'relative',
+            zIndex: 1,
+          }}
+        >
+          {socialLinks.twitter && (
+            <a
+              href={`https://x.com/${socialLinks.twitter}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              title={`@${socialLinks.twitter}`}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
+                borderRadius: tokens.radius.md,
+                background: `${tokens.colors.bg.tertiary}80`,
+                color: tokens.colors.text.secondary,
+                fontSize: tokens.typography.fontSize.xs,
+                textDecoration: 'none',
+                transition: 'all 0.2s ease',
+                border: `1px solid ${tokens.colors.border.primary}40`,
+              }}
+            >
+              <span style={{ fontSize: '11px' }}>𝕏</span>
+              <span>{socialLinks.twitter}</span>
+            </a>
+          )}
+          {socialLinks.telegram && (
+            <a
+              href={`https://t.me/${socialLinks.telegram}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              title={`@${socialLinks.telegram}`}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
+                borderRadius: tokens.radius.md,
+                background: `${tokens.colors.bg.tertiary}80`,
+                color: tokens.colors.text.secondary,
+                fontSize: tokens.typography.fontSize.xs,
+                textDecoration: 'none',
+                transition: 'all 0.2s ease',
+                border: `1px solid ${tokens.colors.border.primary}40`,
+              }}
+            >
+              <span style={{ fontSize: '11px' }}>TG</span>
+              <span>{socialLinks.telegram}</span>
+            </a>
+          )}
+          {socialLinks.discord && (
+            <span
+              title={socialLinks.discord}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
+                borderRadius: tokens.radius.md,
+                background: `${tokens.colors.bg.tertiary}80`,
+                color: tokens.colors.text.secondary,
+                fontSize: tokens.typography.fontSize.xs,
+                border: `1px solid ${tokens.colors.border.primary}40`,
+              }}
+            >
+              <span style={{ fontSize: '11px' }}>DC</span>
+              <span>{socialLinks.discord.length > 12 ? socialLinks.discord.slice(0, 12) + '...' : socialLinks.discord}</span>
+            </span>
+          )}
+          {socialLinks.github && (
+            <a
+              href={`https://github.com/${socialLinks.github}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              title={socialLinks.github}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
+                borderRadius: tokens.radius.md,
+                background: `${tokens.colors.bg.tertiary}80`,
+                color: tokens.colors.text.secondary,
+                fontSize: tokens.typography.fontSize.xs,
+                textDecoration: 'none',
+                transition: 'all 0.2s ease',
+                border: `1px solid ${tokens.colors.border.primary}40`,
+              }}
+            >
+              <span style={{ fontSize: '11px' }}>GH</span>
+              <span>{socialLinks.github}</span>
+            </a>
+          )}
+          {socialLinks.website && (
+            <a
+              href={socialLinks.website.startsWith('http') ? socialLinks.website : `https://${socialLinks.website}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              title={socialLinks.website}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
+                borderRadius: tokens.radius.md,
+                background: `${tokens.colors.bg.tertiary}80`,
+                color: tokens.colors.text.secondary,
+                fontSize: tokens.typography.fontSize.xs,
+                textDecoration: 'none',
+                transition: 'all 0.2s ease',
+                border: `1px solid ${tokens.colors.border.primary}40`,
+              }}
+            >
+              <span style={{ fontSize: '11px' }}>🌐</span>
+              <span>{socialLinks.website.replace(/^https?:\/\//, '').slice(0, 20)}</span>
+            </a>
+          )}
+        </Box>
       )}
 
       {/* 操作按钮 */}
