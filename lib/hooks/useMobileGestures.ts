@@ -332,7 +332,8 @@ export function useSwipeToDelete({
 }: UseSwipeToDeleteOptions) {
   const [swipeX, setSwipeX] = useState(0)
   const [showDelete, setShowDelete] = useState(false)
-  
+  const [isAnimating, setIsAnimating] = useState(false)
+
   const elementRef = useRef<HTMLDivElement>(null)
   const startX = useRef(0)
   const isTracking = useRef(false)
@@ -341,6 +342,7 @@ export function useSwipeToDelete({
     if (disabled) return
     startX.current = e.touches[0].clientX
     isTracking.current = true
+    setIsAnimating(true)
   }, [disabled])
 
   const handleTouchMove = useCallback((e: TouchEvent) => {
@@ -359,11 +361,12 @@ export function useSwipeToDelete({
   const handleTouchEnd = useCallback(() => {
     if (!isTracking.current) return
     isTracking.current = false
-    
+    setIsAnimating(false)
+
     if (showDelete) {
       onDelete()
     }
-    
+
     setSwipeX(0)
     setShowDelete(false)
   }, [showDelete, onDelete])
@@ -389,7 +392,7 @@ export function useSwipeToDelete({
     showDelete,
     style: {
       transform: `translateX(${swipeX}px)`,
-      transition: isTracking.current ? 'none' : 'transform 0.2s ease',
+      transition: isAnimating ? 'none' : 'transform 0.2s ease',
     },
   }
 }
