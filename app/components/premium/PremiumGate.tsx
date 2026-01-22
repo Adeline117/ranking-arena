@@ -57,7 +57,7 @@ export default function PremiumGate({
   lockOnly = false,
   minHeight,
 }: PremiumGateProps) {
-  const { language, t } = useLanguage()
+  const { language: _language, t } = useLanguage()
 
   if (isPro) {
     return <>{children}</>

@@ -274,7 +274,7 @@ export function useFeatureQuota(featureId: PremiumFeatureId): {
   }
 
   const usage = subscription.usage
-  const limits = premiumService.getSubscription().usage
+  const _limits = premiumService.getSubscription().usage
 
   // 根据功能 ID 获取对应的使用量和限制
   let used = 0

@@ -185,7 +185,7 @@ export default function RankingTable(props: {
   onCategoryChange?: (category: CategoryType) => void // 分类切换回调
   onProRequired?: () => void // 需要升级 Pro 时的回调
 }) {
-  const { traders, loading, source, timeRange = '90D', isPro = false, category = 'all', onCategoryChange, onProRequired } = props
+  const { traders, loading, source, timeRange: _timeRange = '90D', isPro = false, category = 'all', onCategoryChange, onProRequired } = props
   const { t, language } = useLanguage()
   const router = useRouter()
   
@@ -562,7 +562,7 @@ export default function RankingTable(props: {
               }
               
               const displayName = formatDisplayName(traderHandle)
-              const sourceLabelText = trader.source ? (sourceLabels[trader.source] || trader.source) : sourceLabel
+              const _sourceLabelText = trader.source ? (sourceLabels[trader.source] || trader.source) : sourceLabel
 
               const ariaLabel = `${t('rank')} ${rank}, ${t('trader')} ${displayName}, ROI ${(trader.roi || 0) >= 0 ? '+' : ''}${(trader.roi || 0).toFixed(2)}%, ${t('winRate')} ${trader.win_rate != null ? trader.win_rate.toFixed(1) + '%' : '—'}`
               

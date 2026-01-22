@@ -67,7 +67,7 @@ function getSupabaseClient() {
 export async function GET(req: Request) {
   try {
     // 简单的认证检查（可以根据需要加强）
-    const authHeader = req.headers.get('authorization')
+    const _authHeader = req.headers.get('authorization')
     
     const supabase = getSupabaseClient()
     const now = new Date()

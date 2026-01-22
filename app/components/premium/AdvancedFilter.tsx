@@ -60,7 +60,7 @@ const CATEGORIES = [
 ]
 
 // 周期选项
-const PERIODS = [
+const _PERIODS = [
   { value: '7D', label: '7天' },
   { value: '30D', label: '30天' },
   { value: '90D', label: '90天' },
@@ -75,7 +75,7 @@ export default function AdvancedFilter({
   onDeleteFilter,
   isPro,
 }: AdvancedFilterProps) {
-  const { t } = useLanguage()
+  const { t: _t } = useLanguage()
   const [isExpanded, setIsExpanded] = useState(false)
   const [showSaveModal, setShowSaveModal] = useState(false)
   const [saveName, setSaveName] = useState('')

@@ -46,7 +46,7 @@ function renderContentWithLinks(text: string) {
   
   // 分割内容，保留图片和链接
   const parts: { type: 'text' | 'image' | 'link'; content: string; url?: string }[] = []
-  const lastIndex = 0
+  const _lastIndex = 0
   let match
   
   // 先找出所有图片
@@ -68,7 +68,7 @@ function renderContentWithLinks(text: string) {
       const beforeText = text.slice(currentIndex, img.start)
       // 处理这段文本中的链接
       const linkParts = beforeText.split(urlRegex)
-      linkParts.forEach((part, i) => {
+      linkParts.forEach((part, _i) => {
         if (urlRegex.test(part)) {
           urlRegex.lastIndex = 0
           parts.push({ type: 'link', content: part, url: part })
@@ -81,12 +81,12 @@ function renderContentWithLinks(text: string) {
     parts.push({ type: 'image', content: img.alt, url: img.url })
     currentIndex = img.end
   }
-  
+
   // 最后一个图片后的文本
   if (currentIndex < text.length) {
     const afterText = text.slice(currentIndex)
     const linkParts = afterText.split(urlRegex)
-    linkParts.forEach((part, i) => {
+    linkParts.forEach((part, _i) => {
       if (urlRegex.test(part)) {
         urlRegex.lastIndex = 0
         parts.push({ type: 'link', content: part, url: part })
@@ -287,15 +287,15 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
   const [votingCustomPoll, setVotingCustomPoll] = useState(false)
   const [selectedPollOptions, setSelectedPollOptions] = useState<number[]>([])
   // 收藏和转发状态
-  const [bookmarkLoading, setBookmarkLoading] = useState<Record<string, boolean>>({})
+  const [_bookmarkLoading, setBookmarkLoading] = useState<Record<string, boolean>>({})
   const [repostLoading, setRepostLoading] = useState<Record<string, boolean>>({})
   const [showRepostModal, setShowRepostModal] = useState<string | null>(null)
   const [repostComment, setRepostComment] = useState('')
   // 用户收藏和转发状态
   const [userBookmarks, setUserBookmarks] = useState<Record<string, boolean>>({})
-  const [userReposts, setUserReposts] = useState<Record<string, boolean>>({})
+  const [_userReposts, _setUserReposts] = useState<Record<string, boolean>>({})
   const [bookmarkCounts, setBookmarkCounts] = useState<Record<string, number>>({})
-  const [repostCounts, setRepostCounts] = useState<Record<string, number>>({})
+  const [_repostCounts, setRepostCounts] = useState<Record<string, number>>({})
   // 收藏夹选择弹窗状态
   const [showBookmarkModal, setShowBookmarkModal] = useState(false)
   const [bookmarkingPostId, setBookmarkingPostId] = useState<string | null>(null)
@@ -619,7 +619,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
   }, [accessToken, openPost?.id, showToast])
 
   // 投票
-  const toggleVote = useCallback(async (postId: string, choice: PollChoice) => {
+  const _toggleVote = useCallback(async (postId: string, choice: PollChoice) => {
     if (!accessToken) {
       showToast('请先登录', 'warning')
       return
@@ -1647,8 +1647,8 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
         }) : posts).map((p) => {
           const poll = { bull: p.poll_bull, bear: p.poll_bear, wait: p.poll_wait }
           const winner = p.poll_enabled ? getPollWinner(poll) : 'tie'
-          const label = pollLabel(winner, t)
-          const color = pollColor(winner)
+          const _label = pollLabel(winner, t)
+          const _color = pollColor(winner)
 
           return (
             <div

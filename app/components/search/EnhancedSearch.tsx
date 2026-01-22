@@ -132,7 +132,7 @@ export function EnhancedSearch({
   className = '',
 }: EnhancedSearchProps) {
   const router = useRouter()
-  const { t } = useLanguage()
+  const { t: _t } = useLanguage()
   const inputRef = useRef<HTMLInputElement>(null)
   const blurTimerRef = useRef<NodeJS.Timeout | null>(null)
   
