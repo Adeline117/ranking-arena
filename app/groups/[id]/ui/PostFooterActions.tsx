@@ -5,6 +5,7 @@ import { ThumbsUpIcon, CommentIcon } from "@/app/components/icons";
 import { useToast } from '@/app/components/ui/Toast';
 import { useLanguage } from '@/app/components/Providers/LanguageProvider';
 import { getCsrfHeaders } from '@/lib/api/client';
+import { supabase } from '@/lib/supabase/client';
 
 type Post = {
   id: string
@@ -31,10 +32,10 @@ export default function PostFooterActions({ post }: { post: Post }) {
   const handleTip = async () => {
     setLoading(true)
     try {
-      // 获取用户 token
-      const token = localStorage.getItem('sb-access-token') || 
-        document.cookie.split('; ').find(row => row.startsWith('sb-access-token='))?.split('=')[1]
-      
+      // 获取用户 session
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token
+
       if (!token) {
         const errorMsg = language === 'zh' ? '请先登录后再打赏' : 'Please login to tip'
         showToast(errorMsg, 'warning')
