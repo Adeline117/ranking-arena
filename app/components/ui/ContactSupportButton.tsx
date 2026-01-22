@@ -7,7 +7,8 @@ import { useToast } from './Toast'
 import { tokens } from '@/lib/design-tokens'
 import { getCsrfHeaders } from '@/lib/api/client'
 
-// 客服账号邮箱 - 用于查找客服用户 ID
+// 客服账号信息 - 用于查找客服用户 ID
+const SUPPORT_HANDLE = 'adeline'
 const SUPPORT_EMAIL = 'adelinewen1107@outlook.com'
 
 type ContactSupportButtonProps = {
@@ -38,25 +39,23 @@ export default function ContactSupportButton({
       const { data: { user } } = await supabase.auth.getUser()
       setCurrentUserId(user?.id || null)
 
-      // 获取客服用户 ID
+      // 获取客服用户 ID - 优先通过 handle 查找
       const { data: supportUser } = await supabase
         .from('user_profiles')
         .select('id')
-        .eq('email', SUPPORT_EMAIL)
+        .eq('handle', SUPPORT_HANDLE)
         .single()
-      
+
       if (supportUser) {
         setSupportUserId(supportUser.id)
       } else {
-        // 如果没找到，尝试从 auth.users 表查询（需要通过 API）
-        // 备用：使用已知的 handle
+        // 备用：通过邮箱查找
         const { data: profile } = await supabase
           .from('user_profiles')
           .select('id')
-          .ilike('handle', 'adelinewen%')
-          .limit(1)
+          .eq('email', SUPPORT_EMAIL)
           .single()
-        
+
         if (profile) {
           setSupportUserId(profile.id)
         }
