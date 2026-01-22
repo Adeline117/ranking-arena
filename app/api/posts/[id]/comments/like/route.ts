@@ -19,7 +19,7 @@ const logger = createLogger('comment-like')
 
 type RouteContext = { params: Promise<{ id: string }> }
 
-export async function POST(request: NextRequest, context: RouteContext) {
+export async function POST(request: NextRequest, _context: RouteContext) {
   // 限流：每分钟最多 30 次点赞操作
   const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.write)
   if (rateLimitResponse) return rateLimitResponse

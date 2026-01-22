@@ -6,7 +6,7 @@
  */
 
 import React from 'react'
-import { Box, Text } from '../base'
+import { Box } from '../base'
 import { tokens } from '@/lib/design-tokens'
 import { type SubscriptionTier } from '@/lib/premium'
 import { usePremium } from '@/lib/premium/hooks'

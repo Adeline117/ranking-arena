@@ -74,7 +74,7 @@ export default function ExchangeConnectionManager({ userId }: ExchangeConnection
       }
 
       setConnections(data || [])
-    } catch (err) {
+    } catch (_err) {
       // 静默处理错误，设置空数组
       setConnections([])
     } finally {

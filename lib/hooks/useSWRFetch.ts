@@ -14,7 +14,7 @@
 import useSWR, { SWRConfiguration, mutate as globalMutate } from 'swr'
 import useSWRMutation from 'swr/mutation'
 import { supabase } from '@/lib/supabase/client'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 
 // ============================================
 // 基础 Fetcher
@@ -466,7 +466,7 @@ export function prefetch<T>(url: string): Promise<T> {
   })
 }
 
-export default {
+const swrFetchHooks = {
   useTraders,
   useTrader,
   useTraderFull,
@@ -482,3 +482,4 @@ export default {
   clearAllCache,
   prefetch,
 }
+export default swrFetchHooks

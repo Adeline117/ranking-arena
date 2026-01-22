@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { 
-  stripe, 
-  STRIPE_PRICE_IDS, 
+import {
+  STRIPE_PRICE_IDS,
   getOrCreateStripeCustomer,
-  createCheckoutSession 
+  createCheckoutSession
 } from '@/lib/stripe'
 import { createLogger } from '@/lib/utils/logger'
 

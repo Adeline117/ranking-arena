@@ -397,9 +397,10 @@ export function useSwipeToDelete({
   }
 }
 
-export default {
+const mobileGestureHooks = {
   usePullToRefresh,
   useSwipeActions,
   useLongPress,
   useSwipeToDelete,
 }
+export default mobileGestureHooks

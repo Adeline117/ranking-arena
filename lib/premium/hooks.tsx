@@ -156,7 +156,7 @@ export function PremiumProvider({ children, initialSubscription }: PremiumProvid
       // 所有方法都失败时使用默认值
       const defaultSub = premiumService.getSubscription()
       setSubscription(defaultSub)
-    } catch (error) {
+    } catch (_error) {
       // 静默处理错误，使用默认订阅
       const defaultSub = premiumService.getSubscription()
       setSubscription(defaultSub)

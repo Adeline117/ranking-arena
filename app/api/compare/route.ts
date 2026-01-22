@@ -3,7 +3,7 @@
  * Pro 会员功能：批量获取多个交易员数据用于对比
  */
 
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import {
   getSupabaseAdmin,
   requireAuth,
