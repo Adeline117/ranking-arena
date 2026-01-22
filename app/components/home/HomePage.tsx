@@ -32,8 +32,10 @@ export default function HomePage() {
   const {
     traders,
     loading,
+    error,
     activeTimeRange,
     changeTimeRange,
+    refresh,
   } = useTraderData()
 
   // 交易者对比状态
@@ -134,6 +136,8 @@ export default function HomePage() {
             isLoggedIn={isLoggedIn}
             activeTimeRange={activeTimeRange}
             onTimeRangeChange={changeTimeRange}
+            error={error}
+            onRetry={refresh}
           />
 
           {/* 右侧：市场数据（移动端隐藏） */}

@@ -26,6 +26,7 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
   const tradersCache = useRef<Map<string, CachedData>>(new Map())
   const [currentTraders, setCurrentTraders] = useState<Trader[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [lastUpdated, setLastUpdated] = useState<string | null>(null)
 
   // 多窗口同步
@@ -67,11 +68,12 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
     if (!forceRefresh && tradersCache.current.has(timeRange)) {
       return tradersCache.current.get(timeRange) || { traders: [], lastUpdated: null }
     }
-    
+
     try {
       const response = await fetch(`/api/traders?timeRange=${timeRange}`)
       if (!response.ok) {
-        console.error(`[useTraderData] ${timeRange} API 错误`)
+        const errorMsg = `加载排行榜数据失败 (${response.status})`
+        setError(errorMsg)
         return tradersCache.current.get(timeRange) || { traders: [], lastUpdated: null }
       }
       const data = await response.json()
@@ -82,6 +84,7 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
 
       // 更新缓存
       tradersCache.current.set(timeRange, cached)
+      setError(null)
 
       // 广播数据更新到其他窗口
       broadcast('TRADER_DATA_UPDATED', {
@@ -91,8 +94,9 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
       })
 
       return cached
-    } catch (error) {
-      console.error(`[useTraderData] 加载 ${timeRange} 数据失败:`, error)
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : '网络连接失败，请检查网络'
+      setError(errorMsg)
       return tradersCache.current.get(timeRange) || { traders: [], lastUpdated: null }
     }
   }, [])
@@ -100,12 +104,14 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
   // 加载当前选中时间段的数据
   const loadCurrentData = useCallback(async (forceRefresh = false) => {
     setLoading(true)
+    setError(null)
     try {
       const cached = await loadTimeRange(activeTimeRange, forceRefresh)
       setCurrentTraders(cached.traders)
       setLastUpdated(cached.lastUpdated)
-    } catch (error) {
-      console.error('[useTraderData] 加载交易者数据失败:', error)
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : '加载数据失败'
+      setError(errorMsg)
       setCurrentTraders([])
       setLastUpdated(null)
     } finally {
@@ -158,6 +164,7 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
   return {
     traders: currentTraders,
     loading,
+    error,
     activeTimeRange,
     lastUpdated,
     changeTimeRange,

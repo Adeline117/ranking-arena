@@ -1,12 +1,13 @@
 'use client'
 
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/layout/TopNav'
 import { Box, Text, Button } from '@/app/components/base'
 import Avatar from '@/app/components/ui/Avatar'
 import EmptyState from '@/app/components/ui/EmptyState'
+import { ListSkeleton } from '@/app/components/ui/Skeleton'
 import Link from 'next/link'
 import { formatCompact as formatNumber } from '@/lib/utils/format'
 import { formatTimeAgo } from '@/lib/utils/date'
@@ -37,6 +38,7 @@ interface UserProfile {
 export default function DashboardPage() {
   const [email, setEmail] = useState<string | null>(null)
   const [userId, setUserId] = useState<string | null>(null)
+  const [authLoading, setAuthLoading] = useState(true)
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [stats, setStats] = useState({
     following: 0,
@@ -50,27 +52,21 @@ export default function DashboardPage() {
   const [loadingActivities, setLoadingActivities] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
 
-  // 注入响应式网格样式
-  useEffect(() => {
-    if (typeof document === 'undefined') return
-    const styleId = 'dashboard-grid-style'
-    if (document.getElementById(styleId)) return
-    const style = document.createElement('style')
-    style.id = styleId
-    style.textContent = '@media (max-width: 900px) { .dashboard-grid { grid-template-columns: 1fr !important; } }'
-    document.head.appendChild(style)
-  }, [])
+  const [retrying, setRetrying] = useState(false)
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
       setEmail(data.user?.email ?? null)
       setUserId(data.user?.id ?? null)
-      
+      setAuthLoading(false)
+
       if (data.user?.id) {
         loadProfile(data.user.id)
         loadStats(data.user.id)
         loadActivities(data.user.id)
       }
+    }).catch(() => {
+      setAuthLoading(false)
     })
   }, [])
 
@@ -259,11 +255,18 @@ export default function DashboardPage() {
     }
   }
 
-  const handleRetry = () => {
-    if (userId) {
-      loadProfile(userId)
-      loadStats(userId)
-      loadActivities(userId)
+  const handleRetry = async () => {
+    if (userId && !retrying) {
+      setRetrying(true)
+      try {
+        await Promise.all([
+          loadProfile(userId),
+          loadStats(userId),
+          loadActivities(userId),
+        ])
+      } finally {
+        setRetrying(false)
+      }
     }
   }
 
@@ -285,12 +288,23 @@ export default function DashboardPage() {
     }
   }
 
+  if (authLoading) {
+    return (
+      <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
+        <TopNav email={email} />
+        <Box style={{ maxWidth: 900, margin: '0 auto', padding: '40px 16px' }}>
+          <ListSkeleton count={3} gap={16} />
+        </Box>
+      </Box>
+    )
+  }
+
   if (!userId) {
     return (
       <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
         <TopNav email={email} />
         <Box style={{ maxWidth: 900, margin: '0 auto', padding: '40px 16px' }}>
-          <EmptyState 
+          <EmptyState
             title="请先登录"
             description="登录后查看个人仪表盘"
             action={
@@ -489,15 +503,7 @@ export default function DashboardPage() {
                 最近动态
               </Text>
               {loadingActivities ? (
-                <Box
-                  bg="secondary"
-                  p={8}
-                  radius="lg"
-                  border="primary"
-                  style={{ textAlign: 'center' }}
-                >
-                  <Text color="secondary">加载中...</Text>
-                </Box>
+                <ListSkeleton count={4} gap={8} />
               ) : loadError ? (
                 <Box
                   bg="secondary"
@@ -507,7 +513,7 @@ export default function DashboardPage() {
                   style={{ textAlign: 'center' }}
                 >
                   <Text color="secondary" style={{ marginBottom: tokens.spacing[3] }}>{loadError}</Text>
-                  <Button variant="primary" size="sm" onClick={handleRetry}>
+                  <Button variant="primary" size="sm" onClick={handleRetry} loading={retrying}>
                     重试
                   </Button>
                 </Box>
