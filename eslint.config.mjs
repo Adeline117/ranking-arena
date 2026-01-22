@@ -5,9 +5,15 @@ import nextTs from "eslint-config-next/typescript";
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
-  // Project overrides: keep lint useful, but don't block deploy on legacy patterns.
+  // ============================================
+  // Project-specific rules
+  // See docs/LINTING_GUIDE.md for rationale
+  // ============================================
   {
     rules: {
+      // ----------------------------------------
+      // Disabled rules (legacy patterns)
+      // ----------------------------------------
       // This repo contains many pragmatic uses of `any` across UI + scripts.
       "@typescript-eslint/no-explicit-any": "off",
 
@@ -20,8 +26,30 @@ const eslintConfig = defineConfig([
       "@next/next/no-html-link-for-pages": "off",
       "@next/next/no-img-element": "off",
 
+      // ----------------------------------------
+      // Warnings (non-blocking, for gradual improvement)
+      // ----------------------------------------
       // Prefer const is fine as warning (autofixable), not a deploy blocker.
       "prefer-const": "warn",
+
+      // Encourage use of === over == (catches type coercion bugs)
+      "eqeqeq": ["warn", "always", { "null": "ignore" }],
+
+      // Warn on console.log (should use logger utility)
+      "no-console": ["warn", { "allow": ["warn", "error"] }],
+
+      // Warn on unused variables (helps catch dead code)
+      "@typescript-eslint/no-unused-vars": ["warn", {
+        "argsIgnorePattern": "^_",
+        "varsIgnorePattern": "^_",
+        "caughtErrorsIgnorePattern": "^_"
+      }],
+
+      // Warn on empty catch blocks (should at least log)
+      "no-empty": ["warn", { "allowEmptyCatch": false }],
+
+      // Encourage async/await error handling
+      "no-async-promise-executor": "warn",
     },
   },
   // Override default ignores of eslint-config-next.
@@ -29,6 +57,8 @@ const eslintConfig = defineConfig([
     // Tooling / docs - don't block app lint
     "scripts/**",
     "docs/**",
+    // Claude skills (external, not part of project)
+    ".claude/**",
     // Default ignores of eslint-config-next:
     ".next/**",
     "out/**",

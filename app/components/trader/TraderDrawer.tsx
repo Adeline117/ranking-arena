@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { supabase } from '@/lib/supabase/client'
+import { useToast } from '@/app/components/ui/Toast'
 
 export type Trader = {
   id: string
@@ -51,6 +52,7 @@ export default function TraderDrawer({
   onClose: () => void
 }) {
   const { t } = useLanguage()
+  const { showToast } = useToast()
   const [tab, setTab] = useState<'overview' | 'stats' | 'portfolio'>(
     'overview'
   )
@@ -123,6 +125,7 @@ export default function TraderDrawer({
       }
     } catch (err) {
       console.error('Follow error:', err)
+      showToast(t('followError') || '操作失败，请重试', 'error')
     } finally {
       setFollowLoading(false)
     }

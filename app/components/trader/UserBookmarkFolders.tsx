@@ -8,6 +8,7 @@ import { tokens } from '@/lib/design-tokens'
 import Card from '@/app/components/ui/Card'
 import { Box, Text } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { useToast } from '@/app/components/ui/Toast'
 
 type BookmarkFolder = {
   id: string
@@ -30,6 +31,7 @@ type UserBookmarkFoldersProps = {
  */
 export default function UserBookmarkFolders({ userId, isOwnProfile = false }: UserBookmarkFoldersProps) {
   const { language } = useLanguage()
+  const { showToast } = useToast()
   const router = useRouter()
   const [folders, setFolders] = useState<BookmarkFolder[]>([])
   const [loading, setLoading] = useState(true)
@@ -141,10 +143,11 @@ export default function UserBookmarkFolders({ userId, isOwnProfile = false }: Us
       }
     } catch (err) {
       console.error('Error toggling subscription:', err)
+      showToast(language === 'zh' ? '操作失败，请重试' : 'Operation failed, please try again', 'error')
     } finally {
       setSubscribing(prev => ({ ...prev, [folderId]: false }))
     }
-  }, [accessToken, subscriptions, router])
+  }, [accessToken, subscriptions, router, showToast, language])
 
   if (loading) {
     return null

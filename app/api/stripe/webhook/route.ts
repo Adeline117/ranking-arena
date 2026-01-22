@@ -63,6 +63,18 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // 幂等性检查：检查事件是否已处理
+    const { data: existingEvent } = await supabase
+      .from('stripe_events')
+      .select('id')
+      .eq('event_id', event.id)
+      .single()
+
+    if (existingEvent) {
+      logger.info(`Event ${event.id} already processed, skipping`, { type: event.type })
+      return NextResponse.json({ received: true, skipped: true })
+    }
+
     // 处理不同的事件类型
     switch (event.type) {
       case 'checkout.session.completed': {
@@ -98,6 +110,22 @@ export async function POST(request: NextRequest) {
 
       default:
         logger.info(`Unhandled event type: ${event.type}`)
+    }
+
+    // 记录已处理的事件（实现幂等性）
+    try {
+      await supabase
+        .from('stripe_events')
+        .insert({
+          event_id: event.id,
+          event_type: event.type,
+          processed_at: new Date().toISOString(),
+          // 不存储完整 payload 以节省空间，仅在需要审计时启用
+          // payload: event.data.object,
+        })
+    } catch (insertError) {
+      // 插入失败不应阻止响应成功（可能是并发导致的唯一约束冲突）
+      logger.warn('Failed to record processed event', { eventId: event.id, error: insertError })
     }
 
     return NextResponse.json({ received: true })
