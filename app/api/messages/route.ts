@@ -6,7 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { createLogger } from '@/lib/utils/logger'
+import { createLogger, traceMessage } from '@/lib/utils/logger'
 
 const logger = createLogger('messages-api')
 
@@ -73,12 +73,23 @@ export async function GET(request: NextRequest) {
     }
 
     // 标记接收到的消息为已读
-    await supabase
+    const { data: updatedMessages } = await supabase
       .from('direct_messages')
       .update({ read: true })
       .eq('conversation_id', conversationId)
       .eq('receiver_id', userId)
       .eq('read', false)
+      .select('id')
+
+    // 追踪已读事件
+    if (updatedMessages && updatedMessages.length > 0) {
+      traceMessage({
+        event: 'read',
+        conversationId,
+        receiverId: userId,
+        metadata: { count: updatedMessages.length },
+      })
+    }
 
     // 获取对方用户信息
     const otherUserId = conversation.user1_id === userId ? conversation.user2_id : conversation.user1_id
@@ -154,6 +165,12 @@ export async function POST(request: NextRequest) {
     const dmPermission = receiverProfile.dm_permission || 'mutual'
 
     if (dmPermission === 'none') {
+      traceMessage({
+        event: 'failed',
+        senderId,
+        receiverId,
+        error: 'DM permission denied: recipient disabled DMs',
+      })
       return NextResponse.json({ error: '该用户已关闭私信功能' }, { status: 403 })
     }
 
@@ -203,7 +220,13 @@ export async function POST(request: NextRequest) {
 
         const currentCount = sentCount || 0
         if (currentCount >= NON_MUTUAL_MESSAGE_LIMIT) {
-          return NextResponse.json({ 
+          traceMessage({
+            event: 'failed',
+            senderId,
+            receiverId,
+            error: `Non-mutual message limit reached: ${currentCount}/${NON_MUTUAL_MESSAGE_LIMIT}`,
+          })
+          return NextResponse.json({
             error: `你们还不是互相关注，在对方回复前你最多只能发送${NON_MUTUAL_MESSAGE_LIMIT}条消息`,
             limit_reached: true,
             sent_count: currentCount
@@ -270,8 +293,24 @@ export async function POST(request: NextRequest) {
 
     if (msgError) {
       logger.error('Send message error', { error: msgError.message })
+      traceMessage({
+        event: 'failed',
+        conversationId: conversation.id,
+        senderId,
+        receiverId,
+        error: msgError.message,
+      })
       return NextResponse.json({ error: '发送失败' }, { status: 500 })
     }
+
+    // 追踪消息发送成功
+    traceMessage({
+      event: 'send',
+      messageId: message.id,
+      conversationId: conversation.id,
+      senderId,
+      receiverId,
+    })
 
     return NextResponse.json({
       success: true,
