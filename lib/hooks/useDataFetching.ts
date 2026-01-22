@@ -251,6 +251,7 @@ export function useFetch<T>(
     return () => {
       mountedRef.current = false
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, cacheKey, ...deps])
 
   // 窗口聚焦时重新获取

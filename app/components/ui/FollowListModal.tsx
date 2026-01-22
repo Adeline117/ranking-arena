@@ -45,6 +45,7 @@ export default function FollowListModal({
     if (isOpen && handle) {
       loadUsers()
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, handle, type])
 
   const loadUsers = async () => {

@@ -265,7 +265,7 @@ export default function PricingPage() {
           'error'
         )
       }
-    } catch (error) {
+    } catch (_error) {
       showToast(language === 'zh' ? '订阅失败，请稍后重试' : 'Subscription failed, please try again', 'error')
     } finally {
       setLoading(false)

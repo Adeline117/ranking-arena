@@ -27,6 +27,7 @@ export default function ClaimTraderButton({ traderId, handle, userId, source = '
   // 检查用户是否已绑定交易所账号
   useEffect(() => {
     checkConnection()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId, source])
 
   const checkConnection = async () => {

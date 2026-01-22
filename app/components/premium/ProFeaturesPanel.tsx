@@ -284,7 +284,7 @@ export default function ProFeaturesPanel({ compact = false, showTitle = true }: 
  */
 export function ProFeaturesMini() {
   const router = useRouter()
-  const { language, t } = useLanguage()
+  const { language, t: _t } = useLanguage()
   const { isPro } = useSubscription()
 
   if (isPro) return null

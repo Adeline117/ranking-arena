@@ -33,6 +33,7 @@ export default function ExchangeConnectionManager({ userId }: ExchangeConnection
 
   useEffect(() => {
     loadConnections()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId])
 
   const loadConnections = async () => {

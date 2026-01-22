@@ -203,6 +203,7 @@ export function useRealtime<T extends Record<string, unknown>>(
       setRetryCount(prev => prev + 1)
       connect()
     }, delay)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoReconnect, retryCount, maxRetries, retryBaseDelay, setStatus, onError])
 
   // 建立连接
@@ -297,6 +298,7 @@ export function useRealtime<T extends Record<string, unknown>>(
     return () => {
       disconnect()
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []) // 只在挂载和卸载时执行
 
   // 监听 enabled 变化
@@ -308,6 +310,7 @@ export function useRealtime<T extends Record<string, unknown>>(
     } else {
       disconnect()
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled])
 
   // 监听网络状态

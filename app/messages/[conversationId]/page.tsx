@@ -33,7 +33,7 @@ export default function ConversationPage({ params }: { params: { conversationId:
   const [conversationId, setConversationId] = useState<string>('')
   const [email, setEmail] = useState<string | null>(null)
   const [userId, setUserId] = useState<string | null>(null)
-  const [accessToken, setAccessToken] = useState<string | null>(null) // 添加 access token
+  const [_accessToken, setAccessToken] = useState<string | null>(null) // 添加 access token
   const [authChecked, setAuthChecked] = useState(false) // 追踪认证检查是否完成
   const [messages, setMessages] = useState<Message[]>([])
   const [otherUser, setOtherUser] = useState<OtherUser | null>(null)
@@ -77,6 +77,7 @@ export default function ConversationPage({ params }: { params: { conversationId:
         loadMessages(data.session.user.id, conversationId, data.session.access_token)
       }
     })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conversationId])
 
   // 滚动到底部

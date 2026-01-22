@@ -231,10 +231,12 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const dismissTimersRef = useRef<Map<string, NodeJS.Timeout>>(new Map())
 
   // Cleanup all timers on unmount
+   
   useEffect(() => {
+    const timers = dismissTimersRef.current
     return () => {
-      dismissTimersRef.current.forEach((timer) => clearTimeout(timer))
-      dismissTimersRef.current.clear()
+      timers.forEach((timer) => clearTimeout(timer))
+      timers.clear()
     }
   }, [])
 

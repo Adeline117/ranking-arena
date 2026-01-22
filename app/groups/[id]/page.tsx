@@ -317,6 +317,7 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
     } finally {
       setTranslatingPosts(false)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isChineseText])
 
   // 当帖子加载或语言变化时触发翻译

@@ -49,7 +49,7 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
   const [loading, setLoading] = useState(false)
   const [searchResults, setSearchResults] = useState<SearchResult[]>([])
   const [searching, setSearching] = useState(false)
-  const [searchError, setSearchError] = useState(false)
+  const [_searchError, setSearchError] = useState(false)
 
   // 加载搜索历史
   useEffect(() => {
@@ -190,6 +190,7 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
     }, 300) // 300ms 防抖
 
     return () => clearTimeout(searchTimer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query, open])
 
   // 删除单个历史记录

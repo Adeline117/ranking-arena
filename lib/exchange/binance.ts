@@ -152,7 +152,7 @@ export function calculateTradingStats(trades: BinanceTrade[]) {
 
   // 计算平均盈亏（简化）
   const totalFee = trades.reduce((sum, t) => sum + parseFloat(t.fee), 0)
-  const avgProfit = totalFee / trades.length
+  const _avgProfit = totalFee / trades.length
 
   // 分离盈利和亏损交易
   const profitTrades = trades.filter(t => parseFloat(t.fee) > 0)

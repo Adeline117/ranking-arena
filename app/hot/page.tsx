@@ -502,6 +502,7 @@ function HotContent() {
         translateContent(openPost.id, openPost.body, language)
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [language]) // 只监听语言变化
 
   // 提交评论

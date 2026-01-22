@@ -213,6 +213,7 @@ export function useOfflineCache<T>(
   // 初始加载
   useEffect(() => {
     fetchData()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // 网络恢复时刷新
@@ -220,6 +221,7 @@ export function useOfflineCache<T>(
     if (online && isFromCache) {
       fetchData()
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [online])
 
   const refresh = useCallback(() => {
@@ -338,7 +340,7 @@ export function useReconnectSync(
 // ============================================
 
 export function OfflineBanner() {
-  const { status, online } = useNetworkStatus()
+  const { status: _status, online } = useNetworkStatus()
   const [visible, setVisible] = useState(false)
   const [dismissed, setDismissed] = useState(false)
   const hideTimerRef = useRef<NodeJS.Timeout | null>(null)
