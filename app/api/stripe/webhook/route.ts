@@ -5,11 +5,15 @@ import { stripe, constructWebhookEvent, SUBSCRIPTION_STATUS_MAP } from '@/lib/st
 import { joinProOfficialGroup, leaveProOfficialGroup } from '@/app/api/pro-official-group/route'
 import { createLogger } from '@/lib/utils/logger'
 
-// 创建服务端 Supabase 客户端
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+// 延迟创建服务端 Supabase 客户端
+function getSupabase() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!url || !key) {
+    throw new Error('Supabase 环境变量未配置')
+  }
+  return createClient(url, key)
+}
 
 // 禁用 body 解析，因为我们需要原始 body 来验证签名
 export const runtime = 'nodejs'
@@ -181,7 +185,7 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
     logger.error('Failed to process checkout completion', { error: err })
     // 即使获取订阅失败，也尝试更新 user_profiles（作为降级方案）
     await withRetry(async () => {
-      const { error: profileError } = await supabase
+      const { error: profileError } = await getSupabase()
         .from('user_profiles')
         .upsert({
           id: userId,
@@ -205,7 +209,7 @@ async function handleSubscriptionUpdate(subscription: Stripe.Subscription) {
   const customerId = subscription.customer as string
   
   // 通过 customerId 查找用户
-  const { data: profile } = await supabase
+  const { data: profile } = await getSupabase()
     .from('user_profiles')
     .select('id')
     .eq('stripe_customer_id', customerId)
@@ -227,7 +231,7 @@ async function handleSubscriptionUpdate(subscription: Stripe.Subscription) {
 async function handleSubscriptionCanceled(subscription: Stripe.Subscription) {
   const customerId = subscription.customer as string
   
-  const { data: profile } = await supabase
+  const { data: profile } = await getSupabase()
     .from('user_profiles')
     .select('id')
     .eq('stripe_customer_id', customerId)
@@ -238,7 +242,7 @@ async function handleSubscriptionCanceled(subscription: Stripe.Subscription) {
   }
 
   // 更新用户订阅状态为已取消
-  await supabase
+  await getSupabase()
     .from('subscriptions')
     .update({
       status: 'canceled',
@@ -249,7 +253,7 @@ async function handleSubscriptionCanceled(subscription: Stripe.Subscription) {
     .eq('stripe_subscription_id', subscription.id)
 
   // 更新用户 tier 为 free
-  await supabase
+  await getSupabase()
     .from('user_profiles')
     .update({
       subscription_tier: 'free',
@@ -283,7 +287,7 @@ async function handlePaymentSucceeded(invoice: Stripe.Invoice) {
   const subscription = await stripe.subscriptions.retrieve(subscriptionId)
   const customerId = typeof invoice.customer === 'string' ? invoice.customer : invoice.customer?.id || ''
 
-  const { data: profile } = await supabase
+  const { data: profile } = await getSupabase()
     .from('user_profiles')
     .select('id')
     .eq('stripe_customer_id', customerId)
@@ -292,7 +296,7 @@ async function handlePaymentSucceeded(invoice: Stripe.Invoice) {
   if (!profile) return
 
   // 记录付款历史
-  await supabase
+  await getSupabase()
     .from('payment_history')
     .insert({
       user_id: profile.id,
@@ -311,7 +315,7 @@ async function handlePaymentSucceeded(invoice: Stripe.Invoice) {
 async function handlePaymentFailed(invoice: Stripe.Invoice) {
   const customerId = invoice.customer as string
 
-  const { data: profile } = await supabase
+  const { data: profile } = await getSupabase()
     .from('user_profiles')
     .select('id, subscription_tier')
     .eq('stripe_customer_id', customerId)
@@ -324,7 +328,7 @@ async function handlePaymentFailed(invoice: Stripe.Invoice) {
 
   // 记录失败的付款
   try {
-    await supabase
+    await getSupabase()
       .from('payment_history')
       .insert({
         user_id: profile.id,
@@ -348,7 +352,7 @@ async function handlePaymentFailed(invoice: Stripe.Invoice) {
       const subscription = await stripe.subscriptions.retrieve(subscriptionId)
       if (subscription.status === 'past_due') {
         // 更新订阅状态为 past_due，但保持 Pro 权限直到真正取消
-        await supabase
+        await getSupabase()
           .from('subscriptions')
           .update({
             status: 'past_due',
@@ -379,7 +383,7 @@ async function updateUserSubscription(
 
   // 使用重试机制更新订阅记录
   await withRetry(async () => {
-    const { error: subscriptionError } = await supabase
+    const { error: subscriptionError } = await getSupabase()
       .from('subscriptions')
       .upsert({
         user_id: userId,
@@ -405,7 +409,7 @@ async function updateUserSubscription(
   // 使用重试机制更新用户 profile 的订阅 tier
   const shouldBePro = status === 'active' || status === 'trialing'
   await withRetry(async () => {
-    const { error: profileError } = await supabase
+    const { error: profileError } = await getSupabase()
       .from('user_profiles')
       .update({
         subscription_tier: shouldBePro ? 'pro' : 'free',
