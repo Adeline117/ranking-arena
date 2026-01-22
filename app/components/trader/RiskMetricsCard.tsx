@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { Box, Text } from '../base'
+import { Text } from '../base'
 import Card from '../ui/Card'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { formatRiskMetric, calculateRiskLevel, type RiskMetrics } from '@/lib/services/trading-metrics'
