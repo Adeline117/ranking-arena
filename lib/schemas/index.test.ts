@@ -11,7 +11,6 @@ import {
   TraderProfileSchema,
   TraderPerformanceSchema,
   RankedTraderSchema,
-  TraderStatsSchema,
   PostSchema,
   CreatePostInputSchema,
   PostListOptionsSchema,
