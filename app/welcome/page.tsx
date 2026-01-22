@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
-import { Box, Text, Button } from '@/app/components/base'
+import { Box, Text } from '@/app/components/base'
 import { useToast } from '@/app/components/ui/Toast'
 
 type Step = 'welcome' | 'interests' | 'complete'

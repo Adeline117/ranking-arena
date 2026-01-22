@@ -416,9 +416,10 @@ export function OfflineBanner() {
   )
 }
 
-export default {
+const networkStatusHooks = {
   useNetworkStatus,
   useOfflineCache,
   useReconnectSync,
   OfflineBanner,
 }
+export default networkStatusHooks

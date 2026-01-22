@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '../base'
 import { useLanguage } from '../Providers/LanguageProvider'

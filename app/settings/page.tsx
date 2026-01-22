@@ -650,7 +650,7 @@ export default function SettingsPage() {
       }
 
       showToast('通知偏好已保存', 'success')
-    } catch (error) {
+    } catch (_error) {
       showToast('保存失败', 'error')
     } finally {
       setSavingNotifications(false)

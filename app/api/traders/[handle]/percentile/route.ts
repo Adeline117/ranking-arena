@@ -3,7 +3,7 @@
  * Pro 会员功能：获取交易员在同类中的百分位排名
  */
 
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import {
   getSupabaseAdmin,
   requireAuth,

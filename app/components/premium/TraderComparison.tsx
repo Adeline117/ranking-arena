@@ -1,9 +1,9 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import React from 'react'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
-import { Box, Text, Button } from '../base'
+import { Box, Text } from '../base'
 import { getAvatarGradient, getAvatarInitial } from '@/lib/utils/avatar'
 import { useLanguage } from '../Providers/LanguageProvider'
 

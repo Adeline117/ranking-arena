@@ -549,7 +549,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
       } else {
         setComments([])
       }
-    } catch (err) {
+    } catch (_err) {
       setComments([])
     } finally {
       setLoadingComments(false)
@@ -700,7 +700,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
         setCustomPollUserVotes(data.data.userVotes || [])
         setSelectedPollOptions(data.data.userVotes || [])
       }
-    } catch (err) {
+    } catch (_err) {
       // 错误已在 showToast 中处理
     } finally {
       setLoadingCustomPoll(false)
@@ -778,7 +778,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
       } else {
         showToast(result.error || '操作失败', 'error')
       }
-    } catch (err) {
+    } catch (_err) {
       // 错误已在 showToast 中处理
       showToast('网络错误', 'error')
     } finally {
@@ -822,7 +822,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
       } else {
         showToast(result.error || '操作失败', 'error')
       }
-    } catch (err) {
+    } catch (_err) {
       // 错误已在 showToast 中处理
       showToast('网络错误', 'error')
     } finally {
@@ -918,7 +918,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
       } else {
         showToast(json.error || '发表评论失败', 'error')
       }
-    } catch (err) {
+    } catch (_err) {
       // 错误已在 showToast 中处理
       showToast('发表评论失败', 'error')
     } finally {
@@ -978,7 +978,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
           showToast(json.error || '点赞失败', 'error')
         }
       }
-    } catch (err) {
+    } catch (_err) {
       // 错误已在 showToast 中处理
       showToast('网络错误', 'error')
     } finally {
@@ -1107,7 +1107,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
       } else {
         showToast(json.error || '删除评论失败', 'error')
       }
-    } catch (err) {
+    } catch (_err) {
       // 错误已在 showToast 中处理
       showToast('删除评论失败', 'error')
     } finally {
@@ -1211,7 +1211,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
       } else {
         showToast(data.error || '删除失败', 'error')
       }
-    } catch (err) {
+    } catch (_err) {
       // 错误已在 showToast 中处理
       showToast('删除失败', 'error')
     }

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
@@ -10,7 +10,7 @@ import { Box, Text } from '../base'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { getAvatarGradient, getAvatarInitial } from '@/lib/utils/avatar'
 import { ScoreRulesModal } from '../ui/ScoreRulesModal'
-import CategoryRankingTabs, { CategoryType, filterByCategory } from './CategoryRankingTabs'
+import CategoryRankingTabs, { CategoryType } from './CategoryRankingTabs'
 import { ProLabel } from '../premium/PremiumGate'
 
 // 图标组件

@@ -409,8 +409,9 @@ export interface SettingSelectProps<T extends string> {
   disabled?: boolean
 }
 
-export default {
+const settingsHooks = {
   useAppSettings,
   useNotificationSettings,
   usePrivacySettings,
 }
+export default settingsHooks

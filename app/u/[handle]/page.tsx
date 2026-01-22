@@ -15,7 +15,6 @@ import PostFeed from '@/app/components/post/PostFeed'
 import StatsPage from '@/app/components/trader/stats/StatsPage'
 // PinnedPost 组件已集成到 PostFeed 中（置顶帖子自动显示在动态列表最上方）
 import PortfolioTable from '@/app/components/trader/PortfolioTable'
-import TradingViewShell from '@/app/components/trader/TradingViewShell'
 import AccountRequiredStats from '@/app/components/trader/AccountRequiredStats'
 import CreatedGroups from '@/app/components/trader/CreatedGroups'
 import UserBookmarkFolders from '@/app/components/trader/UserBookmarkFolders'
