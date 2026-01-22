@@ -245,7 +245,7 @@ function FaqSection({ title, items }: { title: string; items: Array<{ q: string;
 }
 
 export default function HelpPage() {
-  const { language, t } = useLanguage()
+  const { language, t: _t } = useLanguage()
   const [email, setEmail] = useState<string | null>(null)
   
   const faqData = getFaqData(language)
