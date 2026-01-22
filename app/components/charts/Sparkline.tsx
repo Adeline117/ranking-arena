@@ -148,7 +148,7 @@ function SparklineComponent({
   ariaLabel,
 }: SparklineProps) {
   // 计算路径和颜色
-  const { linePath, fillPath, lineColor, trend, endpointY } = useMemo(() => {
+  const { linePath, fillPath, lineColor, endpointY } = useMemo(() => {
     const trend = getTrend(data)
     const lineColor = color || (
       trend === 'positive' ? positiveColor :
@@ -169,8 +169,17 @@ function SparklineComponent({
       endpointY = padding + ((max - data[data.length - 1]) / range) * (height - padding * 2)
     }
 
-    return { linePath, fillPath, lineColor, trend, endpointY }
+    return { linePath, fillPath, lineColor, endpointY }
   }, [data, width, height, color, positiveColor, negativeColor, neutralColor, smooth, showFill])
+
+  // 计算趋势描述 - must be before early return to comply with hooks rules
+  const trendDescription = useMemo(() => {
+    if (data.length < 2) return '数据不足'
+    const first = data[0]
+    const last = data[data.length - 1]
+    const change = ((last - first) / Math.abs(first || 1)) * 100
+    return `趋势${change >= 0 ? '上涨' : '下跌'} ${Math.abs(change).toFixed(1)}%`
+  }, [data])
 
   // 空数据处理
   if (data.length === 0) {
@@ -195,15 +204,6 @@ function SparklineComponent({
       </svg>
     )
   }
-
-  // 计算趋势描述
-  const trendDescription = useMemo(() => {
-    if (data.length < 2) return '数据不足'
-    const first = data[0]
-    const last = data[data.length - 1]
-    const change = ((last - first) / Math.abs(first || 1)) * 100
-    return `趋势${change >= 0 ? '上涨' : '下跌'} ${Math.abs(change).toFixed(1)}%`
-  }, [data])
 
   return (
     <svg
