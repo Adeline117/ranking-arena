@@ -280,7 +280,7 @@ async function handlePaymentSucceeded(invoice: Stripe.Invoice) {
 
   if (!subscriptionId) return
 
-  const subscription = await stripe.subscriptions.retrieve(subscriptionId)
+  const _subscription = await stripe.subscriptions.retrieve(subscriptionId)
   const customerId = typeof invoice.customer === 'string' ? invoice.customer : invoice.customer?.id || ''
 
   const { data: profile } = await supabase

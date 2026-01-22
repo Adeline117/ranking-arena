@@ -50,7 +50,7 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
   const [performance, setPerformance] = useState<TraderPerformance | null>(null)
   const [stats, setStats] = useState<TraderStats | null>(null)
   const [portfolio, setPortfolio] = useState<PortfolioItem[]>([])
-  const [feed, setFeed] = useState<TraderFeedItem[]>([])
+  const [_feed, setFeed] = useState<TraderFeedItem[]>([])
   const [similarTraders, setSimilarTraders] = useState<TraderProfile[]>([])
   const [loading, setLoading] = useState(true)
   const [proBadgeTier, setProBadgeTier] = useState<'pro' | null>(null)

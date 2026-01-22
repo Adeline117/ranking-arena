@@ -58,7 +58,7 @@ const UsersIcon = ({ size = 16 }: { size?: number }) => (
 )
 
 // Pro 功能配置
-const getProFeatures = (t: (key: string) => string, language: string) => [
+const getProFeatures = (t: (key: string) => string, _language: string) => [
   {
     key: 'category_ranking',
     icon: ChartIcon,
@@ -106,7 +106,7 @@ interface ProFeaturesPanelProps {
 export default function ProFeaturesPanel({ compact = false, showTitle = true }: ProFeaturesPanelProps) {
   const router = useRouter()
   const { language, t } = useLanguage()
-  const { isPro, isLoading } = useSubscription()
+  const { isPro, isLoading: _isLoading } = useSubscription()
 
   const features = getProFeatures(t, language)
 

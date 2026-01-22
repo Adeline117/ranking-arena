@@ -25,7 +25,7 @@ const CompareTraders = lazy(() => import('../trader/CompareTraders'))
  * 管理整体布局和状态协调
  */
 export default function HomePage() {
-  const { t } = useLanguage()
+  const { t: _t } = useLanguage()
   const { email, isLoggedIn } = useAuth()
   
   // 交易者数据管理

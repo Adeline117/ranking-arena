@@ -22,7 +22,7 @@ export default function TopNav({ email }: { email: string | null }) {
   const [showUserMenu, setShowUserMenu] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [showSearchDropdown, setShowSearchDropdown] = useState(false)
-  const [theme, setTheme] = useState<'light' | 'dark'>('dark')
+  const [_theme, setTheme] = useState<'light' | 'dark'>('dark')
   const [unreadCount, setUnreadCount] = useState(0)
   const [unreadMessageCount, setUnreadMessageCount] = useState(0)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -127,7 +127,7 @@ export default function TopNav({ email }: { email: string | null }) {
           table: 'notifications',
           filter: `user_id=eq.${myId}`,
         },
-        (payload) => {
+        (_payload) => {
           // 收到新通知或通知状态更新时，重新获取未读数量
           fetchUnreadCount()
         }

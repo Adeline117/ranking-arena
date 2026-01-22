@@ -38,7 +38,7 @@ export default function RankingSection({
 }: RankingSectionProps) {
   const router = useRouter()
   const { showToast } = useToast()
-  const { language, t } = useLanguage()
+  const { language, t: _t } = useLanguage()
   const { isPro, isLoading: premiumLoading } = useSubscription()
   
   // 分类状态

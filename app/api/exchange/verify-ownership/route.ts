@@ -114,8 +114,8 @@ export async function POST(req: NextRequest) {
     
     try {
       // 验证API凭证
-      const account = await getBinanceAccount(config)
-      
+      const _account = await getBinanceAccount(config)
+
       // 如果API调用成功，说明用户拥有该账号
       // 但是我们需要更精确的验证：对比交易员ID
       

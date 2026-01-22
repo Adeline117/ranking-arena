@@ -35,7 +35,7 @@ function SearchContent() {
   const [loading, setLoading] = useState(false)
   const [email, setEmail] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'all' | 'users' | 'traders' | 'posts' | 'groups'>('all')
-  const [searchError, setSearchError] = useState(false)
+  const [_searchError, setSearchError] = useState(false)
   const { showToast } = useToast()
 
   useEffect(() => {
