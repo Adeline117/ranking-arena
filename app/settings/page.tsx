@@ -91,7 +91,7 @@ export default function SettingsPage() {
   const [confirmNewPassword, setConfirmNewPassword] = useState('')
   const [savingPassword, setSavingPassword] = useState(false)
   const [passwordResetMode, setPasswordResetMode] = useState<'password' | 'code'>('password')
-  const [_resetCode, setResetCode] = useState('')
+  const [_resetCode, _setResetCode] = useState('')
   const [resetCodeSent, setResetCodeSent] = useState(false)
   const [sendingResetCode, setSendingResetCode] = useState(false)
   const [resetCountdown, setResetCountdown] = useState(0)
