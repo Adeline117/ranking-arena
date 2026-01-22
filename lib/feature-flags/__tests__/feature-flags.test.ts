@@ -12,7 +12,6 @@ import {
   isFeatureEnabledWithOverrides,
   getFeatureFlagConfig,
   FEATURE_FLAG_CONFIGS,
-  type FeatureFlagConfig,
 } from '../index'
 
 describe('Feature Flags', () => {

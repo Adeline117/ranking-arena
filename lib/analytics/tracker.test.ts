@@ -89,14 +89,14 @@ describe('Tracker', () => {
 
   test('should generate session ID', () => {
     sessionStorage.getItem.mockReturnValueOnce(null)
-    const tracker = new Tracker()
+    const _tracker = new Tracker()
 
     expect(sessionStorage.setItem).toHaveBeenCalled()
   })
 
   test('should reuse existing session ID', () => {
     sessionStorage.getItem.mockReturnValue('existing-session-id')
-    const tracker = new Tracker()
+    const _tracker = new Tracker()
 
     // Should not generate new ID
     expect(sessionStorage.setItem).not.toHaveBeenCalledWith(
@@ -114,7 +114,7 @@ describe('Tracker', () => {
     })
 
     // Event should be queued
-    const events = tracker.getLocalEvents()
+    const _events = tracker.getLocalEvents()
     // Note: events are stored in localStorage when no endpoint is configured
   })
 

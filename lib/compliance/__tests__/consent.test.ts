@@ -4,14 +4,6 @@
 
 import {
   ConsentManager,
-  getConsentManager,
-  getConsentState,
-  hasConsented,
-  hasConsentFor,
-  setConsent,
-  acceptAllConsent,
-  acceptNecessaryOnlyConsent,
-  revokeConsent,
 } from '../consent'
 
 // Mock localStorage
