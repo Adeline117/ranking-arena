@@ -24,7 +24,7 @@ type Conversation = {
 }
 
 export default function MessagesPage() {
-  const router = useRouter()
+  const _router = useRouter()
   const { showToast } = useToast()
   const [email, setEmail] = useState<string | null>(null)
   const [userId, setUserId] = useState<string | null>(null)
@@ -114,10 +114,10 @@ export default function MessagesPage() {
           table: 'direct_messages',
           filter: `receiver_id=eq.${userId}`,
         },
-        (payload) => {
+        (_payload) => {
           // 收到新消息时，刷新会话列表
           loadConversations(userId)
-          
+
           // 显示新消息提示
           showToast('收到新消息', 'info')
         }
