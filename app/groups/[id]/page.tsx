@@ -2,7 +2,6 @@
 
 import Link from 'next/link'
 import { useEffect, useState, useCallback, useRef } from 'react'
-import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/layout/TopNav'

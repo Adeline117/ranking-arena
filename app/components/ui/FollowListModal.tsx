@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
-import { Box, Text, Button } from '../base'
+import { Box, Text } from '../base'
 import Avatar from './Avatar'
 import UserFollowButton from './UserFollowButton'
 
