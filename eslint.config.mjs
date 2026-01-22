@@ -11,6 +11,13 @@ const eslintConfig = defineConfig([
       // This repo contains many pragmatic uses of `any` across UI + scripts.
       "@typescript-eslint/no-explicit-any": "off",
 
+      // Allow unused vars with _ prefix (common pattern for intentionally unused params)
+      "@typescript-eslint/no-unused-vars": ["warn", {
+        "argsIgnorePattern": "^_",
+        "varsIgnorePattern": "^_",
+        "caughtErrorsIgnorePattern": "^_"
+      }],
+
       // These rules are helpful, but currently too strict for the codebase patterns.
       "react-hooks/set-state-in-effect": "off",
       "react-hooks/immutability": "off",
