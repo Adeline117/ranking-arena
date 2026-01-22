@@ -91,7 +91,7 @@ export default function SettingsPage() {
   const [confirmNewPassword, setConfirmNewPassword] = useState('')
   const [savingPassword, setSavingPassword] = useState(false)
   const [passwordResetMode, setPasswordResetMode] = useState<'password' | 'code'>('password')
-  const [resetCode, setResetCode] = useState('')
+  const [_resetCode, setResetCode] = useState('')
   const [resetCodeSent, setResetCodeSent] = useState(false)
   const [sendingResetCode, setSendingResetCode] = useState(false)
   const [resetCountdown, setResetCountdown] = useState(0)
@@ -106,7 +106,7 @@ export default function SettingsPage() {
   const [notifyComment, setNotifyComment] = useState(true)
   const [notifyMention, setNotifyMention] = useState(true)
   const [notifyMessage, setNotifyMessage] = useState(true)
-  const [savingNotifications, setSavingNotifications] = useState(false)
+  const [_savingNotifications, setSavingNotifications] = useState(false)
   
   // Privacy settings
   const [showFollowers, setShowFollowers] = useState(true)
@@ -292,7 +292,7 @@ export default function SettingsPage() {
       const fileName = `${userId}-${Date.now()}.${fileExt}`
       const filePath = `${fileName}`
 
-      const { error: uploadError, data: uploadData } = await supabase.storage
+      const { error: uploadError, data: _uploadData } = await supabase.storage
         .from('covers')
         .upload(filePath, file, { upsert: true })
 
@@ -349,7 +349,7 @@ export default function SettingsPage() {
       const fileName = `${userId}-${Date.now()}.${fileExt}`
       const filePath = `${fileName}`  // 不需要 avatars/ 前缀，因为 bucket 名就是 avatars
 
-      const { error: uploadError, data: uploadData } = await supabase.storage
+      const { error: uploadError, data: _uploadData } = await supabase.storage
         .from('avatars')
         .upload(filePath, file, { upsert: true })
 
@@ -628,7 +628,7 @@ export default function SettingsPage() {
   }
 
   // 保存通知偏好
-  const handleSaveNotifications = async () => {
+  const _handleSaveNotifications = async () => {
     if (!userId) return
 
     setSavingNotifications(true)
