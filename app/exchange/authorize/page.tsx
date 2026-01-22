@@ -31,6 +31,7 @@ function ExchangeAuthorizePageContent() {
 
     setExchange(exchangeParam)
     loadAuthUrl(exchangeParam)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, router])
 
   const loadAuthUrl = async (ex: string) => {

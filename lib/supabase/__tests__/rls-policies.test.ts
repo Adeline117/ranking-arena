@@ -101,7 +101,7 @@ describe('RLS Policies', () => {
 
   describe('pro_official_groups policy', () => {
     it.skipIf(shouldSkip)('should deny free users access to pro groups', async () => {
-      const { data, error } = await anonClient.from('pro_official_groups').select('*')
+      const { data, error: _error } = await anonClient.from('pro_official_groups').select('*')
 
       // 未登录用户应该看不到任何数据
       expect(data).toEqual([])
@@ -174,7 +174,7 @@ describe('RLS Policy Existence', () => {
     serviceClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
   })
 
-  const expectedPolicies = [
+  const _expectedPolicies = [
     { table: 'notifications', policy: 'Only service role can insert notifications' },
     { table: 'risk_alerts', policy: 'Only service role can insert risk alerts' },
     { table: 'group_applications', policy: 'Group admins can update applications' },
@@ -184,7 +184,7 @@ describe('RLS Policy Existence', () => {
   ]
 
   it.skipIf(!SUPABASE_SERVICE_KEY)('should have all required RLS policies', async () => {
-    const { data: policies, error } = await serviceClient.rpc('get_policies_for_table', {
+    const { data: _policies, error } = await serviceClient.rpc('get_policies_for_table', {
       table_name: 'notifications',
     })
 

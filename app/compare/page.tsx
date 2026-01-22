@@ -88,6 +88,7 @@ function CompareContent() {
     }
 
     init()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken, searchParams])
 
   // 加载交易员数据

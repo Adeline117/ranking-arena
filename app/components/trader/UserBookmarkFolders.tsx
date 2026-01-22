@@ -96,7 +96,7 @@ export default function UserBookmarkFolders({ userId, isOwnProfile = false }: Us
             setSubscriptions(subsMap)
           }
         }
-      } catch (err) {
+      } catch (_err) {
         // 静默处理异常，不显示收藏夹组件
         setFolders([])
       } finally {

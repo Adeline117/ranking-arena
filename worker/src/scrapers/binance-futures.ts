@@ -238,7 +238,7 @@ export class BinanceFuturesScraper extends BaseScraper {
     await this.wait(500)
 
     // 方法1：通过 JavaScript 直接操作下拉菜单
-    const jsClicked = await this.page!.evaluate((texts: string[]) => {
+    const jsClicked = await this.page!.evaluate((_texts: string[]) => {
       // 找到时间选择器
       const selects = document.querySelectorAll('[class*="bn-select"]')
       for (const select of selects) {

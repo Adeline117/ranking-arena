@@ -748,6 +748,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
     } finally {
       setVotingCustomPoll(false)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken, selectedPollOptions])
 
   // 收藏帖子 - 点击收藏到默认收藏夹，已收藏则取消收藏
@@ -1523,6 +1524,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
     if (!hasTranslatedTitle && needsTitleTranslation) {
       translateListPosts([post], language as 'zh' | 'en')
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadComments, language, isChineseText, translateContent, translatedListPosts, translateListPosts])
 
   if (loading) {

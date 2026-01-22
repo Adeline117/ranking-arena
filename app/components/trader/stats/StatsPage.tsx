@@ -356,11 +356,11 @@ function EquityCurveSection({
 }
 
 // Period Selector Component
-function PeriodSelector({ 
-  value, 
-  onChange, 
-  t 
-}: { 
+function PeriodSelector({
+  value,
+  onChange,
+  t: _t
+}: {
   value: '7D' | '30D' | '90D'
   onChange: (v: '7D' | '30D' | '90D') => void
   t: (key: string) => string

@@ -95,6 +95,7 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
       console.error(`[useTraderData] 加载 ${timeRange} 数据失败:`, error)
       return tradersCache.current.get(timeRange) || { traders: [], lastUpdated: null }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // 加载当前选中时间段的数据

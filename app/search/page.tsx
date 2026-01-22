@@ -243,6 +243,7 @@ function SearchContent() {
 
     const timeout = setTimeout(search, 300)
     return () => clearTimeout(timeout)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query])
 
   const filteredResults = activeTab === 'all' 

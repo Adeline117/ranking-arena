@@ -500,6 +500,7 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
     }
 
     load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [handle])
 
   if (loading) {

@@ -1,5 +1,5 @@
 'use client'
-/* eslint-disable react-hooks/preserve-manual-memoization */
+ 
 
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
@@ -157,10 +157,11 @@ export default function PaymentSuccessPage() {
       
       // 清除本地订阅缓存
       clearSubscriptionCache()
-      
+
       // 尝试刷新状态
       await refreshPremium()
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, hasVerified, refreshPremium, showToast, language])
 
   useEffect(() => {

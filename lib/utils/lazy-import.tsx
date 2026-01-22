@@ -54,7 +54,7 @@ export function lazyComponent<P extends object>(
   const {
     loading = DefaultLoadingPlaceholder,
     ssr = true,
-    preload = 'none',
+    preload: _preload = 'none',
   } = options
 
   // 缓存 Promise 用于预加载
