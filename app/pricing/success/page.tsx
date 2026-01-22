@@ -84,13 +84,13 @@ export default function PaymentSuccessPage() {
       })
 
       if (!response.ok) {
-        let errorMsg = language === 'zh' ? '验证支付失败' : 'Payment verification failed'
+        let _errorMsg = language === 'zh' ? '验证支付失败' : 'Payment verification failed'
         try {
           const errorData = await response.json()
-          errorMsg = errorData.error || errorMsg
+          _errorMsg = errorData.error || _errorMsg
           console.error('[Payment Success] Verification failed:', errorData)
         } catch {
-          errorMsg = `${errorMsg} (${response.status})`
+          _errorMsg = `${_errorMsg} (${response.status})`
         }
         
         // 即使验证失败也尝试刷新状态（可能 webhook 已经处理了）
@@ -183,7 +183,7 @@ export default function PaymentSuccessPage() {
     return () => clearTimeout(timer)
   }, [countdown, router, verificationStatus])
 
-  const sessionId = searchParams.get('session_id')
+  const _sessionId = searchParams.get('session_id')
 
   return (
     <Box
