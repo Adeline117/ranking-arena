@@ -33,7 +33,7 @@ const _RISK_LEVEL_LABELS: Record<number, string> = {
  * 风险指标卡片组件
  */
 export function RiskMetricsCard({ metrics, loading }: RiskMetricsCardProps) {
-  const { t } = useLanguage()
+  const { t: _t } = useLanguage()
 
   // 计算风险等级（如果未提供）
   const riskInfo = useMemo(() => {

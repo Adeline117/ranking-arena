@@ -37,7 +37,7 @@ export default function TraderDiscussion({
   traderId,
   traderHandle,
 }: TraderDiscussionProps) {
-  const { language, t } = useLanguage()
+  const { language, t: _t } = useLanguage()
   const { showToast } = useToast()
   const [comments, setComments] = useState<Comment[]>([])
   const [loading, setLoading] = useState(true)

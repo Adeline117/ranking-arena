@@ -116,7 +116,7 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
         
         // 先尝试从 trader_sources 获取（如果用户也是交易员）
         let profileData: TraderProfile | null = await getTraderByHandle(handle)
-        let isTraderInRanking = !!profileData // 标记是否在排行榜上
+        let _isTraderInRanking = !!profileData // 标记是否在排行榜上
 
         // 如果找不到，从 user_profiles 表获取注册用户信息（profiles 表不存在）
         if (!profileData) {
@@ -140,14 +140,14 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
             }
           }
           
-          isTraderInRanking = foundInRanking
-          
+          _isTraderInRanking = foundInRanking
+
           // 直接使用 user_profiles 表（因为 profiles 表不存在）
           // 先通过 handle 查询（使用解码后的 handle）
           let userProfile = null
-          
+
           // 先尝试解码后的 handle
-          const { data: profileByHandle, error: handleError } = await supabase
+          const { data: profileByHandle, error: _handleError } = await supabase
             .from('user_profiles')
             .select('*, show_followers, show_following, uid, cover_url')
             .eq('handle', decodedHandle)
@@ -160,7 +160,7 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
             // 注意：只有当 handle 看起来像 UUID 时才尝试通过 id 查询
             const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
             if (uuidRegex.test(handle)) {
-              const { data: profileById, error: idError } = await supabase
+              const { data: profileById, error: _idError } = await supabase
                 .from('user_profiles')
                 .select('*, uid, cover_url')
                 .eq('id', handle)
@@ -387,7 +387,7 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
               } else {
                 // 如果找不到，尝试创建新的 profile
                 try {
-                  const { data: userProfileData, error: insertError } = await supabase
+                  const { data: userProfileData, error: _insertError } = await supabase
                     .from('user_profiles')
                     .upsert({
                       id: user.id,
