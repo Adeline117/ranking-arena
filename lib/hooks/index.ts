@@ -2,6 +2,14 @@
  * 自定义 Hooks 统一导出
  */
 
+// Auth (Single Source of Truth)
+export { useAuthSession, authFetch } from './useAuthSession'
+export type { AuthState, AuthError, AuthSessionReturn } from './useAuthSession'
+
+// Post Interactions (Unified across all entry points)
+export { usePostComments, usePostReaction } from './usePostInteraction'
+export type { Comment, CommentSubmitState } from './usePostInteraction'
+
 export { useSubmit, useDebounceClick } from './useSubmit'
 export { useCsrf, getCsrfToken, createCsrfHeaders } from './useCsrf'
 

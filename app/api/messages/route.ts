@@ -122,14 +122,39 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// 发送私信
+// 发送私信 (Auth verified via JWT token)
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
-    const { senderId, receiverId, content } = body
+    // --- Verify auth via JWT token (don't trust client-provided senderId) ---
+    const authHeader = request.headers.get('authorization')
+    if (!authHeader?.startsWith('Bearer ')) {
+      return NextResponse.json({ error: '请先登录' }, { status: 401 })
+    }
 
-    if (!senderId || !receiverId || !content) {
-      return NextResponse.json({ error: 'Missing senderId, receiverId or content' }, { status: 400 })
+    if (!SUPABASE_URL || !SUPABASE_KEY) {
+      return NextResponse.json({ error: 'Missing Supabase config' }, { status: 500 })
+    }
+
+    const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
+
+    const token = authHeader.slice(7)
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token)
+
+    if (authError || !user) {
+      const isExpired = authError?.message?.toLowerCase().includes('expired')
+      return NextResponse.json(
+        { error: isExpired ? '登录已过期，请重新登录' : '认证失败，请重新登录' },
+        { status: 401 }
+      )
+    }
+
+    const body = await request.json()
+    const { receiverId, content } = body
+    // Use verified user ID from token, not client-provided senderId
+    const senderId = user.id
+
+    if (!receiverId || !content) {
+      return NextResponse.json({ error: 'Missing receiverId or content' }, { status: 400 })
     }
 
     if (senderId === receiverId) {
@@ -143,12 +168,6 @@ export async function POST(request: NextRequest) {
     if (content.length > 2000) {
       return NextResponse.json({ error: '消息内容过长，最多2000字符' }, { status: 400 })
     }
-
-    if (!SUPABASE_URL || !SUPABASE_KEY) {
-      return NextResponse.json({ error: 'Missing Supabase config' }, { status: 500 })
-    }
-
-    const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
 
     // 获取接收者的隐私设置
     const { data: receiverProfile, error: profileError } = await supabase

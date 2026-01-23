@@ -14,20 +14,22 @@ import { CommentIcon, ThumbsUpIcon, ThumbsDownIcon } from '@/app/components/icon
 import { useToast } from '@/app/components/ui/Toast'
 import { formatTimeAgo } from '@/lib/utils/date'
 import { RankingSkeleton } from '@/app/components/ui/Skeleton'
+import { useAuthSession } from '@/lib/hooks/useAuthSession'
+import { usePostComments, usePostReaction } from '@/lib/hooks/usePostInteraction'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { getCsrfHeaders } from '@/lib/api/client'
 
-// Use design tokens for brand color
-const ARENA_PURPLE = '#8b6fa8' // fallback, prefer tokens.colors.accent.brand
+const ARENA_PURPLE = '#8b6fa8'
 
-// 链接解析函数 - 将文本中的URL转换为可点击链接
+// Render text with clickable links
 function renderContentWithLinks(text: string) {
   if (!text) return null
   const urlRegex = /(https?:\/\/[^\s<>"{}|\\^`[\]]+)/g
   const parts = text.split(urlRegex)
-  
+
   return parts.map((part, index) => {
     if (urlRegex.test(part)) {
-      urlRegex.lastIndex = 0 // Reset regex state
+      urlRegex.lastIndex = 0
       return (
         <a
           key={index}
@@ -49,7 +51,6 @@ function renderContentWithLinks(text: string) {
   })
 }
 
-// 本地 Trader 类型
 type Trader = {
   id: string
   handle: string | null
@@ -58,11 +59,11 @@ type Trader = {
   followers: number
   source?: string
 }
-import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 type Post = {
   id: string
   group: string
+  group_id?: string
   title: string
   author: string
   author_handle?: string
@@ -77,76 +78,59 @@ type Post = {
   user_reaction?: 'up' | 'down' | null
 }
 
-type Comment = {
-  id: string
-  content: string
-  user_id: string
-  author_handle?: string
-  author_avatar_url?: string
-  created_at: string
-  replies?: Comment[]
-}
-
 function HotContent() {
   const { t, language } = useLanguage()
   const { showToast } = useToast()
   const router = useRouter()
   const searchParams = useSearchParams()
-  const [loggedIn, setLoggedIn] = useState(false)
-  const [email, setEmail] = useState<string | null>(null)
-  const [accessToken, setAccessToken] = useState<string | null>(null)
-  // 翻译相关状态
+
+  // --- Unified Auth (Single Source of Truth) ---
+  const { email, isLoggedIn, userId, accessToken, authChecked } = useAuthSession()
+
+  // Translation state
   const [translatedContent, setTranslatedContent] = useState<string | null>(null)
   const [showingOriginal, setShowingOriginal] = useState(true)
   const [translating, setTranslating] = useState(false)
   const [translationCache, setTranslationCache] = useState<Record<string, string>>({})
-  // 列表翻译状态
   const [translatedListPosts, setTranslatedListPosts] = useState<Record<string, { title?: string; body?: string }>>({})
   const [translatingList, setTranslatingList] = useState(false)
-  // 展开/收起状态
   const [expandedPosts, setExpandedPosts] = useState<Record<string, boolean>>({})
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+
+  // Data state
   const [traders, setTraders] = useState<Trader[]>([])
   const [loadingTraders, setLoadingTraders] = useState(true)
   const [posts, setPosts] = useState<Post[]>([])
   const [loadingPosts, setLoadingPosts] = useState(true)
-  
-  // 帖子详情弹窗状态
+
+  // Post detail modal state (URL-driven)
   const [openPost, setOpenPost] = useState<Post | null>(null)
-  const [comments, setComments] = useState<Comment[]>([])
-  const [loadingComments, setLoadingComments] = useState(false)
   const [newComment, setNewComment] = useState('')
-  const [submittingComment, setSubmittingComment] = useState(false)
-  
-  // 评论分页状态
-  const COMMENTS_PER_PAGE = 10
-  const [commentsOffset, setCommentsOffset] = useState(0)
-  const [hasMoreComments, setHasMoreComments] = useState(true)
-  const [loadingMoreComments, setLoadingMoreComments] = useState(false)
 
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      setEmail(data.user?.email ?? null)
-      setLoggedIn(!!data.user)
-      setCurrentUserId(data.user?.id ?? null)
-    })
-    supabase.auth.getSession().then(({ data }) => {
-      setAccessToken(data.session?.access_token ?? null)
-    })
-  }, [])
+  // --- Unified Post Interactions (Server ACK) ---
+  const {
+    comments,
+    loading: loadingComments,
+    loadingMore: loadingMoreComments,
+    hasMore: hasMoreComments,
+    submitState,
+    submitError,
+    loadComments,
+    loadMore: loadMoreComments,
+    submitComment: submitCommentHook,
+    reset: resetComments,
+  } = usePostComments({ postId: openPost?.id ?? null })
 
-  // 加载交易员数据 - 使用统一的 API
+  const { toggleReaction } = usePostReaction()
+
+  // Load traders
   useEffect(() => {
     const load = async () => {
       setLoadingTraders(true)
       try {
         const response = await fetch('/api/traders?timeRange=90D')
         const json = await response.json()
-        
-        // API 返回格式是 { traders: [...] }
         const tradersData = json.traders || json.data || []
         if (tradersData.length > 0) {
-          // 取前10名
           interface TraderResponse {
             id?: string
             source_trader_id?: string
@@ -172,7 +156,7 @@ function HotContent() {
         } else {
           setTraders([])
         }
-      } catch (error) {
+      } catch {
         setTraders([])
       } finally {
         setLoadingTraders(false)
@@ -181,12 +165,11 @@ function HotContent() {
     load()
   }, [])
 
-  // 从数据库加载热榜帖子
+  // Load hot posts from database
   useEffect(() => {
     const loadPosts = async () => {
       setLoadingPosts(true)
       try {
-        // 从数据库获取热门帖子
         const { data, error } = await supabase
           .from('posts')
           .select(`
@@ -209,7 +192,6 @@ function HotContent() {
           .limit(20)
 
         if (error) {
-          console.error('Failed to load hot posts:', error)
           setPosts([])
           setLoadingPosts(false)
           return
@@ -217,7 +199,6 @@ function HotContent() {
 
         if (data && data.length > 0) {
           const postsData: Post[] = data.map((post) => {
-            // 计算时间差
             const createdAt = new Date(post.created_at)
             const now = new Date()
             const diffMs = now.getTime() - createdAt.getTime()
@@ -225,24 +206,17 @@ function HotContent() {
             const diffDays = Math.floor(diffHours / 24)
 
             let timeStr = ''
-            if (diffDays > 0) {
-              timeStr = `${diffDays}d`
-            } else if (diffHours > 0) {
-              timeStr = `${diffHours}h`
-            } else {
-              const diffMins = Math.floor(diffMs / (1000 * 60))
-              timeStr = `${diffMins}m`
-            }
+            if (diffDays > 0) timeStr = `${diffDays}d`
+            else if (diffHours > 0) timeStr = `${diffHours}h`
+            else timeStr = `${Math.floor(diffMs / (1000 * 60))}m`
 
-            // groups 是关联查询的结果，可能是对象或数组
             const groupsData = post.groups as { name?: string } | { name?: string }[] | null
-            const groupName = Array.isArray(groupsData)
-              ? groupsData[0]?.name
-              : groupsData?.name
+            const groupName = Array.isArray(groupsData) ? groupsData[0]?.name : groupsData?.name
 
             return {
               id: post.id,
               group: groupName || '综合讨论',
+              group_id: post.group_id || undefined,
               title: post.title || '无标题',
               author: post.author_handle || '匿名',
               author_handle: post.author_handle,
@@ -250,88 +224,37 @@ function HotContent() {
               body: post.content || '',
               comments: post.comment_count || 0,
               likes: post.like_count || 0,
-              hotScore: post.hot_score || 
-                (post.view_count || 0) * 0.1 + 
-                (post.like_count || 0) * 2 + 
+              dislikes: post.dislike_count || 0,
+              hotScore: post.hot_score ||
+                (post.view_count || 0) * 0.1 +
+                (post.like_count || 0) * 2 +
                 (post.comment_count || 0) * 3,
               views: post.view_count || 0,
+              created_at: post.created_at,
             }
           })
           setPosts(postsData)
         } else {
           setPosts([])
         }
-      } catch (e) {
-        console.error('Failed to load posts:', e)
+      } catch {
         setPosts([])
       } finally {
         setLoadingPosts(false)
       }
     }
-    
     loadPosts()
   }, [])
 
   const hotPosts = useMemo(() => {
-    const sorted = [...posts].sort((a, b) => (b.hotScore ?? 0) - (a.hotScore ?? 0))
-    return sorted
+    return [...posts].sort((a, b) => (b.hotScore ?? 0) - (a.hotScore ?? 0))
   }, [posts])
 
   const visibleHot = useMemo(() => {
-    return loggedIn ? hotPosts : hotPosts.slice(0, 3) // 未登录只显示前3条
-  }, [loggedIn, hotPosts])
+    return isLoggedIn ? hotPosts : hotPosts.slice(0, 3)
+  }, [isLoggedIn, hotPosts])
 
-  // 加载评论（初始加载）
-  const loadComments = useCallback(async (postId: string) => {
-    try {
-      setLoadingComments(true)
-      setCommentsOffset(0)
-      setHasMoreComments(true)
-      
-      const response = await fetch(`/api/posts/${postId}/comments?limit=${COMMENTS_PER_PAGE}&offset=0`)
-      const data = await response.json()
-      if (response.ok) {
-        setComments(data.comments || [])
-        setHasMoreComments(data.pagination?.has_more ?? false)
-        setCommentsOffset(COMMENTS_PER_PAGE)
-      } else {
-        setComments([])
-        setHasMoreComments(false)
-      }
-    } catch (err) {
-      console.error('[HotPage] 加载评论失败:', err)
-      setComments([])
-      setHasMoreComments(false)
-    } finally {
-      setLoadingComments(false)
-    }
-  }, [])
-
-  // 加载更多评论
-  const loadMoreComments = useCallback(async () => {
-    if (!openPost || loadingMoreComments || !hasMoreComments) return
-    
-    try {
-      setLoadingMoreComments(true)
-      const response = await fetch(`/api/posts/${openPost.id}/comments?limit=${COMMENTS_PER_PAGE}&offset=${commentsOffset}`)
-      const data = await response.json()
-      
-      if (response.ok) {
-        const newComments = data.comments || []
-        setComments(prev => [...prev, ...newComments])
-        setHasMoreComments(data.pagination?.has_more ?? false)
-        setCommentsOffset(prev => prev + COMMENTS_PER_PAGE)
-      } else {
-        setHasMoreComments(false)
-      }
-    } catch (err) {
-      console.error('[HotPage] 加载更多评论失败:', err)
-    } finally {
-      setLoadingMoreComments(false)
-    }
-  }, [openPost, commentsOffset, loadingMoreComments, hasMoreComments])
-
-  // 检测文本是否是中文
+  // Chinese text detection
   const isChineseText = useCallback((text: string) => {
     if (!text) return false
     const chineseRegex = /[\u4e00-\u9fa5]/g
@@ -340,43 +263,32 @@ function HotContent() {
     return chineseRatio > 0.1
   }, [])
 
-  // 批量翻译列表帖子（使用批量API，带缓存）
+  // Batch translate list posts
   const translateListPosts = useCallback(async (postsToTranslate: Post[], targetLang: 'zh' | 'en') => {
     if (translatingList) return
-    
     const needsTranslation = postsToTranslate.filter(p => {
       if (translatedListPosts[p.id]?.title) return false
       if (!p.title) return false
       const titleIsChinese = isChineseText(p.title)
       return targetLang === 'en' ? titleIsChinese : !titleIsChinese
     })
-    
     if (needsTranslation.length === 0) return
-    
     setTranslatingList(true)
-    
     try {
-      // 使用批量翻译API
       const items = needsTranslation.slice(0, 20).map(post => ({
         id: post.id,
         text: post.title || '',
         contentType: 'post_title' as const,
         contentId: post.id,
       }))
-
       const response = await fetch('/api/translate', {
         method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          ...getCsrfHeaders()
-        },
+        headers: { 'Content-Type': 'application/json', ...getCsrfHeaders() },
         body: JSON.stringify({ items, targetLang }),
       })
       const data = await response.json()
-      
       if (response.ok && data.success && data.data?.results) {
         const results = data.data.results as Record<string, { translatedText: string; cached: boolean }>
-        
         setTranslatedListPosts(prev => {
           const updated = { ...prev }
           for (const [id, result] of Object.entries(results)) {
@@ -385,49 +297,34 @@ function HotContent() {
           }
           return updated
         })
-        
       }
-    } catch {
-      // 翻译失败，静默处理
-    } finally {
+    } catch { /* silent */ } finally {
       setTranslatingList(false)
     }
   }, [translatingList, translatedListPosts, isChineseText])
 
-  // 当帖子加载或语言变化时翻译列表
   useEffect(() => {
     if (posts.length > 0) {
       translateListPosts(posts, language as 'zh' | 'en')
     }
   }, [posts, language, translateListPosts])
 
-  // 翻译帖子内容（带缓存）
+  // Translate post content
   const translateContent = useCallback(async (postId: string, content: string, targetLang: 'zh' | 'en') => {
     const cacheKey = `${postId}-content-${targetLang}`
-    
     if (translationCache[cacheKey]) {
       setTranslatedContent(translationCache[cacheKey])
       setShowingOriginal(false)
       return
     }
-
     setTranslating(true)
     try {
       const response = await fetch('/api/translate', {
         method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          ...getCsrfHeaders()
-        },
-        body: JSON.stringify({ 
-          text: content, 
-          targetLang,
-          contentType: 'post_content',
-          contentId: postId,
-        }),
+        headers: { 'Content-Type': 'application/json', ...getCsrfHeaders() },
+        body: JSON.stringify({ text: content, targetLang, contentType: 'post_content', contentId: postId }),
       })
       const data = await response.json()
-      
       if (response.ok && data.success && data.data?.translatedText) {
         const translated = data.data.translatedText
         setTranslatedContent(translated)
@@ -443,140 +340,112 @@ function HotContent() {
     }
   }, [translationCache, showToast])
 
-  // 打开帖子详情
+  // Open post detail (URL-driven)
   const handleOpenPost = useCallback((post: Post) => {
     setOpenPost(post)
-    setComments([])
+    resetComments()
     setTranslatedContent(null)
     setShowingOriginal(true)
+    setNewComment('')
     loadComments(post.id)
 
-    // 更新 URL，添加 postId 参数
+    // Update URL with post ID
     const params = new URLSearchParams(searchParams.toString())
     params.set('post', post.id)
     router.replace(`/hot?${params.toString()}`, { scroll: false })
 
-    // 自动检测并翻译
+    // Prevent body scroll
+    document.body.style.overflow = 'hidden'
+
+    // Auto-translate if needed
     if (post.body) {
       const isChinese = isChineseText(post.body)
       const needsTranslation = (language === 'en' && isChinese) || (language === 'zh' && !isChinese)
-      
-      if (needsTranslation) {
-        translateContent(post.id, post.body, language)
-      }
+      if (needsTranslation) translateContent(post.id, post.body, language)
     }
-  }, [loadComments, language, isChineseText, translateContent, searchParams, router])
+  }, [loadComments, resetComments, language, isChineseText, translateContent, searchParams, router])
 
-  // 关闭帖子详情
+  // Close post detail (URL-driven)
   const handleClosePost = useCallback(() => {
     setOpenPost(null)
-    // 移除 URL 中的 postId 参数
+    resetComments()
+    document.body.style.overflow = ''
+
     const params = new URLSearchParams(searchParams.toString())
     params.delete('post')
     const newUrl = params.toString() ? `/hot?${params.toString()}` : '/hot'
     router.replace(newUrl, { scroll: false })
-  }, [searchParams, router])
+  }, [searchParams, router, resetComments])
 
-  // 从 URL 参数恢复帖子详情弹窗状态
+  // Escape key closes modal
+  useEffect(() => {
+    if (!openPost) return
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') handleClosePost()
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [openPost, handleClosePost])
+
+  // Restore modal from URL on load
   useEffect(() => {
     const postId = searchParams.get('post')
     if (postId && posts.length > 0 && !openPost) {
       const post = posts.find(p => p.id === postId)
-      if (post) {
-        handleOpenPost(post)
-      }
+      if (post) handleOpenPost(post)
     }
   }, [searchParams, posts, openPost, handleOpenPost])
 
-  // 语言切换时重新翻译当前打开的帖子
+  // Re-translate on language change
   useEffect(() => {
     if (openPost && openPost.body) {
       const isChinese = isChineseText(openPost.body)
       const needsTranslation = (language === 'en' && isChinese) || (language === 'zh' && !isChinese)
-      
-      // 重置翻译状态
       setTranslatedContent(null)
       setShowingOriginal(true)
-      
-      if (needsTranslation) {
-        translateContent(openPost.id, openPost.body, language)
-      }
+      if (needsTranslation) translateContent(openPost.id, openPost.body, language)
     }
-  }, [language]) // 只监听语言变化
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [language])
 
-  // 提交评论
-  const submitComment = useCallback(async (postId: string) => {
-    if (!accessToken) {
-      showToast('请先登录', 'warning')
+  // Submit comment (server ACK via unified hook)
+  const handleSubmitComment = useCallback(async (postId: string) => {
+    if (!newComment.trim()) return
+    if (!isLoggedIn) {
+      showToast(t('pleaseLoginFirst') || '请先登录', 'warning')
       return
     }
-    if (!newComment.trim()) return
 
-    setSubmittingComment(true)
-    try {
-      const response = await fetch(`/api/posts/${postId}/comments`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`,
-          ...getCsrfHeaders()
-        },
-        body: JSON.stringify({ content: newComment.trim() }),
-      })
-
-      const json = await response.json()
-      if (response.ok && json.success) {
+    const comment = await submitCommentHook(newComment, {
+      onSuccess: () => {
         setNewComment('')
-        setComments(prev => [...prev, json.data.comment])
-        setPosts(prev => prev.map(p => {
-          if (p.id === postId) {
-            return { ...p, comments: p.comments + 1 }
-          }
-          return p
-        }))
+        // Update local post comment count
+        setPosts(prev => prev.map(p =>
+          p.id === postId ? { ...p, comments: p.comments + 1 } : p
+        ))
         if (openPost?.id === postId) {
           setOpenPost(prev => prev ? { ...prev, comments: prev.comments + 1 } : null)
         }
-      } else {
-        showToast(json.error || '发表评论失败', 'error')
       }
-    } catch (err) {
-      console.error('[HotPage] 提交评论失败:', err)
-      showToast('发表评论失败', 'error')
-    } finally {
-      setSubmittingComment(false)
-    }
-  }, [accessToken, newComment, openPost?.id, showToast])
+    })
 
-  // 点赞/踩
-  const toggleReaction = useCallback(async (postId: string, reactionType: 'up' | 'down') => {
-    if (!accessToken) {
-      showToast('请先登录', 'warning')
+    if (!comment && submitError) {
+      showToast(submitError, 'error')
+    }
+  }, [newComment, isLoggedIn, submitCommentHook, submitError, openPost?.id, showToast, t])
+
+  // Toggle reaction (server ACK via unified hook)
+  const handleReaction = useCallback(async (postId: string, reactionType: 'up' | 'down') => {
+    if (!isLoggedIn) {
+      showToast(t('pleaseLoginFirst') || '请先登录', 'warning')
       return
     }
 
-    try {
-      const response = await fetch(`/api/posts/${postId}/like`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`,
-          ...getCsrfHeaders()
-        },
-        body: JSON.stringify({ reaction_type: reactionType }),
-      })
-
-      const json = await response.json()
-      if (response.ok && json.success) {
-        const result = json.data
+    await toggleReaction(postId, reactionType, {
+      onSuccess: (result) => {
         setPosts(prev => prev.map(p => {
           if (p.id === postId) {
-            return {
-              ...p,
-              likes: result.like_count,
-              dislikes: result.dislike_count,
-              user_reaction: result.reaction,
-            }
+            return { ...p, likes: result.like_count, dislikes: result.dislike_count, user_reaction: result.reaction }
           }
           return p
         }))
@@ -588,11 +457,10 @@ function HotContent() {
             user_reaction: result.reaction,
           } : null)
         }
-      }
-    } catch (err) {
-      console.error('[HotPage] 点赞失败:', err)
-    }
-  }, [accessToken, openPost?.id, showToast])
+      },
+      onError: (err) => showToast(err, 'error'),
+    })
+  }, [isLoggedIn, toggleReaction, openPost?.id, showToast, t])
 
   return (
     <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
@@ -600,20 +468,20 @@ function HotContent() {
 
       <Box as="main" className="container-padding" px={4} py={6} style={{ maxWidth: 1200, margin: '0 auto' }}>
         <Box className="hot-grid" style={{ display: 'grid', gridTemplateColumns: '260px 1fr 280px', gap: tokens.spacing[4] }}>
-          {/* 左：排名前十 */}
+          {/* Left: Top 10 */}
           <Box as="section">
             <Card title={t('top10')}>
-              <RankingTableCompact traders={traders} loading={loadingTraders} loggedIn={loggedIn} />
+              <RankingTableCompact traders={traders} loading={loadingTraders} loggedIn={isLoggedIn} />
             </Card>
           </Box>
 
-          {/* 中：热榜 */}
+          {/* Center: Hot Posts */}
           <Box as="section">
             <Card title={t('hotList')}>
               <Text size="sm" color="secondary" style={{ marginBottom: tokens.spacing[3] }}>
-                {loggedIn ? t('loggedInShowAllHot') : t('notLoggedInShowLimitedHot')}
+                {isLoggedIn ? t('loggedInShowAllHot') : t('notLoggedInShowLimitedHot')}
               </Text>
-              
+
               {loadingPosts ? (
                 <Box style={{ padding: tokens.spacing[4], textAlign: 'center' }}>
                   <Text color="tertiary">{t('loading')}</Text>
@@ -634,22 +502,27 @@ function HotContent() {
                         p={4}
                         radius="md"
                         border="primary"
-                        style={{
-                          cursor: 'pointer',
-                        }}
+                        style={{ cursor: 'pointer' }}
                         onClick={() => handleOpenPost(p)}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.background = tokens.colors.bg.secondary
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.background = tokens.colors.bg.primary
-                        }}
+                        onMouseEnter={(e) => { e.currentTarget.style.background = tokens.colors.bg.secondary }}
+                        onMouseLeave={(e) => { e.currentTarget.style.background = tokens.colors.bg.primary }}
                       >
                         <Box className="hot-post-meta" style={{ display: 'flex', gap: tokens.spacing[2], marginBottom: tokens.spacing[2], flexWrap: 'wrap' }}>
                           <Text className="hot-post-rank" size="sm" weight="black" style={{ color: rank <= 3 ? tokens.colors.accent.warning : tokens.colors.text.secondary }}>
                             #{rank}
                           </Text>
-                          <Text size="xs" color="secondary">{p.group}</Text>
+                          {/* Group name as clickable link */}
+                          {p.group_id ? (
+                            <Link
+                              href={`/groups/${p.group_id}`}
+                              onClick={(e) => e.stopPropagation()}
+                              style={{ color: ARENA_PURPLE, fontSize: tokens.typography.fontSize.xs, textDecoration: 'none' }}
+                            >
+                              {p.group}
+                            </Link>
+                          ) : (
+                            <Text size="xs" color="secondary">{p.group}</Text>
+                          )}
                           <Text size="xs" color="tertiary">{(p.views ?? 0).toLocaleString()} {t('views')}</Text>
                         </Box>
                         <Text className="hot-post-title" size="base" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>
@@ -682,8 +555,8 @@ function HotContent() {
                                     padding: 0,
                                   }}
                                 >
-                                  {isExpanded 
-                                    ? (language === 'zh' ? '收起' : 'Show less') 
+                                  {isExpanded
+                                    ? (language === 'zh' ? '收起' : 'Show less')
                                     : (language === 'zh' ? '展开查看' : 'Show more')}
                                 </button>
                               )}
@@ -691,7 +564,18 @@ function HotContent() {
                           )
                         })()}
                         <Box className="hot-post-footer" style={{ display: 'flex', gap: tokens.spacing[3], fontSize: tokens.typography.fontSize.xs, color: tokens.colors.text.tertiary, flexWrap: 'wrap', alignItems: 'center' }}>
-                          <Text size="xs" color="tertiary">{p.author}</Text>
+                          {/* Author name as clickable link */}
+                          {p.author_handle ? (
+                            <Link
+                              href={`/u/${p.author_handle}`}
+                              onClick={(e) => e.stopPropagation()}
+                              style={{ color: tokens.colors.text.secondary, fontSize: tokens.typography.fontSize.xs, textDecoration: 'none', fontWeight: 600 }}
+                            >
+                              {p.author}
+                            </Link>
+                          ) : (
+                            <Text size="xs" color="tertiary">{p.author}</Text>
+                          )}
                           <Text size="xs" color="tertiary">{p.time}</Text>
                           <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                             <CommentIcon size={12} /> {p.comments}
@@ -705,8 +589,8 @@ function HotContent() {
                   })}
                 </Box>
               )}
-              
-              {!loggedIn && posts.length > 3 && (
+
+              {!isLoggedIn && posts.length > 3 && (
                 <Box style={{ marginTop: tokens.spacing[4], padding: tokens.spacing[3], textAlign: 'center' }}>
                   <Text size="sm" color="secondary">
                     {t('wantToSeeAllHotList')}
@@ -719,17 +603,19 @@ function HotContent() {
             </Card>
           </Box>
 
-          {/* 右：市场 */}
+          {/* Right: Market */}
           <Box as="section">
             <MarketPanel />
           </Box>
         </Box>
       </Box>
 
-      {/* 帖子详情弹窗 */}
+      {/* Post Detail Modal (URL-driven) */}
       {openPost && (
         <div
           onClick={handleClosePost}
+          role="dialog"
+          aria-modal="true"
           style={{
             position: 'fixed',
             inset: 0,
@@ -753,14 +639,16 @@ function HotContent() {
               padding: 16,
             }}
           >
+            {/* Close button */}
             <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-              <button 
-                onClick={handleClosePost} 
-                style={{ 
-                  border: 'none', 
-                  background: 'transparent', 
-                  color: tokens.colors.text.secondary, 
-                  cursor: 'pointer', 
+              <button
+                onClick={handleClosePost}
+                aria-label="Close"
+                style={{
+                  border: 'none',
+                  background: 'transparent',
+                  color: tokens.colors.text.secondary,
+                  cursor: 'pointer',
                   fontSize: 20,
                   width: 44,
                   height: 44,
@@ -774,26 +662,46 @@ function HotContent() {
               </button>
             </div>
 
-            <div style={{ fontSize: 12, color: ARENA_PURPLE }}>
-              {openPost.group}
+            {/* Group name (clickable link) */}
+            <div style={{ fontSize: 12 }}>
+              {openPost.group_id ? (
+                <Link href={`/groups/${openPost.group_id}`} style={{ color: ARENA_PURPLE, textDecoration: 'none' }}>
+                  {openPost.group}
+                </Link>
+              ) : (
+                <span style={{ color: ARENA_PURPLE }}>{openPost.group}</span>
+              )}
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, marginTop: 8 }}>
               <div style={{ fontSize: 20, fontWeight: 950, lineHeight: 1.25 }}>{openPost.title}</div>
             </div>
 
+            {/* Author (clickable link) + meta */}
             <div style={{ marginTop: 8, fontSize: 12, color: tokens.colors.text.tertiary, display: 'flex', alignItems: 'center', gap: 6 }}>
-              {openPost.author} · {openPost.time} · <CommentIcon size={12} /> {openPost.comments}
+              {openPost.author_handle ? (
+                <Link href={`/u/${openPost.author_handle}`} style={{ color: tokens.colors.text.secondary, textDecoration: 'none', fontWeight: 600 }}>
+                  {openPost.author}
+                </Link>
+              ) : (
+                <span>{openPost.author}</span>
+              )}
+              <span>·</span>
+              <span>{openPost.time}</span>
+              <span>·</span>
+              <CommentIcon size={12} />
+              <span>{openPost.comments}</span>
             </div>
 
+            {/* Content */}
             <div translate="no" style={{ marginTop: 12, fontSize: 14, color: tokens.colors.text.primary, lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>
-              {showingOriginal 
+              {showingOriginal
                 ? renderContentWithLinks(openPost.body || '')
                 : renderContentWithLinks(translatedContent || openPost.body || '')
               }
             </div>
 
-            {/* 翻译/原文切换按钮 */}
+            {/* Translation toggle */}
             {(translatedContent || translating) && (
               <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
                 <button
@@ -813,13 +721,9 @@ function HotContent() {
                     gap: 4,
                   }}
                 >
-                  {translating ? (
-                    <>{language === 'zh' ? '翻译中...' : 'Translating...'}</>
-                  ) : showingOriginal ? (
-                    <>{language === 'zh' ? '查看翻译' : 'View Translation'}</>
-                  ) : (
-                    <>{language === 'zh' ? '查看原文' : 'View Original'}</>
-                  )}
+                  {translating ? (language === 'zh' ? '翻译中...' : 'Translating...')
+                    : showingOriginal ? (language === 'zh' ? '查看翻译' : 'View Translation')
+                    : (language === 'zh' ? '查看原文' : 'View Original')}
                 </button>
                 {!showingOriginal && (
                   <span style={{ fontSize: 11, color: tokens.colors.text.tertiary }}>
@@ -829,58 +733,47 @@ function HotContent() {
               </div>
             )}
 
+            {/* Reactions (server ACK) */}
             <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${tokens.colors.border.secondary}`, display: 'flex', gap: 14, flexWrap: 'wrap' }}>
               <button
-                onClick={() => toggleReaction(openPost.id, 'up')}
+                onClick={() => handleReaction(openPost.id, 'up')}
                 style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  padding: '6px 12px',
-                  border: 'none',
-                  borderRadius: 8,
+                  display: 'flex', alignItems: 'center', gap: 6,
+                  padding: '6px 12px', border: 'none', borderRadius: 8,
                   background: openPost.user_reaction === 'up' ? `${tokens.colors.accent.success}20` : tokens.colors.bg.tertiary,
                   color: openPost.user_reaction === 'up' ? tokens.colors.accent.success : tokens.colors.text.secondary,
-                  cursor: 'pointer',
-                  fontSize: 13,
-                  fontWeight: 600,
+                  cursor: 'pointer', fontSize: 13, fontWeight: 600,
                 }}
               >
                 <ThumbsUpIcon size={14} /> {openPost.likes}
               </button>
               <button
-                onClick={() => toggleReaction(openPost.id, 'down')}
+                onClick={() => handleReaction(openPost.id, 'down')}
                 style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  padding: '6px 12px',
-                  border: 'none',
-                  borderRadius: 8,
+                  display: 'flex', alignItems: 'center', gap: 6,
+                  padding: '6px 12px', border: 'none', borderRadius: 8,
                   background: openPost.user_reaction === 'down' ? `${tokens.colors.accent.error}20` : tokens.colors.bg.tertiary,
                   color: openPost.user_reaction === 'down' ? tokens.colors.accent.error : tokens.colors.text.secondary,
-                  cursor: 'pointer',
-                  fontSize: 13,
-                  fontWeight: 600,
+                  cursor: 'pointer', fontSize: 13, fontWeight: 600,
                 }}
               >
                 <ThumbsDownIcon size={14} />
               </button>
             </div>
 
-            {/* 评论区 */}
+            {/* Comments Section (unified hook, server ACK) */}
             <div style={{ marginTop: 16, borderTop: `1px solid ${tokens.colors.border.secondary}`, paddingTop: 16 }}>
               <div style={{ fontWeight: 950, marginBottom: 12 }}>
                 {t('comments')} ({openPost.comments})
               </div>
 
-              {/* 评论输入框 */}
+              {/* Comment input */}
               <div style={{ marginBottom: 16 }}>
                 <textarea
                   value={newComment}
                   onChange={(e) => setNewComment(e.target.value)}
-                  placeholder={accessToken ? t('writeComment') : '请先登录后发表评论'}
-                  disabled={!accessToken || submittingComment}
+                  placeholder={isLoggedIn ? (t('writeComment') || '写下你的评论...') : '请先登录后发表评论'}
+                  disabled={!isLoggedIn || submitState === 'sending'}
                   style={{
                     width: '100%',
                     minHeight: 80,
@@ -894,32 +787,40 @@ function HotContent() {
                     outline: 'none',
                   }}
                 />
-                {accessToken && (
-                  <button
-                    onClick={() => submitComment(openPost.id)}
-                    disabled={!newComment.trim() || submittingComment}
-                    style={{
-                      marginTop: 8,
-                      padding: '8px 16px',
-                      background: newComment.trim() && !submittingComment ? ARENA_PURPLE : 'rgba(139, 111, 168, 0.3)',
-                      color: '#fff',
-                      border: 'none',
-                      borderRadius: 8,
-                      fontSize: 13,
-                      fontWeight: 700,
-                      cursor: newComment.trim() && !submittingComment ? 'pointer' : 'not-allowed',
-                    }}
-                  >
-                    {submittingComment ? '发送中...' : '发表评论'}
-                  </button>
+                {isLoggedIn && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
+                    <button
+                      onClick={() => handleSubmitComment(openPost.id)}
+                      disabled={!newComment.trim() || submitState === 'sending'}
+                      style={{
+                        padding: '8px 16px',
+                        background: newComment.trim() && submitState !== 'sending' ? ARENA_PURPLE : 'rgba(139, 111, 168, 0.3)',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: 8,
+                        fontSize: 13,
+                        fontWeight: 700,
+                        cursor: newComment.trim() && submitState !== 'sending' ? 'pointer' : 'not-allowed',
+                      }}
+                    >
+                      {submitState === 'sending' ? (language === 'zh' ? '发送中...' : 'Sending...') : (language === 'zh' ? '发表评论' : 'Submit')}
+                    </button>
+                    {submitState === 'error' && submitError && (
+                      <span style={{ fontSize: 12, color: tokens.colors.accent.error }}>{submitError}</span>
+                    )}
+                  </div>
                 )}
               </div>
 
-              {/* 评论列表 */}
+              {/* Comments list */}
               {loadingComments ? (
-                <div style={{ color: tokens.colors.text.tertiary, fontSize: 13 }}>加载评论中...</div>
+                <div style={{ color: tokens.colors.text.tertiary, fontSize: 13 }}>
+                  {language === 'zh' ? '加载评论中...' : 'Loading comments...'}
+                </div>
               ) : comments.length === 0 ? (
-                <div style={{ color: tokens.colors.text.tertiary, fontSize: 13 }}>暂无评论，来发表第一条评论吧</div>
+                <div style={{ color: tokens.colors.text.tertiary, fontSize: 13 }}>
+                  {language === 'zh' ? '暂无评论，来发表第一条评论吧' : 'No comments yet. Be the first!'}
+                </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                   {comments.filter(Boolean).map((comment) => (
@@ -929,24 +830,45 @@ function HotContent() {
                         padding: 12,
                         background: tokens.colors.bg.primary,
                         borderRadius: 8,
-                        border: `1px solid ${tokens.colors.border.primary}`,
+                        border: `1px solid ${comment._status === 'failed' ? tokens.colors.accent.error : tokens.colors.border.primary}`,
+                        opacity: comment._status === 'sending' ? 0.6 : 1,
                       }}
                     >
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                        <span style={{ fontSize: 12, fontWeight: 700, color: tokens.colors.text.secondary }}>
-                          {comment.author_handle || '匿名'}
-                        </span>
+                        {/* Comment author as clickable link */}
+                        {comment.author_handle ? (
+                          <Link
+                            href={`/u/${comment.author_handle}`}
+                            style={{ fontSize: 12, fontWeight: 700, color: tokens.colors.text.secondary, textDecoration: 'none' }}
+                          >
+                            {comment.author_handle}
+                          </Link>
+                        ) : (
+                          <span style={{ fontSize: 12, fontWeight: 700, color: tokens.colors.text.secondary }}>
+                            {language === 'zh' ? '匿名' : 'Anonymous'}
+                          </span>
+                        )}
                         <span style={{ fontSize: 11, color: tokens.colors.text.tertiary }}>
                           {formatTimeAgo(comment.created_at)}
                         </span>
+                        {comment._status === 'sending' && (
+                          <span style={{ fontSize: 11, color: tokens.colors.text.tertiary }}>
+                            {language === 'zh' ? '发送中...' : 'Sending...'}
+                          </span>
+                        )}
+                        {comment._status === 'failed' && (
+                          <span style={{ fontSize: 11, color: tokens.colors.accent.error }}>
+                            {language === 'zh' ? '发送失败' : 'Failed'}
+                          </span>
+                        )}
                       </div>
                       <div translate="no" style={{ fontSize: 13, color: tokens.colors.text.primary, lineHeight: 1.6 }}>
                         {renderContentWithLinks(comment.content || '')}
                       </div>
                     </div>
                   ))}
-                  
-                  {/* 加载更多评论按钮 */}
+
+                  {/* Load more comments */}
                   {hasMoreComments && (
                     <button
                       onClick={loadMoreComments}
@@ -961,22 +883,13 @@ function HotContent() {
                         fontWeight: 600,
                         cursor: loadingMoreComments ? 'not-allowed' : 'pointer',
                         opacity: loadingMoreComments ? 0.6 : 1,
-                        transition: 'all 0.2s ease',
                         width: '100%',
                         marginTop: 4,
                       }}
-                      onMouseEnter={(e) => {
-                        if (!loadingMoreComments) {
-                          e.currentTarget.style.borderColor = tokens.colors.accent.primary
-                          e.currentTarget.style.color = tokens.colors.accent.primary
-                        }
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.borderColor = tokens.colors.border.primary
-                        e.currentTarget.style.color = tokens.colors.text.secondary
-                      }}
                     >
-                      {loadingMoreComments ? '加载中...' : '加载更多评论'}
+                      {loadingMoreComments
+                        ? (language === 'zh' ? '加载中...' : 'Loading...')
+                        : (language === 'zh' ? '加载更多评论' : 'Load more comments')}
                     </button>
                   )}
                 </div>
