@@ -30,9 +30,6 @@ import type { PlatformConnector, ConnectorConfig, RateLimiter } from './types'
 import { ConnectorError, DEFAULT_CONNECTOR_CONFIG } from './types'
 export { ConnectorError, DEFAULT_CONNECTOR_CONFIG }
 
-// Re-export ConnectorError so connectors can import from './base'
-export { ConnectorError } from './types'
-
 // ============================================
 // Circuit Breaker (standalone, for legacy usage)
 // ============================================
