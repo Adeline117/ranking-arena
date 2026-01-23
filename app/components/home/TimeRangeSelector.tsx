@@ -41,15 +41,12 @@ export default function TimeRangeSelector({
     <Box
       className="time-range-selector"
       style={{
-        display: 'flex',
-        gap: 4,
-        marginBottom: tokens.spacing[4],
-        padding: 4,
-        background: tokens.glass.bg.light,
-        borderRadius: tokens.radius.xl,
+        display: 'inline-flex',
+        gap: 2,
+        padding: 3,
+        background: tokens.colors.bg.secondary,
+        borderRadius: tokens.radius.lg,
         border: `1px solid ${tokens.colors.border.primary}`,
-        backdropFilter: tokens.glass.blur.sm,
-        WebkitBackdropFilter: tokens.glass.blur.sm,
       }}
     >
       {TIME_RANGES.map((range) => {
@@ -61,29 +58,30 @@ export default function TimeRangeSelector({
             disabled={disabled}
             className="touch-target"
             style={{
-              flex: 1,
-              padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
-              minHeight: 44,
-              background: isActive 
-                ? tokens.gradient.primary
+              padding: `6px ${tokens.spacing[4]}`,
+              minHeight: 32,
+              background: isActive
+                ? tokens.colors.bg.primary
                 : 'transparent',
-              color: isActive 
-                ? '#ffffff' 
+              color: isActive
+                ? tokens.colors.text.primary
                 : tokens.colors.text.tertiary,
-              border: 'none',
-              borderRadius: tokens.radius.lg,
+              border: isActive
+                ? `1px solid ${tokens.colors.border.primary}`
+                : '1px solid transparent',
+              borderRadius: tokens.radius.md,
               fontSize: tokens.typography.fontSize.sm,
-              fontWeight: isActive 
-                ? tokens.typography.fontWeight.black 
-                : tokens.typography.fontWeight.semibold,
+              fontWeight: isActive
+                ? tokens.typography.fontWeight.bold
+                : tokens.typography.fontWeight.medium,
               cursor: disabled ? 'not-allowed' : 'pointer',
               opacity: disabled ? 0.5 : 1,
-              transition: `all ${tokens.transition.base}`,
+              transition: 'all 0.15s ease',
               fontFamily: tokens.typography.fontFamily.sans.join(', '),
-              boxShadow: isActive 
-                ? `0 4px 12px ${tokens.colors.accent.primary}40` 
+              boxShadow: isActive
+                ? '0 1px 3px rgba(0,0,0,0.08)'
                 : 'none',
-              transform: isActive ? 'scale(1)' : 'scale(1)',
+              lineHeight: 1,
             }}
           >
             {getLabel(range)}

@@ -35,7 +35,7 @@ import {
   type TraderFeedItem,
 } from '@/lib/data/trader'
 
-type TabKey = 'overview' | 'stats' | 'portfolio' | 'discussion'
+type TabKey = 'overview' | 'stats' | 'portfolio'
 
 function UserHomeContent(props: { params: { handle: string } | Promise<{ handle: string }> }) {
   const searchParams = useSearchParams()

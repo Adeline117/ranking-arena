@@ -17,7 +17,6 @@ import TraderFeed from '@/app/components/trader/TraderFeed'
 import StatsPage from '@/app/components/trader/stats/StatsPage'
 // PinnedPost 组件已集成到 TraderFeed 中（置顶帖子自动显示在动态列表最上方）
 import PortfolioTable from '@/app/components/trader/PortfolioTable'
-import TraderDiscussion from '@/app/components/trader/TraderDiscussion'
 import ScoreBreakdown from '@/app/components/premium/ScoreBreakdown'
 import { Box, Text } from '@/app/components/base'
 import { RankingSkeleton } from '@/app/components/ui/Skeleton'
@@ -37,7 +36,7 @@ import {
   combineSchemas,
 } from '@/lib/seo'
 
-type TabKey = 'overview' | 'stats' | 'portfolio' | 'discussion'
+type TabKey = 'overview' | 'stats' | 'portfolio'
 
 // 新数据类型
 interface AssetBreakdownData {
@@ -94,9 +93,8 @@ function TraderContent(props: { params: { handle: string } | Promise<{ handle: s
   // Read tab from URL, default to 'overview'
   const urlTab = searchParams.get('tab') as TabKey | null
   const [activeTab, setActiveTab] = useState<TabKey>(
-    urlTab && ['overview', 'stats', 'portfolio', 'discussion'].includes(urlTab) ? urlTab : 'overview'
+    urlTab && ['overview', 'stats', 'portfolio'].includes(urlTab) ? urlTab : 'overview'
   )
-  const [discussionCount, setDiscussionCount] = useState(0)
 
   // Update URL when tab changes
   const handleTabChange = (tab: TabKey) => {
@@ -114,7 +112,7 @@ function TraderContent(props: { params: { handle: string } | Promise<{ handle: s
   // Sync with URL changes
   useEffect(() => {
     const tab = searchParams.get('tab') as TabKey | null
-    if (tab && ['overview', 'stats', 'portfolio', 'discussion'].includes(tab)) {
+    if (tab && ['overview', 'stats', 'portfolio'].includes(tab)) {
       setActiveTab(tab)
     } else if (!tab) {
       setActiveTab('overview')
@@ -180,16 +178,6 @@ function TraderContent(props: { params: { handle: string } | Promise<{ handle: s
         setAssetBreakdown(data.assetBreakdown)
         setEquityCurve(data.equityCurve)
 
-        // 获取讨论数量
-        try {
-          const discResponse = await fetch(`/api/traders/${encodeURIComponent(handle)}/discussions?count_only=true`)
-          if (discResponse.ok) {
-            const discData = await discResponse.json()
-            setDiscussionCount(discData.count || 0)
-          }
-        } catch {
-          // Silently fail for discussion count
-        }
       } catch (error) {
         console.error('Error loading trader data:', error)
         setProfile(null)
@@ -276,7 +264,7 @@ function TraderContent(props: { params: { handle: string } | Promise<{ handle: s
         />
 
         {/* Tabs */}
-        <TraderTabs activeTab={activeTab} onTabChange={handleTabChange} discussionCount={discussionCount} />
+        <TraderTabs activeTab={activeTab} onTabChange={handleTabChange} />
 
         {/* Tab Content with animation */}
         <Box
@@ -294,10 +282,22 @@ function TraderContent(props: { params: { handle: string } | Promise<{ handle: s
                 gap: tokens.spacing[8],
               }}
             >
-              {/* Left Column - 核心绩效指标和动态 */}
+              {/* Left Column - 核心绩效指标和评分 */}
               <Box className="stagger-enter" style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[6] }}>
                 {performance && (
                   <OverviewPerformanceCard performance={performance} />
+                )}
+                {/* 评分详情 - 紧跟在表现卡片下方 */}
+                {performance && (
+                  <ScoreBreakdown
+                    arenaScore={performance.arena_score ?? null}
+                    returnScore={performance.return_score ?? null}
+                    drawdownScore={performance.drawdown_score ?? null}
+                    stabilityScore={performance.stability_score ?? null}
+                    source={profile.source}
+                    isPro={isPro}
+                    onUnlock={() => router.push('/pricing')}
+                  />
                 )}
                 {/* 交易员动态（置顶帖子自动显示在最上面） */}
                 <TraderFeed items={feed.filter((f) => f.type !== 'group_post')} title={t('activities')} />
@@ -313,20 +313,7 @@ function TraderContent(props: { params: { handle: string } | Promise<{ handle: s
                   followers={profile.followers}
                   isRegistered={profile.isRegistered}
                 />
-                
-                {/* 评分详情 - Pro 功能 */}
-                {performance && (
-                  <ScoreBreakdown
-                    arenaScore={performance.arena_score ?? null}
-                    returnScore={performance.return_score ?? null}
-                    drawdownScore={performance.drawdown_score ?? null}
-                    stabilityScore={performance.stability_score ?? null}
-                    source={profile.source}
-                    isPro={isPro}
-                    onUnlock={() => router.push('/pricing')}
-                  />
-                )}
-                
+
                 {similarTraders.length > 0 && <SimilarTraders traders={similarTraders} />}
               </Box>
             </Box>
@@ -343,10 +330,6 @@ function TraderContent(props: { params: { handle: string } | Promise<{ handle: s
           )}
 
           {activeTab === 'portfolio' && <PortfolioTable items={portfolio} history={positionHistory} />}
-
-          {activeTab === 'discussion' && (
-            <TraderDiscussion traderId={profile.id} traderHandle={profile.handle} />
-          )}
         </Box>
       </Box>
     </Box>

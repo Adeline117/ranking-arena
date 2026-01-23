@@ -10,30 +10,6 @@ import CopyTradeButton from './CopyTradeButton'
 import { getAvatarGradient, getAvatarInitial } from '@/lib/utils/avatar'
 import { ProBadgeOverlay } from '../ui/ProBadge'
 
-/**
- * 根据交易所来源和交易员ID生成原网页链接
- */
-function getOriginalUrl(source: string | undefined, traderId: string): string | null {
-  if (!source) return null
-  
-  const urlMap: Record<string, string> = {
-    binance_futures: `https://www.binance.com/en/copy-trading/lead-details/${traderId}`,
-    binance_spot: `https://www.binance.com/en/copy-trading/lead-details/${traderId}`,
-    binance_web3: `https://www.binance.com/en/copy-trading/lead-details/${traderId}`,
-    binance: `https://www.binance.com/en/copy-trading/lead-details/${traderId}`,
-    bybit: `https://www.bybit.com/copyTrade/trade-center/detail?leaderMark=${traderId}`,
-    bitget_futures: `https://www.bitget.com/copy-trading/trader?id=${traderId}`,
-    bitget_spot: `https://www.bitget.com/copy-trading/trader?id=${traderId}`,
-    mexc: `https://futures.mexc.com/exchange/copy-trading/trader/${traderId}`,
-    coinex: `https://www.coinex.com/futures/copy-trading/trader/${traderId}`,
-    okx_web3: `https://www.okx.com/web3/copy-trading/trader/${traderId}`,
-    kucoin: `https://www.kucoin.com/copy-trading/trader/${traderId}`,
-    gmx: `https://app.gmx.io/#/leaderboard/${traderId}`,
-  }
-  
-  return urlMap[source.toLowerCase()] || null
-}
-
 interface CommunityScore {
   avg_rating: number
   review_count: number
@@ -485,46 +461,6 @@ export default function TraderHeader({
           ← 返回
         </Button>
 
-        {/* 查看原网页按钮 */}
-        {(() => {
-          const originalUrl = getOriginalUrl(source, traderId)
-          return originalUrl ? (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => window.open(originalUrl, '_blank', 'noopener,noreferrer')}
-              style={{
-                color: tokens.colors.text.secondary,
-                fontSize: tokens.typography.fontSize.sm,
-                padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-                borderRadius: tokens.radius.lg,
-                background: `${tokens.colors.accent.primary}10`,
-                border: `1px solid ${tokens.colors.accent.primary}30`,
-                transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
-                display: 'flex',
-                alignItems: 'center',
-                gap: tokens.spacing[2],
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = `${tokens.colors.accent.primary}20`
-                e.currentTarget.style.borderColor = tokens.colors.accent.primary
-                e.currentTarget.style.color = tokens.colors.accent.primary
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = `${tokens.colors.accent.primary}10`
-                e.currentTarget.style.borderColor = `${tokens.colors.accent.primary}30`
-                e.currentTarget.style.color = tokens.colors.text.secondary
-              }}
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-                <polyline points="15 3 21 3 21 9" />
-                <line x1="10" y1="14" x2="21" y2="3" />
-              </svg>
-              查看原网页
-            </Button>
-          ) : null
-        })()}
         
         {!isOwnProfile && !isRegistered && userId && (
           <ClaimTraderButton traderId={traderId} handle={handle} userId={userId} source={source} />
