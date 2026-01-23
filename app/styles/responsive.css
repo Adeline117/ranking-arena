@@ -759,19 +759,6 @@
   display: none;
 }
 
-/* ============================================
-   Dashboard 页面响应式网格
-   ============================================ */
-
-.dashboard-grid {
-  grid-template-columns: 1fr !important;
-}
-
-@media (min-width: 900px) {
-  .dashboard-grid {
-    grid-template-columns: 1fr 340px !important;
-  }
-}
 
 /* ============================================
    iPad 适配
