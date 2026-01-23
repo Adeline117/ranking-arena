@@ -55,6 +55,7 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
   const [similarTraders, setSimilarTraders] = useState<TraderProfile[]>([])
   const [loading, setLoading] = useState(true)
   const [proBadgeTier, setProBadgeTier] = useState<'pro' | null>(null)
+  const [socialLinks, setSocialLinks] = useState<{ twitter?: string; telegram?: string; discord?: string; github?: string; website?: string }>({})
   
   // Read tab from URL, default to 'overview'
   const urlTab = searchParams.get('tab') as TabKey | null
@@ -486,6 +487,25 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
           }
         }
 
+        // Fetch social links
+        if (profileData?.id) {
+          const { data: socialData } = await supabase
+            .from('user_profiles')
+            .select('social_twitter, social_telegram, social_discord, social_github, social_website')
+            .eq('id', profileData.id)
+            .maybeSingle()
+
+          if (socialData) {
+            setSocialLinks({
+              twitter: (socialData as Record<string, unknown>).social_twitter as string || undefined,
+              telegram: (socialData as Record<string, unknown>).social_telegram as string || undefined,
+              discord: (socialData as Record<string, unknown>).social_discord as string || undefined,
+              github: (socialData as Record<string, unknown>).social_github as string || undefined,
+              website: (socialData as Record<string, unknown>).social_website as string || undefined,
+            })
+          }
+        }
+
         setProfile(profileData)
         setPerformance(performanceData)
         setStats(statsData)
@@ -665,6 +685,7 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
                 isOwnProfile={isOwnProfile}
                 showFollowers={profile.showFollowers}
                 showFollowing={profile.showFollowing}
+                socialLinks={socialLinks}
               />
               {/* 创办的小组 */}
               <CreatedGroups userId={profile.id} />
