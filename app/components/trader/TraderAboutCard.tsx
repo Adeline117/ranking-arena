@@ -226,12 +226,12 @@ export default function TraderAboutCard({
       </Text>
 
       {/* Bio */}
-      {bio && (
-        <Text 
-          size="sm" 
-          color="secondary" 
-          style={{ 
-            marginBottom: tokens.spacing[5], 
+      {bio ? (
+        <Text
+          size="sm"
+          color="secondary"
+          style={{
+            marginBottom: tokens.spacing[5],
             lineHeight: tokens.typography.lineHeight.relaxed,
             textAlign: 'center',
             position: 'relative',
@@ -240,7 +240,22 @@ export default function TraderAboutCard({
         >
           {bio.length > 60 ? bio.slice(0, 60) + '...' : bio}
         </Text>
-      )}
+      ) : isOwnProfile ? (
+        <Text
+          size="sm"
+          color="tertiary"
+          style={{
+            marginBottom: tokens.spacing[5],
+            lineHeight: tokens.typography.lineHeight.relaxed,
+            textAlign: 'center',
+            position: 'relative',
+            zIndex: 1,
+            fontStyle: 'italic',
+          }}
+        >
+          点击下方按钮添加个人简介
+        </Text>
+      ) : null}
 
       {/* 操作按钮 */}
       <Box style={{ position: 'relative', zIndex: 1 }}>

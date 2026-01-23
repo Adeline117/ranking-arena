@@ -68,6 +68,42 @@ function validatePasswordMatch(password: string, confirmPassword: string): { val
   return { valid: true, message: '' }
 }
 
+// Toggle switch component
+function ToggleSwitch({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <button
+      role="switch"
+      aria-checked={checked}
+      onClick={() => onChange(!checked)}
+      style={{
+        width: 40,
+        height: 22,
+        borderRadius: 11,
+        padding: 2,
+        border: 'none',
+        background: checked ? '#8b6fa8' : tokens.colors.bg.tertiary,
+        cursor: 'pointer',
+        transition: 'background 0.2s ease',
+        position: 'relative',
+        flexShrink: 0,
+      }}
+    >
+      <span
+        style={{
+          display: 'block',
+          width: 18,
+          height: 18,
+          borderRadius: '50%',
+          background: '#fff',
+          transform: checked ? 'translateX(18px)' : 'translateX(0)',
+          transition: 'transform 0.2s ease',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+        }}
+      />
+    </button>
+  )
+}
+
 // Reusable section card component
 function SectionCard({
   id,
@@ -193,6 +229,52 @@ function SettingsContent() {
   const [showFollowing, setShowFollowing] = useState(true)
   const [dmPermission, setDmPermission] = useState<'all' | 'mutual' | 'none'>('all')
   const [showProBadge, setShowProBadge] = useState(true)
+
+  // Handle uniqueness check
+  const [handleAvailable, setHandleAvailable] = useState<boolean | null>(null)
+  const [checkingHandle, setCheckingHandle] = useState(false)
+  const handleCheckTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  // Debounced handle uniqueness check
+  useEffect(() => {
+    if (!handle || handle.length < 2 || !validateHandle(handle).valid) {
+      setHandleAvailable(null)
+      return
+    }
+    // Don't check if it's the same as initial
+    if (initialValuesRef.current && handle === initialValuesRef.current.handle) {
+      setHandleAvailable(null)
+      return
+    }
+
+    if (handleCheckTimeoutRef.current) {
+      clearTimeout(handleCheckTimeoutRef.current)
+    }
+
+    setCheckingHandle(true)
+    handleCheckTimeoutRef.current = setTimeout(async () => {
+      try {
+        const { data } = await supabase
+          .from('user_profiles')
+          .select('id')
+          .eq('handle', handle)
+          .neq('id', userId || '')
+          .maybeSingle()
+
+        setHandleAvailable(!data)
+      } catch {
+        setHandleAvailable(null)
+      } finally {
+        setCheckingHandle(false)
+      }
+    }, 500)
+
+    return () => {
+      if (handleCheckTimeoutRef.current) {
+        clearTimeout(handleCheckTimeoutRef.current)
+      }
+    }
+  }, [handle, userId])
 
   // Validation state
   const [touchedFields, setTouchedFields] = useState<{
@@ -414,6 +496,10 @@ function SettingsContent() {
     // Validate handle before saving
     if (handle && !handleValidation.valid) {
       showToast(handleValidation.message, 'error')
+      return
+    }
+    if (handle && handleAvailable === false) {
+      showToast('用户名已被占用，请选择其他用户名', 'error')
       return
     }
 
@@ -736,9 +822,53 @@ function SettingsContent() {
 
         {/* Main Content */}
         <Box style={{ flex: 1, minWidth: 0 }}>
-          <Text size="2xl" weight="black" style={{ marginBottom: tokens.spacing[6] }}>
+          <Text size="2xl" weight="black" style={{ marginBottom: tokens.spacing[4] }}>
             设置
           </Text>
+
+          {/* Mobile Section Navigation - horizontal scroll tabs */}
+          <Box
+            className="settings-mobile-nav"
+            style={{
+              display: 'none',
+              gap: tokens.spacing[2],
+              marginBottom: tokens.spacing[5],
+              overflowX: 'auto',
+              paddingBottom: tokens.spacing[2],
+              WebkitOverflowScrolling: 'touch',
+              msOverflowStyle: 'none',
+              scrollbarWidth: 'none',
+            }}
+          >
+            {SECTIONS.map(section => (
+              <button
+                key={section.id}
+                onClick={() => {
+                  setActiveSection(section.id)
+                  document.getElementById(section.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: tokens.spacing[1],
+                  padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+                  borderRadius: tokens.radius.full,
+                  border: `1px solid ${activeSection === section.id ? tokens.colors.accent.primary + '60' : tokens.colors.border.primary}`,
+                  background: activeSection === section.id ? `${tokens.colors.accent.primary}15` : tokens.colors.bg.secondary,
+                  color: activeSection === section.id ? tokens.colors.accent.primary : tokens.colors.text.secondary,
+                  fontSize: tokens.typography.fontSize.xs,
+                  fontWeight: activeSection === section.id ? tokens.typography.fontWeight.bold : tokens.typography.fontWeight.normal,
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0,
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                <span style={{ fontSize: '12px' }}>{section.icon}</span>
+                {section.label}
+              </button>
+            ))}
+          </Box>
 
           {/* ===== Profile Section ===== */}
           <SectionCard id="profile" title="个人资料" description="这些信息将在你的个人主页上展示给其他用户">
@@ -898,9 +1028,19 @@ function SettingsContent() {
                       {handleValidation.message}
                     </Text>
                   )}
-                  {touchedFields.handle && handle && handleValidation.valid && (
+                  {touchedFields.handle && handle && handleValidation.valid && checkingHandle && (
+                    <Text size="xs" color="tertiary">
+                      检查中...
+                    </Text>
+                  )}
+                  {touchedFields.handle && handle && handleValidation.valid && !checkingHandle && handleAvailable === true && (
                     <Text size="xs" style={{ color: tokens.colors.accent.success }}>
                       用户名可用
+                    </Text>
+                  )}
+                  {touchedFields.handle && handle && handleValidation.valid && !checkingHandle && handleAvailable === false && (
+                    <Text size="xs" style={{ color: tokens.colors.accent.error }}>
+                      用户名已被占用
                     </Text>
                   )}
                 </Box>
@@ -1135,7 +1275,7 @@ function SettingsContent() {
 
           {/* ===== Notification Preferences Section ===== */}
           <SectionCard id="notifications" title="通知偏好" description="选择你想接收的通知类型">
-            <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
+            <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[1] }}>
               {[
                 { key: 'follow', label: '新粉丝通知', desc: '有人关注你时', value: notifyFollow, setter: setNotifyFollow },
                 { key: 'like', label: '点赞通知', desc: '有人点赞你的帖子时', value: notifyLike, setter: setNotifyLike },
@@ -1143,7 +1283,7 @@ function SettingsContent() {
                 { key: 'mention', label: '@提及通知', desc: '有人在帖子中提及你时', value: notifyMention, setter: setNotifyMention },
                 { key: 'message', label: '私信通知', desc: '收到新私信时', value: notifyMessage, setter: setNotifyMessage },
               ].map(item => (
-                <label
+                <Box
                   key={item.key}
                   style={{
                     display: 'flex',
@@ -1151,9 +1291,7 @@ function SettingsContent() {
                     justifyContent: 'space-between',
                     padding: `${tokens.spacing[3]} ${tokens.spacing[3]}`,
                     borderRadius: tokens.radius.md,
-                    cursor: 'pointer',
                     transition: 'background 0.15s ease',
-                    background: 'transparent',
                   }}
                   onMouseEnter={(e) => { e.currentTarget.style.background = tokens.colors.bg.primary }}
                   onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
@@ -1162,13 +1300,11 @@ function SettingsContent() {
                     <Text size="sm" weight="medium">{item.label}</Text>
                     <Text size="xs" color="tertiary">{item.desc}</Text>
                   </Box>
-                  <input
-                    type="checkbox"
+                  <ToggleSwitch
                     checked={item.value}
-                    onChange={(e) => item.setter(e.target.checked)}
-                    style={{ width: 18, height: 18, accentColor: '#8b6fa8', cursor: 'pointer' }}
+                    onChange={(v) => item.setter(v)}
                   />
-                </label>
+                </Box>
               ))}
             </Box>
           </SectionCard>
@@ -1340,11 +1476,17 @@ function SettingsContent() {
         </Box>
       </Box>
 
-      {/* Mobile sidebar responsive styles */}
+      {/* Responsive styles */}
       <style>{`
         @media (max-width: 768px) {
           .settings-sidebar {
             display: none !important;
+          }
+          .settings-mobile-nav {
+            display: flex !important;
+          }
+          .settings-mobile-nav::-webkit-scrollbar {
+            display: none;
           }
         }
       `}</style>
