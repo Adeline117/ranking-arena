@@ -167,9 +167,9 @@ export function usePushNotifications(): UsePushNotificationsReturn {
           let registrationHandle: { remove: () => void | Promise<void> } | null = null
           let errorHandle: { remove: () => void | Promise<void> } | null = null
 
-          const cleanup = () => {
-            registrationHandle?.remove()
-            errorHandle?.remove()
+          const cleanup = async () => {
+            await Promise.resolve(registrationHandle?.remove())
+            await Promise.resolve(errorHandle?.remove())
           }
 
           const timeout = setTimeout(() => {
