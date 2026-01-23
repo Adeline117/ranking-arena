@@ -45,7 +45,7 @@ function encrypt(text: string, key: string): string {
 /**
  * AES-256-CBC 解密
  */
-function decrypt(encryptedText: string, key: string): string {
+function _decrypt(encryptedText: string, key: string): string {
   const [ivHex, encrypted] = encryptedText.split(':')
   const iv = Buffer.from(ivHex, 'hex')
   const decipher = crypto.createDecipheriv('aes-256-cbc', Buffer.from(key, 'hex'), iv)

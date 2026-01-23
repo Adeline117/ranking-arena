@@ -342,12 +342,12 @@ export async function sendScrapeSummaryAlert(
   }
 ): Promise<void> {
   const { 
-    totalPlatforms, 
-    successPlatforms, 
+    totalPlatforms,
+    successPlatforms,
     failedPlatforms,
     totalScripts,
     successScripts,
-    failedScripts,
+    failedScripts: _failedScripts,
     duration,
     failedDetails,
   } = summary

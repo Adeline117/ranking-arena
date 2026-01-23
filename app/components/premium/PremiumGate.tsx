@@ -57,20 +57,14 @@ export default function PremiumGate({
   lockOnly = false,
   minHeight,
 }: PremiumGateProps) {
-  const { language, t } = useLanguage()
+  const { t } = useLanguage()
 
   if (isPro) {
     return <>{children}</>
   }
 
-  const loginMessage = t('pleaseLogin')
-
-  const proMessage = customMessage || (
-    featureName
-      ? `${featureName} · ${t('proOnly')}`
-      : t('proOnly')
-  )
-
+  const loginMessage = t('loginToView')
+  const proMessage = customMessage || (featureName ? `${featureName} - ${t('proRequired')}` : t('proRequired'))
   const message = !isLoggedIn ? loginMessage : proMessage
 
   return (

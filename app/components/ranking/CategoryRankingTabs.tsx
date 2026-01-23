@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
-import { Box, Text } from '../base'
+import { Box } from '../base'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { useToast } from '../ui/Toast'
 

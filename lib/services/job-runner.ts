@@ -3,10 +3,10 @@
  *
  * Architecture:
  * - Polls refresh_jobs table for pending jobs.
- * - Uses claim_next_refresh_job() for atomic dequeue (no double-processing).
+ * - Uses FOR UPDATE SKIP LOCKED for atomic dequeue (no double-processing).
  * - Dispatches to appropriate connector method.
  * - Writes results to trader_snapshots_v2, trader_profiles_v2, trader_timeseries_v2.
- * - Handles retries with exponential backoff (done by DB function).
+ * - Handles retries with exponential backoff.
  *
  * Scheduling:
  * - Called from /api/cron/run-jobs or standalone worker.
@@ -15,11 +15,12 @@
  * - On-demand refresh: priority 1 (user-triggered).
  */
 
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { query, queryOne } from '@/lib/db/pool';
 import { getConnector } from '@/lib/connectors/registry';
 import { calculateArenaScore, type Period } from '@/lib/utils/arena-score';
 import type {
   Platform,
+  GranularPlatform,
   RankingWindow,
   RefreshJob,
   SnapshotMetrics,
@@ -40,15 +41,7 @@ interface JobRunResult {
 // ============================================
 
 export class JobRunner {
-  private supabase: SupabaseClient;
   private isRunning = false;
-
-  constructor() {
-    this.supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    );
-  }
 
   /**
    * Process a batch of pending jobs.
@@ -90,7 +83,7 @@ export class JobRunner {
    * Enqueue a discovery job for a platform.
    */
   async enqueueDiscovery(platform: Platform, priority: number = 3): Promise<RefreshJob | null> {
-    return this.enqueueJob('discovery', platform, null, priority);
+    return this.enqueueJob('DISCOVER', platform, null, priority);
   }
 
   /**
@@ -101,7 +94,7 @@ export class JobRunner {
     traderKey: string,
     priority: number = 3,
   ): Promise<RefreshJob | null> {
-    return this.enqueueJob('snapshot', platform, traderKey, priority);
+    return this.enqueueJob('SNAPSHOT_REFRESH', platform, traderKey, priority);
   }
 
   /**
@@ -112,19 +105,22 @@ export class JobRunner {
     traderKey: string,
     priority: number = 2,
   ): Promise<RefreshJob | null> {
-    return this.enqueueJob('full_refresh', platform, traderKey, priority);
+    // Enqueue all three sub-jobs for a full refresh
+    await this.enqueueJob('PROFILE_ENRICH', platform, traderKey, priority);
+    await this.enqueueJob('TIMESERIES_REFRESH', platform, traderKey, priority);
+    // Return the snapshot job as the primary reference
+    return this.enqueueJob('SNAPSHOT_REFRESH', platform, traderKey, priority);
   }
 
   /**
    * Get job status by ID.
    */
   async getJobStatus(jobId: string): Promise<RefreshJob | null> {
-    const { data } = await this.supabase
-      .from('refresh_jobs')
-      .select('*')
-      .eq('id', jobId)
-      .single();
-    return data;
+    const row = await queryOne(
+      `SELECT * FROM refresh_jobs WHERE id = $1`,
+      [jobId],
+    );
+    return row as RefreshJob | null;
   }
 
   // ============================================
@@ -132,26 +128,23 @@ export class JobRunner {
   // ============================================
 
   private async executeJob(job: RefreshJob): Promise<void> {
-    const connector = getConnector(job.platform as Platform);
+    const connector = getConnector(job.platform as unknown as GranularPlatform);
     if (!connector) {
       throw new Error(`No connector available for platform: ${job.platform}`);
     }
 
     switch (job.job_type) {
-      case 'discovery':
+      case 'DISCOVER':
         await this.runDiscovery(job);
         break;
-      case 'snapshot':
+      case 'SNAPSHOT_REFRESH':
         await this.runSnapshot(job);
         break;
-      case 'profile':
+      case 'PROFILE_ENRICH':
         await this.runProfile(job);
         break;
-      case 'timeseries':
+      case 'TIMESERIES_REFRESH':
         await this.runTimeseries(job);
-        break;
-      case 'full_refresh':
-        await this.runFullRefresh(job);
         break;
       default:
         throw new Error(`Unknown job type: ${job.job_type}`);
@@ -159,24 +152,21 @@ export class JobRunner {
   }
 
   private async runDiscovery(job: RefreshJob): Promise<void> {
-    const connector = getConnector(job.platform as Platform)!;
+    const connector = getConnector(job.platform as unknown as GranularPlatform)!;
     const windows: RankingWindow[] = ['7d', '30d', '90d'];
 
     for (const window of windows) {
-      const traders = await connector.discoverLeaderboard(window);
+      const result = await connector.discoverLeaderboard(window);
 
-      for (const trader of traders) {
-        await this.supabase.from('trader_sources_v2').upsert(
-          {
-            platform: trader.platform,
-            trader_key: trader.trader_key,
-            display_name: trader.display_name,
-            avatar_url: trader.avatar_url,
-            profile_url: trader.profile_url,
-            last_seen: new Date().toISOString(),
-            is_active: true,
-          },
-          { onConflict: 'platform,trader_key' },
+      for (const trader of result.traders) {
+        await query(
+          `INSERT INTO trader_sources_v2 (platform, trader_key, display_name, avatar_url, profile_url, last_seen)
+           VALUES ($1, $2, $3, $4, $5, $6)
+           ON CONFLICT (platform, trader_key) DO UPDATE SET
+             display_name = COALESCE($3, trader_sources_v2.display_name),
+             avatar_url = COALESCE($4, trader_sources_v2.avatar_url),
+             last_seen = $6`,
+          [trader.platform, trader.trader_key, trader.display_name, null, trader.profile_url, new Date().toISOString()],
         );
       }
     }
@@ -185,11 +175,12 @@ export class JobRunner {
   private async runSnapshot(job: RefreshJob): Promise<void> {
     if (!job.trader_key) throw new Error('trader_key required for snapshot job');
 
-    const connector = getConnector(job.platform as Platform)!;
+    const connector = getConnector(job.platform as unknown as GranularPlatform)!;
     const windows: RankingWindow[] = ['7d', '30d', '90d'];
 
     for (const window of windows) {
       const snapshot = await connector.fetchTraderSnapshot(job.trader_key, window);
+      if (!snapshot) continue;
 
       // Calculate Arena Score
       const arenaScores = this.calculateScores(snapshot.metrics, window);
@@ -198,24 +189,21 @@ export class JobRunner {
         ...arenaScores,
       };
 
-      await this.supabase.from('trader_snapshots_v2').upsert(
-        {
-          platform: snapshot.platform,
-          trader_key: snapshot.trader_key,
-          window: snapshot.window,
-          as_of_ts: snapshot.as_of_ts,
-          metrics: enrichedMetrics,
-          quality: snapshot.quality,
-          // Denormalized fields for fast queries
-          arena_score: arenaScores.arena_score,
-          roi_pct: snapshot.metrics.roi_pct,
-          pnl_usd: snapshot.metrics.pnl_usd,
-          max_drawdown_pct: snapshot.metrics.max_drawdown_pct,
-          win_rate_pct: snapshot.metrics.win_rate_pct,
-          trades_count: snapshot.metrics.trades_count,
-          copier_count: snapshot.metrics.copier_count,
-        },
-        { onConflict: 'platform,trader_key,window,as_of_ts' },
+      await query(
+        `INSERT INTO trader_snapshots_v2
+           (platform, trader_key, "window", as_of_ts, metrics, quality,
+            arena_score, roi_pct, pnl_usd, max_drawdown_pct, win_rate_pct, trades_count, copier_count)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+         ON CONFLICT (platform, trader_key, "window", as_of_ts) DO UPDATE SET
+           metrics = $5, quality = $6, arena_score = $7, roi_pct = $8, pnl_usd = $9,
+           max_drawdown_pct = $10, win_rate_pct = $11, trades_count = $12, copier_count = $13`,
+        [
+          job.platform, job.trader_key, window, snapshot.fetched_at,
+          JSON.stringify(enrichedMetrics), JSON.stringify(snapshot.quality_flags),
+          arenaScores.arena_score, snapshot.metrics.roi, snapshot.metrics.pnl,
+          snapshot.metrics.max_drawdown, snapshot.metrics.win_rate,
+          snapshot.metrics.trades_count, snapshot.metrics.copiers,
+        ],
       );
     }
   }
@@ -223,47 +211,48 @@ export class JobRunner {
   private async runProfile(job: RefreshJob): Promise<void> {
     if (!job.trader_key) throw new Error('trader_key required for profile job');
 
-    const connector = getConnector(job.platform as Platform)!;
-    const profile = await connector.fetchTraderProfile(job.trader_key);
+    const connector = getConnector(job.platform as unknown as GranularPlatform)!;
+    const profileResult = await connector.fetchTraderProfile(job.trader_key);
+    if (!profileResult) throw new Error(`No profile data for ${job.platform}/${job.trader_key}`);
 
-    await this.supabase.from('trader_profiles_v2').upsert(
-      {
-        ...profile,
-        last_enriched_at: new Date().toISOString(),
-      },
-      { onConflict: 'platform,trader_key' },
+    const profile = profileResult.profile;
+
+    await query(
+      `INSERT INTO trader_profiles_v2
+         (platform, trader_key, display_name, avatar_url, copier_count, aum_usd, last_enriched_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       ON CONFLICT (platform, trader_key) DO UPDATE SET
+         display_name = COALESCE($3, trader_profiles_v2.display_name),
+         avatar_url = COALESCE($4, trader_profiles_v2.avatar_url),
+         copier_count = COALESCE($5, trader_profiles_v2.copier_count),
+         aum_usd = COALESCE($6, trader_profiles_v2.aum_usd),
+         last_enriched_at = $7`,
+      [profile.platform, profile.trader_key, profile.display_name, profile.avatar_url,
+       profile.copiers, profile.aum, new Date().toISOString()],
     );
   }
 
   private async runTimeseries(job: RefreshJob): Promise<void> {
     if (!job.trader_key) throw new Error('trader_key required for timeseries job');
 
-    const connector = getConnector(job.platform as Platform)!;
-    const seriesTypes: Array<'equity_curve' | 'daily_pnl'> = ['equity_curve', 'daily_pnl'];
+    const connector = getConnector(job.platform as unknown as GranularPlatform)!;
+    const result = await connector.fetchTimeseries(job.trader_key);
 
-    for (const seriesType of seriesTypes) {
-      const series = await connector.fetchTimeseries(job.trader_key, seriesType);
-
+    for (const series of result.series) {
       if (series.data.length > 0) {
-        await this.supabase.from('trader_timeseries_v2').upsert(
-          {
-            platform: series.platform,
-            trader_key: series.trader_key,
-            series_type: series.series_type,
-            data: series.data,
-            as_of_ts: series.as_of_ts,
-          },
-          {
-            onConflict: 'platform,trader_key,series_type',
-            ignoreDuplicates: false,
-          },
+        await query(
+          `INSERT INTO trader_timeseries_v2 (platform, trader_key, series_type, data, as_of_ts)
+           VALUES ($1, $2, $3, $4, $5)
+           ON CONFLICT (platform, trader_key, series_type) DO UPDATE SET
+             data = $4, as_of_ts = $5`,
+          [series.platform, series.trader_key, series.series_type,
+           JSON.stringify(series.data), series.as_of_ts],
         );
       }
     }
   }
 
   private async runFullRefresh(job: RefreshJob): Promise<void> {
-    // Full refresh = profile + snapshot + timeseries
     await this.runProfile(job);
     await this.runSnapshot(job);
     await this.runTimeseries(job);
@@ -274,20 +263,31 @@ export class JobRunner {
   // ============================================
 
   private async claimNextJob(platform?: Platform): Promise<RefreshJob | null> {
-    const { data, error } = await this.supabase.rpc('claim_next_refresh_job', {
-      p_platform: platform || null,
-    });
+    const platformCondition = platform ? `AND platform = '${platform}'` : '';
 
-    if (error || !data?.length) return null;
-    return data[0] as RefreshJob;
+    const result = await queryOne(
+      `UPDATE refresh_jobs
+       SET status = 'running', started_at = NOW(), attempts = attempts + 1
+       WHERE id = (
+         SELECT id FROM refresh_jobs
+         WHERE status = 'pending' AND next_run_at <= NOW() ${platformCondition}
+         ORDER BY priority ASC, next_run_at ASC
+         FOR UPDATE SKIP LOCKED
+         LIMIT 1
+       )
+       RETURNING *`,
+    );
+
+    return result as RefreshJob | null;
   }
 
   private async completeJob(jobId: string, status: 'completed' | 'failed', error?: string): Promise<void> {
-    await this.supabase.rpc('complete_refresh_job', {
-      p_job_id: jobId,
-      p_status: status,
-      p_error: error || null,
-    });
+    await query(
+      `UPDATE refresh_jobs
+       SET status = $2, completed_at = NOW(), last_error = $3
+       WHERE id = $1`,
+      [jobId, status, error || null],
+    );
   }
 
   private async enqueueJob(
@@ -296,18 +296,19 @@ export class JobRunner {
     traderKey: string | null,
     priority: number,
   ): Promise<RefreshJob | null> {
-    const { data, error } = await this.supabase.rpc('enqueue_refresh_job', {
-      p_job_type: jobType,
-      p_platform: platform,
-      p_trader_key: traderKey,
-      p_priority: priority,
-    });
+    const idempotencyKey = `${jobType}:${platform}:${traderKey || 'all'}:${new Date().toISOString().slice(0, 13)}`;
 
-    if (error) {
-      console.error('[JobRunner] Failed to enqueue job:', error);
-      return null;
-    }
-    return data as RefreshJob;
+    const result = await queryOne(
+      `INSERT INTO refresh_jobs (job_type, platform, trader_key, priority, status, idempotency_key)
+       VALUES ($1, $2, $3, $4, 'pending', $5)
+       ON CONFLICT (idempotency_key) DO UPDATE SET
+         status = CASE WHEN refresh_jobs.status = 'completed' THEN 'pending' ELSE refresh_jobs.status END,
+         attempts = CASE WHEN refresh_jobs.status = 'completed' THEN 0 ELSE refresh_jobs.attempts END
+       RETURNING *`,
+      [jobType, platform, traderKey, priority, idempotencyKey],
+    );
+
+    return result as RefreshJob | null;
   }
 
   // ============================================
@@ -318,21 +319,20 @@ export class JobRunner {
     metrics: SnapshotMetrics,
     window: RankingWindow,
   ): Pick<SnapshotMetrics, 'arena_score' | 'return_score' | 'drawdown_score' | 'stability_score'> {
-    if (metrics.roi_pct == null) {
+    if (metrics.roi == null) {
       return { arena_score: null, return_score: null, drawdown_score: null, stability_score: null };
     }
 
-    // Map window to the Period format expected by calculateArenaScore
     const periodMap: Record<RankingWindow, Period> = { '7d': '7D', '30d': '30D', '90d': '90D' };
     const period = periodMap[window];
 
     try {
       const score = calculateArenaScore(
         {
-          roi: metrics.roi_pct,
-          pnl: metrics.pnl_usd ?? 0,
-          maxDrawdown: metrics.max_drawdown_pct ?? 0,
-          winRate: metrics.win_rate_pct ?? 50,
+          roi: metrics.roi,
+          pnl: metrics.pnl ?? 0,
+          maxDrawdown: metrics.max_drawdown ?? 0,
+          winRate: metrics.win_rate ?? 50,
         },
         period,
       );
@@ -358,31 +358,19 @@ export class JobRunner {
  * Called from a scheduled cron job.
  */
 export async function prewarmTopTraders(runner: JobRunner, topN: number = 100): Promise<number> {
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  const { rows: topTraders } = await query<{ platform: string; trader_key: string }>(
+    `SELECT DISTINCT ON (platform, trader_key) platform, trader_key
+     FROM trader_snapshots_v2
+     WHERE "window" = '90d' AND arena_score IS NOT NULL
+     ORDER BY platform, trader_key, arena_score DESC
+     LIMIT $1`,
+    [topN],
   );
-
-  // Get top traders by arena_score across all platforms
-  const { data: topTraders } = await supabase
-    .from('trader_snapshots_v2')
-    .select('platform, trader_key')
-    .eq('window', '90d')
-    .not('arena_score', 'is', null)
-    .order('arena_score', { ascending: false })
-    .limit(topN);
 
   if (!topTraders?.length) return 0;
 
-  // Deduplicate by (platform, trader_key)
-  const seen = new Set<string>();
   let enqueued = 0;
-
   for (const trader of topTraders) {
-    const key = `${trader.platform}:${trader.trader_key}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-
     await runner.enqueueFullRefresh(trader.platform as Platform, trader.trader_key, 1);
     enqueued++;
   }

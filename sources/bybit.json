@@ -1,129 +1,106 @@
 {
   "platform": "bybit",
-  "product": "futures",
-  "market_type": "futures",
-  "display_name": "Bybit Futures Copy Trading",
-  "api_base": "https://api2.bybit.com/fapi/beehive/public/v1/common",
-  "data_source_type": "internal_api",
-  "discovery_method": "HTTP POST to internal API (reverse-engineered from frontend XHR interception)",
-
-  "leaderboard_endpoints": [
-    {
-      "url": "https://api2.bybit.com/fapi/beehive/public/v1/common/dynamic-leader-list",
-      "method": "POST",
-      "content_type": "application/json",
-      "request_body": {
-        "pageNo": 1,
-        "pageSize": 20,
-        "timeRange": "MONTHLY",
-        "dataType": "ROI",
-        "sortField": "ROI",
-        "sortType": "DESC"
+  "market_types": ["futures", "copy"],
+  "futures": {
+    "display_name": "Bybit Futures Copy Trading",
+    "api_base": "https://api2.bybit.com/fapi/beehive/public/v1/common",
+    "data_source_type": "internal_api",
+    "discovery_method": "HTTP POST/GET to internal API (reverse-engineered from frontend XHR interception)",
+    "leaderboard_endpoints": [
+      {
+        "method": "GET",
+        "url": "https://api2.bybit.com/fapi/beehive/public/v1/common/dynamic-leader-list",
+        "type": "api",
+        "params": {
+          "timeRange": "7D",
+          "dataType": "DATA_ROI",
+          "page": 1,
+          "pageSize": 100
+        },
+        "notes": "timeRange: 7D, 30D, 90D. dataType: DATA_ROI, DATA_PNL"
       },
-      "time_range_values": {
-        "7D": "WEEKLY",
-        "30D": "MONTHLY",
-        "90D": "QUARTERLY"
+      {
+        "url": "https://api2.bybit.com/fapi/beehive/public/v1/common/dynamic-leader-list",
+        "method": "POST",
+        "type": "api",
+        "content_type": "application/json",
+        "request_body": {
+          "pageNo": 1,
+          "pageSize": 20,
+          "timeRange": "MONTHLY",
+          "dataType": "ROI",
+          "sortField": "ROI",
+          "sortType": "DESC"
+        },
+        "time_range_values": {
+          "7D": "WEEKLY",
+          "30D": "MONTHLY",
+          "90D": "QUARTERLY"
+        },
+        "sort_field_values": ["ROI", "PNL", "WIN_RATE", "MDD"],
+        "notes": "POST variant with additional sort options. Response at result.list or data.list depending on version."
+      }
+    ],
+    "profile_endpoints": [
+      {
+        "method": "GET",
+        "url": "https://api2.bybit.com/fapi/beehive/public/v1/common/leader-details?leaderMark={trader_key}",
+        "type": "api"
       },
-      "sort_field_values": ["ROI", "PNL", "WIN_RATE", "MDD"],
-      "response_structure": {
-        "retCode": 0,
-        "result": {
-          "list": [
-            {
-              "leaderId": "string (trader_key)",
-              "nickName": "string",
-              "avatar": "string (URL)",
-              "roi": "number (decimal, e.g. 0.25 = 25%)",
-              "roiRate": "number (alternative field)",
-              "pnl": "number (USD)",
-              "totalPnl": "number (alternative field)",
-              "winRate": "number (decimal 0-1)",
-              "mdd": "number (decimal 0-1)",
-              "maxDrawdown": "number (alternative field)",
-              "followerCount": "number",
-              "copierNum": "number (alternative field)",
-              "totalAssets": "string (AUM)"
-            }
-          ]
-        }
+      {
+        "method": "GET",
+        "url": "https://api2.bybit.com/fapi/beehive/public/v1/common/leader-history-pnl?leaderMark={trader_key}",
+        "type": "api",
+        "notes": "Returns daily PnL/ROI timeseries"
       },
-      "notes": "Response also found at data.list path in some versions"
-    }
-  ],
-
-  "profile_endpoints": [
-    {
-      "url": "https://api2.bybit.com/fapi/beehive/public/v1/common/leader-detail",
-      "method": "POST",
-      "content_type": "application/json",
-      "request_body": {
-        "leaderId": "<trader_key>"
-      },
-      "response_fields": [
-        "leaderId", "nickName", "avatar", "introduction",
-        "followerCount", "copierNum", "totalAssets",
-        "roi", "pnl", "winRate", "mdd", "sharpeRatio",
-        "avgHoldingTime", "totalTrades", "copiersPnl"
-      ]
+      {
+        "url": "https://api2.bybit.com/fapi/beehive/public/v1/common/leader-detail",
+        "method": "POST",
+        "type": "api",
+        "content_type": "application/json",
+        "request_body": {
+          "leaderId": "<trader_key>"
+        },
+        "response_fields": [
+          "leaderId", "nickName", "avatar", "introduction",
+          "followerCount", "copierNum", "totalAssets",
+          "roi", "pnl", "winRate", "mdd", "sharpeRatio",
+          "avgHoldingTime", "totalTrades", "copiersPnl"
+        ]
+      }
+    ],
+    "trader_key_field": "leaderMark",
+    "roi_sort_supported": true,
+    "roi_sort_mechanism": "platform_native",
+    "roi_sort_param": "dataType=DATA_ROI (response pre-sorted DESC by ROI)",
+    "roi_sort_details": {
+      "parameter": "sortField=ROI, sortType=DESC",
+      "verified_via": "existing import script (scripts/import/import_bybit.mjs) intercepts ROI-sorted responses",
+      "note": "Platform natively supports ROI DESC sort via sortField+sortType parameters"
     },
-    {
-      "url": "https://api2.bybit.com/fapi/beehive/public/v1/common/leader-performance",
-      "method": "POST",
-      "content_type": "application/json",
-      "request_body": {
-        "leaderId": "<trader_key>",
-        "timeRange": "MONTHLY"
-      },
-      "response_fields": [
-        "performanceList (array of {date, roi, pnl})"
-      ]
-    }
-  ],
-
-  "roi_sort_supported": true,
-  "roi_sort_method": "platform_native_roi_sort",
-  "roi_sort_details": {
-    "parameter": "sortField=ROI, sortType=DESC",
-    "verified_via": "existing import script (scripts/import/import_bybit.mjs) intercepts ROI-sorted responses",
-    "note": "Platform natively supports ROI DESC sort via sortField+sortType parameters"
-  },
-
-  "window_support": {
-    "7D": {
-      "supported": true,
-      "native": true,
-      "parameter_value": "WEEKLY"
+    "window_support": {
+      "7d": { "supported": true, "param": "timeRange=7D", "native": true, "parameter_value": "WEEKLY" },
+      "30d": { "supported": true, "param": "timeRange=30D", "native": true, "parameter_value": "MONTHLY" },
+      "90d": { "supported": true, "param": "timeRange=90D", "native": true, "parameter_value": "QUARTERLY" }
     },
-    "30D": {
-      "supported": true,
-      "native": true,
-      "parameter_value": "MONTHLY"
-    },
-    "90D": {
-      "supported": true,
-      "native": true,
-      "parameter_value": "QUARTERLY"
-    }
-  },
-
-  "field_map": {
-    "raw_to_canonical": {
-      "leaderId": "trader_key",
+    "field_map": {
+      "leaderMark": "trader_key",
+      "leaderId": "trader_key (alt)",
       "nickName": "display_name",
       "leaderName": "display_name (alt)",
       "avatar": "avatar_url",
       "avatarUrl": "avatar_url (alt)",
-      "roi": "roi_pct (multiply by 100 if <= 10)",
-      "roiRate": "roi_pct (alt)",
-      "pnl": "pnl_usd",
-      "totalPnl": "pnl_usd (alt)",
-      "winRate": "win_rate (multiply by 100 if <= 1)",
-      "mdd": "max_drawdown (multiply by 100 if <= 1, take abs)",
-      "maxDrawdown": "max_drawdown (alt)",
-      "followerCount": "follower_count",
-      "copierNum": "copier_count",
-      "totalAssets": "aum (parseFloat)",
+      "roi": "roi (already percentage, e.g. 125.5)",
+      "roiRate": "roi (alt, decimal)",
+      "pnl": "pnl (USD string)",
+      "totalPnl": "pnl (alt)",
+      "winRate": "win_rate (percentage)",
+      "maxDrawdown": "max_drawdown (percentage, negative)",
+      "mdd": "max_drawdown (alt, decimal)",
+      "followerCount": "followers",
+      "currentFollowerCount": "copiers",
+      "copierNum": "copiers (alt)",
+      "totalAssets": "aum (parseFloat from string)",
       "totalTrades": "trades_count",
       "sharpeRatio": "sharpe_ratio",
       "avgHoldingTime": "avg_holding_time",
@@ -134,33 +111,80 @@
       "winRate": "if value <= 1, multiply by 100",
       "mdd": "if value <= 1, multiply by 100; always take absolute value",
       "totalAssets": "parseFloat from string"
+    },
+    "timeseries_endpoints": [
+      {
+        "method": "GET",
+        "url": "https://api2.bybit.com/fapi/beehive/public/v1/common/leader-history-pnl?leaderMark={trader_key}",
+        "notes": "Returns pnlList with daily entries containing roi, pnl, timestamp"
+      },
+      {
+        "url": "https://api2.bybit.com/fapi/beehive/public/v1/common/leader-performance",
+        "method": "POST",
+        "type": "api",
+        "request_body": {
+          "leaderId": "<trader_key>",
+          "timeRange": "MONTHLY"
+        },
+        "response_fields": ["performanceList (array of {date, roi, pnl})"]
+      }
+    ],
+    "rate_limits": {
+      "estimated_rpm": 30,
+      "cloudflare_protected": false,
+      "notes": "Public API, relatively generous rate limits"
+    },
+    "anti_scraping": {
+      "cloudflare": false,
+      "fingerprinting": false,
+      "mitigation": "Standard rate limiting, 1-2s delays sufficient"
+    },
+    "proof": {
+      "leaderboard_url": "https://www.bybit.com/copyTrade/tradeCenter/leaderBoard",
+      "alternative_urls": [
+        "https://www.bybit.com/copyTrading/en/leaderboard-master",
+        "https://www.bybit.com/copyTrading/en/leader-board"
+      ],
+      "existing_scraper_file": "worker/src/scrapers/bybit.ts",
+      "existing_import_script": "scripts/import/import_bybit.mjs",
+      "data_completeness": "docs/EXCHANGE_FIELD_MAPPING.md line 556: Bybit rated 'very complete' with ROI, PnL, Win Rate, MDD, Copiers, AUM, Sharpe"
+    },
+    "limitations": {
+      "api_type": "internal/undocumented (not official V5 API)",
+      "rate_limiting": "Unknown, use conservative delays (2-5s between requests)",
+      "stability": "Subject to change without notice",
+      "anti_bot": "May require browser-like headers (User-Agent, Origin, Referer)"
     }
   },
-
-  "proof": {
-    "leaderboard_url": "https://www.bybit.com/copyTrade/tradeCenter/leaderBoard",
-    "alternative_urls": [
-      "https://www.bybit.com/copyTrading/en/leaderboard-master",
-      "https://www.bybit.com/copyTrading/en/leader-board"
+  "copy": {
+    "leaderboard_endpoints": [
+      {
+        "method": "GET",
+        "url": "https://api2.bybit.com/fapi/beehive/public/v1/common/copy-leader-list",
+        "type": "api",
+        "params": {
+          "timeRange": "30D",
+          "page": 1,
+          "pageSize": 50
+        },
+        "notes": "Copy trading specific leaderboard"
+      }
     ],
-    "existing_scraper_file": "worker/src/scrapers/bybit.ts",
-    "existing_import_script": "scripts/import/import_bybit.mjs",
-    "response_interception_evidence": "import_bybit.mjs line 106-131: intercepts XHR responses containing 'leaderBoard'/'leader'/'rank' in URL, parses json.result.list or json.data.list",
-    "field_evidence": "import_bybit.mjs line 116-128: extracts leaderId, nickName, avatar, roi, pnl, winRate, mdd, followerCount from intercepted API responses",
-    "roi_sort_evidence": "import_bybit.mjs line 180-190: clicks 'Top ROI' sort button; worker/src/scrapers/bybit.ts line 73-84: clicks 'Top ROI' sort",
-    "window_evidence": "import_bybit.mjs line 163-175: switches between 7D/30D/90D period tabs; docs/EXCHANGE_FIELD_MAPPING.md line 153: confirms 7D, 30D, 90D",
-    "data_completeness": "docs/EXCHANGE_FIELD_MAPPING.md line 556: Bybit rated 'very complete' with ROI, PnL, Win Rate, MDD, Copiers, AUM, Sharpe"
-  },
-
-  "limitations": {
-    "api_type": "internal/undocumented (not official V5 API)",
-    "rate_limiting": "Unknown, use conservative delays (2-5s between requests)",
-    "stability": "Subject to change without notice",
-    "anti_bot": "May require browser-like headers (User-Agent, Origin, Referer)"
-  },
-
-  "missing_fields": {
-    "equity_curve": "Available via leader-performance endpoint (performanceList)",
-    "positions": "Not available from public API without authentication"
+    "trader_key_field": "leaderMark",
+    "roi_sort_supported": true,
+    "roi_sort_mechanism": "platform_native",
+    "window_support": {
+      "7d": { "supported": true },
+      "30d": { "supported": true },
+      "90d": { "supported": true }
+    },
+    "field_map": {
+      "leaderMark": "trader_key",
+      "nickName": "display_name",
+      "roi": "roi",
+      "followerCount": "followers",
+      "copierCount": "copiers",
+      "aum": "aum"
+    }
   }
 }

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, Suspense, useMemo } from 'react'
+import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'

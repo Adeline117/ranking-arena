@@ -1,0 +1,192 @@
+/**
+ * GET /api/v2/rankings
+ *
+ * Unified leaderboard endpoint.
+ * Reads ONLY from database - no external fetching.
+ *
+ * Query params:
+ *   window: '7d' | '30d' | '90d' (required)
+ *   platform: string (required)
+ *   market_type: string (default: 'futures')
+ *   limit: number (default: 100, max: 500)
+ *   offset: number (default: 0)
+ *   sort: 'arena_score' | 'roi' | 'pnl' (default: 'arena_score')
+ *
+ * Response includes:
+ *   - traders: RankingEntry[]
+ *   - meta: { platform, market_type, window, total_count, updated_at, staleness_seconds }
+ */
+
+import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
+import type { Window, LeaderboardPlatform, RankingEntry, RankingsResponse } from '@/lib/types/leaderboard'
+import { LEADERBOARD_PLATFORMS, WINDOWS } from '@/lib/types/leaderboard'
+
+export const dynamic = 'force-dynamic'
+export const revalidate = 60  // ISR: revalidate every 60 seconds
+
+export async function GET(request: NextRequest) {
+  const { searchParams } = new URL(request.url)
+
+  // Parse and validate params
+  const window = searchParams.get('window') as Window
+  const platform = searchParams.get('platform') as LeaderboardPlatform
+  const marketType = searchParams.get('market_type') || 'futures'
+  const limit = Math.min(parseInt(searchParams.get('limit') || '100', 10), 500)
+  const offset = parseInt(searchParams.get('offset') || '0', 10)
+  const sort = searchParams.get('sort') || 'arena_score'
+
+  // Validation
+  if (!window || !WINDOWS.includes(window)) {
+    return NextResponse.json(
+      { error: 'Invalid or missing window parameter. Must be: 7d, 30d, or 90d' },
+      { status: 400 }
+    )
+  }
+
+  if (!platform || !LEADERBOARD_PLATFORMS.includes(platform)) {
+    return NextResponse.json(
+      { error: `Invalid platform. Must be one of: ${LEADERBOARD_PLATFORMS.join(', ')}` },
+      { status: 400 }
+    )
+  }
+
+  const validSorts = ['arena_score', 'roi', 'pnl']
+  if (!validSorts.includes(sort)) {
+    return NextResponse.json(
+      { error: `Invalid sort. Must be one of: ${validSorts.join(', ')}` },
+      { status: 400 }
+    )
+  }
+
+  // Database query
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  const supabase = createClient(supabaseUrl, supabaseAnonKey)
+
+  // Build query for latest snapshots per trader for this window
+  let query = supabase
+    .from('trader_snapshots')
+    .select('*', { count: 'exact' })
+    .eq('source', platform)
+    .eq('market_type', marketType)
+    .eq('window', window)
+    .not('arena_score', 'is', null)
+
+  // Sort
+  switch (sort) {
+    case 'roi':
+      query = query.order('roi', { ascending: false, nullsFirst: false })
+      break
+    case 'pnl':
+      query = query.order('pnl', { ascending: false, nullsFirst: false })
+      break
+    default:
+      query = query.order('arena_score', { ascending: false, nullsFirst: false })
+  }
+
+  query = query.range(offset, offset + limit - 1)
+
+  const { data: snapshots, count, error } = await query
+
+  if (error) {
+    console.error('[Rankings API] Query error:', error)
+    return NextResponse.json(
+      { error: 'Database query failed' },
+      { status: 500 }
+    )
+  }
+
+  // Join with profiles for display_name and avatar
+  const traderKeys = (snapshots || []).map(s => s.source_trader_id)
+
+  let profiles: Record<string, { display_name: string | null; avatar_url: string | null }> = {}
+  if (traderKeys.length > 0) {
+    const { data: profileData } = await supabase
+      .from('trader_profiles')
+      .select('trader_key, display_name, avatar_url')
+      .eq('platform', platform)
+      .eq('market_type', marketType)
+      .in('trader_key', traderKeys)
+
+    if (profileData) {
+      profiles = Object.fromEntries(
+        profileData.map(p => [p.trader_key, { display_name: p.display_name, avatar_url: p.avatar_url }])
+      )
+    }
+  }
+
+  // Also check trader_sources for handle/display_name fallback
+  if (traderKeys.length > 0) {
+    const { data: sourceData } = await supabase
+      .from('trader_sources')
+      .select('source_trader_id, handle, display_name')
+      .eq('source', platform)
+      .eq('market_type', marketType)
+      .in('source_trader_id', traderKeys)
+
+    if (sourceData) {
+      for (const s of sourceData) {
+        if (!profiles[s.source_trader_id]) {
+          profiles[s.source_trader_id] = {
+            display_name: s.display_name || s.handle,
+            avatar_url: null,
+          }
+        }
+      }
+    }
+  }
+
+  // Calculate staleness
+  const latestUpdate = snapshots && snapshots.length > 0
+    ? new Date(Math.max(...snapshots.map(s => new Date(s.captured_at || s.created_at).getTime())))
+    : new Date(0)
+  const stalenessSeconds = Math.floor((Date.now() - latestUpdate.getTime()) / 1000)
+
+  // Build response
+  const traders: RankingEntry[] = (snapshots || []).map(s => ({
+    platform: s.source as LeaderboardPlatform,
+    market_type: s.market_type,
+    trader_key: s.source_trader_id,
+    display_name: profiles[s.source_trader_id]?.display_name || s.source_trader_id,
+    avatar_url: profiles[s.source_trader_id]?.avatar_url || null,
+    window: s.window as Window,
+    metrics: s.metrics || {
+      roi: s.roi ? parseFloat(s.roi) : null,
+      pnl: s.pnl ? parseFloat(s.pnl) : null,
+      win_rate: s.win_rate ? parseFloat(s.win_rate) : null,
+      max_drawdown: s.max_drawdown ? parseFloat(s.max_drawdown) : null,
+      sharpe_ratio: s.sharpe_ratio ? parseFloat(s.sharpe_ratio) : null,
+      sortino_ratio: s.sortino_ratio ? parseFloat(s.sortino_ratio) : null,
+      trades_count: s.trades_count,
+      followers: s.followers,
+      copiers: s.copiers,
+      aum: s.aum ? parseFloat(s.aum) : null,
+      platform_rank: s.platform_rank || s.rank,
+      arena_score: s.arena_score ? parseFloat(s.arena_score) : null,
+      return_score: s.return_score ? parseFloat(s.return_score) : null,
+      drawdown_score: s.drawdown_score ? parseFloat(s.drawdown_score) : null,
+      stability_score: s.stability_score ? parseFloat(s.stability_score) : null,
+    },
+    quality_flags: s.quality_flags || { missing_fields: [], non_standard_fields: {}, window_native: true, notes: [] },
+    updated_at: s.captured_at || s.created_at,
+  }))
+
+  const response: RankingsResponse = {
+    traders,
+    meta: {
+      platform,
+      market_type: marketType as 'futures',
+      window,
+      total_count: count || 0,
+      updated_at: latestUpdate.toISOString(),
+      staleness_seconds: stalenessSeconds,
+    },
+  }
+
+  return NextResponse.json(response, {
+    headers: {
+      'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300',
+    },
+  })
+}

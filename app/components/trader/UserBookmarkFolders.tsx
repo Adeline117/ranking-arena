@@ -98,7 +98,7 @@ export default function UserBookmarkFolders({ userId, isOwnProfile = false }: Us
             setSubscriptions(subsMap)
           }
         }
-      } catch (err) {
+      } catch (_err) {
         // 静默处理异常，不显示收藏夹组件
         setFolders([])
       } finally {
@@ -135,11 +135,14 @@ export default function UserBookmarkFolders({ userId, isOwnProfile = false }: Us
       if (response.ok) {
         setSubscriptions(prev => ({ ...prev, [folderId]: !isSubscribed }))
         // 更新订阅者数量
-        setFolders(prev => prev.map(f => 
-          f.id === folderId 
+        setFolders(prev => prev.map(f =>
+          f.id === folderId
             ? { ...f, subscriber_count: data.data?.subscriber_count ?? (f.subscriber_count || 0) }
             : f
         ))
+      } else {
+        // 显示错误提示
+        console.error('Subscribe error:', data.error || 'Unknown error')
       }
     } catch (err) {
       console.error('Error toggling subscription:', err)

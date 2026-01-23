@@ -1,6 +1,6 @@
 {
   "marketplace": "claude-code-workflows",
-  "source": "./.claude/skills/claude-code-workflows",
+  "source": "~/.claude/skills/claude-code-workflows",
   "version": "1.3.7",
   "installed_at": "2026-01-21T20:08:00Z",
   "plugins": [
@@ -8,7 +8,7 @@
       "name": "code-documentation",
       "version": "1.2.0",
       "enabled": true,
-      "source": "./.claude/skills/claude-code-workflows/plugins/code-documentation",
+      "source": "~/.claude/skills/claude-code-workflows/plugins/code-documentation",
       "category": "documentation",
       "description": "Documentation generation, code explanation, and technical writing with automated doc generation and tutorial creation"
     },
@@ -16,7 +16,7 @@
       "name": "debugging-toolkit",
       "version": "1.2.0",
       "enabled": true,
-      "source": "./.claude/skills/claude-code-workflows/plugins/debugging-toolkit",
+      "source": "~/.claude/skills/claude-code-workflows/plugins/debugging-toolkit",
       "category": "development",
       "description": "Interactive debugging, developer experience optimization, and smart debugging workflows"
     },
@@ -24,7 +24,7 @@
       "name": "git-pr-workflows",
       "version": "1.2.1",
       "enabled": true,
-      "source": "./.claude/skills/claude-code-workflows/plugins/git-pr-workflows",
+      "source": "~/.claude/skills/claude-code-workflows/plugins/git-pr-workflows",
       "category": "workflows",
       "description": "Git workflow automation, pull request enhancement, and team onboarding processes"
     },
@@ -32,7 +32,7 @@
       "name": "backend-development",
       "version": "1.2.4",
       "enabled": true,
-      "source": "./.claude/skills/claude-code-workflows/plugins/backend-development",
+      "source": "~/.claude/skills/claude-code-workflows/plugins/backend-development",
       "category": "development",
       "description": "Backend API design, GraphQL architecture, workflow orchestration with Temporal, and test-driven backend development"
     },
@@ -40,7 +40,7 @@
       "name": "frontend-mobile-development",
       "version": "1.2.1",
       "enabled": true,
-      "source": "./.claude/skills/claude-code-workflows/plugins/frontend-mobile-development",
+      "source": "~/.claude/skills/claude-code-workflows/plugins/frontend-mobile-development",
       "category": "development",
       "description": "Frontend UI development and mobile application implementation across platforms"
     },
@@ -48,7 +48,7 @@
       "name": "full-stack-orchestration",
       "version": "1.2.1",
       "enabled": true,
-      "source": "./.claude/skills/claude-code-workflows/plugins/full-stack-orchestration",
+      "source": "~/.claude/skills/claude-code-workflows/plugins/full-stack-orchestration",
       "category": "workflows",
       "description": "End-to-end feature orchestration with testing, security, performance, and deployment"
     },
@@ -56,7 +56,7 @@
       "name": "unit-testing",
       "version": "1.2.0",
       "enabled": true,
-      "source": "./.claude/skills/claude-code-workflows/plugins/unit-testing",
+      "source": "~/.claude/skills/claude-code-workflows/plugins/unit-testing",
       "category": "testing",
       "description": "Unit and integration test automation for Python and JavaScript with debugging support"
     },
@@ -64,7 +64,7 @@
       "name": "tdd-workflows",
       "version": "1.2.1",
       "enabled": true,
-      "source": "./.claude/skills/claude-code-workflows/plugins/tdd-workflows",
+      "source": "~/.claude/skills/claude-code-workflows/plugins/tdd-workflows",
       "category": "workflows",
       "description": "Test-driven development methodology with red-green-refactor cycles and code review"
     },
@@ -72,7 +72,7 @@
       "name": "code-review-ai",
       "version": "1.2.0",
       "enabled": true,
-      "source": "./.claude/skills/claude-code-workflows/plugins/code-review-ai",
+      "source": "~/.claude/skills/claude-code-workflows/plugins/code-review-ai",
       "category": "quality",
       "description": "AI-powered architectural review and code quality analysis"
     },
@@ -80,7 +80,7 @@
       "name": "code-refactoring",
       "version": "1.2.0",
       "enabled": true,
-      "source": "./.claude/skills/claude-code-workflows/plugins/code-refactoring",
+      "source": "~/.claude/skills/claude-code-workflows/plugins/code-refactoring",
       "category": "utilities",
       "description": "Code cleanup, refactoring automation, and technical debt management with context restoration"
     },
@@ -88,7 +88,7 @@
       "name": "dependency-management",
       "version": "1.2.0",
       "enabled": true,
-      "source": "./.claude/skills/claude-code-workflows/plugins/dependency-management",
+      "source": "~/.claude/skills/claude-code-workflows/plugins/dependency-management",
       "category": "utilities",
       "description": "Dependency auditing, version management, and security vulnerability scanning"
     },
@@ -96,7 +96,7 @@
       "name": "error-debugging",
       "version": "1.2.0",
       "enabled": true,
-      "source": "./.claude/skills/claude-code-workflows/plugins/error-debugging",
+      "source": "~/.claude/skills/claude-code-workflows/plugins/error-debugging",
       "category": "utilities",
       "description": "Error analysis, trace debugging, and multi-agent problem diagnosis"
     },
@@ -104,7 +104,7 @@
       "name": "team-collaboration",
       "version": "1.2.0",
       "enabled": true,
-      "source": "./.claude/skills/claude-code-workflows/plugins/team-collaboration",
+      "source": "~/.claude/skills/claude-code-workflows/plugins/team-collaboration",
       "category": "utilities",
       "description": "Team workflows, issue management, standup automation, and developer experience optimization"
     },
@@ -112,7 +112,7 @@
       "name": "llm-application-dev",
       "version": "2.0.2",
       "enabled": true,
-      "source": "./.claude/skills/claude-code-workflows/plugins/llm-application-dev",
+      "source": "~/.claude/skills/claude-code-workflows/plugins/llm-application-dev",
       "category": "ai-ml",
       "description": "LLM application development with LangGraph, RAG systems, vector search, and AI agent architectures for Claude 4.5 and GPT-5.2"
     },
@@ -120,7 +120,7 @@
       "name": "agent-orchestration",
       "version": "1.2.0",
       "enabled": true,
-      "source": "./.claude/skills/claude-code-workflows/plugins/agent-orchestration",
+      "source": "~/.claude/skills/claude-code-workflows/plugins/agent-orchestration",
       "category": "ai-ml",
       "description": "Multi-agent system optimization, agent improvement workflows, and context management"
     },
@@ -128,7 +128,7 @@
       "name": "context-management",
       "version": "1.2.0",
       "enabled": true,
-      "source": "./.claude/skills/claude-code-workflows/plugins/context-management",
+      "source": "~/.claude/skills/claude-code-workflows/plugins/context-management",
       "category": "ai-ml",
       "description": "Context persistence, restoration, and long-running conversation management"
     },
@@ -136,7 +136,7 @@
       "name": "machine-learning-ops",
       "version": "1.2.1",
       "enabled": true,
-      "source": "./.claude/skills/claude-code-workflows/plugins/machine-learning-ops",
+      "source": "~/.claude/skills/claude-code-workflows/plugins/machine-learning-ops",
       "category": "ai-ml",
       "description": "ML model training pipelines, hyperparameter tuning, model deployment automation, experiment tracking, and MLOps workflows"
     },
@@ -144,7 +144,7 @@
       "name": "data-engineering",
       "version": "1.2.2",
       "enabled": true,
-      "source": "./.claude/skills/claude-code-workflows/plugins/data-engineering",
+      "source": "~/.claude/skills/claude-code-workflows/plugins/data-engineering",
       "category": "data",
       "description": "ETL pipeline construction, data warehouse design, batch processing workflows, and data-driven feature development"
     },
@@ -152,7 +152,7 @@
       "name": "incident-response",
       "version": "1.2.2",
       "enabled": true,
-      "source": "./.claude/skills/claude-code-workflows/plugins/incident-response",
+      "source": "~/.claude/skills/claude-code-workflows/plugins/incident-response",
       "category": "operations",
       "description": "Production incident management, triage workflows, and automated incident resolution"
     },
@@ -160,7 +160,7 @@
       "name": "error-diagnostics",
       "version": "1.2.0",
       "enabled": true,
-      "source": "./.claude/skills/claude-code-workflows/plugins/error-diagnostics",
+      "source": "~/.claude/skills/claude-code-workflows/plugins/error-diagnostics",
       "category": "operations",
       "description": "Error tracing, root cause analysis, and smart debugging for production systems"
     },
@@ -168,7 +168,7 @@
       "name": "distributed-debugging",
       "version": "1.2.0",
       "enabled": true,
-      "source": "./.claude/skills/claude-code-workflows/plugins/distributed-debugging",
+      "source": "~/.claude/skills/claude-code-workflows/plugins/distributed-debugging",
       "category": "operations",
       "description": "Distributed system tracing and debugging across microservices"
     },
@@ -176,7 +176,7 @@
       "name": "observability-monitoring",
       "version": "1.2.1",
       "enabled": true,
-      "source": "./.claude/skills/claude-code-workflows/plugins/observability-monitoring",
+      "source": "~/.claude/skills/claude-code-workflows/plugins/observability-monitoring",
       "category": "operations",
       "description": "Metrics collection, logging infrastructure, distributed tracing, SLO implementation, and monitoring dashboards"
     },
@@ -184,7 +184,7 @@
       "name": "deployment-strategies",
       "version": "1.2.0",
       "enabled": true,
-      "source": "./.claude/skills/claude-code-workflows/plugins/deployment-strategies",
+      "source": "~/.claude/skills/claude-code-workflows/plugins/deployment-strategies",
       "category": "infrastructure",
       "description": "Deployment patterns, rollback automation, and infrastructure templates"
     },
@@ -192,7 +192,7 @@
       "name": "deployment-validation",
       "version": "1.2.0",
       "enabled": true,
-      "source": "./.claude/skills/claude-code-workflows/plugins/deployment-validation",
+      "source": "~/.claude/skills/claude-code-workflows/plugins/deployment-validation",
       "category": "infrastructure",
       "description": "Pre-deployment checks, configuration validation, and deployment readiness assessment"
     },
@@ -200,7 +200,7 @@
       "name": "kubernetes-operations",
       "version": "1.2.1",
       "enabled": true,
-      "source": "./.claude/skills/claude-code-workflows/plugins/kubernetes-operations",
+      "source": "~/.claude/skills/claude-code-workflows/plugins/kubernetes-operations",
       "category": "infrastructure",
       "description": "Kubernetes manifest generation, networking configuration, security policies, observability setup, GitOps workflows, and auto-scaling"
     },
@@ -208,7 +208,7 @@
       "name": "cloud-infrastructure",
       "version": "1.2.2",
       "enabled": true,
-      "source": "./.claude/skills/claude-code-workflows/plugins/cloud-infrastructure",
+      "source": "~/.claude/skills/claude-code-workflows/plugins/cloud-infrastructure",
       "category": "infrastructure",
       "description": "Cloud architecture design for AWS/Azure/GCP, Kubernetes cluster configuration, Terraform infrastructure-as-code, hybrid cloud networking, and multi-cloud cost optimization"
     },
@@ -216,7 +216,7 @@
       "name": "cicd-automation",
       "version": "1.2.1",
       "enabled": true,
-      "source": "./.claude/skills/claude-code-workflows/plugins/cicd-automation",
+      "source": "~/.claude/skills/claude-code-workflows/plugins/cicd-automation",
       "category": "infrastructure",
       "description": "CI/CD pipeline configuration, GitHub Actions/GitLab CI workflow setup, and automated deployment pipeline orchestration"
     },
@@ -224,7 +224,7 @@
       "name": "application-performance",
       "version": "1.2.1",
       "enabled": true,
-      "source": "./.claude/skills/claude-code-workflows/plugins/application-performance",
+      "source": "~/.claude/skills/claude-code-workflows/plugins/application-performance",
       "category": "performance",
       "description": "Application profiling, performance optimization, and observability for frontend and backend systems"
     },
@@ -232,7 +232,7 @@
       "name": "database-cloud-optimization",
       "version": "1.2.0",
       "enabled": true,
-      "source": "./.claude/skills/claude-code-workflows/plugins/database-cloud-optimization",
+      "source": "~/.claude/skills/claude-code-workflows/plugins/database-cloud-optimization",
       "category": "performance",
       "description": "Database query optimization, cloud cost optimization, and scalability improvements"
     },
@@ -240,7 +240,7 @@
       "name": "comprehensive-review",
       "version": "1.2.1",
       "enabled": true,
-      "source": "./.claude/skills/claude-code-workflows/plugins/comprehensive-review",
+      "source": "~/.claude/skills/claude-code-workflows/plugins/comprehensive-review",
       "category": "quality",
       "description": "Multi-perspective code analysis covering architecture, security, and best practices"
     },
@@ -248,7 +248,7 @@
       "name": "performance-testing-review",
       "version": "1.2.0",
       "enabled": true,
-      "source": "./.claude/skills/claude-code-workflows/plugins/performance-testing-review",
+      "source": "~/.claude/skills/claude-code-workflows/plugins/performance-testing-review",
       "category": "quality",
       "description": "Performance analysis, test coverage review, and AI-powered code quality assessment"
     },
@@ -256,7 +256,7 @@
       "name": "framework-migration",
       "version": "1.2.2",
       "enabled": true,
-      "source": "./.claude/skills/claude-code-workflows/plugins/framework-migration",
+      "source": "~/.claude/skills/claude-code-workflows/plugins/framework-migration",
       "category": "modernization",
       "description": "Framework updates, migration planning, and architectural transformation workflows"
     },
@@ -264,7 +264,7 @@
       "name": "codebase-cleanup",
       "version": "1.2.0",
       "enabled": true,
-      "source": "./.claude/skills/claude-code-workflows/plugins/codebase-cleanup",
+      "source": "~/.claude/skills/claude-code-workflows/plugins/codebase-cleanup",
       "category": "modernization",
       "description": "Technical debt reduction, dependency updates, and code refactoring automation"
     },
@@ -272,7 +272,7 @@
       "name": "database-design",
       "version": "1.2.0",
       "enabled": true,
-      "source": "./.claude/skills/claude-code-workflows/plugins/database-design",
+      "source": "~/.claude/skills/claude-code-workflows/plugins/database-design",
       "category": "database",
       "description": "Database architecture, schema design, and SQL optimization for production systems"
     },
@@ -280,7 +280,7 @@
       "name": "database-migrations",
       "version": "1.2.0",
       "enabled": true,
-      "source": "./.claude/skills/claude-code-workflows/plugins/database-migrations",
+      "source": "~/.claude/skills/claude-code-workflows/plugins/database-migrations",
       "category": "database",
       "description": "Database migration automation, observability, and cross-database migration strategies"
     },
@@ -288,7 +288,7 @@
       "name": "security-scanning",
       "version": "1.2.3",
       "enabled": true,
-      "source": "./.claude/skills/claude-code-workflows/plugins/security-scanning",
+      "source": "~/.claude/skills/claude-code-workflows/plugins/security-scanning",
       "category": "security",
       "description": "SAST analysis, dependency vulnerability scanning, OWASP Top 10 compliance, container security scanning, and automated security hardening"
     },
@@ -296,7 +296,7 @@
       "name": "security-compliance",
       "version": "1.2.0",
       "enabled": true,
-      "source": "./.claude/skills/claude-code-workflows/plugins/security-compliance",
+      "source": "~/.claude/skills/claude-code-workflows/plugins/security-compliance",
       "category": "security",
       "description": "SOC2, HIPAA, and GDPR compliance validation, secrets scanning, compliance checklists, and regulatory documentation"
     },
@@ -304,7 +304,7 @@
       "name": "backend-api-security",
       "version": "1.2.0",
       "enabled": true,
-      "source": "./.claude/skills/claude-code-workflows/plugins/backend-api-security",
+      "source": "~/.claude/skills/claude-code-workflows/plugins/backend-api-security",
       "category": "security",
       "description": "API security hardening, authentication implementation, authorization patterns, rate limiting, and input validation"
     },
@@ -312,7 +312,7 @@
       "name": "frontend-mobile-security",
       "version": "1.2.0",
       "enabled": true,
-      "source": "./.claude/skills/claude-code-workflows/plugins/frontend-mobile-security",
+      "source": "~/.claude/skills/claude-code-workflows/plugins/frontend-mobile-security",
       "category": "security",
       "description": "XSS prevention, CSRF protection, content security policies, mobile app security, and secure storage patterns"
     },
@@ -320,7 +320,7 @@
       "name": "data-validation-suite",
       "version": "1.2.0",
       "enabled": true,
-      "source": "./.claude/skills/claude-code-workflows/plugins/data-validation-suite",
+      "source": "~/.claude/skills/claude-code-workflows/plugins/data-validation-suite",
       "category": "data",
       "description": "Schema validation, data quality monitoring, streaming validation pipelines, and input validation for backend APIs"
     },
@@ -328,7 +328,7 @@
       "name": "api-scaffolding",
       "version": "1.2.1",
       "enabled": true,
-      "source": "./.claude/skills/claude-code-workflows/plugins/api-scaffolding",
+      "source": "~/.claude/skills/claude-code-workflows/plugins/api-scaffolding",
       "category": "api",
       "description": "REST and GraphQL API scaffolding, framework selection, backend architecture, and API generation"
     },
@@ -336,7 +336,7 @@
       "name": "api-testing-observability",
       "version": "1.2.0",
       "enabled": true,
-      "source": "./.claude/skills/claude-code-workflows/plugins/api-testing-observability",
+      "source": "~/.claude/skills/claude-code-workflows/plugins/api-testing-observability",
       "category": "api",
       "description": "API testing automation, request mocking, OpenAPI documentation generation, observability setup, and monitoring"
     },
@@ -344,7 +344,7 @@
       "name": "seo-content-creation",
       "version": "1.2.0",
       "enabled": true,
-      "source": "./.claude/skills/claude-code-workflows/plugins/seo-content-creation",
+      "source": "~/.claude/skills/claude-code-workflows/plugins/seo-content-creation",
       "category": "marketing",
       "description": "SEO content writing, planning, and quality auditing with E-E-A-T optimization"
     },
@@ -352,7 +352,7 @@
       "name": "seo-technical-optimization",
       "version": "1.2.0",
       "enabled": true,
-      "source": "./.claude/skills/claude-code-workflows/plugins/seo-technical-optimization",
+      "source": "~/.claude/skills/claude-code-workflows/plugins/seo-technical-optimization",
       "category": "marketing",
       "description": "Technical SEO optimization including meta tags, keywords, structure, and featured snippets"
     },
@@ -360,7 +360,7 @@
       "name": "seo-analysis-monitoring",
       "version": "1.2.0",
       "enabled": true,
-      "source": "./.claude/skills/claude-code-workflows/plugins/seo-analysis-monitoring",
+      "source": "~/.claude/skills/claude-code-workflows/plugins/seo-analysis-monitoring",
       "category": "marketing",
       "description": "Content freshness analysis, cannibalization detection, and authority building for SEO"
     },
@@ -368,7 +368,7 @@
       "name": "documentation-generation",
       "version": "1.2.1",
       "enabled": true,
-      "source": "./.claude/skills/claude-code-workflows/plugins/documentation-generation",
+      "source": "~/.claude/skills/claude-code-workflows/plugins/documentation-generation",
       "category": "documentation",
       "description": "OpenAPI specification generation, Mermaid diagram creation, tutorial writing, API reference documentation"
     },
@@ -376,7 +376,7 @@
       "name": "c4-architecture",
       "version": "1.0.0",
       "enabled": true,
-      "source": "./.claude/skills/claude-code-workflows/plugins/c4-architecture",
+      "source": "~/.claude/skills/claude-code-workflows/plugins/c4-architecture",
       "category": "documentation",
       "description": "Comprehensive C4 architecture documentation workflow with bottom-up code analysis, component synthesis, container mapping, and context diagram generation"
     },
@@ -384,7 +384,7 @@
       "name": "multi-platform-apps",
       "version": "1.2.1",
       "enabled": true,
-      "source": "./.claude/skills/claude-code-workflows/plugins/multi-platform-apps",
+      "source": "~/.claude/skills/claude-code-workflows/plugins/multi-platform-apps",
       "category": "development",
       "description": "Cross-platform application development coordinating web, iOS, Android, and desktop implementations"
     },
@@ -392,7 +392,7 @@
       "name": "business-analytics",
       "version": "1.2.1",
       "enabled": true,
-      "source": "./.claude/skills/claude-code-workflows/plugins/business-analytics",
+      "source": "~/.claude/skills/claude-code-workflows/plugins/business-analytics",
       "category": "business",
       "description": "Business metrics analysis, KPI tracking, financial reporting, and data-driven decision making"
     },
@@ -400,7 +400,7 @@
       "name": "startup-business-analyst",
       "version": "1.0.3",
       "enabled": true,
-      "source": "./.claude/skills/claude-code-workflows/plugins/startup-business-analyst",
+      "source": "~/.claude/skills/claude-code-workflows/plugins/startup-business-analyst",
       "category": "business",
       "description": "Comprehensive startup business analysis with market sizing (TAM/SAM/SOM), financial modeling, team planning, and strategic research for early-stage companies"
     },
@@ -408,7 +408,7 @@
       "name": "hr-legal-compliance",
       "version": "1.2.1",
       "enabled": true,
-      "source": "./.claude/skills/claude-code-workflows/plugins/hr-legal-compliance",
+      "source": "~/.claude/skills/claude-code-workflows/plugins/hr-legal-compliance",
       "category": "business",
       "description": "HR policy documentation, legal compliance templates (GDPR/SOC2/HIPAA), employment contracts, and regulatory documentation"
     },
@@ -416,7 +416,7 @@
       "name": "customer-sales-automation",
       "version": "1.2.0",
       "enabled": true,
-      "source": "./.claude/skills/claude-code-workflows/plugins/customer-sales-automation",
+      "source": "~/.claude/skills/claude-code-workflows/plugins/customer-sales-automation",
       "category": "business",
       "description": "Customer support workflow automation, sales pipeline management, email campaigns, and CRM integration"
     },
@@ -424,7 +424,7 @@
       "name": "content-marketing",
       "version": "1.2.0",
       "enabled": true,
-      "source": "./.claude/skills/claude-code-workflows/plugins/content-marketing",
+      "source": "~/.claude/skills/claude-code-workflows/plugins/content-marketing",
       "category": "marketing",
       "description": "Content marketing strategy, web research, and information synthesis for marketing operations"
     },
@@ -432,7 +432,7 @@
       "name": "blockchain-web3",
       "version": "1.2.1",
       "enabled": true,
-      "source": "./.claude/skills/claude-code-workflows/plugins/blockchain-web3",
+      "source": "~/.claude/skills/claude-code-workflows/plugins/blockchain-web3",
       "category": "blockchain",
       "description": "Smart contract development with Solidity, DeFi protocol implementation, NFT platforms, and Web3 application architecture"
     },
@@ -440,7 +440,7 @@
       "name": "quantitative-trading",
       "version": "1.2.1",
       "enabled": true,
-      "source": "./.claude/skills/claude-code-workflows/plugins/quantitative-trading",
+      "source": "~/.claude/skills/claude-code-workflows/plugins/quantitative-trading",
       "category": "finance",
       "description": "Quantitative analysis, algorithmic trading strategies, financial modeling, portfolio risk management, and backtesting"
     },
@@ -448,7 +448,7 @@
       "name": "payment-processing",
       "version": "1.2.1",
       "enabled": true,
-      "source": "./.claude/skills/claude-code-workflows/plugins/payment-processing",
+      "source": "~/.claude/skills/claude-code-workflows/plugins/payment-processing",
       "category": "payments",
       "description": "Payment gateway integration with Stripe, PayPal, checkout flow implementation, subscription billing, and PCI compliance"
     },
@@ -456,7 +456,7 @@
       "name": "game-development",
       "version": "1.2.1",
       "enabled": true,
-      "source": "./.claude/skills/claude-code-workflows/plugins/game-development",
+      "source": "~/.claude/skills/claude-code-workflows/plugins/game-development",
       "category": "gaming",
       "description": "Unity game development with C# scripting, Minecraft server plugin development with Bukkit/Spigot APIs"
     },
@@ -464,7 +464,7 @@
       "name": "accessibility-compliance",
       "version": "1.2.1",
       "enabled": true,
-      "source": "./.claude/skills/claude-code-workflows/plugins/accessibility-compliance",
+      "source": "~/.claude/skills/claude-code-workflows/plugins/accessibility-compliance",
       "category": "accessibility",
       "description": "WCAG accessibility auditing, compliance validation, UI testing for screen readers, keyboard navigation, and inclusive design"
     },
@@ -472,7 +472,7 @@
       "name": "python-development",
       "version": "1.2.1",
       "enabled": true,
-      "source": "./.claude/skills/claude-code-workflows/plugins/python-development",
+      "source": "~/.claude/skills/claude-code-workflows/plugins/python-development",
       "category": "languages",
       "description": "Modern Python development with Python 3.12+, Django, FastAPI, async patterns, and production best practices"
     },
@@ -480,7 +480,7 @@
       "name": "javascript-typescript",
       "version": "1.2.1",
       "enabled": true,
-      "source": "./.claude/skills/claude-code-workflows/plugins/javascript-typescript",
+      "source": "~/.claude/skills/claude-code-workflows/plugins/javascript-typescript",
       "category": "languages",
       "description": "JavaScript and TypeScript development with ES6+, Node.js, React, and modern web frameworks"
     },
@@ -488,7 +488,7 @@
       "name": "systems-programming",
       "version": "1.2.1",
       "enabled": true,
-      "source": "./.claude/skills/claude-code-workflows/plugins/systems-programming",
+      "source": "~/.claude/skills/claude-code-workflows/plugins/systems-programming",
       "category": "languages",
       "description": "Systems programming with Rust, Go, C, and C++ for performance-critical and low-level development"
     },
@@ -496,7 +496,7 @@
       "name": "jvm-languages",
       "version": "1.2.0",
       "enabled": true,
-      "source": "./.claude/skills/claude-code-workflows/plugins/jvm-languages",
+      "source": "~/.claude/skills/claude-code-workflows/plugins/jvm-languages",
       "category": "languages",
       "description": "JVM language development including Java, Scala, and C# with enterprise patterns and frameworks"
     },
@@ -504,7 +504,7 @@
       "name": "web-scripting",
       "version": "1.2.0",
       "enabled": true,
-      "source": "./.claude/skills/claude-code-workflows/plugins/web-scripting",
+      "source": "~/.claude/skills/claude-code-workflows/plugins/web-scripting",
       "category": "languages",
       "description": "Web scripting with PHP and Ruby for web applications, CMS development, and backend services"
     },
@@ -512,7 +512,7 @@
       "name": "functional-programming",
       "version": "1.2.0",
       "enabled": true,
-      "source": "./.claude/skills/claude-code-workflows/plugins/functional-programming",
+      "source": "~/.claude/skills/claude-code-workflows/plugins/functional-programming",
       "category": "languages",
       "description": "Functional programming with Elixir, OTP patterns, Phoenix framework, and distributed systems"
     },
@@ -520,7 +520,7 @@
       "name": "julia-development",
       "version": "1.0.0",
       "enabled": true,
-      "source": "./.claude/skills/claude-code-workflows/plugins/julia-development",
+      "source": "~/.claude/skills/claude-code-workflows/plugins/julia-development",
       "category": "languages",
       "description": "Modern Julia development with Julia 1.10+, package management, scientific computing, high-performance numerical code, and production best practices"
     },
@@ -528,7 +528,7 @@
       "name": "arm-cortex-microcontrollers",
       "version": "1.2.0",
       "enabled": true,
-      "source": "./.claude/skills/claude-code-workflows/plugins/arm-cortex-microcontrollers",
+      "source": "~/.claude/skills/claude-code-workflows/plugins/arm-cortex-microcontrollers",
       "category": "languages",
       "description": "ARM Cortex-M firmware development for Teensy, STM32, nRF52, and SAMD with peripheral drivers and memory safety patterns"
     },
@@ -536,7 +536,7 @@
       "name": "shell-scripting",
       "version": "1.2.1",
       "enabled": true,
-      "source": "./.claude/skills/claude-code-workflows/plugins/shell-scripting",
+      "source": "~/.claude/skills/claude-code-workflows/plugins/shell-scripting",
       "category": "languages",
       "description": "Production-grade Bash scripting with defensive programming, POSIX compliance, and comprehensive testing"
     },
@@ -544,7 +544,7 @@
       "name": "developer-essentials",
       "version": "1.0.1",
       "enabled": true,
-      "source": "./.claude/skills/claude-code-workflows/plugins/developer-essentials",
+      "source": "~/.claude/skills/claude-code-workflows/plugins/developer-essentials",
       "category": "development",
       "description": "Essential developer skills including Git workflows, SQL optimization, error handling, code review, E2E testing, authentication, debugging, and monorepo management"
     },
@@ -552,7 +552,7 @@
       "name": "reverse-engineering",
       "version": "1.0.0",
       "enabled": true,
-      "source": "./.claude/skills/claude-code-workflows/plugins/reverse-engineering",
+      "source": "~/.claude/skills/claude-code-workflows/plugins/reverse-engineering",
       "category": "security",
       "description": "Binary reverse engineering, malware analysis, firmware security, and software protection research for authorized security research, CTF competitions, and defensive security"
     },
@@ -560,7 +560,7 @@
       "name": "conductor",
       "version": "1.2.0",
       "enabled": true,
-      "source": "./.claude/skills/claude-code-workflows/plugins/conductor",
+      "source": "~/.claude/skills/claude-code-workflows/plugins/conductor",
       "category": "workflows",
       "description": "Context-Driven Development plugin that transforms Claude Code into a project management tool with structured workflow: Context \u2192 Spec & Plan \u2192 Implement"
     },
@@ -568,17 +568,9 @@
       "name": "ui-design",
       "version": "1.0.1",
       "enabled": true,
-      "source": "./.claude/skills/claude-code-workflows/plugins/ui-design",
+      "source": "~/.claude/skills/claude-code-workflows/plugins/ui-design",
       "category": "development",
       "description": "Comprehensive UI/UX design plugin for mobile (iOS, Android, React Native) and web applications with design systems, accessibility, and modern patterns"
-    },
-    {
-      "name": "dotnet-contribution",
-      "version": "1.0.0",
-      "enabled": true,
-      "source": "./.claude/skills/claude-code-workflows/plugins/dotnet-contribution",
-      "category": "languages",
-      "description": "C#/.NET backend development patterns for building robust APIs, MCP servers, and enterprise applications with Clean Architecture"
     }
   ]
 }

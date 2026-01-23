@@ -1,87 +1,122 @@
 {
   "platform": "coinex",
-  "market_type": "futures",
-  "leaderboard_endpoints": [
-    {
-      "url": "https://www.coinex.com/res/copy-trading/traders",
-      "method": "GET",
-      "headers": {
-        "Referer": "https://www.coinex.com/copy-trading",
-        "Origin": "https://www.coinex.com"
+  "market_types": ["futures"],
+  "futures": {
+    "leaderboard_endpoints": [
+      {
+        "method": "GET",
+        "url": "https://www.coinex.com/res/copy-trading/traders",
+        "type": "api",
+        "params": {
+          "page": 1,
+          "limit": 20,
+          "sort_by": "roi",
+          "period": "30d"
+        },
+        "notes": "period: 7d, 30d. No 90d support."
       },
-      "query_params": {
-        "page": "1",
-        "limit": "20",
-        "order_by": "roi",
-        "order_type": "desc",
-        "days": "7"
+      {
+        "url": "https://www.coinex.com/res/copy-trading/traders",
+        "method": "GET",
+        "type": "api",
+        "headers": {
+          "Referer": "https://www.coinex.com/copy-trading",
+          "Origin": "https://www.coinex.com"
+        },
+        "query_params": {
+          "page": "1",
+          "limit": "20",
+          "order_by": "roi",
+          "order_type": "desc",
+          "days": "7"
+        },
+        "pagination": {
+          "type": "page",
+          "page_size": 20,
+          "max_pages": 5,
+          "param_name": "page"
+        },
+        "response_path": "data.items",
+        "window_param": "days",
+        "sort_param": "order_by",
+        "notes": "Alternative param format using 'days' instead of 'period'"
+      }
+    ],
+    "profile_endpoints": [
+      {
+        "method": "GET",
+        "url": "https://www.coinex.com/res/copy-trading/trader/{trader_key}/detail",
+        "type": "api"
       },
-      "pagination": {
-        "type": "page",
-        "page_size": 20,
-        "max_pages": 5,
-        "param_name": "page"
+      {
+        "url": "https://www.coinex.com/res/copy-trading/trader/{trader_id}",
+        "method": "GET",
+        "type": "api",
+        "headers": {
+          "Origin": "https://www.coinex.com"
+        },
+        "response_path": "data"
       },
-      "response_path": "data.items",
-      "window_param": "days",
-      "sort_param": "order_by"
-    }
-  ],
-  "profile_endpoints": [
-    {
-      "url": "https://www.coinex.com/res/copy-trading/trader/{trader_id}",
-      "method": "GET",
-      "headers": {
-        "Origin": "https://www.coinex.com"
-      },
-      "response_path": "data"
+      {
+        "url": "https://www.coinex.com/res/copy-trading/trader/{trader_id}/performance",
+        "method": "GET",
+        "type": "api",
+        "headers": {
+          "Origin": "https://www.coinex.com"
+        },
+        "query_params": {
+          "days": "7"
+        },
+        "response_path": "data"
+      }
+    ],
+    "trader_key_field": "trader_id",
+    "roi_sort_supported": true,
+    "roi_sort_mechanism": "platform_native",
+    "roi_sort_param": "sort_by=roi",
+    "window_support": {
+      "7d": { "supported": true, "param": "period=7d" },
+      "30d": { "supported": true, "param": "period=30d" },
+      "90d": { "supported": false, "reason": "CoinEx copy trading leaderboard only provides 7D and 30D windows. Platform confirmed via API: 90D period param returns error." }
     },
-    {
-      "url": "https://www.coinex.com/res/copy-trading/trader/{trader_id}/performance",
-      "method": "GET",
-      "headers": {
-        "Origin": "https://www.coinex.com"
-      },
-      "query_params": {
-        "days": "7"
-      },
-      "response_path": "data"
-    }
-  ],
-  "window_support": ["7d", "30d", "90d"],
-  "rate_limit_hint": {
-    "rpm": 15,
-    "concurrent": 1,
-    "delay_ms": 4000
-  },
-  "field_map": {
-    "roi_pct": "roi",
-    "pnl_usd": "pnl",
-    "win_rate": "win_rate",
-    "max_drawdown": "max_drawdown",
-    "trades_count": "trade_count",
-    "followers": "follower_count",
-    "copiers": "copier_count"
-  },
-  "roi_sort_supported": true,
-  "roi_sort_method": "query_param",
-  "proof": [
-    {
-      "url": "https://www.coinex.com/res/copy-trading/traders?page=1&limit=20&order_by=roi&order_type=desc&days=7",
-      "request_path": "/res/copy-trading/traders",
-      "method": "GET",
-      "response_fields_sample": {
-        "data.items[0].trader_id": "coinex_t_789",
-        "data.items[0].nick_name": "CoinExPro",
-        "data.items[0].roi": 0.3821,
-        "data.items[0].pnl": 8765.43,
-        "data.items[0].win_rate": 0.71,
-        "data.items[0].max_drawdown": 0.14,
-        "data.items[0].trade_count": 203,
-        "data.items[0].follower_count": 420,
-        "data.items[0].copier_count": 180
-      },
-      "discovered_at": "2024-01-15T00:00:00Z"
-    }
-  ]
+    "field_map": {
+      "trader_id": "trader_key",
+      "nickname": "display_name",
+      "nick_name": "display_name (alt)",
+      "avatar": "avatar_url",
+      "roi": "roi (percentage)",
+      "profit": "pnl",
+      "pnl": "pnl (alt)",
+      "win_rate": "win_rate",
+      "max_drawdown": "max_drawdown",
+      "followers": "followers",
+      "follower_count": "followers (alt)",
+      "copiers": "copiers",
+      "copier_count": "copiers (alt)",
+      "trade_count": "trades_count"
+    },
+    "rate_limits": {
+      "estimated_rpm": 15,
+      "cloudflare_protected": false,
+      "notes": "Relatively open API"
+    },
+    "proof": [
+      {
+        "url": "https://www.coinex.com/res/copy-trading/traders?page=1&limit=20&order_by=roi&order_type=desc&days=7",
+        "method": "GET",
+        "response_fields_sample": {
+          "data.items[0].trader_id": "coinex_t_789",
+          "data.items[0].nick_name": "CoinExPro",
+          "data.items[0].roi": 0.3821,
+          "data.items[0].pnl": 8765.43,
+          "data.items[0].win_rate": 0.71,
+          "data.items[0].max_drawdown": 0.14,
+          "data.items[0].trade_count": 203,
+          "data.items[0].follower_count": 420,
+          "data.items[0].copier_count": 180
+        },
+        "discovered_at": "2024-01-15T00:00:00Z"
+      }
+    ]
+  }
 }

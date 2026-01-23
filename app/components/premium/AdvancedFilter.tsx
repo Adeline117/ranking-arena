@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '../base'
 import { useLanguage } from '../Providers/LanguageProvider'
@@ -52,18 +52,18 @@ const EXCHANGES = [
   { value: 'gmx', label: 'GMX' },
 ]
 
-// 类型选项
-const CATEGORIES = [
-  { value: 'futures', label: '合约' },
-  { value: 'spot', label: '现货' },
-  { value: 'web3', label: '链上' },
+// 类型选项 - 使用 i18n key
+const CATEGORY_KEYS = [
+  { value: 'futures', labelKey: 'categoryFutures' as const },
+  { value: 'spot', labelKey: 'categorySpot' as const },
+  { value: 'web3', labelKey: 'categoryWeb3' as const },
 ]
 
-// 周期选项
-const PERIODS = [
-  { value: '7D', label: '7天' },
-  { value: '30D', label: '30天' },
-  { value: '90D', label: '90天' },
+// 周期选项 - 使用 i18n key
+const PERIOD_KEYS = [
+  { value: '7D', labelKey: 'period7D' as const },
+  { value: '30D', labelKey: 'period30D' as const },
+  { value: '90D', labelKey: 'period90D' as const },
 ]
 
 export default function AdvancedFilter({
@@ -134,11 +134,11 @@ export default function AdvancedFilter({
       >
         <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <Box>
-            <Text size="sm" weight="bold">🔒 高级筛选</Text>
-            <Text size="xs" color="tertiary">升级 Pro 解锁多条件筛选</Text>
+            <Text size="sm" weight="bold">{t('advancedFilterLocked')}</Text>
+            <Text size="xs" color="tertiary">{t('unlockAdvancedFilter')}</Text>
           </Box>
           <Button variant="secondary" size="sm" onClick={() => window.location.href = '/settings'}>
-            升级
+            {t('upgrade')}
           </Button>
         </Box>
       </Box>
@@ -169,7 +169,7 @@ export default function AdvancedFilter({
       >
         <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
           <Text size="sm" weight="bold">
-            高级筛选
+            {t('advancedFilter')}
           </Text>
           {hasActiveFilters && (
             <Box
@@ -182,7 +182,7 @@ export default function AdvancedFilter({
                 fontWeight: 'bold',
               }}
             >
-              已筛选
+              {t('filtered')}
             </Box>
           )}
         </Box>
@@ -198,7 +198,7 @@ export default function AdvancedFilter({
           {savedFilters.length > 0 && (
             <Box style={{ marginBottom: tokens.spacing[4] }}>
               <Text size="xs" weight="bold" color="tertiary" style={{ marginBottom: tokens.spacing[2] }}>
-                已保存的筛选
+                {t('savedFilters')}
               </Text>
               <Box style={{ display: 'flex', flexWrap: 'wrap', gap: tokens.spacing[2] }}>
                 {savedFilters.map(filter => (
@@ -250,10 +250,10 @@ export default function AdvancedFilter({
           {/* 类型筛选 */}
           <Box style={{ marginBottom: tokens.spacing[4] }}>
             <Text size="xs" weight="bold" color="tertiary" style={{ marginBottom: tokens.spacing[2] }}>
-              类型
+              {t('categoryType')}
             </Text>
             <Box style={{ display: 'flex', flexWrap: 'wrap', gap: tokens.spacing[2] }}>
-              {CATEGORIES.map(cat => {
+              {CATEGORY_KEYS.map(cat => {
                 const isSelected = currentFilter.category?.includes(cat.value)
                 return (
                   <button
@@ -271,7 +271,7 @@ export default function AdvancedFilter({
                       transition: 'all 0.2s',
                     }}
                   >
-                    {cat.label}
+                    {t(cat.labelKey)}
                   </button>
                 )
               })}
@@ -281,7 +281,7 @@ export default function AdvancedFilter({
           {/* 交易所筛选 */}
           <Box style={{ marginBottom: tokens.spacing[4] }}>
             <Text size="xs" weight="bold" color="tertiary" style={{ marginBottom: tokens.spacing[2] }}>
-              交易所
+              {t('exchange')}
             </Text>
             <Box style={{ display: 'flex', flexWrap: 'wrap', gap: tokens.spacing[2] }}>
               {EXCHANGES.map(ex => {
@@ -311,12 +311,12 @@ export default function AdvancedFilter({
           {/* ROI 区间 */}
           <Box style={{ marginBottom: tokens.spacing[4] }}>
             <Text size="xs" weight="bold" color="tertiary" style={{ marginBottom: tokens.spacing[2] }}>
-              ROI 区间 (%)
+              {t('roiRange')}
             </Text>
             <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
               <input
                 type="number"
-                placeholder="最小"
+                placeholder={t('min')}
                 value={currentFilter.roi_min ?? ''}
                 onChange={(e) => updateFilter('roi_min', e.target.value ? Number(e.target.value) : undefined)}
                 style={{
@@ -333,7 +333,7 @@ export default function AdvancedFilter({
               <Text size="sm" color="tertiary">~</Text>
               <input
                 type="number"
-                placeholder="最大"
+                placeholder={t('max')}
                 value={currentFilter.roi_max ?? ''}
                 onChange={(e) => updateFilter('roi_max', e.target.value ? Number(e.target.value) : undefined)}
                 style={{
@@ -353,12 +353,12 @@ export default function AdvancedFilter({
           {/* 回撤区间 */}
           <Box style={{ marginBottom: tokens.spacing[4] }}>
             <Text size="xs" weight="bold" color="tertiary" style={{ marginBottom: tokens.spacing[2] }}>
-              最大回撤区间 (%)
+              {t('drawdownRange')}
             </Text>
             <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
               <input
                 type="number"
-                placeholder="最小"
+                placeholder={t('min')}
                 value={currentFilter.drawdown_min ?? ''}
                 onChange={(e) => updateFilter('drawdown_min', e.target.value ? Number(e.target.value) : undefined)}
                 style={{
@@ -375,7 +375,7 @@ export default function AdvancedFilter({
               <Text size="sm" color="tertiary">~</Text>
               <input
                 type="number"
-                placeholder="最大"
+                placeholder={t('max')}
                 value={currentFilter.drawdown_max ?? ''}
                 onChange={(e) => updateFilter('drawdown_max', e.target.value ? Number(e.target.value) : undefined)}
                 style={{
@@ -396,11 +396,11 @@ export default function AdvancedFilter({
           <Box style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: tokens.spacing[3], marginBottom: tokens.spacing[4] }}>
             <Box>
               <Text size="xs" weight="bold" color="tertiary" style={{ marginBottom: tokens.spacing[1] }}>
-                最低 PnL ($)
+                {t('minPnl')}
               </Text>
               <input
                 type="number"
-                placeholder="如 1000"
+                placeholder={`${t('egExample')} 1000`}
                 value={currentFilter.min_pnl ?? ''}
                 onChange={(e) => updateFilter('min_pnl', e.target.value ? Number(e.target.value) : undefined)}
                 style={{
@@ -417,11 +417,11 @@ export default function AdvancedFilter({
             </Box>
             <Box>
               <Text size="xs" weight="bold" color="tertiary" style={{ marginBottom: tokens.spacing[1] }}>
-                最低 Score
+                {t('minScore')}
               </Text>
               <input
                 type="number"
-                placeholder="如 40"
+                placeholder={`${t('egExample')} 40`}
                 value={currentFilter.min_score ?? ''}
                 onChange={(e) => updateFilter('min_score', e.target.value ? Number(e.target.value) : undefined)}
                 style={{
@@ -438,11 +438,11 @@ export default function AdvancedFilter({
             </Box>
             <Box>
               <Text size="xs" weight="bold" color="tertiary" style={{ marginBottom: tokens.spacing[1] }}>
-                最低胜率 (%)
+                {t('minWinRate')}
               </Text>
               <input
                 type="number"
-                placeholder="如 50"
+                placeholder={`${t('egExample')} 50`}
                 value={currentFilter.min_win_rate ?? ''}
                 onChange={(e) => updateFilter('min_win_rate', e.target.value ? Number(e.target.value) : undefined)}
                 style={{
@@ -473,7 +473,7 @@ export default function AdvancedFilter({
                 fontSize: tokens.typography.fontSize.sm,
               }}
             >
-              重置
+              {t('resetFilter')}
             </button>
             {hasActiveFilters && (
               <button
@@ -489,7 +489,7 @@ export default function AdvancedFilter({
                   fontWeight: tokens.typography.fontWeight.bold,
                 }}
               >
-                保存筛选
+                {t('saveFilter')}
               </button>
             )}
           </Box>
@@ -522,18 +522,18 @@ export default function AdvancedFilter({
             }}
           >
             <Text size="lg" weight="bold" style={{ marginBottom: tokens.spacing[4] }}>
-              保存筛选配置
+              {t('saveFilterConfig')}
             </Text>
-            
+
             <Box style={{ marginBottom: tokens.spacing[3] }}>
               <Text size="xs" weight="bold" color="tertiary" style={{ marginBottom: tokens.spacing[1] }}>
-                名称 *
+                {t('filterName')} *
               </Text>
               <input
                 type="text"
                 value={saveName}
                 onChange={(e) => setSaveName(e.target.value)}
-                placeholder="如：高收益低回撤"
+                placeholder={t('filterNamePlaceholder')}
                 maxLength={50}
                 style={{
                   width: '100%',
@@ -550,12 +550,12 @@ export default function AdvancedFilter({
 
             <Box style={{ marginBottom: tokens.spacing[4] }}>
               <Text size="xs" weight="bold" color="tertiary" style={{ marginBottom: tokens.spacing[1] }}>
-                描述（可选）
+                {t('filterDescription')}
               </Text>
               <textarea
                 value={saveDescription}
                 onChange={(e) => setSaveDescription(e.target.value)}
-                placeholder="简单描述这个筛选条件..."
+                placeholder={t('filterDescPlaceholder')}
                 rows={2}
                 style={{
                   width: '100%',
@@ -573,14 +573,14 @@ export default function AdvancedFilter({
 
             <Box style={{ display: 'flex', justifyContent: 'flex-end', gap: tokens.spacing[2] }}>
               <Button variant="secondary" onClick={() => setShowSaveModal(false)}>
-                取消
+                {t('cancel')}
               </Button>
               <Button
                 variant="primary"
                 onClick={handleSave}
                 disabled={!saveName.trim() || saving}
               >
-                {saving ? '保存中...' : '保存'}
+                {saving ? t('saving') : t('save')}
               </Button>
             </Box>
           </Box>

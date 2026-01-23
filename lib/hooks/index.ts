@@ -1,18 +1,22 @@
 /**
  * 自定义 Hooks 统一导出
+ *
+ * 数据获取统一使用 SWR 实现（useSWR.ts）
  */
+
+// Auth (Single Source of Truth)
+export { useAuthSession, authFetch } from './useAuthSession'
+export type { AuthState, AuthError, AuthSessionReturn } from './useAuthSession'
+
+// Post Interactions (Unified across all entry points)
+export { usePostComments, usePostReaction } from './usePostInteraction'
+export type { Comment, CommentSubmitState } from './usePostInteraction'
 
 export { useSubmit, useDebounceClick } from './useSubmit'
 export { useCsrf, getCsrfToken, createCsrfHeaders } from './useCsrf'
 
-// 数据获取
-export {
-  useFetch,
-  useTraders,
-  usePosts,
-  useTraderDetail,
-  invalidateCache,
-} from './useDataFetching'
+// 基础数据获取（低级 API，一般不直接使用）
+export { useFetch, invalidateCache } from './useDataFetching'
 
 // 实时更新
 export {
@@ -41,18 +45,35 @@ export {
   useOptimisticList,
 } from './useOptimisticUpdate'
 
-// SWR 数据获取（推荐使用）
+// ============================================
+// SWR 数据获取 - 推荐使用
+// ============================================
+
+// 交易员相关
 export {
   useTraderList,
-  useTraderDetail as useTraderDetailSWR,
+  useTraderList as useTraders, // 别名，向后兼容
+  useTraderDetail,
   useTraderEquity,
   useTraderPositions,
-  usePosts as usePostsSWR,
+} from './useSWR'
+
+// 帖子相关
+export {
+  usePosts,
   usePostsInfinite,
   usePostDetail,
+} from './useSWR'
+
+// 其他数据
+export {
   useMarketData,
   useUserProfile,
   useNotifications,
+} from './useSWR'
+
+// 缓存工具
+export {
   refreshCache,
   refreshCacheByPattern,
   clearCache,
@@ -61,6 +82,7 @@ export {
   fetcherWithAuth,
 } from './useSWR'
 
+// 类型导出
 export type {
   TradersResponse,
   TraderDetailResponse,

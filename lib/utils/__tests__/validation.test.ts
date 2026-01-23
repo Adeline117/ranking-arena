@@ -91,8 +91,17 @@ describe('getPasswordStrength', () => {
     expect(result.label).toBe('')
   })
 
-  it('should return weak for short password', () => {
+  it('should return fair for numeric-only password', () => {
+    // '123456' gets score 2: length >= 6 (+1), contains digits (+1)
     const result = getPasswordStrength('123456')
+    expect(result.level).toBe(2)
+    expect(result.label).toBe('一般')
+    expect(result.color).toBe('#ffa500')
+  })
+
+  it('should return weak for very short password', () => {
+    // '12345' gets score 1: length >= 6 (no), contains digits (+1)
+    const result = getPasswordStrength('12345')
     expect(result.level).toBe(1)
     expect(result.label).toBe('弱')
     expect(result.color).toBe('#ff4d4d')

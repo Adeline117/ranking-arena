@@ -1,3 +1,42 @@
+// Mock NextResponse for Node.js test environment
+jest.mock('next/server', () => {
+  class MockHeaders {
+    private headers: Map<string, string> = new Map()
+
+    set(key: string, value: string) {
+      this.headers.set(key, value)
+    }
+
+    get(key: string) {
+      return this.headers.get(key)
+    }
+  }
+
+  class MockNextResponse {
+    status: number
+    headers: MockHeaders
+    private body: unknown
+
+    constructor(body: unknown, init?: { status?: number }) {
+      this.body = body
+      this.status = init?.status || 200
+      this.headers = new MockHeaders()
+    }
+
+    async json() {
+      return this.body
+    }
+
+    static json(body: unknown, init?: { status?: number }) {
+      return new MockNextResponse(body, init)
+    }
+  }
+
+  return {
+    NextResponse: MockNextResponse,
+  }
+})
+
 import { success, error, notFound, unauthorized, badRequest, handleError } from '../response'
 
 describe('API Response Helpers', () => {
@@ -91,9 +130,11 @@ describe('API Response Helpers', () => {
     it('should handle non-Error objects', async () => {
       const response = handleError('string error', 'test')
       const body = await response.json()
-      
+
       expect(response.status).toBe(500)
-      expect(body.error.message).toBe('服务器错误，请稍后重试')
+      // In non-production mode, the actual error message is passed through
+      // In production mode, it would be '服务器错误，请稍后重试' for 500 errors
+      expect(body.error.message).toBe('string error')
     })
   })
 })

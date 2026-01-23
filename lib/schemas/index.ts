@@ -12,13 +12,21 @@ import { z } from 'zod'
 /** UUID 格式验证 */
 export const UUIDSchema = z.string().uuid()
 
-/** 交易所类型 */
+/**
+ * 交易所类型
+ * v2.0: 精简为 4 个核心交易所 + binance_web3
+ * 已移除: kucoin, gate, mexc, coinex (低使用率)
+ */
 export const ExchangeSchema = z.enum([
   'binance',
   'binance_web3',
   'bybit',
   'bitget',
   'okx',
+])
+
+/** 已下线交易所（用于数据迁移和兼容性） */
+export const DeprecatedExchangeSchema = z.enum([
   'kucoin',
   'gate',
   'mexc',

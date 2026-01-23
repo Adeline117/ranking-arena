@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useEffect, useState, useRef } from 'react'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
 import ThemeToggle from '../ui/ThemeToggle'
@@ -15,13 +15,14 @@ import { Box } from '../base'
 export default function TopNav({ email }: { email: string | null }) {
   const { t } = useLanguage()
   const pathname = usePathname()
+  const router = useRouter()
   const [myId, setMyId] = useState<string | null>(null)
   const [myHandle, setMyHandle] = useState<string | null>(null)
   const [myAvatarUrl, setMyAvatarUrl] = useState<string | null>(null)
   const [showUserMenu, setShowUserMenu] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [showSearchDropdown, setShowSearchDropdown] = useState(false)
-  const [theme, setTheme] = useState<'light' | 'dark'>('dark')
+  const [_theme, setTheme] = useState<'light' | 'dark'>('dark')
   const [unreadCount, setUnreadCount] = useState(0)
   const [unreadMessageCount, setUnreadMessageCount] = useState(0)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -126,7 +127,7 @@ export default function TopNav({ email }: { email: string | null }) {
           table: 'notifications',
           filter: `user_id=eq.${myId}`,
         },
-        (payload) => {
+        (_payload) => {
           // 收到新通知或通知状态更新时，重新获取未读数量
           fetchUnreadCount()
         }
@@ -222,7 +223,7 @@ export default function TopNav({ email }: { email: string | null }) {
         const updated = [newItem, ...filtered].slice(0, 10) // 最多保留10条
         localStorage.setItem('searchHistory', JSON.stringify(updated))
       }
-      window.location.href = `/search?q=${encodeURIComponent(trimmedQuery)}`
+      router.push(`/search?q=${encodeURIComponent(trimmedQuery)}`)
     }
   }
 
@@ -261,7 +262,7 @@ export default function TopNav({ email }: { email: string | null }) {
           <Link 
             href="/" 
             className="top-nav-logo touch-target"
-            aria-label="返回首页"
+            aria-label={t('backToHome')}
             tabIndex={0}
             style={{ 
               display: 'flex', 
@@ -283,7 +284,7 @@ export default function TopNav({ email }: { email: string | null }) {
             onKeyDown={(e) => {
               if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault()
-                window.location.href = '/'
+                router.push('/')
               }
             }}
           >
@@ -405,7 +406,7 @@ export default function TopNav({ email }: { email: string | null }) {
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
                       e.preventDefault()
-                      window.location.href = item.href
+                      router.push(item.href)
                     }
                   }}
                 >
@@ -680,7 +681,7 @@ export default function TopNav({ email }: { email: string | null }) {
                       if (!myHandle) {
                         e.preventDefault()
                         // 如果没有 handle，跳转到设置页面
-                        window.location.href = '/settings'
+                        router.push('/settings')
                       } else {
                         setShowUserMenu(false)
                       }

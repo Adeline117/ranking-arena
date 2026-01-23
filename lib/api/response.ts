@@ -4,7 +4,7 @@
  */
 
 import { NextResponse } from 'next/server'
-import { ApiError, ErrorCode, ErrorCodeType, ErrorCodeToHttpStatus } from './errors'
+import { ApiError, ErrorCode, ErrorCodeType } from './errors'
 import { logger } from '../utils/logger'
 
 // ============================================

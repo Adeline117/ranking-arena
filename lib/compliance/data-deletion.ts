@@ -213,8 +213,8 @@ export async function createDataDeletionRequest(userId: string): Promise<DataDel
  * 取消数据删除请求
  */
 export async function cancelDataDeletionRequest(
-  requestId: string,
-  reason?: string
+  _requestId: string,
+  _reason?: string
 ): Promise<{ success: boolean; message: string }> {
   // 在实际实现中，这里应该：
   // 1. 检查请求是否存在且未执行

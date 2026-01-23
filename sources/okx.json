@@ -1,11 +1,24 @@
-[
-  {
-    "platform": "okx",
-    "market_type": "futures",
+{
+  "platform": "okx",
+  "market_types": ["futures", "copy", "web3"],
+  "futures": {
     "leaderboard_endpoints": [
+      {
+        "method": "GET",
+        "url": "https://www.okx.com/priapi/v5/ecotrade/public/trader-list",
+        "type": "api",
+        "params": {
+          "sortType": "profitRatio",
+          "dataRange": "30",
+          "pageNo": "1",
+          "pageSize": "20"
+        },
+        "notes": "sortType: profitRatio=ROI, profit=PnL. dataRange: 7, 30, 90"
+      },
       {
         "url": "https://www.okx.com/priapi/v5/ecotrade/public/leader-board",
         "method": "GET",
+        "type": "api",
         "headers": {
           "Referer": "https://www.okx.com/copy-trading/leaderboard",
           "Origin": "https://www.okx.com"
@@ -25,44 +38,65 @@
         },
         "response_path": "data.ranks",
         "window_param": "period",
-        "sort_param": "sortField"
+        "sort_param": "sortField",
+        "notes": "Alternative leaderboard endpoint"
       }
     ],
     "profile_endpoints": [
       {
-        "url": "https://www.okx.com/priapi/v5/ecotrade/public/trader/detail",
         "method": "GET",
-        "headers": {
-          "Origin": "https://www.okx.com"
-        },
-        "query_params": {
-          "uniqueName": "",
-          "period": "7D"
-        },
-        "response_path": "data"
+        "url": "https://www.okx.com/priapi/v5/ecotrade/public/trader-detail?uniqueName={trader_key}",
+        "type": "api"
+      },
+      {
+        "method": "GET",
+        "url": "https://www.okx.com/priapi/v5/ecotrade/public/profit-detail?uniqueName={trader_key}&dataRange=90",
+        "type": "api",
+        "notes": "Performance details with daily PnL"
       }
     ],
-    "window_support": ["7d", "30d", "90d"],
-    "rate_limit_hint": {
-      "rpm": 15,
-      "concurrent": 1,
-      "delay_ms": 4000
+    "trader_key_field": "uniqueName",
+    "roi_sort_supported": true,
+    "roi_sort_mechanism": "platform_native",
+    "roi_sort_param": "sortType=profitRatio (returns DESC sorted)",
+    "window_support": {
+      "7d": { "supported": true, "param": "dataRange=7" },
+      "30d": { "supported": true, "param": "dataRange=30" },
+      "90d": { "supported": true, "param": "dataRange=90" }
     },
     "field_map": {
-      "roi_pct": "pnlRatio",
-      "pnl_usd": "pnl",
-      "win_rate": "winRate",
-      "max_drawdown": "maxDrawdown",
-      "trades_count": "orderCount",
-      "followers": "followerCount",
-      "copiers": "copierCount"
+      "uniqueName": "trader_key",
+      "nickName": "display_name",
+      "portrait": "avatar_url",
+      "profitRatio": "roi (decimal, multiply by 100)",
+      "pnlRatio": "roi (alt, decimal)",
+      "profit": "pnl (USD)",
+      "pnl": "pnl (alt)",
+      "winRatio": "win_rate (decimal)",
+      "winRate": "win_rate (alt)",
+      "maxDrawdown": "max_drawdown (decimal, negate)",
+      "followerNum": "followers",
+      "followerCount": "followers (alt)",
+      "copyTraderNum": "copiers",
+      "copierCount": "copiers (alt)",
+      "aum": "aum",
+      "orderCount": "trades_count"
     },
-    "roi_sort_supported": true,
-    "roi_sort_method": "query_param",
+    "timeseries_endpoints": [
+      {
+        "method": "GET",
+        "url": "https://www.okx.com/priapi/v5/ecotrade/public/profit-detail?uniqueName={trader_key}&dataRange=90",
+        "notes": "Returns daily profit list with timestamps"
+      }
+    ],
+    "rate_limits": {
+      "estimated_rpm": 20,
+      "cloudflare_protected": true,
+      "notes": "priapi endpoints have moderate rate limiting"
+    },
     "proof": [
       {
         "url": "https://www.okx.com/priapi/v5/ecotrade/public/leader-board?pageNo=1&pageSize=20&sortField=pnlRatio&sortType=desc&period=7D",
-        "request_path": "/priapi/v5/ecotrade/public/leader-board",
         "method": "GET",
         "response_fields_sample": {
           "data.ranks[0].uniqueName": "okx_trader_alpha",
@@ -79,13 +113,32 @@
       }
     ]
   },
-  {
-    "platform": "okx_wallet",
-    "market_type": "web3",
+  "copy": {
+    "leaderboard_endpoints": [
+      {
+        "method": "GET",
+        "url": "https://www.okx.com/priapi/v5/ecotrade/public/copy-trader-list",
+        "type": "api",
+        "params": {
+          "sortType": "profitRatio",
+          "dataRange": "30"
+        }
+      }
+    ],
+    "trader_key_field": "uniqueName",
+    "roi_sort_supported": true,
+    "window_support": {
+      "7d": { "supported": true },
+      "30d": { "supported": true },
+      "90d": { "supported": true }
+    }
+  },
+  "web3": {
     "leaderboard_endpoints": [
       {
         "url": "https://www.okx.com/priapi/v5/wallet/public/leader-board",
         "method": "GET",
+        "type": "api",
         "headers": {
           "Origin": "https://www.okx.com",
           "Referer": "https://www.okx.com/web3/dex/leaderboard"
@@ -107,27 +160,24 @@
       }
     ],
     "profile_endpoints": [],
-    "window_support": ["7d", "30d", "90d"],
-    "rate_limit_hint": {
-      "rpm": 10,
-      "concurrent": 1,
-      "delay_ms": 5000
+    "trader_key_field": "address",
+    "window_support": {
+      "7d": { "supported": true },
+      "30d": { "supported": true },
+      "90d": { "supported": true }
     },
     "field_map": {
-      "roi_pct": "pnlRatio",
-      "pnl_usd": "pnl",
-      "win_rate": "winRate",
-      "max_drawdown": "maxDrawdown",
-      "trades_count": "",
-      "followers": "",
-      "copiers": ""
+      "address": "trader_key",
+      "pnlRatio": "roi",
+      "pnl": "pnl",
+      "winRate": "win_rate",
+      "maxDrawdown": "max_drawdown"
     },
     "roi_sort_supported": false,
-    "roi_sort_method": "not_supported",
+    "missing_fields": ["trades_count", "followers", "copiers"],
     "proof": [
       {
         "url": "https://www.okx.com/priapi/v5/wallet/public/leader-board?period=7D&pageNo=1&pageSize=50&chainId=0",
-        "request_path": "/priapi/v5/wallet/public/leader-board",
         "method": "GET",
         "response_fields_sample": {
           "data.ranks[0].address": "0x1234567890abcdef1234567890abcdef12345678",
@@ -138,4 +188,4 @@
       }
     ]
   }
-]
+}

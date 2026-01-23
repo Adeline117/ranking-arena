@@ -7,6 +7,7 @@
 
 import useSWR, { SWRConfiguration, mutate as globalMutate, SWRResponse } from 'swr'
 import useSWRInfinite, { SWRInfiniteConfiguration } from 'swr/infinite'
+import { t } from '@/lib/i18n'
 
 // ============================================
 // 请求超时配置
@@ -35,7 +36,7 @@ async function fetchWithTimeout(
   } catch (error) {
     clearTimeout(timeoutId)
     if (error instanceof Error && (error.name === 'AbortError' || error.message === 'The user aborted a request.')) {
-      const timeoutError = new Error('请求超时，请检查网络连接')
+      const timeoutError = new Error(t('errorTimeoutCheckNetwork'))
       timeoutError.name = 'TimeoutError'
       throw timeoutError
     }
@@ -73,7 +74,7 @@ export async function fetcher<T>(url: string): Promise<T> {
     })
 
     if (!response.ok) {
-      const error = new Error('请求失败') as Error & { status: number; info: unknown }
+      const error = new Error(t('errorRequestFailed')) as Error & { status: number; info: unknown }
       error.status = response.status
       try {
         error.info = await response.json()
@@ -87,11 +88,11 @@ export async function fetcher<T>(url: string): Promise<T> {
   } catch (error) {
     // 处理超时和网络错误
     if (error instanceof Error) {
-      if (error.name === 'TimeoutError' || error.message.includes('请求超时')) {
-        throw new Error('请求超时，请稍后重试')
+      if (error.name === 'TimeoutError' || error.message.includes('timeout') || error.message.includes('超时')) {
+        throw new Error(t('errorTimeout'))
       }
       if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
-        throw new Error('网络连接失败，请检查网络')
+        throw new Error(t('errorNetworkFailed'))
       }
     }
     throw error
@@ -111,7 +112,7 @@ export async function fetcherWithAuth<T>(url: string, token?: string): Promise<T
     })
 
     if (!response.ok) {
-      const error = new Error('请求失败') as Error & { status: number }
+      const error = new Error(t('errorRequestFailed')) as Error & { status: number }
       error.status = response.status
       throw error
     }
@@ -120,11 +121,11 @@ export async function fetcherWithAuth<T>(url: string, token?: string): Promise<T
   } catch (error) {
     // 处理超时和网络错误
     if (error instanceof Error) {
-      if (error.name === 'TimeoutError' || error.message.includes('请求超时')) {
-        throw new Error('请求超时，请稍后重试')
+      if (error.name === 'TimeoutError' || error.message.includes('timeout') || error.message.includes('超时')) {
+        throw new Error(t('errorTimeout'))
       }
       if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
-        throw new Error('网络连接失败，请检查网络')
+        throw new Error(t('errorNetworkFailed'))
       }
     }
     throw error

@@ -14,6 +14,8 @@ import { useToast } from '../ui/Toast'
 import { useDialog } from '../ui/Dialog'
 import { getCsrfHeaders } from '@/lib/api/client'
 import BookmarkModal from '../ui/BookmarkModal'
+import { useUnifiedAuth } from '@/lib/hooks/useUnifiedAuth'
+import { usePostStore, type PostData } from '@/lib/stores/postStore'
 
 // 本地类型（扩展后端类型）
 type Post = PostWithUserState
@@ -46,7 +48,7 @@ function renderContentWithLinks(text: string) {
   
   // 分割内容，保留图片和链接
   const parts: { type: 'text' | 'image' | 'link'; content: string; url?: string }[] = []
-  const lastIndex = 0
+  const _lastIndex = 0
   let match
   
   // 先找出所有图片
@@ -68,7 +70,7 @@ function renderContentWithLinks(text: string) {
       const beforeText = text.slice(currentIndex, img.start)
       // 处理这段文本中的链接
       const linkParts = beforeText.split(urlRegex)
-      linkParts.forEach((part, i) => {
+      linkParts.forEach((part, _i) => {
         if (urlRegex.test(part)) {
           urlRegex.lastIndex = 0
           parts.push({ type: 'link', content: part, url: part })
@@ -81,12 +83,12 @@ function renderContentWithLinks(text: string) {
     parts.push({ type: 'image', content: img.alt, url: img.url })
     currentIndex = img.end
   }
-  
+
   // 最后一个图片后的文本
   if (currentIndex < text.length) {
     const afterText = text.slice(currentIndex)
     const linkParts = afterText.split(urlRegex)
-    linkParts.forEach((part, i) => {
+    linkParts.forEach((part, _i) => {
       if (urlRegex.test(part)) {
         urlRegex.lastIndex = 0
         parts.push({ type: 'link', content: part, url: part })
@@ -246,8 +248,12 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
   const [loadingComments, setLoadingComments] = useState(false)
   const [newComment, setNewComment] = useState('')
   const [submittingComment, setSubmittingComment] = useState(false)
-  const [accessToken, setAccessToken] = useState<string | null>(null)
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+  // Unified auth - single source of truth
+  const auth = useUnifiedAuth({
+    onUnauthenticated: () => showToast('请先登录', 'warning'),
+  })
+  const accessToken = auth.accessToken
+  const currentUserId = auth.userId
   const [editingPost, setEditingPost] = useState<Post | null>(null)
   const [editTitle, setEditTitle] = useState('')
   const [editContent, setEditContent] = useState('')
@@ -287,33 +293,22 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
   const [votingCustomPoll, setVotingCustomPoll] = useState(false)
   const [selectedPollOptions, setSelectedPollOptions] = useState<number[]>([])
   // 收藏和转发状态
-  const [bookmarkLoading, setBookmarkLoading] = useState<Record<string, boolean>>({})
+  const [_bookmarkLoading, setBookmarkLoading] = useState<Record<string, boolean>>({})
   const [repostLoading, setRepostLoading] = useState<Record<string, boolean>>({})
   const [showRepostModal, setShowRepostModal] = useState<string | null>(null)
   const [repostComment, setRepostComment] = useState('')
   // 用户收藏和转发状态
   const [userBookmarks, setUserBookmarks] = useState<Record<string, boolean>>({})
-  const [userReposts, setUserReposts] = useState<Record<string, boolean>>({})
+  const [_userReposts, _setUserReposts] = useState<Record<string, boolean>>({})
   const [bookmarkCounts, setBookmarkCounts] = useState<Record<string, number>>({})
-  const [repostCounts, setRepostCounts] = useState<Record<string, number>>({})
+  const [_repostCounts, setRepostCounts] = useState<Record<string, number>>({})
   // 收藏夹选择弹窗状态
   const [showBookmarkModal, setShowBookmarkModal] = useState(false)
   const [bookmarkingPostId, setBookmarkingPostId] = useState<string | null>(null)
 
-  // 获取用户 token 和 ID
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setAccessToken(session?.access_token || null)
-      setCurrentUserId(session?.user?.id || null)
-    })
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setAccessToken(session?.access_token || null)
-      setCurrentUserId(session?.user?.id || null)
-    })
-
-    return () => subscription.unsubscribe()
-  }, [])
+  // Auth state is now managed by useUnifiedAuth hook (single source of truth)
+  // Store posts in canonical store when loaded
+  const storeSetPosts = usePostStore(s => s.setPosts)
 
   // 加载帖子
   const loadPosts = useCallback(async () => {
@@ -379,7 +374,26 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
       // API 返回格式: { success: true, data: { posts: [...] } }
       const loadedPosts = data.data?.posts || []
       setPosts(loadedPosts)
-      
+
+      // Store in canonical postStore for cross-component consistency
+      const canonicalPosts: PostData[] = loadedPosts.map((p: Post) => ({
+        id: p.id,
+        title: p.title || '',
+        content: p.content || '',
+        author_handle: p.author_handle || '匿名',
+        group_id: p.group_id,
+        group_name: p.group_name,
+        created_at: p.created_at,
+        like_count: p.like_count || 0,
+        dislike_count: p.dislike_count || 0,
+        comment_count: p.comment_count || 0,
+        view_count: p.view_count || 0,
+        hot_score: p.hot_score || 0,
+        user_reaction: p.user_reaction,
+        author_avatar_url: p.author_avatar_url,
+      }))
+      storeSetPosts(canonicalPosts)
+
       // 初始化收藏和转发计数
       const initialBookmarkCounts: Record<string, number> = {}
       const initialRepostCounts: Record<string, number> = {}
@@ -549,7 +563,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
       } else {
         setComments([])
       }
-    } catch (err) {
+    } catch (_err) {
       setComments([])
     } finally {
       setLoadingComments(false)
@@ -595,6 +609,13 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
           return p
         }))
 
+        // Also update canonical store
+        usePostStore.getState().updatePostReaction(postId, {
+          like_count: result.like_count,
+          dislike_count: result.dislike_count,
+          reaction: result.reaction,
+        })
+
         // 如果弹窗打开，也更新弹窗中的帖子
         if (openPost?.id === postId) {
           setOpenPost(prev => prev ? {
@@ -604,16 +625,22 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
             user_reaction: result.reaction,
           } : null)
         }
+      } else {
+        // FIX: Show error toast when API returns error
+        const errorMsg = json.error || json.message || '操作失败'
+        showToast(errorMsg, 'error')
       }
     } catch (err) {
-      // 错误已在 showToast 中处理
+      // FIX: Show error toast for network/unexpected errors
+      console.error('[PostFeed] toggleReaction error:', err)
+      showToast('网络错误，请重试', 'error')
     } finally {
       setTimeout(() => processingRef.current.delete(key), 300)
     }
-  }, [accessToken, openPost?.id])
+  }, [accessToken, openPost?.id, showToast])
 
   // 投票
-  const toggleVote = useCallback(async (postId: string, choice: PollChoice) => {
+  const _toggleVote = useCallback(async (postId: string, choice: PollChoice) => {
     if (!accessToken) {
       showToast('请先登录', 'warning')
       return
@@ -662,13 +689,19 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
             user_vote: result.vote,
           } : null)
         }
+      } else {
+        // FIX: Show error toast when API returns error
+        const errorMsg = json.error || json.message || '投票失败'
+        showToast(errorMsg, 'error')
       }
     } catch (err) {
-      // 错误已在 showToast 中处理
+      // FIX: Show error toast for network/unexpected errors
+      console.error('[PostFeed] toggleVote error:', err)
+      showToast('网络错误，请重试', 'error')
     } finally {
       setTimeout(() => processingRef.current.delete(key), 300)
     }
-  }, [accessToken, openPost?.id])
+  }, [accessToken, openPost?.id, showToast])
 
   // 加载自定义投票
   const loadCustomPoll = useCallback(async (postId: string) => {
@@ -688,7 +721,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
         setCustomPollUserVotes(data.data.userVotes || [])
         setSelectedPollOptions(data.data.userVotes || [])
       }
-    } catch (err) {
+    } catch (_err) {
       // 错误已在 showToast 中处理
     } finally {
       setLoadingCustomPoll(false)
@@ -736,6 +769,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
     } finally {
       setVotingCustomPoll(false)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken, selectedPollOptions])
 
   // 收藏帖子 - 点击收藏到默认收藏夹，已收藏则取消收藏
@@ -766,7 +800,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
       } else {
         showToast(result.error || '操作失败', 'error')
       }
-    } catch (err) {
+    } catch (_err) {
       // 错误已在 showToast 中处理
       showToast('网络错误', 'error')
     } finally {
@@ -810,7 +844,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
       } else {
         showToast(result.error || '操作失败', 'error')
       }
-    } catch (err) {
+    } catch (_err) {
       // 错误已在 showToast 中处理
       showToast('网络错误', 'error')
     } finally {
@@ -891,7 +925,10 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
         const result = json.data
         setComments(prev => [...prev, result.comment])
         setNewComment('')
-        
+
+        // Also update canonical store (server ACK only)
+        usePostStore.getState().addComment(postId, result.comment)
+
         // 更新评论计数
         setPosts(prev => prev.map(p => {
           if (p.id === postId) {
@@ -899,14 +936,14 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
           }
           return p
         }))
-        
+
         if (openPost?.id === postId) {
           setOpenPost(prev => prev ? { ...prev, comment_count: prev.comment_count + 1 } : null)
         }
       } else {
         showToast(json.error || '发表评论失败', 'error')
       }
-    } catch (err) {
+    } catch (_err) {
       // 错误已在 showToast 中处理
       showToast('发表评论失败', 'error')
     } finally {
@@ -966,7 +1003,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
           showToast(json.error || '点赞失败', 'error')
         }
       }
-    } catch (err) {
+    } catch (_err) {
       // 错误已在 showToast 中处理
       showToast('网络错误', 'error')
     } finally {
@@ -1095,7 +1132,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
       } else {
         showToast(json.error || '删除评论失败', 'error')
       }
-    } catch (err) {
+    } catch (_err) {
       // 错误已在 showToast 中处理
       showToast('删除评论失败', 'error')
     } finally {
@@ -1199,7 +1236,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
       } else {
         showToast(data.error || '删除失败', 'error')
       }
-    } catch (err) {
+    } catch (_err) {
       // 错误已在 showToast 中处理
       showToast('删除失败', 'error')
     }
@@ -1511,6 +1548,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
     if (!hasTranslatedTitle && needsTitleTranslation) {
       translateListPosts([post], language as 'zh' | 'en')
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadComments, language, isChineseText, translateContent, translatedListPosts, translateListPosts])
 
   if (loading) {
@@ -1680,13 +1718,13 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
         }) : posts).map((p) => {
           const poll = { bull: p.poll_bull, bear: p.poll_bear, wait: p.poll_wait }
           const winner = p.poll_enabled ? getPollWinner(poll) : 'tie'
-          const label = pollLabel(winner, t)
-          const color = pollColor(winner)
+          const _label = pollLabel(winner, t)
+          const _color = pollColor(winner)
 
           return (
             <div
               key={p.id}
-              onClick={(e) => {
+              onClick={(e: React.MouseEvent) => {
                 // Don't hijack clicks on interactive elements (links, buttons, etc.)
                 if ((e.target as HTMLElement).closest('a, button, [role="button"], input, textarea, select')) return
                 handleOpenPost(p)
@@ -2031,6 +2069,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
                   fontSize: 12,
                   color: ARENA_PURPLE,
                   textDecoration: 'none',
+                  fontWeight: 600,
                   padding: '2px 8px',
                   background: `${ARENA_PURPLE}20`,
                   borderRadius: tokens.radius.sm,
@@ -2064,7 +2103,25 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
           </div>
 
           <div style={{ marginTop: 8, fontSize: 12, color: tokens.colors.text.tertiary, display: 'flex', alignItems: 'center', gap: 6 }}>
-            {openPost.author_handle} · {formatTimeAgo(openPost.created_at)} · <CommentIcon size={12} /> {openPost.comment_count}
+            {openPost.author_handle ? (
+              <Link
+                href={`/u/${encodeURIComponent(openPost.author_handle)}`}
+                style={{
+                  color: tokens.colors.text.secondary,
+                  textDecoration: 'none',
+                  fontWeight: 700,
+                }}
+              >
+                {openPost.author_handle}
+              </Link>
+            ) : (
+              <span>{openPost.author_handle || '匿名'}</span>
+            )}
+            <span>·</span>
+            <span>{formatTimeAgo(openPost.created_at)}</span>
+            <span>·</span>
+            <CommentIcon size={12} />
+            <span>{openPost.comment_count}</span>
           </div>
 
           <div translate="no" style={{ 

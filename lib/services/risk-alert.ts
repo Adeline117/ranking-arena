@@ -115,9 +115,9 @@ const ALERT_MESSAGES = {
 // ============================================
 
 function getSeverity(
-  alertType: AlertType, 
+  alertType: AlertType,
   currentValue: number,
-  threshold: number
+  _threshold: number
 ): AlertSeverity {
   const defaults = DEFAULT_THRESHOLDS[alertType]
   
@@ -170,7 +170,7 @@ function formatAlertMessage(
 // ============================================
 
 export class RiskAlertService {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   private supabase: any // Database types not generated for these tables
 
   constructor(supabaseUrl: string, supabaseKey: string) {
@@ -342,7 +342,7 @@ export class RiskAlertService {
       throw error
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     return (data || []).map((row: any) => ({
       id: row.id,
       userId: row.user_id,
@@ -428,7 +428,7 @@ export class RiskAlertService {
       throw error
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     return (data || []).map((row: any) => ({
       id: row.id,
       userId: row.user_id,

@@ -15,7 +15,6 @@ import PostFeed from '@/app/components/post/PostFeed'
 import StatsPage from '@/app/components/trader/stats/StatsPage'
 // PinnedPost 组件已集成到 PostFeed 中（置顶帖子自动显示在动态列表最上方）
 import PortfolioTable from '@/app/components/trader/PortfolioTable'
-import TradingViewShell from '@/app/components/trader/TradingViewShell'
 import AccountRequiredStats from '@/app/components/trader/AccountRequiredStats'
 import CreatedGroups from '@/app/components/trader/CreatedGroups'
 import UserBookmarkFolders from '@/app/components/trader/UserBookmarkFolders'
@@ -36,7 +35,7 @@ import {
   type TraderFeedItem,
 } from '@/lib/data/trader'
 
-type TabKey = 'overview' | 'stats' | 'portfolio'
+type TabKey = 'overview' | 'stats' | 'portfolio' | 'discussion'
 
 function UserHomeContent(props: { params: { handle: string } | Promise<{ handle: string }> }) {
   const searchParams = useSearchParams()
@@ -51,7 +50,7 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
   const [performance, setPerformance] = useState<TraderPerformance | null>(null)
   const [stats, setStats] = useState<TraderStats | null>(null)
   const [portfolio, setPortfolio] = useState<PortfolioItem[]>([])
-  const [feed, setFeed] = useState<TraderFeedItem[]>([])
+  const [_feed, setFeed] = useState<TraderFeedItem[]>([])
   const [similarTraders, setSimilarTraders] = useState<TraderProfile[]>([])
   const [loading, setLoading] = useState(true)
   const [proBadgeTier, setProBadgeTier] = useState<'pro' | null>(null)
@@ -118,7 +117,7 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
         
         // 先尝试从 trader_sources 获取（如果用户也是交易员）
         let profileData: TraderProfile | null = await getTraderByHandle(handle)
-        let isTraderInRanking = !!profileData // 标记是否在排行榜上
+        let _isTraderInRanking = !!profileData // 标记是否在排行榜上
 
         // 如果找不到，从 user_profiles 表获取注册用户信息（profiles 表不存在）
         if (!profileData) {
@@ -142,14 +141,14 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
             }
           }
           
-          isTraderInRanking = foundInRanking
-          
+          _isTraderInRanking = foundInRanking
+
           // 直接使用 user_profiles 表（因为 profiles 表不存在）
           // 先通过 handle 查询（使用解码后的 handle）
           let userProfile = null
-          
+
           // 先尝试解码后的 handle
-          const { data: profileByHandle, error: handleError } = await supabase
+          const { data: profileByHandle, error: _handleError } = await supabase
             .from('user_profiles')
             .select('*, show_followers, show_following, uid, cover_url')
             .eq('handle', decodedHandle)
@@ -162,7 +161,7 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
             // 注意：只有当 handle 看起来像 UUID 时才尝试通过 id 查询
             const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
             if (uuidRegex.test(handle)) {
-              const { data: profileById, error: idError } = await supabase
+              const { data: profileById, error: _idError } = await supabase
                 .from('user_profiles')
                 .select('*, uid, cover_url')
                 .eq('id', handle)
@@ -347,6 +346,93 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
               } catch {
                 // 创建 profile 失败，静默处理
               }
+            } else {
+              // 如果 handle 不匹配，尝试通过 ID 查找
+              const { data: profileById } = await supabase
+                .from('user_profiles')
+                .select('*, cover_url')
+                .eq('id', user.id)
+                .maybeSingle()
+
+              if (profileById) {
+                // 如果找到用户且有 handle，重定向到正确的 handle
+                if (profileById.handle && profileById.handle !== handle) {
+                  window.location.href = `/u/${profileById.handle}`
+                  return
+                }
+                // 如果用户没有设置 handle，使用当前 profile 数据显示页面
+                const { count: followersCount } = await supabase
+                  .from('user_follows')
+                  .select('*', { count: 'exact', head: true })
+                  .eq('following_id', profileById.id)
+
+                const { count: followingCount } = await supabase
+                  .from('user_follows')
+                  .select('*', { count: 'exact', head: true })
+                  .eq('follower_id', profileById.id)
+
+                profileData = {
+                  handle: profileById.handle || decodedHandle,
+                  id: profileById.id,
+                  uid: profileById.uid || undefined,
+                  bio: profileById.bio || null,
+                  followers: followersCount || 0,
+                  following: followingCount || 0,
+                  copiers: 0,
+                  avatar_url: profileById.avatar_url || undefined,
+                  cover_url: profileById.cover_url || undefined,
+                  isRegistered: true,
+                  showFollowers: profileById.show_followers !== false,
+                  showFollowing: profileById.show_following !== false,
+                }
+              } else {
+                // 如果找不到，尝试创建新的 profile
+                try {
+                  const { data: userProfileData, error: _insertError } = await supabase
+                    .from('user_profiles')
+                    .upsert({
+                      id: user.id,
+                      handle: emailHandle,
+                    }, { onConflict: 'id' })
+                    .select()
+                    .single()
+
+                  if (userProfileData) {
+                    // 如果新创建的 handle 与当前 URL 不同，重定向
+                    if (userProfileData.handle && userProfileData.handle !== decodedHandle) {
+                      window.location.href = `/u/${encodeURIComponent(userProfileData.handle)}`
+                      return
+                    }
+                    // 否则直接使用创建的数据
+                    const { count: followersCount } = await supabase
+                      .from('user_follows')
+                      .select('*', { count: 'exact', head: true })
+                      .eq('following_id', userProfileData.id)
+
+                    const { count: followingCount } = await supabase
+                      .from('user_follows')
+                      .select('*', { count: 'exact', head: true })
+                      .eq('follower_id', userProfileData.id)
+
+                    profileData = {
+                      handle: userProfileData.handle || decodedHandle,
+                      id: userProfileData.id,
+                      uid: userProfileData.uid || undefined,
+                      bio: userProfileData.bio || null,
+                      followers: followersCount || 0,
+                      following: followingCount || 0,
+                      copiers: 0,
+                      avatar_url: userProfileData.avatar_url || undefined,
+                      cover_url: userProfileData.cover_url || undefined,
+                      isRegistered: true,
+                      showFollowers: true,
+                      showFollowing: true,
+                    }
+                  }
+                } catch {
+                  // 创建 profile 失败，静默处理
+                }
+              }
             }
             // When the URL handle does NOT match the current user's identifiers,
             // do NOT show the current user's profile - this prevents the bug where
@@ -375,7 +461,7 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
           getTraderPerformance(handle).catch(() => null),
           getTraderStats(handle).catch(() => null),
           getTraderPortfolio(handle).catch(() => []),
-          getTraderFeed(handle),
+          getTraderFeed(handle).catch(() => []),
           getSimilarTraders(handle).catch(() => []),
         ])
 
@@ -436,6 +522,7 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
     }
 
     load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [handle])
 
   if (loading) {

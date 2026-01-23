@@ -4,7 +4,7 @@
  * 使用 Playwright 代替 puppeteer-extra
  */
 
-import { BaseScraper, parseTraderFromApi } from './base.js'
+import { BaseScraper } from './base.js'
 import type { TraderData, TimeRange } from '../types.js'
 
 export class BybitScraper extends BaseScraper {

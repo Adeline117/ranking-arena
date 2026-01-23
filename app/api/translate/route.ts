@@ -242,7 +242,7 @@ async function handleBatchTranslate(
   const results: Record<string, { translatedText: string; cached: boolean }> = {}
 
   // 1. 批量查询缓存
-  const contentIds = limitedItems.map(item => item.contentId)
+  const _contentIds = limitedItems.map(item => item.contentId)
   const contentTypes = [...new Set(limitedItems.map(item => item.contentType))]
 
   // 准备需要翻译的项目列表
@@ -294,51 +294,58 @@ async function handleBatchTranslate(
 
   logger.info(`Batch translate: ${limitedItems.length} requests, ${needsTranslation.length} need GPT`)
 
-  // 2. 翻译未缓存的项目（限制并发数）
+  // 2. 翻译未缓存的项目（限制并发数，使用错误隔离）
   const concurrencyLimit = 5
   for (let i = 0; i < needsTranslation.length; i += concurrencyLimit) {
     const batch = needsTranslation.slice(i, i + concurrencyLimit)
-    
-    await Promise.all(batch.map(async (item) => {
+
+    // 使用 Promise.allSettled 确保单个翻译失败不会影响其他翻译
+    const batchResults = await Promise.allSettled(batch.map(async (item) => {
       const sourceLang = detectSourceLang(item.text)
-      
+
       // 如果源语言和目标语言相同
       if (sourceLang === targetLang) {
-        results[item.id] = {
-          translatedText: item.text,
-          cached: true,
-        }
-        return
+        return { id: item.id, translatedText: item.text, cached: true }
       }
 
       const translatedText = await translateWithGPT(item.text, targetLang)
-      
-      if (translatedText) {
-        results[item.id] = {
-          translatedText,
-          cached: false,
-        }
 
-        // 保存到缓存
-        try {
-          await supabase
-            .from('translation_cache')
-            .upsert({
-              content_type: item.contentType,
-              content_id: item.contentId,
-              content_hash: hashContent(item.text),
-              source_lang: sourceLang,
-              target_lang: targetLang,
-              translated_text: translatedText,
-              updated_at: new Date().toISOString(),
-            }, {
-              onConflict: 'content_type,content_id,target_lang',
-            })
-        } catch (err) {
-          logger.warn('Cache save failed', { error: String(err) })
-        }
+      if (translatedText) {
+        // 保存到缓存（不阻塞返回）
+        supabase
+          .from('translation_cache')
+          .upsert({
+            content_type: item.contentType,
+            content_id: item.contentId,
+            content_hash: hashContent(item.text),
+            source_lang: sourceLang,
+            target_lang: targetLang,
+            translated_text: translatedText,
+            updated_at: new Date().toISOString(),
+          }, {
+            onConflict: 'content_type,content_id,target_lang',
+          })
+          .then(({ error }) => {
+            if (error) logger.warn('Cache save failed', { error: error.message, itemId: item.id })
+          })
+
+        return { id: item.id, translatedText, cached: false }
       }
+
+      return { id: item.id, translatedText: null, cached: false }
     }))
+
+    // 处理结果，记录失败的翻译
+    for (const result of batchResults) {
+      if (result.status === 'fulfilled' && result.value.translatedText) {
+        results[result.value.id] = {
+          translatedText: result.value.translatedText,
+          cached: result.value.cached,
+        }
+      } else if (result.status === 'rejected') {
+        logger.warn('Translation failed for item', { error: String(result.reason) })
+      }
+    }
   }
 
   return NextResponse.json({

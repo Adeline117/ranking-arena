@@ -775,7 +775,7 @@ function RiskChart({ scores, height }: { scores: number[]; height: number }) {
 }
 function CompareChart({ height }: { height: number }) {
   // 生成随机曲线路径数据
-  const generatePath = (baseY: number, variance: number, isUp: boolean) => {
+  const _generatePath = (baseY: number, variance: number, isUp: boolean) => {
     const points: string[] = []
     const steps = 10
     let y = baseY

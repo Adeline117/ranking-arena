@@ -1,66 +1,102 @@
 {
   "platform": "bitmart",
-  "market_type": "futures",
-  "leaderboard_endpoints": [
-    {
-      "url": "https://www.bitmart.com/api/copy-trading/v1/public/trader/list",
-      "method": "GET",
-      "headers": {
-        "Origin": "https://www.bitmart.com",
-        "Referer": "https://www.bitmart.com/copy-trading"
+  "market_types": ["futures"],
+  "futures": {
+    "leaderboard_endpoints": [
+      {
+        "method": "GET",
+        "url": "https://www.bitmart.com/api/copy-trade/v1/public/trader/list",
+        "type": "api",
+        "params": {
+          "page": 1,
+          "size": 20,
+          "sortBy": "roi",
+          "period": "30d"
+        },
+        "notes": "period: 7d, 30d. No 90d confirmed."
       },
-      "query_params": {
-        "page": "1",
-        "size": "50",
-        "period": "7",
-        "sort": "roi",
-        "order": "desc"
-      },
-      "pagination": {
-        "type": "page",
-        "page_size": 50,
-        "max_pages": 1,
-        "param_name": "page"
-      },
-      "response_path": "data.list",
-      "window_param": "period",
-      "sort_param": "sort"
-    }
-  ],
-  "profile_endpoints": [],
-  "window_support": ["7d", "30d"],
-  "rate_limit_hint": {
-    "rpm": 10,
-    "concurrent": 1,
-    "delay_ms": 5000
-  },
-  "field_map": {
-    "roi_pct": "roi",
-    "pnl_usd": "pnl",
-    "win_rate": "win_rate",
-    "max_drawdown": "max_drawdown",
-    "trades_count": "trade_count",
-    "followers": "follower_count",
-    "copiers": "copier_count"
-  },
-  "roi_sort_supported": false,
-  "roi_sort_method": "ui_state",
-  "proof": [
-    {
-      "url": "https://www.bitmart.com/api/copy-trading/v1/public/trader/list?page=1&size=50&period=7&sort=roi&order=desc",
-      "request_path": "/api/copy-trading/v1/public/trader/list",
-      "method": "GET",
-      "response_fields_sample": {
-        "data.list[0].trader_id": "bitmart_t_001",
-        "data.list[0].nick_name": "BitmartTrader",
-        "data.list[0].roi": 0.2987,
-        "data.list[0].pnl": 6543.21,
-        "data.list[0].win_rate": 0.63,
-        "data.list[0].max_drawdown": 0.21,
-        "data.list[0].trade_count": 145,
-        "data.list[0].follower_count": 310
-      },
-      "discovered_at": "2024-01-15T00:00:00Z"
-    }
-  ]
+      {
+        "url": "https://www.bitmart.com/api/copy-trading/v1/public/trader/list",
+        "method": "GET",
+        "type": "api",
+        "headers": {
+          "Origin": "https://www.bitmart.com",
+          "Referer": "https://www.bitmart.com/copy-trading"
+        },
+        "query_params": {
+          "page": "1",
+          "size": "50",
+          "period": "7",
+          "sort": "roi",
+          "order": "desc"
+        },
+        "pagination": {
+          "type": "page",
+          "page_size": 50,
+          "max_pages": 1,
+          "param_name": "page"
+        },
+        "response_path": "data.list",
+        "window_param": "period",
+        "sort_param": "sort",
+        "notes": "Alternative endpoint with different URL pattern"
+      }
+    ],
+    "profile_endpoints": [
+      {
+        "method": "GET",
+        "url": "https://www.bitmart.com/api/copy-trade/v1/public/trader/detail?traderId={trader_key}",
+        "type": "api"
+      }
+    ],
+    "trader_key_field": "traderId",
+    "roi_sort_supported": true,
+    "roi_sort_mechanism": "platform_native",
+    "roi_sort_param": "sortBy=roi",
+    "window_support": {
+      "7d": { "supported": true, "param": "period=7d" },
+      "30d": { "supported": true, "param": "period=30d" },
+      "90d": { "supported": false, "reason": "BitMart copy trading only provides 7D and 30D leaderboard views. No 90D period available via API or web UI." }
+    },
+    "field_map": {
+      "traderId": "trader_key",
+      "trader_id": "trader_key (alt)",
+      "nickname": "display_name",
+      "nick_name": "display_name (alt)",
+      "avatar": "avatar_url",
+      "roi": "roi (percentage)",
+      "pnl": "pnl",
+      "followers": "followers",
+      "follower_count": "followers (alt)",
+      "copiers": "copiers",
+      "copier_count": "copiers (alt)",
+      "win_rate": "win_rate",
+      "max_drawdown": "max_drawdown",
+      "trade_count": "trades_count"
+    },
+    "missing_fields": ["win_rate", "max_drawdown", "sharpe_ratio"],
+    "missing_reason": "BitMart leaderboard API does not provide win_rate or drawdown in list endpoint. May be available in detail endpoint.",
+    "rate_limits": {
+      "estimated_rpm": 10,
+      "cloudflare_protected": true,
+      "notes": "Aggressive CF, limited API access"
+    },
+    "proof": [
+      {
+        "url": "https://www.bitmart.com/api/copy-trading/v1/public/trader/list?page=1&size=50&period=7&sort=roi&order=desc",
+        "method": "GET",
+        "response_fields_sample": {
+          "data.list[0].trader_id": "bitmart_t_001",
+          "data.list[0].nick_name": "BitmartTrader",
+          "data.list[0].roi": 0.2987,
+          "data.list[0].pnl": 6543.21,
+          "data.list[0].win_rate": 0.63,
+          "data.list[0].max_drawdown": 0.21,
+          "data.list[0].trade_count": 145,
+          "data.list[0].follower_count": 310
+        },
+        "discovered_at": "2024-01-15T00:00:00Z"
+      }
+    ]
+  }
 }
