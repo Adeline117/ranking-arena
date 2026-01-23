@@ -70,7 +70,19 @@ export async function GET(request: NextRequest) {
 
         return {
           id: conv.id,
-          other_user: otherUser || { id: otherUserId, handle: '未知用户' },
+          other_user: otherUser
+            ? {
+                id: otherUser.id,
+                handle: otherUser.handle || null,
+                avatar_url: otherUser.avatar_url || null,
+                bio: otherUser.bio || null,
+              }
+            : {
+                id: otherUserId,
+                handle: null,
+                avatar_url: null,
+                bio: null,
+              },
           last_message_at: conv.last_message_at,
           last_message_preview: conv.last_message_preview,
           unread_count: unreadCount || 0,

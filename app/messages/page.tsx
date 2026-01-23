@@ -14,9 +14,9 @@ type Conversation = {
   id: string
   other_user: {
     id: string
-    handle: string
-    avatar_url?: string
-    bio?: string
+    handle: string | null
+    avatar_url?: string | null
+    bio?: string | null
   }
   last_message_at: string
   last_message_preview?: string
@@ -431,7 +431,7 @@ export default function MessagesPage() {
                   <Box style={{ position: 'relative', flexShrink: 0 }}>
                     <Avatar
                       userId={conv.other_user.id}
-                      name={conv.other_user.handle}
+                      name={conv.other_user.handle || `User ${conv.other_user.id.slice(0, 8)}`}
                       avatarUrl={conv.other_user.avatar_url}
                       size={52}
                     />
@@ -458,12 +458,12 @@ export default function MessagesPage() {
                       justifyContent: 'space-between', 
                       marginBottom: 4,
                     }}>
-                      <Text 
-                        size="base" 
-                        weight={conv.unread_count > 0 ? 'black' : 'bold'} 
+                      <Text
+                        size="base"
+                        weight={conv.unread_count > 0 ? 'black' : 'bold'}
                         style={{ color: tokens.colors.text.primary }}
                       >
-                        {conv.other_user.handle}
+                        {conv.other_user.handle || `User ${conv.other_user.id.slice(0, 8)}`}
                       </Text>
                       <Text size="xs" color="tertiary" style={{ flexShrink: 0, marginLeft: 8 }}>
                         {formatTime(conv.last_message_at)}
