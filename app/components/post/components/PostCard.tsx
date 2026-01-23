@@ -175,7 +175,7 @@ export function PostCard({
         <AvatarLink handle={post.author_handle} avatarUrl={post.author_avatar_url} />
         
         <div style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
-          {post.group_name && (
+          {post.group_name && post.group_id && (
             <Link
               href={`/groups/${post.group_id}`}
               onClick={(e) => e.stopPropagation()}
