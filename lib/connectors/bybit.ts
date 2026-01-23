@@ -6,16 +6,17 @@
  * Rate limits: 30 req/min with 2-5s jitter.
  */
 
-import { BaseConnector, ConnectorError } from './base';
+import { BaseConnectorLegacy } from './base';
 import type {
   RankingWindow,
   TraderIdentity,
-  TraderSnapshot,
+  TraderSnapshotLegacy,
   TraderProfileEnriched,
-  TraderTimeseries,
+  TraderTimeseriesLegacy,
   TimeseriesType,
-  SnapshotMetrics,
+  SnapshotMetricsLegacy,
   TimeseriesPoint,
+  LegacyPlatformConnector,
 } from '@/lib/types/leaderboard';
 
 // ============================================
@@ -82,7 +83,7 @@ const WINDOW_TO_PERIOD: Record<RankingWindow, string> = {
 // Connector
 // ============================================
 
-export class BybitConnector extends BaseConnector {
+export class BybitConnector extends BaseConnectorLegacy implements LegacyPlatformConnector {
   readonly platform = 'bybit' as const;
   private readonly baseUrl = 'https://api2.bybit.com/fapi/beehive/public/v1';
 
@@ -98,7 +99,7 @@ export class BybitConnector extends BaseConnector {
     const maxPages = 5;
 
     for (let page = 1; page <= maxPages; page++) {
-      const data = await this.request<BybitLeaderboardResponse>(
+      const data = await this.requestWithCircuitBreaker<BybitLeaderboardResponse>(
         () => this.fetchLeaderboardPage(period, page, pageSize),
         { label: `discoverLeaderboard(${window}, page=${page})` },
       );
@@ -127,8 +128,8 @@ export class BybitConnector extends BaseConnector {
   async fetchTraderSnapshot(
     traderKey: string,
     window: RankingWindow,
-  ): Promise<Omit<TraderSnapshot, 'id' | 'created_at'>> {
-    const detail = await this.request<BybitTraderDetailResponse>(
+  ): Promise<Omit<TraderSnapshotLegacy, 'id' | 'created_at'>> {
+    const detail = await this.requestWithCircuitBreaker<BybitTraderDetailResponse>(
       () => this.fetchTraderDetailApi(traderKey, window),
       { label: `fetchTraderSnapshot(${traderKey}, ${window})` },
     );
@@ -136,7 +137,7 @@ export class BybitConnector extends BaseConnector {
     const d = detail.result;
     const roi = d.roi != null ? (Math.abs(d.roi) < 10 ? d.roi * 100 : d.roi) : null;
 
-    const metrics: SnapshotMetrics = {
+    const metrics: SnapshotMetricsLegacy = {
       roi_pct: roi,
       pnl_usd: d.totalPnl ?? null,
       win_rate_pct: d.winRate != null ? (d.winRate <= 1 ? d.winRate * 100 : d.winRate) : null,
@@ -167,7 +168,7 @@ export class BybitConnector extends BaseConnector {
   async fetchTraderProfile(
     traderKey: string,
   ): Promise<Omit<TraderProfileEnriched, 'last_enriched_at'>> {
-    const detail = await this.request<BybitTraderDetailResponse>(
+    const detail = await this.requestWithCircuitBreaker<BybitTraderDetailResponse>(
       () => this.fetchTraderDetailApi(traderKey, '90d'),
       { label: `fetchTraderProfile(${traderKey})` },
     );
@@ -190,7 +191,7 @@ export class BybitConnector extends BaseConnector {
   async fetchTimeseries(
     traderKey: string,
     seriesType: TimeseriesType,
-  ): Promise<Omit<TraderTimeseries, 'id' | 'created_at'>> {
+  ): Promise<Omit<TraderTimeseriesLegacy, 'id' | 'created_at'>> {
     // Bybit performance curve: ROI over time
     if (seriesType !== 'equity_curve') {
       return {
@@ -202,7 +203,7 @@ export class BybitConnector extends BaseConnector {
       };
     }
 
-    const entries = await this.request<Array<{ time: number; value: number }>>(
+    const entries = await this.requestWithCircuitBreaker<Array<{ time: number; value: number }>>(
       () => this.fetchPerformanceCurve(traderKey),
       { label: `fetchTimeseries(${traderKey}, ${seriesType})` },
     );
@@ -237,7 +238,7 @@ export class BybitConnector extends BaseConnector {
     });
 
     if (!response.ok) {
-      throw new ConnectorError(`Bybit API returned ${response.status}`, this.platform, response.status >= 500);
+      throw new Error(`Bybit API returned ${response.status}`);
     }
 
     return response.json();
@@ -254,7 +255,7 @@ export class BybitConnector extends BaseConnector {
     });
 
     if (!response.ok) {
-      throw new ConnectorError(`Bybit detail API returned ${response.status}`, this.platform, response.status >= 500);
+      throw new Error(`Bybit detail API returned ${response.status}`);
     }
 
     return response.json();

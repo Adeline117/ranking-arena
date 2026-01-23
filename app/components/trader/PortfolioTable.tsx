@@ -486,7 +486,7 @@ export default function PortfolioTable({ items, history = [] }: PortfolioTablePr
               position: 'fixed',
               inset: 0,
               background: 'rgba(0, 0, 0, 0.5)',
-              zIndex: 999,
+              zIndex: tokens.zIndex.overlay,
               opacity: 1,
               transition: 'opacity 0.3s ease',
             }}
