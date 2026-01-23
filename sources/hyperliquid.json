@@ -1,91 +1,112 @@
 {
   "platform": "hyperliquid",
-  "market_type": "perp",
-  "leaderboard_endpoints": [
-    {
-      "url": "https://api.hyperliquid.xyz/info",
-      "method": "POST",
-      "headers": {
-        "Content-Type": "application/json"
+  "market_types": ["perp"],
+  "perp": {
+    "leaderboard_endpoints": [
+      {
+        "method": "POST",
+        "url": "https://api.hyperliquid.xyz/info",
+        "type": "api",
+        "body": {
+          "type": "leaderboard",
+          "timeWindow": "month"
+        },
+        "notes": "timeWindow: day (=7d aggregated), week, month (=30d), allTime. For 90d we use allTime and filter by date. Official API docs: https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/info-endpoint"
       },
-      "body_template": {
-        "type": "leaderboard",
-        "timeWindow": "week"
+      {
+        "url": "https://api.hyperliquid.xyz/info",
+        "method": "POST",
+        "type": "api",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body_template": {
+          "type": "frontendLeaderboard",
+          "timeWindow": "week"
+        },
+        "pagination": {
+          "type": "offset",
+          "page_size": 100,
+          "max_pages": 1,
+          "param_name": "limit"
+        },
+        "response_path": "leaderboard",
+        "window_param": "timeWindow",
+        "notes": "Alternative 'frontendLeaderboard' type endpoint"
+      }
+    ],
+    "profile_endpoints": [
+      {
+        "method": "POST",
+        "url": "https://api.hyperliquid.xyz/info",
+        "type": "api",
+        "body": {
+          "type": "clearinghouseState",
+          "user": "{trader_key}"
+        },
+        "notes": "Returns account state, positions, equity"
       },
-      "pagination": {
-        "type": "offset",
-        "page_size": 100,
-        "max_pages": 1,
-        "param_name": "limit"
-      },
-      "response_path": "leaderboardRows",
-      "window_param": "timeWindow"
+      {
+        "method": "POST",
+        "url": "https://api.hyperliquid.xyz/info",
+        "type": "api",
+        "body": {
+          "type": "userFills",
+          "user": "{trader_key}"
+        },
+        "notes": "Trade history for timeseries construction"
+      }
+    ],
+    "trader_key_field": "ethAddress (0x...)",
+    "roi_sort_supported": true,
+    "roi_sort_mechanism": "platform_native",
+    "roi_sort_param": "Leaderboard response is pre-sorted by accountValue change (ROI proxy)",
+    "window_support": {
+      "7d": { "supported": true, "param": "timeWindow=day (aggregate 7 daily windows)", "notes": "Requires client-side aggregation of daily windows" },
+      "30d": { "supported": true, "param": "timeWindow=month" },
+      "90d": { "supported": true, "param": "timeWindow=allTime, filter last 90 days client-side", "notes": "allTime available, we filter to 90d window" }
     },
-    {
-      "url": "https://api.hyperliquid.xyz/info",
-      "method": "POST",
-      "headers": {
-        "Content-Type": "application/json"
-      },
-      "body_template": {
-        "type": "frontendLeaderboard",
-        "timeWindow": "week"
-      },
-      "pagination": {
-        "type": "offset",
-        "page_size": 100,
-        "max_pages": 1,
-        "param_name": "limit"
-      },
-      "response_path": "leaderboard",
-      "window_param": "timeWindow"
-    }
-  ],
-  "profile_endpoints": [
-    {
-      "url": "https://api.hyperliquid.xyz/info",
-      "method": "POST",
-      "headers": {
-        "Content-Type": "application/json"
-      },
-      "body_template": {
-        "type": "clearinghouseState",
-        "user": ""
-      },
-      "response_path": "marginSummary"
-    }
-  ],
-  "window_support": ["7d", "30d", "90d"],
-  "rate_limit_hint": {
-    "rpm": 30,
-    "concurrent": 2,
-    "delay_ms": 2000
-  },
-  "field_map": {
-    "roi_pct": "roi",
-    "pnl_usd": "pnl",
-    "win_rate": "",
-    "max_drawdown": "",
-    "trades_count": "",
-    "followers": "",
-    "copiers": ""
-  },
-  "roi_sort_supported": false,
-  "roi_sort_method": "ui_state",
-  "proof": [
-    {
-      "url": "https://api.hyperliquid.xyz/info",
-      "request_path": "/info",
-      "method": "POST",
-      "response_fields_sample": {
-        "leaderboardRows[0].ethAddress": "0xabcdef1234567890abcdef1234567890abcdef12",
-        "leaderboardRows[0].displayName": "HyperTrader",
-        "leaderboardRows[0].accountValue": "250000.50",
-        "leaderboardRows[0].pnl": "45678.90",
-        "leaderboardRows[0].roi": "0.2345",
-        "leaderboardRows[0].windowPerformances.week.startingValue": "200000.00"
-      },
-      "discovered_at": "2024-01-15T00:00:00Z"
-    }
-  ]
+    "field_map": {
+      "ethAddress": "trader_key",
+      "accountValue": "derived: compute ROI from accountValue changes",
+      "pnl": "pnl (from daily PnL endpoint)",
+      "roi": "roi (alt, decimal)",
+      "displayName": "display_name (may be null for anonymous wallets)"
+    },
+    "missing_fields": ["win_rate", "followers", "copiers", "aum", "max_drawdown"],
+    "missing_reason": "Hyperliquid is a DEX with no copy trading. Win rate requires trade-level computation from userFills. Max drawdown computed from equity curve.",
+    "timeseries_endpoints": [
+      {
+        "method": "POST",
+        "url": "https://api.hyperliquid.xyz/info",
+        "body": { "type": "userFunding", "user": "{trader_key}" },
+        "notes": "Funding payments, combined with fills for equity curve"
+      }
+    ],
+    "rate_limits": {
+      "estimated_rpm": 60,
+      "cloudflare_protected": false,
+      "notes": "Generous public API, 1200 req/min documented limit"
+    },
+    "anti_scraping": {
+      "cloudflare": false,
+      "fingerprinting": false,
+      "mitigation": "Standard REST API, no special measures needed"
+    },
+    "proof": [
+      {
+        "url": "https://api.hyperliquid.xyz/info",
+        "method": "POST",
+        "response_fields_sample": {
+          "leaderboardRows[0].ethAddress": "0xabcdef1234567890abcdef1234567890abcdef12",
+          "leaderboardRows[0].displayName": "HyperTrader",
+          "leaderboardRows[0].accountValue": "250000.50",
+          "leaderboardRows[0].pnl": "45678.90",
+          "leaderboardRows[0].roi": "0.2345",
+          "leaderboardRows[0].windowPerformances.week.startingValue": "200000.00"
+        },
+        "discovered_at": "2024-01-15T00:00:00Z"
+      }
+    ]
+  }
 }
