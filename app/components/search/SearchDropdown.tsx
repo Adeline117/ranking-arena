@@ -121,12 +121,22 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
       setSearching(true)
       const results: SearchResult[] = []
 
+      // 转义 LIKE 通配符防止注入
+      const sanitizedQuery = query.trim()
+        .slice(0, 100)
+        .replace(/[\\%_]/g, c => `\\${c}`)
+
+      if (!sanitizedQuery) {
+        setSearching(false)
+        return
+      }
+
       try {
         // 搜索交易员
         const { data: traders } = await supabase
           .from('trader_sources')
           .select('source_trader_id, handle, source')
-          .ilike('handle', `%${query}%`)
+          .ilike('handle', `%${sanitizedQuery}%`)
           .limit(5)
 
         if (traders) {
@@ -145,7 +155,7 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
         const { data: posts } = await supabase
           .from('posts')
           .select('id, title, author_handle')
-          .or(`title.ilike.%${query}%`)
+          .or(`title.ilike.%${sanitizedQuery}%`)
           .limit(5)
 
         if (posts) {
@@ -164,7 +174,7 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
         const { data: groups } = await supabase
           .from('groups')
           .select('id, name')
-          .ilike('name', `%${query}%`)
+          .ilike('name', `%${sanitizedQuery}%`)
           .limit(3)
 
         if (groups) {

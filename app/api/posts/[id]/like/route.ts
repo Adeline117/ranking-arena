@@ -12,6 +12,7 @@ import {
   validateEnum,
 } from '@/lib/api'
 import { togglePostReaction, getPostById } from '@/lib/data/posts'
+import { deleteServerCacheByPrefix } from '@/lib/utils/server-cache'
 
 type RouteContext = { params: Promise<{ id: string }> }
 
@@ -30,6 +31,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
     // 执行点赞/踩操作
     const result = await togglePostReaction(supabase, id, user.id, reactionType)
+
+    // 清除帖子列表缓存
+    deleteServerCacheByPrefix('posts:')
 
     // 获取更新后的帖子信息（失败不影响点赞结果返回）
     let likeCount = 0
