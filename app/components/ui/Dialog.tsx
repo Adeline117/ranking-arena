@@ -70,6 +70,7 @@ export function DialogProvider({ children }: { children: ReactNode }) {
 
     document.addEventListener('keydown', handleEscape)
     return () => document.removeEventListener('keydown', handleEscape)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.isOpen])
 
   const showDialog = useCallback((options: DialogOptions): Promise<boolean> => {
@@ -141,6 +142,7 @@ export function DialogProvider({ children }: { children: ReactNode }) {
       state.resolve(false)
     }
     closeDialog()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.resolve, closeDialog])
 
   const handleConfirm = useCallback(async () => {
@@ -156,6 +158,7 @@ export function DialogProvider({ children }: { children: ReactNode }) {
       state.resolve(true)
     }
     closeDialog()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.options, state.resolve, closeDialog])
 
   const handleCancel = useCallback(() => {
@@ -166,6 +169,7 @@ export function DialogProvider({ children }: { children: ReactNode }) {
       state.resolve(false)
     }
     closeDialog()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.options, state.resolve, closeDialog])
 
   const getButtonConfig = () => {

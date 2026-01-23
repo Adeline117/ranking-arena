@@ -69,7 +69,7 @@ export function ShareButton({
           text: data.text,
           url: data.url,
         })
-      } catch (err) {
+      } catch (_err) {
         // 用户取消或不支持
       }
       setShowDropdown(false)
@@ -81,7 +81,7 @@ export function ShareButton({
         await navigator.clipboard.writeText(data.url)
         setCopied(true)
         setTimeout(() => setCopied(false), 2000)
-      } catch (err) {
+      } catch (_err) {
         // 复制失败
       }
       setShowDropdown(false)
@@ -169,9 +169,9 @@ interface InviteFriendsProps {
 
 export function InviteFriends({ referralCode, onInvite }: InviteFriendsProps) {
   const [copied, setCopied] = useState(false)
-  const { t } = useLanguage()
+  const { t: _t } = useLanguage()
 
-  const inviteUrl = referralCode 
+  const inviteUrl = referralCode
     ? `${typeof window !== 'undefined' ? window.location.origin : ''}/welcome?ref=${referralCode}`
     : typeof window !== 'undefined' ? window.location.origin : ''
 
@@ -181,7 +181,7 @@ export function InviteFriends({ referralCode, onInvite }: InviteFriendsProps) {
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
       onInvite?.()
-    } catch (err) {
+    } catch (_err) {
       // 复制失败
     }
   }
@@ -195,7 +195,7 @@ export function InviteFriends({ referralCode, onInvite }: InviteFriendsProps) {
           url: inviteUrl,
         })
         onInvite?.()
-      } catch (err) {
+      } catch (_err) {
         // 用户取消
       }
     }

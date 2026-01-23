@@ -4,7 +4,7 @@ import { useEffect } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
 import Card from '@/app/components/ui/Card'
-import { useStats, AdminStats } from '../hooks/useStats'
+import { useStats } from '../hooks/useStats'
 
 interface DashboardTabProps {
   accessToken: string | null

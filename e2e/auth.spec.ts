@@ -71,7 +71,7 @@ test.describe('认证流程', () => {
 
 test.describe('登出流程', () => {
   // 这些测试需要登录状态，跳过或模拟
-  test.skip('登录用户可以登出', async ({ page }) => {
+  test.skip('登录用户可以登出', async ({ page: _page }) => {
     // 这个测试需要先登录
     // 在实际环境中，可以使用测试账户登录
   })

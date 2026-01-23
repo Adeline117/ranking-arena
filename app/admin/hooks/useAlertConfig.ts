@@ -35,8 +35,8 @@ export function useAlertConfig(accessToken: string | null, showToast?: ToastFn) 
       if (data.ok) {
         setConfig(data.config)
       }
-    } catch (err) {
-      console.error('Error loading alert config:', err)
+    } catch (_err) {
+      console.error('Error loading alert config:', _err)
     } finally {
       setLoading(false)
     }
@@ -73,7 +73,7 @@ export function useAlertConfig(accessToken: string | null, showToast?: ToastFn) 
         showToast?.(data.error || '保存失败', 'error')
         return false
       }
-    } catch (err) {
+    } catch (_err) {
       showToast?.('网络错误', 'error')
       return false
     } finally {

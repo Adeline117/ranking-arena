@@ -1,5 +1,8 @@
 /**
- * Canonical types for the multi-platform trader leaderboard system.
+ * Multi-Exchange Leaderboard Canonical Schema
+ *
+ * Defines unified types for trader identity, snapshots, timeseries,
+ * and data provenance across all supported platforms.
  *
  * Architecture invariants:
  * - All page loads read from DB only; no synchronous scraping on user click.
@@ -8,10 +11,67 @@
  */
 
 // ============================================
-// Platform & Category Enums
+// Platform & Market Type Definitions
 // ============================================
 
+/** All supported platforms (CEX + DEX + Data Sources) */
+export const PLATFORMS = [
+  // CEX
+  'binance', 'bybit', 'bitget', 'mexc', 'coinex', 'okx', 'kucoin',
+  'bitmart', 'phemex', 'htx', 'weex',
+  // DEX / On-chain / Perp
+  'gmx', 'dydx', 'hyperliquid',
+  // Data/Intelligence (enrichment only)
+  'nansen', 'dune',
+  // Wallet (mapped/degraded)
+  'okx_wallet',
+] as const
+
+export type Platform = typeof PLATFORMS[number]
+
+/** Platforms that provide leaderboard data */
 export const LEADERBOARD_PLATFORMS = [
+  'binance', 'bybit', 'bitget', 'mexc', 'coinex', 'okx', 'kucoin',
+  'bitmart', 'phemex', 'htx', 'weex',
+  'gmx', 'dydx', 'hyperliquid',
+] as const
+
+export type LeaderboardPlatform = typeof LEADERBOARD_PLATFORMS[number]
+
+/** Enrichment-only platforms (not leaderboards) */
+export const ENRICHMENT_PLATFORMS = ['nansen', 'dune', 'okx_wallet'] as const
+export type EnrichmentPlatform = typeof ENRICHMENT_PLATFORMS[number]
+
+/** Data supplement sources */
+export const DATA_SOURCES = ['nansen', 'dune'] as const
+export type DataSource = (typeof DATA_SOURCES)[number]
+
+/** Market types within a platform */
+export const MARKET_TYPES = ['futures', 'spot', 'perp', 'web3', 'copy'] as const
+export type MarketType = typeof MARKET_TYPES[number]
+
+/** Trading category */
+export type TradingCategory = 'futures' | 'spot' | 'onchain'
+
+/** Time windows for snapshots */
+export const WINDOWS = ['7d', '30d', '90d'] as const
+export type Window = typeof WINDOWS[number]
+
+/** Ranking window (alias for Window for backward compatibility) */
+export type RankingWindow = Window
+
+/** Legacy TimeRange compatibility mapping */
+export type TimeRangeToWindow = {
+  '7D': '7d'
+  '30D': '30d'
+  '90D': '90d'
+}
+
+/**
+ * Granular platform identifiers (combines platform + market type).
+ * Used by the legacy connector interface and rate limiter configs.
+ */
+export const GRANULAR_PLATFORMS = [
   'binance_futures',
   'binance_spot',
   'binance_web3',
@@ -30,22 +90,12 @@ export const LEADERBOARD_PLATFORMS = [
   'phemex',
   'htx',
   'weex',
-] as const;
+] as const
 
-export type Platform = (typeof LEADERBOARD_PLATFORMS)[number];
+export type GranularPlatform = (typeof GRANULAR_PLATFORMS)[number]
 
-/** Data supplement sources (not trading platforms) */
-export const DATA_SOURCES = ['nansen', 'dune'] as const;
-export type DataSource = (typeof DATA_SOURCES)[number];
-
-/** Trading category */
-export type TradingCategory = 'futures' | 'spot' | 'onchain';
-
-/** Ranking window */
-export type RankingWindow = '7d' | '30d' | '90d';
-
-/** Platform → category mapping */
-export const PLATFORM_CATEGORY: Record<Platform, TradingCategory> = {
+/** Platform -> category mapping (for granular platform IDs) */
+export const PLATFORM_CATEGORY: Record<GranularPlatform, TradingCategory> = {
   binance_futures: 'futures',
   binance_spot: 'spot',
   binance_web3: 'onchain',
@@ -64,255 +114,289 @@ export const PLATFORM_CATEGORY: Record<Platform, TradingCategory> = {
   phemex: 'futures',
   htx: 'futures',
   weex: 'futures',
-};
+}
 
 // ============================================
-// Trader Identity
+// Trader Identity (trader_sources + trader_profiles)
 // ============================================
 
-/** Unique identity for a trader on a specific platform */
+/** Unique identity for a trader on a specific platform (legacy format) */
 export interface TraderIdentity {
-  platform: Platform;
-  trader_key: string; // platform-specific unique ID
-  display_name: string | null;
-  avatar_url: string | null;
-  profile_url: string | null;
-  discovered_at: string; // ISO timestamp
-  last_seen: string; // ISO timestamp
+  platform: Platform
+  trader_key: string
+  display_name: string | null
+  avatar_url: string | null
+  profile_url: string | null
+  discovered_at: string
+  last_seen: string
 }
 
-// ============================================
-// Trader Profile (enriched display data)
-// ============================================
+/** How a trader was discovered on a platform (new format) */
+export interface TraderSource {
+  platform: LeaderboardPlatform
+  market_type: MarketType
+  trader_key: string
+  display_name: string | null
+  profile_url: string | null
+  discovered_at: string
+  last_seen_at: string
+  is_active: boolean
+  raw: Record<string, unknown> | null
+}
 
+/** Enriched trader profile (new format) */
+export interface TraderProfile {
+  platform: LeaderboardPlatform
+  market_type: MarketType
+  trader_key: string
+  display_name: string | null
+  avatar_url: string | null
+  bio: string | null
+  tags: string[]
+  profile_url: string | null
+  followers: number | null
+  copiers: number | null
+  aum: number | null
+  updated_at: string
+  last_enriched_at: string | null
+  provenance: DataProvenance
+}
+
+/** Enriched profile data (legacy format) */
 export interface TraderProfileEnriched {
-  platform: Platform;
-  trader_key: string;
-  display_name: string | null;
-  avatar_url: string | null;
-  bio: string | null;
-  /** Copier/follower count on platform */
-  copier_count: number | null;
-  /** Assets under management in USD */
-  aum_usd: number | null;
-  /** Trading since (ISO date) */
-  active_since: string | null;
-  /** Platform-specific badge or tier */
-  platform_tier: string | null;
-  last_enriched_at: string; // ISO timestamp
+  platform: Platform
+  trader_key: string
+  display_name: string | null
+  avatar_url: string | null
+  bio: string | null
+  copier_count: number | null
+  aum_usd: number | null
+  active_since: string | null
+  platform_tier: string | null
+  last_enriched_at: string
 }
 
 // ============================================
-// Trader Snapshot (per-window performance)
+// Snapshot Metrics (per-window rankings data)
 // ============================================
 
-/** Quality flags for a snapshot */
+/** Quality flags for data reliability (comprehensive format) */
+export interface QualityFlags {
+  missing_fields: string[]
+  non_standard_fields: Record<string, string>
+  window_native: boolean
+  notes: string[]
+}
+
+/** Quality flags for a snapshot (legacy format) */
 export interface SnapshotQuality {
-  /** Did platform return all expected fields? */
-  is_complete: boolean;
-  /** Fields that are missing from source */
-  missing_fields: string[];
-  /** Confidence in data accuracy (0-1) */
-  confidence: number;
-  /** Whether this is interpolated from adjacent windows */
-  is_interpolated: boolean;
+  is_complete: boolean
+  missing_fields: string[]
+  confidence: number
+  is_interpolated: boolean
 }
 
-/** Core metrics from a snapshot */
+/** Data provenance information */
+export interface DataProvenance {
+  source_platform: string
+  acquisition_method: 'api' | 'scrape' | 'derived' | 'enrichment'
+  fetched_at: string
+  source_url: string | null
+  scraper_version: string | null
+}
+
+/** Core metrics for a snapshot */
 export interface SnapshotMetrics {
-  roi_pct: number | null;
-  pnl_usd: number | null;
-  win_rate_pct: number | null;
-  max_drawdown_pct: number | null;
-  trades_count: number | null;
-  copier_count: number | null;
-  sharpe_ratio: number | null;
-  sortino_ratio: number | null;
-  volatility_pct: number | null;
-  avg_holding_hours: number | null;
-  profit_factor: number | null;
-  /** Arena Score components */
-  arena_score: number | null;
-  return_score: number | null;
-  drawdown_score: number | null;
-  stability_score: number | null;
+  // Core performance
+  roi: number | null
+  pnl: number | null
+  // Risk metrics
+  win_rate: number | null
+  max_drawdown: number | null
+  sharpe_ratio: number | null
+  sortino_ratio: number | null
+  // Activity metrics
+  trades_count: number | null
+  // Social metrics (null for DEX/on-chain)
+  followers: number | null
+  copiers: number | null
+  aum: number | null
+  // Ranking
+  platform_rank: number | null
+  // Arena Score (computed by us)
+  arena_score: number | null
+  return_score: number | null
+  drawdown_score: number | null
+  stability_score: number | null
+  // Extended metrics (may be null for some platforms)
+  volatility_pct?: number | null
+  avg_holding_hours?: number | null
+  profit_factor?: number | null
 }
 
-/** Full snapshot record */
+/** Legacy snapshot metrics format using different field names */
+export interface SnapshotMetricsLegacy {
+  roi_pct: number | null
+  pnl_usd: number | null
+  win_rate_pct: number | null
+  max_drawdown_pct: number | null
+  trades_count: number | null
+  copier_count: number | null
+  sharpe_ratio: number | null
+  sortino_ratio: number | null
+  volatility_pct: number | null
+  avg_holding_hours: number | null
+  profit_factor: number | null
+  arena_score: number | null
+  return_score: number | null
+  drawdown_score: number | null
+  stability_score: number | null
+}
+
+/** A complete trader snapshot for a given window (new format) */
 export interface TraderSnapshot {
-  id: string;
-  platform: Platform;
-  trader_key: string;
-  window: RankingWindow;
-  as_of_ts: string; // ISO timestamp (bucket boundary)
-  metrics: SnapshotMetrics;
-  quality: SnapshotQuality;
-  created_at: string;
+  platform: LeaderboardPlatform
+  market_type: MarketType
+  trader_key: string
+  window: Window
+  as_of_ts: string
+  metrics: SnapshotMetrics
+  quality_flags: QualityFlags
+  updated_at: string
+}
+
+/** Legacy TraderSnapshot with id field */
+export interface TraderSnapshotLegacy {
+  id: string
+  platform: Platform
+  trader_key: string
+  window: RankingWindow
+  as_of_ts: string
+  metrics: SnapshotMetricsLegacy
+  quality: SnapshotQuality
+  created_at: string
 }
 
 // ============================================
-// Trader Timeseries
+// Timeseries Data (equity curves, daily PnL, etc.)
 // ============================================
 
-export type TimeseriesType = 'equity_curve' | 'drawdown' | 'daily_pnl' | 'position_count';
+/** Types of timeseries data */
+export const SERIES_TYPES = [
+  'equity_curve',
+  'daily_pnl',
+  'daily_roi',
+  'drawdown_curve',
+  'aum_history',
+] as const
+export type SeriesType = typeof SERIES_TYPES[number]
 
+/** Legacy timeseries type */
+export type TimeseriesType = 'equity_curve' | 'drawdown' | 'daily_pnl' | 'position_count'
+
+/** A single data point in a timeseries */
 export interface TimeseriesPoint {
-  ts: string; // ISO date or timestamp
-  value: number;
+  ts: string
+  value: number
 }
 
+/** Timeseries record (new format) */
 export interface TraderTimeseries {
-  id: string;
-  platform: Platform;
-  trader_key: string;
-  series_type: TimeseriesType;
-  /** Array of data points */
-  data: TimeseriesPoint[];
-  as_of_ts: string; // when this series was captured
-  created_at: string;
+  platform: LeaderboardPlatform
+  market_type: MarketType
+  trader_key: string
+  series_type: SeriesType
+  as_of_ts: string
+  data: TimeseriesPoint[]
+  updated_at: string
+}
+
+/** Legacy Timeseries record with id */
+export interface TraderTimeseriesLegacy {
+  id: string
+  platform: Platform
+  trader_key: string
+  series_type: TimeseriesType
+  data: TimeseriesPoint[]
+  as_of_ts: string
+  created_at: string
 }
 
 // ============================================
-// Refresh Job Queue
+// Refresh Jobs
 // ============================================
 
-export type JobType = 'discovery' | 'snapshot' | 'profile' | 'timeseries' | 'full_refresh';
-export type JobStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
-export type JobPriority = 1 | 2 | 3 | 4 | 5; // 1 = highest
+export const JOB_TYPES = [
+  'DISCOVER',
+  'SNAPSHOT_REFRESH',
+  'PROFILE_ENRICH',
+  'TIMESERIES_REFRESH',
+] as const
+export type JobType = typeof JOB_TYPES[number]
+
+/** Legacy job types */
+export type LegacyJobType = 'discovery' | 'snapshot' | 'profile' | 'timeseries' | 'full_refresh'
+
+export const JOB_STATUSES = ['pending', 'running', 'completed', 'failed', 'cancelled'] as const
+export type JobStatus = typeof JOB_STATUSES[number]
+
+export const JOB_PRIORITIES = {
+  USER_TRIGGERED: 10,
+  TOP_N_PREHEAT: 20,
+  SCHEDULED_ACTIVE: 30,
+  SCHEDULED_LONG_TAIL: 40,
+  BACKGROUND: 50,
+} as const
+export type JobPriority = typeof JOB_PRIORITIES[keyof typeof JOB_PRIORITIES]
 
 export interface RefreshJob {
-  id: string;
-  job_type: JobType;
-  platform: Platform;
-  trader_key: string | null; // null for discovery jobs
-  priority: JobPriority;
-  status: JobStatus;
-  attempts: number;
-  max_attempts: number;
-  last_error: string | null;
-  next_run_at: string; // ISO timestamp
-  started_at: string | null;
-  completed_at: string | null;
-  created_at: string;
+  id: string
+  job_type: JobType
+  platform: LeaderboardPlatform
+  market_type: MarketType
+  trader_key: string | null
+  window: Window | null
+  priority: number
+  status: JobStatus
+  attempts: number
+  max_attempts: number
+  next_run_at: string
+  locked_at: string | null
+  locked_by: string | null
+  last_error: string | null
+  result: Record<string, unknown> | null
+  created_at: string
+  updated_at: string
   /** Idempotency key: prevents duplicate jobs for same target+day */
-  idempotency_key: string;
+  idempotency_key?: string
 }
 
 // ============================================
-// API Request/Response Types
+// Platform Rate Limits
 // ============================================
 
-/** GET /api/rankings query params */
-export interface RankingsQuery {
-  window: RankingWindow;
-  category?: TradingCategory;
-  platform?: Platform;
-  limit?: number;
-  offset?: number;
-  sort_by?: 'arena_score' | 'roi' | 'pnl' | 'drawdown' | 'copiers';
-  sort_dir?: 'asc' | 'desc';
-  min_pnl?: number;
-  min_trades?: number;
+export interface PlatformRateLimit {
+  platform: Platform
+  requests_per_minute: number
+  max_concurrency: number
+  cooldown_until: string | null
+  consecutive_failures: number
+  last_success_at: string | null
+  last_failure_at: string | null
+  updated_at: string
 }
 
-/** Single ranked trader in the response */
-export interface RankedTraderRow {
-  rank: number;
-  platform: Platform;
-  trader_key: string;
-  display_name: string | null;
-  avatar_url: string | null;
-  category: TradingCategory;
-  metrics: SnapshotMetrics;
-  quality: SnapshotQuality;
-  as_of_ts: string;
-}
-
-/** GET /api/rankings response */
-export interface RankingsResponse {
-  data: RankedTraderRow[];
-  meta: {
-    window: RankingWindow;
-    category: TradingCategory | 'all';
-    platform: Platform | 'all';
-    total_count: number;
-    limit: number;
-    offset: number;
-    cached_at: string;
-    sort_by: string;
-    sort_dir: string;
-  };
-}
-
-/** GET /api/trader/:id response */
-export interface TraderDetailResponse {
-  identity: TraderIdentity;
-  profile: TraderProfileEnriched | null;
-  snapshots: Record<RankingWindow, TraderSnapshot | null>;
-  timeseries: TraderTimeseries[];
-  data_freshness: {
-    last_snapshot_at: string | null;
-    last_profile_at: string | null;
-    last_timeseries_at: string | null;
-    is_stale: boolean;
-    stale_reason: string | null;
-  };
-}
-
-/** POST /api/trader/:id/refresh response */
-export interface RefreshResponse {
-  job_id: string;
-  status: JobStatus;
-  estimated_wait_seconds: number | null;
-  message: string;
-}
-
-// ============================================
-// Connector Interface
-// ============================================
-
-/** What a platform connector must implement */
-export interface PlatformConnector {
-  platform: Platform;
-
-  /** Discover traders on the leaderboard for a given window */
-  discoverLeaderboard(window: RankingWindow): Promise<TraderIdentity[]>;
-
-  /** Fetch performance snapshot for one trader */
-  fetchTraderSnapshot(
-    traderKey: string,
-    window: RankingWindow,
-  ): Promise<Omit<TraderSnapshot, 'id' | 'created_at'>>;
-
-  /** Fetch enriched profile data */
-  fetchTraderProfile(traderKey: string): Promise<Omit<TraderProfileEnriched, 'last_enriched_at'>>;
-
-  /** Fetch timeseries data */
-  fetchTimeseries(
-    traderKey: string,
-    seriesType: TimeseriesType,
-  ): Promise<Omit<TraderTimeseries, 'id' | 'created_at'>>;
-}
-
-// ============================================
-// Rate Limiter Config
-// ============================================
-
+/** Rate limiter configuration (for legacy BaseConnector) */
 export interface RateLimiterConfig {
-  /** Max requests per window */
-  max_requests: number;
-  /** Window duration in ms */
-  window_ms: number;
-  /** Min delay between requests in ms */
-  min_delay_ms: number;
-  /** Max delay between requests in ms (for jitter) */
-  max_delay_ms: number;
-  /** Max concurrent requests */
-  max_concurrent: number;
+  max_requests: number
+  window_ms: number
+  min_delay_ms: number
+  max_delay_ms: number
+  max_concurrent: number
 }
 
-/** Per-platform rate limit defaults */
-export const PLATFORM_RATE_LIMITS: Record<Platform, RateLimiterConfig> = {
+/** Per-platform rate limit defaults (granular platform IDs) */
+export const PLATFORM_RATE_LIMITS: Record<GranularPlatform, RateLimiterConfig> = {
   binance_futures: { max_requests: 30, window_ms: 60_000, min_delay_ms: 2000, max_delay_ms: 5000, max_concurrent: 3 },
   binance_spot: { max_requests: 30, window_ms: 60_000, min_delay_ms: 2000, max_delay_ms: 5000, max_concurrent: 3 },
   binance_web3: { max_requests: 20, window_ms: 60_000, min_delay_ms: 3000, max_delay_ms: 6000, max_concurrent: 2 },
@@ -331,36 +415,240 @@ export const PLATFORM_RATE_LIMITS: Record<Platform, RateLimiterConfig> = {
   phemex: { max_requests: 15, window_ms: 60_000, min_delay_ms: 3000, max_delay_ms: 6000, max_concurrent: 2 },
   htx: { max_requests: 15, window_ms: 60_000, min_delay_ms: 3000, max_delay_ms: 6000, max_concurrent: 2 },
   weex: { max_requests: 10, window_ms: 60_000, min_delay_ms: 4000, max_delay_ms: 8000, max_concurrent: 1 },
-};
+}
 
 // ============================================
 // Prewarming & Scheduling Config
 // ============================================
 
 export interface PrewarmConfig {
-  /** Top N traders to prewarm per platform */
-  top_n: number;
-  /** Refresh interval for top traders (ms) */
-  top_interval_ms: number;
-  /** Refresh interval for active traders (ms) */
-  active_interval_ms: number;
-  /** Refresh interval for long-tail traders (ms) */
-  longtail_interval_ms: number;
+  top_n: number
+  top_interval_ms: number
+  active_interval_ms: number
+  longtail_interval_ms: number
 }
 
 export const DEFAULT_PREWARM_CONFIG: PrewarmConfig = {
   top_n: 100,
-  top_interval_ms: 15 * 60 * 1000, // 15 min
-  active_interval_ms: 60 * 60 * 1000, // 1 hour
-  longtail_interval_ms: 4 * 60 * 60 * 1000, // 4 hours
-};
+  top_interval_ms: 15 * 60 * 1000,
+  active_interval_ms: 60 * 60 * 1000,
+  longtail_interval_ms: 4 * 60 * 60 * 1000,
+}
 
 // ============================================
-// UI Degradation Helpers
+// API Response Types
 // ============================================
 
-/** Fields and their degradation behavior when missing */
-export const FIELD_DEGRADATION: Record<keyof SnapshotMetrics, { label: string; fallback: string }> = {
+/** GET /api/rankings query params */
+export interface RankingsQuery {
+  window: RankingWindow
+  category?: TradingCategory
+  platform?: Platform
+  limit?: number
+  offset?: number
+  sort_by?: 'arena_score' | 'roi' | 'pnl' | 'drawdown' | 'copiers'
+  sort_dir?: 'asc' | 'desc'
+  min_pnl?: number
+  min_trades?: number
+}
+
+/** Single ranked trader in the response (legacy) */
+export interface RankedTraderRow {
+  rank: number
+  platform: Platform
+  trader_key: string
+  display_name: string | null
+  avatar_url: string | null
+  category: TradingCategory
+  metrics: SnapshotMetrics
+  quality: SnapshotQuality
+  as_of_ts: string
+}
+
+/** Rankings API response (new format) */
+export interface RankingsResponse {
+  traders: RankingEntry[]
+  meta: {
+    platform: LeaderboardPlatform | 'all'
+    market_type: MarketType | 'all'
+    window: Window
+    total_count: number
+    updated_at: string
+    staleness_seconds: number
+    sort_by?: string
+    sort_dir?: string
+    limit?: number
+    offset?: number
+    cached_at?: string
+    category?: TradingCategory | 'all'
+  }
+}
+
+/** Single entry in rankings response */
+export interface RankingEntry {
+  platform: LeaderboardPlatform
+  market_type: MarketType
+  trader_key: string
+  display_name: string | null
+  avatar_url: string | null
+  window: Window
+  metrics: SnapshotMetrics
+  quality_flags: QualityFlags
+  updated_at: string
+}
+
+/** Trader detail API response */
+export interface TraderDetailResponse {
+  profile: TraderProfile
+  snapshots: Record<Window, TraderSnapshot | null>
+  timeseries: TraderTimeseries[]
+  refresh_status: {
+    last_refreshed_at: string | null
+    is_refreshing: boolean
+    next_refresh_at: string | null
+  }
+  provenance: DataProvenance
+  data_freshness?: {
+    last_snapshot_at: string | null
+    last_profile_at: string | null
+    last_timeseries_at: string | null
+    is_stale: boolean
+    stale_reason: string | null
+  }
+}
+
+/** Refresh request response */
+export interface RefreshResponse {
+  job_id: string
+  status: JobStatus
+  estimated_wait_seconds: number | null
+  message: string
+}
+
+// ============================================
+// Connector Interface Types
+// ============================================
+
+/** Result from discovering traders on a leaderboard */
+export interface DiscoverResult {
+  traders: TraderSource[]
+  total_available: number | null
+  window: Window
+  fetched_at: string
+}
+
+/** Result from fetching a trader's profile */
+export interface ProfileResult {
+  profile: TraderProfile
+  fetched_at: string
+}
+
+/** Result from fetching snapshot metrics */
+export interface SnapshotResult {
+  metrics: SnapshotMetrics
+  quality_flags: QualityFlags
+  fetched_at: string
+}
+
+/** Result from fetching timeseries */
+export interface TimeseriesResult {
+  series: TraderTimeseries[]
+  fetched_at: string
+}
+
+/** What a platform connector must implement (legacy interface) */
+export interface PlatformConnector {
+  platform: Platform
+
+  discoverLeaderboard(window: RankingWindow): Promise<TraderIdentity[]>
+
+  fetchTraderSnapshot(
+    traderKey: string,
+    window: RankingWindow,
+  ): Promise<Omit<TraderSnapshotLegacy, 'id' | 'created_at'>>
+
+  fetchTraderProfile(traderKey: string): Promise<Omit<TraderProfileEnriched, 'last_enriched_at'>>
+
+  fetchTimeseries(
+    traderKey: string,
+    seriesType: TimeseriesType,
+  ): Promise<Omit<TraderTimeseriesLegacy, 'id' | 'created_at'>>
+}
+
+// ============================================
+// Platform Capability Matrix
+// ============================================
+
+/** What a platform supports */
+export interface PlatformCapabilities {
+  platform: LeaderboardPlatform
+  market_types: MarketType[]
+  native_windows: Window[]
+  available_fields: (keyof SnapshotMetrics)[]
+  has_timeseries: boolean
+  has_profiles: boolean
+  scraping_difficulty: 1 | 2 | 3 | 4 | 5
+  rate_limit: {
+    rpm: number
+    concurrency: number
+  }
+  notes: string[]
+}
+
+// ============================================
+// Field Degradation Strategy
+// ============================================
+
+/** How to handle missing/incomparable fields */
+export type FieldDegradation = {
+  field: keyof SnapshotMetrics
+  reason: 'platform_not_provided' | 'different_calculation' | 'not_applicable' | 'fetch_failed'
+  explanation_zh: string
+  explanation_en: string
+  fallback: 'show_na' | 'hide' | 'show_warning'
+}
+
+/** Standard field degradation messages */
+export const FIELD_DEGRADATIONS: Record<string, FieldDegradation> = {
+  gmx_win_rate: {
+    field: 'win_rate',
+    reason: 'not_applicable',
+    explanation_zh: 'GMX 为链上永续合约，无传统胜率概念',
+    explanation_en: 'GMX is on-chain perpetual, win rate not applicable',
+    fallback: 'show_na',
+  },
+  gmx_followers: {
+    field: 'followers',
+    reason: 'not_applicable',
+    explanation_zh: 'GMX 无跟单功能',
+    explanation_en: 'GMX does not have copy trading',
+    fallback: 'show_na',
+  },
+  dydx_followers: {
+    field: 'followers',
+    reason: 'not_applicable',
+    explanation_zh: 'dYdX 无跟单功能',
+    explanation_en: 'dYdX does not have copy trading',
+    fallback: 'show_na',
+  },
+  hyperliquid_followers: {
+    field: 'followers',
+    reason: 'not_applicable',
+    explanation_zh: 'Hyperliquid 无跟单功能',
+    explanation_en: 'Hyperliquid does not have copy trading',
+    fallback: 'show_na',
+  },
+  platform_90d_missing: {
+    field: 'roi',
+    reason: 'platform_not_provided',
+    explanation_zh: '该平台未提供90天数据窗口',
+    explanation_en: 'This platform does not provide 90-day window',
+    fallback: 'show_na',
+  },
+}
+
+/** Fields and their simple degradation behavior (legacy format) */
+export const FIELD_DEGRADATION: Record<keyof SnapshotMetricsLegacy, { label: string; fallback: string }> = {
   roi_pct: { label: 'ROI', fallback: '—' },
   pnl_usd: { label: 'PnL', fallback: '—' },
   win_rate_pct: { label: 'Win Rate', fallback: 'N/A' },
@@ -376,4 +664,4 @@ export const FIELD_DEGRADATION: Record<keyof SnapshotMetrics, { label: string; f
   return_score: { label: 'Return Score', fallback: '—' },
   drawdown_score: { label: 'Drawdown Score', fallback: '—' },
   stability_score: { label: 'Stability Score', fallback: '—' },
-};
+}

@@ -48,8 +48,9 @@ describe('getAdminEmails', () => {
     delete process.env.ADMIN_EMAILS
     // Need to reimport to get fresh module
     jest.resetModules()
-    const { getAdminEmails: getEmails } = require('./auth')
-    const emails = getEmails()
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { getAdminEmails } = require('./auth')
+    const emails = getAdminEmails()
     expect(emails).toContain('test@example.com')
   })
 })

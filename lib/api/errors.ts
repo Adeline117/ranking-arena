@@ -303,7 +303,7 @@ export class ApiError extends Error {
   /**
    * 从未知错误创建 ApiError
    */
-  static from(error: unknown, context?: string): ApiError {
+  static from(error: unknown, _context?: string): ApiError {
     // 如果已经是 ApiError，直接返回
     if (error instanceof ApiError) {
       return error

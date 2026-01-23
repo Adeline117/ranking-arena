@@ -6,7 +6,7 @@ import { Box, Text } from '../../base'
 import type { TraderStats } from '@/lib/data/trader'
 import TradingViewShell from '../TradingViewShell'
 import { useLanguage } from '../../Providers/LanguageProvider'
-import { createChart, ColorType, IChartApi, LineSeries, LineData, Time } from 'lightweight-charts'
+import { createChart, ColorType, LineSeries, LineData, Time } from 'lightweight-charts'
 
 // 扩展类型以支持新数据
 interface AssetBreakdownData {
@@ -356,11 +356,11 @@ function EquityCurveSection({
 }
 
 // Period Selector Component
-function PeriodSelector({ 
-  value, 
-  onChange, 
-  t 
-}: { 
+function PeriodSelector({
+  value,
+  onChange,
+  t: _t
+}: {
   value: '7D' | '30D' | '90D'
   onChange: (v: '7D' | '30D' | '90D') => void
   t: (key: string) => string

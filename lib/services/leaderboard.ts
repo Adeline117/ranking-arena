@@ -9,20 +9,20 @@
  * - Trader detail: <200ms (parallel queries)
  */
 
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { query, queryOne } from '@/lib/db/pool';
 import type {
   Platform,
+  GranularPlatform,
   TradingCategory,
   RankingWindow,
   RankingsQuery,
-  RankingsResponse,
   RankedTraderRow,
-  TraderDetailResponse,
   TraderIdentity,
   TraderProfileEnriched,
-  TraderSnapshot,
-  TraderTimeseries,
+  TraderSnapshotLegacy,
+  TraderTimeseriesLegacy,
   SnapshotMetrics,
+  SnapshotMetricsLegacy,
   SnapshotQuality,
 } from '@/lib/types/leaderboard';
 import { PLATFORM_CATEGORY } from '@/lib/types/leaderboard';
@@ -38,20 +38,42 @@ const STALE_THRESHOLD_MS = 4 * 60 * 60 * 1000; // 4 hours
 const DEFAULT_LIMIT = 100;
 const MAX_LIMIT = 500;
 
+/** Legacy rankings response format used by this service */
+interface LegacyRankingsResponse {
+  data: RankedTraderRow[];
+  meta: {
+    window: RankingWindow;
+    category: TradingCategory | 'all';
+    platform: Platform | 'all';
+    total_count: number;
+    limit: number;
+    offset: number;
+    cached_at: string;
+    sort_by?: string;
+    sort_dir?: string;
+  };
+}
+
+/** Legacy trader detail response format used by this service */
+interface LegacyTraderDetailResponse {
+  identity: TraderIdentity;
+  profile: TraderProfileEnriched | null;
+  snapshots: Record<RankingWindow, TraderSnapshotLegacy | null>;
+  timeseries: TraderTimeseriesLegacy[];
+  data_freshness: {
+    last_snapshot_at: string | null;
+    last_profile_at: string | null;
+    last_timeseries_at: string | null;
+    is_stale: boolean;
+    stale_reason: string | null;
+  };
+}
+
 // ============================================
 // Leaderboard Service
 // ============================================
 
 export class LeaderboardService {
-  private supabase: SupabaseClient;
-
-  constructor(supabaseUrl?: string, supabaseKey?: string) {
-    this.supabase = createClient(
-      supabaseUrl || process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      supabaseKey || process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    );
-  }
-
   // ============================================
   // Rankings
   // ============================================
@@ -60,7 +82,7 @@ export class LeaderboardService {
    * Get ranked traders for a given window, with optional filters.
    * Reads from the latest snapshots in trader_snapshots_v2.
    */
-  async getRankings(query: RankingsQuery): Promise<RankingsResponse> {
+  async getRankings(rankingsQuery: RankingsQuery): Promise<LegacyRankingsResponse> {
     const {
       window,
       category,
@@ -71,91 +93,105 @@ export class LeaderboardService {
       sort_dir = 'desc',
       min_pnl,
       min_trades,
-    } = query;
+    } = rankingsQuery;
 
     const safeLimit = Math.min(limit, MAX_LIMIT);
+    const sortColumn = this.mapSortColumn(sort_by);
+    const sortDirection = sort_dir === 'asc' ? 'ASC' : 'DESC';
 
-    // Build query against latest snapshots
-    let dbQuery = this.supabase
-      .from('trader_snapshots_v2')
-      .select(
-        `
-        id,
-        platform,
-        trader_key,
-        window,
-        as_of_ts,
-        metrics,
-        quality,
-        arena_score,
-        roi_pct,
-        pnl_usd,
-        max_drawdown_pct,
-        win_rate_pct,
-        trades_count,
-        copier_count,
-        created_at
-      `,
-        { count: 'exact' },
-      )
-      .eq('window', window);
+    // Build WHERE conditions
+    const conditions: string[] = [`s."window" = $1`];
+    const params: unknown[] = [window];
+    let paramIdx = 2;
+
+    // Only snapshots from last 24h for freshness
+    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    conditions.push(`s.as_of_ts >= $${paramIdx}`);
+    params.push(cutoff);
+    paramIdx++;
 
     // Platform filter
     if (platform) {
-      dbQuery = dbQuery.eq('platform', platform);
+      conditions.push(`s.platform = $${paramIdx}`);
+      params.push(platform);
+      paramIdx++;
     }
 
-    // Category filter: map to list of platforms in that category
+    // Category filter
     if (category && !platform) {
       const platformsInCategory = Object.entries(PLATFORM_CATEGORY)
         .filter(([, cat]) => cat === category)
         .map(([p]) => p);
-      dbQuery = dbQuery.in('platform', platformsInCategory);
+      if (platformsInCategory.length > 0) {
+        conditions.push(`s.platform = ANY($${paramIdx})`);
+        params.push(platformsInCategory);
+        paramIdx++;
+      }
     }
 
     // PnL filter
     if (min_pnl != null) {
-      dbQuery = dbQuery.gte('pnl_usd', min_pnl);
+      conditions.push(`s.pnl_usd >= $${paramIdx}`);
+      params.push(min_pnl);
+      paramIdx++;
     }
 
     // Trades filter
     if (min_trades != null) {
-      dbQuery = dbQuery.gte('trades_count', min_trades);
+      conditions.push(`s.trades_count >= $${paramIdx}`);
+      params.push(min_trades);
+      paramIdx++;
     }
 
-    // Sort
-    const sortColumn = this.mapSortColumn(sort_by);
-    dbQuery = dbQuery
-      .order(sortColumn, { ascending: sort_dir === 'asc', nullsFirst: false })
-      .range(offset, offset + safeLimit - 1);
+    const whereClause = conditions.join(' AND ');
 
-    // We only want the latest snapshot per (platform, trader_key).
-    // The view `latest_trader_snapshots` handles this, but for flexibility
-    // we filter by recency: only snapshots from the last 24h.
-    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-    dbQuery = dbQuery.gte('as_of_ts', cutoff);
+    // Count query
+    const countResult = await query<{ count: string }>(
+      `SELECT COUNT(*) as count FROM trader_snapshots_v2 s WHERE ${whereClause}`,
+      params,
+    );
+    const totalCount = parseInt(countResult.rows[0]?.count || '0', 10);
 
-    const { data, count, error } = await dbQuery;
+    // Data query with JOIN for display names
+    const dataResult = await query<{
+      id: string;
+      platform: string;
+      trader_key: string;
+      window: string;
+      as_of_ts: string;
+      metrics: SnapshotMetrics;
+      quality: SnapshotQuality;
+      arena_score: string;
+      roi_pct: string;
+      pnl_usd: string;
+      max_drawdown_pct: string;
+      win_rate_pct: string;
+      trades_count: number;
+      copier_count: number;
+      display_name: string | null;
+      avatar_url: string | null;
+    }>(
+      `SELECT s.id, s.platform, s.trader_key, s."window", s.as_of_ts,
+              s.metrics, s.quality, s.arena_score, s.roi_pct, s.pnl_usd,
+              s.max_drawdown_pct, s.win_rate_pct, s.trades_count, s.copier_count,
+              src.display_name, src.avatar_url
+       FROM trader_snapshots_v2 s
+       LEFT JOIN trader_sources_v2 src ON src.platform = s.platform AND src.trader_key = s.trader_key
+       WHERE ${whereClause}
+       ORDER BY s.${sortColumn} ${sortDirection} NULLS LAST
+       LIMIT $${paramIdx} OFFSET $${paramIdx + 1}`,
+      [...params, safeLimit, offset],
+    );
 
-    if (error) {
-      console.error('[LeaderboardService] Rankings query error:', error);
-      throw new Error(`Rankings query failed: ${error.message}`);
-    }
-
-    // Join with trader_sources_v2 for display names
-    const traderKeys = (data || []).map((s) => `${s.platform}:${s.trader_key}`);
-    const displayNames = await this.getDisplayNames(data || []);
-
-    // Build response
-    const rankedRows: RankedTraderRow[] = (data || []).map((row, idx) => ({
+    const rankedRows: RankedTraderRow[] = dataResult.rows.map((row, idx) => ({
       rank: offset + idx + 1,
       platform: row.platform as Platform,
       trader_key: row.trader_key,
-      display_name: displayNames.get(`${row.platform}:${row.trader_key}`)?.display_name || null,
-      avatar_url: displayNames.get(`${row.platform}:${row.trader_key}`)?.avatar_url || null,
-      category: PLATFORM_CATEGORY[row.platform as Platform] || 'futures',
-      metrics: row.metrics as SnapshotMetrics,
-      quality: row.quality as SnapshotQuality,
+      display_name: row.display_name || null,
+      avatar_url: row.avatar_url || null,
+      category: PLATFORM_CATEGORY[row.platform as unknown as GranularPlatform] || 'futures',
+      metrics: row.metrics,
+      quality: row.quality,
       as_of_ts: row.as_of_ts,
     }));
 
@@ -165,7 +201,7 @@ export class LeaderboardService {
         window,
         category: category || 'all',
         platform: platform || 'all',
-        total_count: count || 0,
+        total_count: totalCount,
         limit: safeLimit,
         offset,
         cached_at: new Date().toISOString(),
@@ -183,7 +219,7 @@ export class LeaderboardService {
    * Get full trader detail (profile + snapshots + timeseries).
    * All data is read from DB. Target: <200ms.
    */
-  async getTraderDetail(platform: Platform, traderKey: string): Promise<TraderDetailResponse> {
+  async getTraderDetail(platform: Platform, traderKey: string): Promise<LegacyTraderDetailResponse> {
     // Run all queries in parallel for speed
     const [identity, profile, snapshots, timeseries] = await Promise.all([
       this.getTraderIdentity(platform, traderKey),
@@ -233,23 +269,31 @@ export class LeaderboardService {
     platform: Platform,
     traderKey: string,
   ): Promise<TraderIdentity | null> {
-    const { data } = await this.supabase
-      .from('trader_sources_v2')
-      .select('*')
-      .eq('platform', platform)
-      .eq('trader_key', traderKey)
-      .single();
+    const row = await queryOne<{
+      platform: string;
+      trader_key: string;
+      display_name: string | null;
+      avatar_url: string | null;
+      profile_url: string | null;
+      discovered_at: string;
+      last_seen: string;
+    }>(
+      `SELECT platform, trader_key, display_name, avatar_url, profile_url, discovered_at, last_seen
+       FROM trader_sources_v2
+       WHERE platform = $1 AND trader_key = $2`,
+      [platform, traderKey],
+    );
 
-    if (!data) return null;
+    if (!row) return null;
 
     return {
-      platform: data.platform as Platform,
-      trader_key: data.trader_key,
-      display_name: data.display_name,
-      avatar_url: data.avatar_url,
-      profile_url: data.profile_url,
-      discovered_at: data.discovered_at,
-      last_seen: data.last_seen,
+      platform: row.platform as Platform,
+      trader_key: row.trader_key,
+      display_name: row.display_name,
+      avatar_url: row.avatar_url,
+      profile_url: row.profile_url,
+      discovered_at: row.discovered_at,
+      last_seen: row.last_seen,
     };
   }
 
@@ -257,65 +301,83 @@ export class LeaderboardService {
     platform: Platform,
     traderKey: string,
   ): Promise<TraderProfileEnriched | null> {
-    const { data } = await this.supabase
-      .from('trader_profiles_v2')
-      .select('*')
-      .eq('platform', platform)
-      .eq('trader_key', traderKey)
-      .single();
+    const row = await queryOne<{
+      platform: string;
+      trader_key: string;
+      display_name: string | null;
+      avatar_url: string | null;
+      bio: string | null;
+      copier_count: number | null;
+      aum_usd: string | null;
+      active_since: string | null;
+      platform_tier: string | null;
+      last_enriched_at: string | null;
+    }>(
+      `SELECT platform, trader_key, display_name, avatar_url, bio,
+              copier_count, aum_usd, active_since, platform_tier, last_enriched_at
+       FROM trader_profiles_v2
+       WHERE platform = $1 AND trader_key = $2`,
+      [platform, traderKey],
+    );
 
-    if (!data) return null;
+    if (!row) return null;
 
     return {
-      platform: data.platform as Platform,
-      trader_key: data.trader_key,
-      display_name: data.display_name,
-      avatar_url: data.avatar_url,
-      bio: data.bio,
-      copier_count: data.copier_count,
-      aum_usd: data.aum_usd ? Number(data.aum_usd) : null,
-      active_since: data.active_since,
-      platform_tier: data.platform_tier,
-      last_enriched_at: data.last_enriched_at,
+      platform: row.platform as Platform,
+      trader_key: row.trader_key,
+      display_name: row.display_name,
+      avatar_url: row.avatar_url,
+      bio: row.bio,
+      copier_count: row.copier_count,
+      aum_usd: row.aum_usd ? Number(row.aum_usd) : null,
+      active_since: row.active_since,
+      platform_tier: row.platform_tier,
+      last_enriched_at: row.last_enriched_at || new Date().toISOString(),
     };
   }
 
   private async getLatestSnapshots(
     platform: Platform,
     traderKey: string,
-  ): Promise<Record<RankingWindow, TraderSnapshot | null>> {
-    const { data } = await this.supabase
-      .from('trader_snapshots_v2')
-      .select('*')
-      .eq('platform', platform)
-      .eq('trader_key', traderKey)
-      .in('window', ['7d', '30d', '90d'])
-      .order('as_of_ts', { ascending: false })
-      .limit(3);
+  ): Promise<Record<RankingWindow, TraderSnapshotLegacy | null>> {
+    const { rows } = await query<{
+      id: string;
+      platform: string;
+      trader_key: string;
+      window: string;
+      as_of_ts: string;
+      metrics: Record<string, unknown>;
+      quality: Record<string, unknown>;
+      created_at: string;
+    }>(
+      `SELECT id, platform, trader_key, "window", as_of_ts, metrics, quality, created_at
+       FROM trader_snapshots_v2
+       WHERE platform = $1 AND trader_key = $2 AND "window" = ANY($3)
+       ORDER BY as_of_ts DESC
+       LIMIT 3`,
+      [platform, traderKey, ['7d', '30d', '90d']],
+    );
 
-    const result: Record<RankingWindow, TraderSnapshot | null> = {
+    const result: Record<RankingWindow, TraderSnapshotLegacy | null> = {
       '7d': null,
       '30d': null,
       '90d': null,
     };
 
-    if (data) {
-      // Get the latest snapshot for each window
-      const seen = new Set<string>();
-      for (const row of data) {
-        if (!seen.has(row.window)) {
-          seen.add(row.window);
-          result[row.window as RankingWindow] = {
-            id: row.id,
-            platform: row.platform as Platform,
-            trader_key: row.trader_key,
-            window: row.window as RankingWindow,
-            as_of_ts: row.as_of_ts,
-            metrics: row.metrics as SnapshotMetrics,
-            quality: row.quality as SnapshotQuality,
-            created_at: row.created_at,
-          };
-        }
+    const seen = new Set<string>();
+    for (const row of rows) {
+      if (!seen.has(row.window)) {
+        seen.add(row.window);
+        result[row.window as RankingWindow] = {
+          id: row.id,
+          platform: row.platform as Platform,
+          trader_key: row.trader_key,
+          window: row.window as RankingWindow,
+          as_of_ts: row.as_of_ts,
+          metrics: row.metrics as unknown as SnapshotMetricsLegacy,
+          quality: row.quality as unknown as SnapshotQuality,
+          created_at: row.created_at,
+        };
       }
     }
 
@@ -325,53 +387,33 @@ export class LeaderboardService {
   private async getTraderTimeseries(
     platform: Platform,
     traderKey: string,
-  ): Promise<TraderTimeseries[]> {
-    const { data } = await this.supabase
-      .from('trader_timeseries_v2')
-      .select('*')
-      .eq('platform', platform)
-      .eq('trader_key', traderKey)
-      .order('as_of_ts', { ascending: false })
-      .limit(10); // Latest 10 series entries
+  ): Promise<TraderTimeseriesLegacy[]> {
+    const { rows } = await query<{
+      id: string;
+      platform: string;
+      trader_key: string;
+      series_type: string;
+      data: unknown;
+      as_of_ts: string;
+      created_at: string;
+    }>(
+      `SELECT id, platform, trader_key, series_type, data, as_of_ts, created_at
+       FROM trader_timeseries_v2
+       WHERE platform = $1 AND trader_key = $2
+       ORDER BY as_of_ts DESC
+       LIMIT 10`,
+      [platform, traderKey],
+    );
 
-    if (!data) return [];
-
-    return data.map((row) => ({
+    return rows.map((row) => ({
       id: row.id,
       platform: row.platform as Platform,
       trader_key: row.trader_key,
-      series_type: row.series_type,
-      data: row.data,
+      series_type: row.series_type as TraderTimeseriesLegacy['series_type'],
+      data: row.data as TraderTimeseriesLegacy['data'],
       as_of_ts: row.as_of_ts,
       created_at: row.created_at,
     }));
-  }
-
-  private async getDisplayNames(
-    snapshots: Array<{ platform: string; trader_key: string }>,
-  ): Promise<Map<string, { display_name: string | null; avatar_url: string | null }>> {
-    const result = new Map<string, { display_name: string | null; avatar_url: string | null }>();
-
-    if (snapshots.length === 0) return result;
-
-    // Batch query trader_sources_v2 for display names
-    const keys = [...new Set(snapshots.map((s) => s.trader_key))];
-
-    const { data } = await this.supabase
-      .from('trader_sources_v2')
-      .select('platform, trader_key, display_name, avatar_url')
-      .in('trader_key', keys);
-
-    if (data) {
-      for (const row of data) {
-        result.set(`${row.platform}:${row.trader_key}`, {
-          display_name: row.display_name,
-          avatar_url: row.avatar_url,
-        });
-      }
-    }
-
-    return result;
   }
 
   // ============================================

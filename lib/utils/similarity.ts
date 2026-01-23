@@ -3,7 +3,7 @@
  * 使用余弦相似度和多维度匹配
  */
 
-import type { TradingStyle, TraderVector, SimilarTrader } from '../types/trader'
+import type { TradingStyle, TraderVector as _TraderVector, SimilarTrader } from '../types/trader'
 
 // ============================================
 // 类型定义

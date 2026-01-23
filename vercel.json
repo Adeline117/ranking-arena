@@ -67,6 +67,18 @@
     {
       "path": "/api/cron/run-worker",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/run-jobs?max=20",
+      "schedule": "*/2 * * * *"
+    },
+    {
+      "path": "/api/cron/run-jobs?max=10&prewarm=true",
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cron/discover-traders",
+      "schedule": "0 */4 * * *"
     }
   ],
   "headers": [
@@ -130,6 +142,24 @@
         {
           "key": "Cache-Control",
           "value": "s-maxage=60, stale-while-revalidate=300"
+        }
+      ]
+    },
+    {
+      "source": "/api/rankings",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "s-maxage=60, stale-while-revalidate=300"
+        }
+      ]
+    },
+    {
+      "source": "/api/trader/:path*",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "s-maxage=300, stale-while-revalidate=600"
         }
       ]
     },

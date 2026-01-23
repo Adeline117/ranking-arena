@@ -5,7 +5,7 @@
  * DELETE - 取消推送订阅
  */
 
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { withAuth } from '@/lib/api/middleware'
 import { getPushNotificationService } from '@/lib/services/push-notification'
 import type { PushProvider } from '@/lib/services/push-notification'

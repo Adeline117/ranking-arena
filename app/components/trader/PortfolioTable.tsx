@@ -226,7 +226,7 @@ export default function PortfolioTable({ items, history = [] }: PortfolioTablePr
                               color: item.direction === 'long' ? tokens.colors.accent.success : tokens.colors.accent.error,
                               fontWeight: tokens.typography.fontWeight.bold,
                             }}>
-                              {item.direction === 'long' ? '做多' : '做空'}
+                              {item.direction === 'long' ? t('long') : t('short')}
                             </Text>
                           </Box>
                         </td>
@@ -328,7 +328,7 @@ export default function PortfolioTable({ items, history = [] }: PortfolioTablePr
                       fontFamily: tokens.typography.fontFamily.sans.join(', '),
                     }}
                   >
-                    {sortOrder === 'desc' ? '↓ 降序' : '↑ 升序'}
+                    {sortOrder === 'desc' ? t('descending') : t('ascending')}
                   </button>
                 </Box>
 
@@ -360,7 +360,7 @@ export default function PortfolioTable({ items, history = [] }: PortfolioTablePr
                           textAlign: 'center',
                         }}
                       >
-                        {historyExpanded ? `收起` : `展开全部 (${sortedHistory.length} 条)`}
+                        {historyExpanded ? t('collapse') : `${t('expandAll')} (${sortedHistory.length})`}
                       </button>
                     )}
                   </Box>
@@ -406,7 +406,7 @@ export default function PortfolioTable({ items, history = [] }: PortfolioTablePr
                                     color: item.direction === 'long' ? tokens.colors.accent.success : tokens.colors.accent.error,
                                     fontWeight: tokens.typography.fontWeight.bold,
                                   }}>
-                                    {item.direction === 'long' ? '做多' : '做空'}
+                                    {item.direction === 'long' ? t('long') : t('short')}
                                   </Text>
                                 </Box>
                               </td>
@@ -461,7 +461,7 @@ export default function PortfolioTable({ items, history = [] }: PortfolioTablePr
                           marginTop: tokens.spacing[3],
                         }}
                       >
-                        {historyExpanded ? `收起` : `展开全部 (${sortedHistory.length} 条)`}
+                        {historyExpanded ? t('collapse') : `${t('expandAll')} (${sortedHistory.length})`}
                       </button>
                     )}
                   </Box>
@@ -553,7 +553,7 @@ export default function PortfolioTable({ items, history = [] }: PortfolioTablePr
               </button>
             </Box>
             <Text size="sm" color="secondary">
-              详细数据加载中...
+              {t('loadingDetails')}
             </Text>
           </Box>
         </>
@@ -564,6 +564,7 @@ export default function PortfolioTable({ items, history = [] }: PortfolioTablePr
 
 // 详细的仓位历史卡片组件
 function PositionHistoryCard({ position, index }: { position: ExtendedPositionHistoryItem; index: number }) {
+  const { t } = useLanguage()
   const [isHovered, setIsHovered] = useState(false)
   const isLong = position.direction === 'long'
   const isProfit = (position.pnlUsd ?? position.pnlPct ?? 0) >= 0
@@ -626,7 +627,7 @@ function PositionHistoryCard({ position, index }: { position: ExtendedPositionHi
             background: tokens.colors.bg.tertiary,
           }}>
             <Text size="xs" style={{ color: tokens.colors.text.tertiary }}>
-              {position.positionType === 'perpetual' ? '永续' : '交割'}
+              {position.positionType === 'perpetual' ? t('perpetual') : t('delivery')}
             </Text>
           </Box>
           
@@ -640,7 +641,7 @@ function PositionHistoryCard({ position, index }: { position: ExtendedPositionHi
               color: isLong ? tokens.colors.accent.success : tokens.colors.accent.error,
               fontWeight: 600,
             }}>
-              {position.marginMode === 'cross' ? '全仓' : '逐仓'} {isLong ? '做多' : '做空'}
+              {position.marginMode === 'cross' ? t('crossMargin') : t('isolatedMargin')} {isLong ? t('long') : t('short')}
             </Text>
           </Box>
         </Box>
@@ -653,10 +654,10 @@ function PositionHistoryCard({ position, index }: { position: ExtendedPositionHi
         gap: tokens.spacing[4],
         marginBottom: tokens.spacing[3],
       }}>
-        <DataCell label="开仓时间" value={position.openTime ? formatDateTime(position.openTime) : '--'} />
-        <DataCell label="开仓价格" value={`${formatPriceWithComma(position.entryPrice)}`} />
-        <DataCell 
-          label="平仓盈亏" 
+        <DataCell label={t('openTime')} value={position.openTime ? formatDateTime(position.openTime) : '--'} />
+        <DataCell label={t('openPrice')} value={`${formatPriceWithComma(position.entryPrice)}`} />
+        <DataCell
+          label={t('closePnl')}
           value={position.pnlUsd !== undefined && position.pnlUsd !== 0
             ? `${isProfit ? '+' : ''}${formatPriceWithComma(position.pnlUsd)} USDT`
             : `${isProfit ? '+' : ''}${(position.pnlPct ?? 0).toFixed(2)}%`
@@ -671,9 +672,9 @@ function PositionHistoryCard({ position, index }: { position: ExtendedPositionHi
         gridTemplateColumns: 'repeat(3, 1fr)', 
         gap: tokens.spacing[4],
       }}>
-        <DataCell label="平仓均价" value={`${formatPriceWithComma(position.exitPrice)}`} secondary />
-        <DataCell label="最大持仓" value={formatSizeWithUnit(position.maxPositionSize, coinName)} secondary />
-        <DataCell label="平仓时间" value={position.closeTime ? formatDateTime(position.closeTime) : '--'} secondary />
+        <DataCell label={t('closePrice')} value={`${formatPriceWithComma(position.exitPrice)}`} secondary />
+        <DataCell label={t('maxPosition')} value={formatSizeWithUnit(position.maxPositionSize, coinName)} secondary />
+        <DataCell label={t('closeTime')} value={position.closeTime ? formatDateTime(position.closeTime) : '--'} secondary />
       </Box>
     </Box>
   )

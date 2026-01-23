@@ -29,7 +29,7 @@ function SearchIcon({ active }: { active: boolean }) {
   )
 }
 
-function GroupsIcon({ active }: { active: boolean }) {
+function _GroupsIcon({ active }: { active: boolean }) {
   return (
     <svg width="22" height="22" viewBox="0 0 24 24" fill={active ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />

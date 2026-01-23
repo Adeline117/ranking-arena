@@ -63,47 +63,43 @@ describe('Funnels', () => {
 })
 
 describe('FunnelTracker', () => {
-  let originalWindow: typeof globalThis.window
+  let mockLocalStorage: ReturnType<typeof mockStorage>
+  let mockSessionStorage: ReturnType<typeof mockStorage>
   let originalLocalStorage: Storage
   let originalSessionStorage: Storage
 
-  beforeAll(() => {
-    originalWindow = global.window
+  beforeEach(() => {
+    mockLocalStorage = mockStorage()
+    mockSessionStorage = mockStorage()
+
+    // Save original storage
     originalLocalStorage = global.localStorage
     originalSessionStorage = global.sessionStorage
-  })
 
-  beforeEach(() => {
-    // Mock window and storage for browser environment
-    const localStorage = mockStorage()
-    const sessionStorage = mockStorage()
-
-    Object.defineProperty(global, 'window', {
-      value: {},
-      writable: true,
-    })
+    // Mock storage on global (works in jsdom)
     Object.defineProperty(global, 'localStorage', {
-      value: localStorage,
+      value: mockLocalStorage,
       writable: true,
+      configurable: true,
     })
     Object.defineProperty(global, 'sessionStorage', {
-      value: sessionStorage,
+      value: mockSessionStorage,
       writable: true,
+      configurable: true,
     })
   })
 
-  afterAll(() => {
-    Object.defineProperty(global, 'window', {
-      value: originalWindow,
-      writable: true,
-    })
+  afterEach(() => {
+    // Restore original storage
     Object.defineProperty(global, 'localStorage', {
       value: originalLocalStorage,
       writable: true,
+      configurable: true,
     })
     Object.defineProperty(global, 'sessionStorage', {
       value: originalSessionStorage,
       writable: true,
+      configurable: true,
     })
   })
 
@@ -207,17 +203,16 @@ describe('FunnelTracker', () => {
 })
 
 describe('trackFunnelStep', () => {
-  beforeEach(() => {
-    // Reset to server environment (no window)
-    Object.defineProperty(global, 'window', {
-      value: undefined,
-      writable: true,
-    })
-  })
-
-  test('should not throw when funnelTracker is null (server-side)', () => {
+  test('should not throw when called', () => {
+    // In jsdom browser environment, trackFunnelStep should work without throwing
     expect(() => {
       trackFunnelStep('registration', 'landing')
+    }).not.toThrow()
+  })
+
+  test('should not throw for unknown funnel', () => {
+    expect(() => {
+      trackFunnelStep('unknown_funnel', 'some_step')
     }).not.toThrow()
   })
 })

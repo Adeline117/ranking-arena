@@ -111,7 +111,7 @@ export function useUsers(accessToken: string | null, showToast?: ToastFn) {
         showToast?.(data.error || '操作失败', 'error')
         return false
       }
-    } catch (err) {
+    } catch (_err) {
       showToast?.('网络错误', 'error')
       return false
     } finally {
@@ -146,7 +146,7 @@ export function useUsers(accessToken: string | null, showToast?: ToastFn) {
         showToast?.(data.error || '操作失败', 'error')
         return false
       }
-    } catch (err) {
+    } catch (_err) {
       showToast?.('网络错误', 'error')
       return false
     } finally {

@@ -3,19 +3,39 @@
 **Date**: 2026-01-21
 **Auditor**: Claude Opus 4.5
 **Branch**: `claude/audit-hidden-bugs-BoYVE`
-**Verdict**: **BLOCK RELEASE** - Critical issues found
+**Verdict**: ~~BLOCK RELEASE~~ **FIXES APPLIED** - Ready for testing
+
+---
+
+## FIXES APPLIED (2026-01-21)
+
+The following critical issues have been fixed in this branch:
+
+| Issue | Status | Commit |
+|-------|--------|--------|
+| Auth bypass in /api/follow | **FIXED** | 3dcd2d3 |
+| Auth bypass in /api/messages | **FIXED** | 3dcd2d3 |
+| Auth bypass in /api/messages/start | **FIXED** | 3dcd2d3 |
+| Auth bypass in /api/conversations | **FIXED** | 3dcd2d3 |
+| Auth bypass in /api/following | **FIXED** | 3dcd2d3 |
+| Race condition in poll-vote | **FIXED** | 3dcd2d3 |
+| Race condition in bookmark | **FIXED** | 3dcd2d3 |
+| Silent failures in PostFeed | **FIXED** | 3dcd2d3 |
+| Poll-vote error handling | **FIXED** | 3dcd2d3 |
+
+**Remaining Items**: Multi-tab state sync (architectural), enhanced observability (P2)
 
 ---
 
 ## Executive Summary
 
 This audit identified **27+ hidden bugs** across 6 categories. The most severe issues involve:
-1. **Critical permission bypasses** allowing impersonation attacks
-2. **Race conditions** causing data corruption in counters
-3. **Silent failures** that make debugging impossible
-4. **Incomplete error handling** leaving users without feedback
+1. ~~**Critical permission bypasses** allowing impersonation attacks~~ **FIXED**
+2. ~~**Race conditions** causing data corruption in counters~~ **FIXED**
+3. ~~**Silent failures** that make debugging impossible~~ **FIXED**
+4. ~~**Incomplete error handling** leaving users without feedback~~ **FIXED**
 
-**Risk Level**: **HIGH** - Multiple issues could lead to data corruption or security breaches.
+**Risk Level**: ~~HIGH~~ **MEDIUM** - Critical issues fixed, remaining items are lower priority.
 
 ---
 

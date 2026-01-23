@@ -77,7 +77,7 @@ export function usePostTranslation(
       } else {
         showToast(data.error || '翻译失败', 'error')
       }
-    } catch (err) {
+    } catch (_err) {
       showToast('翻译服务出错', 'error')
     } finally {
       setTranslating(false)
@@ -131,7 +131,7 @@ export function usePostTranslation(
           return updated
         })
       }
-    } catch (err) {
+    } catch (_err) {
       // Silent fail for list translation
     } finally {
       setTranslatingList(false)
@@ -196,7 +196,7 @@ export function usePostTranslation(
           return updated
         })
       }
-    } catch (err) {
+    } catch (_err) {
       // Silent fail for comment translation
     } finally {
       setTranslatingComments(false)

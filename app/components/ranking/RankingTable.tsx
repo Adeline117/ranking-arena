@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
 import { RankingSkeleton } from '../ui/Skeleton'
 import { RankingBadge } from '../icons'
@@ -9,8 +10,9 @@ import { Box, Text } from '../base'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { getAvatarGradient, getAvatarInitial } from '@/lib/utils/avatar'
 import { ScoreRulesModal } from '../ui/ScoreRulesModal'
-import CategoryRankingTabs, { CategoryType, filterByCategory } from './CategoryRankingTabs'
+import CategoryRankingTabs, { CategoryType } from './CategoryRankingTabs'
 import { ProLabel } from '../premium/PremiumGate'
+import { DataSourceBadge } from '../ui/DataSourceTooltip'
 
 // 图标组件
 const FilterIcon = ({ size = 14 }: { size?: number }) => (
@@ -56,6 +58,33 @@ function formatROI(roi: number): string {
   } else {
     return `${roi >= 0 ? '+' : ''}${roi.toFixed(1)}%`
   }
+}
+
+/**
+ * 获取 PnL 数据来源提示
+ * 不同交易所的 PnL 含义不同：
+ * - Binance: 交易员本人盈亏
+ * - Bybit/Bitget/KuCoin/MEXC: 跟单者收益（非交易员本人）
+ */
+function getPnLTooltip(source: string, language: string): string {
+  const traderPnlSources = ['binance', 'binance_futures', 'binance_spot', 'binance_web3']
+  const followerPnlSources = ['bybit', 'bitget', 'bitget_futures', 'bitget_spot', 'kucoin', 'mexc']
+
+  const sourceLower = source.toLowerCase()
+
+  if (traderPnlSources.some(s => sourceLower.includes(s))) {
+    return language === 'zh'
+      ? 'PnL = 交易员本人盈亏'
+      : 'PnL = Trader\'s own profit/loss'
+  }
+
+  if (followerPnlSources.some(s => sourceLower.includes(s))) {
+    return language === 'zh'
+      ? 'PnL = 跟单者收益（非交易员本人）'
+      : 'PnL = Followers\' profit (not trader\'s own)'
+  }
+
+  return language === 'zh' ? 'PnL = 盈亏金额' : 'PnL = Profit/Loss'
 }
 
 export interface Trader {
@@ -161,6 +190,7 @@ export default function RankingTable(props: {
 }) {
   const { traders, loading, source, timeRange = '90D', isPro = false, category = 'all', onCategoryChange, onProRequired, error, onRetry } = props
   const { t, language } = useLanguage()
+  const router = useRouter()
   
   // 分页状态
   const [currentPage, setCurrentPage] = useState(1)
@@ -208,7 +238,7 @@ export default function RankingTable(props: {
     
     // 解析 source 字符串
     const parts = src.toLowerCase().split('_')
-    let exchange = parts[0]
+    const exchange = parts[0]
     let type = parts[1] || 'futures' // 默认合约
     
     // 特殊处理 bybit（默认合约）、gmx（链上）
@@ -482,14 +512,21 @@ export default function RankingTable(props: {
           }}
         >
           <Text size="sm" weight="bold" style={{ color: tokens.colors.accent.primary, marginBottom: 8, display: 'block' }}>
-            Arena Score 排名规则
+            {language === 'zh' ? 'Arena Score 排名规则' : 'Arena Score Ranking Rules'}
           </Text>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <span>① 按 Arena Score 从高到低排序（0-100 分）</span>
-            <span>② 分数构成：收益分（85%）+ 稳定/风险分（15%）</span>
-            <span>③ Score 相同时，回撤更小的靠前</span>
+            <span>{language === 'zh' ? '① 按 Arena Score 从高到低排序（0-100 分）' : '① Ranked by Arena Score (0-100)'}</span>
+            <span>{language === 'zh' ? '② 分数构成：收益分（85%）+ 稳定/风险分（15%）' : '② Score: Return (85%) + Stability/Risk (15%)'}</span>
+            <span>{language === 'zh' ? '③ Score 相同时，回撤更小的靠前' : '③ Lower drawdown ranks higher when Score ties'}</span>
             <span style={{ color: tokens.colors.text.tertiary, marginTop: 6 }}>
-              * 入榜门槛（PNL 收益）：7D &gt; $300 | 30D &gt; $1,000 | 90D &gt; $3,000
+              {language === 'zh'
+                ? '* 入榜门槛（PNL 收益）：7D > $300 | 30D > $1,000 | 90D > $3,000'
+                : '* Entry threshold (PNL): 7D > $300 | 30D > $1,000 | 90D > $3,000'}
+            </span>
+            <span style={{ color: tokens.colors.text.tertiary, marginTop: 4 }}>
+              {language === 'zh'
+                ? '* ROI 计算方式因交易所而异，跨所对比时请注意差异'
+                : '* ROI calculation varies by exchange. Use caution when comparing across exchanges.'}
             </span>
           </div>
           <button
@@ -599,7 +636,7 @@ export default function RankingTable(props: {
               }
               
               const displayName = formatDisplayName(traderHandle)
-              const sourceLabelText = trader.source ? (sourceLabels[trader.source] || trader.source) : sourceLabel
+              const _sourceLabelText = trader.source ? (sourceLabels[trader.source] || trader.source) : sourceLabel
 
               const ariaLabel = `${t('rank')} ${rank}, ${t('trader')} ${displayName}, ROI ${(trader.roi || 0) >= 0 ? '+' : ''}${(trader.roi || 0).toFixed(2)}%, ${t('winRate')} ${trader.win_rate != null ? trader.win_rate.toFixed(1) + '%' : '—'}`
               
@@ -614,7 +651,7 @@ export default function RankingTable(props: {
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
                       e.preventDefault()
-                      window.location.href = href
+                      router.push(href)
                     }
                   }}
                 >
@@ -715,10 +752,11 @@ export default function RankingTable(props: {
                         >
                           {displayName}
                         </Text>
-                        {/* 拆分的交易所标签：交易所名 + 类型 */}
+                        {/* 拆分的交易所标签：交易所名 + 类型 + 数据状态 */}
                         <Box style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                           {(() => {
                             const info = parseSourceInfo(trader.source || source || '')
+                            const exchangeKey = (trader.source || source || '').split('_')[0]
                             return (
                               <>
                                 {/* 交易所名称标签 */}
@@ -755,6 +793,12 @@ export default function RankingTable(props: {
                                     {info.type}
                                   </Text>
                                 </Box>
+                                {/* 数据来源状态指示器 */}
+                                <DataSourceBadge
+                                  availability="available"
+                                  exchange={exchangeKey}
+                                  compact
+                                />
                               </>
                             )
                           })()}
@@ -843,20 +887,23 @@ export default function RankingTable(props: {
                       >
                         {formatROI(trader.roi || 0)}
                       </Text>
+                      {/* PnL - 带数据来源提示 */}
                       <Text
                         size="xs"
                         weight="semibold"
                         className="pnl-value"
                         style={{
-                          color: trader.pnl != null 
+                          color: trader.pnl != null
                             ? (trader.pnl >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error)
                             : tokens.colors.text.tertiary,
                           lineHeight: 1.2,
                           fontSize: '11px',
                           opacity: trader.pnl != null ? 0.85 : 0.5,
+                          cursor: trader.pnl != null ? 'help' : 'default',
                         }}
+                        title={trader.pnl != null ? getPnLTooltip(trader.source || source || '', language) : undefined}
                       >
-                        {trader.pnl != null 
+                        {trader.pnl != null
                           ? `${trader.pnl >= 0 ? '+' : ''}${formatPnL(trader.pnl)}`
                           : '—'
                         }

@@ -54,7 +54,8 @@ export async function GET(req: Request) {
     }
     
     // Enrich reports with reporter info and content preview
-    const enrichedReports = await Promise.all(
+    // 使用 Promise.allSettled 确保单个查询失败不会导致整个列表失败
+    const enrichResults = await Promise.allSettled(
       (reports || []).map(async (report) => {
         // Get reporter info
         const { data: reporter } = await supabase
@@ -62,18 +63,18 @@ export async function GET(req: Request) {
           .select('id, handle, avatar_url')
           .eq('id', report.reporter_id)
           .maybeSingle()
-        
+
         // Get content preview
         let contentPreview = null
         let contentAuthor = null
-        
+
         if (report.content_type === 'post') {
           const { data: post } = await supabase
             .from('posts')
             .select('id, title, content, author_id, author_handle')
             .eq('id', report.content_id)
             .maybeSingle()
-          
+
           if (post) {
             contentPreview = {
               title: post.title,
@@ -90,7 +91,7 @@ export async function GET(req: Request) {
             .select('id, content, author_id, author_handle')
             .eq('id', report.content_id)
             .maybeSingle()
-          
+
           if (comment) {
             contentPreview = {
               content: comment.content?.slice(0, 200),
@@ -101,15 +102,26 @@ export async function GET(req: Request) {
             }
           }
         }
-        
+
         return {
           ...report,
-          reporter,
+          reporter: reporter || { id: report.reporter_id, handle: '未知用户', avatar_url: null },
           contentPreview,
           contentAuthor,
         }
       })
     )
+
+    // 过滤成功的结果，记录失败的
+    const enrichedReports = enrichResults
+      .filter((result): result is PromiseFulfilledResult<any> => {
+        if (result.status === 'rejected') {
+          logger.warn('Failed to enrich report', { error: String(result.reason) })
+          return false
+        }
+        return true
+      })
+      .map(result => result.value)
     
     return NextResponse.json({
       ok: true,

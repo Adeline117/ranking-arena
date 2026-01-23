@@ -74,7 +74,7 @@ export default function OptimizedImage({
   rounded = 'md',
   objectFit = 'cover',
   hoverEffect = 'none',
-  lazyThreshold = '200px',
+  lazyThreshold: _lazyThreshold = '200px',
   style,
   className = '',
   priority,
@@ -203,8 +203,11 @@ function LoadingSpinner() {
 // 预设变体
 // ============================================
 
-/** 头像图片 */
-export function Avatar({
+/**
+ * 头像图片（简单版）
+ * 注意：对于需要首字母回退、加载状态等功能的场景，请使用 UI/Avatar 组件
+ */
+export function AvatarImage({
   src,
   alt,
   size = 48,
@@ -222,6 +225,9 @@ export function Avatar({
     />
   )
 }
+
+/** @deprecated 使用 AvatarImage 替代 */
+export const Avatar = AvatarImage
 
 /** 卡片封面图片 */
 export function CardImage({

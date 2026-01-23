@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { Box, Text } from '../base'
+import { Text } from '../base'
 import Card from '../ui/Card'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { formatRiskMetric, calculateRiskLevel, type RiskMetrics } from '@/lib/services/trading-metrics'
@@ -21,7 +21,7 @@ const RISK_LEVEL_COLORS = {
 }
 
 // 风险等级描述
-const RISK_LEVEL_LABELS: Record<number, string> = {
+const _RISK_LEVEL_LABELS: Record<number, string> = {
   1: '低风险',
   2: '较低风险',
   3: '中等风险',
@@ -33,7 +33,7 @@ const RISK_LEVEL_LABELS: Record<number, string> = {
  * 风险指标卡片组件
  */
 export function RiskMetricsCard({ metrics, loading }: RiskMetricsCardProps) {
-  const { t } = useLanguage()
+  const { t: _t } = useLanguage()
 
   // 计算风险等级（如果未提供）
   const riskInfo = useMemo(() => {

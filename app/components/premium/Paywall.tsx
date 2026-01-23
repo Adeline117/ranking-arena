@@ -15,6 +15,7 @@ import {
   getFeature,
 } from '@/lib/premium'
 import { useFeatureAccess, usePremium } from '@/lib/premium/hooks'
+import { useLanguage } from '../Utils/LanguageProvider'
 
 // ============================================
 // 类型定义
@@ -53,10 +54,11 @@ export function Paywall({
   children,
   variant = 'card',
   showPricing = true,
-  upgradeText = '升级解锁',
+  upgradeText,
   onUpgradeClick,
 }: PaywallProps) {
   const { tier: currentTier } = usePremium()
+  const { t } = useLanguage()
   // Always call hook unconditionally with a default feature
   const featureAccess = useFeatureAccess(feature || 'email_notifications')
   const featureInfo = feature ? getFeature(feature) : null
@@ -82,10 +84,11 @@ export function Paywall({
   const targetPlan = SUBSCRIPTION_PLANS.find(p => p.id === requiredTier)
 
   // 默认文案
-  const defaultTitle = featureInfo?.name 
-    ? `解锁「${featureInfo.name}」` 
-    : '升级获取更多功能'
-  const defaultDescription = featureAccess?.message || featureAccess?.upgradeMessage || featureInfo?.description || '升级您的订阅以访问此功能'
+  const finalUpgradeText = upgradeText || t('upgradeUnlock')
+  const defaultTitle = featureInfo?.name
+    ? `${featureInfo.name} - ${t('proRequired')}`
+    : t('upgradeForMore')
+  const defaultDescription = featureAccess?.message || featureAccess?.upgradeMessage || featureInfo?.description || t('upgradeToAccess')
 
   const handleUpgrade = () => {
     if (onUpgradeClick) {
@@ -105,9 +108,10 @@ export function Paywall({
           description={description || defaultDescription}
           targetPlan={targetPlan}
           showPricing={showPricing}
-          upgradeText={upgradeText}
+          upgradeText={finalUpgradeText}
           onUpgrade={handleUpgrade}
           featureIcon={featureInfo?.icon}
+          t={t}
         >
           {children}
         </OverlayPaywall>
@@ -117,7 +121,7 @@ export function Paywall({
         <InlinePaywall
           title={title || defaultTitle}
           description={description || defaultDescription}
-          upgradeText={upgradeText}
+          upgradeText={finalUpgradeText}
           onUpgrade={handleUpgrade}
         />
       )
@@ -126,7 +130,7 @@ export function Paywall({
         <BannerPaywall
           title={title || defaultTitle}
           description={description || defaultDescription}
-          upgradeText={upgradeText}
+          upgradeText={finalUpgradeText}
           onUpgrade={handleUpgrade}
         />
       )
@@ -138,9 +142,10 @@ export function Paywall({
           description={description || defaultDescription}
           targetPlan={targetPlan}
           showPricing={showPricing}
-          upgradeText={upgradeText}
+          upgradeText={finalUpgradeText}
           onUpgrade={handleUpgrade}
           featureIcon={featureInfo?.icon}
+          t={t}
         />
       )
   }
@@ -159,6 +164,7 @@ interface PaywallContentProps {
   onUpgrade: () => void
   featureIcon?: string
   children?: React.ReactNode
+  t?: (key: string) => string
 }
 
 /**
@@ -172,7 +178,15 @@ function CardPaywall({
   upgradeText,
   onUpgrade,
   featureIcon,
+  t,
 }: PaywallContentProps) {
+  const perMonth = t?.('perMonth') || '/month'
+  const savePercent = (percent: number) => {
+    const template = t?.('savePercent') || 'Save {percent}%'
+    return template.replace('{percent}', String(percent))
+  }
+  const yearlyPrice = t?.('yearlyPrice') || 'Yearly'
+
   return (
     <Box
       style={{
@@ -219,10 +233,10 @@ function CardPaywall({
           <Text size="2xl" weight="bold" style={{ color: tokens.colors.accent.primary }}>
             ${targetPlan.price.monthly}
           </Text>
-          <Text size="sm" color="tertiary">/月</Text>
+          <Text size="sm" color="tertiary">{perMonth}</Text>
           {targetPlan.price.yearly > 0 && (
             <Text size="xs" color="tertiary" style={{ display: 'block', marginTop: tokens.spacing[1] }}>
-              年付 ${targetPlan.price.yearly}/年（省 {Math.round((1 - targetPlan.price.yearly / (targetPlan.price.monthly * 12)) * 100)}%）
+              {yearlyPrice} ${targetPlan.price.yearly} ({savePercent(Math.round((1 - targetPlan.price.yearly / (targetPlan.price.monthly * 12)) * 100))})
             </Text>
           )}
         </Box>

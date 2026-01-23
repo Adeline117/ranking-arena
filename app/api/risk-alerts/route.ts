@@ -5,7 +5,7 @@
  * POST - 标记预警为已读
  */
 
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { withAuth } from '@/lib/api/middleware'
 import { getRiskAlertService } from '@/lib/services/risk-alert'
 import { hasFeatureAccess } from '@/lib/types/premium'

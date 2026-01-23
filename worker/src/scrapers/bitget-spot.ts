@@ -67,7 +67,7 @@ export class BitgetSpotScraper extends BaseScraper {
       document.querySelectorAll('button').forEach(btn => {
         const text = btn.textContent || ''
         if (text.includes('OK') || text.includes('Got') || text.includes('Accept')) {
-          try { (btn as HTMLElement).click() } catch (e) { /* ignore */ }
+          try { (btn as HTMLElement).click() } catch (_e) { /* ignore */ }
         }
       })
     })

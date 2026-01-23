@@ -6,6 +6,7 @@ import { tokens } from '@/lib/design-tokens'
 import { supabase } from '@/lib/supabase/client'
 import { Box, Text, Button } from '../base'
 import ClaimTraderButton from './ClaimTraderButton'
+import CopyTradeButton from './CopyTradeButton'
 import { getAvatarGradient, getAvatarInitial } from '@/lib/utils/avatar'
 import { ProBadgeOverlay } from '../ui/ProBadge'
 
@@ -451,6 +452,13 @@ export default function TraderHeader({
           </Button>
         )}
 
+        {/* 跟单按钮 - 最重要的 CTA */}
+        <CopyTradeButton
+          traderId={traderId}
+          source={source}
+          traderHandle={handle}
+        />
+
         {/* 返回按钮 */}
         <Button
           variant="ghost"
@@ -476,7 +484,7 @@ export default function TraderHeader({
         >
           ← 返回
         </Button>
-        
+
         {/* 查看原网页按钮 */}
         {(() => {
           const originalUrl = getOriginalUrl(source, traderId)

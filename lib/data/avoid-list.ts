@@ -85,7 +85,7 @@ export async function getAvoidList(
   if (!data || data.length === 0) return []
 
   // 获取交易员信息
-  const traderKeys = data.map(d => `${d.trader_id}:${d.source}`)
+  const _traderKeys = data.map(d => `${d.trader_id}:${d.source}`)
   const { data: sources } = await supabase
     .from('trader_sources')
     .select('source_trader_id, source, handle')

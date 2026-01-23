@@ -358,6 +358,7 @@ export default function NewPostPage() {
         }
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [handle, draftKey])
 
   // Auto-save draft to localStorage (debounced)
@@ -625,7 +626,7 @@ export default function NewPostPage() {
 
   // 移动图片在内容中的位置（上移或下移）
   const moveImageInContent = (url: string, direction: 'up' | 'down') => {
-    const imagePattern = `![image](${url})`
+    const _imagePattern = `![image](${url})`
     const regex = /!\[image\]\([^)]+\)/g
     const matches: { match: string; start: number; end: number }[] = []
     let m

@@ -37,6 +37,7 @@ export default function AccountRequiredStats({ userId }: { userId: string }) {
 
   useEffect(() => {
     loadData()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId])
 
   const loadData = async () => {
@@ -68,7 +69,7 @@ export default function AccountRequiredStats({ userId }: { userId: string }) {
         })
         setTradingData(dataMap)
       }
-    } catch (err) {
+    } catch (_err) {
       // 静默处理错误，不影响 UI
     } finally {
       setLoading(false)

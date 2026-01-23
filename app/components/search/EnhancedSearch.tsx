@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
 import { useLanguage } from '../Providers/LanguageProvider'
 
 // ============================================
@@ -98,7 +97,7 @@ function useSearchSuggestions(query: string) {
           console.error('Search suggestions error:', error)
           // 出错时显示关键词搜索建议作为降级
           setSuggestions([
-            { type: 'keyword', value: query, label: query, subLabel: '搜索关键词' },
+            { type: 'keyword', value: query, label: query, subLabel: '' },
           ])
         }
       } finally {
@@ -127,13 +126,14 @@ interface EnhancedSearchProps {
 }
 
 export function EnhancedSearch({
-  placeholder = '搜索交易员、交易对...',
+  placeholder,
   autoFocus = false,
   onSearch,
   className = '',
 }: EnhancedSearchProps) {
   const router = useRouter()
   const { t } = useLanguage()
+  const defaultPlaceholder = placeholder || t('searchTraders')
   const inputRef = useRef<HTMLInputElement>(null)
   const blurTimerRef = useRef<NodeJS.Timeout | null>(null)
   
@@ -239,7 +239,7 @@ export function EnhancedSearch({
             blurTimerRef.current = setTimeout(() => setIsFocused(false), 200)
           }}
           onKeyDown={handleKeyDown}
-          placeholder={placeholder}
+          placeholder={defaultPlaceholder}
           autoFocus={autoFocus}
           className="flex-1 bg-transparent px-3 py-3 text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-tertiary)] focus:outline-none"
         />
@@ -262,7 +262,7 @@ export function EnhancedSearch({
             <div className="p-2">
               {loading ? (
                 <div className="py-4 text-center text-sm text-[var(--color-text-tertiary)]">
-                  搜索中...
+                  {t('searching')}
                 </div>
               ) : (
                 suggestions.map((suggestion, idx) => (
@@ -296,12 +296,12 @@ export function EnhancedSearch({
           {!query && recentSearches.length > 0 && (
             <div className="p-3 border-b border-[var(--color-border-primary)]">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-semibold text-[var(--color-text-tertiary)]">历史搜索</span>
+                <span className="text-xs font-semibold text-[var(--color-text-tertiary)]">{t('searchHistory')}</span>
                 <button
                   onClick={clearHistory}
                   className="text-xs text-[var(--color-text-tertiary)] hover:text-[var(--color-error)]"
                 >
-                  清除
+                  {t('clear')}
                 </button>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -321,7 +321,7 @@ export function EnhancedSearch({
           {/* 热门搜索 */}
           {!query && (
             <div className="p-3">
-              <div className="text-xs font-semibold text-[var(--color-text-tertiary)] mb-2">热门搜索</div>
+              <div className="text-xs font-semibold text-[var(--color-text-tertiary)] mb-2">{t('hotSearches')}</div>
               <div className="space-y-1">
                 {HOT_SEARCHES.map((hot, idx) => (
                   <button

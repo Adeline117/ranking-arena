@@ -293,7 +293,7 @@ export function useIntersectionObserver(
   }
 }
 
-export default {
+const imagePreloadHooks = {
   useImagePreload,
   useImageLazyLoad,
   usePrefetch,
@@ -301,3 +301,4 @@ export default {
   useCriticalCSS,
   useIntersectionObserver,
 }
+export default imagePreloadHooks

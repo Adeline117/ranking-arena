@@ -1,48 +1,40 @@
 /**
- * Connector Registry
- * Central registry for all platform connectors.
+ * Connector Framework - Public API
+ *
+ * Usage:
+ *   import { connectorRegistry, initializeConnectors } from '@/lib/connectors'
+ *
+ *   await initializeConnectors()
+ *   const connector = connectorRegistry.get('binance', 'futures')
+ *   const result = await connector.discoverLeaderboard('30d', 100)
+ *
+ * Legacy usage:
+ *   import { getConnector, getAvailablePlatforms } from '@/lib/connectors'
+ *
+ *   const connector = getConnector('binance_futures')
  */
 
-import type { PlatformConnector } from './types'
-import type { Platform } from '@/lib/types/trading-platform'
-import { BinanceFuturesConnector } from './binance-futures'
-import { BybitFuturesConnector } from './bybit-futures'
+// New multi-exchange registry
+export { connectorRegistry, initializeConnectors, getConnector, getAvailablePlatforms } from './registry'
 
-// Connector instances (singleton per platform)
-const connectors = new Map<Platform, PlatformConnector>()
+// Base connector classes
+export { BaseConnector, BaseConnectorLegacy, CircuitOpenError } from './base'
 
-/**
- * Get or create a connector for the specified platform.
- * Returns null if no connector is implemented for the platform.
- */
-export function getConnector(platform: Platform): PlatformConnector | null {
-  if (connectors.has(platform)) {
-    return connectors.get(platform)!
-  }
+// Rate limiters
+export { TokenBucketRateLimiter, DelayRateLimiter, createRateLimiter } from './rate-limiter'
 
-  const connector = createConnector(platform)
-  if (connector) {
-    connectors.set(platform, connector)
-  }
-  return connector
-}
+// Types and errors
+export type { PlatformConnector, ConnectorConfig, RateLimiter, CircuitState, CircuitBreaker } from './types'
+export { ConnectorError, DEFAULT_CONNECTOR_CONFIG } from './types'
 
-function createConnector(platform: Platform): PlatformConnector | null {
-  switch (platform) {
-    case 'binance_futures':
-      return new BinanceFuturesConnector()
-    case 'bybit':
-      return new BybitFuturesConnector()
-    default:
-      return null
-  }
-}
-
-/** Get list of platforms with implemented connectors */
-export function getAvailablePlatforms(): Platform[] {
-  return ['binance_futures', 'bybit']
-}
-
-export { type PlatformConnector } from './types'
+// Individual platform connectors (direct imports)
 export { BinanceFuturesConnector } from './binance-futures'
-export { BybitFuturesConnector } from './bybit-futures'
+export { BinanceSpotConnector } from './binance-spot'
+export { BybitConnector } from './bybit'
+export { BitgetFuturesConnector } from './bitget-futures'
+export { OKXConnector } from './okx'
+export { MEXCConnector } from './mexc'
+export { KuCoinConnector } from './kucoin'
+export { HyperliquidConnector } from './hyperliquid'
+export { CoinExConnector } from './coinex'
+export { BitgetSpotConnector } from './bitget-spot'

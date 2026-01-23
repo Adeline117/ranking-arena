@@ -1,26 +1,37 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { 
-  stripe, 
-  STRIPE_PRICE_IDS, 
+import {
+  STRIPE_PRICE_IDS,
   getOrCreateStripeCustomer,
-  createCheckoutSession 
+  createCheckoutSession
 } from '@/lib/stripe'
 import { createLogger } from '@/lib/utils/logger'
 
-// 延迟创建服务端 Supabase 客户端（用于写入操作）
+// 懒加载 Supabase Admin 客户端，避免构建时环境变量缺失
 function getSupabaseAdmin() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
-  if (!url || !key) {
-    throw new Error('Supabase 环境变量未配置')
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!url || !serviceKey) {
+    throw new Error('Supabase credentials not configured (NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)')
   }
-  return createClient(url, key)
+  return createClient(url, serviceKey, {
+    auth: { persistSession: false },
+  })
 }
 
 export async function POST(request: NextRequest) {
   try {
+    // 前置校验：确保 Stripe 环境变量已配置
+    if (!process.env.STRIPE_SECRET_KEY) {
+      return NextResponse.json(
+        { error: 'Payment system not configured. Please contact support.' },
+        { status: 503 }
+      )
+    }
+
     const { plan, successUrl, cancelUrl } = await request.json()
+
+    const supabaseAdmin = getSupabaseAdmin()
 
     // 优先从 Authorization header 获取 token
     const authHeader = request.headers.get('authorization')
@@ -36,9 +47,17 @@ export async function POST(request: NextRequest) {
     } else {
       // 回退到 cookie 验证
       const cookieHeader = request.headers.get('cookie') || ''
+      const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+      if (!anonKey || !supabaseUrl) {
+        return NextResponse.json(
+          { error: 'Server configuration error' },
+          { status: 500 }
+        )
+      }
       const supabase = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        supabaseUrl,
+        anonKey,
         {
           global: {
             headers: {
@@ -118,28 +137,34 @@ export async function POST(request: NextRequest) {
     const logger = createLogger('stripe-create-checkout')
     const errorMessage = error instanceof Error ? error.message : String(error)
     logger.error('Error creating checkout session', { error: errorMessage })
-    
+
+    // 环境变量缺失 → 503 Service Unavailable
+    if (errorMessage.includes('STRIPE_SECRET_KEY') || errorMessage.includes('not configured')) {
+      return NextResponse.json(
+        { error: 'Payment system not configured. Please contact support.' },
+        { status: 503 }
+      )
+    }
+
     // 提供更详细的错误信息
     let userFacingMessage = 'Failed to create checkout session'
+    let statusCode = 500
     if (error instanceof Error) {
-      if (error.message) {
-        userFacingMessage = error.message
-      }
-      // 检查 Stripe 错误类型
       const stripeError = error as Error & { type?: string; code?: string }
       if (stripeError.type === 'StripeInvalidRequestError') {
         userFacingMessage = 'Invalid payment configuration. Please contact support.'
       } else if (stripeError.code === 'ENOTFOUND' || stripeError.code === 'ECONNREFUSED') {
         userFacingMessage = 'Network error. Please check your connection and try again.'
+        statusCode = 502
       }
     }
-    
+
     return NextResponse.json(
-      { 
+      {
         error: userFacingMessage,
         details: process.env.NODE_ENV === 'development' && error instanceof Error ? error.stack : undefined
       },
-      { status: 500 }
+      { status: statusCode }
     )
   }
 }

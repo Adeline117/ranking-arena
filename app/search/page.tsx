@@ -1,11 +1,12 @@
 'use client'
 
-import { useEffect, useState, Suspense, useCallback, useMemo } from 'react'
+import { useEffect, useState, Suspense, useCallback } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import TopNav from '@/app/components/layout/TopNav'
 import EmptyState from '@/app/components/ui/EmptyState'
 import { RankingSkeleton } from '@/app/components/ui/Skeleton'
+import { useToast } from '@/app/components/ui/Toast'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 
@@ -34,6 +35,8 @@ function SearchContent() {
   const [loading, setLoading] = useState(false)
   const [email, setEmail] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'all' | 'users' | 'traders' | 'posts' | 'groups'>('all')
+  const [_searchError, setSearchError] = useState(false)
+  const { showToast } = useToast()
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -228,8 +231,11 @@ function SearchContent() {
         }
 
         setResults(results)
+        setSearchError(false)
       } catch (error) {
         console.error('Search error:', error)
+        setSearchError(true)
+        showToast('搜索失败，请稍后重试', 'error')
       } finally {
         setLoading(false)
       }
@@ -237,6 +243,7 @@ function SearchContent() {
 
     const timeout = setTimeout(search, 300)
     return () => clearTimeout(timeout)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query])
 
   const filteredResults = activeTab === 'all' 

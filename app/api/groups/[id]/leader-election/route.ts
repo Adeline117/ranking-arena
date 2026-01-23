@@ -1,8 +1,26 @@
+/**
+ * 小组组长竞选 API
+ *
+ * ⚠️ v2.0 已废弃
+ * 此功能已暂停，原因：
+ * 1. 使用率极低
+ * 2. 投票率过低导致结果无代表性
+ * 3. 维护成本高
+ *
+ * 改用：平台指定或自动继承
+ */
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+
+// v2.0: 功能已废弃
+const FEATURE_DEPRECATED = true
+const DEPRECATION_MESSAGE = {
+  zh: '组长竞选功能已暂停。如有需求请联系客服。',
+  en: 'Leader election feature is temporarily disabled. Please contact support.',
+}
 
 // 检查用户是否是小组成员
 async function isGroupMember(
@@ -123,6 +141,11 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // v2.0: 功能已废弃
+  if (FEATURE_DEPRECATED) {
+    return NextResponse.json({ election: null, deprecated: true })
+  }
+
   try {
     const { id: groupId } = await params
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
@@ -230,9 +253,18 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // v2.0: 功能已废弃
+  if (FEATURE_DEPRECATED) {
+    const lang = request.headers.get('Accept-Language')?.includes('zh') ? 'zh' : 'en'
+    return NextResponse.json(
+      { error: DEPRECATION_MESSAGE[lang], deprecated: true },
+      { status: 410 }
+    )
+  }
+
   try {
     const { id: groupId } = await params
-    
+
     const authHeader = request.headers.get('Authorization')
     if (!authHeader?.startsWith('Bearer ')) {
       return NextResponse.json({ error: '未登录' }, { status: 401 })

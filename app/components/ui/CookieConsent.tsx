@@ -209,7 +209,9 @@ function Toggle({
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault()
-          !disabled && onChange?.(!checked)
+          if (!disabled) {
+            onChange?.(!checked)
+          }
         }
       }}
     >

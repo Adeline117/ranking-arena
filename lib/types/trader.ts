@@ -7,9 +7,17 @@
 // 交易所和数据源
 // ============================================
 
-/** 支持的交易所 */
-export const EXCHANGES = ['binance', 'bybit', 'bitget', 'okx', 'kucoin', 'gate', 'mexc', 'coinex'] as const
+/**
+ * 支持的交易所
+ * v2.0: 精简为 4 个核心交易所，移除低使用率交易所 (kucoin, gate, mexc, coinex)
+ * 理由：维护成本高、数据质量参差不齐、用户需求集中在头部交易所
+ */
+export const EXCHANGES = ['binance', 'bybit', 'bitget', 'okx'] as const
 export const EXCHANGES_WITH_WEB3 = ['binance_web3', ...EXCHANGES] as const
+
+/** 已下线的交易所（保留类型定义用于数据迁移） */
+export const DEPRECATED_EXCHANGES = ['kucoin', 'gate', 'mexc', 'coinex'] as const
+export type DeprecatedExchange = typeof DEPRECATED_EXCHANGES[number]
 
 export type Exchange = typeof EXCHANGES[number]
 export type ExchangeWithWeb3 = typeof EXCHANGES_WITH_WEB3[number]
@@ -220,7 +228,28 @@ export interface TraderFeedItem {
 // 排行榜数据
 // ============================================
 
-/** 排行榜交易员数据 */
+/**
+ * 排行榜表格中的交易员数据
+ * 用于 RankingTable 组件和 useTraderData hook
+ */
+export interface Trader {
+  id: string
+  handle: string | null
+  roi: number
+  pnl?: number | null
+  win_rate?: number | null
+  max_drawdown?: number | null
+  trades_count?: number | null
+  followers: number
+  source?: string
+  avatar_url?: string | null
+  arena_score?: number
+  return_score?: number
+  drawdown_score?: number
+  stability_score?: number
+}
+
+/** 排行榜交易员数据（严格版本，所有字段必需） */
 export interface RankedTrader {
   id: string
   handle: string
@@ -334,14 +363,13 @@ export interface TraderDetailResponse {
 /**
  * 交易员列表分页参数（必填字段版本）
  * 用于 trader API 调用时需要明确分页的场景
+ *
+ * 注：通用分页参数请使用 lib/types/index.ts 中的 PaginationParams
  */
 export interface TraderPaginationParams {
   limit: number
   offset: number
 }
-
-/** @deprecated 使用 TraderPaginationParams 替代 */
-export type PaginationParams = TraderPaginationParams
 
 /** 分页响应 */
 export interface PaginatedResponse<T> {

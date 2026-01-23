@@ -100,7 +100,7 @@ function GroupsList() {
                 } else {
                   setGroups(data || [])
                 }
-              } catch (err) {
+              } catch (_err) {
                 const errorMsg = language === 'zh'
                   ? '网络错误，请检查网络连接后重试'
                   : 'Network error, please check your connection and try again'
@@ -129,7 +129,7 @@ function GroupsList() {
 
   return (
     <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
-      {groups.map((group, idx) => {
+      {groups.map((group, _idx) => {
         const isHovered = hoveredGroup === group.id
         return (
           <Link

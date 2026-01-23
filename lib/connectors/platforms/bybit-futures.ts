@@ -1,0 +1,210 @@
+/**
+ * Bybit Futures Connector
+ *
+ * Uses Bybit's public beehive API for copy trading leaderboard.
+ * Endpoint: api2.bybit.com/fapi/beehive/public/v1/common/dynamic-leader-list
+ */
+
+import { BaseConnector } from '../base'
+import type {
+  DiscoverResult,
+  ProfileResult,
+  SnapshotResult,
+  TimeseriesResult,
+  TraderSource,
+  TraderProfile,
+  SnapshotMetrics,
+  QualityFlags,
+  TraderTimeseries,
+  PlatformCapabilities,
+  Window,
+} from '../../types/leaderboard'
+
+const WINDOW_MAP: Record<Window, string> = {
+  '7d': '7D',
+  '30d': '30D',
+  '90d': '90D',
+}
+
+export class BybitFuturesConnector extends BaseConnector {
+  readonly platform = 'bybit' as const
+  readonly marketType = 'futures' as const
+  readonly capabilities: PlatformCapabilities = {
+    platform: 'bybit',
+    market_types: ['futures', 'copy'],
+    native_windows: ['7d', '30d', '90d'],
+    available_fields: ['roi', 'pnl', 'win_rate', 'max_drawdown', 'followers', 'copiers'],
+    has_timeseries: true,
+    has_profiles: true,
+    scraping_difficulty: 2,
+    rate_limit: { rpm: 30, concurrency: 2 },
+    notes: ['Public REST API', 'No CF challenges on API endpoints'],
+  }
+
+  async discoverLeaderboard(window: Window, limit = 100, offset = 0): Promise<DiscoverResult> {
+    const timeRange = WINDOW_MAP[window]
+    const page = Math.floor(offset / limit) + 1
+
+    const data = await this.request<any>(
+      `https://api2.bybit.com/fapi/beehive/public/v1/common/dynamic-leader-list?timeRange=${timeRange}&dataType=DATA_ROI&page=${page}&pageSize=${limit}`,
+      { method: 'GET' }
+    )
+
+    const list = data?.result?.data || []
+
+    const traders: TraderSource[] = list.map((item: Record<string, unknown>) => ({
+      platform: 'bybit' as const,
+      market_type: 'futures' as const,
+      trader_key: String(item.leaderMark || ''),
+      display_name: (item.nickName as string) || null,
+      profile_url: `https://www.bybit.com/copyTrade/trade-center/detail?leaderMark=${item.leaderMark}`,
+      discovered_at: new Date().toISOString(),
+      last_seen_at: new Date().toISOString(),
+      is_active: true,
+      raw: item as Record<string, unknown>,
+    }))
+
+    return {
+      traders,
+      total_available: data?.result?.total || null,
+      window,
+      fetched_at: new Date().toISOString(),
+    }
+  }
+
+  async fetchTraderProfile(traderKey: string): Promise<ProfileResult | null> {
+    const data = await this.request<any>(
+      `https://api2.bybit.com/fapi/beehive/public/v1/common/leader-details?leaderMark=${traderKey}`,
+      { method: 'GET' }
+    )
+
+    const info = data?.result
+
+    if (!info) return null
+
+    const profile: TraderProfile = {
+      platform: 'bybit',
+      market_type: 'futures',
+      trader_key: traderKey,
+      display_name: (info.nickName as string) || null,
+      avatar_url: (info.avatar as string) || null,
+      bio: (info.introduction as string) || null,
+      tags: [],
+      profile_url: `https://www.bybit.com/copyTrade/trade-center/detail?leaderMark=${traderKey}`,
+      followers: typeof info.followerCount === 'number' ? info.followerCount : null,
+      copiers: typeof info.currentFollowerCount === 'number' ? info.currentFollowerCount : null,
+      aum: typeof info.aum === 'number' ? info.aum : null,
+      updated_at: new Date().toISOString(),
+      last_enriched_at: new Date().toISOString(),
+      provenance: {
+        source_platform: 'bybit',
+        acquisition_method: 'api',
+        fetched_at: new Date().toISOString(),
+        source_url: `https://api2.bybit.com/fapi/beehive/public/v1/common/leader-details?leaderMark=${traderKey}`,
+        scraper_version: '1.0.0',
+      },
+    }
+
+    return { profile, fetched_at: new Date().toISOString() }
+  }
+
+  async fetchTraderSnapshot(traderKey: string, window: Window): Promise<SnapshotResult | null> {
+    const timeRange = WINDOW_MAP[window]
+
+    const data = await this.request<any>(
+      `https://api2.bybit.com/fapi/beehive/public/v1/common/leader-details?leaderMark=${traderKey}&timeRange=${timeRange}`,
+      { method: 'GET' }
+    )
+
+    const info = data?.result
+
+    if (!info) return null
+
+    const metrics: SnapshotMetrics = {
+      roi: this.parseNumber(info.roi),
+      pnl: this.parseNumber(info.pnl),
+      win_rate: this.parseNumber(info.winRate),
+      max_drawdown: this.parseNumber(info.maxDrawdown),
+      sharpe_ratio: null,
+      sortino_ratio: null,
+      trades_count: typeof info.tradeCount === 'number' ? info.tradeCount : null,
+      followers: typeof info.followerCount === 'number' ? info.followerCount : null,
+      copiers: typeof info.currentFollowerCount === 'number' ? info.currentFollowerCount : null,
+      aum: this.parseNumber(info.aum),
+      platform_rank: null,
+      arena_score: null,
+      return_score: null,
+      drawdown_score: null,
+      stability_score: null,
+    }
+
+    const quality_flags: QualityFlags = {
+      missing_fields: ['sharpe_ratio', 'sortino_ratio'],
+      non_standard_fields: {},
+      window_native: true,
+      notes: [],
+    }
+
+    return { metrics, quality_flags, fetched_at: new Date().toISOString() }
+  }
+
+  async fetchTimeseries(traderKey: string): Promise<TimeseriesResult> {
+    const data = await this.request<any>(
+      `https://api2.bybit.com/fapi/beehive/public/v1/common/leader-history-pnl?leaderMark=${traderKey}`,
+      { method: 'GET' }
+    )
+
+    const pnlList = data?.result?.pnlList || []
+
+    const series: TraderTimeseries[] = []
+
+    if (pnlList.length > 0) {
+      series.push({
+        platform: 'bybit',
+        market_type: 'futures',
+        trader_key: traderKey,
+        series_type: 'daily_pnl',
+        as_of_ts: new Date().toISOString(),
+        data: pnlList.map((item: Record<string, unknown>) => ({
+          ts: new Date(Number(item.timestamp) || Date.now()).toISOString(),
+          value: Number(item.pnl) || 0,
+        })),
+        updated_at: new Date().toISOString(),
+      })
+
+      series.push({
+        platform: 'bybit',
+        market_type: 'futures',
+        trader_key: traderKey,
+        series_type: 'equity_curve',
+        as_of_ts: new Date().toISOString(),
+        data: pnlList.map((item: Record<string, unknown>) => ({
+          ts: new Date(Number(item.timestamp) || Date.now()).toISOString(),
+          value: Number(item.roi) || 0,
+        })),
+        updated_at: new Date().toISOString(),
+      })
+    }
+
+    return { series, fetched_at: new Date().toISOString() }
+  }
+
+  normalize(raw: Record<string, unknown>): Record<string, unknown> {
+    return {
+      trader_key: raw.leaderMark,
+      display_name: raw.nickName,
+      roi: this.parseNumber(raw.roi),
+      pnl: this.parseNumber(raw.pnl),
+      win_rate: this.parseNumber(raw.winRate),
+      max_drawdown: this.parseNumber(raw.maxDrawdown),
+      followers: raw.followerCount,
+      copiers: raw.currentFollowerCount,
+    }
+  }
+
+  private parseNumber(val: unknown): number | null {
+    if (val === null || val === undefined) return null
+    const num = Number(val)
+    return isNaN(num) ? null : num
+  }
+}

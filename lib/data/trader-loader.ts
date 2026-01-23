@@ -70,7 +70,7 @@ export async function loadAllTraders(
     traderCache = { data: traders, timestamp: Date.now(), timeRange }
 
     return traders
-  } catch (error) {
+  } catch (_error) {
     // Redis 失败时，直接从数据库加载
     return await loadTradersFromDB(supabase, timeRange)
   }
@@ -123,7 +123,7 @@ async function loadTradersFromDB(
     traders.sort((a, b) => b.roi - a.roi)
 
     return traders
-  } catch (error) {
+  } catch (_error) {
     return []
   }
 }

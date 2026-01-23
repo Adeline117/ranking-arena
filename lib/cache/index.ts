@@ -60,7 +60,9 @@ async function getRedis(): Promise<UpstashRedisType | null> {
       const now = Date.now()
       if (now - lastHealthCheck > HEALTH_CHECK_INTERVAL) {
         lastHealthCheck = now
-        checkRedisHealth().catch(() => {})
+        checkRedisHealth().catch((err) => {
+          dataLogger.debug('Background health check failed:', err)
+        })
       }
     }
     return redisHealthy ? redisClient : null
@@ -347,9 +349,9 @@ export async function getOrSet<T>(
   // 缓存未命中，获取新数据
   const data = await fetcher()
 
-  // 异步缓存（不阻塞返回）
-  set(key, data, options).catch(() => {
-    // 静默处理缓存错误
+  // 异步缓存（不阻塞返回，但记录错误）
+  set(key, data, options).catch((err) => {
+    dataLogger.warn('Async cache set failed:', { key, error: String(err) })
   })
 
   return data
@@ -562,7 +564,9 @@ export function forceMemoryOnly(enabled: boolean): void {
     redisHealthy = false
   } else {
     // 尝试恢复 Redis
-    checkRedisHealth().catch(() => {})
+    checkRedisHealth().catch((err) => {
+      dataLogger.debug('Redis recovery check failed:', err)
+    })
   }
 }
 
