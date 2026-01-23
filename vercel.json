@@ -59,6 +59,14 @@
     {
       "path": "/api/cron/fetch-details?concurrency=50&limit=300",
       "schedule": "30 */2 * * *"
+    },
+    {
+      "path": "/api/cron/discover-rankings",
+      "schedule": "0 */4 * * *"
+    },
+    {
+      "path": "/api/cron/run-worker",
+      "schedule": "*/5 * * * *"
     }
   ],
   "headers": [
@@ -91,6 +99,24 @@
     },
     {
       "source": "/api/traders/:path*",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "s-maxage=60, stale-while-revalidate=300"
+        }
+      ]
+    },
+    {
+      "source": "/api/rankings",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "s-maxage=60, stale-while-revalidate=300"
+        }
+      ]
+    },
+    {
+      "source": "/api/trader/:path*",
       "headers": [
         {
           "key": "Cache-Control",

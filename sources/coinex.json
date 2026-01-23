@@ -1,0 +1,87 @@
+{
+  "platform": "coinex",
+  "market_type": "futures",
+  "leaderboard_endpoints": [
+    {
+      "url": "https://www.coinex.com/res/copy-trading/traders",
+      "method": "GET",
+      "headers": {
+        "Referer": "https://www.coinex.com/copy-trading",
+        "Origin": "https://www.coinex.com"
+      },
+      "query_params": {
+        "page": "1",
+        "limit": "20",
+        "order_by": "roi",
+        "order_type": "desc",
+        "days": "7"
+      },
+      "pagination": {
+        "type": "page",
+        "page_size": 20,
+        "max_pages": 5,
+        "param_name": "page"
+      },
+      "response_path": "data.items",
+      "window_param": "days",
+      "sort_param": "order_by"
+    }
+  ],
+  "profile_endpoints": [
+    {
+      "url": "https://www.coinex.com/res/copy-trading/trader/{trader_id}",
+      "method": "GET",
+      "headers": {
+        "Origin": "https://www.coinex.com"
+      },
+      "response_path": "data"
+    },
+    {
+      "url": "https://www.coinex.com/res/copy-trading/trader/{trader_id}/performance",
+      "method": "GET",
+      "headers": {
+        "Origin": "https://www.coinex.com"
+      },
+      "query_params": {
+        "days": "7"
+      },
+      "response_path": "data"
+    }
+  ],
+  "window_support": ["7d", "30d", "90d"],
+  "rate_limit_hint": {
+    "rpm": 15,
+    "concurrent": 1,
+    "delay_ms": 4000
+  },
+  "field_map": {
+    "roi_pct": "roi",
+    "pnl_usd": "pnl",
+    "win_rate": "win_rate",
+    "max_drawdown": "max_drawdown",
+    "trades_count": "trade_count",
+    "followers": "follower_count",
+    "copiers": "copier_count"
+  },
+  "roi_sort_supported": true,
+  "roi_sort_method": "query_param",
+  "proof": [
+    {
+      "url": "https://www.coinex.com/res/copy-trading/traders?page=1&limit=20&order_by=roi&order_type=desc&days=7",
+      "request_path": "/res/copy-trading/traders",
+      "method": "GET",
+      "response_fields_sample": {
+        "data.items[0].trader_id": "coinex_t_789",
+        "data.items[0].nick_name": "CoinExPro",
+        "data.items[0].roi": 0.3821,
+        "data.items[0].pnl": 8765.43,
+        "data.items[0].win_rate": 0.71,
+        "data.items[0].max_drawdown": 0.14,
+        "data.items[0].trade_count": 203,
+        "data.items[0].follower_count": 420,
+        "data.items[0].copier_count": 180
+      },
+      "discovered_at": "2024-01-15T00:00:00Z"
+    }
+  ]
+}

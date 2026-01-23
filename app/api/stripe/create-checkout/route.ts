@@ -8,11 +8,15 @@ import {
 } from '@/lib/stripe'
 import { createLogger } from '@/lib/utils/logger'
 
-// 创建服务端 Supabase 客户端（用于写入操作）
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+// 延迟创建服务端 Supabase 客户端（用于写入操作）
+function getSupabaseAdmin() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!url || !key) {
+    throw new Error('Supabase 环境变量未配置')
+  }
+  return createClient(url, key)
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -26,7 +30,7 @@ export async function POST(request: NextRequest) {
     if (authHeader?.startsWith('Bearer ')) {
       // 使用 token 验证
       const token = authHeader.substring(7)
-      const { data, error } = await supabaseAdmin.auth.getUser(token)
+      const { data, error } = await getSupabaseAdmin().auth.getUser(token)
       user = data?.user
       userError = error
     } else {
@@ -81,7 +85,7 @@ export async function POST(request: NextRequest) {
     )
 
     // 更新用户的 Stripe 客户 ID
-    await supabaseAdmin
+    await getSupabaseAdmin()
       .from('user_profiles')
       .upsert({
         id: user.id,

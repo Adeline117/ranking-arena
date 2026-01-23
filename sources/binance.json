@@ -1,0 +1,247 @@
+[
+  {
+    "platform": "binance",
+    "market_type": "futures",
+    "leaderboard_endpoints": [
+      {
+        "url": "https://www.binance.com/bapi/futures/v1/friendly/future/copy-trade/home-page/query-list",
+        "method": "POST",
+        "headers": {
+          "Origin": "https://www.binance.com",
+          "Referer": "https://www.binance.com/en/copy-trading",
+          "Content-Type": "application/json"
+        },
+        "body_template": {
+          "pageNumber": 1,
+          "pageSize": 20,
+          "timeRange": "WEEKLY",
+          "dataType": "ROI",
+          "favoriteOnly": false,
+          "hideFull": false,
+          "nickname": "",
+          "order": "DESC"
+        },
+        "pagination": {
+          "type": "page",
+          "page_size": 20,
+          "max_pages": 5,
+          "param_name": "pageNumber"
+        },
+        "response_path": "data.list",
+        "window_param": "timeRange",
+        "sort_param": "dataType"
+      }
+    ],
+    "profile_endpoints": [
+      {
+        "url": "https://www.binance.com/bapi/futures/v1/public/future/copy-trade/lead-portfolio/detail",
+        "method": "POST",
+        "headers": {
+          "Origin": "https://www.binance.com",
+          "Content-Type": "application/json"
+        },
+        "body_template": {
+          "portfolioId": ""
+        },
+        "response_path": "data"
+      },
+      {
+        "url": "https://www.binance.com/bapi/futures/v1/public/future/copy-trade/lead-portfolio/performance",
+        "method": "POST",
+        "headers": {
+          "Origin": "https://www.binance.com",
+          "Content-Type": "application/json"
+        },
+        "body_template": {
+          "portfolioId": "",
+          "timeRange": "WEEKLY"
+        },
+        "response_path": "data"
+      }
+    ],
+    "window_support": ["7d", "30d", "90d"],
+    "rate_limit_hint": {
+      "rpm": 20,
+      "concurrent": 2,
+      "delay_ms": 3000
+    },
+    "field_map": {
+      "roi_pct": "roi",
+      "pnl_usd": "pnl",
+      "win_rate": "winRate",
+      "max_drawdown": "maxDrawdown",
+      "trades_count": "tradeCount",
+      "followers": "followerCount",
+      "copiers": "copierCount",
+      "sharpe_ratio": "sharpeRatio",
+      "aum": "totalMarginBalance"
+    },
+    "roi_sort_supported": true,
+    "roi_sort_method": "query_param",
+    "proof": [
+      {
+        "url": "https://www.binance.com/bapi/futures/v1/friendly/future/copy-trade/home-page/query-list",
+        "request_path": "/bapi/futures/v1/friendly/future/copy-trade/home-page/query-list",
+        "method": "POST",
+        "response_fields_sample": {
+          "data.list[0].leadPortfolioId": "3456789012345",
+          "data.list[0].nickname": "TraderName",
+          "data.list[0].roi": 0.4523,
+          "data.list[0].pnl": 12345.67,
+          "data.list[0].winRate": 0.72,
+          "data.list[0].maxDrawdown": 0.15,
+          "data.list[0].tradeCount": 234,
+          "data.list[0].followerCount": 1500,
+          "data.list[0].copierCount": 800
+        },
+        "discovered_at": "2024-01-15T00:00:00Z"
+      }
+    ]
+  },
+  {
+    "platform": "binance",
+    "market_type": "spot",
+    "leaderboard_endpoints": [
+      {
+        "url": "https://www.binance.com/bapi/futures/v1/friendly/future/copy-trade/home-page/query-list",
+        "method": "POST",
+        "headers": {
+          "Origin": "https://www.binance.com",
+          "Referer": "https://www.binance.com/en/copy-trading/spot",
+          "Content-Type": "application/json"
+        },
+        "body_template": {
+          "pageNumber": 1,
+          "pageSize": 20,
+          "timeRange": "WEEKLY",
+          "dataType": "ROI",
+          "favoriteOnly": false,
+          "hideFull": false,
+          "nickname": "",
+          "order": "DESC",
+          "portfolioType": "SPOT"
+        },
+        "pagination": {
+          "type": "page",
+          "page_size": 20,
+          "max_pages": 5,
+          "param_name": "pageNumber"
+        },
+        "response_path": "data.list",
+        "window_param": "timeRange",
+        "sort_param": "dataType"
+      }
+    ],
+    "profile_endpoints": [
+      {
+        "url": "https://www.binance.com/bapi/futures/v1/public/future/copy-trade/lead-portfolio/detail",
+        "method": "POST",
+        "headers": {
+          "Origin": "https://www.binance.com",
+          "Content-Type": "application/json"
+        },
+        "body_template": {
+          "portfolioId": "",
+          "portfolioType": "SPOT"
+        },
+        "response_path": "data"
+      }
+    ],
+    "window_support": ["7d", "30d", "90d"],
+    "rate_limit_hint": {
+      "rpm": 20,
+      "concurrent": 2,
+      "delay_ms": 3000
+    },
+    "field_map": {
+      "roi_pct": "roi",
+      "pnl_usd": "pnl",
+      "win_rate": "winRate",
+      "max_drawdown": "maxDrawdown",
+      "trades_count": "tradeCount",
+      "followers": "followerCount",
+      "copiers": "copierCount",
+      "aum": "totalAsset"
+    },
+    "roi_sort_supported": true,
+    "roi_sort_method": "query_param",
+    "proof": [
+      {
+        "url": "https://www.binance.com/bapi/futures/v1/friendly/future/copy-trade/home-page/query-list",
+        "request_path": "/bapi/futures/v1/friendly/future/copy-trade/home-page/query-list",
+        "method": "POST",
+        "response_fields_sample": {
+          "data.list[0].leadPortfolioId": "9876543210123",
+          "data.list[0].nickname": "SpotTrader",
+          "data.list[0].roi": 0.2315,
+          "data.list[0].pnl": 5678.90,
+          "data.list[0].winRate": 0.65,
+          "data.list[0].tradeCount": 89
+        },
+        "discovered_at": "2024-01-15T00:00:00Z"
+      }
+    ]
+  },
+  {
+    "platform": "binance",
+    "market_type": "web3",
+    "leaderboard_endpoints": [
+      {
+        "url": "https://www.binance.com/bapi/composite/v1/friendly/marketing-campaign/copy-trade/rank-list",
+        "method": "POST",
+        "headers": {
+          "Origin": "https://www.binance.com",
+          "Referer": "https://www.binance.com/en/web3-wallet",
+          "Content-Type": "application/json"
+        },
+        "body_template": {
+          "pageNumber": 1,
+          "pageSize": 50,
+          "timeRange": "WEEKLY",
+          "tradeType": "SPOT",
+          "walletType": "WEB3"
+        },
+        "pagination": {
+          "type": "page",
+          "page_size": 50,
+          "max_pages": 1,
+          "param_name": "pageNumber"
+        },
+        "response_path": "data.list",
+        "window_param": "timeRange"
+      }
+    ],
+    "profile_endpoints": [],
+    "window_support": ["7d", "30d"],
+    "rate_limit_hint": {
+      "rpm": 15,
+      "concurrent": 1,
+      "delay_ms": 4000
+    },
+    "field_map": {
+      "roi_pct": "pnlRate",
+      "pnl_usd": "pnl",
+      "win_rate": "winRate",
+      "max_drawdown": "mdd",
+      "trades_count": "tradeCount",
+      "followers": "followerCount",
+      "copiers": ""
+    },
+    "roi_sort_supported": false,
+    "roi_sort_method": "not_supported",
+    "proof": [
+      {
+        "url": "https://www.binance.com/bapi/composite/v1/friendly/marketing-campaign/copy-trade/rank-list",
+        "request_path": "/bapi/composite/v1/friendly/marketing-campaign/copy-trade/rank-list",
+        "method": "POST",
+        "response_fields_sample": {
+          "data.list[0].encryptedUid": "abc123encrypted",
+          "data.list[0].nickname": "Web3Trader",
+          "data.list[0].pnlRate": 0.35,
+          "data.list[0].pnl": 2345.00
+        },
+        "discovered_at": "2024-01-15T00:00:00Z"
+      }
+    ]
+  }
+]

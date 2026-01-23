@@ -1,27 +1,41 @@
 'use client'
 
-import { useEffect, useState, useCallback, useRef } from 'react'
-import { useRouter } from 'next/navigation'
+import { Suspense, useEffect, useState, useCallback, useRef } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/layout/TopNav'
 import { Box, Text, Button } from '@/app/components/base'
 import Avatar from '@/app/components/ui/Avatar'
-import ToggleSwitch from '@/app/components/ui/ToggleSwitch'
 import ExchangeConnectionManager from '@/app/components/exchange/ExchangeConnection'
 import { useToast } from '@/app/components/ui/Toast'
 import { useDialog } from '@/app/components/ui/Dialog'
-import { useAppSettings, type ThemeMode } from '@/lib/hooks/useSettings'
 import { uiLogger } from '@/lib/utils/logger'
 
-// ============================================
-// Validation Functions
-// ============================================
+// Constants
+const MAX_BIO_LENGTH = 200
+const MAX_HANDLE_LENGTH = 30
 
+// Section IDs for navigation
+type SectionId = 'profile' | 'security' | 'exchanges' | 'notifications' | 'privacy' | 'account'
+
+const SECTIONS: { id: SectionId; label: string; icon: string }[] = [
+  { id: 'profile', label: '个人资料', icon: '👤' },
+  { id: 'security', label: '账号安全', icon: '🔒' },
+  { id: 'exchanges', label: '交易所绑定', icon: '🔗' },
+  { id: 'notifications', label: '通知偏好', icon: '🔔' },
+  { id: 'privacy', label: '隐私设置', icon: '🛡️' },
+  { id: 'account', label: '账号管理', icon: '⚙️' },
+]
+
+// Validation functions
 function validateHandle(handle: string): { valid: boolean; message: string } {
   if (!handle) return { valid: true, message: '' }
-  if (handle.length < 1) {
-    return { valid: false, message: '用户名至少需要1个字符' }
+  if (handle.length < 2) {
+    return { valid: false, message: '用户名至少需要2个字符' }
+  }
+  if (handle.length > MAX_HANDLE_LENGTH) {
+    return { valid: false, message: `用户名不能超过${MAX_HANDLE_LENGTH}个字符` }
   }
   if (!/^[a-zA-Z0-9_\u4e00-\u9fa5]+$/.test(handle)) {
     return { valid: false, message: '用户名只能包含字母、数字、下划线和中文' }
@@ -54,67 +68,108 @@ function validatePasswordMatch(password: string, confirmPassword: string): { val
   return { valid: true, message: '' }
 }
 
-// ============================================
-// Section Navigation Config
-// ============================================
-
-type SectionId = 'profile' | 'account' | 'notifications' | 'privacy' | 'display' | 'social' | 'danger'
-
-const SECTIONS: { id: SectionId; label: string; icon: string }[] = [
-  { id: 'profile', label: '个人资料', icon: '👤' },
-  { id: 'social', label: '社交链接', icon: '🔗' },
-  { id: 'account', label: '账号安全', icon: '🔒' },
-  { id: 'notifications', label: '通知偏好', icon: '🔔' },
-  { id: 'privacy', label: '隐私设置', icon: '🛡️' },
-  { id: 'display', label: '显示偏好', icon: '🎨' },
-  { id: 'danger', label: '账号管理', icon: '⚠️' },
-]
-
-// ============================================
-// Reusable Setting Row
-// ============================================
-
-function SettingRow({ label, description, children }: { label: string; description?: string; children: React.ReactNode }) {
+// Toggle switch component
+function ToggleSwitch({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
   return (
-    <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: tokens.spacing[4], padding: `${tokens.spacing[3]} 0`, borderBottom: `1px solid ${tokens.colors.border.primary}20` }}>
-      <Box style={{ flex: 1, minWidth: 0 }}>
-        <Text size="sm" weight="medium" style={{ marginBottom: description ? 2 : 0 }}>{label}</Text>
-        {description && <Text size="xs" color="tertiary">{description}</Text>}
-      </Box>
-      <Box style={{ flexShrink: 0 }}>{children}</Box>
+    <button
+      role="switch"
+      aria-checked={checked}
+      onClick={() => onChange(!checked)}
+      style={{
+        width: 40,
+        height: 22,
+        borderRadius: 11,
+        padding: 2,
+        border: 'none',
+        background: checked ? '#8b6fa8' : tokens.colors.bg.tertiary,
+        cursor: 'pointer',
+        transition: 'background 0.2s ease',
+        position: 'relative',
+        flexShrink: 0,
+      }}
+    >
+      <span
+        style={{
+          display: 'block',
+          width: 18,
+          height: 18,
+          borderRadius: '50%',
+          background: '#fff',
+          transform: checked ? 'translateX(18px)' : 'translateX(0)',
+          transition: 'transform 0.2s ease',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+        }}
+      />
+    </button>
+  )
+}
+
+// Reusable section card component
+function SectionCard({
+  id,
+  title,
+  description,
+  children,
+  variant = 'default',
+}: {
+  id: string
+  title: string
+  description?: string
+  children: React.ReactNode
+  variant?: 'default' | 'danger'
+}) {
+  return (
+    <Box
+      id={id}
+      style={{
+        marginBottom: tokens.spacing[6],
+        padding: tokens.spacing[6],
+        borderRadius: tokens.radius.xl,
+        background: tokens.colors.bg.secondary,
+        border: `1px solid ${variant === 'danger' ? tokens.colors.accent.error + '30' : tokens.colors.border.primary}`,
+      }}
+    >
+      <Text
+        size="lg"
+        weight="black"
+        style={{
+          marginBottom: description ? tokens.spacing[1] : tokens.spacing[4],
+          color: variant === 'danger' ? tokens.colors.accent.error : tokens.colors.text.primary,
+        }}
+      >
+        {title}
+      </Text>
+      {description && (
+        <Text size="sm" color="tertiary" style={{ marginBottom: tokens.spacing[4] }}>
+          {description}
+        </Text>
+      )}
+      {children}
     </Box>
   )
 }
 
-// ============================================
-// Input styles helper
-// ============================================
-
-function inputStyle(hasError = false): React.CSSProperties {
+// Reusable input styles
+function getInputStyle(hasError = false) {
   return {
     width: '100%',
-    padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
-    borderRadius: tokens.radius.lg,
-    border: `1px solid ${hasError ? '#ff7c7c' : tokens.colors.border.primary}`,
+    padding: tokens.spacing[3],
+    borderRadius: tokens.radius.md,
+    border: `1px solid ${hasError ? tokens.colors.accent.error : tokens.colors.border.primary}`,
     background: tokens.colors.bg.primary,
     color: tokens.colors.text.primary,
     fontSize: tokens.typography.fontSize.base,
     fontFamily: tokens.typography.fontFamily.sans.join(', '),
     outline: 'none',
-    transition: 'border-color 0.2s ease, box-shadow 0.2s ease',
+    transition: 'border-color 0.2s ease',
   }
 }
 
-// ============================================
-// Main Settings Page
-// ============================================
-
-export default function SettingsPage() {
+function SettingsContent() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { showToast } = useToast()
   const { showConfirm } = useDialog()
-  const { settings: appSettings, updateSettings: updateAppSettings } = useAppSettings()
-
   const [email, setEmail] = useState<string | null>(null)
   const [userId, setUserId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -131,13 +186,6 @@ export default function SettingsPage() {
   const [coverFile, setCoverFile] = useState<File | null>(null)
   const [coverPreviewUrl, setCoverPreviewUrl] = useState<string | null>(null)
 
-  // Social links
-  const [socialTwitter, setSocialTwitter] = useState('')
-  const [socialTelegram, setSocialTelegram] = useState('')
-  const [socialDiscord, setSocialDiscord] = useState('')
-  const [socialGithub, setSocialGithub] = useState('')
-  const [socialWebsite, setSocialWebsite] = useState('')
-
   // Initial values for tracking changes
   const initialValuesRef = useRef<{
     handle: string
@@ -153,11 +201,6 @@ export default function SettingsPage() {
     showFollowing: boolean
     dmPermission: string
     showProBadge: boolean
-    socialTwitter: string
-    socialTelegram: string
-    socialDiscord: string
-    socialGithub: string
-    socialWebsite: string
   } | null>(null)
 
   // Password change
@@ -187,7 +230,53 @@ export default function SettingsPage() {
   const [dmPermission, setDmPermission] = useState<'all' | 'mutual' | 'none'>('all')
   const [showProBadge, setShowProBadge] = useState(true)
 
-  // Validation states
+  // Handle uniqueness check
+  const [handleAvailable, setHandleAvailable] = useState<boolean | null>(null)
+  const [checkingHandle, setCheckingHandle] = useState(false)
+  const handleCheckTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  // Debounced handle uniqueness check
+  useEffect(() => {
+    if (!handle || handle.length < 2 || !validateHandle(handle).valid) {
+      setHandleAvailable(null)
+      return
+    }
+    // Don't check if it's the same as initial
+    if (initialValuesRef.current && handle === initialValuesRef.current.handle) {
+      setHandleAvailable(null)
+      return
+    }
+
+    if (handleCheckTimeoutRef.current) {
+      clearTimeout(handleCheckTimeoutRef.current)
+    }
+
+    setCheckingHandle(true)
+    handleCheckTimeoutRef.current = setTimeout(async () => {
+      try {
+        const { data } = await supabase
+          .from('user_profiles')
+          .select('id')
+          .eq('handle', handle)
+          .neq('id', userId || '')
+          .maybeSingle()
+
+        setHandleAvailable(!data)
+      } catch {
+        setHandleAvailable(null)
+      } finally {
+        setCheckingHandle(false)
+      }
+    }, 500)
+
+    return () => {
+      if (handleCheckTimeoutRef.current) {
+        clearTimeout(handleCheckTimeoutRef.current)
+      }
+    }
+  }, [handle, userId])
+
+  // Validation state
   const [touchedFields, setTouchedFields] = useState<{
     handle: boolean
     newPassword: boolean
@@ -195,6 +284,7 @@ export default function SettingsPage() {
     newEmail: boolean
   }>({ handle: false, newPassword: false, confirmPassword: false, newEmail: false })
 
+  // Validation results
   const handleValidation = validateHandle(handle)
   const newPasswordValidation = validatePassword(newPassword)
   const confirmPasswordValidation = validatePasswordMatch(newPassword, confirmNewPassword)
@@ -204,12 +294,7 @@ export default function SettingsPage() {
     setTouchedFields(prev => ({ ...prev, [field]: true }))
   }
 
-  const scrollToSection = (id: SectionId) => {
-    setActiveSection(id)
-    document.getElementById(`section-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }
-
-  // Check for unsaved changes
+  // Check if there are unsaved profile changes
   const hasUnsavedChanges = useCallback(() => {
     if (!initialValuesRef.current) return false
     const initial = initialValuesRef.current
@@ -226,14 +311,9 @@ export default function SettingsPage() {
       showFollowers !== initial.showFollowers ||
       showFollowing !== initial.showFollowing ||
       dmPermission !== initial.dmPermission ||
-      showProBadge !== initial.showProBadge ||
-      socialTwitter !== initial.socialTwitter ||
-      socialTelegram !== initial.socialTelegram ||
-      socialDiscord !== initial.socialDiscord ||
-      socialGithub !== initial.socialGithub ||
-      socialWebsite !== initial.socialWebsite
+      showProBadge !== initial.showProBadge
     )
-  }, [handle, bio, avatarFile, coverFile, notifyFollow, notifyLike, notifyComment, notifyMention, notifyMessage, showFollowers, showFollowing, dmPermission, showProBadge, socialTwitter, socialTelegram, socialDiscord, socialGithub, socialWebsite])
+  }, [handle, bio, avatarFile, coverFile, notifyFollow, notifyLike, notifyComment, notifyMention, notifyMessage, showFollowers, showFollowing, dmPermission, showProBadge])
 
   // Warn before leaving with unsaved changes
   useEffect(() => {
@@ -247,14 +327,28 @@ export default function SettingsPage() {
     return () => window.removeEventListener('beforeunload', handleBeforeUnload)
   }, [hasUnsavedChanges])
 
+  // Handle section from URL
+  useEffect(() => {
+    const section = searchParams.get('section') as SectionId | null
+    if (section && SECTIONS.some(s => s.id === section)) {
+      setActiveSection(section)
+      // Scroll to section after a short delay for DOM to render
+      setTimeout(() => {
+        document.getElementById(section)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }, 100)
+    }
+  }, [searchParams])
+
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
       setEmail(data.user?.email ?? null)
       setUserId(data.user?.id ?? null)
+
       if (!data.user) {
         router.push('/login')
         return
       }
+
       loadProfile(data.user.id)
     })
   }, [router])
@@ -262,9 +356,10 @@ export default function SettingsPage() {
   const loadProfile = async (uid: string) => {
     try {
       setLoading(true)
+
       const { data: userProfile } = await supabase
         .from('user_profiles')
-        .select('handle, bio, avatar_url, cover_url, notify_follow, notify_like, notify_comment, notify_mention, notify_message, show_followers, show_following, dm_permission, show_pro_badge, social_twitter, social_telegram, social_discord, social_github, social_website')
+        .select('handle, bio, avatar_url, cover_url, notify_follow, notify_like, notify_comment, notify_mention, notify_message, show_followers, show_following, dm_permission, show_pro_badge')
         .eq('id', uid)
         .maybeSingle()
 
@@ -282,11 +377,6 @@ export default function SettingsPage() {
         const profileShowFollowing = userProfile.show_following !== false
         const profileDmPermission = userProfile.dm_permission || 'all'
         const profileShowProBadge = userProfile.show_pro_badge !== false
-        const profileSocialTwitter = (userProfile as Record<string, unknown>).social_twitter as string || ''
-        const profileSocialTelegram = (userProfile as Record<string, unknown>).social_telegram as string || ''
-        const profileSocialDiscord = (userProfile as Record<string, unknown>).social_discord as string || ''
-        const profileSocialGithub = (userProfile as Record<string, unknown>).social_github as string || ''
-        const profileSocialWebsite = (userProfile as Record<string, unknown>).social_website as string || ''
 
         setHandle(profileHandle)
         setBio(profileBio)
@@ -303,11 +393,6 @@ export default function SettingsPage() {
         setShowFollowing(profileShowFollowing)
         setDmPermission(profileDmPermission)
         setShowProBadge(profileShowProBadge)
-        setSocialTwitter(profileSocialTwitter)
-        setSocialTelegram(profileSocialTelegram)
-        setSocialDiscord(profileSocialDiscord)
-        setSocialGithub(profileSocialGithub)
-        setSocialWebsite(profileSocialWebsite)
 
         initialValuesRef.current = {
           handle: profileHandle,
@@ -323,13 +408,9 @@ export default function SettingsPage() {
           showFollowing: profileShowFollowing,
           dmPermission: profileDmPermission,
           showProBadge: profileShowProBadge,
-          socialTwitter: profileSocialTwitter,
-          socialTelegram: profileSocialTelegram,
-          socialDiscord: profileSocialDiscord,
-          socialGithub: profileSocialGithub,
-          socialWebsite: profileSocialWebsite,
         }
       }
+
     } catch (error) {
       uiLogger.error('Error loading profile:', error)
     } finally {
@@ -346,7 +427,9 @@ export default function SettingsPage() {
       }
       setAvatarFile(file)
       const reader = new FileReader()
-      reader.onloadend = () => setPreviewUrl(reader.result as string)
+      reader.onloadend = () => {
+        setPreviewUrl(reader.result as string)
+      }
       reader.readAsDataURL(file)
     }
   }
@@ -360,7 +443,9 @@ export default function SettingsPage() {
       }
       setCoverFile(file)
       const reader = new FileReader()
-      reader.onloadend = () => setCoverPreviewUrl(reader.result as string)
+      reader.onloadend = () => {
+        setCoverPreviewUrl(reader.result as string)
+      }
       reader.readAsDataURL(file)
     }
   }
@@ -368,27 +453,34 @@ export default function SettingsPage() {
   const uploadFile = async (file: File, bucket: string, userId: string, maxSize: number): Promise<string | null> => {
     try {
       if (file.size > maxSize) {
-        showToast(`文件大小超过限制`, 'error')
+        showToast(`图片大小不能超过 ${Math.round(maxSize / 1024 / 1024)}MB`, 'error')
         return null
       }
+
       const fileExt = file.name.split('.').pop()?.toLowerCase()
       if (!['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(fileExt || '')) {
         showToast('只支持 JPG、PNG、GIF、WebP 格式', 'error')
         return null
       }
+
       const fileName = `${userId}-${Date.now()}.${fileExt}`
+
       const { error: uploadError } = await supabase.storage
         .from(bucket)
         .upload(fileName, file, { upsert: true })
+
       if (uploadError) {
         uiLogger.error(`${bucket} upload error:`, uploadError)
         if (uploadError.message?.includes('Bucket not found')) {
           showToast('存储服务未配置，请联系管理员', 'error')
+        } else if (uploadError.message?.includes('security') || uploadError.message?.includes('policy')) {
+          showToast('没有上传权限，请联系管理员', 'error')
         } else {
           showToast(`上传失败: ${uploadError.message}`, 'error')
         }
         return null
       }
+
       const { data } = supabase.storage.from(bucket).getPublicUrl(fileName)
       return data.publicUrl
     } catch (error: unknown) {
@@ -398,8 +490,19 @@ export default function SettingsPage() {
     }
   }
 
-  const handleSave = async () => {
+  const handleSaveProfile = async () => {
     if (!userId) return
+
+    // Validate handle before saving
+    if (handle && !handleValidation.valid) {
+      showToast(handleValidation.message, 'error')
+      return
+    }
+    if (handle && handleAvailable === false) {
+      showToast('用户名已被占用，请选择其他用户名', 'error')
+      return
+    }
+
     setSaving(true)
     try {
       const { data: currentProfile } = await supabase
@@ -417,8 +520,10 @@ export default function SettingsPage() {
           finalAvatarUrl = uploadedUrl
           setAvatarUrl(uploadedUrl)
           setPreviewUrl(uploadedUrl)
-        } else if (currentProfile?.avatar_url) {
-          finalAvatarUrl = currentProfile.avatar_url
+        } else {
+          if (currentProfile?.avatar_url) {
+            finalAvatarUrl = currentProfile.avatar_url
+          }
         }
       }
 
@@ -428,12 +533,14 @@ export default function SettingsPage() {
           finalCoverUrl = uploadedUrl
           setCoverUrl(uploadedUrl)
           setCoverPreviewUrl(uploadedUrl)
-        } else if (currentProfile?.cover_url) {
-          finalCoverUrl = currentProfile.cover_url
+        } else {
+          if (currentProfile?.cover_url) {
+            finalCoverUrl = currentProfile.cover_url
+          }
         }
       }
 
-      const { error: userProfilesError } = await supabase
+      const { error: saveError } = await supabase
         .from('user_profiles')
         .upsert(
           {
@@ -451,36 +558,40 @@ export default function SettingsPage() {
             show_following: showFollowing,
             dm_permission: dmPermission,
             show_pro_badge: showProBadge,
-            social_twitter: socialTwitter || null,
-            social_telegram: socialTelegram || null,
-            social_discord: socialDiscord || null,
-            social_github: socialGithub || null,
-            social_website: socialWebsite || null,
           },
           { onConflict: 'id' }
         )
 
-      if (userProfilesError) {
-        uiLogger.error('Error saving profile:', JSON.stringify(userProfilesError, null, 2))
-        if (userProfilesError.code === '23505' || userProfilesError.message?.includes('unique') || userProfilesError.message?.includes('duplicate')) {
+      if (saveError) {
+        uiLogger.error('Error saving profile:', JSON.stringify(saveError, null, 2))
+        if (saveError.code === '23505' || saveError.message?.includes('unique') || saveError.message?.includes('duplicate')) {
           showToast('用户名已被使用，请选择其他用户名', 'error')
         } else {
-          showToast(`保存失败: ${userProfilesError.message || '请重试'}`, 'error')
+          showToast(`保存失败: ${saveError.message || '请重试'}`, 'error')
         }
         return
       }
 
+      // Update initial values after successful save
       initialValuesRef.current = {
-        handle, bio,
-        avatarUrl: finalAvatarUrl, coverUrl: finalCoverUrl,
-        notifyFollow, notifyLike, notifyComment, notifyMention, notifyMessage,
-        showFollowers, showFollowing, dmPermission, showProBadge,
-        socialTwitter, socialTelegram, socialDiscord, socialGithub, socialWebsite,
+        handle,
+        bio,
+        avatarUrl: finalAvatarUrl,
+        coverUrl: finalCoverUrl,
+        notifyFollow,
+        notifyLike,
+        notifyComment,
+        notifyMention,
+        notifyMessage,
+        showFollowers,
+        showFollowing,
+        dmPermission,
+        showProBadge,
       }
       setAvatarFile(null)
       setCoverFile(null)
-      showToast('保存成功！', 'success')
-      router.push(`/u/${handle || userId}`)
+
+      showToast('所有设置已保存', 'success')
     } catch (error) {
       uiLogger.error('Error saving:', error)
       showToast('保存失败，请重试', 'error')
@@ -489,7 +600,7 @@ export default function SettingsPage() {
     }
   }
 
-  // Reset countdown
+  // Reset countdown timer
   useEffect(() => {
     if (resetCountdown > 0) {
       const timer = setTimeout(() => setResetCountdown(resetCountdown - 1), 1000)
@@ -502,15 +613,18 @@ export default function SettingsPage() {
       showToast('无法获取用户邮箱', 'error')
       return
     }
+
     setSendingResetCode(true)
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: `${window.location.origin}/reset-password`,
       })
+
       if (error) {
         showToast(error.message, 'error')
         return
       }
+
       setResetCodeSent(true)
       setResetCountdown(60)
       showToast('密码重置邮件已发送，请查收邮箱', 'success')
@@ -523,21 +637,50 @@ export default function SettingsPage() {
   }
 
   const handleChangePassword = async () => {
-    if (!currentPassword) { showToast('请输入当前密码', 'warning'); return }
-    if (!newPassword || newPassword.length < 6) { showToast('密码至少6位', 'warning'); return }
-    if (newPassword !== confirmNewPassword) { showToast('两次输入的密码不一致', 'warning'); return }
+    if (!currentPassword) {
+      showToast('请输入当前密码', 'warning')
+      return
+    }
+    if (!newPassword || !newPasswordValidation.valid) {
+      showToast('请输入有效的新密码（至少6位）', 'warning')
+      return
+    }
+    if (!confirmPasswordValidation.valid) {
+      showToast('两次输入的密码不一致', 'warning')
+      return
+    }
 
     setSavingPassword(true)
     try {
-      if (!email) { showToast('无法获取用户邮箱', 'error'); return }
-      const { error: signInError } = await supabase.auth.signInWithPassword({ email, password: currentPassword })
-      if (signInError) { showToast('当前密码不正确', 'error'); return }
-      const { error } = await supabase.auth.updateUser({ password: newPassword })
-      if (error) { showToast(error.message, 'error'); return }
-      showToast('密码修改成功！', 'success')
+      if (!email) {
+        showToast('无法获取用户邮箱', 'error')
+        return
+      }
+
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email,
+        password: currentPassword,
+      })
+
+      if (signInError) {
+        showToast('当前密码不正确', 'error')
+        return
+      }
+
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword,
+      })
+
+      if (error) {
+        showToast(error.message, 'error')
+        return
+      }
+
+      showToast('密码修改成功', 'success')
       setCurrentPassword('')
       setNewPassword('')
       setConfirmNewPassword('')
+      setTouchedFields(prev => ({ ...prev, newPassword: false, confirmPassword: false }))
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : '修改失败'
       showToast(msg, 'error')
@@ -547,13 +690,25 @@ export default function SettingsPage() {
   }
 
   const handleChangeEmail = async () => {
-    if (!newEmail || !newEmailValidation.valid) { showToast('请输入有效的邮箱地址', 'warning'); return }
+    if (!newEmail || !newEmailValidation.valid) {
+      showToast('请输入有效的邮箱地址', 'warning')
+      return
+    }
+
     setSavingEmail(true)
     try {
-      const { error } = await supabase.auth.updateUser({ email: newEmail })
-      if (error) { showToast(error.message, 'error'); return }
+      const { error } = await supabase.auth.updateUser({
+        email: newEmail,
+      })
+
+      if (error) {
+        showToast(error.message, 'error')
+        return
+      }
+
       showToast('验证邮件已发送到新邮箱，请查收确认', 'success')
       setNewEmail('')
+      setTouchedFields(prev => ({ ...prev, newEmail: false }))
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : '修改失败'
       showToast(msg, 'error')
@@ -562,767 +717,861 @@ export default function SettingsPage() {
     }
   }
 
-  const handleDeleteAccount = async () => {
-    const confirmed = await showConfirm(
-      '删除账号',
-      '此操作不可逆！删除账号后，您的所有数据（帖子、评论、关注等）将永久删除。确定要继续吗？'
-    )
+  const handleLogout = async () => {
+    const confirmed = await showConfirm('退出登录', '确定要退出当前账号吗？')
     if (!confirmed) return
 
-    const doubleConfirm = await showConfirm(
-      '最终确认',
-      '请再次确认：您确定要永久删除此账号吗？'
-    )
-    if (!doubleConfirm) return
-
-    showToast('账号删除功能需要管理员处理，请联系客服', 'info')
+    try {
+      await supabase.auth.signOut()
+      router.push('/')
+    } catch {
+      showToast('退出失败，请重试', 'error')
+    }
   }
 
-  const handleLogout = async () => {
-    const confirmed = await showConfirm('退出登录', '确定要退出登录吗？')
-    if (!confirmed) return
-    await supabase.auth.signOut()
-    router.push('/')
+  // Scroll-based active section detection
+  useEffect(() => {
+    const handleScroll = () => {
+      const sections = SECTIONS.map(s => document.getElementById(s.id))
+      const scrollTop = window.scrollY + 120
+
+      for (let i = sections.length - 1; i >= 0; i--) {
+        const section = sections[i]
+        if (section && section.offsetTop <= scrollTop) {
+          setActiveSection(SECTIONS[i].id)
+          break
+        }
+      }
+    }
+
+    window.addEventListener('scroll', handleScroll, { passive: true })
+    return () => window.removeEventListener('scroll', handleScroll)
+  }, [])
+
+  // Show auth-required state if not logged in (after initial check)
+  if (!loading && !userId) {
+    return (
+      <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
+        <TopNav email={email} />
+        <Box style={{
+          maxWidth: 400,
+          margin: '0 auto',
+          padding: tokens.spacing[8],
+          textAlign: 'center',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: tokens.spacing[4],
+        }}>
+          <Box style={{
+            width: 64,
+            height: 64,
+            borderRadius: tokens.radius.full,
+            background: `${tokens.colors.accent.primary}15`,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginBottom: tokens.spacing[2],
+          }}>
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke={tokens.colors.accent.primary} strokeWidth="2">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+              <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+            </svg>
+          </Box>
+          <Text size="xl" weight="bold">请先登录</Text>
+          <Text size="sm" color="secondary" style={{ lineHeight: 1.6 }}>
+            您需要登录才能访问设置页面
+          </Text>
+          <Button
+            variant="primary"
+            onClick={() => router.push('/login?redirect=/settings')}
+            style={{ marginTop: tokens.spacing[2] }}
+          >
+            前往登录
+          </Button>
+        </Box>
+      </Box>
+    )
   }
 
   if (loading) {
     return (
       <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
         <TopNav email={email} />
-        <Box style={{ maxWidth: 1000, margin: '0 auto', padding: tokens.spacing[6], display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 400 }}>
-          <Box style={{ textAlign: 'center' }}>
-            <Box className="spinner-sm" style={{ width: 32, height: 32, margin: '0 auto 16px', borderColor: `${tokens.colors.border.primary}`, borderTopColor: tokens.colors.accent.primary }} />
-            <Text size="sm" color="tertiary">加载设置中...</Text>
-          </Box>
+        <Box style={{
+          maxWidth: 800,
+          margin: '0 auto',
+          padding: tokens.spacing[6],
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: tokens.spacing[3],
+        }}>
+          <Box style={{
+            width: 32,
+            height: 32,
+            border: `3px solid ${tokens.colors.border.primary}`,
+            borderTopColor: tokens.colors.accent.primary,
+            borderRadius: '50%',
+            animation: 'spin 1s linear infinite',
+          }} />
+          <Text size="lg" color="secondary">加载中...</Text>
+          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
         </Box>
       </Box>
     )
   }
 
-  // ============================================
-  // Glass card style helper
-  // ============================================
-  const glassCardStyle: React.CSSProperties = {
-    background: tokens.glass.bg.secondary,
-    backdropFilter: tokens.glass.blur.lg,
-    WebkitBackdropFilter: tokens.glass.blur.lg,
-    border: tokens.glass.border.light,
-    borderRadius: tokens.radius.xl,
-    padding: tokens.spacing[6],
-    marginBottom: tokens.spacing[5],
-  }
-
-  const sectionTitleStyle: React.CSSProperties = {
-    marginBottom: tokens.spacing[5],
-    paddingBottom: tokens.spacing[3],
-    borderBottom: `1px solid ${tokens.colors.border.primary}40`,
-  }
-
   return (
-    <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary, position: 'relative' }}>
-      {/* Background mesh */}
-      <Box style={{ position: 'fixed', inset: 0, background: tokens.gradient.mesh, opacity: 0.3, pointerEvents: 'none', zIndex: 0 }} />
-
+    <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
       <TopNav email={email} />
 
-      <Box style={{ maxWidth: 1100, margin: '0 auto', padding: `${tokens.spacing[6]} ${tokens.spacing[4]}`, position: 'relative', zIndex: 1 }}>
-        {/* Page Title */}
-        <Box style={{ marginBottom: tokens.spacing[6], display: 'flex', alignItems: 'center', gap: tokens.spacing[4] }}>
-          <button
-            onClick={async () => {
-              if (hasUnsavedChanges()) {
-                const confirmed = await showConfirm('放弃更改', '您有未保存的更改，确定要离开吗？')
-                if (!confirmed) return
-              }
-              router.back()
-            }}
-            style={{ background: 'none', border: 'none', color: tokens.colors.text.secondary, cursor: 'pointer', fontSize: tokens.typography.fontSize.xl, padding: tokens.spacing[2] }}
-          >
-            ←
-          </button>
-          <Text size="2xl" weight="black" className="gradient-text">设置</Text>
+      <Box style={{ maxWidth: 900, margin: '0 auto', padding: tokens.spacing[6], display: 'flex', gap: tokens.spacing[8] }}>
+        {/* Sidebar Navigation - Desktop only */}
+        <Box
+          className="settings-sidebar"
+          style={{
+            width: 180,
+            flexShrink: 0,
+            position: 'sticky',
+            top: 80,
+            alignSelf: 'flex-start',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: tokens.spacing[1],
+          }}
+        >
+          {SECTIONS.map(section => (
+            <button
+              key={section.id}
+              onClick={() => {
+                setActiveSection(section.id)
+                document.getElementById(section.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: tokens.spacing[2],
+                padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+                borderRadius: tokens.radius.md,
+                border: 'none',
+                background: activeSection === section.id ? tokens.colors.bg.tertiary : 'transparent',
+                color: activeSection === section.id ? tokens.colors.text.primary : tokens.colors.text.secondary,
+                fontWeight: activeSection === section.id ? tokens.typography.fontWeight.bold : tokens.typography.fontWeight.normal,
+                fontSize: tokens.typography.fontSize.sm,
+                cursor: 'pointer',
+                textAlign: 'left',
+                transition: 'all 0.15s ease',
+                width: '100%',
+              }}
+            >
+              <span style={{ fontSize: '14px' }}>{section.icon}</span>
+              {section.label}
+            </button>
+          ))}
         </Box>
 
-        <Box style={{ display: 'grid', gridTemplateColumns: '200px 1fr', gap: tokens.spacing[6], alignItems: 'start' }}>
-          {/* Sidebar Navigation */}
+        {/* Main Content */}
+        <Box style={{ flex: 1, minWidth: 0 }}>
+          <Text size="2xl" weight="black" style={{ marginBottom: tokens.spacing[4] }}>
+            设置
+          </Text>
+
+          {/* Mobile Section Navigation - horizontal scroll tabs */}
           <Box
+            className="settings-mobile-nav"
             style={{
-              position: 'sticky',
-              top: 80,
-              ...glassCardStyle,
-              padding: tokens.spacing[3],
-              marginBottom: 0,
+              display: 'none',
+              gap: tokens.spacing[2],
+              marginBottom: tokens.spacing[5],
+              overflowX: 'auto',
+              paddingBottom: tokens.spacing[2],
+              WebkitOverflowScrolling: 'touch',
+              msOverflowStyle: 'none',
+              scrollbarWidth: 'none',
             }}
-            className="settings-sidebar"
           >
-            {SECTIONS.map((section) => (
+            {SECTIONS.map(section => (
               <button
                 key={section.id}
-                onClick={() => scrollToSection(section.id)}
+                onClick={() => {
+                  setActiveSection(section.id)
+                  document.getElementById(section.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                }}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
-                  gap: tokens.spacing[3],
-                  width: '100%',
+                  gap: tokens.spacing[1],
                   padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-                  borderRadius: tokens.radius.lg,
-                  border: 'none',
-                  background: activeSection === section.id
-                    ? `${tokens.colors.accent.primary}20`
-                    : 'transparent',
-                  color: activeSection === section.id
-                    ? tokens.colors.accent.primary
-                    : tokens.colors.text.secondary,
-                  fontSize: tokens.typography.fontSize.sm,
-                  fontWeight: activeSection === section.id
-                    ? tokens.typography.fontWeight.bold
-                    : tokens.typography.fontWeight.medium,
+                  borderRadius: tokens.radius.full,
+                  border: `1px solid ${activeSection === section.id ? tokens.colors.accent.primary + '60' : tokens.colors.border.primary}`,
+                  background: activeSection === section.id ? `${tokens.colors.accent.primary}15` : tokens.colors.bg.secondary,
+                  color: activeSection === section.id ? tokens.colors.accent.primary : tokens.colors.text.secondary,
+                  fontSize: tokens.typography.fontSize.xs,
+                  fontWeight: activeSection === section.id ? tokens.typography.fontWeight.bold : tokens.typography.fontWeight.normal,
                   cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0,
                   transition: 'all 0.15s ease',
-                  textAlign: 'left',
-                  marginBottom: 2,
                 }}
               >
-                <span style={{ fontSize: '14px', width: 20, textAlign: 'center' }}>{section.icon}</span>
+                <span style={{ fontSize: '12px' }}>{section.icon}</span>
                 {section.label}
               </button>
             ))}
           </Box>
 
-          {/* Main Content */}
-          <Box style={{ minWidth: 0 }}>
-            {/* ====== PROFILE SECTION ====== */}
-            <div id="section-profile" style={glassCardStyle}>
-              <Box style={sectionTitleStyle}>
-                <Text size="lg" weight="black">个人资料</Text>
-                <Text size="xs" color="tertiary" style={{ marginTop: 4 }}>设置您的公开个人信息</Text>
-              </Box>
-
-              {/* Avatar + Cover Preview */}
-              <Box style={{ marginBottom: tokens.spacing[5] }}>
-                {/* Cover preview */}
+          {/* ===== Profile Section ===== */}
+          <SectionCard id="profile" title="个人资料" description="这些信息将在你的个人主页上展示给其他用户">
+            {/* Avatar */}
+            <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[4], marginBottom: tokens.spacing[5] }}>
+              {userId ? (
+                <Avatar
+                  userId={userId}
+                  name={handle || email}
+                  avatarUrl={previewUrl}
+                  size={80}
+                  style={{
+                    borderRadius: tokens.radius.xl,
+                    border: `2px solid ${tokens.colors.border.primary}`,
+                  }}
+                />
+              ) : (
                 <Box
                   style={{
-                    width: '100%',
-                    height: 120,
-                    borderRadius: tokens.radius.lg,
-                    background: coverPreviewUrl
-                      ? `url(${coverPreviewUrl}) center/cover no-repeat`
-                      : `linear-gradient(135deg, ${tokens.colors.bg.tertiary} 0%, ${tokens.colors.accent.primary}15 100%)`,
-                    position: 'relative',
-                    overflow: 'hidden',
-                    border: `1px solid ${tokens.colors.border.primary}40`,
+                    width: 80,
+                    height: 80,
+                    borderRadius: tokens.radius.xl,
+                    background: tokens.colors.bg.tertiary,
+                    border: `2px solid ${tokens.colors.border.primary}`,
+                    display: 'grid',
+                    placeItems: 'center',
+                    flexShrink: 0,
                   }}
                 >
-                  <input type="file" accept="image/*" onChange={handleCoverChange} style={{ display: 'none' }} id="cover-input" />
-                  <label
-                    htmlFor="cover-input"
-                    style={{
-                      position: 'absolute',
-                      bottom: tokens.spacing[2],
-                      right: tokens.spacing[2],
-                      padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
-                      borderRadius: tokens.radius.md,
-                      background: 'rgba(0,0,0,0.6)',
-                      color: '#fff',
-                      fontSize: tokens.typography.fontSize.xs,
-                      cursor: 'pointer',
-                      backdropFilter: 'blur(4px)',
-                    }}
-                  >
-                    更换背景
-                  </label>
-                  {coverPreviewUrl && (
-                    <button
-                      onClick={() => { setCoverFile(null); setCoverPreviewUrl(null); setCoverUrl(null) }}
-                      style={{
-                        position: 'absolute',
-                        top: tokens.spacing[2],
-                        right: tokens.spacing[2],
-                        width: 24,
-                        height: 24,
-                        borderRadius: '50%',
-                        background: 'rgba(239,68,68,0.8)',
-                        color: '#fff',
-                        border: 'none',
-                        cursor: 'pointer',
-                        fontSize: '12px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                      }}
-                    >
-                      ×
-                    </button>
-                  )}
-                </Box>
-
-                {/* Avatar overlay */}
-                <Box style={{ display: 'flex', alignItems: 'flex-end', gap: tokens.spacing[4], marginTop: -32, paddingLeft: tokens.spacing[4] }}>
-                  <Box style={{ position: 'relative' }}>
-                    {userId ? (
-                      <Avatar
-                        userId={userId}
-                        name={handle || email}
-                        avatarUrl={previewUrl}
-                        size={80}
-                        style={{
-                          borderRadius: tokens.radius.xl,
-                          border: `3px solid ${tokens.colors.bg.primary}`,
-                          boxShadow: tokens.shadow.lg,
-                        }}
-                      />
-                    ) : (
-                      <Box
-                        style={{
-                          width: 80, height: 80,
-                          borderRadius: tokens.radius.xl,
-                          background: tokens.colors.bg.tertiary,
-                          border: `3px solid ${tokens.colors.bg.primary}`,
-                          display: 'grid', placeItems: 'center',
-                          boxShadow: tokens.shadow.lg,
-                        }}
-                      >
-                        <Text size="2xl" weight="black" color="tertiary">
-                          {(handle?.[0] || email?.[0] || 'U').toUpperCase()}
-                        </Text>
-                      </Box>
-                    )}
-                    <input type="file" accept="image/*" onChange={handleAvatarChange} style={{ display: 'none' }} id="avatar-input" />
-                    <label
-                      htmlFor="avatar-input"
-                      style={{
-                        position: 'absolute',
-                        bottom: -4,
-                        right: -4,
-                        width: 28,
-                        height: 28,
-                        borderRadius: '50%',
-                        background: tokens.gradient.primary,
-                        border: `2px solid ${tokens.colors.bg.primary}`,
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: '12px',
-                        color: '#fff',
-                        boxShadow: tokens.shadow.md,
-                      }}
-                    >
-                      +
-                    </label>
-                  </Box>
-                  <Box style={{ paddingBottom: tokens.spacing[2] }}>
-                    <Text size="xs" color="tertiary">头像 (最大 5MB) / 背景 (最大 10MB)</Text>
-                    <Text size="xs" color="tertiary">支持 JPG, PNG, GIF, WebP</Text>
-                  </Box>
-                </Box>
-              </Box>
-
-              {/* Handle */}
-              <Box style={{ marginBottom: tokens.spacing[4] }}>
-                <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>用户名</Text>
-                <input
-                  type="text"
-                  value={handle}
-                  onChange={(e) => setHandle(e.target.value)}
-                  onBlur={() => markTouched('handle')}
-                  placeholder="设置您的用户名"
-                  style={inputStyle(touchedFields.handle && !handleValidation.valid)}
-                />
-                {touchedFields.handle && handle && (
-                  <Text size="xs" style={{ color: handleValidation.valid ? '#2fe57d' : '#ff7c7c', marginTop: 4 }}>
-                    {handleValidation.valid ? '✓ 格式正确' : `✕ ${handleValidation.message}`}
+                  <Text size="2xl" weight="black" style={{ color: tokens.colors.text.secondary }}>
+                    {(handle?.[0] || email?.[0] || 'U').toUpperCase()}
                   </Text>
-                )}
-              </Box>
-
-              {/* Bio */}
-              <Box style={{ marginBottom: tokens.spacing[2] }}>
-                <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: tokens.spacing[2] }}>
-                  <Text size="sm" weight="bold">个人简介</Text>
-                  <Text size="xs" color="tertiary">{bio.length}/200</Text>
-                </Box>
-                <textarea
-                  value={bio}
-                  onChange={(e) => { if (e.target.value.length <= 200) setBio(e.target.value) }}
-                  placeholder="介绍一下自己..."
-                  rows={4}
-                  style={{
-                    ...inputStyle(),
-                    resize: 'vertical',
-                    minHeight: 80,
-                  }}
-                />
-              </Box>
-            </div>
-
-            {/* ====== SOCIAL LINKS SECTION ====== */}
-            <div id="section-social" style={glassCardStyle}>
-              <Box style={sectionTitleStyle}>
-                <Text size="lg" weight="black">社交链接</Text>
-                <Text size="xs" color="tertiary" style={{ marginTop: 4 }}>添加您的社交媒体链接，让其他用户了解您</Text>
-              </Box>
-
-              <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
-                {/* Twitter/X */}
-                <Box>
-                  <Text size="xs" weight="bold" color="secondary" style={{ marginBottom: 4 }}>Twitter / X</Text>
-                  <Box style={{ position: 'relative' }}>
-                    <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: tokens.colors.text.tertiary, fontSize: '13px' }}>@</span>
-                    <input
-                      type="text"
-                      value={socialTwitter}
-                      onChange={(e) => setSocialTwitter(e.target.value.replace('@', ''))}
-                      placeholder="username"
-                      style={{ ...inputStyle(), paddingLeft: '28px' }}
-                    />
-                  </Box>
-                </Box>
-
-                {/* Telegram */}
-                <Box>
-                  <Text size="xs" weight="bold" color="secondary" style={{ marginBottom: 4 }}>Telegram</Text>
-                  <Box style={{ position: 'relative' }}>
-                    <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: tokens.colors.text.tertiary, fontSize: '13px' }}>@</span>
-                    <input
-                      type="text"
-                      value={socialTelegram}
-                      onChange={(e) => setSocialTelegram(e.target.value.replace('@', ''))}
-                      placeholder="username"
-                      style={{ ...inputStyle(), paddingLeft: '28px' }}
-                    />
-                  </Box>
-                </Box>
-
-                {/* Discord */}
-                <Box>
-                  <Text size="xs" weight="bold" color="secondary" style={{ marginBottom: 4 }}>Discord</Text>
-                  <input
-                    type="text"
-                    value={socialDiscord}
-                    onChange={(e) => setSocialDiscord(e.target.value)}
-                    placeholder="username#0000 或邀请链接"
-                    style={inputStyle()}
-                  />
-                </Box>
-
-                {/* GitHub */}
-                <Box>
-                  <Text size="xs" weight="bold" color="secondary" style={{ marginBottom: 4 }}>GitHub</Text>
-                  <Box style={{ position: 'relative' }}>
-                    <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: tokens.colors.text.tertiary, fontSize: '12px' }}>github.com/</span>
-                    <input
-                      type="text"
-                      value={socialGithub}
-                      onChange={(e) => setSocialGithub(e.target.value)}
-                      placeholder="username"
-                      style={{ ...inputStyle(), paddingLeft: '90px' }}
-                    />
-                  </Box>
-                </Box>
-
-                {/* Website */}
-                <Box>
-                  <Text size="xs" weight="bold" color="secondary" style={{ marginBottom: 4 }}>个人网站</Text>
-                  <input
-                    type="url"
-                    value={socialWebsite}
-                    onChange={(e) => setSocialWebsite(e.target.value)}
-                    placeholder="https://your-website.com"
-                    style={inputStyle()}
-                  />
-                </Box>
-              </Box>
-            </div>
-
-            {/* ====== ACCOUNT SECTION ====== */}
-            <div id="section-account" style={glassCardStyle}>
-              <Box style={sectionTitleStyle}>
-                <Text size="lg" weight="black">账号安全</Text>
-                <Text size="xs" color="tertiary" style={{ marginTop: 4 }}>管理您的邮箱和密码</Text>
-              </Box>
-
-              {/* Email */}
-              <Box style={{ marginBottom: tokens.spacing[5] }}>
-                <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>邮箱地址</Text>
-                <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[3] }}>当前：{email}</Text>
-                <Box style={{ display: 'flex', gap: tokens.spacing[3] }}>
-                  <input
-                    type="email"
-                    value={newEmail}
-                    onChange={(e) => setNewEmail(e.target.value)}
-                    onBlur={() => markTouched('newEmail')}
-                    placeholder="输入新邮箱"
-                    style={{ ...inputStyle(touchedFields.newEmail && !newEmailValidation.valid), flex: 1 }}
-                  />
-                  <Button variant="secondary" size="sm" onClick={handleChangeEmail} disabled={savingEmail || !newEmail || !newEmailValidation.valid}>
-                    {savingEmail ? '发送中...' : '验证'}
-                  </Button>
-                </Box>
-                {touchedFields.newEmail && newEmail && !newEmailValidation.valid && (
-                  <Text size="xs" style={{ color: '#ff7c7c', marginTop: 4 }}>✕ {newEmailValidation.message}</Text>
-                )}
-              </Box>
-
-              {/* Password */}
-              <Box>
-                <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[3] }}>修改密码</Text>
-
-                {/* Mode toggle */}
-                <Box style={{ display: 'flex', gap: tokens.spacing[2], marginBottom: tokens.spacing[4] }}>
-                  <button
-                    onClick={() => setPasswordResetMode('password')}
-                    style={{
-                      flex: 1,
-                      padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-                      borderRadius: tokens.radius.lg,
-                      border: `1px solid ${passwordResetMode === 'password' ? tokens.colors.accent.primary : tokens.colors.border.primary}40`,
-                      background: passwordResetMode === 'password' ? `${tokens.colors.accent.primary}15` : 'transparent',
-                      color: passwordResetMode === 'password' ? tokens.colors.accent.primary : tokens.colors.text.tertiary,
-                      fontSize: tokens.typography.fontSize.xs,
-                      fontWeight: tokens.typography.fontWeight.bold,
-                      cursor: 'pointer',
-                      transition: 'all 0.2s ease',
-                    }}
-                  >
-                    使用当前密码
-                  </button>
-                  <button
-                    onClick={() => setPasswordResetMode('code')}
-                    style={{
-                      flex: 1,
-                      padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-                      borderRadius: tokens.radius.lg,
-                      border: `1px solid ${passwordResetMode === 'code' ? tokens.colors.accent.primary : tokens.colors.border.primary}40`,
-                      background: passwordResetMode === 'code' ? `${tokens.colors.accent.primary}15` : 'transparent',
-                      color: passwordResetMode === 'code' ? tokens.colors.accent.primary : tokens.colors.text.tertiary,
-                      fontSize: tokens.typography.fontSize.xs,
-                      fontWeight: tokens.typography.fontWeight.bold,
-                      cursor: 'pointer',
-                      transition: 'all 0.2s ease',
-                    }}
-                  >
-                    邮箱验证
-                  </button>
-                </Box>
-
-                {passwordResetMode === 'password' ? (
-                  <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
-                    <input type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} placeholder="当前密码" style={inputStyle()} />
-                    <Box>
-                      <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} onBlur={() => markTouched('newPassword')} placeholder="新密码（至少6位）" style={inputStyle(touchedFields.newPassword && !newPasswordValidation.valid)} />
-                      {touchedFields.newPassword && newPassword && !newPasswordValidation.valid && (
-                        <Text size="xs" style={{ color: '#ff7c7c', marginTop: 4 }}>✕ {newPasswordValidation.message}</Text>
-                      )}
-                    </Box>
-                    <Box>
-                      <input type="password" value={confirmNewPassword} onChange={(e) => setConfirmNewPassword(e.target.value)} onBlur={() => markTouched('confirmPassword')} placeholder="确认新密码" style={inputStyle(touchedFields.confirmPassword && !confirmPasswordValidation.valid)} />
-                      {touchedFields.confirmPassword && confirmNewPassword && (
-                        <Text size="xs" style={{ color: confirmPasswordValidation.valid ? '#2fe57d' : '#ff7c7c', marginTop: 4 }}>
-                          {confirmPasswordValidation.valid ? '✓ 密码匹配' : `✕ ${confirmPasswordValidation.message}`}
-                        </Text>
-                      )}
-                    </Box>
-                    <Box style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                      <Button variant="secondary" size="sm" onClick={handleChangePassword} disabled={savingPassword || !currentPassword || !newPasswordValidation.valid || !confirmPasswordValidation.valid}>
-                        {savingPassword ? '修改中...' : '修改密码'}
-                      </Button>
-                    </Box>
-                  </Box>
-                ) : (
-                  <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
-                    <Text size="xs" color="tertiary">将发送密码重置链接到您的邮箱：{email}</Text>
-                    <Box style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                      <Button variant="secondary" size="sm" onClick={handleSendResetCode} disabled={sendingResetCode || resetCountdown > 0}>
-                        {sendingResetCode ? '发送中...' : resetCountdown > 0 ? `${resetCountdown}秒后重发` : resetCodeSent ? '重新发送' : '发送重置邮件'}
-                      </Button>
-                    </Box>
-                    {resetCodeSent && (
-                      <Box style={{ padding: tokens.spacing[3], borderRadius: tokens.radius.md, background: `${tokens.colors.accent.success}10`, border: `1px solid ${tokens.colors.accent.success}30` }}>
-                        <Text size="xs" style={{ color: tokens.colors.accent.success }}>✓ 重置邮件已发送，请查收邮箱</Text>
-                      </Box>
-                    )}
-                  </Box>
-                )}
-              </Box>
-
-              {/* Exchange Connection */}
-              {userId && (
-                <Box style={{ marginTop: tokens.spacing[5], paddingTop: tokens.spacing[5], borderTop: `1px solid ${tokens.colors.border.primary}40` }}>
-                  <ExchangeConnectionManager userId={userId} />
                 </Box>
               )}
-            </div>
 
-            {/* ====== NOTIFICATIONS SECTION ====== */}
-            <div id="section-notifications" style={glassCardStyle}>
-              <Box style={sectionTitleStyle}>
-                <Text size="lg" weight="black">通知偏好</Text>
-                <Text size="xs" color="tertiary" style={{ marginTop: 4 }}>选择您希望接收的通知类型</Text>
+              <Box>
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/gif,image/webp"
+                  onChange={handleAvatarChange}
+                  style={{ display: 'none' }}
+                  id="avatar-input"
+                />
+                <label
+                  htmlFor="avatar-input"
+                  style={{
+                    display: 'inline-block',
+                    padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
+                    borderRadius: tokens.radius.md,
+                    border: `1px solid ${tokens.colors.border.primary}`,
+                    background: tokens.colors.bg.primary,
+                    color: tokens.colors.text.primary,
+                    cursor: 'pointer',
+                    fontWeight: tokens.typography.fontWeight.bold,
+                    fontSize: tokens.typography.fontSize.sm,
+                  }}
+                >
+                  更换头像
+                </label>
+                <Text size="xs" color="tertiary" style={{ marginTop: tokens.spacing[1], display: 'block' }}>
+                  JPG、PNG、GIF、WebP，最大 5MB
+                </Text>
               </Box>
+            </Box>
 
-              <SettingRow label="关注通知" description="有人关注我时通知">
-                <ToggleSwitch checked={notifyFollow} onChange={setNotifyFollow} />
-              </SettingRow>
-              <SettingRow label="点赞通知" description="有人点赞我的帖子时通知">
-                <ToggleSwitch checked={notifyLike} onChange={setNotifyLike} />
-              </SettingRow>
-              <SettingRow label="评论通知" description="有人评论我的帖子时通知">
-                <ToggleSwitch checked={notifyComment} onChange={setNotifyComment} />
-              </SettingRow>
-              <SettingRow label="提及通知" description="有人 @提及我时通知">
-                <ToggleSwitch checked={notifyMention} onChange={setNotifyMention} />
-              </SettingRow>
-              <SettingRow label="私信通知" description="收到私信时通知">
-                <ToggleSwitch checked={notifyMessage} onChange={setNotifyMessage} />
-              </SettingRow>
-            </div>
-
-            {/* ====== PRIVACY SECTION ====== */}
-            <div id="section-privacy" style={glassCardStyle}>
-              <Box style={sectionTitleStyle}>
-                <Text size="lg" weight="black">隐私设置</Text>
-                <Text size="xs" color="tertiary" style={{ marginTop: 4 }}>控制他人可以看到的信息</Text>
+            {/* Cover Image */}
+            <Box style={{ marginBottom: tokens.spacing[5] }}>
+              <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>
+                背景图片
+              </Text>
+              <Box
+                style={{
+                  width: '100%',
+                  height: 120,
+                  borderRadius: tokens.radius.lg,
+                  background: coverPreviewUrl
+                    ? `url(${coverPreviewUrl}) center/cover no-repeat`
+                    : `linear-gradient(135deg, ${tokens.colors.bg.tertiary} 0%, ${tokens.colors.bg.secondary} 100%)`,
+                  border: `1px solid ${tokens.colors.border.primary}`,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  marginBottom: tokens.spacing[2],
+                }}
+              >
+                {!coverPreviewUrl && (
+                  <Text size="sm" color="tertiary">暂无背景图片</Text>
+                )}
               </Box>
+              <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/gif,image/webp"
+                  onChange={handleCoverChange}
+                  style={{ display: 'none' }}
+                  id="cover-input"
+                />
+                <label
+                  htmlFor="cover-input"
+                  style={{
+                    display: 'inline-block',
+                    padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+                    borderRadius: tokens.radius.md,
+                    border: `1px solid ${tokens.colors.border.primary}`,
+                    background: tokens.colors.bg.primary,
+                    color: tokens.colors.text.primary,
+                    cursor: 'pointer',
+                    fontWeight: tokens.typography.fontWeight.bold,
+                    fontSize: tokens.typography.fontSize.sm,
+                  }}
+                >
+                  更换背景
+                </label>
+                {coverPreviewUrl && (
+                  <button
+                    onClick={() => {
+                      setCoverFile(null)
+                      setCoverPreviewUrl(null)
+                      setCoverUrl(null)
+                    }}
+                    style={{
+                      padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+                      borderRadius: tokens.radius.md,
+                      border: `1px solid ${tokens.colors.accent.error}40`,
+                      background: 'transparent',
+                      color: tokens.colors.accent.error,
+                      cursor: 'pointer',
+                      fontSize: tokens.typography.fontSize.sm,
+                    }}
+                  >
+                    移除
+                  </button>
+                )}
+                <Text size="xs" color="tertiary">
+                  最大 10MB，建议 1200×400
+                </Text>
+              </Box>
+            </Box>
 
-              <SettingRow label="展示关注列表" description="关闭后他人无法查看你关注了谁">
-                <ToggleSwitch checked={showFollowing} onChange={setShowFollowing} />
-              </SettingRow>
-              <SettingRow label="展示粉丝列表" description="关闭后他人无法查看你的粉丝">
-                <ToggleSwitch checked={showFollowers} onChange={setShowFollowers} />
-              </SettingRow>
-              <SettingRow label="显示 Pro 徽章" description="关闭后主页不显示会员徽章">
-                <ToggleSwitch checked={showProBadge} onChange={setShowProBadge} />
-              </SettingRow>
-
-              {/* DM Permission */}
-              <Box style={{ marginTop: tokens.spacing[4], paddingTop: tokens.spacing[3] }}>
-                <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[3] }}>私信权限</Text>
-                <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
-                  {([
-                    { value: 'all' as const, label: '所有人', desc: '任何人都可以给我发私信' },
-                    { value: 'mutual' as const, label: '互相关注', desc: '互相关注可无限私信，非互关最多3条' },
-                    { value: 'none' as const, label: '关闭私信', desc: '不接收任何人的私信' },
-                  ]).map((option) => (
-                    <label
-                      key={option.value}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: tokens.spacing[3],
-                        padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-                        borderRadius: tokens.radius.lg,
-                        cursor: 'pointer',
-                        background: dmPermission === option.value ? `${tokens.colors.accent.primary}10` : 'transparent',
-                        border: `1px solid ${dmPermission === option.value ? tokens.colors.accent.primary + '40' : 'transparent'}`,
-                        transition: 'all 0.15s ease',
-                      }}
-                    >
-                      <input
-                        type="radio"
-                        name="dmPermission"
-                        checked={dmPermission === option.value}
-                        onChange={() => setDmPermission(option.value)}
-                        style={{ width: 16, height: 16, accentColor: tokens.colors.accent.primary }}
-                      />
-                      <Box>
-                        <Text size="sm">{option.label}</Text>
-                        <Text size="xs" color="tertiary">{option.desc}</Text>
-                      </Box>
-                    </label>
-                  ))}
+            {/* Handle */}
+            <Box style={{ marginBottom: tokens.spacing[5] }}>
+              <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>
+                用户名
+              </Text>
+              <input
+                type="text"
+                value={handle}
+                onChange={(e) => setHandle(e.target.value.slice(0, MAX_HANDLE_LENGTH))}
+                onBlur={() => markTouched('handle')}
+                placeholder="设置你的用户名"
+                style={getInputStyle(touchedFields.handle && !handleValidation.valid)}
+              />
+              <Box style={{ display: 'flex', justifyContent: 'space-between', marginTop: tokens.spacing[1] }}>
+                <Box>
+                  {touchedFields.handle && handle && !handleValidation.valid && (
+                    <Text size="xs" style={{ color: tokens.colors.accent.error }}>
+                      {handleValidation.message}
+                    </Text>
+                  )}
+                  {touchedFields.handle && handle && handleValidation.valid && checkingHandle && (
+                    <Text size="xs" color="tertiary">
+                      检查中...
+                    </Text>
+                  )}
+                  {touchedFields.handle && handle && handleValidation.valid && !checkingHandle && handleAvailable === true && (
+                    <Text size="xs" style={{ color: tokens.colors.accent.success }}>
+                      用户名可用
+                    </Text>
+                  )}
+                  {touchedFields.handle && handle && handleValidation.valid && !checkingHandle && handleAvailable === false && (
+                    <Text size="xs" style={{ color: tokens.colors.accent.error }}>
+                      用户名已被占用
+                    </Text>
+                  )}
                 </Box>
+                <Text size="xs" color="tertiary">
+                  {handle.length}/{MAX_HANDLE_LENGTH}
+                </Text>
               </Box>
-            </div>
+            </Box>
 
-            {/* ====== DISPLAY SECTION ====== */}
-            <div id="section-display" style={glassCardStyle}>
-              <Box style={sectionTitleStyle}>
-                <Text size="lg" weight="black">显示偏好</Text>
-                <Text size="xs" color="tertiary" style={{ marginTop: 4 }}>自定义界面显示方式</Text>
+            {/* Bio */}
+            <Box style={{ marginBottom: tokens.spacing[4] }}>
+              <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>
+                个人简介
+              </Text>
+              <textarea
+                value={bio}
+                onChange={(e) => setBio(e.target.value.slice(0, MAX_BIO_LENGTH))}
+                placeholder="介绍一下自己..."
+                rows={4}
+                style={{
+                  ...getInputStyle(),
+                  resize: 'vertical',
+                  minHeight: '80px',
+                }}
+              />
+              <Box style={{ display: 'flex', justifyContent: 'flex-end', marginTop: tokens.spacing[1] }}>
+                <Text
+                  size="xs"
+                  style={{
+                    color: bio.length > MAX_BIO_LENGTH * 0.9
+                      ? tokens.colors.accent.warning
+                      : tokens.colors.text.tertiary
+                  }}
+                >
+                  {bio.length}/{MAX_BIO_LENGTH}
+                </Text>
+              </Box>
+            </Box>
+          </SectionCard>
+
+          {/* ===== Security Section ===== */}
+          <SectionCard id="security" title="账号安全" description="管理你的登录凭证和账号安全设置">
+            {/* Current Email Display */}
+            <Box style={{ marginBottom: tokens.spacing[5], padding: tokens.spacing[3], borderRadius: tokens.radius.md, background: tokens.colors.bg.primary }}>
+              <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[1] }}>当前登录邮箱</Text>
+              <Text size="sm" weight="bold">{email}</Text>
+            </Box>
+
+            {/* Change Email */}
+            <Box style={{ marginBottom: tokens.spacing[6] }}>
+              <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>
+                修改邮箱
+              </Text>
+              <Box style={{ display: 'flex', gap: tokens.spacing[3] }}>
+                <input
+                  type="email"
+                  value={newEmail}
+                  onChange={(e) => setNewEmail(e.target.value)}
+                  onBlur={() => markTouched('newEmail')}
+                  placeholder="输入新邮箱地址"
+                  style={{ ...getInputStyle(touchedFields.newEmail && !newEmailValidation.valid), flex: 1 }}
+                />
+                <Button
+                  variant="secondary"
+                  onClick={handleChangeEmail}
+                  disabled={savingEmail || !newEmail || !newEmailValidation.valid}
+                >
+                  {savingEmail ? '发送中...' : '验证'}
+                </Button>
+              </Box>
+              {touchedFields.newEmail && newEmail && !newEmailValidation.valid && (
+                <Text size="xs" style={{ color: tokens.colors.accent.error, marginTop: tokens.spacing[1] }}>
+                  {newEmailValidation.message}
+                </Text>
+              )}
+              <Text size="xs" color="tertiary" style={{ marginTop: tokens.spacing[1] }}>
+                修改后需要在新邮箱中确认验证链接
+              </Text>
+            </Box>
+
+            {/* Change Password */}
+            <Box>
+              <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[3] }}>
+                修改密码
+              </Text>
+
+              {/* Mode Selector */}
+              <Box style={{ display: 'flex', gap: tokens.spacing[2], marginBottom: tokens.spacing[4] }}>
+                <button
+                  onClick={() => setPasswordResetMode('password')}
+                  style={{
+                    flex: 1,
+                    padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+                    borderRadius: tokens.radius.md,
+                    border: `1px solid ${passwordResetMode === 'password' ? tokens.colors.accent.primary : tokens.colors.border.primary}`,
+                    background: passwordResetMode === 'password' ? `${tokens.colors.accent.primary}15` : 'transparent',
+                    color: passwordResetMode === 'password' ? tokens.colors.accent.primary : tokens.colors.text.secondary,
+                    fontSize: tokens.typography.fontSize.sm,
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                  }}
+                >
+                  用当前密码修改
+                </button>
+                <button
+                  onClick={() => setPasswordResetMode('code')}
+                  style={{
+                    flex: 1,
+                    padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+                    borderRadius: tokens.radius.md,
+                    border: `1px solid ${passwordResetMode === 'code' ? tokens.colors.accent.primary : tokens.colors.border.primary}`,
+                    background: passwordResetMode === 'code' ? `${tokens.colors.accent.primary}15` : 'transparent',
+                    color: passwordResetMode === 'code' ? tokens.colors.accent.primary : tokens.colors.text.secondary,
+                    fontSize: tokens.typography.fontSize.sm,
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                  }}
+                >
+                  通过邮箱重置
+                </button>
               </Box>
 
-              {/* Theme Selection */}
-              <Box style={{ marginBottom: tokens.spacing[5] }}>
-                <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[3] }}>主题</Text>
-                <Box style={{ display: 'flex', gap: tokens.spacing[3] }}>
-                  {([
-                    { value: 'dark' as ThemeMode, label: '深色', preview: '#0B0A10' },
-                    { value: 'light' as ThemeMode, label: '浅色', preview: '#F8F9FA' },
-                    { value: 'system' as ThemeMode, label: '跟随系统', preview: 'linear-gradient(135deg, #0B0A10 50%, #F8F9FA 50%)' },
-                  ]).map((theme) => (
-                    <button
-                      key={theme.value}
-                      onClick={() => updateAppSettings({ theme: theme.value })}
-                      style={{
-                        flex: 1,
-                        padding: tokens.spacing[3],
-                        borderRadius: tokens.radius.lg,
-                        border: `2px solid ${appSettings.theme === theme.value ? tokens.colors.accent.primary : tokens.colors.border.primary}40`,
-                        background: appSettings.theme === theme.value ? `${tokens.colors.accent.primary}10` : 'transparent',
-                        cursor: 'pointer',
-                        transition: 'all 0.2s ease',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        gap: tokens.spacing[2],
-                      }}
-                    >
-                      <Box
-                        style={{
-                          width: 40,
-                          height: 28,
-                          borderRadius: tokens.radius.md,
-                          background: theme.preview,
-                          border: `1px solid ${tokens.colors.border.primary}`,
-                        }}
-                      />
-                      <Text
-                        size="xs"
-                        weight={appSettings.theme === theme.value ? 'bold' : 'medium'}
-                        style={{ color: appSettings.theme === theme.value ? tokens.colors.accent.primary : tokens.colors.text.secondary }}
-                      >
-                        {theme.label}
+              {passwordResetMode === 'password' ? (
+                <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
+                  <input
+                    type="password"
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                    placeholder="当前密码"
+                    style={getInputStyle()}
+                  />
+                  <Box>
+                    <input
+                      type="password"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      onBlur={() => markTouched('newPassword')}
+                      placeholder="新密码（至少6位）"
+                      style={getInputStyle(touchedFields.newPassword && !newPasswordValidation.valid)}
+                    />
+                    {touchedFields.newPassword && newPassword && !newPasswordValidation.valid && (
+                      <Text size="xs" style={{ color: tokens.colors.accent.error, marginTop: tokens.spacing[1] }}>
+                        {newPasswordValidation.message}
                       </Text>
-                    </button>
-                  ))}
+                    )}
+                  </Box>
+                  <Box>
+                    <input
+                      type="password"
+                      value={confirmNewPassword}
+                      onChange={(e) => setConfirmNewPassword(e.target.value)}
+                      onBlur={() => markTouched('confirmPassword')}
+                      placeholder="确认新密码"
+                      style={getInputStyle(touchedFields.confirmPassword && !confirmPasswordValidation.valid)}
+                    />
+                    {touchedFields.confirmPassword && confirmNewPassword && !confirmPasswordValidation.valid && (
+                      <Text size="xs" style={{ color: tokens.colors.accent.error, marginTop: tokens.spacing[1] }}>
+                        {confirmPasswordValidation.message}
+                      </Text>
+                    )}
+                    {touchedFields.confirmPassword && confirmNewPassword && confirmPasswordValidation.valid && (
+                      <Text size="xs" style={{ color: tokens.colors.accent.success, marginTop: tokens.spacing[1] }}>
+                        密码匹配
+                      </Text>
+                    )}
+                  </Box>
+                  <Box style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                    <Button
+                      variant="secondary"
+                      onClick={handleChangePassword}
+                      disabled={savingPassword || !currentPassword || !newPassword || !newPasswordValidation.valid || !confirmPasswordValidation.valid}
+                    >
+                      {savingPassword ? '修改中...' : '修改密码'}
+                    </Button>
+                  </Box>
                 </Box>
-              </Box>
-
-              {/* Language */}
-              <Box style={{ marginBottom: tokens.spacing[4] }}>
-                <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[3] }}>语言</Text>
-                <Box style={{ display: 'flex', gap: tokens.spacing[3] }}>
-                  {([
-                    { value: 'zh' as const, label: '中文' },
-                    { value: 'en' as const, label: 'English' },
-                  ]).map((lang) => (
-                    <button
-                      key={lang.value}
-                      onClick={() => updateAppSettings({ language: lang.value })}
+              ) : (
+                <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
+                  <Text size="sm" color="secondary">
+                    将发送密码重置链接到：{email}
+                  </Text>
+                  <Text size="xs" color="tertiary">
+                    点击邮件中的链接即可设置新密码，有效期 1 小时
+                  </Text>
+                  <Box style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                    <Button
+                      variant="secondary"
+                      onClick={handleSendResetCode}
+                      disabled={sendingResetCode || resetCountdown > 0}
+                    >
+                      {sendingResetCode
+                        ? '发送中...'
+                        : resetCountdown > 0
+                          ? `${resetCountdown}s 后可重发`
+                          : resetCodeSent
+                            ? '重新发送'
+                            : '发送重置邮件'}
+                    </Button>
+                  </Box>
+                  {resetCodeSent && (
+                    <Box
                       style={{
-                        flex: 1,
-                        padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
-                        borderRadius: tokens.radius.lg,
-                        border: `1px solid ${appSettings.language === lang.value ? tokens.colors.accent.primary : tokens.colors.border.primary}40`,
-                        background: appSettings.language === lang.value ? `${tokens.colors.accent.primary}15` : 'transparent',
-                        color: appSettings.language === lang.value ? tokens.colors.accent.primary : tokens.colors.text.secondary,
-                        fontSize: tokens.typography.fontSize.sm,
-                        fontWeight: appSettings.language === lang.value ? tokens.typography.fontWeight.bold : tokens.typography.fontWeight.medium,
-                        cursor: 'pointer',
-                        transition: 'all 0.2s ease',
+                        padding: tokens.spacing[3],
+                        borderRadius: tokens.radius.md,
+                        background: `${tokens.colors.accent.success}10`,
+                        border: `1px solid ${tokens.colors.accent.success}30`,
                       }}
                     >
-                      {lang.label}
-                    </button>
-                  ))}
+                      <Text size="sm" style={{ color: tokens.colors.accent.success }}>
+                        重置邮件已发送，请查收并点击链接
+                      </Text>
+                    </Box>
+                  )}
                 </Box>
-              </Box>
+              )}
+            </Box>
+          </SectionCard>
 
-              {/* Compact mode and other settings */}
-              <SettingRow label="紧凑模式" description="减少页面间距，显示更多内容">
-                <ToggleSwitch checked={appSettings.compactMode} onChange={(v) => updateAppSettings({ compactMode: v })} />
-              </SettingRow>
-              <SettingRow label="显示头像" description="在列表中显示用户头像">
-                <ToggleSwitch checked={appSettings.showAvatars} onChange={(v) => updateAppSettings({ showAvatars: v })} />
-              </SettingRow>
-              <SettingRow label="自动播放视频" description="帖子中的视频自动播放">
-                <ToggleSwitch checked={appSettings.autoPlayVideos} onChange={(v) => updateAppSettings({ autoPlayVideos: v })} />
-              </SettingRow>
-              <SettingRow label="声音提示" description="操作时播放提示音">
-                <ToggleSwitch checked={appSettings.soundEnabled} onChange={(v) => updateAppSettings({ soundEnabled: v })} />
-              </SettingRow>
-            </div>
-
-            {/* ====== DANGER ZONE ====== */}
-            <div id="section-danger" style={{ ...glassCardStyle, border: `1px solid ${tokens.colors.accent.error}30` }}>
-              <Box style={sectionTitleStyle}>
-                <Text size="lg" weight="black" style={{ color: tokens.colors.accent.error }}>账号管理</Text>
-                <Text size="xs" color="tertiary" style={{ marginTop: 4 }}>退出登录或删除账号</Text>
-              </Box>
-
-              <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
-                <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: `${tokens.spacing[3]} 0` }}>
-                  <Box>
-                    <Text size="sm" weight="medium">退出登录</Text>
-                    <Text size="xs" color="tertiary">退出当前账号</Text>
-                  </Box>
-                  <Button variant="secondary" size="sm" onClick={handleLogout}>退出登录</Button>
-                </Box>
-
-                <Box style={{ borderTop: `1px solid ${tokens.colors.accent.error}20`, paddingTop: tokens.spacing[3], display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <Box>
-                    <Text size="sm" weight="medium" style={{ color: tokens.colors.accent.error }}>删除账号</Text>
-                    <Text size="xs" color="tertiary">永久删除账号及所有数据，不可恢复</Text>
-                  </Box>
-                  <Button variant="danger" size="sm" onClick={handleDeleteAccount}>删除账号</Button>
-                </Box>
-              </Box>
-            </div>
+          {/* ===== Exchange Connections Section ===== */}
+          <Box
+            id="exchanges"
+            style={{
+              marginBottom: tokens.spacing[6],
+              padding: tokens.spacing[6],
+              borderRadius: tokens.radius.xl,
+              background: tokens.colors.bg.secondary,
+              border: `1px solid ${tokens.colors.border.primary}`,
+            }}
+          >
+            {userId && <ExchangeConnectionManager userId={userId} />}
           </Box>
+
+          {/* ===== Notification Preferences Section ===== */}
+          <SectionCard id="notifications" title="通知偏好" description="选择你想接收的通知类型">
+            <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[1] }}>
+              {[
+                { key: 'follow', label: '新粉丝通知', desc: '有人关注你时', value: notifyFollow, setter: setNotifyFollow },
+                { key: 'like', label: '点赞通知', desc: '有人点赞你的帖子时', value: notifyLike, setter: setNotifyLike },
+                { key: 'comment', label: '评论通知', desc: '有人评论你的帖子时', value: notifyComment, setter: setNotifyComment },
+                { key: 'mention', label: '@提及通知', desc: '有人在帖子中提及你时', value: notifyMention, setter: setNotifyMention },
+                { key: 'message', label: '私信通知', desc: '收到新私信时', value: notifyMessage, setter: setNotifyMessage },
+              ].map(item => (
+                <Box
+                  key={item.key}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: `${tokens.spacing[3]} ${tokens.spacing[3]}`,
+                    borderRadius: tokens.radius.md,
+                    transition: 'background 0.15s ease',
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = tokens.colors.bg.primary }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+                >
+                  <Box>
+                    <Text size="sm" weight="medium">{item.label}</Text>
+                    <Text size="xs" color="tertiary">{item.desc}</Text>
+                  </Box>
+                  <ToggleSwitch
+                    checked={item.value}
+                    onChange={(v) => item.setter(v)}
+                  />
+                </Box>
+              ))}
+            </Box>
+          </SectionCard>
+
+          {/* ===== Privacy Settings Section ===== */}
+          <SectionCard id="privacy" title="隐私设置" description="控制谁能看到你的信息">
+            {/* Follow lists visibility */}
+            <Box style={{ marginBottom: tokens.spacing[5] }}>
+              <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>
+                关注列表可见性
+              </Text>
+              <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[3] }}>
+                关闭后，其他用户将无法查看对应列表
+              </Text>
+              <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3], cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={showFollowing}
+                    onChange={(e) => setShowFollowing(e.target.checked)}
+                    style={{ width: 18, height: 18, accentColor: '#8b6fa8' }}
+                  />
+                  <Text size="sm">公开我的关注列表</Text>
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3], cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={showFollowers}
+                    onChange={(e) => setShowFollowers(e.target.checked)}
+                    style={{ width: 18, height: 18, accentColor: '#8b6fa8' }}
+                  />
+                  <Text size="sm">公开我的粉丝列表</Text>
+                </label>
+              </Box>
+            </Box>
+
+            {/* Pro Badge */}
+            <Box style={{ marginBottom: tokens.spacing[5] }}>
+              <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>
+                Pro 徽章
+              </Text>
+              <label style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3], cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={showProBadge}
+                  onChange={(e) => setShowProBadge(e.target.checked)}
+                  style={{ width: 18, height: 18, accentColor: '#8b6fa8' }}
+                />
+                <Box>
+                  <Text size="sm">在主页显示 Pro 徽章</Text>
+                  <Text size="xs" color="tertiary">关闭后其他用户看不到你的会员标识</Text>
+                </Box>
+              </label>
+            </Box>
+
+            {/* DM Permission */}
+            <Box>
+              <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>
+                谁可以给我发私信
+              </Text>
+              <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
+                {([
+                  { value: 'all' as const, label: '所有人', desc: '任何人都可以给你发私信' },
+                  { value: 'mutual' as const, label: '互相关注的人', desc: '非互关者最多发3条，你回复后对方可继续' },
+                  { value: 'none' as const, label: '不接收私信', desc: '关闭所有私信功能' },
+                ]).map(option => (
+                  <label
+                    key={option.value}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: tokens.spacing[3],
+                      cursor: 'pointer',
+                      padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+                      borderRadius: tokens.radius.md,
+                      border: `1px solid ${dmPermission === option.value ? tokens.colors.accent.primary + '40' : 'transparent'}`,
+                      background: dmPermission === option.value ? `${tokens.colors.accent.primary}08` : 'transparent',
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    <input
+                      type="radio"
+                      name="dmPermission"
+                      checked={dmPermission === option.value}
+                      onChange={() => setDmPermission(option.value)}
+                      style={{ width: 18, height: 18, accentColor: '#8b6fa8', marginTop: 2 }}
+                    />
+                    <Box>
+                      <Text size="sm" weight="medium">{option.label}</Text>
+                      <Text size="xs" color="tertiary">{option.desc}</Text>
+                    </Box>
+                  </label>
+                ))}
+              </Box>
+            </Box>
+          </SectionCard>
+
+          {/* ===== Account Management (Danger Zone) ===== */}
+          <SectionCard id="account" title="账号管理" variant="danger">
+            <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}>
+              <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <Box>
+                  <Text size="sm" weight="medium">退出登录</Text>
+                  <Text size="xs" color="tertiary">退出当前账号，需要重新登录才能访问设置</Text>
+                </Box>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={handleLogout}
+                  style={{
+                    color: tokens.colors.accent.error,
+                    borderColor: tokens.colors.accent.error + '40',
+                  }}
+                >
+                  退出登录
+                </Button>
+              </Box>
+            </Box>
+          </SectionCard>
+
+          {/* ===== Floating Save Bar ===== */}
+          {hasUnsavedChanges() && (
+            <Box
+              style={{
+                position: 'sticky',
+                bottom: tokens.spacing[4],
+                padding: `${tokens.spacing[3]} ${tokens.spacing[5]}`,
+                borderRadius: tokens.radius.xl,
+                background: tokens.colors.bg.secondary,
+                border: `1px solid ${tokens.colors.accent.warning}40`,
+                boxShadow: tokens.shadow.lg,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                zIndex: 50,
+              }}
+            >
+              <Text size="sm" style={{ color: tokens.colors.accent.warning }}>
+                有未保存的更改
+              </Text>
+              <Box style={{ display: 'flex', gap: tokens.spacing[3] }}>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={async () => {
+                    const confirmed = await showConfirm('放弃更改', '确定要放弃所有未保存的更改吗？')
+                    if (confirmed && userId) {
+                      setTouchedFields({ handle: false, newPassword: false, confirmPassword: false, newEmail: false })
+                      setHandleAvailable(null)
+                      setAvatarFile(null)
+                      setCoverFile(null)
+                      loadProfile(userId)
+                    }
+                  }}
+                  disabled={saving}
+                >
+                  放弃
+                </Button>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={handleSaveProfile}
+                  disabled={saving}
+                >
+                  {saving ? '保存中...' : '保存所有更改'}
+                </Button>
+              </Box>
+            </Box>
+          )}
+
+          {/* Bottom spacer */}
+          <Box style={{ height: tokens.spacing[12] }} />
         </Box>
       </Box>
 
-      {/* Floating Save Bar */}
-      {hasUnsavedChanges() && (
-        <Box
-          style={{
-            position: 'fixed',
-            bottom: 0,
-            left: 0,
-            right: 0,
-            padding: `${tokens.spacing[3]} ${tokens.spacing[6]}`,
-            background: tokens.glass.bg.heavy,
-            backdropFilter: tokens.glass.blur.xl,
-            WebkitBackdropFilter: tokens.glass.blur.xl,
-            borderTop: tokens.glass.border.medium,
-            zIndex: 100,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: tokens.spacing[4],
-            animation: 'slideUp 0.3s ease',
-          }}
-        >
-          <Text size="sm" style={{ color: '#ffc107' }}>您有未保存的更改</Text>
-          <Box style={{ display: 'flex', gap: tokens.spacing[3] }}>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={async () => {
-                if (hasUnsavedChanges()) {
-                  const confirmed = await showConfirm('放弃更改', '确定要放弃所有未保存的更改吗？')
-                  if (!confirmed) return
-                }
-                router.back()
-              }}
-              disabled={saving}
-            >
-              取消
-            </Button>
-            <Button variant="primary" size="sm" onClick={handleSave} disabled={saving} loading={saving}>
-              {saving ? '保存中...' : '保存更改'}
-            </Button>
-          </Box>
-        </Box>
-      )}
-
       {/* Responsive styles */}
-      <style jsx global>{`
-        @keyframes slideUp {
-          from { transform: translateY(100%); opacity: 0; }
-          to { transform: translateY(0); opacity: 1; }
-        }
+      <style>{`
         @media (max-width: 768px) {
           .settings-sidebar {
             display: none !important;
           }
-          .page-enter > div:nth-child(3) {
-            grid-template-columns: 1fr !important;
+          .settings-mobile-nav {
+            display: flex !important;
+          }
+          .settings-mobile-nav::-webkit-scrollbar {
+            display: none;
           }
         }
       `}</style>
     </Box>
+  )
+}
+
+export default function SettingsPage() {
+  return (
+    <Suspense fallback={
+      <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
+        <TopNav email={null} />
+        <Box style={{ maxWidth: 900, margin: '0 auto', padding: tokens.spacing[6] }}>
+          <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}>
+            {[1, 2, 3].map(i => (
+              <Box
+                key={i}
+                style={{
+                  height: 120,
+                  borderRadius: tokens.radius.xl,
+                  background: tokens.colors.bg.secondary,
+                  animation: 'pulse 1.5s ease-in-out infinite',
+                }}
+              />
+            ))}
+          </Box>
+        </Box>
+      </Box>
+    }>
+      <SettingsContent />
+    </Suspense>
   )
 }

@@ -1,0 +1,42 @@
+{
+  "platform": "nansen",
+  "market_type": "enrichment",
+  "leaderboard_endpoints": [],
+  "profile_endpoints": [
+    {
+      "url": "https://app.nansen.ai/api/public/wallet/{address}/labels",
+      "method": "GET",
+      "headers": {},
+      "response_path": "labels"
+    }
+  ],
+  "window_support": [],
+  "rate_limit_hint": {
+    "rpm": 5,
+    "concurrent": 1,
+    "delay_ms": 10000
+  },
+  "field_map": {
+    "roi_pct": "",
+    "pnl_usd": "",
+    "win_rate": "",
+    "max_drawdown": "",
+    "trades_count": "",
+    "followers": "",
+    "copiers": ""
+  },
+  "roi_sort_supported": false,
+  "roi_sort_method": "not_supported",
+  "proof": [
+    {
+      "url": "https://app.nansen.ai/api/public/wallet/0x1234567890abcdef1234567890abcdef12345678/labels",
+      "request_path": "/api/public/wallet/{address}/labels",
+      "method": "GET",
+      "response_fields_sample": {
+        "labels": ["Smart Money", "DEX Trader", "Whale"],
+        "name": "Smart Money Wallet"
+      },
+      "discovered_at": "2024-01-15T00:00:00Z"
+    }
+  ]
+}

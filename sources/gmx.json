@@ -1,0 +1,87 @@
+{
+  "platform": "gmx",
+  "market_type": "perp",
+  "leaderboard_endpoints": [
+    {
+      "url": "https://subgraph.satsuma-prod.com/3b2ced13c8d9/gmx/synthetics-arbitrum-stats/api",
+      "method": "POST",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "body_template": {
+        "query": "{ periodAccountStats(first: 100, orderBy: totalPnlAfterFees, orderDirection: desc, where: { period: \"total\", totalTrades_gt: 0 }) { id account totalPnlAfterFees totalCollateral totalTrades winCount lossCount maxCollateral timestamp } }"
+      },
+      "pagination": {
+        "type": "offset",
+        "page_size": 100,
+        "max_pages": 10,
+        "param_name": "first"
+      },
+      "response_path": "data.periodAccountStats"
+    },
+    {
+      "url": "https://arbitrum-api.gmxinfra.io/leaderboard/positions",
+      "method": "GET",
+      "headers": {},
+      "query_params": {
+        "period": "7d",
+        "limit": "100"
+      },
+      "pagination": {
+        "type": "offset",
+        "page_size": 100,
+        "max_pages": 1,
+        "param_name": "limit"
+      },
+      "response_path": "data",
+      "window_param": "period"
+    }
+  ],
+  "profile_endpoints": [
+    {
+      "url": "https://subgraph.satsuma-prod.com/3b2ced13c8d9/gmx/synthetics-arbitrum-stats/api",
+      "method": "POST",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "body_template": {
+        "query": "{ periodAccountStats(where: { account: \"\", period: \"total\" }, first: 1) { totalPnlAfterFees totalCollateral totalTrades winCount lossCount maxCollateral } }"
+      },
+      "response_path": "data.periodAccountStats"
+    }
+  ],
+  "window_support": ["7d", "30d", "90d"],
+  "rate_limit_hint": {
+    "rpm": 30,
+    "concurrent": 3,
+    "delay_ms": 2000
+  },
+  "field_map": {
+    "roi_pct": "_calculated_from_pnl_and_collateral",
+    "pnl_usd": "totalPnlAfterFees",
+    "win_rate": "_calculated_from_winCount_lossCount",
+    "max_drawdown": "",
+    "trades_count": "totalTrades",
+    "followers": "",
+    "copiers": ""
+  },
+  "roi_sort_supported": false,
+  "roi_sort_method": "ui_state",
+  "proof": [
+    {
+      "url": "https://subgraph.satsuma-prod.com/3b2ced13c8d9/gmx/synthetics-arbitrum-stats/api",
+      "request_path": "/3b2ced13c8d9/gmx/synthetics-arbitrum-stats/api",
+      "method": "POST",
+      "response_fields_sample": {
+        "data.periodAccountStats[0].account": "0x1234567890abcdef1234567890abcdef12345678",
+        "data.periodAccountStats[0].totalPnlAfterFees": "12345678901234567890123456789012",
+        "data.periodAccountStats[0].totalCollateral": "98765432109876543210987654321098",
+        "data.periodAccountStats[0].totalTrades": 156,
+        "data.periodAccountStats[0].winCount": 98,
+        "data.periodAccountStats[0].lossCount": 58,
+        "data.periodAccountStats[0].maxCollateral": "50000000000000000000000000000000"
+      },
+      "discovered_at": "2024-01-15T00:00:00Z"
+    }
+  ]
+}

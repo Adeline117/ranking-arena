@@ -428,16 +428,43 @@ export default function RankingTable(props: {
             ?
           </button>
         </Box>
-        <Text className="col-score" size="sm" weight="bold" color="tertiary" style={{ textAlign: 'center', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap', fontSize: '12px', alignItems: 'center', justifyContent: 'center' }}>
+        <Text
+          className="col-score"
+          size="sm"
+          weight="bold"
+          color="tertiary"
+          title={language === 'zh' ? 'Arena Score: 综合评分 (0-100)，收益+风险+稳定性加权' : 'Arena Score: Overall rating (0-100), weighted by return, risk & stability'}
+          style={{ textAlign: 'center', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap', fontSize: '12px', alignItems: 'center', justifyContent: 'center', cursor: 'help' }}
+        >
           Score
         </Text>
-        <Text size="sm" weight="bold" color="tertiary" style={{ textAlign: 'right', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap', fontSize: '12px' }}>
+        <Text
+          size="sm"
+          weight="bold"
+          color="tertiary"
+          title={language === 'zh' ? `ROI: 投资回报率 (${timeRange})，盈亏金额 / 本金` : `ROI: Return on Investment (${timeRange}), PnL / Principal`}
+          style={{ textAlign: 'right', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap', fontSize: '12px', cursor: 'help' }}
+        >
           ROI
         </Text>
-        <Text className="col-winrate" size="sm" weight="bold" color="tertiary" style={{ textAlign: 'right', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap', fontSize: '12px', alignItems: 'center', justifyContent: 'flex-end' }}>
+        <Text
+          className="col-winrate"
+          size="sm"
+          weight="bold"
+          color="tertiary"
+          title={language === 'zh' ? 'Win%: 胜率，盈利交易次数 / 总交易次数' : 'Win%: Win Rate, profitable trades / total trades'}
+          style={{ textAlign: 'right', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap', fontSize: '12px', alignItems: 'center', justifyContent: 'flex-end', cursor: 'help' }}
+        >
           Win%
         </Text>
-        <Text className="col-mdd" size="sm" weight="bold" color="tertiary" style={{ textAlign: 'right', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap', fontSize: '12px', alignItems: 'center', justifyContent: 'flex-end' }}>
+        <Text
+          className="col-mdd"
+          size="sm"
+          weight="bold"
+          color="tertiary"
+          title={language === 'zh' ? 'MDD: 最大回撤，峰值到谷底的最大跌幅' : 'MDD: Max Drawdown, largest peak-to-trough decline'}
+          style={{ textAlign: 'right', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap', fontSize: '12px', alignItems: 'center', justifyContent: 'flex-end', cursor: 'help' }}
+        >
           MDD
         </Text>
       </Box>

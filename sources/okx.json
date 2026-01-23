@@ -1,0 +1,141 @@
+[
+  {
+    "platform": "okx",
+    "market_type": "futures",
+    "leaderboard_endpoints": [
+      {
+        "url": "https://www.okx.com/priapi/v5/ecotrade/public/leader-board",
+        "method": "GET",
+        "headers": {
+          "Referer": "https://www.okx.com/copy-trading/leaderboard",
+          "Origin": "https://www.okx.com"
+        },
+        "query_params": {
+          "pageNo": "1",
+          "pageSize": "20",
+          "sortField": "pnlRatio",
+          "sortType": "desc",
+          "period": "7D"
+        },
+        "pagination": {
+          "type": "page",
+          "page_size": 20,
+          "max_pages": 5,
+          "param_name": "pageNo"
+        },
+        "response_path": "data.ranks",
+        "window_param": "period",
+        "sort_param": "sortField"
+      }
+    ],
+    "profile_endpoints": [
+      {
+        "url": "https://www.okx.com/priapi/v5/ecotrade/public/trader/detail",
+        "method": "GET",
+        "headers": {
+          "Origin": "https://www.okx.com"
+        },
+        "query_params": {
+          "uniqueName": "",
+          "period": "7D"
+        },
+        "response_path": "data"
+      }
+    ],
+    "window_support": ["7d", "30d", "90d"],
+    "rate_limit_hint": {
+      "rpm": 15,
+      "concurrent": 1,
+      "delay_ms": 4000
+    },
+    "field_map": {
+      "roi_pct": "pnlRatio",
+      "pnl_usd": "pnl",
+      "win_rate": "winRate",
+      "max_drawdown": "maxDrawdown",
+      "trades_count": "orderCount",
+      "followers": "followerCount",
+      "copiers": "copierCount"
+    },
+    "roi_sort_supported": true,
+    "roi_sort_method": "query_param",
+    "proof": [
+      {
+        "url": "https://www.okx.com/priapi/v5/ecotrade/public/leader-board?pageNo=1&pageSize=20&sortField=pnlRatio&sortType=desc&period=7D",
+        "request_path": "/priapi/v5/ecotrade/public/leader-board",
+        "method": "GET",
+        "response_fields_sample": {
+          "data.ranks[0].uniqueName": "okx_trader_alpha",
+          "data.ranks[0].nickName": "OKXMaster",
+          "data.ranks[0].pnlRatio": 0.6789,
+          "data.ranks[0].pnl": 34567.89,
+          "data.ranks[0].winRate": 0.73,
+          "data.ranks[0].maxDrawdown": 0.16,
+          "data.ranks[0].orderCount": 289,
+          "data.ranks[0].followerCount": 1800,
+          "data.ranks[0].copierCount": 720
+        },
+        "discovered_at": "2024-01-15T00:00:00Z"
+      }
+    ]
+  },
+  {
+    "platform": "okx_wallet",
+    "market_type": "web3",
+    "leaderboard_endpoints": [
+      {
+        "url": "https://www.okx.com/priapi/v5/wallet/public/leader-board",
+        "method": "GET",
+        "headers": {
+          "Origin": "https://www.okx.com",
+          "Referer": "https://www.okx.com/web3/dex/leaderboard"
+        },
+        "query_params": {
+          "period": "7D",
+          "pageNo": "1",
+          "pageSize": "50",
+          "chainId": "0"
+        },
+        "pagination": {
+          "type": "page",
+          "page_size": 50,
+          "max_pages": 1,
+          "param_name": "pageNo"
+        },
+        "response_path": "data.ranks",
+        "window_param": "period"
+      }
+    ],
+    "profile_endpoints": [],
+    "window_support": ["7d", "30d", "90d"],
+    "rate_limit_hint": {
+      "rpm": 10,
+      "concurrent": 1,
+      "delay_ms": 5000
+    },
+    "field_map": {
+      "roi_pct": "pnlRatio",
+      "pnl_usd": "pnl",
+      "win_rate": "winRate",
+      "max_drawdown": "maxDrawdown",
+      "trades_count": "",
+      "followers": "",
+      "copiers": ""
+    },
+    "roi_sort_supported": false,
+    "roi_sort_method": "not_supported",
+    "proof": [
+      {
+        "url": "https://www.okx.com/priapi/v5/wallet/public/leader-board?period=7D&pageNo=1&pageSize=50&chainId=0",
+        "request_path": "/priapi/v5/wallet/public/leader-board",
+        "method": "GET",
+        "response_fields_sample": {
+          "data.ranks[0].address": "0x1234567890abcdef1234567890abcdef12345678",
+          "data.ranks[0].pnlRatio": 0.45,
+          "data.ranks[0].pnl": 5678.90
+        },
+        "discovered_at": "2024-01-15T00:00:00Z"
+      }
+    ]
+  }
+]
