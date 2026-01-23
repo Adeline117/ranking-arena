@@ -229,7 +229,7 @@ export default function TraderDrawer({
           width: 'min(980px, 92vw)',
           background: tokens.colors.bg.primary,
           borderLeft: `1px solid ${tokens.colors.border.primary}`,
-          zIndex: 1001,
+          zIndex: tokens.zIndex.modal, // drawer 在 overlay 之上
           overflow: 'hidden',
           display: 'flex',
           flexDirection: 'column',
