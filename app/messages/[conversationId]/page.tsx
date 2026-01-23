@@ -10,7 +10,7 @@ import { Box, Text } from '@/app/components/base'
 import Avatar from '@/app/components/ui/Avatar'
 import { useToast } from '@/app/components/ui/Toast'
 import { getCsrfHeaders } from '@/lib/api/client'
-import { getProfileUrl } from '@/lib/utils/profile-navigation'
+import { getProfileUrl, getSafeProfileUrl } from '@/lib/utils/profile-navigation'
 import {
   MessageErrorCode,
   getAuthSession,
@@ -665,7 +665,7 @@ export default function ConversationPage({ params }: { params: { conversationId:
         </Link>
         
         {otherUser && (() => {
-          const profileUrl = getProfileUrl(otherUser)
+          const profileUrl = getSafeProfileUrl(otherUser, userId)
           const displayName = otherUser.handle || `User ${otherUser.id.slice(0, 8)}`
 
           if (!profileUrl) {
@@ -894,7 +894,7 @@ export default function ConversationPage({ params }: { params: { conversationId:
               
               // Show avatar for first message in a group from the other user
               const showOtherAvatar = !isMine && !isSameSenderAsPrev
-              const otherProfileUrl = !isMine ? getProfileUrl(otherUser) : null
+              const otherProfileUrl = !isMine ? getSafeProfileUrl(otherUser, userId) : null
 
               return (
                 <div
@@ -1122,12 +1122,12 @@ export default function ConversationPage({ params }: { params: { conversationId:
       )}
 
       {/* Settings Drawer */}
-      {otherUser && otherUser.handle && conversationId && accessToken && (
+      {otherUser && conversationId && accessToken && (
         <ChatSettingsDrawer
           isOpen={settingsOpen}
           onClose={() => setSettingsOpen(false)}
           conversationId={conversationId}
-          otherUser={{ id: otherUser.id, handle: otherUser.handle, avatar_url: otherUser.avatar_url ?? undefined, bio: otherUser.bio ?? undefined }}
+          otherUser={{ id: otherUser.id, handle: otherUser.handle || null, avatar_url: otherUser.avatar_url ?? undefined, bio: otherUser.bio ?? undefined }}
           accessToken={accessToken}
           onSettingsChange={(newSettings) => {
             setRemark(newSettings.remark)

@@ -5,24 +5,22 @@ import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { Box, Text } from '../base'
 
-type TabKey = 'overview' | 'stats' | 'portfolio' | 'discussion'
+type TabKey = 'overview' | 'stats' | 'portfolio'
 
 interface TraderTabsProps {
   activeTab: TabKey
   onTabChange: (tab: TabKey) => void
-  discussionCount?: number
 }
 
-export default function TraderTabs({ activeTab, onTabChange, discussionCount }: TraderTabsProps) {
-  const { t, language } = useLanguage()
+export default function TraderTabs({ activeTab, onTabChange }: TraderTabsProps) {
+  const { t } = useLanguage()
   const [indicatorStyle, setIndicatorStyle] = useState({ left: 0, width: 0 })
   const tabRefs = useRef<Map<TabKey, HTMLButtonElement>>(new Map())
 
-  const tabs: Array<{ key: TabKey; label: string; badge?: number }> = [
+  const tabs: Array<{ key: TabKey; label: string }> = [
     { key: 'overview', label: t('overview') },
     { key: 'stats', label: t('stats') },
     { key: 'portfolio', label: t('portfolio') },
-    { key: 'discussion', label: language === 'zh' ? '讨论' : 'Discussion', badge: discussionCount },
   ]
 
   // 更新指示器位置
@@ -115,32 +113,6 @@ export default function TraderTabs({ activeTab, onTabChange, discussionCount }: 
           >
             {tab.label}
           </Text>
-          {/* Badge for discussion count */}
-          {tab.badge !== undefined && tab.badge > 0 && (
-            <Box
-              style={{
-                background: activeTab === tab.key
-                  ? `${tokens.colors.accent.primary}30`
-                  : `${tokens.colors.text.tertiary}20`,
-                padding: `2px ${tokens.spacing[2]}`,
-                borderRadius: tokens.radius.full,
-                minWidth: 20,
-                textAlign: 'center',
-              }}
-            >
-              <Text
-                size="xs"
-                weight="bold"
-                style={{
-                  color: activeTab === tab.key
-                    ? tokens.colors.accent.primary
-                    : tokens.colors.text.tertiary,
-                }}
-              >
-                {tab.badge > 99 ? '99+' : tab.badge}
-              </Text>
-            </Box>
-          )}
         </button>
       ))}
       

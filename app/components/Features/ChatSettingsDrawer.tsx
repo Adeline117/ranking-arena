@@ -6,6 +6,7 @@ import { Box, Text } from '@/app/components/base'
 import Avatar from '@/app/components/ui/Avatar'
 import { useToast } from '@/app/components/ui/Toast'
 import { getCsrfHeaders } from '@/lib/api/client'
+import { getProfileUrl } from '@/lib/utils/profile-navigation'
 
 type ChatSettings = {
   remark: string | null
@@ -17,7 +18,7 @@ type ChatSettings = {
 
 type OtherUser = {
   id: string
-  handle: string
+  handle: string | null
   avatar_url?: string
   bio?: string
 }
@@ -237,15 +238,15 @@ export default function ChatSettingsDrawer({
             >
               <Avatar
                 userId={otherUser.id}
-                name={otherUser.handle}
+                name={otherUser.handle || `User ${otherUser.id.slice(0, 8)}`}
                 avatarUrl={otherUser.avatar_url}
                 size={72}
               />
               <Box style={{ textAlign: 'center' }}>
                 <Text size="lg" weight="bold">
-                  {settings.remark || otherUser.handle}
+                  {settings.remark || otherUser.handle || `User ${otherUser.id.slice(0, 8)}`}
                 </Text>
-                {settings.remark && (
+                {settings.remark && otherUser.handle && (
                   <Text size="xs" color="tertiary" style={{ marginTop: 2 }}>
                     @{otherUser.handle}
                   </Text>
@@ -403,16 +404,21 @@ export default function ChatSettingsDrawer({
               />
 
               {/* View Profile */}
-              <SettingsButton
-                icon={
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                    <circle cx="12" cy="7" r="4" />
-                  </svg>
-                }
-                label="查看主页"
-                onClick={() => { window.location.href = `/u/${otherUser.handle}` }}
-              />
+              {(() => {
+                const profileUrl = getProfileUrl(otherUser)
+                return profileUrl ? (
+                  <SettingsButton
+                    icon={
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                        <circle cx="12" cy="7" r="4" />
+                      </svg>
+                    }
+                    label="查看主页"
+                    onClick={() => { window.location.href = profileUrl }}
+                  />
+                ) : null
+              })()}
 
               <Box style={{ height: 1, background: tokens.colors.border.primary, margin: `${tokens.spacing[2]} ${tokens.spacing[4]}` }} />
 

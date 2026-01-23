@@ -12,6 +12,7 @@ import { CategoryType, filterByCategory } from '../ranking/CategoryRankingTabs'
 import { useSubscription } from './hooks/useSubscription'
 import { useLanguage } from '../Providers/LanguageProvider'
 import DataFreshnessIndicator from '../ui/DataFreshnessIndicator'
+import { CreateSnapshotButton } from '../snapshot'
 
 interface RankingSectionProps {
   traders: Trader[]
@@ -110,15 +111,32 @@ export default function RankingSection({
           onChange={onTimeRangeChange}
           disabled={loading}
         />
-        {/* 数据新鲜度指示器 */}
-        {!loading && (
-          <DataFreshnessIndicator
-            lastUpdated={lastUpdated}
-            updateTier="standard"
-            showDetails={true}
-            size="sm"
-          />
-        )}
+        <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3] }}>
+          {/* 快照分享按钮 */}
+          {!loading && isLoggedIn && (
+            <CreateSnapshotButton
+              timeRange={activeTimeRange}
+              onSuccess={(snapshot) => {
+                const url = snapshot.shareUrl || `${window.location.origin}/s/${snapshot.shareToken}`
+                navigator.clipboard.writeText(url).then(() => {
+                  showToast(language === 'zh' ? '快照已创建，链接已复制' : 'Snapshot created, link copied', 'success')
+                }).catch(() => {
+                  showToast(language === 'zh' ? `快照已创建: ${url}` : `Snapshot created: ${url}`, 'success')
+                })
+              }}
+              disabled={loading || traders.length === 0}
+            />
+          )}
+          {/* 数据新鲜度指示器 */}
+          {!loading && (
+            <DataFreshnessIndicator
+              lastUpdated={lastUpdated}
+              updateTier="standard"
+              showDetails={true}
+              size="sm"
+            />
+          )}
+        </Box>
       </Box>
       
       <RankingTable
