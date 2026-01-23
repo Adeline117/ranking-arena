@@ -10,6 +10,7 @@ import { Box, Text } from '@/app/components/base'
 import Avatar from '@/app/components/ui/Avatar'
 import { useToast } from '@/app/components/ui/Toast'
 import { getCsrfHeaders } from '@/lib/api/client'
+import { useAuthSession } from '@/lib/hooks/useAuthSession'
 
 type MessageStatus = 'sending' | 'sent' | 'failed'
 
@@ -34,11 +35,9 @@ type OtherUser = {
 export default function ConversationPage({ params }: { params: { conversationId: string } | Promise<{ conversationId: string }> }) {
   const router = useRouter()
   const { showToast } = useToast()
+  // --- Unified Auth (Single Source of Truth) ---
+  const { email, userId, accessToken, isLoggedIn, authChecked, getAuthHeaders, categorizeError } = useAuthSession()
   const [conversationId, setConversationId] = useState<string>('')
-  const [email, setEmail] = useState<string | null>(null)
-  const [userId, setUserId] = useState<string | null>(null)
-  const [accessToken, setAccessToken] = useState<string | null>(null) // 添加 access token
-  const [authChecked, setAuthChecked] = useState(false) // 追踪认证检查是否完成
   const [messages, setMessages] = useState<Message[]>([])
   const [otherUser, setOtherUser] = useState<OtherUser | null>(null)
   const [loading, setLoading] = useState(true)
@@ -70,19 +69,14 @@ export default function ConversationPage({ params }: { params: { conversationId:
     }
   }, [params])
 
-  // 使用 getSession 代替 getUser，更可靠地检查认证状态
+  // Load messages when auth is ready and conversationId is available
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setEmail(data.session?.user?.email ?? null)
-      setUserId(data.session?.user?.id ?? null)
-      setAccessToken(data.session?.access_token ?? null) // 保存 access token
-      setAuthChecked(true) // 认证检查完成
-      
-      if (data.session?.user?.id && data.session?.access_token && conversationId) {
-        loadMessages(data.session.user.id, conversationId, data.session.access_token)
-      }
-    })
-  }, [conversationId])
+    if (authChecked && userId && accessToken && conversationId) {
+      loadMessages(userId, conversationId, accessToken)
+    } else if (authChecked && !userId) {
+      setLoading(false)
+    }
+  }, [authChecked, userId, accessToken, conversationId])
 
   // 滚动到底部
   const scrollToBottom = () => {
@@ -176,6 +170,18 @@ export default function ConversationPage({ params }: { params: { conversationId:
   const handleSend = async () => {
     if (!newMessage.trim() || !userId || !otherUser || sending) return
 
+    // Verify auth before sending
+    if (!isLoggedIn) {
+      showToast('请先登录', 'warning')
+      return
+    }
+
+    const authHeaders = getAuthHeaders()
+    if (!authHeaders) {
+      showToast('登录已过期，请重新登录', 'warning')
+      return
+    }
+
     const content = newMessage.trim()
     if (content.length > 2000) {
       showToast('消息内容过长，最多2000字符', 'warning')
@@ -194,7 +200,7 @@ export default function ConversationPage({ params }: { params: { conversationId:
       _tempId: tempId,
     }
 
-    // Optimistic: show message immediately
+    // Optimistic: show message immediately with "sending" state
     setMessages(prev => [...prev, optimisticMessage])
     setNewMessage('')
     inputRef.current?.focus()
@@ -205,6 +211,7 @@ export default function ConversationPage({ params }: { params: { conversationId:
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...authHeaders,
           ...getCsrfHeaders()
         },
         body: JSON.stringify({
@@ -217,27 +224,39 @@ export default function ConversationPage({ params }: { params: { conversationId:
       const data = await res.json()
 
       if (!res.ok) {
-        // Mark as failed
+        // Mark as failed with specific reason
         setMessages(prev => prev.map(m =>
           m._tempId === tempId ? { ...m, _status: 'failed' as MessageStatus } : m
         ))
-        showToast(data.error || '发送失败', 'error')
+
+        // Categorize and display specific error
+        const authError = categorizeError(res.status, data)
+        if (authError) {
+          showToast(authError.message, 'error')
+        } else if (res.status === 403 && data.limit_reached) {
+          showToast(data.error || '消息发送数量已达上限', 'warning')
+        } else if (res.status === 403) {
+          showToast(data.error || '对方已关闭私信功能', 'warning')
+        } else if (res.status === 404) {
+          showToast(data.error || '用户不存在', 'error')
+        } else {
+          showToast(data.error || '发送失败', 'error')
+        }
         return
       }
 
       if (data.message) {
-        // Replace optimistic message with server-confirmed message
+        // Server ACK: replace optimistic with confirmed message
         setMessages(prev => prev.map(m =>
           m._tempId === tempId ? { ...data.message, _status: 'sent' as MessageStatus } : m
         ))
       }
     } catch (error) {
       console.error('Error sending message:', error)
-      // Mark as failed
       setMessages(prev => prev.map(m =>
         m._tempId === tempId ? { ...m, _status: 'failed' as MessageStatus } : m
       ))
-      showToast('发送失败，点击消息重试', 'error')
+      showToast('网络错误，点击消息重试', 'error')
     } finally {
       setSending(false)
     }
@@ -245,6 +264,12 @@ export default function ConversationPage({ params }: { params: { conversationId:
 
   const handleRetry = async (failedMsg: Message) => {
     if (!userId || !otherUser) return
+
+    const authHeaders = getAuthHeaders()
+    if (!authHeaders) {
+      showToast('登录已过期，请重新登录', 'warning')
+      return
+    }
 
     // Update status to sending
     setMessages(prev => prev.map(m =>
@@ -256,6 +281,7 @@ export default function ConversationPage({ params }: { params: { conversationId:
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...authHeaders,
           ...getCsrfHeaders()
         },
         body: JSON.stringify({
@@ -271,7 +297,9 @@ export default function ConversationPage({ params }: { params: { conversationId:
         setMessages(prev => prev.map(m =>
           m.id === failedMsg.id ? { ...m, _status: 'failed' as MessageStatus } : m
         ))
-        showToast(data.error || '重试失败', 'error')
+        // Show specific error reason
+        const authError = categorizeError(res.status, data)
+        showToast(authError?.message || data.error || '重试失败', 'error')
         return
       }
 
@@ -284,7 +312,7 @@ export default function ConversationPage({ params }: { params: { conversationId:
       setMessages(prev => prev.map(m =>
         m.id === failedMsg.id ? { ...m, _status: 'failed' as MessageStatus } : m
       ))
-      showToast('重试失败', 'error')
+      showToast('网络错误，请重试', 'error')
     }
   }
 

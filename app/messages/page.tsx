@@ -9,6 +9,7 @@ import TopNav from '@/app/components/layout/TopNav'
 import { Box, Text } from '@/app/components/base'
 import Avatar from '@/app/components/ui/Avatar'
 import { useToast } from '@/app/components/ui/Toast'
+import { useAuthSession } from '@/lib/hooks/useAuthSession'
 
 type Conversation = {
   id: string
@@ -26,38 +27,39 @@ type Conversation = {
 export default function MessagesPage() {
   const router = useRouter()
   const { showToast } = useToast()
-  const [email, setEmail] = useState<string | null>(null)
-  const [userId, setUserId] = useState<string | null>(null)
+  // --- Unified Auth (Single Source of Truth) ---
+  const { email, userId, isLoggedIn, authChecked, getAuthHeaders } = useAuthSession()
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [loading, setLoading] = useState(true)
-  const [authChecked, setAuthChecked] = useState(false) // 追踪认证检查是否完成
-  const [orphanUnreadCount, setOrphanUnreadCount] = useState(0) // 孤立的未读消息数
-  const [clearingOrphans, setClearingOrphans] = useState(false) // 清除孤立消息的loading状态
+  const [orphanUnreadCount, setOrphanUnreadCount] = useState(0)
+  const [clearingOrphans, setClearingOrphans] = useState(false)
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
 
-  // 加载会话列表
+  // 加载会话列表 (with auth headers)
   const loadConversations = useCallback(async (uid: string) => {
     try {
       setLoading(true)
-      const res = await fetch(`/api/conversations?userId=${uid}`)
+      const headers: Record<string, string> = {}
+      const authHeaders = getAuthHeaders()
+      if (authHeaders) Object.assign(headers, authHeaders)
+
+      const res = await fetch(`/api/conversations?userId=${uid}`, { headers })
       const data = await res.json()
-      
+
       if (data.conversations) {
         setConversations(data.conversations)
-        
-        // 检查是否有孤立的未读消息（不属于任何会话）
+
+        // Check for orphan unread messages
         const conversationUnreadTotal = data.conversations.reduce(
           (sum: number, c: Conversation) => sum + c.unread_count, 0
         )
-        
-        // 获取总的未读私信数
+
         const { count: totalUnread } = await supabase
           .from('direct_messages')
           .select('*', { count: 'exact', head: true })
           .eq('receiver_id', uid)
           .eq('read', false)
-        
-        // 如果总未读数大于会话中的未读数，说明有孤立消息
+
         const orphanCount = (totalUnread || 0) - conversationUnreadTotal
         setOrphanUnreadCount(orphanCount > 0 ? orphanCount : 0)
       }
@@ -67,39 +69,16 @@ export default function MessagesPage() {
     } finally {
       setLoading(false)
     }
-  }, [showToast])
+  }, [showToast, getAuthHeaders])
 
-  // 监听 auth state 变化，确保在 session 恢复后正确获取用户信息
+  // Load conversations when auth is ready
   useEffect(() => {
-    // 首先获取当前 session
-    supabase.auth.getSession().then(({ data }) => {
-      if (data.session?.user) {
-        setEmail(data.session.user.email ?? null)
-        setUserId(data.session.user.id)
-        loadConversations(data.session.user.id)
-      }
-      setAuthChecked(true)
-    })
-
-    // 监听 auth 状态变化（处理 session 恢复的情况）
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (session?.user) {
-        setEmail(session.user.email ?? null)
-        setUserId(session.user.id)
-        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-          loadConversations(session.user.id)
-        }
-      } else if (event === 'SIGNED_OUT') {
-        setUserId(null)
-        setEmail(null)
-      }
-      setAuthChecked(true)
-    })
-
-    return () => {
-      subscription.unsubscribe()
+    if (authChecked && userId) {
+      loadConversations(userId)
+    } else if (authChecked && !userId) {
+      setLoading(false)
     }
-  }, [loadConversations])
+  }, [authChecked, userId, loadConversations])
 
   // 订阅实时消息更新
   useEffect(() => {
