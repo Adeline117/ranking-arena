@@ -1,6 +1,9 @@
 /**
  * 会话列表 API
  * GET: 获取当前用户的所有会话（需要认证）
+ *
+ * SECURITY: Uses withAuth middleware which derives userId from authenticated session,
+ * preventing users from accessing other users' conversation lists.
  */
 
 import { NextResponse } from 'next/server'

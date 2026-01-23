@@ -604,13 +604,19 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
             user_reaction: result.reaction,
           } : null)
         }
+      } else {
+        // FIX: Show error toast when API returns error
+        const errorMsg = json.error || json.message || '操作失败'
+        showToast(errorMsg, 'error')
       }
     } catch (err) {
-      // 错误已在 showToast 中处理
+      // FIX: Show error toast for network/unexpected errors
+      console.error('[PostFeed] toggleReaction error:', err)
+      showToast('网络错误，请重试', 'error')
     } finally {
       setTimeout(() => processingRef.current.delete(key), 300)
     }
-  }, [accessToken, openPost?.id])
+  }, [accessToken, openPost?.id, showToast])
 
   // 投票
   const toggleVote = useCallback(async (postId: string, choice: PollChoice) => {
@@ -662,13 +668,19 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
             user_vote: result.vote,
           } : null)
         }
+      } else {
+        // FIX: Show error toast when API returns error
+        const errorMsg = json.error || json.message || '投票失败'
+        showToast(errorMsg, 'error')
       }
     } catch (err) {
-      // 错误已在 showToast 中处理
+      // FIX: Show error toast for network/unexpected errors
+      console.error('[PostFeed] toggleVote error:', err)
+      showToast('网络错误，请重试', 'error')
     } finally {
       setTimeout(() => processingRef.current.delete(key), 300)
     }
-  }, [accessToken, openPost?.id])
+  }, [accessToken, openPost?.id, showToast])
 
   // 加载自定义投票
   const loadCustomPoll = useCallback(async (postId: string) => {
