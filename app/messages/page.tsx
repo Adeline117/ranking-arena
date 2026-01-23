@@ -9,6 +9,7 @@ import TopNav from '@/app/components/layout/TopNav'
 import { Box, Text } from '@/app/components/base'
 import Avatar from '@/app/components/ui/Avatar'
 import { useToast } from '@/app/components/ui/Toast'
+import { getAuthSession, refreshAuthToken } from '@/lib/auth/client'
 
 type Conversation = {
   id: string
@@ -39,9 +40,36 @@ export default function MessagesPage() {
   const loadConversations = useCallback(async (uid: string) => {
     try {
       setLoading(true)
-      const res = await fetch(`/api/conversations?userId=${uid}`)
+
+      // 获取有效的 auth token
+      let auth = await getAuthSession()
+      if (!auth) {
+        auth = await refreshAuthToken()
+        if (!auth) return // 未登录，不加载
+      }
+
+      const res = await fetch('/api/conversations', {
+        headers: { 'Authorization': `Bearer ${auth.accessToken}` },
+      })
+
+      // 如果 401，尝试刷新 token 后重试
+      if (res.status === 401) {
+        const refreshed = await refreshAuthToken()
+        if (refreshed) {
+          const retryRes = await fetch('/api/conversations', {
+            headers: { 'Authorization': `Bearer ${refreshed.accessToken}` },
+          })
+          const retryData = await retryRes.json()
+          if (retryRes.ok && retryData.conversations) {
+            setConversations(retryData.conversations)
+            return
+          }
+        }
+        return
+      }
+
       const data = await res.json()
-      
+
       if (data.conversations) {
         setConversations(data.conversations)
         

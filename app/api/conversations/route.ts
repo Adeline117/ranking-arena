@@ -4,26 +4,24 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
 
 export const dynamic = 'force-dynamic'
 
-const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
-
 export async function GET(request: NextRequest) {
   try {
-    const userId = request.nextUrl.searchParams.get('userId')
-
-    if (!userId) {
-      return NextResponse.json({ error: 'Missing userId' }, { status: 400 })
+    // 验证用户身份
+    const user = await getAuthUser(request)
+    if (!user) {
+      return NextResponse.json(
+        { error: '请先登录', error_code: 'NOT_AUTHENTICATED' },
+        { status: 401 }
+      )
     }
 
-    if (!SUPABASE_URL || !SUPABASE_KEY) {
-      return NextResponse.json({ error: 'Missing Supabase config' }, { status: 500 })
-    }
+    const userId = user.id // 使用认证用户的 ID
 
-    const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
+    const supabase = getSupabaseAdmin()
 
     // 获取用户的所有会话
     const { data: conversations, error } = await supabase
@@ -50,7 +48,7 @@ export async function GET(request: NextRequest) {
 
     // 获取每个会话中另一方用户的信息和未读消息数
     const enhancedConversations = await Promise.all(
-      (conversations || []).map(async (conv: any) => {
+      (conversations || []).map(async (conv: { id: string; user1_id: string; user2_id: string; last_message_at: string; last_message_preview: string | null; created_at: string }) => {
         const otherUserId = conv.user1_id === userId ? conv.user2_id : conv.user1_id
 
         // 获取另一方用户信息
