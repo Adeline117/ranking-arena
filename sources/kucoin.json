@@ -1,0 +1,52 @@
+{
+  "platform": "kucoin",
+  "market_types": ["futures"],
+  "futures": {
+    "leaderboard_endpoints": [
+      {
+        "method": "GET",
+        "url": "https://www.kucoin.com/_api/copy-trade/leader/public/list",
+        "type": "api",
+        "params": {
+          "pageNo": 1,
+          "pageSize": 20,
+          "orderBy": "ROI",
+          "period": "THIRTY_DAY"
+        },
+        "notes": "period: SEVEN_DAY, THIRTY_DAY, NINETY_DAY. orderBy: ROI, PNL, FOLLOWERS"
+      }
+    ],
+    "profile_endpoints": [
+      {
+        "method": "GET",
+        "url": "https://www.kucoin.com/_api/copy-trade/leader/public/detail?uid={trader_key}",
+        "type": "api"
+      }
+    ],
+    "trader_key_field": "uid",
+    "roi_sort_supported": true,
+    "roi_sort_mechanism": "platform_native",
+    "roi_sort_param": "orderBy=ROI (returns DESC)",
+    "window_support": {
+      "7d": { "supported": true, "param": "period=SEVEN_DAY" },
+      "30d": { "supported": true, "param": "period=THIRTY_DAY" },
+      "90d": { "supported": true, "param": "period=NINETY_DAY" }
+    },
+    "field_map": {
+      "uid": "trader_key",
+      "nickName": "display_name",
+      "avatar": "avatar_url",
+      "roi": "roi (percentage)",
+      "totalPnl": "pnl",
+      "winRate": "win_rate",
+      "maxDrawdown": "max_drawdown",
+      "followerCount": "followers",
+      "currentCopyCount": "copiers"
+    },
+    "rate_limits": {
+      "estimated_rpm": 15,
+      "cloudflare_protected": true,
+      "notes": "CF protected, moderate limits"
+    }
+  }
+}

@@ -1,0 +1,54 @@
+{
+  "platform": "okx_wallet",
+  "market_types": ["web3"],
+  "type": "enrichment",
+  "notes": "OKX Wallet is NOT a traditional leaderboard. It provides wallet-level PnL for connected addresses. The 'trader' concept maps to wallet addresses. This is used for enrichment/cross-reference only.",
+  "web3": {
+    "leaderboard_endpoints": [
+      {
+        "method": "GET",
+        "url": "https://www.okx.com/priapi/v1/wallet/discover/hot-wallets",
+        "type": "api",
+        "params": {
+          "chain": "arbitrum",
+          "period": "30d"
+        },
+        "notes": "Returns hot wallets by activity/PnL. NOT a traditional trader leaderboard. Concept mismatch: wallets ≠ traders."
+      }
+    ],
+    "profile_endpoints": [
+      {
+        "method": "GET",
+        "url": "https://www.okx.com/priapi/v1/wallet/address/{address}/summary",
+        "type": "api",
+        "notes": "Wallet summary: balance, token holdings, DeFi positions"
+      }
+    ],
+    "trader_key_field": "address (0x...)",
+    "roi_sort_supported": false,
+    "roi_sort_mechanism": "not_applicable",
+    "roi_sort_notes": "OKX Wallet does not have ROI-based sorting. It tracks wallet-level metrics. ROI computation would require historical balance snapshots which are not reliably available.",
+    "window_support": {
+      "7d": { "supported": false, "reason": "OKX Wallet hot wallets endpoint does not provide windowed ROI data. It shows current state." },
+      "30d": { "supported": false, "reason": "Same as above" },
+      "90d": { "supported": false, "reason": "Same as above" }
+    },
+    "degradation_strategy": {
+      "approach": "enrichment_only",
+      "description": "OKX Wallet data is used ONLY to enrich existing traders found on other platforms. It does NOT generate its own leaderboard. When a trader's on-chain address is known, we fetch wallet data to add DeFi position context.",
+      "mapping": "If a trader on Bybit/OKX also has a linked wallet address, we fetch OKX Wallet data and attach as enrichment_data in trader_profiles.provenance"
+    },
+    "field_map": {
+      "address": "trader_key (if cross-referenced)",
+      "balance": "supplementary: total wallet balance",
+      "tokenHoldings": "supplementary: token portfolio",
+      "defiPositions": "supplementary: DeFi protocol usage"
+    },
+    "missing_fields": ["roi", "pnl", "win_rate", "max_drawdown", "followers", "copiers"],
+    "missing_reason": "OKX Wallet is not a trading leaderboard. It provides wallet analytics, not trading performance metrics.",
+    "rate_limits": {
+      "estimated_rpm": 15,
+      "cloudflare_protected": true
+    }
+  }
+}

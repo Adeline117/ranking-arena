@@ -1,0 +1,65 @@
+{
+  "platform": "dune",
+  "type": "enrichment",
+  "notes": "Dune Analytics provides SQL-queryable blockchain data. It does NOT have a built-in trader leaderboard. We use pre-built or custom queries to derive on-chain trader metrics. Used as enrichment data source.",
+  "leaderboard_endpoints": [],
+  "has_leaderboard": false,
+  "enrichment_endpoints": [
+    {
+      "method": "POST",
+      "url": "https://api.dune.com/api/v1/query/{query_id}/execute",
+      "type": "api",
+      "auth": "API key required (free tier available)",
+      "notes": "Execute a saved Dune query. We pre-create queries for each DEX platform."
+    },
+    {
+      "method": "GET",
+      "url": "https://api.dune.com/api/v1/query/{query_id}/results",
+      "type": "api",
+      "auth": "API key required",
+      "notes": "Get results of executed query. Polling needed for large queries."
+    }
+  ],
+  "pre_built_queries": {
+    "gmx_top_traders": {
+      "description": "Top GMX traders by realized PnL in last N days",
+      "query_template": "SELECT account, SUM(realized_pnl) as total_pnl, COUNT(*) as trades FROM gmx_v2_arbitrum.trades WHERE block_time > NOW() - INTERVAL '{days} days' GROUP BY account ORDER BY total_pnl DESC LIMIT 500"
+    },
+    "hyperliquid_trader_stats": {
+      "description": "Hyperliquid trader PnL by address",
+      "query_template": "SELECT user_address, SUM(pnl) as total_pnl FROM hyperliquid.trades WHERE block_time > NOW() - INTERVAL '{days} days' GROUP BY user_address ORDER BY total_pnl DESC"
+    },
+    "wallet_activity": {
+      "description": "General wallet activity metrics",
+      "query_template": "SELECT address, COUNT(DISTINCT protocol) as protocols_used, SUM(value_usd) as total_volume FROM crosschain.transactions WHERE from_address = '{address}' AND block_time > NOW() - INTERVAL '90 days' GROUP BY address"
+    }
+  },
+  "trader_key_field": "address (0x...)",
+  "roi_sort_supported": false,
+  "roi_sort_mechanism": "not_applicable",
+  "window_support": {
+    "7d": { "supported": false, "reason": "Dune is not a leaderboard. Query-based enrichment only." },
+    "30d": { "supported": false, "reason": "Same" },
+    "90d": { "supported": false, "reason": "Same" }
+  },
+  "enrichment_use_cases": [
+    "Cross-validate DEX trader PnL with on-chain data",
+    "Compute historical drawdown from trade-level data",
+    "Identify multi-protocol traders",
+    "Calculate on-chain volume metrics",
+    "Verify claimed performance against actual transactions"
+  ],
+  "field_map": {
+    "total_pnl": "cross-reference with platform-reported PnL",
+    "trade_count": "trades_count enrichment",
+    "protocols_used": "trader_profiles.tags (multi-protocol badge)"
+  },
+  "rate_limits": {
+    "api_key_required": true,
+    "free_tier": "10 queries/day, 250 rows/result",
+    "plus_tier": "1000 queries/month, 25k rows",
+    "notes": "Query execution takes 10-60s depending on complexity"
+  },
+  "cost": "Free tier available. Plus: $349/mo. Enterprise: custom.",
+  "implementation_priority": "Phase 4 - enrichment layer after core leaderboards work"
+}

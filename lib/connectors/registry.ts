@@ -95,13 +95,35 @@ export const connectorRegistry = new ConnectorRegistry()
 export async function initializeConnectors(): Promise<void> {
   // Dynamic imports to avoid circular dependencies and allow tree-shaking
   const { BinanceFuturesConnector } = await import('./platforms/binance-futures')
+  const { BybitFuturesConnector } = await import('./platforms/bybit-futures')
+  const { BitgetFuturesConnector } = await import('./platforms/bitget-futures')
+  const { MexcFuturesConnector } = await import('./platforms/mexc-futures')
+  const { CoinexFuturesConnector } = await import('./platforms/coinex-futures')
+  const { OkxFuturesConnector } = await import('./platforms/okx-futures')
+  const { KucoinFuturesConnector } = await import('./platforms/kucoin-futures')
+  const { BitmartFuturesConnector } = await import('./platforms/bitmart-futures')
+  const { PhemexFuturesConnector } = await import('./platforms/phemex-futures')
+  const { HtxFuturesConnector } = await import('./platforms/htx-futures')
+  const { WeexFuturesConnector } = await import('./platforms/weex-futures')
+  const { HyperliquidPerpConnector } = await import('./platforms/hyperliquid-perp')
+  const { DydxPerpConnector } = await import('./platforms/dydx-perp')
+  const { GmxPerpConnector } = await import('./platforms/gmx-perp')
 
+  // CEX Connectors
   connectorRegistry.register(new BinanceFuturesConnector())
+  connectorRegistry.register(new BybitFuturesConnector())
+  connectorRegistry.register(new BitgetFuturesConnector())
+  connectorRegistry.register(new MexcFuturesConnector())
+  connectorRegistry.register(new CoinexFuturesConnector())
+  connectorRegistry.register(new OkxFuturesConnector())
+  connectorRegistry.register(new KucoinFuturesConnector())
+  connectorRegistry.register(new BitmartFuturesConnector())
+  connectorRegistry.register(new PhemexFuturesConnector())
+  connectorRegistry.register(new HtxFuturesConnector())
+  connectorRegistry.register(new WeexFuturesConnector())
 
-  // Future connectors will be registered here as they are implemented:
-  // connectorRegistry.register(new BinanceSpotConnector())
-  // connectorRegistry.register(new BybitFuturesConnector())
-  // connectorRegistry.register(new BitgetFuturesConnector())
-  // connectorRegistry.register(new MexcFuturesConnector())
-  // etc.
+  // DEX Connectors
+  connectorRegistry.register(new HyperliquidPerpConnector())
+  connectorRegistry.register(new DydxPerpConnector())
+  connectorRegistry.register(new GmxPerpConnector())
 }

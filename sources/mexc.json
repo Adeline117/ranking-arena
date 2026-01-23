@@ -1,0 +1,56 @@
+{
+  "platform": "mexc",
+  "market_types": ["futures"],
+  "futures": {
+    "leaderboard_endpoints": [
+      {
+        "method": "GET",
+        "url": "https://futures.mexc.com/api/v1/private/account/assets/copy-trading/trader/list",
+        "type": "api",
+        "params": {
+          "page": 1,
+          "pageSize": 20,
+          "sortField": "yield",
+          "sortType": "DESC",
+          "timeType": 2
+        },
+        "notes": "sortField: yield=ROI, pnl=PnL. timeType: 1=7D, 2=30D, 3=90D"
+      }
+    ],
+    "profile_endpoints": [
+      {
+        "method": "GET",
+        "url": "https://futures.mexc.com/api/v1/private/account/assets/copy-trading/trader/detail?uid={trader_key}",
+        "type": "api"
+      }
+    ],
+    "trader_key_field": "uid",
+    "roi_sort_supported": true,
+    "roi_sort_mechanism": "platform_native",
+    "roi_sort_param": "sortField=yield&sortType=DESC",
+    "window_support": {
+      "7d": { "supported": true, "param": "timeType=1" },
+      "30d": { "supported": true, "param": "timeType=2" },
+      "90d": { "supported": true, "param": "timeType=3" }
+    },
+    "field_map": {
+      "uid": "trader_key",
+      "nickname": "display_name",
+      "avatar": "avatar_url",
+      "yield": "roi (percentage)",
+      "pnl": "pnl (USD)",
+      "winRate": "win_rate",
+      "maxRetrace": "max_drawdown",
+      "followerCount": "followers",
+      "copyCount": "copiers",
+      "aum": "aum"
+    },
+    "rate_limits": {
+      "estimated_rpm": 15,
+      "cloudflare_protected": true,
+      "notes": "Moderate rate limiting, CF protection"
+    },
+    "missing_fields": ["sharpe_ratio", "sortino_ratio"],
+    "missing_reason": "MEXC does not provide risk-adjusted ratios in leaderboard API"
+  }
+}

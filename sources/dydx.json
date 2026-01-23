@@ -1,0 +1,67 @@
+{
+  "platform": "dydx",
+  "market_types": ["perp"],
+  "perp": {
+    "leaderboard_endpoints": [
+      {
+        "method": "GET",
+        "url": "https://indexer.dydx.trade/v4/leaderboard/pnl?period=PERIOD_30D&limit=100&startingBeforeOrAt={timestamp}",
+        "type": "api",
+        "notes": "v4 indexer API. period: PERIOD_7D, PERIOD_30D, PERIOD_90D, PERIOD_1Y. Returns pnlRanking array sorted by PnL DESC. ROI sort requires client-side computation."
+      },
+      {
+        "method": "GET",
+        "url": "https://indexer.dydx.trade/v4/addresses/{address}/subaccounts",
+        "type": "api",
+        "notes": "Get subaccount details for equity/balance"
+      }
+    ],
+    "profile_endpoints": [
+      {
+        "method": "GET",
+        "url": "https://indexer.dydx.trade/v4/addresses/{trader_key}/subaccounts/0",
+        "type": "api",
+        "notes": "Subaccount 0 is primary"
+      },
+      {
+        "method": "GET",
+        "url": "https://indexer.dydx.trade/v4/fills?address={trader_key}&subaccountNumber=0&limit=100",
+        "type": "api"
+      }
+    ],
+    "trader_key_field": "dydx1... address (bech32) or 0x... (evm)",
+    "roi_sort_supported": false,
+    "roi_sort_mechanism": "arena_computed",
+    "roi_sort_notes": "dYdX v4 leaderboard sorts by absolute PnL (not ROI). We fetch PnL-sorted data, compute ROI from equity, then re-sort by ROI.",
+    "window_support": {
+      "7d": { "supported": true, "param": "period=PERIOD_7D" },
+      "30d": { "supported": true, "param": "period=PERIOD_30D" },
+      "90d": { "supported": true, "param": "period=PERIOD_90D" }
+    },
+    "field_map": {
+      "address": "trader_key",
+      "pnl": "pnl (USD, from leaderboard endpoint)",
+      "equity": "derived: used to compute ROI = pnl/equity_at_start",
+      "currentEquity": "from subaccount endpoint"
+    },
+    "missing_fields": ["win_rate", "followers", "copiers", "aum", "display_name", "avatar_url"],
+    "missing_reason": "dYdX v4 is a decentralized exchange. No copy trading, no user profiles. Addresses are pseudonymous. Win rate and drawdown computed from fills/subaccount history.",
+    "timeseries_endpoints": [
+      {
+        "method": "GET",
+        "url": "https://indexer.dydx.trade/v4/historical-pnl?address={trader_key}&subaccountNumber=0&limit=90",
+        "notes": "Daily PnL history for equity curve construction"
+      }
+    ],
+    "rate_limits": {
+      "estimated_rpm": 60,
+      "cloudflare_protected": false,
+      "notes": "Public indexer API. Rate limit: 100 req/10s documented."
+    },
+    "anti_scraping": {
+      "cloudflare": false,
+      "fingerprinting": false,
+      "mitigation": "Standard REST API, well-documented"
+    }
+  }
+}

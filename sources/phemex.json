@@ -1,0 +1,53 @@
+{
+  "platform": "phemex",
+  "market_types": ["futures"],
+  "futures": {
+    "leaderboard_endpoints": [
+      {
+        "method": "GET",
+        "url": "https://api.phemex.com/copy-trading/public/traders",
+        "type": "api",
+        "params": {
+          "page": 1,
+          "pageSize": 20,
+          "sortBy": "roi",
+          "sortOrder": "desc",
+          "period": "30d"
+        },
+        "notes": "period: 7d, 30d, 90d. sortBy: roi, pnl, followers"
+      }
+    ],
+    "profile_endpoints": [
+      {
+        "method": "GET",
+        "url": "https://api.phemex.com/copy-trading/public/trader/{trader_key}/detail",
+        "type": "api"
+      }
+    ],
+    "trader_key_field": "uid",
+    "roi_sort_supported": true,
+    "roi_sort_mechanism": "platform_native",
+    "roi_sort_param": "sortBy=roi&sortOrder=desc",
+    "window_support": {
+      "7d": { "supported": true, "param": "period=7d" },
+      "30d": { "supported": true, "param": "period=30d" },
+      "90d": { "supported": true, "param": "period=90d" }
+    },
+    "field_map": {
+      "uid": "trader_key",
+      "nickname": "display_name",
+      "avatar": "avatar_url",
+      "roi": "roi (percentage)",
+      "pnl": "pnl (USD)",
+      "winRate": "win_rate",
+      "maxDrawdown": "max_drawdown",
+      "followers": "followers",
+      "copiers": "copiers"
+    },
+    "rate_limits": {
+      "estimated_rpm": 10,
+      "cloudflare_protected": false,
+      "notes": "Standard API rate limiting"
+    }
+  }
+}

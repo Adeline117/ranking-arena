@@ -1,0 +1,86 @@
+{
+  "platform": "okx",
+  "market_types": ["futures", "copy"],
+  "futures": {
+    "leaderboard_endpoints": [
+      {
+        "method": "GET",
+        "url": "https://www.okx.com/priapi/v5/ecotrade/public/trader-list",
+        "type": "api",
+        "params": {
+          "sortType": "profitRatio",
+          "dataRange": "30",
+          "pageNo": "1",
+          "pageSize": "20"
+        },
+        "notes": "sortType: profitRatio=ROI, profit=PnL. dataRange: 7, 30, 90"
+      }
+    ],
+    "profile_endpoints": [
+      {
+        "method": "GET",
+        "url": "https://www.okx.com/priapi/v5/ecotrade/public/trader-detail?uniqueName={trader_key}",
+        "type": "api"
+      },
+      {
+        "method": "GET",
+        "url": "https://www.okx.com/priapi/v5/ecotrade/public/profit-detail?uniqueName={trader_key}&dataRange=90",
+        "type": "api",
+        "notes": "Performance details with daily PnL"
+      }
+    ],
+    "trader_key_field": "uniqueName",
+    "roi_sort_supported": true,
+    "roi_sort_mechanism": "platform_native",
+    "roi_sort_param": "sortType=profitRatio (returns DESC sorted)",
+    "window_support": {
+      "7d": { "supported": true, "param": "dataRange=7" },
+      "30d": { "supported": true, "param": "dataRange=30" },
+      "90d": { "supported": true, "param": "dataRange=90" }
+    },
+    "field_map": {
+      "uniqueName": "trader_key",
+      "nickName": "display_name",
+      "portrait": "avatar_url",
+      "profitRatio": "roi (decimal, multiply by 100)",
+      "profit": "pnl (USD)",
+      "winRatio": "win_rate (decimal)",
+      "maxDrawdown": "max_drawdown (decimal, negate)",
+      "followerNum": "followers",
+      "copyTraderNum": "copiers",
+      "aum": "aum"
+    },
+    "timeseries_endpoints": [
+      {
+        "method": "GET",
+        "url": "https://www.okx.com/priapi/v5/ecotrade/public/profit-detail?uniqueName={trader_key}&dataRange=90",
+        "notes": "Returns daily profit list with timestamps"
+      }
+    ],
+    "rate_limits": {
+      "estimated_rpm": 20,
+      "cloudflare_protected": true,
+      "notes": "priapi endpoints have moderate rate limiting"
+    }
+  },
+  "copy": {
+    "leaderboard_endpoints": [
+      {
+        "method": "GET",
+        "url": "https://www.okx.com/priapi/v5/ecotrade/public/copy-trader-list",
+        "type": "api",
+        "params": {
+          "sortType": "profitRatio",
+          "dataRange": "30"
+        }
+      }
+    ],
+    "trader_key_field": "uniqueName",
+    "roi_sort_supported": true,
+    "window_support": {
+      "7d": { "supported": true },
+      "30d": { "supported": true },
+      "90d": { "supported": true }
+    }
+  }
+}
