@@ -56,6 +56,7 @@ export default function ConversationPage({ params }: { params: { conversationId:
   const [newMessage, setNewMessage] = useState('')
   const [sending, setSending] = useState(false)
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'reconnecting'>('connected')
+  const [accessToken, setAccessToken] = useState<string | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const [remark, setRemark] = useState<string | null>(null)
@@ -92,12 +93,14 @@ export default function ConversationPage({ params }: { params: { conversationId:
     getAuthSession().then((auth) => {
       if (auth) {
         setUserId(auth.userId)
+        setAccessToken(auth.accessToken)
         // 获取 email 用于 TopNav 显示
         supabase.auth.getSession().then(({ data }) => {
           setEmail(data.session?.user?.email ?? null)
         })
       } else {
         setUserId(null)
+        setAccessToken(null)
       }
       setAuthChecked(true)
 
@@ -111,9 +114,11 @@ export default function ConversationPage({ params }: { params: { conversationId:
       if (session) {
         setUserId(session.user.id)
         setEmail(session.user.email ?? null)
+        setAccessToken(session.access_token)
       } else {
         setUserId(null)
         setEmail(null)
+        setAccessToken(null)
       }
     })
 
@@ -1088,12 +1093,12 @@ export default function ConversationPage({ params }: { params: { conversationId:
       )}
 
       {/* Settings Drawer */}
-      {otherUser && conversationId && accessToken && (
+      {otherUser && otherUser.handle && conversationId && accessToken && (
         <ChatSettingsDrawer
           isOpen={settingsOpen}
           onClose={() => setSettingsOpen(false)}
           conversationId={conversationId}
-          otherUser={otherUser}
+          otherUser={{ id: otherUser.id, handle: otherUser.handle, avatar_url: otherUser.avatar_url ?? undefined, bio: otherUser.bio ?? undefined }}
           accessToken={accessToken}
           onSettingsChange={(newSettings) => {
             setRemark(newSettings.remark)
