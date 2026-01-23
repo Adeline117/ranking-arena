@@ -1,5 +1,5 @@
 /**
- * OKX copy trading connector.
+ * OKX copy trading connector (legacy interface).
  * Fetches public leaderboard data from OKX's copy trading API.
  *
  * Data source: Public copy trading leaderboard.
@@ -53,7 +53,7 @@ const WINDOW_TO_PERIOD: Record<RankingWindow, string> = {
 };
 
 // ============================================
-// Connector
+// Connector Implementation
 // ============================================
 
 export class OKXConnector extends BaseConnectorLegacy implements LegacyPlatformConnector {
@@ -70,7 +70,7 @@ export class OKXConnector extends BaseConnectorLegacy implements LegacyPlatformC
     const traders: TraderIdentity[] = [];
 
     const data = await this.requestWithCircuitBreaker<OKXLeaderboardResponse>(
-      () => this.fetchLeaderboardPage(period, 1, 100),
+      () => this.fetchLeaderboardApi(period),
       { label: `discoverLeaderboard(${window})` },
     );
 
@@ -102,7 +102,7 @@ export class OKXConnector extends BaseConnectorLegacy implements LegacyPlatformC
       { label: `fetchTraderSnapshot(${traderKey}, ${window})` },
     );
 
-    const d = detail.data || {};
+    const d = detail.data || {} as OKXTraderEntry;
 
     const metrics: SnapshotMetricsLegacy = {
       roi_pct: d.roi != null ? (Math.abs(d.roi) < 10 ? d.roi * 100 : d.roi) : null,
@@ -140,7 +140,7 @@ export class OKXConnector extends BaseConnectorLegacy implements LegacyPlatformC
       { label: `fetchTraderProfile(${traderKey})` },
     );
 
-    const d = detail.data || {};
+    const d = detail.data || {} as OKXTraderEntry;
 
     return {
       platform: this.platform,
@@ -159,6 +159,7 @@ export class OKXConnector extends BaseConnectorLegacy implements LegacyPlatformC
     traderKey: string,
     seriesType: TimeseriesType,
   ): Promise<Omit<TraderTimeseriesLegacy, 'id' | 'created_at'>> {
+    // OKX does not provide timeseries via public API
     return {
       platform: this.platform,
       trader_key: traderKey,
@@ -169,22 +170,18 @@ export class OKXConnector extends BaseConnectorLegacy implements LegacyPlatformC
   }
 
   // ============================================
-  // Private
+  // Private API methods
   // ============================================
 
-  private async fetchLeaderboardPage(
-    period: string,
-    page: number,
-    pageSize: number,
-  ): Promise<OKXLeaderboardResponse> {
-    const url = `${this.baseUrl}/public/rank-list?period=${period}&pageNo=${page}&pageSize=${pageSize}&sortType=YIELD_RATE`;
+  private async fetchLeaderboardApi(period: string): Promise<OKXLeaderboardResponse> {
+    const url = `${this.baseUrl}/public/rank-list?period=${period}&pageNo=1&pageSize=100&sortType=YIELD_RATE`;
 
     const response = await fetch(url, {
       headers: { 'User-Agent': this.getRandomUA() },
     });
 
     if (!response.ok) {
-      throw new Error(`OKX API returned ${response.status}`);
+      throw new Error(`OKX leaderboard API returned ${response.status}`);
     }
 
     return response.json();
@@ -201,10 +198,15 @@ export class OKXConnector extends BaseConnectorLegacy implements LegacyPlatformC
     });
 
     if (!response.ok) {
-      throw new Error(`OKX detail API returned ${response.status}`);
+      throw new Error(`OKX trader detail API returned ${response.status}`);
     }
 
-    return response.json();
+    const json: { code: string; data: OKXTraderEntry } = await response.json();
+    if (json.code !== '0' || !json.data) {
+      throw new Error(`OKX trader detail API returned no data for ${uniqueName}`);
+    }
+
+    return json;
   }
 
   private getRandomUA(): string {

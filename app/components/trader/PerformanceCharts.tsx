@@ -180,7 +180,7 @@ export default function PerformanceCharts({ handle }: PerformanceChartsProps) {
       >
         <Text size="xs" color="tertiary">
           {equityData.length > 0
-            ? `Data from ${equityData[0].time} to ${equityData[equityData.length - 1].time}`
+            ? `Data from ${equityData[0]?.time ?? ''} to ${equityData[equityData.length - 1]?.time ?? ''}`
             : 'No historical data available'}
         </Text>
         <Text size="xs" color="tertiary">

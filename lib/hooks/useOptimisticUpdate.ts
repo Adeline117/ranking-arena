@@ -5,7 +5,7 @@
  * 提供即时 UI 反馈，失败时自动回滚
  */
 
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 
 // ============================================
 // 类型定义
@@ -97,7 +97,10 @@ export function useOptimisticUpdate<T, R = unknown>(
   const previousDataRef = useRef<T>(initialData)
   // 使用 ref 跟踪当前数据以避免 stale closure
   const currentDataRef = useRef<T>(state.data)
-  currentDataRef.current = state.data
+
+  useEffect(() => {
+    currentDataRef.current = state.data
+  }, [state.data])
 
   const mutate = useCallback(async () => {
     // 从 ref 获取最新数据以避免 stale closure
@@ -208,7 +211,10 @@ export function useOptimisticLike(
   const previousStateRef = useRef(initialState)
   // 使用 ref 跟踪当前状态以避免 stale closure
   const currentStateRef = useRef(state)
-  currentStateRef.current = state
+
+  useEffect(() => {
+    currentStateRef.current = state
+  }, [state])
 
   const toggle = useCallback(async () => {
     const current = currentStateRef.current
@@ -268,7 +274,10 @@ export function useOptimisticBookmark(
   const previousStateRef = useRef(initialState)
   // 使用 ref 跟踪当前状态以避免 stale closure
   const currentStateRef = useRef(state)
-  currentStateRef.current = state
+
+  useEffect(() => {
+    currentStateRef.current = state
+  }, [state])
 
   const toggle = useCallback(async () => {
     const current = currentStateRef.current
@@ -327,7 +336,10 @@ export function useOptimisticFollow(
   const previousStateRef = useRef(initialState)
   // 使用 ref 跟踪当前状态以避免 stale closure
   const currentStateRef = useRef(state)
-  currentStateRef.current = state
+
+  useEffect(() => {
+    currentStateRef.current = state
+  }, [state])
 
   const toggle = useCallback(async () => {
     const current = currentStateRef.current

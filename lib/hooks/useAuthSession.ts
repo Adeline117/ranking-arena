@@ -122,8 +122,11 @@ function updateFromSession(session: Session | null) {
 export function useAuthSession(): AuthSessionReturn {
   const [state, setState] = useState<AuthState>(globalAuthState)
   const stateRef = useRef(state)
-  stateRef.current = state
   const refreshingRef = useRef(false)
+
+  useEffect(() => {
+    stateRef.current = state
+  }, [state])
 
   useEffect(() => {
     // Initialize on first use

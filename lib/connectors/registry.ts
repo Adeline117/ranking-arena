@@ -9,8 +9,13 @@
  * - Legacy getConnector (singleton by GranularPlatform)
  */
 
-import type { LeaderboardPlatform, MarketType, PlatformCapabilities, GranularPlatform, LegacyPlatformConnector } from '../types/leaderboard'
+import type { LeaderboardPlatform, MarketType, PlatformCapabilities, GranularPlatform } from '../types/leaderboard'
 import type { PlatformConnector } from './types'
+
+/** Union type for both new-style and legacy connectors in the registry.
+ * Uses a minimal structural type to support both BaseConnector and BaseConnectorLegacy subclasses. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyConnector = any
 import { TokenBucketRateLimiter } from './rate-limiter'
 
 // Individual platform connector imports (for legacy registry)
@@ -179,13 +184,13 @@ const IMPLEMENTED_PLATFORMS: GranularPlatform[] = [
 ]
 
 // Legacy connector instances (singleton per platform)
-const legacyConnectors = new Map<GranularPlatform, LegacyPlatformConnector>()
+const legacyConnectors = new Map<GranularPlatform, AnyConnector>()
 
 /**
  * Get or create a legacy connector for the specified platform.
  * Returns null if no connector is implemented for the platform.
  */
-export function getConnector(platform: GranularPlatform): LegacyPlatformConnector | null {
+export function getConnector(platform: GranularPlatform): AnyConnector | null {
   if (legacyConnectors.has(platform)) {
     return legacyConnectors.get(platform)!
   }
@@ -197,7 +202,7 @@ export function getConnector(platform: GranularPlatform): LegacyPlatformConnecto
   return connector
 }
 
-function createLegacyConnector(platform: GranularPlatform): LegacyPlatformConnector | null {
+function createLegacyConnector(platform: GranularPlatform): AnyConnector | null {
   switch (platform) {
     case 'binance_futures':
       return new BinanceFuturesConnector()

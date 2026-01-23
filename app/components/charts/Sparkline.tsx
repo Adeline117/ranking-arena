@@ -117,8 +117,8 @@ function createFillPath(linePath: string, width: number, height: number): string
 function getTrend(data: number[]): 'positive' | 'negative' | 'neutral' {
   if (data.length < 2) return 'neutral'
 
-  const first = data[0]
-  const last = data[data.length - 1]
+  const first = data[0] ?? 0
+  const last = data[data.length - 1] ?? 0
   const change = ((last - first) / Math.abs(first || 1)) * 100
 
   if (change > 1) return 'positive'
@@ -175,8 +175,8 @@ function SparklineComponent({
   // 计算趋势描述 - 必须在早期返回之前调用以遵循 React Hooks 规则
   const trendDescription = useMemo(() => {
     if (data.length < 2) return '数据不足'
-    const first = data[0]
-    const last = data[data.length - 1]
+    const first = data[0] ?? 0
+    const last = data[data.length - 1] ?? 0
     const change = ((last - first) / Math.abs(first || 1)) * 100
     return `趋势${change >= 0 ? '上涨' : '下跌'} ${Math.abs(change).toFixed(1)}%`
   }, [data])

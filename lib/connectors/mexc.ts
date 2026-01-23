@@ -1,5 +1,5 @@
 /**
- * MEXC copy trading connector.
+ * MEXC copy trading connector (legacy interface).
  * Fetches public leaderboard data from MEXC's copy trading API.
  *
  * Data source: Public copy trading leaderboard (intercepts internal API).
@@ -53,7 +53,7 @@ const WINDOW_TO_SORT: Record<RankingWindow, number> = {
 };
 
 // ============================================
-// Connector
+// Connector Implementation
 // ============================================
 
 export class MEXCConnector extends BaseConnectorLegacy implements LegacyPlatformConnector {
@@ -68,10 +68,12 @@ export class MEXCConnector extends BaseConnectorLegacy implements LegacyPlatform
   async discoverLeaderboard(window: RankingWindow): Promise<TraderIdentity[]> {
     const sortPeriod = WINDOW_TO_SORT[window];
     const traders: TraderIdentity[] = [];
+    const pageSize = 20;
+    const maxPages = 5;
 
-    for (let page = 1; page <= 5; page++) {
+    for (let page = 1; page <= maxPages; page++) {
       const data = await this.requestWithCircuitBreaker<MEXCLeaderboardResponse>(
-        () => this.fetchLeaderboardPage(sortPeriod, page, 20),
+        () => this.fetchLeaderboardPage(sortPeriod, page, pageSize),
         { label: `discoverLeaderboard(${window}, page=${page})` },
       );
 
@@ -104,7 +106,7 @@ export class MEXCConnector extends BaseConnectorLegacy implements LegacyPlatform
       { label: `fetchTraderSnapshot(${traderKey}, ${window})` },
     );
 
-    const d = detail.data || {};
+    const d = detail.data || {} as MEXCTraderEntry;
 
     const metrics: SnapshotMetricsLegacy = {
       roi_pct: d.roi != null ? (Math.abs(d.roi) < 10 ? d.roi * 100 : d.roi) : null,
@@ -142,7 +144,7 @@ export class MEXCConnector extends BaseConnectorLegacy implements LegacyPlatform
       { label: `fetchTraderProfile(${traderKey})` },
     );
 
-    const d = detail.data || {};
+    const d = detail.data || {} as MEXCTraderEntry;
 
     return {
       platform: this.platform,
@@ -161,6 +163,7 @@ export class MEXCConnector extends BaseConnectorLegacy implements LegacyPlatform
     traderKey: string,
     seriesType: TimeseriesType,
   ): Promise<Omit<TraderTimeseriesLegacy, 'id' | 'created_at'>> {
+    // MEXC does not provide timeseries via public API
     return {
       platform: this.platform,
       trader_key: traderKey,
@@ -171,7 +174,7 @@ export class MEXCConnector extends BaseConnectorLegacy implements LegacyPlatform
   }
 
   // ============================================
-  // Private
+  // Private API methods
   // ============================================
 
   private async fetchLeaderboardPage(
@@ -196,7 +199,7 @@ export class MEXCConnector extends BaseConnectorLegacy implements LegacyPlatform
     });
 
     if (!response.ok) {
-      throw new Error(`MEXC API returned ${response.status}`);
+      throw new Error(`MEXC leaderboard API returned ${response.status}`);
     }
 
     return response.json();
@@ -210,10 +213,15 @@ export class MEXCConnector extends BaseConnectorLegacy implements LegacyPlatform
     });
 
     if (!response.ok) {
-      throw new Error(`MEXC detail API returned ${response.status}`);
+      throw new Error(`MEXC trader detail API returned ${response.status}`);
     }
 
-    return response.json();
+    const json: { code: number; data: MEXCTraderEntry } = await response.json();
+    if (json.code !== 0 || !json.data) {
+      throw new Error(`MEXC trader detail API returned no data for ${traderUid}`);
+    }
+
+    return json;
   }
 
   private getRandomUA(): string {

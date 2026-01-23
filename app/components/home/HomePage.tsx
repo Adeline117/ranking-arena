@@ -77,6 +77,7 @@ export default function HomePage() {
     const totalTraders = traders.length
     const averageRoi = traders.reduce((sum, t) => sum + (t.roi || 0), 0) / totalTraders
 
+    if (!traders.length) return { totalTraders: 0, averageRoi: 0, topPerformer: undefined, activeExchanges: 5 }
     const topTrader = traders.reduce((best, current) =>
       (current.roi || 0) > (best?.roi || 0) ? current : best
     , traders[0])
