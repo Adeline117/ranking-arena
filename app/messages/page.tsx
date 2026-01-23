@@ -32,6 +32,7 @@ export default function MessagesPage() {
   const [loading, setLoading] = useState(true)
   const [authChecked, setAuthChecked] = useState(false) // 追踪认证检查是否完成
   const [orphanUnreadCount, setOrphanUnreadCount] = useState(0) // 孤立的未读消息数
+  const [clearingOrphans, setClearingOrphans] = useState(false) // 清除孤立消息的loading状态
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
 
   // 加载会话列表
@@ -62,10 +63,11 @@ export default function MessagesPage() {
       }
     } catch (error) {
       console.error('Error loading conversations:', error)
+      showToast('加载会话列表失败', 'error')
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [showToast])
 
   // 监听 auth state 变化，确保在 session 恢复后正确获取用户信息
   useEffect(() => {
@@ -304,7 +306,8 @@ export default function MessagesPage() {
             </Box>
             <button
               onClick={async () => {
-                if (!userId) return
+                if (!userId || clearingOrphans) return
+                setClearingOrphans(true)
                 try {
                   // 标记所有未读消息为已读
                   await supabase
@@ -316,8 +319,11 @@ export default function MessagesPage() {
                   showToast('已清除', 'success')
                 } catch {
                   showToast('清除失败', 'error')
+                } finally {
+                  setClearingOrphans(false)
                 }
               }}
+              disabled={clearingOrphans}
               style={{
                 padding: '6px 12px',
                 background: 'rgba(255, 193, 7, 0.2)',
@@ -326,11 +332,13 @@ export default function MessagesPage() {
                 color: tokens.colors.text.primary,
                 fontSize: 13,
                 fontWeight: 600,
-                cursor: 'pointer',
+                cursor: clearingOrphans ? 'not-allowed' : 'pointer',
                 whiteSpace: 'nowrap',
+                opacity: clearingOrphans ? 0.6 : 1,
+                transition: 'opacity 0.2s',
               }}
             >
-              全部清除
+              {clearingOrphans ? '清除中...' : '全部清除'}
             </button>
           </Box>
         )}

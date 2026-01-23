@@ -407,7 +407,7 @@ export function useMessagesRealtime(
   onNewMessage?: (message: Record<string, unknown>) => void
 ) {
   return useRealtime({
-    table: 'messages',
+    table: 'direct_messages',
     event: 'INSERT',
     filter: conversationId ? `conversation_id=eq.${conversationId}` : undefined,
     onInsert: onNewMessage,

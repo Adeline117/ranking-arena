@@ -1,15 +1,17 @@
 'use client'
 
-import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/layout/TopNav'
-import { Box, Text, Button } from '@/app/components/base'
+import { Box, Text } from '@/app/components/base'
 import Avatar from '@/app/components/ui/Avatar'
 import { useToast } from '@/app/components/ui/Toast'
 import { getCsrfHeaders } from '@/lib/api/client'
+
+type MessageStatus = 'sending' | 'sent' | 'failed'
 
 type Message = {
   id: string
@@ -18,6 +20,8 @@ type Message = {
   content: string
   read: boolean
   created_at: string
+  _status?: MessageStatus // client-side only: optimistic UI state
+  _tempId?: string // client-side only: temporary ID before server confirms
 }
 
 type OtherUser = {
@@ -40,6 +44,7 @@ export default function ConversationPage({ params }: { params: { conversationId:
   const [loading, setLoading] = useState(true)
   const [newMessage, setNewMessage] = useState('')
   const [sending, setSending] = useState(false)
+  const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'reconnecting'>('connected')
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
@@ -147,7 +152,15 @@ export default function ConversationPage({ params }: { params: { conversationId:
           }
         }
       )
-      .subscribe()
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          setConnectionStatus('connected')
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          setConnectionStatus('disconnected')
+        } else if (status === 'CLOSED') {
+          setConnectionStatus('disconnected')
+        }
+      })
 
     channelRef.current = channel
 
@@ -163,38 +176,115 @@ export default function ConversationPage({ params }: { params: { conversationId:
   const handleSend = async () => {
     if (!newMessage.trim() || !userId || !otherUser || sending) return
 
+    const content = newMessage.trim()
+    if (content.length > 2000) {
+      showToast('消息内容过长，最多2000字符', 'warning')
+      return
+    }
+
+    const tempId = `temp_${Date.now()}_${Math.random().toString(36).slice(2)}`
+    const optimisticMessage: Message = {
+      id: tempId,
+      sender_id: userId,
+      receiver_id: otherUser.id,
+      content,
+      read: false,
+      created_at: new Date().toISOString(),
+      _status: 'sending',
+      _tempId: tempId,
+    }
+
+    // Optimistic: show message immediately
+    setMessages(prev => [...prev, optimisticMessage])
+    setNewMessage('')
+    inputRef.current?.focus()
+
     setSending(true)
     try {
       const res = await fetch('/api/messages', {
         method: 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
           ...getCsrfHeaders()
         },
         body: JSON.stringify({
           senderId: userId,
           receiverId: otherUser.id,
-          content: newMessage.trim()
+          content
         })
       })
-      
+
       const data = await res.json()
-      
+
       if (!res.ok) {
+        // Mark as failed
+        setMessages(prev => prev.map(m =>
+          m._tempId === tempId ? { ...m, _status: 'failed' as MessageStatus } : m
+        ))
         showToast(data.error || '发送失败', 'error')
         return
       }
-      
+
       if (data.message) {
-        setMessages(prev => [...prev, data.message])
-        setNewMessage('')
-        inputRef.current?.focus()
+        // Replace optimistic message with server-confirmed message
+        setMessages(prev => prev.map(m =>
+          m._tempId === tempId ? { ...data.message, _status: 'sent' as MessageStatus } : m
+        ))
       }
     } catch (error) {
       console.error('Error sending message:', error)
-      showToast('发送失败', 'error')
+      // Mark as failed
+      setMessages(prev => prev.map(m =>
+        m._tempId === tempId ? { ...m, _status: 'failed' as MessageStatus } : m
+      ))
+      showToast('发送失败，点击消息重试', 'error')
     } finally {
       setSending(false)
+    }
+  }
+
+  const handleRetry = async (failedMsg: Message) => {
+    if (!userId || !otherUser) return
+
+    // Update status to sending
+    setMessages(prev => prev.map(m =>
+      m.id === failedMsg.id ? { ...m, _status: 'sending' as MessageStatus } : m
+    ))
+
+    try {
+      const res = await fetch('/api/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getCsrfHeaders()
+        },
+        body: JSON.stringify({
+          senderId: userId,
+          receiverId: otherUser.id,
+          content: failedMsg.content
+        })
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        setMessages(prev => prev.map(m =>
+          m.id === failedMsg.id ? { ...m, _status: 'failed' as MessageStatus } : m
+        ))
+        showToast(data.error || '重试失败', 'error')
+        return
+      }
+
+      if (data.message) {
+        setMessages(prev => prev.map(m =>
+          m.id === failedMsg.id ? { ...data.message, _status: 'sent' as MessageStatus } : m
+        ))
+      }
+    } catch {
+      setMessages(prev => prev.map(m =>
+        m.id === failedMsg.id ? { ...m, _status: 'failed' as MessageStatus } : m
+      ))
+      showToast('重试失败', 'error')
     }
   }
 
@@ -407,17 +497,6 @@ export default function ConversationPage({ params }: { params: { conversationId:
                 avatarUrl={otherUser.avatar_url}
                 size={44}
               />
-              {/* 在线状态指示器（可选） */}
-              <Box style={{
-                position: 'absolute',
-                bottom: 1,
-                right: 1,
-                width: 12,
-                height: 12,
-                borderRadius: '50%',
-                background: '#4caf50',
-                border: `2px solid ${tokens.colors.bg.secondary}`,
-              }} />
             </Box>
             <Box style={{ flex: 1, minWidth: 0 }}>
               <Text size="base" weight="bold" style={{ color: tokens.colors.text.primary }}>
@@ -439,9 +518,32 @@ export default function ConversationPage({ params }: { params: { conversationId:
         )}
       </Box>
 
+      {/* Connection status banner */}
+      {connectionStatus !== 'connected' && (
+        <Box style={{
+          padding: '6px 16px',
+          background: connectionStatus === 'reconnecting' ? 'rgba(255, 152, 0, 0.15)' : 'rgba(244, 67, 54, 0.15)',
+          color: connectionStatus === 'reconnecting' ? '#ff9800' : '#f44336',
+          textAlign: 'center',
+          fontSize: 12,
+          fontWeight: 600,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 6,
+        }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="8" x2="12" y2="12"/>
+            <line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
+          {connectionStatus === 'reconnecting' ? '正在重新连接...' : '连接已断开，新消息可能延迟'}
+        </Box>
+      )}
+
       {/* Messages Area */}
-      <Box style={{ 
-        flex: 1, 
+      <Box style={{
+        flex: 1,
         overflow: 'auto',
         padding: tokens.spacing[4],
         maxWidth: 800,
@@ -512,7 +614,7 @@ export default function ConversationPage({ params }: { params: { conversationId:
                       maxWidth: '75%',
                       minWidth: 48,
                       padding: '10px 14px',
-                      borderRadius: isMine 
+                      borderRadius: isMine
                         ? isSameSenderAsPrev && isSameSenderAsNext
                           ? '18px 6px 6px 18px'  // 中间
                           : isSameSenderAsPrev
@@ -527,14 +629,22 @@ export default function ConversationPage({ params }: { params: { conversationId:
                             : isSameSenderAsNext
                               ? '18px 18px 18px 6px' // 第一条
                               : '18px', // 单独一条
-                      background: isMine 
-                        ? 'linear-gradient(135deg, #9575cd 0%, #7e57c2 100%)' 
+                      background: isMine
+                        ? msg._status === 'failed'
+                          ? 'linear-gradient(135deg, #9575cd 0%, #7e57c2 100%)'
+                          : 'linear-gradient(135deg, #9575cd 0%, #7e57c2 100%)'
                         : tokens.colors.bg.secondary,
                       color: isMine ? '#fff' : tokens.colors.text.primary,
-                      border: isMine ? 'none' : `1px solid ${tokens.colors.border.primary}`,
-                      boxShadow: isMine 
-                        ? '0 1px 2px rgba(126, 87, 194, 0.2)' 
+                      border: isMine
+                        ? msg._status === 'failed'
+                          ? '1px solid rgba(244, 67, 54, 0.6)'
+                          : 'none'
+                        : `1px solid ${tokens.colors.border.primary}`,
+                      boxShadow: isMine
+                        ? '0 1px 2px rgba(126, 87, 194, 0.2)'
                         : '0 1px 2px rgba(0,0,0,0.05)',
+                      opacity: msg._status === 'sending' ? 0.7 : 1,
+                      transition: 'opacity 0.2s',
                     }}
                   >
                     <Text 
@@ -549,21 +659,59 @@ export default function ConversationPage({ params }: { params: { conversationId:
                     </Text>
                   </Box>
                   
-                  {/* 时间戳 - 放在气泡外面下方 */}
-                  {showTime && (
-                    <Text 
-                      size="xs" 
+                  {/* Failed state: retry button */}
+                  {isMine && msg._status === 'failed' && (
+                    <button
+                      onClick={() => handleRetry(msg)}
+                      style={{
+                        marginTop: 4,
+                        padding: '2px 8px',
+                        background: 'rgba(244, 67, 54, 0.15)',
+                        border: '1px solid rgba(244, 67, 54, 0.4)',
+                        borderRadius: 6,
+                        color: '#f44336',
+                        fontSize: 11,
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 4,
+                      }}
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M1 4v6h6M23 20v-6h-6"/>
+                        <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/>
+                      </svg>
+                      发送失败，点击重试
+                    </button>
+                  )}
+
+                  {/* 时间戳 + 状态指示器 */}
+                  {showTime && msg._status !== 'failed' && (
+                    <Text
+                      size="xs"
                       color="tertiary"
-                      style={{ 
+                      style={{
                         marginTop: 4,
                         paddingLeft: isMine ? 0 : 4,
                         paddingRight: isMine ? 4 : 0,
                         fontSize: 11,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 3,
                       }}
                     >
-                      {formatTime(msg.created_at)}
-                      {isMine && msg.read && (
-                        <span style={{ marginLeft: 4, opacity: 0.7 }}>✓</span>
+                      {msg._status === 'sending' ? (
+                        <span style={{ opacity: 0.6 }}>发送中...</span>
+                      ) : (
+                        <>
+                          {formatTime(msg.created_at)}
+                          {isMine && (
+                            <span style={{ marginLeft: 2, opacity: 0.7 }}>
+                              {msg.read ? '✓✓' : '✓'}
+                            </span>
+                          )}
+                        </>
                       )}
                     </Text>
                   )}
@@ -617,6 +765,24 @@ export default function ConversationPage({ params }: { params: { conversationId:
           borderTop: `1px solid ${tokens.colors.border.primary}`,
         }}
       >
+        {/* Character counter - show when approaching limit */}
+        {newMessage.length > 1800 && (
+          <Box style={{
+            maxWidth: 800,
+            margin: '0 auto',
+            marginBottom: 4,
+            textAlign: 'right',
+            paddingRight: 8,
+          }}>
+            <Text size="xs" style={{
+              color: newMessage.length > 2000 ? '#f44336' : newMessage.length > 1900 ? '#ff9800' : tokens.colors.text.tertiary,
+              fontSize: 11,
+              fontWeight: newMessage.length > 2000 ? 700 : 400,
+            }}>
+              {newMessage.length}/2000
+            </Text>
+          </Box>
+        )}
         <Box style={{ 
           maxWidth: 800, 
           margin: '0 auto',
@@ -667,17 +833,17 @@ export default function ConversationPage({ params }: { params: { conversationId:
           />
           <button
             onClick={handleSend}
-            disabled={!newMessage.trim() || sending}
+            disabled={!newMessage.trim() || sending || newMessage.length > 2000}
             style={{
               width: 40,
               height: 40,
               borderRadius: '50%',
               border: 'none',
-              background: newMessage.trim() 
-                ? 'linear-gradient(135deg, #9575cd 0%, #7e57c2 100%)' 
+              background: newMessage.trim() && newMessage.length <= 2000
+                ? 'linear-gradient(135deg, #9575cd 0%, #7e57c2 100%)'
                 : tokens.colors.bg.tertiary || 'rgba(255,255,255,0.1)',
-              color: newMessage.trim() ? '#fff' : tokens.colors.text.tertiary,
-              cursor: newMessage.trim() && !sending ? 'pointer' : 'default',
+              color: newMessage.trim() && newMessage.length <= 2000 ? '#fff' : tokens.colors.text.tertiary,
+              cursor: newMessage.trim() && !sending && newMessage.length <= 2000 ? 'pointer' : 'default',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
