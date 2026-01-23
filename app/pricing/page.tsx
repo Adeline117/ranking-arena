@@ -146,9 +146,9 @@ const getFaqData = (language: string) => [
   },
   {
     q: language === 'zh' ? '支持哪些支付方式？' : 'What payment methods are supported?',
-    a: language === 'zh' 
-      ? '我们支持 Visa、MasterCard、American Express 等主流信用卡。付款由 Stripe 安全处理。'
-      : 'We support major credit cards including Visa, MasterCard, and American Express. Payments are securely processed by Stripe.',
+    a: language === 'zh'
+      ? '我们支持 Visa、Mastercard、支付宝、微信支付。付款由 Stripe 安全处理。'
+      : 'We support Visa, Mastercard, Alipay, and WeChat Pay. Payments are securely processed by Stripe.',
   },
   {
     q: language === 'zh' ? '有退款政策吗？' : 'Is there a refund policy?',
@@ -336,9 +336,9 @@ export default function PricingPage() {
             {t('pricingSubtitle')}
           </Text>
           <Text size="md" color="secondary" style={{ maxWidth: 500, margin: '0 auto' }}>
-            {language === 'zh' 
-              ? '专业的跟单分析工具，助你做出更明智的投资决策'
-              : 'Professional copy trading analytics to help you make smarter investment decisions'
+            {language === 'zh'
+              ? '专业的数据聚合与分析工具，全面了解交易员表现与风险'
+              : 'Professional data aggregation and analytics tools to understand trader performance and risks'
             }
           </Text>
         </Box>
