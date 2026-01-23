@@ -17,7 +17,7 @@ export function Modal({ children, onClose }: ModalProps) {
     // 打开弹窗时禁止背景滚动
     document.body.style.overflow = 'hidden'
 
-    // ESC key to close
+    // Escape key closes modal
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         onClose()

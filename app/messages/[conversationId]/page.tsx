@@ -345,7 +345,6 @@ export default function ConversationPage({ params }: { params: { conversationId:
       if (result.status === 401) {
         const refreshed = await refreshAuthToken()
         if (refreshed) {
-
           result = await sendMessageRequest(otherUser.id, content, refreshed.accessToken)
         } else {
           // 刷新失败，用户需要重新登录

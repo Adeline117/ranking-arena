@@ -504,7 +504,7 @@ function HotContent() {
     }
   }, [searchParams, posts, openPost, handleOpenPost])
 
-  // ESC key handler and body scroll lock for modal
+  // ESC key handler, body scroll lock, and browser back button support for modal
   useEffect(() => {
     if (!openPost) return
     // Lock body scroll
@@ -516,11 +516,22 @@ function HotContent() {
         handleClosePost()
       }
     }
+
+    const handlePopState = () => {
+      // When user presses back, close modal if URL no longer has post param
+      const urlParams = new URLSearchParams(window.location.search)
+      if (!urlParams.get('post') && openPost) {
+        setOpenPost(null)
+      }
+    }
+
     document.addEventListener('keydown', handleKeyDown)
+    window.addEventListener('popstate', handlePopState)
 
     return () => {
       document.body.style.overflow = prev
       document.removeEventListener('keydown', handleKeyDown)
+      window.removeEventListener('popstate', handlePopState)
     }
   }, [openPost, handleClosePost])
 
@@ -776,7 +787,7 @@ function HotContent() {
                                 fontWeight: 600,
                               }}
                             >
-                              {p.author}
+                              @{p.author}
                             </Link>
                           ) : (
                             <Text size="xs" color="tertiary">{p.author}</Text>
@@ -905,7 +916,7 @@ function HotContent() {
                     fontWeight: 700,
                   }}
                 >
-                  {openPost.author}
+                  @{openPost.author}
                 </Link>
               ) : (
                 <span>{openPost.author}</span>
@@ -1074,7 +1085,7 @@ function HotContent() {
                               textDecoration: 'none',
                             }}
                           >
-                            {comment.author_handle}
+                            @{comment.author_handle}
                           </Link>
                         ) : (
                           <span style={{ fontSize: 12, fontWeight: 700, color: tokens.colors.text.secondary }}>
