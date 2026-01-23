@@ -1645,7 +1645,7 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              zIndex: 2000,
+              zIndex: tokens.zIndex.modal,
             }}
             onClick={() => {
               setShowRepostModal(null)
@@ -1731,7 +1731,7 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              zIndex: 2000,
+              zIndex: tokens.zIndex.modal,
             }}
             onClick={() => setShowGroupInfo(false)}
           >
@@ -1871,7 +1871,7 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              zIndex: 2000,
+              zIndex: tokens.zIndex.modal,
             }}
             onClick={() => setShowMembersList(false)}
           >
@@ -2026,7 +2026,7 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              zIndex: 2000,
+              zIndex: tokens.zIndex.modal,
             }}
             onClick={() => setShowComplaintModal(false)}
           >
