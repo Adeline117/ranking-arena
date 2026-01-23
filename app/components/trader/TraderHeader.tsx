@@ -28,35 +28,37 @@ interface TraderHeaderProps {
   source?: string
   communityScore?: CommunityScore | null
   proBadgeTier?: 'pro' | null // Pro 徽章等级
+  isPro?: boolean // 是否为 Pro 用户
 }
 
-// 来源平台配置 - 统一颜色，不做颜色区分
+// 来源平台配置 - 只显示类型，不显示交易所名称
 const sourceConfig: Record<string, { label: string; color: string }> = {
-  binance_futures: { label: 'Binance 合约', color: tokens.colors.text.secondary },
-  binance_spot: { label: 'Binance 现货', color: tokens.colors.text.secondary },
-  binance_web3: { label: 'Binance 链上', color: tokens.colors.text.secondary },
-  bybit: { label: 'Bybit 合约', color: tokens.colors.text.secondary },
-  bitget_futures: { label: 'Bitget 合约', color: tokens.colors.text.secondary },
-  bitget_spot: { label: 'Bitget 现货', color: tokens.colors.text.secondary },
-  mexc: { label: 'MEXC 合约', color: tokens.colors.text.secondary },
-  coinex: { label: 'CoinEx 合约', color: tokens.colors.text.secondary },
-  okx_web3: { label: 'OKX 链上', color: tokens.colors.text.secondary },
-  kucoin: { label: 'KuCoin 合约', color: tokens.colors.text.secondary },
-  gmx: { label: 'GMX 链上', color: tokens.colors.text.secondary },
+  binance_futures: { label: '合约', color: tokens.colors.text.secondary },
+  binance_spot: { label: '现货', color: tokens.colors.text.secondary },
+  binance_web3: { label: '链上', color: tokens.colors.text.secondary },
+  bybit: { label: '合约', color: tokens.colors.text.secondary },
+  bitget_futures: { label: '合约', color: tokens.colors.text.secondary },
+  bitget_spot: { label: '现货', color: tokens.colors.text.secondary },
+  mexc: { label: '合约', color: tokens.colors.text.secondary },
+  coinex: { label: '合约', color: tokens.colors.text.secondary },
+  okx_web3: { label: '链上', color: tokens.colors.text.secondary },
+  kucoin: { label: '合约', color: tokens.colors.text.secondary },
+  gmx: { label: '链上', color: tokens.colors.text.secondary },
 }
 
-export default function TraderHeader({ 
-  handle, 
-  traderId, 
+export default function TraderHeader({
+  handle,
+  traderId,
   uid,
-  avatarUrl, 
+  avatarUrl,
   coverUrl,
-  isRegistered, 
-  followers = 0, 
-  isOwnProfile = false, 
+  isRegistered,
+  followers = 0,
+  isOwnProfile = false,
   source,
   communityScore,
   proBadgeTier,
+  isPro = false,
 }: TraderHeaderProps) {
   const [userId, setUserId] = useState<string | null>(null)
   const [mounted, setMounted] = useState(false)
@@ -88,7 +90,7 @@ export default function TraderHeader({
         border: `1px solid ${tokens.colors.border.primary}50`,
         boxShadow: `0 8px 32px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.05)`,
         position: 'relative',
-        overflow: 'hidden',
+        overflow: 'visible',
         opacity: mounted ? 1 : 0,
         transform: mounted ? 'translateY(0)' : 'translateY(-20px)',
         transition: 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
@@ -97,7 +99,7 @@ export default function TraderHeader({
     >
       {/* 背景装饰 - 只在没有自定义背景时显示 */}
       {!coverUrl && (
-        <>
+        <Box style={{ position: 'absolute', inset: 0, overflow: 'hidden', borderRadius: tokens.radius.xl, pointerEvents: 'none' }}>
           <Box
             style={{
               position: 'absolute',
@@ -106,7 +108,6 @@ export default function TraderHeader({
               width: 300,
               height: 300,
               background: `radial-gradient(circle, ${tokens.colors.accent.primary}08 0%, transparent 70%)`,
-              pointerEvents: 'none',
             }}
           />
           <Box
@@ -117,10 +118,9 @@ export default function TraderHeader({
               width: 200,
               height: 200,
               background: `radial-gradient(circle, ${tokens.colors.accent.brand}06 0%, transparent 70%)`,
-              pointerEvents: 'none',
             }}
           />
-        </>
+        </Box>
       )}
       
       {/* 左侧：Avatar + Handle */}
@@ -429,11 +429,38 @@ export default function TraderHeader({
         )}
 
         {/* 跟单按钮 - 最重要的 CTA */}
-        <CopyTradeButton
-          traderId={traderId}
-          source={source}
-          traderHandle={handle}
-        />
+        {isPro ? (
+          <CopyTradeButton
+            traderId={traderId}
+            source={source}
+            traderHandle={handle}
+          />
+        ) : (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => router.push('/pricing')}
+            style={{
+              color: tokens.colors.text.tertiary,
+              fontSize: tokens.typography.fontSize.sm,
+              padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+              borderRadius: tokens.radius.lg,
+              background: `${tokens.colors.bg.tertiary}`,
+              border: `1px solid ${tokens.colors.border.primary}`,
+              transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: tokens.spacing[2],
+              opacity: 0.7,
+            }}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+              <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+            </svg>
+            跟单 Pro
+          </Button>
+        )}
 
         {/* 返回按钮 */}
         <Button
