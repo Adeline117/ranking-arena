@@ -276,6 +276,18 @@ class Logger {
     if (!this.shouldLog('log')) return
     console.table(data)
   }
+
+  /**
+   * 创建带上下文的子 logger
+   * 上下文信息会附加到每条日志消息中
+   */
+  withContext(context: Record<string, unknown>): Logger {
+    const contextStr = Object.entries(context)
+      .map(([k, v]) => `${k}=${typeof v === 'string' ? v : JSON.stringify(v)}`)
+      .join(' ')
+    const newName = this.name ? `${this.name}:${contextStr}` : contextStr
+    return new Logger(newName, this.config)
+  }
 }
 
 // ============================================

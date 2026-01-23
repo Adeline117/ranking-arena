@@ -108,16 +108,19 @@ export default function Button({
 
   const sizeStyles: Record<typeof size, React.CSSProperties> = {
     sm: {
-      padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
+      padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
       fontSize: tokens.typography.fontSize.sm,
+      minHeight: '36px', // 移动端最小触摸目标
     },
     md: {
       padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
       fontSize: tokens.typography.fontSize.base,
+      minHeight: '44px', // 移动端最小触摸目标
     },
     lg: {
       padding: `${tokens.spacing[3]} ${tokens.spacing[5]}`,
       fontSize: tokens.typography.fontSize.md,
+      minHeight: '48px', // 移动端最小触摸目标
     },
   }
 
