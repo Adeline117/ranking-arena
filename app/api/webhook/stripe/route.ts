@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import Stripe from 'stripe'
 import { logger } from '@/lib/utils/logger'
+import { joinProOfficialGroup, leaveProOfficialGroup } from '@/app/api/pro-official-group/route'
 
 export const dynamic = 'force-dynamic'
 
@@ -288,6 +289,24 @@ async function handleSubscriptionChange(
   if (error) {
     log.error('Failed to update subscription', new Error(error.message), { userId })
   }
+
+  // Pro 会员自动加入官方群（auto-mute，不打扰用户）
+  if (userId && tier === 'pro' && status === 'active') {
+    try {
+      const result = await joinProOfficialGroup(userId)
+      if (result.success && result.groupId) {
+        // 自动设置群消息免打扰
+        await supabase
+          .from('group_members')
+          .update({ notifications_muted: true })
+          .eq('group_id', result.groupId)
+          .eq('user_id', userId)
+        log.info('Pro member auto-joined official group (muted)', { userId, groupId: result.groupId })
+      }
+    } catch (joinError) {
+      log.error('Failed to auto-join Pro group', joinError instanceof Error ? joinError : new Error(String(joinError)), { userId })
+    }
+  }
 }
 
 async function handleSubscriptionDeleted(
@@ -302,6 +321,13 @@ async function handleSubscriptionDeleted(
     customerId,
   })
 
+  // 获取用户 ID 以便从 Pro 群移除
+  const { data: subRecord } = await supabase
+    .from('subscriptions')
+    .select('user_id')
+    .eq('stripe_customer_id', customerId)
+    .maybeSingle()
+
   // 将用户降级为免费版
   const { error } = await supabase
     .from('subscriptions')
@@ -315,6 +341,16 @@ async function handleSubscriptionDeleted(
 
   if (error) {
     log.error('Failed to downgrade subscription', new Error(error.message), { customerId })
+  }
+
+  // 从 Pro 官方群移除
+  if (subRecord?.user_id) {
+    try {
+      await leaveProOfficialGroup(subRecord.user_id)
+      log.info('Removed user from Pro official group', { userId: subRecord.user_id })
+    } catch (leaveError) {
+      log.error('Failed to remove from Pro group', leaveError instanceof Error ? leaveError : new Error(String(leaveError)), { userId: subRecord.user_id })
+    }
   }
 }
 
