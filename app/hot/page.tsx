@@ -63,6 +63,7 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 type Post = {
   id: string
   group: string
+  group_id?: string
   title: string
   author: string
   author_handle?: string
@@ -243,6 +244,7 @@ function HotContent() {
             return {
               id: post.id,
               group: groupName || '综合讨论',
+              group_id: post.group_id || undefined,
               title: post.title || '无标题',
               author: post.author_handle || '匿名',
               author_handle: post.author_handle,
@@ -250,9 +252,9 @@ function HotContent() {
               body: post.content || '',
               comments: post.comment_count || 0,
               likes: post.like_count || 0,
-              hotScore: post.hot_score || 
-                (post.view_count || 0) * 0.1 + 
-                (post.like_count || 0) * 2 + 
+              hotScore: post.hot_score ||
+                (post.view_count || 0) * 0.1 +
+                (post.like_count || 0) * 2 +
                 (post.comment_count || 0) * 3,
               views: post.view_count || 0,
             }
@@ -287,12 +289,13 @@ function HotContent() {
       setLoadingComments(true)
       setCommentsOffset(0)
       setHasMoreComments(true)
-      
+
       const response = await fetch(`/api/posts/${postId}/comments?limit=${COMMENTS_PER_PAGE}&offset=0`)
-      const data = await response.json()
-      if (response.ok) {
-        setComments(data.comments || [])
-        setHasMoreComments(data.pagination?.has_more ?? false)
+      const json = await response.json()
+      if (response.ok && json.success) {
+        const commentsData = json.data?.comments || []
+        setComments(commentsData)
+        setHasMoreComments(json.meta?.pagination?.has_more ?? false)
         setCommentsOffset(COMMENTS_PER_PAGE)
       } else {
         setComments([])
@@ -310,16 +313,16 @@ function HotContent() {
   // 加载更多评论
   const loadMoreComments = useCallback(async () => {
     if (!openPost || loadingMoreComments || !hasMoreComments) return
-    
+
     try {
       setLoadingMoreComments(true)
       const response = await fetch(`/api/posts/${openPost.id}/comments?limit=${COMMENTS_PER_PAGE}&offset=${commentsOffset}`)
-      const data = await response.json()
-      
-      if (response.ok) {
-        const newComments = data.comments || []
+      const json = await response.json()
+
+      if (response.ok && json.success) {
+        const newComments = json.data?.comments || []
         setComments(prev => [...prev, ...newComments])
-        setHasMoreComments(data.pagination?.has_more ?? false)
+        setHasMoreComments(json.meta?.pagination?.has_more ?? false)
         setCommentsOffset(prev => prev + COMMENTS_PER_PAGE)
       } else {
         setHasMoreComments(false)
@@ -507,7 +510,7 @@ function HotContent() {
   // 提交评论
   const submitComment = useCallback(async (postId: string) => {
     if (!accessToken) {
-      showToast('请先登录', 'warning')
+      showToast(language === 'zh' ? '请先登录' : 'Please log in first', 'warning')
       return
     }
     if (!newComment.trim()) return
@@ -524,9 +527,25 @@ function HotContent() {
         body: JSON.stringify({ content: newComment.trim() }),
       })
 
+      if (!response.ok) {
+        // Differentiate error types
+        if (response.status === 401) {
+          showToast(language === 'zh' ? '登录已过期，请重新登录' : 'Session expired, please log in again', 'error')
+        } else if (response.status === 403) {
+          showToast(language === 'zh' ? '权限不足' : 'Permission denied', 'error')
+        } else if (response.status >= 500) {
+          showToast(language === 'zh' ? '服务异常，请稍后重试' : 'Server error, please try again', 'error')
+        } else {
+          const json = await response.json().catch(() => null)
+          showToast(json?.error?.message || (language === 'zh' ? '发表评论失败' : 'Failed to post comment'), 'error')
+        }
+        return
+      }
+
       const json = await response.json()
-      if (response.ok && json.success) {
+      if (json.success && json.data?.comment) {
         setNewComment('')
+        // Server ACK received - add comment to state
         setComments(prev => [...prev, json.data.comment])
         setPosts(prev => prev.map(p => {
           if (p.id === postId) {
@@ -538,15 +557,15 @@ function HotContent() {
           setOpenPost(prev => prev ? { ...prev, comments: prev.comments + 1 } : null)
         }
       } else {
-        showToast(json.error || '发表评论失败', 'error')
+        showToast(json.error?.message || (language === 'zh' ? '发表评论失败' : 'Failed to post comment'), 'error')
       }
     } catch (err) {
       console.error('[HotPage] 提交评论失败:', err)
-      showToast('发表评论失败', 'error')
+      showToast(language === 'zh' ? '网络异常，请重试' : 'Network error, please retry', 'error')
     } finally {
       setSubmittingComment(false)
     }
-  }, [accessToken, newComment, openPost?.id, showToast])
+  }, [accessToken, newComment, openPost?.id, showToast, language])
 
   // 点赞/踩
   const toggleReaction = useCallback(async (postId: string, reactionType: 'up' | 'down') => {
@@ -637,7 +656,11 @@ function HotContent() {
                         style={{
                           cursor: 'pointer',
                         }}
-                        onClick={() => handleOpenPost(p)}
+                        onClick={(e: React.MouseEvent) => {
+                          // Don't hijack clicks on interactive elements (links, buttons, etc.)
+                          if ((e.target as HTMLElement).closest('a, button, [role="button"], input, textarea, select')) return
+                          handleOpenPost(p)
+                        }}
                         onMouseEnter={(e) => {
                           e.currentTarget.style.background = tokens.colors.bg.secondary
                         }}
@@ -645,11 +668,28 @@ function HotContent() {
                           e.currentTarget.style.background = tokens.colors.bg.primary
                         }}
                       >
-                        <Box className="hot-post-meta" style={{ display: 'flex', gap: tokens.spacing[2], marginBottom: tokens.spacing[2], flexWrap: 'wrap' }}>
+                        <Box className="hot-post-meta" style={{ display: 'flex', gap: tokens.spacing[2], marginBottom: tokens.spacing[2], flexWrap: 'wrap', alignItems: 'center' }}>
                           <Text className="hot-post-rank" size="sm" weight="black" style={{ color: rank <= 3 ? tokens.colors.accent.warning : tokens.colors.text.secondary }}>
                             #{rank}
                           </Text>
-                          <Text size="xs" color="secondary">{p.group}</Text>
+                          {p.group_id ? (
+                            <Link
+                              href={`/groups/${p.group_id}`}
+                              onClick={(e) => e.stopPropagation()}
+                              style={{
+                                fontSize: tokens.typography.fontSize.xs,
+                                color: ARENA_PURPLE,
+                                textDecoration: 'none',
+                                padding: '1px 6px',
+                                background: `${ARENA_PURPLE}15`,
+                                borderRadius: tokens.radius.sm,
+                              }}
+                            >
+                              {p.group}
+                            </Link>
+                          ) : (
+                            <Text size="xs" color="secondary">{p.group}</Text>
+                          )}
                           <Text size="xs" color="tertiary">{(p.views ?? 0).toLocaleString()} {t('views')}</Text>
                         </Box>
                         <Text className="hot-post-title" size="base" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>
@@ -774,9 +814,26 @@ function HotContent() {
               </button>
             </div>
 
-            <div style={{ fontSize: 12, color: ARENA_PURPLE }}>
-              {openPost.group}
-            </div>
+            {openPost.group_id ? (
+              <Link
+                href={`/groups/${openPost.group_id}`}
+                style={{
+                  fontSize: 12,
+                  color: ARENA_PURPLE,
+                  textDecoration: 'none',
+                  padding: '2px 8px',
+                  background: `${ARENA_PURPLE}20`,
+                  borderRadius: tokens.radius.sm,
+                  display: 'inline-block',
+                }}
+              >
+                {openPost.group}
+              </Link>
+            ) : (
+              <div style={{ fontSize: 12, color: ARENA_PURPLE }}>
+                {openPost.group}
+              </div>
+            )}
 
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, marginTop: 8 }}>
               <div style={{ fontSize: 20, fontWeight: 950, lineHeight: 1.25 }}>{openPost.title}</div>

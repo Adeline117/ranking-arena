@@ -777,13 +777,13 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
   // 加载评论
   const loadComments = async (postId: string) => {
     setCommentLoading(prev => ({ ...prev, [postId]: true }))
-    
+
     try {
       const response = await fetch(`/api/posts/${postId}/comments`)
-      const result = await response.json()
-      
-      if (response.ok) {
-        setComments(prev => ({ ...prev, [postId]: result.comments || [] }))
+      const json = await response.json()
+
+      if (response.ok && json.success) {
+        setComments(prev => ({ ...prev, [postId]: json.data?.comments || [] }))
       } else {
         const errorMsg = language === 'zh' ? '加载评论失败' : 'Failed to load comments'
         showToast(errorMsg, 'error')

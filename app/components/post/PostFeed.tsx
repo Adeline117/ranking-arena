@@ -520,7 +520,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
               // 加载评论
               fetch(`/api/posts/${props.initialPostId}/comments`)
                 .then(res => res.json())
-                .then(data => { if (data.comments) setComments(data.comments) })
+                .then(data => { if (data.success && data.data?.comments) setComments(data.data.comments) })
                 .catch((err) => { console.error('Failed to load comments:', err) })
             }
           } catch (err) {
@@ -1686,7 +1686,11 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
           return (
             <div
               key={p.id}
-              onClick={() => handleOpenPost(p)}
+              onClick={(e) => {
+                // Don't hijack clicks on interactive elements (links, buttons, etc.)
+                if ((e.target as HTMLElement).closest('a, button, [role="button"], input, textarea, select')) return
+                handleOpenPost(p)
+              }}
               style={{
                 width: '100%',
                 textAlign: 'left',
@@ -2020,9 +2024,26 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
       {openPost && (
         <Modal onClose={() => setOpenPost(null)}>
           {openPost.group_name && (
-            <div style={{ fontSize: 12, color: ARENA_PURPLE }}>
-              {openPost.group_name}
-            </div>
+            openPost.group_id ? (
+              <Link
+                href={`/groups/${openPost.group_id}`}
+                style={{
+                  fontSize: 12,
+                  color: ARENA_PURPLE,
+                  textDecoration: 'none',
+                  padding: '2px 8px',
+                  background: `${ARENA_PURPLE}20`,
+                  borderRadius: tokens.radius.sm,
+                  display: 'inline-block',
+                }}
+              >
+                {openPost.group_name}
+              </Link>
+            ) : (
+              <div style={{ fontSize: 12, color: ARENA_PURPLE }}>
+                {openPost.group_name}
+              </div>
+            )
           )}
 
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, marginTop: 8 }}>
