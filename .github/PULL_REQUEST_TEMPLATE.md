@@ -74,14 +74,17 @@
 - [ ] Error states handled gracefully
 - [ ] Design tokens used from `lib/design-tokens.ts`
 
-### Architecture Compliance (see docs/system-principles.md)
+### System State Management (MANDATORY - see docs/system-principles.md)
 
-- [ ] **Auth**: Uses `useUnifiedAuth()` on client, `requireAuth()` on server (no direct `supabase.auth` calls)
-- [ ] **Server ACK**: No UI state updated before server confirms write operation
-- [ ] **Canonical Store**: Entity data written to `postStore` (or equivalent shared store)
-- [ ] **URL-Driven**: Any modal/overlay state synced with URL params via `useUrlModal`
-- [ ] **Click Targets**: Author/group links use `<Link>` with `stopPropagation`
-- [ ] **Error Messages**: Distinguishes 401 (login needed) / 403 (no access) / 500 (server error)
+- [ ] Auth uses `useAuthSession()` hook (no direct `supabase.auth` calls in components)
+- [ ] Write operations wait for server ACK before showing success
+- [ ] Write operations check `isLoggedIn` BEFORE making API requests
+- [ ] Overlays/modals are URL-driven (open/close syncs with URL params)
+- [ ] Escape / close / backdrop click all produce the same result
+- [ ] Clickable links inside cards use `stopPropagation()` to prevent outer click
+- [ ] Server API routes verify auth via JWT token (not trusting client-provided user IDs)
+- [ ] Error messages distinguish: not-logged-in vs token-expired vs forbidden
+- [ ] Same entity uses same cache key regardless of entry point
 
 ### Performance
 
