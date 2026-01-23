@@ -109,8 +109,8 @@ export default function RankingSection({
         category={category}
         onCategoryChange={setCategory}
         onProRequired={handleProRequired}
-        error={error}
-        onRetry={onRetry}
+        error={null}
+        onRetry={undefined}
       />
 
       {/* Data source and update time info */}
