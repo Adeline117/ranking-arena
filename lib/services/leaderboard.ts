@@ -142,12 +142,21 @@ export class LeaderboardService {
       throw new Error(`Rankings query failed: ${error.message}`);
     }
 
+    // Deduplicate: keep only the first (best-ranked) snapshot per (platform, trader_key).
+    // Since data is already sorted by the requested sort column, first occurrence wins.
+    const seen = new Set<string>();
+    const deduped = (data || []).filter((row) => {
+      const key = `${row.platform}:${row.trader_key}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
     // Join with trader_sources_v2 for display names
-    const traderKeys = (data || []).map((s) => `${s.platform}:${s.trader_key}`);
-    const displayNames = await this.getDisplayNames(data || []);
+    const displayNames = await this.getDisplayNames(deduped);
 
     // Build response
-    const rankedRows: RankedTraderRow[] = (data || []).map((row, idx) => ({
+    const rankedRows: RankedTraderRow[] = deduped.map((row, idx) => ({
       rank: offset + idx + 1,
       platform: row.platform as Platform,
       trader_key: row.trader_key,
