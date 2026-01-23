@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { createLogger } from '@/lib/utils/logger'
+import { deleteServerCacheByPrefix } from '@/lib/utils/server-cache'
 
 const logger = createLogger('posts-delete')
 
@@ -76,6 +77,9 @@ export async function DELETE(
       logger.error('Delete error', { error: deleteError, postId, userId: user.id })
       return NextResponse.json({ error: '删除失败' }, { status: 500 })
     }
+
+    // 清除帖子列表缓存
+    deleteServerCacheByPrefix('posts:')
 
     return NextResponse.json({ success: true })
   } catch (error) {

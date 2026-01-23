@@ -19,6 +19,8 @@ interface RankingSectionProps {
   activeTimeRange: TimeRange
   onTimeRangeChange: (range: TimeRange) => void
   lastUpdated?: string | null
+  error?: string | null
+  onRetry?: () => void
 }
 
 /**
@@ -33,6 +35,8 @@ export default function RankingSection({
   activeTimeRange,
   onTimeRangeChange,
   lastUpdated,
+  error,
+  onRetry,
 }: RankingSectionProps) {
   const router = useRouter()
   const { showToast } = useToast()
