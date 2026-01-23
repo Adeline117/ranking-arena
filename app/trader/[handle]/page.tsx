@@ -113,11 +113,17 @@ function TraderContent(props: { params: { handle: string } | Promise<{ handle: s
   useEffect(() => {
     const tab = searchParams.get('tab') as TabKey | null
     if (tab && ['overview', 'stats', 'portfolio'].includes(tab)) {
-      setActiveTab(tab)
+      // Gate pro-only tabs
+      if (!isPro && (tab === 'stats' || tab === 'portfolio')) {
+        setActiveTab('overview')
+        router.replace(pathname, { scroll: false })
+      } else {
+        setActiveTab(tab)
+      }
     } else if (!tab) {
       setActiveTab('overview')
     }
-  }, [searchParams])
+  }, [searchParams, isPro, pathname, router])
 
   // 解析 params
   useEffect(() => {
@@ -261,10 +267,16 @@ function TraderContent(props: { params: { handle: string } | Promise<{ handle: s
           isRegistered={profile.isRegistered}
           followers={profile.followers}
           source={profile.source}
+          isPro={isPro}
         />
 
         {/* Tabs */}
-        <TraderTabs activeTab={activeTab} onTabChange={handleTabChange} />
+        <TraderTabs
+          activeTab={activeTab}
+          onTabChange={handleTabChange}
+          isPro={isPro}
+          onProRequired={() => router.push('/pricing')}
+        />
 
         {/* Tab Content with animation */}
         <Box
@@ -300,7 +312,14 @@ function TraderContent(props: { params: { handle: string } | Promise<{ handle: s
                   />
                 )}
                 {/* 交易员动态（置顶帖子自动显示在最上面） */}
-                <TraderFeed items={feed.filter((f) => f.type !== 'group_post')} title={t('activities')} />
+                <TraderFeed
+                  items={feed.filter((f) => f.type !== 'group_post')}
+                  title={t('activities')}
+                  isRegistered={profile.isRegistered}
+                  traderId={profile.id}
+                  traderHandle={profile.handle}
+                  source={profile.source}
+                />
               </Box>
 
               {/* Right Column - 交易员卡片 */}

@@ -12,7 +12,6 @@ import { getAvatarGradient, getAvatarInitial } from '@/lib/utils/avatar'
 import { ScoreRulesModal } from '../ui/ScoreRulesModal'
 import CategoryRankingTabs, { CategoryType } from './CategoryRankingTabs'
 import { ProLabel } from '../premium/PremiumGate'
-import { DataSourceBadge } from '../ui/DataSourceTooltip'
 
 // 图标组件
 const FilterIcon = ({ size = 14 }: { size?: number }) => (
@@ -752,54 +751,31 @@ export default function RankingTable(props: {
                         >
                           {displayName}
                         </Text>
-                        {/* 拆分的交易所标签：交易所名 + 类型 + 数据状态 */}
+                        {/* 类型标签（合约/现货/链上） */}
                         <Box style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                           {(() => {
                             const info = parseSourceInfo(trader.source || source || '')
-                            const exchangeKey = (trader.source || source || '').split('_')[0]
                             return (
-                              <>
-                                {/* 交易所名称标签 */}
+                              <Box
+                                style={{
+                                  padding: '2px 6px',
+                                  borderRadius: tokens.radius.sm,
+                                  background: `${info.typeColor}15`,
+                                  border: `1px solid ${info.typeColor}30`,
+                                }}
+                              >
                                 <Text
                                   size="xs"
                                   weight="bold"
                                   style={{
-                                    color: tokens.colors.text.secondary,
-                                    fontSize: '10px',
-                                    textTransform: 'uppercase',
-                                    letterSpacing: '0.3px',
+                                    color: info.typeColor,
+                                    fontSize: '9px',
+                                    lineHeight: 1.2,
                                   }}
                                 >
-                                  {info.exchange}
+                                  {info.type}
                                 </Text>
-                                {/* 类型标签（合约/现货/链上） */}
-                                <Box
-                                  style={{
-                                    padding: '2px 6px',
-                                    borderRadius: tokens.radius.sm,
-                                    background: `${info.typeColor}15`,
-                                    border: `1px solid ${info.typeColor}30`,
-                                  }}
-                                >
-                                  <Text
-                                    size="xs"
-                                    weight="bold"
-                                    style={{
-                                      color: info.typeColor,
-                                      fontSize: '9px',
-                                      lineHeight: 1.2,
-                                    }}
-                                  >
-                                    {info.type}
-                                  </Text>
-                                </Box>
-                                {/* 数据来源状态指示器 */}
-                                <DataSourceBadge
-                                  availability="available"
-                                  exchange={exchangeKey}
-                                  compact
-                                />
-                              </>
+                              </Box>
                             )
                           })()}
                         </Box>

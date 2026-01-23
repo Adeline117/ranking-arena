@@ -187,6 +187,165 @@ function SectionCard({
   )
 }
 
+// Trader Links Section Component
+interface TraderLink {
+  id: string
+  trader_id: string
+  source: string
+  handle: string | null
+  verified_at: string
+  created_at: string
+}
+
+function TraderLinksSection({ userId }: { userId: string }) {
+  const [links, setLinks] = useState<TraderLink[]>([])
+  const [loadingLinks, setLoadingLinks] = useState(true)
+  const [deleting, setDeleting] = useState<string | null>(null)
+  const { showToast } = useToast()
+  const { showConfirm } = useDialog()
+
+  const loadLinks = useCallback(async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) return
+
+      const res = await fetch('/api/traders/link', {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setLinks(data.links || [])
+      }
+    } catch (error) {
+      console.error('[TraderLinks] Load error:', error)
+    } finally {
+      setLoadingLinks(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    loadLinks()
+  }, [loadLinks])
+
+  const handleDelete = async (linkId: string) => {
+    const confirmed = await showConfirm('取消关联', '确定要取消关联此交易员账号吗？')
+    if (!confirmed) return
+
+    setDeleting(linkId)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) return
+
+      const res = await fetch(`/api/traders/link?id=${linkId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      })
+      if (res.ok) {
+        setLinks((prev) => prev.filter((l) => l.id !== linkId))
+        showToast('已取消关联', 'success')
+      } else {
+        const data = await res.json()
+        showToast(data.error || '操作失败', 'error')
+      }
+    } catch {
+      showToast('网络错误', 'error')
+    } finally {
+      setDeleting(null)
+    }
+  }
+
+  const getSourceLabel = (source: string) => {
+    const map: Record<string, string> = {
+      binance_futures: '合约',
+      binance_spot: '现货',
+      binance_web3: '链上',
+      bybit: '合约',
+      bitget_futures: '合约',
+      bitget_spot: '现货',
+      mexc: '合约',
+      coinex: '合约',
+      okx_web3: '链上',
+      kucoin: '合约',
+      gmx: '链上',
+    }
+    return map[source] || source
+  }
+
+  if (loadingLinks) {
+    return (
+      <Box style={{ padding: tokens.spacing[4], textAlign: 'center' }}>
+        <Text size="sm" color="tertiary">加载中...</Text>
+      </Box>
+    )
+  }
+
+  return (
+    <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}>
+      {links.length === 0 ? (
+        <Box style={{ padding: tokens.spacing[4], textAlign: 'center' }}>
+          <Text size="sm" color="tertiary">暂无关联的交易员账号</Text>
+          <Text size="xs" color="tertiary" style={{ marginTop: tokens.spacing[2] }}>
+            您可以在交易员主页上点击「申请认领」来关联您的交易员身份
+          </Text>
+        </Box>
+      ) : (
+        <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
+          {links.map((link) => (
+            <Box
+              key={link.id}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: tokens.spacing[3],
+                borderRadius: tokens.radius.md,
+                background: tokens.colors.bg.primary,
+                border: `1px solid ${tokens.colors.border.primary}`,
+              }}
+            >
+              <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3] }}>
+                <Box
+                  style={{
+                    padding: `2px ${tokens.spacing[2]}`,
+                    borderRadius: tokens.radius.sm,
+                    background: `${tokens.colors.accent.primary}15`,
+                    border: `1px solid ${tokens.colors.accent.primary}30`,
+                  }}
+                >
+                  <Text size="xs" weight="bold" style={{ color: tokens.colors.accent.primary }}>
+                    {getSourceLabel(link.source)}
+                  </Text>
+                </Box>
+                <Box>
+                  <Text size="sm" weight="medium">
+                    {link.handle || link.trader_id}
+                  </Text>
+                  <Text size="xs" color="tertiary">
+                    {new Date(link.verified_at).toLocaleDateString('zh-CN')} 认证
+                  </Text>
+                </Box>
+              </Box>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => handleDelete(link.id)}
+                disabled={deleting === link.id}
+                style={{
+                  color: tokens.colors.accent.error,
+                  fontSize: tokens.typography.fontSize.xs,
+                  padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
+                }}
+              >
+                {deleting === link.id ? '...' : '取消关联'}
+              </Button>
+            </Box>
+          ))}
+        </Box>
+      )}
+    </Box>
+  )
+}
+
 // Reusable input styles
 function getInputStyle(hasError = false) {
   return {
@@ -1392,6 +1551,11 @@ function SettingsContent() {
           >
             {userId && <ExchangeConnectionManager userId={userId} />}
           </Box>
+
+          {/* ===== Trader Links Section ===== */}
+          <SectionCard id="trader-links" title="我的交易员账号" description="管理您在排行榜上认领的交易员身份">
+            {userId && <TraderLinksSection userId={userId} />}
+          </SectionCard>
 
           {/* ===== Notification Preferences Section ===== */}
           <SectionCard id="notifications" title="通知偏好" description="选择你想接收的通知类型">
