@@ -1,0 +1,94 @@
+{
+  "platform": "bybit",
+  "market_type": "futures",
+  "leaderboard_endpoints": [
+    {
+      "url": "https://api2.bybit.com/fapi/beehive/public/v2/common/leader/list",
+      "method": "GET",
+      "headers": {
+        "Referer": "https://www.bybit.com/copyTrading/traderRanking",
+        "Origin": "https://www.bybit.com"
+      },
+      "query_params": {
+        "pageNo": "0",
+        "pageSize": "20",
+        "sortField": "ROI",
+        "sortType": "DESC",
+        "periodType": "7"
+      },
+      "pagination": {
+        "type": "offset",
+        "page_size": 20,
+        "max_pages": 5,
+        "param_name": "pageNo"
+      },
+      "response_path": "result.leaderList",
+      "window_param": "periodType",
+      "sort_param": "sortField"
+    }
+  ],
+  "profile_endpoints": [
+    {
+      "url": "https://api2.bybit.com/fapi/beehive/public/v1/common/leader/detail",
+      "method": "GET",
+      "headers": {
+        "Origin": "https://www.bybit.com"
+      },
+      "query_params": {
+        "leaderMark": ""
+      },
+      "response_path": "result"
+    },
+    {
+      "url": "https://api2.bybit.com/fapi/beehive/public/v1/common/leader/performance",
+      "method": "GET",
+      "headers": {
+        "Origin": "https://www.bybit.com"
+      },
+      "query_params": {
+        "leaderMark": "",
+        "periodType": "7"
+      },
+      "response_path": "result"
+    }
+  ],
+  "window_support": ["7d", "30d", "90d"],
+  "rate_limit_hint": {
+    "rpm": 20,
+    "concurrent": 2,
+    "delay_ms": 3000
+  },
+  "field_map": {
+    "roi_pct": "roi",
+    "pnl_usd": "pnl",
+    "win_rate": "winRate",
+    "max_drawdown": "maxDrawdown",
+    "trades_count": "totalOrder",
+    "followers": "followerNum",
+    "copiers": "copierNum",
+    "sharpe_ratio": "sharpeRatio",
+    "aum": "aum"
+  },
+  "roi_sort_supported": true,
+  "roi_sort_method": "query_param",
+  "proof": [
+    {
+      "url": "https://api2.bybit.com/fapi/beehive/public/v2/common/leader/list?pageNo=0&pageSize=20&sortField=ROI&sortType=DESC&periodType=7",
+      "request_path": "/fapi/beehive/public/v2/common/leader/list",
+      "method": "GET",
+      "response_fields_sample": {
+        "result.leaderList[0].leaderMark": "leader_abc123",
+        "result.leaderList[0].nickName": "TopTrader",
+        "result.leaderList[0].roi": 1.2345,
+        "result.leaderList[0].pnl": 98765.43,
+        "result.leaderList[0].winRate": 0.68,
+        "result.leaderList[0].maxDrawdown": 0.12,
+        "result.leaderList[0].totalOrder": 456,
+        "result.leaderList[0].followerNum": 2300,
+        "result.leaderList[0].copierNum": 1100,
+        "result.leaderList[0].aum": 500000
+      },
+      "discovered_at": "2024-01-15T00:00:00Z"
+    }
+  ]
+}

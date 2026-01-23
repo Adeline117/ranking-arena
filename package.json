@@ -26,6 +26,10 @@
     "daily-check": "bash scripts/daily-check.sh",
     "setup:antigravity": "bash scripts/antigravity-setup.sh",
     "setup:dev": "bash scripts/setup-dev.sh",
+    "worker": "npx tsx workers/index.ts",
+    "worker:seed": "npx tsx workers/index.ts --seed",
+    "worker:discover": "npx tsx workers/discovery.ts",
+    "worker:discover:platform": "npx tsx workers/discovery.ts --platform",
     "prepare": "husky || true"
   },
   "dependencies": {
