@@ -246,12 +246,11 @@ export function providerError(
 export function handleError(err: unknown, context?: string): NextResponse<ApiErrorResponse> {
   // 如果已经是 ApiError，直接转换
   if (err instanceof ApiError) {
-    // 使用 logger.error 上报到 Sentry（仅 500 级别错误）
     if (err.statusCode >= 500) {
       logger.error(`[${context || 'API'}] ApiError: ${err.message}`, err, { code: err.code })
-    } else if (context) {
-      // 4xx 错误仅记录 warn
-      logger.warn(`[${context}] ApiError: ${err.message}`, { code: err.code })
+    } else if (err.statusCode >= 400) {
+      // 4xx 错误上报到 Sentry 便于分析（warn 级别）
+      logger.warn(`[${context || 'API'}] ApiError ${err.statusCode}: ${err.message}`, { code: err.code, statusCode: err.statusCode })
     }
     return errorFromApiError(err)
   }

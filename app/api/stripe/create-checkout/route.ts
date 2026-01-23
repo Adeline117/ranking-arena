@@ -94,10 +94,11 @@ export async function POST(request: NextRequest) {
     }
 
     // 获取或创建 Stripe 客户
+    const userEmail = user.email || `${user.id}@user.ranking-arena.com`
     const customerId = await getOrCreateStripeCustomer(
       user.id,
-      user.email!,
-      { 
+      userEmail,
+      {
         source: 'ranking-arena',
         plan: plan,
       }

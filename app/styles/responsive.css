@@ -479,8 +479,43 @@
 }
 
 /* ============================================
+   交易员主页双栏网格
+   ============================================ */
+
+.profile-grid {
+  grid-template-columns: 1fr !important;
+  gap: 20px !important;
+}
+
+@media (min-width: 768px) {
+  .profile-grid {
+    grid-template-columns: 1fr 300px !important;
+    gap: 24px !important;
+  }
+}
+
+@media (min-width: 1024px) {
+  .profile-grid {
+    grid-template-columns: 1fr 340px !important;
+    gap: 32px !important;
+  }
+}
+
+/* ============================================
    Overview Performance Card 响应式
    ============================================ */
+
+.performance-main-grid {
+  grid-template-columns: 1fr !important;
+  gap: 12px !important;
+}
+
+@media (min-width: 480px) {
+  .performance-main-grid {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 16px !important;
+  }
+}
 
 .performance-grid {
   grid-template-columns: repeat(2, 1fr) !important;
@@ -497,6 +532,23 @@
 @media (min-width: 1024px) {
   .performance-grid {
     grid-template-columns: repeat(4, 1fr) !important;
+  }
+}
+
+/* ============================================
+   交易员页面移动端 Header 按钮
+   ============================================ */
+
+@media (max-width: 767px) {
+  .profile-header-actions {
+    width: 100%;
+    justify-content: center !important;
+  }
+
+  .profile-header-info {
+    flex-direction: column !important;
+    align-items: center !important;
+    text-align: center;
   }
 }
 

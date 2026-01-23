@@ -174,8 +174,8 @@ export default function OverviewPerformanceCard({ performance, profitableWeeksPc
   const sparklineData = equityCurve?.map(d => d.roi) || []
 
   return (
+    <div ref={cardRef}>
     <Box
-      ref={cardRef}
       className="performance-card glass-card"
       style={{
         background: `linear-gradient(145deg, ${tokens.colors.bg.secondary} 0%, ${tokens.colors.bg.primary}90 100%)`,
@@ -377,6 +377,7 @@ export default function OverviewPerformanceCard({ performance, profitableWeeksPc
         </Box>
       </Box>
     </Box>
+    </div>
   )
 }
 

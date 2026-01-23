@@ -42,7 +42,7 @@ export default function PaymentSuccessPage() {
   const searchParams = useSearchParams()
   const { language, t } = useLanguage()
   const { showToast } = useToast()
-  const { refresh: refreshPremium, isPremium, tier } = usePremium()
+  const { refresh: refreshPremium } = usePremium()
   
   const [email, setEmail] = useState<string | null>(null)
   const [countdown, setCountdown] = useState(8)
@@ -59,7 +59,12 @@ export default function PaymentSuccessPage() {
   // 直接查询订阅状态（避免 React 状态闭包问题）
   const checkSubscriptionDirect = useCallback(async (): Promise<boolean> => {
     try {
-      const { data: { session } } = await supabase.auth.getSession()
+      // 获取有效 session（自动刷新过期 token）
+      let { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) {
+        const { data: refreshed } = await supabase.auth.refreshSession()
+        session = refreshed.session
+      }
       if (!session?.access_token || !session?.user?.id) return false
 
       // 优先通过 API 查询（使用 service role，不受 RLS 限制）
@@ -225,10 +230,10 @@ export default function PaymentSuccessPage() {
     }
   }, [retrying, verificationStatus])
 
-  // 自动跳转倒计时（只在验证完成后开始）
+  // 自动跳转倒计时（只在验证成功后开始）
   useEffect(() => {
-    if (verificationStatus === 'verifying') return
-    
+    if (verificationStatus !== 'success') return
+
     if (countdown <= 0) {
       router.push('/')
       return

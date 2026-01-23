@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/layout/TopNav'
@@ -329,12 +329,17 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
   }, [isChineseText])
 
   // 当帖子加载或语言变化时触发翻译
+  const postsRef = useRef(posts)
+  useEffect(() => {
+    postsRef.current = posts
+  }, [posts])
+
   useEffect(() => {
     if (posts.length > 0 && !translatingPosts) {
       translatePosts(posts, language as 'zh' | 'en')
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [posts.length, language])
+  }, [posts, language])
 
   // 获取相关小组 - 常来这个小组的人也爱去的小组
   useEffect(() => {
@@ -566,7 +571,7 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
 
   useEffect(() => {
     setSortedPosts(computedSortedPosts)
-  }, [posts, sortMode])
+  }, [computedSortedPosts])
 
   // 计算热度颜色 - 根据评论数从浅橙到深橙
   const getHeatColor = (commentCount: number, maxComments: number): string => {

@@ -266,8 +266,12 @@ function TraderContent(props: { params: { handle: string } | Promise<{ handle: s
           coverUrl={profile.cover_url}
           isRegistered={profile.isRegistered}
           followers={profile.followers}
+          copiers={profile.copiers}
           source={profile.source}
           isPro={isPro}
+          roi90d={performance?.roi_90d}
+          maxDrawdown={performance?.max_drawdown}
+          winRate={performance?.win_rate}
         />
 
         {/* Tabs */}
@@ -287,17 +291,19 @@ function TraderContent(props: { params: { handle: string } | Promise<{ handle: s
         >
           {activeTab === 'overview' && (
             <Box
-              className="profile-grid main-grid"
+              className="profile-grid"
               style={{
                 display: 'grid',
-                gridTemplateColumns: '1fr 340px',
                 gap: tokens.spacing[8],
               }}
             >
               {/* Left Column - 核心绩效指标和评分 */}
               <Box className="stagger-enter" style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[6] }}>
                 {performance && (
-                  <OverviewPerformanceCard performance={performance} />
+                  <OverviewPerformanceCard
+                    performance={performance}
+                    equityCurve={equityCurve?.['90D']}
+                  />
                 )}
                 {/* 评分详情 - 紧跟在表现卡片下方 */}
                 {performance && (

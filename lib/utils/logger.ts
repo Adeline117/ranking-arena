@@ -580,7 +580,7 @@ export async function withRetry<T>(
   }
 
   logger.error(`${context} failed after ${maxRetries} attempts`, lastError!)
-  captureError(lastError!, { maxRetries, context })
+  await captureError(lastError!, { maxRetries, context })
 
   throw lastError
 }

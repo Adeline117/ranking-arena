@@ -154,7 +154,7 @@ async function handleCheckoutCompleted(
   }
 
   // 处理订阅支付
-  const userId = session.metadata?.supabase_user_id
+  const userId = session.metadata?.supabase_user_id || session.metadata?.userId
   const customerId = session.customer as string
 
   if (!userId) {
@@ -162,14 +162,23 @@ async function handleCheckoutCompleted(
     return
   }
 
+  // 检查支付状态
+  if (session.payment_status !== 'paid') {
+    log.warn('Checkout completed but payment not paid', { sessionId: session.id, status: session.payment_status })
+    return
+  }
+
   log.info('Subscription checkout completed', { userId, customerId, sessionId: session.id })
 
-  // 更新或创建订阅记录（实际订阅状态将由 subscription.created 事件更新）
+  // 更新订阅记录（设置 pro tier 和 active 状态）
   const { error } = await supabase
     .from('subscriptions')
     .upsert({
       user_id: userId,
       stripe_customer_id: customerId,
+      stripe_subscription_id: session.subscription as string || undefined,
+      tier: 'pro',
+      status: 'active',
       updated_at: new Date().toISOString(),
     }, {
       onConflict: 'user_id',
@@ -177,6 +186,20 @@ async function handleCheckoutCompleted(
 
   if (error) {
     log.error('Failed to update subscription record', new Error(error.message), { userId })
+  }
+
+  // 同步更新 user_profiles.subscription_tier
+  const { error: profileError } = await supabase
+    .from('user_profiles')
+    .update({
+      subscription_tier: 'pro',
+      stripe_customer_id: customerId,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', userId)
+
+  if (profileError) {
+    log.error('Failed to update user_profiles tier', new Error(profileError.message), { userId })
   }
 }
 
@@ -233,10 +256,10 @@ async function handleSubscriptionChange(
   subscription: Stripe.Subscription,
   log: ReturnType<typeof logger.withContext>
 ) {
-  const userId = subscription.metadata?.supabase_user_id
+  let resolvedUserId = subscription.metadata?.supabase_user_id || subscription.metadata?.userId
   const customerId = subscription.customer as string
 
-  if (!userId) {
+  if (!resolvedUserId) {
     // 尝试从客户 ID 查找用户
     const { data: existing } = await supabase
       .from('subscriptions')
@@ -245,11 +268,23 @@ async function handleSubscriptionChange(
       .maybeSingle()
 
     if (!existing) {
-      log.warn('Subscription change without user mapping', { 
-        subscriptionId: subscription.id,
-        customerId,
-      })
-      return
+      // 再尝试从 user_profiles 查找
+      const { data: profile } = await supabase
+        .from('user_profiles')
+        .select('id')
+        .eq('stripe_customer_id', customerId)
+        .maybeSingle()
+
+      if (!profile) {
+        log.warn('Subscription change without user mapping', {
+          subscriptionId: subscription.id,
+          customerId,
+        })
+        return
+      }
+      resolvedUserId = profile.id
+    } else {
+      resolvedUserId = existing.user_id
     }
   }
 
@@ -258,23 +293,22 @@ async function handleSubscriptionChange(
   const status = mapStripeStatus(subscription.status)
 
   log.info('Subscription changed', {
-    userId,
+    userId: resolvedUserId,
     tier,
     status,
     subscriptionId: subscription.id,
   })
 
-  // 获取订阅周期信息（从第一个订阅项目或订阅本身）
-  const subscriptionItem = subscription.items?.data?.[0]
-  const periodStart = (subscriptionItem as { current_period_start?: number })?.current_period_start || 
-    (subscription as unknown as { current_period_start?: number }).current_period_start
-  const periodEnd = (subscriptionItem as { current_period_end?: number })?.current_period_end ||
-    (subscription as unknown as { current_period_end?: number }).current_period_end
+  // 兼容不同 Stripe API 版本获取周期信息
+  const sub = subscription as unknown as Record<string, unknown>
+  const itemPeriod = subscription.items?.data?.[0] as unknown as Record<string, unknown> | undefined
+  const periodStart = (sub.current_period_start ?? itemPeriod?.current_period_start) as number | undefined
+  const periodEnd = (sub.current_period_end ?? itemPeriod?.current_period_end) as number | undefined
 
   const { error } = await supabase
     .from('subscriptions')
     .upsert({
-      user_id: userId,
+      user_id: resolvedUserId,
       stripe_customer_id: customerId,
       stripe_subscription_id: subscription.id,
       tier,
@@ -287,24 +321,38 @@ async function handleSubscriptionChange(
     })
 
   if (error) {
-    log.error('Failed to update subscription', new Error(error.message), { userId })
+    log.error('Failed to update subscription', new Error(error.message), { userId: resolvedUserId })
+  }
+
+  // 同步更新 user_profiles.subscription_tier
+  const shouldBePro = tier === 'pro' && (status === 'active' || status === 'trialing')
+  const { error: profileError } = await supabase
+    .from('user_profiles')
+    .update({
+      subscription_tier: shouldBePro ? 'pro' : 'free',
+      stripe_customer_id: customerId,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', resolvedUserId)
+
+  if (profileError) {
+    log.error('Failed to update user_profiles tier', new Error(profileError.message), { userId: resolvedUserId })
   }
 
   // Pro 会员自动加入官方群（auto-mute，不打扰用户）
-  if (userId && tier === 'pro' && status === 'active') {
+  if (resolvedUserId && tier === 'pro' && status === 'active') {
     try {
-      const result = await joinProOfficialGroup(userId)
+      const result = await joinProOfficialGroup(resolvedUserId)
       if (result.success && result.groupId) {
-        // 自动设置群消息免打扰
         await supabase
           .from('group_members')
           .update({ notifications_muted: true })
           .eq('group_id', result.groupId)
-          .eq('user_id', userId)
-        log.info('Pro member auto-joined official group (muted)', { userId, groupId: result.groupId })
+          .eq('user_id', resolvedUserId)
+        log.info('Pro member auto-joined official group (muted)', { userId: resolvedUserId, groupId: result.groupId })
       }
     } catch (joinError) {
-      log.error('Failed to auto-join Pro group', joinError instanceof Error ? joinError : new Error(String(joinError)), { userId })
+      log.error('Failed to auto-join Pro group', joinError instanceof Error ? joinError : new Error(String(joinError)), { userId: resolvedUserId })
     }
   }
 }
@@ -321,7 +369,7 @@ async function handleSubscriptionDeleted(
     customerId,
   })
 
-  // 获取用户 ID 以便从 Pro 群移除
+  // 获取用户 ID 以便更新 profile 和从 Pro 群移除
   const { data: subRecord } = await supabase
     .from('subscriptions')
     .select('user_id')
@@ -343,8 +391,17 @@ async function handleSubscriptionDeleted(
     log.error('Failed to downgrade subscription', new Error(error.message), { customerId })
   }
 
-  // 从 Pro 官方群移除
+  // 同步更新 user_profiles.subscription_tier
   if (subRecord?.user_id) {
+    await supabase
+      .from('user_profiles')
+      .update({
+        subscription_tier: 'free',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', subRecord.user_id)
+
+    // 从 Pro 官方群移除
     try {
       await leaveProOfficialGroup(subRecord.user_id)
       log.info('Removed user from Pro official group', { userId: subRecord.user_id })
