@@ -1686,7 +1686,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
           return (
             <div
               key={p.id}
-              onClick={(e) => {
+              onClick={(e: React.MouseEvent) => {
                 // Don't hijack clicks on interactive elements (links, buttons, etc.)
                 if ((e.target as HTMLElement).closest('a, button, [role="button"], input, textarea, select')) return
                 handleOpenPost(p)
@@ -2031,6 +2031,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
                   fontSize: 12,
                   color: ARENA_PURPLE,
                   textDecoration: 'none',
+                  fontWeight: 600,
                   padding: '2px 8px',
                   background: `${ARENA_PURPLE}20`,
                   borderRadius: tokens.radius.sm,
@@ -2064,7 +2065,25 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
           </div>
 
           <div style={{ marginTop: 8, fontSize: 12, color: tokens.colors.text.tertiary, display: 'flex', alignItems: 'center', gap: 6 }}>
-            {openPost.author_handle} · {formatTimeAgo(openPost.created_at)} · <CommentIcon size={12} /> {openPost.comment_count}
+            {openPost.author_handle ? (
+              <Link
+                href={`/u/${encodeURIComponent(openPost.author_handle)}`}
+                style={{
+                  color: tokens.colors.text.secondary,
+                  textDecoration: 'none',
+                  fontWeight: 700,
+                }}
+              >
+                {openPost.author_handle}
+              </Link>
+            ) : (
+              <span>{openPost.author_handle || '匿名'}</span>
+            )}
+            <span>·</span>
+            <span>{formatTimeAgo(openPost.created_at)}</span>
+            <span>·</span>
+            <CommentIcon size={12} />
+            <span>{openPost.comment_count}</span>
           </div>
 
           <div translate="no" style={{ 
