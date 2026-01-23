@@ -48,7 +48,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    // 获取每个会话中另一方用户的信息和未读消息数
+    // 获取每个会话中另一方用户的信息、未读消息数和成员设置
     const enhancedConversations = await Promise.all(
       (conversations || []).map(async (conv: any) => {
         const otherUserId = conv.user1_id === userId ? conv.user2_id : conv.user1_id
@@ -68,16 +68,34 @@ export async function GET(request: NextRequest) {
           .eq('receiver_id', userId)
           .eq('read', false)
 
+        // 获取成员设置（备注、置顶、静音等）
+        const { data: memberSettings } = await supabase
+          .from('conversation_members')
+          .select('remark, is_muted, is_pinned, is_blocked')
+          .eq('conversation_id', conv.id)
+          .eq('user_id', userId)
+          .maybeSingle()
+
         return {
           id: conv.id,
           other_user: otherUser || { id: otherUserId, handle: '未知用户' },
           last_message_at: conv.last_message_at,
           last_message_preview: conv.last_message_preview,
           unread_count: unreadCount || 0,
-          created_at: conv.created_at
+          created_at: conv.created_at,
+          member_settings: memberSettings || null,
         }
       })
     )
+
+    // Sort: pinned conversations first, then by last_message_at
+    enhancedConversations.sort((a, b) => {
+      const aPinned = a.member_settings?.is_pinned || false
+      const bPinned = b.member_settings?.is_pinned || false
+      if (aPinned && !bPinned) return -1
+      if (!aPinned && bPinned) return 1
+      return new Date(b.last_message_at).getTime() - new Date(a.last_message_at).getTime()
+    })
 
     return NextResponse.json({ conversations: enhancedConversations })
   } catch (error) {

@@ -10,6 +10,13 @@ import { Box, Text } from '@/app/components/base'
 import Avatar from '@/app/components/ui/Avatar'
 import { useToast } from '@/app/components/ui/Toast'
 
+type MemberSettings = {
+  remark: string | null
+  is_muted: boolean
+  is_pinned: boolean
+  is_blocked: boolean
+}
+
 type Conversation = {
   id: string
   other_user: {
@@ -21,6 +28,7 @@ type Conversation = {
   last_message_at: string
   last_message_preview?: string
   unread_count: number
+  member_settings?: MemberSettings | null
 }
 
 export default function MessagesPage() {
@@ -119,9 +127,13 @@ export default function MessagesPage() {
         (payload) => {
           // 收到新消息时，刷新会话列表
           loadConversations(userId)
-          
-          // 显示新消息提示
-          showToast('收到新消息', 'info')
+
+          // Check if the conversation is muted before showing notification
+          const newMsg = payload.new as { conversation_id?: string }
+          const conv = conversations.find(c => c.id === newMsg.conversation_id)
+          if (!conv?.member_settings?.is_muted) {
+            showToast('收到新消息', 'info')
+          }
         }
       )
       .on(
@@ -452,19 +464,41 @@ export default function MessagesPage() {
                   
                   {/* 内容区域 */}
                   <Box style={{ flex: 1, minWidth: 0 }}>
-                    <Box style={{ 
-                      display: 'flex', 
-                      alignItems: 'center', 
-                      justifyContent: 'space-between', 
+                    <Box style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
                       marginBottom: 4,
                     }}>
-                      <Text 
-                        size="base" 
-                        weight={conv.unread_count > 0 ? 'black' : 'bold'} 
-                        style={{ color: tokens.colors.text.primary }}
-                      >
-                        {conv.other_user.handle}
-                      </Text>
+                      <Box style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, flex: 1 }}>
+                        {/* Pin icon */}
+                        {conv.member_settings?.is_pinned && (
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="#9575cd" stroke="#9575cd" strokeWidth="2" style={{ flexShrink: 0 }}>
+                            <line x1="12" y1="17" x2="12" y2="22" />
+                            <path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V17z" />
+                          </svg>
+                        )}
+                        <Text
+                          size="base"
+                          weight={conv.unread_count > 0 ? 'black' : 'bold'}
+                          style={{
+                            color: tokens.colors.text.primary,
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {conv.member_settings?.remark || conv.other_user.handle}
+                        </Text>
+                        {/* Mute icon */}
+                        {conv.member_settings?.is_muted && (
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={tokens.colors.text.tertiary} strokeWidth="2" style={{ flexShrink: 0 }}>
+                            <path d="M11 5L6 9H2v6h4l5 4V5z" />
+                            <line x1="23" y1="9" x2="17" y2="15" />
+                            <line x1="17" y1="9" x2="23" y2="15" />
+                          </svg>
+                        )}
+                      </Box>
                       <Text size="xs" color="tertiary" style={{ flexShrink: 0, marginLeft: 8 }}>
                         {formatTime(conv.last_message_at)}
                       </Text>
@@ -483,7 +517,7 @@ export default function MessagesPage() {
                       >
                         {conv.last_message_preview || '开始聊天'}
                       </Text>
-                      {conv.unread_count > 0 && (
+                      {conv.unread_count > 0 && !conv.member_settings?.is_muted && (
                         <Box
                           style={{
                             background: 'linear-gradient(135deg, #9575cd 0%, #7e57c2 100%)',
@@ -502,6 +536,17 @@ export default function MessagesPage() {
                         >
                           {conv.unread_count > 99 ? '99+' : conv.unread_count}
                         </Box>
+                      )}
+                      {conv.unread_count > 0 && conv.member_settings?.is_muted && (
+                        <Box
+                          style={{
+                            width: 8,
+                            height: 8,
+                            borderRadius: '50%',
+                            background: tokens.colors.text.tertiary,
+                            flexShrink: 0,
+                          }}
+                        />
                       )}
                     </Box>
                   </Box>
