@@ -124,7 +124,7 @@ function Spotlight({
         right: 0,
         bottom: 0,
         pointerEvents: 'none',
-        zIndex: 9998,
+        zIndex: tokens.zIndex.max - 1, // 引导遮罩，低于 max
       }}
     >
       {/* 四个遮罩区域 */}
@@ -532,7 +532,7 @@ export function TourProvider({ children }: { children: ReactNode }) {
               left: 0,
               right: 0,
               bottom: 0,
-              zIndex: 9997,
+              zIndex: tokens.zIndex.max - 2, // 引导点击遮罩
             }}
           />
 
