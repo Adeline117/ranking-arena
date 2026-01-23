@@ -660,7 +660,7 @@ export default function PricingPage() {
                   <QuoteIcon size={24} />
                 </Box>
                 <Text size="sm" color="secondary" style={{ marginBottom: tokens.spacing[4], lineHeight: 1.6 }}>
-                  "{language === 'zh' ? testimonial.content : testimonial.contentEn}"
+                  &ldquo;{language === 'zh' ? testimonial.content : testimonial.contentEn}&rdquo;
                 </Text>
                 <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3] }}>
                   <Box

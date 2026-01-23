@@ -192,6 +192,16 @@ class Logger {
   }
 
   /**
+   * 创建带上下文的 logger（child 方法的别名）
+   */
+  withContext(context: Record<string, unknown>): Logger {
+    const contextName = Object.entries(context)
+      .map(([k, v]) => `${k}=${v}`)
+      .join(',')
+    return this.child(contextName)
+  }
+
+  /**
    * 设置配置
    */
   setConfig(config: Partial<LoggerConfig>): void {

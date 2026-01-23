@@ -54,12 +54,12 @@ describe('getPosts', () => {
 
     mockSupabase.range.mockReturnValueOnce({
       ...mockSupabase,
-      then: (resolve: Function) => resolve({ data: mockPosts, error: null }),
+      then: (resolve: (value: unknown) => void) => resolve({ data: mockPosts, error: null }),
     })
 
     mockSupabase.in.mockReturnValueOnce({
       ...mockSupabase,
-      then: (resolve: Function) => resolve({
+      then: (resolve: (value: unknown) => void) => resolve({
         data: [{ handle: 'testUser', avatar_url: 'https://example.com/avatar.png' }],
         error: null,
       }),
@@ -75,7 +75,7 @@ describe('getPosts', () => {
 
     mockSupabase.range.mockReturnValueOnce({
       ...mockSupabase,
-      then: (resolve: Function) => resolve({ data: [], error: null }),
+      then: (resolve: (value: unknown) => void) => resolve({ data: [], error: null }),
     })
 
     const result = await getPosts(mockSupabase as any)
@@ -87,7 +87,7 @@ describe('getPosts', () => {
 
     mockSupabase.range.mockReturnValueOnce({
       ...mockSupabase,
-      then: (resolve: Function) => resolve({ data: null, error: new Error('DB Error') }),
+      then: (resolve: (value: unknown) => void) => resolve({ data: null, error: new Error('DB Error') }),
     })
 
     await expect(getPosts(mockSupabase as any)).rejects.toThrow()
@@ -98,7 +98,7 @@ describe('getPosts', () => {
 
     mockSupabase.range.mockReturnValueOnce({
       ...mockSupabase,
-      then: (resolve: Function) => resolve({ data: [], error: null }),
+      then: (resolve: (value: unknown) => void) => resolve({ data: [], error: null }),
     })
 
     await getPosts(mockSupabase as any, { group_id: 'group123' })
@@ -110,7 +110,7 @@ describe('getPosts', () => {
 
     mockSupabase.range.mockReturnValueOnce({
       ...mockSupabase,
-      then: (resolve: Function) => resolve({ data: [], error: null }),
+      then: (resolve: (value: unknown) => void) => resolve({ data: [], error: null }),
     })
 
     await getPosts(mockSupabase as any, { author_handle: 'testUser' })
@@ -228,7 +228,7 @@ describe('deletePost', () => {
 
     mockSupabase.eq.mockReturnValueOnce({
       ...mockSupabase,
-      eq: jest.fn().mockReturnValue({ then: (resolve: Function) => resolve({ error: null }) }),
+      eq: jest.fn().mockReturnValue({ then: (resolve: (value: unknown) => void) => resolve({ error: null }) }),
     })
 
     await expect(deletePost(mockSupabase as any, 'post1', 'user1')).resolves.toBeUndefined()
@@ -239,7 +239,7 @@ describe('deletePost', () => {
 
     mockSupabase.eq.mockReturnValueOnce({
       ...mockSupabase,
-      eq: jest.fn().mockReturnValue({ then: (resolve: Function) => resolve({ error: new Error('Delete failed') }) }),
+      eq: jest.fn().mockReturnValue({ then: (resolve: (value: unknown) => void) => resolve({ error: new Error('Delete failed') }) }),
     })
 
     await expect(deletePost(mockSupabase as any, 'post1', 'user1')).rejects.toThrow()
@@ -282,7 +282,7 @@ describe('togglePostReaction', () => {
 
     mockSupabase.maybeSingle.mockResolvedValueOnce({ data: null, error: null })
     mockSupabase.insert.mockReturnValueOnce({
-      then: (resolve: Function) => resolve({ error: null }),
+      then: (resolve: (value: unknown) => void) => resolve({ error: null }),
     })
 
     const result = await togglePostReaction(mockSupabase as any, 'post1', 'user1', 'up')
@@ -296,7 +296,7 @@ describe('togglePostReaction', () => {
     mockSupabase.maybeSingle.mockResolvedValueOnce({ data: { id: 'reaction1', reaction_type: 'up' }, error: null })
     mockSupabase.eq.mockReturnValueOnce({
       ...mockSupabase,
-      then: (resolve: Function) => resolve({ error: null }),
+      then: (resolve: (value: unknown) => void) => resolve({ error: null }),
     })
 
     const result = await togglePostReaction(mockSupabase as any, 'post1', 'user1', 'up')
@@ -310,7 +310,7 @@ describe('togglePostReaction', () => {
     mockSupabase.maybeSingle.mockResolvedValueOnce({ data: { id: 'reaction1', reaction_type: 'up' }, error: null })
     mockSupabase.eq.mockReturnValueOnce({
       ...mockSupabase,
-      then: (resolve: Function) => resolve({ error: null }),
+      then: (resolve: (value: unknown) => void) => resolve({ error: null }),
     })
 
     const result = await togglePostReaction(mockSupabase as any, 'post1', 'user1', 'down')
@@ -345,7 +345,7 @@ describe('togglePostVote', () => {
 
     mockSupabase.maybeSingle.mockResolvedValueOnce({ data: null, error: null })
     mockSupabase.insert.mockReturnValueOnce({
-      then: (resolve: Function) => resolve({ error: null }),
+      then: (resolve: (value: unknown) => void) => resolve({ error: null }),
     })
 
     const result = await togglePostVote(mockSupabase as any, 'post1', 'user1', 'bull')
@@ -359,7 +359,7 @@ describe('togglePostVote', () => {
     mockSupabase.maybeSingle.mockResolvedValueOnce({ data: { id: 'vote1', choice: 'bull' }, error: null })
     mockSupabase.eq.mockReturnValueOnce({
       ...mockSupabase,
-      then: (resolve: Function) => resolve({ error: null }),
+      then: (resolve: (value: unknown) => void) => resolve({ error: null }),
     })
 
     const result = await togglePostVote(mockSupabase as any, 'post1', 'user1', 'bull')
@@ -374,7 +374,7 @@ describe('getUserPostReactions', () => {
 
     mockSupabase.eq.mockReturnValueOnce({
       ...mockSupabase,
-      then: (resolve: Function) => resolve({
+      then: (resolve: (value: unknown) => void) => resolve({
         data: [
           { post_id: 'post1', reaction_type: 'up' },
           { post_id: 'post2', reaction_type: 'down' },
@@ -395,7 +395,7 @@ describe('getUserPostVotes', () => {
 
     mockSupabase.eq.mockReturnValueOnce({
       ...mockSupabase,
-      then: (resolve: Function) => resolve({
+      then: (resolve: (value: unknown) => void) => resolve({
         data: [
           { post_id: 'post1', choice: 'bull' },
           { post_id: 'post2', choice: 'bear' },

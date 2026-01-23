@@ -348,7 +348,7 @@ describe('useCacheStore', () => {
     })
 
     // 立即检查应该是新鲜的
-    let meta = result.current.getWithMeta<string>('testKey')
+    const meta = result.current.getWithMeta<string>('testKey')
     expect(meta.isFresh).toBe(true)
     expect(meta.isStale).toBe(false)
     expect(meta.data).toBe('fresh')

@@ -47,7 +47,7 @@ describe('getAdminEmails', () => {
   test('should return default when no env var set', () => {
     delete process.env.ADMIN_EMAILS
     jest.resetModules()
-
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { getAdminEmails } = require('./auth')
     const emails = getAdminEmails()
     expect(emails).toContain('test@example.com')

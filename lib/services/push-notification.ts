@@ -106,7 +106,7 @@ export class PushNotificationService {
       platform?: 'ios' | 'android' | 'web'
     }
   ): Promise<PushSubscription> {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const { data, error } = await (this.supabase as any)
       .from('push_subscriptions')
       .upsert({
@@ -136,7 +136,7 @@ export class PushNotificationService {
    * 取消推送订阅
    */
   async unregisterSubscription(userId: string, token: string): Promise<void> {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const { error } = await (this.supabase as any)
       .from('push_subscriptions')
       .delete()
@@ -153,7 +153,7 @@ export class PushNotificationService {
    * 禁用推送订阅（保留记录）
    */
   async disableSubscription(userId: string, token: string): Promise<void> {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const { error } = await (this.supabase as any)
       .from('push_subscriptions')
       .update({ enabled: false, updated_at: new Date().toISOString() })
@@ -170,7 +170,7 @@ export class PushNotificationService {
    * 获取用户的所有推送订阅
    */
   async getUserSubscriptions(userId: string): Promise<PushSubscription[]> {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const { data, error } = await (this.supabase as any)
       .from('push_subscriptions')
       .select('*')

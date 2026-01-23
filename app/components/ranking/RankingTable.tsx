@@ -208,7 +208,7 @@ export default function RankingTable(props: {
     
     // 解析 source 字符串
     const parts = src.toLowerCase().split('_')
-    let exchange = parts[0]
+    const exchange = parts[0]
     let type = parts[1] || 'futures' // 默认合约
     
     // 特殊处理 bybit（默认合约）、gmx（链上）
