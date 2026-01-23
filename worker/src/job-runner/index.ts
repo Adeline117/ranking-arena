@@ -19,6 +19,7 @@
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import { BinanceFuturesConnectorWorker } from './binance-connector.js'
+import { BybitFuturesConnectorWorker } from './bybit-connector.js'
 import type { ConnectorInterface, RefreshJobRow } from './types.js'
 
 // Configuration
@@ -46,6 +47,7 @@ function getSupabase(): SupabaseClient {
 // Connector registry
 const connectors: Record<string, ConnectorInterface> = {
   binance_futures: new BinanceFuturesConnectorWorker(),
+  bybit: new BybitFuturesConnectorWorker(),
 }
 
 /**

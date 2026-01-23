@@ -17,6 +17,7 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { BinanceFuturesConnectorWorker } from './binance-connector.js'
+import { BybitFuturesConnectorWorker } from './bybit-connector.js'
 import type { SnapshotWindow } from './types.js'
 
 const WINDOWS: SnapshotWindow[] = ['7D', '30D', '90D']
@@ -33,7 +34,6 @@ async function main(): Promise<void> {
   }
   const db = createClient(url, serviceKey, { auth: { persistSession: false } })
 
-  const connector = new BinanceFuturesConnectorWorker()
   const windows = targetWindow ? [targetWindow] : WINDOWS
 
   console.log(`[discover] Starting leaderboard discovery: platform=${platform}, windows=${windows.join(',')}, limit=${limit}`)
@@ -41,9 +41,10 @@ async function main(): Promise<void> {
   for (const window of windows) {
     console.log(`[discover] Fetching ${window} leaderboard...`)
 
-    // Fetch leaderboard entries via the connector's snapshot method
-    // We'll use a batch approach: first get the leaderboard list, then save snapshots
-    const leaderboard = await fetchLeaderboard(connector, window, limit)
+    // Fetch leaderboard entries using the appropriate connector
+    const leaderboard = platform === 'bybit'
+      ? await fetchBybitLeaderboard(window, limit)
+      : await fetchLeaderboard(window, limit)
 
     if (leaderboard.length === 0) {
       console.log(`[discover] No data for ${window}, skipping`)
@@ -129,8 +130,15 @@ interface LeaderboardResult {
   quality_flags: Record<string, unknown>
 }
 
+async function fetchBybitLeaderboard(
+  window: SnapshotWindow,
+  limit: number
+): Promise<LeaderboardResult[]> {
+  const connector = new BybitFuturesConnectorWorker()
+  return connector.fetchLeaderboardList(window, limit)
+}
+
 async function fetchLeaderboard(
-  connector: BinanceFuturesConnectorWorker,
   window: SnapshotWindow,
   limit: number
 ): Promise<LeaderboardResult[]> {
