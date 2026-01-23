@@ -1,8 +1,8 @@
 /**
- * Bitget Futures copy trading connector.
+ * Bitget Futures copy trading connector (legacy interface).
  * Fetches public leaderboard data from Bitget's copy trading API.
  *
- * Data source: Public copy trading leaderboard.
+ * Data source: Public copy trading leaderboard (no auth required).
  * Rate limits: 20 req/min with 2.5-5s jitter.
  */
 
@@ -15,7 +15,6 @@ import type {
   TraderTimeseriesLegacy,
   TimeseriesType,
   SnapshotMetricsLegacy,
-  TimeseriesPoint,
   LegacyPlatformConnector,
 } from '@/lib/types/leaderboard';
 
@@ -76,9 +75,9 @@ interface BitgetTraderDetailResponse {
 // ============================================
 
 const WINDOW_TO_SORT: Record<RankingWindow, number> = {
-  '7d': 1,  // 7天
-  '30d': 2, // 30天
-  '90d': 0, // 全部 / 90天
+  '7d': 1,
+  '30d': 2,
+  '90d': 0,
 };
 
 // ============================================
@@ -135,13 +134,16 @@ export class BitgetFuturesConnector extends BaseConnectorLegacy implements Legac
       { label: `fetchTraderSnapshot(${traderKey}, ${window})` },
     );
 
-    const d = detail.data;
+    const d = detail.data || {} as BitgetTraderDetailResponse['data'];
+
     const roi = d.roi != null ? (Math.abs(d.roi) < 10 ? d.roi * 100 : d.roi) : null;
 
     const metrics: SnapshotMetricsLegacy = {
       roi_pct: roi,
       pnl_usd: d.totalProfit ?? null,
-      win_rate_pct: d.winRatio != null ? (d.winRatio <= 1 ? d.winRatio * 100 : d.winRatio) : null,
+      win_rate_pct: d.winRatio != null
+        ? (d.winRatio <= 1 ? d.winRatio * 100 : d.winRatio)
+        : null,
       max_drawdown_pct: d.maxDrawdown != null ? Math.abs(d.maxDrawdown) : null,
       trades_count: d.totalTradeCount ?? null,
       copier_count: d.currentCopyCount ?? d.followerCount ?? null,
@@ -174,7 +176,7 @@ export class BitgetFuturesConnector extends BaseConnectorLegacy implements Legac
       { label: `fetchTraderProfile(${traderKey})` },
     );
 
-    const d = detail.data;
+    const d = detail.data || {} as BitgetTraderDetailResponse['data'];
 
     return {
       platform: this.platform,
@@ -184,7 +186,7 @@ export class BitgetFuturesConnector extends BaseConnectorLegacy implements Legac
       bio: d.introduction || null,
       copier_count: d.currentCopyCount ?? d.followerCount ?? null,
       aum_usd: d.aum ?? null,
-      active_since: d.registerTime ? new Date(d.registerTime).toISOString().split('T')[0] : null,
+      active_since: null,
       platform_tier: null,
     };
   }
@@ -208,7 +210,7 @@ export class BitgetFuturesConnector extends BaseConnectorLegacy implements Legac
       { label: `fetchTimeseries(${traderKey}, ${seriesType})` },
     );
 
-    const data: TimeseriesPoint[] = entries.map((e) => ({
+    const data = entries.map((e) => ({
       ts: new Date(e.time).toISOString(),
       value: e.value,
     }));
@@ -231,9 +233,7 @@ export class BitgetFuturesConnector extends BaseConnectorLegacy implements Legac
     page: number,
     pageSize: number,
   ): Promise<BitgetLeaderboardResponse> {
-    const url = `${this.baseUrl}/trader/list`;
-
-    const response = await fetch(url, {
+    const response = await fetch(`${this.baseUrl}/trader/list`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -255,7 +255,9 @@ export class BitgetFuturesConnector extends BaseConnectorLegacy implements Legac
     return response.json();
   }
 
-  private async fetchTraderDetailApi(traderId: string): Promise<BitgetTraderDetailResponse> {
+  private async fetchTraderDetailApi(
+    traderId: string,
+  ): Promise<BitgetTraderDetailResponse> {
     const url = `${this.baseUrl}/trader/detail?traderId=${traderId}`;
 
     const response = await fetch(url, {

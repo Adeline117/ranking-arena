@@ -12,13 +12,20 @@ type ExportButtonProps = {
 export default function ExportButton({ data, filename, format = 'csv' }: ExportButtonProps) {
   const { t } = useLanguage()
   const handleExport = () => {
+    if (!data || data.length === 0) return
+
     if (format === 'csv') {
       const headers = Object.keys(data[0] || {})
       const csv = [
         headers.join(','),
         ...data.map(row => headers.map(header => {
           const value = row[header]
-          return typeof value === 'string' && value.includes(',') ? `"${value}"` : value
+          if (value == null) return ''
+          const str = String(value)
+          // Escape CSV injection: prefix formula-like values with a single quote
+          const safe = /^[=+\-@\t\r]/.test(str) ? `'${str}` : str
+          // Quote if contains comma, quote, or newline
+          return /[,"\n\r]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe
         }).join(','))
       ].join('\n')
 
