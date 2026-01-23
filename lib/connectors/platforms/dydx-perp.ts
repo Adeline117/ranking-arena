@@ -73,20 +73,18 @@ export class DydxPerpConnector extends BaseConnector {
 
   async fetchTraderSnapshot(traderKey: string, window: Window): Promise<SnapshotResult | null> {
     // Get subaccount for equity
-    const subResponse = await this.request<any>(
+    const subData = await this.request<any>(
       `https://indexer.dydx.trade/v4/addresses/${traderKey}/subaccounts/0`,
       { method: 'GET' }
     )
-    const subData = await subResponse.json()
     const equity = Number(subData?.subaccount?.equity) || 0
 
     // Get PnL from leaderboard for this address
     const period = WINDOW_MAP[window]
-    const lbResponse = await this.request<any>(
+    const lbData = await this.request<any>(
       `https://indexer.dydx.trade/v4/leaderboard/pnl?period=${period}&limit=1000`,
       { method: 'GET' }
     )
-    const lbData = await lbResponse.json()
     const rankings = lbData?.pnlRanking || []
     const entry = rankings.find((r: Record<string, unknown>) => String(r.address) === traderKey)
 
