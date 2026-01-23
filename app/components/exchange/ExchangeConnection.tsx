@@ -94,7 +94,7 @@ export default function ExchangeConnectionManager({ userId }: ExchangeConnection
     try {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) {
-        showToast('请先登录', 'warning')
+        showToast(t('pleaseLogin'), 'warning')
         return
       }
 
@@ -125,7 +125,7 @@ export default function ExchangeConnectionManager({ userId }: ExchangeConnection
   }
 
   const handleDisconnect = async (exchange: string) => {
-    const confirmed = await showConfirm('断开连接', t('confirmDisconnect').replace('{exchange}', exchange))
+    const confirmed = await showConfirm(t('disconnect'), t('confirmDisconnect').replace('{exchange}', exchange))
     if (!confirmed) {
       return
     }
