@@ -247,7 +247,7 @@ function ResetPasswordContent() {
   const [mounted, setMounted] = useState(false)
   const errorRef = useRef<HTMLDivElement>(null)
   const router = useRouter()
-  const searchParams = useSearchParams()
+  const _searchParams = useSearchParams()
 
   const t = translations[lang]
   const passwordStrength = getPasswordStrength(newPassword)
@@ -272,7 +272,7 @@ function ResetPasswordContent() {
       setIsResetMode(true)
     }
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, _session) => {
       if (event === 'PASSWORD_RECOVERY') {
         setIsResetMode(true)
       }

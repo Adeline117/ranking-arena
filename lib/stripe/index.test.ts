@@ -4,7 +4,6 @@
  */
 
 import {
-  getStripe,
   stripe,
   STRIPE_PRICE_IDS,
   SUBSCRIPTION_PLANS,

@@ -9,7 +9,7 @@ import TopNav from '@/app/components/layout/TopNav'
  */
 export default function HomeLoading() {
   // 骨架屏动画样式
-  const pulseStyle = {
+  const _pulseStyle = {
     animation: 'pulse 1.5s ease-in-out infinite',
   }
 

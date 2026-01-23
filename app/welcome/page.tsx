@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
-import { Box, Text, Button } from '@/app/components/base'
+import { Box, Text } from '../components/base'
 import { useToast } from '@/app/components/ui/Toast'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
@@ -209,9 +209,9 @@ export default function WelcomePage() {
   const { t, language } = useLanguage()
   
   const [step, setStep] = useState<Step>('welcome')
-  const [prevStep, setPrevStep] = useState<Step | null>(null)
+  const [_prevStep, setPrevStep] = useState<Step | null>(null)
   const [userId, setUserId] = useState<string | null>(null)
-  const [email, setEmail] = useState<string | null>(null)
+  const [_email, setEmail] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [mounted, setMounted] = useState(false)
   const [transitioning, setTransitioning] = useState(false)

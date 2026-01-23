@@ -3,7 +3,7 @@
  * Pro 会员功能：保存和管理筛选配置
  */
 
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import {
   getSupabaseAdmin,
   requireAuth,

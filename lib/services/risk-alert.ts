@@ -115,9 +115,9 @@ const ALERT_MESSAGES = {
 // ============================================
 
 function getSeverity(
-  alertType: AlertType, 
+  alertType: AlertType,
   currentValue: number,
-  threshold: number
+  _threshold: number
 ): AlertSeverity {
   const defaults = DEFAULT_THRESHOLDS[alertType]
   

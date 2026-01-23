@@ -24,8 +24,8 @@ type Rule = {
 }
 
 export default function ApplyGroupPage() {
-  const router = useRouter()
-  const { t, language } = useLanguage()
+  const _router = useRouter()
+  const { t: _t, language } = useLanguage()
   const { isPro } = useSubscription()
   const { showToast } = useToast()
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -239,7 +239,7 @@ export default function ApplyGroupPage() {
           } else if (data.message) {
             errorMessage = data.message
           }
-        } catch (parseError) {
+        } catch (_parseError) {
           // 如果JSON解析失败，尝试获取状态文本
           if (res.status === 401) {
             errorMessage = language === 'zh' ? '身份验证失败，请重新登录' : 'Authentication failed, please login again'
@@ -256,7 +256,7 @@ export default function ApplyGroupPage() {
         return
       }
 
-      const data = await res.json()
+      const _data = await res.json()
 
       setSuccess(true)
       if (accessToken) {

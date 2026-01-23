@@ -192,35 +192,10 @@ class Logger {
   }
 
   /**
-   * 创建带上下文的 logger（child 方法的别名）
-   */
-  withContext(context: Record<string, unknown>): Logger {
-    const contextName = Object.entries(context)
-      .map(([k, v]) => `${k}=${v}`)
-      .join(',')
-    return this.child(contextName)
-  }
-
-  /**
    * 设置配置
    */
   setConfig(config: Partial<LoggerConfig>): void {
     this.config = { ...this.config, ...config }
-  }
-
-  /**
-   * 创建带上下文的 logger 实例
-   * 返回一个新的 logger，所有日志都会附带上下文信息
-   */
-  withContext(context: Record<string, unknown>): Logger {
-    const contextLogger = new Logger(this.name, this.config)
-    const originalOutput = contextLogger['output'].bind(contextLogger)
-
-    contextLogger['output'] = (level: LogLevel, message: string, ...data: unknown[]) => {
-      originalOutput(level, message, { ...context, ...data[0] as Record<string, unknown> }, ...data.slice(1))
-    }
-
-    return contextLogger
   }
 
   /**

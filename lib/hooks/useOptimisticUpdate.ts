@@ -402,7 +402,7 @@ export function useOptimisticList<T>(options: UseOptimisticListOptions<T>) {
         const result = await addFn()
         // 如果服务器返回了新数据，使用它
         if (result) {
-          const newId = getId(result)
+          const _newId = getId(result)
           setItems((prev) =>
             prev.map((i) => (getId(i) === id ? result : i))
           )

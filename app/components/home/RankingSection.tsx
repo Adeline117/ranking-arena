@@ -11,6 +11,7 @@ import type { TimeRange } from './hooks/useTraderData'
 import { CategoryType, filterByCategory } from '../ranking/CategoryRankingTabs'
 import { useSubscription } from './hooks/useSubscription'
 import { useLanguage } from '../Providers/LanguageProvider'
+import DataFreshnessIndicator from '../ui/DataFreshnessIndicator'
 
 interface RankingSectionProps {
   traders: Trader[]
@@ -18,6 +19,7 @@ interface RankingSectionProps {
   isLoggedIn: boolean
   activeTimeRange: TimeRange
   onTimeRangeChange: (range: TimeRange) => void
+  /** 数据最后更新时间 */
   lastUpdated?: string | null
 }
 
@@ -36,7 +38,7 @@ export default function RankingSection({
 }: RankingSectionProps) {
   const router = useRouter()
   const { showToast } = useToast()
-  const { language, t } = useLanguage()
+  const { language, t: _t } = useLanguage()
   const { isPro, isLoading: premiumLoading } = useSubscription()
 
   // 分类状态
@@ -85,18 +87,32 @@ export default function RankingSection({
         minWidth: 0,
       }}
     >
-      {/* 顶部工具栏 - 时间选择器 */}
+      {/* 顶部工具栏 - 时间选择器 + 数据新鲜度 */}
       <Box
         className="ranking-toolbar"
         style={{
           marginBottom: tokens.spacing[3],
-      }}
-    >
-      <TimeRangeSelector
-        activeRange={activeTimeRange}
-        onChange={onTimeRangeChange}
-        disabled={loading}
-      />
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: tokens.spacing[2],
+        }}
+      >
+        <TimeRangeSelector
+          activeRange={activeTimeRange}
+          onChange={onTimeRangeChange}
+          disabled={loading}
+        />
+        {/* 数据新鲜度指示器 */}
+        {!loading && (
+          <DataFreshnessIndicator
+            lastUpdated={lastUpdated}
+            updateTier="standard"
+            showDetails={true}
+            size="sm"
+          />
+        )}
       </Box>
       
       <RankingTable

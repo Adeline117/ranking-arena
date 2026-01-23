@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, Suspense, useCallback, useMemo } from 'react'
+import { useEffect, useState, Suspense, useCallback } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import TopNav from '@/app/components/layout/TopNav'
@@ -35,7 +35,7 @@ function SearchContent() {
   const [loading, setLoading] = useState(false)
   const [email, setEmail] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'all' | 'users' | 'traders' | 'posts' | 'groups'>('all')
-  const [searchError, setSearchError] = useState(false)
+  const [_searchError, setSearchError] = useState(false)
   const { showToast } = useToast()
 
   useEffect(() => {
@@ -243,6 +243,7 @@ function SearchContent() {
 
     const timeout = setTimeout(search, 300)
     return () => clearTimeout(timeout)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query])
 
   const filteredResults = activeTab === 'all' 

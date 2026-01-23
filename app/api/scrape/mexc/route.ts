@@ -133,7 +133,7 @@ async function saveTraders(traders: MexcTrader[], period: string) {
       })
       
       saved++
-    } catch (error) {
+    } catch (_error) {
       // 忽略重复错误
     }
   }

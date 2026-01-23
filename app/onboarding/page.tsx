@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
 import { setLanguage } from '@/lib/i18n'
 

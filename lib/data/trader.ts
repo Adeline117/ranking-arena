@@ -218,7 +218,7 @@ export async function findTraderAcrossSources(
     }
 
     return data[0] as TraderSourceRecord
-  } catch (error) {
+  } catch (_error) {
     return null
   }
 }
@@ -268,7 +268,7 @@ export async function findTradersAcrossSources(
     })
 
     return result
-  } catch (error) {
+  } catch (_error) {
     return result
   }
 }
@@ -298,7 +298,7 @@ async function getTraderArenaFollowersCountBatch(
     })
 
     return counts
-  } catch (error) {
+  } catch (_error) {
     return result
   }
 }

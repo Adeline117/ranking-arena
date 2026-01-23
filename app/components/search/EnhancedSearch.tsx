@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
 import { useLanguage } from '../Providers/LanguageProvider'
 
 // ============================================

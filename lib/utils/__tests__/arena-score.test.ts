@@ -14,7 +14,6 @@ import {
   calculateOverallScore,
   rankByArenaScore,
   ARENA_CONFIG,
-  type Period,
   type TraderScoreInput,
 } from '../arena-score'
 

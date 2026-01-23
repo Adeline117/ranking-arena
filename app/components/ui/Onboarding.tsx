@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useCallback } from 'react'
-import { useRouter } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
 import { setLanguage } from '@/lib/i18n'
 

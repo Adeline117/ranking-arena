@@ -527,7 +527,7 @@ export function TableRowSkeleton({ columns = 5, rows = 5 }: { columns?: number; 
 // 导出
 // ============================================
 
-export default {
+const StateComponents = {
   LoadingState,
   EmptyState,
   ErrorState,
@@ -535,3 +535,5 @@ export default {
   CardSkeleton,
   TableRowSkeleton,
 }
+
+export default StateComponents

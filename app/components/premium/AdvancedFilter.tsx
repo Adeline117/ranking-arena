@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '../base'
 import { useLanguage } from '../Providers/LanguageProvider'
@@ -75,7 +75,7 @@ export default function AdvancedFilter({
   onDeleteFilter,
   isPro,
 }: AdvancedFilterProps) {
-  const { t } = useLanguage()
+  const { t: _t } = useLanguage()
   const [isExpanded, setIsExpanded] = useState(false)
   const [showSaveModal, setShowSaveModal] = useState(false)
   const [saveName, setSaveName] = useState('')

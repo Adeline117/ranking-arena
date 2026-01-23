@@ -41,7 +41,7 @@ function formatPrice(price: number): string {
 }
 
 export default function PremiumGroupCard({
-  groupId,
+  groupId: _groupId,
   groupName,
   description,
   avatarUrl,
@@ -60,7 +60,7 @@ export default function PremiumGroupCard({
   const [selectedTier, setSelectedTier] = useState<'monthly' | 'yearly'>('yearly')
   const [hoveredTier, setHoveredTier] = useState<'monthly' | 'yearly' | null>(null)
 
-  const monthlyDiscount = originalPriceMonthly 
+  const _monthlyDiscount = originalPriceMonthly
     ? Math.round((1 - priceMonthly / originalPriceMonthly) * 100)
     : 0
   const yearlySavings = Math.round((1 - (priceYearly / 12) / priceMonthly) * 100)

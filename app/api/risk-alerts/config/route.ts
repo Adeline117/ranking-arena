@@ -6,7 +6,7 @@
  * DELETE - 删除预警配置
  */
 
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { withAuth } from '@/lib/api/middleware'
 import { getRiskAlertService, DEFAULT_THRESHOLDS } from '@/lib/services/risk-alert'
 import { hasFeatureAccess } from '@/lib/types/premium'

@@ -74,7 +74,7 @@ export default function OptimizedImage({
   rounded = 'md',
   objectFit = 'cover',
   hoverEffect = 'none',
-  lazyThreshold = '200px',
+  lazyThreshold: _lazyThreshold = '200px',
   style,
   className = '',
   priority,

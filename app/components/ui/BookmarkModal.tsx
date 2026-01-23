@@ -25,7 +25,7 @@ interface BookmarkModalProps {
   postId: string
 }
 
-export default function BookmarkModal({ isOpen, onClose, onSelect, postId }: BookmarkModalProps) {
+export default function BookmarkModal({ isOpen, onClose, onSelect, postId: _postId }: BookmarkModalProps) {
   const { showToast } = useToast()
   const [folders, setFolders] = useState<BookmarkFolder[]>([])
   const [loading, setLoading] = useState(true)
@@ -51,6 +51,7 @@ export default function BookmarkModal({ isOpen, onClose, onSelect, postId }: Boo
       setNewFolderName('')
       setNewFolderPublic(true)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, accessToken])
 
   // 打开弹窗时禁止背景滚动，ESC 键关闭

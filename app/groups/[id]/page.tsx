@@ -2,17 +2,16 @@
 
 import Link from 'next/link'
 import { useEffect, useState, useCallback, useRef } from 'react'
-import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/layout/TopNav'
 import Card from '@/app/components/ui/Card'
 import { Box, Text, Button } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
-import { ThumbsUpIcon, ThumbsDownIcon, CommentIcon } from '@/app/components/icons'
+import { ThumbsUpIcon, CommentIcon } from '@/app/components/icons'
 import { useToast } from '@/app/components/ui/Toast'
 import { getCsrfHeaders } from '@/lib/api/client'
-import { GroupCardSkeleton, PostSkeleton, ListSkeleton, SkeletonAvatar, Skeleton } from '@/app/components/UI/Skeleton'
+import { GroupCardSkeleton, PostSkeleton, ListSkeleton, SkeletonAvatar, Skeleton } from '@/app/components/ui/Skeleton'
 
 const ARENA_PURPLE = '#8b6fa8'
 
@@ -99,7 +98,7 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
     }
   }, [params])
   
-  const { t, language } = useLanguage()
+  const { t: _t, language } = useLanguage()
   const { showToast } = useToast()
   const [email, setEmail] = useState<string | null>(null)
   const [userId, setUserId] = useState<string | null>(null)
@@ -318,6 +317,7 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
     } finally {
       setTranslatingPosts(false)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isChineseText])
 
   // 当帖子加载或语言变化时触发翻译
@@ -973,7 +973,7 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
         </Text>
       ) : (
         <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
-          {relatedGroups.map((relGroup, idx) => (
+          {relatedGroups.map((relGroup, _idx) => (
             <Link
               key={relGroup.id}
               href={`/groups/${relGroup.id}`}

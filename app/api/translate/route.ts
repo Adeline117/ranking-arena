@@ -242,7 +242,7 @@ async function handleBatchTranslate(
   const results: Record<string, { translatedText: string; cached: boolean }> = {}
 
   // 1. 批量查询缓存
-  const contentIds = limitedItems.map(item => item.contentId)
+  const _contentIds = limitedItems.map(item => item.contentId)
   const contentTypes = [...new Set(limitedItems.map(item => item.contentType))]
 
   // 准备需要翻译的项目列表

@@ -107,7 +107,7 @@ function HotContent() {
   const [translatingList, setTranslatingList] = useState(false)
   // 展开/收起状态
   const [expandedPosts, setExpandedPosts] = useState<Record<string, boolean>>({})
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+  const [_currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [traders, setTraders] = useState<Trader[]>([])
   const [loadingTraders, setLoadingTraders] = useState(true)
   const [posts, setPosts] = useState<Post[]>([])
@@ -174,7 +174,7 @@ function HotContent() {
         } else {
           setTraders([])
         }
-      } catch (error) {
+      } catch (_error) {
         setTraders([])
       } finally {
         setLoadingTraders(false)
@@ -538,6 +538,7 @@ function HotContent() {
         translateContent(openPost.id, openPost.body, language)
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [language]) // 只监听语言变化
 
   // 提交评论

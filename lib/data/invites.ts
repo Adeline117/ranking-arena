@@ -4,7 +4,6 @@
  */
 
 import { SupabaseClient } from '@supabase/supabase-js'
-import { nanoid } from 'nanoid'
 
 // ============================================
 // 类型定义

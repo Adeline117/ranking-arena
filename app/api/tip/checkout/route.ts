@@ -33,7 +33,7 @@ function getSupabase() {
 }
 
 // 打赏金额选项（美分）
-const TIP_AMOUNTS = [100, 300, 500, 1000, 2000, 5000] // $1, $3, $5, $10, $20, $50
+const _TIP_AMOUNTS = [100, 300, 500, 1000, 2000, 5000] // $1, $3, $5, $10, $20, $50
 
 export async function POST(request: NextRequest) {
   try {
