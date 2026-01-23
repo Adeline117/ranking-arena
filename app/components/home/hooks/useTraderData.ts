@@ -99,7 +99,7 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
       setError(errorMsg)
       return tradersCache.current.get(timeRange) || { traders: [], lastUpdated: null }
     }
-  }, [])
+  }, [broadcast])
 
   // 加载当前选中时间段的数据
   const loadCurrentData = useCallback(async (forceRefresh = false) => {
@@ -136,12 +136,16 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
     if (autoRefreshInterval > 0) {
       const interval = setInterval(() => {
         // 静默刷新：不设置 loading 状态
-        loadTimeRange(activeTimeRange, true).then(cached => {
-          setCurrentTraders(cached.traders)
-          setLastUpdated(cached.lastUpdated)
-        })
+        loadTimeRange(activeTimeRange, true)
+          .then(cached => {
+            setCurrentTraders(cached.traders)
+            setLastUpdated(cached.lastUpdated)
+          })
+          .catch(() => {
+            // 静默刷新失败不干扰用户，loadTimeRange 已设置 error 状态
+          })
       }, autoRefreshInterval)
-      
+
       return () => clearInterval(interval)
     }
   }, [autoRefreshInterval, activeTimeRange, loadTimeRange])

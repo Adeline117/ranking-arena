@@ -91,38 +91,38 @@ export async function getPostComments(
     .in('parent_id', commentIds)
     .order('created_at', { ascending: true })
 
-  // 获取所有用户ID
+  // 获取所有用户ID 和评论ID
   const allComments = [...comments, ...(replies || [])]
   const userIds = [...new Set(allComments.map(c => c.user_id))]
+  const allCommentIds = allComments.map(c => c.id)
 
-  // 获取用户信息
-  const { data: profiles } = await supabase
-    .from('user_profiles')
-    .select('id, handle, avatar_url')
-    .in('id', userIds)
+  // 并行获取用户信息和点赞状态
+  const [profilesResult, likesResult] = await Promise.all([
+    supabase
+      .from('user_profiles')
+      .select('id, handle, avatar_url')
+      .in('id', userIds),
+    userId
+      ? supabase
+          .from('comment_likes')
+          .select('comment_id')
+          .eq('user_id', userId)
+          .in('comment_id', allCommentIds)
+      : Promise.resolve({ data: null }),
+  ])
 
   const profileMap = new Map<string, { handle: string; avatar_url: string | null }>()
-  if (profiles) {
-    profiles.forEach((p: { id: string; handle: string; avatar_url: string | null }) => {
+  if (profilesResult.data) {
+    profilesResult.data.forEach((p: { id: string; handle: string; avatar_url: string | null }) => {
       profileMap.set(p.id, { handle: p.handle, avatar_url: p.avatar_url })
     })
   }
 
-  // 获取用户对评论的点赞状态
   const userLikedMap = new Map<string, boolean>()
-  if (userId) {
-    const allCommentIds = allComments.map(c => c.id)
-    const { data: likes } = await supabase
-      .from('comment_likes')
-      .select('comment_id')
-      .eq('user_id', userId)
-      .in('comment_id', allCommentIds)
-    
-    if (likes) {
-      likes.forEach((like: { comment_id: string }) => {
-        userLikedMap.set(like.comment_id, true)
-      })
-    }
+  if (likesResult.data) {
+    likesResult.data.forEach((like: { comment_id: string }) => {
+      userLikedMap.set(like.comment_id, true)
+    })
   }
 
   // 构建回复映射
