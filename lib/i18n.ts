@@ -420,6 +420,22 @@ export const translations = {
     serverBusy: '服务繁忙，稍后再试',
     noAccess: '无权限访问',
     contentNotFound: '内容不存在',
+    // 空状态
+    noPosts: '暂无帖子',
+    beFirstToPost: '成为第一个发帖的人吧！',
+    latest: '最新',
+    hotSort: '最热',
+    // 设置页面
+    goToLogin: '前往登录',
+    loginRequired: '请先登录',
+    loginRequiredDesc: '您需要登录才能访问设置页面',
+    // 排名指标说明
+    scoreTooltip: 'Arena Score: 综合评分 (0-100)，收益+风险+稳定性加权',
+    roiTooltip: 'ROI: 投资回报率，盈亏金额 / 本金',
+    winRateTooltip: 'Win%: 胜率，盈利交易次数 / 总交易次数',
+    mddTooltip: 'MDD: 最大回撤，峰值到谷底的最大跌幅',
+    // 免责声明
+    notInvestmentAdvice: '本平台仅提供数据聚合与分析工具，不构成投资建议',
   },
   en: {
     home: 'Home',
@@ -839,6 +855,22 @@ export const translations = {
     serverBusy: 'Server busy, try later',
     noAccess: 'No access',
     contentNotFound: 'Content not found',
+    // Empty states
+    noPosts: 'No posts yet',
+    beFirstToPost: 'Be the first to post!',
+    latest: 'Latest',
+    hotSort: 'Hot',
+    // Settings page
+    goToLogin: 'Go to Login',
+    loginRequired: 'Login Required',
+    loginRequiredDesc: 'You need to login to access settings',
+    // Ranking metric tooltips
+    scoreTooltip: 'Arena Score: Overall rating (0-100), weighted by return, risk & stability',
+    roiTooltip: 'ROI: Return on Investment, PnL / Principal',
+    winRateTooltip: 'Win%: Win Rate, profitable trades / total trades',
+    mddTooltip: 'MDD: Max Drawdown, largest peak-to-trough decline',
+    // Disclaimer
+    notInvestmentAdvice: 'This platform provides data aggregation and analytics only, not investment advice',
   },
 }
 
