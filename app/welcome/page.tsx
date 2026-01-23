@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
 import { useToast } from '@/app/components/ui/Toast'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 type Step = 'welcome' | 'interests' | 'complete'
 
@@ -205,6 +206,7 @@ const injectStyles = () => {
 export default function WelcomePage() {
   const router = useRouter()
   const { showToast } = useToast()
+  const { t, language } = useLanguage()
   
   const [step, setStep] = useState<Step>('welcome')
   const [prevStep, setPrevStep] = useState<Step | null>(null)
@@ -279,7 +281,7 @@ export default function WelcomePage() {
 
   const handleComplete = async () => {
     if (!userId) {
-      showToast('用户未登录，请重新登录', 'error')
+      showToast(t('userNotLoggedIn'), 'error')
       return
     }
 
@@ -295,7 +297,7 @@ export default function WelcomePage() {
 
       if (error) {
         console.error('Error saving interests:', error)
-        const errorMsg = error.message || '保存失败，请稍后重试'
+        const errorMsg = error.message || t('saveFailed')
         showToast(errorMsg, 'error')
         setSaving(false)
         return
@@ -305,7 +307,7 @@ export default function WelcomePage() {
       goToStep('complete')
     } catch (error: any) {
       console.error('Error completing onboarding:', error)
-      const errorMsg = error?.message || '网络错误，请稍后重试'
+      const errorMsg = error?.message || t('networkError')
       showToast(errorMsg, 'error')
     } finally {
       setSaving(false)
@@ -314,7 +316,7 @@ export default function WelcomePage() {
 
   const handleSkipInterests = async () => {
     if (!userId) {
-      showToast('用户未登录，请重新登录', 'error')
+      showToast(t('userNotLoggedIn'), 'error')
       return
     }
 
@@ -327,7 +329,7 @@ export default function WelcomePage() {
 
       if (error) {
         console.error('Error skipping:', error)
-        const errorMsg = error.message || '保存失败，请稍后重试'
+        const errorMsg = error.message || t('saveFailed')
         showToast(errorMsg, 'error')
         setSaving(false)
         return
@@ -337,7 +339,7 @@ export default function WelcomePage() {
       goToStep('complete')
     } catch (error: any) {
       console.error('Error skipping:', error)
-      const errorMsg = error?.message || '网络错误，请稍后重试'
+      const errorMsg = error?.message || t('networkError')
       showToast(errorMsg, 'error')
     } finally {
       setSaving(false)
@@ -494,7 +496,7 @@ export default function WelcomePage() {
                   WebkitTextFillColor: 'transparent',
                 }}
               >
-                欢迎加入
+                {t('welcomeJoin')}
               </Text>
               <Text 
                 size="2xl" 
@@ -509,7 +511,7 @@ export default function WelcomePage() {
                 Arena
               </Text>
               <Text color="secondary" style={{ marginBottom: 36, lineHeight: 1.7, color: '#8a8a8a' }}>
-                这里汇聚了各大交易所的顶级交易员
+                {t('welcomeDesc')}
               </Text>
               
               <Box style={{ 
@@ -520,9 +522,9 @@ export default function WelcomePage() {
                 textAlign: 'left',
               }}>
                 {[
-                  { num: 1, title: '查看交易员排名', desc: '聚合 5 大交易所实时 ROI 数据' },
-                  { num: 2, title: '关注优秀交易员', desc: '追踪他们的动态和策略分享' },
-                  { num: 3, title: '参与社区讨论', desc: '与其他交易者交流心得' },
+                  { num: 1, title: t('stepViewRanking'), desc: t('stepViewRankingDesc') },
+                  { num: 2, title: t('stepFollowTraders'), desc: t('stepFollowTradersDesc') },
+                  { num: 3, title: t('stepJoinCommunity'), desc: t('stepJoinCommunityDesc') },
                 ].map((item, idx) => (
                   <Box 
                     key={item.num}
@@ -576,7 +578,7 @@ export default function WelcomePage() {
                   cursor: 'pointer',
                 }}
               >
-                开始设置
+                {t('startSetup')}
               </button>
             </Box>
           )}
@@ -595,10 +597,10 @@ export default function WelcomePage() {
                   WebkitTextFillColor: 'transparent',
                 }}
               >
-                选择你的兴趣
+                {t('selectInterests')}
               </Text>
               <Text color="secondary" style={{ marginBottom: 32, textAlign: 'center', color: '#7a7a7a' }}>
-                帮助我们为你推荐更相关的内容
+                {t('selectInterestsDesc')}
               </Text>
 
               <Box style={{ 
@@ -642,7 +644,7 @@ export default function WelcomePage() {
                         weight={isSelected ? "bold" : "medium"}
                         style={{ color: isSelected ? '#c9b8db' : '#9a9a9a' }}
                       >
-                        {interest.label}
+                        {language === 'en' ? interest.labelEn : interest.label}
                       </Text>
                     </Box>
                   )
@@ -666,7 +668,7 @@ export default function WelcomePage() {
                     cursor: saving ? 'not-allowed' : 'pointer',
                   }}
                 >
-                  跳过
+                  {t('skip')}
                 </button>
                 <button
                   className="welcome-button"
@@ -700,7 +702,7 @@ export default function WelcomePage() {
                       animation: 'spin 1s linear infinite',
                     }} />
                   )}
-                  {saving ? '保存中...' : '完成'}
+                  {saving ? t('saving') : t('complete')}
                 </button>
               </Box>
             </Box>
@@ -746,10 +748,10 @@ export default function WelcomePage() {
                   WebkitTextFillColor: 'transparent',
                 }}
               >
-                设置完成！
+                {t('setupComplete')}
               </Text>
               <Text color="secondary" style={{ marginBottom: 36, color: '#7a7a7a' }}>
-                欢迎来到 Arena，开始你的探索之旅吧！
+                {t('welcomeToArena')}
               </Text>
 
               <Box style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -768,7 +770,7 @@ export default function WelcomePage() {
                     cursor: 'pointer',
                   }}
                 >
-                  探索交易员排名
+                  {t('exploreRanking')}
                 </button>
                 <button
                   className="welcome-button"
@@ -785,7 +787,7 @@ export default function WelcomePage() {
                     cursor: 'pointer',
                   }}
                 >
-                  查看我的主页
+                  {t('viewMyProfile')}
                 </button>
               </Box>
             </Box>

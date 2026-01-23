@@ -10,6 +10,7 @@ import { Box, Text } from '@/app/components/base'
 import Avatar from '@/app/components/ui/Avatar'
 import { useToast } from '@/app/components/ui/Toast'
 import { getAuthSession, refreshAuthToken } from '@/lib/auth/client'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 type MemberSettings = {
   remark: string | null
@@ -35,6 +36,7 @@ type Conversation = {
 export default function MessagesPage() {
   const router = useRouter()
   const { showToast } = useToast()
+  const { t } = useLanguage()
   const [email, setEmail] = useState<string | null>(null)
   const [userId, setUserId] = useState<string | null>(null)
   const [conversations, setConversations] = useState<Conversation[]>([])
@@ -341,10 +343,11 @@ export default function MessagesPage() {
           >
             <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
               <Text size="sm" color="primary">
-                有 {orphanUnreadCount} 条历史未读消息（对话可能已被删除）
+                {t('orphanMessages').replace('{count}', String(orphanUnreadCount))}
               </Text>
             </Box>
             <button
+              disabled={clearingOrphans}
               onClick={async () => {
                 if (!userId || clearingOrphans) return
                 setClearingOrphans(true)
@@ -356,17 +359,16 @@ export default function MessagesPage() {
                     .eq('receiver_id', userId)
                     .eq('read', false)
                   setOrphanUnreadCount(0)
-                  showToast('已清除', 'success')
+                  showToast(t('cleared'), 'success')
                 } catch {
-                  showToast('清除失败', 'error')
+                  showToast(t('clearFailed'), 'error')
                 } finally {
                   setClearingOrphans(false)
                 }
               }}
-              disabled={clearingOrphans}
               style={{
                 padding: '6px 12px',
-                background: 'rgba(255, 193, 7, 0.2)',
+                background: clearingOrphans ? 'rgba(255, 193, 7, 0.1)' : 'rgba(255, 193, 7, 0.2)',
                 border: '1px solid rgba(255, 193, 7, 0.4)',
                 borderRadius: 8,
                 color: tokens.colors.text.primary,
@@ -378,7 +380,7 @@ export default function MessagesPage() {
                 transition: 'opacity 0.2s',
               }}
             >
-              {clearingOrphans ? '清除中...' : '全部清除'}
+              {clearingOrphans ? t('clearing') : t('clearAll')}
             </button>
           </Box>
         )}
