@@ -9,7 +9,7 @@ import ThemeToggle from '../ui/ThemeToggle'
 import LanguageSwitcher from '../ui/LanguageToggle'
 import SearchDropdown from '../search/SearchDropdown'
 import { useLanguage } from '../Providers/LanguageProvider'
-import { SearchIcon, UserIcon, DashboardIcon, NotificationIcon, MessageIcon } from '../icons'
+import { SearchIcon, UserIcon, NotificationIcon, MessageIcon } from '../icons'
 import { Box } from '../base'
 
 export default function TopNav({ email }: { email: string | null }) {
@@ -707,31 +707,6 @@ export default function TopNav({ email }: { email: string | null }) {
                   >
                     <UserIcon size={16} />
                     <span>{t('myHome')}</span>
-                  </Link>
-                  <Link
-                    href="/dashboard"
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: tokens.spacing[2],
-                      padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-                      borderRadius: tokens.radius.md,
-                      color: tokens.colors.text.primary,
-                      textDecoration: 'none',
-                      fontSize: tokens.typography.fontSize.base,
-                      fontWeight: tokens.typography.fontWeight.bold,
-                      transition: `all ${tokens.transition.base}`,
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.background = tokens.colors.bg.secondary
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = 'transparent'
-                    }}
-                    onClick={() => setShowUserMenu(false)}
-                  >
-                    <DashboardIcon size={16} />
-                    <span>{t('dashboard')}</span>
                   </Link>
                   <Link
                     href="/messages"
