@@ -76,7 +76,7 @@ export default function MessageButton({
   const handleClick = () => {
     if (!currentUserId) {
       showToast('请先登录', 'warning')
-      window.location.href = '/login'
+      router.push('/login')
       return
     }
 
@@ -97,7 +97,7 @@ export default function MessageButton({
   if (!currentUserId) {
     return (
       <button
-        onClick={() => window.location.href = '/login'}
+        onClick={() => router.push('/login')}
         style={{
           ...sizeStyles[size],
           width: fullWidth ? '100%' : 'auto',

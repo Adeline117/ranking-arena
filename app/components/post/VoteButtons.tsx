@@ -42,7 +42,9 @@ export default function VoteButtons({
     }
   )
 
-  const handleVote = (direction: 'up' | 'down') => {
+  const handleVote = (e: React.MouseEvent, direction: 'up' | 'down') => {
+    e.preventDefault()
+    e.stopPropagation()
     if (disabled) return
 
     const newData: VoteData = { ...voteData }
@@ -88,7 +90,7 @@ export default function VoteButtons({
     >
       {/* 赞同按钮 */}
       <button
-        onClick={() => handleVote('up')}
+        onClick={(e) => handleVote(e, 'up')}
         disabled={disabled}
         style={{
           display: 'flex',
@@ -136,7 +138,7 @@ export default function VoteButtons({
 
       {/* 反对按钮 */}
       <button
-        onClick={() => handleVote('down')}
+        onClick={(e) => handleVote(e, 'down')}
         disabled={disabled}
         style={{
           display: 'flex',
