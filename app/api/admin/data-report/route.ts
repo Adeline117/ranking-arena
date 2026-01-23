@@ -66,10 +66,18 @@ function getSupabaseClient() {
 
 export async function GET(req: Request) {
   try {
-    // 简单的认证检查（可以根据需要加强）
+    // 认证检查：必须是管理员
     const authHeader = req.headers.get('authorization')
-    
     const supabase = getSupabaseClient()
+
+    const { verifyAdmin } = await import('@/lib/admin/auth')
+    const admin = await verifyAdmin(supabase, authHeader)
+    if (!admin) {
+      return NextResponse.json(
+        { ok: false, error: 'Unauthorized: Admin access required' },
+        { status: 401 }
+      )
+    }
     const now = new Date()
     const staleThreshold = new Date(now.getTime() - STALE_THRESHOLD_HOURS * 60 * 60 * 1000)
     

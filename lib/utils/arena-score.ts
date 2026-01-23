@@ -173,11 +173,13 @@ export function calculateDrawdownScore(maxDrawdown: number | null, period: Perio
     // 无回撤数据时给予中等分数
     return ARENA_CONFIG.MAX_DRAWDOWN_SCORE * 0.5
   }
-  
-  const threshold = ARENA_CONFIG.PARAMS[period].mddThreshold
+
+  // 归一化：如果 |maxDrawdown| <= 1，认为是小数格式（0.20），需要转换为百分比（20）
   const mddAbs = Math.abs(maxDrawdown)
-  
-  const score = ARENA_CONFIG.MAX_DRAWDOWN_SCORE * clip(1 - mddAbs / threshold, 0, 1)
+  const normalizedMdd = mddAbs <= 1 ? mddAbs * 100 : mddAbs
+
+  const threshold = ARENA_CONFIG.PARAMS[period].mddThreshold
+  const score = ARENA_CONFIG.MAX_DRAWDOWN_SCORE * clip(1 - normalizedMdd / threshold, 0, 1)
   return clip(score, 0, ARENA_CONFIG.MAX_DRAWDOWN_SCORE)
 }
 
@@ -193,11 +195,14 @@ export function calculateStabilityScore(winRate: number | null, period: Period):
     // 无胜率数据时给予中等分数
     return ARENA_CONFIG.MAX_STABILITY_SCORE * 0.5
   }
-  
+
+  // 归一化：如果 winRate <= 1，认为是小数格式（0.60），需要转换为百分比（60）
+  const normalizedWinRate = winRate <= 1 && winRate >= 0 ? winRate * 100 : winRate
+
   const cap = ARENA_CONFIG.PARAMS[period].winRateCap
   const baseline = ARENA_CONFIG.WIN_RATE_BASELINE
-  
-  const score = ARENA_CONFIG.MAX_STABILITY_SCORE * clip((winRate - baseline) / (cap - baseline), 0, 1)
+
+  const score = ARENA_CONFIG.MAX_STABILITY_SCORE * clip((normalizedWinRate - baseline) / (cap - baseline), 0, 1)
   return clip(score, 0, ARENA_CONFIG.MAX_STABILITY_SCORE)
 }
 
