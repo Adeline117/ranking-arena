@@ -6,7 +6,7 @@
 'use client'
 
 import useSWR from 'swr'
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import type {
   TraderDetailResponse,
   RefreshResponse,
@@ -53,6 +53,8 @@ export function useTraderDetailV2({
 }: UseTraderDetailV2Options): UseTraderDetailV2Result {
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [refreshError, setRefreshError] = useState<string | null>(null)
+  const abortControllerRef = useRef<AbortController | null>(null)
+  const pollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const url = traderKey ? `/api/trader/${platform}/${traderKey}` : null
 
@@ -66,6 +68,20 @@ export function useTraderDetailV2({
       errorRetryCount: 2,
     }
   )
+
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      if (pollTimeoutRef.current) {
+        clearTimeout(pollTimeoutRef.current)
+        pollTimeoutRef.current = null
+      }
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort()
+        abortControllerRef.current = null
+      }
+    }
+  }, [])
 
   const triggerRefresh = useCallback(async (): Promise<RefreshResponse | null> => {
     if (!traderKey || isRefreshing) return null
@@ -89,7 +105,17 @@ export function useTraderDetailV2({
 
       // Poll for completion (check every 5s, max 60s)
       if (result.created) {
-        pollForCompletion(platform, traderKey, mutate)
+        // Abort any existing polling
+        if (abortControllerRef.current) {
+          abortControllerRef.current.abort()
+        }
+        if (pollTimeoutRef.current) {
+          clearTimeout(pollTimeoutRef.current)
+        }
+
+        const controller = new AbortController()
+        abortControllerRef.current = controller
+        pollForCompletion(platform, traderKey, mutate, controller.signal, pollTimeoutRef)
       }
 
       return result
@@ -117,33 +143,37 @@ export function useTraderDetailV2({
 
 /**
  * Poll the trader detail endpoint until data is refreshed or timeout.
+ * Uses AbortSignal for proper cleanup on component unmount.
  */
 function pollForCompletion(
   platform: string,
   traderKey: string,
   mutate: () => void,
+  signal: AbortSignal,
+  timeoutRef: React.MutableRefObject<ReturnType<typeof setTimeout> | null>,
   maxAttempts = 12,
   intervalMs = 5000
 ): void {
   let attempts = 0
 
   const poll = () => {
+    if (signal.aborted) return
     attempts++
     if (attempts >= maxAttempts) return
 
-    setTimeout(async () => {
+    timeoutRef.current = setTimeout(async () => {
+      if (signal.aborted) return
       try {
-        const res = await fetch(`/api/trader/${platform}/${traderKey}`)
+        const res = await fetch(`/api/trader/${platform}/${traderKey}`, { signal })
         if (res.ok) {
           const data: TraderDetailResponse = await res.json()
-          // If refresh job is done (no active job) or data is fresh, stop polling
           if (!data.refresh_job || data.refresh_job.status === 'success') {
             mutate()
             return
           }
         }
       } catch {
-        // Ignore poll errors
+        if (signal.aborted) return
       }
       poll()
     }, intervalMs)
