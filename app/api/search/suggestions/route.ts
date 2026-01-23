@@ -29,13 +29,23 @@ export const GET = withPublic(
       return success({ suggestions: [] })
     }
 
+    // 限制查询长度并转义 PostgREST 特殊字符，防止注入
+    const sanitizedQuery = query
+      .slice(0, 100)
+      .replace(/[\\%_]/g, c => `\\${c}`)  // 转义 LIKE 通配符
+      .replace(/[.,()]/g, '')  // 移除 PostgREST 过滤语法字符
+
+    if (!sanitizedQuery) {
+      return success({ suggestions: [] })
+    }
+
     const suggestions: SearchSuggestion[] = []
 
     // 搜索交易员（从 trader_sources 表）
     const { data: traders } = await supabase
       .from('trader_sources')
       .select('source_trader_id, handle, source, profile_url')
-      .or(`handle.ilike.%${query}%,source_trader_id.ilike.%${query}%`)
+      .or(`handle.ilike.%${sanitizedQuery}%,source_trader_id.ilike.%${sanitizedQuery}%`)
       .limit(limit)
 
     if (traders?.length) {
