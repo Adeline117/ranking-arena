@@ -6,6 +6,7 @@
 import type { PlatformConnector } from './types'
 import type { Platform } from '@/lib/types/trading-platform'
 import { BinanceFuturesConnector } from './binance-futures'
+import { BybitFuturesConnector } from './bybit-futures'
 
 // Connector instances (singleton per platform)
 const connectors = new Map<Platform, PlatformConnector>()
@@ -30,11 +31,8 @@ function createConnector(platform: Platform): PlatformConnector | null {
   switch (platform) {
     case 'binance_futures':
       return new BinanceFuturesConnector()
-    // Phase 2: Add more connectors here
-    // case 'bybit':
-    //   return new BybitConnector()
-    // case 'bitget_futures':
-    //   return new BitgetFuturesConnector()
+    case 'bybit':
+      return new BybitFuturesConnector()
     default:
       return null
   }
@@ -42,9 +40,9 @@ function createConnector(platform: Platform): PlatformConnector | null {
 
 /** Get list of platforms with implemented connectors */
 export function getAvailablePlatforms(): Platform[] {
-  return ['binance_futures']
-  // Phase 2: Add more as implemented
+  return ['binance_futures', 'bybit']
 }
 
 export { type PlatformConnector } from './types'
 export { BinanceFuturesConnector } from './binance-futures'
+export { BybitFuturesConnector } from './bybit-futures'
