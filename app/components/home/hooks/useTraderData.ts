@@ -18,6 +18,9 @@ interface UseTraderDataOptions {
   autoRefreshInterval?: number // 自动刷新间隔（毫秒）
 }
 
+// 全局请求去重 Map（跨组件实例共享，避免并发重复请求）
+const pendingRequests = new Map<string, Promise<CachedData>>()
+
 export function useTraderData(options: UseTraderDataOptions = {}) {
   // 默认 10 分钟自动刷新（数据每 2 小时更新一次，无需频繁刷新）
   const { autoRefreshInterval = 10 * 60 * 1000 } = options
@@ -62,43 +65,57 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
     return unsubscribe
   }, [activeTimeRange, on])
 
-  // 加载单个时间段数据
+  // 加载单个时间段数据（含请求去重）
   const loadTimeRange = useCallback(async (timeRange: TimeRange, forceRefresh = false): Promise<CachedData> => {
     // 检查缓存（非强制刷新时）
     if (!forceRefresh && tradersCache.current.has(timeRange)) {
       return tradersCache.current.get(timeRange) || { traders: [], lastUpdated: null }
     }
 
-    try {
-      const response = await fetch(`/api/traders?timeRange=${timeRange}`)
-      if (!response.ok) {
-        const errorMsg = `加载排行榜数据失败 (${response.status})`
+    // 请求去重：如果有相同 key 的请求正在进行，复用该 Promise
+    const cacheKey = `${timeRange}-${forceRefresh ? 'force' : 'normal'}`
+    if (pendingRequests.has(cacheKey)) {
+      return pendingRequests.get(cacheKey)!
+    }
+
+    const requestPromise = (async (): Promise<CachedData> => {
+      try {
+        const response = await fetch(`/api/traders?timeRange=${timeRange}`)
+        if (!response.ok) {
+          const errorMsg = `加载排行榜数据失败 (${response.status})`
+          setError(errorMsg)
+          return tradersCache.current.get(timeRange) || { traders: [], lastUpdated: null }
+        }
+        const data = await response.json()
+        const cached: CachedData = {
+          traders: data.traders || [],
+          lastUpdated: data.lastUpdated || null,
+        }
+
+        // 更新缓存
+        tradersCache.current.set(timeRange, cached)
+        setError(null)
+
+        // 广播数据更新到其他窗口
+        broadcast('TRADER_DATA_UPDATED', {
+          timeRange,
+          traders: cached.traders,
+          lastUpdated: cached.lastUpdated || '',
+        })
+
+        return cached
+      } catch (err) {
+        const errorMsg = err instanceof Error ? err.message : '网络连接失败，请检查网络'
         setError(errorMsg)
         return tradersCache.current.get(timeRange) || { traders: [], lastUpdated: null }
+      } finally {
+        // 请求完成后移除 pending 标记
+        pendingRequests.delete(cacheKey)
       }
-      const data = await response.json()
-      const cached: CachedData = {
-        traders: data.traders || [],
-        lastUpdated: data.lastUpdated || null,
-      }
+    })()
 
-      // 更新缓存
-      tradersCache.current.set(timeRange, cached)
-      setError(null)
-
-      // 广播数据更新到其他窗口
-      broadcast('TRADER_DATA_UPDATED', {
-        timeRange,
-        traders: cached.traders,
-        lastUpdated: cached.lastUpdated || '',
-      })
-
-      return cached
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : '网络连接失败，请检查网络'
-      setError(errorMsg)
-      return tradersCache.current.get(timeRange) || { traders: [], lastUpdated: null }
-    }
+    pendingRequests.set(cacheKey, requestPromise)
+    return requestPromise
   }, [broadcast])
 
   // 加载当前选中时间段的数据

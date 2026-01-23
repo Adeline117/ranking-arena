@@ -188,6 +188,8 @@ export default function TopNav({ email }: { email: string | null }) {
   }, [myId])
 
   useEffect(() => {
+    if (!showUserMenu && !showSearchDropdown) return
+
     const handleClickOutside = (event: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
         setShowUserMenu(false)
@@ -197,10 +199,7 @@ export default function TopNav({ email }: { email: string | null }) {
       }
     }
 
-    if (showUserMenu || showSearchDropdown) {
-      document.addEventListener('mousedown', handleClickOutside)
-    }
-
+    document.addEventListener('mousedown', handleClickOutside)
     return () => {
       document.removeEventListener('mousedown', handleClickOutside)
     }

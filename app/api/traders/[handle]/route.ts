@@ -17,9 +17,24 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
+import { z } from 'zod'
 import { getServerCache, setServerCache, CacheTTL } from '@/lib/utils/server-cache'
 import { calculateArenaScore, calculateOverallScore } from '@/lib/utils/arena-score'
 import { createLogger } from '@/lib/utils/logger'
+
+// 输入验证 schema（支持字母、数字、下划线、连字符、点、中文、0x 地址）
+const handleSchema = z.string().min(1).max(255)
+
+// Promise 超时包装器（防止数据库查询永久挂起）
+function withTimeout<T>(promise: Promise<T>, ms: number, fallback?: T): Promise<T> {
+  const timeout = new Promise<T>((_, reject) =>
+    setTimeout(() => reject(new Error(`Query timeout after ${ms}ms`)), ms)
+  )
+  if (fallback !== undefined) {
+    return Promise.race([promise, timeout]).catch(() => fallback)
+  }
+  return Promise.race([promise, timeout])
+}
 
 const logger = createLogger('trader-api')
 
@@ -214,7 +229,7 @@ async function getTraderDetails(
   const traderId = source.source_trader_id
   const traderHandle = source.handle || source.source_trader_id
   
-  // 🚀 并行获取所有数据
+  // 🚀 并行获取所有数据（10s 超时保护）
   const [
     snapshotResult,
     snapshot7dResult,
@@ -236,7 +251,7 @@ async function getTraderDetails(
     statsDetailResult,
     // 新增：tracked_since
     trackedSinceResult,
-  ] = await Promise.all([
+  ] = await withTimeout(Promise.all([
     // 最新快照
     supabase
       .from('trader_snapshots')
@@ -386,8 +401,8 @@ async function getTraderDetails(
       .order('captured_at', { ascending: true })
       .limit(1)
       .maybeSingle(),
-  ])
-  
+  ]), 10000) // 10s timeout
+
   const snapshot = snapshotResult.data as SnapshotData | null
   const snapshot7d = snapshot7dResult.data as SnapshotData | null
   const snapshot30d = snapshot30dResult.data as SnapshotData | null
@@ -806,11 +821,13 @@ export async function GET(
   const startTime = Date.now()
   
   try {
-    const { handle } = await params
-    
-    if (!handle) {
-      return NextResponse.json({ error: 'Handle is required' }, { status: 400 })
+    const { handle: rawHandle } = await params
+
+    const parsed = handleSchema.safeParse(rawHandle)
+    if (!parsed.success) {
+      return NextResponse.json({ error: 'Invalid handle parameter' }, { status: 400 })
     }
+    const handle = parsed.data
 
     if (!SUPABASE_URL || !SUPABASE_KEY) {
       return NextResponse.json({ error: 'Missing Supabase config' }, { status: 500 })
