@@ -23,7 +23,7 @@ import type {
   GranularPlatform,
   RankingWindow,
   RefreshJob,
-  SnapshotMetrics,
+  SnapshotMetricsLegacy,
 } from '@/lib/types/leaderboard';
 
 // ============================================
@@ -156,9 +156,9 @@ export class JobRunner {
     const windows: RankingWindow[] = ['7d', '30d', '90d'];
 
     for (const window of windows) {
-      const result = await connector.discoverLeaderboard(window);
+      const traders = await connector.discoverLeaderboard(window);
 
-      for (const trader of result.traders) {
+      for (const trader of traders) {
         await query(
           `INSERT INTO trader_sources_v2 (platform, trader_key, display_name, avatar_url, profile_url, last_seen)
            VALUES ($1, $2, $3, $4, $5, $6)
@@ -182,10 +182,12 @@ export class JobRunner {
       const snapshot = await connector.fetchTraderSnapshot(job.trader_key, window);
       if (!snapshot) continue;
 
-      // Calculate Arena Score
-      const arenaScores = this.calculateScores(snapshot.metrics, window);
-      const enrichedMetrics: SnapshotMetrics = {
-        ...snapshot.metrics,
+      const metrics = snapshot.metrics;
+
+      // Calculate Arena Score using legacy metric field names
+      const arenaScores = this.calculateScores(metrics, window);
+      const enrichedMetrics = {
+        ...metrics,
         ...arenaScores,
       };
 
@@ -198,11 +200,11 @@ export class JobRunner {
            metrics = $5, quality = $6, arena_score = $7, roi_pct = $8, pnl_usd = $9,
            max_drawdown_pct = $10, win_rate_pct = $11, trades_count = $12, copier_count = $13`,
         [
-          job.platform, job.trader_key, window, snapshot.fetched_at,
-          JSON.stringify(enrichedMetrics), JSON.stringify(snapshot.quality_flags),
-          arenaScores.arena_score, snapshot.metrics.roi, snapshot.metrics.pnl,
-          snapshot.metrics.max_drawdown, snapshot.metrics.win_rate,
-          snapshot.metrics.trades_count, snapshot.metrics.copiers,
+          job.platform, job.trader_key, window, snapshot.as_of_ts,
+          JSON.stringify(enrichedMetrics), JSON.stringify(snapshot.quality),
+          arenaScores.arena_score, metrics.roi_pct, metrics.pnl_usd,
+          metrics.max_drawdown_pct, metrics.win_rate_pct,
+          metrics.trades_count, metrics.copier_count,
         ],
       );
     }
@@ -212,10 +214,8 @@ export class JobRunner {
     if (!job.trader_key) throw new Error('trader_key required for profile job');
 
     const connector = getConnector(job.platform as unknown as GranularPlatform)!;
-    const profileResult = await connector.fetchTraderProfile(job.trader_key);
-    if (!profileResult) throw new Error(`No profile data for ${job.platform}/${job.trader_key}`);
-
-    const profile = profileResult.profile;
+    const profile = await connector.fetchTraderProfile(job.trader_key);
+    if (!profile) throw new Error(`No profile data for ${job.platform}/${job.trader_key}`);
 
     await query(
       `INSERT INTO trader_profiles_v2
@@ -228,7 +228,7 @@ export class JobRunner {
          aum_usd = COALESCE($6, trader_profiles_v2.aum_usd),
          last_enriched_at = $7`,
       [profile.platform, profile.trader_key, profile.display_name, profile.avatar_url,
-       profile.copiers, profile.aum, new Date().toISOString()],
+       profile.copier_count, profile.aum_usd, new Date().toISOString()],
     );
   }
 
@@ -236,19 +236,20 @@ export class JobRunner {
     if (!job.trader_key) throw new Error('trader_key required for timeseries job');
 
     const connector = getConnector(job.platform as unknown as GranularPlatform)!;
-    const result = await connector.fetchTimeseries(job.trader_key);
+    const seriesTypes = ['equity_curve', 'daily_pnl'] as const;
 
-    for (const series of result.series) {
-      if (series.data.length > 0) {
-        await query(
-          `INSERT INTO trader_timeseries_v2 (platform, trader_key, series_type, data, as_of_ts)
-           VALUES ($1, $2, $3, $4, $5)
-           ON CONFLICT (platform, trader_key, series_type) DO UPDATE SET
-             data = $4, as_of_ts = $5`,
-          [series.platform, series.trader_key, series.series_type,
-           JSON.stringify(series.data), series.as_of_ts],
-        );
-      }
+    for (const seriesType of seriesTypes) {
+      const result = await connector.fetchTimeseries(job.trader_key, seriesType);
+      if (!result || result.data.length === 0) continue;
+
+      await query(
+        `INSERT INTO trader_timeseries_v2 (platform, trader_key, series_type, data, as_of_ts)
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (platform, trader_key, series_type) DO UPDATE SET
+           data = $4, as_of_ts = $5`,
+        [result.platform, result.trader_key, result.series_type,
+         JSON.stringify(result.data), result.as_of_ts],
+      );
     }
   }
 
@@ -316,10 +317,10 @@ export class JobRunner {
   // ============================================
 
   private calculateScores(
-    metrics: SnapshotMetrics,
+    metrics: SnapshotMetricsLegacy,
     window: RankingWindow,
-  ): Pick<SnapshotMetrics, 'arena_score' | 'return_score' | 'drawdown_score' | 'stability_score'> {
-    if (metrics.roi == null) {
+  ): Pick<SnapshotMetricsLegacy, 'arena_score' | 'return_score' | 'drawdown_score' | 'stability_score'> {
+    if (metrics.roi_pct == null) {
       return { arena_score: null, return_score: null, drawdown_score: null, stability_score: null };
     }
 
@@ -329,10 +330,10 @@ export class JobRunner {
     try {
       const score = calculateArenaScore(
         {
-          roi: metrics.roi,
-          pnl: metrics.pnl ?? 0,
-          maxDrawdown: metrics.max_drawdown ?? 0,
-          winRate: metrics.win_rate ?? 50,
+          roi: metrics.roi_pct,
+          pnl: metrics.pnl_usd ?? 0,
+          maxDrawdown: metrics.max_drawdown_pct ?? 0,
+          winRate: metrics.win_rate_pct ?? 50,
         },
         period,
       );

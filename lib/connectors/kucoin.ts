@@ -6,15 +6,16 @@
  * Rate limits: 20 req/min with 2.5-5s jitter.
  */
 
-import { BaseConnector, ConnectorError } from './base';
+import { BaseConnectorLegacy } from './base';
 import type {
   RankingWindow,
   TraderIdentity,
-  TraderSnapshot,
+  TraderSnapshotLegacy,
   TraderProfileEnriched,
-  TraderTimeseries,
+  TraderTimeseriesLegacy,
   TimeseriesType,
-  SnapshotMetrics,
+  SnapshotMetricsLegacy,
+  LegacyPlatformConnector,
 } from '@/lib/types/leaderboard';
 
 // ============================================
@@ -57,7 +58,7 @@ const WINDOW_TO_PERIOD: Record<RankingWindow, string> = {
 // Connector
 // ============================================
 
-export class KuCoinConnector extends BaseConnector {
+export class KuCoinConnector extends BaseConnectorLegacy implements LegacyPlatformConnector {
   readonly platform = 'kucoin' as const;
   private readonly baseUrl = 'https://www.kucoin.com/_api/copy-trade/leader';
 
@@ -71,7 +72,7 @@ export class KuCoinConnector extends BaseConnector {
     const traders: TraderIdentity[] = [];
 
     for (let page = 1; page <= 5; page++) {
-      const data = await this.request<KuCoinLeaderboardResponse>(
+      const data = await this.requestWithCircuitBreaker<KuCoinLeaderboardResponse>(
         () => this.fetchLeaderboardPage(period, page, 20),
         { label: `discoverLeaderboard(${window}, page=${page})` },
       );
@@ -99,8 +100,8 @@ export class KuCoinConnector extends BaseConnector {
   async fetchTraderSnapshot(
     traderKey: string,
     window: RankingWindow,
-  ): Promise<Omit<TraderSnapshot, 'id' | 'created_at'>> {
-    const detail = await this.request<{ code: string; data: KuCoinTraderEntry }>(
+  ): Promise<Omit<TraderSnapshotLegacy, 'id' | 'created_at'>> {
+    const detail = await this.requestWithCircuitBreaker<{ code: string; data: KuCoinTraderEntry }>(
       () => this.fetchTraderDetailApi(traderKey, window),
       { label: `fetchTraderSnapshot(${traderKey}, ${window})` },
     );
@@ -108,7 +109,7 @@ export class KuCoinConnector extends BaseConnector {
     const d = detail.data || {};
     const roi = d.roi != null ? (Math.abs(d.roi) < 10 ? d.roi * 100 : d.roi) : null;
 
-    const metrics: SnapshotMetrics = {
+    const metrics: SnapshotMetricsLegacy = {
       roi_pct: roi,
       pnl_usd: d.totalPnl ?? d.pnl ?? null,
       win_rate_pct: d.winRate != null ? (d.winRate <= 1 ? d.winRate * 100 : d.winRate) : null,
@@ -139,7 +140,7 @@ export class KuCoinConnector extends BaseConnector {
   async fetchTraderProfile(
     traderKey: string,
   ): Promise<Omit<TraderProfileEnriched, 'last_enriched_at'>> {
-    const detail = await this.request<{ code: string; data: KuCoinTraderEntry }>(
+    const detail = await this.requestWithCircuitBreaker<{ code: string; data: KuCoinTraderEntry }>(
       () => this.fetchTraderDetailApi(traderKey, '90d'),
       { label: `fetchTraderProfile(${traderKey})` },
     );
@@ -162,7 +163,7 @@ export class KuCoinConnector extends BaseConnector {
   async fetchTimeseries(
     traderKey: string,
     seriesType: TimeseriesType,
-  ): Promise<Omit<TraderTimeseries, 'id' | 'created_at'>> {
+  ): Promise<Omit<TraderTimeseriesLegacy, 'id' | 'created_at'>> {
     return {
       platform: this.platform,
       trader_key: traderKey,
@@ -188,7 +189,7 @@ export class KuCoinConnector extends BaseConnector {
     });
 
     if (!response.ok) {
-      throw new ConnectorError(`KuCoin API returned ${response.status}`, this.platform, response.status >= 500);
+      throw new Error(`KuCoin API returned ${response.status}`);
     }
 
     return response.json();
@@ -205,7 +206,7 @@ export class KuCoinConnector extends BaseConnector {
     });
 
     if (!response.ok) {
-      throw new ConnectorError(`KuCoin detail API returned ${response.status}`, this.platform, response.status >= 500);
+      throw new Error(`KuCoin detail API returned ${response.status}`);
     }
 
     return response.json();

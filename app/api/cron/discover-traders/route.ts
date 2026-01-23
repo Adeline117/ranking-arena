@@ -12,6 +12,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { JobRunner } from '@/lib/services/job-runner';
 import { getAvailablePlatforms } from '@/lib/connectors/registry';
+import type { Platform } from '@/lib/types/leaderboard';
 
 export async function GET(request: NextRequest) {
   const authHeader = request.headers.get('authorization');
@@ -25,7 +26,7 @@ export async function GET(request: NextRequest) {
     const results: Array<{ platform: string; job_id: string | null }> = [];
 
     for (const platform of platforms) {
-      const job = await runner.enqueueDiscovery(platform, 3);
+      const job = await runner.enqueueDiscovery(platform as Platform, 3);
       results.push({ platform, job_id: job?.id || null });
     }
 

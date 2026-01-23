@@ -122,7 +122,7 @@ export const PLATFORM_CATEGORY: Record<GranularPlatform, TradingCategory> = {
 
 /** Unique identity for a trader on a specific platform (legacy format) */
 export interface TraderIdentity {
-  platform: Platform
+  platform: Platform | GranularPlatform
   trader_key: string
   display_name: string | null
   avatar_url: string | null
@@ -164,7 +164,7 @@ export interface TraderProfile {
 
 /** Enriched profile data (legacy format) */
 export interface TraderProfileEnriched {
-  platform: Platform
+  platform: Platform | GranularPlatform
   trader_key: string
   display_name: string | null
   avatar_url: string | null
@@ -268,7 +268,7 @@ export interface TraderSnapshot {
 /** Legacy TraderSnapshot with id field */
 export interface TraderSnapshotLegacy {
   id: string
-  platform: Platform
+  platform: Platform | GranularPlatform
   trader_key: string
   window: RankingWindow
   as_of_ts: string
@@ -314,7 +314,7 @@ export interface TraderTimeseries {
 /** Legacy Timeseries record with id */
 export interface TraderTimeseriesLegacy {
   id: string
-  platform: Platform
+  platform: Platform | GranularPlatform
   trader_key: string
   series_type: TimeseriesType
   data: TimeseriesPoint[]
@@ -557,8 +557,8 @@ export interface TimeseriesResult {
 }
 
 /** What a platform connector must implement (legacy interface) */
-export interface PlatformConnector {
-  platform: Platform
+export interface LegacyPlatformConnector {
+  platform: Platform | GranularPlatform
 
   discoverLeaderboard(window: RankingWindow): Promise<TraderIdentity[]>
 
@@ -574,6 +574,9 @@ export interface PlatformConnector {
     seriesType: TimeseriesType,
   ): Promise<Omit<TraderTimeseriesLegacy, 'id' | 'created_at'>>
 }
+
+/** @deprecated Use LegacyPlatformConnector instead */
+export type PlatformConnectorLegacy = LegacyPlatformConnector
 
 // ============================================
 // Platform Capability Matrix

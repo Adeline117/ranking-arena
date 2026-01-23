@@ -13,7 +13,6 @@
  * - mdd: returned as decimal (0-1), multiply by 100, take absolute
  */
 
-import type { PlatformConnector } from './types'
 import type {
   SnapshotWindow,
   ConnectorTraderProfile,
@@ -50,7 +49,7 @@ function getRandomUserAgent(): string {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type BybitApiResponse = Record<string, any>
 
-export class BybitFuturesConnector implements PlatformConnector {
+export class BybitFuturesConnector {
   readonly platform = 'bybit' as const
 
   private rateLimiter = new DelayRateLimiter(2500)
