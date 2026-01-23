@@ -1,7 +1,9 @@
 {
   "platform": "bybit",
+  "product": "futures",
   "market_type": "futures",
   "display_name": "Bybit Futures Copy Trading",
+  "api_base": "https://api2.bybit.com/fapi/beehive/public/v1/common",
   "data_source_type": "internal_api",
   "discovery_method": "HTTP POST to internal API (reverse-engineered from frontend XHR interception)",
 
