@@ -356,13 +356,19 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
                   }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                    <Link
-                      href={`/u/${comment.author_handle || ''}`}
-                      onClick={(e) => e.stopPropagation()}
-                      style={{ fontSize: 12, fontWeight: 700, color: tokens.colors.text.secondary, textDecoration: 'none' }}
-                    >
-                      {comment.author_handle || '匿名'}
-                    </Link>
+                    {comment.author_handle ? (
+                      <Link
+                        href={`/u/${comment.author_handle}`}
+                        onClick={(e) => e.stopPropagation()}
+                        style={{ fontSize: 12, fontWeight: 700, color: tokens.colors.text.secondary, textDecoration: 'none' }}
+                      >
+                        {comment.author_handle}
+                      </Link>
+                    ) : (
+                      <span style={{ fontSize: 12, fontWeight: 700, color: tokens.colors.text.tertiary }}>
+                        匿名
+                      </span>
+                    )}
                     <span style={{ fontSize: 11, color: tokens.colors.text.tertiary }}>
                       {formatTimeAgo(comment.created_at)}
                     </span>

@@ -111,7 +111,7 @@ export default function VoteButtons({
         }}
         onMouseEnter={(e) => {
           if (!disabled && !isUpActive) {
-            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)'
+            e.currentTarget.style.background = 'var(--overlay-hover, rgba(255, 255, 255, 0.05))'
             e.currentTarget.style.color = tokens.colors.text.primary
           }
         }}
@@ -161,7 +161,7 @@ export default function VoteButtons({
         }}
         onMouseEnter={(e) => {
           if (!disabled && !isDownActive) {
-            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)'
+            e.currentTarget.style.background = 'var(--overlay-hover, rgba(255, 255, 255, 0.05))'
             e.currentTarget.style.color = tokens.colors.text.primary
           }
         }}

@@ -24,11 +24,17 @@ interface TraderHeaderProps {
   coverUrl?: string // 用户背景图片
   isRegistered?: boolean
   followers?: number
+  copiers?: number // 跟单人数
+  aum?: number // 管理资金量 (USD)
   isOwnProfile?: boolean
   source?: string
   communityScore?: CommunityScore | null
   proBadgeTier?: 'pro' | null // Pro 徽章等级
   isPro?: boolean // 是否为 Pro 用户
+  activeSince?: string // 入驻日期
+  roi90d?: number // 用于推断交易风格
+  maxDrawdown?: number // 最大回撤
+  winRate?: number // 胜率
 }
 
 // 来源平台配置 - 只显示类型，不显示交易所名称
@@ -46,6 +52,49 @@ const sourceConfig: Record<string, { label: string; color: string }> = {
   gmx: { label: '链上', color: tokens.colors.text.secondary },
 }
 
+// 推断交易风格标签
+function getTradingStyleTags(source?: string, roi90d?: number, maxDrawdown?: number, winRate?: number): Array<{ label: string; color: string }> {
+  const tags: Array<{ label: string; color: string }> = []
+
+  // 基于来源
+  if (source?.includes('web3') || source === 'gmx') {
+    tags.push({ label: '链上', color: '#8B5CF6' })
+  } else if (source?.includes('spot')) {
+    tags.push({ label: '现货', color: '#06B6D4' })
+  } else if (source?.includes('futures') || source === 'bybit' || source === 'okx') {
+    tags.push({ label: '合约', color: '#F59E0B' })
+  }
+
+  // 基于指标推断风格
+  if (maxDrawdown !== undefined && Math.abs(maxDrawdown) < 10) {
+    tags.push({ label: '低回撤', color: '#10B981' })
+  }
+  if (winRate !== undefined && winRate > 70) {
+    tags.push({ label: '高胜率', color: '#22C55E' })
+  }
+  if (roi90d !== undefined && roi90d > 100) {
+    tags.push({ label: '高收益', color: '#EF4444' })
+  }
+
+  return tags.slice(0, 3) // 最多3个标签
+}
+
+// 格式化 AUM
+function formatAum(aum: number): string {
+  if (aum >= 1000000) return `$${(aum / 1000000).toFixed(1)}M`
+  if (aum >= 1000) return `$${(aum / 1000).toFixed(0)}K`
+  return `$${aum.toFixed(0)}`
+}
+
+// 计算活跃天数
+function getActiveDays(activeSince?: string): number | null {
+  if (!activeSince) return null
+  const start = new Date(activeSince)
+  if (isNaN(start.getTime())) return null
+  const now = new Date()
+  return Math.floor((now.getTime() - start.getTime()) / (1000 * 60 * 60 * 24))
+}
+
 export default function TraderHeader({
   handle,
   traderId,
@@ -54,11 +103,17 @@ export default function TraderHeader({
   coverUrl,
   isRegistered,
   followers = 0,
+  copiers,
+  aum,
   isOwnProfile = false,
   source,
   communityScore,
   proBadgeTier,
   isPro = false,
+  activeSince,
+  roi90d,
+  maxDrawdown,
+  winRate,
 }: TraderHeaderProps) {
   const [userId, setUserId] = useState<string | null>(null)
   const [mounted, setMounted] = useState(false)
@@ -334,25 +389,16 @@ export default function TraderHeader({
             )}
           </Box>
           
-          <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[4] }}>
+          {/* 统计指标行 */}
+          <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[4], flexWrap: 'wrap' }}>
+            {/* 粉丝 */}
             <Box
               style={{
                 display: 'flex',
                 alignItems: 'center',
                 gap: tokens.spacing[2],
-                cursor: 'pointer',
                 padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
                 borderRadius: tokens.radius.md,
-                transition: 'background 0.2s ease',
-              }}
-              title="查看粉丝列表"
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = coverUrl
-                  ? 'rgba(255,255,255,0.1)'
-                  : `${tokens.colors.accent.primary}10`
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'transparent'
               }}
             >
               <Text
@@ -377,7 +423,130 @@ export default function TraderHeader({
                 粉丝
               </Text>
             </Box>
+
+            {/* 跟单人数 */}
+            {copiers !== undefined && copiers > 0 && (
+              <Box
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
+                  borderRadius: tokens.radius.md,
+                }}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={coverUrl ? 'rgba(255,255,255,0.7)' : tokens.colors.text.tertiary} strokeWidth="2" strokeLinecap="round">
+                  <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+                  <circle cx="9" cy="7" r="4" />
+                  <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+                  <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                </svg>
+                <Text
+                  size="sm"
+                  style={{
+                    color: coverUrl ? 'rgba(255,255,255,0.8)' : tokens.colors.text.secondary,
+                    textShadow: coverUrl ? '0 1px 4px rgba(0,0,0,0.5)' : undefined,
+                  }}
+                >
+                  <Text as="span" weight="black" style={{ color: coverUrl ? '#ffffff' : tokens.colors.text.primary, marginRight: 4 }}>
+                    {copiers.toLocaleString()}
+                  </Text>
+                  跟单
+                </Text>
+              </Box>
+            )}
+
+            {/* AUM */}
+            {aum !== undefined && aum > 0 && (
+              <Box
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
+                  borderRadius: tokens.radius.md,
+                }}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={coverUrl ? 'rgba(255,255,255,0.7)' : tokens.colors.text.tertiary} strokeWidth="2" strokeLinecap="round">
+                  <line x1="12" y1="1" x2="12" y2="23" />
+                  <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                </svg>
+                <Text
+                  size="sm"
+                  style={{
+                    color: coverUrl ? 'rgba(255,255,255,0.8)' : tokens.colors.text.secondary,
+                    textShadow: coverUrl ? '0 1px 4px rgba(0,0,0,0.5)' : undefined,
+                  }}
+                >
+                  <Text as="span" weight="bold" style={{ color: coverUrl ? '#ffffff' : tokens.colors.text.primary, marginRight: 4 }}>
+                    {formatAum(aum)}
+                  </Text>
+                  AUM
+                </Text>
+              </Box>
+            )}
+
+            {/* 活跃天数 - 信任信号 */}
+            {(() => {
+              const days = getActiveDays(activeSince)
+              if (!days || days < 7) return null
+              return (
+                <Box
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 4,
+                    padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
+                    borderRadius: tokens.radius.md,
+                  }}
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={coverUrl ? 'rgba(255,255,255,0.7)' : tokens.colors.text.tertiary} strokeWidth="2" strokeLinecap="round">
+                    <circle cx="12" cy="12" r="10" />
+                    <polyline points="12 6 12 12 16 14" />
+                  </svg>
+                  <Text
+                    size="sm"
+                    style={{
+                      color: coverUrl ? 'rgba(255,255,255,0.8)' : tokens.colors.text.secondary,
+                      textShadow: coverUrl ? '0 1px 4px rgba(0,0,0,0.5)' : undefined,
+                    }}
+                  >
+                    <Text as="span" weight="bold" style={{ color: coverUrl ? '#ffffff' : tokens.colors.text.primary, marginRight: 4 }}>
+                      {days > 365 ? `${Math.floor(days / 365)}年` : `${days}天`}
+                    </Text>
+                    活跃
+                  </Text>
+                </Box>
+              )
+            })()}
           </Box>
+
+          {/* 交易风格标签 */}
+          {(() => {
+            const tags = getTradingStyleTags(source, roi90d, maxDrawdown, winRate)
+            if (tags.length === 0) return null
+            return (
+              <Box style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+                {tags.map((tag, i) => (
+                  <Box
+                    key={i}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      padding: '2px 8px',
+                      borderRadius: tokens.radius.full,
+                      background: `${tag.color}15`,
+                      border: `1px solid ${tag.color}30`,
+                    }}
+                  >
+                    <Text style={{ fontSize: 10, fontWeight: 600, color: tag.color }}>
+                      {tag.label}
+                    </Text>
+                  </Box>
+                ))}
+              </Box>
+            )
+          })()}
         </Box>
       </Box>
 
@@ -430,36 +599,46 @@ export default function TraderHeader({
 
         {/* 跟单按钮 - 最重要的 CTA */}
         {isPro ? (
-          <CopyTradeButton
-            traderId={traderId}
-            source={source}
-            traderHandle={handle}
-          />
+          <Box style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+            <CopyTradeButton
+              traderId={traderId}
+              source={source}
+              traderHandle={handle}
+            />
+            <Text size="xs" color="tertiary" style={{ fontSize: 10, opacity: 0.7 }}>
+              跳转至交易所跟单
+            </Text>
+          </Box>
         ) : (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => router.push('/pricing')}
-            style={{
-              color: tokens.colors.text.tertiary,
-              fontSize: tokens.typography.fontSize.sm,
-              padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-              borderRadius: tokens.radius.lg,
-              background: `${tokens.colors.bg.tertiary}`,
-              border: `1px solid ${tokens.colors.border.primary}`,
-              transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
-              display: 'flex',
-              alignItems: 'center',
-              gap: tokens.spacing[2],
-              opacity: 0.7,
-            }}
-          >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-              <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-            </svg>
-            跟单 Pro
-          </Button>
+          <Box style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => router.push('/pricing')}
+              style={{
+                color: tokens.colors.text.tertiary,
+                fontSize: tokens.typography.fontSize.sm,
+                padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+                borderRadius: tokens.radius.lg,
+                background: `${tokens.colors.bg.tertiary}`,
+                border: `1px solid ${tokens.colors.border.primary}`,
+                transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: tokens.spacing[2],
+                opacity: 0.7,
+              }}
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+              </svg>
+              跟单 Pro
+            </Button>
+            <Text size="xs" color="tertiary" style={{ fontSize: 10, opacity: 0.7 }}>
+              解锁后跳转交易所跟单
+            </Text>
+          </Box>
         )}
 
         {/* 返回按钮 */}

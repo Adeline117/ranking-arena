@@ -11,13 +11,16 @@ import ExchangeConnectionManager from '@/app/components/exchange/ExchangeConnect
 import { useToast } from '@/app/components/ui/Toast'
 import { useDialog } from '@/app/components/ui/Dialog'
 import { uiLogger } from '@/lib/utils/logger'
+import AdvancedAlerts from '@/app/components/pro/AdvancedAlerts'
+import { useSubscription } from '@/app/components/home/hooks/useSubscription'
+import { useMultiAccount } from '@/lib/hooks/useMultiAccount'
 
 // Constants
 const MAX_BIO_LENGTH = 200
 const MAX_HANDLE_LENGTH = 30
 
 // Section IDs for navigation
-type SectionId = 'profile' | 'security' | 'exchanges' | 'notifications' | 'privacy' | 'account'
+type SectionId = 'profile' | 'security' | 'exchanges' | 'alerts' | 'notifications' | 'privacy' | 'account'
 
 const SECTION_ICONS: Record<SectionId, React.ReactNode> = {
   profile: (
@@ -36,6 +39,13 @@ const SECTION_ICONS: Record<SectionId, React.ReactNode> = {
     <svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
       <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+    </svg>
+  ),
+  alerts: (
+    <svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+      <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+      <line x1="12" y1="2" x2="12" y2="4" />
     </svg>
   ),
   notifications: (
@@ -61,6 +71,7 @@ const SECTIONS: { id: SectionId; label: string }[] = [
   { id: 'profile', label: '个人资料' },
   { id: 'security', label: '账号安全' },
   { id: 'exchanges', label: '交易所绑定' },
+  { id: 'alerts', label: '交易员警报' },
   { id: 'notifications', label: '通知偏好' },
   { id: 'privacy', label: '隐私设置' },
   { id: 'account', label: '账号管理' },
@@ -362,6 +373,110 @@ function getInputStyle(hasError = false) {
   }
 }
 
+function MultiAccountSection() {
+  const { accounts, activeAccount, inactiveAccounts, canAddAccount, isPro, removeAccount, switchAccount, signOutAll } = useMultiAccount()
+  const router = useRouter()
+  const [switchingId, setSwitchingId] = useState<string | null>(null)
+
+  const handleSwitch = async (userId: string) => {
+    setSwitchingId(userId)
+    const result = await switchAccount(userId)
+    setSwitchingId(null)
+    if (result.success) {
+      router.refresh()
+    }
+  }
+
+  return (
+    <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
+      {accounts.map((account) => (
+        <Box
+          key={account.userId}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: tokens.spacing[2],
+            padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+            borderRadius: tokens.radius.md,
+            background: account.isActive ? `${tokens.colors.accent.primary}10` : 'transparent',
+            border: `1px solid ${account.isActive ? tokens.colors.accent.primary + '30' : tokens.colors.border.primary}`,
+          }}
+        >
+          <Box style={{
+            width: 24, height: 24, borderRadius: '50%',
+            background: tokens.colors.accent.primary + '20',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 11, fontWeight: 700, color: tokens.colors.accent.primary,
+          }}>
+            {(account.handle?.[0] || account.email[0] || 'U').toUpperCase()}
+          </Box>
+          <Box style={{ flex: 1, minWidth: 0 }}>
+            <Text size="xs" weight={account.isActive ? 'bold' : 'normal'} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {account.handle || account.email}
+            </Text>
+          </Box>
+          {account.isActive ? (
+            <Text size="xs" style={{ color: tokens.colors.accent.success }}>当前</Text>
+          ) : (
+            <Box style={{ display: 'flex', gap: tokens.spacing[1] }}>
+              <button
+                onClick={() => handleSwitch(account.userId)}
+                disabled={!!switchingId}
+                style={{
+                  border: 'none', background: 'transparent', cursor: 'pointer',
+                  fontSize: 11, color: tokens.colors.accent.primary,
+                  opacity: switchingId ? 0.5 : 1,
+                }}
+              >
+                {switchingId === account.userId ? '...' : '切换'}
+              </button>
+              <button
+                onClick={() => removeAccount(account.userId)}
+                style={{
+                  border: 'none', background: 'transparent', cursor: 'pointer',
+                  fontSize: 11, color: tokens.colors.text.tertiary,
+                }}
+              >
+                移除
+              </button>
+            </Box>
+          )}
+        </Box>
+      ))}
+      <Box
+        onClick={() => {
+          if (!isPro && accounts.length >= 1) {
+            router.push('/settings?section=subscription')
+          } else {
+            router.push('/login?addAccount=true')
+          }
+        }}
+        style={{
+          display: 'flex', alignItems: 'center', gap: tokens.spacing[2],
+          padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+          borderRadius: tokens.radius.md,
+          border: `1px dashed ${tokens.colors.border.secondary}`,
+          cursor: 'pointer',
+          transition: `all ${tokens.transition.base}`,
+        }}
+      >
+        <Text size="xs" color="tertiary">+ 添加账号</Text>
+        {!isPro && (
+          <Box style={{
+            marginLeft: 'auto',
+            padding: `1px ${tokens.spacing[1]}`,
+            borderRadius: tokens.radius.sm,
+            background: 'linear-gradient(135deg, #8b6fa8, #b794d4)',
+            color: '#fff', fontSize: 9, fontWeight: 700,
+          }}>
+            Pro
+          </Box>
+        )}
+      </Box>
+    </Box>
+  )
+}
+
 function SettingsContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -427,6 +542,16 @@ function SettingsContent() {
   const [showFollowing, setShowFollowing] = useState(true)
   const [dmPermission, setDmPermission] = useState<'all' | 'mutual' | 'none'>('all')
   const [showProBadge, setShowProBadge] = useState(true)
+
+  // Pro subscription status
+  const { isPro } = useSubscription()
+
+  // Account deletion state
+  const [showDeleteAccountModal, setShowDeleteAccountModal] = useState(false)
+  const [deletePassword, setDeletePassword] = useState('')
+  const [deleteReason, setDeleteReason] = useState('')
+  const [deletingAccount, setDeletingAccount] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   // Handle uniqueness check
   const [handleAvailable, setHandleAvailable] = useState<boolean | null>(null)
@@ -954,6 +1079,40 @@ function SettingsContent() {
       router.push('/')
     } catch {
       showToast('退出失败，请重试', 'error')
+    }
+  }
+
+  const handleDeleteAccount = async () => {
+    if (!deletePassword) return
+    setDeletingAccount(true)
+    setDeleteError(null)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) {
+        setDeleteError('请先登录')
+        return
+      }
+      const res = await fetch('/api/account/delete', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ password: deletePassword, reason: deleteReason }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setDeleteError(data.error || '注销失败')
+        return
+      }
+      showToast('账号已标记为注销，30天内可通过登录恢复', 'success')
+      setShowDeleteAccountModal(false)
+      await supabase.auth.signOut()
+      router.push('/')
+    } catch {
+      setDeleteError('网络错误，请重试')
+    } finally {
+      setDeletingAccount(false)
     }
   }
 
@@ -1557,6 +1716,14 @@ function SettingsContent() {
             {userId && <TraderLinksSection userId={userId} />}
           </SectionCard>
 
+          {/* ===== Trader Alerts Section ===== */}
+          <SectionCard id="alerts" title="交易员警报" description="设置自定义警报条件，及时掌握交易员动态（Pro 功能）">
+            <AdvancedAlerts
+              isPro={isPro}
+              isLoggedIn={!!userId}
+            />
+          </SectionCard>
+
           {/* ===== Notification Preferences Section ===== */}
           <SectionCard id="notifications" title="通知偏好" description="选择你想接收的通知类型">
             <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[1] }}>
@@ -1689,6 +1856,22 @@ function SettingsContent() {
           {/* ===== Account Management (Danger Zone) ===== */}
           <SectionCard id="account" title="账号管理" variant="danger">
             <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}>
+
+              {/* Multi-Account Section */}
+              <Box>
+                <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: tokens.spacing[2] }}>
+                  <Box>
+                    <Text size="sm" weight="medium">已关联账号</Text>
+                    <Text size="xs" color="tertiary">快速切换多个账号（Pro 会员最多 5 个）</Text>
+                  </Box>
+                </Box>
+                <MultiAccountSection />
+              </Box>
+
+              {/* Divider */}
+              <Box style={{ height: 1, background: tokens.colors.border.primary }} />
+
+              {/* Logout */}
               <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <Box>
                   <Text size="sm" weight="medium">退出登录</Text>
@@ -1706,8 +1889,135 @@ function SettingsContent() {
                   退出登录
                 </Button>
               </Box>
+
+              {/* Divider */}
+              <Box style={{ height: 1, background: tokens.colors.border.primary }} />
+
+              {/* Account Deletion */}
+              <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <Box>
+                  <Text size="sm" weight="medium" style={{ color: tokens.colors.accent.error }}>注销账号</Text>
+                  <Text size="xs" color="tertiary">永久删除你的账号和所有数据，30天内可恢复</Text>
+                </Box>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setShowDeleteAccountModal(true)}
+                  style={{
+                    color: tokens.colors.accent.error,
+                    borderColor: tokens.colors.accent.error + '40',
+                  }}
+                >
+                  注销账号
+                </Button>
+              </Box>
             </Box>
           </SectionCard>
+
+          {/* Account Deletion Modal */}
+          {showDeleteAccountModal && (
+            <Box
+              style={{
+                position: 'fixed',
+                top: 0, left: 0, right: 0, bottom: 0,
+                background: 'rgba(0,0,0,0.6)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                zIndex: 9999,
+                padding: tokens.spacing[4],
+              }}
+              onClick={() => setShowDeleteAccountModal(false)}
+            >
+              <Box
+                onClick={(e) => e.stopPropagation()}
+                style={{
+                  background: tokens.colors.bg.primary,
+                  borderRadius: tokens.radius.xl,
+                  padding: tokens.spacing[6],
+                  maxWidth: 420,
+                  width: '100%',
+                  border: `1px solid ${tokens.colors.accent.error}40`,
+                }}
+              >
+                <Text size="lg" weight="bold" style={{ color: tokens.colors.accent.error, marginBottom: tokens.spacing[3] }}>
+                  确认注销账号
+                </Text>
+                <Box style={{ marginBottom: tokens.spacing[4] }}>
+                  <Text size="sm" color="secondary" style={{ lineHeight: 1.6 }}>
+                    注销后，你的账号将在 30 天内被永久删除。在此期间，你可以通过登录恢复账号。
+                  </Text>
+                  <Box style={{
+                    marginTop: tokens.spacing[3],
+                    padding: tokens.spacing[3],
+                    borderRadius: tokens.radius.md,
+                    background: `${tokens.colors.accent.warning}10`,
+                    border: `1px solid ${tokens.colors.accent.warning}30`,
+                  }}>
+                    <Text size="xs" style={{ color: tokens.colors.accent.warning }}>
+                      注意：注销后你的帖子和评论将显示为"已注销用户"，关注者将无法看到你的动态。
+                    </Text>
+                  </Box>
+                </Box>
+                <Box style={{ marginBottom: tokens.spacing[3] }}>
+                  <Text size="sm" weight="medium" style={{ marginBottom: tokens.spacing[2] }}>输入密码确认</Text>
+                  <input
+                    type="password"
+                    value={deletePassword}
+                    onChange={(e) => setDeletePassword(e.target.value)}
+                    placeholder="请输入当前密码"
+                    style={{
+                      width: '100%',
+                      padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+                      borderRadius: tokens.radius.md,
+                      border: `1px solid ${tokens.colors.border.primary}`,
+                      background: tokens.colors.bg.secondary,
+                      color: tokens.colors.text.primary,
+                      fontSize: tokens.typography.fontSize.sm,
+                    }}
+                  />
+                </Box>
+                <Box style={{ marginBottom: tokens.spacing[4] }}>
+                  <Text size="sm" weight="medium" style={{ marginBottom: tokens.spacing[2] }}>注销原因（可选）</Text>
+                  <input
+                    type="text"
+                    value={deleteReason}
+                    onChange={(e) => setDeleteReason(e.target.value)}
+                    placeholder="告诉我们为什么..."
+                    style={{
+                      width: '100%',
+                      padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+                      borderRadius: tokens.radius.md,
+                      border: `1px solid ${tokens.colors.border.primary}`,
+                      background: tokens.colors.bg.secondary,
+                      color: tokens.colors.text.primary,
+                      fontSize: tokens.typography.fontSize.sm,
+                    }}
+                  />
+                </Box>
+                {deleteError && (
+                  <Text size="xs" style={{ color: tokens.colors.accent.error, marginBottom: tokens.spacing[3] }}>
+                    {deleteError}
+                  </Text>
+                )}
+                <Box style={{ display: 'flex', gap: tokens.spacing[3], justifyContent: 'flex-end' }}>
+                  <Button variant="secondary" size="sm" onClick={() => setShowDeleteAccountModal(false)}>
+                    取消
+                  </Button>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={handleDeleteAccount}
+                    disabled={!deletePassword || deletingAccount}
+                    style={{
+                      background: tokens.colors.accent.error,
+                      opacity: !deletePassword || deletingAccount ? 0.5 : 1,
+                    }}
+                  >
+                    {deletingAccount ? '处理中...' : '确认注销'}
+                  </Button>
+                </Box>
+              </Box>
+            </Box>
+          )}
 
           {/* ===== Floating Save Bar ===== */}
           {hasUnsavedChanges() && (

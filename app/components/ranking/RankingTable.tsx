@@ -12,6 +12,7 @@ import { getAvatarGradient, getAvatarInitial } from '@/lib/utils/avatar'
 import { ScoreRulesModal } from '../ui/ScoreRulesModal'
 import CategoryRankingTabs, { CategoryType } from './CategoryRankingTabs'
 import { ProLabel } from '../premium/PremiumGate'
+import ExportButton from '../Utils/ExportButton'
 
 // 图标组件
 const FilterIcon = ({ size = 14 }: { size?: number }) => (
@@ -401,6 +402,25 @@ export default function RankingTable(props: {
               <CompareIcon size={14} />
               {!isPro && <LockIconSmall size={8} />}
             </Link>
+
+            {/* 导出按钮 */}
+            {isPro && traders.length > 0 && (
+              <ExportButton
+                data={traders.map(t => ({
+                  rank: traders.indexOf(t) + 1,
+                  handle: t.handle || t.id,
+                  source: t.source || '',
+                  arena_score: t.arena_score ?? '',
+                  roi: t.roi,
+                  pnl: t.pnl ?? '',
+                  win_rate: t.win_rate ?? '',
+                  max_drawdown: t.max_drawdown ?? '',
+                  followers: t.followers,
+                }))}
+                filename={`ranking-arena-${source || 'all'}-${timeRange || '90D'}`}
+                format="csv"
+              />
+            )}
           </Box>
         </Box>
       )}

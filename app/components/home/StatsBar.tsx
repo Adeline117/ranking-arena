@@ -1,8 +1,16 @@
 'use client'
 
-import { memo } from 'react'
+import { useState, useEffect } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
+
+// Convert hex color to rgba with given alpha
+function hexToRgba(hex: string, alpha: number): string {
+  const r = parseInt(hex.slice(1, 3), 16)
+  const g = parseInt(hex.slice(3, 5), 16)
+  const b = parseInt(hex.slice(5, 7), 16)
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`
+}
 
 // ============================================
 // 数据源配置
@@ -65,8 +73,11 @@ const marketConfig: Record<string, { label: string; color: string; icon: React.R
 // 单个数据源标签
 // ============================================
 
-function SourceTag({ source }: { source: DataSource }) {
+function SourceTag({ source, isDark }: { source: DataSource; isDark: boolean }) {
   const market = marketConfig[source.market]
+  const tagBg = hexToRgba(market.color, isDark ? 0.03 : 0.08)
+  const tagBorder = hexToRgba(market.color, isDark ? 0.14 : 0.25)
+  const badgeBg = hexToRgba(market.color, isDark ? 0.08 : 0.18)
 
   return (
     <Box
@@ -76,8 +87,8 @@ function SourceTag({ source }: { source: DataSource }) {
         gap: 6,
         padding: '6px 12px',
         borderRadius: 20,
-        background: `${market.color}08`,
-        border: `1px solid ${market.color}25`,
+        background: tagBg,
+        border: `1px solid ${tagBorder}`,
         whiteSpace: 'nowrap',
         flexShrink: 0,
       }}
@@ -96,7 +107,7 @@ function SourceTag({ source }: { source: DataSource }) {
           gap: 3,
           padding: '1px 6px',
           borderRadius: 10,
-          background: `${market.color}15`,
+          background: badgeBg,
           color: market.color,
         }}
       >
@@ -117,7 +128,21 @@ function SourceTag({ source }: { source: DataSource }) {
 // 主组件 - 滚动数据源展示
 // ============================================
 
-function StatsBarComponent() {
+export function StatsBar() {
+  const [isDark, setIsDark] = useState(true)
+
+  useEffect(() => {
+    const detectTheme = () => {
+      const theme = document.documentElement.getAttribute('data-theme')
+      setIsDark(theme !== 'light')
+    }
+    detectTheme()
+
+    const observer = new MutationObserver(detectTheme)
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
+    return () => observer.disconnect()
+  }, [])
+
   // 双份列表实现无缝滚动
   const items = [...dataSources, ...dataSources]
 
@@ -143,12 +168,11 @@ function StatsBarComponent() {
         }}
       >
         {items.map((source, index) => (
-          <SourceTag key={`${source.key}-${index}`} source={source} />
+          <SourceTag key={`${source.key}-${index}`} source={source} isDark={isDark} />
         ))}
       </Box>
     </Box>
   )
 }
 
-export const StatsBar = memo(StatsBarComponent)
 export default StatsBar

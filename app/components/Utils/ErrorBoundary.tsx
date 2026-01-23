@@ -46,7 +46,6 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    // 记录错误到控制台（生产环境可以发送到错误监控服务）
     console.error('ErrorBoundary 捕获到错误:', error, errorInfo)
 
     this.setState({
@@ -57,10 +56,18 @@ export class ErrorBoundary extends Component<Props, State> {
     // 调用自定义错误处理回调
     this.props.onError?.(error, errorInfo)
 
-    // 在生产环境中，可以将错误发送到错误监控服务（如 Sentry）
+    // 将错误上报到 Sentry
     if (process.env.NODE_ENV === 'production') {
-      // 这里可以集成 Sentry 或其他错误监控服务
-      // Sentry.captureException(error, { contexts: { react: errorInfo } })
+      import('@sentry/nextjs').then((Sentry) => {
+        Sentry.captureException(error, {
+          contexts: {
+            react: { componentStack: errorInfo.componentStack || '' },
+          },
+          tags: { errorBoundary: true },
+        })
+      }).catch(() => {
+        // Sentry 加载失败时静默降级
+      })
     }
   }
 

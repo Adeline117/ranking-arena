@@ -216,9 +216,15 @@ export default function PricingPage() {
     setLoading(true)
     
     try {
-      // 获取当前会话的 access token
-      const { data: { session } } = await supabase.auth.getSession()
-      
+      // 获取当前会话的 access token，如果过期则尝试刷新
+      let { data: { session } } = await supabase.auth.getSession()
+
+      if (!session?.access_token) {
+        // 尝试刷新 session（token 可能已过期但 refresh token 仍有效）
+        const { data: refreshed } = await supabase.auth.refreshSession()
+        session = refreshed.session
+      }
+
       if (!session?.access_token) {
         showToast(language === 'zh' ? '请重新登录' : 'Please login again', 'error')
         router.push('/login?redirect=/pricing')

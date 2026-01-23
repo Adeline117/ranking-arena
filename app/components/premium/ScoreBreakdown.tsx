@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect, useState, useRef } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '../base'
 import { useLanguage } from '../Providers/LanguageProvider'
@@ -123,11 +124,12 @@ function ScoreBar({
       {/* 进度条 */}
       <Box
         style={{
-          height: 6,
+          height: 8,
           background: 'var(--color-bg-tertiary)',
           borderRadius: tokens.radius.full,
           overflow: 'hidden',
           position: 'relative',
+          boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.15)',
         }}
       >
         {locked ? (
@@ -149,9 +151,10 @@ function ScoreBar({
             style={{
               height: '100%',
               width: `${width}%`,
-              background: `linear-gradient(90deg, ${color}cc 0%, ${color} 100%)`,
+              background: `linear-gradient(90deg, ${color}99 0%, ${color} 100%)`,
               borderRadius: tokens.radius.full,
-              transition: 'width 0.5s ease',
+              transition: 'width 0.8s cubic-bezier(0.4, 0, 0.2, 1)',
+              boxShadow: `0 0 8px ${color}40`,
             }}
           />
         )}
@@ -209,9 +212,12 @@ export default function ScoreBreakdown({
       }}
     >
       {/* 标题区 */}
-      <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: tokens.spacing[4] }}>
+      <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: tokens.spacing[5] }}>
         <Box>
           <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], marginBottom: 4 }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent-warning)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+            </svg>
             <Text size="md" weight="bold">{t('scoreBreakdown')}</Text>
             {/* v2.0: 子分数免费可见，百分位需要 Pro */}
             {!isPro && (
@@ -245,18 +251,70 @@ export default function ScoreBreakdown({
         </Box>
 
         {/* 总分 - 所有人可见 */}
-        <Box style={{ textAlign: 'right' }}>
-          <Text
-            size="2xl"
-            weight="black"
+        <Box style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+        <Box
+          style={{
+            position: 'relative',
+            width: 72,
+            height: 72,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          {/* 外圈光晕 */}
+          <Box
             style={{
-              color: getScoreColor(arenaScore, 100),
-              lineHeight: 1,
+              position: 'absolute',
+              inset: -4,
+              borderRadius: '50%',
+              background: `radial-gradient(circle, ${getScoreColor(arenaScore, 100)}20 0%, transparent 70%)`,
             }}
-          >
-            {arenaScore != null ? arenaScore.toFixed(1) : '—'}
-          </Text>
-          <Text size="xs" color="tertiary">/ 100</Text>
+          />
+          {/* 圆环背景 */}
+          <svg width="72" height="72" style={{ position: 'absolute', top: 0, left: 0 }}>
+            <circle
+              cx="36"
+              cy="36"
+              r="30"
+              fill="none"
+              stroke="var(--color-bg-tertiary)"
+              strokeWidth="5"
+            />
+            <circle
+              cx="36"
+              cy="36"
+              r="30"
+              fill="none"
+              stroke={getScoreColor(arenaScore, 100)}
+              strokeWidth="5"
+              strokeLinecap="round"
+              strokeDasharray={`${(arenaScore != null ? arenaScore / 100 : 0) * 188.5} 188.5`}
+              transform="rotate(-90 36 36)"
+              style={{ transition: 'stroke-dasharray 0.8s ease' }}
+            />
+          </svg>
+          {/* 分数文字 */}
+          <Box style={{ textAlign: 'center', position: 'relative', zIndex: 1 }}>
+            <Text
+              weight="black"
+              style={{
+                fontSize: 20,
+                color: getScoreColor(arenaScore, 100),
+                lineHeight: 1,
+                letterSpacing: '-0.5px',
+              }}
+            >
+              {arenaScore != null ? arenaScore.toFixed(0) : '—'}
+            </Text>
+            <Text style={{ fontSize: 9, color: 'var(--color-text-quaternary)', marginTop: 2 }}>
+              / 100
+            </Text>
+          </Box>
+        </Box>
+        <Text style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-tertiary)', letterSpacing: '0.5px' }}>
+          Arena Score
+        </Text>
         </Box>
       </Box>
 
