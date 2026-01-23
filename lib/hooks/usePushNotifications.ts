@@ -167,13 +167,13 @@ export function usePushNotifications(): UsePushNotificationsReturn {
           let registrationHandle: { remove: () => void | Promise<void> } | null = null
           let errorHandle: { remove: () => void | Promise<void> } | null = null
 
-          const cleanup = async () => {
-            await registrationHandle?.remove()
-            await errorHandle?.remove()
+          const cleanup = () => {
+            registrationHandle?.remove()
+            errorHandle?.remove()
           }
 
-          const timeout = setTimeout(async () => {
-            await cleanup()
+          const timeout = setTimeout(() => {
+            cleanup()
             reject(new Error('获取 token 超时'))
           }, 10000)
 

@@ -1,5 +1,4 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono, ZCOOL_KuaiLe } from "next/font/google";
 import { Suspense } from "react";
 import "./globals.css";
 import KeyboardShortcuts from "./components/Providers/KeyboardShortcuts";
@@ -8,23 +7,6 @@ import { GlobalProgress } from "./components/ui/GlobalProgress";
 import { ServiceWorkerRegistration } from "./components/Providers/ServiceWorkerRegistration";
 import CookieConsent from "./components/ui/CookieConsent";
 import { SkipLink } from "./components/Providers/Accessibility";
-
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
-
-// 站酷快乐体 - 用于中文 Logo
-const zcoolKuaiLe = ZCOOL_KuaiLe({
-  variable: "--font-logo-cn",
-  weight: "400",
-  subsets: ["latin"],
-});
 
 export const viewport: Viewport = {
   width: 'device-width',
@@ -92,7 +74,7 @@ export default function RootLayout({
   return (
     <html lang="zh-CN" data-theme="dark" translate="no">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} ${zcoolKuaiLe.variable} antialiased`}
+        className="font-sans antialiased"
       >
         <Providers>
           <SkipLink targetId="main-content" />
