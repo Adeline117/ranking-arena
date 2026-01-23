@@ -16,10 +16,20 @@ export function Modal({ children, onClose }: ModalProps) {
     setMounted(true)
     // 打开弹窗时禁止背景滚动
     document.body.style.overflow = 'hidden'
+
+    // ESC key to close
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose()
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown)
+
     return () => {
       document.body.style.overflow = ''
+      document.removeEventListener('keydown', handleKeyDown)
     }
-  }, [])
+  }, [onClose])
 
   const modalContent = (
     <div
@@ -59,8 +69,8 @@ export function Modal({ children, onClose }: ModalProps) {
               color: tokens.colors.text.secondary,
               cursor: 'pointer',
               fontSize: 20,
-              width: 32,
-              height: 32,
+              width: 44,
+              height: 44,
               borderRadius: 8,
               display: 'flex',
               alignItems: 'center',
