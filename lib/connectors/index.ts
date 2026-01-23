@@ -17,8 +17,7 @@
 // New multi-exchange registry
 export { connectorRegistry, initializeConnectors, getConnector, getAvailablePlatforms } from './registry'
 
-import type { PlatformConnector } from './types'
-import type { Platform } from '@/lib/types/trading-platform'
+import type { GranularPlatform } from '@/lib/types/leaderboard'
 import { BybitFuturesConnector } from './bybit-futures'
 
 // Base connector classes
@@ -32,7 +31,8 @@ export type { PlatformConnector, ConnectorConfig, RateLimiter, CircuitState, Cir
 export { ConnectorError, DEFAULT_CONNECTOR_CONFIG } from './types'
 
 // Legacy createConnector function (simplified)
-export function createConnector(platform: Platform): PlatformConnector | null {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function createConnector(platform: GranularPlatform): any {
   switch (platform) {
     case 'bybit':
       return new BybitFuturesConnector()
@@ -40,8 +40,6 @@ export function createConnector(platform: Platform): PlatformConnector | null {
       return null
   }
 }
-
-export { type PlatformConnector } from './types'
 
 // Individual platform connectors (direct imports)
 export { BinanceFuturesConnector } from './binance-futures'

@@ -12,16 +12,17 @@
  * - Win rate must be derived from position history.
  */
 
-import { BaseConnector, ConnectorError } from './base';
+import { BaseConnectorLegacy } from './base';
 import type {
   RankingWindow,
   TraderIdentity,
-  TraderSnapshot,
+  TraderSnapshotLegacy,
   TraderProfileEnriched,
-  TraderTimeseries,
+  TraderTimeseriesLegacy,
   TimeseriesType,
-  SnapshotMetrics,
+  SnapshotMetricsLegacy,
   TimeseriesPoint,
+  LegacyPlatformConnector,
 } from '@/lib/types/leaderboard';
 
 // ============================================
@@ -85,7 +86,7 @@ const WINDOW_TO_PERIOD: Record<RankingWindow, string> = {
 // Connector
 // ============================================
 
-export class HyperliquidConnector extends BaseConnector {
+export class HyperliquidConnector extends BaseConnectorLegacy implements LegacyPlatformConnector {
   readonly platform = 'hyperliquid' as const;
   private readonly apiUrl = 'https://api.hyperliquid.xyz/info';
 
@@ -98,7 +99,7 @@ export class HyperliquidConnector extends BaseConnector {
     const period = WINDOW_TO_PERIOD[window];
     const traders: TraderIdentity[] = [];
 
-    const data = await this.request<HyperliquidLeaderEntry[]>(
+    const data = await this.requestWithCircuitBreaker<HyperliquidLeaderEntry[]>(
       () => this.fetchLeaderboard(period),
       { label: `discoverLeaderboard(${window})` },
     );
@@ -123,20 +124,20 @@ export class HyperliquidConnector extends BaseConnector {
   async fetchTraderSnapshot(
     traderKey: string,
     window: RankingWindow,
-  ): Promise<Omit<TraderSnapshot, 'id' | 'created_at'>> {
+  ): Promise<Omit<TraderSnapshotLegacy, 'id' | 'created_at'>> {
     // Fetch user state and fills in parallel
     const [userState, pnlData] = await Promise.all([
-      this.request<HyperliquidUserState>(
+      this.requestWithCircuitBreaker<HyperliquidUserState>(
         () => this.fetchUserState(traderKey),
         { label: `fetchUserState(${traderKey})` },
       ),
-      this.request<{ pnl: number; roi: number; nTrades: number; winRate: number | null }>(
+      this.requestWithCircuitBreaker<{ pnl: number; roi: number; nTrades: number; winRate: number | null }>(
         () => this.fetchUserPnl(traderKey, window),
         { label: `fetchUserPnl(${traderKey}, ${window})` },
       ),
     ]);
 
-    const metrics: SnapshotMetrics = {
+    const metrics: SnapshotMetricsLegacy = {
       roi_pct: pnlData.roi != null ? pnlData.roi * 100 : null,
       pnl_usd: pnlData.pnl ?? null,
       win_rate_pct: pnlData.winRate != null ? pnlData.winRate * 100 : null,
@@ -167,7 +168,7 @@ export class HyperliquidConnector extends BaseConnector {
   async fetchTraderProfile(
     traderKey: string,
   ): Promise<Omit<TraderProfileEnriched, 'last_enriched_at'>> {
-    const userState = await this.request<HyperliquidUserState>(
+    const userState = await this.requestWithCircuitBreaker<HyperliquidUserState>(
       () => this.fetchUserState(traderKey),
       { label: `fetchTraderProfile(${traderKey})` },
     );
@@ -190,7 +191,7 @@ export class HyperliquidConnector extends BaseConnector {
   async fetchTimeseries(
     traderKey: string,
     seriesType: TimeseriesType,
-  ): Promise<Omit<TraderTimeseries, 'id' | 'created_at'>> {
+  ): Promise<Omit<TraderTimeseriesLegacy, 'id' | 'created_at'>> {
     if (seriesType !== 'daily_pnl') {
       return {
         platform: this.platform,
@@ -202,7 +203,7 @@ export class HyperliquidConnector extends BaseConnector {
     }
 
     // Fetch recent fills and aggregate daily PnL
-    const fills = await this.request<HyperliquidFill[]>(
+    const fills = await this.requestWithCircuitBreaker<HyperliquidFill[]>(
       () => this.fetchUserFills(traderKey),
       { label: `fetchTimeseries(${traderKey}, daily_pnl)` },
     );
@@ -243,7 +244,7 @@ export class HyperliquidConnector extends BaseConnector {
     });
 
     if (!response.ok) {
-      throw new ConnectorError(`Hyperliquid API returned ${response.status}`, this.platform, response.status >= 500);
+      throw new Error(`Hyperliquid API returned ${response.status}`);
     }
 
     const json = await response.json();
@@ -261,7 +262,7 @@ export class HyperliquidConnector extends BaseConnector {
     });
 
     if (!response.ok) {
-      throw new ConnectorError(`Hyperliquid user state API returned ${response.status}`, this.platform);
+      throw new Error(`Hyperliquid user state API returned ${response.status}`);
     }
 
     return response.json();

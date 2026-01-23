@@ -29,6 +29,9 @@ import { PLATFORM_RATE_LIMITS } from '../types/leaderboard'
 import type { PlatformConnector, ConnectorConfig, RateLimiter } from './types'
 import { ConnectorError, DEFAULT_CONNECTOR_CONFIG } from './types'
 
+// Re-export ConnectorError so connectors can import from './base'
+export { ConnectorError } from './types'
+
 // ============================================
 // Circuit Breaker (standalone, for legacy usage)
 // ============================================
@@ -487,14 +490,15 @@ export abstract class BaseConnectorLegacy {
   /**
    * Build a SnapshotQuality object from available metrics.
    */
-  protected buildQuality(metrics: SnapshotMetrics): {
+  protected buildQuality<T extends object>(metrics: T): {
     is_complete: boolean
     missing_fields: string[]
     confidence: number
     is_interpolated: boolean
   } {
-    const allFields = Object.keys(metrics) as (keyof SnapshotMetrics)[]
-    const missingFields = allFields.filter((f) => metrics[f] === null || metrics[f] === undefined)
+    const metricsRecord = metrics as unknown as Record<string, unknown>
+    const allFields = Object.keys(metricsRecord)
+    const missingFields = allFields.filter((f) => metricsRecord[f] === null || metricsRecord[f] === undefined)
     const totalFields = allFields.length
     const presentFields = totalFields - missingFields.length
 

@@ -1,7 +1,7 @@
 'use client'
 
 import React from 'react'
-import { useLanguage } from './LanguageProvider'
+import { useLanguage } from '../Providers/LanguageProvider'
 
 type ExportButtonProps = {
   data: any[]

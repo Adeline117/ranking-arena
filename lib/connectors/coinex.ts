@@ -6,15 +6,16 @@
  * Rate limits: 15 req/min with 3-6s jitter.
  */
 
-import { BaseConnector, ConnectorError } from './base';
+import { BaseConnectorLegacy } from './base';
 import type {
   RankingWindow,
   TraderIdentity,
-  TraderSnapshot,
+  TraderSnapshotLegacy,
   TraderProfileEnriched,
-  TraderTimeseries,
+  TraderTimeseriesLegacy,
   TimeseriesType,
-  SnapshotMetrics,
+  SnapshotMetricsLegacy,
+  LegacyPlatformConnector,
 } from '@/lib/types/leaderboard';
 
 // ============================================
@@ -56,7 +57,7 @@ const WINDOW_TO_PERIOD: Record<RankingWindow, string> = {
 // Connector
 // ============================================
 
-export class CoinExConnector extends BaseConnector {
+export class CoinExConnector extends BaseConnectorLegacy implements LegacyPlatformConnector {
   readonly platform = 'coinex' as const;
   private readonly baseUrl = 'https://www.coinex.com/res/copy-trade';
 
@@ -70,7 +71,7 @@ export class CoinExConnector extends BaseConnector {
     const traders: TraderIdentity[] = [];
 
     for (let page = 1; page <= 5; page++) {
-      const data = await this.request<CoinExLeaderboardResponse>(
+      const data = await this.requestWithCircuitBreaker<CoinExLeaderboardResponse>(
         () => this.fetchLeaderboardPage(period, page, 20),
         { label: `discoverLeaderboard(${window}, page=${page})` },
       );
@@ -98,8 +99,8 @@ export class CoinExConnector extends BaseConnector {
   async fetchTraderSnapshot(
     traderKey: string,
     window: RankingWindow,
-  ): Promise<Omit<TraderSnapshot, 'id' | 'created_at'>> {
-    const detail = await this.request<{ code: number; data: CoinExTraderEntry }>(
+  ): Promise<Omit<TraderSnapshotLegacy, 'id' | 'created_at'>> {
+    const detail = await this.requestWithCircuitBreaker<{ code: number; data: CoinExTraderEntry }>(
       () => this.fetchTraderDetailApi(traderKey),
       { label: `fetchTraderSnapshot(${traderKey}, ${window})` },
     );
@@ -107,7 +108,7 @@ export class CoinExConnector extends BaseConnector {
     const d = detail.data || {};
     const roi = d.roi != null ? (Math.abs(d.roi) < 10 ? d.roi * 100 : d.roi) : null;
 
-    const metrics: SnapshotMetrics = {
+    const metrics: SnapshotMetricsLegacy = {
       roi_pct: roi,
       pnl_usd: d.total_pnl ?? d.pnl ?? null,
       win_rate_pct: d.win_rate != null ? (d.win_rate <= 1 ? d.win_rate * 100 : d.win_rate) : null,
@@ -138,7 +139,7 @@ export class CoinExConnector extends BaseConnector {
   async fetchTraderProfile(
     traderKey: string,
   ): Promise<Omit<TraderProfileEnriched, 'last_enriched_at'>> {
-    const detail = await this.request<{ code: number; data: CoinExTraderEntry }>(
+    const detail = await this.requestWithCircuitBreaker<{ code: number; data: CoinExTraderEntry }>(
       () => this.fetchTraderDetailApi(traderKey),
       { label: `fetchTraderProfile(${traderKey})` },
     );
@@ -161,7 +162,7 @@ export class CoinExConnector extends BaseConnector {
   async fetchTimeseries(
     traderKey: string,
     seriesType: TimeseriesType,
-  ): Promise<Omit<TraderTimeseries, 'id' | 'created_at'>> {
+  ): Promise<Omit<TraderTimeseriesLegacy, 'id' | 'created_at'>> {
     return {
       platform: this.platform,
       trader_key: traderKey,
@@ -187,7 +188,7 @@ export class CoinExConnector extends BaseConnector {
     });
 
     if (!response.ok) {
-      throw new ConnectorError(`CoinEx API returned ${response.status}`, this.platform, response.status >= 500);
+      throw new Error(`CoinEx API returned ${response.status}`);
     }
 
     return response.json();
@@ -201,7 +202,7 @@ export class CoinExConnector extends BaseConnector {
     });
 
     if (!response.ok) {
-      throw new ConnectorError(`CoinEx detail API returned ${response.status}`, this.platform, response.status >= 500);
+      throw new Error(`CoinEx detail API returned ${response.status}`);
     }
 
     return response.json();
