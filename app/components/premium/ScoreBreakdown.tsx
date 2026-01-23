@@ -83,28 +83,33 @@ function getPercentileColor(percentile: number): string {
 }
 
 // 进度条组件
-function ScoreBar({ 
-  label, 
-  score, 
-  maxScore, 
+function ScoreBar({
+  label,
+  score,
+  maxScore,
   percentile,
   locked = false,
   language,
-}: { 
+  isVisible = false,
+  delay = 0,
+}: {
   label: string
   score: number | null
   maxScore: number
   percentile?: number
   locked?: boolean
   language: string
+  isVisible?: boolean
+  delay?: number
 }) {
   const color = getScoreColor(score, maxScore)
   const width = score != null ? (score / maxScore) * 100 : 0
-  
+  const animatedWidth = isVisible ? width : 0
+
   return (
     <Box style={{ marginBottom: tokens.spacing[3] }}>
       <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: tokens.spacing[1] }}>
-        <Text size="sm" color="secondary">{label}</Text>
+        <Text size="sm" color="secondary" weight="bold">{label}</Text>
         <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
           {locked ? (
             <Box style={{ color: 'var(--color-text-quaternary)' }}>
@@ -112,7 +117,7 @@ function ScoreBar({
             </Box>
           ) : (
             <>
-              <Text size="sm" weight="bold" style={{ color }}>
+              <Text size="sm" weight="black" style={{ color, fontFamily: tokens.typography.fontFamily.mono.join(', ') }}>
                 {score != null ? score.toFixed(1) : '—'}
               </Text>
               <Text size="xs" color="tertiary">/ {maxScore}</Text>
@@ -120,7 +125,7 @@ function ScoreBar({
           )}
         </Box>
       </Box>
-      
+
       {/* 进度条 */}
       <Box
         style={{
@@ -150,24 +155,25 @@ function ScoreBar({
           <Box
             style={{
               height: '100%',
-              width: `${width}%`,
+              width: `${animatedWidth}%`,
               background: `linear-gradient(90deg, ${color}99 0%, ${color} 100%)`,
               borderRadius: tokens.radius.full,
-              transition: 'width 0.8s cubic-bezier(0.4, 0, 0.2, 1)',
-              boxShadow: `0 0 8px ${color}40`,
+              transition: `width 1s cubic-bezier(0.4, 0, 0.2, 1) ${delay}ms`,
+              boxShadow: isVisible ? `0 0 8px ${color}40` : 'none',
             }}
           />
         )}
       </Box>
-      
+
       {/* 分位信息 */}
       {!locked && percentile != null && (
-        <Text 
-          size="xs" 
-          style={{ 
-            color: getPercentileColor(percentile), 
+        <Text
+          size="xs"
+          style={{
+            color: getPercentileColor(percentile),
             marginTop: 4,
             textAlign: 'right',
+            fontWeight: 600,
           }}
         >
           {language === 'en' ? 'Rank: ' : '同类 '}{getPercentileLabel(percentile, language)}
@@ -188,6 +194,23 @@ export default function ScoreBreakdown({
   onUnlock,
 }: ScoreBreakdownProps) {
   const { language, t } = useLanguage()
+  const [isVisible, setIsVisible] = useState(false)
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!containerRef.current) return
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsVisible(true)
+          observer.disconnect()
+        }
+      },
+      { threshold: 0.3 }
+    )
+    observer.observe(containerRef.current)
+    return () => observer.disconnect()
+  }, [])
 
   // 来源类型描述
   const getSourceTypeLabel = () => {
@@ -201,6 +224,7 @@ export default function ScoreBreakdown({
   const sourceTypeLabel = getSourceTypeLabel()
 
   return (
+    <div ref={containerRef}>
     <Box
       style={{
         background: `linear-gradient(135deg, var(--color-bg-secondary) 0%, var(--color-bg-tertiary) 100%)`,
@@ -324,9 +348,11 @@ export default function ScoreBreakdown({
           label={t('returnScore')}
           score={returnScore}
           maxScore={85}
-          percentile={isPro ? percentile?.return : undefined}  // 仅 Pro 显示百分位
-          locked={false}  // v2.0: 子分数不再锁定
+          percentile={isPro ? percentile?.return : undefined}
+          locked={false}
           language={language}
+          isVisible={isVisible}
+          delay={100}
         />
         <ScoreBar
           label={t('drawdownScore')}
@@ -335,6 +361,8 @@ export default function ScoreBreakdown({
           percentile={isPro ? percentile?.drawdown : undefined}
           locked={false}
           language={language}
+          isVisible={isVisible}
+          delay={250}
         />
         <ScoreBar
           label={t('stabilityScore')}
@@ -343,6 +371,8 @@ export default function ScoreBreakdown({
           percentile={isPro ? percentile?.stability : undefined}
           locked={false}
           language={language}
+          isVisible={isVisible}
+          delay={400}
         />
       </Box>
 
@@ -415,5 +445,6 @@ export default function ScoreBreakdown({
         </Text>
       </Box>
     </Box>
+    </div>
   )
 }

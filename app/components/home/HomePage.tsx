@@ -2,8 +2,9 @@
 
 import { useState, lazy, Suspense, useEffect } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
+import dynamic from 'next/dynamic'
 import { tokens } from '@/lib/design-tokens'
-import { Box } from '../base'
+import { Box, Text } from '../base'
 import TopNav from '../layout/TopNav'
 import MobileBottomNav from '../layout/MobileBottomNav'
 import ExchangeQuickConnect from '../exchange/ExchangeQuickConnect'
@@ -13,11 +14,22 @@ import { JsonLd } from '../Providers/JsonLd'
 import { generateWebSiteSchema, generateOrganizationSchema, combineSchemas } from '@/lib/seo'
 
 import RankingSection from './RankingSection'
-import SidebarSection from './SidebarSection'
 import StatsBar from './StatsBar'
 import { useTraderData, useAuth } from './hooks'
 import type { Trader } from '../ranking/RankingTable'
 import type { TimeRange } from './hooks/useTraderData'
+
+// 动态加载侧边栏（移动端不需要，减少首屏 JS）
+const SidebarSection = dynamic(() => import('./SidebarSection'), {
+  ssr: false,
+  loading: () => (
+    <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
+      {[1, 2, 3].map(i => (
+        <Box key={i} style={{ height: 80, borderRadius: tokens.radius.lg, background: tokens.colors.bg.secondary, animation: 'pulse 1.5s ease-in-out infinite' }} />
+      ))}
+    </Box>
+  ),
+})
 
 // 懒加载对比组件
 const CompareTraders = lazy(() => import('../trader/CompareTraders'))
@@ -137,7 +149,16 @@ export default function HomePage() {
       {/* 交易者对比面板 */}
       {compareTraders.length > 0 && (
         <ErrorBoundary>
-          <Suspense fallback={null}>
+          <Suspense fallback={
+            <Box style={{
+              position: 'fixed', bottom: 80, left: '50%', transform: 'translateX(-50%)',
+              padding: `${tokens.spacing[3]} ${tokens.spacing[5]}`, borderRadius: tokens.radius.xl,
+              background: tokens.colors.bg.secondary, border: `1px solid ${tokens.colors.border.primary}`,
+              boxShadow: tokens.shadow.lg, zIndex: 40,
+            }}>
+              <Text size="sm" color="secondary">加载对比面板...</Text>
+            </Box>
+          }>
             <CompareTraders
               traders={compareTraders}
               onRemove={(id) => setCompareTraders(compareTraders.filter((t) => t.id !== id))}
