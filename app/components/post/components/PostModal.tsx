@@ -16,10 +16,20 @@ export function Modal({ children, onClose }: ModalProps) {
     setMounted(true)
     // 打开弹窗时禁止背景滚动
     document.body.style.overflow = 'hidden'
+
+    // Escape key closes modal
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose()
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown)
+
     return () => {
       document.body.style.overflow = ''
+      document.removeEventListener('keydown', handleKeyDown)
     }
-  }, [])
+  }, [onClose])
 
   const modalContent = (
     <div

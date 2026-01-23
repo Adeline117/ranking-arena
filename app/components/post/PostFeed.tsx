@@ -885,21 +885,36 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
         body: JSON.stringify({ content: newComment.trim() }),
       })
 
+      if (!response.ok) {
+        // Differentiate error types for clear user feedback
+        if (response.status === 401) {
+          showToast('登录已过期，请重新登录', 'error')
+        } else if (response.status === 403) {
+          showToast('权限不足', 'error')
+        } else if (response.status >= 500) {
+          showToast('服务异常，请稍后重试', 'error')
+        } else {
+          const json = await response.json().catch(() => null)
+          showToast(json?.error || '发表评论失败', 'error')
+        }
+        return
+      }
+
       const json = await response.json()
 
-      if (response.ok && json.success) {
-        const result = json.data
-        setComments(prev => [...prev, result.comment])
+      if (json.success && json.data?.comment) {
+        // Server ACK received - append comment
+        setComments(prev => [...prev, json.data.comment])
         setNewComment('')
-        
-        // 更新评论计数
+
+        // Update comment count
         setPosts(prev => prev.map(p => {
           if (p.id === postId) {
             return { ...p, comment_count: p.comment_count + 1 }
           }
           return p
         }))
-        
+
         if (openPost?.id === postId) {
           setOpenPost(prev => prev ? { ...prev, comment_count: prev.comment_count + 1 } : null)
         }
@@ -907,8 +922,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
         showToast(json.error || '发表评论失败', 'error')
       }
     } catch (err) {
-      // 错误已在 showToast 中处理
-      showToast('发表评论失败', 'error')
+      showToast('网络异常，请重试', 'error')
     } finally {
       setSubmittingComment(false)
     }
@@ -2064,7 +2078,17 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
           </div>
 
           <div style={{ marginTop: 8, fontSize: 12, color: tokens.colors.text.tertiary, display: 'flex', alignItems: 'center', gap: 6 }}>
-            {openPost.author_handle} · {formatTimeAgo(openPost.created_at)} · <CommentIcon size={12} /> {openPost.comment_count}
+            {openPost.author_handle ? (
+              <Link
+                href={`/u/${encodeURIComponent(openPost.author_handle)}`}
+                style={{ color: '#8b6fa8', textDecoration: 'none', fontWeight: 600 }}
+              >
+                @{openPost.author_handle}
+              </Link>
+            ) : (
+              <span>匿名</span>
+            )}
+            <span>·</span> {formatTimeAgo(openPost.created_at)} · <CommentIcon size={12} /> {openPost.comment_count}
           </div>
 
           <div translate="no" style={{ 

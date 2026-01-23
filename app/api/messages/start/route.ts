@@ -14,15 +14,10 @@ const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
-    const { senderId, receiverId } = body
-
-    if (!senderId || !receiverId) {
-      return NextResponse.json({ error: 'Missing senderId or receiverId' }, { status: 400 })
-    }
-
-    if (senderId === receiverId) {
-      return NextResponse.json({ error: '不能给自己发私信' }, { status: 400 })
+    // Auth check: verify the sender is the authenticated user
+    const authHeader = request.headers.get('Authorization')
+    if (!authHeader?.startsWith('Bearer ')) {
+      return NextResponse.json({ error: '未登录，请先登录' }, { status: 401 })
     }
 
     if (!SUPABASE_URL || !SUPABASE_KEY) {
@@ -30,6 +25,28 @@ export async function POST(request: NextRequest) {
     }
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
+
+    const token = authHeader.slice(7)
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token)
+    if (authError || !user) {
+      return NextResponse.json({ error: '登录已过期，请重新登录' }, { status: 401 })
+    }
+
+    const body = await request.json()
+    const { senderId, receiverId } = body
+
+    if (!senderId || !receiverId) {
+      return NextResponse.json({ error: 'Missing senderId or receiverId' }, { status: 400 })
+    }
+
+    // Verify the authenticated user is the sender
+    if (user.id !== senderId) {
+      return NextResponse.json({ error: '权限不足' }, { status: 403 })
+    }
+
+    if (senderId === receiverId) {
+      return NextResponse.json({ error: '不能给自己发私信' }, { status: 400 })
+    }
 
     // 获取接收者的隐私设置
     const { data: receiverProfile, error: profileError } = await supabase
