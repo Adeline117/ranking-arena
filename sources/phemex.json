@@ -1,0 +1,79 @@
+{
+  "platform": "phemex",
+  "market_type": "futures",
+  "leaderboard_endpoints": [
+    {
+      "url": "https://phemex.com/api/copy-trading/public/leader/ranking",
+      "method": "GET",
+      "headers": {
+        "Origin": "https://phemex.com",
+        "Referer": "https://phemex.com/copy-trading"
+      },
+      "query_params": {
+        "page": "1",
+        "pageSize": "50",
+        "period": "7D",
+        "sort": "roi",
+        "order": "desc"
+      },
+      "pagination": {
+        "type": "page",
+        "page_size": 50,
+        "max_pages": 1,
+        "param_name": "page"
+      },
+      "response_path": "data.list",
+      "window_param": "period",
+      "sort_param": "sort"
+    }
+  ],
+  "profile_endpoints": [
+    {
+      "url": "https://phemex.com/api/copy-trading/public/leader/detail",
+      "method": "GET",
+      "headers": {
+        "Origin": "https://phemex.com"
+      },
+      "query_params": {
+        "leaderId": ""
+      },
+      "response_path": "data"
+    }
+  ],
+  "window_support": ["7d", "30d", "90d"],
+  "rate_limit_hint": {
+    "rpm": 10,
+    "concurrent": 1,
+    "delay_ms": 5000
+  },
+  "field_map": {
+    "roi_pct": "roi",
+    "pnl_usd": "pnl",
+    "win_rate": "winRate",
+    "max_drawdown": "maxDrawdown",
+    "trades_count": "tradeCount",
+    "followers": "followerCount",
+    "copiers": "copierCount"
+  },
+  "roi_sort_supported": true,
+  "roi_sort_method": "query_param",
+  "proof": [
+    {
+      "url": "https://phemex.com/api/copy-trading/public/leader/ranking?page=1&pageSize=50&period=7D&sort=roi&order=desc",
+      "request_path": "/api/copy-trading/public/leader/ranking",
+      "method": "GET",
+      "response_fields_sample": {
+        "data.list[0].leaderId": "phemex_leader_xyz",
+        "data.list[0].nickName": "PhemexPro",
+        "data.list[0].roi": 0.5678,
+        "data.list[0].pnl": 18765.43,
+        "data.list[0].winRate": 0.71,
+        "data.list[0].maxDrawdown": 0.17,
+        "data.list[0].tradeCount": 198,
+        "data.list[0].followerCount": 560,
+        "data.list[0].copierCount": 220
+      },
+      "discovered_at": "2024-01-15T00:00:00Z"
+    }
+  ]
+}

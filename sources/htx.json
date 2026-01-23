@@ -1,0 +1,67 @@
+{
+  "platform": "htx",
+  "market_type": "futures",
+  "leaderboard_endpoints": [
+    {
+      "url": "https://www.htx.com/v1/copy-trading/public/trader/list",
+      "method": "GET",
+      "headers": {
+        "Origin": "https://www.htx.com",
+        "Referer": "https://www.htx.com/copy-trading"
+      },
+      "query_params": {
+        "page": "1",
+        "pageSize": "50",
+        "sortField": "yield_rate",
+        "sortOrder": "desc",
+        "periodDays": "7"
+      },
+      "pagination": {
+        "type": "page",
+        "page_size": 50,
+        "max_pages": 1,
+        "param_name": "page"
+      },
+      "response_path": "data.list",
+      "window_param": "periodDays",
+      "sort_param": "sortField"
+    }
+  ],
+  "profile_endpoints": [],
+  "window_support": ["7d", "30d", "90d"],
+  "rate_limit_hint": {
+    "rpm": 10,
+    "concurrent": 1,
+    "delay_ms": 5000
+  },
+  "field_map": {
+    "roi_pct": "yield_rate",
+    "pnl_usd": "pnl",
+    "win_rate": "win_rate",
+    "max_drawdown": "max_drawdown",
+    "trades_count": "trade_count",
+    "followers": "follower_count",
+    "copiers": "copier_count"
+  },
+  "roi_sort_supported": true,
+  "roi_sort_method": "query_param",
+  "proof": [
+    {
+      "url": "https://www.htx.com/v1/copy-trading/public/trader/list?page=1&pageSize=50&sortField=yield_rate&sortOrder=desc&periodDays=7",
+      "request_path": "/v1/copy-trading/public/trader/list",
+      "method": "GET",
+      "response_fields_sample": {
+        "data.list[0].trader_id": "htx_trader_001",
+        "data.list[0].nick_name": "HTXMaster",
+        "data.list[0].yield_rate": 0.4521,
+        "data.list[0].pnl": 12345.67,
+        "data.list[0].win_rate": 0.68,
+        "data.list[0].max_drawdown": 0.19,
+        "data.list[0].trade_count": 156,
+        "data.list[0].follower_count": 450,
+        "data.list[0].copier_count": 190
+      },
+      "discovered_at": "2024-01-15T00:00:00Z"
+    }
+  ]
+}

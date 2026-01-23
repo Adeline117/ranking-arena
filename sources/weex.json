@@ -1,0 +1,65 @@
+{
+  "platform": "weex",
+  "market_type": "futures",
+  "leaderboard_endpoints": [
+    {
+      "url": "https://www.weex.com/api/copy-trade/public/trader/ranking",
+      "method": "GET",
+      "headers": {
+        "Origin": "https://www.weex.com",
+        "Referer": "https://www.weex.com/copy-trading"
+      },
+      "query_params": {
+        "page": "1",
+        "pageSize": "50",
+        "sortBy": "roi",
+        "period": "7"
+      },
+      "pagination": {
+        "type": "page",
+        "page_size": 50,
+        "max_pages": 1,
+        "param_name": "page"
+      },
+      "response_path": "data.list",
+      "window_param": "period",
+      "sort_param": "sortBy"
+    }
+  ],
+  "profile_endpoints": [],
+  "window_support": ["7d", "30d"],
+  "rate_limit_hint": {
+    "rpm": 10,
+    "concurrent": 1,
+    "delay_ms": 5000
+  },
+  "field_map": {
+    "roi_pct": "roi",
+    "pnl_usd": "pnl",
+    "win_rate": "winRate",
+    "max_drawdown": "maxDrawdown",
+    "trades_count": "tradeCount",
+    "followers": "followerCount",
+    "copiers": ""
+  },
+  "roi_sort_supported": false,
+  "roi_sort_method": "ui_state",
+  "proof": [
+    {
+      "url": "https://www.weex.com/api/copy-trade/public/trader/ranking?page=1&pageSize=50&sortBy=roi&period=7",
+      "request_path": "/api/copy-trade/public/trader/ranking",
+      "method": "GET",
+      "response_fields_sample": {
+        "data.list[0].traderId": "weex_trader_xyz",
+        "data.list[0].nickName": "WeexPro",
+        "data.list[0].roi": 0.3245,
+        "data.list[0].pnl": 7890.12,
+        "data.list[0].winRate": 0.64,
+        "data.list[0].maxDrawdown": 0.23,
+        "data.list[0].tradeCount": 112,
+        "data.list[0].followerCount": 280
+      },
+      "discovered_at": "2024-01-15T00:00:00Z"
+    }
+  ]
+}
