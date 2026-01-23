@@ -6,16 +6,16 @@
  * API: /bapi/futures/v1/friendly/future/spot-copy-trade/
  */
 
-import { BaseConnector, ConnectorError } from './base';
+import { BaseConnectorLegacy, ConnectorError } from './base';
 import type {
   RankingWindow,
   TraderIdentity,
-  TraderSnapshot,
+  TraderSnapshotLegacy,
   TraderProfileEnriched,
-  TraderTimeseries,
+  TraderTimeseriesLegacy,
   TimeseriesType,
-  SnapshotMetrics,
-  TimeseriesPoint,
+  SnapshotMetricsLegacy,
+  LegacyPlatformConnector,
 } from '@/lib/types/leaderboard';
 
 // ============================================
@@ -57,7 +57,7 @@ const WINDOW_TO_PERIOD: Record<RankingWindow, string> = {
 // Connector
 // ============================================
 
-export class BinanceSpotConnector extends BaseConnector {
+export class BinanceSpotConnector extends BaseConnectorLegacy implements LegacyPlatformConnector {
   readonly platform = 'binance_spot' as const;
   private readonly baseUrl = 'https://www.binance.com/bapi/futures/v1/friendly/future/spot-copy-trade';
 
@@ -70,7 +70,7 @@ export class BinanceSpotConnector extends BaseConnector {
     const period = WINDOW_TO_PERIOD[window];
     const traders: TraderIdentity[] = [];
 
-    const data = await this.request<BinanceSpotListResponse>(
+    const data = await this.requestWithCircuitBreaker<BinanceSpotListResponse>(
       () => this.fetchLeaderboardPage(period, 1, 100),
       { label: `discoverLeaderboard(${window})` },
     );
@@ -98,15 +98,15 @@ export class BinanceSpotConnector extends BaseConnector {
   async fetchTraderSnapshot(
     traderKey: string,
     window: RankingWindow,
-  ): Promise<Omit<TraderSnapshot, 'id' | 'created_at'>> {
-    const detail = await this.request<{ data: BinanceSpotEntry; success: boolean }>(
+  ): Promise<Omit<TraderSnapshotLegacy, 'id' | 'created_at'>> {
+    const detail = await this.requestWithCircuitBreaker<{ data: BinanceSpotEntry; success: boolean }>(
       () => this.fetchDetailApi(traderKey, window),
       { label: `fetchTraderSnapshot(${traderKey}, ${window})` },
     );
 
     const d = detail.data || {};
 
-    const metrics: SnapshotMetrics = {
+    const metrics: SnapshotMetricsLegacy = {
       roi_pct: d.roi != null ? d.roi * 100 : null,
       pnl_usd: d.pnl ?? null,
       win_rate_pct: d.winRate != null ? d.winRate * 100 : null,
@@ -137,7 +137,7 @@ export class BinanceSpotConnector extends BaseConnector {
   async fetchTraderProfile(
     traderKey: string,
   ): Promise<Omit<TraderProfileEnriched, 'last_enriched_at'>> {
-    const detail = await this.request<{ data: BinanceSpotEntry & { introduction?: string }; success: boolean }>(
+    const detail = await this.requestWithCircuitBreaker<{ data: BinanceSpotEntry & { introduction?: string }; success: boolean }>(
       () => this.fetchDetailApi(traderKey, '90d'),
       { label: `fetchTraderProfile(${traderKey})` },
     );
@@ -160,7 +160,7 @@ export class BinanceSpotConnector extends BaseConnector {
   async fetchTimeseries(
     traderKey: string,
     seriesType: TimeseriesType,
-  ): Promise<Omit<TraderTimeseries, 'id' | 'created_at'>> {
+  ): Promise<Omit<TraderTimeseriesLegacy, 'id' | 'created_at'>> {
     // Binance Spot may not have a public performance curve API
     return {
       platform: this.platform,
@@ -195,7 +195,7 @@ export class BinanceSpotConnector extends BaseConnector {
     });
 
     if (!response.ok) {
-      throw new ConnectorError(`Binance Spot API returned ${response.status}`, this.platform, response.status >= 500);
+      throw new Error(`Binance Spot API returned ${response.status}`);
     }
 
     return response.json();
@@ -218,7 +218,7 @@ export class BinanceSpotConnector extends BaseConnector {
     });
 
     if (!response.ok) {
-      throw new ConnectorError(`Binance Spot detail API returned ${response.status}`, this.platform, response.status >= 500);
+      throw new Error(`Binance Spot detail API returned ${response.status}`);
     }
 
     return response.json();

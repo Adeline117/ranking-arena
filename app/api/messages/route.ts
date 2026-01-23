@@ -47,6 +47,21 @@ export async function GET(request: NextRequest) {
 
     const supabase = getSupabaseAdmin()
 
+    // Auth check: verify the requesting user matches the userId
+    const authHeader = request.headers.get('Authorization')
+    if (authHeader?.startsWith('Bearer ')) {
+      const token = authHeader.slice(7)
+      const { data: { user }, error: authError } = await supabase.auth.getUser(token)
+      if (authError || !user) {
+        return NextResponse.json({ error: '登录已过期，请重新登录' }, { status: 401 })
+      }
+      if (user.id !== userId) {
+        return NextResponse.json({ error: '权限不足' }, { status: 403 })
+      }
+    } else {
+      return NextResponse.json({ error: '未登录' }, { status: 401 })
+    }
+
     // 验证用户是否有权限访问此会话
     const { data: conversation, error: convError } = await supabase
       .from('conversations')
@@ -182,6 +197,11 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Verify the authenticated user is the sender
+    if (user.id !== senderId) {
+      return NextResponse.json({ error: '权限不足：不能代替其他用户发送消息' }, { status: 403 })
+    }
+
     if (senderId === receiverId) {
       return NextResponse.json(
         { error: '不能给自己发私信', error_code: 'VALIDATION_ERROR' },
@@ -204,6 +224,7 @@ export async function POST(request: NextRequest) {
     }
 
     const supabase = getSupabaseAdmin()
+
 
     // 获取接收者的隐私设置
     const { data: receiverProfile, error: profileError } = await supabase

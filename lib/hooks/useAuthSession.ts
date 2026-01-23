@@ -7,8 +7,9 @@
  * Principles:
  * 1. One canonical source - no page should independently call supabase.auth
  * 2. Provides userId, email, accessToken, and auth-guard utilities
- * 3. Handles token refresh transparently
+ * 3. Handles token refresh transparently (proactive expiry detection)
  * 4. Distinguishes between "not logged in", "token expired", and "forbidden"
+ * 5. All write operations MUST check requireAuth() before sending
  */
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
@@ -32,10 +33,14 @@ export type AuthError = {
 }
 
 export type AuthSessionReturn = AuthState & {
+  /** Get a fresh token, refreshing if close to expiry (within 60s) */
+  getToken: () => Promise<string | null>
   /** Get headers for authenticated API requests. Returns null if not authenticated. */
   getAuthHeaders: () => Record<string, string> | null
+  /** Get headers asynchronously, refreshing token if needed */
+  getAuthHeadersAsync: () => Promise<Record<string, string>>
   /** Guard a write operation: returns auth headers or shows login prompt and returns null */
-  requireAuth: (options?: { redirectToLogin?: boolean }) => Record<string, string> | null
+  requireAuth: (options?: { redirectToLogin?: boolean; showToast?: (msg: string, type: string) => void }) => Record<string, string> | null
   /** Refresh the current session token */
   refreshSession: () => Promise<boolean>
   /** Categorize an HTTP error response into an AuthError */
@@ -118,6 +123,7 @@ export function useAuthSession(): AuthSessionReturn {
   const [state, setState] = useState<AuthState>(globalAuthState)
   const stateRef = useRef(state)
   stateRef.current = state
+  const refreshingRef = useRef(false)
 
   useEffect(() => {
     // Initialize on first use
@@ -137,15 +143,64 @@ export function useAuthSession(): AuthSessionReturn {
     }
   }, [])
 
+  // Get a fresh token, refreshing if close to expiry (within 60s)
+  const getToken = useCallback(async (): Promise<string | null> => {
+    // Prevent concurrent refresh attempts
+    if (refreshingRef.current) {
+      await new Promise(resolve => setTimeout(resolve, 100))
+      return stateRef.current.accessToken
+    }
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session?.access_token) {
+        // Check if token is close to expiry (within 60s)
+        const expiresAt = session.expires_at
+        const now = Math.floor(Date.now() / 1000)
+        if (expiresAt && (expiresAt - now) < 60) {
+          // Token about to expire, refresh
+          refreshingRef.current = true
+          try {
+            const { data: { session: refreshed } } = await supabase.auth.refreshSession()
+            if (refreshed) {
+              updateFromSession(refreshed)
+              setGlobalAuthState({ loading: false, authChecked: true })
+              return refreshed.access_token
+            }
+          } finally {
+            refreshingRef.current = false
+          }
+        }
+        return session.access_token
+      }
+      return null
+    } catch {
+      return null
+    }
+  }, [])
+
   const getAuthHeaders = useCallback((): Record<string, string> | null => {
     const { accessToken } = stateRef.current
     if (!accessToken) return null
     return { 'Authorization': `Bearer ${accessToken}` }
   }, [])
 
-  const requireAuth = useCallback((options?: { redirectToLogin?: boolean }): Record<string, string> | null => {
+  // Async version that refreshes token if needed
+  const getAuthHeadersAsync = useCallback(async (): Promise<Record<string, string>> => {
+    const token = await getToken()
+    const headers: Record<string, string> = {}
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`
+    }
+    return headers
+  }, [getToken])
+
+  const requireAuth = useCallback((options?: { redirectToLogin?: boolean; showToast?: (msg: string, type: string) => void }): Record<string, string> | null => {
     const { accessToken, isLoggedIn } = stateRef.current
     if (!isLoggedIn || !accessToken) {
+      if (options?.showToast) {
+        options.showToast('请先登录', 'warning')
+      }
       if (options?.redirectToLogin !== false && typeof window !== 'undefined') {
         // Store current URL for redirect back after login
         const returnUrl = window.location.pathname + window.location.search
@@ -184,16 +239,27 @@ export function useAuthSession(): AuthSessionReturn {
 
   const signOut = useCallback(async () => {
     await supabase.auth.signOut()
+    setGlobalAuthState({
+      user: null,
+      userId: null,
+      email: null,
+      accessToken: null,
+      isLoggedIn: false,
+      loading: false,
+      authChecked: true,
+    })
   }, [])
 
   return useMemo(() => ({
     ...state,
+    getToken,
     getAuthHeaders,
+    getAuthHeadersAsync,
     requireAuth,
     refreshSession,
     categorizeError,
     signOut,
-  }), [state, getAuthHeaders, requireAuth, refreshSession, categorizeError, signOut])
+  }), [state, getToken, getAuthHeaders, getAuthHeadersAsync, requireAuth, refreshSession, categorizeError, signOut])
 }
 
 /**

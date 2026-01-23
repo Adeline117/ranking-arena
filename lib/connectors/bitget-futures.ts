@@ -6,16 +6,17 @@
  * Rate limits: 20 req/min with 2.5-5s jitter.
  */
 
-import { BaseConnector, ConnectorError } from './base';
+import { BaseConnectorLegacy } from './base';
 import type {
   RankingWindow,
   TraderIdentity,
-  TraderSnapshot,
+  TraderSnapshotLegacy,
   TraderProfileEnriched,
-  TraderTimeseries,
+  TraderTimeseriesLegacy,
   TimeseriesType,
-  SnapshotMetrics,
+  SnapshotMetricsLegacy,
   TimeseriesPoint,
+  LegacyPlatformConnector,
 } from '@/lib/types/leaderboard';
 
 // ============================================
@@ -84,7 +85,7 @@ const WINDOW_TO_SORT: Record<RankingWindow, number> = {
 // Connector
 // ============================================
 
-export class BitgetFuturesConnector extends BaseConnector {
+export class BitgetFuturesConnector extends BaseConnectorLegacy implements LegacyPlatformConnector {
   readonly platform = 'bitget_futures' as const;
   private readonly baseUrl = 'https://www.bitget.com/v1/copy/mix';
 
@@ -100,7 +101,7 @@ export class BitgetFuturesConnector extends BaseConnector {
     const maxPages = 5;
 
     for (let page = 1; page <= maxPages; page++) {
-      const data = await this.request<BitgetLeaderboardResponse>(
+      const data = await this.requestWithCircuitBreaker<BitgetLeaderboardResponse>(
         () => this.fetchLeaderboardPage(sortPeriod, page, pageSize),
         { label: `discoverLeaderboard(${window}, page=${page})` },
       );
@@ -128,8 +129,8 @@ export class BitgetFuturesConnector extends BaseConnector {
   async fetchTraderSnapshot(
     traderKey: string,
     window: RankingWindow,
-  ): Promise<Omit<TraderSnapshot, 'id' | 'created_at'>> {
-    const detail = await this.request<BitgetTraderDetailResponse>(
+  ): Promise<Omit<TraderSnapshotLegacy, 'id' | 'created_at'>> {
+    const detail = await this.requestWithCircuitBreaker<BitgetTraderDetailResponse>(
       () => this.fetchTraderDetailApi(traderKey),
       { label: `fetchTraderSnapshot(${traderKey}, ${window})` },
     );
@@ -137,7 +138,7 @@ export class BitgetFuturesConnector extends BaseConnector {
     const d = detail.data;
     const roi = d.roi != null ? (Math.abs(d.roi) < 10 ? d.roi * 100 : d.roi) : null;
 
-    const metrics: SnapshotMetrics = {
+    const metrics: SnapshotMetricsLegacy = {
       roi_pct: roi,
       pnl_usd: d.totalProfit ?? null,
       win_rate_pct: d.winRatio != null ? (d.winRatio <= 1 ? d.winRatio * 100 : d.winRatio) : null,
@@ -168,7 +169,7 @@ export class BitgetFuturesConnector extends BaseConnector {
   async fetchTraderProfile(
     traderKey: string,
   ): Promise<Omit<TraderProfileEnriched, 'last_enriched_at'>> {
-    const detail = await this.request<BitgetTraderDetailResponse>(
+    const detail = await this.requestWithCircuitBreaker<BitgetTraderDetailResponse>(
       () => this.fetchTraderDetailApi(traderKey),
       { label: `fetchTraderProfile(${traderKey})` },
     );
@@ -191,7 +192,7 @@ export class BitgetFuturesConnector extends BaseConnector {
   async fetchTimeseries(
     traderKey: string,
     seriesType: TimeseriesType,
-  ): Promise<Omit<TraderTimeseries, 'id' | 'created_at'>> {
+  ): Promise<Omit<TraderTimeseriesLegacy, 'id' | 'created_at'>> {
     if (seriesType !== 'equity_curve') {
       return {
         platform: this.platform,
@@ -202,7 +203,7 @@ export class BitgetFuturesConnector extends BaseConnector {
       };
     }
 
-    const entries = await this.request<Array<{ time: number; value: number }>>(
+    const entries = await this.requestWithCircuitBreaker<Array<{ time: number; value: number }>>(
       () => this.fetchPerformanceCurve(traderKey),
       { label: `fetchTimeseries(${traderKey}, ${seriesType})` },
     );
@@ -248,7 +249,7 @@ export class BitgetFuturesConnector extends BaseConnector {
     });
 
     if (!response.ok) {
-      throw new ConnectorError(`Bitget API returned ${response.status}`, this.platform, response.status >= 500);
+      throw new Error(`Bitget API returned ${response.status}`);
     }
 
     return response.json();
@@ -262,7 +263,7 @@ export class BitgetFuturesConnector extends BaseConnector {
     });
 
     if (!response.ok) {
-      throw new ConnectorError(`Bitget detail API returned ${response.status}`, this.platform, response.status >= 500);
+      throw new Error(`Bitget detail API returned ${response.status}`);
     }
 
     return response.json();

@@ -53,7 +53,7 @@ export async function GET(request: NextRequest) {
     }
 
     const platform = searchParams.get('platform') as Platform | null;
-    if (platform && !LEADERBOARD_PLATFORMS.includes(platform)) {
+    if (platform && !(LEADERBOARD_PLATFORMS as readonly string[]).includes(platform)) {
       return NextResponse.json(
         { error: `Invalid platform: ${platform}` },
         { status: 400 },

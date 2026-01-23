@@ -15,7 +15,7 @@ import {
   getFeature,
 } from '@/lib/premium'
 import { useFeatureAccess, usePremium } from '@/lib/premium/hooks'
-import { useLanguage } from '../Utils/LanguageProvider'
+import { useLanguage } from '../Providers/LanguageProvider'
 
 // ============================================
 // 类型定义

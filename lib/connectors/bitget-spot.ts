@@ -6,15 +6,16 @@
  * Rate limits: 20 req/min with 2.5-5s jitter.
  */
 
-import { BaseConnector, ConnectorError } from './base';
+import { BaseConnectorLegacy } from './base';
 import type {
   RankingWindow,
   TraderIdentity,
-  TraderSnapshot,
+  TraderSnapshotLegacy,
   TraderProfileEnriched,
-  TraderTimeseries,
+  TraderTimeseriesLegacy,
   TimeseriesType,
-  SnapshotMetrics,
+  SnapshotMetricsLegacy,
+  LegacyPlatformConnector,
 } from '@/lib/types/leaderboard';
 
 // ============================================
@@ -56,7 +57,7 @@ const WINDOW_TO_SORT: Record<RankingWindow, number> = {
 // Connector
 // ============================================
 
-export class BitgetSpotConnector extends BaseConnector {
+export class BitgetSpotConnector extends BaseConnectorLegacy implements LegacyPlatformConnector {
   readonly platform = 'bitget_spot' as const;
   private readonly baseUrl = 'https://www.bitget.com/v1/copy/spot';
 
@@ -70,7 +71,7 @@ export class BitgetSpotConnector extends BaseConnector {
     const traders: TraderIdentity[] = [];
 
     for (let page = 1; page <= 5; page++) {
-      const data = await this.request<BitgetSpotListResponse>(
+      const data = await this.requestWithCircuitBreaker<BitgetSpotListResponse>(
         () => this.fetchLeaderboardPage(sortPeriod, page, 20),
         { label: `discoverLeaderboard(${window}, page=${page})` },
       );
@@ -98,8 +99,8 @@ export class BitgetSpotConnector extends BaseConnector {
   async fetchTraderSnapshot(
     traderKey: string,
     window: RankingWindow,
-  ): Promise<Omit<TraderSnapshot, 'id' | 'created_at'>> {
-    const detail = await this.request<{ code: string; data: BitgetSpotEntry }>(
+  ): Promise<Omit<TraderSnapshotLegacy, 'id' | 'created_at'>> {
+    const detail = await this.requestWithCircuitBreaker<{ code: string; data: BitgetSpotEntry }>(
       () => this.fetchTraderDetailApi(traderKey),
       { label: `fetchTraderSnapshot(${traderKey}, ${window})` },
     );
@@ -107,7 +108,7 @@ export class BitgetSpotConnector extends BaseConnector {
     const d = detail.data || {};
     const roi = d.roi != null ? (Math.abs(d.roi) < 10 ? d.roi * 100 : d.roi) : null;
 
-    const metrics: SnapshotMetrics = {
+    const metrics: SnapshotMetricsLegacy = {
       roi_pct: roi,
       pnl_usd: d.totalProfit ?? null,
       win_rate_pct: d.winRatio != null ? (d.winRatio <= 1 ? d.winRatio * 100 : d.winRatio) : null,
@@ -138,7 +139,7 @@ export class BitgetSpotConnector extends BaseConnector {
   async fetchTraderProfile(
     traderKey: string,
   ): Promise<Omit<TraderProfileEnriched, 'last_enriched_at'>> {
-    const detail = await this.request<{ code: string; data: BitgetSpotEntry }>(
+    const detail = await this.requestWithCircuitBreaker<{ code: string; data: BitgetSpotEntry }>(
       () => this.fetchTraderDetailApi(traderKey),
       { label: `fetchTraderProfile(${traderKey})` },
     );
@@ -161,7 +162,7 @@ export class BitgetSpotConnector extends BaseConnector {
   async fetchTimeseries(
     traderKey: string,
     seriesType: TimeseriesType,
-  ): Promise<Omit<TraderTimeseries, 'id' | 'created_at'>> {
+  ): Promise<Omit<TraderTimeseriesLegacy, 'id' | 'created_at'>> {
     return {
       platform: this.platform,
       trader_key: traderKey,
@@ -197,7 +198,7 @@ export class BitgetSpotConnector extends BaseConnector {
     });
 
     if (!response.ok) {
-      throw new ConnectorError(`Bitget Spot API returned ${response.status}`, this.platform, response.status >= 500);
+      throw new Error(`Bitget Spot API returned ${response.status}`);
     }
 
     return response.json();
@@ -211,7 +212,7 @@ export class BitgetSpotConnector extends BaseConnector {
     });
 
     if (!response.ok) {
-      throw new ConnectorError(`Bitget Spot detail API returned ${response.status}`, this.platform, response.status >= 500);
+      throw new Error(`Bitget Spot detail API returned ${response.status}`);
     }
 
     return response.json();

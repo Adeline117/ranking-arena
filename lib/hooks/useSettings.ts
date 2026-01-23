@@ -273,17 +273,19 @@ export function useNotificationSettings(userId?: string | null) {
   // 更新设置
   const updateSettings = useCallback(async (updates: Partial<NotificationSettings>) => {
     setSaving(true)
-    
+
+    // 乐观更新本地
+    const previousSettings = { ...settings }
     setSettings(prev => {
       const newSettings = { ...prev, ...updates }
       saveToStorage(STORAGE_KEYS.NOTIFICATION_SETTINGS, newSettings)
       return newSettings
     })
-    
-    // 同步到数据库
-    if (userId) {
-      try {
-        await supabase
+
+    // 同步到数据库，完成后再关闭 saving 状态
+    try {
+      if (userId) {
+        const { error } = await supabase
           .from('user_profiles')
           .update({
             notify_follow: updates.follow,
@@ -293,13 +295,16 @@ export function useNotificationSettings(userId?: string | null) {
             notify_message: updates.message,
           })
           .eq('id', userId)
-      } catch {
-        // 忽略错误
+        if (error) throw error
       }
+    } catch {
+      // 回滚
+      setSettings(previousSettings)
+      saveToStorage(STORAGE_KEYS.NOTIFICATION_SETTINGS, previousSettings)
+    } finally {
+      setSaving(false)
     }
-    
-    setSaving(false)
-  }, [userId])
+  }, [userId, settings])
 
   return {
     settings,
@@ -355,16 +360,18 @@ export function usePrivacySettings(userId?: string | null) {
   // 更新设置
   const updateSettings = useCallback(async (updates: Partial<PrivacySettings>) => {
     setSaving(true)
-    
+
+    // 乐观更新本地
+    const previousSettings = { ...settings }
     setSettings(prev => {
       const newSettings = { ...prev, ...updates }
       saveToStorage(STORAGE_KEYS.PRIVACY_SETTINGS, newSettings)
       return newSettings
     })
-    
-    if (userId) {
-      try {
-        await supabase
+
+    try {
+      if (userId) {
+        const { error } = await supabase
           .from('user_profiles')
           .update({
             show_followers: updates.showFollowers,
@@ -373,13 +380,16 @@ export function usePrivacySettings(userId?: string | null) {
             show_pro_badge: updates.showProBadge,
           })
           .eq('id', userId)
-      } catch {
-        // 忽略错误
+        if (error) throw error
       }
+    } catch {
+      // 回滚
+      setSettings(previousSettings)
+      saveToStorage(STORAGE_KEYS.PRIVACY_SETTINGS, previousSettings)
+    } finally {
+      setSaving(false)
     }
-    
-    setSaving(false)
-  }, [userId])
+  }, [userId, settings])
 
   return {
     settings,

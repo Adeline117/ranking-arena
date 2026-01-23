@@ -6,16 +6,17 @@
  * Rate limits: Conservative 30 req/min with 2-5s jitter.
  */
 
-import { BaseConnector, ConnectorError } from './base';
+import { BaseConnectorLegacy, ConnectorError } from './base';
 import type {
   RankingWindow,
   TraderIdentity,
-  TraderSnapshot,
+  TraderSnapshotLegacy,
   TraderProfileEnriched,
-  TraderTimeseries,
+  TraderTimeseriesLegacy,
   TimeseriesType,
-  SnapshotMetrics,
+  SnapshotMetricsLegacy,
   TimeseriesPoint,
+  LegacyPlatformConnector,
 } from '@/lib/types/leaderboard';
 
 // ============================================
@@ -77,7 +78,7 @@ const WINDOW_TO_PERIOD: Record<RankingWindow, string> = {
 // Connector Implementation
 // ============================================
 
-export class BinanceFuturesConnector extends BaseConnector {
+export class BinanceFuturesConnector extends BaseConnectorLegacy implements LegacyPlatformConnector {
   readonly platform = 'binance_futures' as const;
   private readonly baseUrl = 'https://www.binance.com/bapi/futures/v1/public/future/copy-trade';
 
@@ -97,7 +98,7 @@ export class BinanceFuturesConnector extends BaseConnector {
     const maxPages = 5; // 100 traders per window
 
     for (let page = 1; page <= maxPages; page++) {
-      const data = await this.request<BinanceLeaderboardResponse>(
+      const data = await this.requestWithCircuitBreaker<BinanceLeaderboardResponse>(
         () => this.fetchLeaderboardPage(period, page, pageSize),
         { label: `discoverLeaderboard(${window}, page=${page})` },
       );
@@ -126,13 +127,13 @@ export class BinanceFuturesConnector extends BaseConnector {
   async fetchTraderSnapshot(
     traderKey: string,
     window: RankingWindow,
-  ): Promise<Omit<TraderSnapshot, 'id' | 'created_at'>> {
-    const detail = await this.request<BinanceTraderDetail>(
+  ): Promise<Omit<TraderSnapshotLegacy, 'id' | 'created_at'>> {
+    const detail = await this.requestWithCircuitBreaker<BinanceTraderDetail>(
       () => this.fetchTraderDetailApi(traderKey, window),
       { label: `fetchTraderSnapshot(${traderKey}, ${window})` },
     );
 
-    const metrics: SnapshotMetrics = {
+    const metrics: SnapshotMetricsLegacy = {
       roi_pct: detail.roi ?? null,
       pnl_usd: detail.pnl ?? null,
       win_rate_pct: detail.winRate != null ? detail.winRate * 100 : null,
@@ -166,7 +167,7 @@ export class BinanceFuturesConnector extends BaseConnector {
   async fetchTraderProfile(
     traderKey: string,
   ): Promise<Omit<TraderProfileEnriched, 'last_enriched_at'>> {
-    const detail = await this.request<BinanceTraderDetail>(
+    const detail = await this.requestWithCircuitBreaker<BinanceTraderDetail>(
       () => this.fetchTraderDetailApi(traderKey, '90d'),
       { label: `fetchTraderProfile(${traderKey})` },
     );
@@ -192,7 +193,7 @@ export class BinanceFuturesConnector extends BaseConnector {
   async fetchTimeseries(
     traderKey: string,
     seriesType: TimeseriesType,
-  ): Promise<Omit<TraderTimeseries, 'id' | 'created_at'>> {
+  ): Promise<Omit<TraderTimeseriesLegacy, 'id' | 'created_at'>> {
     if (seriesType !== 'equity_curve' && seriesType !== 'daily_pnl') {
       // Binance only provides equity curve and daily PnL
       return {
@@ -204,7 +205,7 @@ export class BinanceFuturesConnector extends BaseConnector {
       };
     }
 
-    const entries = await this.request<BinancePerformanceEntry[]>(
+    const entries = await this.requestWithCircuitBreaker<BinancePerformanceEntry[]>(
       () => this.fetchPerformanceCurve(traderKey, seriesType),
       { label: `fetchTimeseries(${traderKey}, ${seriesType})` },
     );
@@ -248,10 +249,8 @@ export class BinanceFuturesConnector extends BaseConnector {
     });
 
     if (!response.ok) {
-      throw new ConnectorError(
+      throw new Error(
         `Binance leaderboard API returned ${response.status}`,
-        this.platform,
-        response.status >= 500,
       );
     }
 
@@ -275,19 +274,15 @@ export class BinanceFuturesConnector extends BaseConnector {
     });
 
     if (!response.ok) {
-      throw new ConnectorError(
+      throw new Error(
         `Binance trader detail API returned ${response.status}`,
-        this.platform,
-        response.status >= 500,
       );
     }
 
     const json = await response.json();
     if (!json.success || !json.data) {
-      throw new ConnectorError(
+      throw new Error(
         `Binance trader detail API returned no data for ${encryptedUid}`,
-        this.platform,
-        false,
       );
     }
 
@@ -314,10 +309,8 @@ export class BinanceFuturesConnector extends BaseConnector {
     });
 
     if (!response.ok) {
-      throw new ConnectorError(
+      throw new Error(
         `Binance performance API returned ${response.status}`,
-        this.platform,
-        response.status >= 500,
       );
     }
 

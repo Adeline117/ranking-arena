@@ -48,6 +48,8 @@ export function DialogProvider({ children }: { children: ReactNode }) {
   })
   const [isLoading, setIsLoading] = useState(false)
   const closeTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const dialogRef = useRef<HTMLDivElement>(null)
+  const previousFocusRef = useRef<HTMLElement | null>(null)
 
   // Cleanup close timer on unmount
   useEffect(() => {
@@ -58,19 +60,58 @@ export function DialogProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  // Handle escape key
+  // Focus trap + escape key
   useEffect(() => {
     if (!state.isOpen) return
 
-    const handleEscape = (e: KeyboardEvent) => {
+    // Save previously focused element
+    previousFocusRef.current = document.activeElement as HTMLElement
+
+    // Focus the dialog after render
+    const timer = setTimeout(() => {
+      if (dialogRef.current) {
+        const firstButton = dialogRef.current.querySelector('button') as HTMLElement
+        firstButton?.focus()
+      }
+    }, 50)
+
+    const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         handleCancel()
+        return
+      }
+
+      // Focus trap: keep Tab within dialog
+      if (e.key === 'Tab' && dialogRef.current) {
+        const focusable = dialogRef.current.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        )
+        if (focusable.length === 0) return
+
+        const first = focusable[0]
+        const last = focusable[focusable.length - 1]
+
+        if (e.shiftKey) {
+          if (document.activeElement === first) {
+            e.preventDefault()
+            last.focus()
+          }
+        } else {
+          if (document.activeElement === last) {
+            e.preventDefault()
+            first.focus()
+          }
+        }
       }
     }
 
-    document.addEventListener('keydown', handleEscape)
-    return () => document.removeEventListener('keydown', handleEscape)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      clearTimeout(timer)
+      document.removeEventListener('keydown', handleKeyDown)
+      // Restore focus when dialog closes
+      previousFocusRef.current?.focus()
+    }
   }, [state.isOpen])
 
   const showDialog = useCallback((options: DialogOptions): Promise<boolean> => {
@@ -212,6 +253,10 @@ export function DialogProvider({ children }: { children: ReactNode }) {
           }}
         >
           <div
+            ref={dialogRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="dialog-title"
             onClick={(e) => e.stopPropagation()}
             className={state.isExiting ? 'modal-content-exit' : 'modal-content-enter'}
             style={{
@@ -269,7 +314,7 @@ export function DialogProvider({ children }: { children: ReactNode }) {
               </div>
               
               {/* Title */}
-              <h2 style={{
+              <h2 id="dialog-title" style={{
                 fontSize: tokens.typography.fontSize.xl,
                 fontWeight: tokens.typography.fontWeight.black,
                 color: tokens.colors.text.primary,

@@ -6,15 +6,16 @@
  * Rate limits: 15 req/min with 3-6s jitter.
  */
 
-import { BaseConnector, ConnectorError } from './base';
+import { BaseConnectorLegacy } from './base';
 import type {
   RankingWindow,
   TraderIdentity,
-  TraderSnapshot,
+  TraderSnapshotLegacy,
   TraderProfileEnriched,
-  TraderTimeseries,
+  TraderTimeseriesLegacy,
   TimeseriesType,
-  SnapshotMetrics,
+  SnapshotMetricsLegacy,
+  LegacyPlatformConnector,
 } from '@/lib/types/leaderboard';
 
 // ============================================
@@ -55,7 +56,7 @@ const WINDOW_TO_SORT: Record<RankingWindow, number> = {
 // Connector
 // ============================================
 
-export class MEXCConnector extends BaseConnector {
+export class MEXCConnector extends BaseConnectorLegacy implements LegacyPlatformConnector {
   readonly platform = 'mexc' as const;
   private readonly baseUrl = 'https://www.mexc.com/api/platform/copy-trade';
 
@@ -69,7 +70,7 @@ export class MEXCConnector extends BaseConnector {
     const traders: TraderIdentity[] = [];
 
     for (let page = 1; page <= 5; page++) {
-      const data = await this.request<MEXCLeaderboardResponse>(
+      const data = await this.requestWithCircuitBreaker<MEXCLeaderboardResponse>(
         () => this.fetchLeaderboardPage(sortPeriod, page, 20),
         { label: `discoverLeaderboard(${window}, page=${page})` },
       );
@@ -97,15 +98,15 @@ export class MEXCConnector extends BaseConnector {
   async fetchTraderSnapshot(
     traderKey: string,
     window: RankingWindow,
-  ): Promise<Omit<TraderSnapshot, 'id' | 'created_at'>> {
-    const detail = await this.request<{ code: number; data: MEXCTraderEntry }>(
+  ): Promise<Omit<TraderSnapshotLegacy, 'id' | 'created_at'>> {
+    const detail = await this.requestWithCircuitBreaker<{ code: number; data: MEXCTraderEntry }>(
       () => this.fetchTraderDetailApi(traderKey),
       { label: `fetchTraderSnapshot(${traderKey}, ${window})` },
     );
 
     const d = detail.data || {};
 
-    const metrics: SnapshotMetrics = {
+    const metrics: SnapshotMetricsLegacy = {
       roi_pct: d.roi != null ? (Math.abs(d.roi) < 10 ? d.roi * 100 : d.roi) : null,
       pnl_usd: d.pnl ?? null,
       win_rate_pct: d.winRate != null ? (d.winRate <= 1 ? d.winRate * 100 : d.winRate) : null,
@@ -136,7 +137,7 @@ export class MEXCConnector extends BaseConnector {
   async fetchTraderProfile(
     traderKey: string,
   ): Promise<Omit<TraderProfileEnriched, 'last_enriched_at'>> {
-    const detail = await this.request<{ code: number; data: MEXCTraderEntry }>(
+    const detail = await this.requestWithCircuitBreaker<{ code: number; data: MEXCTraderEntry }>(
       () => this.fetchTraderDetailApi(traderKey),
       { label: `fetchTraderProfile(${traderKey})` },
     );
@@ -159,7 +160,7 @@ export class MEXCConnector extends BaseConnector {
   async fetchTimeseries(
     traderKey: string,
     seriesType: TimeseriesType,
-  ): Promise<Omit<TraderTimeseries, 'id' | 'created_at'>> {
+  ): Promise<Omit<TraderTimeseriesLegacy, 'id' | 'created_at'>> {
     return {
       platform: this.platform,
       trader_key: traderKey,
@@ -195,7 +196,7 @@ export class MEXCConnector extends BaseConnector {
     });
 
     if (!response.ok) {
-      throw new ConnectorError(`MEXC API returned ${response.status}`, this.platform, response.status >= 500);
+      throw new Error(`MEXC API returned ${response.status}`);
     }
 
     return response.json();
@@ -209,7 +210,7 @@ export class MEXCConnector extends BaseConnector {
     });
 
     if (!response.ok) {
-      throw new ConnectorError(`MEXC detail API returned ${response.status}`, this.platform, response.status >= 500);
+      throw new Error(`MEXC detail API returned ${response.status}`);
     }
 
     return response.json();

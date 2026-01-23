@@ -6,15 +6,16 @@
  * Rate limits: 20 req/min with 2.5-5s jitter.
  */
 
-import { BaseConnector, ConnectorError } from './base';
+import { BaseConnectorLegacy } from './base';
 import type {
   RankingWindow,
   TraderIdentity,
-  TraderSnapshot,
+  TraderSnapshotLegacy,
   TraderProfileEnriched,
-  TraderTimeseries,
+  TraderTimeseriesLegacy,
   TimeseriesType,
-  SnapshotMetrics,
+  SnapshotMetricsLegacy,
+  LegacyPlatformConnector,
 } from '@/lib/types/leaderboard';
 
 // ============================================
@@ -55,7 +56,7 @@ const WINDOW_TO_PERIOD: Record<RankingWindow, string> = {
 // Connector
 // ============================================
 
-export class OKXConnector extends BaseConnector {
+export class OKXConnector extends BaseConnectorLegacy implements LegacyPlatformConnector {
   readonly platform = 'okx' as const;
   private readonly baseUrl = 'https://www.okx.com/priapi/v5/ecotrade';
 
@@ -68,7 +69,7 @@ export class OKXConnector extends BaseConnector {
     const period = WINDOW_TO_PERIOD[window];
     const traders: TraderIdentity[] = [];
 
-    const data = await this.request<OKXLeaderboardResponse>(
+    const data = await this.requestWithCircuitBreaker<OKXLeaderboardResponse>(
       () => this.fetchLeaderboardPage(period, 1, 100),
       { label: `discoverLeaderboard(${window})` },
     );
@@ -95,15 +96,15 @@ export class OKXConnector extends BaseConnector {
   async fetchTraderSnapshot(
     traderKey: string,
     window: RankingWindow,
-  ): Promise<Omit<TraderSnapshot, 'id' | 'created_at'>> {
-    const detail = await this.request<{ code: string; data: OKXTraderEntry }>(
+  ): Promise<Omit<TraderSnapshotLegacy, 'id' | 'created_at'>> {
+    const detail = await this.requestWithCircuitBreaker<{ code: string; data: OKXTraderEntry }>(
       () => this.fetchTraderDetailApi(traderKey, window),
       { label: `fetchTraderSnapshot(${traderKey}, ${window})` },
     );
 
     const d = detail.data || {};
 
-    const metrics: SnapshotMetrics = {
+    const metrics: SnapshotMetricsLegacy = {
       roi_pct: d.roi != null ? (Math.abs(d.roi) < 10 ? d.roi * 100 : d.roi) : null,
       pnl_usd: d.pnl ?? null,
       win_rate_pct: d.winRatio != null ? (d.winRatio <= 1 ? d.winRatio * 100 : d.winRatio) : null,
@@ -134,7 +135,7 @@ export class OKXConnector extends BaseConnector {
   async fetchTraderProfile(
     traderKey: string,
   ): Promise<Omit<TraderProfileEnriched, 'last_enriched_at'>> {
-    const detail = await this.request<{ code: string; data: OKXTraderEntry }>(
+    const detail = await this.requestWithCircuitBreaker<{ code: string; data: OKXTraderEntry }>(
       () => this.fetchTraderDetailApi(traderKey, '90d'),
       { label: `fetchTraderProfile(${traderKey})` },
     );
@@ -157,7 +158,7 @@ export class OKXConnector extends BaseConnector {
   async fetchTimeseries(
     traderKey: string,
     seriesType: TimeseriesType,
-  ): Promise<Omit<TraderTimeseries, 'id' | 'created_at'>> {
+  ): Promise<Omit<TraderTimeseriesLegacy, 'id' | 'created_at'>> {
     return {
       platform: this.platform,
       trader_key: traderKey,
@@ -183,7 +184,7 @@ export class OKXConnector extends BaseConnector {
     });
 
     if (!response.ok) {
-      throw new ConnectorError(`OKX API returned ${response.status}`, this.platform, response.status >= 500);
+      throw new Error(`OKX API returned ${response.status}`);
     }
 
     return response.json();
@@ -200,7 +201,7 @@ export class OKXConnector extends BaseConnector {
     });
 
     if (!response.ok) {
-      throw new ConnectorError(`OKX detail API returned ${response.status}`, this.platform, response.status >= 500);
+      throw new Error(`OKX detail API returned ${response.status}`);
     }
 
     return response.json();

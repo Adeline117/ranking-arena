@@ -165,79 +165,69 @@ export async function getPosts(
     throw error
   }
 
-  // 获取作者头像
+  // 收集所有需要的作者 handle 和原始帖子 ID
   const authorHandles = [...new Set((data || []).map(p => p.author_handle).filter(Boolean))]
-  const avatarMap = new Map<string, string>()
-
-  if (authorHandles.length > 0) {
-    const { data: profiles } = await supabase
-      .from('user_profiles')
-      .select('handle, avatar_url')
-      .in('handle', authorHandles)
-
-    if (profiles) {
-      profiles.forEach((p: { handle: string; avatar_url: string | null }) => {
-        if (p.avatar_url) {
-          avatarMap.set(p.handle, p.avatar_url)
-        }
-      })
-    }
-  }
-
-  // 获取所有需要加载的原始帖子 ID
   const originalPostIds = [...new Set(
     (data || [])
       .map(p => p.original_post_id)
       .filter((id): id is string => !!id)
   )]
 
-  // 批量获取原始帖子数据
-  const originalPostMap = new Map<string, OriginalPost>()
-  if (originalPostIds.length > 0) {
-    const { data: originalPosts } = await supabase
-      .from('posts')
-      .select(`
-        id,
-        title,
-        content,
-        author_handle,
-        images,
-        created_at
-      `)
-      .in('id', originalPostIds)
+  // 并行获取作者头像和原始帖子数据
+  const [profilesResult, originalPostsResult] = await Promise.all([
+    authorHandles.length > 0
+      ? supabase.from('user_profiles').select('handle, avatar_url').in('handle', authorHandles)
+      : Promise.resolve({ data: null }),
+    originalPostIds.length > 0
+      ? supabase.from('posts').select('id, title, content, author_handle, images, created_at').in('id', originalPostIds)
+      : Promise.resolve({ data: null }),
+  ])
 
-    if (originalPosts) {
-      // 获取原始帖子作者头像
-      const originalAuthorHandles = [...new Set(originalPosts.map(p => p.author_handle).filter(Boolean))]
-      const originalAvatarMap = new Map<string, string>()
-
-      if (originalAuthorHandles.length > 0) {
-        const { data: originalProfiles } = await supabase
-          .from('user_profiles')
-          .select('handle, avatar_url')
-          .in('handle', originalAuthorHandles)
-
-        if (originalProfiles) {
-          originalProfiles.forEach((p: { handle: string; avatar_url: string | null }) => {
-            if (p.avatar_url) {
-              originalAvatarMap.set(p.handle, p.avatar_url)
-            }
-          })
-        }
+  // 构建作者头像映射
+  const avatarMap = new Map<string, string>()
+  if (profilesResult.data) {
+    profilesResult.data.forEach((p: { handle: string; avatar_url: string | null }) => {
+      if (p.avatar_url) {
+        avatarMap.set(p.handle, p.avatar_url)
       }
+    })
+  }
 
-      originalPosts.forEach((op: { id: string; title: string; content: string; author_handle: string; images?: string[]; created_at: string }) => {
-        originalPostMap.set(op.id, {
-          id: op.id,
-          title: op.title,
-          content: op.content,
-          author_handle: op.author_handle,
-          author_avatar_url: originalAvatarMap.get(op.author_handle) || null,
-          images: op.images || null,
-          created_at: op.created_at,
+  // 处理原始帖子 + 获取原始帖子作者头像
+  const originalPostMap = new Map<string, OriginalPost>()
+  if (originalPostsResult.data && originalPostsResult.data.length > 0) {
+    const originalAuthorHandles = [...new Set(
+      originalPostsResult.data.map((p: { author_handle: string }) => p.author_handle).filter(Boolean)
+    )]
+
+    // 仅查询作者头像映射中不存在的 handles
+    const missingHandles = originalAuthorHandles.filter(h => !avatarMap.has(h))
+    if (missingHandles.length > 0) {
+      const { data: originalProfiles } = await supabase
+        .from('user_profiles')
+        .select('handle, avatar_url')
+        .in('handle', missingHandles)
+
+      if (originalProfiles) {
+        originalProfiles.forEach((p: { handle: string; avatar_url: string | null }) => {
+          if (p.avatar_url) {
+            avatarMap.set(p.handle, p.avatar_url)
+          }
         })
-      })
+      }
     }
+
+    originalPostsResult.data.forEach((op: { id: string; title: string; content: string; author_handle: string; images?: string[]; created_at: string }) => {
+      originalPostMap.set(op.id, {
+        id: op.id,
+        title: op.title,
+        content: op.content,
+        author_handle: op.author_handle,
+        author_avatar_url: avatarMap.get(op.author_handle) || null,
+        images: op.images || null,
+        created_at: op.created_at,
+      })
+    })
   }
 
   return (data || []).map((post: PostRow) => ({

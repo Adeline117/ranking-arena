@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { createLogger } from '@/lib/utils/logger'
+import { deleteServerCacheByPrefix } from '@/lib/utils/server-cache'
 
 const logger = createLogger('posts-edit')
 
@@ -68,6 +69,9 @@ export async function PUT(
       logger.error('Update error', { error: updateError, postId, userId: user.id })
       return NextResponse.json({ error: '更新失败' }, { status: 500 })
     }
+
+    // 清除帖子列表缓存
+    deleteServerCacheByPrefix('posts:')
 
     return NextResponse.json({ success: true, post: updatedPost })
   } catch (error) {

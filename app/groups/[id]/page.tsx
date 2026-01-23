@@ -808,18 +808,18 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
     }
   }
 
-  // 提交评论
+  // 提交评论 - uses server ACK to append comment (no refetch)
   const submitComment = async (postId: string) => {
     if (!accessToken) {
       showToast(language === 'zh' ? '请先登录' : 'Please login first', 'warning')
       return
     }
-    
+
     const content = newComment[postId]?.trim()
     if (!content) return
 
     setCommentLoading(prev => ({ ...prev, [postId]: true }))
-    
+
     try {
       const response = await fetch(`/api/posts/${postId}/comments`, {
         method: 'POST',
@@ -831,15 +831,33 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
         body: JSON.stringify({ content }),
       })
 
+      if (!response.ok) {
+        // Differentiate error types
+        if (response.status === 401) {
+          showToast(language === 'zh' ? '登录已过期，请重新登录' : 'Session expired, please log in again', 'error')
+        } else if (response.status === 403) {
+          showToast(language === 'zh' ? '权限不足' : 'Permission denied', 'error')
+        } else if (response.status >= 500) {
+          showToast(language === 'zh' ? '服务异常，请稍后重试' : 'Server error, please try again', 'error')
+        } else {
+          const result = await response.json().catch(() => null)
+          showToast(result?.error || (language === 'zh' ? '评论发布失败' : 'Failed to post comment'), 'error')
+        }
+        return
+      }
+
       const result = await response.json()
-      
-      if (response.ok) {
+
+      if (result.success && result.data?.comment) {
         setNewComment(prev => ({ ...prev, [postId]: '' }))
-        // 确保评论区展开
+        // Ensure comment section is expanded
         setExpandedComments(prev => ({ ...prev, [postId]: true }))
-        // 重新加载评论
-        loadComments(postId)
-        // 更新评论数
+        // Server ACK received: append the new comment directly (no refetch)
+        setComments(prev => ({
+          ...prev,
+          [postId]: [...(prev[postId] || []), result.data.comment]
+        }))
+        // Update comment count
         setPosts(prev => prev.map(p => {
           if (p.id === postId) {
             return { ...p, comment_count: (p.comment_count || 0) + 1 }
@@ -847,13 +865,11 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
           return p
         }))
       } else {
-        const errorMsg = result.error || (language === 'zh' ? '评论发布失败' : 'Failed to post comment')
-        showToast(errorMsg, 'error')
+        showToast(result.error || (language === 'zh' ? '评论发布失败' : 'Failed to post comment'), 'error')
       }
     } catch (err) {
       console.error('提交评论失败:', err)
-      const errorMsg = language === 'zh' ? '网络错误，请稍后重试' : 'Network error, please try again later'
-      showToast(errorMsg, 'error')
+      showToast(language === 'zh' ? '网络错误，请稍后重试' : 'Network error, please try again later', 'error')
     } finally {
       setCommentLoading(prev => ({ ...prev, [postId]: false }))
     }
@@ -1542,9 +1558,23 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
                                 }}
                               >
                                 <Box style={{ display: 'flex', justifyContent: 'space-between', marginBottom: tokens.spacing[1] }}>
-                                  <Text size="xs" weight="bold" color="secondary">
-                                    @{comment.author_handle || '匿名'}
-                                  </Text>
+                                  {comment.author_handle ? (
+                                    <Link
+                                      href={`/u/${encodeURIComponent(comment.author_handle)}`}
+                                      style={{
+                                        fontSize: tokens.typography.fontSize.xs,
+                                        fontWeight: tokens.typography.fontWeight.bold,
+                                        color: tokens.colors.accent?.primary || '#8b6fa8',
+                                        textDecoration: 'none',
+                                      }}
+                                    >
+                                      @{comment.author_handle}
+                                    </Link>
+                                  ) : (
+                                    <Text size="xs" weight="bold" color="secondary">
+                                      @匿名
+                                    </Text>
+                                  )}
                                   <Text size="xs" color="tertiary">
                                     {new Date(comment.created_at).toLocaleString('zh-CN')}
                                   </Text>
@@ -1615,7 +1645,7 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              zIndex: 2000,
+              zIndex: tokens.zIndex.modal,
             }}
             onClick={() => {
               setShowRepostModal(null)
@@ -1701,7 +1731,7 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              zIndex: 2000,
+              zIndex: tokens.zIndex.modal,
             }}
             onClick={() => setShowGroupInfo(false)}
           >
@@ -1841,7 +1871,7 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              zIndex: 2000,
+              zIndex: tokens.zIndex.modal,
             }}
             onClick={() => setShowMembersList(false)}
           >
@@ -1996,7 +2026,7 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              zIndex: 2000,
+              zIndex: tokens.zIndex.modal,
             }}
             onClick={() => setShowComplaintModal(false)}
           >

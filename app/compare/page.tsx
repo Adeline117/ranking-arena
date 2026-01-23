@@ -123,12 +123,19 @@ function CompareContent() {
   const handleSearch = async () => {
     if (!searchInput.trim()) return
 
+    // 转义 LIKE 通配符防止注入
+    const sanitizedInput = searchInput.trim()
+      .slice(0, 100)
+      .replace(/[\\%_]/g, c => `\\${c}`)
+
+    if (!sanitizedInput) return
+
     setSearching(true)
     try {
       const { data, error } = await supabase
         .from('trader_sources')
         .select('source_trader_id, source, roi, arena_score, avatar_url')
-        .or(`source_trader_id.ilike.%${searchInput}%`)
+        .or(`source_trader_id.ilike.%${sanitizedInput}%`)
         .order('arena_score', { ascending: false, nullsFirst: false })
         .limit(10)
 
