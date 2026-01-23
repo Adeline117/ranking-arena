@@ -1,0 +1,50 @@
+{
+  "platform": "nansen",
+  "type": "enrichment",
+  "notes": "Nansen is an on-chain analytics platform. It does NOT provide a public trader leaderboard. It provides wallet labels, smart money tracking, and portfolio analytics. Used as enrichment data source ONLY.",
+  "leaderboard_endpoints": [],
+  "has_leaderboard": false,
+  "enrichment_endpoints": [
+    {
+      "method": "GET",
+      "url": "https://api.nansen.ai/v1/address/{address}/labels",
+      "type": "api",
+      "auth": "API key required (paid subscription)",
+      "notes": "Returns labels for an address: 'Smart Money', 'Fund', 'DEX Trader', etc."
+    },
+    {
+      "method": "GET",
+      "url": "https://api.nansen.ai/v1/address/{address}/portfolio",
+      "type": "api",
+      "auth": "API key required",
+      "notes": "Token holdings and DeFi positions"
+    }
+  ],
+  "trader_key_field": "address (0x...)",
+  "roi_sort_supported": false,
+  "roi_sort_mechanism": "not_applicable",
+  "roi_sort_notes": "Nansen does not have a leaderboard. It provides wallet analytics.",
+  "window_support": {
+    "7d": { "supported": false, "reason": "Nansen is not a leaderboard platform" },
+    "30d": { "supported": false, "reason": "Same" },
+    "90d": { "supported": false, "reason": "Same" }
+  },
+  "enrichment_use_cases": [
+    "Label wallets that appear on DEX leaderboards (GMX/dYdX/Hyperliquid)",
+    "Identify 'Smart Money' addresses for trust scoring",
+    "Cross-reference wallet portfolios for risk assessment",
+    "Tag traders with institutional/whale labels"
+  ],
+  "field_map": {
+    "labels": "trader_profiles.tags (append Nansen labels)",
+    "portfolio_value": "supplementary: portfolio size context",
+    "first_seen": "supplementary: wallet age"
+  },
+  "rate_limits": {
+    "api_key_required": true,
+    "estimated_rpm": 30,
+    "notes": "Paid API. Free tier very limited. Enterprise tier: higher limits."
+  },
+  "cost": "Paid API subscription required. Standard plan ~$150/mo for API access.",
+  "implementation_priority": "Phase 4 - enrichment layer after core leaderboards work"
+}

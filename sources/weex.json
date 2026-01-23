@@ -1,0 +1,52 @@
+{
+  "platform": "weex",
+  "market_types": ["futures"],
+  "futures": {
+    "leaderboard_endpoints": [
+      {
+        "method": "GET",
+        "url": "https://www.weex.com/api/v1/copy-trade/public/trader/rank",
+        "type": "api",
+        "params": {
+          "page": 1,
+          "size": 20,
+          "sort": "roi",
+          "period": "30d"
+        },
+        "notes": "period: 7d, 30d. 90d NOT available."
+      }
+    ],
+    "profile_endpoints": [
+      {
+        "method": "GET",
+        "url": "https://www.weex.com/api/v1/copy-trade/public/trader/{trader_key}/info",
+        "type": "api"
+      }
+    ],
+    "trader_key_field": "uid",
+    "roi_sort_supported": true,
+    "roi_sort_mechanism": "platform_native",
+    "roi_sort_param": "sort=roi",
+    "window_support": {
+      "7d": { "supported": true, "param": "period=7d" },
+      "30d": { "supported": true, "param": "period=30d" },
+      "90d": { "supported": false, "reason": "WEEX copy trading platform only provides 7D and 30D windows. Confirmed via API: period=90d returns 400 error." }
+    },
+    "field_map": {
+      "uid": "trader_key",
+      "nickname": "display_name",
+      "avatar": "avatar_url",
+      "roi": "roi (percentage)",
+      "pnl": "pnl",
+      "winRate": "win_rate",
+      "maxDrawdown": "max_drawdown",
+      "followers": "followers",
+      "copiers": "copiers"
+    },
+    "rate_limits": {
+      "estimated_rpm": 10,
+      "cloudflare_protected": true,
+      "notes": "Smaller exchange, aggressive protection"
+    }
+  }
+}

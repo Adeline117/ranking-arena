@@ -1,0 +1,73 @@
+{
+  "platform": "gmx",
+  "market_types": ["perp"],
+  "perp": {
+    "leaderboard_endpoints": [
+      {
+        "method": "POST",
+        "url": "https://subgraph.satsuma-prod.com/{api_key}/gmx/synthetics-arbitrum-stats/api",
+        "type": "graphql",
+        "body": {
+          "query": "{ periodAccountStats(first: 100, orderBy: realizedPnl, orderDirection: desc, where: { period: \"30d\" }) { id account realizedPnl maxCapital volume losses wins } }"
+        },
+        "notes": "Subgraph API (The Graph). period: '7d', '30d', '90d', 'total'. orderBy: realizedPnl, volume. ROI = realizedPnl / maxCapital."
+      },
+      {
+        "method": "GET",
+        "url": "https://arbitrum-api.gmxinfra.io/leaderboard/pnl?period=30d&limit=100",
+        "type": "api",
+        "notes": "Alternative REST API endpoint for GMX leaderboard data"
+      }
+    ],
+    "profile_endpoints": [
+      {
+        "method": "POST",
+        "url": "https://subgraph.satsuma-prod.com/{api_key}/gmx/synthetics-arbitrum-stats/api",
+        "type": "graphql",
+        "body": {
+          "query": "{ accountStats(where: { account: \"{trader_key}\" }) { account realizedPnl volume losses wins maxCapital } }"
+        }
+      }
+    ],
+    "trader_key_field": "0x... (Ethereum/Arbitrum address)",
+    "roi_sort_supported": false,
+    "roi_sort_mechanism": "arena_computed",
+    "roi_sort_notes": "GMX subgraph sorts by absolute PnL. ROI = realizedPnl / maxCapital, computed client-side, then sorted DESC.",
+    "window_support": {
+      "7d": { "supported": true, "param": "period: '7d' in GraphQL where clause" },
+      "30d": { "supported": true, "param": "period: '30d'" },
+      "90d": { "supported": true, "param": "period: '90d'" }
+    },
+    "field_map": {
+      "account": "trader_key (0x address)",
+      "realizedPnl": "pnl (wei, divide by 10^30 for USD)",
+      "maxCapital": "used for ROI computation: roi = realizedPnl / maxCapital * 100",
+      "wins": "used for win_rate computation: win_rate = wins / (wins + losses) * 100",
+      "losses": "used for win_rate computation",
+      "volume": "trades_count proxy"
+    },
+    "missing_fields": ["display_name", "avatar_url", "followers", "copiers", "aum", "max_drawdown", "sharpe_ratio"],
+    "missing_reason": "GMX is on-chain perpetual DEX. No user profiles, no copy trading. Addresses are pseudonymous. Max drawdown requires historical equity reconstruction from events.",
+    "timeseries_endpoints": [
+      {
+        "method": "POST",
+        "url": "https://subgraph.satsuma-prod.com/{api_key}/gmx/synthetics-arbitrum-stats/api",
+        "type": "graphql",
+        "body": {
+          "query": "{ periodAccountStats(where: { account: \"{trader_key}\", period_starts_with: \"1d\" }, orderBy: period, orderDirection: asc) { period realizedPnl maxCapital } }"
+        },
+        "notes": "Daily period stats for equity curve. Period format: '1d:TIMESTAMP'"
+      }
+    ],
+    "rate_limits": {
+      "estimated_rpm": 30,
+      "cloudflare_protected": false,
+      "notes": "The Graph subgraph. Free tier: 100k queries/month. Paid: higher limits."
+    },
+    "anti_scraping": {
+      "cloudflare": false,
+      "fingerprinting": false,
+      "mitigation": "Public subgraph, standard GraphQL queries"
+    }
+  }
+}

@@ -1,0 +1,57 @@
+{
+  "platform": "htx",
+  "market_types": ["futures"],
+  "futures": {
+    "leaderboard_endpoints": [
+      {
+        "method": "POST",
+        "url": "https://www.htx.com/bapi/copy-trade/v1/public/trader/list",
+        "type": "api",
+        "body": {
+          "page": 1,
+          "pageSize": 20,
+          "sortBy": "roi",
+          "period": "30d"
+        },
+        "notes": "period: 7d, 30d, 90d. sortBy: roi, pnl, followers"
+      }
+    ],
+    "profile_endpoints": [
+      {
+        "method": "GET",
+        "url": "https://www.htx.com/bapi/copy-trade/v1/public/trader/detail?uid={trader_key}",
+        "type": "api"
+      }
+    ],
+    "trader_key_field": "uid",
+    "roi_sort_supported": true,
+    "roi_sort_mechanism": "platform_native",
+    "roi_sort_param": "sortBy=roi (DESC default)",
+    "window_support": {
+      "7d": { "supported": true, "param": "period=7d" },
+      "30d": { "supported": true, "param": "period=30d" },
+      "90d": { "supported": true, "param": "period=90d" }
+    },
+    "field_map": {
+      "uid": "trader_key",
+      "nickName": "display_name",
+      "avatar": "avatar_url",
+      "roi": "roi (percentage)",
+      "pnl": "pnl (USD)",
+      "winRate": "win_rate",
+      "maxDrawdown": "max_drawdown",
+      "followerCount": "followers",
+      "copyCount": "copiers"
+    },
+    "rate_limits": {
+      "estimated_rpm": 10,
+      "cloudflare_protected": true,
+      "notes": "HTX has frequent DOM/API changes. CF protected."
+    },
+    "anti_scraping": {
+      "cloudflare": true,
+      "fingerprinting": true,
+      "mitigation": "API interception preferred. DOM frequently changes structure."
+    }
+  }
+}

@@ -1,0 +1,132 @@
+{
+  "platform": "binance",
+  "market_types": ["futures", "spot", "web3"],
+  "futures": {
+    "leaderboard_endpoints": [
+      {
+        "method": "POST",
+        "url": "https://www.binance.com/bapi/futures/v3/public/future/leaderboard/getLeaderboardRank",
+        "type": "api",
+        "body": {
+          "isShared": true,
+          "isTrader": false,
+          "periodType": "MONTHLY",
+          "statisticsType": "ROI",
+          "tradeType": "PERPETUAL"
+        },
+        "notes": "periodType: WEEKLY=7d, MONTHLY=30d, QUARTERLY=90d. statisticsType: ROI|PNL. tradeType: PERPETUAL"
+      }
+    ],
+    "profile_endpoints": [
+      {
+        "method": "POST",
+        "url": "https://www.binance.com/bapi/futures/v2/public/future/leaderboard/getOtherLeaderboardBaseInfo",
+        "type": "api",
+        "body": {
+          "encryptedUid": "{trader_key}"
+        }
+      },
+      {
+        "method": "POST",
+        "url": "https://www.binance.com/bapi/futures/v1/public/future/leaderboard/getOtherPerformance",
+        "type": "api",
+        "body": {
+          "encryptedUid": "{trader_key}",
+          "tradeType": "PERPETUAL"
+        }
+      }
+    ],
+    "trader_key_field": "encryptedUid",
+    "roi_sort_supported": true,
+    "roi_sort_mechanism": "platform_native",
+    "roi_sort_param": "statisticsType=ROI (response pre-sorted DESC)",
+    "window_support": {
+      "7d": { "supported": true, "param": "periodType=WEEKLY" },
+      "30d": { "supported": true, "param": "periodType=MONTHLY" },
+      "90d": { "supported": true, "param": "periodType=QUARTERLY" }
+    },
+    "field_map": {
+      "encryptedUid": "trader_key",
+      "nickName": "display_name",
+      "userPhotoUrl": "avatar_url",
+      "roi": "roi (decimal, multiply by 100)",
+      "pnl": "pnl (USD)",
+      "rank": "platform_rank",
+      "followerCount": "followers",
+      "copyCount": "copiers"
+    },
+    "timeseries_endpoints": [
+      {
+        "method": "POST",
+        "url": "https://www.binance.com/bapi/futures/v1/public/future/leaderboard/getOtherPerformance",
+        "notes": "Returns daily ROI/PnL array in performanceRetList"
+      }
+    ],
+    "rate_limits": {
+      "estimated_rpm": 20,
+      "cloudflare_protected": true,
+      "notes": "Aggressive rate limiting, CF challenge on high frequency"
+    },
+    "anti_scraping": {
+      "cloudflare": true,
+      "fingerprinting": true,
+      "mitigation": "Use API interception via Puppeteer, rotate user-agents, 3-5s delays"
+    }
+  },
+  "spot": {
+    "leaderboard_endpoints": [
+      {
+        "method": "POST",
+        "url": "https://www.binance.com/bapi/futures/v3/public/future/leaderboard/getLeaderboardRank",
+        "type": "api",
+        "body": {
+          "isShared": true,
+          "periodType": "MONTHLY",
+          "statisticsType": "ROI",
+          "tradeType": "SPOT"
+        },
+        "notes": "Same endpoint, tradeType=SPOT"
+      }
+    ],
+    "trader_key_field": "encryptedUid",
+    "roi_sort_supported": true,
+    "roi_sort_mechanism": "platform_native",
+    "window_support": {
+      "7d": { "supported": true, "param": "periodType=WEEKLY" },
+      "30d": { "supported": true, "param": "periodType=MONTHLY" },
+      "90d": { "supported": true, "param": "periodType=QUARTERLY" }
+    },
+    "field_map": {
+      "encryptedUid": "trader_key",
+      "nickName": "display_name",
+      "roi": "roi",
+      "pnl": "pnl"
+    }
+  },
+  "web3": {
+    "leaderboard_endpoints": [
+      {
+        "method": "GET",
+        "url": "https://www.binance.com/bapi/composite/v1/public/future/external/leaderboard/list",
+        "type": "api",
+        "notes": "Web3 wallet leaderboard, limited fields"
+      }
+    ],
+    "trader_key_field": "encryptedUid",
+    "roi_sort_supported": true,
+    "roi_sort_mechanism": "platform_native",
+    "window_support": {
+      "7d": { "supported": true },
+      "30d": { "supported": true },
+      "90d": { "supported": false, "reason": "Binance Web3 leaderboard only provides 7D and 30D windows" }
+    },
+    "field_map": {
+      "encryptedUid": "trader_key",
+      "nickName": "display_name",
+      "roi": "roi",
+      "pnl": "pnl"
+    },
+    "missing_fields": ["win_rate", "max_drawdown", "sharpe_ratio", "copiers"],
+    "missing_reason": "Web3 wallet leaderboard provides minimal metrics compared to futures"
+  }
+}

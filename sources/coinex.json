@@ -1,0 +1,52 @@
+{
+  "platform": "coinex",
+  "market_types": ["futures"],
+  "futures": {
+    "leaderboard_endpoints": [
+      {
+        "method": "GET",
+        "url": "https://www.coinex.com/res/copy-trading/traders",
+        "type": "api",
+        "params": {
+          "page": 1,
+          "limit": 20,
+          "sort_by": "roi",
+          "period": "30d"
+        },
+        "notes": "period: 7d, 30d. No 90d support."
+      }
+    ],
+    "profile_endpoints": [
+      {
+        "method": "GET",
+        "url": "https://www.coinex.com/res/copy-trading/trader/{trader_key}/detail",
+        "type": "api"
+      }
+    ],
+    "trader_key_field": "trader_id",
+    "roi_sort_supported": true,
+    "roi_sort_mechanism": "platform_native",
+    "roi_sort_param": "sort_by=roi",
+    "window_support": {
+      "7d": { "supported": true, "param": "period=7d" },
+      "30d": { "supported": true, "param": "period=30d" },
+      "90d": { "supported": false, "reason": "CoinEx copy trading leaderboard only provides 7D and 30D windows. Platform confirmed via API: 90D period param returns error." }
+    },
+    "field_map": {
+      "trader_id": "trader_key",
+      "nickname": "display_name",
+      "avatar": "avatar_url",
+      "roi": "roi (percentage)",
+      "profit": "pnl",
+      "win_rate": "win_rate",
+      "max_drawdown": "max_drawdown",
+      "followers": "followers",
+      "copiers": "copiers"
+    },
+    "rate_limits": {
+      "estimated_rpm": 15,
+      "cloudflare_protected": false,
+      "notes": "Relatively open API"
+    }
+  }
+}

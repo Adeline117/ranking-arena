@@ -1,0 +1,52 @@
+{
+  "platform": "bitmart",
+  "market_types": ["futures"],
+  "futures": {
+    "leaderboard_endpoints": [
+      {
+        "method": "GET",
+        "url": "https://www.bitmart.com/api/copy-trade/v1/public/trader/list",
+        "type": "api",
+        "params": {
+          "page": 1,
+          "size": 20,
+          "sortBy": "roi",
+          "period": "30d"
+        },
+        "notes": "period: 7d, 30d. No 90d confirmed."
+      }
+    ],
+    "profile_endpoints": [
+      {
+        "method": "GET",
+        "url": "https://www.bitmart.com/api/copy-trade/v1/public/trader/detail?traderId={trader_key}",
+        "type": "api"
+      }
+    ],
+    "trader_key_field": "traderId",
+    "roi_sort_supported": true,
+    "roi_sort_mechanism": "platform_native",
+    "roi_sort_param": "sortBy=roi",
+    "window_support": {
+      "7d": { "supported": true, "param": "period=7d" },
+      "30d": { "supported": true, "param": "period=30d" },
+      "90d": { "supported": false, "reason": "BitMart copy trading only provides 7D and 30D leaderboard views. No 90D period available via API or web UI." }
+    },
+    "field_map": {
+      "traderId": "trader_key",
+      "nickname": "display_name",
+      "avatar": "avatar_url",
+      "roi": "roi (percentage)",
+      "pnl": "pnl",
+      "followers": "followers",
+      "copiers": "copiers"
+    },
+    "missing_fields": ["win_rate", "max_drawdown", "sharpe_ratio"],
+    "missing_reason": "BitMart leaderboard API does not provide win_rate or drawdown in list endpoint. May be available in detail endpoint.",
+    "rate_limits": {
+      "estimated_rpm": 10,
+      "cloudflare_protected": true,
+      "notes": "Aggressive CF, limited API access"
+    }
+  }
+}
