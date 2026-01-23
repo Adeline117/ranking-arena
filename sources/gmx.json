@@ -1,87 +1,113 @@
 {
   "platform": "gmx",
-  "market_type": "perp",
-  "leaderboard_endpoints": [
-    {
-      "url": "https://subgraph.satsuma-prod.com/3b2ced13c8d9/gmx/synthetics-arbitrum-stats/api",
-      "method": "POST",
-      "headers": {
-        "Content-Type": "application/json"
+  "market_types": ["perp"],
+  "perp": {
+    "leaderboard_endpoints": [
+      {
+        "method": "POST",
+        "url": "https://subgraph.satsuma-prod.com/{api_key}/gmx/synthetics-arbitrum-stats/api",
+        "type": "graphql",
+        "body": {
+          "query": "{ periodAccountStats(first: 100, orderBy: realizedPnl, orderDirection: desc, where: { period: \"30d\" }) { id account realizedPnl maxCapital volume losses wins } }"
+        },
+        "notes": "Subgraph API (The Graph). period: '7d', '30d', '90d', 'total'. orderBy: realizedPnl, volume. ROI = realizedPnl / maxCapital."
       },
-      "body_template": {
-        "query": "{ periodAccountStats(first: 100, orderBy: totalPnlAfterFees, orderDirection: desc, where: { period: \"total\", totalTrades_gt: 0 }) { id account totalPnlAfterFees totalCollateral totalTrades winCount lossCount maxCollateral timestamp } }"
+      {
+        "method": "POST",
+        "url": "https://subgraph.satsuma-prod.com/3b2ced13c8d9/gmx/synthetics-arbitrum-stats/api",
+        "type": "graphql",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body_template": {
+          "query": "{ periodAccountStats(first: 100, orderBy: totalPnlAfterFees, orderDirection: desc, where: { period: \"total\", totalTrades_gt: 0 }) { id account totalPnlAfterFees totalCollateral totalTrades winCount lossCount maxCollateral timestamp } }"
+        },
+        "pagination": {
+          "type": "offset",
+          "page_size": 100,
+          "max_pages": 10,
+          "param_name": "first"
+        },
+        "response_path": "data.periodAccountStats",
+        "notes": "Alternative query with totalPnlAfterFees ordering"
       },
-      "pagination": {
-        "type": "offset",
-        "page_size": 100,
-        "max_pages": 10,
-        "param_name": "first"
-      },
-      "response_path": "data.periodAccountStats"
+      {
+        "method": "GET",
+        "url": "https://arbitrum-api.gmxinfra.io/leaderboard/pnl?period=30d&limit=100",
+        "type": "api",
+        "notes": "Alternative REST API endpoint for GMX leaderboard data"
+      }
+    ],
+    "profile_endpoints": [
+      {
+        "method": "POST",
+        "url": "https://subgraph.satsuma-prod.com/{api_key}/gmx/synthetics-arbitrum-stats/api",
+        "type": "graphql",
+        "body": {
+          "query": "{ accountStats(where: { account: \"{trader_key}\" }) { account realizedPnl volume losses wins maxCapital } }"
+        }
+      }
+    ],
+    "trader_key_field": "0x... (Ethereum/Arbitrum address)",
+    "roi_sort_supported": false,
+    "roi_sort_mechanism": "arena_computed",
+    "roi_sort_notes": "GMX subgraph sorts by absolute PnL. ROI = realizedPnl / maxCapital, computed client-side, then sorted DESC.",
+    "window_support": {
+      "7d": { "supported": true, "param": "period: '7d' in GraphQL where clause" },
+      "30d": { "supported": true, "param": "period: '30d'" },
+      "90d": { "supported": true, "param": "period: '90d'" }
     },
-    {
-      "url": "https://arbitrum-api.gmxinfra.io/leaderboard/positions",
-      "method": "GET",
-      "headers": {},
-      "query_params": {
-        "period": "7d",
-        "limit": "100"
-      },
-      "pagination": {
-        "type": "offset",
-        "page_size": 100,
-        "max_pages": 1,
-        "param_name": "limit"
-      },
-      "response_path": "data",
-      "window_param": "period"
-    }
-  ],
-  "profile_endpoints": [
-    {
-      "url": "https://subgraph.satsuma-prod.com/3b2ced13c8d9/gmx/synthetics-arbitrum-stats/api",
-      "method": "POST",
-      "headers": {
-        "Content-Type": "application/json"
-      },
-      "body_template": {
-        "query": "{ periodAccountStats(where: { account: \"\", period: \"total\" }, first: 1) { totalPnlAfterFees totalCollateral totalTrades winCount lossCount maxCollateral } }"
-      },
-      "response_path": "data.periodAccountStats"
-    }
-  ],
-  "window_support": ["7d", "30d", "90d"],
-  "rate_limit_hint": {
-    "rpm": 30,
-    "concurrent": 3,
-    "delay_ms": 2000
-  },
-  "field_map": {
-    "roi_pct": "_calculated_from_pnl_and_collateral",
-    "pnl_usd": "totalPnlAfterFees",
-    "win_rate": "_calculated_from_winCount_lossCount",
-    "max_drawdown": "",
-    "trades_count": "totalTrades",
-    "followers": "",
-    "copiers": ""
-  },
-  "roi_sort_supported": false,
-  "roi_sort_method": "ui_state",
-  "proof": [
-    {
-      "url": "https://subgraph.satsuma-prod.com/3b2ced13c8d9/gmx/synthetics-arbitrum-stats/api",
-      "request_path": "/3b2ced13c8d9/gmx/synthetics-arbitrum-stats/api",
-      "method": "POST",
-      "response_fields_sample": {
-        "data.periodAccountStats[0].account": "0x1234567890abcdef1234567890abcdef12345678",
-        "data.periodAccountStats[0].totalPnlAfterFees": "12345678901234567890123456789012",
-        "data.periodAccountStats[0].totalCollateral": "98765432109876543210987654321098",
-        "data.periodAccountStats[0].totalTrades": 156,
-        "data.periodAccountStats[0].winCount": 98,
-        "data.periodAccountStats[0].lossCount": 58,
-        "data.periodAccountStats[0].maxCollateral": "50000000000000000000000000000000"
-      },
-      "discovered_at": "2024-01-15T00:00:00Z"
-    }
-  ]
+    "field_map": {
+      "account": "trader_key (0x address)",
+      "realizedPnl": "pnl (wei, divide by 10^30 for USD)",
+      "totalPnlAfterFees": "pnl (alt, wei format)",
+      "maxCapital": "used for ROI computation: roi = realizedPnl / maxCapital * 100",
+      "totalCollateral": "maxCapital (alt)",
+      "wins": "used for win_rate computation: win_rate = wins / (wins + losses) * 100",
+      "winCount": "wins (alt)",
+      "losses": "used for win_rate computation",
+      "lossCount": "losses (alt)",
+      "volume": "trades_count proxy",
+      "totalTrades": "trades_count (alt)"
+    },
+    "missing_fields": ["display_name", "avatar_url", "followers", "copiers", "aum", "max_drawdown", "sharpe_ratio"],
+    "missing_reason": "GMX is on-chain perpetual DEX. No user profiles, no copy trading. Addresses are pseudonymous. Max drawdown requires historical equity reconstruction from events.",
+    "timeseries_endpoints": [
+      {
+        "method": "POST",
+        "url": "https://subgraph.satsuma-prod.com/{api_key}/gmx/synthetics-arbitrum-stats/api",
+        "type": "graphql",
+        "body": {
+          "query": "{ periodAccountStats(where: { account: \"{trader_key}\", period_starts_with: \"1d\" }, orderBy: period, orderDirection: asc) { period realizedPnl maxCapital } }"
+        },
+        "notes": "Daily period stats for equity curve. Period format: '1d:TIMESTAMP'"
+      }
+    ],
+    "rate_limits": {
+      "estimated_rpm": 30,
+      "cloudflare_protected": false,
+      "notes": "The Graph subgraph. Free tier: 100k queries/month. Paid: higher limits."
+    },
+    "anti_scraping": {
+      "cloudflare": false,
+      "fingerprinting": false,
+      "mitigation": "Public subgraph, standard GraphQL queries"
+    },
+    "proof": [
+      {
+        "url": "https://subgraph.satsuma-prod.com/3b2ced13c8d9/gmx/synthetics-arbitrum-stats/api",
+        "method": "POST",
+        "response_fields_sample": {
+          "data.periodAccountStats[0].account": "0x1234567890abcdef1234567890abcdef12345678",
+          "data.periodAccountStats[0].totalPnlAfterFees": "12345678901234567890123456789012",
+          "data.periodAccountStats[0].totalCollateral": "98765432109876543210987654321098",
+          "data.periodAccountStats[0].totalTrades": 156,
+          "data.periodAccountStats[0].winCount": 98,
+          "data.periodAccountStats[0].lossCount": 58,
+          "data.periodAccountStats[0].maxCollateral": "50000000000000000000000000000000"
+        },
+        "discovered_at": "2024-01-15T00:00:00Z"
+      }
+    ]
+  }
 }

@@ -1,91 +1,131 @@
 {
   "platform": "mexc",
-  "market_type": "futures",
-  "leaderboard_endpoints": [
-    {
-      "url": "https://www.mexc.com/api/platform/copy-trade/trader/list",
-      "method": "GET",
-      "headers": {
-        "Referer": "https://www.mexc.com/copy-trading",
-        "Origin": "https://www.mexc.com"
+  "market_types": ["futures"],
+  "futures": {
+    "leaderboard_endpoints": [
+      {
+        "method": "GET",
+        "url": "https://futures.mexc.com/api/v1/private/account/assets/copy-trading/trader/list",
+        "type": "api",
+        "params": {
+          "page": 1,
+          "pageSize": 20,
+          "sortField": "yield",
+          "sortType": "DESC",
+          "timeType": 2
+        },
+        "notes": "sortField: yield=ROI, pnl=PnL. timeType: 1=7D, 2=30D, 3=90D"
       },
-      "query_params": {
-        "page": "1",
-        "pageSize": "20",
-        "sortBy": "roi",
-        "sortType": "DESC",
-        "periodDays": "7"
+      {
+        "url": "https://www.mexc.com/api/platform/copy-trade/trader/list",
+        "method": "GET",
+        "type": "api",
+        "headers": {
+          "Referer": "https://www.mexc.com/copy-trading",
+          "Origin": "https://www.mexc.com"
+        },
+        "query_params": {
+          "page": "1",
+          "pageSize": "20",
+          "sortBy": "roi",
+          "sortType": "DESC",
+          "periodDays": "7"
+        },
+        "pagination": {
+          "type": "page",
+          "page_size": 20,
+          "max_pages": 5,
+          "param_name": "page"
+        },
+        "response_path": "data.list",
+        "window_param": "periodDays",
+        "sort_param": "sortBy",
+        "notes": "Alternative platform API endpoint"
+      }
+    ],
+    "profile_endpoints": [
+      {
+        "method": "GET",
+        "url": "https://futures.mexc.com/api/v1/private/account/assets/copy-trading/trader/detail?uid={trader_key}",
+        "type": "api"
       },
-      "pagination": {
-        "type": "page",
-        "page_size": 20,
-        "max_pages": 5,
-        "param_name": "page"
+      {
+        "url": "https://www.mexc.com/api/platform/copy-trade/trader/detail",
+        "method": "GET",
+        "type": "api",
+        "headers": {
+          "Origin": "https://www.mexc.com"
+        },
+        "query_params": {
+          "traderId": ""
+        },
+        "response_path": "data"
       },
-      "response_path": "data.list",
-      "window_param": "periodDays",
-      "sort_param": "sortBy"
-    }
-  ],
-  "profile_endpoints": [
-    {
-      "url": "https://www.mexc.com/api/platform/copy-trade/trader/detail",
-      "method": "GET",
-      "headers": {
-        "Origin": "https://www.mexc.com"
-      },
-      "query_params": {
-        "traderId": ""
-      },
-      "response_path": "data"
+      {
+        "url": "https://www.mexc.com/api/platform/copy-trade/trader/performance",
+        "method": "GET",
+        "type": "api",
+        "headers": {
+          "Origin": "https://www.mexc.com"
+        },
+        "query_params": {
+          "traderId": "",
+          "periodDays": "7"
+        },
+        "response_path": "data"
+      }
+    ],
+    "trader_key_field": "uid",
+    "roi_sort_supported": true,
+    "roi_sort_mechanism": "platform_native",
+    "roi_sort_param": "sortField=yield&sortType=DESC",
+    "window_support": {
+      "7d": { "supported": true, "param": "timeType=1" },
+      "30d": { "supported": true, "param": "timeType=2" },
+      "90d": { "supported": true, "param": "timeType=3" }
     },
-    {
-      "url": "https://www.mexc.com/api/platform/copy-trade/trader/performance",
-      "method": "GET",
-      "headers": {
-        "Origin": "https://www.mexc.com"
-      },
-      "query_params": {
-        "traderId": "",
-        "periodDays": "7"
-      },
-      "response_path": "data"
-    }
-  ],
-  "window_support": ["7d", "30d", "90d"],
-  "rate_limit_hint": {
-    "rpm": 15,
-    "concurrent": 1,
-    "delay_ms": 4000
-  },
-  "field_map": {
-    "roi_pct": "roi",
-    "pnl_usd": "pnl",
-    "win_rate": "winRate",
-    "max_drawdown": "maxDrawdown",
-    "trades_count": "totalOrder",
-    "followers": "followerCount",
-    "copiers": "copierCount"
-  },
-  "roi_sort_supported": true,
-  "roi_sort_method": "query_param",
-  "proof": [
-    {
-      "url": "https://www.mexc.com/api/platform/copy-trade/trader/list?page=1&pageSize=20&sortBy=roi&sortType=DESC&periodDays=7",
-      "request_path": "/api/platform/copy-trade/trader/list",
-      "method": "GET",
-      "response_fields_sample": {
-        "data.list[0].traderId": "mexc_trader_001",
-        "data.list[0].nickName": "MexcTrader",
-        "data.list[0].roi": 0.5432,
-        "data.list[0].pnl": 23456.78,
-        "data.list[0].winRate": 0.69,
-        "data.list[0].maxDrawdown": 0.22,
-        "data.list[0].totalOrder": 178,
-        "data.list[0].followerCount": 650,
-        "data.list[0].copierCount": 320
-      },
-      "discovered_at": "2024-01-15T00:00:00Z"
-    }
-  ]
+    "field_map": {
+      "uid": "trader_key",
+      "traderId": "trader_key (alt)",
+      "nickname": "display_name",
+      "nickName": "display_name (alt)",
+      "avatar": "avatar_url",
+      "yield": "roi (percentage)",
+      "roi": "roi (alt)",
+      "pnl": "pnl (USD)",
+      "winRate": "win_rate",
+      "maxRetrace": "max_drawdown",
+      "maxDrawdown": "max_drawdown (alt)",
+      "followerCount": "followers",
+      "copyCount": "copiers",
+      "copierCount": "copiers (alt)",
+      "aum": "aum",
+      "totalOrder": "trades_count"
+    },
+    "missing_fields": ["sharpe_ratio", "sortino_ratio"],
+    "missing_reason": "MEXC does not provide risk-adjusted ratios in leaderboard API",
+    "rate_limits": {
+      "estimated_rpm": 15,
+      "cloudflare_protected": true,
+      "notes": "Moderate rate limiting, CF protection"
+    },
+    "proof": [
+      {
+        "url": "https://www.mexc.com/api/platform/copy-trade/trader/list?page=1&pageSize=20&sortBy=roi&sortType=DESC&periodDays=7",
+        "method": "GET",
+        "response_fields_sample": {
+          "data.list[0].traderId": "mexc_trader_001",
+          "data.list[0].nickName": "MexcTrader",
+          "data.list[0].roi": 0.5432,
+          "data.list[0].pnl": 23456.78,
+          "data.list[0].winRate": 0.69,
+          "data.list[0].maxDrawdown": 0.22,
+          "data.list[0].totalOrder": 178,
+          "data.list[0].followerCount": 650,
+          "data.list[0].copierCount": 320
+        },
+        "discovered_at": "2024-01-15T00:00:00Z"
+      }
+    ]
+  }
 }
