@@ -10,7 +10,6 @@ import { Box, Text } from '@/app/components/base'
 import Avatar from '@/app/components/ui/Avatar'
 import { useToast } from '@/app/components/ui/Toast'
 import { getCsrfHeaders } from '@/lib/api/client'
-<<<<<<< HEAD
 import { getProfileUrl } from '@/lib/utils/profile-navigation'
 import {
   MessageErrorCode,
@@ -21,9 +20,6 @@ import {
 } from '@/lib/auth/client'
 import ChatSettingsDrawer from '@/app/components/Features/ChatSettingsDrawer'
 import ChatSearchOverlay from '@/app/components/Features/ChatSearchOverlay'
-=======
-import { useRealtime } from '@/lib/hooks/useRealtime'
->>>>>>> origin/claude/messaging-qa-ux-improvements-rKSSV
 
 type MessageStatus = 'sending' | 'sent' | 'failed'
 
@@ -60,7 +56,6 @@ export default function ConversationPage({ params }: { params: { conversationId:
   const [newMessage, setNewMessage] = useState('')
   const [sending, setSending] = useState(false)
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'reconnecting'>('connected')
-<<<<<<< HEAD
   const [accessToken, setAccessToken] = useState<string | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
@@ -71,12 +66,6 @@ export default function ConversationPage({ params }: { params: { conversationId:
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
   const messageRefs = useRef<Record<string, HTMLDivElement | null>>({})
-=======
-  const [hasMore, setHasMore] = useState(false)
-  const [loadingMore, setLoadingMore] = useState(false)
-  const messagesEndRef = useRef<HTMLDivElement>(null)
-  const inputRef = useRef<HTMLTextAreaElement>(null)
->>>>>>> origin/claude/messaging-qa-ux-improvements-rKSSV
 
   // 注入 spin 动画样式
   useEffect(() => {
@@ -177,7 +166,6 @@ export default function ConversationPage({ params }: { params: { conversationId:
   const loadMessages = useCallback(async (uid: string, convId: string, token?: string) => {
     try {
       setLoading(true)
-<<<<<<< HEAD
 
       // 确保有有效 token
       let authToken = token
@@ -219,27 +207,12 @@ export default function ConversationPage({ params }: { params: { conversationId:
 
       if (!res.ok) {
         showToast(data.error || '加载消息失败', 'error')
-=======
-      const headers: Record<string, string> = {}
-      if (token) headers['Authorization'] = `Bearer ${token}`
-
-      const res = await fetch(`/api/messages?conversationId=${convId}`, { headers })
-      const data = await res.json()
-
-      if (data.error) {
-        showToast(data.error, 'error')
->>>>>>> origin/claude/messaging-qa-ux-improvements-rKSSV
         router.push('/messages')
         return
       }
 
       if (data.messages) {
         setMessages(data.messages)
-<<<<<<< HEAD
-=======
-        setHasMore(!!data.has_more)
-
->>>>>>> origin/claude/messaging-qa-ux-improvements-rKSSV
         if (data.otherUser) {
           setOtherUser(data.otherUser)
         }
@@ -362,31 +335,13 @@ export default function ConversationPage({ params }: { params: { conversationId:
 
     setSending(true)
     try {
-<<<<<<< HEAD
       let result = await sendMessageRequest(otherUser.id, content, auth.accessToken)
-=======
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-        ...getCsrfHeaders()
-      }
-      if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`
-
-      const res = await fetch('/api/messages', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          receiverId: otherUser.id,
-          content
-        })
-      })
->>>>>>> origin/claude/messaging-qa-ux-improvements-rKSSV
 
       // 如果 401，尝试刷新 token 后重试一次
       if (result.status === 401) {
         const refreshed = await refreshAuthToken()
         if (refreshed) {
 
-<<<<<<< HEAD
           result = await sendMessageRequest(otherUser.id, content, refreshed.accessToken)
         } else {
           // 刷新失败，用户需要重新登录
@@ -404,9 +359,6 @@ export default function ConversationPage({ params }: { params: { conversationId:
       if (!result.ok) {
         const errorCode = resolveErrorCode(result.status, result.data as { error_code?: string; error?: string })
         const errorMsg = getErrorMessage(errorCode, result.data.error as string)
-=======
-      if (!res.ok) {
->>>>>>> origin/claude/messaging-qa-ux-improvements-rKSSV
         setMessages(prev => prev.map(m =>
           m._tempId === tempId
             ? { ...m, _status: 'failed' as MessageStatus, _errorCode: errorCode, _errorMessage: errorMsg }
@@ -416,27 +368,18 @@ export default function ConversationPage({ params }: { params: { conversationId:
         return
       }
 
-<<<<<<< HEAD
       if (result.data.message) {
         // Replace optimistic message with server-confirmed message
-=======
-      if (data.message) {
->>>>>>> origin/claude/messaging-qa-ux-improvements-rKSSV
         setMessages(prev => prev.map(m =>
           m._tempId === tempId
             ? { ...(result.data.message as Message), _status: 'sent' as MessageStatus }
             : m
         ))
       }
-<<<<<<< HEAD
     } catch {
       // Network error
       const errorCode = MessageErrorCode.NETWORK_ERROR
       const errorMsg = getErrorMessage(errorCode)
-=======
-    } catch (error) {
-      console.error('Error sending message:', error)
->>>>>>> origin/claude/messaging-qa-ux-improvements-rKSSV
       setMessages(prev => prev.map(m =>
         m._tempId === tempId
           ? { ...m, _status: 'failed' as MessageStatus, _errorCode: errorCode, _errorMessage: errorMsg }
@@ -451,7 +394,6 @@ export default function ConversationPage({ params }: { params: { conversationId:
   const handleRetry = async (failedMsg: Message) => {
     if (!otherUser) return
 
-<<<<<<< HEAD
     // 重试前先验证登录态
     const auth = await getAuthSession()
     if (!auth) {
@@ -473,8 +415,6 @@ export default function ConversationPage({ params }: { params: { conversationId:
     }
 
     // Update status to sending, clear previous error
-=======
->>>>>>> origin/claude/messaging-qa-ux-improvements-rKSSV
     setMessages(prev => prev.map(m =>
       m.id === failedMsg.id
         ? { ...m, _status: 'sending' as MessageStatus, _errorCode: undefined, _errorMessage: undefined }
@@ -482,24 +422,7 @@ export default function ConversationPage({ params }: { params: { conversationId:
     ))
 
     try {
-<<<<<<< HEAD
       let result = await sendMessageRequest(otherUser.id, failedMsg.content, currentAuth.accessToken)
-=======
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-        ...getCsrfHeaders()
-      }
-      if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`
-
-      const res = await fetch('/api/messages', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          receiverId: otherUser.id,
-          content: failedMsg.content
-        })
-      })
->>>>>>> origin/claude/messaging-qa-ux-improvements-rKSSV
 
       // 如果 401，尝试刷新 token 后重试一次
       if (result.status === 401) {
