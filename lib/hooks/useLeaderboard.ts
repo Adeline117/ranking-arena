@@ -143,7 +143,7 @@ export function useRankings(options: UseRankingsOptions) {
  * Cached for 5 minutes, auto-refreshes every 5 minutes.
  */
 export function useTraderDetail(traderId: string | null) {
-  const url = traderId ? `/api/trader/${encodeURIComponent(traderId)}` : null
+  const url = traderId ? `/api/trader/by-id/${encodeURIComponent(traderId)}` : null
 
   const { data, error, isLoading, mutate } = useSWR<TraderDetailResponse>(
     url,
@@ -172,7 +172,7 @@ export function useTraderDetail(traderId: string | null) {
  * Returns job status and estimated wait time.
  */
 export function useTraderRefresh(traderId: string | null) {
-  const url = traderId ? `/api/trader/${encodeURIComponent(traderId)}/refresh` : null
+  const url = traderId ? `/api/trader/by-id/${encodeURIComponent(traderId)}/refresh` : null
 
   const { trigger, data, error, isMutating } = useSWRMutation<RefreshResponse, Error, string | null, Record<string, unknown> | undefined>(
     url,
