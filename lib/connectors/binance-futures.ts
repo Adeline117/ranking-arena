@@ -73,12 +73,6 @@ const WINDOW_TO_PERIOD: Record<RankingWindow, string> = {
   '90d': 'QUARTERLY',
 };
 
-const WINDOW_TO_DAYS: Record<RankingWindow, number> = {
-  '7d': 7,
-  '30d': 30,
-  '90d': 90,
-};
-
 // ============================================
 // Connector Implementation
 // ============================================

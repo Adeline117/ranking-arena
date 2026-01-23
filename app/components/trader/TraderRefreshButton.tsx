@@ -1,165 +1,100 @@
 'use client'
 
-/**
- * Trader Refresh Button
- * Calls POST /api/trader/:platform/:market_type/:trader_key/refresh
- * Enqueues a background refresh job (non-blocking)
- */
-
-import { useState, useCallback } from 'react'
+import { tokens } from '@/lib/design-tokens'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 interface TraderRefreshButtonProps {
-  platform: string
-  market_type: string
-  trader_key: string
-  lastUpdated?: string | null
+  isRefreshing: boolean
+  isStale: boolean
+  onRefresh: () => void
+  refreshError: string | null
+  updatedAt: string | null
+  refreshJob?: {
+    status: string
+    attempts: number
+  } | null
 }
 
-export function TraderRefreshButton({
-  platform,
-  market_type,
-  trader_key,
-  lastUpdated,
+export default function TraderRefreshButton({
+  isRefreshing,
+  isStale,
+  onRefresh,
+  refreshError,
+  updatedAt,
+  refreshJob,
 }: TraderRefreshButtonProps) {
-  const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
-  const [message, setMessage] = useState<string | null>(null)
+  const { language } = useLanguage()
+  const isZh = language === 'zh'
 
-  const handleRefresh = useCallback(async () => {
-    if (status === 'loading') return
-
-    setStatus('loading')
-    setMessage(null)
-
-    try {
-      const response = await fetch(
-        `/api/trader/${platform}/${market_type}/${trader_key}/refresh`,
-        { method: 'POST' }
-      )
-
-      const data = await response.json()
-
-      if (response.ok) {
-        setStatus('success')
-        setMessage(data.message || 'Refresh queued')
-        // Reset after 5 seconds
-        setTimeout(() => {
-          setStatus('idle')
-          setMessage(null)
-        }, 5000)
-      } else if (response.status === 503) {
-        setStatus('error')
-        setMessage(data.message || 'Platform temporarily unavailable')
-      } else {
-        setStatus('error')
-        setMessage(data.error || 'Refresh failed')
-      }
-    } catch {
-      setStatus('error')
-      setMessage('Network error')
+  const formatTimeAgo = (dateStr: string): string => {
+    const seconds = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000)
+    if (seconds < 60) return isZh ? '刚刚' : 'Just now'
+    if (seconds < 3600) {
+      const mins = Math.floor(seconds / 60)
+      return isZh ? `${mins} 分钟前` : `${mins}m ago`
     }
-  }, [platform, market_type, trader_key, status])
+    if (seconds < 86400) {
+      const hrs = Math.floor(seconds / 3600)
+      return isZh ? `${hrs} 小时前` : `${hrs}h ago`
+    }
+    const days = Math.floor(seconds / 86400)
+    return isZh ? `${days} 天前` : `${days}d ago`
+  }
 
-  // Calculate age
-  const ageText = lastUpdated ? getAgeText(lastUpdated) : null
+  const isJobActive = refreshJob && (refreshJob.status === 'pending' || refreshJob.status === 'running')
+  const showSpinner = isRefreshing || isJobActive
 
   return (
-    <div className="flex items-center gap-2">
-      {ageText && (
-        <span className="text-xs text-gray-400">
-          Updated {ageText}
+    <div className="flex items-center gap-2 text-sm">
+      {updatedAt && (
+        <span style={{ color: tokens.colors.text.secondary }}>
+          {isZh ? '更新于' : 'Updated'} {formatTimeAgo(updatedAt)}
         </span>
       )}
+
+      {isStale && !showSpinner && (
+        <span
+          className="px-2 py-0.5 rounded text-xs font-medium"
+          style={{
+            backgroundColor: `${tokens.colors.accent.warning}20`,
+            color: tokens.colors.accent.warning,
+          }}
+        >
+          {isZh ? '数据过期' : 'Stale'}
+        </span>
+      )}
+
       <button
-        onClick={handleRefresh}
-        disabled={status === 'loading'}
-        className={`
-          inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium
-          transition-all duration-200
-          ${status === 'loading'
-            ? 'bg-gray-700 text-gray-400 cursor-wait'
-            : status === 'success'
-              ? 'bg-green-900/30 text-green-400 border border-green-500/30'
-              : status === 'error'
-                ? 'bg-red-900/30 text-red-400 border border-red-500/30'
-                : 'bg-gray-800 text-gray-300 border border-gray-600 hover:border-blue-500/50 hover:text-blue-400'
-          }
-        `}
-        title={message || 'Refresh trader data'}
+        onClick={onRefresh}
+        disabled={!!showSpinner}
+        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+        style={{
+          backgroundColor: showSpinner ? tokens.colors.bg.secondary : tokens.colors.accent.brand + '15',
+          color: showSpinner ? tokens.colors.text.secondary : tokens.colors.accent.brand,
+          border: `1px solid ${showSpinner ? tokens.colors.border.primary : tokens.colors.accent.brand + '30'}`,
+        }}
       >
-        {status === 'loading' ? (
+        {showSpinner ? (
           <>
-            <RefreshSpinIcon />
-            Refreshing...
-          </>
-        ) : status === 'success' ? (
-          <>
-            <CheckIcon />
-            Queued
-          </>
-        ) : status === 'error' ? (
-          <>
-            <ErrorIcon />
-            Failed
+            <svg className="animate-spin h-3.5 w-3.5" viewBox="0 0 24 24" fill="none">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+            {isZh ? '刷新中...' : 'Refreshing...'}
           </>
         ) : (
           <>
-            <RefreshIcon />
-            Refresh
+            <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            {isZh ? '刷新数据' : 'Refresh'}
           </>
         )}
       </button>
-      {message && status === 'error' && (
-        <span className="text-xs text-red-400">{message}</span>
+
+      {refreshError && (
+        <span className="text-xs" style={{ color: tokens.colors.accent.error }}>{refreshError}</span>
       )}
     </div>
-  )
-}
-
-function getAgeText(isoDate: string): string {
-  const ms = Date.now() - new Date(isoDate).getTime()
-  const minutes = Math.floor(ms / 60000)
-  if (minutes < 1) return 'just now'
-  if (minutes < 60) return `${minutes}m ago`
-  const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `${hours}h ago`
-  const days = Math.floor(hours / 24)
-  return `${days}d ago`
-}
-
-// Inline icons
-function RefreshIcon() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M21 2v6h-6" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M3 12a9 9 0 0 1 15-6.7L21 8" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M3 22v-6h6" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M21 12a9 9 0 0 1-15 6.7L3 16" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  )
-}
-
-function RefreshSpinIcon() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="animate-spin">
-      <circle cx="12" cy="12" r="10" strokeDasharray="60" strokeDashoffset="20" />
-    </svg>
-  )
-}
-
-function CheckIcon() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M20 6L9 17l-5-5" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  )
-}
-
-function ErrorIcon() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <circle cx="12" cy="12" r="10" />
-      <line x1="15" y1="9" x2="9" y2="15" />
-      <line x1="9" y1="9" x2="15" y2="15" />
-    </svg>
   )
 }
