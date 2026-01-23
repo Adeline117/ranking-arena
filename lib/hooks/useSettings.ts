@@ -158,9 +158,10 @@ export function useAppSettings() {
     
     // 应用主题
     applyTheme(loaded.theme)
-    
+
     // 应用语言
     setLanguage(loaded.language)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // 应用主题
@@ -409,8 +410,9 @@ export interface SettingSelectProps<T extends string> {
   disabled?: boolean
 }
 
-export default {
+const settingsHooks = {
   useAppSettings,
   useNotificationSettings,
   usePrivacySettings,
 }
+export default settingsHooks

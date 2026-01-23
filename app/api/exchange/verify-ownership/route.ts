@@ -28,10 +28,10 @@ function getSupabaseAdmin() {
  * 注意：Binance API可能不直接返回账号ID，这里我们需要通过其他方式验证
  * 一个可行的方法是：通过获取用户的交易数据，然后与交易员ID对比
  */
-async function getBinanceAccountId(config: BinanceConfig): Promise<string | null> {
+async function _getBinanceAccountId(config: BinanceConfig): Promise<string | null> {
   try {
     // 获取账户信息
-    const account = await getBinanceAccount(config)
+    const _account = await getBinanceAccount(config)
     
     // Binance API不直接返回账号ID，我们需要通过其他方式获取
     // 这里我们可以尝试通过Copy Trading API获取
@@ -114,8 +114,8 @@ export async function POST(req: NextRequest) {
     
     try {
       // 验证API凭证
-      const account = await getBinanceAccount(config)
-      
+      const _account = await getBinanceAccount(config)
+
       // 如果API调用成功，说明用户拥有该账号
       // 但是我们需要更精确的验证：对比交易员ID
       

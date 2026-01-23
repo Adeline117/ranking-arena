@@ -87,10 +87,10 @@ export default function RankingTableCompact(props: {
                     background: tokens.colors.bg.primary,
                     transition: `background-color ${tokens.transition.fast}`,
                   }}
-                  onMouseEnter={(e) => {
+                  onMouseEnter={(e: React.MouseEvent<HTMLTableRowElement>) => {
                     e.currentTarget.style.background = tokens.colors.bg.secondary
                   }}
-                  onMouseLeave={(e) => {
+                  onMouseLeave={(e: React.MouseEvent<HTMLTableRowElement>) => {
                     e.currentTarget.style.background = tokens.colors.bg.primary
                   }}
                 >

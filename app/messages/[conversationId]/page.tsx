@@ -125,6 +125,7 @@ export default function ConversationPage({ params }: { params: { conversationId:
     return () => {
       subscription.unsubscribe()
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conversationId])
 
   // Load conversation member settings (remark, muted, pinned, cleared_before)

@@ -121,7 +121,7 @@ export async function checkRateLimit(
     const identifier = getIdentifier(request, userId)
     
     const limiter = getRateLimiter(finalConfig, redisClient)
-    const { success, limit, remaining, reset } = await limiter.limit(identifier)
+    const { success, limit, remaining: _remaining, reset } = await limiter.limit(identifier)
     
     if (!success) {
       const retryAfter = Math.ceil((reset - Date.now()) / 1000)

@@ -3,7 +3,7 @@
  * Pro 会员功能：批量获取多个交易员数据用于对比
  */
 
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import {
   getSupabaseAdmin,
   requireAuth,
@@ -66,7 +66,7 @@ export async function GET(request: NextRequest) {
     }
 
     // 检查配额
-    const limits = getFeatureLimits(tier)
+    const _limits = getFeatureLimits(tier)
     // 可以在这里检查 comparisonReportsPerMonth 配额
 
     // 获取查询参数

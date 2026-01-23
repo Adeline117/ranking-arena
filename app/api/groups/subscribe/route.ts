@@ -3,7 +3,7 @@
  * 处理付费群组的订阅操作
  */
 
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import {
   getSupabaseAdmin,
   requireAuth,

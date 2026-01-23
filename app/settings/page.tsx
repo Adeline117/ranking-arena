@@ -223,6 +223,7 @@ function SettingsContent() {
   const [notifyComment, setNotifyComment] = useState(true)
   const [notifyMention, setNotifyMention] = useState(true)
   const [notifyMessage, setNotifyMessage] = useState(true)
+  const [savingNotifications, setSavingNotifications] = useState(false)
 
   // Privacy settings
   const [showFollowers, setShowFollowers] = useState(true)
@@ -714,6 +715,36 @@ function SettingsContent() {
       showToast(msg, 'error')
     } finally {
       setSavingEmail(false)
+    }
+  }
+
+  // 保存通知偏好
+  const handleSaveNotifications = async () => {
+    if (!userId) return
+    setSavingNotifications(true)
+
+    try {
+      const { error } = await supabase
+        .from('user_profiles')
+        .update({
+          notify_follow: notifyFollow,
+          notify_like: notifyLike,
+          notify_comment: notifyComment,
+          notify_mention: notifyMention,
+          notify_message: notifyMessage,
+        })
+        .eq('id', userId)
+
+      if (error) {
+        showToast('保存失败，请重试', 'error')
+        return
+      }
+
+      showToast('通知偏好已保存', 'success')
+    } catch {
+      showToast('保存失败', 'error')
+    } finally {
+      setSavingNotifications(false)
     }
   }
 

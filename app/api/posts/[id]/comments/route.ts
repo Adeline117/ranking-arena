@@ -76,7 +76,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
   }
 }
 
-export async function DELETE(request: NextRequest, context: RouteContext) {
+export async function DELETE(request: NextRequest, _context: RouteContext) {
   try {
     const user = await requireAuth(request)
     const supabase = getSupabaseAdmin()

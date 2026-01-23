@@ -34,7 +34,7 @@ type Conversation = {
 }
 
 export default function MessagesPage() {
-  const router = useRouter()
+  const _router = useRouter()
   const { showToast } = useToast()
   const { t } = useLanguage()
   const [email, setEmail] = useState<string | null>(null)

@@ -3,7 +3,7 @@
  * Handles rate limit and other errors from external API providers (e.g., OpenAI, Anthropic)
  */
 
-import { withRetry, RetryOptions } from './circuit-breaker'
+import { RetryOptions } from './circuit-breaker'
 
 // ============================================
 // Provider Error Types

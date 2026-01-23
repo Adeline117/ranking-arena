@@ -10,6 +10,7 @@
  */
 
 'use client'
+ 
 
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react'
 
@@ -135,6 +136,7 @@ export function useFormValidation<T extends Record<string, unknown>>(
       }
     }
     return state as FormState<T>
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const [formState, setFormState] = useState<FormState<T>>(initialState)
@@ -315,9 +317,11 @@ export function useFormValidation<T extends Record<string, unknown>>(
   }, [formState])
 
   // 清理定时器
+   
   useEffect(() => {
+    const timers = debounceTimers.current
     return () => {
-      Object.values(debounceTimers.current).forEach(clearTimeout)
+      Object.values(timers).forEach(clearTimeout)
     }
   }, [])
 
