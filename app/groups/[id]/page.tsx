@@ -12,6 +12,7 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { ThumbsUpIcon, ThumbsDownIcon, CommentIcon } from '@/app/components/icons'
 import { useToast } from '@/app/components/ui/Toast'
 import { getCsrfHeaders } from '@/lib/api/client'
+import { useAuthSession } from '@/lib/hooks/useAuthSession'
 
 const ARENA_PURPLE = '#8b6fa8'
 
@@ -100,9 +101,8 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
   
   const { t, language } = useLanguage()
   const { showToast } = useToast()
-  const [email, setEmail] = useState<string | null>(null)
-  const [userId, setUserId] = useState<string | null>(null)
-  const [accessToken, setAccessToken] = useState<string | null>(null)
+  // --- Unified Auth (Single Source of Truth) ---
+  const { email, userId, accessToken, isLoggedIn, getAuthHeaders } = useAuthSession()
   const [group, setGroup] = useState<Group | null>(null)
   const [posts, setPosts] = useState<Post[]>([])
   const [sortedPosts, setSortedPosts] = useState<Post[]>([])
@@ -153,13 +153,7 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
   const [relatedGroups, setRelatedGroups] = useState<Array<{id: string; name: string; name_en?: string | null; avatar_url?: string | null; member_count?: number | null}>>([])
   const [loadingRelatedGroups, setLoadingRelatedGroups] = useState(true)
 
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setEmail(data.session?.user?.email ?? null)
-      setUserId(data.session?.user?.id ?? null)
-      setAccessToken(data.session?.access_token ?? null)
-    })
-  }, [])
+  // Auth is now managed by useAuthSession (Single Source of Truth)
 
   // 获取用户点赞状态
   const fetchUserLikes = useCallback(async (postIds: string[], uid: string) => {
@@ -576,21 +570,27 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
     Math.max(max, post.comment_count || 0), 0
   )
 
-  // 点赞功能
+  // 点赞功能 (Server ACK via unified auth)
   const handleLike = async (postId: string) => {
-    if (!accessToken) {
+    if (!isLoggedIn) {
       showToast(language === 'zh' ? '请先登录' : 'Please login first', 'warning')
       return
     }
 
+    const authHeaders = getAuthHeaders()
+    if (!authHeaders) {
+      showToast(language === 'zh' ? '登录已过期，请重新登录' : 'Session expired', 'warning')
+      return
+    }
+
     setLikeLoading(prev => ({ ...prev, [postId]: true }))
-    
+
     try {
       const response = await fetch(`/api/posts/${postId}/like`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`,
+          ...authHeaders,
           ...getCsrfHeaders()
         },
         body: JSON.stringify({ reaction_type: 'up' }),
@@ -624,20 +624,26 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
     }
   }
 
-  // 收藏功能
+  // 收藏功能 (Server ACK via unified auth)
   const handleBookmark = async (postId: string) => {
-    if (!accessToken) {
+    if (!isLoggedIn) {
       showToast(language === 'zh' ? '请先登录' : 'Please login first', 'warning')
       return
     }
 
+    const authHeaders = getAuthHeaders()
+    if (!authHeaders) {
+      showToast(language === 'zh' ? '登录已过期，请重新登录' : 'Session expired', 'warning')
+      return
+    }
+
     setBookmarkLoading(prev => ({ ...prev, [postId]: true }))
-    
+
     try {
       const response = await fetch(`/api/posts/${postId}/bookmark`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${accessToken}`,
+          ...authHeaders,
           ...getCsrfHeaders()
         },
       })
@@ -666,10 +672,16 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
     }
   }
 
-  // 转发功能
+  // 转发功能 (Server ACK via unified auth)
   const handleRepost = async (postId: string, comment?: string) => {
-    if (!accessToken) {
+    if (!isLoggedIn) {
       showToast(language === 'zh' ? '请先登录' : 'Please login first', 'warning')
+      return
+    }
+
+    const authHeaders = getAuthHeaders()
+    if (!authHeaders) {
+      showToast(language === 'zh' ? '登录已过期，请重新登录' : 'Session expired', 'warning')
       return
     }
 
@@ -686,13 +698,13 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
     }
 
     setRepostLoading(prev => ({ ...prev, [postId]: true }))
-    
+
     try {
       const response = await fetch(`/api/posts/${postId}/repost`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`,
+          ...authHeaders,
           ...getCsrfHeaders()
         },
         body: JSON.stringify({ comment }),
@@ -774,14 +786,18 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
     }
   }
 
-  // 加载评论
+  // 加载评论 (with auth headers for user-specific data)
   const loadComments = async (postId: string) => {
     setCommentLoading(prev => ({ ...prev, [postId]: true }))
-    
+
     try {
-      const response = await fetch(`/api/posts/${postId}/comments`)
+      const headers: Record<string, string> = {}
+      const authHeaders = getAuthHeaders()
+      if (authHeaders) Object.assign(headers, authHeaders)
+
+      const response = await fetch(`/api/posts/${postId}/comments`, { headers })
       const result = await response.json()
-      
+
       if (response.ok) {
         setComments(prev => ({ ...prev, [postId]: result.comments || [] }))
       } else {
@@ -807,38 +823,54 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
     }
   }
 
-  // 提交评论
+  // 提交评论 (Server ACK: only update UI after server confirms)
   const submitComment = async (postId: string) => {
-    if (!accessToken) {
+    if (!isLoggedIn) {
       showToast(language === 'zh' ? '请先登录' : 'Please login first', 'warning')
       return
     }
-    
+
+    const authHeaders = getAuthHeaders()
+    if (!authHeaders) {
+      showToast(language === 'zh' ? '登录已过期，请重新登录' : 'Session expired, please login again', 'warning')
+      return
+    }
+
     const content = newComment[postId]?.trim()
     if (!content) return
 
     setCommentLoading(prev => ({ ...prev, [postId]: true }))
-    
+
     try {
       const response = await fetch(`/api/posts/${postId}/comments`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`,
+          ...authHeaders,
           ...getCsrfHeaders()
         },
         body: JSON.stringify({ content }),
       })
 
       const result = await response.json()
-      
-      if (response.ok) {
+
+      if (response.ok && result.success) {
+        // Server ACK received - now update UI
         setNewComment(prev => ({ ...prev, [postId]: '' }))
-        // 确保评论区展开
         setExpandedComments(prev => ({ ...prev, [postId]: true }))
-        // 重新加载评论
-        loadComments(postId)
-        // 更新评论数
+
+        // Add the server-confirmed comment directly to the list
+        if (result.data?.comment) {
+          setComments(prev => ({
+            ...prev,
+            [postId]: [...(prev[postId] || []), result.data.comment]
+          }))
+        } else {
+          // Fallback: reload comments from server
+          loadComments(postId)
+        }
+
+        // Update comment count
         setPosts(prev => prev.map(p => {
           if (p.id === postId) {
             return { ...p, comment_count: (p.comment_count || 0) + 1 }
@@ -846,6 +878,7 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
           return p
         }))
       } else {
+        // Server rejected - show error, comment NOT added to UI
         const errorMsg = result.error || (language === 'zh' ? '评论发布失败' : 'Failed to post comment')
         showToast(errorMsg, 'error')
       }
