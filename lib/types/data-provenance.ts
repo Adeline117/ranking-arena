@@ -8,10 +8,16 @@
  * - 数据可用性状态
  */
 
-import type { Exchange, TimeRange } from './trader'
+import type { Exchange, DeprecatedExchange, TimeRange } from './trader'
 
 // Re-export Exchange for convenience
 export type { Exchange, TimeRange }
+
+/**
+ * All exchanges including deprecated ones.
+ * Used for data provenance since historical data may come from deprecated exchanges.
+ */
+export type AllExchange = Exchange | DeprecatedExchange
 
 // ============================================
 // 数据来源定义
@@ -41,7 +47,7 @@ export interface MetricProvenance {
   /** 数据来源类型 */
   sourceType: DataSourceType
   /** 数据来源交易所 */
-  exchange: Exchange | 'arena'
+  exchange: AllExchange | 'arena'
   /** 来源页面/接口描述（用于展示给用户） */
   sourceDescription: {
     zh: string
@@ -82,7 +88,7 @@ export interface TraderDataProvenance {
   /** 交易员 ID */
   traderId: string
   /** 数据来源交易所 */
-  exchange: Exchange
+  exchange: AllExchange
   /** 交易所展示名称 */
   exchangeDisplayName: string
   /** 原始数据页面 URL */
@@ -119,7 +125,7 @@ export interface TraderDataProvenance {
 
 /** 交易所支持的数据字段 */
 export interface ExchangeDataCapabilities {
-  exchange: Exchange
+  exchange: AllExchange
   displayName: string
   /** 支持的指标及其来源说明 */
   supportedMetrics: {
@@ -363,14 +369,14 @@ export const EXCHANGE_DATA_CAPABILITIES: ExchangeDataCapabilities[] = [
 /**
  * 获取交易所的数据能力配置
  */
-export function getExchangeCapabilities(exchange: Exchange): ExchangeDataCapabilities | undefined {
+export function getExchangeCapabilities(exchange: AllExchange): ExchangeDataCapabilities | undefined {
   return EXCHANGE_DATA_CAPABILITIES.find(e => e.exchange === exchange)
 }
 
 /**
  * 检查交易所是否支持某个指标
  */
-export function isMetricSupported(exchange: Exchange, metric: keyof ExchangeDataCapabilities['supportedMetrics']): boolean {
+export function isMetricSupported(exchange: AllExchange, metric: keyof ExchangeDataCapabilities['supportedMetrics']): boolean {
   const capabilities = getExchangeCapabilities(exchange)
   return capabilities?.supportedMetrics[metric] ?? false
 }
@@ -380,7 +386,7 @@ export function isMetricSupported(exchange: Exchange, metric: keyof ExchangeData
  */
 export function createDefaultMetricProvenance(
   metricName: string,
-  exchange: Exchange,
+  exchange: AllExchange,
   availability: DataAvailability = 'available',
   lastUpdated?: string
 ): MetricProvenance {

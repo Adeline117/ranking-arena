@@ -75,7 +75,7 @@ export default function AdvancedFilter({
   onDeleteFilter,
   isPro,
 }: AdvancedFilterProps) {
-  const { t: _t } = useLanguage()
+  const { t } = useLanguage()
   const [isExpanded, setIsExpanded] = useState(false)
   const [showSaveModal, setShowSaveModal] = useState(false)
   const [saveName, setSaveName] = useState('')

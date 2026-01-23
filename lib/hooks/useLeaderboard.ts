@@ -128,7 +128,7 @@ export function useRankings(options: UseRankingsOptions) {
   )
 
   return {
-    rankings: data?.data ?? [],
+    rankings: data?.traders ?? [],
     meta: data?.meta ?? null,
     totalCount: data?.meta?.total_count ?? 0,
     isLoading,
@@ -156,7 +156,7 @@ export function useTraderDetail(traderId: string | null) {
   )
 
   return {
-    identity: data?.identity ?? null,
+    identity: data?.profile ?? null,
     profile: data?.profile ?? null,
     snapshots: data?.snapshots ?? { '7d': null, '30d': null, '90d': null },
     timeseries: data?.timeseries ?? [],

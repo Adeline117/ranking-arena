@@ -158,7 +158,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
           apiLogger.warn('Failed to update bookmark count:', fallbackError)
         }
       } else {
-        newCount = updatedPost?.bookmark_count ?? 0
+        newCount = (updatedPost as { bookmark_count?: number } | null)?.bookmark_count ?? 0
       }
 
       return NextResponse.json({
@@ -256,7 +256,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
           apiLogger.warn('Failed to update bookmark count:', fallbackError)
         }
       } else {
-        newCount = updatedPost?.bookmark_count ?? 1
+        newCount = (updatedPost as { bookmark_count?: number } | null)?.bookmark_count ?? 1
       }
 
       return NextResponse.json({
