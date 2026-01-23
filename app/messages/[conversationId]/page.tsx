@@ -18,6 +18,8 @@ import {
   resolveErrorCode,
   getErrorMessage,
 } from '@/lib/auth/client'
+import ChatSettingsDrawer from '@/app/components/Features/ChatSettingsDrawer'
+import ChatSearchOverlay from '@/app/components/Features/ChatSearchOverlay'
 
 type MessageStatus = 'sending' | 'sent' | 'failed'
 
@@ -54,9 +56,15 @@ export default function ConversationPage({ params }: { params: { conversationId:
   const [newMessage, setNewMessage] = useState('')
   const [sending, setSending] = useState(false)
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'reconnecting'>('connected')
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [remark, setRemark] = useState<string | null>(null)
+  const [clearedBefore, setClearedBefore] = useState<string | null>(null)
+  const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
+  const messageRefs = useRef<Record<string, HTMLDivElement | null>>({})
 
   // 注入 spin 动画样式
   useEffect(() => {
@@ -113,6 +121,33 @@ export default function ConversationPage({ params }: { params: { conversationId:
       subscription.unsubscribe()
     }
   }, [conversationId])
+
+  // Load conversation member settings (remark, muted, pinned, cleared_before)
+  useEffect(() => {
+    if (!conversationId || !accessToken) return
+    fetch(`/api/chat/${conversationId}/settings`, {
+      headers: { 'Authorization': `Bearer ${accessToken}` },
+    })
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (data?.settings) {
+          setRemark(data.settings.remark || null)
+          setClearedBefore(data.settings.cleared_before || null)
+        }
+      })
+      .catch(() => {})
+  }, [conversationId, accessToken])
+
+  // Navigate to a specific message (for search)
+  const navigateToMessage = useCallback((messageId: string) => {
+    setHighlightedMessageId(messageId)
+    const el = messageRefs.current[messageId]
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      // Clear highlight after animation
+      setTimeout(() => setHighlightedMessageId(null), 2000)
+    }
+  }, [])
 
   // 滚动到底部
   const scrollToBottom = () => {
@@ -561,15 +596,21 @@ export default function ConversationPage({ params }: { params: { conversationId:
     )
   }
 
-  const messageGroups = groupMessagesByDate(messages)
+  // Filter messages based on cleared_before
+  const visibleMessages = clearedBefore
+    ? messages.filter(msg => new Date(msg.created_at) > new Date(clearedBefore))
+    : messages
+
+  const messageGroups = groupMessagesByDate(visibleMessages)
 
   return (
-    <Box style={{ 
-      minHeight: '100vh', 
-      background: tokens.colors.bg.primary, 
+    <Box style={{
+      minHeight: '100vh',
+      background: tokens.colors.bg.primary,
       color: tokens.colors.text.primary,
       display: 'flex',
-      flexDirection: 'column'
+      flexDirection: 'column',
+      position: 'relative',
     }}>
       <TopNav email={email} />
       
@@ -636,8 +677,13 @@ export default function ConversationPage({ params }: { params: { conversationId:
                 />
                 <Box style={{ flex: 1, minWidth: 0 }}>
                   <Text size="base" weight="bold" style={{ color: tokens.colors.text.primary }}>
-                    {displayName}
+                    {remark || displayName}
                   </Text>
+                  {remark && (
+                    <Text size="xs" color="tertiary" style={{ marginTop: 2 }}>
+                      @{displayName}
+                    </Text>
+                  )}
                 </Box>
               </Box>
             )
@@ -673,9 +719,14 @@ export default function ConversationPage({ params }: { params: { conversationId:
               </Box>
               <Box style={{ flex: 1, minWidth: 0 }}>
                 <Text size="base" weight="bold" style={{ color: tokens.colors.text.primary }}>
-                  {displayName}
+                  {remark || displayName}
                 </Text>
-                {otherUser.bio && (
+                {remark && (
+                  <Text size="xs" color="tertiary" style={{ marginTop: 2 }}>
+                    @{displayName}
+                  </Text>
+                )}
+                {!remark && otherUser.bio && (
                   <Text size="xs" color="tertiary" style={{
                     maxWidth: '100%',
                     overflow: 'hidden',
@@ -690,6 +741,41 @@ export default function ConversationPage({ params }: { params: { conversationId:
             </Link>
           )
         })()}
+
+        {/* Settings button */}
+        {otherUser && (
+          <button
+            onClick={() => setSettingsOpen(true)}
+            style={{
+              width: 36,
+              height: 36,
+              borderRadius: tokens.radius.full,
+              border: 'none',
+              background: 'transparent',
+              color: tokens.colors.text.secondary,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              transition: 'all 0.2s',
+              flexShrink: 0,
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = tokens.colors.bg.tertiary || 'rgba(255,255,255,0.1)'
+              e.currentTarget.style.color = tokens.colors.text.primary
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'transparent'
+              e.currentTarget.style.color = tokens.colors.text.secondary
+            }}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="1" />
+              <circle cx="19" cy="12" r="1" />
+              <circle cx="5" cy="12" r="1" />
+            </svg>
+          </button>
+        )}
       </Box>
 
       {/* Connection status banner */}
@@ -777,13 +863,18 @@ export default function ConversationPage({ params }: { params: { conversationId:
               const otherProfileUrl = !isMine ? getProfileUrl(otherUser) : null
 
               return (
-                <Box
+                <div
                   key={msg.id}
+                  ref={(el: HTMLDivElement | null) => { messageRefs.current[msg.id] = el }}
                   style={{
                     display: 'flex',
                     flexDirection: 'column',
                     alignItems: isMine ? 'flex-end' : 'flex-start',
                     marginBottom: isSameSenderAsNext ? '2px' : tokens.spacing[3],
+                    transition: 'background 0.3s',
+                    borderRadius: 12,
+                    background: highlightedMessageId === msg.id ? 'rgba(149, 117, 205, 0.15)' : 'transparent',
+                    padding: highlightedMessageId === msg.id ? '4px' : '0px',
                   }}
                 >
                   {/* Message row with avatar */}
@@ -939,13 +1030,13 @@ export default function ConversationPage({ params }: { params: { conversationId:
                       )}
                     </Text>
                   )}
-                </Box>
+                </div>
               )
             })}
           </Box>
         ))}
         
-        {messages.length === 0 && (
+        {visibleMessages.length === 0 && (
           <Box style={{ 
             textAlign: 'center', 
             padding: `${tokens.spacing[8]} ${tokens.spacing[4]}`,
@@ -980,6 +1071,42 @@ export default function ConversationPage({ params }: { params: { conversationId:
         
         <div ref={messagesEndRef} />
       </Box>
+
+      {/* Search Overlay */}
+      {conversationId && accessToken && (
+        <ChatSearchOverlay
+          isOpen={searchOpen}
+          onClose={() => setSearchOpen(false)}
+          conversationId={conversationId}
+          accessToken={accessToken}
+          onNavigateToMessage={(messageId) => {
+            setSearchOpen(false)
+            // Small delay to allow overlay to close
+            setTimeout(() => navigateToMessage(messageId), 100)
+          }}
+        />
+      )}
+
+      {/* Settings Drawer */}
+      {otherUser && conversationId && accessToken && (
+        <ChatSettingsDrawer
+          isOpen={settingsOpen}
+          onClose={() => setSettingsOpen(false)}
+          conversationId={conversationId}
+          otherUser={otherUser}
+          accessToken={accessToken}
+          onSettingsChange={(newSettings) => {
+            setRemark(newSettings.remark)
+            if (newSettings.cleared_before) {
+              setClearedBefore(newSettings.cleared_before)
+            }
+          }}
+          onSearchOpen={() => setSearchOpen(true)}
+          onClearHistory={() => {
+            setClearedBefore(new Date().toISOString())
+          }}
+        />
+      )}
 
       {/* Input Area */}
       <Box
