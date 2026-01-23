@@ -308,24 +308,13 @@ describe('trackExchangeConnect', () => {
 })
 
 describe('trackBusinessError', () => {
-  const originalWindow = global.window
-
   beforeEach(() => {
     jest.clearAllMocks()
   })
 
-  afterEach(() => {
-    // Restore original window
-    global.window = originalWindow
-  })
-
   test('should track business error', () => {
-    // Mock window.location using a different approach
-    const mockWindow = {
-      ...global.window,
-      location: { pathname: '/test-page' },
-    }
-    global.window = mockWindow as unknown as typeof window
+    // Navigate to a test page using history.pushState (works with jsdom)
+    window.history.pushState({}, '', '/test-page')
 
     trackBusinessError('Invalid input')
 
@@ -334,6 +323,9 @@ describe('trackBusinessError', () => {
       error_message: 'Invalid input',
       page: '/test-page',
     })
+
+    // Navigate back to original location
+    window.history.pushState({}, '', '/')
   })
 })
 

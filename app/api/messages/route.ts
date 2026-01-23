@@ -2,6 +2,9 @@
  * 私信消息 API
  * GET: 获取会话中的消息
  * POST: 发送私信
+ *
+ * SECURITY: All operations require authentication. senderId is derived from
+ * the authenticated user's session, preventing impersonation attacks.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -18,7 +21,7 @@ const NON_MUTUAL_MESSAGE_LIMIT = 3
 // 获取会话消息
 export async function GET(request: NextRequest) {
   try {
-    // 验证用户身份
+    // SECURITY: Require authentication
     const user = await getAuthUser(request)
     if (!user) {
       return NextResponse.json(
@@ -28,7 +31,8 @@ export async function GET(request: NextRequest) {
     }
 
     const conversationId = request.nextUrl.searchParams.get('conversationId')
-    const userId = user.id // 使用认证用户的 ID，而非请求参数
+    // SECURITY: Use authenticated user's ID, never from query params
+    const userId = user.id
 
     if (!conversationId) {
       return NextResponse.json({ error: 'Missing conversationId' }, { status: 400 })
@@ -131,7 +135,7 @@ export async function GET(request: NextRequest) {
 // 发送私信
 export async function POST(request: NextRequest) {
   try {
-    // 验证用户身份 - 必须携带有效的 Authorization header
+    // SECURITY: Require authentication
     const user = await getAuthUser(request)
     if (!user) {
       return NextResponse.json(
@@ -143,7 +147,8 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { receiverId, content } = body
 
-    // 使用认证用户的 ID 作为发送者，忽略客户端传来的 senderId
+    // SECURITY: Use authenticated user's ID as sender, ignoring any client-provided senderId.
+    // This prevents users from sending messages impersonating other users.
     const senderId = user.id
 
     if (!receiverId || !content) {
