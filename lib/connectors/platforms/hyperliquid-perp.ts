@@ -81,7 +81,7 @@ export class HyperliquidPerpConnector extends BaseConnector {
 
   async fetchTraderSnapshot(traderKey: string, window: Window): Promise<SnapshotResult | null> {
     // Get clearinghouse state for current equity
-    const stateResponse = await this.request<any>(
+    const state = await this.request<any>(
       'https://api.hyperliquid.xyz/info',
       {
         method: 'POST',
@@ -89,7 +89,6 @@ export class HyperliquidPerpConnector extends BaseConnector {
         body: JSON.stringify({ type: 'clearinghouseState', user: traderKey }),
       }
     )
-    const state = await stateResponse.json()
 
     const accountValue = Number(state?.marginSummary?.accountValue) || 0
     const totalRawPnl = Number(state?.marginSummary?.totalRawPnl) || 0
@@ -128,7 +127,7 @@ export class HyperliquidPerpConnector extends BaseConnector {
 
   async fetchTimeseries(traderKey: string): Promise<TimeseriesResult> {
     // Get user fills for trade history
-    const fillsResponse = await this.request<any>(
+    const fills = await this.request<any>(
       'https://api.hyperliquid.xyz/info',
       {
         method: 'POST',
@@ -136,7 +135,6 @@ export class HyperliquidPerpConnector extends BaseConnector {
         body: JSON.stringify({ type: 'userFills', user: traderKey }),
       }
     )
-    const fills = await fillsResponse.json()
 
     const series: TraderTimeseries[] = []
 
