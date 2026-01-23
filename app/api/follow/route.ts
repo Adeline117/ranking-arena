@@ -53,11 +53,10 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
-    const { userId, traderId, action } = body
-
-    if (!userId || !traderId || !action) {
-      return NextResponse.json({ error: 'Missing userId, traderId or action' }, { status: 400 })
+    // Auth check: verify the requesting user matches the userId
+    const authHeader = request.headers.get('Authorization')
+    if (!authHeader?.startsWith('Bearer ')) {
+      return NextResponse.json({ error: '未登录' }, { status: 401 })
     }
 
     if (!SUPABASE_URL || !SUPABASE_KEY) {
@@ -65,6 +64,24 @@ export async function POST(request: NextRequest) {
     }
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
+
+    const token = authHeader.slice(7)
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token)
+    if (authError || !user) {
+      return NextResponse.json({ error: '登录已过期，请重新登录' }, { status: 401 })
+    }
+
+    const body = await request.json()
+    const { userId, traderId, action } = body
+
+    if (!userId || !traderId || !action) {
+      return NextResponse.json({ error: 'Missing userId, traderId or action' }, { status: 400 })
+    }
+
+    // Verify the authenticated user matches the requested userId
+    if (user.id !== userId) {
+      return NextResponse.json({ error: '权限不足' }, { status: 403 })
+    }
 
     if (action === 'follow') {
       // 关注

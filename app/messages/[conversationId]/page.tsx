@@ -206,6 +206,7 @@ export default function ConversationPage({ params }: { params: { conversationId:
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
           ...getCsrfHeaders()
         },
         body: JSON.stringify({
@@ -218,11 +219,18 @@ export default function ConversationPage({ params }: { params: { conversationId:
       const data = await res.json()
 
       if (!res.ok) {
-        // Mark as failed
+        // Mark as failed with specific error
         setMessages(prev => prev.map(m =>
           m._tempId === tempId ? { ...m, _status: 'failed' as MessageStatus } : m
         ))
-        showToast(data.error || '发送失败', 'error')
+        // Differentiate error types
+        if (res.status === 401) {
+          showToast('登录已过期，请重新登录', 'error')
+        } else if (res.status === 403) {
+          showToast(data.error || '权限不足', 'error')
+        } else {
+          showToast(data.error || '发送失败', 'error')
+        }
         return
       }
 
@@ -257,6 +265,7 @@ export default function ConversationPage({ params }: { params: { conversationId:
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
           ...getCsrfHeaders()
         },
         body: JSON.stringify({
@@ -272,7 +281,13 @@ export default function ConversationPage({ params }: { params: { conversationId:
         setMessages(prev => prev.map(m =>
           m.id === failedMsg.id ? { ...m, _status: 'failed' as MessageStatus } : m
         ))
-        showToast(data.error || '重试失败', 'error')
+        if (res.status === 401) {
+          showToast('登录已过期，请重新登录', 'error')
+        } else if (res.status === 403) {
+          showToast(data.error || '权限不足', 'error')
+        } else {
+          showToast(data.error || '重试失败', 'error')
+        }
         return
       }
 

@@ -491,6 +491,36 @@ function HotContent() {
     }
   }, [searchParams, posts, openPost, handleOpenPost])
 
+  // Escape key closes modal + browser back button support
+  useEffect(() => {
+    if (!openPost) return
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        handleClosePost()
+      }
+    }
+
+    const handlePopState = () => {
+      // When user presses back, close modal if URL no longer has post param
+      const urlParams = new URLSearchParams(window.location.search)
+      if (!urlParams.get('post') && openPost) {
+        setOpenPost(null)
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    window.addEventListener('popstate', handlePopState)
+    // Prevent body scroll when modal is open
+    document.body.style.overflow = 'hidden'
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+      window.removeEventListener('popstate', handlePopState)
+      document.body.style.overflow = ''
+    }
+  }, [openPost, handleClosePost])
+
   // 语言切换时重新翻译当前打开的帖子
   useEffect(() => {
     if (openPost && openPost.body) {
@@ -731,7 +761,22 @@ function HotContent() {
                           )
                         })()}
                         <Box className="hot-post-footer" style={{ display: 'flex', gap: tokens.spacing[3], fontSize: tokens.typography.fontSize.xs, color: tokens.colors.text.tertiary, flexWrap: 'wrap', alignItems: 'center' }}>
-                          <Text size="xs" color="tertiary">{p.author}</Text>
+                          {p.author_handle ? (
+                            <Link
+                              href={`/u/${encodeURIComponent(p.author_handle)}`}
+                              onClick={(e) => e.stopPropagation()}
+                              style={{
+                                fontSize: tokens.typography.fontSize.xs,
+                                color: ARENA_PURPLE,
+                                textDecoration: 'none',
+                                fontWeight: 600,
+                              }}
+                            >
+                              @{p.author}
+                            </Link>
+                          ) : (
+                            <Text size="xs" color="tertiary">{p.author}</Text>
+                          )}
                           <Text size="xs" color="tertiary">{p.time}</Text>
                           <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                             <CommentIcon size={12} /> {p.comments}
@@ -840,7 +885,21 @@ function HotContent() {
             </div>
 
             <div style={{ marginTop: 8, fontSize: 12, color: tokens.colors.text.tertiary, display: 'flex', alignItems: 'center', gap: 6 }}>
-              {openPost.author} · {openPost.time} · <CommentIcon size={12} /> {openPost.comments}
+              {openPost.author_handle ? (
+                <Link
+                  href={`/u/${encodeURIComponent(openPost.author_handle)}`}
+                  style={{
+                    color: ARENA_PURPLE,
+                    textDecoration: 'none',
+                    fontWeight: 600,
+                  }}
+                >
+                  @{openPost.author}
+                </Link>
+              ) : (
+                <span>{openPost.author}</span>
+              )}
+              <span>·</span> {openPost.time} · <CommentIcon size={12} /> {openPost.comments}
             </div>
 
             <div translate="no" style={{ marginTop: 12, fontSize: 14, color: tokens.colors.text.primary, lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>
@@ -990,9 +1049,23 @@ function HotContent() {
                       }}
                     >
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                        <span style={{ fontSize: 12, fontWeight: 700, color: tokens.colors.text.secondary }}>
-                          {comment.author_handle || '匿名'}
-                        </span>
+                        {comment.author_handle ? (
+                          <Link
+                            href={`/u/${encodeURIComponent(comment.author_handle)}`}
+                            style={{
+                              fontSize: 12,
+                              fontWeight: 700,
+                              color: ARENA_PURPLE,
+                              textDecoration: 'none',
+                            }}
+                          >
+                            @{comment.author_handle}
+                          </Link>
+                        ) : (
+                          <span style={{ fontSize: 12, fontWeight: 700, color: tokens.colors.text.secondary }}>
+                            匿名
+                          </span>
+                        )}
                         <span style={{ fontSize: 11, color: tokens.colors.text.tertiary }}>
                           {formatTimeAgo(comment.created_at)}
                         </span>

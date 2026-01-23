@@ -34,6 +34,21 @@ export async function GET(request: NextRequest) {
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
 
+    // Auth check: verify the requesting user matches the userId
+    const authHeader = request.headers.get('Authorization')
+    if (authHeader?.startsWith('Bearer ')) {
+      const token = authHeader.slice(7)
+      const { data: { user }, error: authError } = await supabase.auth.getUser(token)
+      if (authError || !user) {
+        return NextResponse.json({ error: '登录已过期，请重新登录' }, { status: 401 })
+      }
+      if (user.id !== userId) {
+        return NextResponse.json({ error: '权限不足' }, { status: 403 })
+      }
+    } else {
+      return NextResponse.json({ error: '未登录' }, { status: 401 })
+    }
+
     // 验证用户是否有权限访问此会话
     const { data: conversation, error: convError } = await supabase
       .from('conversations')
@@ -129,11 +144,34 @@ export async function GET(request: NextRequest) {
 // 发送私信
 export async function POST(request: NextRequest) {
   try {
+    // Auth check: verify the sender is the authenticated user
+    const authHeader = request.headers.get('Authorization')
+    if (!authHeader?.startsWith('Bearer ')) {
+      return NextResponse.json({ error: '未登录，请先登录' }, { status: 401 })
+    }
+
+    if (!SUPABASE_URL || !SUPABASE_KEY) {
+      return NextResponse.json({ error: 'Missing Supabase config' }, { status: 500 })
+    }
+
+    const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
+
+    const token = authHeader.slice(7)
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token)
+    if (authError || !user) {
+      return NextResponse.json({ error: '登录已过期，请重新登录' }, { status: 401 })
+    }
+
     const body = await request.json()
     const { senderId, receiverId, content } = body
 
     if (!senderId || !receiverId || !content) {
       return NextResponse.json({ error: 'Missing senderId, receiverId or content' }, { status: 400 })
+    }
+
+    // Verify the authenticated user is the sender
+    if (user.id !== senderId) {
+      return NextResponse.json({ error: '权限不足：不能代替其他用户发送消息' }, { status: 403 })
     }
 
     if (senderId === receiverId) {
@@ -147,12 +185,6 @@ export async function POST(request: NextRequest) {
     if (content.length > 2000) {
       return NextResponse.json({ error: '消息内容过长，最多2000字符' }, { status: 400 })
     }
-
-    if (!SUPABASE_URL || !SUPABASE_KEY) {
-      return NextResponse.json({ error: 'Missing Supabase config' }, { status: 500 })
-    }
-
-    const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
 
     // 获取接收者的隐私设置
     const { data: receiverProfile, error: profileError } = await supabase
