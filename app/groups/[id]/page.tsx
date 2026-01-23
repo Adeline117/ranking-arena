@@ -12,6 +12,8 @@ import { ThumbsUpIcon, CommentIcon } from '@/app/components/icons'
 import { useToast } from '@/app/components/ui/Toast'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { GroupCardSkeleton, PostSkeleton, ListSkeleton, SkeletonAvatar, Skeleton } from '@/app/components/ui/Skeleton'
+import MasonryGrid from '@/app/components/ui/MasonryGrid'
+import MasonryPostCard from '@/app/components/post/MasonryPostCard'
 
 const ARENA_PURPLE = '#8b6fa8'
 
@@ -117,6 +119,12 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
   const [complaintTarget, setComplaintTarget] = useState<string | null>(null)
   const [submittingComplaint, setSubmittingComplaint] = useState(false)
   const [sortMode, setSortMode] = useState<'latest' | 'hot'>('latest')
+  const [viewMode, setViewMode] = useState<'list' | 'masonry'>(() => {
+    if (typeof window !== 'undefined') {
+      return (localStorage.getItem('group-view-mode') as 'list' | 'masonry') || 'masonry'
+    }
+    return 'masonry'
+  })
   const [likeLoading, setLikeLoading] = useState<Record<string, boolean>>({})
   const [bookmarkLoading, setBookmarkLoading] = useState<Record<string, boolean>>({})
   const [repostLoading, setRepostLoading] = useState<Record<string, boolean>>({})
@@ -533,32 +541,31 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [groupId, userId])
 
-  // 计算帖子排序
-  useEffect(() => {
-    if (posts.length === 0) {
-      setSortedPosts([])
-      return
-    }
+  // 计算帖子排序 (使用 useMemo 避免阻塞渲染)
+  const computedSortedPosts = useMemo(() => {
+    if (posts.length === 0) return []
 
     if (sortMode === 'latest') {
-      // 最新：按时间降序
-      setSortedPosts([...posts].sort((a, b) => 
+      return [...posts].sort((a, b) =>
         new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-      ))
-    } else {
-      // 热门：按综合分数排序
-      const now = Date.now()
-      const sorted = [...posts].sort((a, b) => {
-        const hoursA = (now - new Date(a.created_at).getTime()) / (1000 * 60 * 60)
-        const hoursB = (now - new Date(b.created_at).getTime()) / (1000 * 60 * 60)
-        
-        const scoreA = ((a.like_count || 0) * 2 + (a.comment_count || 0) * 1) / (1 + hoursA / 24)
-        const scoreB = ((b.like_count || 0) * 2 + (b.comment_count || 0) * 1) / (1 + hoursB / 24)
-        
-        return scoreB - scoreA
-      })
-      setSortedPosts(sorted)
+      )
     }
+
+    // 热门：按综合分数排序
+    const now = Date.now()
+    return [...posts].sort((a, b) => {
+      const hoursA = (now - new Date(a.created_at).getTime()) / (1000 * 60 * 60)
+      const hoursB = (now - new Date(b.created_at).getTime()) / (1000 * 60 * 60)
+
+      const scoreA = ((a.like_count || 0) * 2 + (a.comment_count || 0) * 1) / (1 + hoursA / 24)
+      const scoreB = ((b.like_count || 0) * 2 + (b.comment_count || 0) * 1) / (1 + hoursB / 24)
+
+      return scoreB - scoreA
+    })
+  }, [posts, sortMode])
+
+  useEffect(() => {
+    setSortedPosts(computedSortedPosts)
   }, [posts, sortMode])
 
   // 计算热度颜色 - 根据评论数从浅橙到深橙
@@ -1006,8 +1013,8 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
                 transition: 'all 0.2s ease',
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.background = 'rgba(139, 111, 168, 0.1)'
-                e.currentTarget.style.borderColor = 'rgba(139, 111, 168, 0.2)'
+                e.currentTarget.style.background = `${tokens.colors.accent?.primary || '#8b6fa8'}1a`
+                e.currentTarget.style.borderColor = `${tokens.colors.accent?.primary || '#8b6fa8'}33`
                 e.currentTarget.style.transform = 'translateX(4px)'
               }}
               onMouseLeave={(e) => {
@@ -1265,28 +1272,90 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
 
         {/* Posts Section */}
         <Box style={{ position: 'relative' }}>
-          {/* Sort Tabs */}
-          <Box style={{ display: 'flex', gap: tokens.spacing[2], marginBottom: tokens.spacing[4] }}>
-            <Button
-              variant={sortMode === 'latest' ? 'primary' : 'secondary'}
-              size="sm"
-              onClick={() => setSortMode('latest')}
-            >
-              最新
-            </Button>
-            <Button
-              variant={sortMode === 'hot' ? 'primary' : 'secondary'}
-              size="sm"
-              onClick={() => setSortMode('hot')}
-            >
-              热门
-            </Button>
+          {/* Sort Tabs + View Toggle */}
+          <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: tokens.spacing[4] }}>
+            <Box style={{ display: 'flex', gap: tokens.spacing[2] }}>
+              <Button
+                variant={sortMode === 'latest' ? 'primary' : 'secondary'}
+                size="sm"
+                onClick={() => setSortMode('latest')}
+              >
+                最新
+              </Button>
+              <Button
+                variant={sortMode === 'hot' ? 'primary' : 'secondary'}
+                size="sm"
+                onClick={() => setSortMode('hot')}
+              >
+                热门
+              </Button>
+            </Box>
+            <Box style={{ display: 'flex', gap: tokens.spacing[1] }}>
+              <button
+                onClick={() => { setViewMode('list'); localStorage.setItem('group-view-mode', 'list') }}
+                title="列表视图"
+                style={{
+                  padding: tokens.spacing[2],
+                  borderRadius: tokens.radius.md,
+                  border: 'none',
+                  background: viewMode === 'list' ? `${tokens.colors.accent.primary}20` : 'transparent',
+                  color: viewMode === 'list' ? tokens.colors.accent.primary : tokens.colors.text.tertiary,
+                  cursor: 'pointer',
+                  transition: `all ${tokens.transition.base}`,
+                }}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="8" y1="6" x2="21" y2="6" /><line x1="8" y1="12" x2="21" y2="12" /><line x1="8" y1="18" x2="21" y2="18" />
+                  <line x1="3" y1="6" x2="3.01" y2="6" /><line x1="3" y1="12" x2="3.01" y2="12" /><line x1="3" y1="18" x2="3.01" y2="18" />
+                </svg>
+              </button>
+              <button
+                onClick={() => { setViewMode('masonry'); localStorage.setItem('group-view-mode', 'masonry') }}
+                title="瀑布流视图"
+                style={{
+                  padding: tokens.spacing[2],
+                  borderRadius: tokens.radius.md,
+                  border: 'none',
+                  background: viewMode === 'masonry' ? `${tokens.colors.accent.primary}20` : 'transparent',
+                  color: viewMode === 'masonry' ? tokens.colors.accent.primary : tokens.colors.text.tertiary,
+                  cursor: 'pointer',
+                  transition: `all ${tokens.transition.base}`,
+                }}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="3" width="7" height="9" rx="1" /><rect x="14" y="3" width="7" height="5" rx="1" />
+                  <rect x="3" y="15" width="7" height="6" rx="1" /><rect x="14" y="11" width="7" height="10" rx="1" />
+                </svg>
+              </button>
+            </Box>
           </Box>
 
+          {/* Masonry View */}
+          {viewMode === 'masonry' && sortedPosts.length > 0 && (
+            <Box style={{ marginBottom: tokens.spacing[4] }}>
+              <Text size="sm" color="tertiary" style={{ marginBottom: tokens.spacing[3] }}>
+                {language === 'zh' ? `帖子 (${sortedPosts.length})` : `Posts (${sortedPosts.length})`}
+              </Text>
+              <MasonryGrid columns={{ mobile: 2, desktop: 3 }} gap="12px">
+                {sortedPosts.map((post) => (
+                  <MasonryPostCard
+                    key={post.id}
+                    post={{ ...post, group_id: groupId }}
+                    language={language}
+                    onLike={(id) => handleLike(id)}
+                    onComment={(id) => toggleComments(id)}
+                  />
+                ))}
+              </MasonryGrid>
+            </Box>
+          )}
+
+          {/* List View */}
+          {viewMode === 'list' && (
           <Card title={language === 'zh' ? `帖子 (${sortedPosts.length})` : `Posts (${sortedPosts.length})`}>
             {sortedPosts.length === 0 ? (
-              <Box style={{ 
-                color: tokens.colors.text.tertiary, 
+              <Box style={{
+                color: tokens.colors.text.tertiary,
                 padding: `${tokens.spacing[10]} ${tokens.spacing[5]}`,
                 textAlign: 'center',
               }}>
@@ -1330,35 +1399,39 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
                         </Text>
                       </Box>
 
-                    {post.author_handle && (
-                      <Box style={{ fontSize: tokens.typography.fontSize.xs, color: tokens.colors.text.secondary, marginBottom: tokens.spacing[2], display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
+                    <Box style={{ fontSize: tokens.typography.fontSize.xs, color: tokens.colors.text.secondary, marginBottom: tokens.spacing[2], display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
                         <Text size="xs" color="secondary">
                           {language === 'zh' ? '作者' : 'Author'}:{' '}
                         </Text>
-                        <Link 
-                          href={`/u/${encodeURIComponent(post.author_handle)}`} 
-                          onClick={(e) => e.stopPropagation()}
-                          style={{ 
-                            color: tokens.colors.accent?.primary || '#8b6fa8', 
-                            textDecoration: 'none',
-                            fontWeight: tokens.typography.fontWeight.bold,
-                            fontSize: tokens.typography.fontSize.xs,
-                            padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
-                            borderRadius: tokens.radius.md,
-                            background: 'rgba(139, 111, 168, 0.1)',
-                            transition: `all ${tokens.transition.base}`,
-                          }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.background = 'rgba(139, 111, 168, 0.2)'
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.background = 'rgba(139, 111, 168, 0.1)'
-                          }}
-                        >
-                          @{post.author_handle}
-                        </Link>
+                        {post.author_handle && !post.author_handle.startsWith('deleted_') ? (
+                          <Link
+                            href={`/u/${encodeURIComponent(post.author_handle)}`}
+                            onClick={(e) => e.stopPropagation()}
+                            style={{
+                              color: tokens.colors.accent?.primary || '#8b6fa8',
+                              textDecoration: 'none',
+                              fontWeight: tokens.typography.fontWeight.bold,
+                              fontSize: tokens.typography.fontSize.xs,
+                              padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
+                              borderRadius: tokens.radius.md,
+                              background: 'rgba(139, 111, 168, 0.1)',
+                              transition: `all ${tokens.transition.base}`,
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.background = `${tokens.colors.accent?.primary || '#8b6fa8'}33`
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.background = `${tokens.colors.accent?.primary || '#8b6fa8'}1a`
+                            }}
+                          >
+                            @{post.author_handle}
+                          </Link>
+                        ) : (
+                          <Text size="xs" color="tertiary" style={{ fontStyle: 'italic' }}>
+                            {language === 'zh' ? '已注销用户' : 'Deleted user'}
+                          </Text>
+                        )}
                       </Box>
-                    )}
 
                     {post.content && (() => {
                       const displayContent = translatedPosts[post.id]?.content || post.content
@@ -1594,6 +1667,20 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
               </Box>
             )}
           </Card>
+          )}
+
+          {/* Empty state for masonry view */}
+          {viewMode === 'masonry' && sortedPosts.length === 0 && (
+            <Box style={{
+              color: tokens.colors.text.tertiary,
+              padding: `${tokens.spacing[10]} ${tokens.spacing[5]}`,
+              textAlign: 'center',
+            }}>
+              <Text size="sm" color="tertiary">
+                还没有帖子，成为第一个发帖的人吧！
+              </Text>
+            </Box>
+          )}
         </Box>
 
         {/* Floating Post Button (右下角固定) */}

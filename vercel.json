@@ -79,6 +79,10 @@
     {
       "path": "/api/cron/discover-traders",
       "schedule": "0 */4 * * *"
+    },
+    {
+      "path": "/api/cron/cleanup-deleted-accounts",
+      "schedule": "0 3 * * *"
     }
   ],
   "headers": [

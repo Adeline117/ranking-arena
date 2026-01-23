@@ -440,11 +440,19 @@ async function updateUserSubscription(
   plan: string
 ) {
   const status = SUBSCRIPTION_STATUS_MAP[subscription.status] || subscription.status
-  // 使用 billing_cycle_anchor 作为周期开始，cancel_at 或 trial_end 作为参考
-  const billingAnchor = new Date(subscription.billing_cycle_anchor * 1000)
-  const startDate = new Date(subscription.start_date * 1000)
+  // 兼容不同 Stripe API 版本获取周期信息
+  const sub = subscription as unknown as Record<string, unknown>
+  const itemPeriod = subscription.items?.data?.[0] as unknown as Record<string, unknown> | undefined
+  const pStart = (sub.current_period_start ?? itemPeriod?.current_period_start) as number | undefined
+  const pEnd = (sub.current_period_end ?? itemPeriod?.current_period_end) as number | undefined
+  const periodStart = pStart
+    ? new Date(pStart * 1000).toISOString()
+    : new Date(subscription.start_date * 1000).toISOString()
+  const periodEnd = pEnd
+    ? new Date(pEnd * 1000).toISOString()
+    : null
 
-  logger.info(`updateUserSubscription`, { userId, status, plan })
+  logger.info(`updateUserSubscription`, { userId, status, plan, periodStart, periodEnd })
 
   // 使用重试机制更新订阅记录
   await withRetry(async () => {
@@ -457,8 +465,8 @@ async function updateUserSubscription(
         status: status,
         tier: 'pro',
         plan: plan,
-        current_period_start: startDate.toISOString(),
-        current_period_end: billingAnchor.toISOString(),
+        current_period_start: periodStart,
+        current_period_end: periodEnd,
         cancel_at_period_end: subscription.cancel_at_period_end,
         updated_at: new Date().toISOString(),
       }, {

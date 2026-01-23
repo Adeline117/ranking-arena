@@ -11,6 +11,7 @@ import SearchDropdown from '../search/SearchDropdown'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { SearchIcon, UserIcon, NotificationIcon, MessageIcon } from '../icons'
 import { Box } from '../base'
+import AccountSwitcher from '../ui/AccountSwitcher'
 
 export default function TopNav({ email }: { email: string | null }) {
   const { t } = useLanguage()
@@ -675,6 +676,10 @@ export default function TopNav({ email }: { email: string | null }) {
                     zIndex: tokens.zIndex.dropdown,
                   }}
                 >
+                  {/* Account Switcher */}
+                  <AccountSwitcher onClose={() => setShowUserMenu(false)} />
+                  <Box style={{ height: 1, background: tokens.colors.border.primary, margin: `${tokens.spacing[1]} 0` }} />
+
                   <Link
                     href={myHandle ? `/u/${encodeURIComponent(myHandle)}` : '/'}
                     onClick={(e) => {

@@ -50,15 +50,14 @@ export async function getUserFromToken(token: string): Promise<User | null> {
       return null
     }
 
-    // 检查用户是否被禁用
+    // 检查用户是否被禁用或已注销
     const { data: profile } = await supabase
       .from('user_profiles')
-      .select('banned_at')
+      .select('banned_at, deleted_at')
       .eq('id', user.id)
       .maybeSingle()
 
-    if (profile?.banned_at) {
-      // 用户已被禁用，返回 null
+    if (profile?.banned_at || profile?.deleted_at) {
       return null
     }
 

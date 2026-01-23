@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
 import { useLanguage } from '../Providers/LanguageProvider'
@@ -26,26 +26,86 @@ interface ExtendedPerformance extends TraderPerformance {
 export interface OverviewPerformanceCardProps {
   performance: ExtendedPerformance
   profitableWeeksPct?: number
+  equityCurve?: Array<{ date: string; roi: number; pnl: number }>
+  lastUpdated?: string
 }
 
 type Period = '7D' | '30D' | '90D'
 
 /**
- * Performance卡片 - 交易员主页核心指标
- * 简洁清晰的布局设计
+ * 迷你趋势图 Sparkline
  */
-export default function OverviewPerformanceCard({ performance, profitableWeeksPct }: OverviewPerformanceCardProps) {
+function MiniSparkline({ data, color, width = 80, height = 28 }: { data: number[]; color: string; width?: number; height?: number }) {
+  if (!data || data.length < 2) return null
+
+  const min = Math.min(...data)
+  const max = Math.max(...data)
+  const range = max - min || 1
+
+  const points = data.map((v, i) => {
+    const x = (i / (data.length - 1)) * width
+    const y = height - ((v - min) / range) * (height - 4) - 2
+    return `${x},${y}`
+  }).join(' ')
+
+  return (
+    <svg width={width} height={height} style={{ display: 'block' }}>
+      <defs>
+        <linearGradient id={`sparkGrad-${color.replace('#', '')}`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity="0.3" />
+          <stop offset="100%" stopColor={color} stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <polyline
+        points={points}
+        fill="none"
+        stroke={color}
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      {/* 填充区域 */}
+      <polygon
+        points={`0,${height} ${points} ${width},${height}`}
+        fill={`url(#sparkGrad-${color.replace('#', '')})`}
+      />
+    </svg>
+  )
+}
+
+/**
+ * Performance卡片 - 交易员主页核心指标
+ * 优化版：信息层级分明，主指标突出，次指标用徽章展示
+ */
+export default function OverviewPerformanceCard({ performance, profitableWeeksPct, equityCurve, lastUpdated }: OverviewPerformanceCardProps) {
   void profitableWeeksPct
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
   const [period, setPeriod] = useState<Period>('90D')
   const [isAnimating, setIsAnimating] = useState(false)
   const [mounted, setMounted] = useState(false)
+  const [isVisible, setIsVisible] = useState(false)
+  const cardRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     setMounted(true)
   }, [])
 
-  // 切换周期时触发动画
+  // 进入视口时触发动画
+  useEffect(() => {
+    if (!cardRef.current) return
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsVisible(true)
+          observer.disconnect()
+        }
+      },
+      { threshold: 0.2 }
+    )
+    observer.observe(cardRef.current)
+    return () => observer.disconnect()
+  }, [])
+
   const handlePeriodChange = (newPeriod: Period) => {
     if (newPeriod !== period) {
       setIsAnimating(true)
@@ -103,17 +163,19 @@ export default function OverviewPerformanceCard({ performance, profitableWeeksPc
     const absValue = Math.abs(value)
     const sign = value >= 0 ? '+' : '-'
     if (absValue >= 1000000) {
-      return `${sign}${(absValue / 1000000).toFixed(2)}M`
+      return `${sign}$${(absValue / 1000000).toFixed(2)}M`
     } else if (absValue >= 1000) {
-      return `${sign}${absValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+      return `${sign}$${absValue.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
     }
-    return `${sign}${absValue.toFixed(2)}`
+    return `${sign}$${absValue.toFixed(2)}`
   }
 
-  const _periodLabel = period === '7D' ? '7 天' : period === '30D' ? '30 天' : '90 天'
+  // 生成 sparkline 数据
+  const sparklineData = equityCurve?.map(d => d.roi) || []
 
   return (
     <Box
+      ref={cardRef}
       className="performance-card glass-card"
       style={{
         background: `linear-gradient(145deg, ${tokens.colors.bg.secondary} 0%, ${tokens.colors.bg.primary}90 100%)`,
@@ -136,10 +198,18 @@ export default function OverviewPerformanceCard({ performance, profitableWeeksPc
             marginBottom: tokens.spacing[5],
           }}
         >
-          <Text size="lg" weight="black" style={{ color: tokens.colors.text.primary }}>
-            {t('performance')}
-          </Text>
-          
+          <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3] }}>
+            <Text size="lg" weight="black" style={{ color: tokens.colors.text.primary }}>
+              {t('performance')}
+            </Text>
+            {lastUpdated && (
+              <Text size="xs" color="tertiary" style={{ opacity: 0.6 }}>
+                {language === 'zh' ? '更新于 ' : 'Updated '}
+                {new Date(lastUpdated).toLocaleTimeString(language === 'zh' ? 'zh-CN' : 'en-US', { hour: '2-digit', minute: '2-digit' })}
+              </Text>
+            )}
+          </Box>
+
           {/* Period Selector */}
           <Box
             style={{
@@ -152,7 +222,7 @@ export default function OverviewPerformanceCard({ performance, profitableWeeksPc
             }}
           >
             {(['7D', '30D', '90D'] as Period[]).map((p) => {
-              const label = p === '7D' ? '7 天' : p === '30D' ? '30 天' : '90 天'
+              const label = p === '7D' ? '7D' : p === '30D' ? '30D' : '90D'
               return (
                 <button
                   key={p}
@@ -168,6 +238,7 @@ export default function OverviewPerformanceCard({ performance, profitableWeeksPc
                     cursor: 'pointer',
                     transition: 'all 0.2s ease',
                     fontFamily: tokens.typography.fontFamily.sans.join(', '),
+                    boxShadow: period === p ? '0 2px 8px rgba(0,0,0,0.1)' : 'none',
                   }}
                 >
                   {label}
@@ -180,65 +251,127 @@ export default function OverviewPerformanceCard({ performance, profitableWeeksPc
         {/* Content */}
         <Box
           style={{
-            opacity: isAnimating ? 0.5 : 1,
-            transform: isAnimating ? 'scale(0.99)' : 'scale(1)',
-            transition: 'all 0.15s ease',
+            opacity: isAnimating ? 0.3 : 1,
+            transform: isAnimating ? 'scale(0.98)' : 'scale(1)',
+            transition: 'all 0.2s ease',
           }}
         >
-          {/* ROI & PnL - 主指标 */}
+          {/* ROI & PnL - 主指标区 Hero Metrics */}
           <Box
             className="performance-main-grid"
             style={{
               display: 'grid',
               gridTemplateColumns: '1fr 1fr',
               gap: tokens.spacing[4],
-              marginBottom: tokens.spacing[4],
+              marginBottom: tokens.spacing[5],
             }}
           >
-            <StatRow
-              label={t('roi')}
-              value={roi !== undefined ? `${roi >= 0 ? '+' : ''}${roi.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%` : '—'}
-              valueColor={roi !== undefined ? (roi >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error) : tokens.colors.text.secondary}
-              large
-            />
-            <StatRow
-              label={t('pnl')}
-              value={formatPnl(pnl)}
-              valueColor={pnl !== undefined ? (pnl >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error) : tokens.colors.text.secondary}
-              large
-              align="right"
-            />
+            {/* ROI 卡片 */}
+            <Box
+              style={{
+                padding: tokens.spacing[4],
+                background: roi !== undefined && roi >= 0
+                  ? `linear-gradient(135deg, ${tokens.colors.accent.success}08 0%, ${tokens.colors.accent.success}03 100%)`
+                  : roi !== undefined
+                    ? `linear-gradient(135deg, ${tokens.colors.accent.error}08 0%, ${tokens.colors.accent.error}03 100%)`
+                    : tokens.colors.bg.tertiary + '40',
+                borderRadius: tokens.radius.lg,
+                border: `1px solid ${roi !== undefined && roi >= 0 ? tokens.colors.accent.success + '20' : roi !== undefined ? tokens.colors.accent.error + '20' : tokens.colors.border.primary}`,
+                position: 'relative',
+                overflow: 'hidden',
+              }}
+            >
+              <Text size="xs" style={{ color: tokens.colors.text.tertiary, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px', fontSize: 11, fontWeight: 500 }}>
+                {t('roi')}
+              </Text>
+              <Box style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
+                <Text
+                  style={{
+                    fontSize: 28,
+                    fontWeight: 800,
+                    color: roi !== undefined ? (roi >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error) : tokens.colors.text.secondary,
+                    fontFamily: tokens.typography.fontFamily.mono.join(', '),
+                    letterSpacing: '-0.03em',
+                    lineHeight: 1,
+                    opacity: isVisible ? 1 : 0,
+                    transform: isVisible ? 'translateY(0)' : 'translateY(10px)',
+                    transition: 'all 0.6s cubic-bezier(0.4, 0, 0.2, 1) 0.1s',
+                  }}
+                >
+                  {roi !== undefined ? `${roi >= 0 ? '+' : ''}${roi.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%` : '—'}
+                </Text>
+                {sparklineData.length > 2 && (
+                  <MiniSparkline
+                    data={sparklineData}
+                    color={roi !== undefined && roi >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error}
+                  />
+                )}
+              </Box>
+            </Box>
+
+            {/* PnL 卡片 */}
+            <Box
+              style={{
+                padding: tokens.spacing[4],
+                background: pnl !== undefined && pnl >= 0
+                  ? `linear-gradient(135deg, ${tokens.colors.accent.success}08 0%, ${tokens.colors.accent.success}03 100%)`
+                  : pnl !== undefined
+                    ? `linear-gradient(135deg, ${tokens.colors.accent.error}08 0%, ${tokens.colors.accent.error}03 100%)`
+                    : tokens.colors.bg.tertiary + '40',
+                borderRadius: tokens.radius.lg,
+                border: `1px solid ${pnl !== undefined && pnl >= 0 ? tokens.colors.accent.success + '20' : pnl !== undefined ? tokens.colors.accent.error + '20' : tokens.colors.border.primary}`,
+              }}
+            >
+              <Text size="xs" style={{ color: tokens.colors.text.tertiary, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px', fontSize: 11, fontWeight: 500 }}>
+                {t('pnl')}
+              </Text>
+              <Text
+                style={{
+                  fontSize: 28,
+                  fontWeight: 800,
+                  color: pnl !== undefined ? (pnl >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error) : tokens.colors.text.secondary,
+                  fontFamily: tokens.typography.fontFamily.mono.join(', '),
+                  letterSpacing: '-0.03em',
+                  lineHeight: 1,
+                  opacity: isVisible ? 1 : 0,
+                  transform: isVisible ? 'translateY(0)' : 'translateY(10px)',
+                  transition: 'all 0.6s cubic-bezier(0.4, 0, 0.2, 1) 0.2s',
+                }}
+              >
+                {formatPnl(pnl)}
+              </Text>
+            </Box>
           </Box>
 
-          {/* 分隔线 */}
-          <Box style={{ height: 1, background: tokens.colors.border.primary, marginBottom: tokens.spacing[4] }} />
-
-          {/* Secondary Metrics */}
-          <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
-            <StatRow
-              label={t('sharpeRatio')}
+          {/* 二级指标 - 紧凑徽章布局 */}
+          <Box
+            style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: tokens.spacing[2],
+              opacity: isVisible ? 1 : 0,
+              transform: isVisible ? 'translateY(0)' : 'translateY(10px)',
+              transition: 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1) 0.3s',
+            }}
+          >
+            <MetricBadge
+              label={language === 'zh' ? '夏普' : 'Sharpe'}
               value={sharpeRatio !== undefined ? sharpeRatio.toFixed(2) : '—'}
-              valueColor={sharpeRatio !== undefined && sharpeRatio > 1 ? tokens.colors.accent.success : tokens.colors.text.primary}
+              highlight={sharpeRatio !== undefined && sharpeRatio > 1}
             />
-            <StatRow
-              label={t('maxDrawdown')}
-              value={maxDrawdown !== undefined ? `${Math.abs(maxDrawdown).toFixed(2)}%` : '—'}
-              valueColor={tokens.colors.text.primary}
+            <MetricBadge
+              label={language === 'zh' ? '最大回撤' : 'MDD'}
+              value={maxDrawdown !== undefined ? `${Math.abs(maxDrawdown).toFixed(1)}%` : '—'}
+              negative
             />
-            <StatRow
-              label={t('winRate')}
-              value={winRate !== undefined ? `${winRate.toFixed(2)}%` : '—'}
-              valueColor={tokens.colors.text.primary}
+            <MetricBadge
+              label={language === 'zh' ? '胜率' : 'Win'}
+              value={winRate !== undefined ? `${winRate.toFixed(1)}%` : '—'}
+              highlight={winRate !== undefined && winRate > 60}
             />
-            <StatRow
-              label={t('winningPositions')}
-              value={winningPositions !== undefined ? String(winningPositions) : '—'}
-              valueColor={tokens.colors.text.primary}
-            />
-            <StatRow
-              label={t('totalPositions')}
-              value={totalPositions !== undefined ? String(totalPositions) : '—'}
-              valueColor={tokens.colors.text.primary}
+            <MetricBadge
+              label={language === 'zh' ? '盈利单' : 'W/T'}
+              value={winningPositions !== undefined && totalPositions !== undefined ? `${winningPositions}/${totalPositions}` : '—'}
             />
           </Box>
         </Box>
@@ -247,84 +380,44 @@ export default function OverviewPerformanceCard({ performance, profitableWeeksPc
   )
 }
 
-// 统计行组件
-function StatRow({
+/**
+ * 二级指标徽章组件
+ */
+function MetricBadge({
   label,
   value,
-  valueColor,
-  large = false,
-  align = 'left',
+  highlight = false,
+  negative = false,
 }: {
   label: string
   value: string
-  valueColor: string
-  large?: boolean
-  align?: 'left' | 'right'
+  highlight?: boolean
+  negative?: boolean
 }) {
+  const color = highlight
+    ? tokens.colors.accent.success
+    : negative
+      ? tokens.colors.accent.error
+      : tokens.colors.text.primary
+
   return (
     <Box
       style={{
         display: 'flex',
-        flexDirection: 'column',
-        gap: large ? 6 : 0,
-        ...(align === 'right' ? { alignItems: 'flex-end' } : {}),
+        alignItems: 'center',
+        gap: 6,
+        padding: `6px 12px`,
+        background: tokens.colors.bg.tertiary,
+        borderRadius: tokens.radius.full,
+        border: `1px solid ${highlight ? tokens.colors.accent.success + '30' : tokens.colors.border.primary}`,
       }}
     >
-      {large ? (
-        <>
-          <Text
-            size="xs"
-            style={{
-              color: tokens.colors.text.tertiary,
-              borderBottom: `1px dashed ${tokens.colors.text.tertiary}40`,
-              paddingBottom: 2,
-            }}
-          >
-            {label}
-          </Text>
-          <Text
-            style={{
-              fontSize: 24,
-              fontWeight: 700,
-              color: valueColor,
-              fontFamily: tokens.typography.fontFamily.mono.join(', '),
-              letterSpacing: '-0.02em',
-            }}
-          >
-            {value}
-          </Text>
-        </>
-      ) : (
-        <Box
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            width: '100%',
-          }}
-        >
-          <Text
-            size="sm"
-            style={{
-              color: tokens.colors.text.tertiary,
-              borderBottom: `1px dashed ${tokens.colors.text.tertiary}30`,
-              paddingBottom: 1,
-            }}
-          >
-            {label}
-          </Text>
-          <Text
-            size="base"
-            weight="bold"
-            style={{
-              color: valueColor,
-              fontFamily: tokens.typography.fontFamily.mono.join(', '),
-            }}
-          >
-            {value}
-          </Text>
-        </Box>
-      )}
+      <Text style={{ fontSize: 11, color: tokens.colors.text.tertiary, fontWeight: 500 }}>
+        {label}
+      </Text>
+      <Text style={{ fontSize: 13, color, fontWeight: 700, fontFamily: tokens.typography.fontFamily.mono.join(', ') }}>
+        {value}
+      </Text>
     </Box>
   )
 }

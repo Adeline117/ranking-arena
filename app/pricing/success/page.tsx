@@ -45,9 +45,10 @@ export default function PaymentSuccessPage() {
   const { refresh: refreshPremium, isPremium, tier } = usePremium()
   
   const [email, setEmail] = useState<string | null>(null)
-  const [countdown, setCountdown] = useState(8) // 增加倒计时给验证留更多时间
+  const [countdown, setCountdown] = useState(8)
   const [verificationStatus, setVerificationStatus] = useState<'verifying' | 'success' | 'error'>('verifying')
   const [hasVerified, setHasVerified] = useState(false)
+  const [retrying, setRetrying] = useState(false)
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -100,6 +101,19 @@ export default function PaymentSuccessPage() {
     }
   }, [])
 
+  // 获取有效的 access token（自动刷新过期 token）
+  const getValidAccessToken = useCallback(async (): Promise<string | null> => {
+    let { data: { session } } = await supabase.auth.getSession()
+
+    if (!session?.access_token) {
+      // 尝试刷新 session（token 可能已过期但 refresh token 仍有效）
+      const { data: refreshed } = await supabase.auth.refreshSession()
+      session = refreshed.session
+    }
+
+    return session?.access_token || null
+  }, [])
+
   // 验证并同步订阅状态
   const verifyAndRefresh = useCallback(async () => {
     const sessionId = searchParams.get('session_id')
@@ -109,10 +123,10 @@ export default function PaymentSuccessPage() {
     setVerificationStatus('verifying')
 
     try {
-      const { data: { session } } = await supabase.auth.getSession()
+      const accessToken = await getValidAccessToken()
 
-      if (!session?.access_token) {
-        console.error('No session found')
+      if (!accessToken) {
+        console.error('[Payment Success] No valid session after refresh')
         setVerificationStatus('error')
         return
       }
@@ -122,27 +136,41 @@ export default function PaymentSuccessPage() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
+          'Authorization': `Bearer ${accessToken}`,
           ...getCsrfHeaders()
         },
         body: JSON.stringify({ sessionId }),
       })
 
-      if (!response.ok) {
-        try {
-          const errorData = await response.json()
-          console.error('[Payment Success] Verification API error:', errorData)
-        } catch {
-          console.error('[Payment Success] Verification API error:', response.status)
-        }
+      if (response.ok) {
+        const data = await response.json()
+        console.log('[Payment Success] Subscription verified:', data)
 
-        // 验证 API 失败，可能 webhook 已经处理了，直接查询数据库确认
         clearSubscriptionCache()
+        await refreshPremium()
+        setVerificationStatus('success')
+        showToast(
+          language === 'zh' ? '会员已激活！' : 'Membership activated!',
+          'success'
+        )
+        return
+      }
 
-        // 等待 webhook 处理
-        await new Promise(resolve => setTimeout(resolve, 2000))
+      // API 返回非 200，记录错误
+      try {
+        const errorData = await response.json()
+        console.error('[Payment Success] Verification API error:', errorData)
+      } catch {
+        console.error('[Payment Success] Verification API error:', response.status)
+      }
 
-        // 直接查询数据库（避免闭包中的 stale state）
+      // 验证 API 失败，可能 webhook 已经处理了，通过轮询数据库确认
+      clearSubscriptionCache()
+
+      // 轮询检查（最多尝试 4 次，间隔递增）
+      const delays = [1500, 2500, 3000, 4000]
+      for (const delay of delays) {
+        await new Promise(resolve => setTimeout(resolve, delay))
         const isProNow = await checkSubscriptionDirect()
         if (isProNow) {
           await refreshPremium()
@@ -151,40 +179,12 @@ export default function PaymentSuccessPage() {
             language === 'zh' ? '会员已激活！' : 'Membership activated!',
             'success'
           )
-        } else {
-          // 再等一次
-          await new Promise(resolve => setTimeout(resolve, 2000))
-          const isProRetry = await checkSubscriptionDirect()
-          if (isProRetry) {
-            await refreshPremium()
-            setVerificationStatus('success')
-            showToast(
-              language === 'zh' ? '会员已激活！' : 'Membership activated!',
-              'success'
-            )
-          } else {
-            setVerificationStatus('error')
-            showToast(
-              language === 'zh' ? '验证失败，请稍后刷新页面或联系客服' : 'Verification failed, please refresh or contact support',
-              'warning'
-            )
-          }
+          return
         }
-        return
       }
 
-      const data = await response.json()
-      console.log('[Payment Success] Subscription verified:', data)
-
-      // 清除本地订阅缓存并刷新上下文
-      clearSubscriptionCache()
-      await refreshPremium()
-
-      setVerificationStatus('success')
-      showToast(
-        language === 'zh' ? '会员已激活！' : 'Membership activated!',
-        'success'
-      )
+      // 所有重试都失败
+      setVerificationStatus('error')
     } catch (error) {
       console.error('Failed to verify subscription:', error)
 
@@ -202,11 +202,28 @@ export default function PaymentSuccessPage() {
         setVerificationStatus('error')
       }
     }
-  }, [searchParams, hasVerified, refreshPremium, showToast, language, checkSubscriptionDirect])
+  }, [searchParams, hasVerified, refreshPremium, showToast, language, checkSubscriptionDirect, getValidAccessToken])
+
+  // 手动重试
+  const handleRetry = useCallback(async () => {
+    setRetrying(true)
+    setVerificationStatus('verifying')
+    setHasVerified(false)
+    // 触发重新验证（hasVerified 重置后 verifyAndRefresh 会重新执行）
+  }, [])
 
   useEffect(() => {
-    verifyAndRefresh()
-  }, [verifyAndRefresh])
+    if (!hasVerified) {
+      verifyAndRefresh()
+    }
+  }, [verifyAndRefresh, hasVerified])
+
+  // retrying 结束后重置状态
+  useEffect(() => {
+    if (retrying && verificationStatus !== 'verifying') {
+      setRetrying(false)
+    }
+  }, [retrying, verificationStatus])
 
   // 自动跳转倒计时（只在验证完成后开始）
   useEffect(() => {
@@ -275,49 +292,44 @@ export default function PaymentSuccessPage() {
         )}
 
         {/* 验证成功状态 */}
-        {verificationStatus !== 'verifying' && (
+        {verificationStatus === 'success' && (
           <>
-            {/* 成功图标 */}
             <Box style={{ marginBottom: tokens.spacing[6] }}>
               <CheckCircleIcon size={80} />
             </Box>
 
-            {/* 标题 */}
             <Text
               as="h1"
               size="2xl"
               weight="black"
-              style={{
-                marginBottom: tokens.spacing[3],
-              }}
+              style={{ marginBottom: tokens.spacing[3] }}
             >
               {t('paymentSuccess')}
             </Text>
 
             <Text size="md" color="secondary" style={{ marginBottom: tokens.spacing[6] }}>
-              {language === 'zh' 
-                ? '恭喜！你已成功升级为 Pro 会员' 
+              {language === 'zh'
+                ? '恭喜！你已成功升级为 Pro 会员'
                 : 'Congratulations! You are now a Pro member'
               }
             </Text>
 
-            {/* Pro 徽章 - 显示实时状态 */}
+            {/* Pro 徽章 */}
             <Box
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: 8,
                 padding: '12px 24px',
-                background: isPremium ? 'var(--color-pro-badge-bg)' : 'var(--color-bg-secondary)',
+                background: 'var(--color-pro-badge-bg)',
                 borderRadius: tokens.radius.full,
-                boxShadow: isPremium ? '0 4px 20px var(--color-pro-badge-shadow)' : 'none',
-                border: isPremium ? 'none' : '1px solid var(--color-border-primary)',
+                boxShadow: '0 4px 20px var(--color-pro-badge-shadow)',
                 marginBottom: tokens.spacing[6],
               }}
             >
               <StarIcon size={18} />
-              <Text size="md" weight="bold" style={{ color: isPremium ? '#fff' : 'var(--color-text-secondary)' }}>
-                {isPremium ? 'Pro Member' : (tier === 'pro' ? 'Pro Member' : 'Activating...')}
+              <Text size="md" weight="bold" style={{ color: '#fff' }}>
+                Pro Member
               </Text>
             </Box>
 
@@ -376,22 +388,83 @@ export default function PaymentSuccessPage() {
               <Link href="/settings" style={{ textDecoration: 'none' }}>
                 <Button
                   variant="secondary"
-                  style={{
-                    padding: `${tokens.spacing[3]} ${tokens.spacing[6]}`,
-                  }}
+                  style={{ padding: `${tokens.spacing[3]} ${tokens.spacing[6]}` }}
                 >
                   {t('settings')}
                 </Button>
               </Link>
             </Box>
 
-            {/* 倒计时提示 */}
             <Text size="xs" color="tertiary" style={{ marginTop: tokens.spacing[6] }}>
-              {language === 'zh' 
-                ? `${countdown} 秒后自动返回首页...` 
+              {language === 'zh'
+                ? `${countdown} 秒后自动返回首页...`
                 : `Redirecting to home in ${countdown} seconds...`
               }
             </Text>
+          </>
+        )}
+
+        {/* 验证失败状态 */}
+        {verificationStatus === 'error' && (
+          <>
+            <Box style={{ marginBottom: tokens.spacing[6], color: 'var(--color-accent-warning, #f59e0b)' }}>
+              <svg width={80} height={80} viewBox="0 0 24 24" fill="none">
+                <circle cx="12" cy="12" r="10" fill="currentColor" fillOpacity="0.15" />
+                <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" />
+                <path d="M12 8V13" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
+                <circle cx="12" cy="16.5" r="1.5" fill="currentColor" />
+              </svg>
+            </Box>
+
+            <Text
+              as="h1"
+              size="2xl"
+              weight="black"
+              style={{ marginBottom: tokens.spacing[3] }}
+            >
+              {language === 'zh' ? '激活处理中' : 'Activation In Progress'}
+            </Text>
+
+            <Text size="md" color="secondary" style={{ marginBottom: tokens.spacing[4] }}>
+              {language === 'zh'
+                ? '您的付款已成功，会员正在激活中。这通常需要几秒钟，请稍后重试。'
+                : 'Your payment was successful. Membership activation is in progress. This usually takes a few seconds, please retry.'
+              }
+            </Text>
+
+            <Text size="sm" color="tertiary" style={{ marginBottom: tokens.spacing[6] }}>
+              {language === 'zh'
+                ? '如多次重试后仍未激活，请联系 support@arenafi.org'
+                : 'If it still fails after retrying, please contact support@arenafi.org'
+              }
+            </Text>
+
+            <Box style={{ display: 'flex', gap: tokens.spacing[3], justifyContent: 'center' }}>
+              <Button
+                variant="primary"
+                onClick={handleRetry}
+                disabled={retrying}
+                style={{
+                  padding: `${tokens.spacing[3]} ${tokens.spacing[6]}`,
+                  background: 'var(--color-pro-badge-bg)',
+                  border: 'none',
+                  boxShadow: '0 4px 12px var(--color-pro-badge-shadow)',
+                }}
+              >
+                {retrying
+                  ? (language === 'zh' ? '重试中...' : 'Retrying...')
+                  : (language === 'zh' ? '重新激活' : 'Retry Activation')
+                }
+              </Button>
+              <Link href="/" style={{ textDecoration: 'none' }}>
+                <Button
+                  variant="secondary"
+                  style={{ padding: `${tokens.spacing[3]} ${tokens.spacing[6]}` }}
+                >
+                  {language === 'zh' ? '返回首页' : 'Back to Home'}
+                </Button>
+              </Link>
+            </Box>
           </>
         )}
       </Box>

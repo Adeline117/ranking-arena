@@ -485,9 +485,11 @@ export function CreateSnapshotButton({
 
     try {
       const { getCsrfHeaders } = await import('@/lib/api/client')
+      const { getAuthHeaders } = await import('@/lib/auth/client')
+      const authHeaders = await getAuthHeaders()
       const response = await fetch('/api/snapshots', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...getCsrfHeaders() },
+        headers: { 'Content-Type': 'application/json', ...getCsrfHeaders(), ...authHeaders },
         body: JSON.stringify({ timeRange, exchange }),
       })
 
