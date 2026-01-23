@@ -85,6 +85,16 @@ function SearchContent() {
       setLoading(true)
       const results: SearchResult[] = []
 
+      // 转义 LIKE 通配符防止注入
+      const sanitizedQuery = query.trim()
+        .slice(0, 100)
+        .replace(/[\\%_]/g, c => `\\${c}`)
+
+      if (!sanitizedQuery) {
+        setLoading(false)
+        return
+      }
+
       try {
         // 搜索用户（通过 handle 或 UID）
         const isNumericQuery = /^\d+$/.test(query.trim())
@@ -114,7 +124,7 @@ function SearchContent() {
           const { data: usersByHandle } = await supabase
             .from('user_profiles')
             .select('id, handle, avatar_url, bio, uid')
-            .ilike('handle', `%${query}%`)
+            .ilike('handle', `%${sanitizedQuery}%`)
             .limit(10)
           
           if (usersByHandle) {
@@ -135,51 +145,39 @@ function SearchContent() {
         const { data: traders } = await supabase
           .from('trader_sources')
           .select('source_trader_id, handle, source')
-          .ilike('handle', `%${query}%`)
+          .ilike('handle', `%${sanitizedQuery}%`)
           .limit(10)
 
-        if (traders) {
-          // 获取交易员的最新排行榜数据
+        if (traders && traders.length > 0) {
+          // 批量获取所有交易员的快照数据（避免 N+1 查询）
+          const traderIds = traders.map(t => t.source_trader_id)
+          const { data: allSnapshots } = await supabase
+            .from('trader_snapshots')
+            .select('source_trader_id, season_id, roi, pnl, arena_score, win_rate, max_drawdown, captured_at')
+            .in('source_trader_id', traderIds)
+            .not('arena_score', 'is', null)
+            .order('captured_at', { ascending: false })
+
+          // 构建每个 trader 的最佳快照映射（优先 90D > 30D > 7D）
+          const snapshotMap = new Map<string, { season_id: string; roi: number; arena_score: number }>()
+          const periodPriority: Record<string, number> = { '90D': 3, '30D': 2, '7D': 1 }
+
+          allSnapshots?.forEach((s: any) => {
+            const existing = snapshotMap.get(s.source_trader_id)
+            const currentPriority = periodPriority[s.season_id] || 0
+            const existingPriority = existing ? (periodPriority[existing.season_id] || 0) : 0
+
+            if (!existing || currentPriority > existingPriority) {
+              snapshotMap.set(s.source_trader_id, s)
+            }
+          })
+
           for (const trader of traders) {
-            // 获取最新的90D数据（优先显示90D）
-            let { data: snapshots } = await supabase
-              .from('trader_snapshots')
-              .select('season_id, roi, pnl, arena_score, win_rate, max_drawdown')
-              .eq('source_trader_id', trader.source_trader_id)
-              .eq('season_id', '90D')
-              .not('arena_score', 'is', null)
-              .order('captured_at', { ascending: false })
-              .limit(1)
-            
-            // 如果没有90D数据，尝试30D
-            if (!snapshots?.length) {
-              snapshots = (await supabase
-                .from('trader_snapshots')
-                .select('season_id, roi, pnl, arena_score, win_rate, max_drawdown')
-                .eq('source_trader_id', trader.source_trader_id)
-                .eq('season_id', '30D')
-                .not('arena_score', 'is', null)
-                .order('captured_at', { ascending: false })
-                .limit(1)).data
-            }
-            
-            // 如果还没有，尝试7D
-            if (!snapshots?.length) {
-              snapshots = (await supabase
-                .from('trader_snapshots')
-                .select('season_id, roi, pnl, arena_score, win_rate, max_drawdown')
-                .eq('source_trader_id', trader.source_trader_id)
-                .eq('season_id', '7D')
-                .not('arena_score', 'is', null)
-                .order('captured_at', { ascending: false })
-                .limit(1)).data
-            }
-            
-            const latest = snapshots?.[0]
-            const subtitle = latest 
+            const latest = snapshotMap.get(trader.source_trader_id)
+            const subtitle = latest
               ? `${latest.season_id}: ROI ${latest.roi?.toFixed(1)}% • Score ${latest.arena_score?.toFixed(1)}`
               : `来源: ${String(trader.source || '').toUpperCase()}`
-            
+
             results.push({
               type: 'trader',
               id: trader.source_trader_id,
@@ -194,7 +192,7 @@ function SearchContent() {
         const { data: posts } = await supabase
           .from('posts')
           .select('id, title, content, author_handle, created_at')
-          .or(`title.ilike.%${query}%,content.ilike.%${query}%`)
+          .or(`title.ilike.%${sanitizedQuery}%,content.ilike.%${sanitizedQuery}%`)
           .limit(10)
 
         if (posts) {
@@ -213,7 +211,7 @@ function SearchContent() {
         const { data: groups } = await supabase
           .from('groups')
           .select('id, name')
-          .ilike('name', `%${query}%`)
+          .ilike('name', `%${sanitizedQuery}%`)
           .limit(10)
 
         if (groups) {
