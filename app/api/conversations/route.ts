@@ -43,8 +43,9 @@ export const GET = withAuth(
       conv.user1_id === userId ? conv.user2_id : conv.user1_id
     )
     const uniqueOtherUserIds = [...new Set(otherUserIds)]
+    const conversationIds = conversations.map(c => c.id)
 
-    const [profilesResult, unreadResult] = await Promise.all([
+    const [profilesResult, unreadResult, memberSettingsResult] = await Promise.all([
       // 一次性获取所有对方用户资料
       supabase
         .from('user_profiles')
@@ -56,7 +57,13 @@ export const GET = withAuth(
         .select('conversation_id', { count: 'exact' })
         .eq('receiver_id', userId)
         .eq('read', false)
-        .in('conversation_id', conversations.map(c => c.id)),
+        .in('conversation_id', conversationIds),
+      // 一次性获取所有会话的成员设置（备注、置顶、静音等）
+      supabase
+        .from('conversation_members')
+        .select('conversation_id, remark, is_muted, is_pinned, is_blocked')
+        .eq('user_id', userId)
+        .in('conversation_id', conversationIds),
     ])
 
     // 构建用户资料映射
@@ -79,6 +86,19 @@ export const GET = withAuth(
       }
     }
 
+    // 构建成员设置映射
+    const memberSettingsMap = new Map<string, { remark: string | null; is_muted: boolean; is_pinned: boolean; is_blocked: boolean }>()
+    if (memberSettingsResult.data) {
+      for (const setting of memberSettingsResult.data) {
+        memberSettingsMap.set(setting.conversation_id, {
+          remark: setting.remark || null,
+          is_muted: setting.is_muted || false,
+          is_pinned: setting.is_pinned || false,
+          is_blocked: setting.is_blocked || false,
+        })
+      }
+    }
+
     // 组装结果
     const enhancedConversations = conversations.map(conv => {
       const otherUserId = conv.user1_id === userId ? conv.user2_id : conv.user1_id
@@ -96,7 +116,17 @@ export const GET = withAuth(
         last_message_preview: conv.last_message_preview,
         unread_count: unreadMap.get(conv.id) || 0,
         created_at: conv.created_at,
+        member_settings: memberSettingsMap.get(conv.id) || null,
       }
+    })
+
+    // Sort: pinned conversations first, then by last_message_at
+    enhancedConversations.sort((a, b) => {
+      const aPinned = a.member_settings?.is_pinned || false
+      const bPinned = b.member_settings?.is_pinned || false
+      if (aPinned && !bPinned) return -1
+      if (!aPinned && bPinned) return 1
+      return new Date(b.last_message_at).getTime() - new Date(a.last_message_at).getTime()
     })
 
     return NextResponse.json({ conversations: enhancedConversations })

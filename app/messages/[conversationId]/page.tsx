@@ -11,6 +11,15 @@ import Avatar from '@/app/components/ui/Avatar'
 import { useToast } from '@/app/components/ui/Toast'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { getProfileUrl } from '@/lib/utils/profile-navigation'
+import {
+  MessageErrorCode,
+  getAuthSession,
+  refreshAuthToken,
+  resolveErrorCode,
+  getErrorMessage,
+} from '@/lib/auth/client'
+import ChatSettingsDrawer from '@/app/components/Features/ChatSettingsDrawer'
+import ChatSearchOverlay from '@/app/components/Features/ChatSearchOverlay'
 
 type MessageStatus = 'sending' | 'sent' | 'failed'
 
@@ -23,6 +32,8 @@ type Message = {
   created_at: string
   _status?: MessageStatus // client-side only: optimistic UI state
   _tempId?: string // client-side only: temporary ID before server confirms
+  _errorCode?: MessageErrorCode // client-side only: failure reason
+  _errorMessage?: string // client-side only: user-facing error message
 }
 
 type OtherUser = {
@@ -38,7 +49,6 @@ export default function ConversationPage({ params }: { params: { conversationId:
   const [conversationId, setConversationId] = useState<string>('')
   const [email, setEmail] = useState<string | null>(null)
   const [userId, setUserId] = useState<string | null>(null)
-  const [accessToken, setAccessToken] = useState<string | null>(null) // 添加 access token
   const [authChecked, setAuthChecked] = useState(false) // 追踪认证检查是否完成
   const [messages, setMessages] = useState<Message[]>([])
   const [otherUser, setOtherUser] = useState<OtherUser | null>(null)
@@ -46,9 +56,16 @@ export default function ConversationPage({ params }: { params: { conversationId:
   const [newMessage, setNewMessage] = useState('')
   const [sending, setSending] = useState(false)
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'reconnecting'>('connected')
+  const [accessToken, setAccessToken] = useState<string | null>(null)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [remark, setRemark] = useState<string | null>(null)
+  const [clearedBefore, setClearedBefore] = useState<string | null>(null)
+  const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
+  const messageRefs = useRef<Record<string, HTMLDivElement | null>>({})
 
   // 注入 spin 动画样式
   useEffect(() => {
@@ -71,19 +88,71 @@ export default function ConversationPage({ params }: { params: { conversationId:
     }
   }, [params])
 
-  // 使用 getSession 代替 getUser，更可靠地检查认证状态
+  // 使用统一的 auth 工具检查认证状态，自动处理 token 刷新
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setEmail(data.session?.user?.email ?? null)
-      setUserId(data.session?.user?.id ?? null)
-      setAccessToken(data.session?.access_token ?? null) // 保存 access token
-      setAuthChecked(true) // 认证检查完成
-      
-      if (data.session?.user?.id && data.session?.access_token && conversationId) {
-        loadMessages(data.session.user.id, conversationId, data.session.access_token)
+    getAuthSession().then((auth) => {
+      if (auth) {
+        setUserId(auth.userId)
+        setAccessToken(auth.accessToken)
+        // 获取 email 用于 TopNav 显示
+        supabase.auth.getSession().then(({ data }) => {
+          setEmail(data.session?.user?.email ?? null)
+        })
+      } else {
+        setUserId(null)
+        setAccessToken(null)
+      }
+      setAuthChecked(true)
+
+      if (auth?.userId && conversationId) {
+        loadMessages(auth.userId, conversationId, auth.accessToken)
       }
     })
+
+    // 监听 auth 状态变化（logout、token刷新等）
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session) {
+        setUserId(session.user.id)
+        setEmail(session.user.email ?? null)
+        setAccessToken(session.access_token)
+      } else {
+        setUserId(null)
+        setEmail(null)
+        setAccessToken(null)
+      }
+    })
+
+    return () => {
+      subscription.unsubscribe()
+    }
   }, [conversationId])
+
+  // Load conversation member settings (remark, muted, pinned, cleared_before)
+  useEffect(() => {
+    if (!conversationId || !accessToken) return
+    fetch(`/api/chat/${conversationId}/settings`, {
+      headers: { 'Authorization': `Bearer ${accessToken}` },
+    })
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (data?.settings) {
+          setRemark(data.settings.remark || null)
+          setClearedBefore(data.settings.cleared_before || null)
+        }
+      })
+      .catch(() => {})
+  }, [conversationId, accessToken])
+
+  // Navigate to a specific message (for search)
+  const navigateToMessage = useCallback((messageId: string) => {
+    setHighlightedMessageId(messageId)
+    const el = messageRefs.current[messageId]
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      // Clear highlight after animation
+      setTimeout(() => setHighlightedMessageId(null), 2000)
+    }
+  }, [])
 
   // 滚动到底部
   const scrollToBottom = () => {
@@ -97,28 +166,59 @@ export default function ConversationPage({ params }: { params: { conversationId:
   const loadMessages = useCallback(async (uid: string, convId: string, token?: string) => {
     try {
       setLoading(true)
-      const res = await fetch(`/api/messages?conversationId=${convId}&userId=${uid}`, {
-        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+
+      // 确保有有效 token
+      let authToken = token
+      if (!authToken) {
+        const auth = await getAuthSession()
+        if (!auth) {
+          showToast('请先登录', 'error')
+          router.push('/login')
+          return
+        }
+        authToken = auth.accessToken
+      }
+
+      const res = await fetch(`/api/messages?conversationId=${convId}`, {
+        headers: { 'Authorization': `Bearer ${authToken}` },
       })
+
+      // 如果 401，尝试刷新后重试
+      if (res.status === 401) {
+        const refreshed = await refreshAuthToken()
+        if (refreshed) {
+
+          const retryRes = await fetch(`/api/messages?conversationId=${convId}`, {
+            headers: { 'Authorization': `Bearer ${refreshed.accessToken}` },
+          })
+          const retryData = await retryRes.json()
+          if (retryRes.ok && retryData.messages) {
+            setMessages(retryData.messages)
+            if (retryData.otherUser) setOtherUser(retryData.otherUser)
+            return
+          }
+        }
+        showToast('登录已过期，请重新登录', 'error')
+        router.push('/login')
+        return
+      }
+
       const data = await res.json()
-      
-      if (data.error) {
-        showToast(data.error, 'error')
+
+      if (!res.ok) {
+        showToast(data.error || '加载消息失败', 'error')
         router.push('/messages')
         return
       }
-      
+
       if (data.messages) {
         setMessages(data.messages)
-        
-        // 使用 API 返回的对方用户信息
         if (data.otherUser) {
           setOtherUser(data.otherUser)
         }
       }
-    } catch (error) {
-      console.error('Error loading messages:', error)
-      showToast('加载消息失败', 'error')
+    } catch {
+      showToast('网络异常，加载消息失败', 'error')
     } finally {
       setLoading(false)
     }
@@ -174,12 +274,42 @@ export default function ConversationPage({ params }: { params: { conversationId:
     }
   }, [userId, conversationId, otherUser])
 
+  /**
+   * 发送消息的核心函数
+   * 处理 auth token 获取、发送、401 自动刷新重试
+   */
+  const sendMessageRequest = async (
+    receiverId: string,
+    content: string,
+    token: string
+  ): Promise<{ ok: boolean; status: number; data: Record<string, unknown> }> => {
+    const res = await fetch('/api/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+        ...getCsrfHeaders()
+      },
+      body: JSON.stringify({ receiverId, content })
+    })
+    const data = await res.json()
+    return { ok: res.ok, status: res.status, data }
+  }
+
   const handleSend = async () => {
     if (!newMessage.trim() || !userId || !otherUser || sending) return
 
     const content = newMessage.trim()
     if (content.length > 2000) {
       showToast('消息内容过长，最多2000字符', 'warning')
+      return
+    }
+
+    // 先确保有有效的 auth token
+    const auth = await getAuthSession()
+    if (!auth) {
+      showToast('请先登录', 'error')
+      router.push('/login')
       return
     }
 
@@ -202,90 +332,141 @@ export default function ConversationPage({ params }: { params: { conversationId:
 
     setSending(true)
     try {
-      const res = await fetch('/api/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...getCsrfHeaders()
-        },
-        body: JSON.stringify({
-          senderId: userId,
-          receiverId: otherUser.id,
-          content
-        })
-      })
+      let result = await sendMessageRequest(otherUser.id, content, auth.accessToken)
 
-      const data = await res.json()
+      // 如果 401，尝试刷新 token 后重试一次
+      if (result.status === 401) {
+        const refreshed = await refreshAuthToken()
+        if (refreshed) {
 
-      if (!res.ok) {
-        // Mark as failed
+          result = await sendMessageRequest(otherUser.id, content, refreshed.accessToken)
+        } else {
+          // 刷新失败，用户需要重新登录
+          const errorCode = MessageErrorCode.NOT_AUTHENTICATED
+          setMessages(prev => prev.map(m =>
+            m._tempId === tempId
+              ? { ...m, _status: 'failed' as MessageStatus, _errorCode: errorCode, _errorMessage: getErrorMessage(errorCode) }
+              : m
+          ))
+          showToast('登录已过期，请重新登录', 'error')
+          return
+        }
+      }
+
+      if (!result.ok) {
+        const errorCode = resolveErrorCode(result.status, result.data as { error_code?: string; error?: string })
+        const errorMsg = getErrorMessage(errorCode, result.data.error as string)
         setMessages(prev => prev.map(m =>
-          m._tempId === tempId ? { ...m, _status: 'failed' as MessageStatus } : m
+          m._tempId === tempId
+            ? { ...m, _status: 'failed' as MessageStatus, _errorCode: errorCode, _errorMessage: errorMsg }
+            : m
         ))
-        showToast(data.error || '发送失败', 'error')
+        showToast(errorMsg, 'error')
         return
       }
 
-      if (data.message) {
+      if (result.data.message) {
         // Replace optimistic message with server-confirmed message
         setMessages(prev => prev.map(m =>
-          m._tempId === tempId ? { ...data.message, _status: 'sent' as MessageStatus } : m
+          m._tempId === tempId
+            ? { ...(result.data.message as Message), _status: 'sent' as MessageStatus }
+            : m
         ))
       }
-    } catch (error) {
-      console.error('Error sending message:', error)
-      // Mark as failed
+    } catch {
+      // Network error
+      const errorCode = MessageErrorCode.NETWORK_ERROR
+      const errorMsg = getErrorMessage(errorCode)
       setMessages(prev => prev.map(m =>
-        m._tempId === tempId ? { ...m, _status: 'failed' as MessageStatus } : m
+        m._tempId === tempId
+          ? { ...m, _status: 'failed' as MessageStatus, _errorCode: errorCode, _errorMessage: errorMsg }
+          : m
       ))
-      showToast('发送失败，点击消息重试', 'error')
+      showToast(errorMsg, 'error')
     } finally {
       setSending(false)
     }
   }
 
   const handleRetry = async (failedMsg: Message) => {
-    if (!userId || !otherUser) return
+    if (!otherUser) return
 
-    // Update status to sending
+    // 重试前先验证登录态
+    const auth = await getAuthSession()
+    if (!auth) {
+      // 尝试刷新 token
+      const refreshed = await refreshAuthToken()
+      if (!refreshed) {
+        showToast('登录已过期，请重新登录', 'error')
+        router.push('/login')
+        return
+      }
+      setUserId(refreshed.userId)
+    }
+
+    const currentAuth = auth || (await getAuthSession())
+    if (!currentAuth) {
+      showToast('请先登录', 'error')
+      router.push('/login')
+      return
+    }
+
+    // Update status to sending, clear previous error
     setMessages(prev => prev.map(m =>
-      m.id === failedMsg.id ? { ...m, _status: 'sending' as MessageStatus } : m
+      m.id === failedMsg.id
+        ? { ...m, _status: 'sending' as MessageStatus, _errorCode: undefined, _errorMessage: undefined }
+        : m
     ))
 
     try {
-      const res = await fetch('/api/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...getCsrfHeaders()
-        },
-        body: JSON.stringify({
-          senderId: userId,
-          receiverId: otherUser.id,
-          content: failedMsg.content
-        })
-      })
+      let result = await sendMessageRequest(otherUser.id, failedMsg.content, currentAuth.accessToken)
 
-      const data = await res.json()
+      // 如果 401，尝试刷新 token 后重试一次
+      if (result.status === 401) {
+        const refreshed = await refreshAuthToken()
+        if (refreshed) {
 
-      if (!res.ok) {
+          result = await sendMessageRequest(otherUser.id, failedMsg.content, refreshed.accessToken)
+        } else {
+          const errorCode = MessageErrorCode.NOT_AUTHENTICATED
+          setMessages(prev => prev.map(m =>
+            m.id === failedMsg.id
+              ? { ...m, _status: 'failed' as MessageStatus, _errorCode: errorCode, _errorMessage: getErrorMessage(errorCode) }
+              : m
+          ))
+          showToast('登录已过期，请重新登录', 'error')
+          return
+        }
+      }
+
+      if (!result.ok) {
+        const errorCode = resolveErrorCode(result.status, result.data as { error_code?: string; error?: string })
+        const errorMsg = getErrorMessage(errorCode, result.data.error as string)
         setMessages(prev => prev.map(m =>
-          m.id === failedMsg.id ? { ...m, _status: 'failed' as MessageStatus } : m
+          m.id === failedMsg.id
+            ? { ...m, _status: 'failed' as MessageStatus, _errorCode: errorCode, _errorMessage: errorMsg }
+            : m
         ))
-        showToast(data.error || '重试失败', 'error')
+        showToast(errorMsg, 'error')
         return
       }
 
-      if (data.message) {
+      if (result.data.message) {
         setMessages(prev => prev.map(m =>
-          m.id === failedMsg.id ? { ...data.message, _status: 'sent' as MessageStatus } : m
+          m.id === failedMsg.id
+            ? { ...(result.data.message as Message), _status: 'sent' as MessageStatus }
+            : m
         ))
       }
     } catch {
+      const errorCode = MessageErrorCode.NETWORK_ERROR
+      const errorMsg = getErrorMessage(errorCode)
       setMessages(prev => prev.map(m =>
-        m.id === failedMsg.id ? { ...m, _status: 'failed' as MessageStatus } : m
+        m.id === failedMsg.id
+          ? { ...m, _status: 'failed' as MessageStatus, _errorCode: errorCode, _errorMessage: errorMsg }
+          : m
       ))
-      showToast('重试失败', 'error')
+      showToast(errorMsg, 'error')
     }
   }
 
@@ -420,15 +601,21 @@ export default function ConversationPage({ params }: { params: { conversationId:
     )
   }
 
-  const messageGroups = groupMessagesByDate(messages)
+  // Filter messages based on cleared_before
+  const visibleMessages = clearedBefore
+    ? messages.filter(msg => new Date(msg.created_at) > new Date(clearedBefore))
+    : messages
+
+  const messageGroups = groupMessagesByDate(visibleMessages)
 
   return (
-    <Box style={{ 
-      minHeight: '100vh', 
-      background: tokens.colors.bg.primary, 
+    <Box style={{
+      minHeight: '100vh',
+      background: tokens.colors.bg.primary,
       color: tokens.colors.text.primary,
       display: 'flex',
-      flexDirection: 'column'
+      flexDirection: 'column',
+      position: 'relative',
     }}>
       <TopNav email={email} />
       
@@ -495,8 +682,13 @@ export default function ConversationPage({ params }: { params: { conversationId:
                 />
                 <Box style={{ flex: 1, minWidth: 0 }}>
                   <Text size="base" weight="bold" style={{ color: tokens.colors.text.primary }}>
-                    {displayName}
+                    {remark || displayName}
                   </Text>
+                  {remark && (
+                    <Text size="xs" color="tertiary" style={{ marginTop: 2 }}>
+                      @{displayName}
+                    </Text>
+                  )}
                 </Box>
               </Box>
             )
@@ -532,9 +724,14 @@ export default function ConversationPage({ params }: { params: { conversationId:
               </Box>
               <Box style={{ flex: 1, minWidth: 0 }}>
                 <Text size="base" weight="bold" style={{ color: tokens.colors.text.primary }}>
-                  {displayName}
+                  {remark || displayName}
                 </Text>
-                {otherUser.bio && (
+                {remark && (
+                  <Text size="xs" color="tertiary" style={{ marginTop: 2 }}>
+                    @{displayName}
+                  </Text>
+                )}
+                {!remark && otherUser.bio && (
                   <Text size="xs" color="tertiary" style={{
                     maxWidth: '100%',
                     overflow: 'hidden',
@@ -549,6 +746,41 @@ export default function ConversationPage({ params }: { params: { conversationId:
             </Link>
           )
         })()}
+
+        {/* Settings button */}
+        {otherUser && (
+          <button
+            onClick={() => setSettingsOpen(true)}
+            style={{
+              width: 36,
+              height: 36,
+              borderRadius: tokens.radius.full,
+              border: 'none',
+              background: 'transparent',
+              color: tokens.colors.text.secondary,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              transition: 'all 0.2s',
+              flexShrink: 0,
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = tokens.colors.bg.tertiary || 'rgba(255,255,255,0.1)'
+              e.currentTarget.style.color = tokens.colors.text.primary
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'transparent'
+              e.currentTarget.style.color = tokens.colors.text.secondary
+            }}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="1" />
+              <circle cx="19" cy="12" r="1" />
+              <circle cx="5" cy="12" r="1" />
+            </svg>
+          </button>
+        )}
       </Box>
 
       {/* Connection status banner */}
@@ -636,13 +868,18 @@ export default function ConversationPage({ params }: { params: { conversationId:
               const otherProfileUrl = !isMine ? getProfileUrl(otherUser) : null
 
               return (
-                <Box
+                <div
                   key={msg.id}
+                  ref={(el: HTMLDivElement | null) => { messageRefs.current[msg.id] = el }}
                   style={{
                     display: 'flex',
                     flexDirection: 'column',
                     alignItems: isMine ? 'flex-end' : 'flex-start',
                     marginBottom: isSameSenderAsNext ? '2px' : tokens.spacing[3],
+                    transition: 'background 0.3s',
+                    borderRadius: 12,
+                    background: highlightedMessageId === msg.id ? 'rgba(149, 117, 205, 0.15)' : 'transparent',
+                    padding: highlightedMessageId === msg.id ? '4px' : '0px',
                   }}
                 >
                   {/* Message row with avatar */}
@@ -734,31 +971,39 @@ export default function ConversationPage({ params }: { params: { conversationId:
                   </Box>
                   </Box>{/* close message row with avatar */}
 
-                  {/* Failed state: retry button */}
+                  {/* Failed state: error reason + retry button */}
                   {isMine && msg._status === 'failed' && (
-                    <button
-                      onClick={() => handleRetry(msg)}
-                      style={{
-                        marginTop: 4,
-                        padding: '2px 8px',
-                        background: 'rgba(244, 67, 54, 0.15)',
-                        border: '1px solid rgba(244, 67, 54, 0.4)',
-                        borderRadius: 6,
-                        color: '#f44336',
-                        fontSize: 11,
-                        fontWeight: 600,
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 4,
-                      }}
-                    >
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M1 4v6h6M23 20v-6h-6"/>
-                        <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/>
-                      </svg>
-                      发送失败，点击重试
-                    </button>
+                    <Box style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2, marginTop: 4 }}>
+                      {/* 显示具体错误原因 */}
+                      <Text size="xs" style={{ color: '#f44336', fontSize: 11, fontWeight: 500 }}>
+                        {msg._errorMessage || '发送失败'}
+                      </Text>
+                      {/* 重试按钮 - 对于权限错误不显示重试 */}
+                      {msg._errorCode !== MessageErrorCode.PERMISSION_DENIED && (
+                        <button
+                          onClick={() => handleRetry(msg)}
+                          style={{
+                            padding: '2px 8px',
+                            background: 'rgba(244, 67, 54, 0.15)',
+                            border: '1px solid rgba(244, 67, 54, 0.4)',
+                            borderRadius: 6,
+                            color: '#f44336',
+                            fontSize: 11,
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 4,
+                          }}
+                        >
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M1 4v6h6M23 20v-6h-6"/>
+                            <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/>
+                          </svg>
+                          {msg._errorCode === MessageErrorCode.NOT_AUTHENTICATED ? '重新登录' : '点击重试'}
+                        </button>
+                      )}
+                    </Box>
                   )}
 
                   {/* 时间戳 + 状态指示器 */}
@@ -790,13 +1035,13 @@ export default function ConversationPage({ params }: { params: { conversationId:
                       )}
                     </Text>
                   )}
-                </Box>
+                </div>
               )
             })}
           </Box>
         ))}
         
-        {messages.length === 0 && (
+        {visibleMessages.length === 0 && (
           <Box style={{ 
             textAlign: 'center', 
             padding: `${tokens.spacing[8]} ${tokens.spacing[4]}`,
@@ -831,6 +1076,42 @@ export default function ConversationPage({ params }: { params: { conversationId:
         
         <div ref={messagesEndRef} />
       </Box>
+
+      {/* Search Overlay */}
+      {conversationId && accessToken && (
+        <ChatSearchOverlay
+          isOpen={searchOpen}
+          onClose={() => setSearchOpen(false)}
+          conversationId={conversationId}
+          accessToken={accessToken}
+          onNavigateToMessage={(messageId) => {
+            setSearchOpen(false)
+            // Small delay to allow overlay to close
+            setTimeout(() => navigateToMessage(messageId), 100)
+          }}
+        />
+      )}
+
+      {/* Settings Drawer */}
+      {otherUser && otherUser.handle && conversationId && accessToken && (
+        <ChatSettingsDrawer
+          isOpen={settingsOpen}
+          onClose={() => setSettingsOpen(false)}
+          conversationId={conversationId}
+          otherUser={{ id: otherUser.id, handle: otherUser.handle, avatar_url: otherUser.avatar_url ?? undefined, bio: otherUser.bio ?? undefined }}
+          accessToken={accessToken}
+          onSettingsChange={(newSettings) => {
+            setRemark(newSettings.remark)
+            if (newSettings.cleared_before) {
+              setClearedBefore(newSettings.cleared_before)
+            }
+          }}
+          onSearchOpen={() => setSearchOpen(true)}
+          onClearHistory={() => {
+            setClearedBefore(new Date().toISOString())
+          }}
+        />
+      )}
 
       {/* Input Area */}
       <Box
