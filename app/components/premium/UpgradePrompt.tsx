@@ -55,8 +55,7 @@ export default function UpgradePrompt({
   const router = useRouter()
   const { t } = useLanguage()
 
-  const defaultButtonText = t('upgradeToPro')
-  const finalButtonText = buttonText || defaultButtonText
+  const finalButtonText = buttonText || t('upgradeToPro')
 
   const handleClick = () => {
     if (onClick) {
@@ -198,7 +197,7 @@ export default function UpgradePrompt({
           WebkitTextFillColor: 'transparent',
         }}
       >
-        {featureName || t('proOnly')}
+        {featureName || t('proFeature')}
       </Text>
       
       {featureDescription && (
