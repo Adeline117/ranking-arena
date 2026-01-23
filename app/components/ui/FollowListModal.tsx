@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '../base'
@@ -40,27 +40,43 @@ export default function FollowListModal({
   const [loading, setLoading] = useState(true)
   const [hidden, setHidden] = useState(false)
   const [hiddenMessage, setHiddenMessage] = useState('')
+  const abortControllerRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
     if (isOpen && handle) {
       loadUsers()
     }
+
+    // 清理：组件卸载或关闭时取消请求
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort()
+      }
+    }
   }, [isOpen, handle, type])
 
   const loadUsers = async () => {
+    // 取消之前的请求
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+    }
+    abortControllerRef.current = new AbortController()
+
     setLoading(true)
     try {
-      const endpoint = type === 'followers' 
+      const endpoint = type === 'followers'
         ? `/api/users/${encodeURIComponent(handle)}/followers`
         : `/api/users/${encodeURIComponent(handle)}/following`
-      
-      const url = currentUserId 
+
+      const url = currentUserId
         ? `${endpoint}?requesterId=${currentUserId}`
         : endpoint
-        
-      const response = await fetch(url)
+
+      const response = await fetch(url, {
+        signal: abortControllerRef.current.signal,
+      })
       const data = await response.json()
-      
+
       if (response.ok) {
         if (data.hidden) {
           setHidden(true)
@@ -75,8 +91,10 @@ export default function FollowListModal({
         setUsers([])
       }
     } catch (error) {
-      console.error('加载失败:', error)
-      setUsers([])
+      if ((error as Error).name !== 'AbortError') {
+        console.error('加载失败:', error)
+        setUsers([])
+      }
     } finally {
       setLoading(false)
     }
