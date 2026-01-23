@@ -21,10 +21,14 @@ function getStripe() {
 
 // 懒加载 Supabase Admin 客户端
 function getSupabaseAdmin() {
-  return createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!url || !serviceKey) {
+    throw new Error('Supabase credentials not configured')
+  }
+  return createClient(url, serviceKey, {
+    auth: { persistSession: false },
+  })
 }
 
 // 从价格 ID 获取订阅等级
@@ -170,6 +174,13 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     logger.error('Verify session error', { error })
+    const message = error instanceof Error ? error.message : ''
+    if (message.includes('STRIPE_SECRET_KEY') || message.includes('not configured')) {
+      return NextResponse.json(
+        { error: 'Payment system not configured. Please contact support.' },
+        { status: 503 }
+      )
+    }
     return NextResponse.json({ error: 'Failed to verify session' }, { status: 500 })
   }
 }

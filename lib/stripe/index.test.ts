@@ -19,6 +19,9 @@ import {
   constructWebhookEvent,
 } from './index'
 
+// Mock server-only (no-op in test environment)
+jest.mock('server-only', () => ({}))
+
 // Mock Stripe
 jest.mock('stripe', () => {
   const mockStripe = {
@@ -106,7 +109,7 @@ describe('getStripe', () => {
     expect(() => {
       const { getStripe: getStripeNew } = require('./index')
       getStripeNew()
-    }).toThrow('STRIPE_SECRET_KEY is not defined')
+    }).toThrow('STRIPE_SECRET_KEY is not configured')
   })
 })
 

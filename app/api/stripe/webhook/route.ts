@@ -1,15 +1,38 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import Stripe from 'stripe'
 import { stripe, constructWebhookEvent, SUBSCRIPTION_STATUS_MAP } from '@/lib/stripe'
 import { joinProOfficialGroup, leaveProOfficialGroup } from '@/app/api/pro-official-group/route'
 import { createLogger } from '@/lib/utils/logger'
 
-// 创建服务端 Supabase 客户端
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+// 懒加载 Supabase Admin 客户端
+let _supabase: SupabaseClient | null = null
+function getSupabase() {
+  if (!_supabase) {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+    if (!url || !serviceKey) {
+      throw new Error('Supabase credentials not configured (NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)')
+    }
+    _supabase = createClient(url, serviceKey, {
+      auth: { persistSession: false },
+    })
+  }
+  return _supabase
+}
+
+// Lazy-initialized reference - all helper functions use this
+// Safe: initialized on first access, not at module load time
+const supabase = new Proxy({} as SupabaseClient, {
+  get(_, prop: string) {
+    const client = getSupabase()
+    const value = (client as unknown as Record<string, unknown>)[prop]
+    if (typeof value === 'function') {
+      return value.bind(client)
+    }
+    return value
+  },
+})
 
 // 禁用 body 解析，因为我们需要原始 body 来验证签名
 export const runtime = 'nodejs'
@@ -39,6 +62,22 @@ async function withRetry<T>(
 }
 
 export async function POST(request: NextRequest) {
+  // 前置校验：确保 Stripe 环境变量已配置
+  if (!process.env.STRIPE_SECRET_KEY) {
+    logger.error('STRIPE_SECRET_KEY is not configured')
+    return NextResponse.json(
+      { error: 'Payment system not configured' },
+      { status: 503 }
+    )
+  }
+  if (!process.env.STRIPE_WEBHOOK_SECRET) {
+    logger.error('STRIPE_WEBHOOK_SECRET is not configured')
+    return NextResponse.json(
+      { error: 'Webhook not configured' },
+      { status: 503 }
+    )
+  }
+
   try {
     const body = await request.text()
     const signature = request.headers.get('stripe-signature')
