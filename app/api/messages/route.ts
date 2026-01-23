@@ -5,15 +5,12 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 import { createLogger, traceMessage } from '@/lib/utils/logger'
+import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
 
 const logger = createLogger('messages-api')
 
 export const dynamic = 'force-dynamic'
-
-const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
 
 // 非互关用户发送消息的限制数量
 const NON_MUTUAL_MESSAGE_LIMIT = 3
@@ -21,18 +18,23 @@ const NON_MUTUAL_MESSAGE_LIMIT = 3
 // 获取会话消息
 export async function GET(request: NextRequest) {
   try {
+    // 验证用户身份
+    const user = await getAuthUser(request)
+    if (!user) {
+      return NextResponse.json(
+        { error: '请先登录', error_code: 'NOT_AUTHENTICATED' },
+        { status: 401 }
+      )
+    }
+
     const conversationId = request.nextUrl.searchParams.get('conversationId')
-    const userId = request.nextUrl.searchParams.get('userId')
+    const userId = user.id // 使用认证用户的 ID，而非请求参数
 
-    if (!conversationId || !userId) {
-      return NextResponse.json({ error: 'Missing conversationId or userId' }, { status: 400 })
+    if (!conversationId) {
+      return NextResponse.json({ error: 'Missing conversationId' }, { status: 400 })
     }
 
-    if (!SUPABASE_URL || !SUPABASE_KEY) {
-      return NextResponse.json({ error: 'Missing Supabase config' }, { status: 500 })
-    }
-
-    const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
+    const supabase = getSupabaseAdmin()
 
     // 验证用户是否有权限访问此会话
     const { data: conversation, error: convError } = await supabase
@@ -125,30 +127,50 @@ export async function GET(request: NextRequest) {
 // 发送私信
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
-    const { senderId, receiverId, content } = body
+    // 验证用户身份 - 必须携带有效的 Authorization header
+    const user = await getAuthUser(request)
+    if (!user) {
+      return NextResponse.json(
+        { error: '请先登录', error_code: 'NOT_AUTHENTICATED' },
+        { status: 401 }
+      )
+    }
 
-    if (!senderId || !receiverId || !content) {
-      return NextResponse.json({ error: 'Missing senderId, receiverId or content' }, { status: 400 })
+    const body = await request.json()
+    const { receiverId, content } = body
+
+    // 使用认证用户的 ID 作为发送者，忽略客户端传来的 senderId
+    const senderId = user.id
+
+    if (!receiverId || !content) {
+      return NextResponse.json(
+        { error: '缺少接收者或消息内容', error_code: 'VALIDATION_ERROR' },
+        { status: 400 }
+      )
     }
 
     if (senderId === receiverId) {
-      return NextResponse.json({ error: '不能给自己发私信' }, { status: 400 })
+      return NextResponse.json(
+        { error: '不能给自己发私信', error_code: 'VALIDATION_ERROR' },
+        { status: 400 }
+      )
     }
 
     if (content.trim().length === 0) {
-      return NextResponse.json({ error: '消息内容不能为空' }, { status: 400 })
+      return NextResponse.json(
+        { error: '消息内容不能为空', error_code: 'VALIDATION_ERROR' },
+        { status: 400 }
+      )
     }
 
     if (content.length > 2000) {
-      return NextResponse.json({ error: '消息内容过长，最多2000字符' }, { status: 400 })
+      return NextResponse.json(
+        { error: '消息内容过长，最多2000字符', error_code: 'VALIDATION_ERROR' },
+        { status: 400 }
+      )
     }
 
-    if (!SUPABASE_URL || !SUPABASE_KEY) {
-      return NextResponse.json({ error: 'Missing Supabase config' }, { status: 500 })
-    }
-
-    const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
+    const supabase = getSupabaseAdmin()
 
     // 获取接收者的隐私设置
     const { data: receiverProfile, error: profileError } = await supabase
@@ -171,7 +193,10 @@ export async function POST(request: NextRequest) {
         receiverId,
         error: 'DM permission denied: recipient disabled DMs',
       })
-      return NextResponse.json({ error: '该用户已关闭私信功能' }, { status: 403 })
+      return NextResponse.json(
+        { error: '该用户已关闭私信功能', error_code: 'PERMISSION_DENIED' },
+        { status: 403 }
+      )
     }
 
     // 检查是否互相关注
@@ -228,6 +253,7 @@ export async function POST(request: NextRequest) {
           })
           return NextResponse.json({
             error: `你们还不是互相关注，在对方回复前你最多只能发送${NON_MUTUAL_MESSAGE_LIMIT}条消息`,
+            error_code: 'PERMISSION_DENIED',
             limit_reached: true,
             sent_count: currentCount
           }, { status: 403 })
@@ -300,7 +326,10 @@ export async function POST(request: NextRequest) {
         receiverId,
         error: msgError.message,
       })
-      return NextResponse.json({ error: '发送失败' }, { status: 500 })
+      return NextResponse.json(
+        { error: '服务异常，请稍后重试', error_code: 'SERVER_ERROR' },
+        { status: 500 }
+      )
     }
 
     // 追踪消息发送成功
@@ -319,6 +348,9 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     logger.error('POST error', { error: String(error) })
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return NextResponse.json(
+      { error: '服务异常，请稍后重试', error_code: 'SERVER_ERROR' },
+      { status: 500 }
+    )
   }
 }
