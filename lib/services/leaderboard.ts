@@ -183,7 +183,17 @@ export class LeaderboardService {
       [...params, safeLimit, offset],
     );
 
-    const rankedRows: RankedTraderRow[] = dataResult.rows.map((row, idx) => ({
+    // Deduplicate: keep only the first (best-ranked) snapshot per (platform, trader_key).
+    // Since data is already sorted by the requested sort column, first occurrence wins.
+    const seen = new Set<string>();
+    const deduped = dataResult.rows.filter((row) => {
+      const key = `${row.platform}:${row.trader_key}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    const rankedRows: RankedTraderRow[] = deduped.map((row, idx) => ({
       rank: offset + idx + 1,
       platform: row.platform as Platform,
       trader_key: row.trader_key,
