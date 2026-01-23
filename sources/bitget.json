@@ -1,0 +1,192 @@
+[
+  {
+    "platform": "bitget",
+    "market_type": "futures",
+    "leaderboard_endpoints": [
+      {
+        "url": "https://www.bitget.com/v1/trigger/trace/queryCopyTraderList",
+        "method": "POST",
+        "headers": {
+          "Origin": "https://www.bitget.com",
+          "Referer": "https://www.bitget.com/copy-trading",
+          "Content-Type": "application/json",
+          "language": "en_US"
+        },
+        "body_template": {
+          "pageNo": 1,
+          "pageSize": 20,
+          "periodType": "7D",
+          "sortBy": "ROI",
+          "sortType": "DESC",
+          "productType": "USDT-FUTURES"
+        },
+        "pagination": {
+          "type": "page",
+          "page_size": 20,
+          "max_pages": 5,
+          "param_name": "pageNo"
+        },
+        "response_path": "data.traderList",
+        "window_param": "periodType",
+        "sort_param": "sortBy"
+      }
+    ],
+    "profile_endpoints": [
+      {
+        "url": "https://www.bitget.com/v1/trigger/trace/queryTraderDetail",
+        "method": "POST",
+        "headers": {
+          "Origin": "https://www.bitget.com",
+          "Content-Type": "application/json"
+        },
+        "body_template": {
+          "traderId": ""
+        },
+        "response_path": "data"
+      },
+      {
+        "url": "https://www.bitget.com/v1/trigger/trace/queryTraderPerformance",
+        "method": "POST",
+        "headers": {
+          "Origin": "https://www.bitget.com",
+          "Content-Type": "application/json"
+        },
+        "body_template": {
+          "traderId": "",
+          "periodType": "7D"
+        },
+        "response_path": "data"
+      }
+    ],
+    "window_support": ["7d", "30d", "90d"],
+    "rate_limit_hint": {
+      "rpm": 20,
+      "concurrent": 2,
+      "delay_ms": 3000
+    },
+    "field_map": {
+      "roi_pct": "roi",
+      "pnl_usd": "profit",
+      "win_rate": "winRate",
+      "max_drawdown": "maxDrawdown",
+      "trades_count": "totalOrder",
+      "followers": "followerCount",
+      "copiers": "copierCount",
+      "aum": "totalAssets"
+    },
+    "roi_sort_supported": true,
+    "roi_sort_method": "query_param",
+    "proof": [
+      {
+        "url": "https://www.bitget.com/v1/trigger/trace/queryCopyTraderList",
+        "request_path": "/v1/trigger/trace/queryCopyTraderList",
+        "method": "POST",
+        "response_fields_sample": {
+          "data.traderList[0].traderId": "trader_xyz789",
+          "data.traderList[0].nickName": "BitgetPro",
+          "data.traderList[0].roi": 0.8921,
+          "data.traderList[0].profit": 45678.12,
+          "data.traderList[0].winRate": 0.74,
+          "data.traderList[0].maxDrawdown": 0.18,
+          "data.traderList[0].totalOrder": 312,
+          "data.traderList[0].followerCount": 950
+        },
+        "discovered_at": "2024-01-15T00:00:00Z"
+      }
+    ]
+  },
+  {
+    "platform": "bitget",
+    "market_type": "spot",
+    "leaderboard_endpoints": [
+      {
+        "url": "https://www.bitget.com/v1/trigger/trace/queryCopyTraderList",
+        "method": "POST",
+        "headers": {
+          "Origin": "https://www.bitget.com",
+          "Referer": "https://www.bitget.com/copy-trading/spot",
+          "Content-Type": "application/json",
+          "language": "en_US"
+        },
+        "body_template": {
+          "pageNo": 1,
+          "pageSize": 20,
+          "periodType": "7D",
+          "sortBy": "ROI",
+          "sortType": "DESC",
+          "productType": "SPOT"
+        },
+        "pagination": {
+          "type": "page",
+          "page_size": 20,
+          "max_pages": 5,
+          "param_name": "pageNo"
+        },
+        "response_path": "data.traderList",
+        "window_param": "periodType",
+        "sort_param": "sortBy"
+      }
+    ],
+    "profile_endpoints": [
+      {
+        "url": "https://www.bitget.com/v1/trigger/trace/queryTraderDetail",
+        "method": "POST",
+        "headers": {
+          "Origin": "https://www.bitget.com",
+          "Content-Type": "application/json"
+        },
+        "body_template": {
+          "traderId": "",
+          "productType": "SPOT"
+        },
+        "response_path": "data"
+      },
+      {
+        "url": "https://www.bitget.com/v1/trigger/trace/queryTraderPerformance",
+        "method": "POST",
+        "headers": {
+          "Origin": "https://www.bitget.com",
+          "Content-Type": "application/json"
+        },
+        "body_template": {
+          "traderId": "",
+          "periodType": "7D",
+          "productType": "SPOT"
+        },
+        "response_path": "data"
+      }
+    ],
+    "window_support": ["7d", "30d", "90d"],
+    "rate_limit_hint": {
+      "rpm": 20,
+      "concurrent": 2,
+      "delay_ms": 3000
+    },
+    "field_map": {
+      "roi_pct": "roi",
+      "pnl_usd": "profit",
+      "win_rate": "winRate",
+      "max_drawdown": "maxDrawdown",
+      "trades_count": "totalOrder",
+      "followers": "followerCount",
+      "copiers": ""
+    },
+    "roi_sort_supported": true,
+    "roi_sort_method": "query_param",
+    "proof": [
+      {
+        "url": "https://www.bitget.com/v1/trigger/trace/queryCopyTraderList",
+        "request_path": "/v1/trigger/trace/queryCopyTraderList",
+        "method": "POST",
+        "response_fields_sample": {
+          "data.traderList[0].traderId": "spot_trader_456",
+          "data.traderList[0].nickName": "SpotKing",
+          "data.traderList[0].yieldRate": 0.3456,
+          "data.traderList[0].profit": 12345.67,
+          "data.traderList[0].winRate": 0.62
+        },
+        "discovered_at": "2024-01-15T00:00:00Z"
+      }
+    ]
+  }
+]
