@@ -55,6 +55,51 @@ export default function PaymentSuccessPage() {
     })
   }, [])
 
+  // 直接查询订阅状态（避免 React 状态闭包问题）
+  const checkSubscriptionDirect = useCallback(async (): Promise<boolean> => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token || !session?.user?.id) return false
+
+      // 优先通过 API 查询（使用 service role，不受 RLS 限制）
+      try {
+        const response = await fetch('/api/subscription', {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+          },
+        })
+        if (response.ok) {
+          const data = await response.json()
+          if (data.subscription?.tier === 'pro') return true
+        }
+      } catch {
+        // API 失败，继续尝试直接查询
+      }
+
+      // 降级：直接查 subscriptions 表
+      const { data: sub } = await supabase
+        .from('subscriptions')
+        .select('tier, status')
+        .eq('user_id', session.user.id)
+        .in('status', ['active', 'trialing'])
+        .maybeSingle()
+
+      if (sub?.tier === 'pro') return true
+
+      // 再查 user_profiles
+      const { data: profile } = await supabase
+        .from('user_profiles')
+        .select('subscription_tier')
+        .eq('id', session.user.id)
+        .maybeSingle()
+
+      return profile?.subscription_tier === 'pro'
+    } catch {
+      return false
+    }
+  }, [])
+
   // 验证并同步订阅状态
   const verifyAndRefresh = useCallback(async () => {
     const sessionId = searchParams.get('session_id')
@@ -65,7 +110,7 @@ export default function PaymentSuccessPage() {
 
     try {
       const { data: { session } } = await supabase.auth.getSession()
-      
+
       if (!session?.access_token) {
         console.error('No session found')
         setVerificationStatus('error')
@@ -84,85 +129,80 @@ export default function PaymentSuccessPage() {
       })
 
       if (!response.ok) {
-        let _errorMsg = language === 'zh' ? '验证支付失败' : 'Payment verification failed'
         try {
           const errorData = await response.json()
-          _errorMsg = errorData.error || _errorMsg
-          console.error('[Payment Success] Verification failed:', errorData)
+          console.error('[Payment Success] Verification API error:', errorData)
         } catch {
-          _errorMsg = `${_errorMsg} (${response.status})`
+          console.error('[Payment Success] Verification API error:', response.status)
         }
-        
-        // 即使验证失败也尝试刷新状态（可能 webhook 已经处理了）
+
+        // 验证 API 失败，可能 webhook 已经处理了，直接查询数据库确认
         clearSubscriptionCache()
-        await refreshPremium()
-        
-        // 等待一下再检查状态（给 webhook 时间处理）
+
+        // 等待 webhook 处理
         await new Promise(resolve => setTimeout(resolve, 2000))
-        await refreshPremium()
-        
-        // 再次刷新以获取最新状态
-        await refreshPremium()
-        
-        // 如果刷新后是 pro，说明 webhook 已经处理了
-        const currentIsPremium = isPremium || tier === 'pro'
-        if (currentIsPremium) {
+
+        // 直接查询数据库（避免闭包中的 stale state）
+        const isProNow = await checkSubscriptionDirect()
+        if (isProNow) {
+          await refreshPremium()
           setVerificationStatus('success')
           showToast(
             language === 'zh' ? '会员已激活！' : 'Membership activated!',
             'success'
           )
         } else {
-          setVerificationStatus('error')
-          showToast(
-            language === 'zh' ? '验证失败，请稍后刷新页面或联系客服' : 'Verification failed, please refresh or contact support',
-            'warning'
-          )
+          // 再等一次
+          await new Promise(resolve => setTimeout(resolve, 2000))
+          const isProRetry = await checkSubscriptionDirect()
+          if (isProRetry) {
+            await refreshPremium()
+            setVerificationStatus('success')
+            showToast(
+              language === 'zh' ? '会员已激活！' : 'Membership activated!',
+              'success'
+            )
+          } else {
+            setVerificationStatus('error')
+            showToast(
+              language === 'zh' ? '验证失败，请稍后刷新页面或联系客服' : 'Verification failed, please refresh or contact support',
+              'warning'
+            )
+          }
         }
         return
       }
 
       const data = await response.json()
       console.log('[Payment Success] Subscription verified:', data)
-      
-      // 清除本地订阅缓存
+
+      // 清除本地订阅缓存并刷新上下文
       clearSubscriptionCache()
-      
-      // 关键：刷新 Premium 上下文以更新界面状态
       await refreshPremium()
-      
-      // 等待一下确保状态更新
-      await new Promise(resolve => setTimeout(resolve, 500))
-      await refreshPremium()
-      
-      // 检查最终状态
-      const finalIsPremium = data.tier === 'pro' || isPremium || tier === 'pro'
-      if (finalIsPremium) {
+
+      setVerificationStatus('success')
+      showToast(
+        language === 'zh' ? '会员已激活！' : 'Membership activated!',
+        'success'
+      )
+    } catch (error) {
+      console.error('Failed to verify subscription:', error)
+
+      // 清除缓存，尝试直接查询确认
+      clearSubscriptionCache()
+      const isProNow = await checkSubscriptionDirect()
+      if (isProNow) {
+        await refreshPremium()
         setVerificationStatus('success')
         showToast(
           language === 'zh' ? '会员已激活！' : 'Membership activated!',
           'success'
         )
       } else {
-        // 状态可能还没完全同步，但 API 返回成功，标记为成功
-        setVerificationStatus('success')
-        showToast(
-          language === 'zh' ? '支付成功，正在激活会员...' : 'Payment successful, activating membership...',
-          'info'
-        )
+        setVerificationStatus('error')
       }
-    } catch (error) {
-      console.error('Failed to verify subscription:', error)
-      setVerificationStatus('error')
-      
-      // 清除本地订阅缓存
-      clearSubscriptionCache()
-
-      // 尝试刷新状态
-      await refreshPremium()
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams, hasVerified, refreshPremium, showToast, language])
+  }, [searchParams, hasVerified, refreshPremium, showToast, language, checkSubscriptionDirect])
 
   useEffect(() => {
     verifyAndRefresh()
@@ -183,8 +223,6 @@ export default function PaymentSuccessPage() {
 
     return () => clearTimeout(timer)
   }, [countdown, router, verificationStatus])
-
-  const _sessionId = searchParams.get('session_id')
 
   return (
     <Box
