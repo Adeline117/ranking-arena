@@ -1,3 +1,4 @@
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-nocheck - Supabase tables not in generated types (v2 schema)
 /**
  * Cron endpoint: Run worker inline (for Vercel serverless deployment)

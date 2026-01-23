@@ -42,7 +42,7 @@ export class CircuitBreaker {
         if (Date.now() - this.lastFailureTime >= this.config.resetTimeout) {
           this.state = 'HALF_OPEN';
           this.halfOpenAttempts = 0;
-          console.log(`[CircuitBreaker:${this.name}] Transitioning to HALF_OPEN`);
+          console.warn(`[CircuitBreaker:${this.name}] Transitioning to HALF_OPEN`);
           return true;
         }
         return false;
@@ -58,7 +58,7 @@ export class CircuitBreaker {
         this.halfOpenAttempts++;
         if (this.halfOpenAttempts >= this.config.halfOpenMaxAttempts) {
           this.reset();
-          console.log(`[CircuitBreaker:${this.name}] Recovered, transitioning to CLOSED`);
+          console.warn(`[CircuitBreaker:${this.name}] Recovered, transitioning to CLOSED`);
         }
         break;
 
@@ -79,13 +79,13 @@ export class CircuitBreaker {
       case 'CLOSED':
         if (this.failures >= this.config.failureThreshold) {
           this.state = 'OPEN';
-          console.log(`[CircuitBreaker:${this.name}] OPENED after ${this.failures} failures`);
+          console.warn(`[CircuitBreaker:${this.name}] OPENED after ${this.failures} failures`);
         }
         break;
 
       case 'HALF_OPEN':
         this.state = 'OPEN';
-        console.log(`[CircuitBreaker:${this.name}] Failed in HALF_OPEN, re-opening`);
+        console.warn(`[CircuitBreaker:${this.name}] Failed in HALF_OPEN, re-opening`);
         break;
     }
   }

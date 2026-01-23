@@ -1,3 +1,4 @@
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-nocheck - Supabase tables not in generated types (v2 schema)
 /**
  * GET /api/rankings
@@ -106,7 +107,7 @@ export async function GET(request: Request) {
     // Pagination
     query = query.range(offset, offset + limit - 1);
 
-    const { data, error, count } = await query;
+    const { data, error } = await query;
 
     if (error) {
       console.error('[rankings] Query error:', error.message);

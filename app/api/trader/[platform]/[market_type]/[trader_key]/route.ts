@@ -1,3 +1,4 @@
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-nocheck - Supabase tables not in generated types (v2 schema)
 /**
  * GET /api/trader/:platform/:market_type/:trader_key
