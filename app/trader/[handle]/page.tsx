@@ -7,6 +7,7 @@ import { tokens } from '@/lib/design-tokens'
 import { supabase } from '@/lib/supabase/client'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import TopNav from '@/app/components/layout/TopNav'
+import TraderPageV2 from '@/app/components/trader/TraderPageV2'
 import TraderHeader from '@/app/components/trader/TraderHeader'
 import TraderTabs from '@/app/components/trader/TraderTabs'
 import OverviewPerformanceCard from '@/app/components/trader/OverviewPerformanceCard'
@@ -335,6 +336,42 @@ function TraderContent(props: { params: { handle: string } | Promise<{ handle: s
   )
 }
 
+function TraderPageV2Router({ platform, params }: { platform: string; params: { handle: string } | Promise<{ handle: string }> }) {
+  const [traderKey, setTraderKey] = useState<string>('')
+
+  useEffect(() => {
+    if (params && typeof params === 'object' && 'then' in params) {
+      (params as Promise<{ handle: string }>).then((resolved) => {
+        setTraderKey(decodeURIComponent(resolved?.handle ?? ''))
+      })
+    } else {
+      setTraderKey(decodeURIComponent(String((params as { handle: string })?.handle ?? '')))
+    }
+  }, [params])
+
+  if (!traderKey) return <RankingSkeleton />
+
+  return (
+    <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
+      <TopNav email={null} />
+      <TraderPageV2 platform={platform} traderKey={traderKey} />
+    </Box>
+  )
+}
+
+function TraderPageRouter(props: { params: { handle: string } | Promise<{ handle: string }> }) {
+  const searchParams = useSearchParams()
+  const platform = searchParams.get('platform')
+
+  // If platform query param is present, use the new V2 page (pure DB read, fast)
+  if (platform) {
+    return <TraderPageV2Router platform={platform} params={props.params} />
+  }
+
+  // Default: existing behavior
+  return <TraderContent {...props} />
+}
+
 export default function TraderPage(props: { params: { handle: string } | Promise<{ handle: string }> }) {
   return (
     <Suspense fallback={
@@ -345,7 +382,7 @@ export default function TraderPage(props: { params: { handle: string } | Promise
         </Box>
       </Box>
     }>
-      <TraderContent {...props} />
+      <TraderPageRouter {...props} />
     </Suspense>
   )
 }
