@@ -594,7 +594,7 @@ export default function PricingPage() {
             textAlign: 'center',
           }}
         >
-          {/* 统计数据 */}
+          {/* 平台数据 - 仅展示可验证的真实数据 */}
           <Box
             style={{
               display: 'flex',
@@ -606,26 +606,26 @@ export default function PricingPage() {
           >
             <Box>
               <Text size="3xl" weight="black" style={{ color: 'var(--color-pro-gradient-start)' }}>
-                500+
+                8
               </Text>
               <Text size="sm" color="secondary">
-                {language === 'zh' ? 'Pro 会员' : 'Pro Members'}
+                {language === 'zh' ? '交易所覆盖' : 'Exchanges Supported'}
               </Text>
             </Box>
             <Box>
               <Text size="3xl" weight="black" style={{ color: 'var(--color-pro-gradient-start)' }}>
-                10K+
+                90{language === 'zh' ? '天' : 'D'}
               </Text>
               <Text size="sm" color="secondary">
-                {language === 'zh' ? '交易员数据' : 'Traders Tracked'}
+                {language === 'zh' ? '历史数据' : 'Historical Data'}
               </Text>
             </Box>
             <Box>
               <Text size="3xl" weight="black" style={{ color: 'var(--color-pro-gradient-start)' }}>
-                7
+                24/7
               </Text>
               <Text size="sm" color="secondary">
-                {language === 'zh' ? '交易所覆盖' : 'Exchanges'}
+                {language === 'zh' ? '数据更新' : 'Data Updates'}
               </Text>
             </Box>
           </Box>
