@@ -1,212 +1,268 @@
-# System Architecture Principles (Lockdown)
+# System State Management Principles
 
-> **This document defines non-negotiable architectural rules.**
-> Any PR that violates these principles MUST be rejected.
-> These rules exist to prevent the "works on page A, broken on page B" class of bugs.
+> **This document is normative.** All new code MUST comply with these rules.
+> Violations must be caught in code review or ESLint.
 
 ---
 
-## 1. Auth Chain: Single Source of Truth
+## 1. Single Source of Truth (Auth)
 
-### Rule: All client-side auth state must come from `useUnifiedAuth()`
+### Rule
+All authentication state comes from `useAuthSession()` (defined in `lib/hooks/useAuthSession.ts`).
 
+### What This Means
+- One global singleton manages: `userId`, `email`, `accessToken`, `isLoggedIn`, `authChecked`
+- Token refresh is handled transparently inside the hook
+- All pages share the same state (no re-initialization per page)
+
+### Prohibited Patterns
 ```typescript
-// CORRECT
-import { useUnifiedAuth } from '@/lib/hooks/useUnifiedAuth'
+// WRONG: Direct supabase auth calls in components
+supabase.auth.getSession()
+supabase.auth.getUser()
+supabase.auth.onAuthStateChange(...)
+
+// WRONG: Local auth state in pages
+const [userId, setUserId] = useState(null)
+const [accessToken, setAccessToken] = useState(null)
+```
+
+### Correct Pattern
+```typescript
+import { useAuthSession } from '@/lib/hooks/useAuthSession'
 
 function MyComponent() {
-  const auth = useUnifiedAuth({
-    onUnauthenticated: () => showToast('请先登录', 'warning'),
-  })
-  const token = auth.requireAuth() // returns null if not authenticated
+  const { userId, email, isLoggedIn, authChecked, getAuthHeaders, requireAuth } = useAuthSession()
+  // ...
 }
 ```
-
-```typescript
-// FORBIDDEN - Direct supabase.auth calls in components/pages
-supabase.auth.getSession()  // ← NEVER in component code
-supabase.auth.getUser()     // ← NEVER in component code
-```
-
-### Rule: All server-side auth must use `requireAuth()` or `getAuthUser()`
-
-```typescript
-// CORRECT
-import { requireAuth, getAuthUser } from '@/lib/supabase/server'
-
-export async function POST(request: NextRequest) {
-  const user = await requireAuth(request) // throws 401 if no valid token
-  // user.id is the authenticated user - NEVER trust body/query params for identity
-}
-```
-
-```typescript
-// FORBIDDEN - Taking userId from request body
-const { userId } = await request.json() // ← NEVER trust client-provided userId
-```
-
-### Rule: Write operations MUST NOT proceed without auth
-
-- Client: `auth.requireAuth()` returns null → abort, show "please login"
-- Server: `requireAuth()` throws 401 → caller catches and returns proper error
-- Token expired → clear message "登录已过期", not generic "操作失败"
 
 ---
 
-## 2. Data Chain: Canonical Store + Server ACK
+## 2. Server ACK Before UI Success
 
-### Rule: One cache key per entity
+### Rule
+All write operations (comment, like, message, follow, bookmark, repost) must wait for server confirmation before showing success in the UI.
 
-| Entity | Cache Key | Store |
-|--------|-----------|-------|
-| Post | `posts[postId]` | `usePostStore` |
-| Comments | `comments[postId]` | `usePostStore` |
-| Pagination | `commentsPagination[postId]` | `usePostStore` |
+### What This Means
+- UI shows "sending" state during the request
+- On success: update UI with server-returned data
+- On failure: show error state, user can retry
+- The comment/message NEVER appears as "sent" until the server confirms
 
-### Rule: All entry points read/write the same store
-
+### Prohibited Patterns
 ```typescript
-// CORRECT - Store loaded data in canonical store
-import { usePostStore, type PostData } from '@/lib/stores/postStore'
+// WRONG: Optimistic success then refetch (comment appears then disappears)
+setComments(prev => [...prev, newComment])  // appears immediately
+await fetch('/api/comments', { method: 'POST', ... })
+refetchComments()  // might overwrite local state
 
-const storeSetPosts = usePostStore(s => s.setPosts)
-// After fetching posts from API:
-storeSetPosts(canonicalPosts)
+// WRONG: Fire-and-forget (no error handling)
+fetch('/api/posts/like', { method: 'POST', ... })
+setLiked(true)  // what if the request fails?
 ```
 
-### Rule: UI updates ONLY after server ACK
-
+### Correct Pattern
 ```typescript
-// CORRECT - Wait for server response before updating store
-const result = await submitPostComment(postId, content, token)
-if ('error' in result) {
-  showToast(result.error, 'error') // Show error, don't update UI
+// Show sending state
+setSubmitState('sending')
+
+const response = await fetch('/api/posts/{id}/comments', {
+  method: 'POST',
+  headers: { ...getAuthHeaders(), ...getCsrfHeaders() },
+  body: JSON.stringify({ content }),
+})
+const json = await response.json()
+
+if (response.ok && json.success) {
+  // Server ACK received - NOW update UI
+  setComments(prev => [...prev, json.data.comment])
+  setSubmitState('idle')
 } else {
-  // Store already updated by submitPostComment after server ACK
+  // Show error - comment NOT added to UI
+  setSubmitState('error')
+  showToast(json.error, 'error')
 }
 ```
 
-```typescript
-// FORBIDDEN - Optimistic update that can't be reconciled
-setComments(prev => [...prev, fakeComment]) // ← shows then disappears on refetch
-```
-
-### Rule: Comment ordering is explicit
-
-- All comments are ordered by `created_at ASC` (oldest first)
-- This is enforced in `loadPostComments()` and `loadMorePostComments()`
-- No component may re-sort comments
+### Unified Hooks
+Use these instead of raw fetch for common operations:
+- `usePostComments({ postId })` - comments with server ACK
+- `usePostReaction()` - likes/dislikes with server ACK
 
 ---
 
-## 3. Navigation Chain: URL-Driven State
+## 3. URL-Driven UI State
 
-### Rule: Modals/overlays must be URL-driven
+### Rule
+All overlays, modals, and detail views must sync their open/close state with the URL.
 
+### What This Means
+- Opening a post modal: URL becomes `?post={id}`
+- Closing: URL param is removed
+- Escape key, close button, backdrop click ALL update the URL
+- Direct URL access opens the correct view
+- Browser back button works correctly
+
+### Prohibited Patterns
 ```typescript
-// CORRECT - URL controls modal state
-import { useUrlModal } from '@/lib/hooks/useUrlModal'
+// WRONG: Pure memory state for modals
+const [isOpen, setIsOpen] = useState(false)
+// User can't bookmark this state, back button doesn't work
 
-const postModal = useUrlModal({ paramName: 'post' })
-// Open: postModal.open(postId) → URL becomes ?post=<id>
-// Close: postModal.close() → removes ?post from URL
-// ESC: automatically handled
-// Back button: automatically handled (browser history)
+// WRONG: Inconsistent close behavior
+const close = () => setIsOpen(false)  // doesn't update URL
 ```
 
+### Correct Pattern
 ```typescript
-// FORBIDDEN - Pure memory modal state
-const [openPost, setOpenPost] = useState(null) // ← no URL, no back button, no deep-link
+const router = useRouter()
+const searchParams = useSearchParams()
+
+// Open: update URL
+const open = (postId: string) => {
+  const params = new URLSearchParams(searchParams.toString())
+  params.set('post', postId)
+  router.replace(`/hot?${params.toString()}`, { scroll: false })
+  document.body.style.overflow = 'hidden'
+}
+
+// Close: remove from URL
+const close = () => {
+  const params = new URLSearchParams(searchParams.toString())
+  params.delete('post')
+  router.replace(params.toString() ? `/hot?${params}` : '/hot', { scroll: false })
+  document.body.style.overflow = ''
+}
+
+// Escape key handler
+useEffect(() => {
+  if (!isOpen) return
+  const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') close() }
+  window.addEventListener('keydown', handler)
+  return () => window.removeEventListener('keydown', handler)
+}, [isOpen, close])
 ```
-
-### Rule: Click targets must be separated
-
-```typescript
-// CORRECT - Author link is independent, with stopPropagation
-<Link
-  href={`/u/${post.author_handle}`}
-  onClick={(e) => e.stopPropagation()} // ← prevents parent onClick
->
-  {post.author_handle}
-</Link>
-```
-
-```typescript
-// FORBIDDEN - Author name inside a clickable card with no separation
-<div onClick={() => openPost(post)}>
-  <span>{post.author_handle}</span>  // ← clicking author opens post, not profile
-</div>
-```
-
-### Rule: Close/ESC/Back must all work consistently
-
-- `useUrlModal` handles all three automatically via URL state
-- Any modal component MUST use `useUrlModal` or equivalent URL-driven mechanism
-- Manual `setOpenPost(null)` without URL update is forbidden
 
 ---
 
-## 4. Prohibited Patterns (Anti-Regression)
+## 4. Click Target Isolation
 
-| Pattern | Why It's Banned | Replacement |
-|---------|----------------|-------------|
-| `supabase.auth.getSession()` in pages | Creates parallel auth states | `useUnifiedAuth()` |
-| `supabase.auth.getUser()` in pages | Same | `useUnifiedAuth()` |
-| `userId` from request body | Allows impersonation | `requireAuth(request).id` |
-| `senderId` from request body | Same | `requireAuth(request).id` |
-| `setComments([...prev, fake])` before ACK | Ghost data | `submitPostComment()` |
-| `useState` for modal open/close | No URL, no back | `useUrlModal()` |
-| `router.push('/page')` for modal | Breaks back button | `useUrlModal().open()` |
+### Rule
+Interactive elements inside clickable cards must NOT trigger the outer card's click handler.
+
+### What This Means
+- Author names are `<Link>` to `/u/{handle}` with `e.stopPropagation()`
+- Group names are `<Link>` to `/groups/{id}` with `e.stopPropagation()`
+- The outer card click opens the post detail
+- Inner links navigate to their respective pages
+
+### Prohibited Patterns
+```typescript
+// WRONG: Author name is just text, not a link
+<span>{post.author}</span>
+
+// WRONG: Author link without stopPropagation (triggers card click too)
+<Link href={`/u/${author}`}>{author}</Link>
+```
+
+### Correct Pattern
+```typescript
+<Box onClick={() => openPost(post)}>
+  {/* Author link - stops propagation to outer card */}
+  <Link
+    href={`/u/${post.author_handle}`}
+    onClick={(e) => e.stopPropagation()}
+  >
+    {post.author}
+  </Link>
+
+  {/* Group link - stops propagation to outer card */}
+  {post.group_id && (
+    <Link
+      href={`/groups/${post.group_id}`}
+      onClick={(e) => e.stopPropagation()}
+    >
+      {post.group}
+    </Link>
+  )}
+</Box>
+```
 
 ---
 
-## 5. PR Checklist (All Must Be Checked)
+## 5. Auth-Gated Write Operations
 
-When submitting a PR that touches any of these areas, the author must confirm:
+### Rule
+Write operations must check auth BEFORE making any API call. The UI must never "assume" the user is logged in.
 
-- [ ] **Auth**: Uses `useUnifiedAuth()` on client, `requireAuth()` on server
-- [ ] **Server ACK**: No UI state updated before server confirms write operation
-- [ ] **Canonical Store**: Entity data written to `postStore` (or equivalent)
-- [ ] **URL-Driven**: Any modal/overlay state synced with URL params
-- [ ] **Click Targets**: Author/group links use `<Link>` with `stopPropagation`
-- [ ] **Error Messages**: Distinguishes 401/403/500 with user-facing text
-- [ ] **No Optimistic Ghosts**: Refreshing the page shows the same data
+### What This Means
+- Check `isLoggedIn` before calling any mutation API
+- If not logged in: show toast or redirect to login (never send the request)
+- If token is expired: the server returns 401, client shows "session expired" (not generic error)
+- If forbidden (403): show the specific reason (e.g., "DM disabled", "message limit reached")
 
----
-
-## 6. File Reference
-
-| File | Purpose |
-|------|---------|
-| `lib/hooks/useUnifiedAuth.ts` | Client-side auth singleton |
-| `lib/hooks/useUrlModal.ts` | URL-driven modal state |
-| `lib/stores/postStore.ts` | Canonical post/comment store |
-| `lib/supabase/server.ts` | Server-side auth helpers |
-| `app/components/post/PostDetailModal.tsx` | Shared modal component |
-| `e2e/system-state-architecture.spec.ts` | Architecture verification tests |
+### Error Classification
+| Status | Client Message | Action |
+|--------|---------------|--------|
+| 401 (no token) | "请先登录" | Redirect to login |
+| 401 (expired) | "登录已过期，请重新登录" | Try refresh, then redirect |
+| 403 (forbidden) | Show `body.error` | No redirect, explain reason |
+| 403 (limit) | "消息发送数量已达上限" | Show specific limit info |
+| 500+ | "服务器错误，请稍后重试" | Allow retry |
 
 ---
 
-## 7. Migration Status
+## 6. Canonical Cache Keys
 
-### Fully Migrated (Auth + Data + Navigation)
-- `app/hot/page.tsx`
-- `app/messages/[conversationId]/page.tsx`
-- `app/components/post/PostFeed.tsx`
-- `app/api/follow/route.ts`
-- `app/api/messages/route.ts`
+### Rule
+The same entity must always use the same cache key, regardless of which page accesses it.
 
-### Pending Migration (Auth only - use `useUnifiedAuth`)
-- 48 other pages/components still use direct supabase.auth calls
-- These should be migrated incrementally using the same pattern
-- Priority: pages with write operations (post creation, settings, groups)
+### What This Means
+- Post comments are keyed by `post:{postId}:comments`
+- A comment submitted on the hot page is the same data as on the groups page
+- The unified hooks (`usePostComments`, `usePostReaction`) ensure this automatically
+
+### Prohibited Patterns
+```typescript
+// WRONG: Different fetch URLs for same data in different pages
+// hot page: fetch(`/api/hot-posts/${id}/comments`)
+// groups page: fetch(`/api/groups/${gid}/posts/${id}/comments`)
+```
+
+---
+
+## 7. How to Add New Features Correctly
+
+When adding a new feature (e.g., bookmarks, reposts, new modals):
+
+### Step 1: Auth
+- Use `useAuthSession()` for auth state
+- Guard write operations with `getAuthHeaders()`
+- Never trust client-provided user IDs on the server (verify via JWT)
+
+### Step 2: Data
+- Create a hook in `lib/hooks/` if the feature involves data mutations
+- Always wait for server ACK before updating UI
+- Include `getCsrfHeaders()` on write requests
+
+### Step 3: UI
+- If opening an overlay/detail view: sync with URL params
+- If adding clickable elements inside cards: use `stopPropagation()`
+- Provide loading, error, and empty states
+
+### Step 4: Testing
+- Add E2E test in `e2e/system-state.spec.ts` for:
+  - Auth boundary (unauthenticated user can't perform action)
+  - Server ACK (action persists after refresh)
+  - Navigation (URL state, escape key, back button)
 
 ---
 
 ## Enforcement
 
-This document is enforced by:
-1. **ESLint rule**: `no-restricted-imports` and `no-restricted-syntax` (see `.eslintrc.js`)
-2. **E2E tests**: `e2e/system-state-architecture.spec.ts`
-3. **PR template**: Checklist above must be completed
-4. **Code review**: Any violation of these principles is a blocking review comment
+These rules are enforced by:
+1. **ESLint**: `no-restricted-syntax` rules block direct `supabase.auth` calls in `app/`
+2. **PR Template**: Mandatory checklist items for system state compliance
+3. **E2E Tests**: `e2e/system-state.spec.ts` validates behavior continuously
+4. **Code Review**: All PRs must confirm compliance with this document

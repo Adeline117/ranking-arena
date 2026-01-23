@@ -53,22 +53,33 @@ const eslintConfig = defineConfig([
     },
   },
   // ============================================
-  // Architecture lockdown rules (prevent regression)
+  // System State Management enforcement
   // See docs/system-principles.md for rationale
   // ============================================
   {
-    files: ["app/**/*.{ts,tsx}", "!app/**/login/**", "!app/**/signup/**"],
+    files: ["app/**/*.{ts,tsx}"],
     rules: {
       "no-restricted-syntax": ["warn",
         {
-          "selector": "CallExpression[callee.object.property.name='auth'][callee.property.name='getSession']",
-          "message": "Use `useUnifiedAuth()` hook instead of direct supabase.auth.getSession(). See docs/system-principles.md"
+          "selector": "MemberExpression[object.property.name='auth'][property.name='getSession']",
+          "message": "Use useAuthSession() hook instead of direct supabase.auth.getSession(). See docs/system-principles.md"
         },
         {
-          "selector": "CallExpression[callee.object.property.name='auth'][callee.property.name='getUser']",
-          "message": "Use `useUnifiedAuth()` hook instead of direct supabase.auth.getUser(). See docs/system-principles.md"
-        }
+          "selector": "MemberExpression[object.property.name='auth'][property.name='getUser']",
+          "message": "Use useAuthSession() hook instead of direct supabase.auth.getUser(). See docs/system-principles.md"
+        },
+        {
+          "selector": "MemberExpression[object.property.name='auth'][property.name='onAuthStateChange']",
+          "message": "Use useAuthSession() hook instead of direct supabase.auth.onAuthStateChange(). See docs/system-principles.md"
+        },
       ],
+    },
+  },
+  // Exempt: auth hook implementation and server-side API routes (which use JWT verification)
+  {
+    files: ["lib/hooks/useAuthSession.ts", "app/api/**/*.ts"],
+    rules: {
+      "no-restricted-syntax": "off",
     },
   },
   // Override default ignores of eslint-config-next.
