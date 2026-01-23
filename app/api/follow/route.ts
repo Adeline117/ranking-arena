@@ -1,10 +1,14 @@
 /**
  * 关注/取消关注交易员 API
+ *
+ * SECURITY: All write operations require authentication and verify
+ * that the userId matches the authenticated user to prevent impersonation.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { apiLogger } from '@/lib/utils/logger'
+import { getAuthUser } from '@/lib/supabase/server'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,6 +23,16 @@ export async function GET(request: NextRequest) {
 
     if (!userId || !traderId) {
       return NextResponse.json({ error: 'Missing userId or traderId' }, { status: 400 })
+    }
+
+    // SECURITY: Verify that the requesting user can only check their own follow status
+    const authUser = await getAuthUser(request)
+    if (authUser && authUser.id !== userId) {
+      apiLogger.warn('User attempted to check follow status for another user', {
+        authUserId: authUser.id,
+        requestedUserId: userId
+      })
+      return NextResponse.json({ error: 'Unauthorized: Cannot check follow status for other users' }, { status: 403 })
     }
 
     if (!SUPABASE_URL || !SUPABASE_KEY) {
@@ -53,11 +67,29 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    // SECURITY: Require authentication
+    const authUser = await getAuthUser(request)
+    if (!authUser) {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+    }
+
     const body = await request.json()
     const { userId, traderId, action } = body
 
     if (!userId || !traderId || !action) {
       return NextResponse.json({ error: 'Missing userId, traderId or action' }, { status: 400 })
+    }
+
+    // SECURITY: Verify that userId matches the authenticated user
+    // This prevents users from following/unfollowing on behalf of others
+    if (userId !== authUser.id) {
+      apiLogger.warn('User attempted to follow/unfollow for another user', {
+        authUserId: authUser.id,
+        requestedUserId: userId,
+        traderId,
+        action
+      })
+      return NextResponse.json({ error: 'Unauthorized: Cannot perform follow actions for other users' }, { status: 403 })
     }
 
     if (!SUPABASE_URL || !SUPABASE_KEY) {

@@ -1,35 +1,49 @@
 /**
  * 开始新对话 API
  * POST: 创建或获取与指定用户的会话
+ *
+ * SECURITY: Requires authentication. senderId is derived from authenticated user's
+ * session, preventing users from starting conversations as other users.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 import { traceMessage } from '@/lib/utils/logger'
+import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
 
 export const dynamic = 'force-dynamic'
 
-const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
-
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
-    const { senderId, receiverId } = body
+    // SECURITY: Require authentication
+    const user = await getAuthUser(request)
+    if (!user) {
+      return NextResponse.json(
+        { error: '请先登录', error_code: 'NOT_AUTHENTICATED' },
+        { status: 401 }
+      )
+    }
 
-    if (!senderId || !receiverId) {
-      return NextResponse.json({ error: 'Missing senderId or receiverId' }, { status: 400 })
+    const body = await request.json()
+    const { receiverId } = body
+
+    // SECURITY: Use authenticated user's ID as sender, ignoring any client-provided senderId.
+    const senderId = user.id
+
+    if (!receiverId) {
+      return NextResponse.json(
+        { error: '缺少接收者', error_code: 'VALIDATION_ERROR' },
+        { status: 400 }
+      )
     }
 
     if (senderId === receiverId) {
-      return NextResponse.json({ error: '不能给自己发私信' }, { status: 400 })
+      return NextResponse.json(
+        { error: '不能给自己发私信', error_code: 'VALIDATION_ERROR' },
+        { status: 400 }
+      )
     }
 
-    if (!SUPABASE_URL || !SUPABASE_KEY) {
-      return NextResponse.json({ error: 'Missing Supabase config' }, { status: 500 })
-    }
-
-    const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
+    const supabase = getSupabaseAdmin()
 
     // 获取接收者的隐私设置
     const { data: receiverProfile, error: profileError } = await supabase
@@ -46,12 +60,15 @@ export async function POST(request: NextRequest) {
     const dmPermission = receiverProfile.dm_permission || 'mutual'
 
     if (dmPermission === 'none') {
-      return NextResponse.json({ error: '该用户已关闭私信功能' }, { status: 403 })
+      return NextResponse.json(
+        { error: '该用户已关闭私信功能', error_code: 'PERMISSION_DENIED' },
+        { status: 403 }
+      )
     }
 
     // 检查是否互相关注
     let isMutualFollow = false
-    
+
     const { data: senderFollows } = await supabase
       .from('user_follows')
       .select('*')
@@ -192,5 +209,3 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
-
-

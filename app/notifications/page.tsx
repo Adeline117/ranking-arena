@@ -255,7 +255,7 @@ export default function NotificationsPage() {
         setUnreadCount(prev => Math.max(0, prev - 1))
       }
       showToast('已删除', 'success')
-    } catch (err) {
+    } catch (_err) {
       showToast('删除失败', 'error')
     } finally {
       setDeletingId(null)
@@ -275,7 +275,7 @@ export default function NotificationsPage() {
   }, [router])
 
   // 处理通知点击 - 立即响应，不阻塞导航
-  const handleNotificationClick = useCallback((notif: Notification, e?: React.MouseEvent) => {
+  const handleNotificationClick = useCallback((notif: Notification, _e?: React.MouseEvent) => {
     if (!notif.read) {
       markAsRead(notif.id)
     }

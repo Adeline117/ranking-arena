@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useMemo, useState, useCallback, Suspense } from 'react'
+import { useEffect, useMemo, useState, useCallback, useRef, Suspense } from 'react'
+import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
@@ -106,7 +107,7 @@ function HotContent() {
   const [translatingList, setTranslatingList] = useState(false)
   // 展开/收起状态
   const [expandedPosts, setExpandedPosts] = useState<Record<string, boolean>>({})
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+  const [_currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [traders, setTraders] = useState<Trader[]>([])
   const [loadingTraders, setLoadingTraders] = useState(true)
   const [posts, setPosts] = useState<Post[]>([])
@@ -173,7 +174,7 @@ function HotContent() {
         } else {
           setTraders([])
         }
-      } catch (error) {
+      } catch (_error) {
         setTraders([])
       } finally {
         setLoadingTraders(false)
@@ -446,8 +447,11 @@ function HotContent() {
     }
   }, [translationCache, showToast])
 
+  // Track whether this modal was opened via navigation (for back button handling)
+  const openedViaNav = useRef(false)
+
   // 打开帖子详情
-  const handleOpenPost = useCallback((post: Post) => {
+  const handleOpenPost = useCallback((post: Post, fromUrlRestore = false) => {
     setOpenPost(post)
     setComments([])
     setTranslatedContent(null)
@@ -455,15 +459,18 @@ function HotContent() {
     loadComments(post.id)
 
     // 更新 URL，添加 postId 参数
-    const params = new URLSearchParams(searchParams.toString())
-    params.set('post', post.id)
-    router.replace(`/hot?${params.toString()}`, { scroll: false })
+    if (!fromUrlRestore) {
+      const params = new URLSearchParams(searchParams.toString())
+      params.set('post', post.id)
+      openedViaNav.current = true
+      router.push(`/hot?${params.toString()}`, { scroll: false })
+    }
 
     // 自动检测并翻译
     if (post.body) {
       const isChinese = isChineseText(post.body)
       const needsTranslation = (language === 'en' && isChinese) || (language === 'zh' && !isChinese)
-      
+
       if (needsTranslation) {
         translateContent(post.id, post.body, language)
       }
@@ -473,11 +480,17 @@ function HotContent() {
   // 关闭帖子详情
   const handleClosePost = useCallback(() => {
     setOpenPost(null)
-    // 移除 URL 中的 postId 参数
-    const params = new URLSearchParams(searchParams.toString())
-    params.delete('post')
-    const newUrl = params.toString() ? `/hot?${params.toString()}` : '/hot'
-    router.replace(newUrl, { scroll: false })
+    if (openedViaNav.current) {
+      // We pushed a history entry when opening, so go back
+      openedViaNav.current = false
+      router.back()
+    } else {
+      // Fallback: direct URL access or restored from URL, use replace
+      const params = new URLSearchParams(searchParams.toString())
+      params.delete('post')
+      const newUrl = params.toString() ? `/hot?${params.toString()}` : '/hot'
+      router.replace(newUrl, { scroll: false })
+    }
   }, [searchParams, router])
 
   // 从 URL 参数恢复帖子详情弹窗状态
@@ -486,10 +499,30 @@ function HotContent() {
     if (postId && posts.length > 0 && !openPost) {
       const post = posts.find(p => p.id === postId)
       if (post) {
-        handleOpenPost(post)
+        handleOpenPost(post, true) // fromUrlRestore: don't push history again
       }
     }
   }, [searchParams, posts, openPost, handleOpenPost])
+
+  // ESC key handler and body scroll lock for modal
+  useEffect(() => {
+    if (!openPost) return
+    // Lock body scroll
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        handleClosePost()
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown)
+
+    return () => {
+      document.body.style.overflow = prev
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [openPost, handleClosePost])
 
   // 语言切换时重新翻译当前打开的帖子
   useEffect(() => {
@@ -505,6 +538,7 @@ function HotContent() {
         translateContent(openPost.id, openPost.body, language)
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [language]) // 只监听语言变化
 
   // 提交评论
@@ -731,7 +765,22 @@ function HotContent() {
                           )
                         })()}
                         <Box className="hot-post-footer" style={{ display: 'flex', gap: tokens.spacing[3], fontSize: tokens.typography.fontSize.xs, color: tokens.colors.text.tertiary, flexWrap: 'wrap', alignItems: 'center' }}>
-                          <Text size="xs" color="tertiary">{p.author}</Text>
+                          {p.author_handle ? (
+                            <Link
+                              href={`/u/${encodeURIComponent(p.author_handle)}`}
+                              onClick={(e) => e.stopPropagation()}
+                              style={{
+                                fontSize: tokens.typography.fontSize.xs,
+                                color: tokens.colors.text.secondary,
+                                textDecoration: 'none',
+                                fontWeight: 600,
+                              }}
+                            >
+                              {p.author}
+                            </Link>
+                          ) : (
+                            <Text size="xs" color="tertiary">{p.author}</Text>
+                          )}
                           <Text size="xs" color="tertiary">{p.time}</Text>
                           <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                             <CommentIcon size={12} /> {p.comments}
@@ -766,10 +815,13 @@ function HotContent() {
         </Box>
       </Box>
 
-      {/* 帖子详情弹窗 */}
-      {openPost && (
+      {/* 帖子详情弹窗 - Portal to body to avoid stacking context issues */}
+      {openPost && createPortal(
         <div
           onClick={handleClosePost}
+          role="dialog"
+          aria-modal="true"
+          aria-label={openPost.title}
           style={{
             position: 'fixed',
             inset: 0,
@@ -794,13 +846,14 @@ function HotContent() {
             }}
           >
             <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-              <button 
-                onClick={handleClosePost} 
-                style={{ 
-                  border: 'none', 
-                  background: 'transparent', 
-                  color: tokens.colors.text.secondary, 
-                  cursor: 'pointer', 
+              <button
+                onClick={handleClosePost}
+                aria-label="Close"
+                style={{
+                  border: 'none',
+                  background: 'transparent',
+                  color: tokens.colors.text.secondary,
+                  cursor: 'pointer',
                   fontSize: 20,
                   width: 44,
                   height: 44,
@@ -814,6 +867,7 @@ function HotContent() {
               </button>
             </div>
 
+            {/* Group name - clickable link */}
             {openPost.group_id ? (
               <Link
                 href={`/groups/${openPost.group_id}`}
@@ -821,6 +875,7 @@ function HotContent() {
                   fontSize: 12,
                   color: ARENA_PURPLE,
                   textDecoration: 'none',
+                  fontWeight: 600,
                   padding: '2px 8px',
                   background: `${ARENA_PURPLE}20`,
                   borderRadius: tokens.radius.sm,
@@ -839,12 +894,31 @@ function HotContent() {
               <div style={{ fontSize: 20, fontWeight: 950, lineHeight: 1.25 }}>{openPost.title}</div>
             </div>
 
+            {/* Author - clickable link */}
             <div style={{ marginTop: 8, fontSize: 12, color: tokens.colors.text.tertiary, display: 'flex', alignItems: 'center', gap: 6 }}>
-              {openPost.author} · {openPost.time} · <CommentIcon size={12} /> {openPost.comments}
+              {openPost.author_handle ? (
+                <Link
+                  href={`/u/${encodeURIComponent(openPost.author_handle)}`}
+                  style={{
+                    color: tokens.colors.text.secondary,
+                    textDecoration: 'none',
+                    fontWeight: 700,
+                  }}
+                >
+                  {openPost.author}
+                </Link>
+              ) : (
+                <span>{openPost.author}</span>
+              )}
+              <span>·</span>
+              <span>{openPost.time}</span>
+              <span>·</span>
+              <CommentIcon size={12} />
+              <span>{openPost.comments}</span>
             </div>
 
             <div translate="no" style={{ marginTop: 12, fontSize: 14, color: tokens.colors.text.primary, lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>
-              {showingOriginal 
+              {showingOriginal
                 ? renderContentWithLinks(openPost.body || '')
                 : renderContentWithLinks(translatedContent || openPost.body || '')
               }
@@ -990,9 +1064,23 @@ function HotContent() {
                       }}
                     >
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                        <span style={{ fontSize: 12, fontWeight: 700, color: tokens.colors.text.secondary }}>
-                          {comment.author_handle || '匿名'}
-                        </span>
+                        {comment.author_handle ? (
+                          <Link
+                            href={`/u/${encodeURIComponent(comment.author_handle)}`}
+                            style={{
+                              fontSize: 12,
+                              fontWeight: 700,
+                              color: tokens.colors.text.secondary,
+                              textDecoration: 'none',
+                            }}
+                          >
+                            {comment.author_handle}
+                          </Link>
+                        ) : (
+                          <span style={{ fontSize: 12, fontWeight: 700, color: tokens.colors.text.secondary }}>
+                            匿名
+                          </span>
+                        )}
                         <span style={{ fontSize: 11, color: tokens.colors.text.tertiary }}>
                           {formatTimeAgo(comment.created_at)}
                         </span>
@@ -1002,7 +1090,7 @@ function HotContent() {
                       </div>
                     </div>
                   ))}
-                  
+
                   {/* 加载更多评论按钮 */}
                   {hasMoreComments && (
                     <button
@@ -1040,7 +1128,8 @@ function HotContent() {
               )}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </Box>
   )

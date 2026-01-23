@@ -17,80 +17,70 @@ const mockStorage = () => {
 }
 
 describe('Tracker', () => {
-  let originalWindow: typeof globalThis.window
-  let originalDocument: typeof globalThis.document
-  let originalNavigator: typeof globalThis.navigator
-  let localStorage: ReturnType<typeof mockStorage>
-  let sessionStorage: ReturnType<typeof mockStorage>
-
-  beforeAll(() => {
-    originalWindow = global.window
-    originalDocument = global.document
-    originalNavigator = global.navigator
-  })
+  let mockLocalStorage: ReturnType<typeof mockStorage>
+  let mockSessionStorage: ReturnType<typeof mockStorage>
+  let originalLocalStorage: Storage
+  let originalSessionStorage: Storage
+  let originalFetch: typeof globalThis.fetch
 
   beforeEach(() => {
     jest.useFakeTimers()
-    localStorage = mockStorage()
-    sessionStorage = mockStorage()
+    mockLocalStorage = mockStorage()
+    mockSessionStorage = mockStorage()
 
-    Object.defineProperty(global, 'window', {
-      value: {
-        location: { href: 'https://example.com/test' },
-        addEventListener: jest.fn(),
-        removeEventListener: jest.fn(),
-      },
-      writable: true,
-    })
-    Object.defineProperty(global, 'document', {
-      value: {
-        referrer: 'https://google.com',
-        title: 'Test Page',
-        addEventListener: jest.fn(),
-        visibilityState: 'visible',
-      },
-      writable: true,
-    })
-    Object.defineProperty(global, 'navigator', {
-      value: {
-        userAgent: 'Mozilla/5.0 Test',
-        sendBeacon: jest.fn().mockReturnValue(true),
-      },
-      writable: true,
-    })
+    // Save originals
+    originalLocalStorage = global.localStorage
+    originalSessionStorage = global.sessionStorage
+    originalFetch = global.fetch
+
+    // Mock storage - jsdom already has window/document/navigator
     Object.defineProperty(global, 'localStorage', {
-      value: localStorage,
+      value: mockLocalStorage,
       writable: true,
+      configurable: true,
     })
     Object.defineProperty(global, 'sessionStorage', {
-      value: sessionStorage,
+      value: mockSessionStorage,
       writable: true,
+      configurable: true,
     })
     Object.defineProperty(global, 'fetch', {
       value: jest.fn().mockResolvedValue({ ok: true }),
       writable: true,
+      configurable: true,
+    })
+
+    // Mock navigator.sendBeacon
+    Object.defineProperty(global.navigator, 'sendBeacon', {
+      value: jest.fn().mockReturnValue(true),
+      writable: true,
+      configurable: true,
     })
   })
 
   afterEach(() => {
     jest.useRealTimers()
     jest.clearAllMocks()
+
+    // Restore storage
+    Object.defineProperty(global, 'localStorage', {
+      value: originalLocalStorage,
+      writable: true,
+      configurable: true,
+    })
+    Object.defineProperty(global, 'sessionStorage', {
+      value: originalSessionStorage,
+      writable: true,
+      configurable: true,
+    })
+    Object.defineProperty(global, 'fetch', {
+      value: originalFetch,
+      writable: true,
+      configurable: true,
+    })
   })
 
-  afterAll(() => {
-    Object.defineProperty(global, 'window', {
-      value: originalWindow,
-      writable: true,
-    })
-    Object.defineProperty(global, 'document', {
-      value: originalDocument,
-      writable: true,
-    })
-    Object.defineProperty(global, 'navigator', {
-      value: originalNavigator,
-      writable: true,
-    })
-  })
+  // No afterAll needed - jsdom manages window/document/navigator
 
   test('should create tracker instance', () => {
     const tracker = new Tracker()
@@ -99,14 +89,14 @@ describe('Tracker', () => {
 
   test('should generate session ID', () => {
     sessionStorage.getItem.mockReturnValueOnce(null)
-    const tracker = new Tracker()
+    const _tracker = new Tracker()
 
     expect(sessionStorage.setItem).toHaveBeenCalled()
   })
 
   test('should reuse existing session ID', () => {
     sessionStorage.getItem.mockReturnValue('existing-session-id')
-    const tracker = new Tracker()
+    const _tracker = new Tracker()
 
     // Should not generate new ID
     expect(sessionStorage.setItem).not.toHaveBeenCalledWith(
@@ -124,7 +114,7 @@ describe('Tracker', () => {
     })
 
     // Event should be queued
-    const events = tracker.getLocalEvents()
+    const _events = tracker.getLocalEvents()
     // Note: events are stored in localStorage when no endpoint is configured
   })
 
@@ -237,33 +227,38 @@ describe('Tracker', () => {
 })
 
 describe('Global tracker functions', () => {
+  let originalLocalStorage: Storage
+  let originalSessionStorage: Storage
+
   beforeEach(() => {
-    Object.defineProperty(global, 'window', {
-      value: {
-        location: { href: 'https://example.com/test' },
-        addEventListener: jest.fn(),
-      },
-      writable: true,
-    })
-    Object.defineProperty(global, 'document', {
-      value: {
-        referrer: '',
-        title: 'Test',
-        addEventListener: jest.fn(),
-      },
-      writable: true,
-    })
-    Object.defineProperty(global, 'navigator', {
-      value: { userAgent: 'Test' },
-      writable: true,
-    })
+    // Save originals
+    originalLocalStorage = global.localStorage
+    originalSessionStorage = global.sessionStorage
+
+    // Mock storage (jsdom provides window/document/navigator)
     Object.defineProperty(global, 'localStorage', {
       value: mockStorage(),
       writable: true,
+      configurable: true,
     })
     Object.defineProperty(global, 'sessionStorage', {
       value: mockStorage(),
       writable: true,
+      configurable: true,
+    })
+  })
+
+  afterEach(() => {
+    // Restore storage
+    Object.defineProperty(global, 'localStorage', {
+      value: originalLocalStorage,
+      writable: true,
+      configurable: true,
+    })
+    Object.defineProperty(global, 'sessionStorage', {
+      value: originalSessionStorage,
+      writable: true,
+      configurable: true,
     })
   })
 

@@ -1,11 +1,25 @@
-[
-  {
-    "platform": "binance",
-    "market_type": "futures",
+{
+  "platform": "binance",
+  "market_types": ["futures", "spot", "web3"],
+  "futures": {
     "leaderboard_endpoints": [
+      {
+        "method": "POST",
+        "url": "https://www.binance.com/bapi/futures/v3/public/future/leaderboard/getLeaderboardRank",
+        "type": "api",
+        "body": {
+          "isShared": true,
+          "isTrader": false,
+          "periodType": "MONTHLY",
+          "statisticsType": "ROI",
+          "tradeType": "PERPETUAL"
+        },
+        "notes": "periodType: WEEKLY=7d, MONTHLY=30d, QUARTERLY=90d. statisticsType: ROI|PNL. tradeType: PERPETUAL"
+      },
       {
         "url": "https://www.binance.com/bapi/futures/v1/friendly/future/copy-trade/home-page/query-list",
         "method": "POST",
+        "type": "api",
         "headers": {
           "Origin": "https://www.binance.com",
           "Referer": "https://www.binance.com/en/copy-trading",
@@ -29,13 +43,32 @@
         },
         "response_path": "data.list",
         "window_param": "timeRange",
-        "sort_param": "dataType"
+        "sort_param": "dataType",
+        "notes": "Copy trading leaderboard endpoint"
       }
     ],
     "profile_endpoints": [
       {
+        "method": "POST",
+        "url": "https://www.binance.com/bapi/futures/v2/public/future/leaderboard/getOtherLeaderboardBaseInfo",
+        "type": "api",
+        "body": {
+          "encryptedUid": "{trader_key}"
+        }
+      },
+      {
+        "method": "POST",
+        "url": "https://www.binance.com/bapi/futures/v1/public/future/leaderboard/getOtherPerformance",
+        "type": "api",
+        "body": {
+          "encryptedUid": "{trader_key}",
+          "tradeType": "PERPETUAL"
+        }
+      },
+      {
         "url": "https://www.binance.com/bapi/futures/v1/public/future/copy-trade/lead-portfolio/detail",
         "method": "POST",
+        "type": "api",
         "headers": {
           "Origin": "https://www.binance.com",
           "Content-Type": "application/json"
@@ -48,6 +81,7 @@
       {
         "url": "https://www.binance.com/bapi/futures/v1/public/future/copy-trade/lead-portfolio/performance",
         "method": "POST",
+        "type": "api",
         "headers": {
           "Origin": "https://www.binance.com",
           "Content-Type": "application/json"
@@ -59,25 +93,48 @@
         "response_path": "data"
       }
     ],
-    "window_support": ["7d", "30d", "90d"],
-    "rate_limit_hint": {
-      "rpm": 20,
-      "concurrent": 2,
-      "delay_ms": 3000
+    "trader_key_field": "encryptedUid",
+    "roi_sort_supported": true,
+    "roi_sort_mechanism": "platform_native",
+    "roi_sort_param": "statisticsType=ROI (response pre-sorted DESC)",
+    "window_support": {
+      "7d": { "supported": true, "param": "periodType=WEEKLY" },
+      "30d": { "supported": true, "param": "periodType=MONTHLY" },
+      "90d": { "supported": true, "param": "periodType=QUARTERLY" }
     },
     "field_map": {
-      "roi_pct": "roi",
-      "pnl_usd": "pnl",
-      "win_rate": "winRate",
-      "max_drawdown": "maxDrawdown",
-      "trades_count": "tradeCount",
-      "followers": "followerCount",
-      "copiers": "copierCount",
-      "sharpe_ratio": "sharpeRatio",
-      "aum": "totalMarginBalance"
+      "encryptedUid": "trader_key",
+      "nickName": "display_name",
+      "userPhotoUrl": "avatar_url",
+      "roi": "roi (decimal, multiply by 100)",
+      "pnl": "pnl (USD)",
+      "rank": "platform_rank",
+      "followerCount": "followers",
+      "copyCount": "copiers",
+      "winRate": "win_rate",
+      "maxDrawdown": "max_drawdown",
+      "tradeCount": "trades_count",
+      "copierCount": "copiers (alt)",
+      "sharpeRatio": "sharpe_ratio",
+      "totalMarginBalance": "aum"
     },
-    "roi_sort_supported": true,
-    "roi_sort_method": "query_param",
+    "timeseries_endpoints": [
+      {
+        "method": "POST",
+        "url": "https://www.binance.com/bapi/futures/v1/public/future/leaderboard/getOtherPerformance",
+        "notes": "Returns daily ROI/PnL array in performanceRetList"
+      }
+    ],
+    "rate_limits": {
+      "estimated_rpm": 20,
+      "cloudflare_protected": true,
+      "notes": "Aggressive rate limiting, CF challenge on high frequency"
+    },
+    "anti_scraping": {
+      "cloudflare": true,
+      "fingerprinting": true,
+      "mitigation": "Use API interception via Puppeteer, rotate user-agents, 3-5s delays"
+    },
     "proof": [
       {
         "url": "https://www.binance.com/bapi/futures/v1/friendly/future/copy-trade/home-page/query-list",
@@ -98,13 +155,24 @@
       }
     ]
   },
-  {
-    "platform": "binance",
-    "market_type": "spot",
+  "spot": {
     "leaderboard_endpoints": [
+      {
+        "method": "POST",
+        "url": "https://www.binance.com/bapi/futures/v3/public/future/leaderboard/getLeaderboardRank",
+        "type": "api",
+        "body": {
+          "isShared": true,
+          "periodType": "MONTHLY",
+          "statisticsType": "ROI",
+          "tradeType": "SPOT"
+        },
+        "notes": "Same endpoint, tradeType=SPOT"
+      },
       {
         "url": "https://www.binance.com/bapi/futures/v1/friendly/future/copy-trade/home-page/query-list",
         "method": "POST",
+        "type": "api",
         "headers": {
           "Origin": "https://www.binance.com",
           "Referer": "https://www.binance.com/en/copy-trading/spot",
@@ -136,6 +204,7 @@
       {
         "url": "https://www.binance.com/bapi/futures/v1/public/future/copy-trade/lead-portfolio/detail",
         "method": "POST",
+        "type": "api",
         "headers": {
           "Origin": "https://www.binance.com",
           "Content-Type": "application/json"
@@ -147,28 +216,28 @@
         "response_path": "data"
       }
     ],
-    "window_support": ["7d", "30d", "90d"],
-    "rate_limit_hint": {
-      "rpm": 20,
-      "concurrent": 2,
-      "delay_ms": 3000
+    "trader_key_field": "encryptedUid",
+    "roi_sort_supported": true,
+    "roi_sort_mechanism": "platform_native",
+    "window_support": {
+      "7d": { "supported": true, "param": "periodType=WEEKLY" },
+      "30d": { "supported": true, "param": "periodType=MONTHLY" },
+      "90d": { "supported": true, "param": "periodType=QUARTERLY" }
     },
     "field_map": {
-      "roi_pct": "roi",
-      "pnl_usd": "pnl",
-      "win_rate": "winRate",
-      "max_drawdown": "maxDrawdown",
-      "trades_count": "tradeCount",
-      "followers": "followerCount",
-      "copiers": "copierCount",
-      "aum": "totalAsset"
+      "encryptedUid": "trader_key",
+      "nickName": "display_name",
+      "roi": "roi",
+      "pnl": "pnl",
+      "winRate": "win_rate",
+      "tradeCount": "trades_count",
+      "followerCount": "followers",
+      "copierCount": "copiers",
+      "totalAsset": "aum"
     },
-    "roi_sort_supported": true,
-    "roi_sort_method": "query_param",
     "proof": [
       {
         "url": "https://www.binance.com/bapi/futures/v1/friendly/future/copy-trade/home-page/query-list",
-        "request_path": "/bapi/futures/v1/friendly/future/copy-trade/home-page/query-list",
         "method": "POST",
         "response_fields_sample": {
           "data.list[0].leadPortfolioId": "9876543210123",
@@ -182,13 +251,18 @@
       }
     ]
   },
-  {
-    "platform": "binance",
-    "market_type": "web3",
+  "web3": {
     "leaderboard_endpoints": [
+      {
+        "method": "GET",
+        "url": "https://www.binance.com/bapi/composite/v1/public/future/external/leaderboard/list",
+        "type": "api",
+        "notes": "Web3 wallet leaderboard, limited fields"
+      },
       {
         "url": "https://www.binance.com/bapi/composite/v1/friendly/marketing-campaign/copy-trade/rank-list",
         "method": "POST",
+        "type": "api",
         "headers": {
           "Origin": "https://www.binance.com",
           "Referer": "https://www.binance.com/en/web3-wallet",
@@ -211,28 +285,29 @@
         "window_param": "timeRange"
       }
     ],
-    "profile_endpoints": [],
-    "window_support": ["7d", "30d"],
-    "rate_limit_hint": {
-      "rpm": 15,
-      "concurrent": 1,
-      "delay_ms": 4000
+    "trader_key_field": "encryptedUid",
+    "roi_sort_supported": true,
+    "roi_sort_mechanism": "platform_native",
+    "window_support": {
+      "7d": { "supported": true },
+      "30d": { "supported": true },
+      "90d": { "supported": false, "reason": "Binance Web3 leaderboard only provides 7D and 30D windows" }
     },
     "field_map": {
-      "roi_pct": "pnlRate",
-      "pnl_usd": "pnl",
-      "win_rate": "winRate",
-      "max_drawdown": "mdd",
-      "trades_count": "tradeCount",
-      "followers": "followerCount",
-      "copiers": ""
+      "encryptedUid": "trader_key",
+      "nickName": "display_name",
+      "pnlRate": "roi",
+      "pnl": "pnl",
+      "winRate": "win_rate",
+      "mdd": "max_drawdown",
+      "tradeCount": "trades_count",
+      "followerCount": "followers"
     },
-    "roi_sort_supported": false,
-    "roi_sort_method": "not_supported",
+    "missing_fields": ["win_rate", "max_drawdown", "sharpe_ratio", "copiers"],
+    "missing_reason": "Web3 wallet leaderboard provides minimal metrics compared to futures",
     "proof": [
       {
         "url": "https://www.binance.com/bapi/composite/v1/friendly/marketing-campaign/copy-trade/rank-list",
-        "request_path": "/bapi/composite/v1/friendly/marketing-campaign/copy-trade/rank-list",
         "method": "POST",
         "response_fields_sample": {
           "data.list[0].encryptedUid": "abc123encrypted",
@@ -244,4 +319,4 @@
       }
     ]
   }
-]
+}

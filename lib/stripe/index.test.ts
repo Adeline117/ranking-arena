@@ -4,7 +4,6 @@
  */
 
 import {
-  getStripe,
   stripe,
   STRIPE_PRICE_IDS,
   SUBSCRIPTION_PLANS,
@@ -18,6 +17,9 @@ import {
   getCustomerSubscriptions,
   constructWebhookEvent,
 } from './index'
+
+// Mock server-only (no-op in test environment)
+jest.mock('server-only', () => ({}))
 
 // Mock Stripe
 jest.mock('stripe', () => {
@@ -104,9 +106,10 @@ describe('getStripe', () => {
     // Clear the cached instance
     jest.resetModules()
     expect(() => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { getStripe: getStripeNew } = require('./index')
       getStripeNew()
-    }).toThrow('STRIPE_SECRET_KEY is not defined')
+    }).toThrow('STRIPE_SECRET_KEY is not configured')
   })
 })
 

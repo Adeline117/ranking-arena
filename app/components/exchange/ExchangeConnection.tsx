@@ -33,6 +33,7 @@ export default function ExchangeConnectionManager({ userId }: ExchangeConnection
 
   useEffect(() => {
     loadConnections()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId])
 
   const loadConnections = async () => {
@@ -74,7 +75,7 @@ export default function ExchangeConnectionManager({ userId }: ExchangeConnection
       }
 
       setConnections(data || [])
-    } catch (err) {
+    } catch (_err) {
       // 静默处理错误，设置空数组
       setConnections([])
     } finally {
@@ -94,7 +95,7 @@ export default function ExchangeConnectionManager({ userId }: ExchangeConnection
     try {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) {
-        showToast('请先登录', 'warning')
+        showToast(t('pleaseLogin'), 'warning')
         return
       }
 
@@ -125,7 +126,7 @@ export default function ExchangeConnectionManager({ userId }: ExchangeConnection
   }
 
   const handleDisconnect = async (exchange: string) => {
-    const confirmed = await showConfirm('断开连接', t('confirmDisconnect').replace('{exchange}', exchange))
+    const confirmed = await showConfirm(t('disconnect'), t('confirmDisconnect').replace('{exchange}', exchange))
     if (!confirmed) {
       return
     }

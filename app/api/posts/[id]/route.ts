@@ -29,11 +29,22 @@ export async function GET(request: NextRequest, context: RouteContext) {
       return notFound('帖子不存在')
     }
 
-    // 增加浏览次数
-    await supabase
-      .from('posts')
-      .update({ view_count: (post.view_count || 0) + 1 })
-      .eq('id', id)
+    // 增加浏览次数（使用原子操作，不阻塞响应）
+    supabase.rpc('increment_view_count', { post_id: id })
+      .then(({ error }) => {
+        if (error) {
+          // 回退到非原子操作
+          supabase
+            .from('posts')
+            .update({ view_count: (post.view_count || 0) + 1 })
+            .eq('id', id)
+            .then(({ error: fallbackError }) => {
+              if (fallbackError) {
+                console.error('[posts/[id]] Failed to increment view count:', fallbackError.message)
+              }
+            })
+        }
+      })
 
     // 如果用户已登录，获取用户的点赞和投票状态
     let user_reaction: 'up' | 'down' | null = null

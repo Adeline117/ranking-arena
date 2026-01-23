@@ -66,7 +66,7 @@ export function GlobalProgress() {
 
   // 监听页面切换开始
   useEffect(() => {
-    const handleStart = () => {
+    const _handleStart = () => {
       start()
     }
 

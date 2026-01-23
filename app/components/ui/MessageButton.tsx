@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { useToast } from './Toast'
 import { useApiMutation } from '@/lib/hooks/useApiMutation'
 import { apiRequest } from '@/lib/api/client'
+import { supabase } from '@/lib/supabase/client'
 
 type MessageButtonProps = {
   targetUserId: string
@@ -34,10 +35,16 @@ export default function MessageButton({
 
   const { mutate, isLoading } = useApiMutation<StartMessageResponse, void>(
     async () => {
+      // Get fresh access token for auth
+      const { data: sessionData } = await supabase.auth.getSession()
+      const token = sessionData.session?.access_token
+      const headers: Record<string, string> = {}
+      if (token) headers['Authorization'] = `Bearer ${token}`
+
       return apiRequest<StartMessageResponse>('/api/messages/start', {
         method: 'POST',
+        headers,
         body: {
-          senderId: currentUserId,
           receiverId: targetUserId,
         },
       })
@@ -69,7 +76,7 @@ export default function MessageButton({
   const handleClick = () => {
     if (!currentUserId) {
       showToast('请先登录', 'warning')
-      window.location.href = '/login'
+      router.push('/login')
       return
     }
 
@@ -90,7 +97,7 @@ export default function MessageButton({
   if (!currentUserId) {
     return (
       <button
-        onClick={() => window.location.href = '/login'}
+        onClick={() => router.push('/login')}
         style={{
           ...sizeStyles[size],
           width: fullWidth ? '100%' : 'auto',

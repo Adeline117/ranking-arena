@@ -2,16 +2,16 @@
 
 import Link from 'next/link'
 import { useEffect, useState, useCallback, useRef } from 'react'
-import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/layout/TopNav'
 import Card from '@/app/components/ui/Card'
 import { Box, Text, Button } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
-import { ThumbsUpIcon, ThumbsDownIcon, CommentIcon } from '@/app/components/icons'
+import { ThumbsUpIcon, CommentIcon } from '@/app/components/icons'
 import { useToast } from '@/app/components/ui/Toast'
 import { getCsrfHeaders } from '@/lib/api/client'
+import { GroupCardSkeleton, PostSkeleton, ListSkeleton, SkeletonAvatar, Skeleton } from '@/app/components/ui/Skeleton'
 
 const ARENA_PURPLE = '#8b6fa8'
 
@@ -98,7 +98,7 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
     }
   }, [params])
   
-  const { t, language } = useLanguage()
+  const { t: _t, language } = useLanguage()
   const { showToast } = useToast()
   const [email, setEmail] = useState<string | null>(null)
   const [userId, setUserId] = useState<string | null>(null)
@@ -317,6 +317,7 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
     } finally {
       setTranslatingPosts(false)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isChineseText])
 
   // 当帖子加载或语言变化时触发翻译
@@ -862,8 +863,24 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
     return (
       <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
         <TopNav email={email} />
-        <Box as="main" style={{ maxWidth: 900, margin: '0 auto', padding: tokens.spacing[10] }}>
-          <Text size="sm" color="tertiary" style={{ textAlign: 'center' }}>{t('loading')}</Text>
+        <Box as="main" style={{ maxWidth: 900, margin: '0 auto', padding: tokens.spacing[6] }}>
+          {/* 小组头部骨架屏 */}
+          <Box style={{ marginBottom: tokens.spacing[6] }}>
+            <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[4], marginBottom: tokens.spacing[4] }}>
+              <SkeletonAvatar size={80} />
+              <Box style={{ flex: 1 }}>
+                <Skeleton width="200px" height="24px" />
+                <Skeleton width="120px" height="14px" />
+              </Box>
+            </Box>
+            <Skeleton width="100%" height="60px" />
+          </Box>
+          {/* 帖子列表骨架屏 */}
+          <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}>
+            {[1, 2, 3].map((i) => (
+              <PostSkeleton key={i} />
+            ))}
+          </Box>
         </Box>
       </Box>
     )
@@ -945,16 +962,18 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
       </Text>
       
       {loadingRelatedGroups ? (
-        <Text size="sm" color="tertiary" style={{ textAlign: 'center', padding: tokens.spacing[4] }}>
-          {language === 'zh' ? '加载中...' : 'Loading...'}
-        </Text>
+        <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
+          {[1, 2, 3].map((i) => (
+            <GroupCardSkeleton key={i} />
+          ))}
+        </Box>
       ) : relatedGroups.length === 0 ? (
         <Text size="sm" color="tertiary" style={{ textAlign: 'center', padding: tokens.spacing[4] }}>
           {language === 'zh' ? '暂无推荐' : 'No recommendations'}
         </Text>
       ) : (
         <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
-          {relatedGroups.map((relGroup, idx) => (
+          {relatedGroups.map((relGroup, _idx) => (
             <Link
               key={relGroup.id}
               href={`/groups/${relGroup.id}`}
@@ -1860,9 +1879,7 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
               
               {/* 成员列表 */}
               {loadingMembers ? (
-                <Text color="tertiary" style={{ textAlign: 'center', padding: tokens.spacing[4] }}>
-                  {language === 'zh' ? '加载中...' : 'Loading...'}
-                </Text>
+                <ListSkeleton count={5} gap={8} />
               ) : members.length === 0 ? (
                 <Text color="tertiary" style={{ textAlign: 'center', padding: tokens.spacing[4] }}>
                   {language === 'zh' ? '暂无成员' : 'No members'}

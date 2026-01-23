@@ -95,13 +95,19 @@ export function useOptimisticUpdate<T, R = unknown>(
   })
 
   const previousDataRef = useRef<T>(initialData)
+  // 使用 ref 跟踪当前数据以避免 stale closure
+  const currentDataRef = useRef<T>(state.data)
+  currentDataRef.current = state.data
 
   const mutate = useCallback(async () => {
+    // 从 ref 获取最新数据以避免 stale closure
+    const currentData = currentDataRef.current
+
     // 保存当前数据用于回滚
-    previousDataRef.current = state.data
+    previousDataRef.current = currentData
 
     // 乐观更新
-    const optimisticData = optimisticUpdate(state.data)
+    const optimisticData = optimisticUpdate(currentData)
     setState({
       data: optimisticData,
       isPending: true,
@@ -148,7 +154,7 @@ export function useOptimisticUpdate<T, R = unknown>(
       // 调用错误回调
       onError?.(error instanceof Error ? error : new Error(errorMessage), previousDataRef.current)
     }
-  }, [state.data, optimisticUpdate, mutationFn, onSuccess, onError, rollbackDelay])
+  }, [optimisticUpdate, mutationFn, onSuccess, onError, rollbackDelay])
 
   const setData = useCallback((updater: T | ((prev: T) => T)) => {
     setState((prev) => ({
@@ -200,15 +206,19 @@ export function useOptimisticLike(
   })
 
   const previousStateRef = useRef(initialState)
+  // 使用 ref 跟踪当前状态以避免 stale closure
+  const currentStateRef = useRef(state)
+  currentStateRef.current = state
 
   const toggle = useCallback(async () => {
-    const willLike = !state.isLiked
-    previousStateRef.current = { isLiked: state.isLiked, likeCount: state.likeCount }
+    const current = currentStateRef.current
+    const willLike = !current.isLiked
+    previousStateRef.current = { isLiked: current.isLiked, likeCount: current.likeCount }
 
     // 乐观更新
     setState({
       isLiked: willLike,
-      likeCount: state.likeCount + (willLike ? 1 : -1),
+      likeCount: current.likeCount + (willLike ? 1 : -1),
       isPending: true,
       error: null,
     })
@@ -225,7 +235,7 @@ export function useOptimisticLike(
       })
       onError?.(error instanceof Error ? error : new Error('操作失败'))
     }
-  }, [state.isLiked, state.likeCount, likeFn, unlikeFn, onError])
+  }, [likeFn, unlikeFn, onError])
 
   return {
     isLiked: state.isLiked,
@@ -256,10 +266,14 @@ export function useOptimisticBookmark(
   })
 
   const previousStateRef = useRef(initialState)
+  // 使用 ref 跟踪当前状态以避免 stale closure
+  const currentStateRef = useRef(state)
+  currentStateRef.current = state
 
   const toggle = useCallback(async () => {
-    const willBookmark = !state.isBookmarked
-    previousStateRef.current = { isBookmarked: state.isBookmarked }
+    const current = currentStateRef.current
+    const willBookmark = !current.isBookmarked
+    previousStateRef.current = { isBookmarked: current.isBookmarked }
 
     // 乐观更新
     setState({
@@ -280,7 +294,7 @@ export function useOptimisticBookmark(
       })
       onError?.(error instanceof Error ? error : new Error('操作失败'))
     }
-  }, [state.isBookmarked, addBookmarkFn, removeBookmarkFn, onError])
+  }, [addBookmarkFn, removeBookmarkFn, onError])
 
   return {
     isBookmarked: state.isBookmarked,
@@ -311,15 +325,19 @@ export function useOptimisticFollow(
   })
 
   const previousStateRef = useRef(initialState)
+  // 使用 ref 跟踪当前状态以避免 stale closure
+  const currentStateRef = useRef(state)
+  currentStateRef.current = state
 
   const toggle = useCallback(async () => {
-    const willFollow = !state.isFollowing
-    previousStateRef.current = { isFollowing: state.isFollowing, followerCount: state.followerCount }
+    const current = currentStateRef.current
+    const willFollow = !current.isFollowing
+    previousStateRef.current = { isFollowing: current.isFollowing, followerCount: current.followerCount }
 
     // 乐观更新
     setState({
       isFollowing: willFollow,
-      followerCount: state.followerCount + (willFollow ? 1 : -1),
+      followerCount: current.followerCount + (willFollow ? 1 : -1),
       isPending: true,
       error: null,
     })
@@ -336,7 +354,7 @@ export function useOptimisticFollow(
       })
       onError?.(error instanceof Error ? error : new Error('操作失败'))
     }
-  }, [state.isFollowing, state.followerCount, followFn, unfollowFn, onError])
+  }, [followFn, unfollowFn, onError])
 
   return {
     isFollowing: state.isFollowing,
@@ -384,7 +402,7 @@ export function useOptimisticList<T>(options: UseOptimisticListOptions<T>) {
         const result = await addFn()
         // 如果服务器返回了新数据，使用它
         if (result) {
-          const newId = getId(result)
+          const _newId = getId(result)
           setItems((prev) =>
             prev.map((i) => (getId(i) === id ? result : i))
           )

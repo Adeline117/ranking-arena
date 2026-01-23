@@ -3,7 +3,6 @@
  * 提供交易员、交易对等的实时搜索建议
  */
 
-import { NextResponse } from 'next/server'
 import { withPublic } from '@/lib/api/middleware'
 import { success } from '@/lib/api/response'
 

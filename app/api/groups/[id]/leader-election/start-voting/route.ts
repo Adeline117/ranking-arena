@@ -5,7 +5,7 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 
 // 检查是否是系统管理员
-async function isAdmin(supabase: SupabaseClient<any>, userId: string): Promise<boolean> {
+async function _isAdmin(supabase: SupabaseClient<any>, userId: string): Promise<boolean> {
   const { data: profile } = await supabase
     .from('user_profiles')
     .select('role')
@@ -53,8 +53,8 @@ export async function POST(
     const authHeader = request.headers.get('Authorization')
     if (authHeader?.startsWith('Bearer ')) {
       const token = authHeader.slice(7)
-      const { data: { user } } = await supabase.auth.getUser(token)
-      
+      const { data: { user: _user } } = await supabase.auth.getUser(token)
+
       // 如果是管理员，可以手动开始投票
       // 否则可能需要其他条件（如达到一定数量的候选人，或等待一段时间）
     }

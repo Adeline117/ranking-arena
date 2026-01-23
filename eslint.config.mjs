@@ -17,6 +17,13 @@ const eslintConfig = defineConfig([
       // This repo contains many pragmatic uses of `any` across UI + scripts.
       "@typescript-eslint/no-explicit-any": "off",
 
+      // Allow unused vars with _ prefix (common pattern for intentionally unused params)
+      "@typescript-eslint/no-unused-vars": ["warn", {
+        "argsIgnorePattern": "^_",
+        "varsIgnorePattern": "^_",
+        "caughtErrorsIgnorePattern": "^_"
+      }],
+
       // These rules are helpful, but currently too strict for the codebase patterns.
       "react-hooks/set-state-in-effect": "off",
       "react-hooks/immutability": "off",
@@ -50,6 +57,36 @@ const eslintConfig = defineConfig([
 
       // Encourage async/await error handling
       "no-async-promise-executor": "warn",
+    },
+  },
+  // ============================================
+  // System State Management enforcement
+  // See docs/system-principles.md for rationale
+  // ============================================
+  {
+    files: ["app/**/*.{ts,tsx}"],
+    rules: {
+      "no-restricted-syntax": ["warn",
+        {
+          "selector": "MemberExpression[object.property.name='auth'][property.name='getSession']",
+          "message": "Use useAuthSession() hook instead of direct supabase.auth.getSession(). See docs/system-principles.md"
+        },
+        {
+          "selector": "MemberExpression[object.property.name='auth'][property.name='getUser']",
+          "message": "Use useAuthSession() hook instead of direct supabase.auth.getUser(). See docs/system-principles.md"
+        },
+        {
+          "selector": "MemberExpression[object.property.name='auth'][property.name='onAuthStateChange']",
+          "message": "Use useAuthSession() hook instead of direct supabase.auth.onAuthStateChange(). See docs/system-principles.md"
+        },
+      ],
+    },
+  },
+  // Exempt: auth hook implementation and server-side API routes (which use JWT verification)
+  {
+    files: ["lib/hooks/useAuthSession.ts", "app/api/**/*.ts"],
+    rules: {
+      "no-restricted-syntax": "off",
     },
   },
   // Override default ignores of eslint-config-next.
