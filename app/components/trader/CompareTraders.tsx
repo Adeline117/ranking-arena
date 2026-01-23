@@ -6,6 +6,7 @@ import { X, TrendingUp, TrendingDown, Minus, ChevronUp, ChevronDown, BarChart3, 
 import { tokens } from '@/lib/design-tokens'
 import { formatCompact as formatNumber, formatPercent } from '@/lib/utils/format'
 import { Box, Text, Button } from '../base'
+import type { Trader } from '../ranking/RankingTable'
 
 // ============================================
 // 类型定义

@@ -216,9 +216,9 @@ async function createLegacyConnector(platform: GranularPlatform): Promise<Platfo
     case 'kucoin':
       return new KuCoinConnector()
     case 'hyperliquid':
-      return new HyperliquidConnector()
+      return new HyperliquidConnector() as unknown as PlatformConnector
     case 'coinex':
-      return new CoinExConnector()
+      return new CoinExConnector() as unknown as PlatformConnector
     default:
       return null
   }

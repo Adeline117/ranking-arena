@@ -21,6 +21,10 @@ interface RankingSectionProps {
   onTimeRangeChange: (range: TimeRange) => void
   /** 数据最后更新时间 */
   lastUpdated?: string | null
+  /** 错误信息 */
+  error?: string | null
+  /** 重试回调 */
+  onRetry?: () => void
 }
 
 /**
@@ -35,10 +39,12 @@ export default function RankingSection({
   activeTimeRange,
   onTimeRangeChange,
   lastUpdated,
+  error,
+  onRetry,
 }: RankingSectionProps) {
   const router = useRouter()
   const { showToast } = useToast()
-  const { language, t: _t } = useLanguage()
+  const { language, t } = useLanguage()
   const { isPro, isLoading: premiumLoading } = useSubscription()
 
   // 分类状态

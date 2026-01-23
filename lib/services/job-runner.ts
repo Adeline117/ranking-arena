@@ -20,6 +20,7 @@ import { getConnector } from '@/lib/connectors/registry';
 import { calculateArenaScore, type Period } from '@/lib/utils/arena-score';
 import type {
   Platform,
+  GranularPlatform,
   RankingWindow,
   RefreshJob,
   SnapshotMetrics,
@@ -82,7 +83,7 @@ export class JobRunner {
    * Enqueue a discovery job for a platform.
    */
   async enqueueDiscovery(platform: Platform, priority: number = 3): Promise<RefreshJob | null> {
-    return this.enqueueJob('discovery', platform, null, priority);
+    return this.enqueueJob('DISCOVER', platform, null, priority);
   }
 
   /**
@@ -93,7 +94,7 @@ export class JobRunner {
     traderKey: string,
     priority: number = 3,
   ): Promise<RefreshJob | null> {
-    return this.enqueueJob('snapshot', platform, traderKey, priority);
+    return this.enqueueJob('SNAPSHOT_REFRESH', platform, traderKey, priority);
   }
 
   /**
@@ -104,18 +105,22 @@ export class JobRunner {
     traderKey: string,
     priority: number = 2,
   ): Promise<RefreshJob | null> {
-    return this.enqueueJob('full_refresh', platform, traderKey, priority);
+    // Enqueue all three sub-jobs for a full refresh
+    await this.enqueueJob('PROFILE_ENRICH', platform, traderKey, priority);
+    await this.enqueueJob('TIMESERIES_REFRESH', platform, traderKey, priority);
+    // Return the snapshot job as the primary reference
+    return this.enqueueJob('SNAPSHOT_REFRESH', platform, traderKey, priority);
   }
 
   /**
    * Get job status by ID.
    */
   async getJobStatus(jobId: string): Promise<RefreshJob | null> {
-    const row = await queryOne<RefreshJob>(
+    const row = await queryOne(
       `SELECT * FROM refresh_jobs WHERE id = $1`,
       [jobId],
     );
-    return row;
+    return row as RefreshJob | null;
   }
 
   // ============================================
@@ -123,26 +128,23 @@ export class JobRunner {
   // ============================================
 
   private async executeJob(job: RefreshJob): Promise<void> {
-    const connector = getConnector(job.platform as Platform);
+    const connector = getConnector(job.platform as unknown as GranularPlatform);
     if (!connector) {
       throw new Error(`No connector available for platform: ${job.platform}`);
     }
 
     switch (job.job_type) {
-      case 'discovery':
+      case 'DISCOVER':
         await this.runDiscovery(job);
         break;
-      case 'snapshot':
+      case 'SNAPSHOT_REFRESH':
         await this.runSnapshot(job);
         break;
-      case 'profile':
+      case 'PROFILE_ENRICH':
         await this.runProfile(job);
         break;
-      case 'timeseries':
+      case 'TIMESERIES_REFRESH':
         await this.runTimeseries(job);
-        break;
-      case 'full_refresh':
-        await this.runFullRefresh(job);
         break;
       default:
         throw new Error(`Unknown job type: ${job.job_type}`);
@@ -150,13 +152,13 @@ export class JobRunner {
   }
 
   private async runDiscovery(job: RefreshJob): Promise<void> {
-    const connector = getConnector(job.platform as Platform)!;
+    const connector = getConnector(job.platform as unknown as GranularPlatform)!;
     const windows: RankingWindow[] = ['7d', '30d', '90d'];
 
     for (const window of windows) {
-      const traders = await connector.discoverLeaderboard(window);
+      const result = await connector.discoverLeaderboard(window);
 
-      for (const trader of traders) {
+      for (const trader of result.traders) {
         await query(
           `INSERT INTO trader_sources_v2 (platform, trader_key, display_name, avatar_url, profile_url, last_seen)
            VALUES ($1, $2, $3, $4, $5, $6)
@@ -164,7 +166,7 @@ export class JobRunner {
              display_name = COALESCE($3, trader_sources_v2.display_name),
              avatar_url = COALESCE($4, trader_sources_v2.avatar_url),
              last_seen = $6`,
-          [trader.platform, trader.trader_key, trader.display_name, trader.avatar_url, trader.profile_url, new Date().toISOString()],
+          [trader.platform, trader.trader_key, trader.display_name, null, trader.profile_url, new Date().toISOString()],
         );
       }
     }
@@ -173,11 +175,12 @@ export class JobRunner {
   private async runSnapshot(job: RefreshJob): Promise<void> {
     if (!job.trader_key) throw new Error('trader_key required for snapshot job');
 
-    const connector = getConnector(job.platform as Platform)!;
+    const connector = getConnector(job.platform as unknown as GranularPlatform)!;
     const windows: RankingWindow[] = ['7d', '30d', '90d'];
 
     for (const window of windows) {
       const snapshot = await connector.fetchTraderSnapshot(job.trader_key, window);
+      if (!snapshot) continue;
 
       // Calculate Arena Score
       const arenaScores = this.calculateScores(snapshot.metrics, window);
@@ -195,11 +198,11 @@ export class JobRunner {
            metrics = $5, quality = $6, arena_score = $7, roi_pct = $8, pnl_usd = $9,
            max_drawdown_pct = $10, win_rate_pct = $11, trades_count = $12, copier_count = $13`,
         [
-          snapshot.platform, snapshot.trader_key, snapshot.window, snapshot.as_of_ts,
-          JSON.stringify(enrichedMetrics), JSON.stringify(snapshot.quality),
-          arenaScores.arena_score, snapshot.metrics.roi_pct, snapshot.metrics.pnl_usd,
-          snapshot.metrics.max_drawdown_pct, snapshot.metrics.win_rate_pct,
-          snapshot.metrics.trades_count, snapshot.metrics.copier_count,
+          job.platform, job.trader_key, window, snapshot.fetched_at,
+          JSON.stringify(enrichedMetrics), JSON.stringify(snapshot.quality_flags),
+          arenaScores.arena_score, snapshot.metrics.roi, snapshot.metrics.pnl,
+          snapshot.metrics.max_drawdown, snapshot.metrics.win_rate,
+          snapshot.metrics.trades_count, snapshot.metrics.copiers,
         ],
       );
     }
@@ -208,8 +211,11 @@ export class JobRunner {
   private async runProfile(job: RefreshJob): Promise<void> {
     if (!job.trader_key) throw new Error('trader_key required for profile job');
 
-    const connector = getConnector(job.platform as Platform)!;
-    const profile = await connector.fetchTraderProfile(job.trader_key);
+    const connector = getConnector(job.platform as unknown as GranularPlatform)!;
+    const profileResult = await connector.fetchTraderProfile(job.trader_key);
+    if (!profileResult) throw new Error(`No profile data for ${job.platform}/${job.trader_key}`);
+
+    const profile = profileResult.profile;
 
     await query(
       `INSERT INTO trader_profiles_v2
@@ -222,19 +228,17 @@ export class JobRunner {
          aum_usd = COALESCE($6, trader_profiles_v2.aum_usd),
          last_enriched_at = $7`,
       [profile.platform, profile.trader_key, profile.display_name, profile.avatar_url,
-       profile.copier_count, profile.aum_usd, new Date().toISOString()],
+       profile.copiers, profile.aum, new Date().toISOString()],
     );
   }
 
   private async runTimeseries(job: RefreshJob): Promise<void> {
     if (!job.trader_key) throw new Error('trader_key required for timeseries job');
 
-    const connector = getConnector(job.platform as Platform)!;
-    const seriesTypes: Array<'equity_curve' | 'daily_pnl'> = ['equity_curve', 'daily_pnl'];
+    const connector = getConnector(job.platform as unknown as GranularPlatform)!;
+    const result = await connector.fetchTimeseries(job.trader_key);
 
-    for (const seriesType of seriesTypes) {
-      const series = await connector.fetchTimeseries(job.trader_key, seriesType);
-
+    for (const series of result.series) {
       if (series.data.length > 0) {
         await query(
           `INSERT INTO trader_timeseries_v2 (platform, trader_key, series_type, data, as_of_ts)
@@ -261,7 +265,7 @@ export class JobRunner {
   private async claimNextJob(platform?: Platform): Promise<RefreshJob | null> {
     const platformCondition = platform ? `AND platform = '${platform}'` : '';
 
-    const result = await queryOne<RefreshJob>(
+    const result = await queryOne(
       `UPDATE refresh_jobs
        SET status = 'running', started_at = NOW(), attempts = attempts + 1
        WHERE id = (
@@ -274,7 +278,7 @@ export class JobRunner {
        RETURNING *`,
     );
 
-    return result;
+    return result as RefreshJob | null;
   }
 
   private async completeJob(jobId: string, status: 'completed' | 'failed', error?: string): Promise<void> {
@@ -294,7 +298,7 @@ export class JobRunner {
   ): Promise<RefreshJob | null> {
     const idempotencyKey = `${jobType}:${platform}:${traderKey || 'all'}:${new Date().toISOString().slice(0, 13)}`;
 
-    const result = await queryOne<RefreshJob>(
+    const result = await queryOne(
       `INSERT INTO refresh_jobs (job_type, platform, trader_key, priority, status, idempotency_key)
        VALUES ($1, $2, $3, $4, 'pending', $5)
        ON CONFLICT (idempotency_key) DO UPDATE SET
@@ -304,7 +308,7 @@ export class JobRunner {
       [jobType, platform, traderKey, priority, idempotencyKey],
     );
 
-    return result;
+    return result as RefreshJob | null;
   }
 
   // ============================================
@@ -315,7 +319,7 @@ export class JobRunner {
     metrics: SnapshotMetrics,
     window: RankingWindow,
   ): Pick<SnapshotMetrics, 'arena_score' | 'return_score' | 'drawdown_score' | 'stability_score'> {
-    if (metrics.roi_pct == null) {
+    if (metrics.roi == null) {
       return { arena_score: null, return_score: null, drawdown_score: null, stability_score: null };
     }
 
@@ -325,10 +329,10 @@ export class JobRunner {
     try {
       const score = calculateArenaScore(
         {
-          roi: metrics.roi_pct,
-          pnl: metrics.pnl_usd ?? 0,
-          maxDrawdown: metrics.max_drawdown_pct ?? 0,
-          winRate: metrics.win_rate_pct ?? 50,
+          roi: metrics.roi,
+          pnl: metrics.pnl ?? 0,
+          maxDrawdown: metrics.max_drawdown ?? 0,
+          winRate: metrics.win_rate ?? 50,
         },
         period,
       );
