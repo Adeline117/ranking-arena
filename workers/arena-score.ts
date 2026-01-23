@@ -1,25 +1,23 @@
 /**
  * Arena Score calculation for the worker
- * Mirrors lib/utils/arena-score.ts logic
+ * Delegates to lib/utils/arena-score.ts to ensure consistency
  */
 
 import type { Window } from '../connectors/base/types';
+import {
+  calculateArenaScore as libCalculateArenaScore,
+  calculateDrawdownScore,
+  calculateStabilityScore,
+  calculateReturnScore,
+  type Period,
+  type TraderScoreInput,
+} from '../lib/utils/arena-score';
 
-const ARENA_CONFIG = {
-  PNL_THRESHOLD: { '7d': 300, '30d': 1000, '90d': 3000 } as Record<Window, number>,
-  PARAMS: {
-    '7d': { tanhCoeff: 0.08, roiExponent: 1.8, mddThreshold: 15, winRateCap: 62 },
-    '30d': { tanhCoeff: 0.15, roiExponent: 1.6, mddThreshold: 30, winRateCap: 68 },
-    '90d': { tanhCoeff: 0.18, roiExponent: 1.6, mddThreshold: 40, winRateCap: 70 },
-  } as Record<Window, { tanhCoeff: number; roiExponent: number; mddThreshold: number; winRateCap: number }>,
-  MAX_RETURN_SCORE: 85,
-  MAX_DRAWDOWN_SCORE: 8,
-  MAX_STABILITY_SCORE: 7,
-};
-
-const clip = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
-const safeLog1p = (x: number) => x <= -1 ? 0 : Math.log(1 + x);
-const getPeriodDays = (p: Window) => p === '7d' ? 7 : p === '30d' ? 30 : 90;
+/** Convert worker Window format ('7d') to lib Period format ('7D') */
+function toPeriod(window: Window): Period {
+  const map: Record<string, Period> = { '7d': '7D', '30d': '30D', '90d': '90D' };
+  return map[window] || '90D';
+}
 
 export function calculateArenaScore(
   roi: number | null,
@@ -30,30 +28,18 @@ export function calculateArenaScore(
 ): number | null {
   if (roi == null) return null;
 
-  const params = ARENA_CONFIG.PARAMS[window] || ARENA_CONFIG.PARAMS['90d'];
-  const days = getPeriodDays(window);
+  const period = toPeriod(window);
 
-  // Normalize win rate to percentage
-  const wr = winRate != null
-    ? (winRate <= 1 ? winRate * 100 : winRate)
-    : null;
+  const input: TraderScoreInput = {
+    roi,
+    pnl: pnl ?? 0,
+    maxDrawdown,
+    winRate,
+  };
 
-  // Return score (0-85)
-  const intensity = (365 / days) * safeLog1p(roi / 100);
-  const r0 = Math.tanh(params.tanhCoeff * intensity);
-  const returnScore = r0 > 0
-    ? clip(ARENA_CONFIG.MAX_RETURN_SCORE * Math.pow(r0, params.roiExponent), 0, 85)
-    : 0;
-
-  // Drawdown score (0-8)
-  const drawdownScore = maxDrawdown != null
-    ? clip(ARENA_CONFIG.MAX_DRAWDOWN_SCORE * clip(1 - Math.abs(maxDrawdown) / params.mddThreshold, 0, 1), 0, 8)
-    : 4; // Default if missing
-
-  // Stability score (0-7)
-  const stabilityScore = wr != null
-    ? clip(ARENA_CONFIG.MAX_STABILITY_SCORE * clip((wr - 45) / (params.winRateCap - 45), 0, 1), 0, 7)
-    : 3.5; // Default if missing
-
-  return Math.round((returnScore + drawdownScore + stabilityScore) * 100) / 100;
+  const result = libCalculateArenaScore(input, period);
+  return result.totalScore;
 }
+
+// Re-export for compatibility
+export { calculateDrawdownScore, calculateStabilityScore, calculateReturnScore };

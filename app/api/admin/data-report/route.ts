@@ -81,85 +81,85 @@ export async function GET(req: Request) {
     const now = new Date()
     const staleThreshold = new Date(now.getTime() - STALE_THRESHOLD_HOURS * 60 * 60 * 1000)
     
-    const reports: SourceReport[] = []
-    
-    // 为每个数据源生成报告
-    for (const sourceConfig of ALL_SOURCES) {
-      const periodReports: PeriodReport[] = []
-      
-      for (const period of sourceConfig.periods) {
-        // 获取最新的 captured_at
-        const { data: latestSnapshot } = await supabase
-          .from('trader_snapshots')
-          .select('captured_at')
-          .eq('source', sourceConfig.source)
-          .eq('season_id', period)
-          .order('captured_at', { ascending: false })
-          .limit(1)
-          .maybeSingle()
-        
-        const lastUpdate = latestSnapshot?.captured_at || null
-        const isStale = lastUpdate ? new Date(lastUpdate) < staleThreshold : true
-        
-        // 获取该时间段的交易员数量
-        const { count } = await supabase
-          .from('trader_snapshots')
-          .select('*', { count: 'exact', head: true })
-          .eq('source', sourceConfig.source)
-          .eq('season_id', period)
-          .eq('captured_at', lastUpdate)
-        
-        // 获取 TOP 10
-        let top10: TraderData[] = []
-        if (lastUpdate) {
-          const { data: snapshots } = await supabase
-            .from('trader_snapshots')
-            .select('source_trader_id, roi, pnl, win_rate, rank')
-            .eq('source', sourceConfig.source)
-            .eq('season_id', period)
-            .eq('captured_at', lastUpdate)
-            .order('roi', { ascending: false })
-            .limit(10)
-          
-          if (snapshots && snapshots.length > 0) {
-            // 批量获取 handles
-            const traderIds = snapshots.map(s => s.source_trader_id)
-            const { data: sources } = await supabase
-              .from('trader_sources')
-              .select('source_trader_id, handle')
+    // 并行获取所有数据源的报告（而非串行）
+    const reports: SourceReport[] = await Promise.all(
+      ALL_SOURCES.map(async (sourceConfig) => {
+        const periodReports: PeriodReport[] = await Promise.all(
+          sourceConfig.periods.map(async (period) => {
+            // 获取最新的 captured_at
+            const { data: latestSnapshot } = await supabase
+              .from('trader_snapshots')
+              .select('captured_at')
               .eq('source', sourceConfig.source)
-              .in('source_trader_id', traderIds)
-            
-            const handleMap = new Map<string, string | null>()
-            sources?.forEach(s => handleMap.set(s.source_trader_id, s.handle))
-            
-            top10 = snapshots.map((s, idx) => ({
-              traderId: s.source_trader_id,
-              handle: handleMap.get(s.source_trader_id) || null,
-              roi: s.roi ?? 0,
-              pnl: s.pnl ?? null,
-              winRate: s.win_rate ?? null,
-              rank: idx + 1,
-            }))
-          }
+              .eq('season_id', period)
+              .order('captured_at', { ascending: false })
+              .limit(1)
+              .maybeSingle()
+
+            const lastUpdate = latestSnapshot?.captured_at || null
+            const isStale = lastUpdate ? new Date(lastUpdate) < staleThreshold : true
+
+            // 并行获取交易员数量和 TOP 10
+            const [countResult, snapshotsResult] = await Promise.all([
+              supabase
+                .from('trader_snapshots')
+                .select('*', { count: 'exact', head: true })
+                .eq('source', sourceConfig.source)
+                .eq('season_id', period)
+                .eq('captured_at', lastUpdate),
+              lastUpdate
+                ? supabase
+                    .from('trader_snapshots')
+                    .select('source_trader_id, roi, pnl, win_rate, rank')
+                    .eq('source', sourceConfig.source)
+                    .eq('season_id', period)
+                    .eq('captured_at', lastUpdate)
+                    .order('roi', { ascending: false })
+                    .limit(10)
+                : Promise.resolve({ data: null }),
+            ])
+
+            let top10: TraderData[] = []
+            const snapshots = snapshotsResult.data
+            if (snapshots && snapshots.length > 0) {
+              const traderIds = snapshots.map(s => s.source_trader_id)
+              const { data: sources } = await supabase
+                .from('trader_sources')
+                .select('source_trader_id, handle')
+                .eq('source', sourceConfig.source)
+                .in('source_trader_id', traderIds)
+
+              const handleMap = new Map<string, string | null>()
+              sources?.forEach(s => handleMap.set(s.source_trader_id, s.handle))
+
+              top10 = snapshots.map((s, idx) => ({
+                traderId: s.source_trader_id,
+                handle: handleMap.get(s.source_trader_id) || null,
+                roi: s.roi ?? 0,
+                pnl: s.pnl ?? null,
+                winRate: s.win_rate ?? null,
+                rank: idx + 1,
+              }))
+            }
+
+            return {
+              period,
+              lastUpdate,
+              isStale,
+              traderCount: countResult.count || 0,
+              top10,
+            }
+          })
+        )
+
+        return {
+          source: sourceConfig.source,
+          displayName: sourceConfig.displayName,
+          type: sourceConfig.type,
+          periods: periodReports,
         }
-        
-        periodReports.push({
-          period,
-          lastUpdate,
-          isStale,
-          traderCount: count || 0,
-          top10,
-        })
-      }
-      
-      reports.push({
-        source: sourceConfig.source,
-        displayName: sourceConfig.displayName,
-        type: sourceConfig.type,
-        periods: periodReports,
       })
-    }
+    )
     
     // 计算统计信息
     const stats = {
