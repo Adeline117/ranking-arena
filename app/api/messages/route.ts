@@ -1,38 +1,43 @@
 /**
  * 私信消息 API
- * GET: 获取会话中的消息
+ * GET: 获取会话中的消息（支持分页）
  * POST: 发送私信
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 import { createLogger, traceMessage } from '@/lib/utils/logger'
+import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
 
 const logger = createLogger('messages-api')
 
 export const dynamic = 'force-dynamic'
 
-const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
-
 // 非互关用户发送消息的限制数量
 const NON_MUTUAL_MESSAGE_LIMIT = 3
+const DEFAULT_PAGE_SIZE = 50
+const MAX_PAGE_SIZE = 100
 
-// 获取会话消息
+// 获取会话消息（分页支持）
 export async function GET(request: NextRequest) {
   try {
+    // 服务端鉴权：从 Authorization header 验证用户身份
+    const user = await getAuthUser(request)
+    if (!user) {
+      return NextResponse.json({ error: '请先登录' }, { status: 401 })
+    }
+    const userId = user.id
+
     const conversationId = request.nextUrl.searchParams.get('conversationId')
-    const userId = request.nextUrl.searchParams.get('userId')
-
-    if (!conversationId || !userId) {
-      return NextResponse.json({ error: 'Missing conversationId or userId' }, { status: 400 })
+    if (!conversationId) {
+      return NextResponse.json({ error: 'Missing conversationId' }, { status: 400 })
     }
 
-    if (!SUPABASE_URL || !SUPABASE_KEY) {
-      return NextResponse.json({ error: 'Missing Supabase config' }, { status: 500 })
-    }
+    // 分页参数
+    const before = request.nextUrl.searchParams.get('before') // cursor: created_at of oldest loaded message
+    const limitParam = request.nextUrl.searchParams.get('limit')
+    const limit = Math.min(Math.max(parseInt(limitParam || String(DEFAULT_PAGE_SIZE), 10) || DEFAULT_PAGE_SIZE, 1), MAX_PAGE_SIZE)
 
-    const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
+    const supabase = getSupabaseAdmin()
 
     // 验证用户是否有权限访问此会话
     const { data: conversation, error: convError } = await supabase
@@ -49,8 +54,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: '无权访问此会话' }, { status: 403 })
     }
 
-    // 获取消息列表
-    const { data: messages, error: msgError } = await supabase
+    // 构建查询（支持 cursor 分页）
+    let query = supabase
       .from('direct_messages')
       .select(`
         id,
@@ -61,34 +66,46 @@ export async function GET(request: NextRequest) {
         created_at
       `)
       .eq('conversation_id', conversationId)
-      .order('created_at', { ascending: true })
-      .limit(100)
+      .order('created_at', { ascending: false })
+      .limit(limit + 1) // fetch one extra to check has_more
+
+    // 如果有 cursor，加载更早的消息
+    if (before) {
+      query = query.lt('created_at', before)
+    }
+
+    const { data: messages, error: msgError } = await query
 
     if (msgError) {
       if (msgError.message?.includes('Could not find')) {
-        return NextResponse.json({ messages: [] })
+        return NextResponse.json({ messages: [], has_more: false })
       }
       logger.error('Query error', { error: msgError.message })
       return NextResponse.json({ error: msgError.message }, { status: 500 })
     }
 
-    // 标记接收到的消息为已读
-    const { data: updatedMessages } = await supabase
-      .from('direct_messages')
-      .update({ read: true })
-      .eq('conversation_id', conversationId)
-      .eq('receiver_id', userId)
-      .eq('read', false)
-      .select('id')
+    // 判断是否还有更多消息
+    const has_more = (messages?.length || 0) > limit
+    const resultMessages = (messages || []).slice(0, limit).reverse() // reverse back to ascending order
 
-    // 追踪已读事件
-    if (updatedMessages && updatedMessages.length > 0) {
-      traceMessage({
-        event: 'read',
-        conversationId,
-        receiverId: userId,
-        metadata: { count: updatedMessages.length },
-      })
+    // 标记接收到的消息为已读（仅首次加载时，不在翻页时重复执行）
+    if (!before) {
+      const { data: updatedMessages } = await supabase
+        .from('direct_messages')
+        .update({ read: true })
+        .eq('conversation_id', conversationId)
+        .eq('receiver_id', userId)
+        .eq('read', false)
+        .select('id')
+
+      if (updatedMessages && updatedMessages.length > 0) {
+        traceMessage({
+          event: 'read',
+          conversationId,
+          receiverId: userId,
+          metadata: { count: updatedMessages.length },
+        })
+      }
     }
 
     // 获取对方用户信息
@@ -99,22 +116,22 @@ export async function GET(request: NextRequest) {
       .eq('id', otherUserId)
       .maybeSingle()
 
-    // 确保 handle 有效值，如果用户没有设置 handle，使用 ID 前 8 位
-    const otherUserData = otherUser 
+    const otherUserData = otherUser
       ? {
           ...otherUser,
           handle: otherUser.handle || otherUserId.slice(0, 8)
         }
-      : { 
-          id: otherUserId, 
+      : {
+          id: otherUserId,
           handle: otherUserId.slice(0, 8),
           avatar_url: null,
           bio: null
         }
 
-    return NextResponse.json({ 
-      messages: messages || [],
-      otherUser: otherUserData
+    return NextResponse.json({
+      messages: resultMessages,
+      otherUser: otherUserData,
+      has_more,
     })
   } catch (error) {
     logger.error('GET error', { error: String(error) })
@@ -125,11 +142,18 @@ export async function GET(request: NextRequest) {
 // 发送私信
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
-    const { senderId, receiverId, content } = body
+    // 服务端鉴权：从 Authorization header 验证用户身份
+    const user = await getAuthUser(request)
+    if (!user) {
+      return NextResponse.json({ error: '请先登录' }, { status: 401 })
+    }
+    const senderId = user.id
 
-    if (!senderId || !receiverId || !content) {
-      return NextResponse.json({ error: 'Missing senderId, receiverId or content' }, { status: 400 })
+    const body = await request.json()
+    const { receiverId, content } = body
+
+    if (!receiverId || !content) {
+      return NextResponse.json({ error: 'Missing receiverId or content' }, { status: 400 })
     }
 
     if (senderId === receiverId) {
@@ -144,11 +168,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '消息内容过长，最多2000字符' }, { status: 400 })
     }
 
-    if (!SUPABASE_URL || !SUPABASE_KEY) {
-      return NextResponse.json({ error: 'Missing Supabase config' }, { status: 500 })
-    }
-
-    const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
+    const supabase = getSupabaseAdmin()
 
     // 获取接收者的隐私设置
     const { data: receiverProfile, error: profileError } = await supabase
@@ -193,7 +213,6 @@ export async function POST(request: NextRequest) {
 
     // 如果设置为仅互相关注可以私信，且不是互关
     if (dmPermission === 'mutual' && !isMutualFollow) {
-      // 检查接收者是否已回复过
       const { data: receiverReplied, error: replyError } = await supabase
         .from('direct_messages')
         .select('id')
@@ -206,7 +225,6 @@ export async function POST(request: NextRequest) {
         logger.warn('Query reply error', { error: replyError.message })
       }
 
-      // 如果接收者没有回复过，检查发送者已发送的消息数量
       if (!receiverReplied) {
         const { count: sentCount, error: countError } = await supabase
           .from('direct_messages')
@@ -236,11 +254,9 @@ export async function POST(request: NextRequest) {
     }
 
     // 获取或创建会话
-    // 确保 user1_id < user2_id
     const orderedUser1 = senderId < receiverId ? senderId : receiverId
     const orderedUser2 = senderId < receiverId ? receiverId : senderId
 
-    // 尝试查找现有会话
     let { data: conversation } = await supabase
       .from('conversations')
       .select('*')
@@ -248,7 +264,6 @@ export async function POST(request: NextRequest) {
       .eq('user2_id', orderedUser2)
       .maybeSingle()
 
-    // 如果会话不存在，创建新会话
     if (!conversation) {
       const { data: newConv, error: convError } = await supabase
         .from('conversations')
@@ -257,7 +272,6 @@ export async function POST(request: NextRequest) {
         .single()
 
       if (convError) {
-        // 如果是并发创建导致的重复，再次查询
         if (convError.code === '23505') {
           const { data: existingConv } = await supabase
             .from('conversations')
@@ -303,7 +317,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '发送失败' }, { status: 500 })
     }
 
-    // 追踪消息发送成功
     traceMessage({
       event: 'send',
       messageId: message.id,

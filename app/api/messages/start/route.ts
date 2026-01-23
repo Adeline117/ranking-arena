@@ -4,32 +4,32 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 import { traceMessage } from '@/lib/utils/logger'
+import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
 
 export const dynamic = 'force-dynamic'
 
-const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
-
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
-    const { senderId, receiverId } = body
+    // 服务端鉴权：从 Authorization header 验证用户身份
+    const user = await getAuthUser(request)
+    if (!user) {
+      return NextResponse.json({ error: '请先登录' }, { status: 401 })
+    }
+    const senderId = user.id
 
-    if (!senderId || !receiverId) {
-      return NextResponse.json({ error: 'Missing senderId or receiverId' }, { status: 400 })
+    const body = await request.json()
+    const { receiverId } = body
+
+    if (!receiverId) {
+      return NextResponse.json({ error: 'Missing receiverId' }, { status: 400 })
     }
 
     if (senderId === receiverId) {
       return NextResponse.json({ error: '不能给自己发私信' }, { status: 400 })
     }
 
-    if (!SUPABASE_URL || !SUPABASE_KEY) {
-      return NextResponse.json({ error: 'Missing Supabase config' }, { status: 500 })
-    }
-
-    const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
+    const supabase = getSupabaseAdmin()
 
     // 获取接收者的隐私设置
     const { data: receiverProfile, error: profileError } = await supabase

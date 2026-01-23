@@ -262,10 +262,10 @@ async function joinProOfficialGroupFallback(userId: string): Promise<{
       return { success: false, message: memberError.message }
     }
     
-    // 加入 group_members（使用 upsert 处理冲突）
+    // 加入 group_members（使用 upsert 处理冲突，auto-mute 不打扰用户）
     await supabase
       .from('group_members')
-      .upsert({ group_id: groupId, user_id: userId, role: 'member' }, {
+      .upsert({ group_id: groupId, user_id: userId, role: 'member', notifications_muted: true }, {
         onConflict: 'group_id,user_id'
       })
     
