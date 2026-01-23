@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import Stripe from 'stripe'
 import { createLogger } from '@/lib/utils/logger'
+import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
 // 懒加载 Stripe 客户端
 function getStripe() {
@@ -45,6 +46,13 @@ const logger = createLogger('stripe-verify-session')
 
 export async function POST(request: NextRequest) {
   try {
+    // 速率限制检查（金融操作使用 sensitive 预设：15次/分钟）
+    const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.sensitive)
+    if (rateLimitResponse) {
+      logger.warn('Rate limit exceeded for stripe/verify-session')
+      return rateLimitResponse
+    }
+
     const { sessionId } = await request.json()
 
     if (!sessionId) {

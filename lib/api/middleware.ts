@@ -8,6 +8,7 @@ import { User } from '@supabase/supabase-js'
 import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
 import { checkRateLimit, RateLimitPresets, type RateLimitConfig } from '@/lib/utils/rate-limit'
 import { createLogger } from '@/lib/utils/logger'
+import { validateCsrfToken, CSRF_COOKIE_NAME, CSRF_HEADER_NAME } from '@/lib/utils/csrf'
 import { 
   parseApiVersion, 
   addVersionHeaders, 
@@ -64,7 +65,7 @@ function createResponse(data: unknown, status = 200) {
 /**
  * 创建错误响应
  */
-function createErrorResponse(message: string, status = 500) {
+export function createErrorResponse(message: string, status = 500) {
   return NextResponse.json(
     { success: false, error: message },
     { status }
@@ -115,10 +116,10 @@ export function withApiMiddleware<T>(
     try {
       // 1. 限流检查
       if (rateLimit !== false) {
-        const config = typeof rateLimit === 'string' 
+        const config = typeof rateLimit === 'string'
           ? RateLimitPresets[rateLimit]
           : rateLimit
-        
+
         const rateLimitResponse = await checkRateLimit(request, config)
         if (rateLimitResponse) {
           logger.warn(`Rate limit exceeded for ${name}`)
@@ -130,7 +131,23 @@ export function withApiMiddleware<T>(
         }
       }
 
-      // 2. 认证检查
+      // 2. CSRF 验证（仅针对写操作）
+      const method = request.method.toUpperCase()
+      if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(method)) {
+        const cookieToken = request.cookies.get(CSRF_COOKIE_NAME)?.value
+        const headerToken = request.headers.get(CSRF_HEADER_NAME) ?? undefined
+
+        if (!validateCsrfToken(cookieToken, headerToken)) {
+          logger.warn(`CSRF validation failed for ${name}`)
+          const csrfErrorResponse = createErrorResponse('CSRF 验证失败', 403)
+          if (versioning) {
+            addVersionHeaders(csrfErrorResponse, versionContext)
+          }
+          return csrfErrorResponse
+        }
+      }
+
+      // 3. 认证检查
       let user: User | null = null
       if (needsAuth) {
         user = await getAuthUser(request)
@@ -146,13 +163,13 @@ export function withApiMiddleware<T>(
         user = await getAuthUser(request)
       }
 
-      // 3. 获取 Supabase 客户端
+      // 4. 获取 Supabase 客户端
       const supabase = getSupabaseAdmin()
 
-      // 4. 执行处理函数（传入版本上下文）
+      // 5. 执行处理函数（传入版本上下文）
       const result = await handler({ user, supabase, request, version: versionContext })
 
-      // 5. 返回响应
+      // 6. 返回响应
       let response: NextResponse
       if (result instanceof NextResponse) {
         response = result
@@ -160,13 +177,13 @@ export function withApiMiddleware<T>(
         response = createResponse({ success: true, data: result })
       }
 
-      // 6. 添加版本和弃用头
+      // 7. 添加版本和弃用头
       if (versioning) {
         addVersionHeaders(response, versionContext)
         addDeprecationHeaders(response, versionContext, request.nextUrl.pathname, request.method)
       }
-      
-      // 7. 添加响应时间头
+
+      // 8. 添加响应时间头
       const duration = Date.now() - startTime
       response.headers.set('X-Response-Time', `${duration}ms`)
 

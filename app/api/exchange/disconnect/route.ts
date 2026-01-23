@@ -1,81 +1,70 @@
 /**
- * 断开交易所连接API
+ * 断开交易所连接 API
  * DELETE /api/exchange/disconnect
- * 
+ *
  * 请求体：
  * {
- *   exchange: 'binance'
+ *   exchange: 'binance' | 'bybit' | 'bitget' | ...
  * }
  */
 
-import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { withApiMiddleware, createErrorResponse } from '@/lib/api/middleware'
+import { createLogger } from '@/lib/utils/logger'
 
-function getSupabaseAdmin() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-  return createClient(url, serviceKey, {
-    auth: { persistSession: false },
-  })
-}
+const logger = createLogger('exchange-disconnect')
 
-export async function DELETE(req: NextRequest) {
-  try {
-    // 1. 获取用户身份
-    const authHeader = req.headers.get('authorization')
-    if (!authHeader) {
-      return NextResponse.json({ error: '未授权' }, { status: 401 })
+export const dynamic = 'force-dynamic'
+
+/**
+ * DELETE /api/exchange/disconnect
+ * 断开用户与交易所的连接（软删除）
+ */
+export const DELETE = withApiMiddleware(
+  async ({ user, supabase, request }) => {
+    // 需要认证
+    if (!user) {
+      return createErrorResponse('未授权', 401)
     }
 
-    // 从token中提取用户ID
-    const token = authHeader.replace('Bearer ', '')
-    const adminSupabase = getSupabaseAdmin()
-    
-    // 验证token并获取用户
-    const { data: { user }, error: userError } = await adminSupabase.auth.getUser(token)
-    if (userError || !user) {
-      return NextResponse.json({ error: '未授权' }, { status: 401 })
-    }
-
-    // 2. 解析请求体
-    const body = await req.json()
+    // 解析请求体
+    const body = await request.json()
     const { exchange } = body
 
     if (!exchange) {
-      return NextResponse.json(
-        { error: '缺少必要参数：exchange' },
-        { status: 400 }
-      )
+      return createErrorResponse('缺少必要参数：exchange', 400)
     }
 
-    // 3. 删除连接（软删除：设置为非活跃）
-    const { error: updateError } = await adminSupabase
+    // 验证 exchange 参数
+    const validExchanges = ['binance', 'bybit', 'bitget', 'mexc', 'okx', 'kucoin', 'coinex', 'gmx']
+    if (!validExchanges.includes(exchange.toLowerCase())) {
+      return createErrorResponse('无效的交易所参数', 400)
+    }
+
+    // 软删除：设置为非活跃
+    const { error: updateError } = await supabase
       .from('user_exchange_connections')
       .update({
         is_active: false,
         updated_at: new Date().toISOString(),
       })
       .eq('user_id', user.id)
-      .eq('exchange', exchange)
+      .eq('exchange', exchange.toLowerCase())
 
     if (updateError) {
-      console.error('[exchange/disconnect] 断开连接失败:', updateError)
-      return NextResponse.json(
-        { error: '断开连接失败' },
-        { status: 500 }
-      )
+      logger.error('断开连接失败', { error: updateError, userId: user.id, exchange })
+      return createErrorResponse('断开连接失败', 500)
     }
 
-    return NextResponse.json({
+    logger.info('用户断开交易所连接', { userId: user.id, exchange })
+
+    return {
       success: true,
       message: '已断开连接',
-    })
-  } catch (error: any) {
-    console.error('[exchange/disconnect] 错误:', error)
-    return NextResponse.json(
-      { error: error.message || '断开连接失败' },
-      { status: 500 }
-    )
+    }
+  },
+  {
+    name: 'exchange-disconnect',
+    requireAuth: true,
+    rateLimit: 'sensitive', // 15次/分钟，敏感操作
   }
-}
-
+)

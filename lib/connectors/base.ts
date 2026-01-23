@@ -28,6 +28,7 @@ import type {
 import { PLATFORM_RATE_LIMITS } from '../types/leaderboard'
 import type { PlatformConnector, ConnectorConfig, RateLimiter } from './types'
 import { ConnectorError, DEFAULT_CONNECTOR_CONFIG } from './types'
+export { ConnectorError, DEFAULT_CONNECTOR_CONFIG }
 
 // ============================================
 // Circuit Breaker (standalone, for legacy usage)
@@ -51,7 +52,7 @@ class CircuitBreaker {
   constructor(
     private readonly failureThreshold: number = 5,
     private readonly resetTimeout: number = 60_000,
-    private readonly halfOpenMaxAttempts: number = 2,
+    private readonly halfOpenMaxAttempts: number = 2
   ) {}
 
   async execute<T>(fn: () => Promise<T>): Promise<T> {
@@ -61,7 +62,7 @@ class CircuitBreaker {
         this.successCount = 0
       } else {
         throw new CircuitOpenError(
-          `Circuit is open. Retry after ${this.resetTimeout - (Date.now() - this.lastFailureTime)}ms`,
+          `Circuit is open. Retry after ${this.resetTimeout - (Date.now() - this.lastFailureTime)}ms`
         )
       }
     }
@@ -178,10 +179,7 @@ export abstract class BaseConnector implements PlatformConnector {
 
   abstract fetchTraderProfile(traderKey: string): Promise<ProfileResult | null>
 
-  abstract fetchTraderSnapshot(
-    traderKey: string,
-    window: Window
-  ): Promise<SnapshotResult | null>
+  abstract fetchTraderSnapshot(traderKey: string, window: Window): Promise<SnapshotResult | null>
 
   abstract fetchTimeseries(traderKey: string): Promise<TimeseriesResult>
 
@@ -194,10 +192,7 @@ export abstract class BaseConnector implements PlatformConnector {
   /**
    * Make an HTTP request with retry, backoff, and rate limiting.
    */
-  protected async request<T>(
-    url: string,
-    options?: RequestInit
-  ): Promise<T> {
+  protected async request<T>(url: string, options?: RequestInit): Promise<T> {
     let lastError: Error | null = null
 
     for (let attempt = 0; attempt <= this.config.maxRetries; attempt++) {
@@ -224,7 +219,7 @@ export abstract class BaseConnector implements PlatformConnector {
           signal: controller.signal,
           headers: {
             'User-Agent': this.config.userAgent,
-            'Accept': 'application/json',
+            Accept: 'application/json',
             ...this.config.headers,
             ...options?.headers,
           },
@@ -270,13 +265,17 @@ export abstract class BaseConnector implements PlatformConnector {
         this.rateLimiter?.recordSuccess()
         this.rateLimiter?.release()
 
-        const data = await response.json() as T
+        const data = (await response.json()) as T
         return data
       } catch (error) {
         this.rateLimiter?.release()
 
-        if (error instanceof ConnectorError && !error.isRateLimited && (error.statusCode ?? 0) < 500) {
-          throw error  // Non-retryable errors
+        if (
+          error instanceof ConnectorError &&
+          !error.isRateLimited &&
+          (error.statusCode ?? 0) < 500
+        ) {
+          throw error // Non-retryable errors
         }
 
         lastError = error as Error
@@ -290,11 +289,7 @@ export abstract class BaseConnector implements PlatformConnector {
       }
     }
 
-    throw lastError || new ConnectorError(
-      'Max retries exceeded',
-      this.platform,
-      this.marketType
-    )
+    throw lastError || new ConnectorError('Max retries exceeded', this.platform, this.marketType)
   }
 
   // ============================================
@@ -315,9 +310,12 @@ export abstract class BaseConnector implements PlatformConnector {
     if (metrics.roi === null || metrics.roi === undefined) missingFields.push('roi')
     if (metrics.pnl === null || metrics.pnl === undefined) missingFields.push('pnl')
     if (metrics.win_rate === null || metrics.win_rate === undefined) missingFields.push('win_rate')
-    if (metrics.max_drawdown === null || metrics.max_drawdown === undefined) missingFields.push('max_drawdown')
-    if (metrics.trades_count === null || metrics.trades_count === undefined) missingFields.push('trades_count')
-    if (metrics.followers === null || metrics.followers === undefined) missingFields.push('followers')
+    if (metrics.max_drawdown === null || metrics.max_drawdown === undefined)
+      missingFields.push('max_drawdown')
+    if (metrics.trades_count === null || metrics.trades_count === undefined)
+      missingFields.push('trades_count')
+    if (metrics.followers === null || metrics.followers === undefined)
+      missingFields.push('followers')
     if (metrics.copiers === null || metrics.copiers === undefined) missingFields.push('copiers')
 
     const notes: string[] = []
@@ -374,7 +372,7 @@ export abstract class BaseConnector implements PlatformConnector {
   // ============================================
 
   protected sleep(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms))
+    return new Promise((resolve) => setTimeout(resolve, ms))
   }
 
   /**
@@ -450,7 +448,7 @@ export abstract class BaseConnectorLegacy {
    */
   protected async requestWithCircuitBreaker<T>(
     fn: () => Promise<T>,
-    options: { retries?: number; label?: string } = {},
+    options: { retries?: number; label?: string } = {}
   ): Promise<T> {
     const { retries = 3, label = 'request' } = options
 
@@ -471,7 +469,7 @@ export abstract class BaseConnectorLegacy {
           if (attempt < retries) {
             const backoff = Math.pow(2, attempt) * 1000 + Math.random() * 1000
             console.warn(
-              `[${this.platform}] ${label} attempt ${attempt + 1} failed, retrying in ${Math.round(backoff)}ms: ${lastError.message}`,
+              `[${this.platform}] ${label} attempt ${attempt + 1} failed, retrying in ${Math.round(backoff)}ms: ${lastError.message}`
             )
             await sleep(backoff)
           }
@@ -479,7 +477,7 @@ export abstract class BaseConnectorLegacy {
       }
 
       throw new Error(
-        `[${this.platform}] ${label} failed after ${retries + 1} attempts: ${lastError?.message}`,
+        `[${this.platform}] ${label} failed after ${retries + 1} attempts: ${lastError?.message}`
       )
     })
   }
