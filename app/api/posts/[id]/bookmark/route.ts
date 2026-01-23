@@ -133,25 +133,28 @@ export async function POST(request: NextRequest, context: RouteContext) {
       }
 
       // 手动更新收藏计数（因为触发器可能不工作）
-      const { data: currentPost, error: countQueryError } = await supabase
+      // Re-fetch to reduce race condition window
+      const { data: currentPost, error: fetchError } = await supabase
         .from('posts')
         .select('bookmark_count')
         .eq('id', id)
         .single()
 
-      if (countQueryError) {
-        apiLogger.error('Error querying bookmark count:', countQueryError)
+      if (fetchError) {
+        apiLogger.warn('Failed to fetch current bookmark count:', fetchError)
       }
 
-      const newCount = Math.max(0, (currentPost?.bookmark_count || 1) - 1)
-      const { error: countUpdateError } = await supabase
+      const currentCount = currentPost?.bookmark_count ?? 0
+      const newCount = Math.max(0, currentCount - 1)
+
+      const { error: updateError } = await supabase
         .from('posts')
         .update({ bookmark_count: newCount })
         .eq('id', id)
 
-      if (countUpdateError) {
-        apiLogger.error('Error updating bookmark count on remove:', countUpdateError)
-        // Continue with success response since the main operation succeeded
+      if (updateError) {
+        apiLogger.warn('Failed to update bookmark count:', updateError)
+        // Still return success since the bookmark was removed
       }
 
       return NextResponse.json({
@@ -224,25 +227,28 @@ export async function POST(request: NextRequest, context: RouteContext) {
       }
 
       // 手动更新收藏计数（因为触发器可能不工作）
-      const { data: currentPost, error: countQueryError } = await supabase
+      // Re-fetch to reduce race condition window
+      const { data: currentPost, error: fetchError } = await supabase
         .from('posts')
         .select('bookmark_count')
         .eq('id', id)
         .single()
 
-      if (countQueryError) {
-        apiLogger.error('Error querying bookmark count:', countQueryError)
+      if (fetchError) {
+        apiLogger.warn('Failed to fetch current bookmark count:', fetchError)
       }
 
-      const newCount = (currentPost?.bookmark_count || 0) + 1
-      const { error: countUpdateError } = await supabase
+      const currentCount = currentPost?.bookmark_count ?? 0
+      const newCount = currentCount + 1
+
+      const { error: updateError } = await supabase
         .from('posts')
         .update({ bookmark_count: newCount })
         .eq('id', id)
 
-      if (countUpdateError) {
-        apiLogger.error('Error updating bookmark count on add:', countUpdateError)
-        // Continue with success response since the main operation succeeded
+      if (updateError) {
+        apiLogger.warn('Failed to update bookmark count:', updateError)
+        // Still return success since the bookmark was added
       }
 
       return NextResponse.json({

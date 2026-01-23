@@ -1,6 +1,9 @@
 /**
  * 开始新对话 API
  * POST: 创建或获取与指定用户的会话
+ *
+ * SECURITY: Requires authentication. senderId is derived from authenticated user's
+ * session, preventing users from starting conversations as other users.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -11,7 +14,7 @@ export const dynamic = 'force-dynamic'
 
 export async function POST(request: NextRequest) {
   try {
-    // 验证用户身份
+    // SECURITY: Require authentication
     const user = await getAuthUser(request)
     if (!user) {
       return NextResponse.json(
@@ -23,7 +26,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { receiverId } = body
 
-    // 使用认证用户的 ID 作为发送者
+    // SECURITY: Use authenticated user's ID as sender, ignoring any client-provided senderId.
     const senderId = user.id
 
     if (!receiverId) {
@@ -65,7 +68,7 @@ export async function POST(request: NextRequest) {
 
     // 检查是否互相关注
     let isMutualFollow = false
-    
+
     const { data: senderFollows } = await supabase
       .from('user_follows')
       .select('*')
@@ -206,5 +209,3 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
-
-
