@@ -10,6 +10,7 @@ import { Box, Text } from '@/app/components/base'
 import Avatar from '@/app/components/ui/Avatar'
 import { useToast } from '@/app/components/ui/Toast'
 import { getCsrfHeaders } from '@/lib/api/client'
+import { useUnifiedAuth } from '@/lib/hooks/useUnifiedAuth'
 
 type MessageStatus = 'sending' | 'sent' | 'failed'
 
@@ -34,11 +35,8 @@ type OtherUser = {
 export default function ConversationPage({ params }: { params: { conversationId: string } | Promise<{ conversationId: string }> }) {
   const router = useRouter()
   const { showToast } = useToast()
+  const auth = useUnifiedAuth()
   const [conversationId, setConversationId] = useState<string>('')
-  const [email, setEmail] = useState<string | null>(null)
-  const [userId, setUserId] = useState<string | null>(null)
-  const [accessToken, setAccessToken] = useState<string | null>(null) // 添加 access token
-  const [authChecked, setAuthChecked] = useState(false) // 追踪认证检查是否完成
   const [messages, setMessages] = useState<Message[]>([])
   const [otherUser, setOtherUser] = useState<OtherUser | null>(null)
   const [loading, setLoading] = useState(true)
@@ -70,20 +68,6 @@ export default function ConversationPage({ params }: { params: { conversationId:
     }
   }, [params])
 
-  // 使用 getSession 代替 getUser，更可靠地检查认证状态
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setEmail(data.session?.user?.email ?? null)
-      setUserId(data.session?.user?.id ?? null)
-      setAccessToken(data.session?.access_token ?? null) // 保存 access token
-      setAuthChecked(true) // 认证检查完成
-      
-      if (data.session?.user?.id && data.session?.access_token && conversationId) {
-        loadMessages(data.session.user.id, conversationId, data.session.access_token)
-      }
-    })
-  }, [conversationId])
-
   // 滚动到底部
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -93,23 +77,31 @@ export default function ConversationPage({ params }: { params: { conversationId:
     scrollToBottom()
   }, [messages])
 
-  const loadMessages = useCallback(async (uid: string, convId: string, token?: string) => {
+  const loadMessages = useCallback(async (convId: string, token: string) => {
     try {
       setLoading(true)
-      const res = await fetch(`/api/messages?conversationId=${convId}&userId=${uid}`, {
-        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+      // Auth is required - userId is derived from token on server side
+      const res = await fetch(`/api/messages?conversationId=${convId}`, {
+        headers: { 'Authorization': `Bearer ${token}` },
       })
       const data = await res.json()
-      
-      if (data.error) {
-        showToast(data.error, 'error')
+
+      if (!res.ok) {
+        // Differentiate between auth errors and other errors
+        if (res.status === 401) {
+          showToast('请先登录后查看消息', 'warning')
+        } else if (res.status === 403) {
+          showToast('无权访问此会话', 'error')
+        } else {
+          showToast(data.error || '加载消息失败', 'error')
+        }
         router.push('/messages')
         return
       }
-      
+
       if (data.messages) {
         setMessages(data.messages)
-        
+
         // 使用 API 返回的对方用户信息
         if (data.otherUser) {
           setOtherUser(data.otherUser)
@@ -123,9 +115,16 @@ export default function ConversationPage({ params }: { params: { conversationId:
     }
   }, [showToast, router])
 
+  // Load messages when auth is ready and conversationId is set
+  useEffect(() => {
+    if (auth.initialized && auth.userId && auth.accessToken && conversationId) {
+      loadMessages(conversationId, auth.accessToken)
+    }
+  }, [auth.initialized, auth.userId, auth.accessToken, conversationId, loadMessages])
+
   // 订阅实时消息更新
   useEffect(() => {
-    if (!userId || !conversationId || !otherUser) return
+    if (!auth.userId || !conversationId || !otherUser) return
 
     // 创建实时订阅通道 - 监听来自对方的新消息
     const channel = supabase
@@ -141,7 +140,7 @@ export default function ConversationPage({ params }: { params: { conversationId:
         (payload) => {
           // 检查这条消息是否是发给当前用户的
           const newMsg = payload.new as Message
-          if (newMsg.receiver_id === userId) {
+          if (newMsg.receiver_id === auth.userId) {
             // 添加新消息到列表（避免重复）
             setMessages(prev => {
               if (prev.some(m => m.id === newMsg.id)) {
@@ -171,10 +170,10 @@ export default function ConversationPage({ params }: { params: { conversationId:
         channelRef.current = null
       }
     }
-  }, [userId, conversationId, otherUser])
+  }, [auth.userId, conversationId, otherUser])
 
   const handleSend = async () => {
-    if (!newMessage.trim() || !userId || !otherUser || sending) return
+    if (!newMessage.trim() || !auth.userId || !otherUser || sending) return
 
     const content = newMessage.trim()
     if (content.length > 2000) {
@@ -185,7 +184,7 @@ export default function ConversationPage({ params }: { params: { conversationId:
     const tempId = `temp_${Date.now()}_${Math.random().toString(36).slice(2)}`
     const optimisticMessage: Message = {
       id: tempId,
-      sender_id: userId,
+      sender_id: auth.userId!,
       receiver_id: otherUser.id,
       content,
       read: false,
@@ -205,10 +204,10 @@ export default function ConversationPage({ params }: { params: { conversationId:
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${auth.accessToken}`,
           ...getCsrfHeaders()
         },
         body: JSON.stringify({
-          senderId: userId,
           receiverId: otherUser.id,
           content
         })
@@ -244,7 +243,7 @@ export default function ConversationPage({ params }: { params: { conversationId:
   }
 
   const handleRetry = async (failedMsg: Message) => {
-    if (!userId || !otherUser) return
+    if (!auth.userId || !otherUser) return
 
     // Update status to sending
     setMessages(prev => prev.map(m =>
@@ -256,10 +255,10 @@ export default function ConversationPage({ params }: { params: { conversationId:
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${auth.accessToken}`,
           ...getCsrfHeaders()
         },
         body: JSON.stringify({
-          senderId: userId,
           receiverId: otherUser.id,
           content: failedMsg.content
         })
@@ -340,10 +339,10 @@ export default function ConversationPage({ params }: { params: { conversationId:
   }
 
   // 等待认证检查完成
-  if (!authChecked || (authChecked && !userId && loading)) {
+  if (!auth.initialized) {
     return (
       <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
-        <TopNav email={email} />
+        <TopNav email={auth.email} />
         <Box style={{ maxWidth: 800, margin: '0 auto', padding: tokens.spacing[6] }}>
           <Text size="lg">加载中...</Text>
         </Box>
@@ -352,10 +351,10 @@ export default function ConversationPage({ params }: { params: { conversationId:
   }
 
   // 认证检查完成但用户未登录
-  if (authChecked && !userId) {
+  if (!auth.isAuthenticated) {
     return (
       <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
-        <TopNav email={email} />
+        <TopNav email={auth.email} />
         <Box style={{ maxWidth: 600, margin: '0 auto', padding: `${tokens.spacing[5]} ${tokens.spacing[4]}` }}>
           <Box
             style={{ 
@@ -411,7 +410,7 @@ export default function ConversationPage({ params }: { params: { conversationId:
   if (loading) {
     return (
       <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
-        <TopNav email={email} />
+        <TopNav email={auth.email} />
         <Box style={{ maxWidth: 800, margin: '0 auto', padding: tokens.spacing[6] }}>
           <Text size="lg">加载中...</Text>
         </Box>
@@ -429,7 +428,7 @@ export default function ConversationPage({ params }: { params: { conversationId:
       display: 'flex',
       flexDirection: 'column'
     }}>
-      <TopNav email={email} />
+      <TopNav email={auth.email} />
       
       {/* Header */}
       <Box
@@ -589,7 +588,7 @@ export default function ConversationPage({ params }: { params: { conversationId:
             
             {/* Messages */}
             {group.messages.map((msg, msgIndex) => {
-              const isMine = msg.sender_id === userId
+              const isMine = msg.sender_id === auth.userId
               const prevMsg = msgIndex > 0 ? group.messages[msgIndex - 1] : null
               const nextMsg = msgIndex < group.messages.length - 1 ? group.messages[msgIndex + 1] : null
               const isSameSenderAsPrev = prevMsg?.sender_id === msg.sender_id

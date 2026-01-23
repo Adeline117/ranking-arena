@@ -14,6 +14,8 @@ import { useToast } from '../ui/Toast'
 import { useDialog } from '../ui/Dialog'
 import { getCsrfHeaders } from '@/lib/api/client'
 import BookmarkModal from '../ui/BookmarkModal'
+import { useUnifiedAuth } from '@/lib/hooks/useUnifiedAuth'
+import { usePostStore, type PostData } from '@/lib/stores/postStore'
 
 // 本地类型（扩展后端类型）
 type Post = PostWithUserState
@@ -246,8 +248,12 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
   const [loadingComments, setLoadingComments] = useState(false)
   const [newComment, setNewComment] = useState('')
   const [submittingComment, setSubmittingComment] = useState(false)
-  const [accessToken, setAccessToken] = useState<string | null>(null)
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+  // Unified auth - single source of truth
+  const auth = useUnifiedAuth({
+    onUnauthenticated: () => showToast('请先登录', 'warning'),
+  })
+  const accessToken = auth.accessToken
+  const currentUserId = auth.userId
   const [editingPost, setEditingPost] = useState<Post | null>(null)
   const [editTitle, setEditTitle] = useState('')
   const [editContent, setEditContent] = useState('')
@@ -300,20 +306,9 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
   const [showBookmarkModal, setShowBookmarkModal] = useState(false)
   const [bookmarkingPostId, setBookmarkingPostId] = useState<string | null>(null)
 
-  // 获取用户 token 和 ID
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setAccessToken(session?.access_token || null)
-      setCurrentUserId(session?.user?.id || null)
-    })
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setAccessToken(session?.access_token || null)
-      setCurrentUserId(session?.user?.id || null)
-    })
-
-    return () => subscription.unsubscribe()
-  }, [])
+  // Auth state is now managed by useUnifiedAuth hook (single source of truth)
+  // Store posts in canonical store when loaded
+  const storeSetPosts = usePostStore(s => s.setPosts)
 
   // 加载帖子
   const loadPosts = useCallback(async () => {
@@ -379,7 +374,26 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
       // API 返回格式: { success: true, data: { posts: [...] } }
       const loadedPosts = data.data?.posts || []
       setPosts(loadedPosts)
-      
+
+      // Store in canonical postStore for cross-component consistency
+      const canonicalPosts: PostData[] = loadedPosts.map((p: Post) => ({
+        id: p.id,
+        title: p.title || '',
+        content: p.content || '',
+        author_handle: p.author_handle || '匿名',
+        group_id: p.group_id,
+        group_name: p.group_name,
+        created_at: p.created_at,
+        like_count: p.like_count || 0,
+        dislike_count: p.dislike_count || 0,
+        comment_count: p.comment_count || 0,
+        view_count: p.view_count || 0,
+        hot_score: p.hot_score || 0,
+        user_reaction: p.user_reaction,
+        author_avatar_url: p.author_avatar_url,
+      }))
+      storeSetPosts(canonicalPosts)
+
       // 初始化收藏和转发计数
       const initialBookmarkCounts: Record<string, number> = {}
       const initialRepostCounts: Record<string, number> = {}
@@ -594,6 +608,13 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
           }
           return p
         }))
+
+        // Also update canonical store
+        usePostStore.getState().updatePostReaction(postId, {
+          like_count: result.like_count,
+          dislike_count: result.dislike_count,
+          reaction: result.reaction,
+        })
 
         // 如果弹窗打开，也更新弹窗中的帖子
         if (openPost?.id === postId) {
@@ -891,7 +912,10 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
         const result = json.data
         setComments(prev => [...prev, result.comment])
         setNewComment('')
-        
+
+        // Also update canonical store (server ACK only)
+        usePostStore.getState().addComment(postId, result.comment)
+
         // 更新评论计数
         setPosts(prev => prev.map(p => {
           if (p.id === postId) {
@@ -899,7 +923,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
           }
           return p
         }))
-        
+
         if (openPost?.id === postId) {
           setOpenPost(prev => prev ? { ...prev, comment_count: prev.comment_count + 1 } : null)
         }

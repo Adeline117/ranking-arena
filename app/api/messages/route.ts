@@ -2,18 +2,19 @@
  * 私信消息 API
  * GET: 获取会话中的消息
  * POST: 发送私信
+ *
+ * SECURITY: Both endpoints require authentication.
+ * - GET: userId derived from token, prevents unauthorized conversation access
+ * - POST: senderId derived from token, prevents sender impersonation
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 import { createLogger, traceMessage } from '@/lib/utils/logger'
+import { requireAuth, getSupabaseAdmin } from '@/lib/supabase/server'
 
 const logger = createLogger('messages-api')
 
 export const dynamic = 'force-dynamic'
-
-const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
 
 // 非互关用户发送消息的限制数量
 const NON_MUTUAL_MESSAGE_LIMIT = 3
@@ -21,18 +22,17 @@ const NON_MUTUAL_MESSAGE_LIMIT = 3
 // 获取会话消息
 export async function GET(request: NextRequest) {
   try {
+    // Require authentication - userId from token, not query param
+    const user = await requireAuth(request)
+    const userId = user.id
+
     const conversationId = request.nextUrl.searchParams.get('conversationId')
-    const userId = request.nextUrl.searchParams.get('userId')
 
-    if (!conversationId || !userId) {
-      return NextResponse.json({ error: 'Missing conversationId or userId' }, { status: 400 })
+    if (!conversationId) {
+      return NextResponse.json({ error: 'Missing conversationId' }, { status: 400 })
     }
 
-    if (!SUPABASE_URL || !SUPABASE_KEY) {
-      return NextResponse.json({ error: 'Missing Supabase config' }, { status: 500 })
-    }
-
-    const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
+    const supabase = getSupabaseAdmin()
 
     // 验证用户是否有权限访问此会话
     const { data: conversation, error: convError } = await supabase
@@ -116,7 +116,10 @@ export async function GET(request: NextRequest) {
       messages: messages || [],
       otherUser: otherUserData
     })
-  } catch (error) {
+  } catch (error: unknown) {
+    if (error instanceof Error && (error as Error & { statusCode?: number }).statusCode === 401) {
+      return NextResponse.json({ error: '请先登录后查看消息' }, { status: 401 })
+    }
     logger.error('GET error', { error: String(error) })
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
@@ -125,11 +128,15 @@ export async function GET(request: NextRequest) {
 // 发送私信
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
-    const { senderId, receiverId, content } = body
+    // Require authentication - senderId derived from token, not body
+    const user = await requireAuth(request)
+    const senderId = user.id
 
-    if (!senderId || !receiverId || !content) {
-      return NextResponse.json({ error: 'Missing senderId, receiverId or content' }, { status: 400 })
+    const body = await request.json()
+    const { receiverId, content } = body
+
+    if (!receiverId || !content) {
+      return NextResponse.json({ error: 'Missing receiverId or content' }, { status: 400 })
     }
 
     if (senderId === receiverId) {
@@ -144,11 +151,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '消息内容过长，最多2000字符' }, { status: 400 })
     }
 
-    if (!SUPABASE_URL || !SUPABASE_KEY) {
-      return NextResponse.json({ error: 'Missing Supabase config' }, { status: 500 })
-    }
-
-    const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
+    const supabase = getSupabaseAdmin()
 
     // 获取接收者的隐私设置
     const { data: receiverProfile, error: profileError } = await supabase
@@ -317,7 +320,10 @@ export async function POST(request: NextRequest) {
       message,
       conversation_id: conversation.id
     })
-  } catch (error) {
+  } catch (error: unknown) {
+    if (error instanceof Error && (error as Error & { statusCode?: number }).statusCode === 401) {
+      return NextResponse.json({ error: '请先登录后发送消息' }, { status: 401 })
+    }
     logger.error('POST error', { error: String(error) })
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }

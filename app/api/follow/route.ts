@@ -1,41 +1,39 @@
 /**
  * 关注/取消关注交易员 API
+ *
+ * SECURITY: Both GET and POST now require authentication.
+ * The userId is derived from the authenticated user's token,
+ * preventing impersonation attacks.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 import { apiLogger } from '@/lib/utils/logger'
+import { getAuthUser, requireAuth, getSupabaseAdmin } from '@/lib/supabase/server'
 
 export const dynamic = 'force-dynamic'
 
-const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
-
 export async function GET(request: NextRequest) {
   try {
-    const searchParams = request.nextUrl.searchParams
-    const userId = searchParams.get('userId')
-    const traderId = searchParams.get('traderId')
-
-    if (!userId || !traderId) {
-      return NextResponse.json({ error: 'Missing userId or traderId' }, { status: 400 })
+    const user = await getAuthUser(request)
+    if (!user) {
+      return NextResponse.json({ following: false })
     }
 
-    if (!SUPABASE_URL || !SUPABASE_KEY) {
-      return NextResponse.json({ error: 'Missing Supabase config' }, { status: 500 })
+    const traderId = request.nextUrl.searchParams.get('traderId')
+    if (!traderId) {
+      return NextResponse.json({ error: 'Missing traderId' }, { status: 400 })
     }
 
-    const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
+    const supabase = getSupabaseAdmin()
 
     const { data, error } = await supabase
       .from('trader_follows')
       .select('*')
-      .eq('user_id', userId)
+      .eq('user_id', user.id)
       .eq('trader_id', traderId)
       .maybeSingle()
 
     if (error) {
-      // 如果表不存在，返回未关注状态
       if (error.message?.includes('Could not find the table')) {
         apiLogger.warn('trader_follows table not found, please run setup_trader_follows.sql')
         return NextResponse.json({ following: false, tableNotFound: true })
@@ -53,31 +51,27 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    // Require authentication - userId comes from token, not body
+    const user = await requireAuth(request)
+
     const body = await request.json()
-    const { userId, traderId, action } = body
+    const { traderId, action } = body
 
-    if (!userId || !traderId || !action) {
-      return NextResponse.json({ error: 'Missing userId, traderId or action' }, { status: 400 })
+    if (!traderId || !action) {
+      return NextResponse.json({ error: 'Missing traderId or action' }, { status: 400 })
     }
 
-    if (!SUPABASE_URL || !SUPABASE_KEY) {
-      return NextResponse.json({ error: 'Missing Supabase config' }, { status: 500 })
-    }
-
-    const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
+    const supabase = getSupabaseAdmin()
 
     if (action === 'follow') {
-      // 关注
       const { error } = await supabase
         .from('trader_follows')
-        .insert({ user_id: userId, trader_id: traderId })
+        .insert({ user_id: user.id, trader_id: traderId })
 
       if (error) {
-        // 如果是重复关注，忽略错误
         if (error.code === '23505') {
           return NextResponse.json({ success: true, following: true })
         }
-        // 如果表不存在
         if (error.message?.includes('Could not find the table')) {
           apiLogger.warn('trader_follows table not found, please run setup_trader_follows.sql')
           return NextResponse.json({ error: 'Follow feature coming soon', tableNotFound: true }, { status: 503 })
@@ -88,15 +82,13 @@ export async function POST(request: NextRequest) {
 
       return NextResponse.json({ success: true, following: true })
     } else if (action === 'unfollow') {
-      // 取消关注
       const { error } = await supabase
         .from('trader_follows')
         .delete()
-        .eq('user_id', userId)
+        .eq('user_id', user.id)
         .eq('trader_id', traderId)
 
       if (error) {
-        // 如果表不存在
         if (error.message?.includes('Could not find the table')) {
           apiLogger.warn('trader_follows table not found, please run setup_trader_follows.sql')
           return NextResponse.json({ error: 'Follow feature coming soon', tableNotFound: true }, { status: 503 })
@@ -109,7 +101,10 @@ export async function POST(request: NextRequest) {
     } else {
       return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
     }
-  } catch (error) {
+  } catch (error: unknown) {
+    if (error instanceof Error && (error as Error & { statusCode?: number }).statusCode === 401) {
+      return NextResponse.json({ error: '未授权，请先登录' }, { status: 401 })
+    }
     apiLogger.error('POST /api/follow error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
