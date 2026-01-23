@@ -17,6 +17,10 @@
 // New multi-exchange registry
 export { connectorRegistry, initializeConnectors, getConnector, getAvailablePlatforms } from './registry'
 
+import type { PlatformConnector } from './types'
+import type { Platform } from '@/lib/types/trading-platform'
+import { BybitFuturesConnector } from './bybit-futures'
+
 // Base connector classes
 export { BaseConnector, BaseConnectorLegacy, CircuitOpenError } from './base'
 
@@ -26,6 +30,18 @@ export { TokenBucketRateLimiter, DelayRateLimiter, createRateLimiter } from './r
 // Types and errors
 export type { PlatformConnector, ConnectorConfig, RateLimiter, CircuitState, CircuitBreaker } from './types'
 export { ConnectorError, DEFAULT_CONNECTOR_CONFIG } from './types'
+
+// Legacy createConnector function (simplified)
+export function createConnector(platform: Platform): PlatformConnector | null {
+  switch (platform) {
+    case 'bybit':
+      return new BybitFuturesConnector()
+    default:
+      return null
+  }
+}
+
+export { type PlatformConnector } from './types'
 
 // Individual platform connectors (direct imports)
 export { BinanceFuturesConnector } from './binance-futures'
