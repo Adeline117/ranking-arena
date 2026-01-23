@@ -45,7 +45,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const platform = id.substring(0, separatorIndex) as Platform;
     const traderKey = id.substring(separatorIndex + 1);
 
-    if (!LEADERBOARD_PLATFORMS.includes(platform)) {
+    if (!(LEADERBOARD_PLATFORMS as readonly string[]).includes(platform)) {
       return NextResponse.json(
         { error: `Invalid platform: ${platform}` },
         { status: 400 },
