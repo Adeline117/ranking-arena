@@ -40,13 +40,10 @@ interface CreateSnapshotBody {
  * POST /api/snapshots - Create a new ranking snapshot
  */
 export const POST = withAuth(
-  async ({ user, supabase }) => {
+  async ({ user, supabase, request }) => {
     try {
       // Parse request body
-      const body = await new Promise<CreateSnapshotBody>((resolve) => {
-        // Get body from context - this is a workaround since we can't access request directly
-        resolve({} as CreateSnapshotBody)
-      }).catch(() => ({} as CreateSnapshotBody))
+      const body: CreateSnapshotBody = await request.json().catch(() => ({} as CreateSnapshotBody))
 
       const timeRange = body.timeRange || '90D'
       const exchange = body.exchange || null
