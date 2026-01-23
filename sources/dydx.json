@@ -1,0 +1,90 @@
+{
+  "platform": "dydx",
+  "market_type": "perp",
+  "leaderboard_endpoints": [
+    {
+      "url": "https://indexer.dydx.trade/v4/leaderboard",
+      "method": "GET",
+      "headers": {},
+      "query_params": {
+        "period": "WEEKLY",
+        "limit": "200"
+      },
+      "pagination": {
+        "type": "offset",
+        "page_size": 200,
+        "max_pages": 1,
+        "param_name": "limit"
+      },
+      "response_path": "leaderboard",
+      "window_param": "period"
+    },
+    {
+      "url": "https://indexer.dydx.trade/v4/rankings",
+      "method": "GET",
+      "headers": {},
+      "query_params": {
+        "timeframe": "WEEKLY",
+        "limit": "200"
+      },
+      "pagination": {
+        "type": "offset",
+        "page_size": 200,
+        "max_pages": 1,
+        "param_name": "limit"
+      },
+      "response_path": "rankings",
+      "window_param": "timeframe"
+    }
+  ],
+  "profile_endpoints": [
+    {
+      "url": "https://indexer.dydx.trade/v4/addresses/{address}",
+      "method": "GET",
+      "headers": {},
+      "response_path": "subaccounts"
+    },
+    {
+      "url": "https://indexer.dydx.trade/v4/addresses/{address}/subaccountNumber/0/historicalPnl",
+      "method": "GET",
+      "headers": {},
+      "query_params": {
+        "period": "MONTHLY"
+      },
+      "response_path": "historicalPnl"
+    }
+  ],
+  "window_support": ["7d", "30d", "90d"],
+  "rate_limit_hint": {
+    "rpm": 30,
+    "concurrent": 2,
+    "delay_ms": 2000
+  },
+  "field_map": {
+    "roi_pct": "pnlPercent",
+    "pnl_usd": "totalPnl",
+    "win_rate": "winRate",
+    "max_drawdown": "maxDrawdown",
+    "trades_count": "totalTrades",
+    "followers": "",
+    "copiers": ""
+  },
+  "roi_sort_supported": false,
+  "roi_sort_method": "ui_state",
+  "proof": [
+    {
+      "url": "https://indexer.dydx.trade/v4/leaderboard?period=WEEKLY&limit=200",
+      "request_path": "/v4/leaderboard",
+      "method": "GET",
+      "response_fields_sample": {
+        "leaderboard[0].address": "dydx1abc123def456ghi789jkl012mno345pqr678stu",
+        "leaderboard[0].subaccountId": "0",
+        "leaderboard[0].username": "dydx_trader",
+        "leaderboard[0].totalPnl": "45678.90",
+        "leaderboard[0].equity": "125000.00",
+        "leaderboard[0].pnlPercent": "0.3654"
+      },
+      "discovered_at": "2024-01-15T00:00:00Z"
+    }
+  ]
+}
