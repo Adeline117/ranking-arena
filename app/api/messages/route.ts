@@ -1,6 +1,6 @@
 /**
  * 私信消息 API
- * GET: 获取会话中的消息
+ * GET: 获取会话中的消息（支持分页）
  * POST: 发送私信
  *
  * SECURITY: All operations require authentication. senderId is derived from
@@ -17,8 +17,10 @@ export const dynamic = 'force-dynamic'
 
 // 非互关用户发送消息的限制数量
 const NON_MUTUAL_MESSAGE_LIMIT = 3
+const DEFAULT_PAGE_SIZE = 50
+const MAX_PAGE_SIZE = 100
 
-// 获取会话消息
+// 获取会话消息（支持 cursor 分页）
 export async function GET(request: NextRequest) {
   try {
     // SECURITY: Require authentication
@@ -38,6 +40,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Missing conversationId' }, { status: 400 })
     }
 
+    // 分页参数
+    const before = request.nextUrl.searchParams.get('before') // cursor: created_at of oldest loaded message
+    const limitParam = request.nextUrl.searchParams.get('limit')
+    const limit = Math.min(Math.max(parseInt(limitParam || String(DEFAULT_PAGE_SIZE), 10) || DEFAULT_PAGE_SIZE, 1), MAX_PAGE_SIZE)
+
     const supabase = getSupabaseAdmin()
 
     // 验证用户是否有权限访问此会话
@@ -55,8 +62,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: '无权访问此会话' }, { status: 403 })
     }
 
-    // 获取消息列表
-    const { data: messages, error: msgError } = await supabase
+    // 构建查询（支持 cursor 分页）
+    let query = supabase
       .from('direct_messages')
       .select(`
         id,
@@ -67,39 +74,50 @@ export async function GET(request: NextRequest) {
         created_at
       `)
       .eq('conversation_id', conversationId)
-      .order('created_at', { ascending: true })
-      .limit(100)
+      .order('created_at', { ascending: false })
+      .limit(limit + 1) // fetch one extra to check has_more
+
+    // 如果有 cursor，加载更早的消息
+    if (before) {
+      query = query.lt('created_at', before)
+    }
+
+    const { data: messages, error: msgError } = await query
 
     if (msgError) {
       if (msgError.message?.includes('Could not find')) {
-        return NextResponse.json({ messages: [] })
+        return NextResponse.json({ messages: [], has_more: false })
       }
       logger.error('Query error', { error: msgError.message })
       return NextResponse.json({ error: msgError.message }, { status: 500 })
     }
 
-    // 标记接收到的消息为已读
-    const { data: updatedMessages, error: readUpdateError } = await supabase
-      .from('direct_messages')
-      .update({ read: true })
-      .eq('conversation_id', conversationId)
-      .eq('receiver_id', userId)
-      .eq('read', false)
-      .select('id')
+    // 判断是否还有更多消息
+    const has_more = (messages?.length || 0) > limit
+    const resultMessages = (messages || []).slice(0, limit).reverse() // reverse back to ascending order
 
-    if (readUpdateError) {
-      // 记录错误但不阻止返回消息
-      logger.warn('Failed to mark messages as read', { error: readUpdateError.message, conversationId, userId })
-    }
+    // 标记接收到的消息为已读（仅首次加载时，不在翻页时重复执行）
+    if (!before) {
+      const { data: updatedMessages, error: readUpdateError } = await supabase
+        .from('direct_messages')
+        .update({ read: true })
+        .eq('conversation_id', conversationId)
+        .eq('receiver_id', userId)
+        .eq('read', false)
+        .select('id')
 
-    // 追踪已读事件
-    if (updatedMessages && updatedMessages.length > 0) {
-      traceMessage({
-        event: 'read',
-        conversationId,
-        receiverId: userId,
-        metadata: { count: updatedMessages.length },
-      })
+      if (readUpdateError) {
+        logger.warn('Failed to mark messages as read', { error: readUpdateError.message, conversationId, userId })
+      }
+
+      if (updatedMessages && updatedMessages.length > 0) {
+        traceMessage({
+          event: 'read',
+          conversationId,
+          receiverId: userId,
+          metadata: { count: updatedMessages.length },
+        })
+      }
     }
 
     // 获取对方用户信息
@@ -128,8 +146,9 @@ export async function GET(request: NextRequest) {
         }
 
     return NextResponse.json({
-      messages: messages || [],
-      otherUser: otherUserData
+      messages: resultMessages,
+      otherUser: otherUserData,
+      has_more,
     })
   } catch (error) {
     logger.error('GET error', { error: String(error) })
@@ -232,7 +251,6 @@ export async function POST(request: NextRequest) {
 
     // 如果设置为仅互相关注可以私信，且不是互关
     if (dmPermission === 'mutual' && !isMutualFollow) {
-      // 检查接收者是否已回复过
       const { data: receiverReplied, error: replyError } = await supabase
         .from('direct_messages')
         .select('id')
@@ -245,7 +263,6 @@ export async function POST(request: NextRequest) {
         logger.warn('Query reply error', { error: replyError.message })
       }
 
-      // 如果接收者没有回复过，检查发送者已发送的消息数量
       if (!receiverReplied) {
         const { count: sentCount, error: countError } = await supabase
           .from('direct_messages')
@@ -276,11 +293,9 @@ export async function POST(request: NextRequest) {
     }
 
     // 获取或创建会话
-    // 确保 user1_id < user2_id
     const orderedUser1 = senderId < receiverId ? senderId : receiverId
     const orderedUser2 = senderId < receiverId ? receiverId : senderId
 
-    // 尝试查找现有会话
     let { data: conversation } = await supabase
       .from('conversations')
       .select('*')
@@ -288,7 +303,6 @@ export async function POST(request: NextRequest) {
       .eq('user2_id', orderedUser2)
       .maybeSingle()
 
-    // 如果会话不存在，创建新会话
     if (!conversation) {
       const { data: newConv, error: convError } = await supabase
         .from('conversations')
@@ -297,7 +311,6 @@ export async function POST(request: NextRequest) {
         .single()
 
       if (convError) {
-        // 如果是并发创建导致的重复，再次查询
         if (convError.code === '23505') {
           const { data: existingConv } = await supabase
             .from('conversations')
@@ -346,7 +359,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 追踪消息发送成功
     traceMessage({
       event: 'send',
       messageId: message.id,
