@@ -26,3 +26,15 @@ export { TokenBucketRateLimiter, DelayRateLimiter, createRateLimiter } from './r
 // Types and errors
 export type { PlatformConnector, ConnectorConfig, RateLimiter, CircuitState, CircuitBreaker } from './types'
 export { ConnectorError, DEFAULT_CONNECTOR_CONFIG } from './types'
+
+// Individual platform connectors (direct imports)
+export { BinanceFuturesConnector } from './binance-futures'
+export { BinanceSpotConnector } from './binance-spot'
+export { BybitConnector } from './bybit'
+export { BitgetFuturesConnector } from './bitget-futures'
+export { OKXConnector } from './okx'
+export { MEXCConnector } from './mexc'
+export { KuCoinConnector } from './kucoin'
+export { HyperliquidConnector } from './hyperliquid'
+export { CoinExConnector } from './coinex'
+export { BitgetSpotConnector } from './bitget-spot'
