@@ -1,225 +1,151 @@
 'use client'
 
-import { memo, useMemo } from 'react'
-import { TrendingUp, Users, Activity, Award } from 'lucide-react'
+import { memo } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
-import { formatCompact } from '@/lib/utils/format'
-import { Sparkline } from '../charts/Sparkline'
 
 // ============================================
-// 类型定义
+// 数据源配置
 // ============================================
 
-interface StatItem {
-  label: string
-  value: string | number
-  change?: number
-  trend?: number[]
-  icon: React.ReactNode
-  color: string
+interface DataSource {
+  exchange: string
+  market: 'futures' | 'spot' | 'on-chain'
+  key: string
 }
 
-interface StatsBarProps {
-  totalTraders?: number
-  averageRoi?: number
-  topPerformer?: {
-    handle: string
-    roi: number
-  }
-  activeExchanges?: number
-  loading?: boolean
+const dataSources: DataSource[] = [
+  { exchange: 'Binance', market: 'futures', key: 'binance_futures' },
+  { exchange: 'Binance', market: 'spot', key: 'binance_spot' },
+  { exchange: 'Binance', market: 'on-chain', key: 'binance_web3' },
+  { exchange: 'Bybit', market: 'futures', key: 'bybit' },
+  { exchange: 'Bitget', market: 'futures', key: 'bitget_futures' },
+  { exchange: 'Bitget', market: 'spot', key: 'bitget_spot' },
+  { exchange: 'OKX', market: 'on-chain', key: 'okx_web3' },
+  { exchange: 'MEXC', market: 'futures', key: 'mexc' },
+  { exchange: 'KuCoin', market: 'futures', key: 'kucoin' },
+  { exchange: 'CoinEx', market: 'futures', key: 'coinex' },
+  { exchange: 'GMX', market: 'on-chain', key: 'gmx' },
+]
+
+const marketConfig: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
+  futures: {
+    label: '合约',
+    color: '#3b82f6',
+    icon: (
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <polyline points="22 7 13.5 15.5 8.5 10.5 2 17" />
+        <polyline points="16 7 22 7 22 13" />
+      </svg>
+    ),
+  },
+  spot: {
+    label: '现货',
+    color: '#22c55e',
+    icon: (
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="10" />
+        <path d="M12 6v12M6 12h12" />
+      </svg>
+    ),
+  },
+  'on-chain': {
+    label: '链上',
+    color: '#a855f7',
+    icon: (
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+        <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+      </svg>
+    ),
+  },
 }
 
 // ============================================
-// 单个统计卡片
+// 单个数据源标签
 // ============================================
 
-function StatCard({
-  stat,
-  loading,
-}: {
-  stat: StatItem
-  loading?: boolean
-}) {
-  if (loading) {
-    return (
-      <Box
-        style={{
-          padding: '12px 16px',
-          borderRadius: 12,
-          background: tokens.colors.bg.secondary,
-          border: `1px solid ${tokens.colors.border.primary}`,
-          minWidth: 140,
-        }}
-      >
-        <Box
-          className="skeleton"
-          style={{
-            width: 60,
-            height: 12,
-            borderRadius: 4,
-            marginBottom: 8,
-            backgroundImage: 'linear-gradient(90deg, var(--color-bg-tertiary) 0%, var(--color-bg-hover) 50%, var(--color-bg-tertiary) 100%)',
-            backgroundSize: '200% 100%',
-          }}
-        />
-        <Box
-          className="skeleton"
-          style={{
-            width: 80,
-            height: 20,
-            borderRadius: 4,
-            backgroundImage: 'linear-gradient(90deg, var(--color-bg-tertiary) 0%, var(--color-bg-hover) 50%, var(--color-bg-tertiary) 100%)',
-            backgroundSize: '200% 100%',
-          }}
-        />
-      </Box>
-    )
-  }
+function SourceTag({ source }: { source: DataSource }) {
+  const market = marketConfig[source.market]
 
   return (
     <Box
       style={{
-        padding: '12px 16px',
-        borderRadius: 12,
-        background: tokens.colors.bg.secondary,
-        border: `1px solid ${tokens.colors.border.primary}`,
-        minWidth: 140,
-        display: 'flex',
+        display: 'inline-flex',
         alignItems: 'center',
-        gap: 12,
-        transition: 'all 0.2s ease',
+        gap: 6,
+        padding: '6px 12px',
+        borderRadius: 20,
+        background: `${market.color}08`,
+        border: `1px solid ${market.color}25`,
+        whiteSpace: 'nowrap',
+        flexShrink: 0,
       }}
     >
-      {/* 图标 */}
+      <Text
+        size="sm"
+        weight="bold"
+        style={{ color: tokens.colors.text.primary }}
+      >
+        {source.exchange}
+      </Text>
       <Box
         style={{
-          width: 36,
-          height: 36,
-          borderRadius: 10,
-          background: `${stat.color}15`,
-          display: 'flex',
+          display: 'inline-flex',
           alignItems: 'center',
-          justifyContent: 'center',
-          color: stat.color,
-          flexShrink: 0,
+          gap: 3,
+          padding: '1px 6px',
+          borderRadius: 10,
+          background: `${market.color}15`,
+          color: market.color,
         }}
       >
-        {stat.icon}
-      </Box>
-
-      {/* 内容 */}
-      <Box style={{ flex: 1, minWidth: 0 }}>
+        {market.icon}
         <Text
           size="xs"
-          color="tertiary"
-          style={{ marginBottom: 2 }}
+          weight="semibold"
+          style={{ color: market.color, fontSize: 10 }}
         >
-          {stat.label}
+          {market.label}
         </Text>
-        <Box style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <Text
-            size="md"
-            weight="bold"
-            style={{ color: tokens.colors.text.primary }}
-          >
-            {stat.value}
-          </Text>
-
-          {/* 变化指示 */}
-          {stat.change !== undefined && (
-            <Text
-              size="xs"
-              style={{
-                color: stat.change >= 0
-                  ? (tokens.colors.accent?.success || '#2fe57d')
-                  : (tokens.colors.accent?.error || '#ff7c7c'),
-              }}
-            >
-              {stat.change >= 0 ? '+' : ''}{stat.change.toFixed(1)}%
-            </Text>
-          )}
-        </Box>
       </Box>
-
-      {/* 迷你趋势图 */}
-      {stat.trend && stat.trend.length > 0 && (
-        <Box style={{ flexShrink: 0 }}>
-          <Sparkline
-            data={stat.trend}
-            width={50}
-            height={24}
-            showEndpoint={false}
-            showFill={false}
-            strokeWidth={1.5}
-          />
-        </Box>
-      )}
     </Box>
   )
 }
 
 // ============================================
-// 主组件
+// 主组件 - 滚动数据源展示
 // ============================================
 
-function StatsBarComponent({
-  totalTraders = 0,
-  averageRoi = 0,
-  topPerformer,
-  activeExchanges = 5,
-  loading = false,
-}: StatsBarProps) {
-  const stats: StatItem[] = useMemo(() => [
-    {
-      label: '活跃交易员',
-      value: formatCompact(totalTraders),
-      icon: <Users size={18} />,
-      color: tokens.colors.accent?.primary || '#8b6fa8',
-      trend: [10, 12, 15, 14, 18, 20, 22],
-    },
-    {
-      label: '平均 ROI',
-      value: `${averageRoi.toFixed(1)}%`,
-      change: averageRoi > 50 ? 12.5 : -5.2,
-      icon: <TrendingUp size={18} />,
-      color: averageRoi >= 0
-        ? (tokens.colors.accent?.success || '#2fe57d')
-        : (tokens.colors.accent?.error || '#ff7c7c'),
-    },
-    {
-      label: '最佳表现',
-      value: topPerformer?.handle || '—',
-      icon: <Award size={18} />,
-      color: '#ffd700',
-    },
-    {
-      label: '数据源',
-      value: `${activeExchanges} 交易所`,
-      icon: <Activity size={18} />,
-      color: tokens.colors.accent?.primary || '#8b6fa8',
-    },
-  ], [totalTraders, averageRoi, topPerformer, activeExchanges])
+function StatsBarComponent() {
+  // 双份列表实现无缝滚动
+  const items = [...dataSources, ...dataSources]
 
   return (
     <Box
       role="region"
-      aria-label="市场概览"
-      data-tour="stats-bar"
+      aria-label="数据来源"
       style={{
-        display: 'flex',
-        gap: 12,
-        overflowX: 'auto',
-        paddingBottom: 4,
         marginBottom: 16,
-        scrollbarWidth: 'none',
-        msOverflowStyle: 'none',
+        overflow: 'hidden',
+        position: 'relative',
+        maskImage: 'linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)',
+        WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)',
       }}
     >
-      {stats.map((stat, index) => (
-        <StatCard key={index} stat={stat} loading={loading} />
-      ))}
+      <Box
+        className="scroll-ticker"
+        style={{
+          display: 'flex',
+          gap: 10,
+          animation: 'scrollTicker 35s linear infinite',
+          width: 'max-content',
+        }}
+      >
+        {items.map((source, index) => (
+          <SourceTag key={`${source.key}-${index}`} source={source} />
+        ))}
+      </Box>
     </Box>
   )
 }
