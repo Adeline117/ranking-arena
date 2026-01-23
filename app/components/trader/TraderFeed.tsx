@@ -1,9 +1,11 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
+import ClaimTraderButton from './ClaimTraderButton'
+import { supabase } from '@/lib/supabase/client'
 import type { TraderFeedItem } from '@/lib/data/trader'
 
 interface TraderFeedProps {
@@ -11,6 +13,10 @@ interface TraderFeedProps {
   title: string
   showPostButton?: boolean
   onPostClick?: () => void
+  isRegistered?: boolean
+  traderId?: string
+  traderHandle?: string
+  source?: string
 }
 
 type SortType = 'all' | 'top'
@@ -37,9 +43,16 @@ function formatRelativeTime(dateString: string): string {
   return date.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })
 }
 
-export default function TraderFeed({ items, title, showPostButton = false, onPostClick }: TraderFeedProps) {
+export default function TraderFeed({ items, title, showPostButton = false, onPostClick, isRegistered, traderId, traderHandle, source }: TraderFeedProps) {
   const [sortType, setSortType] = useState<SortType>('all')
   const [hoveredId, setHoveredId] = useState<string | null>(null)
+  const [userId, setUserId] = useState<string | null>(null)
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      setUserId(data.user?.id ?? null)
+    })
+  }, [])
 
   const sortedItems = useMemo(() => {
     let sorted: TraderFeedItem[]
@@ -166,8 +179,42 @@ export default function TraderFeed({ items, title, showPostButton = false, onPos
         </Box>
       </Box>
       
-      {/* Feed List */}
-      {items.length === 0 ? (
+      {/* 交易员未入驻提示 */}
+      {isRegistered === false ? (
+        <Box
+          style={{
+            padding: tokens.spacing[10],
+            textAlign: 'center',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: tokens.spacing[3],
+          }}
+        >
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke={tokens.colors.text.tertiary} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.5 }}>
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+            <circle cx="12" cy="7" r="4" />
+            <line x1="12" y1="11" x2="12" y2="17" />
+            <line x1="9" y1="14" x2="15" y2="14" />
+          </svg>
+          <Text size="base" weight="bold" style={{ color: tokens.colors.text.secondary }}>
+            交易员未入驻
+          </Text>
+          <Text size="sm" color="tertiary">
+            该交易员尚未认领此账号
+          </Text>
+          {userId && traderId && traderHandle && (
+            <Box style={{ marginTop: tokens.spacing[2] }}>
+              <ClaimTraderButton
+                traderId={traderId}
+                handle={traderHandle}
+                userId={userId}
+                source={source}
+              />
+            </Box>
+          )}
+        </Box>
+      ) : items.length === 0 ? (
         <Box
           style={{
             padding: tokens.spacing[10],
