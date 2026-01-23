@@ -7,10 +7,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getTraderByHandle, getTraderPerformance, getTraderStats, getTraderPortfolio } from '@/lib/data/trader'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+function getSupabase() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!url || !key) {
+    throw new Error('Supabase 环境变量未配置')
+  }
+  return createClient(url, key)
+}
 
 export async function GET(
   request: NextRequest,
@@ -44,7 +48,7 @@ export async function GET(
       // 订阅状态（如果是用户）
       (async () => {
         try {
-          const { data } = await supabase
+          const { data } = await getSupabase()
             .from('user_profiles')
             .select('subscription_tier, show_pro_badge')
             .eq('handle', handle)
@@ -63,7 +67,7 @@ export async function GET(
     // 获取相似交易员
     let similarTraders: any[] = []
     if (profile.source) {
-      const { data: similar } = await supabase
+      const { data: similar } = await getSupabase()
         .from('traders')
         .select('id, handle, source, roi_90d, followers')
         .eq('source', profile.source)
@@ -76,11 +80,11 @@ export async function GET(
 
     // 获取粉丝和关注数
     const [followersResult, followingResult] = await Promise.all([
-      supabase
+      getSupabase()
         .from('user_follows')
         .select('id', { count: 'exact', head: true })
         .eq('following_id', profile.id),
-      supabase
+      getSupabase()
         .from('user_follows')
         .select('id', { count: 'exact', head: true })
         .eq('follower_id', profile.id),
