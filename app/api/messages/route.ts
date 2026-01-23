@@ -79,13 +79,18 @@ export async function GET(request: NextRequest) {
     }
 
     // 标记接收到的消息为已读
-    const { data: updatedMessages } = await supabase
+    const { data: updatedMessages, error: readUpdateError } = await supabase
       .from('direct_messages')
       .update({ read: true })
       .eq('conversation_id', conversationId)
       .eq('receiver_id', userId)
       .eq('read', false)
       .select('id')
+
+    if (readUpdateError) {
+      // 记录错误但不阻止返回消息
+      logger.warn('Failed to mark messages as read', { error: readUpdateError.message, conversationId, userId })
+    }
 
     // 追踪已读事件
     if (updatedMessages && updatedMessages.length > 0) {

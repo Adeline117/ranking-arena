@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import { useToast } from './Toast'
 
@@ -14,9 +14,13 @@ export default function FavoriteButton({ traderId, userId, initialFavorited = fa
   const { showToast } = useToast()
   const [favorited, setFavorited] = useState(initialFavorited)
   const [loading, setLoading] = useState(false)
+  // 使用 ref 防止重复点击（比 loading state 更可靠）
+  const pendingRef = useRef(false)
 
   useEffect(() => {
     if (!userId) return
+    const controller = new AbortController()
+
     ;(async () => {
       try {
         const { data } = await supabase
@@ -25,11 +29,18 @@ export default function FavoriteButton({ traderId, userId, initialFavorited = fa
           .eq('user_id', userId)
           .eq('trader_id', traderId)
           .maybeSingle()
-        setFavorited(!!data)
+
+        if (!controller.signal.aborted) {
+          setFavorited(!!data)
+        }
       } catch (error) {
-        console.error('Check favorite error:', error)
+        if (!controller.signal.aborted) {
+          console.error('Check favorite error:', error)
+        }
       }
     })()
+
+    return () => controller.abort()
   }, [userId, traderId])
 
   const handleToggle = async () => {
@@ -38,13 +49,19 @@ export default function FavoriteButton({ traderId, userId, initialFavorited = fa
       return
     }
 
+    // 防止重复点击
+    if (pendingRef.current) {
+      return
+    }
+    pendingRef.current = true
+    setLoading(true)
+
     // 保存当前状态用于回滚
     const previousState = favorited
     const newState = !favorited
 
     // 乐观更新 UI
     setFavorited(newState)
-    setLoading(true)
 
     try {
       if (previousState) {
@@ -71,6 +88,7 @@ export default function FavoriteButton({ traderId, userId, initialFavorited = fa
       showToast('操作失败，请重试', 'error')
     } finally {
       setLoading(false)
+      pendingRef.current = false
     }
   }
 
