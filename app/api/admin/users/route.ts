@@ -33,9 +33,15 @@ export async function GET(req: Request) {
       .from('user_profiles')
       .select('id, handle, email, avatar_url, bio, follower_count, following_count, role, banned_at, banned_reason, banned_by, created_at, updated_at', { count: 'exact' })
     
-    // Apply search filter
+    // Apply search filter (sanitize to prevent PostgREST filter injection)
     if (search) {
-      query = query.or(`handle.ilike.%${search}%,email.ilike.%${search}%`)
+      const sanitizedSearch = search
+        .slice(0, 100)
+        .replace(/[\\%_]/g, c => `\\${c}`)
+        .replace(/[.,()]/g, '')
+      if (sanitizedSearch) {
+        query = query.or(`handle.ilike.%${sanitizedSearch}%,email.ilike.%${sanitizedSearch}%`)
+      }
     }
     
     // Apply status filter
