@@ -12,17 +12,17 @@
 import { query, queryOne } from '@/lib/db/pool';
 import type {
   Platform,
+  GranularPlatform,
   TradingCategory,
   RankingWindow,
   RankingsQuery,
-  RankingsResponse,
   RankedTraderRow,
-  TraderDetailResponse,
   TraderIdentity,
   TraderProfileEnriched,
-  TraderSnapshot,
-  TraderTimeseries,
+  TraderSnapshotLegacy,
+  TraderTimeseriesLegacy,
   SnapshotMetrics,
+  SnapshotMetricsLegacy,
   SnapshotQuality,
 } from '@/lib/types/leaderboard';
 import { PLATFORM_CATEGORY } from '@/lib/types/leaderboard';
@@ -38,6 +38,37 @@ const STALE_THRESHOLD_MS = 4 * 60 * 60 * 1000; // 4 hours
 const DEFAULT_LIMIT = 100;
 const MAX_LIMIT = 500;
 
+/** Legacy rankings response format used by this service */
+interface LegacyRankingsResponse {
+  data: RankedTraderRow[];
+  meta: {
+    window: RankingWindow;
+    category: TradingCategory | 'all';
+    platform: Platform | 'all';
+    total_count: number;
+    limit: number;
+    offset: number;
+    cached_at: string;
+    sort_by?: string;
+    sort_dir?: string;
+  };
+}
+
+/** Legacy trader detail response format used by this service */
+interface LegacyTraderDetailResponse {
+  identity: TraderIdentity;
+  profile: TraderProfileEnriched | null;
+  snapshots: Record<RankingWindow, TraderSnapshotLegacy | null>;
+  timeseries: TraderTimeseriesLegacy[];
+  data_freshness: {
+    last_snapshot_at: string | null;
+    last_profile_at: string | null;
+    last_timeseries_at: string | null;
+    is_stale: boolean;
+    stale_reason: string | null;
+  };
+}
+
 // ============================================
 // Leaderboard Service
 // ============================================
@@ -51,7 +82,7 @@ export class LeaderboardService {
    * Get ranked traders for a given window, with optional filters.
    * Reads from the latest snapshots in trader_snapshots_v2.
    */
-  async getRankings(rankingsQuery: RankingsQuery): Promise<RankingsResponse> {
+  async getRankings(rankingsQuery: RankingsQuery): Promise<LegacyRankingsResponse> {
     const {
       window,
       category,
@@ -158,9 +189,9 @@ export class LeaderboardService {
       trader_key: row.trader_key,
       display_name: row.display_name || null,
       avatar_url: row.avatar_url || null,
-      category: PLATFORM_CATEGORY[row.platform as Platform] || 'futures',
-      metrics: row.metrics as SnapshotMetrics,
-      quality: row.quality as SnapshotQuality,
+      category: PLATFORM_CATEGORY[row.platform as unknown as GranularPlatform] || 'futures',
+      metrics: row.metrics,
+      quality: row.quality,
       as_of_ts: row.as_of_ts,
     }));
 
@@ -188,7 +219,7 @@ export class LeaderboardService {
    * Get full trader detail (profile + snapshots + timeseries).
    * All data is read from DB. Target: <200ms.
    */
-  async getTraderDetail(platform: Platform, traderKey: string): Promise<TraderDetailResponse> {
+  async getTraderDetail(platform: Platform, traderKey: string): Promise<LegacyTraderDetailResponse> {
     // Run all queries in parallel for speed
     const [identity, profile, snapshots, timeseries] = await Promise.all([
       this.getTraderIdentity(platform, traderKey),
@@ -301,22 +332,22 @@ export class LeaderboardService {
       aum_usd: row.aum_usd ? Number(row.aum_usd) : null,
       active_since: row.active_since,
       platform_tier: row.platform_tier,
-      last_enriched_at: row.last_enriched_at,
+      last_enriched_at: row.last_enriched_at || new Date().toISOString(),
     };
   }
 
   private async getLatestSnapshots(
     platform: Platform,
     traderKey: string,
-  ): Promise<Record<RankingWindow, TraderSnapshot | null>> {
+  ): Promise<Record<RankingWindow, TraderSnapshotLegacy | null>> {
     const { rows } = await query<{
       id: string;
       platform: string;
       trader_key: string;
       window: string;
       as_of_ts: string;
-      metrics: SnapshotMetrics;
-      quality: SnapshotQuality;
+      metrics: Record<string, unknown>;
+      quality: Record<string, unknown>;
       created_at: string;
     }>(
       `SELECT id, platform, trader_key, "window", as_of_ts, metrics, quality, created_at
@@ -327,7 +358,7 @@ export class LeaderboardService {
       [platform, traderKey, ['7d', '30d', '90d']],
     );
 
-    const result: Record<RankingWindow, TraderSnapshot | null> = {
+    const result: Record<RankingWindow, TraderSnapshotLegacy | null> = {
       '7d': null,
       '30d': null,
       '90d': null,
@@ -343,8 +374,8 @@ export class LeaderboardService {
           trader_key: row.trader_key,
           window: row.window as RankingWindow,
           as_of_ts: row.as_of_ts,
-          metrics: row.metrics as SnapshotMetrics,
-          quality: row.quality as SnapshotQuality,
+          metrics: row.metrics as unknown as SnapshotMetricsLegacy,
+          quality: row.quality as unknown as SnapshotQuality,
           created_at: row.created_at,
         };
       }
@@ -356,7 +387,7 @@ export class LeaderboardService {
   private async getTraderTimeseries(
     platform: Platform,
     traderKey: string,
-  ): Promise<TraderTimeseries[]> {
+  ): Promise<TraderTimeseriesLegacy[]> {
     const { rows } = await query<{
       id: string;
       platform: string;
@@ -378,8 +409,8 @@ export class LeaderboardService {
       id: row.id,
       platform: row.platform as Platform,
       trader_key: row.trader_key,
-      series_type: row.series_type,
-      data: row.data,
+      series_type: row.series_type as TraderTimeseriesLegacy['series_type'],
+      data: row.data as TraderTimeseriesLegacy['data'],
       as_of_ts: row.as_of_ts,
       created_at: row.created_at,
     }));

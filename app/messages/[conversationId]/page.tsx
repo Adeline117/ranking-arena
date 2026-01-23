@@ -18,6 +18,7 @@ import {
   resolveErrorCode,
   getErrorMessage,
 } from '@/lib/auth/client'
+import { useRealtime } from '@/lib/hooks/useRealtime'
 import ChatSettingsDrawer from '@/app/components/Features/ChatSettingsDrawer'
 import ChatSearchOverlay from '@/app/components/Features/ChatSearchOverlay'
 
@@ -62,6 +63,8 @@ export default function ConversationPage({ params }: { params: { conversationId:
   const [remark, setRemark] = useState<string | null>(null)
   const [clearedBefore, setClearedBefore] = useState<string | null>(null)
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [hasMore, setHasMore] = useState(true)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
