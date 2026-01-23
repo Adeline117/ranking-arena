@@ -156,7 +156,19 @@ export async function getPosts(
   }
 
   if (author_handle) {
-    query = query.eq('author_handle', author_handle)
+    // 先通过 handle 查找用户 ID，再用 author_id 过滤（避免改名后找不到旧帖子）
+    const { data: authorProfile } = await supabase
+      .from('user_profiles')
+      .select('id')
+      .eq('handle', author_handle)
+      .maybeSingle()
+
+    if (authorProfile?.id) {
+      query = query.eq('author_id', authorProfile.id)
+    } else {
+      // 如果找不到用户，降级为直接用 handle 查询
+      query = query.eq('author_handle', author_handle)
+    }
   }
 
   const { data, error } = await query
@@ -165,78 +177,77 @@ export async function getPosts(
     throw error
   }
 
-  // 收集所有需要的作者 handle 和原始帖子 ID
-  const authorHandles = [...new Set((data || []).map(p => p.author_handle).filter(Boolean))]
+  // 收集所有需要的作者 ID 和原始帖子 ID
+  const authorIds = [...new Set((data || []).map(p => p.author_id).filter(Boolean))]
   const originalPostIds = [...new Set(
     (data || [])
       .map(p => p.original_post_id)
       .filter((id): id is string => !!id)
   )]
 
-  // 并行获取作者头像和原始帖子数据
+  // 并行获取作者资料（通过 author_id 获取最新 handle 和头像）和原始帖子数据
   const [profilesResult, originalPostsResult] = await Promise.all([
-    authorHandles.length > 0
-      ? supabase.from('user_profiles').select('handle, avatar_url').in('handle', authorHandles)
+    authorIds.length > 0
+      ? supabase.from('user_profiles').select('id, handle, avatar_url').in('id', authorIds)
       : Promise.resolve({ data: null }),
     originalPostIds.length > 0
-      ? supabase.from('posts').select('id, title, content, author_handle, images, created_at').in('id', originalPostIds)
+      ? supabase.from('posts').select('id, title, content, author_id, author_handle, images, created_at').in('id', originalPostIds)
       : Promise.resolve({ data: null }),
   ])
 
-  // 构建作者头像映射
-  const avatarMap = new Map<string, string>()
+  // 构建作者资料映射 (author_id → { handle, avatar_url })
+  const authorProfileMap = new Map<string, { handle: string | null; avatar_url: string | null }>()
   if (profilesResult.data) {
-    profilesResult.data.forEach((p: { handle: string; avatar_url: string | null }) => {
-      if (p.avatar_url) {
-        avatarMap.set(p.handle, p.avatar_url)
-      }
+    profilesResult.data.forEach((p: { id: string; handle: string | null; avatar_url: string | null }) => {
+      authorProfileMap.set(p.id, { handle: p.handle, avatar_url: p.avatar_url })
     })
   }
 
-  // 处理原始帖子 + 获取原始帖子作者头像
+  // 处理原始帖子 + 获取原始帖子作者资料
   const originalPostMap = new Map<string, OriginalPost>()
   if (originalPostsResult.data && originalPostsResult.data.length > 0) {
-    const originalAuthorHandles = [...new Set(
-      originalPostsResult.data.map((p: { author_handle: string }) => p.author_handle).filter(Boolean)
+    const originalAuthorIds = [...new Set(
+      originalPostsResult.data.map((p: { author_id: string }) => p.author_id).filter(Boolean)
     )]
 
-    // 仅查询作者头像映射中不存在的 handles
-    const missingHandles = originalAuthorHandles.filter(h => !avatarMap.has(h))
-    if (missingHandles.length > 0) {
+    // 仅查询作者资料映射中不存在的 IDs
+    const missingIds = originalAuthorIds.filter(id => !authorProfileMap.has(id))
+    if (missingIds.length > 0) {
       const { data: originalProfiles } = await supabase
         .from('user_profiles')
-        .select('handle, avatar_url')
-        .in('handle', missingHandles)
+        .select('id, handle, avatar_url')
+        .in('id', missingIds)
 
       if (originalProfiles) {
-        originalProfiles.forEach((p: { handle: string; avatar_url: string | null }) => {
-          if (p.avatar_url) {
-            avatarMap.set(p.handle, p.avatar_url)
-          }
+        originalProfiles.forEach((p: { id: string; handle: string | null; avatar_url: string | null }) => {
+          authorProfileMap.set(p.id, { handle: p.handle, avatar_url: p.avatar_url })
         })
       }
     }
 
-    originalPostsResult.data.forEach((op: { id: string; title: string; content: string; author_handle: string; images?: string[]; created_at: string }) => {
+    originalPostsResult.data.forEach((op: { id: string; title: string; content: string; author_id: string; author_handle: string; images?: string[]; created_at: string }) => {
+      const opProfile = authorProfileMap.get(op.author_id)
       originalPostMap.set(op.id, {
         id: op.id,
         title: op.title,
         content: op.content,
-        author_handle: op.author_handle,
-        author_avatar_url: avatarMap.get(op.author_handle) || null,
+        author_handle: opProfile?.handle || op.author_handle,
+        author_avatar_url: opProfile?.avatar_url || null,
         images: op.images || null,
         created_at: op.created_at,
       })
     })
   }
 
-  return (data || []).map((post: PostRow) => ({
+  return (data || []).map((post: PostRow) => {
+    const profile = authorProfileMap.get(post.author_id)
+    return {
     id: post.id,
     title: post.title,
     content: post.content,
     author_id: post.author_id,
-    author_handle: post.author_handle,
-    author_avatar_url: avatarMap.get(post.author_handle),
+    author_handle: profile?.handle || post.author_handle,
+    author_avatar_url: profile?.avatar_url || undefined,
     group_id: post.group_id,
     group_name: Array.isArray(post.groups) ? post.groups[0]?.name : post.groups?.name,
     poll_enabled: post.poll_enabled || false,
@@ -257,7 +268,7 @@ export async function getPosts(
     updated_at: post.updated_at,
     original_post_id: post.original_post_id || null,
     original_post: post.original_post_id ? originalPostMap.get(post.original_post_id) || null : null,
-  }))
+  }})
 }
 
 /**
@@ -302,16 +313,18 @@ export async function getPostById(
 
   if (!data) return null
 
-  // 获取作者头像
+  // 获取作者当前 handle 和头像（通过 author_id 查找，避免改名后的旧 handle 问题）
   let author_avatar_url: string | undefined
-  if (data.author_handle) {
+  let current_author_handle: string = data.author_handle || ''
+  if (data.author_id) {
     const { data: profile } = await supabase
       .from('user_profiles')
-      .select('avatar_url')
-      .eq('handle', data.author_handle)
+      .select('handle, avatar_url')
+      .eq('id', data.author_id)
       .maybeSingle()
-    
+
     author_avatar_url = profile?.avatar_url || undefined
+    current_author_handle = profile?.handle || data.author_handle || ''
   }
 
   // 获取原始帖子数据（如果是转发）
@@ -323,6 +336,7 @@ export async function getPostById(
         id,
         title,
         content,
+        author_id,
         author_handle,
         images,
         created_at
@@ -331,23 +345,25 @@ export async function getPostById(
       .maybeSingle()
 
     if (originalPostData) {
-      // 获取原始帖子作者头像
+      // 获取原始帖子作者当前 handle 和头像（通过 author_id）
       let original_author_avatar_url: string | null = null
-      if (originalPostData.author_handle) {
+      let original_author_handle: string = originalPostData.author_handle || ''
+      if (originalPostData.author_id) {
         const { data: originalProfile } = await supabase
           .from('user_profiles')
-          .select('avatar_url')
-          .eq('handle', originalPostData.author_handle)
+          .select('handle, avatar_url')
+          .eq('id', originalPostData.author_id)
           .maybeSingle()
-        
+
         original_author_avatar_url = originalProfile?.avatar_url || null
+        original_author_handle = originalProfile?.handle || originalPostData.author_handle || ''
       }
 
       original_post = {
         id: originalPostData.id,
         title: originalPostData.title,
         content: originalPostData.content,
-        author_handle: originalPostData.author_handle,
+        author_handle: original_author_handle,
         author_avatar_url: original_author_avatar_url,
         images: originalPostData.images || null,
         created_at: originalPostData.created_at,
@@ -360,7 +376,7 @@ export async function getPostById(
     title: data.title,
     content: data.content,
     author_id: data.author_id,
-    author_handle: data.author_handle,
+    author_handle: current_author_handle,
     author_avatar_url,
     group_id: data.group_id,
     group_name: (() => { const g = (data as PostRow).groups; return Array.isArray(g) ? g[0]?.name : g?.name; })(),
