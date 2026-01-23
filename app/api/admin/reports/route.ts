@@ -3,19 +3,27 @@
  * GET /api/admin/reports - 获取举报列表
  */
 
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin, verifyAdmin } from '@/lib/admin/auth'
 import { createLogger } from '@/lib/utils/logger'
+import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
 const logger = createLogger('admin-reports')
 
 export const dynamic = 'force-dynamic'
 
-export async function GET(req: Request) {
+export async function GET(req: NextRequest) {
   try {
+    // 速率限制检查（Admin 路由使用 sensitive 预设：15次/分钟）
+    const rateLimitResponse = await checkRateLimit(req, RateLimitPresets.sensitive)
+    if (rateLimitResponse) {
+      logger.warn('Rate limit exceeded for admin/reports')
+      return rateLimitResponse
+    }
+
     const supabase = getSupabaseAdmin()
     const authHeader = req.headers.get('authorization')
-    
+
     const admin = await verifyAdmin(supabase, authHeader)
     if (!admin) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
