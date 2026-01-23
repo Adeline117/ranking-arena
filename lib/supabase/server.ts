@@ -6,8 +6,9 @@
 import { createClient, SupabaseClient, User } from '@supabase/supabase-js'
 import { NextRequest } from 'next/server'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+// 构建时使用占位符，运行时使用真实环境变量
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co'
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || 'placeholder-service-key'
 
 // 缓存 admin 客户端实例
 let adminClientInstance: SupabaseClient | null = null
@@ -18,10 +19,11 @@ let adminClientInstance: SupabaseClient | null = null
  */
 export function getSupabaseAdmin(): SupabaseClient {
   if (!adminClientInstance) {
-    if (!supabaseUrl || !supabaseServiceKey) {
+    // 检查是否使用占位符（构建时）
+    if (supabaseUrl.includes('placeholder') || supabaseServiceKey.includes('placeholder')) {
       throw new Error('Supabase 环境变量未配置: NEXT_PUBLIC_SUPABASE_URL 或 SUPABASE_SERVICE_ROLE_KEY')
     }
-    
+
     adminClientInstance = createClient(supabaseUrl, supabaseServiceKey, {
       auth: {
         persistSession: false,
