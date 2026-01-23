@@ -18,6 +18,8 @@ interface RankingSectionProps {
   isLoggedIn: boolean
   activeTimeRange: TimeRange
   onTimeRangeChange: (range: TimeRange) => void
+  error?: string | null
+  onRetry?: () => void
 }
 
 /**
@@ -31,6 +33,8 @@ export default function RankingSection({
   isLoggedIn,
   activeTimeRange,
   onTimeRangeChange,
+  error,
+  onRetry,
 }: RankingSectionProps) {
   const router = useRouter()
   const { showToast } = useToast()
@@ -85,6 +89,8 @@ export default function RankingSection({
         category={category}
         onCategoryChange={setCategory}
         onProRequired={handleProRequired}
+        error={error}
+        onRetry={onRetry}
       />
     </Box>
   )

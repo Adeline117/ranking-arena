@@ -128,11 +128,11 @@ const injectStyles = () => {
     .ranking-row {
       transition: all 0.2s ease;
     }
-    
+
     .ranking-row:hover {
       background: var(--glass-bg-light) !important;
     }
-    
+
     @media (prefers-reduced-motion: reduce) {
       .medal-glow-gold, .medal-glow-silver, .medal-glow-bronze {
         animation: none;
@@ -156,8 +156,10 @@ export default function RankingTable(props: {
   category?: CategoryType // 当前分类
   onCategoryChange?: (category: CategoryType) => void // 分类切换回调
   onProRequired?: () => void // 需要升级 Pro 时的回调
+  error?: string | null // 错误信息
+  onRetry?: () => void // 重试回调
 }) {
-  const { traders, loading, source, timeRange = '90D', isPro = false, category = 'all', onCategoryChange, onProRequired } = props
+  const { traders, loading, source, timeRange = '90D', isPro = false, category = 'all', onCategoryChange, onProRequired, error, onRetry } = props
   const { t, language } = useLanguage()
   
   // 分页状态
@@ -379,8 +381,6 @@ export default function RankingTable(props: {
         className="ranking-table-header ranking-table-grid"
         style={{
           display: 'grid',
-          // 增大列宽：Rank | Trader | Score | ROI+PnL | Win Rate | MDD
-          gridTemplateColumns: '44px minmax(140px, 1.5fr) 64px 90px 70px 70px',
           gap: tokens.spacing[2],
           padding: `${tokens.spacing[4]} ${tokens.spacing[4]}`,
           borderBottom: `1px solid var(--glass-border-light)`,
@@ -504,6 +504,45 @@ export default function RankingTable(props: {
 
       {loading ? (
         <RankingSkeleton />
+      ) : error ? (
+        <Box
+          style={{
+            padding: `${tokens.spacing[10]} ${tokens.spacing[4]}`,
+            textAlign: 'center',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: tokens.spacing[3],
+          }}
+        >
+          <Text size="md" color="secondary">
+            {error}
+          </Text>
+          {onRetry && (
+            <button
+              onClick={onRetry}
+              style={{
+                padding: `${tokens.spacing[2]} ${tokens.spacing[5]}`,
+                background: `${tokens.colors.accent.primary}20`,
+                border: `1px solid ${tokens.colors.accent.primary}40`,
+                borderRadius: tokens.radius.md,
+                color: tokens.colors.accent.primary,
+                cursor: 'pointer',
+                fontSize: tokens.typography.fontSize.sm,
+                fontWeight: tokens.typography.fontWeight.bold,
+                transition: `all ${tokens.transition.base}`,
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = `${tokens.colors.accent.primary}30`
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = `${tokens.colors.accent.primary}20`
+              }}
+            >
+              {t('retry') || '重试'}
+            </button>
+          )}
+        </Box>
       ) : sortedTraders.length === 0 ? (
         <Box
           style={{
