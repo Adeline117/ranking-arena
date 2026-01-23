@@ -5,7 +5,6 @@
 
 import type { PlatformConnector } from './types'
 import type { Platform } from '@/lib/types/trading-platform'
-import { BinanceFuturesConnector } from './binance-futures'
 import { BybitFuturesConnector } from './bybit-futures'
 
 // Connector instances (singleton per platform)
@@ -29,8 +28,6 @@ export function getConnector(platform: Platform): PlatformConnector | null {
 
 function createConnector(platform: Platform): PlatformConnector | null {
   switch (platform) {
-    case 'binance_futures':
-      return new BinanceFuturesConnector()
     case 'bybit':
       return new BybitFuturesConnector()
     default:
@@ -40,7 +37,7 @@ function createConnector(platform: Platform): PlatformConnector | null {
 
 /** Get list of platforms with implemented connectors */
 export function getAvailablePlatforms(): Platform[] {
-  return ['binance_futures', 'bybit']
+  return ['bybit']
 }
 
 export { type PlatformConnector } from './types'

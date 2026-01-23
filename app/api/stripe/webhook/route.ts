@@ -67,6 +67,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const supabase = getSupabase()
+
     // 幂等性检查：检查事件是否已处理
     const { data: existingEvent } = await supabase
       .from('stripe_events')
