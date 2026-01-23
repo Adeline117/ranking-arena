@@ -53,7 +53,7 @@ export interface SubscriptionPlan {
 // 功能定义
 // ============================================
 
-export type PremiumFeatureId = 
+export type PremiumFeatureId =
   | 'email_notifications'     // 邮件通知
   | 'push_notifications'      // 推送通知
   | 'portfolio_suggestions'   // 跟单组合建议
@@ -68,6 +68,10 @@ export type PremiumFeatureId =
   | 'pro_badge'               // Pro 徽章
   | 'advanced_filter'         // 高级筛选
   | 'premium_groups'          // Pro 专属群组
+  | 'detailed_explanation'    // 详细解释层（贡献拆解、变化归因、风险分解）
+  | 'cross_exchange_compare'  // 跨交易所对比
+  | 'extended_snapshot_history' // 扩展快照历史
+  | 'advanced_alerts'         // 高级告警条件
 
 export interface PremiumFeature {
   id: PremiumFeatureId
@@ -271,6 +275,38 @@ export const PREMIUM_FEATURES: PremiumFeature[] = [
     description: '创建或加入会员专属群组',
     icon: '',
     tier: ['pro'],
+  },
+
+  // 新增 Pro 功能：数据追溯与快照
+  {
+    id: 'detailed_explanation',
+    name: '详细解释层',
+    description: '查看贡献拆解、变化归因、风险分解等深度分析',
+    icon: '',
+    tier: ['pro'],
+    isCore: true,
+  },
+  {
+    id: 'cross_exchange_compare',
+    name: '跨交易所对比',
+    description: '同一交易员在不同交易所的表现并排对比',
+    icon: '',
+    tier: ['pro'],
+  },
+  {
+    id: 'extended_snapshot_history',
+    name: '扩展快照历史',
+    description: '保留90天完整快照历史（免费版仅7天）',
+    icon: '',
+    tier: ['pro'],
+  },
+  {
+    id: 'advanced_alerts',
+    name: '高级告警条件',
+    description: '自定义阈值、多条件组合、更多告警渠道',
+    icon: '',
+    tier: ['pro'],
+    isCore: true,
   },
 ]
 
