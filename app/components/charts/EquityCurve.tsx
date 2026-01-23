@@ -37,7 +37,7 @@ export default function EquityCurve({
   const [chartError, setChartError] = useState<string | null>(null)
 
   // Calculate if overall trend is positive
-  const isPositive = data.length >= 2 ? data[data.length - 1].value >= data[0].value : true
+  const isPositive = data.length >= 2 ? (data[data.length - 1]?.value ?? 0) >= (data[0]?.value ?? 0) : true
 
   // Default colors based on trend
   const defaultLineColor = isPositive ? tokens.colors.accent.success : tokens.colors.accent.error

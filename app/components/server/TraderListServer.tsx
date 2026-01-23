@@ -76,8 +76,8 @@ export async function getTraderListData(options: TraderListServerProps = {}): Pr
     // 转换数据格式
     const traders: TraderData[] = (data || []).map((item, index) => {
       // trader_sources 可能是数组或单个对象
-      const traderSource = Array.isArray(item.trader_sources) 
-        ? item.trader_sources[0] 
+      const traderSource = Array.isArray(item.trader_sources)
+        ? item.trader_sources?.[0]
         : item.trader_sources
       return {
         id: item.source_trader_id,

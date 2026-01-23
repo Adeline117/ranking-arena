@@ -1,5 +1,5 @@
 /**
- * KuCoin copy trading connector.
+ * KuCoin copy trading connector (legacy interface).
  * Fetches public leaderboard data from KuCoin's copy trading API.
  *
  * Data source: Public copy trading leaderboard.
@@ -55,7 +55,7 @@ const WINDOW_TO_PERIOD: Record<RankingWindow, string> = {
 };
 
 // ============================================
-// Connector
+// Connector Implementation
 // ============================================
 
 export class KuCoinConnector extends BaseConnectorLegacy implements LegacyPlatformConnector {
@@ -70,10 +70,12 @@ export class KuCoinConnector extends BaseConnectorLegacy implements LegacyPlatfo
   async discoverLeaderboard(window: RankingWindow): Promise<TraderIdentity[]> {
     const period = WINDOW_TO_PERIOD[window];
     const traders: TraderIdentity[] = [];
+    const pageSize = 20;
+    const maxPages = 5;
 
-    for (let page = 1; page <= 5; page++) {
+    for (let page = 1; page <= maxPages; page++) {
       const data = await this.requestWithCircuitBreaker<KuCoinLeaderboardResponse>(
-        () => this.fetchLeaderboardPage(period, page, 20),
+        () => this.fetchLeaderboardPage(period, page, pageSize),
         { label: `discoverLeaderboard(${window}, page=${page})` },
       );
 
@@ -106,7 +108,7 @@ export class KuCoinConnector extends BaseConnectorLegacy implements LegacyPlatfo
       { label: `fetchTraderSnapshot(${traderKey}, ${window})` },
     );
 
-    const d = detail.data || {};
+    const d = detail.data || {} as KuCoinTraderEntry;
     const roi = d.roi != null ? (Math.abs(d.roi) < 10 ? d.roi * 100 : d.roi) : null;
 
     const metrics: SnapshotMetricsLegacy = {
@@ -145,7 +147,7 @@ export class KuCoinConnector extends BaseConnectorLegacy implements LegacyPlatfo
       { label: `fetchTraderProfile(${traderKey})` },
     );
 
-    const d = detail.data || {};
+    const d = detail.data || {} as KuCoinTraderEntry;
 
     return {
       platform: this.platform,
@@ -164,6 +166,7 @@ export class KuCoinConnector extends BaseConnectorLegacy implements LegacyPlatfo
     traderKey: string,
     seriesType: TimeseriesType,
   ): Promise<Omit<TraderTimeseriesLegacy, 'id' | 'created_at'>> {
+    // KuCoin does not provide timeseries via public API
     return {
       platform: this.platform,
       trader_key: traderKey,
@@ -174,7 +177,7 @@ export class KuCoinConnector extends BaseConnectorLegacy implements LegacyPlatfo
   }
 
   // ============================================
-  // Private
+  // Private API methods
   // ============================================
 
   private async fetchLeaderboardPage(
@@ -189,7 +192,7 @@ export class KuCoinConnector extends BaseConnectorLegacy implements LegacyPlatfo
     });
 
     if (!response.ok) {
-      throw new Error(`KuCoin API returned ${response.status}`);
+      throw new Error(`KuCoin leaderboard API returned ${response.status}`);
     }
 
     return response.json();
@@ -206,10 +209,15 @@ export class KuCoinConnector extends BaseConnectorLegacy implements LegacyPlatfo
     });
 
     if (!response.ok) {
-      throw new Error(`KuCoin detail API returned ${response.status}`);
+      throw new Error(`KuCoin trader detail API returned ${response.status}`);
     }
 
-    return response.json();
+    const json: { code: string; data: KuCoinTraderEntry } = await response.json();
+    if (json.code !== '200000' || !json.data) {
+      throw new Error(`KuCoin trader detail API returned no data for ${leaderId}`);
+    }
+
+    return json;
   }
 
   private getRandomUA(): string {
