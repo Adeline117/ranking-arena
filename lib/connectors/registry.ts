@@ -12,6 +12,8 @@ import { OKXConnector } from './okx';
 import { MEXCConnector } from './mexc';
 import { KuCoinConnector } from './kucoin';
 import { HyperliquidConnector } from './hyperliquid';
+import { CoinExConnector } from './coinex';
+import { BitgetSpotConnector } from './bitget-spot';
 
 const connectorInstances = new Map<Platform, PlatformConnector>();
 
@@ -50,14 +52,14 @@ const IMPLEMENTED_PLATFORMS: Platform[] = [
   'binance_spot',
   'bybit',
   'bitget_futures',
+  'bitget_spot',
   'okx',
   'mexc',
   'kucoin',
+  'coinex',
   'hyperliquid',
   // Pending implementation:
   // 'binance_web3',
-  // 'bitget_spot',
-  // 'coinex',
   // 'okx_wallet',
   // 'gmx',
   // 'dydx',
@@ -85,6 +87,10 @@ function createConnector(platform: Platform): PlatformConnector | null {
       return new KuCoinConnector();
     case 'hyperliquid':
       return new HyperliquidConnector();
+    case 'coinex':
+      return new CoinExConnector();
+    case 'bitget_spot':
+      return new BitgetSpotConnector();
     default:
       return null;
   }
