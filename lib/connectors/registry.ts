@@ -13,6 +13,18 @@ import type { LeaderboardPlatform, MarketType, PlatformCapabilities, GranularPla
 import type { PlatformConnector } from './types'
 import { TokenBucketRateLimiter } from './rate-limiter'
 
+// Individual platform connector imports (for legacy registry)
+import { BinanceFuturesConnector } from './binance-futures'
+import { BinanceSpotConnector } from './binance-spot'
+import { BybitConnector } from './bybit'
+import { BitgetFuturesConnector } from './bitget-futures'
+import { OKXConnector } from './okx'
+import { MEXCConnector } from './mexc'
+import { KuCoinConnector } from './kucoin'
+import { HyperliquidConnector } from './hyperliquid'
+import { CoinExConnector } from './coinex'
+import { BitgetSpotConnector } from './bitget-spot'
+
 // ============================================
 // New ConnectorRegistry (multi-exchange)
 // ============================================
@@ -146,23 +158,24 @@ export async function initializeConnectors(): Promise<void> {
  */
 const IMPLEMENTED_PLATFORMS: GranularPlatform[] = [
   'binance_futures',
+  'binance_spot',
   'bybit',
-  // 'binance_spot',     // TODO
-  // 'binance_web3',     // TODO
-  // 'bitget_futures',   // TODO
-  // 'bitget_spot',      // TODO
-  // 'mexc',             // TODO
-  // 'coinex',           // TODO
-  // 'okx',              // TODO
-  // 'okx_wallet',       // TODO
-  // 'kucoin',           // TODO
-  // 'gmx',              // TODO
-  // 'dydx',             // TODO
-  // 'hyperliquid',      // TODO
-  // 'bitmart',          // TODO
-  // 'phemex',           // TODO
-  // 'htx',              // TODO
-  // 'weex',             // TODO
+  'bitget_futures',
+  'bitget_spot',
+  'okx',
+  'mexc',
+  'kucoin',
+  'coinex',
+  'hyperliquid',
+  // Pending implementation:
+  // 'binance_web3',
+  // 'okx_wallet',
+  // 'gmx',
+  // 'dydx',
+  // 'bitmart',
+  // 'phemex',
+  // 'htx',
+  // 'weex',
 ]
 
 // Legacy connector instances (singleton per platform)
@@ -186,14 +199,26 @@ export function getConnector(platform: GranularPlatform): PlatformConnector | nu
 
 async function createLegacyConnector(platform: GranularPlatform): Promise<PlatformConnector | null> {
   switch (platform) {
-    case 'binance_futures': {
-      const { BinanceFuturesConnector } = await import('./platforms/binance-futures')
+    case 'binance_futures':
       return new BinanceFuturesConnector()
-    }
-    case 'bybit': {
-      const { BybitFuturesConnector } = await import('./platforms/bybit-futures')
-      return new BybitFuturesConnector()
-    }
+    case 'binance_spot':
+      return new BinanceSpotConnector()
+    case 'bybit':
+      return new BybitConnector()
+    case 'bitget_futures':
+      return new BitgetFuturesConnector()
+    case 'bitget_spot':
+      return new BitgetSpotConnector()
+    case 'okx':
+      return new OKXConnector()
+    case 'mexc':
+      return new MEXCConnector()
+    case 'kucoin':
+      return new KuCoinConnector()
+    case 'hyperliquid':
+      return new HyperliquidConnector()
+    case 'coinex':
+      return new CoinExConnector()
     default:
       return null
   }
