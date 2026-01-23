@@ -28,6 +28,7 @@ export default function MessagesPage() {
   const { showToast } = useToast()
   const [email, setEmail] = useState<string | null>(null)
   const [userId, setUserId] = useState<string | null>(null)
+  const [accessToken, setAccessToken] = useState<string | null>(null)
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [loading, setLoading] = useState(true)
   const [authChecked, setAuthChecked] = useState(false) // 追踪认证检查是否完成
@@ -36,10 +37,13 @@ export default function MessagesPage() {
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
 
   // 加载会话列表
-  const loadConversations = useCallback(async (uid: string) => {
+  const loadConversations = useCallback(async (uid: string, token?: string) => {
     try {
       setLoading(true)
-      const res = await fetch(`/api/conversations?userId=${uid}`)
+      const headers: Record<string, string> = {}
+      if (token) headers['Authorization'] = `Bearer ${token}`
+
+      const res = await fetch(`/api/conversations`, { headers })
       const data = await res.json()
       
       if (data.conversations) {
@@ -76,7 +80,8 @@ export default function MessagesPage() {
       if (data.session?.user) {
         setEmail(data.session.user.email ?? null)
         setUserId(data.session.user.id)
-        loadConversations(data.session.user.id)
+        setAccessToken(data.session.access_token ?? null)
+        loadConversations(data.session.user.id, data.session.access_token)
       }
       setAuthChecked(true)
     })
@@ -86,8 +91,9 @@ export default function MessagesPage() {
       if (session?.user) {
         setEmail(session.user.email ?? null)
         setUserId(session.user.id)
+        setAccessToken(session.access_token ?? null)
         if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-          loadConversations(session.user.id)
+          loadConversations(session.user.id, session.access_token)
         }
       } else if (event === 'SIGNED_OUT') {
         setUserId(null)
@@ -116,11 +122,9 @@ export default function MessagesPage() {
           table: 'direct_messages',
           filter: `receiver_id=eq.${userId}`,
         },
-        (payload) => {
+        () => {
           // 收到新消息时，刷新会话列表
-          loadConversations(userId)
-          
-          // 显示新消息提示
+          loadConversations(userId, accessToken ?? undefined)
           showToast('收到新消息', 'info')
         }
       )
@@ -134,7 +138,7 @@ export default function MessagesPage() {
         },
         () => {
           // 消息状态更新时（如已读状态），刷新会话列表
-          loadConversations(userId)
+          loadConversations(userId, accessToken ?? undefined)
         }
       )
       .subscribe()
@@ -148,7 +152,7 @@ export default function MessagesPage() {
         channelRef.current = null
       }
     }
-  }, [userId, loadConversations, showToast])
+  }, [userId, accessToken, loadConversations, showToast])
 
   const formatTime = (dateString: string) => {
     const date = new Date(dateString)
