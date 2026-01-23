@@ -6,7 +6,6 @@
 import {
   type SubscriptionTier,
   type PremiumFeatureId,
-  type FeatureLimits,
   SUBSCRIPTION_PLANS,
   PREMIUM_FEATURES,
   hasFeatureAccess,

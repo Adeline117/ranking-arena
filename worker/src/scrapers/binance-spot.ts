@@ -5,7 +5,6 @@
 
 import { Response } from 'playwright'
 import { BaseScraper, parseTraderFromApi } from './base.js'
-import { logger } from '../logger.js'
 import type { TraderData, TimeRange } from '../types.js'
 
 const PERIOD_CONFIG: Record<TimeRange, { tabTexts: string[]; sortText: string }> = {

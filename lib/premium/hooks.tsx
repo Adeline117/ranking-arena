@@ -156,7 +156,7 @@ export function PremiumProvider({ children, initialSubscription }: PremiumProvid
       // 所有方法都失败时使用默认值
       const defaultSub = premiumService.getSubscription()
       setSubscription(defaultSub)
-    } catch (error) {
+    } catch (_error) {
       // 静默处理错误，使用默认订阅
       const defaultSub = premiumService.getSubscription()
       setSubscription(defaultSub)
@@ -274,7 +274,7 @@ export function useFeatureQuota(featureId: PremiumFeatureId): {
   }
 
   const usage = subscription.usage
-  const limits = premiumService.getSubscription().usage
+  const _limits = premiumService.getSubscription().usage
 
   // 根据功能 ID 获取对应的使用量和限制
   let used = 0

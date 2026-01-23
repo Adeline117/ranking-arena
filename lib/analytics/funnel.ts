@@ -374,7 +374,7 @@ class FunnelTracker {
       if (process.env.NODE_ENV === 'development') {
         console.log('[Funnel] 发送事件:', events.length, '条')
       }
-    } catch (error) {
+    } catch (_error) {
       // 失败时放回队列
       this.eventQueue = [...events, ...this.eventQueue]
     }

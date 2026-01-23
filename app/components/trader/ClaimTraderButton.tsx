@@ -22,11 +22,12 @@ export default function ClaimTraderButton({ traderId, handle, userId, source = '
   const [loading, setLoading] = useState(false)
   const [claimed, setClaimed] = useState(false)
   const [hasConnection, setHasConnection] = useState(false)
-  const [checking, setChecking] = useState(true)
+  const [_checking, setChecking] = useState(true)
 
   // 检查用户是否已绑定交易所账号
   useEffect(() => {
     checkConnection()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId, source])
 
   const checkConnection = async () => {

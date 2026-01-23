@@ -110,7 +110,7 @@ export default function OverviewPerformanceCard({ performance, profitableWeeksPc
     return `${sign}${absValue.toFixed(2)}`
   }
 
-  const periodLabel = period === '7D' ? '7 天' : period === '30D' ? '30 天' : '90 天'
+  const _periodLabel = period === '7D' ? '7 天' : period === '30D' ? '30 天' : '90 天'
 
   return (
     <Box

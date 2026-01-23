@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useToast } from './Toast'
-import { tokens } from '@/lib/design-tokens'
 import { apiPost } from '@/lib/api/client'
 
 type UserFollowButtonProps = {

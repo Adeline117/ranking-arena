@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
   try {
     // 获取请求体
     const body = await request.json()
-    const { plan, billingCycle = 'monthly' } = body
+    const { plan, billingCycle: _billingCycle = 'monthly' } = body
 
     if (!plan || !PLANS[plan]) {
       return NextResponse.json(

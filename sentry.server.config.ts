@@ -32,7 +32,7 @@ Sentry.init({
   ],
   
   // 在发送前处理事件
-  beforeSend(event, hint) {
+  beforeSend(event, _hint) {
     // 脱敏处理
     if (event.user) {
       delete event.user.ip_address

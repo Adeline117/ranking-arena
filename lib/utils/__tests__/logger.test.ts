@@ -124,10 +124,10 @@ describe('createLogger', () => {
 })
 
 describe('silent', () => {
-  let consoleSpy: jest.SpyInstance
+  let _consoleSpy: jest.SpyInstance
 
   beforeEach(() => {
-    consoleSpy = jest.spyOn(console, 'log').mockImplementation()
+    _consoleSpy = jest.spyOn(console, 'log').mockImplementation()
   })
 
   afterEach(() => {
