@@ -724,7 +724,7 @@ function SettingsContent() {
     try {
       await supabase.auth.signOut()
       router.push('/')
-    } catch (error) {
+    } catch {
       showToast('退出失败，请重试', 'error')
     }
   }
@@ -1452,6 +1452,10 @@ function SettingsContent() {
                   onClick={async () => {
                     const confirmed = await showConfirm('放弃更改', '确定要放弃所有未保存的更改吗？')
                     if (confirmed && userId) {
+                      setTouchedFields({ handle: false, newPassword: false, confirmPassword: false, newEmail: false })
+                      setHandleAvailable(null)
+                      setAvatarFile(null)
+                      setCoverFile(null)
                       loadProfile(userId)
                     }
                   }}
