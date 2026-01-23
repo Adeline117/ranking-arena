@@ -52,6 +52,25 @@ const eslintConfig = defineConfig([
       "no-async-promise-executor": "warn",
     },
   },
+  // ============================================
+  // Architecture lockdown rules (prevent regression)
+  // See docs/system-principles.md for rationale
+  // ============================================
+  {
+    files: ["app/**/*.{ts,tsx}", "!app/**/login/**", "!app/**/signup/**"],
+    rules: {
+      "no-restricted-syntax": ["warn",
+        {
+          "selector": "CallExpression[callee.object.property.name='auth'][callee.property.name='getSession']",
+          "message": "Use `useUnifiedAuth()` hook instead of direct supabase.auth.getSession(). See docs/system-principles.md"
+        },
+        {
+          "selector": "CallExpression[callee.object.property.name='auth'][callee.property.name='getUser']",
+          "message": "Use `useUnifiedAuth()` hook instead of direct supabase.auth.getUser(). See docs/system-principles.md"
+        }
+      ],
+    },
+  },
   // Override default ignores of eslint-config-next.
   globalIgnores([
     // Tooling / docs - don't block app lint

@@ -74,6 +74,15 @@
 - [ ] Error states handled gracefully
 - [ ] Design tokens used from `lib/design-tokens.ts`
 
+### Architecture Compliance (see docs/system-principles.md)
+
+- [ ] **Auth**: Uses `useUnifiedAuth()` on client, `requireAuth()` on server (no direct `supabase.auth` calls)
+- [ ] **Server ACK**: No UI state updated before server confirms write operation
+- [ ] **Canonical Store**: Entity data written to `postStore` (or equivalent shared store)
+- [ ] **URL-Driven**: Any modal/overlay state synced with URL params via `useUrlModal`
+- [ ] **Click Targets**: Author/group links use `<Link>` with `stopPropagation`
+- [ ] **Error Messages**: Distinguishes 401 (login needed) / 403 (no access) / 500 (server error)
+
 ### Performance
 
 - [ ] No obvious performance regressions
