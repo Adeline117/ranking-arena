@@ -293,70 +293,16 @@ export function useFetch<T>(
 }
 
 // ============================================
-// 便捷 Hooks
-// ============================================
-
-/**
- * 获取交易员列表
- */
-export function useTraders(timeRange: string = '90D') {
-  return useFetch(
-    ['traders', timeRange],
-    async () => {
-      const res = await fetch(`/api/traders?timeRange=${timeRange}`)
-      if (!res.ok) throw new Error('获取交易员列表失败')
-      const data = await res.json()
-      return data.traders
-    },
-    {
-      staleTime: 60000, // 1 分钟
-      revalidateOnFocus: true,
-    }
-  )
-}
-
-/**
- * 获取帖子列表
- */
-export function usePosts(options: { limit?: number; offset?: number; groupId?: string } = {}) {
-  const { limit = 20, offset = 0, groupId } = options
-  
-  return useFetch(
-    ['posts', String(limit), String(offset), groupId || ''],
-    async () => {
-      const params = new URLSearchParams({ limit: String(limit), offset: String(offset) })
-      if (groupId) params.set('group_id', groupId)
-      
-      const res = await fetch(`/api/posts?${params}`)
-      if (!res.ok) throw new Error('获取帖子列表失败')
-      const data = await res.json()
-      return data.data?.posts || []
-    },
-    {
-      staleTime: 30000, // 30 秒
-    }
-  )
-}
-
-/**
- * 获取单个交易员详情
- */
-export function useTraderDetail(handle: string | undefined) {
-  return useFetch(
-    handle ? ['trader', handle] : null,
-    async () => {
-      const res = await fetch(`/api/traders/${encodeURIComponent(handle!)}`)
-      if (!res.ok) throw new Error('获取交易员详情失败')
-      return res.json()
-    },
-    {
-      staleTime: 120000, // 2 分钟
-    }
-  )
-}
-
-// ============================================
 // 清除缓存
+// ============================================
+
+/**
+ * @deprecated 使用 useSWR.ts 中的 useTraderList 替代
+ * 此处保留空导出以保持向后兼容，将在下个版本移除
+ */
+
+// ============================================
+// 缓存操作
 // ============================================
 
 export function invalidateCache(keyPattern?: string | RegExp): void {
