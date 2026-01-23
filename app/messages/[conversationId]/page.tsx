@@ -10,6 +10,7 @@ import { Box, Text } from '@/app/components/base'
 import Avatar from '@/app/components/ui/Avatar'
 import { useToast } from '@/app/components/ui/Toast'
 import { getCsrfHeaders } from '@/lib/api/client'
+import { getProfileUrl } from '@/lib/utils/profile-navigation'
 
 type MessageStatus = 'sending' | 'sent' | 'failed'
 
@@ -26,9 +27,9 @@ type Message = {
 
 type OtherUser = {
   id: string
-  handle: string
-  avatar_url?: string
-  bio?: string
+  handle: string | null
+  avatar_url?: string | null
+  bio?: string | null
 }
 
 export default function ConversationPage({ params }: { params: { conversationId: string } | Promise<{ conversationId: string }> }) {
@@ -470,52 +471,84 @@ export default function ConversationPage({ params }: { params: { conversationId:
           </svg>
         </Link>
         
-        {otherUser && (
-          <Link 
-            href={`/u/${otherUser.handle}`} 
-            style={{ 
-              textDecoration: 'none', 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: tokens.spacing[3],
-              flex: 1,
-              padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-              borderRadius: tokens.radius.lg,
-              transition: 'background 0.2s',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = tokens.colors.bg.tertiary || 'rgba(255,255,255,0.05)'
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = 'transparent'
-            }}
-          >
-            <Box style={{ position: 'relative' }}>
-              <Avatar
-                userId={otherUser.id}
-                name={otherUser.handle}
-                avatarUrl={otherUser.avatar_url}
-                size={44}
-              />
-            </Box>
-            <Box style={{ flex: 1, minWidth: 0 }}>
-              <Text size="base" weight="bold" style={{ color: tokens.colors.text.primary }}>
-                {otherUser.handle}
-              </Text>
-              {otherUser.bio && (
-                <Text size="xs" color="tertiary" style={{ 
-                  maxWidth: '100%', 
-                  overflow: 'hidden', 
-                  textOverflow: 'ellipsis', 
-                  whiteSpace: 'nowrap',
-                  marginTop: 2,
-                }}>
-                  {otherUser.bio}
+        {otherUser && (() => {
+          const profileUrl = getProfileUrl(otherUser)
+          const displayName = otherUser.handle || `User ${otherUser.id.slice(0, 8)}`
+
+          if (!profileUrl) {
+            // No valid profile URL - show info without link
+            return (
+              <Box
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: tokens.spacing[3],
+                  flex: 1,
+                  padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+                }}
+              >
+                <Avatar
+                  userId={otherUser.id}
+                  name={displayName}
+                  avatarUrl={otherUser.avatar_url}
+                  size={44}
+                />
+                <Box style={{ flex: 1, minWidth: 0 }}>
+                  <Text size="base" weight="bold" style={{ color: tokens.colors.text.primary }}>
+                    {displayName}
+                  </Text>
+                </Box>
+              </Box>
+            )
+          }
+
+          return (
+            <Link
+              href={profileUrl}
+              style={{
+                textDecoration: 'none',
+                display: 'flex',
+                alignItems: 'center',
+                gap: tokens.spacing[3],
+                flex: 1,
+                padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+                borderRadius: tokens.radius.lg,
+                transition: 'background 0.2s',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = tokens.colors.bg.tertiary || 'rgba(255,255,255,0.05)'
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'transparent'
+              }}
+            >
+              <Box style={{ position: 'relative' }}>
+                <Avatar
+                  userId={otherUser.id}
+                  name={displayName}
+                  avatarUrl={otherUser.avatar_url}
+                  size={44}
+                />
+              </Box>
+              <Box style={{ flex: 1, minWidth: 0 }}>
+                <Text size="base" weight="bold" style={{ color: tokens.colors.text.primary }}>
+                  {displayName}
                 </Text>
-              )}
-            </Box>
-          </Link>
-        )}
+                {otherUser.bio && (
+                  <Text size="xs" color="tertiary" style={{
+                    maxWidth: '100%',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    marginTop: 2,
+                  }}>
+                    {otherUser.bio}
+                  </Text>
+                )}
+              </Box>
+            </Link>
+          )
+        })()}
       </Box>
 
       {/* Connection status banner */}
@@ -598,6 +631,10 @@ export default function ConversationPage({ params }: { params: { conversationId:
               // 计算是否显示时间（最后一条消息或下一条是不同发送者时显示）
               const showTime = !isSameSenderAsNext
               
+              // Show avatar for first message in a group from the other user
+              const showOtherAvatar = !isMine && !isSameSenderAsPrev
+              const otherProfileUrl = !isMine ? getProfileUrl(otherUser) : null
+
               return (
                 <Box
                   key={msg.id}
@@ -608,6 +645,43 @@ export default function ConversationPage({ params }: { params: { conversationId:
                     marginBottom: isSameSenderAsNext ? '2px' : tokens.spacing[3],
                   }}
                 >
+                  {/* Message row with avatar */}
+                  <Box style={{
+                    display: 'flex',
+                    alignItems: 'flex-end',
+                    gap: 8,
+                    maxWidth: '80%',
+                    flexDirection: isMine ? 'row-reverse' : 'row',
+                  }}>
+                    {/* Other user's avatar */}
+                    {!isMine && (
+                      <Box style={{ width: 28, flexShrink: 0 }}>
+                        {showOtherAvatar && otherUser && (
+                          otherProfileUrl ? (
+                            <Link
+                              href={otherProfileUrl}
+                              style={{ textDecoration: 'none', display: 'block' }}
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <Avatar
+                                userId={otherUser.id}
+                                name={otherUser.handle || `User ${otherUser.id.slice(0, 8)}`}
+                                avatarUrl={otherUser.avatar_url}
+                                size={28}
+                              />
+                            </Link>
+                          ) : (
+                            <Avatar
+                              userId={otherUser.id}
+                              name={otherUser.handle || `User ${otherUser.id.slice(0, 8)}`}
+                              avatarUrl={otherUser.avatar_url}
+                              size={28}
+                            />
+                          )
+                        )}
+                      </Box>
+                    )}
+
                   {/* 气泡 */}
                   <Box
                     style={{
@@ -647,10 +721,10 @@ export default function ConversationPage({ params }: { params: { conversationId:
                       transition: 'opacity 0.2s',
                     }}
                   >
-                    <Text 
-                      size="sm" 
-                      style={{ 
-                        whiteSpace: 'pre-wrap', 
+                    <Text
+                      size="sm"
+                      style={{
+                        whiteSpace: 'pre-wrap',
                         wordBreak: 'break-word',
                         lineHeight: 1.5,
                       }}
@@ -658,7 +732,8 @@ export default function ConversationPage({ params }: { params: { conversationId:
                       {msg.content}
                     </Text>
                   </Box>
-                  
+                  </Box>{/* close message row with avatar */}
+
                   {/* Failed state: retry button */}
                   {isMine && msg._status === 'failed' && (
                     <button
@@ -693,7 +768,7 @@ export default function ConversationPage({ params }: { params: { conversationId:
                       color="tertiary"
                       style={{
                         marginTop: 4,
-                        paddingLeft: isMine ? 0 : 4,
+                        paddingLeft: isMine ? 0 : 36,
                         paddingRight: isMine ? 4 : 0,
                         fontSize: 11,
                         display: 'flex',
@@ -748,7 +823,7 @@ export default function ConversationPage({ params }: { params: { conversationId:
                 开始对话
               </Text>
               <Text size="sm" color="tertiary">
-                向 @{otherUser?.handle} 发送第一条消息
+                向 @{otherUser?.handle || `User ${otherUser?.id.slice(0, 8)}`} 发送第一条消息
               </Text>
             </Box>
           </Box>

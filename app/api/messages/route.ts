@@ -99,20 +99,24 @@ export async function GET(request: NextRequest) {
       .eq('id', otherUserId)
       .maybeSingle()
 
-    // 确保 handle 有效值，如果用户没有设置 handle，使用 ID 前 8 位
-    const otherUserData = otherUser 
+    // Build counterparty data with proper fallback:
+    // - Use actual handle if available
+    // - Fall back to full user ID (not truncated) so the profile page can resolve by UUID
+    const otherUserData = otherUser
       ? {
-          ...otherUser,
-          handle: otherUser.handle || otherUserId.slice(0, 8)
+          id: otherUser.id,
+          handle: otherUser.handle || null,
+          avatar_url: otherUser.avatar_url || null,
+          bio: otherUser.bio || null,
         }
-      : { 
-          id: otherUserId, 
-          handle: otherUserId.slice(0, 8),
+      : {
+          id: otherUserId,
+          handle: null,
           avatar_url: null,
-          bio: null
+          bio: null,
         }
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       messages: messages || [],
       otherUser: otherUserData
     })
