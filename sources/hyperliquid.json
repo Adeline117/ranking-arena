@@ -1,0 +1,91 @@
+{
+  "platform": "hyperliquid",
+  "market_type": "perp",
+  "leaderboard_endpoints": [
+    {
+      "url": "https://api.hyperliquid.xyz/info",
+      "method": "POST",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "body_template": {
+        "type": "leaderboard",
+        "timeWindow": "week"
+      },
+      "pagination": {
+        "type": "offset",
+        "page_size": 100,
+        "max_pages": 1,
+        "param_name": "limit"
+      },
+      "response_path": "leaderboardRows",
+      "window_param": "timeWindow"
+    },
+    {
+      "url": "https://api.hyperliquid.xyz/info",
+      "method": "POST",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "body_template": {
+        "type": "frontendLeaderboard",
+        "timeWindow": "week"
+      },
+      "pagination": {
+        "type": "offset",
+        "page_size": 100,
+        "max_pages": 1,
+        "param_name": "limit"
+      },
+      "response_path": "leaderboard",
+      "window_param": "timeWindow"
+    }
+  ],
+  "profile_endpoints": [
+    {
+      "url": "https://api.hyperliquid.xyz/info",
+      "method": "POST",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "body_template": {
+        "type": "clearinghouseState",
+        "user": ""
+      },
+      "response_path": "marginSummary"
+    }
+  ],
+  "window_support": ["7d", "30d", "90d"],
+  "rate_limit_hint": {
+    "rpm": 30,
+    "concurrent": 2,
+    "delay_ms": 2000
+  },
+  "field_map": {
+    "roi_pct": "roi",
+    "pnl_usd": "pnl",
+    "win_rate": "",
+    "max_drawdown": "",
+    "trades_count": "",
+    "followers": "",
+    "copiers": ""
+  },
+  "roi_sort_supported": false,
+  "roi_sort_method": "ui_state",
+  "proof": [
+    {
+      "url": "https://api.hyperliquid.xyz/info",
+      "request_path": "/info",
+      "method": "POST",
+      "response_fields_sample": {
+        "leaderboardRows[0].ethAddress": "0xabcdef1234567890abcdef1234567890abcdef12",
+        "leaderboardRows[0].displayName": "HyperTrader",
+        "leaderboardRows[0].accountValue": "250000.50",
+        "leaderboardRows[0].pnl": "45678.90",
+        "leaderboardRows[0].roi": "0.2345",
+        "leaderboardRows[0].windowPerformances.week.startingValue": "200000.00"
+      },
+      "discovered_at": "2024-01-15T00:00:00Z"
+    }
+  ]
+}
