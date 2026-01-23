@@ -5,6 +5,13 @@
 
 import type { Platform, PlatformConnector } from '@/lib/types/leaderboard';
 import { BinanceFuturesConnector } from './binance-futures';
+import { BinanceSpotConnector } from './binance-spot';
+import { BybitConnector } from './bybit';
+import { BitgetFuturesConnector } from './bitget-futures';
+import { OKXConnector } from './okx';
+import { MEXCConnector } from './mexc';
+import { KuCoinConnector } from './kucoin';
+import { HyperliquidConnector } from './hyperliquid';
 
 const connectorInstances = new Map<Platform, PlatformConnector>();
 
@@ -37,36 +44,47 @@ export function getAvailablePlatforms(): Platform[] {
 
 /**
  * Platforms with implemented connectors.
- * Add new platforms here as their connectors are built.
  */
 const IMPLEMENTED_PLATFORMS: Platform[] = [
   'binance_futures',
-  // 'binance_spot',     // TODO
-  // 'binance_web3',     // TODO
-  // 'bybit',            // TODO
-  // 'bitget_futures',   // TODO
-  // 'bitget_spot',      // TODO
-  // 'mexc',             // TODO
-  // 'coinex',           // TODO
-  // 'okx',              // TODO
-  // 'okx_wallet',       // TODO
-  // 'kucoin',           // TODO
-  // 'gmx',              // TODO
-  // 'dydx',             // TODO
-  // 'hyperliquid',      // TODO
-  // 'bitmart',          // TODO
-  // 'phemex',           // TODO
-  // 'htx',              // TODO
-  // 'weex',             // TODO
+  'binance_spot',
+  'bybit',
+  'bitget_futures',
+  'okx',
+  'mexc',
+  'kucoin',
+  'hyperliquid',
+  // Pending implementation:
+  // 'binance_web3',
+  // 'bitget_spot',
+  // 'coinex',
+  // 'okx_wallet',
+  // 'gmx',
+  // 'dydx',
+  // 'bitmart',
+  // 'phemex',
+  // 'htx',
+  // 'weex',
 ];
 
 function createConnector(platform: Platform): PlatformConnector | null {
   switch (platform) {
     case 'binance_futures':
       return new BinanceFuturesConnector();
-    // Add new connectors here:
-    // case 'bybit':
-    //   return new BybitConnector();
+    case 'binance_spot':
+      return new BinanceSpotConnector();
+    case 'bybit':
+      return new BybitConnector();
+    case 'bitget_futures':
+      return new BitgetFuturesConnector();
+    case 'okx':
+      return new OKXConnector();
+    case 'mexc':
+      return new MEXCConnector();
+    case 'kucoin':
+      return new KuCoinConnector();
+    case 'hyperliquid':
+      return new HyperliquidConnector();
     default:
       return null;
   }
