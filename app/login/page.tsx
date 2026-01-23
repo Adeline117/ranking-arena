@@ -378,8 +378,10 @@ export default function LoginPage() {
   }, [error])
 
   useEffect(() => {
+    let redirected = false
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_IN' && session && !isRegister && !codeVerified) {
+      if (event === 'SIGNED_IN' && session && !isRegister && !codeVerified && !redirected) {
+        redirected = true
         supabase.auth.getUser().then(({ data: { user } }) => {
           if (user) {
             supabase

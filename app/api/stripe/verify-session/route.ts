@@ -62,29 +62,28 @@ export async function POST(request: NextRequest) {
     const stripe = getStripe()
     const supabaseAdmin = getSupabaseAdmin()
 
-    // 获取 Checkout Session
-    const session = await stripe.checkout.sessions.retrieve(sessionId, {
-      expand: ['subscription'],
-    })
+    // 获取 Checkout Session（不展开 subscription，避免类型问题）
+    const session = await stripe.checkout.sessions.retrieve(sessionId)
 
     if (session.payment_status !== 'paid') {
-      return NextResponse.json({ 
+      return NextResponse.json({
         error: 'Payment not completed',
-        paymentStatus: session.payment_status 
+        paymentStatus: session.payment_status
       }, { status: 400 })
     }
 
     // 检查是否为订阅模式
     if (session.mode !== 'subscription') {
-      return NextResponse.json({ 
+      return NextResponse.json({
         error: 'Session is not a subscription',
-        mode: session.mode 
+        mode: session.mode
       }, { status: 400 })
     }
 
     const userId = session.metadata?.supabase_user_id || session.metadata?.userId
     const customerId = session.customer as string
-    const subscriptionId = session.subscription as string
+    // session.subscription 在未 expand 时始终是 string | null
+    const subscriptionId = session.subscription as string | null
 
     if (!userId) {
       return NextResponse.json({ error: 'User ID not found in session' }, { status: 400 })
@@ -105,29 +104,32 @@ export async function POST(request: NextRequest) {
       const priceId = subscription.items.data[0]?.price.id || ''
       tier = getTierFromPriceId(priceId)
       subscriptionStatus = subscription.status
-      
+
       // 检查订阅状态
       if (subscription.status !== 'active' && subscription.status !== 'trialing') {
-        return NextResponse.json({ 
+        return NextResponse.json({
           error: 'Subscription is not active',
-          status: subscription.status 
+          status: subscription.status
         }, { status: 400 })
       }
-      
-      // 获取周期信息
-      const subAny = subscription as unknown as { current_period_start?: number; current_period_end?: number }
-      if (subAny.current_period_start) {
-        periodStart = new Date(subAny.current_period_start * 1000).toISOString()
+
+      // 获取周期信息（兼容不同 Stripe API 版本）
+      const sub = subscription as unknown as Record<string, unknown>
+      const itemPeriod = subscription.items?.data?.[0] as unknown as Record<string, unknown> | undefined
+      const pStart = (sub.current_period_start ?? itemPeriod?.current_period_start) as number | undefined
+      const pEnd = (sub.current_period_end ?? itemPeriod?.current_period_end) as number | undefined
+      if (pStart) {
+        periodStart = new Date(pStart * 1000).toISOString()
       }
-      if (subAny.current_period_end) {
-        periodEnd = new Date(subAny.current_period_end * 1000).toISOString()
+      if (pEnd) {
+        periodEnd = new Date(pEnd * 1000).toISOString()
       }
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error'
-      logger.error('Failed to retrieve subscription', { error: errorMessage })
-      return NextResponse.json({ 
+      logger.error('Failed to retrieve subscription', { error: errorMessage, subscriptionId })
+      return NextResponse.json({
         error: 'Failed to retrieve subscription',
-        details: errorMessage 
+        details: errorMessage
       }, { status: 500 })
     }
 

@@ -230,7 +230,8 @@ export default function MarketPanel() {
       alive = false
       clearInterval(interval)
     }
-  }, [customPairs, market.length, t])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customPairs, t])
 
   const formatTime = (date: Date) => {
     const now = new Date()

@@ -169,10 +169,14 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
               
               if (profileById) {
                 userProfile = profileById
-                // 如果用户有设置 handle，重定向到正确的 URL
-                if (profileById.handle && profileById.handle !== decodedHandle) {
-                  window.location.href = `/u/${encodeURIComponent(profileById.handle)}`
-                  return
+                // 如果用户有设置 handle，重定向到正确的 URL（防止重定向循环）
+                const targetHandle = profileById.handle
+                if (targetHandle && targetHandle !== decodedHandle && targetHandle !== handle) {
+                  const targetUrl = `/u/${encodeURIComponent(targetHandle)}`
+                  if (typeof window !== 'undefined' && window.location.pathname !== targetUrl) {
+                    window.location.href = targetUrl
+                    return
+                  }
                 }
               }
             }
@@ -191,10 +195,14 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
 
                 if (currentUserProfile) {
                   userProfile = currentUserProfile
-                  // If the current user has a handle, redirect to the canonical URL
-                  if (currentUserProfile.handle) {
-                    window.location.href = `/u/${encodeURIComponent(currentUserProfile.handle)}`
-                    return
+                  // If the current user has a handle, redirect to the canonical URL (prevent loops)
+                  const targetHandle = currentUserProfile.handle
+                  if (targetHandle && targetHandle !== decodedHandle && targetHandle !== handle) {
+                    const targetUrl = `/u/${encodeURIComponent(targetHandle)}`
+                    if (typeof window !== 'undefined' && window.location.pathname !== targetUrl) {
+                      window.location.href = targetUrl
+                      return
+                    }
                   }
                 }
               }
@@ -398,10 +406,14 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
                     .single()
 
                   if (userProfileData) {
-                    // 如果新创建的 handle 与当前 URL 不同，重定向
-                    if (userProfileData.handle && userProfileData.handle !== decodedHandle) {
-                      window.location.href = `/u/${encodeURIComponent(userProfileData.handle)}`
-                      return
+                    // 如果新创建的 handle 与当前 URL 不同，重定向（防止循环）
+                    const targetHandle = userProfileData.handle
+                    if (targetHandle && targetHandle !== decodedHandle && targetHandle !== handle) {
+                      const targetUrl = `/u/${encodeURIComponent(targetHandle)}`
+                      if (typeof window !== 'undefined' && window.location.pathname !== targetUrl) {
+                        window.location.href = targetUrl
+                        return
+                      }
                     }
                     // 否则直接使用创建的数据
                     const { count: followersCount } = await supabase

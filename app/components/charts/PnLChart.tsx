@@ -99,16 +99,21 @@ export default function PnLChart({
     histogramSeries.setData(chartData)
     chart.timeScale().fitContent()
 
-    // Handle resize
+    // Handle resize with debounce
+    let resizeTimer: ReturnType<typeof setTimeout>
     const handleResize = () => {
-      if (chartContainerRef.current) {
-        chart.applyOptions({ width: chartContainerRef.current.clientWidth })
-      }
+      clearTimeout(resizeTimer)
+      resizeTimer = setTimeout(() => {
+        if (chartContainerRef.current) {
+          chart.applyOptions({ width: chartContainerRef.current.clientWidth })
+        }
+      }, 150)
     }
 
     window.addEventListener('resize', handleResize)
 
     return () => {
+      clearTimeout(resizeTimer)
       window.removeEventListener('resize', handleResize)
       chart.remove()
     }

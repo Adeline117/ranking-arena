@@ -34,6 +34,7 @@
   --color-text-primary: #EDEDED;
   --color-text-secondary: #A8A8B3;
   --color-text-tertiary: #6B6B7B;
+  --color-text-quaternary: #4A4A5A;
   
   /* Border colors */
   --color-border-primary: #2A2836;
@@ -89,6 +90,7 @@
   --color-text-primary: #1A1A1A;
   --color-text-secondary: #5A5A6A;
   --color-text-tertiary: #8A8A9A;
+  --color-text-quaternary: #B0B0BA;
   
   /* Border colors */
   --color-border-primary: #E0E0E6;
