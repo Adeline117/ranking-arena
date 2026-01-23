@@ -215,21 +215,25 @@ export function useFetch<T>(
     await doFetch(false)
   }, [doFetch])
 
-  // 乐观更新
+  // 乐观更新 - 修复 stale closure 问题
   const mutate = useCallback((updater: T | ((prev: T | null) => T)) => {
-    setState(prev => ({
-      ...prev,
-      data: typeof updater === 'function' 
-        ? (updater as (prev: T | null) => T)(prev.data) 
-        : updater,
-    }))
-    if (cacheKey) {
+    setState(prev => {
       const newData = typeof updater === 'function'
-        ? (updater as (prev: T | null) => T)(state.data)
+        ? (updater as (prev: T | null) => T)(prev.data)
         : updater
-      setCache(cacheKey, newData, cacheTime)
-    }
-  }, [cacheKey, cacheTime, state.data])
+
+      // 在 setState 回调内更新缓存，确保使用正确的数据
+      if (cacheKey) {
+        // 使用 setTimeout 确保在 state 更新后同步缓存
+        setTimeout(() => setCache(cacheKey, newData, cacheTime), 0)
+      }
+
+      return {
+        ...prev,
+        data: newData,
+      }
+    })
+  }, [cacheKey, cacheTime])
 
   // 挂载时获取
   useEffect(() => {

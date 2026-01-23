@@ -375,7 +375,7 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
           getTraderPerformance(handle).catch(() => null),
           getTraderStats(handle).catch(() => null),
           getTraderPortfolio(handle).catch(() => []),
-          getTraderFeed(handle),
+          getTraderFeed(handle).catch(() => []),
           getSimilarTraders(handle).catch(() => []),
         ])
 

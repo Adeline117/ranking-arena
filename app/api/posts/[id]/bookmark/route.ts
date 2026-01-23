@@ -132,29 +132,33 @@ export async function POST(request: NextRequest, context: RouteContext) {
         return NextResponse.json({ error: '取消收藏失败' }, { status: 500 })
       }
 
-      // 手动更新收藏计数（因为触发器可能不工作）
-      // Re-fetch to reduce race condition window
-      const { data: currentPost, error: fetchError } = await supabase
-        .from('posts')
-        .select('bookmark_count')
-        .eq('id', id)
-        .single()
+      // 使用原子递减操作避免竞态条件
+      const { data: updatedPost, error: rpcError } = await supabase.rpc(
+        'decrement_bookmark_count',
+        { post_id: id }
+      ).maybeSingle()
 
-      if (fetchError) {
-        apiLogger.warn('Failed to fetch current bookmark count:', fetchError)
-      }
+      // 如果 RPC 不存在，回退到非原子操作（但记录警告）
+      let newCount = 0
+      if (rpcError) {
+        apiLogger.warn('RPC decrement_bookmark_count not found, using fallback:', rpcError)
+        const { data: currentPost } = await supabase
+          .from('posts')
+          .select('bookmark_count')
+          .eq('id', id)
+          .single()
 
-      const currentCount = currentPost?.bookmark_count ?? 0
-      const newCount = Math.max(0, currentCount - 1)
+        newCount = Math.max(0, (currentPost?.bookmark_count ?? 1) - 1)
+        const { error: fallbackError } = await supabase
+          .from('posts')
+          .update({ bookmark_count: newCount })
+          .eq('id', id)
 
-      const { error: updateError } = await supabase
-        .from('posts')
-        .update({ bookmark_count: newCount })
-        .eq('id', id)
-
-      if (updateError) {
-        apiLogger.warn('Failed to update bookmark count:', updateError)
-        // Still return success since the bookmark was removed
+        if (fallbackError) {
+          apiLogger.warn('Failed to update bookmark count:', fallbackError)
+        }
+      } else {
+        newCount = updatedPost?.bookmark_count ?? 0
       }
 
       return NextResponse.json({
@@ -226,29 +230,33 @@ export async function POST(request: NextRequest, context: RouteContext) {
         return NextResponse.json({ error: `收藏失败: ${insertError.message}` }, { status: 500 })
       }
 
-      // 手动更新收藏计数（因为触发器可能不工作）
-      // Re-fetch to reduce race condition window
-      const { data: currentPost, error: fetchError } = await supabase
-        .from('posts')
-        .select('bookmark_count')
-        .eq('id', id)
-        .single()
+      // 使用原子递增操作避免竞态条件
+      const { data: updatedPost, error: rpcError } = await supabase.rpc(
+        'increment_bookmark_count',
+        { post_id: id }
+      ).maybeSingle()
 
-      if (fetchError) {
-        apiLogger.warn('Failed to fetch current bookmark count:', fetchError)
-      }
+      // 如果 RPC 不存在，回退到非原子操作（但记录警告）
+      let newCount = 1
+      if (rpcError) {
+        apiLogger.warn('RPC increment_bookmark_count not found, using fallback:', rpcError)
+        const { data: currentPost } = await supabase
+          .from('posts')
+          .select('bookmark_count')
+          .eq('id', id)
+          .single()
 
-      const currentCount = currentPost?.bookmark_count ?? 0
-      const newCount = currentCount + 1
+        newCount = (currentPost?.bookmark_count ?? 0) + 1
+        const { error: fallbackError } = await supabase
+          .from('posts')
+          .update({ bookmark_count: newCount })
+          .eq('id', id)
 
-      const { error: updateError } = await supabase
-        .from('posts')
-        .update({ bookmark_count: newCount })
-        .eq('id', id)
-
-      if (updateError) {
-        apiLogger.warn('Failed to update bookmark count:', updateError)
-        // Still return success since the bookmark was added
+        if (fallbackError) {
+          apiLogger.warn('Failed to update bookmark count:', fallbackError)
+        }
+      } else {
+        newCount = updatedPost?.bookmark_count ?? 1
       }
 
       return NextResponse.json({

@@ -44,26 +44,34 @@ export async function DELETE(
       return NextResponse.json({ error: '无权删除此帖子' }, { status: 403 })
     }
 
-    // 删除帖子相关的评论
-    const { error: commentsDeleteError } = await supabase
+    // 删除帖子相关的评论（记录错误但继续删除帖子）
+    const { error: commentsError } = await supabase
       .from('comments')
       .delete()
       .eq('post_id', postId)
 
-    if (commentsDeleteError) {
-      logger.error('Failed to delete comments', { error: commentsDeleteError, postId })
-      // Continue with deletion - orphaned comments are less critical
+    if (commentsError) {
+      logger.warn('Failed to delete comments', { error: commentsError.message, postId })
     }
 
-    // 删除帖子相关的点赞
-    const { error: likesDeleteError } = await supabase
+    // 删除帖子相关的点赞（记录错误但继续删除帖子）
+    const { error: likesError } = await supabase
       .from('post_likes')
       .delete()
       .eq('post_id', postId)
 
-    if (likesDeleteError) {
-      logger.error('Failed to delete post likes', { error: likesDeleteError, postId })
-      // Continue with deletion - orphaned likes are less critical
+    if (likesError) {
+      logger.warn('Failed to delete likes', { error: likesError.message, postId })
+    }
+
+    // 删除帖子收藏（记录错误但继续删除帖子）
+    const { error: bookmarksError } = await supabase
+      .from('post_bookmarks')
+      .delete()
+      .eq('post_id', postId)
+
+    if (bookmarksError) {
+      logger.warn('Failed to delete bookmarks', { error: bookmarksError.message, postId })
     }
 
     // 删除帖子
