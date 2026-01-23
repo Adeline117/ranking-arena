@@ -96,11 +96,11 @@ export class PhemexConnector extends BaseConnector {
     }
   }
 
-  async fetchTraderSnapshot(trader_key: string, window: Window): Promise<ConnectorResult<CanonicalSnapshot>> {
+  async fetchTraderSnapshot(_trader_key: string, _window: Window): Promise<ConnectorResult<CanonicalSnapshot>> {
     return this.failure('Phemex snapshot requires further endpoint discovery');
   }
 
-  async fetchTimeseries(trader_key: string): Promise<ConnectorResult<CanonicalTimeseries[]>> {
+  async fetchTimeseries(_trader_key: string): Promise<ConnectorResult<CanonicalTimeseries[]>> {
     return this.success([]);
   }
 

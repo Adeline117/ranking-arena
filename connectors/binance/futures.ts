@@ -12,7 +12,7 @@ import type {
   Platform, MarketType, Window,
   ConnectorResult, LeaderboardEntry,
   CanonicalProfile, CanonicalSnapshot, CanonicalTimeseries,
-  SnapshotMetrics, QualityFlags,
+  SnapshotMetrics,
 } from '../base/types';
 
 const API_BASE = 'https://www.binance.com';

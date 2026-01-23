@@ -67,15 +67,15 @@ export class BinanceWeb3Connector extends BaseConnector {
     }
   }
 
-  async fetchTraderProfile(trader_key: string): Promise<ConnectorResult<CanonicalProfile>> {
+  async fetchTraderProfile(_trader_key: string): Promise<ConnectorResult<CanonicalProfile>> {
     return this.failure('Binance Web3 individual profiles not publicly accessible');
   }
 
-  async fetchTraderSnapshot(trader_key: string, window: Window): Promise<ConnectorResult<CanonicalSnapshot>> {
+  async fetchTraderSnapshot(_trader_key: string, _window: Window): Promise<ConnectorResult<CanonicalSnapshot>> {
     return this.failure('Binance Web3 individual snapshots not publicly accessible');
   }
 
-  async fetchTimeseries(trader_key: string): Promise<ConnectorResult<CanonicalTimeseries[]>> {
+  async fetchTimeseries(_trader_key: string): Promise<ConnectorResult<CanonicalTimeseries[]>> {
     return this.success([], { reason: 'Web3 timeseries not available' });
   }
 

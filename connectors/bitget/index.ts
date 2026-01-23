@@ -141,7 +141,7 @@ export class BitgetFuturesConnector extends BaseConnector {
     }
   }
 
-  async fetchTimeseries(trader_key: string): Promise<ConnectorResult<CanonicalTimeseries[]>> {
+  async fetchTimeseries(_trader_key: string): Promise<ConnectorResult<CanonicalTimeseries[]>> {
     return this.success([], { reason: 'Bitget timeseries requires separate endpoint discovery' });
   }
 
@@ -273,7 +273,7 @@ export class BitgetSpotConnector extends BaseConnector {
     }
   }
 
-  async fetchTimeseries(trader_key: string): Promise<ConnectorResult<CanonicalTimeseries[]>> {
+  async fetchTimeseries(_trader_key: string): Promise<ConnectorResult<CanonicalTimeseries[]>> {
     return this.success([], { reason: 'Bitget Spot timeseries not available' });
   }
 

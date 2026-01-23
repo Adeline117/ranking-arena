@@ -137,7 +137,7 @@ export class MexcConnector extends BaseConnector {
     }
   }
 
-  async fetchTimeseries(trader_key: string): Promise<ConnectorResult<CanonicalTimeseries[]>> {
+  async fetchTimeseries(_trader_key: string): Promise<ConnectorResult<CanonicalTimeseries[]>> {
     return this.success([], { reason: 'MEXC timeseries not publicly available' });
   }
 

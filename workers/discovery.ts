@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 /**
  * Source Discovery Module
  *
@@ -11,9 +12,9 @@
  */
 
 import 'dotenv/config';
-import { writeFileSync, mkdirSync } from 'fs';
+import { readFileSync, writeFileSync, mkdirSync } from 'fs';
 import { join } from 'path';
-import { getConnector, getRankingConnectorKeys } from '../connectors';
+import { getConnector } from '../connectors';
 import type { Platform, MarketType, Window, SourceConfig } from '../connectors/base/types';
 
 const SOURCES_DIR = join(__dirname, '..', 'sources');
@@ -465,7 +466,8 @@ async function runDiscovery(targetPlatform?: string): Promise<void> {
       // If file already exists with same platform+market_type, merge
       let existingConfigs: SourceConfig[] = [];
       try {
-        const existing = require(filepath);
+        const raw = readFileSync(filepath, 'utf-8');
+        const existing = JSON.parse(raw);
         existingConfigs = Array.isArray(existing) ? existing : [existing];
         // Remove old entry for same market_type
         existingConfigs = existingConfigs.filter(c => c.market_type !== meta.market_type);

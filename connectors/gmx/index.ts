@@ -209,7 +209,7 @@ export class GmxConnector extends BaseConnector {
     }
   }
 
-  async fetchTimeseries(trader_key: string): Promise<ConnectorResult<CanonicalTimeseries[]>> {
+  async fetchTimeseries(_trader_key: string): Promise<ConnectorResult<CanonicalTimeseries[]>> {
     return this.success([], { reason: 'GMX timeseries requires trade-by-trade reconstruction' });
   }
 
