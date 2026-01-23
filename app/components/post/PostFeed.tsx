@@ -1641,7 +1641,11 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
           return (
             <div
               key={p.id}
-              onClick={() => handleOpenPost(p)}
+              onClick={(e: React.MouseEvent) => {
+                // Don't trigger card navigation if clicking on a link/button
+                if ((e.target as HTMLElement).closest('a, button, [role="button"], input, textarea, select')) return
+                handleOpenPost(p)
+              }}
               style={{
                 width: '100%',
                 textAlign: 'left',
@@ -1975,9 +1979,23 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
       {openPost && (
         <Modal onClose={() => setOpenPost(null)}>
           {openPost.group_name && (
-            <div style={{ fontSize: 12, color: ARENA_PURPLE }}>
-              {openPost.group_name}
-            </div>
+            openPost.group_id ? (
+              <Link
+                href={`/groups/${openPost.group_id}`}
+                style={{
+                  fontSize: 12,
+                  color: ARENA_PURPLE,
+                  textDecoration: 'none',
+                  fontWeight: 600,
+                }}
+              >
+                {openPost.group_name}
+              </Link>
+            ) : (
+              <div style={{ fontSize: 12, color: ARENA_PURPLE }}>
+                {openPost.group_name}
+              </div>
+            )
           )}
 
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, marginTop: 8 }}>
@@ -1998,7 +2016,25 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
           </div>
 
           <div style={{ marginTop: 8, fontSize: 12, color: tokens.colors.text.tertiary, display: 'flex', alignItems: 'center', gap: 6 }}>
-            {openPost.author_handle} · {formatTimeAgo(openPost.created_at)} · <CommentIcon size={12} /> {openPost.comment_count}
+            {openPost.author_handle ? (
+              <Link
+                href={`/u/${encodeURIComponent(openPost.author_handle)}`}
+                style={{
+                  color: tokens.colors.text.secondary,
+                  textDecoration: 'none',
+                  fontWeight: 700,
+                }}
+              >
+                {openPost.author_handle}
+              </Link>
+            ) : (
+              <span>{openPost.author_handle || '匿名'}</span>
+            )}
+            <span>·</span>
+            <span>{formatTimeAgo(openPost.created_at)}</span>
+            <span>·</span>
+            <CommentIcon size={12} />
+            <span>{openPost.comment_count}</span>
           </div>
 
           <div translate="no" style={{ 
