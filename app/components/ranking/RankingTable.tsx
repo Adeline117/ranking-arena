@@ -356,10 +356,12 @@ export default function RankingTable(props: {
   category?: CategoryType // 当前分类
   onCategoryChange?: (category: CategoryType) => void // 分类切换回调
   onProRequired?: () => void // 需要升级 Pro 时的回调
+  onFilterToggle?: () => void // 高级筛选切换回调
+  hasActiveFilters?: boolean // 是否有活动的高级筛选
   error?: string | null // 错误信息
   onRetry?: () => void // 重试回调
 }) {
-  const { traders, loading, source, timeRange = '90D', isPro = false, category = 'all', onCategoryChange, onProRequired, error, onRetry } = props
+  const { traders, loading, source, timeRange = '90D', isPro = false, category = 'all', onCategoryChange, onProRequired, onFilterToggle, hasActiveFilters, error, onRetry } = props
   const { t, language } = useLanguage()
   const router = useRouter()
   
@@ -501,7 +503,7 @@ export default function RankingTable(props: {
           <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], flexShrink: 0 }}>
             {/* 高级筛选按钮 */}
             <Box
-              onClick={isPro ? () => {} : onProRequired}
+              onClick={isPro ? onFilterToggle : onProRequired}
               title={language === 'en' ? 'Advanced Filter' : '高级筛选'}
               className="touch-target-sm"
               style={{
@@ -512,9 +514,10 @@ export default function RankingTable(props: {
                 width: 32,
                 height: 32,
                 borderRadius: tokens.radius.md,
-                background: 'var(--color-bg-tertiary)',
-                border: '1px solid var(--color-border-secondary)',
-                color: isPro ? 'var(--color-text-secondary)' : 'var(--color-text-tertiary)',
+                position: 'relative',
+                background: hasActiveFilters ? 'var(--color-pro-glow)' : 'var(--color-bg-tertiary)',
+                border: hasActiveFilters ? '1px solid var(--color-pro-gradient-start)' : '1px solid var(--color-border-secondary)',
+                color: hasActiveFilters ? 'var(--color-pro-gradient-start)' : isPro ? 'var(--color-text-secondary)' : 'var(--color-text-tertiary)',
                 cursor: isPro ? 'pointer' : 'not-allowed',
                 transition: 'all 0.2s',
                 opacity: isPro ? 1 : 0.5,
@@ -534,6 +537,17 @@ export default function RankingTable(props: {
             >
               <FilterIcon size={14} />
               {!isPro && <LockIconSmall size={8} />}
+              {hasActiveFilters && (
+                <Box style={{
+                  position: 'absolute',
+                  top: 4,
+                  right: 4,
+                  width: 6,
+                  height: 6,
+                  borderRadius: '50%',
+                  background: tokens.colors.accent.primary,
+                }} />
+              )}
             </Box>
 
             {/* 对比按钮 */}
