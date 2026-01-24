@@ -263,8 +263,6 @@ export function MembersListModal({ members, memberCount, loading, language, onCl
                       src={member.avatar_url}
                       alt={member.handle || 'User'}
                       style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                      referrerPolicy="no-referrer"
-                      onError={(e) => { e.currentTarget.style.display = 'none' }}
                     />
                   ) : (
                     <Text size="sm" color="tertiary">
