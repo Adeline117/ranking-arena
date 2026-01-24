@@ -61,9 +61,10 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (!profile?.stripe_customer_id) {
+      // Fallback: redirect to pricing page when no customer exists
       return NextResponse.json(
-        { error: 'No subscription found' },
-        { status: 404 }
+        { redirect: '/pricing' },
+        { status: 200 }
       )
     }
 

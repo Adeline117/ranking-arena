@@ -16,39 +16,10 @@ import { useToast } from '@/app/components/ui/Toast'
 import { formatTimeAgo } from '@/lib/utils/date'
 import { RankingSkeleton } from '@/app/components/ui/Skeleton'
 import { getCsrfHeaders } from '@/lib/api/client'
+import { renderContentWithLinks } from '@/lib/utils/content'
 
 // Use design tokens for brand color
 const ARENA_PURPLE = '#8b6fa8' // fallback, prefer tokens.colors.accent.brand
-
-// 链接解析函数 - 将文本中的URL转换为可点击链接
-function renderContentWithLinks(text: string) {
-  if (!text) return null
-  const urlRegex = /(https?:\/\/[^\s<>"{}|\\^`[\]]+)/g
-  const parts = text.split(urlRegex)
-  
-  return parts.map((part, index) => {
-    if (urlRegex.test(part)) {
-      urlRegex.lastIndex = 0 // Reset regex state
-      return (
-        <a
-          key={index}
-          href={part}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={(e) => e.stopPropagation()}
-          style={{
-            color: ARENA_PURPLE,
-            textDecoration: 'underline',
-            wordBreak: 'break-all',
-          }}
-        >
-          {part}
-        </a>
-      )
-    }
-    return part
-  })
-}
 
 // 本地 Trader 类型
 type Trader = {

@@ -211,17 +211,11 @@ export default function TopNav({ email }: { email: string | null }) {
     if (trimmedQuery) {
       // 保存搜索历史
       if (typeof window !== 'undefined') {
-        const stored = localStorage.getItem('searchHistory')
-        const history: Array<{ id: string; query: string; timestamp: number }> = stored ? JSON.parse(stored) : []
-        const newItem = {
-          id: Date.now().toString(),
-          query: trimmedQuery,
-          timestamp: Date.now(),
-        }
-        // 移除重复项，添加新项到最前面
-        const filtered = history.filter((item) => item.query !== trimmedQuery)
-        const updated = [newItem, ...filtered].slice(0, 10) // 最多保留10条
-        localStorage.setItem('searchHistory', JSON.stringify(updated))
+        const stored = localStorage.getItem('ranking-arena-recent-searches')
+        const history: string[] = stored ? JSON.parse(stored) : []
+        const filtered = history.filter((item) => item !== trimmedQuery)
+        const updated = [trimmedQuery, ...filtered].slice(0, 10)
+        localStorage.setItem('ranking-arena-recent-searches', JSON.stringify(updated))
       }
       router.push(`/search?q=${encodeURIComponent(trimmedQuery)}`)
     }

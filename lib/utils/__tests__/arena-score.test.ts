@@ -12,6 +12,7 @@ import {
   meetsThreshold,
   calculateArenaScore,
   calculateOverallScore,
+  calculateMomentumBonus,
   rankByArenaScore,
   ARENA_CONFIG,
   type TraderScoreInput,
@@ -270,28 +271,81 @@ describe('calculateArenaScore', () => {
 })
 
 // ============================================
+// 动量加分计算测试
+// ============================================
+
+describe('calculateMomentumBonus', () => {
+  test('7D 优于 30D 获得正加分', () => {
+    // 7D=80, 30D=60 → ratio = 80/60 - 1 = 0.333, clip to 0.333, * 5 = 1.667
+    const bonus = calculateMomentumBonus(80, 60)
+    expect(bonus).toBeCloseTo(1.67, 1)
+    expect(bonus).toBeGreaterThan(0)
+  })
+
+  test('7D 远超 30D 加分封顶 2.5', () => {
+    // 7D=90, 30D=30 → ratio = 2.0, clip to 0.5, * 5 = 2.5
+    const bonus = calculateMomentumBonus(90, 30)
+    expect(bonus).toBe(ARENA_CONFIG.MOMENTUM_MAX_BONUS)
+  })
+
+  test('7D 低于 30D 获得负加分', () => {
+    // 7D=60, 30D=70 → ratio = -0.143, clip to -0.143, * 5 = -0.714
+    const bonus = calculateMomentumBonus(60, 70)
+    expect(bonus).toBeCloseTo(-0.71, 1)
+    expect(bonus).toBeLessThan(0)
+  })
+
+  test('7D 远低于 30D 扣分封顶 -1', () => {
+    // 7D=10, 30D=80 → ratio = -0.875, clip to -0.2, * 5 = -1.0
+    const bonus = calculateMomentumBonus(10, 80)
+    expect(bonus).toBe(-ARENA_CONFIG.MOMENTUM_MAX_PENALTY)
+  })
+
+  test('score7d 为 null 返回 0', () => {
+    expect(calculateMomentumBonus(null, 70)).toBe(0)
+  })
+
+  test('score30d 为 null 返回 0', () => {
+    expect(calculateMomentumBonus(60, null)).toBe(0)
+  })
+
+  test('score30d 为 0 返回 0', () => {
+    expect(calculateMomentumBonus(60, 0)).toBe(0)
+  })
+
+  test('7D 等于 30D 返回 0', () => {
+    // ratio = 0, * 5 = 0
+    expect(calculateMomentumBonus(50, 50)).toBe(0)
+  })
+})
+
+// ============================================
 // 总体分数计算测试
 // ============================================
 
 describe('calculateOverallScore', () => {
-  test('完整数据标准加权', () => {
+  test('完整数据标准加权 + 动量', () => {
     const score = calculateOverallScore({
       score7d: 60,
       score30d: 70,
       score90d: 80,
     })
-    // 0.70 * 80 + 0.25 * 70 + 0.05 * 60 = 56 + 17.5 + 3 = 76.5
-    expect(score).toBeCloseTo(76.5, 1)
+    // base: 0.70 * 80 + 0.25 * 70 + 0.05 * 60 = 76.5
+    // momentum: clip(60/70 - 1, -0.2, 0.5) * 5 = -0.714
+    // total: 76.5 - 0.714 = 75.79
+    expect(score).toBeCloseTo(75.79, 1)
   })
 
-  test('缺失 90D 降权惩罚', () => {
+  test('缺失 90D 降权惩罚 + 动量', () => {
     const score = calculateOverallScore({
       score7d: 60,
       score30d: 70,
       score90d: null,
     })
-    // (0.80 * 70 + 0.20 * 60) * 0.85 = (56 + 12) * 0.85 = 57.8
-    expect(score).toBeCloseTo(57.8, 1)
+    // base: (0.80 * 70 + 0.20 * 60) * 0.85 = 57.8
+    // momentum: clip(60/70 - 1, -0.2, 0.5) * 5 = -0.714
+    // total: 57.8 - 0.714 = 57.09
+    expect(score).toBeCloseTo(57.09, 1)
   })
 
   test('只有 7D 强惩罚', () => {

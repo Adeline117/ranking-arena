@@ -16,6 +16,11 @@ import { getCsrfHeaders } from '@/lib/api/client'
 import BookmarkModal from '../ui/BookmarkModal'
 import { useUnifiedAuth } from '@/lib/hooks/useUnifiedAuth'
 import { usePostStore, type PostData } from '@/lib/stores/postStore'
+import { renderContentWithLinks } from '@/lib/utils/content'
+import { usePostComments } from './hooks/usePostComments'
+import { usePostActions } from './hooks/usePostActions'
+import { usePostTranslation, useAutoTranslateList, useAutoTranslateComments } from './hooks/usePostTranslation'
+import CommentsModal from './CommentsModal'
 
 // 本地类型（扩展后端类型）
 type Post = PostWithUserState
@@ -36,140 +41,6 @@ type Comment = {
 const REPLIES_PREVIEW_COUNT = 2
 
 const ARENA_PURPLE = '#8b6fa8'
-// 翻译文本颜色使用主题令牌，会根据明暗模式自动切换
-
-// 内容渲染函数 - 将文本中的URL转换为可点击链接，Markdown图片转换为图片元素
-function renderContentWithLinks(text: string) {
-  if (!text) return null
-  
-  // 先处理 Markdown 图片语法 ![alt](url)
-  const imageRegex = /!\[([^\]]*)\]\(([^)]+)\)/g
-  const urlRegex = /(https?:\/\/[^\s<>"{}|\\^`[\]]+)/g
-  
-  // 分割内容，保留图片和链接
-  const parts: { type: 'text' | 'image' | 'link'; content: string; url?: string }[] = []
-  const _lastIndex = 0
-  let match
-  
-  // 先找出所有图片
-  const imageMatches: { start: number; end: number; alt: string; url: string }[] = []
-  while ((match = imageRegex.exec(text)) !== null) {
-    imageMatches.push({
-      start: match.index,
-      end: match.index + match[0].length,
-      alt: match[1],
-      url: match[2],
-    })
-  }
-  
-  // 构建内容片段
-  let currentIndex = 0
-  for (const img of imageMatches) {
-    // 图片前的文本
-    if (img.start > currentIndex) {
-      const beforeText = text.slice(currentIndex, img.start)
-      // 处理这段文本中的链接
-      const linkParts = beforeText.split(urlRegex)
-      linkParts.forEach((part, _i) => {
-        if (urlRegex.test(part)) {
-          urlRegex.lastIndex = 0
-          parts.push({ type: 'link', content: part, url: part })
-        } else if (part) {
-          parts.push({ type: 'text', content: part })
-        }
-      })
-    }
-    // 图片
-    parts.push({ type: 'image', content: img.alt, url: img.url })
-    currentIndex = img.end
-  }
-
-  // 最后一个图片后的文本
-  if (currentIndex < text.length) {
-    const afterText = text.slice(currentIndex)
-    const linkParts = afterText.split(urlRegex)
-    linkParts.forEach((part, _i) => {
-      if (urlRegex.test(part)) {
-        urlRegex.lastIndex = 0
-        parts.push({ type: 'link', content: part, url: part })
-      } else if (part) {
-        parts.push({ type: 'text', content: part })
-      }
-    })
-  }
-  
-  // 如果没有图片，直接处理链接
-  if (imageMatches.length === 0) {
-    const linkParts = text.split(urlRegex)
-    return linkParts.map((part, index) => {
-      if (urlRegex.test(part)) {
-        urlRegex.lastIndex = 0
-        return (
-          <a
-            key={index}
-            href={part}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              color: ARENA_PURPLE,
-              textDecoration: 'underline',
-              wordBreak: 'break-all',
-            }}
-          >
-            {part}
-          </a>
-        )
-      }
-      return part
-    })
-  }
-  
-  // 渲染所有片段
-  return parts.map((part, index) => {
-    if (part.type === 'image') {
-      return (
-        <img
-          key={index}
-          src={part.url}
-          alt={part.content || 'image'}
-          onClick={(e) => {
-            e.stopPropagation()
-            window.open(part.url, '_blank')
-          }}
-          style={{
-            maxWidth: '100%',
-            maxHeight: 300,
-            borderRadius: 8,
-            cursor: 'pointer',
-            display: 'inline-block',
-            verticalAlign: 'middle',
-            margin: '4px 6px',
-          }}
-        />
-      )
-    }
-    if (part.type === 'link') {
-      return (
-        <a
-          key={index}
-          href={part.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={(e) => e.stopPropagation()}
-          style={{
-            color: ARENA_PURPLE,
-            textDecoration: 'underline',
-            wordBreak: 'break-all',
-          }}
-        >
-          {part.content}
-        </a>
-      )
-    }
-    return <span key={index}>{part.content}</span>
-  })
-}
 
 function pollLabel(choice: PollChoice | 'tie', t: (key: keyof typeof import('@/lib/i18n').translations.zh) => string) {
   if (choice === 'bull') return t('bullish')

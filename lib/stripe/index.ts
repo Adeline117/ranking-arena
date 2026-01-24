@@ -125,11 +125,11 @@ export async function createCheckoutSession(params: {
   successUrl: string
   cancelUrl: string
   metadata?: Record<string, string>
+  promotionCode?: string
 }): Promise<Stripe.Checkout.Session> {
-  const session = await stripe.checkout.sessions.create({
+  const sessionParams: Stripe.Checkout.SessionCreateParams = {
     customer: params.customerId,
-    // 订阅模式只支持 card，alipay/wechat_pay 不支持 subscription
-    payment_method_types: ['card'],
+    payment_method_types: ['card', 'link'],
     line_items: [
       {
         price: params.priceId,
@@ -143,11 +143,17 @@ export async function createCheckoutSession(params: {
     subscription_data: {
       metadata: params.metadata,
     },
-    allow_promotion_codes: true,
+    allow_promotion_codes: !params.promotionCode, // Disable UI promotion code input if one is explicitly provided
     billing_address_collection: 'auto',
     locale: 'auto',
-  })
+  }
 
+  // Apply explicit promotion code if provided
+  if (params.promotionCode) {
+    sessionParams.discounts = [{ promotion_code: params.promotionCode }]
+  }
+
+  const session = await stripe.checkout.sessions.create(sessionParams)
   return session
 }
 

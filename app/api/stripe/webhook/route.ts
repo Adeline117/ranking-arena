@@ -120,7 +120,12 @@ export async function POST(request: NextRequest) {
     switch (event.type) {
       case 'checkout.session.completed': {
         const session = event.data.object as Stripe.Checkout.Session
-        await handleCheckoutComplete(session)
+        // Handle tip payments
+        if (session.metadata?.type === 'tip') {
+          await handleTipPaymentCompleted(session)
+        } else {
+          await handleCheckoutComplete(session)
+        }
         break
       }
 
@@ -454,46 +459,124 @@ async function updateUserSubscription(
 
   logger.info(`updateUserSubscription`, { userId, status, plan, periodStart, periodEnd })
 
-  // 使用重试机制更新订阅记录
+  // Use transactional RPC to update subscription and profile atomically
   await withRetry(async () => {
-    const { error: subscriptionError } = await getSupabase()
-      .from('subscriptions')
-      .upsert({
-        user_id: userId,
-        stripe_subscription_id: subscription.id,
-        stripe_customer_id: subscription.customer as string,
-        status: status,
-        tier: 'pro',
-        plan: plan,
-        current_period_start: periodStart,
-        current_period_end: periodEnd,
-        cancel_at_period_end: subscription.cancel_at_period_end,
-        updated_at: new Date().toISOString(),
-      }, {
-        onConflict: 'user_id',
-      })
+    const { error: rpcError } = await getSupabase().rpc('update_subscription_and_profile', {
+      p_user_id: userId,
+      p_tier: 'pro',
+      p_status: status,
+      p_stripe_sub_id: subscription.id,
+      p_stripe_customer_id: subscription.customer as string,
+      p_plan: plan,
+      p_period_start: periodStart,
+      p_period_end: periodEnd,
+      p_cancel_at_period_end: subscription.cancel_at_period_end,
+    })
 
-    if (subscriptionError) {
-      throw new Error(`Failed to upsert subscriptions: ${subscriptionError.message}`)
+    if (rpcError) {
+      // Fallback to separate updates if RPC not yet deployed
+      logger.warn('RPC update_subscription_and_profile failed, using fallback', { error: rpcError.message })
+
+      const { error: subscriptionError } = await getSupabase()
+        .from('subscriptions')
+        .upsert({
+          user_id: userId,
+          stripe_subscription_id: subscription.id,
+          stripe_customer_id: subscription.customer as string,
+          status: status,
+          tier: 'pro',
+          plan: plan,
+          current_period_start: periodStart,
+          current_period_end: periodEnd,
+          cancel_at_period_end: subscription.cancel_at_period_end,
+          updated_at: new Date().toISOString(),
+        }, {
+          onConflict: 'user_id',
+        })
+
+      if (subscriptionError) {
+        throw new Error(`Failed to upsert subscriptions: ${subscriptionError.message}`)
+      }
+
+      const shouldBePro = status === 'active' || status === 'trialing'
+      const { error: profileError } = await getSupabase()
+        .from('user_profiles')
+        .update({
+          subscription_tier: shouldBePro ? 'pro' : 'free',
+          stripe_customer_id: subscription.customer as string,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', userId)
+
+      if (profileError) {
+        throw new Error(`Failed to update user_profiles: ${profileError.message}`)
+      }
     }
-    logger.info(`Subscriptions table updated for user ${userId}`)
+
+    logger.info(`Subscription updated for user ${userId}`, { status, plan })
+  })
+}
+
+// 处理打赏支付完成
+async function handleTipPaymentCompleted(session: Stripe.Checkout.Session) {
+  const tipId = session.metadata?.tip_id
+  const postId = session.metadata?.post_id
+  const fromUserId = session.metadata?.from_user_id
+  const toUserId = session.metadata?.to_user_id
+  const amountCents = session.metadata?.amount_cents
+  const paymentIntentId = session.payment_intent as string
+
+  if (!tipId) {
+    logger.warn('Tip payment completed without tip_id', { sessionId: session.id })
+    return
+  }
+
+  logger.info('Tip payment completed', {
+    tipId,
+    postId,
+    fromUserId,
+    toUserId,
+    amountCents,
+    sessionId: session.id,
   })
 
-  // 使用重试机制更新用户 profile 的订阅 tier
-  const shouldBePro = status === 'active' || status === 'trialing'
-  await withRetry(async () => {
-    const { error: profileError } = await getSupabase()
-      .from('user_profiles')
-      .update({
-        subscription_tier: shouldBePro ? 'pro' : 'free',
-        stripe_customer_id: subscription.customer as string,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', userId)
+  // 更新打赏记录状态
+  const { error: updateError } = await getSupabase()
+    .from('tips')
+    .update({
+      status: 'completed',
+      stripe_payment_intent_id: paymentIntentId,
+      completed_at: new Date().toISOString(),
+    })
+    .eq('id', tipId)
 
-    if (profileError) {
-      throw new Error(`Failed to update user_profiles: ${profileError.message}`)
+  if (updateError) {
+    logger.error('Failed to update tip status', { tipId, error: updateError.message })
+    return
+  }
+
+  // 发送通知给帖子作者
+  if (toUserId && fromUserId && postId) {
+    try {
+      const { data: fromProfile } = await getSupabase()
+        .from('user_profiles')
+        .select('handle')
+        .eq('id', fromUserId)
+        .single()
+
+      await getSupabase()
+        .from('notifications')
+        .insert({
+          user_id: toUserId,
+          type: 'tip_received',
+          title: '收到打赏',
+          body: `${fromProfile?.handle || '用户'} 给你的帖子打赏了 $${(Number(amountCents) / 100).toFixed(2)}`,
+          data: { tipId, postId, fromUserId, amount: amountCents },
+        })
+    } catch (notifError) {
+      logger.warn('Failed to send tip notification', { error: notifError })
     }
-    logger.info(`user_profiles updated for user ${userId}`, { tier: shouldBePro ? 'pro' : 'free' })
-  })
+  }
+
+  logger.info('Tip recorded successfully', { tipId, amountCents })
 }

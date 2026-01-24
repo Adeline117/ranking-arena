@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { plan, successUrl, cancelUrl } = await request.json()
+    const { plan, successUrl, cancelUrl, promotionCode } = await request.json()
 
     const supabaseAdmin = getSupabaseAdmin()
 
@@ -117,17 +117,24 @@ export async function POST(request: NextRequest) {
     const priceId = STRIPE_PRICE_IDS[plan as 'monthly' | 'yearly']
 
     // 创建 Checkout Session
-    const checkoutSession = await createCheckoutSession({
+    const checkoutOptions: Parameters<typeof createCheckoutSession>[0] = {
       customerId,
       priceId,
       successUrl: successUrl || `${process.env.NEXT_PUBLIC_APP_URL}/pricing/success?session_id={CHECKOUT_SESSION_ID}`,
       cancelUrl: cancelUrl || `${process.env.NEXT_PUBLIC_APP_URL}/pricing`,
       metadata: {
-        supabase_user_id: user.id,  // 与 webhook 期望的键名一致
+        supabase_user_id: user.id,
         userId: user.id,
         plan: plan,
       },
-    })
+    }
+
+    // Add promotion code if provided
+    if (promotionCode) {
+      checkoutOptions.promotionCode = promotionCode
+    }
+
+    const checkoutSession = await createCheckoutSession(checkoutOptions)
 
     return NextResponse.json({
       url: checkoutSession.url,

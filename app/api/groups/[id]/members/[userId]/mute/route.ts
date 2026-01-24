@@ -166,6 +166,16 @@ export async function POST(
       console.error('Failed to send mute notification:', notifyError)
     }
 
+    // Audit log (fire-and-forget)
+    const duration = muted_until || 'permanent'
+    void Promise.resolve(supabase.from('group_audit_log').insert({
+      group_id: groupId,
+      actor_id: user.id,
+      action: 'mute',
+      target_id: targetUserId,
+      details: { duration, reason: reason || null }
+    })).catch(() => {})
+
     return NextResponse.json({ success: true })
 
   } catch (error) {
@@ -216,6 +226,15 @@ export async function DELETE(
       console.error('Unmute error:', updateError)
       return NextResponse.json({ error: '解除禁言失败' }, { status: 500 })
     }
+
+    // Audit log (fire-and-forget)
+    void Promise.resolve(supabase.from('group_audit_log').insert({
+      group_id: groupId,
+      actor_id: user.id,
+      action: 'unmute',
+      target_id: targetUserId,
+      details: {}
+    })).catch(() => {})
 
     return NextResponse.json({ success: true })
 

@@ -25,6 +25,7 @@ import {
 } from '@/lib/api'
 import { getPosts, createPost, getUserPostReactions, getUserPostVotes } from '@/lib/data/posts'
 import { getServerCache, setServerCache, deleteServerCacheByPrefix, CacheTTL } from '@/lib/utils/server-cache'
+import { get as cacheGet, set as cacheSet } from '@/lib/cache'
 
 // 缓存键前缀
 const POSTS_CACHE_PREFIX = 'posts:'
@@ -69,22 +70,51 @@ export async function GET(request: NextRequest) {
     // 生成缓存键
     const cacheKey = getCacheKey({ limit, offset, group_id, author_handle, sort_by, sort_order })
     
-    // 尝试从缓存获取帖子列表
-    let posts = getServerCache<Awaited<ReturnType<typeof getPosts>>>(cacheKey)
-    
+    // For hot posts (first page, no filters), check Redis cache first
+    const isHotQuery = sort_by === 'hot_score' && offset === 0 && !group_id && !author_handle
+    const HOT_POSTS_REDIS_KEY = 'hot_posts:top50'
+
+    let posts: Awaited<ReturnType<typeof getPosts>> | null = null
+
+    if (isHotQuery) {
+      try {
+        const cachedHot = await cacheGet<Awaited<ReturnType<typeof getPosts>>>(HOT_POSTS_REDIS_KEY)
+        if (cachedHot) {
+          posts = cachedHot.slice(0, limit)
+        }
+      } catch {
+        // Redis cache miss, continue
+      }
+    }
+
     if (!posts) {
-      // 缓存未命中，从数据库获取
+      // Try server memory cache
+      posts = getServerCache<Awaited<ReturnType<typeof getPosts>>>(cacheKey)
+    }
+
+    if (!posts) {
+      // Cache miss, fetch from database
       posts = await getPosts(supabase, {
-        limit,
+        limit: isHotQuery ? 50 : limit, // Fetch more for hot posts to populate Redis cache
         offset,
         group_id,
         author_handle,
         sort_by,
         sort_order,
       })
-      
-      // 缓存帖子列表（1分钟）
+
+      // Cache in server memory (1 minute)
       setServerCache(cacheKey, posts, CacheTTL.SHORT)
+
+      // For hot posts, also cache in Redis (5 minutes, matches cron interval)
+      if (isHotQuery && posts.length > 0) {
+        cacheSet(HOT_POSTS_REDIS_KEY, posts, { ttl: 300 }).catch(() => {})
+      }
+
+      // Trim to requested limit if we fetched more for cache
+      if (isHotQuery && posts.length > limit) {
+        posts = posts.slice(0, limit)
+      }
     }
 
     // 如果用户已登录，获取用户的点赞和投票状态（并行获取）

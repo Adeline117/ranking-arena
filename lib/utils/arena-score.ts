@@ -89,6 +89,10 @@ export const ARENA_CONFIG = {
   // 缺失数据惩罚
   MISSING_90D_PENALTY: 0.85,
   ONLY_7D_PENALTY: 0.70,
+
+  // 动量因子参数
+  MOMENTUM_MAX_BONUS: 2.5,    // 最大加分（7D远超30D时）
+  MOMENTUM_MAX_PENALTY: 1,    // 最大扣分（7D远低于30D时）
 } as const
 
 // ============================================
@@ -255,6 +259,31 @@ export function calculateArenaScore(
 }
 
 /**
+ * 计算动量加分
+ * 当交易员近期（7D）表现优于长期（30D），获得正向加分；反之扣分。
+ *
+ * 公式: clip(score7D / score30D - 1, -0.2, 0.5) * 5
+ * 范围: -MOMENTUM_MAX_PENALTY 到 +MOMENTUM_MAX_BONUS（即 -1 到 +2.5）
+ *
+ * @param score7d 7天分数
+ * @param score30d 30天分数
+ * @returns 动量加分（可为负数）
+ */
+export function calculateMomentumBonus(
+  score7d: number | null,
+  score30d: number | null,
+): number {
+  if (score7d === null || score7d === undefined) return 0
+  if (score30d === null || score30d === undefined) return 0
+  if (score30d === 0) return 0
+
+  const ratio = score7d / score30d - 1
+  const clipped = clip(ratio, -0.2, 0.5)
+  const bonus = clipped * 5
+  return clip(bonus, -ARENA_CONFIG.MOMENTUM_MAX_PENALTY, ARENA_CONFIG.MOMENTUM_MAX_BONUS)
+}
+
+/**
  * 计算总体分数（个人主页用）
  * OverallScore = 0.70 * Score_90 + 0.25 * Score_30 + 0.05 * Score_7
  * 
@@ -306,7 +335,11 @@ export function calculateOverallScore(input: OverallScoreInput): number {
     // 无数据
     overall = 0
   }
-  
+
+  // 动量加分：近期表现优于长期时加分，反之扣分
+  const momentum = calculateMomentumBonus(score7d ?? null, score30d ?? null)
+  overall += momentum
+
   return Math.round(clip(overall, 0, 100) * 100) / 100
 }
 

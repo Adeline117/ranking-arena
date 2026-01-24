@@ -77,6 +77,24 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Idempotency check: prevent duplicate tips within 60 seconds
+    const { data: recentPendingTip } = await supabase
+      .from('tips')
+      .select('id')
+      .eq('from_user_id', user.id)
+      .eq('post_id', post_id)
+      .eq('amount_cents', amount)
+      .eq('status', 'pending')
+      .gte('created_at', new Date(Date.now() - 60000).toISOString())
+      .maybeSingle()
+
+    if (recentPendingTip) {
+      return NextResponse.json(
+        { error: '请勿重复打赏，请稍后再试' },
+        { status: 429 }
+      )
+    }
+
     // 获取帖子信息
     const { data: post, error: postError } = await supabase
       .from('posts')
