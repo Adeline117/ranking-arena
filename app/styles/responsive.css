@@ -1031,6 +1031,34 @@
 }
 
 /* ============================================
+   Chart container responsive height
+   ============================================ */
+
+@media (max-width: 639px) {
+  .chart-container {
+    height: 200px !important;
+  }
+}
+
+/* ============================================
+   Hero metric values (ROI/PnL) responsive size
+   ============================================ */
+
+@media (max-width: 639px) {
+  .hero-metric-value {
+    font-size: 22px !important;
+  }
+}
+
+/* ============================================
+   TraderTabs hide scrollbar
+   ============================================ */
+
+.profile-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+/* ============================================
    iPad 适配
    ============================================ */
 

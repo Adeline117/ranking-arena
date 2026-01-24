@@ -149,7 +149,6 @@ export default function TraderHeader({
         opacity: mounted ? 1 : 0,
         transform: mounted ? 'translateY(0)' : 'translateY(-20px)',
         transition: 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
-        minHeight: coverUrl ? 180 : undefined,
       }}
     >
       {/* 背景装饰 - 只在没有自定义背景时显示 */}
@@ -390,7 +389,7 @@ export default function TraderHeader({
           </Box>
           
           {/* 统计指标行 */}
-          <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[4], flexWrap: 'wrap' }}>
+          <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3], flexWrap: 'wrap' }}>
             {/* 粉丝 */}
             <Box
               style={{
@@ -539,7 +538,7 @@ export default function TraderHeader({
                       border: `1px solid ${tag.color}30`,
                     }}
                   >
-                    <Text style={{ fontSize: 10, fontWeight: 600, color: tag.color }}>
+                    <Text style={{ fontSize: 11, fontWeight: 600, color: tag.color }}>
                       {tag.label}
                     </Text>
                   </Box>
@@ -606,7 +605,7 @@ export default function TraderHeader({
               source={source}
               traderHandle={handle}
             />
-            <Text size="xs" color="tertiary" style={{ fontSize: 10, opacity: 0.7 }}>
+            <Text size="xs" color="tertiary" style={{ fontSize: 11, opacity: 0.7 }}>
               跳转至交易所跟单
             </Text>
           </Box>
@@ -636,7 +635,7 @@ export default function TraderHeader({
               </svg>
               跟单 Pro
             </Button>
-            <Text size="xs" color="tertiary" style={{ fontSize: 10, opacity: 0.7 }}>
+            <Text size="xs" color="tertiary" style={{ fontSize: 11, opacity: 0.7 }}>
               解锁后跳转交易所跟单
             </Text>
           </Box>

@@ -228,7 +228,8 @@ export default function OverviewPerformanceCard({ performance, profitableWeeksPc
                   key={p}
                   onClick={() => handlePeriodChange(p)}
                   style={{
-                    padding: `6px 12px`,
+                    padding: `6px 14px`,
+                    minHeight: 36,
                     borderRadius: tokens.radius.md,
                     border: 'none',
                     background: period === p ? tokens.colors.bg.primary : 'transparent',
@@ -286,6 +287,7 @@ export default function OverviewPerformanceCard({ performance, profitableWeeksPc
               </Text>
               <Box style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
                 <Text
+                  className="hero-metric-value"
                   style={{
                     fontSize: 28,
                     fontWeight: 800,
@@ -326,6 +328,7 @@ export default function OverviewPerformanceCard({ performance, profitableWeeksPc
                 {t('pnl')}
               </Text>
               <Text
+                className="hero-metric-value"
                 style={{
                   fontSize: 28,
                   fontWeight: 800,
