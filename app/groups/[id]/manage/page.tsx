@@ -115,10 +115,19 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
   // Pro 专属小组选项
   const [isPremiumOnly, setIsPremiumOnly] = useState(false)
 
+  // 内容搜索
+  const [contentSearch, setContentSearch] = useState('')
+
   // 禁言弹窗状态
   const [showMuteModal, setShowMuteModal] = useState<string | null>(null)
   const [muteDuration, setMuteDuration] = useState<'3h' | '1d' | '7d' | 'permanent'>('1d')
   const [muteReason, setMuteReason] = useState('')
+
+  // 通知弹窗状态
+  const [showNotifyModal, setShowNotifyModal] = useState(false)
+  const [notifyTitle, setNotifyTitle] = useState('')
+  const [notifyMessage, setNotifyMessage] = useState('')
+  const [notifySending, setNotifySending] = useState(false)
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -185,10 +194,10 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
           setUserRole(memberData.role as 'owner' | 'admin' | 'member')
         }
 
-        // 获取成员列表（只查询基础字段，避免依赖新字段）
+        // 获取成员列表
         const { data: membersData, error: membersError } = await supabase
           .from('group_members')
-          .select('user_id, role, joined_at')
+          .select('user_id, role, joined_at, muted_until, mute_reason')
           .eq('group_id', groupId)
           .order('role', { ascending: true })
 
@@ -363,6 +372,48 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
     }
   }
 
+  // 发送通知给成员
+  const handleNotify = async () => {
+    if (!accessToken || !canManage || !notifyMessage.trim()) return
+
+    setNotifySending(true)
+    try {
+      const res = await fetch(`/api/groups/${groupId}/notify`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+          ...getCsrfHeaders()
+        },
+        body: JSON.stringify({
+          title: notifyTitle.trim() || undefined,
+          message: notifyMessage.trim()
+        })
+      })
+
+      if (res.ok) {
+        const data = await res.json()
+        setShowNotifyModal(false)
+        setNotifyTitle('')
+        setNotifyMessage('')
+        showToast(
+          language === 'zh'
+            ? `通知已发送给 ${data.notified} 位成员`
+            : `Notification sent to ${data.notified} members`,
+          'success'
+        )
+      } else {
+        const data = await res.json()
+        showToast(data.error || (language === 'zh' ? '发送失败' : 'Send failed'), 'error')
+      }
+    } catch (err) {
+      console.error('Notify error:', err)
+      showToast(language === 'zh' ? '网络错误，请稍后重试' : 'Network error, please try again later', 'error')
+    } finally {
+      setNotifySending(false)
+    }
+  }
+
   // 设置/撤销管理员
   const handleSetRole = async (targetUserId: string, newRole: 'admin' | 'member') => {
     if (!accessToken || !isOwner) return
@@ -526,6 +577,22 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
     }
   }
 
+  // 根据关键词过滤帖子和评论
+  const searchLower = contentSearch.toLowerCase()
+  const filteredPosts = contentSearch
+    ? posts.filter(p =>
+        (p.title && p.title.toLowerCase().includes(searchLower)) ||
+        (p.content && p.content.toLowerCase().includes(searchLower)) ||
+        (p.author_handle && p.author_handle.toLowerCase().includes(searchLower))
+      )
+    : posts
+  const filteredComments = contentSearch
+    ? comments.filter(c =>
+        (c.content && c.content.toLowerCase().includes(searchLower)) ||
+        (c.author_handle && c.author_handle.toLowerCase().includes(searchLower))
+      )
+    : comments
+
   const inputStyle: React.CSSProperties = {
     width: '100%',
     padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
@@ -638,6 +705,16 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
         {/* 成员管理 */}
         {activeTab === 'members' && (
           <Card title={language === 'zh' ? `成员列表 (${members.length})` : `Members (${members.length})`}>
+            {/* 通知成员按钮 */}
+            <Box style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: tokens.spacing[3] }}>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => setShowNotifyModal(true)}
+              >
+                {language === 'zh' ? '通知成员' : 'Notify Members'}
+              </Button>
+            </Box>
             <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
               {members.length === 0 && (
                 <Text color="tertiary" style={{ textAlign: 'center', padding: tokens.spacing[4] }}>
@@ -772,10 +849,61 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
         {/* 内容管理 */}
         {activeTab === 'content' && (
           <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[6] }}>
+            {/* 搜索栏 */}
+            <Box style={{ position: 'relative' }}>
+              <input
+                type="text"
+                value={contentSearch}
+                onChange={(e) => setContentSearch(e.target.value)}
+                placeholder={language === 'zh' ? '搜索帖子、评论或作者...' : 'Search posts, comments, or authors...'}
+                style={{
+                  ...inputStyle,
+                  paddingLeft: tokens.spacing[10],
+                }}
+              />
+              <svg
+                width={16}
+                height={16}
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke={tokens.colors.text.tertiary}
+                strokeWidth="2"
+                style={{
+                  position: 'absolute',
+                  left: tokens.spacing[4],
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                }}
+              >
+                <circle cx="11" cy="11" r="8" />
+                <path d="M21 21l-4.35-4.35" />
+              </svg>
+              {contentSearch && (
+                <button
+                  onClick={() => setContentSearch('')}
+                  style={{
+                    position: 'absolute',
+                    right: tokens.spacing[4],
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    color: tokens.colors.text.tertiary,
+                    fontSize: tokens.typography.fontSize.lg,
+                    lineHeight: 1,
+                    padding: tokens.spacing[1],
+                  }}
+                >
+                  ×
+                </button>
+              )}
+            </Box>
+
             {/* 帖子 */}
-            <Card title={language === 'zh' ? `帖子 (${posts.length})` : `Posts (${posts.length})`}>
+            <Card title={language === 'zh' ? `帖子 (${filteredPosts.length}${contentSearch ? `/${posts.length}` : ''})` : `Posts (${filteredPosts.length}${contentSearch ? `/${posts.length}` : ''})`}>
               <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
-                {posts.map((post) => (
+                {filteredPosts.map((post) => (
                   <Box
                     key={post.id}
                     style={{
@@ -812,18 +940,20 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
                     </Box>
                   </Box>
                 ))}
-                {posts.length === 0 && (
+                {filteredPosts.length === 0 && (
                   <Text color="tertiary" style={{ textAlign: 'center', padding: tokens.spacing[4] }}>
-                    {language === 'zh' ? '暂无帖子' : 'No posts'}
+                    {contentSearch
+                      ? (language === 'zh' ? '没有匹配的帖子' : 'No matching posts')
+                      : (language === 'zh' ? '暂无帖子' : 'No posts')}
                   </Text>
                 )}
               </Box>
             </Card>
 
             {/* 评论 */}
-            <Card title={language === 'zh' ? `评论 (${comments.length})` : `Comments (${comments.length})`}>
+            <Card title={language === 'zh' ? `评论 (${filteredComments.length}${contentSearch ? `/${comments.length}` : ''})` : `Comments (${filteredComments.length}${contentSearch ? `/${comments.length}` : ''})`}>
               <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
-                {comments.slice(0, 50).map((comment) => (
+                {filteredComments.slice(0, 50).map((comment) => (
                   <Box
                     key={comment.id}
                     style={{
@@ -860,9 +990,11 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
                     </Box>
                   </Box>
                 ))}
-                {comments.length === 0 && (
+                {filteredComments.length === 0 && (
                   <Text color="tertiary" style={{ textAlign: 'center', padding: tokens.spacing[4] }}>
-                    {language === 'zh' ? '暂无评论' : 'No comments'}
+                    {contentSearch
+                      ? (language === 'zh' ? '没有匹配的评论' : 'No matching comments')
+                      : (language === 'zh' ? '暂无评论' : 'No comments')}
                   </Text>
                 )}
               </Box>
@@ -1473,6 +1605,94 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
                 </Button>
                 <Button variant="primary" onClick={() => handleMute(showMuteModal)}>
                   {language === 'zh' ? '确认禁言' : 'Confirm Mute'}
+                </Button>
+              </Box>
+            </Box>
+          </Box>
+        )}
+
+        {/* 通知弹窗 */}
+        {showNotifyModal && (
+          <Box
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: 'rgba(0, 0, 0, 0.6)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: tokens.zIndex.modal,
+            }}
+            onClick={() => setShowNotifyModal(false)}
+          >
+            <Box
+              style={{
+                background: tokens.colors.bg.primary,
+                borderRadius: tokens.radius.xl,
+                padding: tokens.spacing[6],
+                width: '90%',
+                maxWidth: 450,
+                border: `1px solid ${tokens.colors.border.primary}`,
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <Text size="lg" weight="bold" style={{ marginBottom: tokens.spacing[4] }}>
+                {language === 'zh' ? '通知全体成员' : 'Notify All Members'}
+              </Text>
+
+              {/* 通知标题 */}
+              <Box style={{ marginBottom: tokens.spacing[4] }}>
+                <Text size="sm" weight="bold" color="secondary" style={{ marginBottom: tokens.spacing[2] }}>
+                  {language === 'zh' ? '标题（可选）' : 'Title (optional)'}
+                </Text>
+                <input
+                  type="text"
+                  value={notifyTitle}
+                  onChange={(e) => setNotifyTitle(e.target.value)}
+                  placeholder={language === 'zh' ? '通知标题...' : 'Notification title...'}
+                  style={inputStyle}
+                  maxLength={50}
+                />
+              </Box>
+
+              {/* 通知内容 */}
+              <Box style={{ marginBottom: tokens.spacing[4] }}>
+                <Text size="sm" weight="bold" color="secondary" style={{ marginBottom: tokens.spacing[2] }}>
+                  {language === 'zh' ? '通知内容' : 'Message'} *
+                </Text>
+                <textarea
+                  value={notifyMessage}
+                  onChange={(e) => setNotifyMessage(e.target.value)}
+                  placeholder={language === 'zh' ? '输入通知内容...' : 'Enter notification message...'}
+                  style={{ ...inputStyle, minHeight: 120, resize: 'vertical' }}
+                  maxLength={500}
+                />
+                <Text size="xs" color="tertiary" style={{ marginTop: tokens.spacing[1], textAlign: 'right' }}>
+                  {notifyMessage.length}/500
+                </Text>
+              </Box>
+
+              <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[4] }}>
+                {language === 'zh'
+                  ? '通知将以私信和系统通知的形式发送给所有成员'
+                  : 'Notification will be sent as DM and system notification to all members'}
+              </Text>
+
+              <Box style={{ display: 'flex', gap: tokens.spacing[3], justifyContent: 'flex-end' }}>
+                <Button variant="secondary" onClick={() => setShowNotifyModal(false)} disabled={notifySending}>
+                  {language === 'zh' ? '取消' : 'Cancel'}
+                </Button>
+                <Button
+                  variant="primary"
+                  onClick={handleNotify}
+                  disabled={notifySending || !notifyMessage.trim()}
+                >
+                  {notifySending
+                    ? (language === 'zh' ? '发送中...' : 'Sending...')
+                    : (language === 'zh' ? '发送通知' : 'Send Notification')}
                 </Button>
               </Box>
             </Box>
