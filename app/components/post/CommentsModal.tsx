@@ -6,6 +6,7 @@ import { tokens } from '@/lib/design-tokens'
 import { ThumbsUpIcon } from '../icons'
 import { renderContentWithLinks } from '@/lib/utils/content'
 import { formatTimeAgo } from '@/lib/utils/date'
+import { CompactErrorBoundary } from '../Utils/ErrorBoundary'
 import type { Comment } from './hooks/usePostComments'
 
 const ARENA_PURPLE = '#8b6fa8'
@@ -406,15 +407,17 @@ export default function CommentsModal({
       </div>
 
       {/* Comments list */}
-      {loadingComments ? (
-        <CommentSkeleton />
-      ) : comments.length === 0 ? (
-        <EmptyComments />
-      ) : (
-        <div>
-          {comments.map(comment => renderComment(comment))}
-        </div>
-      )}
+      <CompactErrorBoundary>
+        {loadingComments ? (
+          <CommentSkeleton />
+        ) : comments.length === 0 ? (
+          <EmptyComments />
+        ) : (
+          <div>
+            {comments.map(comment => renderComment(comment))}
+          </div>
+        )}
+      </CompactErrorBoundary>
     </div>
   )
 }

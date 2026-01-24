@@ -18,7 +18,7 @@ function getSupabaseAdmin() {
 }
 
 interface RouteContext {
-  params: Promise<{ id: string }>
+  params: Promise<{ handle: string }>
 }
 
 export async function POST(request: NextRequest, context: RouteContext) {
@@ -34,7 +34,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { id: targetUserId } = await context.params
+    const { handle: targetUserId } = await context.params
 
     if (!targetUserId) {
       return NextResponse.json({ error: 'Target user ID is required' }, { status: 400 })
@@ -93,7 +93,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { id: targetUserId } = await context.params
+    const { handle: targetUserId } = await context.params
 
     if (!targetUserId) {
       return NextResponse.json({ error: 'Target user ID is required' }, { status: 400 })
