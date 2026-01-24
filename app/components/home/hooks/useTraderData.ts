@@ -43,16 +43,16 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
   // 多窗口同步
   const { broadcast, on } = useTraderDataSync()
 
-  // 从 localStorage 读取用户偏好的时间段
-  const [activeTimeRange, setActiveTimeRange] = useState<TimeRange>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem(TIME_RANGE_STORAGE_KEY)
-      if (saved === '90D' || saved === '30D' || saved === '7D') {
-        return saved
-      }
+  // 时间范围状态 - 固定初始值避免 hydration mismatch
+  const [activeTimeRange, setActiveTimeRange] = useState<TimeRange>('90D')
+
+  // 客户端 hydration 后从 localStorage 读取偏好
+  useEffect(() => {
+    const saved = localStorage.getItem(TIME_RANGE_STORAGE_KEY)
+    if (saved === '90D' || saved === '30D' || saved === '7D') {
+      setActiveTimeRange(saved)
     }
-    return '90D'
-  })
+  }, [])
 
   // 监听其他窗口的数据更新
   useEffect(() => {
