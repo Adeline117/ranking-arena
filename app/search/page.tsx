@@ -5,7 +5,6 @@ import { useSearchParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import TopNav from '@/app/components/layout/TopNav'
 import EmptyState from '@/app/components/ui/EmptyState'
-import { RankingSkeleton } from '@/app/components/ui/Skeleton'
 import { useToast } from '@/app/components/ui/Toast'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import Link from 'next/link'
@@ -741,7 +740,47 @@ export default function SearchPage() {
       <div style={{ minHeight: '100vh', background: '#060606', color: '#f2f2f2' }}>
         <TopNav email={null} />
         <main style={{ maxWidth: 900, margin: '0 auto', padding: '24px 16px' }}>
-          <RankingSkeleton />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: 60 }}>
+            {[1, 2, 3, 4, 5].map((i) => (
+              <div
+                key={i}
+                style={{
+                  padding: '20px',
+                  borderRadius: '16px',
+                  background: 'rgba(255,255,255,0.03)',
+                  border: '1px solid rgba(255,255,255,0.06)',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px' }}>
+                  <div style={{
+                    width: 44,
+                    height: 44,
+                    borderRadius: '12px',
+                    background: 'rgba(255,255,255,0.06)',
+                    animation: 'pulse 1.5s ease-in-out infinite',
+                    flexShrink: 0,
+                  }} />
+                  <div style={{ flex: 1 }}>
+                    <div style={{
+                      width: `${50 + i * 8}%`,
+                      height: 16,
+                      borderRadius: '6px',
+                      background: 'rgba(255,255,255,0.06)',
+                      marginBottom: 8,
+                      animation: 'pulse 1.5s ease-in-out infinite',
+                    }} />
+                    <div style={{
+                      width: `${30 + i * 5}%`,
+                      height: 12,
+                      borderRadius: '6px',
+                      background: 'rgba(255,255,255,0.06)',
+                      animation: 'pulse 1.5s ease-in-out infinite',
+                    }} />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
         </main>
       </div>
     }>
