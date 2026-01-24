@@ -8,6 +8,7 @@ import { tokens } from '@/lib/design-tokens'
 import ThemeToggle from '../ui/ThemeToggle'
 import LanguageSwitcher from '../ui/LanguageToggle'
 import SearchDropdown from '../search/SearchDropdown'
+import MobileSearchOverlay from '../search/MobileSearchOverlay'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { SearchIcon, UserIcon, NotificationIcon, MessageIcon } from '../icons'
 import { Box } from '../base'
@@ -23,6 +24,7 @@ export default function TopNav({ email }: { email: string | null }) {
   const [showUserMenu, setShowUserMenu] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [showSearchDropdown, setShowSearchDropdown] = useState(false)
+  const [showMobileSearch, setShowMobileSearch] = useState(false)
   const [_theme, setTheme] = useState<'light' | 'dark'>('dark')
   const [unreadCount, setUnreadCount] = useState(0)
   const [unreadMessageCount, setUnreadMessageCount] = useState(0)
@@ -505,10 +507,10 @@ export default function TopNav({ email }: { email: string | null }) {
           }}
         >
           {/* 移动端搜索按钮 - 显示在移动端 */}
-          <Link
-            href="/search"
+          <button
             className="show-mobile-flex touch-target"
             aria-label="搜索"
+            onClick={() => setShowMobileSearch(true)}
             style={{
               display: 'none',
               alignItems: 'center',
@@ -519,12 +521,12 @@ export default function TopNav({ email }: { email: string | null }) {
               background: tokens.glass.bg.light,
               color: tokens.colors.text.secondary,
               transition: `all ${tokens.transition.base}`,
-              textDecoration: 'none',
               border: `1px solid ${tokens.colors.border.primary}`,
+              cursor: 'pointer',
             }}
           >
             <SearchIcon size={20} />
-          </Link>
+          </button>
           {/* 语言切换 - 移动端隐藏 */}
           <Box className="hide-mobile">
             <LanguageSwitcher />
@@ -880,6 +882,7 @@ export default function TopNav({ email }: { email: string | null }) {
           )}
         </div>
       </Box>
+      <MobileSearchOverlay open={showMobileSearch} onClose={() => setShowMobileSearch(false)} />
     </Box>
   )
 }

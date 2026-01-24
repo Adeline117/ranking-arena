@@ -83,7 +83,21 @@ function HotContent() {
   const [loadingTraders, setLoadingTraders] = useState(true)
   const [posts, setPosts] = useState<Post[]>([])
   const [loadingPosts, setLoadingPosts] = useState(true)
-  
+
+  // Time range filter state
+  const [timeRange, setTimeRange] = useState<string>('24h')
+
+  // Tabbed sections state
+  const [activeHotTab, setActiveHotTab] = useState<'posts' | 'traders' | 'groups'>('posts')
+
+  // Groups data for the groups tab
+  const [groups, setGroups] = useState<{ id: string; name: string; member_count: number }[]>([])
+  const [loadingGroups, setLoadingGroups] = useState(false)
+
+  // New content polling state
+  const [newPostCount, setNewPostCount] = useState(0)
+  const latestPostTime = useRef<string>('')
+
   // 帖子详情弹窗状态
   const [openPost, setOpenPost] = useState<Post | null>(null)
   const [comments, setComments] = useState<Comment[]>([])
@@ -156,65 +170,112 @@ function HotContent() {
   }, [])
 
   // 从缓存 API 加载热榜帖子
-  useEffect(() => {
-    const loadPosts = async () => {
-      setLoadingPosts(true)
-      try {
-        const res = await fetch('/api/posts?sort_by=hot_score&sort_order=desc&limit=20')
-        const json = await res.json()
-        const data = json.posts || json.data?.posts || []
+  const loadPosts = useCallback(async () => {
+    setLoadingPosts(true)
+    try {
+      const res = await fetch(`/api/posts?sort_by=hot_score&sort_order=desc&limit=20&time_range=${timeRange}`)
+      const json = await res.json()
+      const data = json.posts || json.data?.posts || []
 
-        if (data.length > 0) {
-          const postsData: Post[] = data.map((post: Record<string, unknown>) => {
-            const createdAt = new Date(post.created_at as string)
-            const diffMs = Date.now() - createdAt.getTime()
-            const diffHours = Math.floor(diffMs / 3600000)
-            const diffDays = Math.floor(diffHours / 24)
+      if (data.length > 0) {
+        const postsData: Post[] = data.map((post: Record<string, unknown>) => {
+          const createdAt = new Date(post.created_at as string)
+          const diffMs = Date.now() - createdAt.getTime()
+          const diffHours = Math.floor(diffMs / 3600000)
+          const diffDays = Math.floor(diffHours / 24)
 
-            let timeStr = ''
-            if (diffDays > 0) timeStr = `${diffDays}d`
-            else if (diffHours > 0) timeStr = `${diffHours}h`
-            else timeStr = `${Math.floor(diffMs / 60000)}m`
+          let timeStr = ''
+          if (diffDays > 0) timeStr = `${diffDays}d`
+          else if (diffHours > 0) timeStr = `${diffHours}h`
+          else timeStr = `${Math.floor(diffMs / 60000)}m`
 
-            const groupName = (post.group_name as string) || '综合讨论'
+          const groupName = (post.group_name as string) || '综合讨论'
 
-            const hotScore = (post.hot_score as number) || (() => {
-              const hours = diffMs / 3600000
-              return ((post.like_count as number) || 0) * 3 +
-                ((post.comment_count as number) || 0) * 5 +
-                ((post.view_count as number) || 0) * 0.1 -
-                Math.log(hours + 2) * 2
-            })()
+          const hotScore = (post.hot_score as number) || (() => {
+            const hours = diffMs / 3600000
+            return ((post.like_count as number) || 0) * 3 +
+              ((post.comment_count as number) || 0) * 5 +
+              ((post.view_count as number) || 0) * 0.1 -
+              Math.log(hours + 2) * 2
+          })()
 
-            return {
-              id: post.id as string,
-              group: groupName,
-              group_id: (post.group_id as string) || undefined,
-              title: (post.title as string) || '无标题',
-              author: (post.author_handle as string) || '匿名',
-              author_handle: post.author_handle as string,
-              time: timeStr,
-              body: (post.content as string) || '',
-              comments: (post.comment_count as number) || 0,
-              likes: (post.like_count as number) || 0,
-              hotScore,
-              views: (post.view_count as number) || 0,
-            }
-          })
-          setPosts(postsData)
-        } else {
-          setPosts([])
+          return {
+            id: post.id as string,
+            group: groupName,
+            group_id: (post.group_id as string) || undefined,
+            title: (post.title as string) || '无标题',
+            author: (post.author_handle as string) || '匿名',
+            author_handle: post.author_handle as string,
+            time: timeStr,
+            body: (post.content as string) || '',
+            comments: (post.comment_count as number) || 0,
+            likes: (post.like_count as number) || 0,
+            hotScore,
+            views: (post.view_count as number) || 0,
+            created_at: post.created_at as string,
+          }
+        })
+        setPosts(postsData)
+        // Set latestPostTime from the most recent post
+        if (postsData.length > 0 && postsData[0].created_at) {
+          latestPostTime.current = postsData[0].created_at
         }
-      } catch (e) {
-        console.error('Failed to load posts:', e)
+        setNewPostCount(0)
+      } else {
         setPosts([])
-        showToast(language === 'zh' ? '加载热榜失败' : 'Failed to load hot posts', 'error')
+      }
+    } catch (e) {
+      console.error('Failed to load posts:', e)
+      setPosts([])
+      showToast(language === 'zh' ? '加载热榜失败' : 'Failed to load hot posts', 'error')
+    } finally {
+      setLoadingPosts(false)
+    }
+  }, [timeRange, showToast, language])
+
+  useEffect(() => {
+    loadPosts()
+  }, [loadPosts])
+
+  // Load groups when groups tab is active
+  useEffect(() => {
+    if (activeHotTab !== 'groups') return
+    const loadGroups = async () => {
+      setLoadingGroups(true)
+      try {
+        const res = await fetch('/api/groups?sort_by=activity&limit=10')
+        const json = await res.json()
+        const data = json.groups || json.data || []
+        setGroups(data.map((g: Record<string, unknown>) => ({
+          id: (g.id as string) || '',
+          name: (g.name as string) || '',
+          member_count: (g.member_count as number) || 0,
+        })))
+      } catch {
+        setGroups([])
       } finally {
-        setLoadingPosts(false)
+        setLoadingGroups(false)
       }
     }
+    loadGroups()
+  }, [activeHotTab])
 
-    loadPosts()
+  // New content polling (every 60s)
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      if (!latestPostTime.current) return
+      try {
+        const res = await fetch(`/api/posts?sort_by=hot_score&sort_order=desc&limit=1&after=${latestPostTime.current}`)
+        const json = await res.json()
+        const data = json.posts || json.data?.posts || []
+        if (data.length > 0) {
+          setNewPostCount(prev => prev + data.length)
+        }
+      } catch {
+        // Silent fail for polling
+      }
+    }, 60000)
+    return () => clearInterval(interval)
   }, [])
 
   const hotPosts = useMemo(() => {
@@ -223,7 +284,7 @@ function HotContent() {
   }, [posts])
 
   const visibleHot = useMemo(() => {
-    return loggedIn ? hotPosts : hotPosts.slice(0, 10)
+    return loggedIn ? hotPosts : hotPosts.slice(0, 20)
   }, [loggedIn, hotPosts])
 
   // 加载评论（初始加载）
@@ -621,144 +682,430 @@ function HotContent() {
               <Text size="sm" color="secondary" style={{ marginBottom: tokens.spacing[3] }}>
                 {loggedIn ? t('loggedInShowAllHot') : t('notLoggedInShowLimitedHot')}
               </Text>
-              
-              {loadingPosts ? (
-                <Box style={{ padding: tokens.spacing[4], textAlign: 'center' }}>
-                  <Text color="tertiary">{t('loading')}</Text>
-                </Box>
-              ) : visibleHot.length === 0 ? (
-                <Box style={{ padding: tokens.spacing[4], textAlign: 'center' }}>
-                  <Text color="tertiary">{t('noData')}</Text>
-                </Box>
-              ) : (
-                <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
-                  {visibleHot.map((p, idx) => {
-                    const rank = idx + 1
-                    return (
-                      <Box
-                        key={p.id}
-                        className="hot-post-item"
-                        bg="primary"
-                        p={4}
-                        radius="md"
-                        border="primary"
-                        style={{
-                          cursor: 'pointer',
-                        }}
-                        onClick={(e: React.MouseEvent) => {
-                          // Don't hijack clicks on interactive elements (links, buttons, etc.)
-                          if ((e.target as HTMLElement).closest('a, button, [role="button"], input, textarea, select')) return
-                          handleOpenPost(p)
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.background = tokens.colors.bg.secondary
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.background = tokens.colors.bg.primary
-                        }}
-                      >
-                        <Box className="hot-post-meta" style={{ display: 'flex', gap: tokens.spacing[2], marginBottom: tokens.spacing[2], flexWrap: 'wrap', alignItems: 'center' }}>
-                          <Text className="hot-post-rank" size="sm" weight="black" style={{ color: rank <= 3 ? tokens.colors.accent.warning : tokens.colors.text.secondary }}>
-                            #{rank}
-                          </Text>
-                          {p.group_id ? (
-                            <Link
-                              href={`/groups/${p.group_id}`}
-                              onClick={(e) => e.stopPropagation()}
-                              style={{
-                                fontSize: tokens.typography.fontSize.xs,
-                                color: ARENA_PURPLE,
-                                textDecoration: 'none',
-                                padding: '1px 6px',
-                                background: `${ARENA_PURPLE}15`,
-                                borderRadius: tokens.radius.sm,
-                              }}
-                            >
-                              {p.group}
-                            </Link>
-                          ) : (
-                            <Text size="xs" color="secondary">{p.group}</Text>
-                          )}
-                          <Text size="xs" color="tertiary">{(p.views ?? 0).toLocaleString()} {t('views')}</Text>
+
+              {/* Time Range Filter */}
+              <Box style={{ display: 'flex', gap: '8px', marginBottom: tokens.spacing[3], flexWrap: 'wrap' }}>
+                {([
+                  { value: '1h', label: '1小时' },
+                  { value: '6h', label: '6小时' },
+                  { value: '24h', label: '24小时' },
+                  { value: '7d', label: '7天' },
+                  { value: 'all', label: '全部' },
+                ] as const).map((option) => (
+                  <button
+                    key={option.value}
+                    onClick={() => setTimeRange(option.value)}
+                    style={{
+                      padding: '8px 16px',
+                      borderRadius: tokens.radius.lg,
+                      border: timeRange === option.value ? 'none' : tokens.glass.border.light,
+                      background: timeRange === option.value ? tokens.gradient.primary : tokens.glass.bg.light,
+                      backdropFilter: tokens.glass.blur.sm,
+                      WebkitBackdropFilter: tokens.glass.blur.sm,
+                      color: timeRange === option.value ? '#fff' : tokens.colors.text.secondary,
+                      fontWeight: timeRange === option.value ? 900 : 600,
+                      fontSize: '12px',
+                      cursor: 'pointer',
+                      transition: tokens.transition.all,
+                      boxShadow: timeRange === option.value ? `0 4px 12px ${tokens.colors.accent.primary}40` : 'none',
+                    }}
+                    onMouseEnter={(e) => {
+                      if (timeRange !== option.value) {
+                        e.currentTarget.style.background = tokens.glass.bg.medium
+                        e.currentTarget.style.color = tokens.colors.text.primary
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (timeRange !== option.value) {
+                        e.currentTarget.style.background = tokens.glass.bg.light
+                        e.currentTarget.style.color = tokens.colors.text.secondary
+                      }
+                    }}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </Box>
+
+              {/* Tabbed Sections */}
+              <Box style={{ display: 'flex', gap: '8px', marginBottom: tokens.spacing[3], flexWrap: 'wrap' }}>
+                {([
+                  { value: 'posts' as const, label: '热门帖子' },
+                  { value: 'traders' as const, label: '热门交易员' },
+                  { value: 'groups' as const, label: '热门小组' },
+                ]).map((tab) => (
+                  <button
+                    key={tab.value}
+                    onClick={() => setActiveHotTab(tab.value)}
+                    style={{
+                      padding: '8px 16px',
+                      borderRadius: tokens.radius.lg,
+                      border: activeHotTab === tab.value ? 'none' : tokens.glass.border.light,
+                      background: activeHotTab === tab.value ? tokens.gradient.primary : tokens.glass.bg.light,
+                      backdropFilter: tokens.glass.blur.sm,
+                      WebkitBackdropFilter: tokens.glass.blur.sm,
+                      color: activeHotTab === tab.value ? '#fff' : tokens.colors.text.secondary,
+                      fontWeight: activeHotTab === tab.value ? 900 : 600,
+                      fontSize: '12px',
+                      cursor: 'pointer',
+                      transition: tokens.transition.all,
+                      boxShadow: activeHotTab === tab.value ? `0 4px 12px ${tokens.colors.accent.primary}40` : 'none',
+                    }}
+                    onMouseEnter={(e) => {
+                      if (activeHotTab !== tab.value) {
+                        e.currentTarget.style.background = tokens.glass.bg.medium
+                        e.currentTarget.style.color = tokens.colors.text.primary
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (activeHotTab !== tab.value) {
+                        e.currentTarget.style.background = tokens.glass.bg.light
+                        e.currentTarget.style.color = tokens.colors.text.secondary
+                      }
+                    }}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </Box>
+
+              {/* Tab Content: Hot Posts */}
+              {activeHotTab === 'posts' && (
+                <>
+                  {loadingPosts ? (
+                    <Box style={{ padding: tokens.spacing[4], textAlign: 'center' }}>
+                      <Text color="tertiary">{t('loading')}</Text>
+                    </Box>
+                  ) : visibleHot.length === 0 ? (
+                    <Box style={{ padding: tokens.spacing[4], textAlign: 'center' }}>
+                      <Text color="tertiary">{t('noData')}</Text>
+                    </Box>
+                  ) : (
+                    <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3], position: 'relative' }}>
+                      {/* New posts polling banner */}
+                      {newPostCount > 0 && (
+                        <Box
+                          onClick={() => {
+                            loadPosts()
+                          }}
+                          style={{
+                            position: 'sticky',
+                            top: 0,
+                            zIndex: 10,
+                            background: ARENA_PURPLE,
+                            borderRadius: tokens.radius.md,
+                            padding: '10px 16px',
+                            textAlign: 'center',
+                            cursor: 'pointer',
+                            color: '#fff',
+                            fontWeight: 700,
+                            fontSize: '13px',
+                          }}
+                        >
+                          {newPostCount} 条新帖子
                         </Box>
-                        <Text className="hot-post-title" size="base" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>
-                          {translatedListPosts[p.id]?.title || p.title}
-                        </Text>
-                        {(() => {
-                          const isExpanded = expandedPosts[p.id]
-                          const isLongContent = p.body.length > 100
-                          const contentToShow = isExpanded || !isLongContent
-                            ? p.body
-                            : p.body.slice(0, 100) + '...'
-                          return (
-                            <>
-                              <Text className="hot-post-body" size="sm" color="secondary" style={{ marginBottom: tokens.spacing[2], lineHeight: 1.5 }}>
-                                {renderContentWithLinks(contentToShow)}
+                      )}
+
+                      {visibleHot.map((p, idx) => {
+                        const rank = idx + 1
+                        return (
+                          <Box
+                            key={p.id}
+                            className="hot-post-item"
+                            bg="primary"
+                            p={4}
+                            radius="md"
+                            border="primary"
+                            style={{
+                              cursor: 'pointer',
+                            }}
+                            onClick={(e: React.MouseEvent) => {
+                              if ((e.target as HTMLElement).closest('a, button, [role="button"], input, textarea, select')) return
+                              handleOpenPost(p)
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.background = tokens.colors.bg.secondary
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.background = tokens.colors.bg.primary
+                            }}
+                          >
+                            <Box className="hot-post-meta" style={{ display: 'flex', gap: tokens.spacing[2], marginBottom: tokens.spacing[2], flexWrap: 'wrap', alignItems: 'center' }}>
+                              <Text className="hot-post-rank" size="sm" weight="black" style={{ color: rank <= 3 ? tokens.colors.accent.warning : tokens.colors.text.secondary }}>
+                                #{rank}
                               </Text>
-                              {isLongContent && (
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    setExpandedPosts(prev => ({ ...prev, [p.id]: !prev[p.id] }))
-                                  }}
+                              {p.group_id ? (
+                                <Link
+                                  href={`/groups/${p.group_id}`}
+                                  onClick={(e) => e.stopPropagation()}
                                   style={{
-                                    background: 'transparent',
-                                    border: 'none',
+                                    fontSize: tokens.typography.fontSize.xs,
                                     color: ARENA_PURPLE,
-                                    cursor: 'pointer',
-                                    fontSize: 12,
-                                    marginBottom: tokens.spacing[2],
-                                    padding: 0,
+                                    textDecoration: 'none',
+                                    padding: '1px 6px',
+                                    background: `${ARENA_PURPLE}15`,
+                                    borderRadius: tokens.radius.sm,
                                   }}
                                 >
-                                  {isExpanded 
-                                    ? (language === 'zh' ? '收起' : 'Show less') 
-                                    : (language === 'zh' ? '展开查看' : 'Show more')}
-                                </button>
+                                  {p.group}
+                                </Link>
+                              ) : (
+                                <Text size="xs" color="secondary">{p.group}</Text>
                               )}
-                            </>
-                          )
-                        })()}
-                        <Box className="hot-post-footer" style={{ display: 'flex', gap: tokens.spacing[3], fontSize: tokens.typography.fontSize.xs, color: tokens.colors.text.tertiary, flexWrap: 'wrap', alignItems: 'center' }}>
-                          {p.author_handle ? (
+                              <Text size="xs" color="tertiary">{(p.views ?? 0).toLocaleString()} {t('views')}</Text>
+                            </Box>
+                            <Text className="hot-post-title" size="base" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>
+                              {translatedListPosts[p.id]?.title || p.title}
+                            </Text>
+                            {(() => {
+                              const isExpanded = expandedPosts[p.id]
+                              const isLongContent = p.body.length > 100
+                              const contentToShow = isExpanded || !isLongContent
+                                ? p.body
+                                : p.body.slice(0, 100) + '...'
+                              return (
+                                <>
+                                  <Text className="hot-post-body" size="sm" color="secondary" style={{ marginBottom: tokens.spacing[2], lineHeight: 1.5 }}>
+                                    {renderContentWithLinks(contentToShow)}
+                                  </Text>
+                                  {isLongContent && (
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        setExpandedPosts(prev => ({ ...prev, [p.id]: !prev[p.id] }))
+                                      }}
+                                      style={{
+                                        background: 'transparent',
+                                        border: 'none',
+                                        color: ARENA_PURPLE,
+                                        cursor: 'pointer',
+                                        fontSize: 12,
+                                        marginBottom: tokens.spacing[2],
+                                        padding: 0,
+                                      }}
+                                    >
+                                      {isExpanded
+                                        ? (language === 'zh' ? '收起' : 'Show less')
+                                        : (language === 'zh' ? '展开查看' : 'Show more')}
+                                    </button>
+                                  )}
+                                </>
+                              )
+                            })()}
+                            <Box className="hot-post-footer" style={{ display: 'flex', gap: tokens.spacing[3], fontSize: tokens.typography.fontSize.xs, color: tokens.colors.text.tertiary, flexWrap: 'wrap', alignItems: 'center' }}>
+                              {p.author_handle ? (
+                                <Link
+                                  href={`/u/${encodeURIComponent(p.author_handle)}`}
+                                  onClick={(e) => e.stopPropagation()}
+                                  style={{
+                                    fontSize: tokens.typography.fontSize.xs,
+                                    color: tokens.colors.text.secondary,
+                                    textDecoration: 'none',
+                                    fontWeight: 600,
+                                  }}
+                                >
+                                  @{p.author}
+                                </Link>
+                              ) : (
+                                <Text size="xs" color="tertiary">{p.author}</Text>
+                              )}
+                              <Text size="xs" color="tertiary">{p.time}</Text>
+                              <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                <CommentIcon size={12} /> {p.comments}
+                              </span>
+                              <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                <ThumbsUpIcon size={12} /> {p.likes}
+                              </span>
+                            </Box>
+                          </Box>
+                        )
+                      })}
+
+                      {/* Blurred preview cards for anonymous users */}
+                      {!loggedIn && hotPosts.length > visibleHot.length && (
+                        <>
+                          {hotPosts.slice(visibleHot.length, visibleHot.length + 3).map((p, idx) => {
+                            const rank = visibleHot.length + idx + 1
+                            return (
+                              <Box
+                                key={`blur-${p.id}`}
+                                bg="primary"
+                                p={4}
+                                radius="md"
+                                border="primary"
+                                style={{
+                                  filter: 'blur(6px)',
+                                  pointerEvents: 'none',
+                                  opacity: 0.5,
+                                }}
+                              >
+                                <Box style={{ display: 'flex', gap: tokens.spacing[2], marginBottom: tokens.spacing[2], flexWrap: 'wrap', alignItems: 'center' }}>
+                                  <Text size="sm" weight="black" style={{ color: tokens.colors.text.secondary }}>
+                                    #{rank}
+                                  </Text>
+                                  <Text size="xs" color="secondary">{p.group}</Text>
+                                  <Text size="xs" color="tertiary">{(p.views ?? 0).toLocaleString()} {t('views')}</Text>
+                                </Box>
+                                <Text size="base" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>
+                                  {p.title}
+                                </Text>
+                                <Text size="sm" color="secondary" style={{ marginBottom: tokens.spacing[2], lineHeight: 1.5 }}>
+                                  {p.body.slice(0, 100)}...
+                                </Text>
+                                <Box style={{ display: 'flex', gap: tokens.spacing[3], fontSize: tokens.typography.fontSize.xs, color: tokens.colors.text.tertiary }}>
+                                  <Text size="xs" color="tertiary">{p.author}</Text>
+                                  <Text size="xs" color="tertiary">{p.time}</Text>
+                                </Box>
+                              </Box>
+                            )
+                          })}
+
+                          {/* Prominent login CTA */}
+                          <Box style={{
+                            background: tokens.gradient.primarySubtle,
+                            borderRadius: tokens.radius.lg,
+                            padding: tokens.spacing[6],
+                            textAlign: 'center',
+                          }}>
+                            <Text size="lg" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>
+                              登录查看完整热榜
+                            </Text>
+                            <Text size="sm" color="secondary" style={{ marginBottom: tokens.spacing[4] }}>
+                              登录后解锁所有热门帖子和交互功能
+                            </Text>
                             <Link
-                              href={`/u/${encodeURIComponent(p.author_handle)}`}
-                              onClick={(e) => e.stopPropagation()}
+                              href="/login"
                               style={{
-                                fontSize: tokens.typography.fontSize.xs,
-                                color: tokens.colors.text.secondary,
+                                display: 'inline-block',
+                                padding: '10px 24px',
+                                background: tokens.gradient.primary,
+                                color: '#fff',
+                                borderRadius: tokens.radius.md,
                                 textDecoration: 'none',
-                                fontWeight: 600,
+                                fontWeight: 700,
+                                fontSize: '14px',
                               }}
                             >
-                              @{p.author}
+                              立即登录
                             </Link>
-                          ) : (
-                            <Text size="xs" color="tertiary">{p.author}</Text>
-                          )}
-                          <Text size="xs" color="tertiary">{p.time}</Text>
-                          <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                            <CommentIcon size={12} /> {p.comments}
-                          </span>
-                          <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                            <ThumbsUpIcon size={12} /> {p.likes}
-                          </span>
-                        </Box>
-                      </Box>
-                    )
-                  })}
-                </Box>
+                          </Box>
+                        </>
+                      )}
+                    </Box>
+                  )}
+                </>
               )}
-              
-              {!loggedIn && posts.length > 3 && (
-                <Box style={{ marginTop: tokens.spacing[4], padding: tokens.spacing[3], textAlign: 'center' }}>
-                  <Text size="sm" color="secondary">
-                    {t('wantToSeeAllHotList')}
-                    <Link href="/login" style={{ color: tokens.colors.accent.primary, textDecoration: 'none', marginLeft: tokens.spacing[1] }}>
-                      {t('loginArrow')} →
-                    </Link>
-                  </Text>
-                </Box>
+
+              {/* Tab Content: Hot Traders */}
+              {activeHotTab === 'traders' && (
+                <>
+                  {loadingTraders ? (
+                    <Box style={{ padding: tokens.spacing[4], textAlign: 'center' }}>
+                      <Text color="tertiary">{t('loading')}</Text>
+                    </Box>
+                  ) : traders.length === 0 ? (
+                    <Box style={{ padding: tokens.spacing[4], textAlign: 'center' }}>
+                      <Text color="tertiary">{t('noData')}</Text>
+                    </Box>
+                  ) : (
+                    <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
+                      {traders.map((trader, idx) => (
+                        <Box
+                          key={trader.id}
+                          bg="primary"
+                          p={4}
+                          radius="md"
+                          border="primary"
+                          style={{ cursor: 'pointer' }}
+                          onClick={() => {
+                            if (trader.handle) {
+                              router.push(`/trader/${encodeURIComponent(trader.handle)}`)
+                            }
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.background = tokens.colors.bg.secondary
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.background = tokens.colors.bg.primary
+                          }}
+                        >
+                          <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
+                              <Text size="sm" weight="black" style={{ color: idx < 3 ? tokens.colors.accent.warning : tokens.colors.text.secondary }}>
+                                #{idx + 1}
+                              </Text>
+                              <Text size="base" weight="bold">
+                                {trader.handle || 'Unknown'}
+                              </Text>
+                              {trader.source && (
+                                <Text size="xs" color="tertiary" style={{ textTransform: 'uppercase' }}>
+                                  {trader.source}
+                                </Text>
+                              )}
+                            </Box>
+                            <Box style={{ display: 'flex', gap: tokens.spacing[4], alignItems: 'center' }}>
+                              <Text size="sm" style={{ color: trader.roi >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error }}>
+                                ROI {trader.roi.toFixed(1)}%
+                              </Text>
+                              <Text size="xs" color="tertiary">
+                                {trader.followers.toLocaleString()} followers
+                              </Text>
+                            </Box>
+                          </Box>
+                        </Box>
+                      ))}
+                    </Box>
+                  )}
+                </>
+              )}
+
+              {/* Tab Content: Hot Groups */}
+              {activeHotTab === 'groups' && (
+                <>
+                  {loadingGroups ? (
+                    <Box style={{ padding: tokens.spacing[4], textAlign: 'center' }}>
+                      <Text color="tertiary">{t('loading')}</Text>
+                    </Box>
+                  ) : groups.length === 0 ? (
+                    <Box style={{ padding: tokens.spacing[4], textAlign: 'center' }}>
+                      <Text color="tertiary">{t('noData')}</Text>
+                    </Box>
+                  ) : (
+                    <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
+                      {groups.map((group, idx) => (
+                        <Box
+                          key={group.id}
+                          bg="primary"
+                          p={4}
+                          radius="md"
+                          border="primary"
+                          style={{ cursor: 'pointer' }}
+                          onClick={() => router.push(`/groups/${group.id}`)}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.background = tokens.colors.bg.secondary
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.background = tokens.colors.bg.primary
+                          }}
+                        >
+                          <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
+                              <Text size="sm" weight="black" style={{ color: idx < 3 ? tokens.colors.accent.warning : tokens.colors.text.secondary }}>
+                                #{idx + 1}
+                              </Text>
+                              <Text size="base" weight="bold">
+                                {group.name}
+                              </Text>
+                            </Box>
+                            <Text size="xs" color="tertiary">
+                              {group.member_count.toLocaleString()} 成员
+                            </Text>
+                          </Box>
+                        </Box>
+                      ))}
+                    </Box>
+                  )}
+                </>
               )}
             </Card>
           </Box>

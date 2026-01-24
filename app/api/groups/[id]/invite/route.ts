@@ -62,6 +62,28 @@ export async function GET(request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: 'Invalid or expired invite' }, { status: 400 })
     }
 
+    // Check usage limits in group_invites table
+    const supabase = createClient(supabaseUrl, supabaseServiceKey)
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex')
+
+    const { data: invite } = await supabase
+      .from('group_invites')
+      .select('id, used_count, max_uses')
+      .eq('token_hash', tokenHash)
+      .maybeSingle()
+
+    if (invite) {
+      if (invite.used_count >= invite.max_uses) {
+        return NextResponse.json({ error: 'Invalid or expired invite' }, { status: 400 })
+      }
+
+      // Increment used_count on successful verification
+      await supabase
+        .from('group_invites')
+        .update({ used_count: invite.used_count + 1 })
+        .eq('id', invite.id)
+    }
+
     return NextResponse.json({ success: true, valid: true })
   } catch {
     return NextResponse.json({ error: 'Server error' }, { status: 500 })
@@ -98,9 +120,31 @@ export async function POST(request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: '无权限' }, { status: 403 })
     }
 
+    // Rate limit: max 10 invites per hour per user
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000)
+    const { count: recentInviteCount } = await supabase
+      .from('group_invites')
+      .select('id', { count: 'exact', head: true })
+      .eq('created_by', user.id)
+      .gte('created_at', oneHourAgo.toISOString())
+
+    if ((recentInviteCount ?? 0) >= 10) {
+      return NextResponse.json({ error: '每小时最多生成10个邀请链接' }, { status: 429 })
+    }
+
     // Generate 7-day invite token
     const expiresAt = Date.now() + 7 * 24 * 60 * 60 * 1000
     const inviteToken = generateInviteToken(groupId, expiresAt)
+
+    // Track invite in group_invites table
+    await supabase.from('group_invites').insert({
+      group_id: groupId,
+      created_by: user.id,
+      token_hash: crypto.createHash('sha256').update(inviteToken).digest('hex'),
+      max_uses: 50,
+      used_count: 0,
+      expires_at: new Date(expiresAt).toISOString(),
+    })
 
     const inviteUrl = `/groups/${groupId}?invite=${inviteToken}`
 

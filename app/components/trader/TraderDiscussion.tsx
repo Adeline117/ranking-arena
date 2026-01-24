@@ -80,10 +80,11 @@ export default function TraderDiscussion({
       }
     } catch (error) {
       console.error('Error fetching comments:', error)
+      showToast(language === 'zh' ? '加载讨论失败' : 'Failed to load discussions', 'error')
     } finally {
       setLoading(false)
     }
-  }, [traderId, sortBy])
+  }, [traderId, sortBy, showToast, language])
 
   useEffect(() => {
     fetchComments()

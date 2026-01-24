@@ -76,6 +76,30 @@ export async function POST(request: NextRequest) {
       .update({ author_handle: null })
       .eq('user_id', user.id)
 
+    // Cleanup related data
+    const cleanupPromises = [
+      // Remove exchange connections
+      supabase.from('user_exchange_connections').delete().eq('user_id', user.id),
+      // Remove trader links
+      supabase.from('trader_links').delete().eq('user_id', user.id),
+      // Remove from groups (soft delete)
+      supabase.from('group_members').update({ deleted_at: now.toISOString() }).eq('user_id', user.id),
+      // Remove blocked users entries (both directions)
+      supabase.from('blocked_users').delete().eq('blocker_id', user.id),
+      supabase.from('blocked_users').delete().eq('blocked_id', user.id),
+      // Remove backup codes
+      supabase.from('backup_codes').delete().eq('user_id', user.id),
+      // Remove login sessions
+      supabase.from('login_sessions').delete().eq('user_id', user.id),
+      // Clear 2FA secrets
+      supabase.from('user_profiles').update({ totp_secret: null, totp_enabled: false }).eq('id', user.id),
+      // Remove notifications
+      supabase.from('notifications').delete().eq('user_id', user.id),
+    ]
+
+    // Execute all cleanup in parallel, don't fail the deletion if some cleanup fails
+    await Promise.allSettled(cleanupPromises.map(p => Promise.resolve(p)))
+
     // Ban the user (876000h ~ 100 years)
     await supabase.auth.admin.updateUserById(user.id, {
       ban_duration: '876000h',
