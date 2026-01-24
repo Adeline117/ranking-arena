@@ -34,7 +34,6 @@ export default function HomeLoading() {
           className="main-grid"
           style={{
             display: 'grid',
-            gridTemplateColumns: '260px minmax(0, 1fr) 280px',
             gap: tokens.spacing[4],
             alignItems: 'start',
           }}

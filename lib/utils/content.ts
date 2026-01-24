@@ -357,7 +357,18 @@ export function generateSummary(text: string, maxLength: number = 200): string {
   
   // 移除多余空白
   const normalized = cleanText.replace(/\s+/g, ' ').trim()
-  
+
   return truncateText(normalized, maxLength)
+}
+
+/**
+ * 检测文本是否是中文
+ */
+export function isChineseText(text: string): boolean {
+  if (!text) return false
+  const chineseRegex = /[\u4e00-\u9fa5]/g
+  const chineseMatches = text.match(chineseRegex)
+  const chineseRatio = chineseMatches ? chineseMatches.length / text.length : 0
+  return chineseRatio > 0.1
 }
 

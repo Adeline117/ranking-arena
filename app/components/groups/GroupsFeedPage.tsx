@@ -11,6 +11,7 @@ import FloatingActionButton from '@/app/components/layout/FloatingActionButton'
 import MobileBottomNav from '@/app/components/layout/MobileBottomNav'
 import PostFeed from '@/app/components/post/PostFeed'
 import { Box, Text, Button } from '@/app/components/base'
+import { Skeleton } from '@/app/components/ui/Skeleton'
 
 type Group = {
   id: string
@@ -111,7 +112,36 @@ export default function GroupsFeedPage() {
           </Box>
 
           {loadingGroups ? (
-            <Text size="sm" color="tertiary">{language === 'zh' ? '加载中...' : 'Loading...'}</Text>
+            <Box
+              style={{
+                display: 'flex',
+                gap: tokens.spacing[3],
+                overflowX: 'hidden',
+                paddingBottom: tokens.spacing[2],
+              }}
+            >
+              {[0, 1, 2, 3].map((i) => (
+                <Box
+                  key={i}
+                  style={{
+                    flexShrink: 0,
+                    width: 120,
+                    padding: tokens.spacing[3],
+                    borderRadius: tokens.radius.lg,
+                    border: `1px solid ${tokens.colors.border.primary}`,
+                    background: tokens.colors.bg.secondary,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: tokens.spacing[2],
+                  }}
+                >
+                  <Skeleton width="44px" height="44px" variant="rounded" />
+                  <Skeleton width="80px" height="12px" />
+                  <Skeleton width="50px" height="10px" />
+                </Box>
+              ))}
+            </Box>
           ) : myGroups.length === 0 ? (
             <Box
               style={{

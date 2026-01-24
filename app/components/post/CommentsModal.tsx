@@ -4,12 +4,11 @@ import { useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import { ThumbsUpIcon } from '../icons'
-import { renderContentWithLinks } from '@/lib/utils/content'
+import { renderContentWithLinks, ARENA_PURPLE } from '@/lib/utils/content'
 import { formatTimeAgo } from '@/lib/utils/date'
 import { CompactErrorBoundary } from '../Utils/ErrorBoundary'
 import type { Comment } from './hooks/usePostComments'
 
-const ARENA_PURPLE = '#8b6fa8'
 const REPLIES_PREVIEW_COUNT = 2
 
 interface CommentsModalProps {

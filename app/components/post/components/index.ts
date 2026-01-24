@@ -9,4 +9,4 @@ export { usePostTranslation } from './hooks/usePostTranslation'
 export { usePosts, usePostActions } from './hooks/usePosts'
 
 // 工具函数导出
-export * from './utils'
+export { ARENA_PURPLE, isChineseText, renderContentWithLinks, truncateText } from '@/lib/utils/content'

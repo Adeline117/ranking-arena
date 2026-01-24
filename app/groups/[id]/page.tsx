@@ -535,12 +535,12 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
 
       <Box
         as="main"
+        className="content-sidebar-grid"
         style={{
           maxWidth: 1200,
           margin: '0 auto',
           padding: `${tokens.spacing[6]} ${tokens.spacing[4]}`,
           display: 'grid',
-          gridTemplateColumns: '1fr 280px',
           gap: tokens.spacing[6],
         }}
       >

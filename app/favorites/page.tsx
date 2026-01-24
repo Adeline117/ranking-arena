@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/layout/TopNav'
 import { Box, Text, Button } from '@/app/components/base'
-import { RankingSkeleton } from '@/app/components/ui/Skeleton'
+import { ListSkeleton } from '@/app/components/ui/Skeleton'
 import EmptyState from '@/app/components/ui/EmptyState'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { useToast } from '@/app/components/ui/Toast'
@@ -87,6 +87,7 @@ export default function FavoritesPage() {
         } else {
           console.error('Error fetching folders:', foldersData.error)
           setFolders([])
+          showToast('加载收藏夹失败', 'error')
         }
         
         if (subscribedResponse.ok) {
@@ -102,6 +103,7 @@ export default function FavoritesPage() {
         console.error('Error loading folders:', error)
         setFolders([])
         setSubscribedFolders([])
+        showToast('加载收藏夹失败，请稍后重试', 'error')
       } finally {
         setLoading(false)
       }
@@ -161,7 +163,7 @@ export default function FavoritesPage() {
           <Text size="2xl" weight="black" style={{ marginBottom: tokens.spacing[4] }}>
             我的收藏
           </Text>
-          <RankingSkeleton />
+          <ListSkeleton count={5} gap={12} />
         </Box>
       </Box>
     )
@@ -330,7 +332,7 @@ export default function FavoritesPage() {
 
         {/* 收藏夹列表 */}
         {loading ? (
-          <RankingSkeleton />
+          <ListSkeleton count={5} gap={12} />
         ) : activeTab === 'my' ? (
           // 我的收藏夹
           folders.length === 0 ? (
