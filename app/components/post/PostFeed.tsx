@@ -17,9 +17,7 @@ import BookmarkModal from '../ui/BookmarkModal'
 import { useUnifiedAuth } from '@/lib/hooks/useUnifiedAuth'
 import { usePostStore, type PostData } from '@/lib/stores/postStore'
 import { renderContentWithLinks, ARENA_PURPLE } from '@/lib/utils/content'
-import { usePostComments } from './hooks/usePostComments'
-import { usePostActions } from './hooks/usePostActions'
-import { usePostTranslation, useAutoTranslateList, useAutoTranslateComments } from './hooks/usePostTranslation'
+import { usePostComments, type Comment } from './hooks/usePostComments'
 import CommentsModal from './CommentsModal'
 import { SectionErrorBoundary } from '../Utils/ErrorBoundary'
 import { PostSkeleton } from '../ui/Skeleton'
@@ -27,20 +25,6 @@ import { PostSkeleton } from '../ui/Skeleton'
 // 本地类型（扩展后端类型）
 type Post = PostWithUserState
 
-type Comment = {
-  id: string
-  content: string
-  user_id?: string
-  author_handle?: string
-  author_avatar_url?: string
-  created_at: string
-  like_count?: number
-  user_liked?: boolean
-  replies?: Comment[]
-}
-
-// 默认显示的回复数量
-const REPLIES_PREVIEW_COUNT = 2
 
 
 function pollLabel(choice: PollChoice | 'tie', t: (key: keyof typeof import('@/lib/i18n').translations.zh) => string) {
@@ -116,10 +100,6 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; layout?:
   const [error, setError] = useState<string | null>(null)
   const [sortType, setSortType] = useState<SortType>('time')
   const [openPost, setOpenPost] = useState<Post | null>(null)
-  const [comments, setComments] = useState<Comment[]>([])
-  const [loadingComments, setLoadingComments] = useState(false)
-  const [newComment, setNewComment] = useState('')
-  const [submittingComment, setSubmittingComment] = useState(false)
   // Unified auth - single source of truth
   const auth = useUnifiedAuth({
     onUnauthenticated: () => showToast('请先登录', 'warning'),
@@ -130,14 +110,28 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; layout?:
   const [editTitle, setEditTitle] = useState('')
   const [editContent, setEditContent] = useState('')
   const [savingEdit, setSavingEdit] = useState(false)
-  const processingRef = useRef<Set<string>>(new Set())
+  const lockRef = useRef<Set<string>>(new Set())
   const abortControllerRef = useRef<AbortController | null>(null)
-  // 评论相关状态
-  const [replyingTo, setReplyingTo] = useState<{ commentId: string; handle: string } | null>(null)
-  const [replyContent, setReplyContent] = useState('')
-  const [submittingReply, setSubmittingReply] = useState(false)
-  const [commentLikeLoading, setCommentLikeLoading] = useState<Record<string, boolean>>({})
-  const [expandedReplies, setExpandedReplies] = useState<Record<string, boolean>>({})
+
+  // Comments hook
+  const commentsHook = usePostComments({
+    accessToken,
+    showToast,
+    showDangerConfirm,
+    onCommentCountChange: (postId, delta) => {
+      setPosts(prev => prev.map(p =>
+        p.id === postId ? { ...p, comment_count: p.comment_count + delta } : p
+      ))
+      if (openPost?.id === postId) {
+        setOpenPost(prev => prev ? { ...prev, comment_count: prev.comment_count + delta } : null)
+      }
+    },
+  })
+  const { comments, setComments, loadingComments, newComment, setNewComment, submittingComment,
+    replyingTo, setReplyingTo, replyContent, setReplyContent, submittingReply,
+    commentLikeLoading, expandedReplies, setExpandedReplies, deletingCommentId,
+    loadComments, submitComment, toggleCommentLike, submitReply, deleteComment } = commentsHook
+
   // 翻译相关状态
   const [translatedContent, setTranslatedContent] = useState<string | null>(null)
   const [showingOriginal, setShowingOriginal] = useState(true)
@@ -418,31 +412,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; layout?:
     }
   }, [props.initialPostId, posts, openPost])
 
-  // 加载评论
-  const loadComments = useCallback(async (postId: string) => {
-    try {
-      setLoadingComments(true)
-      const headers: Record<string, string> = {}
-      if (accessToken) {
-        headers['Authorization'] = `Bearer ${accessToken}`
-      }
-      const response = await fetch(`/api/posts/${postId}/comments`, { headers })
-      const json = await response.json()
-
-      if (response.ok && json.success) {
-        // API 返回格式：{ success: true, data: { comments: [...] } }
-        setComments(json.data?.comments || [])
-      } else {
-        setComments([])
-      }
-    } catch (_err) {
-      setComments([])
-    } finally {
-      setLoadingComments(false)
-    }
-  }, [accessToken])
-
-  // 点赞/踩
+  // 点赞/踩 - per-postId lock (waits for API response before allowing next action)
   const toggleReaction = useCallback(async (postId: string, reactionType: 'up' | 'down') => {
     if (!accessToken) {
       showToast('请先登录', 'warning')
@@ -450,8 +420,8 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; layout?:
     }
 
     const key = `react-${postId}-${reactionType}`
-    if (processingRef.current.has(key)) return
-    processingRef.current.add(key)
+    if (lockRef.current.has(key)) return
+    lockRef.current.add(key)
 
     try {
       const response = await fetch(`/api/posts/${postId}/like`, {
@@ -507,7 +477,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; layout?:
       console.error('[PostFeed] toggleReaction error:', err)
       showToast('网络错误，请重试', 'error')
     } finally {
-      setTimeout(() => processingRef.current.delete(key), 300)
+      lockRef.current.delete(key)
     }
   }, [accessToken, openPost?.id, showToast])
 
@@ -519,8 +489,8 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; layout?:
     }
 
     const key = `vote-${postId}-${choice}`
-    if (processingRef.current.has(key)) return
-    processingRef.current.add(key)
+    if (lockRef.current.has(key)) return
+    lockRef.current.add(key)
 
     try {
       const response = await fetch(`/api/posts/${postId}/vote`, {
@@ -571,7 +541,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; layout?:
       console.error('[PostFeed] toggleVote error:', err)
       showToast('网络错误，请重试', 'error')
     } finally {
-      setTimeout(() => processingRef.current.delete(key), 300)
+      lockRef.current.delete(key)
     }
   }, [accessToken, openPost?.id, showToast])
 
@@ -769,262 +739,6 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; layout?:
       setRepostLoading(prev => ({ ...prev, [postId]: false }))
     }
   }, [accessToken, posts, openPost, currentUserId, showToast])
-
-  // 提交评论
-  const submitComment = useCallback(async (postId: string) => {
-    if (!accessToken) {
-      showToast('请先登录', 'warning')
-      return
-    }
-
-    if (!newComment.trim()) return
-
-    setSubmittingComment(true)
-    try {
-      const response = await fetch(`/api/posts/${postId}/comments`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`,
-          ...getCsrfHeaders()
-        },
-        body: JSON.stringify({ content: newComment.trim() }),
-      })
-
-      if (!response.ok) {
-        // Differentiate error types for clear user feedback
-        if (response.status === 401) {
-          showToast('登录已过期，请重新登录', 'error')
-        } else if (response.status === 403) {
-          showToast('权限不足', 'error')
-        } else if (response.status >= 500) {
-          showToast('服务异常，请稍后重试', 'error')
-        } else {
-          const json = await response.json().catch(() => null)
-          showToast(json?.error || '发表评论失败', 'error')
-        }
-        return
-      }
-
-      const json = await response.json()
-
-      if (json.success && json.data?.comment) {
-        // Server ACK received - append comment
-        setComments(prev => [...prev, json.data.comment])
-        setNewComment('')
-
-        // Also update canonical store (server ACK only)
-        usePostStore.getState().addComment(postId, json.data.comment)
-
-        // Update comment count
-        setPosts(prev => prev.map(p => {
-          if (p.id === postId) {
-            return { ...p, comment_count: p.comment_count + 1 }
-          }
-          return p
-        }))
-
-        if (openPost?.id === postId) {
-          setOpenPost(prev => prev ? { ...prev, comment_count: prev.comment_count + 1 } : null)
-        }
-      } else {
-        showToast(json.error || '发表评论失败', 'error')
-      }
-    } catch (_err) {
-      showToast('网络异常，请重试', 'error')
-    } finally {
-      setSubmittingComment(false)
-    }
-  }, [accessToken, newComment, openPost?.id, showToast])
-
-  // 评论点赞
-  const toggleCommentLike = useCallback(async (commentId: string) => {
-    if (!accessToken) {
-      showToast('请先登录', 'warning')
-      return
-    }
-
-    if (commentLikeLoading[commentId]) return
-    setCommentLikeLoading(prev => ({ ...prev, [commentId]: true }))
-
-    try {
-      const response = await fetch(`/api/posts/${openPost?.id}/comments/like`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`,
-          ...getCsrfHeaders()
-        },
-        body: JSON.stringify({ comment_id: commentId }),
-      })
-
-      const json = await response.json()
-
-      if (response.ok && json.success) {
-        // 更新评论的点赞状态
-        const updateCommentLike = (comment: Comment): Comment => {
-          if (comment.id === commentId) {
-            return {
-              ...comment,
-              like_count: json.data.like_count,
-              user_liked: json.data.liked,
-            }
-          }
-          if (comment.replies) {
-            return {
-              ...comment,
-              replies: comment.replies.map(updateCommentLike),
-            }
-          }
-          return comment
-        }
-        setComments(prev => prev.map(updateCommentLike))
-      } else {
-        // 处理API错误
-        if (response.status === 429) {
-          showToast('操作太快，稍等一下', 'warning')
-        } else if (response.status === 401) {
-          showToast('登录已过期', 'warning')
-        } else {
-          showToast(json.error || '点赞失败', 'error')
-        }
-      }
-    } catch (_err) {
-      // 错误已在 showToast 中处理
-      showToast('网络错误', 'error')
-    } finally {
-      setCommentLikeLoading(prev => ({ ...prev, [commentId]: false }))
-    }
-  }, [accessToken, openPost?.id, commentLikeLoading, showToast])
-
-  // 提交回复
-  const submitReply = useCallback(async (postId: string, parentId: string) => {
-    if (!accessToken) {
-      showToast('请先登录', 'warning')
-      return
-    }
-
-    if (!replyContent.trim()) return
-
-    setSubmittingReply(true)
-    try {
-      const response = await fetch(`/api/posts/${postId}/comments`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`,
-          ...getCsrfHeaders()
-        },
-        body: JSON.stringify({ content: replyContent.trim(), parent_id: parentId }),
-      })
-
-      const json = await response.json()
-
-      if (response.ok && json.success) {
-        const newReply = json.data.comment
-        // 添加回复到对应评论
-        setComments(prev => prev.map(c => {
-          if (c.id === parentId) {
-            return {
-              ...c,
-              replies: [...(c.replies || []), newReply],
-            }
-          }
-          return c
-        }))
-        setReplyContent('')
-        setReplyingTo(null)
-        // 展开该评论的回复
-        setExpandedReplies(prev => ({ ...prev, [parentId]: true }))
-        
-        // 更新评论计数
-        setPosts(prev => prev.map(p => {
-          if (p.id === postId) {
-            return { ...p, comment_count: p.comment_count + 1 }
-          }
-          return p
-        }))
-        
-        if (openPost?.id === postId) {
-          setOpenPost(prev => prev ? { ...prev, comment_count: prev.comment_count + 1 } : null)
-        }
-        
-        showToast('已回复', 'success')
-      } else {
-        showToast(json.error || '回复失败', 'error')
-      }
-    } catch (err) {
-      console.error('[PostFeed] 回复失败:', err)
-      showToast('回复失败', 'error')
-    } finally {
-      setSubmittingReply(false)
-    }
-  }, [accessToken, replyContent, openPost?.id, showToast])
-
-  // 删除评论
-  const [deletingCommentId, setDeletingCommentId] = useState<string | null>(null)
-  
-  const deleteComment = useCallback(async (postId: string, commentId: string) => {
-    if (!accessToken) {
-      showToast('请先登录', 'warning')
-      return
-    }
-
-    const confirmed = await showDangerConfirm('删除评论', '确定要删除这条评论吗？')
-    if (!confirmed) return
-
-    setDeletingCommentId(commentId)
-    try {
-      const response = await fetch(`/api/posts/${postId}/comments`, {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`,
-          ...getCsrfHeaders()
-        },
-        body: JSON.stringify({ comment_id: commentId }),
-      })
-
-      const json = await response.json()
-
-      if (response.ok && json.success) {
-        // 从列表中移除评论（包括顶级评论和嵌套回复）
-        setComments(prev => prev.map(c => {
-          // 如果是顶级评论被删除，直接过滤
-          if (c.id === commentId) return null
-          // 如果是嵌套回复被删除，过滤掉回复
-          if (c.replies && c.replies.length > 0) {
-            return {
-              ...c,
-              replies: c.replies.filter(r => r.id !== commentId)
-            }
-          }
-          return c
-        }).filter(Boolean) as Comment[])
-        
-        // 更新评论计数
-        setPosts(prev => prev.map(p => {
-          if (p.id === postId) {
-            return { ...p, comment_count: Math.max(0, p.comment_count - 1) }
-          }
-          return p
-        }))
-        
-        if (openPost?.id === postId) {
-          setOpenPost(prev => prev ? { ...prev, comment_count: Math.max(0, prev.comment_count - 1) } : null)
-        }
-        
-        showToast('已删除', 'success')
-      } else {
-        showToast(json.error || '删除评论失败', 'error')
-      }
-    } catch (_err) {
-      // 错误已在 showToast 中处理
-      showToast('删除评论失败', 'error')
-    } finally {
-      setDeletingCommentId(null)
-    }
-  }, [accessToken, openPost?.id, showDangerConfirm, showToast])
 
   // 路由
   const router = useRouter()
@@ -1616,8 +1330,8 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; layout?:
               }}
               style={isMasonry ? {
                 breakInside: 'avoid',
-                marginBottom: 12,
-                padding: tokens.spacing[3],
+                marginBottom: 10,
+                padding: tokens.spacing[2],
                 borderRadius: tokens.radius.lg,
                 background: tokens.colors.bg.secondary,
                 border: `1px solid ${tokens.colors.border.primary}`,
@@ -2397,380 +2111,29 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; layout?:
 
           {/* 评论区 */}
           <div style={{ marginTop: 16, borderTop: `1px solid ${tokens.colors.border.secondary}`, paddingTop: 16 }}>
-            <div style={{ fontWeight: 950, marginBottom: 12 }}>
-              {t('comments')} ({openPost.comment_count})
-            </div>
-
-            {/* 评论输入框 */}
-            <div style={{ marginBottom: 16 }}>
-              <textarea
-                value={newComment}
-                onChange={(e) => setNewComment(e.target.value)}
-                placeholder={accessToken ? t('writeComment') : '请先登录后发表评论'}
-                disabled={!accessToken || submittingComment}
-                style={{
-                  width: '100%',
-                  minHeight: 80,
-                  resize: 'vertical',
-                  padding: 12,
-                  borderRadius: 12,
-                  border: `1px solid ${tokens.colors.border.primary}`,
-                  background: tokens.colors.bg.secondary,
-                  color: tokens.colors.text.primary,
-                  outline: 'none',
-                  fontSize: 13,
-                  lineHeight: 1.6,
-                }}
-              />
-              {accessToken && (
-                <button
-                  onClick={() => submitComment(openPost.id)}
-                  disabled={!newComment.trim() || submittingComment}
-                  style={{
-                    marginTop: 8,
-                    padding: '8px 16px',
-                    background: newComment.trim() && !submittingComment ? ARENA_PURPLE : 'rgba(139, 111, 168, 0.3)',
-                    color: '#fff',
-                    border: 'none',
-                    borderRadius: 8,
-                    cursor: newComment.trim() && !submittingComment ? 'pointer' : 'not-allowed',
-                    fontWeight: 700,
-                    fontSize: 13,
-                  }}
-                >
-                  {submittingComment ? '发送中...' : '发表评论'}
-                </button>
-              )}
-            </div>
-
-            {/* 评论列表 */}
-            {loadingComments ? (
-              <div style={{ color: tokens.colors.text.tertiary, fontSize: 13 }}>加载评论中...</div>
-            ) : comments.length === 0 ? (
-              <div style={{ color: tokens.colors.text.tertiary, fontSize: 13 }}>暂无评论，来发表第一条评论吧</div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                {comments.filter(Boolean).map((comment) => {
-                  const replies = comment.replies || []
-                  const isExpanded = expandedReplies[comment.id]
-                  const displayedReplies = isExpanded ? replies : replies.slice(0, REPLIES_PREVIEW_COUNT)
-                  const hasMoreReplies = replies.length > REPLIES_PREVIEW_COUNT
-                  
-                  return (
-                    <div
-                      key={comment.id}
-                      style={{
-                        padding: 12,
-                        background: tokens.colors.bg.secondary,
-                        borderRadius: 8,
-                        border: `1px solid ${tokens.colors.border.primary}`,
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                        <AvatarLink handle={comment.author_handle || '匿名'} avatarUrl={comment.author_avatar_url} />
-                        <span style={{ fontSize: 11, color: tokens.colors.text.tertiary }}>
-                          {formatTimeAgo(comment.created_at)}
-                        </span>
-                        {/* 删除按钮 - 仅评论作者可见 */}
-                        {currentUserId && comment.user_id === currentUserId && (
-                          <button
-                            onClick={() => openPost && deleteComment(openPost.id, comment.id)}
-                            disabled={deletingCommentId === comment.id}
-                            style={{
-                              marginLeft: 'auto',
-                              background: 'transparent',
-                              border: 'none',
-                              color: tokens.colors.text.tertiary,
-                              cursor: deletingCommentId === comment.id ? 'not-allowed' : 'pointer',
-                              fontSize: 11,
-                              padding: '2px 6px',
-                              borderRadius: 4,
-                              opacity: deletingCommentId === comment.id ? 0.5 : 1,
-                            }}
-                            onMouseEnter={(e) => {
-                              if (deletingCommentId !== comment.id) {
-                                e.currentTarget.style.color = '#ff4d4d'
-                                e.currentTarget.style.background = 'rgba(255,77,77,0.1)'
-                              }
-                            }}
-                            onMouseLeave={(e) => {
-                              e.currentTarget.style.color = tokens.colors.text.tertiary
-                              e.currentTarget.style.background = 'transparent'
-                            }}
-                          >
-                            {deletingCommentId === comment.id ? '删除中...' : '删除'}
-                          </button>
-                        )}
-                      </div>
-                      <div translate="no" style={{ 
-                        fontSize: 13, 
-                        color: translatedComments[comment.id] 
-                          ? tokens.colors.accent.translated 
-                          : tokens.colors.text.primary, 
-                        lineHeight: 1.6 
-                      }}>
-                        {renderContentWithLinks(translatedComments[comment.id] || comment.content || '')}
-                      </div>
-                      
-                      {/* 评论操作栏：点赞和回复 */}
-                      <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 16 }}>
-                        <button
-                          onClick={() => toggleCommentLike(comment.id)}
-                          disabled={commentLikeLoading[comment.id]}
-                          style={{
-                            background: 'transparent',
-                            border: 'none',
-                            color: comment.user_liked ? ARENA_PURPLE : tokens.colors.text.tertiary,
-                            cursor: 'pointer',
-                            fontSize: 12,
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 4,
-                            padding: '4px 8px',
-                            borderRadius: 4,
-                            transition: 'all 0.2s',
-                          }}
-                          onMouseEnter={(e) => {
-                            if (!comment.user_liked) {
-                              e.currentTarget.style.color = ARENA_PURPLE
-                              e.currentTarget.style.background = 'rgba(139,111,168,0.1)'
-                            }
-                          }}
-                          onMouseLeave={(e) => {
-                            if (!comment.user_liked) {
-                              e.currentTarget.style.color = tokens.colors.text.tertiary
-                              e.currentTarget.style.background = 'transparent'
-                            }
-                          }}
-                        >
-                          <ThumbsUpIcon size={12} />
-                          <span style={{ fontWeight: comment.user_liked ? 700 : 400 }}>
-                            {comment.like_count || 0}
-                          </span>
-                        </button>
-                        
-                        <button
-                          onClick={() => {
-                            if (!accessToken) {
-                              showToast('请先登录', 'warning')
-                              return
-                            }
-                            setReplyingTo(replyingTo?.commentId === comment.id 
-                              ? null 
-                              : { commentId: comment.id, handle: comment.author_handle || '匿名' })
-                            setReplyContent('')
-                          }}
-                          style={{
-                            background: replyingTo?.commentId === comment.id ? 'rgba(139,111,168,0.1)' : 'transparent',
-                            border: 'none',
-                            color: replyingTo?.commentId === comment.id ? ARENA_PURPLE : tokens.colors.text.tertiary,
-                            cursor: 'pointer',
-                            fontSize: 12,
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 4,
-                            padding: '4px 8px',
-                            borderRadius: 4,
-                            transition: 'all 0.2s',
-                          }}
-                          onMouseEnter={(e) => {
-                            if (replyingTo?.commentId !== comment.id) {
-                              e.currentTarget.style.color = ARENA_PURPLE
-                              e.currentTarget.style.background = 'rgba(139,111,168,0.1)'
-                            }
-                          }}
-                          onMouseLeave={(e) => {
-                            if (replyingTo?.commentId !== comment.id) {
-                              e.currentTarget.style.color = tokens.colors.text.tertiary
-                              e.currentTarget.style.background = 'transparent'
-                            }
-                          }}
-                        >
-                          <CommentIcon size={12} />
-                          回复
-                        </button>
-                      </div>
-                      
-                      {/* 回复输入框 */}
-                      {replyingTo?.commentId === comment.id && (
-                        <div style={{ marginTop: 12, padding: 12, background: tokens.colors.bg.primary, borderRadius: 8 }}>
-                          <div style={{ fontSize: 12, color: tokens.colors.text.tertiary, marginBottom: 8 }}>
-                            回复 @{replyingTo.handle}
-                          </div>
-                          <textarea
-                            value={replyContent}
-                            onChange={(e) => setReplyContent(e.target.value)}
-                            placeholder="写下你的回复..."
-                            disabled={submittingReply}
-                            style={{
-                              width: '100%',
-                              minHeight: 60,
-                              resize: 'vertical',
-                              padding: 10,
-                              borderRadius: 8,
-                              border: `1px solid ${tokens.colors.border.primary}`,
-                              background: tokens.colors.bg.secondary,
-                              color: tokens.colors.text.primary,
-                              outline: 'none',
-                              fontSize: 13,
-                              lineHeight: 1.5,
-                            }}
-                          />
-                          <div style={{ display: 'flex', gap: 8, marginTop: 8, justifyContent: 'flex-end' }}>
-                            <button
-                              onClick={() => {
-                                setReplyingTo(null)
-                                setReplyContent('')
-                              }}
-                              style={{
-                                padding: '6px 12px',
-                                background: 'transparent',
-                                color: tokens.colors.text.secondary,
-                                border: `1px solid ${tokens.colors.border.primary}`,
-                                borderRadius: 6,
-                                cursor: 'pointer',
-                                fontSize: 12,
-                                fontWeight: 600,
-                              }}
-                            >
-                              取消
-                            </button>
-                            <button
-                              onClick={() => openPost && submitReply(openPost.id, comment.id)}
-                              disabled={!replyContent.trim() || submittingReply}
-                              style={{
-                                padding: '6px 12px',
-                                background: replyContent.trim() && !submittingReply ? ARENA_PURPLE : 'rgba(139, 111, 168, 0.3)',
-                                color: '#fff',
-                                border: 'none',
-                                borderRadius: 6,
-                                cursor: replyContent.trim() && !submittingReply ? 'pointer' : 'not-allowed',
-                                fontSize: 12,
-                                fontWeight: 600,
-                              }}
-                            >
-                              {submittingReply ? '发送中...' : '发送'}
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                      
-                      {/* 嵌套回复 */}
-                      {displayedReplies.length > 0 && (
-                        <div style={{ marginTop: 12, marginLeft: 16, borderLeft: `2px solid ${tokens.colors.border.primary}`, paddingLeft: 12 }}>
-                          {displayedReplies.map((reply) => (
-                            <div key={reply.id} style={{ marginBottom: 10 }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                                <span style={{ fontSize: 12, fontWeight: 700, color: tokens.colors.text.secondary }}>
-                                  {reply.author_handle || '匿名'}
-                                </span>
-                                <span style={{ fontSize: 11, color: tokens.colors.text.tertiary }}>
-                                  {formatTimeAgo(reply.created_at)}
-                                </span>
-                                {/* 删除按钮 - 仅回复作者可见 */}
-                                {currentUserId && reply.user_id === currentUserId && (
-                                  <button
-                                    onClick={() => openPost && deleteComment(openPost.id, reply.id)}
-                                    disabled={deletingCommentId === reply.id}
-                                    style={{
-                                      marginLeft: 'auto',
-                                      background: 'transparent',
-                                      border: 'none',
-                                      color: tokens.colors.text.tertiary,
-                                      cursor: deletingCommentId === reply.id ? 'not-allowed' : 'pointer',
-                                      fontSize: 11,
-                                      padding: '2px 6px',
-                                      borderRadius: 4,
-                                      opacity: deletingCommentId === reply.id ? 0.5 : 1,
-                                    }}
-                                    onMouseEnter={(e) => {
-                                      if (deletingCommentId !== reply.id) {
-                                        e.currentTarget.style.color = '#ff4d4d'
-                                        e.currentTarget.style.background = 'rgba(255,77,77,0.1)'
-                                      }
-                                    }}
-                                    onMouseLeave={(e) => {
-                                      e.currentTarget.style.color = tokens.colors.text.tertiary
-                                      e.currentTarget.style.background = 'transparent'
-                                    }}
-                                  >
-                                    {deletingCommentId === reply.id ? '...' : '删除'}
-                                  </button>
-                                )}
-                              </div>
-                              <div style={{ 
-                                fontSize: 13, 
-                                color: translatedComments[reply.id] 
-                                  ? tokens.colors.accent.translated 
-                                  : tokens.colors.text.primary 
-                              }}>
-                                {renderContentWithLinks(translatedComments[reply.id] || reply.content || '')}
-                              </div>
-                              {/* 回复的点赞按钮 */}
-                              <div style={{ marginTop: 4 }}>
-                                <button
-                                  onClick={() => toggleCommentLike(reply.id)}
-                                  disabled={commentLikeLoading[reply.id]}
-                                  style={{
-                                    background: 'transparent',
-                                    border: 'none',
-                                    color: reply.user_liked ? ARENA_PURPLE : tokens.colors.text.tertiary,
-                                    cursor: 'pointer',
-                                    fontSize: 11,
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: 3,
-                                    padding: '2px 6px',
-                                    borderRadius: 4,
-                                    transition: 'all 0.2s',
-                                  }}
-                                  onMouseEnter={(e) => {
-                                    if (!reply.user_liked) {
-                                      e.currentTarget.style.color = ARENA_PURPLE
-                                    }
-                                  }}
-                                  onMouseLeave={(e) => {
-                                    if (!reply.user_liked) {
-                                      e.currentTarget.style.color = tokens.colors.text.tertiary
-                                    }
-                                  }}
-                                >
-                                  <ThumbsUpIcon size={10} />
-                                  {reply.like_count || 0}
-                                </button>
-                              </div>
-                            </div>
-                          ))}
-                          
-                          {/* 展开/收起更多回复 */}
-                          {hasMoreReplies && (
-                            <button
-                              onClick={() => setExpandedReplies(prev => ({ ...prev, [comment.id]: !isExpanded }))}
-                              style={{
-                                background: 'transparent',
-                                border: 'none',
-                                color: ARENA_PURPLE,
-                                cursor: 'pointer',
-                                fontSize: 12,
-                                fontWeight: 600,
-                                padding: '4px 0',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: 4,
-                              }}
-                            >
-                              {isExpanded 
-                                ? '收起回复 ▲' 
-                                : `查看全部 ${replies.length} 条回复 ▼`}
-                            </button>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
-            )}
+            <CommentsModal
+              postId={openPost.id}
+              comments={comments}
+              loadingComments={loadingComments}
+              currentUserId={currentUserId}
+              newComment={newComment}
+              setNewComment={setNewComment}
+              submittingComment={submittingComment}
+              onSubmitComment={submitComment}
+              replyingTo={replyingTo}
+              setReplyingTo={setReplyingTo}
+              replyContent={replyContent}
+              setReplyContent={setReplyContent}
+              submittingReply={submittingReply}
+              onSubmitReply={submitReply}
+              commentLikeLoading={commentLikeLoading}
+              onToggleCommentLike={toggleCommentLike}
+              deletingCommentId={deletingCommentId}
+              onDeleteComment={deleteComment}
+              expandedReplies={expandedReplies}
+              setExpandedReplies={setExpandedReplies}
+              translatedComments={translatedComments}
+            />
           </div>
         </Modal>
       )}
