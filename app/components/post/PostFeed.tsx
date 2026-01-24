@@ -1452,13 +1452,25 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; layout?:
       <div style={{
         padding: tokens.spacing[6],
         textAlign: 'center',
-        color: tokens.colors.text.tertiary,
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
         gap: tokens.spacing[3],
+        background: tokens.colors.bg.secondary,
+        borderRadius: tokens.radius.lg,
+        border: `1px solid ${tokens.colors.border.primary}`,
       }}>
-        <div style={{ color: tokens.colors.accent.error, marginBottom: tokens.spacing[2] }}>
+        <div style={{
+          color: tokens.colors.accent.error,
+          fontSize: tokens.typography.fontSize.sm,
+          fontWeight: tokens.typography.fontWeight.bold,
+        }}>
+          {language === 'zh' ? '加载失败' : 'Failed to load'}
+        </div>
+        <div style={{
+          color: tokens.colors.text.tertiary,
+          fontSize: tokens.typography.fontSize.xs,
+        }}>
           {error}
         </div>
         <button

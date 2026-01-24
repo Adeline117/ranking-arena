@@ -8,6 +8,7 @@ import { ThumbsUpIcon, CommentIcon } from '@/app/components/icons'
 import MasonryGrid from '@/app/components/ui/MasonryGrid'
 import MasonryPostCard from '@/app/components/post/MasonryPostCard'
 import { renderContentWithLinks, ARENA_PURPLE } from '@/lib/utils/content'
+import { getAvatarGradient } from '@/lib/utils/avatar'
 import type { Post, CommentWithAuthor } from '../hooks/useGroupPosts'
 
 interface GroupPostListProps {
@@ -504,14 +505,14 @@ function PostListItem(props: PostListItemProps) {
 
         {/* Author */}
         <Box style={{ fontSize: tokens.typography.fontSize.xs, color: tokens.colors.text.secondary, marginBottom: tokens.spacing[2], display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
-          <Text size="xs" color="secondary">
-            {language === 'zh' ? '作者' : 'Author'}:{' '}
-          </Text>
           {post.author_handle && !post.author_handle.startsWith('deleted_') ? (
             <Link
               href={`/u/${encodeURIComponent(post.author_handle)}`}
               onClick={(e) => e.stopPropagation()}
               style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
                 color: tokens.colors.accent?.primary || '#8b6fa8',
                 textDecoration: 'none',
                 fontWeight: tokens.typography.fontWeight.bold,
@@ -522,6 +523,20 @@ function PostListItem(props: PostListItemProps) {
                 transition: `all ${tokens.transition.base}`,
               }}
             >
+              <span style={{
+                width: 20, height: 20, borderRadius: '50%', flexShrink: 0,
+                background: post.author_avatar_url ? undefined : getAvatarGradient(post.author_id || post.author_handle),
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                overflow: 'hidden', position: 'relative',
+              }}>
+                {post.author_avatar_url ? (
+                  <img src={post.author_avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} referrerPolicy="no-referrer" />
+                ) : (
+                  <span style={{ color: '#fff', fontSize: 10, fontWeight: 700 }}>
+                    {(post.author_handle || 'U').charAt(0).toUpperCase()}
+                  </span>
+                )}
+              </span>
               @{post.author_handle}
             </Link>
           ) : (
@@ -737,12 +752,26 @@ function CommentsSection(props: CommentsSectionProps) {
           {comments.map((comment) => (
             <Box key={comment.id}>
               <Box style={{ padding: tokens.spacing[2], background: tokens.colors.bg.primary, borderRadius: tokens.radius.md }}>
-                <Box style={{ display: 'flex', justifyContent: 'space-between', marginBottom: tokens.spacing[1] }}>
+                <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: tokens.spacing[1] }}>
                   {comment.author_handle ? (
                     <Link
                       href={`/u/${encodeURIComponent(comment.author_handle)}`}
-                      style={{ fontSize: tokens.typography.fontSize.xs, fontWeight: tokens.typography.fontWeight.bold, color: tokens.colors.accent?.primary || '#8b6fa8', textDecoration: 'none' }}
+                      style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: tokens.typography.fontSize.xs, fontWeight: tokens.typography.fontWeight.bold, color: tokens.colors.accent?.primary || '#8b6fa8', textDecoration: 'none' }}
                     >
+                      <span style={{
+                        width: 18, height: 18, borderRadius: '50%', flexShrink: 0,
+                        background: comment.author_avatar_url ? undefined : getAvatarGradient(comment.user_id || comment.author_handle),
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        overflow: 'hidden',
+                      }}>
+                        {comment.author_avatar_url ? (
+                          <img src={comment.author_avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} referrerPolicy="no-referrer" />
+                        ) : (
+                          <span style={{ color: '#fff', fontSize: 9, fontWeight: 700 }}>
+                            {(comment.author_handle || 'U').charAt(0).toUpperCase()}
+                          </span>
+                        )}
+                      </span>
                       @{comment.author_handle}
                     </Link>
                   ) : (
@@ -802,10 +831,33 @@ function CommentsSection(props: CommentsSectionProps) {
                 <Box style={{ marginLeft: tokens.spacing[4], borderLeft: `2px solid ${tokens.colors.border.primary}`, paddingLeft: tokens.spacing[2], marginTop: tokens.spacing[1] }}>
                   {(expandedReplies[comment.id] ? comment.replies : comment.replies.slice(0, 3)).map((reply) => (
                     <Box key={reply.id} style={{ padding: `${tokens.spacing[1]} 0` }}>
-                      <Box style={{ display: 'flex', gap: tokens.spacing[1], alignItems: 'baseline' }}>
-                        <Text size="xs" weight="bold" style={{ color: tokens.colors.accent?.primary || '#8b6fa8' }}>
-                          @{reply.author_handle || (language === 'zh' ? '匿名' : 'Anonymous')}
-                        </Text>
+                      <Box style={{ display: 'flex', gap: tokens.spacing[1], alignItems: 'center' }}>
+                        {reply.author_handle ? (
+                          <Link
+                            href={`/u/${encodeURIComponent(reply.author_handle)}`}
+                            style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: tokens.typography.fontSize.xs, fontWeight: tokens.typography.fontWeight.bold, color: tokens.colors.accent?.primary || '#8b6fa8', textDecoration: 'none' }}
+                          >
+                            <span style={{
+                              width: 16, height: 16, borderRadius: '50%', flexShrink: 0,
+                              background: reply.author_avatar_url ? undefined : getAvatarGradient(reply.user_id || reply.author_handle),
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              overflow: 'hidden',
+                            }}>
+                              {reply.author_avatar_url ? (
+                                <img src={reply.author_avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} referrerPolicy="no-referrer" />
+                              ) : (
+                                <span style={{ color: '#fff', fontSize: 8, fontWeight: 700 }}>
+                                  {reply.author_handle.charAt(0).toUpperCase()}
+                                </span>
+                              )}
+                            </span>
+                            @{reply.author_handle}
+                          </Link>
+                        ) : (
+                          <Text size="xs" weight="bold" color="secondary">
+                            @{language === 'zh' ? '匿名' : 'Anonymous'}
+                          </Text>
+                        )}
                         <Text size="xs" color="tertiary">
                           {new Date(reply.created_at).toLocaleString(language === 'zh' ? 'zh-CN' : 'en-US')}
                         </Text>

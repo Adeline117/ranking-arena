@@ -359,11 +359,25 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
             </Text>
           </Box>
           {searching ? (
-            <Box style={{ padding: tokens.spacing[4], display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{ animation: 'spin 1s linear infinite' }}>
-                <circle cx="12" cy="12" r="10" stroke={tokens.colors.text.tertiary} strokeWidth="3" strokeDasharray="31.4 31.4" strokeLinecap="round" />
-              </svg>
-              <Text size="sm" color="tertiary">搜索中...</Text>
+            <Box style={{ padding: `${tokens.spacing[2]} 0` }}>
+              {[1, 2, 3].map((i) => (
+                <Box
+                  key={i}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: tokens.spacing[3],
+                    padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+                    borderBottom: `1px solid ${tokens.colors.border.primary}`,
+                  }}
+                >
+                  <Box style={{ width: 28, height: 28, borderRadius: tokens.radius.md, background: tokens.colors.bg.tertiary, animation: 'pulse 1.5s ease-in-out infinite', flexShrink: 0 }} />
+                  <Box style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <Box style={{ width: `${50 + i * 15}%`, height: 12, background: tokens.colors.bg.tertiary, borderRadius: tokens.radius.sm, animation: 'pulse 1.5s ease-in-out infinite' }} />
+                    <Box style={{ width: `${30 + i * 10}%`, height: 10, background: tokens.colors.bg.tertiary, borderRadius: tokens.radius.sm, animation: 'pulse 1.5s ease-in-out infinite', opacity: 0.6 }} />
+                  </Box>
+                </Box>
+              ))}
             </Box>
           ) : searchResults.length === 0 ? (
             <Box style={{ padding: tokens.spacing[4], textAlign: 'center' }}>

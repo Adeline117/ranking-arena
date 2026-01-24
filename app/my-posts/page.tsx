@@ -214,7 +214,7 @@ export default function MyPostsPage() {
             ) : undefined}
           />
         ) : (
-          <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
+          <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3], animation: 'fadeIn 0.3s ease-out' }}>
             {posts.map((post) => (
               <Box
                 key={post.id}
@@ -227,7 +227,7 @@ export default function MyPostsPage() {
               >
                 <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: tokens.spacing[4] }}>
                   <Link
-                    href={post.group_id ? `/groups/${post.group_id}?post=${post.id}` : `/groups?post=${post.id}`}
+                    href={`/post/${post.id}`}
                     style={{
                       flex: 1,
                       textDecoration: 'none',

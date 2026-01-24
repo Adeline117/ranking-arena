@@ -261,7 +261,7 @@ function TraderContent(props: { params: { handle: string } | Promise<{ handle: s
       
       <TopNav email={email} />
 
-      <Box style={{ maxWidth: 1200, margin: '0 auto', padding: tokens.spacing[6] }}>
+      <Box className="page-container" style={{ maxWidth: 1200, margin: '0 auto', padding: tokens.spacing[6], paddingBottom: 100 }}>
         {/* Header */}
         <TraderHeader
           handle={profile.handle}
@@ -303,23 +303,34 @@ function TraderContent(props: { params: { handle: string } | Promise<{ handle: s
             >
               {/* Left Column - 核心绩效指标和评分 */}
               <Box className="stagger-enter" style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[6] }}>
-                {performance && (
-                  <OverviewPerformanceCard
-                    performance={performance}
-                    equityCurve={equityCurve?.['90D']}
-                  />
-                )}
-                {/* 评分详情 - 紧跟在表现卡片下方 */}
-                {performance && (
-                  <ScoreBreakdown
-                    arenaScore={performance.arena_score ?? null}
-                    returnScore={performance.return_score ?? null}
-                    drawdownScore={performance.drawdown_score ?? null}
-                    stabilityScore={performance.stability_score ?? null}
-                    source={profile.source}
-                    isPro={isPro}
-                    onUnlock={() => router.push('/pricing')}
-                  />
+                {performance ? (
+                  <>
+                    <OverviewPerformanceCard
+                      performance={performance}
+                      equityCurve={equityCurve?.['90D']}
+                    />
+                    <ScoreBreakdown
+                      arenaScore={performance.arena_score ?? null}
+                      returnScore={performance.return_score ?? null}
+                      drawdownScore={performance.drawdown_score ?? null}
+                      stabilityScore={performance.stability_score ?? null}
+                      source={profile.source}
+                      isPro={isPro}
+                      onUnlock={() => router.push('/pricing')}
+                    />
+                  </>
+                ) : (
+                  <Box style={{
+                    padding: tokens.spacing[6],
+                    background: tokens.colors.bg.secondary,
+                    borderRadius: tokens.radius.xl,
+                    border: `1px solid ${tokens.colors.border.primary}`,
+                    textAlign: 'center',
+                  }}>
+                    <Text size="sm" color="tertiary">
+                      {language === 'zh' ? '暂无绩效数据' : 'No performance data available'}
+                    </Text>
+                  </Box>
                 )}
                 {/* 交易员动态（置顶帖子自动显示在最上面） */}
                 <TraderFeed
@@ -348,14 +359,28 @@ function TraderContent(props: { params: { handle: string } | Promise<{ handle: s
             </Box>
           )}
 
-          {activeTab === 'stats' && stats && (
-            <StatsPage 
-              stats={stats} 
-              traderHandle={profile.handle}
-              assetBreakdown={assetBreakdown}
-              equityCurve={equityCurve}
-              positionHistory={extendedPositionHistory}
-            />
+          {activeTab === 'stats' && (
+            stats ? (
+              <StatsPage
+                stats={stats}
+                traderHandle={profile.handle}
+                assetBreakdown={assetBreakdown}
+                equityCurve={equityCurve}
+                positionHistory={extendedPositionHistory}
+              />
+            ) : (
+              <Box style={{
+                padding: tokens.spacing[6],
+                background: tokens.colors.bg.secondary,
+                borderRadius: tokens.radius.xl,
+                border: `1px solid ${tokens.colors.border.primary}`,
+                textAlign: 'center',
+              }}>
+                <Text size="sm" color="tertiary">
+                  {language === 'zh' ? '暂无统计数据' : 'No statistics available'}
+                </Text>
+              </Box>
+            )
           )}
 
           {activeTab === 'portfolio' && <PortfolioTable items={portfolio} history={positionHistory} />}
