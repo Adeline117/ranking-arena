@@ -183,81 +183,50 @@ function HotContent() {
     load()
   }, [])
 
-  // 从数据库加载热榜帖子
+  // 从缓存 API 加载热榜帖子
   useEffect(() => {
     const loadPosts = async () => {
       setLoadingPosts(true)
       try {
-        // 从数据库获取热门帖子
-        const { data, error } = await supabase
-          .from('posts')
-          .select(`
-            id,
-            title,
-            content,
-            author_handle,
-            created_at,
-            like_count,
-            dislike_count,
-            comment_count,
-            view_count,
-            hot_score,
-            group_id,
-            groups(name)
-          `)
-          .order('hot_score', { ascending: false, nullsFirst: false })
-          .order('view_count', { ascending: false, nullsFirst: false })
-          .order('like_count', { ascending: false, nullsFirst: false })
-          .limit(20)
+        const res = await fetch('/api/posts?sort_by=hot_score&sort_order=desc&limit=20')
+        const json = await res.json()
+        const data = json.posts || json.data?.posts || []
 
-        if (error) {
-          console.error('Failed to load hot posts:', error)
-          setPosts([])
-          setLoadingPosts(false)
-          return
-        }
-
-        if (data && data.length > 0) {
-          const postsData: Post[] = data.map((post) => {
-            // 计算时间差
-            const createdAt = new Date(post.created_at)
-            const now = new Date()
-            const diffMs = now.getTime() - createdAt.getTime()
-            const diffHours = Math.floor(diffMs / (1000 * 60 * 60))
+        if (data.length > 0) {
+          const postsData: Post[] = data.map((post: Record<string, unknown>) => {
+            const createdAt = new Date(post.created_at as string)
+            const diffMs = Date.now() - createdAt.getTime()
+            const diffHours = Math.floor(diffMs / 3600000)
             const diffDays = Math.floor(diffHours / 24)
 
             let timeStr = ''
-            if (diffDays > 0) {
-              timeStr = `${diffDays}d`
-            } else if (diffHours > 0) {
-              timeStr = `${diffHours}h`
-            } else {
-              const diffMins = Math.floor(diffMs / (1000 * 60))
-              timeStr = `${diffMins}m`
-            }
+            if (diffDays > 0) timeStr = `${diffDays}d`
+            else if (diffHours > 0) timeStr = `${diffHours}h`
+            else timeStr = `${Math.floor(diffMs / 60000)}m`
 
-            // groups 是关联查询的结果，可能是对象或数组
-            const groupsData = post.groups as { name?: string } | { name?: string }[] | null
-            const groupName = Array.isArray(groupsData)
-              ? groupsData[0]?.name
-              : groupsData?.name
+            const groupName = (post.group_name as string) || '综合讨论'
+
+            const hotScore = (post.hot_score as number) || (() => {
+              const hours = diffMs / 3600000
+              return ((post.like_count as number) || 0) * 3 +
+                ((post.comment_count as number) || 0) * 5 +
+                ((post.view_count as number) || 0) * 0.1 -
+                Math.log(hours + 2) * 2
+            })()
 
             return {
-              id: post.id,
-              group: groupName || '综合讨论',
-              group_id: post.group_id || undefined,
-              title: post.title || '无标题',
-              author: post.author_handle || '匿名',
-              author_handle: post.author_handle,
+              id: post.id as string,
+              group: groupName,
+              group_id: (post.group_id as string) || undefined,
+              title: (post.title as string) || '无标题',
+              author: (post.author_handle as string) || '匿名',
+              author_handle: post.author_handle as string,
               time: timeStr,
-              body: post.content || '',
-              comments: post.comment_count || 0,
-              likes: post.like_count || 0,
-              hotScore: post.hot_score ||
-                (post.view_count || 0) * 0.1 +
-                (post.like_count || 0) * 2 +
-                (post.comment_count || 0) * 3,
-              views: post.view_count || 0,
+              body: (post.content as string) || '',
+              comments: (post.comment_count as number) || 0,
+              likes: (post.like_count as number) || 0,
+              hotScore,
+              views: (post.view_count as number) || 0,
             }
           })
           setPosts(postsData)
@@ -271,7 +240,7 @@ function HotContent() {
         setLoadingPosts(false)
       }
     }
-    
+
     loadPosts()
   }, [])
 
@@ -281,7 +250,7 @@ function HotContent() {
   }, [posts])
 
   const visibleHot = useMemo(() => {
-    return loggedIn ? hotPosts : hotPosts.slice(0, 3) // 未登录只显示前3条
+    return loggedIn ? hotPosts : hotPosts.slice(0, 10)
   }, [loggedIn, hotPosts])
 
   // 加载评论（初始加载）

@@ -15,6 +15,7 @@ import { withAuth } from '@/lib/api/middleware'
 import { normalizeSubscriptionTier } from '@/lib/types/premium'
 import type { TimeRange } from '@/lib/types/trader'
 import { createLogger } from '@/lib/utils/logger'
+import { query } from '@/lib/db/pool'
 
 const logger = createLogger('snapshots-api')
 
@@ -67,53 +68,54 @@ export const POST = withAuth(
       const expiresAt = new Date()
       expiresAt.setDate(expiresAt.getDate() + expiryDays)
 
-      // Get current ranking data
-      const seasonId = getSeasonId(timeRange)
-      let tradersQuery = supabase
-        .from('trader_snapshots')
-        .select(`
-          source_trader_id,
-          season_id,
-          roi,
-          pnl,
-          win_rate,
-          max_drawdown,
-          trades_count,
-          followers,
-          source,
-          captured_at,
-          trader_scores!inner (
-            arena_score,
-            return_score,
-            drawdown_score,
-            stability_score
-          ),
-          trader_sources!inner (
-            handle,
-            profile_url
-          )
-        `)
-        .eq('season_id', seasonId)
-        .gte('captured_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
-        .order('roi', { ascending: false })
-        .limit(MAX_SNAPSHOT_TRADERS)
+      // Get current ranking data from trader_snapshots_v2
+      const window = timeRangeToWindow(timeRange)
+      const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
 
-      // Apply exchange filter
+      const conditions: string[] = [`s."window" = $1`, `s.as_of_ts >= $2`]
+      const params: unknown[] = [window, cutoff]
+      let paramIdx = 3
+
       if (exchange) {
-        tradersQuery = tradersQuery.eq('source', exchange)
+        conditions.push(`s.platform = $${paramIdx}`)
+        params.push(exchange)
+        paramIdx++
       }
 
-      const { data: traders, error: tradersError } = await tradersQuery
+      const whereClause = conditions.join(' AND ')
 
-      if (tradersError) {
-        logger.error('Failed to fetch traders for snapshot', { error: tradersError.message })
+      let tradersResult: { rows: SnapshotRow[] }
+      try {
+        tradersResult = await query<SnapshotRow>(
+          `SELECT s.platform, s.trader_key, s.roi_pct, s.pnl_usd,
+                  s.win_rate_pct, s.max_drawdown_pct, s.trades_count,
+                  s.copier_count, s.arena_score, s.metrics,
+                  src.display_name
+           FROM trader_snapshots_v2 s
+           LEFT JOIN trader_sources_v2 src ON src.platform = s.platform AND src.trader_key = s.trader_key
+           WHERE ${whereClause}
+           ORDER BY s.roi_pct DESC NULLS LAST
+           LIMIT $${paramIdx}`,
+          [...params, MAX_SNAPSHOT_TRADERS],
+        )
+      } catch (dbError) {
+        logger.error('Failed to fetch traders for snapshot', { error: String(dbError) })
         return NextResponse.json(
           { success: false, error: 'Failed to fetch ranking data' },
           { status: 500 }
         )
       }
 
-      if (!traders || traders.length === 0) {
+      // Deduplicate by platform:trader_key
+      const seen = new Set<string>()
+      const traders = tradersResult.rows.filter((row) => {
+        const key = `${row.platform}:${row.trader_key}`
+        if (seen.has(key)) return false
+        seen.add(key)
+        return true
+      })
+
+      if (traders.length === 0) {
         return NextResponse.json(
           { success: false, error: 'No trader data available for snapshot' },
           { status: 400 }
@@ -122,7 +124,7 @@ export const POST = withAuth(
 
       // Find top trader
       const topTrader = traders[0]
-      const topTraderHandle = ((topTrader as Record<string, unknown>).trader_sources as Record<string, unknown> | undefined)?.handle as string || topTrader.source_trader_id
+      const topTraderHandle = topTrader.display_name || topTrader.trader_key
 
       // Create the snapshot record
       const { data: snapshot, error: snapshotError } = await supabase
@@ -134,11 +136,11 @@ export const POST = withAuth(
           category,
           total_traders: traders.length,
           top_trader_handle: topTraderHandle,
-          top_trader_roi: topTrader.roi,
+          top_trader_roi: topTrader.roi_pct,
           data_captured_at: new Date().toISOString(),
           data_delay_minutes: 15,
           is_public: isPublic,
-          expires_at: isPro ? null : expiresAt.toISOString(), // Pro users never expire
+          expires_at: isPro ? null : expiresAt.toISOString(),
           title,
           description,
         })
@@ -155,30 +157,28 @@ export const POST = withAuth(
 
       // Insert individual trader data
       const snapshotTraders = traders.map((trader, index) => {
-        const scores = (trader as Record<string, unknown>).trader_scores as Record<string, number> | undefined
-        const sources = (trader as Record<string, unknown>).trader_sources as Record<string, string> | undefined
-
+        const metrics = trader.metrics as Record<string, unknown> | null
         return {
           snapshot_id: snapshot.id,
           rank: index + 1,
-          trader_id: trader.source_trader_id,
-          handle: sources?.handle,
-          source: trader.source,
-          roi: trader.roi,
-          pnl: trader.pnl,
-          win_rate: trader.win_rate,
-          max_drawdown: trader.max_drawdown,
+          trader_id: trader.trader_key,
+          handle: trader.display_name || trader.trader_key,
+          source: trader.platform,
+          roi: trader.roi_pct,
+          pnl: trader.pnl_usd,
+          win_rate: trader.win_rate_pct,
+          max_drawdown: trader.max_drawdown_pct,
           trades_count: trader.trades_count,
-          followers: trader.followers,
-          arena_score: scores?.arena_score,
-          return_score: scores?.return_score,
-          drawdown_score: scores?.drawdown_score,
-          stability_score: scores?.stability_score,
+          followers: trader.copier_count,
+          arena_score: trader.arena_score,
+          return_score: metrics?.return_score ?? null,
+          drawdown_score: metrics?.drawdown_score ?? null,
+          stability_score: metrics?.stability_score ?? null,
           data_availability: {
-            roi: trader.roi !== null,
-            pnl: trader.pnl !== null,
-            win_rate: trader.win_rate !== null,
-            max_drawdown: trader.max_drawdown !== null,
+            roi: trader.roi_pct !== null,
+            pnl: trader.pnl_usd !== null,
+            win_rate: trader.win_rate_pct !== null,
+            max_drawdown: trader.max_drawdown_pct !== null,
           },
         }
       })
@@ -189,7 +189,6 @@ export const POST = withAuth(
 
       if (tradersInsertError) {
         logger.error('Failed to insert snapshot traders', { error: tradersInsertError.message })
-        // Still return success as the snapshot was created
       }
 
       logger.info('Snapshot created', {
@@ -210,7 +209,7 @@ export const POST = withAuth(
           tradersCount: traders.length,
           topTrader: {
             handle: topTraderHandle,
-            roi: topTrader.roi,
+            roi: topTrader.roi_pct,
           },
         },
       })
@@ -290,24 +289,29 @@ export const GET = withAuth(
   { name: 'list-snapshots' }
 )
 
-/**
- * Helper function to get season ID based on time range
- */
-function getSeasonId(timeRange: TimeRange): string {
-  const now = new Date()
-  const year = now.getFullYear()
-  const month = now.getMonth() + 1
+/** Row shape returned by the trader_snapshots_v2 query */
+type SnapshotRow = Record<string, unknown> & {
+  platform: string
+  trader_key: string
+  roi_pct: number | null
+  pnl_usd: number | null
+  win_rate_pct: number | null
+  max_drawdown_pct: number | null
+  trades_count: number | null
+  copier_count: number | null
+  arena_score: number | null
+  metrics: Record<string, unknown> | null
+  display_name: string | null
+}
 
+/**
+ * Map TimeRange (7D/30D/90D) to v2 window format (7d/30d/90d)
+ */
+function timeRangeToWindow(timeRange: TimeRange): string {
   switch (timeRange) {
-    case '7D':
-      const weekNum = Math.ceil((now.getDate() + new Date(year, month - 1, 1).getDay()) / 7)
-      return `${year}-W${weekNum.toString().padStart(2, '0')}`
-    case '30D':
-      return `${year}-${month.toString().padStart(2, '0')}`
-    case '90D':
-      const quarter = Math.ceil(month / 3)
-      return `${year}-Q${quarter}`
-    default:
-      return `${year}-Q${Math.ceil(month / 3)}`
+    case '7D': return '7d'
+    case '30D': return '30d'
+    case '90D': return '90d'
+    default: return '90d'
   }
 }

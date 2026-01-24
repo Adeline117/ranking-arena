@@ -79,18 +79,38 @@ export default function NewGroupPostPage() {
   const draftKey = `${DRAFT_KEY_PREFIX}${groupId}`
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
+    supabase.auth.getUser().then(async ({ data }) => {
       setEmail(data.user?.email ?? null)
       setUserId(data.user?.id ?? null)
-      
+
       if (!data.user) {
         router.push('/login')
         return
       }
-      
+
       loadUserHandle(data.user.id)
+
+      // Check membership and mute status
+      const { data: membership } = await supabase
+        .from('group_members')
+        .select('role, muted_until')
+        .eq('group_id', groupId)
+        .eq('user_id', data.user.id)
+        .maybeSingle()
+
+      if (!membership) {
+        showToast(language === 'zh' ? '需要加入小组才能发帖' : 'You must be a member to post', 'warning')
+        router.push(`/groups/${groupId}`)
+        return
+      }
+
+      if (membership.muted_until && new Date(membership.muted_until) > new Date()) {
+        showToast(language === 'zh' ? '您已被禁言' : 'You are muted in this group', 'warning')
+        router.push(`/groups/${groupId}`)
+        return
+      }
     })
-  }, [router])
+  }, [router, groupId, showToast, language])
 
   // 加载小组名称
   useEffect(() => {

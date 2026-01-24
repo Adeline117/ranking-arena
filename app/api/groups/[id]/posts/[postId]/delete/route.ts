@@ -49,7 +49,7 @@ export async function POST(
     // 检查帖子是否属于此小组
     const { data: postData } = await supabase
       .from('posts')
-      .select('id, group_id, deleted_at')
+      .select('id, group_id, deleted_at, author_id, title')
       .eq('id', postId)
       .single()
 
@@ -78,6 +78,25 @@ export async function POST(
     if (updateError) {
       console.error('Delete post error:', updateError)
       return NextResponse.json({ error: '删除失败' }, { status: 500 })
+    }
+
+    // Notify the post author
+    if (postData.author_id && postData.author_id !== user.id) {
+      const { error: notifyError } = await supabase
+        .from('notifications')
+        .insert({
+          user_id: postData.author_id,
+          type: 'system' as const,
+          title: '帖子被删除',
+          message: `您的帖子「${postData.title || ''}」已被小组管理员删除`,
+          link: `/groups/${groupId}`,
+          actor_id: user.id,
+          reference_id: postId,
+        })
+
+      if (notifyError) {
+        console.error('Notification error:', notifyError)
+      }
     }
 
     return NextResponse.json({ success: true })

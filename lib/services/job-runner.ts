@@ -5,7 +5,7 @@
  * - Polls refresh_jobs table for pending jobs.
  * - Uses FOR UPDATE SKIP LOCKED for atomic dequeue (no double-processing).
  * - Dispatches to appropriate connector method.
- * - Writes results to trader_snapshots_v2, trader_profiles_v2, trader_timeseries_v2.
+ * - Writes results to trader_snapshots_v2, trader_profiles_v2, trader_timeseries.
  * - Handles retries with exponential backoff.
  *
  * Scheduling:
@@ -243,7 +243,7 @@ export class JobRunner {
       if (!result || result.data.length === 0) continue;
 
       await query(
-        `INSERT INTO trader_timeseries_v2 (platform, trader_key, series_type, data, as_of_ts)
+        `INSERT INTO trader_timeseries (platform, trader_key, series_type, data, as_of_ts)
          VALUES ($1, $2, $3, $4, $5)
          ON CONFLICT (platform, trader_key, series_type) DO UPDATE SET
            data = $4, as_of_ts = $5`,

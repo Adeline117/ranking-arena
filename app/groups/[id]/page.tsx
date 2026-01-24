@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/layout/TopNav'
@@ -10,6 +11,8 @@ import { Box, Text, Button } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { ThumbsUpIcon, CommentIcon } from '@/app/components/icons'
 import { useToast } from '@/app/components/ui/Toast'
+import { useDialog } from '@/app/components/ui/Dialog'
+import { useSubscription } from '@/app/components/home/hooks/useSubscription'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { GroupCardSkeleton, PostSkeleton, ListSkeleton, SkeletonAvatar, Skeleton } from '@/app/components/ui/Skeleton'
 import MasonryGrid from '@/app/components/ui/MasonryGrid'
@@ -59,6 +62,7 @@ type Group = {
   created_by?: string | null
   rules?: string | null
   owner_handle?: string | null
+  is_premium_only?: boolean | null
 }
 
 type GroupMember = {
@@ -81,6 +85,7 @@ type Post = {
   comment_count?: number | null
   bookmark_count?: number | null
   repost_count?: number | null
+  is_pinned?: boolean | null
   user_liked?: boolean // 当前用户是否点赞
   user_bookmarked?: boolean // 当前用户是否收藏
   user_reposted?: boolean // 当前用户是否转发
@@ -102,6 +107,9 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
   
   const { t: _t, language } = useLanguage()
   const { showToast } = useToast()
+  const { showDangerConfirm } = useDialog()
+  const { isPro } = useSubscription()
+  const searchParams = useSearchParams()
   const [email, setEmail] = useState<string | null>(null)
   const [userId, setUserId] = useState<string | null>(null)
   const [accessToken, setAccessToken] = useState<string | null>(null)
@@ -113,11 +121,6 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [joining, setJoining] = useState(false)
-  // 投诉相关
-  const [showComplaintModal, setShowComplaintModal] = useState(false)
-  const [complaintReason, setComplaintReason] = useState('')
-  const [complaintTarget, setComplaintTarget] = useState<string | null>(null)
-  const [submittingComplaint, setSubmittingComplaint] = useState(false)
   const [sortMode, setSortMode] = useState<'latest' | 'hot'>('latest')
   const [viewMode, setViewMode] = useState<'list' | 'masonry'>(() => {
     if (typeof window !== 'undefined') {
@@ -130,6 +133,21 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
   const [repostLoading, setRepostLoading] = useState<Record<string, boolean>>({})
   const [showRepostModal, setShowRepostModal] = useState<string | null>(null)
   const [repostComment, setRepostComment] = useState('')
+  // Infinite scroll
+  const [hasMorePosts, setHasMorePosts] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const sentinelRef = useRef<HTMLDivElement>(null)
+  // Post editing
+  const [editingPost, setEditingPost] = useState<string | null>(null)
+  const [editTitle, setEditTitle] = useState('')
+  const [editContent, setEditContent] = useState('')
+  const [savingEdit, setSavingEdit] = useState(false)
+  // Post delete
+  const [deletingPost, setDeletingPost] = useState<string | null>(null)
+  // Comment reply
+  const [replyingTo, setReplyingTo] = useState<Record<string, string | null>>({}) // postId -> commentId
+  const [replyContent, setReplyContent] = useState<Record<string, string>>({})
+  const [expandedReplies, setExpandedReplies] = useState<Record<string, boolean>>({})
   // 小组信息弹窗
   const [showGroupInfo, setShowGroupInfo] = useState(false)
   const [showMembersList, setShowMembersList] = useState(false)
@@ -147,6 +165,7 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
     updated_at: string
     author_handle?: string | null
     author_avatar_url?: string | null
+    replies?: CommentWithAuthor[]
   }
   const [expandedComments, setExpandedComments] = useState<Record<string, boolean>>({})
   const [comments, setComments] = useState<Record<string, CommentWithAuthor[]>>({})
@@ -455,7 +474,7 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
         // 读取小组信息
         const { data: groupData, error: groupErr } = await supabase
           .from('groups')
-          .select('id, name, name_en, description, description_en, avatar_url, member_count, created_at, created_by, rules')
+          .select('id, name, name_en, description, description_en, avatar_url, member_count, created_at, created_by, rules, is_premium_only')
           .eq('id', groupId)
           .maybeSingle()
         
@@ -478,38 +497,8 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
 
         setGroup(groupData ? { ...groupData, owner_handle: ownerHandle } as Group : null)
 
-        // 读取帖子
-        const { data: postsData, error: postsErr } = await supabase
-          .from('posts')
-          .select('id, group_id, title, content, created_at, author_handle, author_id, like_count, comment_count, bookmark_count, repost_count')
-          .eq('group_id', groupId)
-          .order('created_at', { ascending: false })
-          .limit(50)
-
-        if (postsErr) {
-          setError(postsErr.message)
-        } else {
-          const postsList = (postsData || []) as Post[]
-          
-          // 获取用户点赞、收藏、转发状态
-          if (userId) {
-            const postIds = postsList.map(p => p.id)
-            const [likeMap, bookmarkMap, repostMap] = await Promise.all([
-              fetchUserLikes(postIds, userId),
-              fetchUserBookmarks(postIds, userId),
-              fetchUserReposts(postIds, userId)
-            ])
-            postsList.forEach(post => {
-              post.user_liked = likeMap[post.id] || false
-              post.user_bookmarked = bookmarkMap[post.id] || false
-              post.user_reposted = repostMap[post.id] || false
-            })
-          }
-          
-          setPosts(postsList)
-        }
-
-        // 检查用户是否是成员及角色
+        // 检查用户是否是成员及角色 (do this before loading posts)
+        let membershipConfirmed = false
         if (userId) {
           const { data: membership } = await supabase
             .from('group_members')
@@ -519,6 +508,45 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
             .maybeSingle()
           setIsMember(!!membership)
           setUserRole(membership?.role as 'owner' | 'admin' | 'member' | null)
+          membershipConfirmed = !!membership
+        }
+
+        // Only load posts if user is a member (content gate)
+        if (membershipConfirmed) {
+          const { data: postsData, error: postsErr } = await supabase
+            .from('posts')
+            .select('id, group_id, title, content, created_at, author_handle, author_id, like_count, comment_count, bookmark_count, repost_count, is_pinned')
+            .eq('group_id', groupId)
+            .is('deleted_at', null)
+            .order('created_at', { ascending: false })
+            .limit(20)
+
+          if (postsErr) {
+            setError(postsErr.message)
+          } else {
+            const postsList = (postsData || []) as Post[]
+
+            // 获取用户点赞、收藏、转发状态
+            if (userId) {
+              const postIds = postsList.map(p => p.id)
+              const [likeMap, bookmarkMap, repostMap] = await Promise.all([
+                fetchUserLikes(postIds, userId),
+                fetchUserBookmarks(postIds, userId),
+                fetchUserReposts(postIds, userId)
+              ])
+              postsList.forEach(post => {
+                post.user_liked = likeMap[post.id] || false
+                post.user_bookmarked = bookmarkMap[post.id] || false
+                post.user_reposted = repostMap[post.id] || false
+              })
+            }
+
+            setPosts(postsList)
+            setHasMorePosts(postsList.length === 20)
+          }
+        } else {
+          setPosts([])
+          setHasMorePosts(false)
         }
     } catch (err) {
       // 如果是取消的请求，不处理错误
@@ -546,26 +574,219 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [groupId, userId])
 
+  // Invite auto-join
+  useEffect(() => {
+    const inviteToken = searchParams.get('invite')
+    if (!inviteToken || !userId || !groupId || isMember || loading) return
+
+    const handleInvite = async () => {
+      try {
+        const res = await fetch(`/api/groups/${groupId}/invite?verify=${encodeURIComponent(inviteToken)}`)
+        if (res.ok) {
+          // Valid invite, auto-join (bypass Pro check for invited users)
+          await handleJoin(true)
+        } else {
+          showToast(language === 'zh' ? '邀请链接无效或已过期' : 'Invite link is invalid or expired', 'error')
+        }
+      } catch {
+        // Invite verification failed, just join normally via button
+      }
+    }
+    handleInvite()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, userId, groupId, isMember, loading])
+
+  // Infinite scroll: load more posts
+  const loadMorePosts = useCallback(async () => {
+    if (loadingMore || !hasMorePosts || posts.length === 0 || !isMember) return
+
+    setLoadingMore(true)
+    try {
+      const lastPost = posts[posts.length - 1]
+      const { data: morePosts } = await supabase
+        .from('posts')
+        .select('id, group_id, title, content, created_at, author_handle, author_id, like_count, comment_count, bookmark_count, repost_count, is_pinned')
+        .eq('group_id', groupId)
+        .is('deleted_at', null)
+        .lt('created_at', lastPost.created_at)
+        .order('created_at', { ascending: false })
+        .limit(20)
+
+      if (morePosts && morePosts.length > 0) {
+        const postsList = morePosts as Post[]
+        if (userId) {
+          const postIds = postsList.map(p => p.id)
+          const [likeMap, bookmarkMap, repostMap] = await Promise.all([
+            fetchUserLikes(postIds, userId),
+            fetchUserBookmarks(postIds, userId),
+            fetchUserReposts(postIds, userId)
+          ])
+          postsList.forEach(post => {
+            post.user_liked = likeMap[post.id] || false
+            post.user_bookmarked = bookmarkMap[post.id] || false
+            post.user_reposted = repostMap[post.id] || false
+          })
+        }
+        setPosts(prev => [...prev, ...postsList])
+        setHasMorePosts(postsList.length === 20)
+      } else {
+        setHasMorePosts(false)
+      }
+    } catch (err) {
+      console.error('Load more posts error:', err)
+    } finally {
+      setLoadingMore(false)
+    }
+  }, [loadingMore, hasMorePosts, posts, isMember, groupId, userId, fetchUserLikes, fetchUserBookmarks, fetchUserReposts])
+
+  // IntersectionObserver for infinite scroll
+  useEffect(() => {
+    const sentinel = sentinelRef.current
+    if (!sentinel) return
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          loadMorePosts()
+        }
+      },
+      { threshold: 0.1 }
+    )
+
+    observer.observe(sentinel)
+    return () => observer.disconnect()
+  }, [loadMorePosts])
+
+  // Post delete handler
+  const handleDeletePost = async (postId: string) => {
+    const confirmed = await showDangerConfirm(
+      language === 'zh' ? '删除帖子' : 'Delete Post',
+      language === 'zh' ? '确定删除此帖子吗？此操作不可撤销。' : 'Are you sure you want to delete this post? This cannot be undone.'
+    )
+    if (!confirmed) return
+
+    setDeletingPost(postId)
+    try {
+      const res = await fetch(`/api/posts/${postId}/delete`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          ...getCsrfHeaders()
+        }
+      })
+      if (res.ok) {
+        setPosts(prev => prev.filter(p => p.id !== postId))
+        showToast(language === 'zh' ? '帖子已删除' : 'Post deleted', 'success')
+      } else {
+        const data = await res.json()
+        showToast(data.error || (language === 'zh' ? '删除失败' : 'Delete failed'), 'error')
+      }
+    } catch (err) {
+      console.error('Delete post error:', err)
+      showToast(language === 'zh' ? '网络错误' : 'Network error', 'error')
+    } finally {
+      setDeletingPost(null)
+    }
+  }
+
+  // Post edit handler
+  const handleSaveEdit = async (postId: string) => {
+    if (!editTitle.trim()) {
+      showToast(language === 'zh' ? '标题不能为空' : 'Title cannot be empty', 'warning')
+      return
+    }
+    setSavingEdit(true)
+    try {
+      const res = await fetch(`/api/posts/${postId}/edit`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+          ...getCsrfHeaders()
+        },
+        body: JSON.stringify({ title: editTitle.trim(), content: editContent.trim() })
+      })
+      if (res.ok) {
+        setPosts(prev => prev.map(p =>
+          p.id === postId ? { ...p, title: editTitle.trim(), content: editContent.trim() } : p
+        ))
+        setEditingPost(null)
+        showToast(language === 'zh' ? '修改成功' : 'Updated successfully', 'success')
+      } else {
+        const data = await res.json()
+        showToast(data.error || (language === 'zh' ? '修改失败' : 'Update failed'), 'error')
+      }
+    } catch (err) {
+      console.error('Edit post error:', err)
+      showToast(language === 'zh' ? '网络错误' : 'Network error', 'error')
+    } finally {
+      setSavingEdit(false)
+    }
+  }
+
+  // Pin/unpin handler
+  const handlePinPost = async (postId: string) => {
+    try {
+      const res = await fetch(`/api/posts/${postId}/pin`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          ...getCsrfHeaders()
+        }
+      })
+      if (res.ok) {
+        const data = await res.json()
+        const newPinned = data.data?.is_pinned ?? data.is_pinned
+        setPosts(prev => prev.map(p => {
+          if (p.id === postId) return { ...p, is_pinned: newPinned }
+          // If pinning, unpin others in this group
+          if (newPinned) return { ...p, is_pinned: false }
+          return p
+        }))
+        showToast(
+          newPinned
+            ? (language === 'zh' ? '已置顶' : 'Pinned')
+            : (language === 'zh' ? '已取消置顶' : 'Unpinned'),
+          'success'
+        )
+      } else {
+        const data = await res.json()
+        showToast(data.error || (language === 'zh' ? '操作失败' : 'Operation failed'), 'error')
+      }
+    } catch (err) {
+      console.error('Pin post error:', err)
+      showToast(language === 'zh' ? '网络错误' : 'Network error', 'error')
+    }
+  }
+
   // 计算帖子排序 (使用 useMemo 避免阻塞渲染)
   const computedSortedPosts = useMemo(() => {
     if (posts.length === 0) return []
 
+    let sorted: Post[]
     if (sortMode === 'latest') {
-      return [...posts].sort((a, b) =>
+      sorted = [...posts].sort((a, b) =>
         new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
       )
+    } else {
+      // 热门：按综合分数排序
+      const now = Date.now()
+      sorted = [...posts].sort((a, b) => {
+        const hoursA = (now - new Date(a.created_at).getTime()) / (1000 * 60 * 60)
+        const hoursB = (now - new Date(b.created_at).getTime()) / (1000 * 60 * 60)
+
+        const scoreA = ((a.like_count || 0) * 2 + (a.comment_count || 0) * 1) / (1 + hoursA / 24)
+        const scoreB = ((b.like_count || 0) * 2 + (b.comment_count || 0) * 1) / (1 + hoursB / 24)
+
+        return scoreB - scoreA
+      })
     }
 
-    // 热门：按综合分数排序
-    const now = Date.now()
-    return [...posts].sort((a, b) => {
-      const hoursA = (now - new Date(a.created_at).getTime()) / (1000 * 60 * 60)
-      const hoursB = (now - new Date(b.created_at).getTime()) / (1000 * 60 * 60)
-
-      const scoreA = ((a.like_count || 0) * 2 + (a.comment_count || 0) * 1) / (1 + hoursA / 24)
-      const scoreB = ((b.like_count || 0) * 2 + (b.comment_count || 0) * 1) / (1 + hoursB / 24)
-
-      return scoreB - scoreA
+    // Sort pinned posts to top
+    return sorted.sort((a, b) => {
+      if (a.is_pinned && !b.is_pinned) return -1
+      if (!a.is_pinned && b.is_pinned) return 1
+      return 0
     })
   }, [posts, sortMode])
 
@@ -930,11 +1151,18 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
     )
   }
 
-  const handleJoin = async () => {
+  const handleJoin = async (bypassPro = false) => {
     if (!userId) {
       showToast(language === 'zh' ? '请先登录' : 'Please login first', 'warning')
       return
     }
+
+    // Pro group enforcement (skip if joining via invite)
+    if (!bypassPro && group?.is_premium_only && !isPro) {
+      showToast(language === 'zh' ? '此小组仅限 Pro 会员加入' : 'This group is Pro members only', 'warning')
+      return
+    }
+
     setJoining(true)
     try {
       const { error } = await supabase
@@ -942,7 +1170,47 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
         .insert({ group_id: groupId, user_id: userId })
       if (error) throw error
       setIsMember(true)
+      setUserRole('member')
       showToast(language === 'zh' ? '加入成功' : 'Joined successfully', 'success')
+
+      // Notify group owner
+      if (group?.created_by && group.created_by !== userId) {
+        await supabase.from('notifications').insert({
+          user_id: group.created_by,
+          type: 'system' as const,
+          title: language === 'zh' ? '新成员加入' : 'New Member Joined',
+          message: language === 'zh' ? '有新成员加入了您的小组' : 'A new member joined your group',
+          link: `/groups/${groupId}`,
+          actor_id: userId,
+          reference_id: groupId,
+        })
+      }
+
+      // Reload posts after joining
+      const { data: postsData } = await supabase
+        .from('posts')
+        .select('id, group_id, title, content, created_at, author_handle, author_id, like_count, comment_count, bookmark_count, repost_count, is_pinned')
+        .eq('group_id', groupId)
+        .is('deleted_at', null)
+        .order('created_at', { ascending: false })
+        .limit(20)
+
+      if (postsData) {
+        const postsList = postsData as Post[]
+        const postIds = postsList.map(p => p.id)
+        const [likeMap, bookmarkMap, repostMap] = await Promise.all([
+          fetchUserLikes(postIds, userId),
+          fetchUserBookmarks(postIds, userId),
+          fetchUserReposts(postIds, userId)
+        ])
+        postsList.forEach(post => {
+          post.user_liked = likeMap[post.id] || false
+          post.user_bookmarked = bookmarkMap[post.id] || false
+          post.user_reposted = repostMap[post.id] || false
+        })
+        setPosts(postsList)
+        setHasMorePosts(postsList.length === 20)
+      }
     } catch (err) {
       console.error('Join error:', err)
       const errorMsg = err instanceof Error ? err.message : (language === 'zh' ? '加入失败' : 'Failed to join')
@@ -1230,20 +1498,6 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
                           </Button>
                         </Link>
                       )}
-                      {/* 投诉按钮（普通成员可见，且小组成员数大于100） */}
-                      {userRole === 'member' && (group?.member_count ?? 0) > 100 && (
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          onClick={() => {
-                            setComplaintTarget(group?.created_by || null)
-                            setShowComplaintModal(true)
-                          }}
-                          style={{ color: '#ff6b6b' }}
-                        >
-                          {language === 'zh' ? '投诉' : 'Report'}
-                        </Button>
-                      )}
                       <Button
                         variant="secondary"
                         size="sm"
@@ -1257,7 +1511,7 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
                     <Button
                       variant="primary"
                       size="sm"
-                      onClick={handleJoin}
+                      onClick={() => handleJoin()}
                       disabled={joining}
                     >
                       {joining ? '加入中...' : '+ 加入小组'}
@@ -1276,6 +1530,31 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
         </Box>
 
         {/* Posts Section */}
+        {!isMember && !loading ? (
+          <Box style={{
+            padding: `${tokens.spacing[10]} ${tokens.spacing[5]}`,
+            textAlign: 'center',
+            background: tokens.colors.bg.secondary,
+            borderRadius: tokens.radius.xl,
+            border: `1px solid ${tokens.colors.border.primary}`,
+          }}>
+            <Text size="lg" weight="bold" style={{ marginBottom: tokens.spacing[3] }}>
+              {language === 'zh' ? '加入小组查看帖子' : 'Join to view posts'}
+            </Text>
+            <Text size="sm" color="tertiary" style={{ marginBottom: tokens.spacing[4] }}>
+              {language === 'zh' ? '加入小组后可以查看帖子、评论和参与讨论' : 'Join the group to view posts, comments, and participate in discussions'}
+            </Text>
+            {userId ? (
+              <Button variant="primary" onClick={() => handleJoin()} disabled={joining}>
+                {joining ? (language === 'zh' ? '加入中...' : 'Joining...') : (language === 'zh' ? '加入小组' : 'Join Group')}
+              </Button>
+            ) : (
+              <Link href="/login">
+                <Button variant="primary">{language === 'zh' ? '登录后加入' : 'Login to join'}</Button>
+              </Link>
+            )}
+          </Box>
+        ) : (
         <Box style={{ position: 'relative' }}>
           {/* Sort Tabs + View Toggle */}
           <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: tokens.spacing[4] }}>
@@ -1396,12 +1675,64 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
                     {/* 帖子内容 */}
                     <Box style={{ flex: 1, padding: tokens.spacing[4] }}>
                       <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: tokens.spacing[2] }}>
-                        <Text size="lg" weight="bold">
-                          {translatedPosts[post.id]?.title || post.title}
-                        </Text>
-                        <Text size="xs" color="tertiary">
-                          {new Date(post.created_at).toLocaleString(language === 'zh' ? 'zh-CN' : 'en-US')}
-                        </Text>
+                        <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], flex: 1 }}>
+                          {post.is_pinned && (
+                            <span title={language === 'zh' ? '置顶' : 'Pinned'} style={{ fontSize: 14, color: tokens.colors.accent?.primary || ARENA_PURPLE }}>📌</span>
+                          )}
+                          {editingPost === post.id ? (
+                            <input
+                              type="text"
+                              value={editTitle}
+                              onChange={(e) => setEditTitle(e.target.value)}
+                              style={{
+                                flex: 1,
+                                padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
+                                borderRadius: tokens.radius.md,
+                                border: `1px solid ${tokens.colors.border.primary}`,
+                                background: tokens.colors.bg.primary,
+                                color: tokens.colors.text.primary,
+                                fontSize: tokens.typography.fontSize.lg,
+                                fontWeight: tokens.typography.fontWeight.bold,
+                              }}
+                            />
+                          ) : (
+                            <Text size="lg" weight="bold">
+                              {translatedPosts[post.id]?.title || post.title}
+                            </Text>
+                          )}
+                        </Box>
+                        <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], flexShrink: 0 }}>
+                          <Text size="xs" color="tertiary">
+                            {new Date(post.created_at).toLocaleString(language === 'zh' ? 'zh-CN' : 'en-US')}
+                          </Text>
+                          {/* Post actions (author: edit/delete, admin: pin/delete) */}
+                          {(post.author_id === userId || userRole === 'owner' || userRole === 'admin') && (
+                            <Box style={{ display: 'flex', gap: tokens.spacing[1] }}>
+                              {post.author_id === userId && editingPost !== post.id && (
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); setEditingPost(post.id); setEditTitle(post.title); setEditContent(post.content || '') }}
+                                  title={language === 'zh' ? '编辑' : 'Edit'}
+                                  style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 2, fontSize: 13, color: tokens.colors.text.tertiary }}
+                                >✏️</button>
+                              )}
+                              {(userRole === 'owner' || userRole === 'admin') && (
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); handlePinPost(post.id) }}
+                                  title={post.is_pinned ? (language === 'zh' ? '取消置顶' : 'Unpin') : (language === 'zh' ? '置顶' : 'Pin')}
+                                  style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 2, fontSize: 13, color: post.is_pinned ? (tokens.colors.accent?.primary || ARENA_PURPLE) : tokens.colors.text.tertiary }}
+                                >📌</button>
+                              )}
+                              {post.author_id === userId && (
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); handleDeletePost(post.id) }}
+                                  title={language === 'zh' ? '删除' : 'Delete'}
+                                  disabled={deletingPost === post.id}
+                                  style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 2, fontSize: 13, color: '#ff6b6b', opacity: deletingPost === post.id ? 0.5 : 1 }}
+                                >🗑️</button>
+                              )}
+                            </Box>
+                          )}
+                        </Box>
                       </Box>
 
                     <Box style={{ fontSize: tokens.typography.fontSize.xs, color: tokens.colors.text.secondary, marginBottom: tokens.spacing[2], display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
@@ -1438,17 +1769,43 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
                         )}
                       </Box>
 
-                    {post.content && (() => {
+                    {editingPost === post.id ? (
+                      <Box style={{ marginTop: tokens.spacing[2] }}>
+                        <textarea
+                          value={editContent}
+                          onChange={(e) => setEditContent(e.target.value)}
+                          style={{
+                            width: '100%',
+                            minHeight: 80,
+                            padding: tokens.spacing[2],
+                            borderRadius: tokens.radius.md,
+                            border: `1px solid ${tokens.colors.border.primary}`,
+                            background: tokens.colors.bg.primary,
+                            color: tokens.colors.text.primary,
+                            fontSize: tokens.typography.fontSize.sm,
+                            resize: 'vertical',
+                          }}
+                        />
+                        <Box style={{ display: 'flex', gap: tokens.spacing[2], marginTop: tokens.spacing[2] }}>
+                          <Button variant="primary" size="sm" onClick={() => handleSaveEdit(post.id)} disabled={savingEdit}>
+                            {savingEdit ? (language === 'zh' ? '保存中...' : 'Saving...') : (language === 'zh' ? '保存' : 'Save')}
+                          </Button>
+                          <Button variant="secondary" size="sm" onClick={() => setEditingPost(null)}>
+                            {language === 'zh' ? '取消' : 'Cancel'}
+                          </Button>
+                        </Box>
+                      </Box>
+                    ) : post.content && (() => {
                       const displayContent = translatedPosts[post.id]?.content || post.content
                       const isLongContent = displayContent.length > 150
                       const isExpanded = expandedPosts[post.id]
-                      const contentToShow = isExpanded || !isLongContent 
-                        ? displayContent 
+                      const contentToShow = isExpanded || !isLongContent
+                        ? displayContent
                         : displayContent.slice(0, 150) + '...'
-                      
+
                       return (
                         <Box style={{ marginTop: tokens.spacing[3] }}>
-                          <Text size="sm" color="secondary" style={{ 
+                          <Text size="sm" color="secondary" style={{
                             lineHeight: 1.6,
                             whiteSpace: 'pre-wrap',
                           }}>
@@ -1470,8 +1827,8 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
                                 padding: 0,
                               }}
                             >
-                              {isExpanded 
-                                ? (language === 'zh' ? '收起' : 'Show less') 
+                              {isExpanded
+                                ? (language === 'zh' ? '收起' : 'Show less')
                                 : (language === 'zh' ? '展开查看' : 'Show more')}
                             </button>
                           )}
@@ -1623,46 +1980,153 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
 
                         {/* 评论列表 */}
                         {commentLoading[post.id] ? (
-                          <Text size="xs" color="tertiary">加载中...</Text>
+                          <Text size="xs" color="tertiary">{language === 'zh' ? '加载中...' : 'Loading...'}</Text>
                         ) : comments[post.id]?.length > 0 ? (
                           <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
                             {comments[post.id].map((comment) => (
-                              <Box 
-                                key={comment.id}
-                                style={{ 
-                                  padding: tokens.spacing[2],
-                                  background: tokens.colors.bg.primary,
-                                  borderRadius: tokens.radius.md,
-                                }}
-                              >
-                                <Box style={{ display: 'flex', justifyContent: 'space-between', marginBottom: tokens.spacing[1] }}>
-                                  {comment.author_handle ? (
-                                    <Link
-                                      href={`/u/${encodeURIComponent(comment.author_handle)}`}
+                              <Box key={comment.id}>
+                                <Box
+                                  style={{
+                                    padding: tokens.spacing[2],
+                                    background: tokens.colors.bg.primary,
+                                    borderRadius: tokens.radius.md,
+                                  }}
+                                >
+                                  <Box style={{ display: 'flex', justifyContent: 'space-between', marginBottom: tokens.spacing[1] }}>
+                                    {comment.author_handle ? (
+                                      <Link
+                                        href={`/u/${encodeURIComponent(comment.author_handle)}`}
+                                        style={{
+                                          fontSize: tokens.typography.fontSize.xs,
+                                          fontWeight: tokens.typography.fontWeight.bold,
+                                          color: tokens.colors.accent?.primary || '#8b6fa8',
+                                          textDecoration: 'none',
+                                        }}
+                                      >
+                                        @{comment.author_handle}
+                                      </Link>
+                                    ) : (
+                                      <Text size="xs" weight="bold" color="secondary">
+                                        @{language === 'zh' ? '匿名' : 'Anonymous'}
+                                      </Text>
+                                    )}
+                                    <Text size="xs" color="tertiary">
+                                      {new Date(comment.created_at).toLocaleString(language === 'zh' ? 'zh-CN' : 'en-US')}
+                                    </Text>
+                                  </Box>
+                                  <Text size="sm">{renderContentWithLinks(comment.content)}</Text>
+                                  {/* Reply button */}
+                                  {accessToken && !comment.parent_id && (
+                                    <button
+                                      onClick={() => setReplyingTo(prev => ({
+                                        ...prev,
+                                        [post.id]: prev[post.id] === comment.id ? null : comment.id
+                                      }))}
                                       style={{
-                                        fontSize: tokens.typography.fontSize.xs,
-                                        fontWeight: tokens.typography.fontWeight.bold,
-                                        color: tokens.colors.accent?.primary || '#8b6fa8',
-                                        textDecoration: 'none',
+                                        background: 'transparent',
+                                        border: 'none',
+                                        color: tokens.colors.text.tertiary,
+                                        cursor: 'pointer',
+                                        fontSize: 11,
+                                        marginTop: tokens.spacing[1],
+                                        padding: 0,
                                       }}
                                     >
-                                      @{comment.author_handle}
-                                    </Link>
-                                  ) : (
-                                    <Text size="xs" weight="bold" color="secondary">
-                                      @匿名
-                                    </Text>
+                                      {language === 'zh' ? '回复' : 'Reply'}
+                                    </button>
                                   )}
-                                  <Text size="xs" color="tertiary">
-                                    {new Date(comment.created_at).toLocaleString('zh-CN')}
-                                  </Text>
                                 </Box>
-                                <Text size="sm">{renderContentWithLinks(comment.content)}</Text>
+
+                                {/* Reply input */}
+                                {replyingTo[post.id] === comment.id && (
+                                  <Box style={{ marginLeft: tokens.spacing[4], marginTop: tokens.spacing[1], display: 'flex', gap: tokens.spacing[2] }}>
+                                    <input
+                                      type="text"
+                                      placeholder={language === 'zh' ? `回复 @${comment.author_handle || '匿名'}...` : `Reply to @${comment.author_handle || 'Anonymous'}...`}
+                                      value={replyContent[comment.id] || ''}
+                                      onChange={(e) => setReplyContent(prev => ({ ...prev, [comment.id]: e.target.value }))}
+                                      onKeyDown={async (e) => {
+                                        if (e.key === 'Enter' && replyContent[comment.id]?.trim()) {
+                                          try {
+                                            const res = await fetch(`/api/posts/${post.id}/comments`, {
+                                              method: 'POST',
+                                              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}`, ...getCsrfHeaders() },
+                                              body: JSON.stringify({ content: replyContent[comment.id].trim(), parent_id: comment.id })
+                                            })
+                                            if (res.ok) {
+                                              setReplyContent(prev => ({ ...prev, [comment.id]: '' }))
+                                              setReplyingTo(prev => ({ ...prev, [post.id]: null }))
+                                              toggleComments(post.id) // Refresh comments
+                                            }
+                                          } catch { /* ignore */ }
+                                        }
+                                      }}
+                                      style={{
+                                        flex: 1,
+                                        padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
+                                        borderRadius: tokens.radius.md,
+                                        border: `1px solid ${tokens.colors.border.primary}`,
+                                        background: tokens.colors.bg.primary,
+                                        color: tokens.colors.text.primary,
+                                        fontSize: tokens.typography.fontSize.xs,
+                                      }}
+                                    />
+                                    <Button
+                                      variant="primary"
+                                      size="sm"
+                                      onClick={async () => {
+                                        if (!replyContent[comment.id]?.trim()) return
+                                        try {
+                                          const res = await fetch(`/api/posts/${post.id}/comments`, {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}`, ...getCsrfHeaders() },
+                                            body: JSON.stringify({ content: replyContent[comment.id].trim(), parent_id: comment.id })
+                                          })
+                                          if (res.ok) {
+                                            setReplyContent(prev => ({ ...prev, [comment.id]: '' }))
+                                            setReplyingTo(prev => ({ ...prev, [post.id]: null }))
+                                            toggleComments(post.id)
+                                          }
+                                        } catch { /* ignore */ }
+                                      }}
+                                      style={{ fontSize: 11, padding: `${tokens.spacing[1]} ${tokens.spacing[2]}` }}
+                                    >
+                                      {language === 'zh' ? '发送' : 'Send'}
+                                    </Button>
+                                  </Box>
+                                )}
+
+                                {/* Nested replies */}
+                                {comment.replies && comment.replies.length > 0 && (
+                                  <Box style={{ marginLeft: tokens.spacing[4], borderLeft: `2px solid ${tokens.colors.border.primary}`, paddingLeft: tokens.spacing[2], marginTop: tokens.spacing[1] }}>
+                                    {(expandedReplies[comment.id] ? comment.replies : comment.replies.slice(0, 3)).map((reply) => (
+                                      <Box key={reply.id} style={{ padding: `${tokens.spacing[1]} 0` }}>
+                                        <Box style={{ display: 'flex', gap: tokens.spacing[1], alignItems: 'baseline' }}>
+                                          <Text size="xs" weight="bold" style={{ color: tokens.colors.accent?.primary || '#8b6fa8' }}>
+                                            @{reply.author_handle || (language === 'zh' ? '匿名' : 'Anonymous')}
+                                          </Text>
+                                          <Text size="xs" color="tertiary">
+                                            {new Date(reply.created_at).toLocaleString(language === 'zh' ? 'zh-CN' : 'en-US')}
+                                          </Text>
+                                        </Box>
+                                        <Text size="xs" style={{ marginLeft: tokens.spacing[1] }}>{reply.content}</Text>
+                                      </Box>
+                                    ))}
+                                    {comment.replies.length > 3 && !expandedReplies[comment.id] && (
+                                      <button
+                                        onClick={() => setExpandedReplies(prev => ({ ...prev, [comment.id]: true }))}
+                                        style={{ background: 'transparent', border: 'none', color: ARENA_PURPLE, cursor: 'pointer', fontSize: 11, padding: 0 }}
+                                      >
+                                        {language === 'zh' ? `查看更多 (${comment.replies.length - 3})` : `Show more (${comment.replies.length - 3})`}
+                                      </button>
+                                    )}
+                                  </Box>
+                                )}
                               </Box>
                             ))}
                           </Box>
                         ) : (
-                          <Text size="xs" color="tertiary">暂无评论</Text>
+                          <Text size="xs" color="tertiary">{language === 'zh' ? '暂无评论' : 'No comments'}</Text>
                         )}
                       </Box>
                     )}
@@ -1686,7 +2150,19 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
               </Text>
             </Box>
           )}
+
+          {/* Infinite scroll sentinel */}
+          {hasMorePosts && sortedPosts.length > 0 && (
+            <div ref={sentinelRef} style={{ padding: tokens.spacing[4], textAlign: 'center' }}>
+              {loadingMore && (
+                <Text size="sm" color="tertiary">
+                  {language === 'zh' ? '加载更多...' : 'Loading more...'}
+                </Text>
+              )}
+            </div>
+          )}
         </Box>
+        )}
 
         {/* Floating Post Button (右下角固定) */}
         {isMember && (
@@ -2105,123 +2581,6 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
           </Box>
         )}
 
-        {/* 投诉弹窗 */}
-        {showComplaintModal && (
-          <Box
-            style={{
-              position: 'fixed',
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              background: 'rgba(0, 0, 0, 0.6)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              zIndex: tokens.zIndex.modal,
-            }}
-            onClick={() => setShowComplaintModal(false)}
-          >
-            <Box
-              style={{
-                background: tokens.colors.bg.primary,
-                borderRadius: tokens.radius.xl,
-                padding: tokens.spacing[6],
-                width: '90%',
-                maxWidth: 500,
-                border: `1px solid ${tokens.colors.border.primary}`,
-              }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <Text size="xl" weight="bold" style={{ marginBottom: tokens.spacing[4] }}>
-                {language === 'zh' ? '投诉组长/管理员' : 'Report Admin/Owner'}
-              </Text>
-              
-              <Text size="sm" color="tertiary" style={{ marginBottom: tokens.spacing[4] }}>
-                {language === 'zh' 
-                  ? '当投诉人数达到小组成员的10%时，将自动发起投票。超过50%的人支持投诉，组长/管理员将被撤职。' 
-                  : 'When 10% of members report, a vote will be triggered. If over 50% vote in favor, the admin/owner will be removed.'}
-              </Text>
-
-              <Box style={{ marginBottom: tokens.spacing[4] }}>
-                <Text size="sm" weight="bold" color="secondary" style={{ marginBottom: tokens.spacing[2] }}>
-                  {language === 'zh' ? '投诉原因（至少30字）' : 'Reason (min 30 characters)'}
-                </Text>
-                <textarea
-                  value={complaintReason}
-                  onChange={(e) => setComplaintReason(e.target.value)}
-                  placeholder={language === 'zh' ? '请详细描述您投诉的原因...' : 'Please describe your complaint in detail...'}
-                  style={{
-                    width: '100%',
-                    minHeight: 120,
-                    padding: tokens.spacing[3],
-                    borderRadius: tokens.radius.lg,
-                    border: `1px solid ${tokens.colors.border.primary}`,
-                    background: tokens.colors.bg.secondary,
-                    color: tokens.colors.text.primary,
-                    fontSize: tokens.typography.fontSize.sm,
-                    resize: 'vertical',
-                  }}
-                />
-                <Text size="xs" color="tertiary" style={{ marginTop: tokens.spacing[1] }}>
-                  {complaintReason.length}/30 {language === 'zh' ? '字' : 'chars'}
-                </Text>
-              </Box>
-
-              <Box style={{ display: 'flex', gap: tokens.spacing[3], justifyContent: 'flex-end' }}>
-                <Button
-                  variant="secondary"
-                  onClick={() => {
-                    setShowComplaintModal(false)
-                    setComplaintReason('')
-                  }}
-                >
-                  {language === 'zh' ? '取消' : 'Cancel'}
-                </Button>
-                <Button
-                  variant="primary"
-                  disabled={complaintReason.length < 30 || submittingComplaint}
-                  onClick={async () => {
-                    if (!accessToken || !complaintTarget) return
-                    setSubmittingComplaint(true)
-                    try {
-                      const res = await fetch(`/api/groups/${groupId}/complaints`, {
-                        method: 'POST',
-                        headers: {
-                          'Content-Type': 'application/json',
-                          Authorization: `Bearer ${accessToken}`,
-                          ...getCsrfHeaders()
-                        },
-                        body: JSON.stringify({
-                          target_user_id: complaintTarget,
-                          reason: complaintReason
-                        })
-                      })
-                      const data = await res.json()
-                      if (res.ok) {
-                        showToast(language === 'zh' ? '投诉已提交' : 'Complaint submitted', 'success')
-                        setShowComplaintModal(false)
-                        setComplaintReason('')
-                      } else {
-                        showToast(data.error || (language === 'zh' ? '提交失败' : 'Submission failed'), 'error')
-                      }
-                    } catch (err) {
-                      console.error('Complaint error:', err)
-                      showToast(language === 'zh' ? '网络错误，请稍后重试' : 'Network error, please try again later', 'error')
-                    } finally {
-                      setSubmittingComplaint(false)
-                    }
-                  }}
-                  style={{ background: '#ff6b6b' }}
-                >
-                  {submittingComplaint 
-                    ? (language === 'zh' ? '提交中...' : 'Submitting...') 
-                    : (language === 'zh' ? '提交投诉' : 'Submit Complaint')}
-                </Button>
-              </Box>
-            </Box>
-          </Box>
-        )}
       </Box>
     </Box>
   )

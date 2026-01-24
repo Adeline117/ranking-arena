@@ -55,6 +55,29 @@ export async function POST(request: NextRequest, context: RouteContext) {
     const user = await requireAuth(request)
     const supabase = getSupabaseAdmin()
 
+    // Check if the post belongs to a group and if user is muted
+    const { data: post } = await supabase
+      .from('posts')
+      .select('group_id')
+      .eq('id', id)
+      .single()
+
+    if (post?.group_id) {
+      const { data: membership } = await supabase
+        .from('group_members')
+        .select('muted_until')
+        .eq('group_id', post.group_id)
+        .eq('user_id', user.id)
+        .maybeSingle()
+
+      if (membership?.muted_until && new Date(membership.muted_until) > new Date()) {
+        return new Response(JSON.stringify({ error: '您已被禁言', success: false }), {
+          status: 403,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+    }
+
     const body = await request.json()
     const content = validateString(body.content, {
       required: true,
