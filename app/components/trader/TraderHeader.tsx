@@ -556,8 +556,9 @@ export default function TraderHeader({
         style={{
           display: 'flex',
           alignItems: 'center',
-          gap: tokens.spacing[3],
+          gap: tokens.spacing[2],
           flexShrink: 0,
+          flexWrap: 'wrap',
           position: 'relative',
           zIndex: 1,
         }}

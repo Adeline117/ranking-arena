@@ -151,7 +151,7 @@ export default function HomePage() {
         <ErrorBoundary>
           <Suspense fallback={
             <Box style={{
-              position: 'fixed', bottom: 80, left: '50%', transform: 'translateX(-50%)',
+              position: 'fixed', bottom: 'calc(80px + env(safe-area-inset-bottom, 0px))', left: '50%', transform: 'translateX(-50%)',
               padding: `${tokens.spacing[3]} ${tokens.spacing[5]}`, borderRadius: tokens.radius.xl,
               background: tokens.colors.bg.secondary, border: `1px solid ${tokens.colors.border.primary}`,
               boxShadow: tokens.shadow.lg, zIndex: 40,
