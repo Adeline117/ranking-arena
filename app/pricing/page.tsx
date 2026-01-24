@@ -353,7 +353,6 @@ export default function PricingPage() {
         <Box
           style={{
             display: 'grid',
-            gridTemplateColumns: '1fr 380px',
             gap: tokens.spacing[6],
             alignItems: 'start',
           }}
