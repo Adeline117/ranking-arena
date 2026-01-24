@@ -105,7 +105,10 @@ export default function GroupsFeedPage() {
           .limit(30)
 
         if (debouncedQuery.trim()) {
-          query = query.or(`name.ilike.%${debouncedQuery.trim()}%,name_en.ilike.%${debouncedQuery.trim()}%`)
+          const sanitized = debouncedQuery.trim()
+            .slice(0, 100)
+            .replace(/[\\%_]/g, c => `\\${c}`)
+          query = query.or(`name.ilike.%${sanitized}%,name_en.ilike.%${sanitized}%`)
         }
 
         const { data } = await query
@@ -231,7 +234,7 @@ export default function GroupsFeedPage() {
                     >
                       <Box style={{ width: 40, height: 40, borderRadius: tokens.radius.lg, background: 'linear-gradient(135deg, rgba(139,111,168,0.2), rgba(139,111,168,0.1))', border: `1px solid ${tokens.colors.border.primary}`, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
                         {group.avatar_url ? (
-                          <img src={group.avatar_url} alt={group.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          <img src={group.avatar_url} alt={group.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} referrerPolicy="no-referrer" onError={(e) => { e.currentTarget.style.display = 'none' }} />
                         ) : (
                           <Text size="sm" weight="bold" style={{ color: '#c9b8db' }}>
                             {group.name.charAt(0).toUpperCase()}
@@ -243,7 +246,7 @@ export default function GroupsFeedPage() {
                       </Text>
                       {group.member_count != null && (
                         <Text size="xs" color="tertiary">
-                          {group.member_count} {language === 'zh' ? '人' : ''}
+                          {group.member_count} {language === 'zh' ? '人' : 'members'}
                         </Text>
                       )}
                     </Link>
@@ -337,7 +340,7 @@ export default function GroupsFeedPage() {
                     >
                       <Box style={{ width: 44, height: 44, borderRadius: tokens.radius.lg, background: 'linear-gradient(135deg, rgba(139,111,168,0.2), rgba(139,111,168,0.1))', border: `1px solid ${tokens.colors.border.primary}`, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 }}>
                         {group.avatar_url ? (
-                          <img src={group.avatar_url} alt={group.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          <img src={group.avatar_url} alt={group.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} referrerPolicy="no-referrer" onError={(e) => { e.currentTarget.style.display = 'none' }} />
                         ) : (
                           <Text size="base" weight="bold" style={{ color: '#c9b8db' }}>
                             {group.name.charAt(0).toUpperCase()}

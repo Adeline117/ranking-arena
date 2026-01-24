@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
 import { ThumbsUpIcon, CommentIcon } from '@/app/components/icons'
+import { getAvatarGradient } from '@/lib/utils/avatar'
 
 interface MasonryPostCardProps {
   post: {
@@ -11,6 +12,8 @@ interface MasonryPostCardProps {
     title: string
     content?: string | null
     author_handle?: string | null
+    author_avatar_url?: string | null
+    author_id?: string | null
     created_at: string
     like_count?: number | null
     comment_count?: number | null
@@ -54,7 +57,7 @@ export default function MasonryPostCard({ post, language = 'zh', onLike, onComme
         )}
 
         {/* Content */}
-        <Box style={{ padding: tokens.spacing[3] }}>
+        <Box className="masonry-card-content" style={{ padding: tokens.spacing[3] }}>
           {/* Title */}
           <Text
             size="sm"
@@ -100,9 +103,47 @@ export default function MasonryPostCard({ post, language = 'zh', onLike, onComme
                 {language === 'zh' ? '已注销用户' : 'Deleted user'}
               </Text>
             ) : (
-              <Text size="xs" style={{ color: '#8b6fa8' }}>
+              <Link
+                href={`/u/${encodeURIComponent(post.author_handle!)}`}
+                onClick={(e) => e.stopPropagation()}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  color: '#8b6fa8',
+                  textDecoration: 'none',
+                  fontSize: tokens.typography.fontSize.xs,
+                  fontWeight: 600,
+                }}
+              >
+                <span style={{
+                  width: 16,
+                  height: 16,
+                  borderRadius: '50%',
+                  flexShrink: 0,
+                  background: post.author_avatar_url ? undefined : getAvatarGradient(post.author_id || post.author_handle!),
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  overflow: 'hidden',
+                  position: 'relative',
+                }}>
+                  {post.author_avatar_url ? (
+                    <img
+                      src={post.author_avatar_url}
+                      alt=""
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      referrerPolicy="no-referrer"
+                      onError={(e) => { e.currentTarget.style.display = 'none' }}
+                    />
+                  ) : (
+                    <span style={{ color: '#fff', fontSize: 8, fontWeight: 700 }}>
+                      {(post.author_handle || 'U').charAt(0).toUpperCase()}
+                    </span>
+                  )}
+                </span>
                 @{post.author_handle}
-              </Text>
+              </Link>
             )}
             <Text size="xs" color="tertiary">
               {new Date(post.created_at).toLocaleDateString(language === 'zh' ? 'zh-CN' : 'en-US')}

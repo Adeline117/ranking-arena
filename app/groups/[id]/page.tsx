@@ -394,6 +394,11 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
         .from('group_members')
         .insert({ group_id: groupId, user_id: userId })
       if (error) throw error
+
+      // Update member count
+      await supabase.rpc('increment_member_count', { p_group_id: groupId, p_delta: 1 })
+      setGroup(prev => prev ? { ...prev, member_count: (prev.member_count || 0) + 1 } : prev)
+
       setIsMember(true)
       setUserRole('member')
       showToast(language === 'zh' ? '加入成功' : 'Joined successfully', 'success')
@@ -432,7 +437,13 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
         .eq('group_id', groupId)
         .eq('user_id', userId)
       if (error) throw error
+
+      // Update member count
+      await supabase.rpc('increment_member_count', { p_group_id: groupId, p_delta: -1 })
+      setGroup(prev => prev ? { ...prev, member_count: Math.max(0, (prev.member_count || 1) - 1) } : prev)
+
       setIsMember(false)
+      setUserRole(null)
       showToast(language === 'zh' ? '已退出小组' : 'Left group successfully', 'success')
     } catch (err) {
       console.error('Leave error:', err)

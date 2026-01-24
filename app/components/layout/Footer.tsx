@@ -94,8 +94,7 @@ export default function Footer() {
             <Text size="xs" color="tertiary" style={{ lineHeight: 1.7 }}>
               {language === 'zh' ? (
                 <>
-                  排行榜数据来自 Binance、Bybit、Bitget 等交易所公开页面。
-                  热门交易员（Top 100）每 15 分钟更新一次，其他交易员每 4 小时更新。
+                  排行榜数据来自 Binance、Bybit、Bitget 等交易所公开页面，每 4 小时更新。
                   Arena Score 为平台自研评分系统，详见
                   <Link href="/methodology" style={{ color: tokens.colors.accent.primary, marginLeft: 4 }}>
                     评分方法论
@@ -104,8 +103,7 @@ export default function Footer() {
                 </>
               ) : (
                 <>
-                  Leaderboard data is sourced from public pages of Binance, Bybit, Bitget and other exchanges.
-                  Hot traders (Top 100) are updated every 15 minutes, others every 4 hours.
+                  Leaderboard data is sourced from public pages of Binance, Bybit, Bitget and other exchanges, updated every 4 hours.
                   Arena Score is our proprietary rating system, see
                   <Link href="/methodology" style={{ color: tokens.colors.accent.primary, marginLeft: 4 }}>
                     Methodology

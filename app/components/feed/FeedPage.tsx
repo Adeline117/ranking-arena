@@ -40,7 +40,7 @@ export default function FeedPage() {
         as="main"
         className="feed-main-content"
         style={{
-          maxWidth: 680,
+          maxWidth: 960,
           margin: '0 auto',
           padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
           paddingBottom: 100,
@@ -64,7 +64,8 @@ export default function FeedPage() {
               key={tab.key}
               onClick={() => setActiveTab(tab.key)}
               style={{
-                padding: `${tokens.spacing[2]} ${tokens.spacing[5]}`,
+                padding: `${tokens.spacing[3]} ${tokens.spacing[5]}`,
+                minHeight: 44,
                 borderRadius: tokens.radius.lg,
                 border: 'none',
                 background: activeTab === tab.key ? tokens.gradient.primary : 'transparent',
@@ -95,7 +96,7 @@ export default function FeedPage() {
         {/* Post feed - no groupId filter shows all posts */}
         <PostFeed
           key={activeTab}
-          layout="list"
+          layout="masonry"
           sortBy={sortBy}
         />
       </Box>
