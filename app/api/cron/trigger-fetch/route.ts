@@ -11,9 +11,16 @@ export const runtime = 'edge'
 export const dynamic = 'force-dynamic'
 
 function isAuthorized(req: Request): boolean {
-  const header = req.headers.get('x-cron-secret') || ''
-  const secret = process.env.CRON_SECRET || ''
-  return Boolean(secret) && header === secret
+  const authHeader = req.headers.get('authorization')
+  const cronSecret = process.env.CRON_SECRET
+
+  // 开发环境允许无密钥访问
+  if (!cronSecret && process.env.NODE_ENV === 'development') {
+    return true
+  }
+
+  if (!cronSecret) return false
+  return authHeader === `Bearer ${cronSecret}`
 }
 
 export async function GET() {
