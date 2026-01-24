@@ -23,6 +23,17 @@ import type { SnapshotWindow, RankedTraderV2, Platform } from '@/lib/types/tradi
 
 const WINDOWS: SnapshotWindow[] = ['7D', '30D', '90D']
 
+const PLATFORM_LABELS: Record<string, string> = {
+  binance_futures: 'Binance',
+  bybit: 'Bybit',
+  bitget_futures: 'Bitget',
+  okx_web3: 'OKX',
+  mexc: 'MEXC',
+  kucoin: 'KuCoin',
+}
+
+const FILTER_PLATFORMS = Object.keys(PLATFORM_LABELS)
+
 function RankingsContent() {
   const { language } = useLanguage()
   const isZh = language === 'zh'
@@ -41,6 +52,16 @@ function RankingsContent() {
   const handleWindowChange = (w: SnapshotWindow) => {
     const params = new URLSearchParams(searchParams.toString())
     params.set('window', w)
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false })
+  }
+
+  const handlePlatformChange = (p: string | undefined) => {
+    const params = new URLSearchParams(searchParams.toString())
+    if (p) {
+      params.set('platform', p)
+    } else {
+      params.delete('platform')
+    }
     router.replace(`${pathname}?${params.toString()}`, { scroll: false })
   }
 
@@ -75,7 +96,7 @@ function RankingsContent() {
           </div>
         </div>
 
-        <div className="flex gap-2 mb-6">
+        <div className="flex flex-wrap gap-2 mb-4">
           {WINDOWS.map(w => (
             <button
               key={w}
@@ -91,6 +112,34 @@ function RankingsContent() {
           ))}
         </div>
 
+        <div className="flex flex-wrap gap-2 mb-6">
+          <button
+            onClick={() => handlePlatformChange(undefined)}
+            className="px-3 py-1.5 rounded-md text-xs font-medium transition-all"
+            style={{
+              backgroundColor: !activePlatform ? tokens.colors.accent.brand + '30' : tokens.colors.bg.tertiary,
+              color: !activePlatform ? tokens.colors.accent.brand : tokens.colors.text.tertiary,
+              border: !activePlatform ? `1px solid ${tokens.colors.accent.brand}50` : `1px solid transparent`,
+            }}
+          >
+            {isZh ? '全部' : 'All'}
+          </button>
+          {FILTER_PLATFORMS.map(p => (
+            <button
+              key={p}
+              onClick={() => handlePlatformChange(p)}
+              className="px-3 py-1.5 rounded-md text-xs font-medium transition-all"
+              style={{
+                backgroundColor: activePlatform === p ? tokens.colors.accent.brand + '30' : tokens.colors.bg.tertiary,
+                color: activePlatform === p ? tokens.colors.accent.brand : tokens.colors.text.tertiary,
+                border: activePlatform === p ? `1px solid ${tokens.colors.accent.brand}50` : `1px solid transparent`,
+              }}
+            >
+              {PLATFORM_LABELS[p]}
+            </button>
+          ))}
+        </div>
+
         <DataStateWrapper
           isLoading={isLoading}
           error={error}
@@ -99,29 +148,31 @@ function RankingsContent() {
           loadingComponent={<RankingSkeleton />}
         >
           {data && data.traders.length > 0 && (
-            <div className="rounded-xl overflow-hidden" style={{ backgroundColor: tokens.colors.bg.secondary }}>
-              <div
-                className="grid grid-cols-[60px_1fr_100px_100px_90px_90px_90px] gap-2 px-4 py-3 text-xs font-medium border-b"
-                style={{ color: tokens.colors.text.secondary, borderColor: tokens.colors.border.primary }}
-              >
-                <div>#</div>
-                <div>{isZh ? '交易员' : 'Trader'}</div>
-                <div className="text-right">ROI</div>
-                <div className="text-right">PnL</div>
-                <div className="text-right">{isZh ? '胜率' : 'Win%'}</div>
-                <div className="text-right">{isZh ? '回撤' : 'MDD'}</div>
-                <div className="text-right">Score</div>
-              </div>
+            <div className="rounded-xl overflow-x-auto" style={{ backgroundColor: tokens.colors.bg.secondary }}>
+              <div style={{ minWidth: 640 }}>
+                <div
+                  className="grid grid-cols-[48px_1fr_90px_90px_80px_80px_80px] gap-2 px-4 py-3 text-xs font-medium border-b"
+                  style={{ color: tokens.colors.text.secondary, borderColor: tokens.colors.border.primary }}
+                >
+                  <div>#</div>
+                  <div>{isZh ? '交易员' : 'Trader'}</div>
+                  <div className="text-right">ROI</div>
+                  <div className="text-right">PnL</div>
+                  <div className="text-right">{isZh ? '胜率' : 'Win%'}</div>
+                  <div className="text-right">{isZh ? '回撤' : 'MDD'}</div>
+                  <div className="text-right">Score</div>
+                </div>
 
-              {data.traders.map((trader) => (
-                <TraderRow key={`${trader.platform}:${trader.trader_key}`} trader={trader} />
-              ))}
+                {data.traders.map((trader) => (
+                  <TraderRow key={`${trader.platform}:${trader.trader_key}`} trader={trader} />
+                ))}
 
-              <div
-                className="px-4 py-3 text-xs text-center border-t"
-                style={{ color: tokens.colors.text.tertiary, borderColor: tokens.colors.border.primary }}
-              >
-                {isZh ? `共 ${data.total_count} 名交易员` : `${data.total_count} traders total`}
+                <div
+                  className="px-4 py-3 text-xs text-center border-t"
+                  style={{ color: tokens.colors.text.tertiary, borderColor: tokens.colors.border.primary }}
+                >
+                  {isZh ? `共 ${data.total_count} 名交易员` : `${data.total_count} traders total`}
+                </div>
               </div>
             </div>
           )}
@@ -140,8 +191,10 @@ function TraderRow({ trader }: { trader: RankedTraderV2 }) {
   return (
     <Link
       href={traderUrl}
-      className="grid grid-cols-[60px_1fr_100px_100px_90px_90px_90px] gap-2 px-4 py-3 items-center hover:opacity-80 transition-opacity border-b last:border-b-0"
+      className="grid grid-cols-[48px_1fr_90px_90px_80px_80px_80px] gap-2 px-4 py-3 items-center transition-all border-b last:border-b-0"
       style={{ borderColor: tokens.colors.border.primary + '40' }}
+      onMouseEnter={(e) => { e.currentTarget.style.background = tokens.colors.bg.tertiary }}
+      onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
     >
       <div className="text-sm font-medium" style={{ color: tokens.colors.text.secondary }}>
         {trader.rank <= 3 ? (

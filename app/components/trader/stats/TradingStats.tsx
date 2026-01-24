@@ -17,9 +17,9 @@ export default function TradingStats({ data }: TradingStatsProps) {
         Trading
       </Text>
       <Box
+        className="trading-stats-grid"
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(4, 1fr)',
           gap: tokens.spacing[4],
         }}
       >

@@ -44,9 +44,9 @@ export default function UserHomeLayout({
 
   return (
     <Box
+      className="profile-grid"
       style={{
         display: 'grid',
-        gridTemplateColumns: '1fr 320px',
         gap: tokens.spacing[6],
       }}
     >

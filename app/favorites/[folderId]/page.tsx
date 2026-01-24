@@ -430,7 +430,7 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
           {/* 查看完整帖子链接 */}
           <Box style={{ marginTop: tokens.spacing[4], textAlign: 'center' }}>
             <Link
-              href={selectedPost.group_id ? `/groups/${selectedPost.group_id}?post=${selectedPost.id}` : `/groups?post=${selectedPost.id}`}
+              href={`/post/${selectedPost.id}`}
               style={{
                 color: tokens.colors.accent?.primary,
                 textDecoration: 'none',

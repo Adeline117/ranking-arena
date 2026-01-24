@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
@@ -21,12 +21,31 @@ type Group = {
   member_count?: number | null
 }
 
+type TabKey = 'feed' | 'discover'
+
 export default function GroupsFeedPage() {
   const { language } = useLanguage()
   const [email, setEmail] = useState<string | null>(null)
   const [myGroups, setMyGroups] = useState<Group[]>([])
+  const [allGroups, setAllGroups] = useState<Group[]>([])
   const [loadingGroups, setLoadingGroups] = useState(true)
+  const [loadingDiscover, setLoadingDiscover] = useState(false)
   const [userId, setUserId] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState<TabKey>('feed')
+  const [searchQuery, setSearchQuery] = useState('')
+  const [debouncedQuery, setDebouncedQuery] = useState('')
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Debounce search input (300ms)
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => {
+      setDebouncedQuery(searchQuery)
+    }, 300)
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+    }
+  }, [searchQuery])
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -72,6 +91,37 @@ export default function GroupsFeedPage() {
     loadMyGroups()
   }, [userId])
 
+  // Load all groups for discover tab
+  useEffect(() => {
+    if (activeTab !== 'discover') return
+
+    const loadAll = async () => {
+      setLoadingDiscover(true)
+      try {
+        let query = supabase
+          .from('groups')
+          .select('id, name, name_en, avatar_url, member_count')
+          .order('member_count', { ascending: false, nullsFirst: false })
+          .limit(30)
+
+        if (debouncedQuery.trim()) {
+          query = query.or(`name.ilike.%${debouncedQuery.trim()}%,name_en.ilike.%${debouncedQuery.trim()}%`)
+        }
+
+        const { data } = await query
+        setAllGroups(data || [])
+      } catch (err) {
+        console.error('Failed to load groups:', err)
+      } finally {
+        setLoadingDiscover(false)
+      }
+    }
+
+    loadAll()
+  }, [activeTab, debouncedQuery])
+
+  const myGroupIds = myGroups.map(g => g.id)
+
   return (
     <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
       <TopNav email={email} />
@@ -88,182 +138,232 @@ export default function GroupsFeedPage() {
         style={{
           maxWidth: 680,
           margin: '0 auto',
-          padding: `${tokens.spacing[4]} ${tokens.spacing[4]}`,
+          padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
           paddingBottom: 100,
         }}
       >
-        {/* My Groups - Horizontal scrollable */}
-        <Box style={{ marginBottom: tokens.spacing[5] }}>
-          <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: tokens.spacing[3] }}>
-            <Text size="lg" weight="bold">
-              {language === 'zh' ? '我的小组' : 'My Groups'}
-            </Text>
-            <Link
-              href="/groups/discover"
+        {/* Tabs */}
+        <Box
+          style={{
+            display: 'flex',
+            gap: tokens.spacing[1],
+            marginBottom: tokens.spacing[3],
+            borderBottom: `1px solid ${tokens.colors.border.primary}`,
+            paddingBottom: tokens.spacing[2],
+          }}
+        >
+          {([
+            { key: 'feed' as TabKey, label: language === 'zh' ? '小组动态' : 'Feed' },
+            { key: 'discover' as TabKey, label: language === 'zh' ? '发现小组' : 'Discover' },
+          ]).map((tab) => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
               style={{
-                fontSize: tokens.typography.fontSize.sm,
-                color: tokens.colors.accent.primary,
-                textDecoration: 'none',
-                fontWeight: 600,
+                padding: `${tokens.spacing[2]} ${tokens.spacing[5]}`,
+                borderRadius: tokens.radius.lg,
+                border: 'none',
+                background: activeTab === tab.key ? tokens.gradient.primary : 'transparent',
+                color: activeTab === tab.key ? '#fff' : tokens.colors.text.secondary,
+                fontWeight: activeTab === tab.key ? 800 : 600,
+                fontSize: tokens.typography.fontSize.base,
+                cursor: 'pointer',
+                transition: `all ${tokens.transition.base}`,
+              }}
+              onMouseEnter={(e) => {
+                if (activeTab !== tab.key) {
+                  e.currentTarget.style.background = tokens.colors.bg.secondary
+                  e.currentTarget.style.color = tokens.colors.text.primary
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (activeTab !== tab.key) {
+                  e.currentTarget.style.background = 'transparent'
+                  e.currentTarget.style.color = tokens.colors.text.secondary
+                }
               }}
             >
-              {language === 'zh' ? '发现更多' : 'Discover'}
-            </Link>
-          </Box>
+              {tab.label}
+            </button>
+          ))}
+        </Box>
 
-          {loadingGroups ? (
-            <Box
-              style={{
-                display: 'flex',
-                gap: tokens.spacing[3],
-                overflowX: 'hidden',
-                paddingBottom: tokens.spacing[2],
-              }}
-            >
-              {[0, 1, 2, 3].map((i) => (
-                <Box
-                  key={i}
-                  style={{
-                    flexShrink: 0,
-                    width: 120,
-                    padding: tokens.spacing[3],
-                    borderRadius: tokens.radius.lg,
-                    border: `1px solid ${tokens.colors.border.primary}`,
-                    background: tokens.colors.bg.secondary,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    gap: tokens.spacing[2],
-                  }}
-                >
-                  <Skeleton width="44px" height="44px" variant="rounded" />
-                  <Skeleton width="80px" height="12px" />
-                  <Skeleton width="50px" height="10px" />
+        {activeTab === 'feed' ? (
+          <>
+            {/* My Groups - Horizontal scrollable */}
+            <Box style={{ marginBottom: tokens.spacing[4] }}>
+              <Text size="sm" weight="bold" color="tertiary" style={{ marginBottom: tokens.spacing[2], textTransform: 'uppercase' }}>
+                {language === 'zh' ? '我的小组' : 'My Groups'}
+              </Text>
+
+              {loadingGroups ? (
+                <Box style={{ display: 'flex', gap: tokens.spacing[3], overflowX: 'hidden', paddingBottom: tokens.spacing[2] }}>
+                  {[0, 1, 2, 3].map((i) => (
+                    <Box key={i} style={{ flexShrink: 0, width: 120, padding: tokens.spacing[3], borderRadius: tokens.radius.lg, border: `1px solid ${tokens.colors.border.primary}`, background: tokens.colors.bg.secondary, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: tokens.spacing[2] }}>
+                      <Skeleton width="40px" height="40px" variant="rounded" />
+                      <Skeleton width="80px" height="12px" />
+                      <Skeleton width="50px" height="10px" />
+                    </Box>
+                  ))}
                 </Box>
-              ))}
-            </Box>
-          ) : myGroups.length === 0 ? (
-            <Box
-              style={{
-                padding: tokens.spacing[5],
-                textAlign: 'center',
-                background: tokens.colors.bg.secondary,
-                borderRadius: tokens.radius.lg,
-                border: `1px solid ${tokens.colors.border.primary}`,
-              }}
-            >
-              <Text size="sm" color="tertiary" style={{ marginBottom: tokens.spacing[3] }}>
-                {language === 'zh' ? '还未加入任何小组' : 'Not joined any groups yet'}
-              </Text>
-              <Link href="/groups/discover">
-                <Button variant="primary" size="sm">
-                  {language === 'zh' ? '发现小组' : 'Discover Groups'}
-                </Button>
-              </Link>
-            </Box>
-          ) : (
-            <Box
-              style={{
-                display: 'flex',
-                gap: tokens.spacing[3],
-                overflowX: 'auto',
-                paddingBottom: tokens.spacing[2],
-                scrollSnapType: 'x mandatory',
-                WebkitOverflowScrolling: 'touch',
-              }}
-            >
-              {myGroups.map((group) => (
-                <Link
-                  key={group.id}
-                  href={`/groups/${group.id}`}
-                  style={{
-                    flexShrink: 0,
-                    width: 120,
-                    padding: tokens.spacing[3],
-                    borderRadius: tokens.radius.lg,
-                    border: `1px solid ${tokens.colors.border.primary}`,
-                    background: tokens.colors.bg.secondary,
-                    textDecoration: 'none',
-                    color: tokens.colors.text.primary,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    gap: tokens.spacing[2],
-                    scrollSnapAlign: 'start',
-                    transition: `all ${tokens.transition.base}`,
-                  }}
-                >
-                  <Box
-                    style={{
-                      width: 44,
-                      height: 44,
-                      borderRadius: tokens.radius.lg,
-                      background: 'linear-gradient(135deg, rgba(139,111,168,0.2), rgba(139,111,168,0.1))',
-                      border: `1px solid ${tokens.colors.border.primary}`,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      overflow: 'hidden',
-                    }}
-                  >
-                    {group.avatar_url ? (
-                      <img src={group.avatar_url} alt={group.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    ) : (
-                      <Text size="base" weight="bold" style={{ color: '#c9b8db' }}>
-                        {group.name.charAt(0).toUpperCase()}
-                      </Text>
-                    )}
-                  </Box>
-                  <Text
-                    size="xs"
-                    weight="bold"
-                    style={{
-                      textAlign: 'center',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                      width: '100%',
-                    }}
-                  >
-                    {group.name}
+              ) : myGroups.length === 0 ? (
+                <Box style={{ padding: tokens.spacing[4], textAlign: 'center', background: tokens.colors.bg.secondary, borderRadius: tokens.radius.lg, border: `1px solid ${tokens.colors.border.primary}` }}>
+                  <Text size="sm" color="tertiary" style={{ marginBottom: tokens.spacing[3] }}>
+                    {language === 'zh' ? '还未加入任何小组' : 'Not joined any groups yet'}
                   </Text>
-                  {group.member_count != null && (
-                    <Text size="xs" color="tertiary">
-                      {group.member_count} {language === 'zh' ? '人' : 'members'}
-                    </Text>
-                  )}
-                </Link>
-              ))}
+                  <Button variant="primary" size="sm" onClick={() => setActiveTab('discover')}>
+                    {language === 'zh' ? '发现小组' : 'Discover Groups'}
+                  </Button>
+                </Box>
+              ) : (
+                <Box style={{ display: 'flex', gap: tokens.spacing[3], overflowX: 'auto', paddingBottom: tokens.spacing[2], scrollSnapType: 'x mandatory', WebkitOverflowScrolling: 'touch' }}>
+                  {myGroups.map((group) => (
+                    <Link
+                      key={group.id}
+                      href={`/groups/${group.id}`}
+                      style={{
+                        flexShrink: 0, width: 120, padding: tokens.spacing[3], borderRadius: tokens.radius.lg,
+                        border: `1px solid ${tokens.colors.border.primary}`, background: tokens.colors.bg.secondary,
+                        textDecoration: 'none', color: tokens.colors.text.primary,
+                        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: tokens.spacing[2],
+                        scrollSnapAlign: 'start', transition: `all ${tokens.transition.base}`,
+                      }}
+                    >
+                      <Box style={{ width: 40, height: 40, borderRadius: tokens.radius.lg, background: 'linear-gradient(135deg, rgba(139,111,168,0.2), rgba(139,111,168,0.1))', border: `1px solid ${tokens.colors.border.primary}`, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+                        {group.avatar_url ? (
+                          <img src={group.avatar_url} alt={group.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        ) : (
+                          <Text size="sm" weight="bold" style={{ color: '#c9b8db' }}>
+                            {group.name.charAt(0).toUpperCase()}
+                          </Text>
+                        )}
+                      </Box>
+                      <Text size="xs" weight="bold" style={{ textAlign: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%' }}>
+                        {language === 'zh' ? group.name : (group.name_en || group.name)}
+                      </Text>
+                      {group.member_count != null && (
+                        <Text size="xs" color="tertiary">
+                          {group.member_count} {language === 'zh' ? '人' : ''}
+                        </Text>
+                      )}
+                    </Link>
+                  ))}
+                </Box>
+              )}
             </Box>
-          )}
-        </Box>
 
-        {/* Group feed - posts from joined groups */}
-        <Box>
-          <Text size="lg" weight="bold" style={{ marginBottom: tokens.spacing[3] }}>
-            {language === 'zh' ? '小组动态' : 'Group Posts'}
-          </Text>
-          {myGroups.length > 0 ? (
-            <PostFeed
-              layout="masonry"
-              groupIds={myGroups.map((g) => g.id)}
-            />
-          ) : (
-            <Box
-              style={{
-                padding: tokens.spacing[6],
-                textAlign: 'center',
-                background: tokens.colors.bg.secondary,
-                borderRadius: tokens.radius.lg,
-                border: `1px solid ${tokens.colors.border.primary}`,
-              }}
-            >
-              <Text size="sm" color="tertiary">
-                {language === 'zh' ? '加入小组后，这里会显示小组内的帖子' : 'Join groups to see their posts here'}
-              </Text>
+            {/* Group feed - posts from joined groups */}
+            {myGroups.length > 0 ? (
+              <PostFeed
+                layout="list"
+                groupIds={myGroupIds}
+              />
+            ) : (
+              <Box style={{ padding: tokens.spacing[6], textAlign: 'center', background: tokens.colors.bg.secondary, borderRadius: tokens.radius.lg, border: `1px solid ${tokens.colors.border.primary}` }}>
+                <Text size="sm" color="tertiary">
+                  {language === 'zh' ? '加入小组后，这里会显示小组内的帖子' : 'Join groups to see their posts here'}
+                </Text>
+              </Box>
+            )}
+          </>
+        ) : (
+          /* Discover tab */
+          <Box>
+            {/* Search */}
+            <Box style={{ marginBottom: tokens.spacing[3] }}>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder={language === 'zh' ? '搜索小组...' : 'Search groups...'}
+                style={{
+                  width: '100%',
+                  padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+                  borderRadius: tokens.radius.lg,
+                  border: `1px solid ${tokens.colors.border.primary}`,
+                  background: tokens.colors.bg.secondary,
+                  color: tokens.colors.text.primary,
+                  fontSize: tokens.typography.fontSize.sm,
+                  outline: 'none',
+                }}
+              />
             </Box>
-          )}
-        </Box>
+
+            {/* Groups grid */}
+            {loadingDiscover ? (
+              <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
+                {[0, 1, 2, 3, 4].map((i) => (
+                  <Box key={i} style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3], padding: tokens.spacing[3], borderRadius: tokens.radius.lg, border: `1px solid ${tokens.colors.border.primary}`, background: tokens.colors.bg.secondary }}>
+                    <Skeleton width="44px" height="44px" variant="rounded" />
+                    <Box style={{ flex: 1 }}>
+                      <Box style={{ marginBottom: 6 }}>
+                        <Skeleton width="60%" height="14px" />
+                      </Box>
+                      <Skeleton width="40%" height="12px" />
+                    </Box>
+                  </Box>
+                ))}
+              </Box>
+            ) : allGroups.length === 0 ? (
+              <Box style={{ padding: tokens.spacing[6], textAlign: 'center' }}>
+                <Text size="sm" color="tertiary">
+                  {language === 'zh' ? '暂无更多小组' : 'No groups found'}
+                </Text>
+              </Box>
+            ) : (
+              <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
+                {allGroups.map((group) => {
+                  const isJoined = myGroupIds.includes(group.id)
+                  return (
+                    <Link
+                      key={group.id}
+                      href={`/groups/${group.id}`}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: tokens.spacing[3],
+                        padding: tokens.spacing[3], borderRadius: tokens.radius.lg,
+                        border: `1px solid ${tokens.colors.border.primary}`,
+                        background: tokens.colors.bg.secondary,
+                        textDecoration: 'none', color: tokens.colors.text.primary,
+                        transition: `all ${tokens.transition.base}`,
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.borderColor = `${tokens.colors.accent?.primary || '#8b6fa8'}50`
+                        e.currentTarget.style.transform = 'translateX(4px)'
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.borderColor = tokens.colors.border.primary
+                        e.currentTarget.style.transform = 'translateX(0)'
+                      }}
+                    >
+                      <Box style={{ width: 44, height: 44, borderRadius: tokens.radius.lg, background: 'linear-gradient(135deg, rgba(139,111,168,0.2), rgba(139,111,168,0.1))', border: `1px solid ${tokens.colors.border.primary}`, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 }}>
+                        {group.avatar_url ? (
+                          <img src={group.avatar_url} alt={group.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        ) : (
+                          <Text size="base" weight="bold" style={{ color: '#c9b8db' }}>
+                            {group.name.charAt(0).toUpperCase()}
+                          </Text>
+                        )}
+                      </Box>
+                      <Box style={{ flex: 1, minWidth: 0 }}>
+                        <Text size="sm" weight="bold" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {language === 'zh' ? group.name : (group.name_en || group.name)}
+                        </Text>
+                        <Text size="xs" color="tertiary">
+                          {group.member_count || 0} {language === 'zh' ? '位成员' : 'members'}
+                        </Text>
+                      </Box>
+                      {isJoined && (
+                        <Text size="xs" color="tertiary" style={{ flexShrink: 0, padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`, borderRadius: tokens.radius.md, background: tokens.colors.bg.tertiary }}>
+                          {language === 'zh' ? '已加入' : 'Joined'}
+                        </Text>
+                      )}
+                    </Link>
+                  )
+                })}
+              </Box>
+            )}
+          </Box>
+        )}
       </Box>
 
       <FloatingActionButton />

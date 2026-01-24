@@ -27,7 +27,7 @@ export default function MasonryPostCard({ post, language = 'zh', onLike, onComme
 
   return (
     <Link
-      href={post.group_id ? `/groups/${post.group_id}?post=${post.id}` : '#'}
+      href={`/post/${post.id}`}
       style={{ textDecoration: 'none', color: 'inherit' }}
     >
       <Box
