@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, Suspense, useCallback } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useSearchParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import TopNav from '@/app/components/layout/TopNav'
 import EmptyState from '@/app/components/ui/EmptyState'
@@ -28,15 +28,30 @@ const HIGHLIGHT_STYLE = {
   fontWeight: 600,
 }
 
+type TabType = 'all' | 'users' | 'traders' | 'posts' | 'groups'
+const VALID_TABS: TabType[] = ['all', 'users', 'traders', 'posts', 'groups']
+
 function SearchContent() {
   const searchParams = useSearchParams()
+  const router = useRouter()
   const query = searchParams.get('q') || ''
+  const tabParam = searchParams.get('tab') as TabType | null
   const [results, setResults] = useState<SearchResult[]>([])
   const [loading, setLoading] = useState(false)
   const [email, setEmail] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<'all' | 'users' | 'traders' | 'posts' | 'groups'>('all')
+  const activeTab: TabType = tabParam && VALID_TABS.includes(tabParam) ? tabParam : 'all'
   const [searchError, setSearchError] = useState(false)
   const { showToast } = useToast()
+
+  const setActiveTab = useCallback((tab: TabType) => {
+    const params = new URLSearchParams(searchParams.toString())
+    if (tab === 'all') {
+      params.delete('tab')
+    } else {
+      params.set('tab', tab)
+    }
+    router.replace(`/search?${params.toString()}`, { scroll: false })
+  }, [searchParams, router])
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -310,7 +325,47 @@ function SearchContent() {
         )}
 
         {loading ? (
-          <RankingSkeleton />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {[1, 2, 3, 4, 5].map((i) => (
+              <div
+                key={i}
+                style={{
+                  padding: '20px',
+                  borderRadius: tokens.radius.xl,
+                  background: tokens.glass.bg.secondary,
+                  border: tokens.glass.border.light,
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px' }}>
+                  <div style={{
+                    width: 44,
+                    height: 44,
+                    borderRadius: tokens.radius.lg,
+                    background: tokens.colors.bg.tertiary,
+                    animation: 'pulse 1.5s ease-in-out infinite',
+                    flexShrink: 0,
+                  }} />
+                  <div style={{ flex: 1 }}>
+                    <div style={{
+                      width: `${50 + i * 8}%`,
+                      height: 16,
+                      borderRadius: tokens.radius.sm,
+                      background: tokens.colors.bg.tertiary,
+                      marginBottom: 8,
+                      animation: 'pulse 1.5s ease-in-out infinite',
+                    }} />
+                    <div style={{
+                      width: `${30 + i * 5}%`,
+                      height: 12,
+                      borderRadius: tokens.radius.sm,
+                      background: tokens.colors.bg.tertiary,
+                      animation: 'pulse 1.5s ease-in-out infinite',
+                    }} />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
         ) : searchError ? (
           <EmptyState
             title="搜索失败"

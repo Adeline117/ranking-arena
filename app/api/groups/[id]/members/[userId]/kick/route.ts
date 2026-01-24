@@ -114,6 +114,15 @@ export async function POST(request: NextRequest, context: RouteContext) {
       console.error('Failed to send kick notification:', notifyError)
     }
 
+    // Audit log (fire-and-forget)
+    void Promise.resolve(supabase.from('group_audit_log').insert({
+      group_id: groupId,
+      actor_id: user.id,
+      action: 'kick',
+      target_id: targetUserId,
+      details: { reason: null }
+    })).catch(() => {})
+
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error('Kick member error:', error)

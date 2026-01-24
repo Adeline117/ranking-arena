@@ -26,36 +26,7 @@ import {
   submitPostComment,
   togglePostReaction,
 } from '@/lib/stores/postStore'
-
-const ARENA_PURPLE = '#8b6fa8'
-
-function renderContentWithLinks(text: string) {
-  if (!text) return null
-  const urlRegex = /(https?:\/\/[^\s<>"{}|\\^`[\]]+)/g
-  const parts = text.split(urlRegex)
-  return parts.map((part, index) => {
-    if (urlRegex.test(part)) {
-      urlRegex.lastIndex = 0
-      return (
-        <a
-          key={index}
-          href={part}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={(e) => e.stopPropagation()}
-          style={{
-            color: ARENA_PURPLE,
-            textDecoration: 'underline',
-            wordBreak: 'break-all',
-          }}
-        >
-          {part}
-        </a>
-      )
-    }
-    return part
-  })
-}
+import { renderContentWithLinks, ARENA_PURPLE } from '@/lib/utils/content'
 
 type PostDetailModalProps = {
   postId: string
