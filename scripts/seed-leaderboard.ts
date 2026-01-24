@@ -177,7 +177,7 @@ async function seed() {
     }
 
     await client.query(`
-      INSERT INTO trader_timeseries_v2 (platform, trader_key, series_type, data, as_of_ts)
+      INSERT INTO trader_timeseries (platform, trader_key, series_type, data, as_of_ts)
       VALUES ($1, $2, $3, $4, $5)
       ON CONFLICT (platform, trader_key, series_type) DO UPDATE SET data = $4, as_of_ts = $5
     `, ['binance_futures', t.trader_key, 'equity_curve', JSON.stringify(equityData), now]);
@@ -191,7 +191,7 @@ async function seed() {
       (SELECT COUNT(*) FROM trader_sources_v2) AS sources,
       (SELECT COUNT(*) FROM trader_profiles_v2) AS profiles,
       (SELECT COUNT(*) FROM trader_snapshots_v2) AS snapshots,
-      (SELECT COUNT(*) FROM trader_timeseries_v2) AS timeseries
+      (SELECT COUNT(*) FROM trader_timeseries) AS timeseries
   `);
   console.log('\n[Seed] Database counts:', counts.rows[0]);
 

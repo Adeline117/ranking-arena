@@ -408,7 +408,7 @@ export class LeaderboardService {
       created_at: string;
     }>(
       `SELECT id, platform, trader_key, series_type, data, as_of_ts, created_at
-       FROM trader_timeseries_v2
+       FROM trader_timeseries
        WHERE platform = $1 AND trader_key = $2
        ORDER BY as_of_ts DESC
        LIMIT 10`,
