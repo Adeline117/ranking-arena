@@ -1,0 +1,171 @@
+'use client'
+
+import { useState, useEffect, useRef } from 'react'
+import { useRouter, usePathname } from 'next/navigation'
+import { tokens } from '@/lib/design-tokens'
+import { useLanguage } from '../Providers/LanguageProvider'
+import { supabase } from '@/lib/supabase/client'
+
+export default function FloatingActionButton() {
+  const router = useRouter()
+  const pathname = usePathname()
+  const { language } = useLanguage()
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      setIsAuthenticated(!!data.user)
+    })
+  }, [])
+
+  useEffect(() => {
+    if (!menuOpen) return
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [menuOpen])
+
+  // Only show on feed and groups pages, and only when authenticated
+  const showOnPages = ['/', '/groups']
+  const shouldShow = isAuthenticated && showOnPages.some(p => pathname === p || pathname.startsWith('/groups/'))
+
+  if (!shouldShow) return null
+
+  return (
+    <div
+      ref={menuRef}
+      className="fab-container"
+      style={{
+        position: 'fixed',
+        bottom: 80,
+        right: 20,
+        zIndex: 40,
+      }}
+    >
+      {/* Popup menu */}
+      {menuOpen && (
+        <div
+          style={{
+            position: 'absolute',
+            bottom: 64,
+            right: 0,
+            background: tokens.glass.bg.secondary,
+            backdropFilter: tokens.glass.blur.xl,
+            WebkitBackdropFilter: tokens.glass.blur.xl,
+            border: `1px solid ${tokens.colors.border.primary}`,
+            borderRadius: tokens.radius.xl,
+            padding: tokens.spacing[2],
+            minWidth: 180,
+            boxShadow: tokens.shadow.xl,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: tokens.spacing[1],
+          }}
+        >
+          <button
+            onClick={() => {
+              setMenuOpen(false)
+              router.push('/groups?action=new-post')
+            }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: tokens.spacing[2],
+              padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+              borderRadius: tokens.radius.md,
+              border: 'none',
+              background: 'transparent',
+              color: tokens.colors.text.primary,
+              fontSize: tokens.typography.fontSize.sm,
+              fontWeight: 600,
+              cursor: 'pointer',
+              width: '100%',
+              textAlign: 'left',
+              transition: `background ${tokens.transition.fast}`,
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = tokens.colors.bg.secondary }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 20h9" />
+              <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+            </svg>
+            <span>{language === 'zh' ? '发动态' : 'New Post'}</span>
+          </button>
+          <button
+            onClick={() => {
+              setMenuOpen(false)
+              router.push('/groups?action=group-post')
+            }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: tokens.spacing[2],
+              padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+              borderRadius: tokens.radius.md,
+              border: 'none',
+              background: 'transparent',
+              color: tokens.colors.text.primary,
+              fontSize: tokens.typography.fontSize.sm,
+              fontWeight: 600,
+              cursor: 'pointer',
+              width: '100%',
+              textAlign: 'left',
+              transition: `background ${tokens.transition.fast}`,
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = tokens.colors.bg.secondary }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+              <circle cx="9" cy="7" r="4" />
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+              <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+            </svg>
+            <span>{language === 'zh' ? '发帖到小组' : 'Post to Group'}</span>
+          </button>
+        </div>
+      )}
+
+      {/* FAB button */}
+      <button
+        onClick={() => setMenuOpen(!menuOpen)}
+        aria-label={language === 'zh' ? '创建帖子' : 'Create post'}
+        style={{
+          width: 56,
+          height: 56,
+          borderRadius: '50%',
+          border: 'none',
+          background: tokens.gradient.primary,
+          color: '#fff',
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          boxShadow: `0 4px 16px ${tokens.colors.accent.primary}50`,
+          transition: `all ${tokens.transition.base}`,
+          transform: menuOpen ? 'rotate(45deg)' : 'rotate(0deg)',
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.transform = menuOpen ? 'rotate(45deg) scale(1.1)' : 'scale(1.1)'
+          e.currentTarget.style.boxShadow = `0 6px 24px ${tokens.colors.accent.primary}70`
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.transform = menuOpen ? 'rotate(45deg)' : 'rotate(0deg)'
+          e.currentTarget.style.boxShadow = `0 4px 16px ${tokens.colors.accent.primary}50`
+        }}
+      >
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <line x1="12" y1="5" x2="12" y2="19" />
+          <line x1="5" y1="12" x2="19" y2="12" />
+        </svg>
+      </button>
+    </div>
+  )
+}

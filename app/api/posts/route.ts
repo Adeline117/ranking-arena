@@ -54,6 +54,7 @@ export async function GET(request: NextRequest) {
     const limit = validateNumber(searchParams.get('limit'), { min: 1, max: 100 }) ?? 20
     const offset = validateNumber(searchParams.get('offset'), { min: 0 }) ?? 0
     const group_id = validateString(searchParams.get('group_id')) ?? undefined
+    const group_ids = searchParams.get('group_ids') ? searchParams.get('group_ids')!.split(',').filter(Boolean) : undefined
     const author_handle = validateString(searchParams.get('author_handle')) ?? undefined
     const sort_by = validateEnum(
       searchParams.get('sort_by'),
@@ -68,7 +69,7 @@ export async function GET(request: NextRequest) {
     const user = await getAuthUser(request)
     
     // 生成缓存键
-    const cacheKey = getCacheKey({ limit, offset, group_id, author_handle, sort_by, sort_order })
+    const cacheKey = getCacheKey({ limit, offset, group_id: group_id || (group_ids ? group_ids.join(',') : undefined), author_handle, sort_by, sort_order })
     
     // For hot posts (first page, no filters), check Redis cache first
     const isHotQuery = sort_by === 'hot_score' && offset === 0 && !group_id && !author_handle
@@ -98,6 +99,7 @@ export async function GET(request: NextRequest) {
         limit: isHotQuery ? 50 : limit, // Fetch more for hot posts to populate Redis cache
         offset,
         group_id,
+        group_ids,
         author_handle,
         sort_by,
         sort_order,

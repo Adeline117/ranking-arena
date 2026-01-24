@@ -57,6 +57,7 @@ export interface PostListOptions {
   limit?: number
   offset?: number
   group_id?: string
+  group_ids?: string[]
   author_handle?: string
   sort_by?: 'created_at' | 'hot_score' | 'like_count'
   sort_order?: 'asc' | 'desc'
@@ -114,6 +115,7 @@ export async function getPosts(
     limit = 20,
     offset = 0,
     group_id,
+    group_ids,
     author_handle,
     sort_by = 'created_at',
     sort_order = 'desc',
@@ -153,6 +155,8 @@ export async function getPosts(
 
   if (group_id) {
     query = query.eq('group_id', group_id)
+  } else if (group_ids && group_ids.length > 0) {
+    query = query.in('group_id', group_ids)
   }
 
   if (author_handle) {

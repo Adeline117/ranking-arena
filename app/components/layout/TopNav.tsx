@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useEffect, useState, useRef } from 'react'
-import { usePathname, useRouter } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
 import ThemeToggle from '../ui/ThemeToggle'
@@ -10,13 +10,14 @@ import LanguageSwitcher from '../ui/LanguageToggle'
 import SearchDropdown from '../search/SearchDropdown'
 import MobileSearchOverlay from '../search/MobileSearchOverlay'
 import { useLanguage } from '../Providers/LanguageProvider'
-import { SearchIcon, UserIcon, NotificationIcon, MessageIcon } from '../icons'
+import { SearchIcon, UserIcon, NotificationIcon } from '../icons'
 import { Box } from '../base'
 import AccountSwitcher from '../ui/AccountSwitcher'
+import InboxPanel from '../inbox/InboxPanel'
+import { useInboxStore } from '@/lib/stores/inboxStore'
 
 export default function TopNav({ email }: { email: string | null }) {
   const { t } = useLanguage()
-  const pathname = usePathname()
   const router = useRouter()
   const [myId, setMyId] = useState<string | null>(null)
   const [myHandle, setMyHandle] = useState<string | null>(null)
@@ -333,89 +334,6 @@ export default function TopNav({ email }: { email: string | null }) {
               </Box>
             </Box>
           </Link>
-          
-          {/* 导航链接 - 移动端隐藏 */}
-          <Box as="nav" className="hide-mobile" style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1] }}>
-            {[
-              { href: '/', labelKey: 'home' as const },
-              { href: '/groups', labelKey: 'groups' as const },
-              { href: '/hot', labelKey: 'hot' as const },
-              { href: '/pricing', labelKey: 'pro' as const, isPro: true },
-            ].map((item) => {
-              const label = t(item.labelKey)
-              const isActive = pathname === item.href || (item.href === '/' && pathname === '/')
-              const isPro = 'isPro' in item && item.isPro
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  aria-label={label}
-                  aria-current={isActive ? 'page' : undefined}
-                  tabIndex={0}
-                  role="menuitem"
-                  style={{
-                    padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-                    borderRadius: tokens.radius.md,
-                    color: isPro 
-                      ? 'var(--color-pro-gradient-start)'
-                      : isActive 
-                        ? tokens.colors.text.primary 
-                        : tokens.colors.text.secondary,
-                    textDecoration: 'none',
-                    fontWeight: isActive || isPro ? tokens.typography.fontWeight.black : tokens.typography.fontWeight.semibold,
-                    fontSize: tokens.typography.fontSize.sm,
-                    background: isPro 
-                      ? 'var(--color-pro-glow)'
-                      : isActive 
-                        ? tokens.colors.bg.secondary 
-                        : 'transparent',
-                    transition: `all ${tokens.transition.base}`,
-                    border: isPro ? '1px solid var(--color-pro-gradient-start)' : 'none',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 4,
-                  }}
-                  onMouseEnter={(e) => {
-                    if (isPro) {
-                      e.currentTarget.style.background = 'var(--color-pro-badge-bg)'
-                      e.currentTarget.style.color = '#fff'
-                      e.currentTarget.style.transform = 'translateY(-1px)'
-                      e.currentTarget.style.boxShadow = '0 4px 12px var(--color-pro-badge-shadow)'
-                    } else if (!isActive) {
-                      e.currentTarget.style.color = tokens.colors.text.primary
-                      e.currentTarget.style.background = tokens.colors.bg.secondary
-                      e.currentTarget.style.transform = 'translateY(-1px)'
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (isPro) {
-                      e.currentTarget.style.background = 'var(--color-pro-glow)'
-                      e.currentTarget.style.color = 'var(--color-pro-gradient-start)'
-                      e.currentTarget.style.transform = 'translateY(0)'
-                      e.currentTarget.style.boxShadow = 'none'
-                    } else if (!isActive) {
-                      e.currentTarget.style.color = tokens.colors.text.secondary
-                      e.currentTarget.style.background = 'transparent'
-                      e.currentTarget.style.transform = 'translateY(0)'
-                    }
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault()
-                      router.push(item.href)
-                    }
-                  }}
-                >
-                  {isPro && (
-                    <svg width={12} height={12} viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
-                    </svg>
-                  )}
-                  {label}
-                </Link>
-              )
-            })}
-          </Box>
         </Box>
 
         {/* 中：搜索 - 移动端隐藏 */}
@@ -426,7 +344,7 @@ export default function TopNav({ email }: { email: string | null }) {
             flex: 1,
             display: 'flex',
             justifyContent: 'center',
-            maxWidth: 480,
+            maxWidth: 600,
             position: 'relative',
           }}
         >
@@ -534,11 +452,18 @@ export default function TopNav({ email }: { email: string | null }) {
           <ThemeToggle />
           {myId ? (
             <>
-              {/* 通知铃铛图标（包含私信和系统通知） */}
-              <Link
-                href="/notifications"
-                prefetch={true}
-                aria-label="通知"
+              {/* 通知铃铛图标 - desktop opens panel, mobile navigates to /inbox */}
+              <button
+                data-inbox-trigger
+                aria-label="收件箱"
+                onClick={() => {
+                  // On mobile, navigate to inbox page; on desktop, toggle panel
+                  if (window.innerWidth < 1024) {
+                    router.push('/inbox')
+                  } else {
+                    useInboxStore.getState().togglePanel()
+                  }
+                }}
                 style={{
                   position: 'relative',
                   display: 'flex',
@@ -550,7 +475,8 @@ export default function TopNav({ email }: { email: string | null }) {
                   background: 'transparent',
                   color: tokens.colors.text.secondary,
                   transition: `all ${tokens.transition.base}`,
-                  textDecoration: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
                 }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.background = tokens.colors.bg.secondary
@@ -587,7 +513,7 @@ export default function TopNav({ email }: { email: string | null }) {
                     {(unreadCount + unreadMessageCount) > 99 ? '99+' : (unreadCount + unreadMessageCount)}
                   </Box>
                 )}
-              </Link>
+              </button>
               <Box
                 as="button"
                 onClick={() => setShowUserMenu(!showUserMenu)}
@@ -710,58 +636,7 @@ export default function TopNav({ email }: { email: string | null }) {
                     <span>{t('myHome')}</span>
                   </Link>
                   <Link
-                    href="/messages"
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: tokens.spacing[2],
-                      padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-                      borderRadius: tokens.radius.md,
-                      color: tokens.colors.text.primary,
-                      textDecoration: 'none',
-                      fontSize: tokens.typography.fontSize.base,
-                      fontWeight: tokens.typography.fontWeight.bold,
-                      transition: `all ${tokens.transition.base}`,
-                      position: 'relative',
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.background = tokens.colors.bg.secondary
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = 'transparent'
-                    }}
-                    onClick={() => setShowUserMenu(false)}
-                  >
-                    <Box style={{ position: 'relative' }}>
-                      <MessageIcon size={16} />
-                      {unreadMessageCount > 0 && (
-                        <Box
-                          style={{
-                            position: 'absolute',
-                            top: -6,
-                            right: -6,
-                            minWidth: 16,
-                            height: 16,
-                            borderRadius: '50%',
-                            background: '#8b6fa8',
-                            color: '#fff',
-                            fontSize: 10,
-                            fontWeight: 900,
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            padding: '0 4px',
-                          }}
-                        >
-                          {unreadMessageCount > 99 ? '99+' : unreadMessageCount}
-                        </Box>
-                      )}
-                    </Box>
-                    <span>私信</span>
-                  </Link>
-                  <Link
-                    href="/notifications"
-                    prefetch={true}
+                    href="/inbox"
                     style={{
                       display: 'flex',
                       alignItems: 'center',
@@ -785,7 +660,7 @@ export default function TopNav({ email }: { email: string | null }) {
                   >
                     <Box style={{ position: 'relative' }}>
                       <NotificationIcon size={16} />
-                      {unreadCount > 0 && (
+                      {(unreadCount + unreadMessageCount) > 0 && (
                         <Box
                           style={{
                             position: 'absolute',
@@ -804,11 +679,11 @@ export default function TopNav({ email }: { email: string | null }) {
                             padding: '0 4px',
                           }}
                         >
-                          {unreadCount > 99 ? '99+' : unreadCount}
+                          {(unreadCount + unreadMessageCount) > 99 ? '99+' : (unreadCount + unreadMessageCount)}
                         </Box>
                       )}
                     </Box>
-                    <span>{t('notifications')}</span>
+                    <span>收件箱</span>
                   </Link>
                   <Box
                     style={{
@@ -883,6 +758,10 @@ export default function TopNav({ email }: { email: string | null }) {
         </div>
       </Box>
       <MobileSearchOverlay open={showMobileSearch} onClose={() => setShowMobileSearch(false)} />
+      {/* Desktop inbox panel - slides in from right */}
+      <div className="hide-mobile hide-tablet">
+        <InboxPanel />
+      </div>
     </Box>
   )
 }
