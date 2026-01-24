@@ -7,7 +7,7 @@ import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/layout/TopNav'
 import { Box, Text, Button } from '@/app/components/base'
-import { RankingSkeleton } from '@/app/components/ui/Skeleton'
+import { PostSkeleton } from '@/app/components/ui/Skeleton'
 import EmptyState from '@/app/components/ui/EmptyState'
 import { formatTimeAgo } from '@/lib/utils/date'
 import { useToast } from '@/app/components/ui/Toast'
@@ -49,14 +49,18 @@ export default function MyPostsPage() {
   }, [])
 
   const loadUserHandle = async (uid: string) => {
-    const { data: profile } = await supabase
-      .from('user_profiles')
-      .select('handle')
-      .eq('id', uid)
-      .maybeSingle()
-    
-    if (profile?.handle) {
-      setUserHandle(profile.handle)
+    try {
+      const { data: profile } = await supabase
+        .from('user_profiles')
+        .select('handle')
+        .eq('id', uid)
+        .maybeSingle()
+
+      if (profile?.handle) {
+        setUserHandle(profile.handle)
+      }
+    } catch (error) {
+      console.error('Error loading user handle:', error)
     }
   }
 
@@ -90,6 +94,7 @@ export default function MyPostsPage() {
           console.error('Error fetching posts:', postsError)
           setPosts([])
           setLoading(false)
+          showToast('加载帖子失败', 'error')
           return
         }
 
@@ -97,6 +102,7 @@ export default function MyPostsPage() {
       } catch (error) {
         console.error('Error loading posts:', error)
         setPosts([])
+        showToast('加载帖子失败，请稍后重试', 'error')
       } finally {
         setLoading(false)
       }
@@ -189,7 +195,11 @@ export default function MyPostsPage() {
         </Box>
         
         {loading ? (
-          <RankingSkeleton />
+          <>
+            <PostSkeleton />
+            <PostSkeleton />
+            <PostSkeleton />
+          </>
         ) : posts.length === 0 ? (
           <EmptyState
             title="暂无帖子"

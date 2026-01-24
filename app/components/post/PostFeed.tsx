@@ -16,12 +16,13 @@ import { getCsrfHeaders } from '@/lib/api/client'
 import BookmarkModal from '../ui/BookmarkModal'
 import { useUnifiedAuth } from '@/lib/hooks/useUnifiedAuth'
 import { usePostStore, type PostData } from '@/lib/stores/postStore'
-import { renderContentWithLinks } from '@/lib/utils/content'
+import { renderContentWithLinks, ARENA_PURPLE } from '@/lib/utils/content'
 import { usePostComments } from './hooks/usePostComments'
 import { usePostActions } from './hooks/usePostActions'
 import { usePostTranslation, useAutoTranslateList, useAutoTranslateComments } from './hooks/usePostTranslation'
 import CommentsModal from './CommentsModal'
 import { SectionErrorBoundary } from '../Utils/ErrorBoundary'
+import { PostSkeleton } from '../ui/Skeleton'
 
 // 本地类型（扩展后端类型）
 type Post = PostWithUserState
@@ -41,7 +42,6 @@ type Comment = {
 // 默认显示的回复数量
 const REPLIES_PREVIEW_COUNT = 2
 
-const ARENA_PURPLE = '#8b6fa8'
 
 function pollLabel(choice: PollChoice | 'tie', t: (key: keyof typeof import('@/lib/i18n').translations.zh) => string) {
   if (choice === 'bull') return t('bullish')
@@ -1439,25 +1439,10 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; layout?:
 
   if (loading) {
     return (
-      <div style={{
-        padding: tokens.spacing[6],
-        textAlign: 'center',
-        color: tokens.colors.text.tertiary,
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        gap: tokens.spacing[3],
-      }}>
-        <div style={{
-          width: 24,
-          height: 24,
-          border: `2px solid ${tokens.colors.border.primary}`,
-          borderTopColor: tokens.colors.accent.primary,
-          borderRadius: '50%',
-          animation: 'spin 1s linear infinite',
-        }} />
-        <span>{t('loading')}</span>
-        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      <div className="stagger-children" style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
+        <PostSkeleton />
+        <PostSkeleton />
+        <PostSkeleton />
       </div>
     )
   }
@@ -1594,7 +1579,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; layout?:
           </button>
         </div>
       )}
-      <div style={props.layout === 'masonry' ? { columns: 2, columnGap: 12 } : undefined} className={props.layout === 'masonry' ? 'post-feed-masonry' : undefined}>
+      <div style={props.layout === 'masonry' ? { columnGap: 12 } : undefined} className={`stagger-children${props.layout === 'masonry' ? ' post-feed-masonry' : ''}`}>
         {/* 只在个人主页（有 authorHandle）时才将置顶帖子排在最上面 */}
         {(props.authorHandle ? [...posts].sort((a, b) => {
           // 置顶帖子优先（仅在个人主页生效）

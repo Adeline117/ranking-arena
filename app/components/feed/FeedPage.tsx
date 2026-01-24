@@ -42,7 +42,7 @@ export default function FeedPage() {
         style={{
           maxWidth: 680,
           margin: '0 auto',
-          padding: `${tokens.spacing[4]} ${tokens.spacing[4]}`,
+          padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
           paddingBottom: 100,
         }}
       >
@@ -51,9 +51,9 @@ export default function FeedPage() {
           style={{
             display: 'flex',
             gap: tokens.spacing[1],
-            marginBottom: tokens.spacing[4],
+            marginBottom: tokens.spacing[3],
             borderBottom: `1px solid ${tokens.colors.border.primary}`,
-            paddingBottom: tokens.spacing[3],
+            paddingBottom: tokens.spacing[2],
           }}
         >
           {([
@@ -95,7 +95,7 @@ export default function FeedPage() {
         {/* Post feed - no groupId filter shows all posts */}
         <PostFeed
           key={activeTab}
-          layout="masonry"
+          layout="list"
           sortBy={sortBy}
         />
       </Box>

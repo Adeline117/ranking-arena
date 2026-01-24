@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback } from 'react'
-import { isChineseText } from '../utils'
+import { isChineseText } from '@/lib/utils/content'
 import { getCsrfHeaders } from '@/lib/api/client'
 
 type Comment = {

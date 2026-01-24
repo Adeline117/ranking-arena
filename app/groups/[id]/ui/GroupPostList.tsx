@@ -7,10 +7,8 @@ import Card from '@/app/components/ui/Card'
 import { ThumbsUpIcon, CommentIcon } from '@/app/components/icons'
 import MasonryGrid from '@/app/components/ui/MasonryGrid'
 import MasonryPostCard from '@/app/components/post/MasonryPostCard'
-import { renderContentWithLinks } from '@/lib/utils/content'
+import { renderContentWithLinks, ARENA_PURPLE } from '@/lib/utils/content'
 import type { Post, CommentWithAuthor } from '../hooks/useGroupPosts'
-
-const ARENA_PURPLE = '#8b6fa8'
 
 interface GroupPostListProps {
   groupId: string

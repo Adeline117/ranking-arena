@@ -2,8 +2,7 @@
 
 import { useState, useRef } from 'react'
 import { tokens } from '@/lib/design-tokens'
-
-const ARENA_PURPLE = '#8b6fa8'
+import { ARENA_PURPLE } from '@/lib/utils/content'
 
 interface ReactButtonProps {
   onClick: (e: React.MouseEvent) => void | Promise<void>

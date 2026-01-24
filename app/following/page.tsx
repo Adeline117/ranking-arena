@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/layout/TopNav'
 import { Box, Text } from '@/app/components/base'
-import { RankingSkeleton } from '@/app/components/ui/Skeleton'
+import { ListSkeleton } from '@/app/components/ui/Skeleton'
 import EmptyState from '@/app/components/ui/EmptyState'
 import Avatar from '@/app/components/ui/Avatar'
 import { useToast } from '@/app/components/ui/Toast'
@@ -126,7 +126,7 @@ export default function FollowingPage() {
           我的关注
         </Text>
         {loading ? (
-          <RankingSkeleton />
+          <ListSkeleton count={5} gap={12} />
         ) : items.length === 0 ? (
           <EmptyState
             title="暂无关注"

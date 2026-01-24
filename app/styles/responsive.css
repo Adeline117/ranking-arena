@@ -245,6 +245,21 @@
 }
 
 /* ============================================
+   帖子瀑布流响应式
+   ============================================ */
+
+.post-feed-masonry {
+  columns: 1 !important;
+}
+
+@media (min-width: 640px) {
+  .post-feed-masonry {
+    columns: 2 !important;
+    column-gap: 12px !important;
+  }
+}
+
+/* ============================================
    移动端卡片
    ============================================ */
 
@@ -688,6 +703,36 @@
 }
 
 /* ============================================
+   内容 + 侧边栏 2列布局
+   ============================================ */
+
+/* 移动端：单列堆叠 */
+.content-sidebar-grid {
+  grid-template-columns: 1fr !important;
+}
+
+/* 平板及以上：2列 */
+@media (min-width: 768px) {
+  .content-sidebar-grid {
+    grid-template-columns: 1fr 280px !important;
+  }
+}
+
+/* ============================================
+   定价页面 2列布局
+   ============================================ */
+
+.pricing-grid {
+  grid-template-columns: 1fr !important;
+}
+
+@media (min-width: 768px) {
+  .pricing-grid {
+    grid-template-columns: 1fr 380px !important;
+  }
+}
+
+/* ============================================
    搜索页面响应式
    ============================================ */
 
@@ -870,6 +915,28 @@
 
 
 /* ============================================
+   Feed Content Responsive Padding
+   ============================================ */
+
+@media (max-width: 639px) {
+  .feed-main-content {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+  }
+}
+
+/* ============================================
+   FAB Mobile Safe Area
+   ============================================ */
+
+@media (max-width: 767px) {
+  .fab-container {
+    bottom: calc(60px + env(safe-area-inset-bottom, 0px) + 16px) !important;
+    right: 16px !important;
+  }
+}
+
+/* ============================================
    Desktop Sidebar & Feed Layout
    ============================================ */
 
@@ -886,6 +953,7 @@
   /* Offset main content for desktop sidebar */
   .feed-main-content {
     margin-left: 240px !important;
+    margin-right: auto !important;
   }
 }
 
