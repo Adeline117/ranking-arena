@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
+import { createNotification } from '@/lib/data/notifications'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -80,6 +81,89 @@ export async function POST(
     if (updateError) {
       console.error('Mute error:', updateError)
       return NextResponse.json({ error: '禁言失败' }, { status: 500 })
+    }
+
+    // 发送私信通知给被禁言用户
+    try {
+      // 获取小组名称
+      const { data: groupData } = await supabase
+        .from('groups')
+        .select('name')
+        .eq('id', groupId)
+        .single()
+
+      const groupName = groupData?.name || '小组'
+
+      // 格式化禁言时长
+      let durationText = ''
+      if (muted_until) {
+        const mutedDate = new Date(muted_until)
+        const now = new Date()
+        const diffMs = mutedDate.getTime() - now.getTime()
+        const diffHours = Math.round(diffMs / (1000 * 60 * 60))
+        if (diffHours <= 4) durationText = '3小时'
+        else if (diffHours <= 25) durationText = '1天'
+        else if (diffHours <= 170) durationText = '7天'
+        else durationText = '永久'
+      }
+
+      const reasonText = reason ? `\n原因: ${reason}` : ''
+      const messageContent = `您已被「${groupName}」禁言${durationText}。${reasonText}`
+
+      // 创建或获取会话并发送私信
+      const orderedUser1 = user.id < targetUserId ? user.id : targetUserId
+      const orderedUser2 = user.id < targetUserId ? targetUserId : user.id
+
+      let conversationId: string | null = null
+      const { data: existingConv } = await supabase
+        .from('conversations')
+        .select('id')
+        .eq('user1_id', orderedUser1)
+        .eq('user2_id', orderedUser2)
+        .maybeSingle()
+
+      if (existingConv) {
+        conversationId = existingConv.id
+      } else {
+        const { data: newConv } = await supabase
+          .from('conversations')
+          .insert({ user1_id: orderedUser1, user2_id: orderedUser2 })
+          .select('id')
+          .single()
+        conversationId = newConv?.id || null
+      }
+
+      if (conversationId) {
+        await supabase.from('direct_messages').insert({
+          conversation_id: conversationId,
+          sender_id: user.id,
+          receiver_id: targetUserId,
+          content: messageContent,
+        })
+
+        // 更新会话最后消息时间
+        await supabase
+          .from('conversations')
+          .update({
+            last_message_at: new Date().toISOString(),
+            last_message_preview: messageContent.slice(0, 100)
+          })
+          .eq('id', conversationId)
+      }
+
+      // 同时创建系统通知
+      await createNotification(supabase, {
+        user_id: targetUserId,
+        type: 'system',
+        title: '小组禁言通知',
+        message: messageContent,
+        link: `/groups/${groupId}`,
+        actor_id: user.id,
+        reference_id: groupId,
+      })
+    } catch (notifyError) {
+      // 通知发送失败不影响禁言操作
+      console.error('Failed to send mute notification:', notifyError)
     }
 
     return NextResponse.json({ success: true })
