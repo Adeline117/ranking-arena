@@ -181,7 +181,7 @@
 .ranking-table-grid .col-score,
 .ranking-table-grid .col-winrate,
 .ranking-table-grid .col-mdd {
-  display: none;
+  display: none !important;
 }
 
 /* 平板：显示 Rank | Trader | Score | ROI */
@@ -191,7 +191,7 @@
   }
   
   .ranking-table-grid .col-score {
-    display: flex;
+    display: flex !important;
   }
 }
 
@@ -200,11 +200,47 @@
   .ranking-table-grid {
     grid-template-columns: 44px minmax(140px, 1.5fr) 64px 90px 70px 70px !important;
   }
-  
+
   .ranking-table-grid .col-score,
   .ranking-table-grid .col-winrate,
   .ranking-table-grid .col-mdd {
-    display: flex;
+    display: flex !important;
+  }
+}
+
+/* ============================================
+   热榜 3列网格响应式
+   ============================================ */
+
+/* 移动端：单列堆叠，隐藏侧边栏 */
+.hot-grid {
+  grid-template-columns: 1fr !important;
+}
+
+.hot-grid > section:first-child,
+.hot-grid > section:last-child {
+  display: none;
+}
+
+/* 平板：2列，显示左侧 */
+@media (min-width: 768px) {
+  .hot-grid {
+    grid-template-columns: 220px 1fr !important;
+  }
+
+  .hot-grid > section:first-child {
+    display: block;
+  }
+}
+
+/* 桌面：3列全部显示 */
+@media (min-width: 1024px) {
+  .hot-grid {
+    grid-template-columns: 260px 1fr 280px !important;
+  }
+
+  .hot-grid > section:last-child {
+    display: block;
   }
 }
 

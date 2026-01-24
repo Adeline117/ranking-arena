@@ -111,19 +111,21 @@ export function Action({ icon, text, onClick, active, count, showCount }: Action
   const [isAnimating, setIsAnimating] = useState(false)
   const processingRef = useRef(false)
 
-  const handleClick = (e: React.MouseEvent) => {
-    // 防止重复点击
+  const handleClick = async (e: React.MouseEvent) => {
     if (processingRef.current) return
     processingRef.current = true
 
     e.preventDefault()
     e.stopPropagation()
     setIsAnimating(true)
-    setTimeout(() => {
-      setIsAnimating(false)
-      processingRef.current = false
-    }, 300)
-    onClick(e)
+    try {
+      await onClick(e)
+    } finally {
+      setTimeout(() => {
+        setIsAnimating(false)
+        processingRef.current = false
+      }, 300)
+    }
   }
 
   return (

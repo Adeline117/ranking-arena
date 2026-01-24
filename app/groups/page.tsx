@@ -274,24 +274,80 @@ function GroupsList() {
       try {
         setLoading(true)
         setError(null)
+
+        // "Mine" tab early return
+        if (activeGroupTab === 'mine' && myGroupIds.length === 0) {
+          setGroups([])
+          setLoading(false)
+          return
+        }
+
+        // "Hot" tab: rank by recent activity (posts in last 7 days)
+        if (activeGroupTab === 'hot') {
+          const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+          const { data: recentPosts } = await supabase
+            .from('posts')
+            .select('group_id')
+            .gte('created_at', sevenDaysAgo)
+            .not('group_id', 'is', null)
+
+          // Count posts per group
+          const activityMap: Record<string, number> = {}
+          for (const p of recentPosts || []) {
+            if (p.group_id) {
+              activityMap[p.group_id] = (activityMap[p.group_id] || 0) + 1
+            }
+          }
+
+          const activeGroupIds = Object.keys(activityMap)
+          if (activeGroupIds.length === 0) {
+            // Fallback to member_count if no recent activity
+            const { data } = await supabase
+              .from('groups')
+              .select('id, name, avatar_url, member_count, name_en')
+              .order('member_count', { ascending: false, nullsFirst: false })
+              .limit(20)
+            setGroups(data || [])
+            setLoading(false)
+            return
+          }
+
+          let query = supabase
+            .from('groups')
+            .select('id, name, avatar_url, member_count, name_en')
+            .in('id', activeGroupIds)
+            .limit(20)
+
+          if (debouncedQuery) {
+            query = query.or(`name.ilike.%${debouncedQuery}%,name_en.ilike.%${debouncedQuery}%`)
+          }
+
+          const { data, error: supabaseError } = await query
+          if (supabaseError) {
+            setError(language === 'zh' ? '加载失败' : 'Failed to load')
+            showToast(language === 'zh' ? '加载小组列表失败' : 'Failed to load groups', 'error')
+          }
+
+          // Sort by activity count (descending)
+          const sorted = (data || []).sort((a, b) => (activityMap[b.id] || 0) - (activityMap[a.id] || 0))
+          setGroups(sorted)
+          setLoading(false)
+          return
+        }
+
+        // "All" and "Mine" tabs: sort by member_count
         let query = supabase
           .from('groups')
           .select('id, name, avatar_url, member_count, name_en')
           .order('member_count', { ascending: false, nullsFirst: false })
           .limit(20)
 
-        // Apply search filter
         if (debouncedQuery) {
           query = query.or(`name.ilike.%${debouncedQuery}%,name_en.ilike.%${debouncedQuery}%`)
         }
 
-        // Apply tab filter
-        if (activeGroupTab === 'mine' && myGroupIds.length > 0) {
+        if (activeGroupTab === 'mine') {
           query = query.in('id', myGroupIds)
-        } else if (activeGroupTab === 'mine' && myGroupIds.length === 0) {
-          setGroups([])
-          setLoading(false)
-          return
         }
 
         const { data, error: supabaseError } = await query
