@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useRef, memo } from 'react'
+import React, { useState, useEffect, useRef, memo, useCallback } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
@@ -145,6 +145,11 @@ export interface Trader {
   return_score?: number // 收益分
   drawdown_score?: number // 回撤分
   stability_score?: number // 稳定分
+  // Feature 3: Rank change indicators
+  rank_change?: number | null // Positive = moved up
+  is_new?: boolean // New to rankings
+  // Feature 7: Duplicate trader detection
+  also_on?: string[] // Other exchanges this trader appears on
 }
 
 // CSS animations for top 3
@@ -269,8 +274,8 @@ const TraderRow = memo(function TraderRow({
           minHeight: 72,
         }}
       >
-        {/* 排名 */}
-        <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        {/* 排名 + Feature 3: Rank Change */}
+        <Box style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2 }}>
           {rank <= 3 ? (
             <Box className={getMedalGlowClass(rank)} style={{ transform: 'scale(1.1)' }}>
               <RankingBadge rank={rank as 1 | 2 | 3} size={28} />
@@ -280,6 +285,13 @@ const TraderRow = memo(function TraderRow({
               #{rank}
             </Text>
           )}
+          {trader.is_new ? (
+            <span style={{ fontSize: '9px', fontWeight: 700, color: tokens.colors.accent.primary, lineHeight: 1 }}>NEW</span>
+          ) : trader.rank_change != null && trader.rank_change !== 0 ? (
+            <span style={{ fontSize: '9px', fontWeight: 700, color: trader.rank_change > 0 ? tokens.colors.accent.success : tokens.colors.accent.error, lineHeight: 1 }}>
+              {trader.rank_change > 0 ? `+${trader.rank_change}` : trader.rank_change}
+            </span>
+          ) : null}
         </Box>
 
         {/* 交易员 */}
@@ -310,10 +322,22 @@ const TraderRow = memo(function TraderRow({
             )}
           </div>
           <Box style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0, flex: 1 }}>
-            <Text size="sm" weight="bold" style={{ color: tokens.colors.text.primary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '14px' }}>
-              {displayName}
-            </Text>
             <Box style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Text size="sm" weight="bold" style={{ color: tokens.colors.text.primary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '14px' }}>
+                {displayName}
+              </Text>
+              {/* Feature 5: Mobile Score Badge - visible only on mobile */}
+              {trader.arena_score != null && (
+                <span className="mobile-score-badge" style={{ display: 'inline-flex', alignItems: 'center', gap: 3, flexShrink: 0 }}>
+                  <span style={{
+                    width: 6, height: 6, borderRadius: '50%',
+                    background: trader.arena_score >= 60 ? tokens.colors.accent.success : trader.arena_score >= 40 ? tokens.colors.accent.warning : tokens.colors.text.tertiary,
+                  }} />
+                  <span style={{ fontSize: '11px', fontWeight: 700, color: tokens.colors.text.secondary }}>{trader.arena_score.toFixed(0)}</span>
+                </span>
+              )}
+            </Box>
+            <Box style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
               {(() => {
                 const info = parseSourceInfo(trader.source || source || '')
                 return (
@@ -324,12 +348,18 @@ const TraderRow = memo(function TraderRow({
                   </Box>
                 )
               })()}
+              {/* Feature 7: Also on other exchanges */}
+              {trader.also_on && trader.also_on.length > 0 && (
+                <Text size="xs" style={{ fontSize: '9px', color: tokens.colors.text.tertiary, lineHeight: 1.2 }}>
+                  also on: {trader.also_on.map(s => s.split('_')[0]).filter((v, i, a) => a.indexOf(v) === i).join(', ')}
+                </Text>
+              )}
             </Box>
           </Box>
         </Box>
 
-        {/* Arena Score */}
-        <Box className="col-score" style={{ textAlign: 'center', display: 'flex', justifyContent: 'center' }}>
+        {/* Arena Score + Feature 10: Score Breakdown Tooltip */}
+        <Box className="col-score" style={{ textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
           <Box style={{
             position: 'relative', minWidth: 46, height: 24, borderRadius: tokens.radius.md,
             background: trader.arena_score != null && trader.arena_score >= 60 ? tokens.gradient.successSubtle : trader.arena_score != null && trader.arena_score >= 40 ? tokens.gradient.warningSubtle : tokens.glass.bg.light,
@@ -343,6 +373,7 @@ const TraderRow = memo(function TraderRow({
               {trader.arena_score != null ? trader.arena_score.toFixed(1) : '—'}
             </Text>
           </Box>
+          <ScoreBreakdownTooltip trader={trader} language={language} />
         </Box>
 
         {/* ROI */}
@@ -380,10 +411,89 @@ const TraderRow = memo(function TraderRow({
     prev.trader.pnl === next.trader.pnl &&
     prev.trader.win_rate === next.trader.win_rate &&
     prev.trader.max_drawdown === next.trader.max_drawdown &&
+    prev.trader.rank_change === next.trader.rank_change &&
+    prev.trader.is_new === next.trader.is_new &&
     prev.rank === next.rank &&
     prev.language === next.language
   )
 })
+
+// Feature 2: Search icon
+const SearchIcon = ({ size = 14 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <circle cx="11" cy="11" r="8" />
+    <path d="m21 21-4.3-4.3" strokeLinecap="round" />
+  </svg>
+)
+
+// Feature 10: Score Breakdown Tooltip
+const ScoreBreakdownTooltip = memo(function ScoreBreakdownTooltip({
+  trader,
+  language,
+}: {
+  trader: Trader
+  language: string
+}) {
+  const [show, setShow] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  if (trader.return_score == null && trader.drawdown_score == null && trader.stability_score == null) {
+    return null
+  }
+
+  return (
+    <div
+      ref={ref}
+      style={{ position: 'relative', display: 'inline-flex' }}
+      onMouseEnter={() => setShow(true)}
+      onMouseLeave={() => setShow(false)}
+      onClick={(e) => { e.preventDefault(); e.stopPropagation(); setShow(s => !s) }}
+    >
+      <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ opacity: 0.5, cursor: 'pointer' }}>
+        <circle cx="12" cy="12" r="10" />
+        <path d="M12 16v-4M12 8h.01" strokeLinecap="round" />
+      </svg>
+      {show && (
+        <div
+          style={{
+            position: 'absolute',
+            bottom: '100%',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            marginBottom: 6,
+            padding: '8px 12px',
+            background: tokens.colors.bg.primary,
+            border: `1px solid ${tokens.colors.border.primary}`,
+            borderRadius: tokens.radius.md,
+            boxShadow: tokens.shadow.lg,
+            zIndex: 100,
+            whiteSpace: 'nowrap',
+            fontSize: '11px',
+            lineHeight: 1.6,
+            color: tokens.colors.text.secondary,
+          }}
+        >
+          <div style={{ fontWeight: 700, marginBottom: 2, color: tokens.colors.text.primary }}>
+            {language === 'zh' ? '分数构成' : 'Score Breakdown'}
+          </div>
+          <div>{language === 'zh' ? '收益' : 'Return'}: <span style={{ color: tokens.colors.accent.success, fontWeight: 700 }}>{trader.return_score?.toFixed(1) ?? '—'}</span>/85</div>
+          <div>{language === 'zh' ? '回撤' : 'Drawdown'}: <span style={{ color: tokens.colors.accent.warning, fontWeight: 700 }}>{trader.drawdown_score?.toFixed(1) ?? '—'}</span>/8</div>
+          <div>{language === 'zh' ? '稳定' : 'Stability'}: <span style={{ color: tokens.colors.accent.primary, fontWeight: 700 }}>{trader.stability_score?.toFixed(1) ?? '—'}</span>/7</div>
+        </div>
+      )}
+    </div>
+  )
+})
+
+// Feature 2: Debounce hook
+function useDebounce<T>(value: T, delay: number): T {
+  const [debounced, setDebounced] = useState(value)
+  useEffect(() => {
+    const timer = setTimeout(() => setDebounced(value), delay)
+    return () => clearTimeout(timer)
+  }, [value, delay])
+  return debounced
+}
 
 /**
  * 排行榜页面 - 核心功能，突出前三名
@@ -403,18 +513,44 @@ export default function RankingTable(props: {
   hasActiveFilters?: boolean // 是否有活动的高级筛选
   error?: string | null // 错误信息
   onRetry?: () => void // 重试回调
+  // Feature 8: Controlled props for URL-first state
+  controlledSortColumn?: 'score' | 'roi' | 'winrate' | 'mdd'
+  controlledSortDir?: 'asc' | 'desc'
+  controlledPage?: number
+  controlledSearchQuery?: string
+  onSortChange?: (column: 'score' | 'roi' | 'winrate' | 'mdd', dir: 'asc' | 'desc') => void
+  onPageChange?: (page: number) => void
+  onSearchChange?: (query: string) => void
 }) {
-  const { traders, loading, source, timeRange = '90D', isPro = false, category = 'all', onCategoryChange, onProRequired, onFilterToggle, hasActiveFilters, error, onRetry } = props
+  const { traders, loading, source, timeRange = '90D', isPro = false, category = 'all', onCategoryChange, onProRequired, onFilterToggle, hasActiveFilters, error, onRetry,
+    controlledSortColumn, controlledSortDir, controlledPage, controlledSearchQuery,
+    onSortChange, onPageChange, onSearchChange,
+  } = props
   const { t, language } = useLanguage()
   const router = useRouter()
-  
-  // 分页状态
-  const [currentPage, setCurrentPage] = useState(1)
+
+  // 分页状态 (internal state, overridden by controlled props)
+  const [internalPage, setInternalPage] = useState(1)
   const [showRules, setShowRules] = useState(false)
   const [showScoreRulesModal, setShowScoreRulesModal] = useState(false)
-  const [sortColumn, setSortColumn] = useState<'score' | 'roi' | 'winrate' | 'mdd'>('score')
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
+  const [internalSortColumn, setInternalSortColumn] = useState<'score' | 'roi' | 'winrate' | 'mdd'>('score')
+  const [internalSortDir, setInternalSortDir] = useState<'asc' | 'desc'>('desc')
   const itemsPerPage = 20 // 每页显示 20 条
+
+  // Feature 2: Inline search state
+  const [internalSearchQuery, setInternalSearchQuery] = useState('')
+  const searchQuery = controlledSearchQuery ?? internalSearchQuery
+  const debouncedSearch = useDebounce(searchQuery, 300)
+
+  // Feature 8: Use controlled or internal state
+  const sortColumn = controlledSortColumn ?? internalSortColumn
+  const sortDir = controlledSortDir ?? internalSortDir
+  const currentPage = controlledPage ?? internalPage
+  const setCurrentPage = useCallback((v: number | ((prev: number) => number)) => {
+    const newVal = typeof v === 'function' ? v(controlledPage ?? internalPage) : v
+    if (onPageChange) onPageChange(newVal)
+    else setInternalPage(newVal)
+  }, [onPageChange, controlledPage, internalPage])
 
   // Column customization
   const [visibleColumns, setVisibleColumns] = useState<ColumnKey[]>(DEFAULT_VISIBLE_COLUMNS)
@@ -461,18 +597,36 @@ export default function RankingTable(props: {
   }, [])
 
   const handleSort = (col: 'score' | 'roi' | 'winrate' | 'mdd') => {
-    if (sortColumn === col) {
-      setSortDir(d => d === 'desc' ? 'asc' : 'desc')
+    const newDir = sortColumn === col ? (sortDir === 'desc' ? 'asc' : 'desc') : 'desc'
+    if (onSortChange) {
+      onSortChange(col, newDir)
     } else {
-      setSortColumn(col)
-      setSortDir('desc')
+      setInternalSortColumn(col)
+      setInternalSortDir(newDir)
     }
     setCurrentPage(1)
   }
 
-  // 客户端排序
+  // Feature 2: Handle search input
+  const handleSearchInput = (value: string) => {
+    if (onSearchChange) onSearchChange(value)
+    else setInternalSearchQuery(value)
+    setCurrentPage(1)
+  }
+
+  // Feature 2: Filter by search, then sort
   const sortedTraders = React.useMemo(() => {
-    const data = traders.slice(0, 100)
+    let data = traders.slice(0, 100)
+
+    // Feature 2: Apply search filter
+    if (debouncedSearch.trim()) {
+      const q = debouncedSearch.trim().toLowerCase()
+      data = data.filter(t => {
+        const handle = (t.handle || t.id || '').toLowerCase()
+        return handle.includes(q) || t.id.toLowerCase().includes(q)
+      })
+    }
+
     return [...data].sort((a, b) => {
       let aVal = 0, bVal = 0
       switch (sortColumn) {
@@ -483,7 +637,7 @@ export default function RankingTable(props: {
       }
       return sortDir === 'desc' ? bVal - aVal : aVal - bVal
     })
-  }, [traders, sortColumn, sortDir])
+  }, [traders, sortColumn, sortDir, debouncedSearch])
 
   // Virtual scrolling for large datasets
   const useVirtualScroll = sortedTraders.length > 50
@@ -823,6 +977,47 @@ export default function RankingTable(props: {
           </Box>
         </Box>
       )}
+
+      {/* Feature 2: Inline Table Search */}
+      <Box
+        style={{
+          padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
+          borderBottom: `1px solid var(--glass-border-light)`,
+          display: 'flex',
+          alignItems: 'center',
+          gap: tokens.spacing[2],
+        }}
+      >
+        <SearchIcon size={14} />
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(e) => handleSearchInput(e.target.value)}
+          placeholder={language === 'zh' ? '搜索交易员...' : 'Search traders...'}
+          style={{
+            flex: 1,
+            background: 'transparent',
+            border: 'none',
+            outline: 'none',
+            color: tokens.colors.text.primary,
+            fontSize: tokens.typography.fontSize.sm,
+            padding: `${tokens.spacing[1]} 0`,
+          }}
+        />
+        {debouncedSearch.trim() && (
+          <Text size="xs" color="tertiary" style={{ flexShrink: 0 }}>
+            {sortedTraders.length} {language === 'zh' ? '条结果' : 'results'}
+          </Text>
+        )}
+        {searchQuery && (
+          <button
+            onClick={() => handleSearchInput('')}
+            style={{ background: 'none', border: 'none', color: tokens.colors.text.tertiary, cursor: 'pointer', padding: 4, lineHeight: 1, fontSize: '16px' }}
+          >
+            ×
+          </button>
+        )}
+      </Box>
 
       {/* Header - 增大字体和间距 */}
       <Box

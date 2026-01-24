@@ -14,6 +14,8 @@ import { useLanguage } from '../Providers/LanguageProvider'
 import DataFreshnessIndicator from '../ui/DataFreshnessIndicator'
 import { CreateSnapshotButton } from '../snapshot'
 import AdvancedFilter, { type FilterConfig, type SavedFilter } from '../premium/AdvancedFilter'
+import FilterPresets, { type PresetId, PRESETS } from '../ranking/FilterPresets'
+import ShareTop10Button from '../ranking/ShareTop10Button'
 
 interface RankingSectionProps {
   traders: Trader[]
@@ -27,6 +29,8 @@ interface RankingSectionProps {
   error?: string | null
   /** 重试回调 */
   onRetry?: () => void
+  /** Feature 4: Manual refresh callback */
+  onRefresh?: () => void
 }
 
 /**
@@ -43,6 +47,7 @@ export default function RankingSection({
   lastUpdated,
   error,
   onRetry,
+  onRefresh,
 }: RankingSectionProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -58,7 +63,16 @@ export default function RankingSection({
   const [filterConfig, setFilterConfig] = useState<FilterConfig>({})
   const [savedFilters, setSavedFilters] = useState<SavedFilter[]>([])
 
-  // 从 URL 恢复筛选状态
+  // Feature 6: Filter presets
+  const [activePreset, setActivePreset] = useState<PresetId | null>(null)
+
+  // Feature 8: Lifted sort/page/search state for URL sync
+  const [sortColumn, setSortColumn] = useState<'score' | 'roi' | 'winrate' | 'mdd'>('score')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
+  const [currentPage, setCurrentPage] = useState(1)
+  const [searchQuery, setSearchQuery] = useState('')
+
+  // 从 URL 恢复筛选状态 + Feature 8: sort/page/search/preset
   useEffect(() => {
     const config: FilterConfig = {}
     const roiMin = searchParams.get('roi_min')
@@ -85,16 +99,37 @@ export default function RankingSection({
       setFilterConfig(config)
       setShowAdvancedFilter(true)
     }
+
+    // Feature 8: Restore sort/page/search/preset from URL
+    const urlSort = searchParams.get('sort') as typeof sortColumn | null
+    const urlOrder = searchParams.get('order') as 'asc' | 'desc' | null
+    const urlPage = searchParams.get('page')
+    const urlQ = searchParams.get('q')
+    const urlPreset = searchParams.get('preset') as PresetId | null
+
+    if (urlSort && ['score', 'roi', 'winrate', 'mdd'].includes(urlSort)) setSortColumn(urlSort)
+    if (urlOrder && ['asc', 'desc'].includes(urlOrder)) setSortDir(urlOrder)
+    if (urlPage) setCurrentPage(Math.max(1, parseInt(urlPage, 10) || 1))
+    if (urlQ) setSearchQuery(urlQ)
+    if (urlPreset && PRESETS.some(p => p.id === urlPreset)) setActivePreset(urlPreset)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // 同步筛选状态到 URL
-  const syncFilterToUrl = useCallback((config: FilterConfig) => {
+  // Feature 8: Sync all state to URL via replaceState
+  const syncStateToUrl = useCallback((overrides: {
+    config?: FilterConfig
+    sort?: string
+    order?: string
+    page?: number
+    q?: string
+    preset?: string | null
+  } = {}) => {
     const params = new URLSearchParams(window.location.search)
+    const config = overrides.config ?? filterConfig
 
-    // 清除旧的筛选参数
-    ;['roi_min', 'roi_max', 'dd_min', 'dd_max', 'min_pnl', 'min_score', 'min_wr', 'exchange', 'fcat'].forEach(k => params.delete(k))
+    // Clear old filter params
+    ;['roi_min', 'roi_max', 'dd_min', 'dd_max', 'min_pnl', 'min_score', 'min_wr', 'exchange', 'fcat', 'sort', 'order', 'page', 'q', 'preset'].forEach(k => params.delete(k))
 
-    // 写入新参数
+    // Filter params
     if (config.roi_min != null) params.set('roi_min', String(config.roi_min))
     if (config.roi_max != null) params.set('roi_max', String(config.roi_max))
     if (config.drawdown_min != null) params.set('dd_min', String(config.drawdown_min))
@@ -105,16 +140,60 @@ export default function RankingSection({
     if (config.exchange?.length) params.set('exchange', config.exchange.join(','))
     if (config.category?.length) params.set('fcat', config.category.join(','))
 
+    // Feature 8: Sort/page/search/preset
+    const sort = overrides.sort ?? sortColumn
+    const order = overrides.order ?? sortDir
+    const page = overrides.page ?? currentPage
+    const q = overrides.q ?? searchQuery
+    const preset = overrides.preset !== undefined ? overrides.preset : activePreset
+
+    if (sort && sort !== 'score') params.set('sort', sort)
+    if (order && order !== 'desc') params.set('order', order)
+    if (page && page > 1) params.set('page', String(page))
+    if (q) params.set('q', q)
+    if (preset) params.set('preset', preset)
+
     const qs = params.toString()
     const newUrl = qs ? `${window.location.pathname}?${qs}` : window.location.pathname
     window.history.replaceState(null, '', newUrl)
-  }, [])
+  }, [filterConfig, sortColumn, sortDir, currentPage, searchQuery, activePreset])
+
+  // Keep backward compatibility for syncFilterToUrl
+  const syncFilterToUrl = useCallback((config: FilterConfig) => {
+    syncStateToUrl({ config })
+  }, [syncStateToUrl])
 
   // 筛选变更处理
   const handleFilterChange = useCallback((config: FilterConfig) => {
     setFilterConfig(config)
     syncFilterToUrl(config)
   }, [syncFilterToUrl])
+
+  // Feature 8: Sort/page/search change handlers
+  const handleSortChange = useCallback((col: 'score' | 'roi' | 'winrate' | 'mdd', dir: 'asc' | 'desc') => {
+    setSortColumn(col)
+    setSortDir(dir)
+    setCurrentPage(1)
+    syncStateToUrl({ sort: col, order: dir, page: 1 })
+  }, [syncStateToUrl])
+
+  const handlePageChange = useCallback((page: number) => {
+    setCurrentPage(page)
+    syncStateToUrl({ page })
+  }, [syncStateToUrl])
+
+  const handleSearchChange = useCallback((q: string) => {
+    setSearchQuery(q)
+    setCurrentPage(1)
+    syncStateToUrl({ q, page: 1 })
+  }, [syncStateToUrl])
+
+  // Feature 6: Preset change handler
+  const handlePresetChange = useCallback((preset: PresetId | null) => {
+    setActivePreset(preset)
+    setCurrentPage(1)
+    syncStateToUrl({ preset, page: 1 })
+  }, [syncStateToUrl])
 
   // 客户端高级筛选函数
   const applyAdvancedFilter = (list: Trader[], config: FilterConfig): Trader[] => {
@@ -202,13 +281,24 @@ export default function RankingSection({
     }
   }
 
-  // 根据分类过滤交易员，再应用高级筛选
+  // 根据分类过滤交易员，再应用预设和高级筛选
   const categoryFiltered = category === 'all'
     ? traders
     : traders.filter(t => t.source && filterByCategory(t.source, category))
-  const filteredTraders = hasActiveFilters
-    ? applyAdvancedFilter(categoryFiltered, filterConfig)
+
+  // Feature 6: Apply preset filter
+  const presetFiltered = activePreset
+    ? (() => {
+        const presetConfig = PRESETS.find(p => p.id === activePreset)
+        return presetConfig
+          ? categoryFiltered.filter(t => presetConfig.filter(t))
+          : categoryFiltered
+      })()
     : categoryFiltered
+
+  const filteredTraders = hasActiveFilters
+    ? applyAdvancedFilter(presetFiltered, filterConfig)
+    : presetFiltered
 
   // Pro 功能提示
   const handleProRequired = () => {
@@ -241,7 +331,15 @@ export default function RankingSection({
           onChange={onTimeRangeChange}
           disabled={loading}
         />
-        <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3] }}>
+        <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
+          {/* Feature 9: Share Top 10 button */}
+          {!loading && filteredTraders.length > 0 && (
+            <ShareTop10Button
+              traders={filteredTraders}
+              timeRange={activeTimeRange}
+              disabled={loading}
+            />
+          )}
           {/* 快照分享按钮 */}
           {!loading && isLoggedIn && (
             <CreateSnapshotButton
@@ -256,6 +354,31 @@ export default function RankingSection({
               }}
               disabled={loading || traders.length === 0}
             />
+          )}
+          {/* Feature 4: Manual refresh button */}
+          {!loading && onRefresh && (
+            <button
+              onClick={onRefresh}
+              title={language === 'zh' ? '刷新数据' : 'Refresh data'}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: 28,
+                height: 28,
+                borderRadius: tokens.radius.md,
+                background: tokens.glass.bg.light,
+                border: `1px solid ${tokens.colors.border.primary}`,
+                color: tokens.colors.text.secondary,
+                cursor: 'pointer',
+                transition: `all ${tokens.transition.fast}`,
+              }}
+            >
+              <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M1 4v6h6M23 20v-6h-6" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
           )}
           {/* 数据新鲜度指示器 */}
           {!loading && (
@@ -284,6 +407,11 @@ export default function RankingSection({
         </Box>
       )}
 
+      {/* Feature 6: Filter Presets */}
+      <Box style={{ marginBottom: tokens.spacing[2] }}>
+        <FilterPresets activePreset={activePreset} onPresetChange={handlePresetChange} />
+      </Box>
+
       <RankingTable
         traders={filteredTraders}
         loading={loading || premiumLoading}
@@ -298,6 +426,14 @@ export default function RankingSection({
         hasActiveFilters={hasActiveFilters}
         error={null}
         onRetry={undefined}
+        // Feature 8: Controlled props
+        controlledSortColumn={sortColumn}
+        controlledSortDir={sortDir}
+        controlledPage={currentPage}
+        controlledSearchQuery={searchQuery}
+        onSortChange={handleSortChange}
+        onPageChange={handlePageChange}
+        onSearchChange={handleSearchChange}
       />
 
       {/* Data source and update time info */}

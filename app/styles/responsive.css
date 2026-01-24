@@ -1067,13 +1067,114 @@
     grid-template-columns: 1fr 260px !important;
     gap: 16px !important;
   }
-  
+
   .ranking-table-grid {
     grid-template-columns: 40px 1fr 56px 80px !important;
   }
-  
+
   .ranking-table-grid .col-winrate,
   .ranking-table-grid .col-mdd {
+    display: none !important;
+  }
+}
+
+/* ============================================
+   Mobile-Only Overrides (max-width: 767px)
+   Targets inline styles with !important.
+   Zero desktop impact.
+   ============================================ */
+
+@media (max-width: 767px) {
+  /* --- TopNav: make mobile search button visible --- */
+  .show-mobile-flex {
+    display: flex !important;
+  }
+
+  /* --- Rankings: remove horizontal scroll --- */
+  .overflow-x-auto > div {
+    min-width: 0 !important;
+  }
+
+  /* Rankings: 3-column grid (Rank | Trader | ROI) */
+  .overflow-x-auto > div > .grid,
+  .overflow-x-auto > div > a.grid {
+    grid-template-columns: 36px 1fr 72px !important;
+    min-height: 52px !important;
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+  }
+
+  /* Hide columns 4-7 (PnL, Win%, MDD, Score) */
+  .overflow-x-auto > div > .grid > *:nth-child(n+4),
+  .overflow-x-auto > div > a.grid > *:nth-child(n+4) {
+    display: none !important;
+  }
+
+  /* --- Homepage feed: 2-column card grid (Xiaohongshu style) --- */
+  .feed-main-content {
+    max-width: 100% !important;
+    padding-left: 8px !important;
+    padding-right: 8px !important;
+  }
+
+  .feed-main-content .stagger-children {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 10px !important;
+  }
+
+  .feed-main-content .stagger-children > div {
+    border: 1px solid var(--color-border-primary) !important;
+    background: var(--color-bg-secondary) !important;
+    border-radius: 12px !important;
+    padding: 10px !important;
+    border-bottom: none !important;
+  }
+
+  /* Masonry card mobile polish */
+  .masonry-card {
+    border-radius: 12px !important;
+  }
+
+  .masonry-card-content {
+    padding: 8px !important;
+  }
+
+  /* Masonry layout 2-col on mobile */
+  .post-feed-masonry {
+    columns: 2 !important;
+    column-gap: 10px !important;
+  }
+
+  .post-feed-masonry > div {
+    margin-bottom: 10px !important;
+    break-inside: avoid !important;
+  }
+
+  /* --- Feed tabs: touch-friendly --- */
+  .feed-main-content button {
+    min-height: 44px !important;
+  }
+
+  /* --- Platform filter buttons: touch-friendly --- */
+  .flex.flex-wrap.gap-2 button {
+    min-height: 36px !important;
+    padding-top: 8px !important;
+    padding-bottom: 8px !important;
+  }
+}
+
+/* ============================================
+   Feature 5: Mobile Score Badge
+   Visible only on mobile, hidden on sm+ (640px)
+   ============================================ */
+
+.mobile-score-badge {
+  display: inline-flex;
+}
+
+@media (min-width: 640px) {
+  .mobile-score-badge {
     display: none !important;
   }
 }
