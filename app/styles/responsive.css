@@ -870,6 +870,51 @@
 
 
 /* ============================================
+   Desktop Sidebar & Feed Layout
+   ============================================ */
+
+/* Hide on tablet (show only on lg+) */
+.hide-tablet {
+  display: none !important;
+}
+
+@media (min-width: 1024px) {
+  .hide-tablet {
+    display: block !important;
+  }
+
+  /* Offset main content for desktop sidebar */
+  .feed-main-content {
+    margin-left: 240px !important;
+  }
+}
+
+/* Desktop sidebar hidden below lg */
+.desktop-sidebar {
+  display: none;
+}
+
+@media (min-width: 1024px) {
+  .desktop-sidebar {
+    display: flex;
+  }
+}
+
+/* FAB positioning adjustments */
+@media (min-width: 768px) {
+  .fab-container {
+    bottom: 24px !important;
+    right: 24px !important;
+  }
+}
+
+@media (min-width: 1024px) {
+  .fab-container {
+    right: 40px !important;
+  }
+}
+
+/* ============================================
    iPad 适配
    ============================================ */
 

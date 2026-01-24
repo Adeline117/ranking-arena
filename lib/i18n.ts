@@ -4,6 +4,7 @@ export type Language = 'zh' | 'en'
 export const translations = {
   zh: {
     home: '首页',
+    rankings: '排名',
     groups: '小组',
     hot: '热榜',
     search: '搜索',
@@ -611,6 +612,7 @@ export const translations = {
   },
   en: {
     home: 'Home',
+    rankings: 'Rankings',
     groups: 'Groups',
     hot: 'Hot',
     search: 'Search',

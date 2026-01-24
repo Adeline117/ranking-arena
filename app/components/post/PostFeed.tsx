@@ -107,7 +107,7 @@ function AvatarLink({ handle, avatarUrl }: { handle?: string | null; avatarUrl?:
 
 type SortType = 'time' | 'likes'
 
-export default function PostFeed(props: { variant?: 'compact' | 'full'; layout?: 'list' | 'masonry'; groupId?: string; authorHandle?: string; initialPostId?: string | null; showSortButtons?: boolean } = {}) {
+export default function PostFeed(props: { variant?: 'compact' | 'full'; layout?: 'list' | 'masonry'; groupId?: string; groupIds?: string[]; authorHandle?: string; initialPostId?: string | null; showSortButtons?: boolean; sortBy?: string } = {}) {
   const { t, language } = useLanguage()
   const { showToast } = useToast()
   const { showDangerConfirm } = useDialog()
@@ -200,21 +200,21 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; layout?:
       const params = new URLSearchParams()
       params.set('limit', '20')
       // 根据排序类型设置排序方式
-      if (sortType === 'likes') {
+      if (props.sortBy) {
+        params.set('sort_by', props.sortBy)
+      } else if (sortType === 'likes') {
         params.set('sort_by', 'like_count')
       } else if (props.authorHandle) {
-        // 个人主页按时间排序
         params.set('sort_by', 'created_at')
-      } else if (props.groupId) {
-        // 小组页面按时间排序
+      } else if (props.groupId || props.groupIds) {
         params.set('sort_by', 'created_at')
       } else {
-        // 推荐页面按热度排序
         params.set('sort_by', 'hot_score')
       }
       params.set('sort_order', 'desc')
-      
+
       if (props.groupId) params.set('group_id', props.groupId)
+      if (props.groupIds && props.groupIds.length > 0) params.set('group_ids', props.groupIds.join(','))
       if (props.authorHandle) params.set('author_handle', props.authorHandle)
 
       const headers: Record<string, string> = {
