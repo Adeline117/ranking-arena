@@ -42,6 +42,7 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
 
   const [newComment, setNewComment] = useState('')
   const [submittingComment, setSubmittingComment] = useState(false)
+  const [reacting, setReacting] = useState(false)
 
   // Read from canonical store
   const post = usePostStore(s => s.posts[postId])
@@ -59,25 +60,37 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
     if (!newComment.trim()) return
 
     setSubmittingComment(true)
-    const result = await submitPostComment(postId, newComment.trim(), token)
-    setSubmittingComment(false)
-
-    if ('error' in result) {
-      showToast(result.error, 'error')
-    } else {
-      setNewComment('')
+    try {
+      const result = await submitPostComment(postId, newComment.trim(), token)
+      if ('error' in result) {
+        showToast(result.error, 'error')
+      } else {
+        setNewComment('')
+      }
+    } catch {
+      showToast('评论失败，请重试', 'error')
+    } finally {
+      setSubmittingComment(false)
     }
   }, [postId, newComment, auth, showToast])
 
   const handleReaction = useCallback(async (reactionType: 'up' | 'down') => {
     const token = auth.requireAuth()
     if (!token) return
+    if (reacting) return
 
-    const result = await togglePostReaction(postId, reactionType, token)
-    if (!result.success) {
-      showToast(result.error || '操作失败', 'error')
+    setReacting(true)
+    try {
+      const result = await togglePostReaction(postId, reactionType, token)
+      if (!result.success) {
+        showToast(result.error || '操作失败', 'error')
+      }
+    } catch {
+      showToast('操作失败，请重试', 'error')
+    } finally {
+      setReacting(false)
     }
-  }, [postId, auth, showToast])
+  }, [postId, auth, showToast, reacting])
 
   const handleLoadMore = useCallback(() => {
     loadMorePostComments(postId)
@@ -226,6 +239,7 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
         }}>
           <button
             onClick={() => handleReaction('up')}
+            disabled={reacting}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -235,15 +249,17 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
               borderRadius: 8,
               background: post.user_reaction === 'up' ? `${tokens.colors.accent.success}20` : tokens.colors.bg.tertiary,
               color: post.user_reaction === 'up' ? tokens.colors.accent.success : tokens.colors.text.secondary,
-              cursor: 'pointer',
+              cursor: reacting ? 'not-allowed' : 'pointer',
               fontSize: 13,
               fontWeight: 600,
+              opacity: reacting ? 0.6 : 1,
             }}
           >
             <ThumbsUpIcon size={14} /> {post.like_count}
           </button>
           <button
             onClick={() => handleReaction('down')}
+            disabled={reacting}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -253,9 +269,10 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
               borderRadius: 8,
               background: post.user_reaction === 'down' ? `${tokens.colors.accent.error}20` : tokens.colors.bg.tertiary,
               color: post.user_reaction === 'down' ? tokens.colors.accent.error : tokens.colors.text.secondary,
-              cursor: 'pointer',
+              cursor: reacting ? 'not-allowed' : 'pointer',
               fontSize: 13,
               fontWeight: 600,
+              opacity: reacting ? 0.6 : 1,
             }}
           >
             <ThumbsDownIcon size={14} />

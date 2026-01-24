@@ -499,7 +499,7 @@ export default function PortfolioTable({ items, history = [] }: PortfolioTablePr
               right: 0,
               top: 0,
               bottom: 0,
-              width: 420,
+              width: 'min(420px, 90vw)',
               background: `linear-gradient(135deg, ${tokens.colors.bg.primary} 0%, ${tokens.colors.bg.secondary} 100%)`,
               borderLeft: `1px solid ${tokens.colors.border.primary}`,
               padding: tokens.spacing[6],
