@@ -31,6 +31,8 @@ const HIGHLIGHT_STYLE = {
 type TabType = 'all' | 'users' | 'traders' | 'posts' | 'groups'
 const VALID_TABS: TabType[] = ['all', 'users', 'traders', 'posts', 'groups']
 
+const PAGE_SIZE = 10
+
 function SearchContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
@@ -42,6 +44,9 @@ function SearchContent() {
   const activeTab: TabType = tabParam && VALID_TABS.includes(tabParam) ? tabParam : 'all'
   const [searchError, setSearchError] = useState(false)
   const { showToast } = useToast()
+  const [offsets, setOffsets] = useState<Record<string, number>>({ users: PAGE_SIZE, traders: PAGE_SIZE, posts: PAGE_SIZE, groups: PAGE_SIZE })
+  const [hasMore, setHasMore] = useState<Record<string, boolean>>({ users: true, traders: true, posts: true, groups: true })
+  const [loadingMore, setLoadingMore] = useState<Record<string, boolean>>({ users: false, traders: false, posts: false, groups: false })
 
   const setActiveTab = useCallback((tab: TabType) => {
     const params = new URLSearchParams(searchParams.toString())
@@ -98,6 +103,9 @@ function SearchContent() {
       setResults([])
       return
     }
+    // Reset pagination state on new query
+    setOffsets({ users: PAGE_SIZE, traders: PAGE_SIZE, posts: PAGE_SIZE, groups: PAGE_SIZE })
+    setHasMore({ users: true, traders: true, posts: true, groups: true })
 
     const search = async () => {
       setLoading(true)
@@ -117,23 +125,38 @@ function SearchContent() {
       try {
         const isNumericQuery = /^\d+$/.test(query.trim())
 
-        // 并行查询所有数据源
-        const [usersData, tradersData, postsData, groupsData] = await Promise.all([
+        // 并行查询所有数据源（使用 allSettled 避免单个失败丢失全部结果）
+        // Fetch PAGE_SIZE + 1 to detect if more results exist
+        const settled = await Promise.allSettled([
           // 搜索用户
           isNumericQuery
-            ? supabase.from('user_profiles').select('id, handle, avatar_url, bio, uid').eq('uid', parseInt(query.trim())).limit(10)
-            : supabase.from('user_profiles').select('id, handle, avatar_url, bio, uid').ilike('handle', `%${sanitizedQuery}%`).limit(10),
+            ? supabase.from('user_profiles').select('id, handle, avatar_url, bio, uid').eq('uid', parseInt(query.trim())).limit(PAGE_SIZE + 1)
+            : supabase.from('user_profiles').select('id, handle, avatar_url, bio, uid').ilike('handle', `%${sanitizedQuery}%`).limit(PAGE_SIZE + 1),
           // 搜索交易者（v2 表）
-          supabase.from('trader_sources_v2').select('trader_key, display_name, platform').ilike('display_name', `%${sanitizedQuery}%`).limit(10),
+          supabase.from('trader_sources_v2').select('trader_key, display_name, platform').ilike('display_name', `%${sanitizedQuery}%`).limit(PAGE_SIZE + 1),
           // 搜索帖子
-          supabase.from('posts').select('id, title, content, author_handle, created_at').or(`title.ilike.%${sanitizedQuery}%,content.ilike.%${sanitizedQuery}%`).limit(10),
+          supabase.from('posts').select('id, title, content, author_handle, created_at').or(`title.ilike.%${sanitizedQuery}%,content.ilike.%${sanitizedQuery}%`).limit(PAGE_SIZE + 1),
           // 搜索小组
-          supabase.from('groups').select('id, name').ilike('name', `%${sanitizedQuery}%`).limit(10),
+          supabase.from('groups').select('id, name').ilike('name', `%${sanitizedQuery}%`).limit(PAGE_SIZE + 1),
         ])
+        const usersData = settled[0].status === 'fulfilled' ? settled[0].value : { data: null }
+        const tradersData = settled[1].status === 'fulfilled' ? settled[1].value : { data: null }
+        const postsData = settled[2].status === 'fulfilled' ? settled[2].value : { data: null }
+        const groupsData = settled[3].status === 'fulfilled' ? settled[3].value : { data: null }
+
+        // Detect hasMore for each category
+        const newHasMore = {
+          users: (usersData.data?.length ?? 0) > PAGE_SIZE,
+          traders: (tradersData.data?.length ?? 0) > PAGE_SIZE,
+          posts: (postsData.data?.length ?? 0) > PAGE_SIZE,
+          groups: (groupsData.data?.length ?? 0) > PAGE_SIZE,
+        }
+        setHasMore(newHasMore)
 
         // 处理用户结果
         if (usersData.data) {
-          usersData.data.forEach((u: Record<string, unknown>) => {
+          const users = usersData.data.slice(0, PAGE_SIZE)
+          users.forEach((u: Record<string, unknown>) => {
             results.push({
               type: 'user',
               id: u.id as string,
@@ -146,7 +169,7 @@ function SearchContent() {
         }
 
         // 处理交易员结果 - 批量获取快照数据
-        const traders = tradersData.data
+        const traders = tradersData.data?.slice(0, PAGE_SIZE) ?? null
         if (traders && traders.length > 0) {
           const traderKeys = traders.map(t => t.trader_key)
           const { data: allSnapshots } = await supabase
@@ -188,7 +211,8 @@ function SearchContent() {
 
         // 处理帖子结果
         if (postsData.data) {
-          postsData.data.forEach((p: Record<string, unknown>) => {
+          const posts = postsData.data.slice(0, PAGE_SIZE)
+          posts.forEach((p: Record<string, unknown>) => {
             results.push({
               type: 'post',
               id: p.id as string,
@@ -201,7 +225,8 @@ function SearchContent() {
 
         // 处理小组结果
         if (groupsData.data) {
-          groupsData.data.forEach((g: Record<string, unknown>) => {
+          const groups = groupsData.data.slice(0, PAGE_SIZE)
+          groups.forEach((g: Record<string, unknown>) => {
             results.push({
               type: 'group',
               id: g.id as string,
@@ -226,6 +251,131 @@ function SearchContent() {
     return () => clearTimeout(timeout)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query])
+
+  const loadMore = useCallback(async (type: 'users' | 'traders' | 'posts' | 'groups') => {
+    if (!query.trim() || loadingMore[type] || !hasMore[type]) return
+
+    setLoadingMore(prev => ({ ...prev, [type]: true }))
+
+    const sanitizedQuery = query.trim()
+      .slice(0, 100)
+      .replace(/[\\%_]/g, c => `\\${c}`)
+
+    const offset = offsets[type]
+    const isNumericQuery = /^\d+$/.test(query.trim())
+
+    try {
+      const newResults: SearchResult[] = []
+
+      if (type === 'users') {
+        const { data } = isNumericQuery
+          ? await supabase.from('user_profiles').select('id, handle, avatar_url, bio, uid').eq('uid', parseInt(query.trim())).range(offset, offset + PAGE_SIZE)
+          : await supabase.from('user_profiles').select('id, handle, avatar_url, bio, uid').ilike('handle', `%${sanitizedQuery}%`).range(offset, offset + PAGE_SIZE)
+        if (data) {
+          if (data.length <= PAGE_SIZE) {
+            setHasMore(prev => ({ ...prev, users: false }))
+          }
+          data.slice(0, PAGE_SIZE).forEach((u: Record<string, unknown>) => {
+            newResults.push({
+              type: 'user',
+              id: u.id as string,
+              title: (u.handle as string) || '未设置昵称',
+              subtitle: ((u.bio as string) || '').substring(0, 80),
+              meta: u.uid ? `UID: ${u.uid}` : undefined,
+              uid: u.uid as number | undefined,
+            })
+          })
+        }
+      } else if (type === 'traders') {
+        const { data } = await supabase.from('trader_sources_v2').select('trader_key, display_name, platform').ilike('display_name', `%${sanitizedQuery}%`).range(offset, offset + PAGE_SIZE)
+        if (data) {
+          if (data.length <= PAGE_SIZE) {
+            setHasMore(prev => ({ ...prev, traders: false }))
+          }
+          const traders = data.slice(0, PAGE_SIZE)
+          if (traders.length > 0) {
+            const traderKeys = traders.map(t => t.trader_key)
+            const { data: allSnapshots } = await supabase
+              .from('trader_snapshots_v2')
+              .select('trader_key, window, roi_pct, arena_score, as_of_ts')
+              .in('trader_key', traderKeys)
+              .not('arena_score', 'is', null)
+              .order('as_of_ts', { ascending: false })
+
+            const snapshotMap = new Map<string, { window: string; roi_pct: number; arena_score: number }>()
+            const windowPriority: Record<string, number> = { '90d': 3, '30d': 2, '7d': 1 }
+            allSnapshots?.forEach((s: Record<string, unknown>) => {
+              const key = s.trader_key as string
+              const existing = snapshotMap.get(key)
+              const currentP = windowPriority[s.window as string] || 0
+              const existingP = existing ? (windowPriority[existing.window] || 0) : 0
+              if (!existing || currentP > existingP) {
+                snapshotMap.set(key, { window: s.window as string, roi_pct: s.roi_pct as number, arena_score: s.arena_score as number })
+              }
+            })
+
+            for (const trader of traders) {
+              const latest = snapshotMap.get(trader.trader_key)
+              const platformLabel = (trader.platform || '').replace(/_/g, ' ').toUpperCase()
+              const subtitle = latest
+                ? `${latest.window}: ROI ${latest.roi_pct?.toFixed(1)}% • Score ${latest.arena_score?.toFixed(1)}`
+                : platformLabel
+              newResults.push({
+                type: 'trader',
+                id: trader.trader_key,
+                title: trader.display_name || trader.trader_key,
+                subtitle,
+                meta: platformLabel || undefined,
+              })
+            }
+          }
+        }
+      } else if (type === 'posts') {
+        const { data } = await supabase.from('posts').select('id, title, content, author_handle, created_at').or(`title.ilike.%${sanitizedQuery}%,content.ilike.%${sanitizedQuery}%`).range(offset, offset + PAGE_SIZE)
+        if (data) {
+          if (data.length <= PAGE_SIZE) {
+            setHasMore(prev => ({ ...prev, posts: false }))
+          }
+          data.slice(0, PAGE_SIZE).forEach((p: Record<string, unknown>) => {
+            newResults.push({
+              type: 'post',
+              id: p.id as string,
+              title: (p.title as string) || '',
+              subtitle: ((p.content as string) || '').substring(0, 100),
+              meta: `作者: ${(p.author_handle as string) || '未知'}`,
+            })
+          })
+        }
+      } else if (type === 'groups') {
+        const { data } = await supabase.from('groups').select('id, name').ilike('name', `%${sanitizedQuery}%`).range(offset, offset + PAGE_SIZE)
+        if (data) {
+          if (data.length <= PAGE_SIZE) {
+            setHasMore(prev => ({ ...prev, groups: false }))
+          }
+          data.slice(0, PAGE_SIZE).forEach((g: Record<string, unknown>) => {
+            newResults.push({
+              type: 'group',
+              id: g.id as string,
+              title: (g.name as string) || '',
+              subtitle: '',
+            })
+          })
+        }
+      }
+
+      if (newResults.length > 0) {
+        setResults(prev => [...prev, ...newResults])
+        setOffsets(prev => ({ ...prev, [type]: offset + PAGE_SIZE }))
+      } else {
+        setHasMore(prev => ({ ...prev, [type]: false }))
+      }
+    } catch (error) {
+      console.error(`Load more ${type} error:`, error)
+      showToast('加载更多失败，请稍后重试', 'error')
+    } finally {
+      setLoadingMore(prev => ({ ...prev, [type]: false }))
+    }
+  }, [query, offsets, hasMore, loadingMore, showToast])
 
   const filteredResults = activeTab === 'all' 
     ? results 
@@ -485,6 +635,96 @@ function SearchContent() {
                 </div>
               </Link>
             ))}
+
+            {/* Load More button for the active tab */}
+            {activeTab !== 'all' && hasMore[activeTab] && (
+              <button
+                onClick={() => loadMore(activeTab as 'users' | 'traders' | 'posts' | 'groups')}
+                disabled={loadingMore[activeTab]}
+                className="btn-press"
+                style={{
+                  width: '100%',
+                  padding: '14px 24px',
+                  marginTop: '8px',
+                  borderRadius: tokens.radius.lg,
+                  border: tokens.glass.border.light,
+                  background: tokens.glass.bg.light,
+                  backdropFilter: tokens.glass.blur.sm,
+                  WebkitBackdropFilter: tokens.glass.blur.sm,
+                  color: tokens.colors.text.secondary,
+                  fontWeight: 700,
+                  fontSize: '14px',
+                  cursor: loadingMore[activeTab] ? 'not-allowed' : 'pointer',
+                  transition: tokens.transition.all,
+                  opacity: loadingMore[activeTab] ? 0.6 : 1,
+                }}
+                onMouseEnter={(e) => {
+                  if (!loadingMore[activeTab]) {
+                    e.currentTarget.style.background = tokens.glass.bg.medium
+                    e.currentTarget.style.color = tokens.colors.text.primary
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = tokens.glass.bg.light
+                  e.currentTarget.style.color = tokens.colors.text.secondary
+                }}
+              >
+                {loadingMore[activeTab] ? '加载中...' : '加载更多'}
+              </button>
+            )}
+
+            {/* Load More buttons for "all" tab - show per category */}
+            {activeTab === 'all' && (
+              <>
+                {(['users', 'traders', 'posts', 'groups'] as const).map((type) => {
+                  const typeResults = results.filter(r => {
+                    if (type === 'users') return r.type === 'user'
+                    if (type === 'traders') return r.type === 'trader'
+                    if (type === 'posts') return r.type === 'post'
+                    if (type === 'groups') return r.type === 'group'
+                    return false
+                  })
+                  if (typeResults.length === 0 || !hasMore[type]) return null
+                  const typeLabel = type === 'users' ? '用户' : type === 'traders' ? '交易者' : type === 'posts' ? '帖子' : '小组'
+                  return (
+                    <button
+                      key={type}
+                      onClick={() => loadMore(type)}
+                      disabled={loadingMore[type]}
+                      className="btn-press"
+                      style={{
+                        width: '100%',
+                        padding: '14px 24px',
+                        marginTop: '8px',
+                        borderRadius: tokens.radius.lg,
+                        border: tokens.glass.border.light,
+                        background: tokens.glass.bg.light,
+                        backdropFilter: tokens.glass.blur.sm,
+                        WebkitBackdropFilter: tokens.glass.blur.sm,
+                        color: tokens.colors.text.secondary,
+                        fontWeight: 700,
+                        fontSize: '14px',
+                        cursor: loadingMore[type] ? 'not-allowed' : 'pointer',
+                        transition: tokens.transition.all,
+                        opacity: loadingMore[type] ? 0.6 : 1,
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!loadingMore[type]) {
+                          e.currentTarget.style.background = tokens.glass.bg.medium
+                          e.currentTarget.style.color = tokens.colors.text.primary
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = tokens.glass.bg.light
+                        e.currentTarget.style.color = tokens.colors.text.secondary
+                      }}
+                    >
+                      {loadingMore[type] ? '加载中...' : `加载更多${typeLabel}`}
+                    </button>
+                  )
+                })}
+              </>
+            )}
           </div>
         )}
       </main>

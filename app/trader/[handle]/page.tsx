@@ -6,6 +6,7 @@ import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
 import { supabase } from '@/lib/supabase/client'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { useToast } from '@/app/components/ui/Toast'
 import TopNav from '@/app/components/layout/TopNav'
 import TraderPageV2 from '@/app/components/trader/TraderPageV2'
 import TraderHeader from '@/app/components/trader/TraderHeader'
@@ -68,7 +69,8 @@ interface ExtendedPositionHistoryItem {
 }
 
 function TraderContent(props: { params: { handle: string } | Promise<{ handle: string }> }) {
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
+  const { showToast } = useToast()
   const searchParams = useSearchParams()
   const router = useRouter()
   const pathname = usePathname()
@@ -166,6 +168,7 @@ function TraderContent(props: { params: { handle: string } | Promise<{ handle: s
         if (!response.ok) {
           console.error('Error loading trader data:', response.status)
           setProfile(null)
+          showToast(language === 'zh' ? '加载交易员数据失败' : 'Failed to load trader data', 'error')
           return
         }
 
@@ -187,13 +190,14 @@ function TraderContent(props: { params: { handle: string } | Promise<{ handle: s
       } catch (error) {
         console.error('Error loading trader data:', error)
         setProfile(null)
+        showToast(language === 'zh' ? '加载失败，请稍后重试' : 'Failed to load, please try again', 'error')
       } finally {
         setLoading(false)
       }
     }
 
     load()
-  }, [handle])
+  }, [handle, showToast, language])
 
   if (loading) {
     return (

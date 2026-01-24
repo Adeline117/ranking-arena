@@ -11,6 +11,7 @@ import ExchangeConnectionManager from '@/app/components/exchange/ExchangeConnect
 import { useToast } from '@/app/components/ui/Toast'
 import { useDialog } from '@/app/components/ui/Dialog'
 import { uiLogger } from '@/lib/utils/logger'
+import { formatTimeAgo } from '@/lib/utils/date'
 import AdvancedAlerts from '@/app/components/pro/AdvancedAlerts'
 import { useSubscription } from '@/app/components/home/hooks/useSubscription'
 import { useMultiAccount } from '@/lib/hooks/useMultiAccount'
@@ -543,6 +544,40 @@ function SettingsContent() {
   const [dmPermission, setDmPermission] = useState<'all' | 'mutual' | 'none'>('all')
   const [showProBadge, setShowProBadge] = useState(true)
 
+  // 2FA state
+  const [twoFAEnabled, setTwoFAEnabled] = useState(false)
+  const [twoFASetupData, setTwoFASetupData] = useState<{ qrCodeDataUrl: string; secret: string } | null>(null)
+  const [twoFACode, setTwoFACode] = useState('')
+  const [backupCodes, setBackupCodes] = useState<string[]>([])
+  const [twoFALoading, setTwoFALoading] = useState(false)
+  const [disablePassword, setDisablePassword] = useState('')
+  const [showDisable2FA, setShowDisable2FA] = useState(false)
+
+  // Sessions state
+  interface SessionInfo {
+    id: string
+    deviceInfo: { browser?: string; os?: string } | null
+    ipAddress: string | null
+    lastActiveAt: string | null
+    isCurrent: boolean
+  }
+  const [sessions, setSessions] = useState<SessionInfo[]>([])
+  const [loadingSessions, setLoadingSessions] = useState(false)
+
+  // Blocked users state
+  interface BlockedUserInfo {
+    blockedId: string
+    handle: string | null
+    avatarUrl: string | null
+    createdAt: string
+  }
+  const [blockedUsers, setBlockedUsers] = useState<BlockedUserInfo[]>([])
+  const [loadingBlockedUsers, setLoadingBlockedUsers] = useState(false)
+  const [unblockingId, setUnblockingId] = useState<string | null>(null)
+
+  // Email digest state
+  const [emailDigest, setEmailDigest] = useState<'none' | 'daily' | 'weekly'>('none')
+
   // Pro subscription status
   const { isPro } = useSubscription()
 
@@ -682,7 +717,7 @@ function SettingsContent() {
 
       const { data: userProfile } = await supabase
         .from('user_profiles')
-        .select('handle, bio, avatar_url, cover_url, notify_follow, notify_like, notify_comment, notify_mention, notify_message, show_followers, show_following, dm_permission, show_pro_badge')
+        .select('handle, bio, avatar_url, cover_url, notify_follow, notify_like, notify_comment, notify_mention, notify_message, show_followers, show_following, dm_permission, show_pro_badge, totp_enabled, email_digest')
         .eq('id', uid)
         .maybeSingle()
 
@@ -700,8 +735,12 @@ function SettingsContent() {
         const profileShowFollowing = userProfile.show_following !== false
         const profileDmPermission = userProfile.dm_permission || 'all'
         const profileShowProBadge = userProfile.show_pro_badge !== false
+        const profileTotpEnabled = userProfile.totp_enabled === true
+        const profileEmailDigest = (userProfile.email_digest as 'none' | 'daily' | 'weekly') || 'none'
 
         setHandle(profileHandle)
+        setTwoFAEnabled(profileTotpEnabled)
+        setEmailDigest(profileEmailDigest)
         setBio(profileBio)
         setAvatarUrl(profileAvatarUrl)
         setPreviewUrl(profileAvatarUrl)
@@ -1070,6 +1109,278 @@ function SettingsContent() {
     }
   }
 
+  // ===== 2FA Handlers =====
+  const handleSetup2FA = async () => {
+    setTwoFALoading(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) {
+        showToast('请先登录', 'error')
+        return
+      }
+
+      const res = await fetch('/api/settings/2fa/setup', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        showToast(data.error || '设置失败', 'error')
+        return
+      }
+      setTwoFASetupData({ qrCodeDataUrl: data.qrCode, secret: data.secret })
+    } catch {
+      showToast('网络错误', 'error')
+    } finally {
+      setTwoFALoading(false)
+    }
+  }
+
+  const handleVerify2FA = async () => {
+    if (!twoFACode || twoFACode.length !== 6) {
+      showToast('请输入6位验证码', 'warning')
+      return
+    }
+    setTwoFALoading(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) {
+        showToast('请先登录', 'error')
+        return
+      }
+
+      const res = await fetch('/api/settings/2fa/verify', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ code: twoFACode }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        showToast(data.error || '验证失败', 'error')
+        return
+      }
+      setTwoFAEnabled(true)
+      setBackupCodes(data.backupCodes || [])
+      setTwoFASetupData(null)
+      setTwoFACode('')
+      showToast('2FA 已开启', 'success')
+    } catch {
+      showToast('网络错误', 'error')
+    } finally {
+      setTwoFALoading(false)
+    }
+  }
+
+  const handleDisable2FA = async () => {
+    if (!disablePassword) {
+      showToast('请输入密码', 'warning')
+      return
+    }
+    setTwoFALoading(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) {
+        showToast('请先登录', 'error')
+        return
+      }
+
+      const res = await fetch('/api/settings/2fa/disable', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ password: disablePassword }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        showToast(data.error || '关闭失败', 'error')
+        return
+      }
+      setTwoFAEnabled(false)
+      setShowDisable2FA(false)
+      setDisablePassword('')
+      setBackupCodes([])
+      showToast('2FA 已关闭', 'success')
+    } catch {
+      showToast('网络错误', 'error')
+    } finally {
+      setTwoFALoading(false)
+    }
+  }
+
+  // ===== Sessions Handlers =====
+  const loadSessions = useCallback(async () => {
+    setLoadingSessions(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) return
+
+      const res = await fetch('/api/settings/sessions', {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      })
+      if (res.ok) {
+        const data = await res.json()
+        const sessionList = (data.sessions || []) as Array<{
+          id: string
+          deviceInfo: string | null
+          ipAddress: string | null
+          lastActiveAt: string | null
+        }>
+        // Mark the first session (most recent activity) as current
+        setSessions(sessionList.map((s, index) => ({
+          id: s.id,
+          deviceInfo: s.deviceInfo ? (typeof s.deviceInfo === 'string' ? JSON.parse(s.deviceInfo) : s.deviceInfo) as { browser?: string; os?: string } : null,
+          ipAddress: s.ipAddress,
+          lastActiveAt: s.lastActiveAt,
+          isCurrent: index === 0,
+        })))
+      }
+    } catch (error) {
+      uiLogger.error('[Sessions] Load error:', error)
+    } finally {
+      setLoadingSessions(false)
+    }
+  }, [])
+
+  const handleRevokeSession = async (sessionId: string) => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) return
+
+      const res = await fetch('/api/settings/sessions', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ sessionId }),
+      })
+      if (res.ok) {
+        setSessions(prev => prev.filter(s => s.id !== sessionId))
+        showToast('会话已撤销', 'success')
+      } else {
+        showToast('操作失败', 'error')
+      }
+    } catch {
+      showToast('网络错误', 'error')
+    }
+  }
+
+  const handleRevokeAllSessions = async () => {
+    const confirmed = await showConfirm('登出所有设备', '确定要登出所有其他设备吗？')
+    if (!confirmed) return
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) return
+
+      const res = await fetch('/api/settings/sessions', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ all: true }),
+      })
+      if (res.ok) {
+        setSessions(prev => prev.filter(s => s.isCurrent))
+        showToast('已登出所有其他设备', 'success')
+      } else {
+        showToast('操作失败', 'error')
+      }
+    } catch {
+      showToast('网络错误', 'error')
+    }
+  }
+
+  // ===== Blocked Users Handlers =====
+  const loadBlockedUsers = useCallback(async (uid: string) => {
+    setLoadingBlockedUsers(true)
+    try {
+      const { data: blockedRows, error } = await supabase
+        .from('blocked_users')
+        .select('blocked_id, created_at')
+        .eq('blocker_id', uid)
+
+      if (error || !blockedRows || blockedRows.length === 0) {
+        setBlockedUsers([])
+        return
+      }
+
+      const blockedIds = blockedRows.map(r => r.blocked_id as string)
+      const { data: profiles } = await supabase
+        .from('user_profiles')
+        .select('id, handle, avatar_url')
+        .in('id', blockedIds)
+
+      const profileMap = new Map((profiles || []).map(p => [p.id as string, p]))
+
+      setBlockedUsers(blockedRows.map(row => {
+        const profile = profileMap.get(row.blocked_id as string)
+        return {
+          blockedId: row.blocked_id as string,
+          handle: (profile?.handle as string) || null,
+          avatarUrl: (profile?.avatar_url as string) || null,
+          createdAt: row.created_at as string,
+        }
+      }))
+    } catch (error) {
+      uiLogger.error('[BlockedUsers] Load error:', error)
+    } finally {
+      setLoadingBlockedUsers(false)
+    }
+  }, [])
+
+  const handleUnblock = async (blockedId: string) => {
+    setUnblockingId(blockedId)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) return
+
+      const res = await fetch(`/api/users/${blockedId}/block`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      })
+      if (res.ok) {
+        setBlockedUsers(prev => prev.filter(u => u.blockedId !== blockedId))
+        showToast('已解除屏蔽', 'success')
+      } else {
+        showToast('操作失败', 'error')
+      }
+    } catch {
+      showToast('网络错误', 'error')
+    } finally {
+      setUnblockingId(null)
+    }
+  }
+
+  // ===== Email Digest Handler =====
+  const handleEmailDigestChange = async (value: 'none' | 'daily' | 'weekly') => {
+    if (!userId) return
+    const previous = emailDigest
+    setEmailDigest(value)
+    try {
+      const { error } = await supabase
+        .from('user_profiles')
+        .update({ email_digest: value })
+        .eq('id', userId)
+
+      if (error) {
+        setEmailDigest(previous)
+        showToast('保存失败', 'error')
+        return
+      }
+      showToast('邮件摘要设置已保存', 'success')
+    } catch {
+      setEmailDigest(previous)
+      showToast('保存失败', 'error')
+    }
+  }
+
   const handleLogout = async () => {
     const confirmed = await showConfirm('退出登录', '确定要退出当前账号吗？')
     if (!confirmed) return
@@ -1134,6 +1445,20 @@ function SettingsContent() {
     window.addEventListener('scroll', handleScroll, { passive: true })
     return () => window.removeEventListener('scroll', handleScroll)
   }, [])
+
+  // Load sessions when security section becomes active
+  useEffect(() => {
+    if (activeSection === 'security' && sessions.length === 0 && !loadingSessions) {
+      loadSessions()
+    }
+  }, [activeSection, sessions.length, loadingSessions, loadSessions])
+
+  // Load blocked users when privacy section becomes active
+  useEffect(() => {
+    if (activeSection === 'privacy' && userId && blockedUsers.length === 0 && !loadingBlockedUsers) {
+      loadBlockedUsers(userId)
+    }
+  }, [activeSection, userId, blockedUsers.length, loadingBlockedUsers, loadBlockedUsers])
 
   // Show auth-required state if not logged in (after initial check)
   if (!loading && !userId) {
@@ -1695,6 +2020,300 @@ function SettingsContent() {
                 </Box>
               )}
             </Box>
+
+            {/* ===== 2FA Section ===== */}
+            <Box style={{ marginTop: tokens.spacing[6], paddingTop: tokens.spacing[6], borderTop: `1px solid ${tokens.colors.border.primary}` }}>
+              <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], marginBottom: tokens.spacing[3] }}>
+                <Text size="sm" weight="bold">
+                  两步验证 (2FA)
+                </Text>
+                {twoFAEnabled && (
+                  <span style={{
+                    padding: `2px ${tokens.spacing[2]}`,
+                    borderRadius: tokens.radius.sm,
+                    background: `${tokens.colors.accent.success}15`,
+                    border: `1px solid ${tokens.colors.accent.success}30`,
+                    color: tokens.colors.accent.success,
+                    fontSize: tokens.typography.fontSize.xs,
+                    fontWeight: Number(tokens.typography.fontWeight.bold),
+                  }}>
+                    已开启
+                  </span>
+                )}
+              </Box>
+
+              {!twoFAEnabled && !twoFASetupData && backupCodes.length === 0 && (
+                <Box>
+                  <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[3] }}>
+                    启用两步验证以增强账号安全性。登录时需要输入验证器应用中的动态验证码。
+                  </Text>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={handleSetup2FA}
+                    disabled={twoFALoading}
+                  >
+                    {twoFALoading ? '加载中...' : '开启两步验证'}
+                  </Button>
+                </Box>
+              )}
+
+              {twoFASetupData && !twoFAEnabled && (
+                <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}>
+                  <Text size="xs" color="secondary" style={{ lineHeight: 1.6 }}>
+                    使用验证器应用（如 Google Authenticator、Authy）扫描以下二维码，或手动输入密钥。
+                  </Text>
+                  <Box style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: tokens.spacing[3] }}>
+                    <img
+                      src={twoFASetupData.qrCodeDataUrl}
+                      alt="2FA QR Code"
+                      style={{
+                        width: 180,
+                        height: 180,
+                        borderRadius: tokens.radius.md,
+                        border: `1px solid ${tokens.colors.border.primary}`,
+                        background: '#fff',
+                        padding: tokens.spacing[2],
+                      }}
+                    />
+                    <Box style={{
+                      padding: tokens.spacing[3],
+                      borderRadius: tokens.radius.md,
+                      background: tokens.colors.bg.primary,
+                      border: `1px solid ${tokens.colors.border.primary}`,
+                      textAlign: 'center',
+                      width: '100%',
+                      maxWidth: 320,
+                    }}>
+                      <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[1] }}>
+                        手动输入密钥：
+                      </Text>
+                      <Text size="sm" weight="bold" style={{ fontFamily: 'monospace', wordBreak: 'break-all' }}>
+                        {twoFASetupData.secret}
+                      </Text>
+                    </Box>
+                  </Box>
+                  <Box>
+                    <Text size="xs" weight="medium" style={{ marginBottom: tokens.spacing[2] }}>
+                      输入验证器中显示的6位验证码：
+                    </Text>
+                    <Box style={{ display: 'flex', gap: tokens.spacing[3], alignItems: 'center' }}>
+                      <input
+                        type="text"
+                        value={twoFACode}
+                        onChange={(e) => setTwoFACode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                        placeholder="000000"
+                        maxLength={6}
+                        style={{
+                          ...getInputStyle(),
+                          maxWidth: 160,
+                          textAlign: 'center',
+                          fontSize: tokens.typography.fontSize.lg,
+                          fontFamily: 'monospace',
+                          letterSpacing: '4px',
+                        }}
+                      />
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        onClick={handleVerify2FA}
+                        disabled={twoFALoading || twoFACode.length !== 6}
+                      >
+                        {twoFALoading ? '验证中...' : '验证并开启'}
+                      </Button>
+                    </Box>
+                  </Box>
+                </Box>
+              )}
+
+              {backupCodes.length > 0 && (
+                <Box style={{
+                  marginTop: tokens.spacing[4],
+                  padding: tokens.spacing[4],
+                  borderRadius: tokens.radius.md,
+                  background: `${tokens.colors.accent.warning}08`,
+                  border: `1px solid ${tokens.colors.accent.warning}30`,
+                }}>
+                  <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[2], color: tokens.colors.accent.warning }}>
+                    备份恢复码
+                  </Text>
+                  <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[3], lineHeight: 1.6 }}>
+                    请妥善保存以下恢复码。当无法使用验证器时，可以用恢复码登录。每个恢复码只能使用一次。
+                  </Text>
+                  <Box style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(2, 1fr)',
+                    gap: tokens.spacing[2],
+                    padding: tokens.spacing[3],
+                    borderRadius: tokens.radius.md,
+                    background: tokens.colors.bg.primary,
+                  }}>
+                    {backupCodes.map((code, index) => (
+                      <Text
+                        key={index}
+                        size="sm"
+                        style={{ fontFamily: 'monospace', textAlign: 'center' }}
+                      >
+                        {code}
+                      </Text>
+                    ))}
+                  </Box>
+                </Box>
+              )}
+
+              {twoFAEnabled && !showDisable2FA && (
+                <Box style={{ marginTop: tokens.spacing[3] }}>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setShowDisable2FA(true)}
+                    style={{
+                      color: tokens.colors.accent.error,
+                      borderColor: tokens.colors.accent.error + '40',
+                    }}
+                  >
+                    关闭两步验证
+                  </Button>
+                </Box>
+              )}
+
+              {showDisable2FA && (
+                <Box style={{
+                  marginTop: tokens.spacing[3],
+                  padding: tokens.spacing[4],
+                  borderRadius: tokens.radius.md,
+                  background: tokens.colors.bg.primary,
+                  border: `1px solid ${tokens.colors.accent.error}30`,
+                }}>
+                  <Text size="sm" weight="medium" style={{ marginBottom: tokens.spacing[2] }}>
+                    输入密码以关闭两步验证：
+                  </Text>
+                  <Box style={{ display: 'flex', gap: tokens.spacing[3], alignItems: 'center' }}>
+                    <input
+                      type="password"
+                      value={disablePassword}
+                      onChange={(e) => setDisablePassword(e.target.value)}
+                      placeholder="输入当前密码"
+                      style={{ ...getInputStyle(), maxWidth: 240 }}
+                    />
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={handleDisable2FA}
+                      disabled={twoFALoading || !disablePassword}
+                      style={{
+                        color: tokens.colors.accent.error,
+                        borderColor: tokens.colors.accent.error + '40',
+                      }}
+                    >
+                      {twoFALoading ? '处理中...' : '确认关闭'}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => { setShowDisable2FA(false); setDisablePassword('') }}
+                    >
+                      取消
+                    </Button>
+                  </Box>
+                </Box>
+              )}
+            </Box>
+
+            {/* ===== Active Sessions Section ===== */}
+            <Box style={{ marginTop: tokens.spacing[6], paddingTop: tokens.spacing[6], borderTop: `1px solid ${tokens.colors.border.primary}` }}>
+              <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[3] }}>
+                活跃会话
+              </Text>
+              <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[4] }}>
+                查看和管理你在不同设备上的登录状态
+              </Text>
+
+              {loadingSessions ? (
+                <Text size="sm" color="tertiary">加载中...</Text>
+              ) : sessions.length === 0 ? (
+                <Text size="sm" color="tertiary">暂无会话信息</Text>
+              ) : (
+                <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
+                  {sessions.map((session) => (
+                    <Box
+                      key={session.id}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: tokens.spacing[3],
+                        borderRadius: tokens.radius.md,
+                        background: tokens.colors.bg.primary,
+                        border: `1px solid ${session.isCurrent ? tokens.colors.accent.success + '40' : tokens.colors.border.primary}`,
+                      }}
+                    >
+                      <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[1] }}>
+                        <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
+                          <Text size="sm" weight="medium">
+                            {session.deviceInfo?.browser || '未知浏览器'}
+                            {session.deviceInfo?.os ? ` - ${session.deviceInfo.os}` : ''}
+                          </Text>
+                          {session.isCurrent && (
+                            <span style={{
+                              padding: `1px ${tokens.spacing[2]}`,
+                              borderRadius: tokens.radius.sm,
+                              background: `${tokens.colors.accent.success}15`,
+                              color: tokens.colors.accent.success,
+                              fontSize: tokens.typography.fontSize.xs,
+                              fontWeight: Number(tokens.typography.fontWeight.bold),
+                            }}>
+                              当前会话
+                            </span>
+                          )}
+                        </Box>
+                        <Box style={{ display: 'flex', gap: tokens.spacing[3] }}>
+                          {session.ipAddress && (
+                            <Text size="xs" color="tertiary">
+                              IP: {session.ipAddress}
+                            </Text>
+                          )}
+                          {session.lastActiveAt && (
+                            <Text size="xs" color="tertiary">
+                              {formatTimeAgo(session.lastActiveAt)}
+                            </Text>
+                          )}
+                        </Box>
+                      </Box>
+                      {!session.isCurrent && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleRevokeSession(session.id)}
+                          style={{
+                            color: tokens.colors.accent.error,
+                            fontSize: tokens.typography.fontSize.xs,
+                          }}
+                        >
+                          撤销
+                        </Button>
+                      )}
+                    </Box>
+                  ))}
+
+                  {sessions.filter(s => !s.isCurrent).length > 0 && (
+                    <Box style={{ display: 'flex', justifyContent: 'flex-end', marginTop: tokens.spacing[2] }}>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={handleRevokeAllSessions}
+                        style={{
+                          color: tokens.colors.accent.error,
+                          borderColor: tokens.colors.accent.error + '40',
+                        }}
+                      >
+                        登出所有其他设备
+                      </Button>
+                    </Box>
+                  )}
+                </Box>
+              )}
+            </Box>
           </SectionCard>
 
           {/* ===== Exchange Connections Section ===== */}
@@ -1757,6 +2376,50 @@ function SettingsContent() {
                   />
                 </Box>
               ))}
+            </Box>
+
+            {/* ===== Email Digest Section ===== */}
+            <Box style={{ marginTop: tokens.spacing[5], paddingTop: tokens.spacing[5], borderTop: `1px solid ${tokens.colors.border.primary}` }}>
+              <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>
+                邮件摘要
+              </Text>
+              <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[3] }}>
+                选择是否通过邮件接收活动摘要
+              </Text>
+              <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
+                {([
+                  { value: 'none' as const, label: '不发送', desc: '不通过邮件发送摘要' },
+                  { value: 'daily' as const, label: '每日摘要', desc: '每天发送一封活动总结邮件' },
+                  { value: 'weekly' as const, label: '每周摘要', desc: '每周发送一封活动总结邮件' },
+                ]).map(option => (
+                  <label
+                    key={option.value}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: tokens.spacing[3],
+                      cursor: 'pointer',
+                      padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+                      borderRadius: tokens.radius.md,
+                      border: `1px solid ${emailDigest === option.value ? tokens.colors.accent.primary + '40' : 'transparent'}`,
+                      background: emailDigest === option.value ? `${tokens.colors.accent.primary}08` : 'transparent',
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    <input
+                      type="radio"
+                      name="emailDigest"
+                      checked={emailDigest === option.value}
+                      onChange={() => handleEmailDigestChange(option.value)}
+                      style={{ width: 18, height: 18, accentColor: '#8b6fa8', marginTop: 2 }}
+                    />
+                    <Box>
+                      <Text size="sm" weight="medium">{option.label}</Text>
+                      <Text size="xs" color="tertiary">{option.desc}</Text>
+                    </Box>
+                  </label>
+                ))}
+              </Box>
             </Box>
           </SectionCard>
 
@@ -1850,6 +2513,89 @@ function SettingsContent() {
                   </label>
                 ))}
               </Box>
+            </Box>
+
+            {/* ===== Blocked Users Section ===== */}
+            <Box style={{ marginTop: tokens.spacing[5], paddingTop: tokens.spacing[5], borderTop: `1px solid ${tokens.colors.border.primary}` }}>
+              <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>
+                屏蔽用户
+              </Text>
+              <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[3] }}>
+                已屏蔽的用户将无法查看你的内容或与你互动
+              </Text>
+
+              {loadingBlockedUsers ? (
+                <Text size="sm" color="tertiary">加载中...</Text>
+              ) : blockedUsers.length === 0 ? (
+                <Box style={{
+                  padding: tokens.spacing[4],
+                  textAlign: 'center',
+                  borderRadius: tokens.radius.md,
+                  background: tokens.colors.bg.primary,
+                }}>
+                  <Text size="sm" color="tertiary">暂无屏蔽用户</Text>
+                </Box>
+              ) : (
+                <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
+                  {blockedUsers.map((blockedUser) => (
+                    <Box
+                      key={blockedUser.blockedId}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: tokens.spacing[3],
+                        borderRadius: tokens.radius.md,
+                        background: tokens.colors.bg.primary,
+                        border: `1px solid ${tokens.colors.border.primary}`,
+                      }}
+                    >
+                      <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3] }}>
+                        <Box
+                          style={{
+                            width: 32,
+                            height: 32,
+                            borderRadius: tokens.radius.full,
+                            background: blockedUser.avatarUrl
+                              ? `url(${blockedUser.avatarUrl}) center/cover no-repeat`
+                              : `${tokens.colors.accent.primary}15`,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            flexShrink: 0,
+                          }}
+                        >
+                          {!blockedUser.avatarUrl && (
+                            <Text size="sm" weight="bold" style={{ color: tokens.colors.accent.primary }}>
+                              {(blockedUser.handle?.[0] || '?').toUpperCase()}
+                            </Text>
+                          )}
+                        </Box>
+                        <Box>
+                          <Text size="sm" weight="medium">
+                            {blockedUser.handle || '未知用户'}
+                          </Text>
+                          <Text size="xs" color="tertiary">
+                            {formatTimeAgo(blockedUser.createdAt)} 屏蔽
+                          </Text>
+                        </Box>
+                      </Box>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleUnblock(blockedUser.blockedId)}
+                        disabled={unblockingId === blockedUser.blockedId}
+                        style={{
+                          fontSize: tokens.typography.fontSize.xs,
+                          color: tokens.colors.accent.primary,
+                        }}
+                      >
+                        {unblockingId === blockedUser.blockedId ? '...' : '解除屏蔽'}
+                      </Button>
+                    </Box>
+                  ))}
+                </Box>
+              )}
             </Box>
           </SectionCard>
 
