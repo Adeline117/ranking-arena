@@ -148,19 +148,19 @@ function RankingsContent() {
           loadingComponent={<RankingSkeleton />}
         >
           {data && data.traders.length > 0 && (
-            <div className="rounded-xl rankings-container overflow-x-auto" style={{ backgroundColor: tokens.colors.bg.secondary }}>
-              <div className="rankings-min-width" style={{ minWidth: 640 }}>
+            <div className="rounded-xl overflow-x-auto" style={{ backgroundColor: tokens.colors.bg.secondary }}>
+              <div style={{ minWidth: 640 }}>
                 <div
-                  className="grid grid-cols-[48px_1fr_90px_90px_80px_80px_80px] gap-2 px-4 py-3 text-xs font-medium border-b rankings-grid-row"
+                  className="grid grid-cols-[48px_1fr_90px_90px_80px_80px_80px] gap-2 px-4 py-3 text-xs font-medium border-b"
                   style={{ color: tokens.colors.text.secondary, borderColor: tokens.colors.border.primary }}
                 >
                   <div>#</div>
                   <div>{isZh ? '交易员' : 'Trader'}</div>
                   <div className="text-right">ROI</div>
-                  <div className="text-right rankings-col-hide">PnL</div>
-                  <div className="text-right rankings-col-hide">{isZh ? '胜率' : 'Win%'}</div>
-                  <div className="text-right rankings-col-hide">{isZh ? '回撤' : 'MDD'}</div>
-                  <div className="text-right rankings-col-hide">Score</div>
+                  <div className="text-right">PnL</div>
+                  <div className="text-right">{isZh ? '胜率' : 'Win%'}</div>
+                  <div className="text-right">{isZh ? '回撤' : 'MDD'}</div>
+                  <div className="text-right">Score</div>
                 </div>
 
                 {data.traders.map((trader) => (
@@ -191,7 +191,7 @@ function TraderRow({ trader }: { trader: RankedTraderV2 }) {
   return (
     <Link
       href={traderUrl}
-      className="grid grid-cols-[48px_1fr_90px_90px_80px_80px_80px] gap-2 px-4 py-3 items-center transition-all border-b last:border-b-0 rankings-grid-row"
+      className="grid grid-cols-[48px_1fr_90px_90px_80px_80px_80px] gap-2 px-4 py-3 items-center transition-all border-b last:border-b-0"
       style={{ borderColor: tokens.colors.border.primary + '40' }}
       onMouseEnter={(e) => { e.currentTarget.style.background = tokens.colors.bg.tertiary }}
       onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
@@ -229,19 +229,19 @@ function TraderRow({ trader }: { trader: RankedTraderV2 }) {
         {metrics.roi >= 0 ? '+' : ''}{formatROI(metrics.roi)}
       </div>
 
-      <div className="text-right text-sm rankings-col-hide" style={{ color: tokens.colors.text.primary }}>
+      <div className="text-right text-sm" style={{ color: tokens.colors.text.primary }}>
         {formatPnL(metrics.pnl)}
       </div>
 
-      <div className="text-right text-sm rankings-col-hide" style={{ color: tokens.colors.text.secondary }}>
+      <div className="text-right text-sm" style={{ color: tokens.colors.text.secondary }}>
         {metrics.win_rate != null ? `${metrics.win_rate.toFixed(1)}%` : '--'}
       </div>
 
-      <div className="text-right text-sm rankings-col-hide" style={{ color: tokens.colors.accent.error + 'cc' }}>
+      <div className="text-right text-sm" style={{ color: tokens.colors.accent.error + 'cc' }}>
         {metrics.max_drawdown != null ? `-${metrics.max_drawdown.toFixed(1)}%` : '--'}
       </div>
 
-      <div className="text-right rankings-col-hide">
+      <div className="text-right">
         {metrics.arena_score != null ? (
           <span
             className="text-sm font-bold px-2 py-0.5 rounded"

@@ -17,16 +17,11 @@ export default function FeedPage() {
   const { language } = useLanguage()
   const [email, setEmail] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<FeedTab>('hot')
-  const [isMobile, setIsMobile] = useState(false)
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
       setEmail(data.user?.email ?? null)
     })
-    const check = () => setIsMobile(window.innerWidth < 768)
-    check()
-    window.addEventListener('resize', check)
-    return () => window.removeEventListener('resize', check)
   }, [])
 
   const sortBy = activeTab === 'hot' ? 'hot_score' : 'created_at'
@@ -100,7 +95,7 @@ export default function FeedPage() {
         {/* Post feed - no groupId filter shows all posts */}
         <PostFeed
           key={activeTab}
-          layout={isMobile ? 'masonry' : 'list'}
+          layout="list"
           sortBy={sortBy}
         />
       </Box>

@@ -248,51 +248,14 @@
    帖子瀑布流响应式
    ============================================ */
 
-/* 手机端：小红书双列瀑布流 */
 .post-feed-masonry {
-  columns: 2 !important;
-  column-gap: 10px !important;
+  columns: 1 !important;
 }
 
 @media (min-width: 640px) {
   .post-feed-masonry {
     columns: 2 !important;
-    column-gap: 14px !important;
-  }
-}
-
-/* ============================================
-   手机端专用优化（不影响桌面端）
-   ============================================ */
-
-@media (max-width: 767px) {
-  /* 排行榜：移除横向滚动，只显示 Rank | Trader | ROI */
-  .rankings-container {
-    overflow-x: hidden !important;
-  }
-
-  .rankings-min-width {
-    min-width: 0 !important;
-  }
-
-  .rankings-grid-row {
-    grid-template-columns: 36px 1fr 80px !important;
-    padding-left: 12px !important;
-    padding-right: 12px !important;
-    min-height: 56px !important;
-  }
-
-  .rankings-col-hide {
-    display: none !important;
-  }
-
-  /* 瀑布流卡片紧凑间距 */
-  .post-feed-masonry > div {
-    margin-bottom: 10px !important;
-  }
-
-  .masonry-card-content {
-    padding: 8px !important;
+    column-gap: 12px !important;
   }
 }
 
