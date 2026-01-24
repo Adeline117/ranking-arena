@@ -4,37 +4,127 @@
  *
  * In production, this connects to Supabase's PostgreSQL via connection pooler.
  * In development, connects to local PostgreSQL.
+ *
+ * Features:
+ * - SSL support for Supabase production connections
+ * - Retry with exponential backoff for transient failures
+ * - Serverless-optimized pool sizing
+ * - Connection error recovery (pool recreation on fatal errors)
  */
 
 import { Pool, type PoolConfig } from 'pg';
 
 let pool: Pool | null = null;
 
+/** Max retries for transient connection errors */
+const MAX_RETRIES = 2;
+/** Base delay between retries (ms) */
+const RETRY_BASE_DELAY_MS = 200;
+
+/** Errors that indicate a transient/recoverable connection issue */
+const TRANSIENT_ERROR_CODES = new Set([
+  'ECONNREFUSED',
+  'ECONNRESET',
+  'EPIPE',
+  'ETIMEDOUT',
+  'EAI_AGAIN',
+  'CONNECTION_ENDED',
+  '57P01', // admin_shutdown
+  '57P03', // cannot_connect_now
+  '08000', // connection_exception
+  '08003', // connection_does_not_exist
+  '08006', // connection_failure
+]);
+
+function isTransientError(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const e = err as { code?: string; message?: string };
+  if (e.code && TRANSIENT_ERROR_CODES.has(e.code)) return true;
+  if (e.message?.includes('Connection terminated unexpectedly')) return true;
+  if (e.message?.includes('Client has encountered a connection error')) return true;
+  if (e.message?.includes('timeout')) return true;
+  return false;
+}
+
+function resetPool(): void {
+  if (pool) {
+    pool.end().catch(() => { /* ignore cleanup errors */ });
+    pool = null;
+  }
+}
+
 export function getPool(): Pool {
   if (!pool) {
+    const isProduction = process.env.NODE_ENV === 'production';
+    const connectionString = process.env.DATABASE_URL || 'postgresql://claude:arena_dev@localhost:5432/ranking_arena';
+
     const config: PoolConfig = {
-      connectionString: process.env.DATABASE_URL || 'postgresql://claude:arena_dev@localhost:5432/ranking_arena',
-      max: 10,
-      idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 5000,
+      connectionString,
+      // Serverless-optimized: fewer connections, shorter timeouts
+      max: isProduction ? 5 : 10,
+      idleTimeoutMillis: isProduction ? 10000 : 30000,
+      connectionTimeoutMillis: 10000,
+      // Keep connections alive through load balancer/pooler
+      keepAlive: true,
+      keepAliveInitialDelayMillis: 10000,
     };
+
+    // Supabase requires SSL in production
+    if (isProduction && connectionString.includes('supabase')) {
+      config.ssl = { rejectUnauthorized: false };
+    }
+
     pool = new Pool(config);
+
+    // Handle pool-level errors to prevent unhandled rejections
+    pool.on('error', (err) => {
+      console.error('[db/pool] Unexpected pool error:', err.message);
+      resetPool();
+    });
   }
   return pool;
+}
+
+async function queryWithRetry<T>(
+  text: string,
+  params: unknown[] | undefined,
+): Promise<{ rows: T[]; rowCount: number }> {
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const result = await getPool().query(text, params);
+      return { rows: result.rows as T[], rowCount: result.rowCount || 0 };
+    } catch (err) {
+      lastError = err;
+
+      if (!isTransientError(err) || attempt === MAX_RETRIES) {
+        break;
+      }
+
+      // Reset pool on connection errors so next attempt gets fresh connection
+      resetPool();
+
+      // Exponential backoff: 200ms, 400ms
+      const delay = RETRY_BASE_DELAY_MS * Math.pow(2, attempt);
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+
+  throw lastError;
 }
 
 export async function query<T extends Record<string, unknown> = Record<string, unknown>>(
   text: string,
   params?: unknown[],
 ): Promise<{ rows: T[]; rowCount: number }> {
-  const result = await getPool().query(text, params);
-  return { rows: result.rows as T[], rowCount: result.rowCount || 0 };
+  return queryWithRetry<T>(text, params);
 }
 
 export async function queryOne<T extends Record<string, unknown> = Record<string, unknown>>(
   text: string,
   params?: unknown[],
 ): Promise<T | null> {
-  const result = await getPool().query(text, params);
-  return (result.rows[0] as T) || null;
+  const result = await queryWithRetry<T>(text, params);
+  return result.rows[0] || null;
 }
