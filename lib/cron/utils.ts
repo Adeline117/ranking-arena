@@ -66,14 +66,14 @@ export const PLATFORM_SCRIPTS: Record<string, Array<{ name: string; script: stri
     { name: 'bybit_90d', script: 'scripts/import_bybit.mjs', args: ['90D'] },
   ],
   bitget_futures: [
-    { name: 'bitget_futures_7d', script: 'scripts/import_bitget_futures.mjs', args: ['7D'] },
-    { name: 'bitget_futures_30d', script: 'scripts/import_bitget_futures.mjs', args: ['30D'] },
-    { name: 'bitget_futures_90d', script: 'scripts/import_bitget_futures.mjs', args: ['90D'] },
+    { name: 'bitget_futures_7d', script: 'scripts/import/import_bitget_futures_v2.mjs', args: ['7D'] },
+    { name: 'bitget_futures_30d', script: 'scripts/import/import_bitget_futures_v2.mjs', args: ['30D'] },
+    { name: 'bitget_futures_90d', script: 'scripts/import/import_bitget_futures_v2.mjs', args: ['90D'] },
   ],
   bitget_spot: [
-    { name: 'bitget_spot_7d', script: 'scripts/import_bitget_spot.mjs', args: ['7D'] },
-    { name: 'bitget_spot_30d', script: 'scripts/import_bitget_spot.mjs', args: ['30D'] },
-    { name: 'bitget_spot_90d', script: 'scripts/import_bitget_spot.mjs', args: ['90D'] },
+    { name: 'bitget_spot_7d', script: 'scripts/import/import_bitget_spot_v2.mjs', args: ['7D'] },
+    { name: 'bitget_spot_30d', script: 'scripts/import/import_bitget_spot_v2.mjs', args: ['30D'] },
+    { name: 'bitget_spot_90d', script: 'scripts/import/import_bitget_spot_v2.mjs', args: ['90D'] },
   ],
   mexc: [
     { name: 'mexc_7d', script: 'scripts/import_mexc.mjs', args: ['7D'] },

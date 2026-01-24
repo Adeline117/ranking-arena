@@ -7,6 +7,7 @@ import TopNav from '@/app/components/layout/TopNav'
 import EmptyState from '@/app/components/ui/EmptyState'
 import { RankingSkeleton } from '@/app/components/ui/Skeleton'
 import { useToast } from '@/app/components/ui/Toast'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 
@@ -36,6 +37,8 @@ const PAGE_SIZE = 10
 function SearchContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
+  const { language } = useLanguage()
+  const isZh = language === 'zh'
   const query = searchParams.get('q') || ''
   const tabParam = searchParams.get('tab') as TabType | null
   const [results, setResults] = useState<SearchResult[]>([])
@@ -160,7 +163,7 @@ function SearchContent() {
             results.push({
               type: 'user',
               id: u.id as string,
-              title: (u.handle as string) || '未设置昵称',
+              title: (u.handle as string) || (isZh ? '未设置昵称' : 'No handle'),
               subtitle: ((u.bio as string) || '').substring(0, 80),
               meta: u.uid ? `UID: ${u.uid}` : undefined,
               uid: u.uid as number | undefined,
@@ -218,7 +221,7 @@ function SearchContent() {
               id: p.id as string,
               title: (p.title as string) || '',
               subtitle: ((p.content as string) || '').substring(0, 100),
-              meta: `作者: ${(p.author_handle as string) || '未知'}`,
+              meta: `${isZh ? '作者' : 'By'}: ${(p.author_handle as string) || (isZh ? '未知' : 'Unknown')}`,
             })
           })
         }
@@ -241,7 +244,7 @@ function SearchContent() {
       } catch (error) {
         console.error('Search error:', error)
         setSearchError(true)
-        showToast('搜索失败，请稍后重试', 'error')
+        showToast(isZh ? '搜索失败，请稍后重试' : 'Search failed, please try again', 'error')
       } finally {
         setLoading(false)
       }
@@ -279,7 +282,7 @@ function SearchContent() {
             newResults.push({
               type: 'user',
               id: u.id as string,
-              title: (u.handle as string) || '未设置昵称',
+              title: (u.handle as string) || (isZh ? '未设置昵称' : 'No handle'),
               subtitle: ((u.bio as string) || '').substring(0, 80),
               meta: u.uid ? `UID: ${u.uid}` : undefined,
               uid: u.uid as number | undefined,
@@ -342,7 +345,7 @@ function SearchContent() {
               id: p.id as string,
               title: (p.title as string) || '',
               subtitle: ((p.content as string) || '').substring(0, 100),
-              meta: `作者: ${(p.author_handle as string) || '未知'}`,
+              meta: `${isZh ? '作者' : 'By'}: ${(p.author_handle as string) || (isZh ? '未知' : 'Unknown')}`,
             })
           })
         }
@@ -371,11 +374,11 @@ function SearchContent() {
       }
     } catch (error) {
       console.error(`Load more ${type} error:`, error)
-      showToast('加载更多失败，请稍后重试', 'error')
+      showToast(isZh ? '加载更多失败，请稍后重试' : 'Failed to load more, please try again', 'error')
     } finally {
       setLoadingMore(prev => ({ ...prev, [type]: false }))
     }
-  }, [query, offsets, hasMore, loadingMore, showToast])
+  }, [query, offsets, hasMore, loadingMore, showToast, isZh])
 
   const filteredResults = activeTab === 'all' 
     ? results 
@@ -389,7 +392,7 @@ function SearchContent() {
 
   const getHref = (result: SearchResult) => {
     if (result.type === 'user') return `/u/${encodeURIComponent(result.title)}`
-    if (result.type === 'trader') return `/trader/${encodeURIComponent(result.title)}`
+    if (result.type === 'trader') return `/trader/${encodeURIComponent(result.id)}`
     if (result.type === 'post') return `/post/${result.id}`
     if (result.type === 'group') return `/groups/${result.id}`
     return '#'
@@ -419,13 +422,13 @@ function SearchContent() {
       
       <TopNav email={email} />
       
-      <main className="page-enter" style={{ maxWidth: 900, margin: '0 auto', padding: '24px 16px', position: 'relative', zIndex: 1 }}>
+      <main className="page-enter" style={{ maxWidth: 900, margin: '0 auto', padding: '24px 16px', paddingBottom: 100, position: 'relative', zIndex: 1 }}>
         <div style={{ marginBottom: '24px' }}>
           <h1 className="search-title gradient-text" style={{ fontSize: '28px', fontWeight: 950, marginBottom: '8px' }}>
-            搜索结果
+            {isZh ? '搜索结果' : 'Search Results'}
           </h1>
           <div style={{ fontSize: '14px', color: tokens.colors.text.tertiary }}>
-            {query ? `搜索: "${query}"` : '请输入搜索关键词'}
+            {query ? `${isZh ? '搜索' : 'Search'}: "${query}"` : (isZh ? '请输入搜索关键词' : 'Enter a search term')}
           </div>
         </div>
 
@@ -468,7 +471,7 @@ function SearchContent() {
                   }
                 }}
               >
-                {tab === 'all' ? '全部' : tab === 'users' ? '用户' : tab === 'traders' ? '交易者' : tab === 'posts' ? '帖子' : '小组'}
+                {tab === 'all' ? (isZh ? '全部' : 'All') : tab === 'users' ? (isZh ? '用户' : 'Users') : tab === 'traders' ? (isZh ? '交易者' : 'Traders') : tab === 'posts' ? (isZh ? '帖子' : 'Posts') : (isZh ? '小组' : 'Groups')}
               </button>
             ))}
           </div>
@@ -518,18 +521,18 @@ function SearchContent() {
           </div>
         ) : searchError ? (
           <EmptyState
-            title="搜索失败"
-            description="请稍后重试"
+            title={isZh ? '搜索失败' : 'Search Failed'}
+            description={isZh ? '请稍后重试' : 'Please try again later'}
           />
         ) : !query ? (
-          <EmptyState 
-            title="开始搜索"
-            description="在顶部搜索栏输入关键词，搜索交易者、帖子或小组"
+          <EmptyState
+            title={isZh ? '开始搜索' : 'Start Searching'}
+            description={isZh ? '在顶部搜索栏输入关键词，搜索交易者、帖子或小组' : 'Enter keywords in the search bar to find traders, posts, or groups'}
           />
         ) : filteredResults.length === 0 ? (
-          <EmptyState 
-            title="未找到结果"
-            description={`没有找到与"${query}"相关的内容`}
+          <EmptyState
+            title={isZh ? '未找到结果' : 'No Results'}
+            description={isZh ? `没有找到与"${query}"相关的内容` : `No results found for "${query}"`}
           />
         ) : (
           <div className="stagger-children search-results" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -669,7 +672,7 @@ function SearchContent() {
                   e.currentTarget.style.color = tokens.colors.text.secondary
                 }}
               >
-                {loadingMore[activeTab] ? '加载中...' : '加载更多'}
+                {loadingMore[activeTab] ? (isZh ? '加载中...' : 'Loading...') : (isZh ? '加载更多' : 'Load More')}
               </button>
             )}
 
@@ -685,7 +688,7 @@ function SearchContent() {
                     return false
                   })
                   if (typeResults.length === 0 || !hasMore[type]) return null
-                  const typeLabel = type === 'users' ? '用户' : type === 'traders' ? '交易者' : type === 'posts' ? '帖子' : '小组'
+                  const typeLabel = type === 'users' ? (isZh ? '用户' : 'users') : type === 'traders' ? (isZh ? '交易者' : 'traders') : type === 'posts' ? (isZh ? '帖子' : 'posts') : (isZh ? '小组' : 'groups')
                   return (
                     <button
                       key={type}
@@ -719,7 +722,7 @@ function SearchContent() {
                         e.currentTarget.style.color = tokens.colors.text.secondary
                       }}
                     >
-                      {loadingMore[type] ? '加载中...' : `加载更多${typeLabel}`}
+                      {loadingMore[type] ? (isZh ? '加载中...' : 'Loading...') : (isZh ? `加载更多${typeLabel}` : `Load more ${typeLabel}`)}
                     </button>
                   )
                 })}

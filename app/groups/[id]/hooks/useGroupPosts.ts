@@ -12,6 +12,7 @@ export type Post = {
   created_at: string
   author_handle?: string | null
   author_id?: string | null
+  author_avatar_url?: string | null
   like_count?: number | null
   comment_count?: number | null
   bookmark_count?: number | null
@@ -130,6 +131,24 @@ export function useGroupPosts({
     return repostMap
   }, [])
 
+  // Fetch author avatars in batch
+  const fetchAuthorAvatars = useCallback(async (postsList: Post[]) => {
+    const authorIds = [...new Set(postsList.map(p => p.author_id).filter(Boolean))] as string[]
+    if (authorIds.length === 0) return
+    const { data: profiles } = await supabase
+      .from('user_profiles')
+      .select('id, avatar_url')
+      .in('id', authorIds)
+    if (profiles) {
+      const avatarMap = new Map(profiles.map(p => [p.id, p.avatar_url]))
+      postsList.forEach(post => {
+        if (post.author_id) {
+          post.author_avatar_url = avatarMap.get(post.author_id) || null
+        }
+      })
+    }
+  }, [])
+
   // Load initial posts
   const loadPosts = useCallback(async () => {
     if (!groupId || !isMember) {
@@ -153,23 +172,29 @@ export function useGroupPosts({
 
     const postsList = (postsData || []) as Post[]
 
+    // Fetch avatars and user interactions in parallel
+    const promises: Promise<unknown>[] = [fetchAuthorAvatars(postsList)]
     if (userId) {
       const postIds = postsList.map(p => p.id)
-      const [likeMap, bookmarkMap, repostMap] = await Promise.all([
-        fetchUserLikes(postIds, userId),
-        fetchUserBookmarks(postIds, userId),
-        fetchUserReposts(postIds, userId)
-      ])
-      postsList.forEach(post => {
-        post.user_liked = likeMap[post.id] || false
-        post.user_bookmarked = bookmarkMap[post.id] || false
-        post.user_reposted = repostMap[post.id] || false
-      })
+      promises.push(
+        Promise.all([
+          fetchUserLikes(postIds, userId),
+          fetchUserBookmarks(postIds, userId),
+          fetchUserReposts(postIds, userId)
+        ]).then(([likeMap, bookmarkMap, repostMap]) => {
+          postsList.forEach(post => {
+            post.user_liked = likeMap[post.id] || false
+            post.user_bookmarked = bookmarkMap[post.id] || false
+            post.user_reposted = repostMap[post.id] || false
+          })
+        })
+      )
     }
+    await Promise.all(promises)
 
     setPosts(postsList)
     setHasMorePosts(postsList.length === 20)
-  }, [groupId, isMember, userId, fetchUserLikes, fetchUserBookmarks, fetchUserReposts, showToast])
+  }, [groupId, isMember, userId, fetchUserLikes, fetchUserBookmarks, fetchUserReposts, fetchAuthorAvatars, showToast])
 
   // Infinite scroll: load more
   const loadMorePosts = useCallback(async () => {
@@ -189,19 +214,24 @@ export function useGroupPosts({
 
       if (morePosts && morePosts.length > 0) {
         const postsList = morePosts as Post[]
+        const promises: Promise<unknown>[] = [fetchAuthorAvatars(postsList)]
         if (userId) {
           const postIds = postsList.map(p => p.id)
-          const [likeMap, bookmarkMap, repostMap] = await Promise.all([
-            fetchUserLikes(postIds, userId),
-            fetchUserBookmarks(postIds, userId),
-            fetchUserReposts(postIds, userId)
-          ])
-          postsList.forEach(post => {
-            post.user_liked = likeMap[post.id] || false
-            post.user_bookmarked = bookmarkMap[post.id] || false
-            post.user_reposted = repostMap[post.id] || false
-          })
+          promises.push(
+            Promise.all([
+              fetchUserLikes(postIds, userId),
+              fetchUserBookmarks(postIds, userId),
+              fetchUserReposts(postIds, userId)
+            ]).then(([likeMap, bookmarkMap, repostMap]) => {
+              postsList.forEach(post => {
+                post.user_liked = likeMap[post.id] || false
+                post.user_bookmarked = bookmarkMap[post.id] || false
+                post.user_reposted = repostMap[post.id] || false
+              })
+            })
+          )
         }
+        await Promise.all(promises)
         setPosts(prev => [...prev, ...postsList])
         setHasMorePosts(postsList.length === 20)
       } else {
@@ -212,7 +242,7 @@ export function useGroupPosts({
     } finally {
       setLoadingMore(false)
     }
-  }, [loadingMore, hasMorePosts, posts, isMember, groupId, userId, fetchUserLikes, fetchUserBookmarks, fetchUserReposts])
+  }, [loadingMore, hasMorePosts, posts, isMember, groupId, userId, fetchUserLikes, fetchUserBookmarks, fetchUserReposts, fetchAuthorAvatars])
 
   // IntersectionObserver for infinite scroll
   useEffect(() => {

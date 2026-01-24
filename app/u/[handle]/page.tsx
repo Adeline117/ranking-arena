@@ -21,6 +21,7 @@ import UserBookmarkFolders from '@/app/components/trader/UserBookmarkFolders'
 import { Box, Text } from '@/app/components/base'
 import { RankingSkeleton } from '@/app/components/ui/Skeleton'
 import { useToast } from '@/app/components/ui/Toast'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import {
   getTraderByHandle,
   getTraderPerformance,
@@ -42,6 +43,8 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
   const router = useRouter()
   const pathname = usePathname()
   const { showToast } = useToast()
+  const { language } = useLanguage()
+  const isZh = language === 'zh'
 
   const [handle, setHandle] = useState<string>('')
   const [email, setEmail] = useState<string | null>(null)
@@ -300,7 +303,7 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
                 } else if (userProfileError) {
                   // 如果错误是因为缺少 handle 列，提示用户运行修复脚本
                   if (userProfileError.message?.includes('handle') || userProfileError.code === 'PGRST204') {
-                    showToast('数据库表结构不完整，请联系管理员', 'error')
+                    showToast(isZh ? '数据库表结构不完整，请联系管理员' : 'Database schema incomplete, please contact admin', 'error')
                     console.error('Database schema issue: Run scripts/fix_user_profiles_complete.sql to fix')
                   }
                 }
@@ -530,7 +533,7 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
         console.error('Error loading user data:', error)
         setProfile(null)
         setLoadError(true)
-        showToast('加载用户数据失败', 'error')
+        showToast(isZh ? '加载用户数据失败' : 'Failed to load user data', 'error')
       } finally {
         setLoading(false)
       }
@@ -557,10 +560,10 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
         <TopNav email={email} />
         <Box style={{ maxWidth: 1200, margin: '0 auto', padding: tokens.spacing[6], textAlign: 'center' }}>
           <Text size="xl" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>
-            加载失败
+            {isZh ? '加载失败' : 'Failed to Load'}
           </Text>
           <Text size="sm" color="tertiary" style={{ marginBottom: tokens.spacing[4] }}>
-            无法加载用户数据，请检查网络后重试
+            {isZh ? '无法加载用户数据，请检查网络后重试' : 'Unable to load user data. Please check your network and try again.'}
           </Text>
           <button
             onClick={() => window.location.reload()}
@@ -574,7 +577,7 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
               fontWeight: 600,
             }}
           >
-            重试
+            {isZh ? '重试' : 'Retry'}
           </button>
         </Box>
       </Box>
@@ -608,17 +611,17 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
             @{handle}
           </Text>
           <Text size="sm" color="tertiary" style={{ marginBottom: tokens.spacing[4] }}>
-            该用户尚未在平台注册
+            {isZh ? '该用户尚未在平台注册' : 'This user has not registered on the platform'}
           </Text>
-          <Link 
-            href="/" 
-            style={{ 
-              color: tokens.colors.accent?.primary || '#8b6fa8', 
+          <Link
+            href="/"
+            style={{
+              color: tokens.colors.accent?.primary || '#8b6fa8',
               textDecoration: 'none',
               fontSize: tokens.typography.fontSize.sm,
             }}
           >
-            ← 返回首页
+            ← {isZh ? '返回首页' : 'Back to Home'}
           </Link>
         </Box>
       </Box>
@@ -632,7 +635,7 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
     '@context': 'https://schema.org',
     '@type': 'Person',
     name: profile.handle,
-    description: profile.bio || `用户 ${profile.handle}`,
+    description: profile.bio || `User ${profile.handle}`,
     url: `${process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'}/u/${encodeURIComponent(handle)}`,
     image: profile.avatar_url || undefined,
     identifier: profile.id,
@@ -657,7 +660,7 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
       
       <TopNav email={email} />
 
-      <Box style={{ maxWidth: 1200, margin: '0 auto', padding: tokens.spacing[6] }}>
+      <Box className="page-container" style={{ maxWidth: 1200, margin: '0 auto', padding: tokens.spacing[6], paddingBottom: 100 }}>
           {/* Header */}
         <TraderHeader
           handle={profile.handle}
@@ -696,7 +699,7 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
               {/* 交易员动态 - 使用 PostFeed 组件（置顶帖子会自动显示在最上面） */}
               <Box bg="secondary" p={4} radius="lg" border="primary">
                 <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: tokens.spacing[4] }}>
-                  <Text size="lg" weight="black">动态</Text>
+                  <Text size="lg" weight="black">{isZh ? '动态' : 'Posts'}</Text>
                   {isOwnProfile && (
                     <button
                       onClick={() => router.push(`/u/${handle}/new`)}
@@ -711,7 +714,7 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
                         cursor: 'pointer',
                       }}
                     >
-                      发动态
+                      {isZh ? '发动态' : 'New Post'}
                     </button>
                   )}
                 </Box>

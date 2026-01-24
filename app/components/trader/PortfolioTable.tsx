@@ -648,9 +648,8 @@ function PositionHistoryCard({ position, index }: { position: ExtendedPositionHi
       </Box>
 
       {/* 数据网格 */}
-      <Box style={{ 
-        display: 'grid', 
-        gridTemplateColumns: 'repeat(3, 1fr)', 
+      <Box className="trading-grid" style={{
+        display: 'grid',
         gap: tokens.spacing[4],
         marginBottom: tokens.spacing[3],
       }}>
@@ -667,9 +666,8 @@ function PositionHistoryCard({ position, index }: { position: ExtendedPositionHi
         />
       </Box>
 
-      <Box style={{ 
-        display: 'grid', 
-        gridTemplateColumns: 'repeat(3, 1fr)', 
+      <Box className="trading-grid" style={{
+        display: 'grid',
         gap: tokens.spacing[4],
       }}>
         <DataCell label={t('closePrice')} value={`${formatPriceWithComma(position.exitPrice)}`} secondary />

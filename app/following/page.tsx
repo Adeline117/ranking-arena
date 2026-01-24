@@ -133,13 +133,14 @@ export default function FollowingPage() {
             description="关注交易员或用户后，他们会显示在这里"
           />
         ) : (
-          <Box style={{ 
-            display: 'flex', 
-            flexDirection: 'column', 
+          <Box style={{
+            display: 'flex',
+            flexDirection: 'column',
             gap: tokens.spacing[2],
             background: tokens.colors.bg.secondary,
             borderRadius: tokens.radius.lg,
             padding: tokens.spacing[2],
+            animation: 'fadeIn 0.3s ease-out',
           }}>
             {items.map((item) => (
               <Box
