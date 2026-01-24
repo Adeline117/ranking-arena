@@ -1,9 +1,8 @@
 /**
  * 交易员详情快速抓取 Cron 端点
- * 
- * GET /api/cron/fetch-details - 健康检查
- * POST /api/cron/fetch-details - 触发快速详情抓取
- * 
+ *
+ * GET /api/cron/fetch-details - 触发快速详情抓取 (Vercel Cron 调用)
+ *
  * 参数:
  * - source: 指定来源 (binance, bybit 等)
  * - limit: 限制数量 (默认 200)
@@ -24,29 +23,11 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 300 // 5 分钟超时
 
 /**
- * GET - 健康检查
+ * GET - 触发快速详情抓取 (Vercel Cron 调用此端点)
  */
-export async function GET() {
-  const { url, serviceKey } = getSupabaseEnv()
-
-  return NextResponse.json({
-    ok: true,
-    message: '详情抓取端点正常',
-    script: 'scripts/fetch_details_fast.mjs',
-    config: {
-      hasSupabaseUrl: !!url,
-      hasServiceKey: !!serviceKey,
-      hasCronSecret: !!process.env.CRON_SECRET,
-    },
-  })
-}
-
-/**
- * POST - 触发快速详情抓取
- */
-export async function POST(req: Request) {
+export async function GET(req: Request) {
   const startTime = Date.now()
-  
+
   try {
     // 1) 验证授权
     if (!isAuthorized(req)) {

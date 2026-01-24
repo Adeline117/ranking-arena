@@ -1,9 +1,8 @@
 /**
  * 关注交易员按需更新 Cron
  * 每小时更新有用户关注的交易员数据
- * 
- * GET /api/cron/fetch-followed-traders - 健康检查
- * POST /api/cron/fetch-followed-traders - 执行更新
+ *
+ * GET /api/cron/fetch-followed-traders - 执行更新 (Vercel Cron 调用)
  */
 
 import { NextResponse } from 'next/server'
@@ -13,10 +12,15 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
-// 验证 Cron 密钥
+// 验证 Cron 密钥 (Vercel Cron 使用 Authorization: Bearer 格式)
 function isAuthorized(req: Request): boolean {
   const authHeader = req.headers.get('authorization')
   const cronSecret = process.env.CRON_SECRET
+
+  // 开发环境允许无密钥访问
+  if (!cronSecret && process.env.NODE_ENV === 'development') {
+    return true
+  }
 
   if (!cronSecret) {
     console.warn('[FollowedTraders Cron] CRON_SECRET 未配置')
@@ -41,20 +45,9 @@ function getSupabaseAdmin() {
 }
 
 /**
- * GET - 健康检查
+ * GET - 执行关注交易员更新 (Vercel Cron 调用此端点)
  */
-export async function GET() {
-  return NextResponse.json({
-    ok: true,
-    message: 'Followed traders cron endpoint ready',
-    updateInterval: '1 hour',
-  })
-}
-
-/**
- * POST - 执行关注交易员更新
- */
-export async function POST(req: Request) {
+export async function GET(req: Request) {
   const startTime = Date.now()
 
   try {
@@ -104,7 +97,7 @@ export async function POST(req: Request) {
       const count = traderIds.size
       totalCount += count
       results.push({ source, count })
-      
+
       console.log(`[FollowedTraders Cron] ${source}: ${count} 个关注的交易员需要更新`)
     }
 

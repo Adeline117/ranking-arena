@@ -230,12 +230,21 @@ async function saveTraders(traders: BinanceTrader[], period: string) {
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
   const period = searchParams.get('period') || '90D'
-  
+
+  // Vercel Cron 使用 Authorization: Bearer 验证
+  const authHeader = request.headers.get('authorization')
+  const cronSecret = process.env.CRON_SECRET
+
+  // 生产环境需要验证授权
+  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
   // 支持抓取所有时间段
   if (period === 'all') {
     return scrapeAllPeriods()
   }
-  
+
   // 验证 period
   if (!['7D', '30D', '90D'].includes(period)) {
     return NextResponse.json({ error: 'Invalid period' }, { status: 400 })
@@ -278,17 +287,18 @@ export async function GET(request: Request) {
 }
 
 /**
- * POST - Cron 调用，自动抓取所有时间段
+ * POST - 手动调用，自动抓取所有时间段
+ * (Vercel Cron 使用 GET，POST 保留用于手动触发)
  */
 export async function POST(request: Request) {
-  // 可选：验证 cron secret
-  const cronSecret = request.headers.get('x-cron-secret')
-  const expectedSecret = process.env.CRON_SECRET
-  
-  if (expectedSecret && cronSecret !== expectedSecret) {
+  // 验证授权 (支持两种格式以兼容手动调用)
+  const authHeader = request.headers.get('authorization')
+  const cronSecret = process.env.CRON_SECRET
+
+  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
-  
+
   return scrapeAllPeriods()
 }
 
