@@ -71,6 +71,8 @@ export default function GroupHeader({
               src={group.avatar_url}
               alt={group.name}
               style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+              referrerPolicy="no-referrer"
+              onError={(e) => { e.currentTarget.style.display = 'none' }}
             />
           ) : (
             <Text size="2xl" weight="bold" color="tertiary">
@@ -152,13 +154,11 @@ export default function GroupHeader({
             {userId ? (
               isMember ? (
                 <Box style={{ display: 'flex', gap: tokens.spacing[2], flexWrap: 'wrap' }}>
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    onClick={() => window.location.href = `/groups/${groupId}/new`}
-                  >
-                    + 发新帖
-                  </Button>
+                  <Link href={`/groups/${groupId}/new`} style={{ textDecoration: 'none' }}>
+                    <Button variant="primary" size="sm">
+                      {language === 'zh' ? '+ 发帖' : '+ Post'}
+                    </Button>
+                  </Link>
                   {(userRole === 'owner' || userRole === 'admin') && (
                     <Link href={`/groups/${groupId}/manage`}>
                       <Button variant="secondary" size="sm">
@@ -172,7 +172,9 @@ export default function GroupHeader({
                     onClick={onLeave}
                     disabled={joining}
                   >
-                    {joining ? '退出中...' : '退出小组'}
+                    {joining
+                      ? (language === 'zh' ? '退出中...' : 'Leaving...')
+                      : (language === 'zh' ? '退出小组' : 'Leave')}
                   </Button>
                 </Box>
               ) : (
@@ -182,13 +184,15 @@ export default function GroupHeader({
                   onClick={onJoin}
                   disabled={joining}
                 >
-                  {joining ? '加入中...' : '+ 加入小组'}
+                  {joining
+                    ? (language === 'zh' ? '加入中...' : 'Joining...')
+                    : (language === 'zh' ? '+ 加入小组' : '+ Join')}
                 </Button>
               )
             ) : (
               <Link href="/login">
                 <Button variant="primary" size="sm">
-                  登录后加入
+                  {language === 'zh' ? '登录后加入' : 'Login to join'}
                 </Button>
               </Link>
             )}
