@@ -73,8 +73,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
       }
 
       // Decrement member count
-      const { error: decrementError } = await supabase.rpc('decrement_member_count', {
+      const { error: decrementError } = await supabase.rpc('increment_member_count', {
         p_group_id: groupId,
+        p_delta: -1,
       })
 
       if (decrementError) {
