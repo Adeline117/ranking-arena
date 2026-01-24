@@ -1,11 +1,11 @@
 'use client'
 
-import { HomePage } from './components/home'
+import FeedPage from './components/feed/FeedPage'
 
 /**
- * 首页入口
- * 组件已拆分到 app/components/home/ 目录
+ * Home page - Social feed
+ * Shows recommended and latest posts
  */
 export default function Page() {
-  return <HomePage />
+  return <FeedPage />
 }

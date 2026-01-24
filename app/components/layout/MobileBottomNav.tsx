@@ -20,39 +20,26 @@ function HomeIcon({ active }: { active: boolean }) {
   )
 }
 
-function SearchIcon({ active }: { active: boolean }) {
+function TrophyIcon({ active }: { active: boolean }) {
   return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={active ? '2.5' : '2'} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <circle cx="11" cy="11" r="8" />
-      <line x1="21" y1="21" x2="16.65" y2="16.65" />
+    <svg width="22" height="22" viewBox="0 0 24 24" fill={active ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" />
+      <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" />
+      <path d="M4 22h16" />
+      <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22" />
+      <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22" />
+      <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z" />
     </svg>
   )
 }
 
-function _GroupsIcon({ active }: { active: boolean }) {
+function GroupsIcon({ active }: { active: boolean }) {
   return (
     <svg width="22" height="22" viewBox="0 0 24 24" fill={active ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
       <circle cx="9" cy="7" r="4" />
       <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
       <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-    </svg>
-  )
-}
-
-function HotIcon({ active }: { active: boolean }) {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill={active ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z" />
-    </svg>
-  )
-}
-
-function BellIcon({ active }: { active: boolean }) {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill={active ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-      <path d="M13.73 21a2 2 0 0 1-3.46 0" />
     </svg>
   )
 }
@@ -115,7 +102,6 @@ export default function MobileBottomNav() {
   const pathname = usePathname()
   const { t } = useLanguage()
   const [userHandle, setUserHandle] = useState<string | null>(null)
-  const [unreadCount, setUnreadCount] = useState(0)
   const [isVisible, setIsVisible] = useState(true)
   const [lastScrollY, setLastScrollY] = useState(0)
 
@@ -138,17 +124,6 @@ export default function MobileBottomNav() {
             } else if (data.user?.email) {
               setUserHandle(data.user.email.split('@')[0])
             }
-          })
-
-        // 获取未读通知数
-        supabase
-          .from('notifications')
-          .select('id', { count: 'exact', head: true })
-          .eq('user_id', userId)
-          .eq('is_read', false)
-          .then(({ count }) => {
-            if (!alive) return
-            setUnreadCount(count || 0)
           })
       }
     })
@@ -177,7 +152,7 @@ export default function MobileBottomNav() {
     return () => window.removeEventListener('scroll', handleScroll)
   }, [handleScroll])
 
-  // 动态生成导航项（包含搜索、通知和个人主页）
+  // 4-tab navigation: Home, Rankings, Groups, Profile
   const navItems: NavItem[] = [
     {
       href: '/',
@@ -185,21 +160,14 @@ export default function MobileBottomNav() {
       icon: HomeIcon,
     },
     {
-      href: '/search',
-      labelKey: 'search',
-      icon: SearchIcon,
+      href: '/rankings',
+      labelKey: 'rankings',
+      icon: TrophyIcon,
     },
     {
-      href: '/hot',
-      labelKey: 'hot',
-      icon: HotIcon,
-      highlight: true,
-    },
-    {
-      href: '/notifications',
-      labelKey: 'notifications',
-      icon: BellIcon,
-      badge: unreadCount,
+      href: '/groups',
+      labelKey: 'groups',
+      icon: GroupsIcon,
     },
     {
       href: userHandle ? `/u/${encodeURIComponent(userHandle)}` : '/settings',
