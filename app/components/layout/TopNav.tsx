@@ -430,15 +430,16 @@ export default function TopNav({ email }: { email: string | null }) {
             aria-label="搜索"
             onClick={() => setShowMobileSearch(true)}
             style={{
+              display: 'none',
               alignItems: 'center',
               justifyContent: 'center',
-              width: 44,
-              height: 44,
+              width: 40,
+              height: 40,
               borderRadius: tokens.radius.full,
-              background: `${tokens.colors.accent.primary}12`,
+              background: tokens.glass.bg.light,
               color: tokens.colors.text.secondary,
               transition: `all ${tokens.transition.base}`,
-              border: `1px solid ${tokens.colors.accent.primary}30`,
+              border: `1px solid ${tokens.colors.border.primary}`,
               cursor: 'pointer',
             }}
           >
