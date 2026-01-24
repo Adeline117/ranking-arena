@@ -1,12 +1,12 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
 import { CloseIcon } from '../icons'
 import { supabase } from '@/lib/supabase/client'
-import { useToast } from '../ui/Toast'
 
 interface SearchDropdownProps {
   open: boolean
@@ -14,11 +14,7 @@ interface SearchDropdownProps {
   onClose: () => void
 }
 
-interface SearchHistoryItem {
-  id: string
-  query: string
-  timestamp: number
-}
+// Search history is stored as a simple string[] in localStorage under 'ranking-arena-recent-searches'
 
 interface HotPost {
   id: string
@@ -34,27 +30,31 @@ interface SearchResult {
   title: string
   subtitle?: string
   href: string
+  roi?: number
 }
 
 /**
  * 搜索下拉菜单
- * - 实时搜索建议
+ * - 实时搜索建议（通过 API）
+ * - 键盘导航（上下箭头、Enter、Escape）
  * - 显示搜索历史记录（可删除）
  * - 显示热榜帖子前十（前三标橙）
  */
 export default function SearchDropdown({ open, query, onClose }: SearchDropdownProps) {
-  const { showToast } = useToast()
-  const [searchHistory, setSearchHistory] = useState<SearchHistoryItem[]>([])
+  const router = useRouter()
+  const [searchHistory, setSearchHistory] = useState<string[]>([])
   const [hotPosts, setHotPosts] = useState<HotPost[]>([])
   const [loading, setLoading] = useState(false)
   const [searchResults, setSearchResults] = useState<SearchResult[]>([])
   const [searching, setSearching] = useState(false)
-  const [_searchError, setSearchError] = useState(false)
+  const [selectedIndex, setSelectedIndex] = useState(-1)
+  const abortControllerRef = useRef<AbortController | null>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
 
   // 加载搜索历史
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const stored = localStorage.getItem('searchHistory')
+      const stored = localStorage.getItem('ranking-arena-recent-searches')
       if (stored) {
         try {
           setSearchHistory(JSON.parse(stored))
@@ -68,10 +68,9 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
   // 从数据库加载热榜帖子
   const loadHotPosts = useCallback(async () => {
     if (!open) return
-    
+
     setLoading(true)
     try {
-      // 从数据库获取热门帖子（按 hot_score 或综合排序）
       const { data, error } = await supabase
         .from('posts')
         .select('id, title, hot_score, view_count, like_count, comment_count')
@@ -82,7 +81,6 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
 
       if (error) {
         console.error('Failed to load hot posts:', error)
-        // 静默处理热榜加载失败，不影响用户搜索体验
         return
       }
 
@@ -90,9 +88,9 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
         const posts: HotPost[] = data.map((post, index) => ({
           id: post.id,
           title: post.title || '无标题',
-          hotScore: post.hot_score || 
-            (post.view_count || 0) * 0.1 + 
-            (post.like_count || 0) * 2 + 
+          hotScore: post.hot_score ||
+            (post.view_count || 0) * 0.1 +
+            (post.like_count || 0) * 2 +
             (post.comment_count || 0) * 3,
           rank: index + 1,
           view_count: post.view_count,
@@ -110,75 +108,94 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
     loadHotPosts()
   }, [loadHotPosts])
 
-  // 实时搜索
+  // 实时搜索 - 使用 API 和 AbortController
   useEffect(() => {
     if (!open || !query.trim() || query.length < 2) {
       setSearchResults([])
+      setSelectedIndex(-1)
       return
     }
 
     const searchTimer = setTimeout(async () => {
-      setSearching(true)
-      const results: SearchResult[] = []
-
-      // 转义 LIKE 通配符防止注入
-      const sanitizedQuery = query.trim()
-        .slice(0, 100)
-        .replace(/[\\%_]/g, c => `\\${c}`)
-
-      if (!sanitizedQuery) {
-        setSearching(false)
-        return
+      // Cancel previous request
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort()
       }
 
+      const controller = new AbortController()
+      abortControllerRef.current = controller
+
+      setSearching(true)
+
       try {
-        // 搜索交易员
-        const { data: traders } = await supabase
-          .from('trader_sources')
-          .select('source_trader_id, handle, source')
-          .ilike('handle', `%${sanitizedQuery}%`)
-          .limit(5)
+        // Use the search suggestions API
+        const response = await fetch(
+          `/api/search/suggestions?q=${encodeURIComponent(query.trim())}&limit=10`,
+          { signal: controller.signal }
+        )
 
-        if (traders) {
-          traders.forEach((trader: any) => {
-            results.push({
-              id: trader.source_trader_id,
-              type: 'trader',
-              title: trader.handle || '未知交易员',
-              subtitle: trader.source?.toUpperCase(),
-              href: `/trader/${encodeURIComponent(trader.handle || trader.source_trader_id)}`,
-            })
-          })
-        }
+        if (!response.ok) throw new Error('Search failed')
 
-        // 搜索帖子
-        const { data: posts } = await supabase
-          .from('posts')
-          .select('id, title, author_handle')
-          .or(`title.ilike.%${sanitizedQuery}%`)
-          .limit(5)
+        const data = await response.json()
+        const suggestions = data.suggestions || []
 
-        if (posts) {
-          posts.forEach((post: any) => {
+        const results: SearchResult[] = suggestions.map((s: { type: string; value: string; label: string; subLabel?: string; source?: string; roi?: number }) => {
+          let href: string
+          let type: 'trader' | 'post' | 'group'
+
+          if (s.type === 'trader') {
+            type = 'trader'
+            href = `/trader/${encodeURIComponent(s.value)}`
+          } else if (s.type === 'symbol') {
+            type = 'trader'
+            href = `/search?q=${encodeURIComponent(s.value)}`
+          } else {
+            type = 'post'
+            href = `/search?q=${encodeURIComponent(s.value)}`
+          }
+
+          return {
+            id: `${s.type}-${s.value}`,
+            type,
+            title: s.label,
+            subtitle: s.subLabel,
+            href,
+            roi: s.roi,
+          }
+        })
+
+        // Also search posts and groups from Supabase for dropdown enrichment
+        const sanitizedQuery = query.trim()
+          .slice(0, 100)
+          .replace(/[\\%_]/g, c => `\\${c}`)
+
+        const [postsRes, groupsRes] = await Promise.all([
+          supabase
+            .from('posts')
+            .select('id, title, author_handle')
+            .or(`title.ilike.%${sanitizedQuery}%`)
+            .limit(3),
+          supabase
+            .from('groups')
+            .select('id, name')
+            .ilike('name', `%${sanitizedQuery}%`)
+            .limit(3),
+        ])
+
+        if (postsRes.data) {
+          postsRes.data.forEach((post) => {
             results.push({
               id: post.id,
               type: 'post',
               title: post.title || '无标题',
               subtitle: post.author_handle ? `@${post.author_handle}` : undefined,
-              href: `/groups?post=${post.id}`,
+              href: `/post/${post.id}`,
             })
           })
         }
 
-        // 搜索群组
-        const { data: groups } = await supabase
-          .from('groups')
-          .select('id, name')
-          .ilike('name', `%${sanitizedQuery}%`)
-          .limit(3)
-
-        if (groups) {
-          groups.forEach((group: any) => {
+        if (groupsRes.data) {
+          groupsRes.data.forEach((group) => {
             results.push({
               id: group.id,
               type: 'group',
@@ -188,29 +205,73 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
           })
         }
 
-        setSearchResults(results)
-        setSearchError(false)
+        if (!controller.signal.aborted) {
+          setSearchResults(results)
+          setSelectedIndex(-1)
+        }
       } catch (error) {
+        if (error instanceof Error && error.name === 'AbortError') return
         console.error('Search error:', error)
-        setSearchError(true)
-        showToast('搜索失败，请稍后重试', 'error')
       } finally {
-        setSearching(false)
+        if (!controller.signal.aborted) {
+          setSearching(false)
+        }
       }
     }, 300) // 300ms 防抖
 
-    return () => clearTimeout(searchTimer)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => {
+      clearTimeout(searchTimer)
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort()
+      }
+    }
   }, [query, open])
 
+  // Keyboard navigation
+  useEffect(() => {
+    if (!open) return
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose()
+        return
+      }
+
+      if (searchResults.length === 0) return
+
+      if (e.key === 'ArrowDown') {
+        e.preventDefault()
+        setSelectedIndex(prev =>
+          prev < searchResults.length - 1 ? prev + 1 : 0
+        )
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault()
+        setSelectedIndex(prev =>
+          prev > 0 ? prev - 1 : searchResults.length - 1
+        )
+      } else if (e.key === 'Enter' && selectedIndex >= 0) {
+        e.preventDefault()
+        const selected = searchResults[selectedIndex]
+        if (selected) {
+          saveToHistory(query)
+          router.push(selected.href)
+          onClose()
+        }
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [open, searchResults, selectedIndex, query, onClose, router])
+
   // 删除单个历史记录
-  const handleDeleteHistory = (id: string, e: React.MouseEvent) => {
+  const handleDeleteHistory = (term: string, e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
-    const newHistory = searchHistory.filter((item) => item.id !== id)
+    const newHistory = searchHistory.filter((item) => item !== term)
     setSearchHistory(newHistory)
     if (typeof window !== 'undefined') {
-      localStorage.setItem('searchHistory', JSON.stringify(newHistory))
+      localStorage.setItem('ranking-arena-recent-searches', JSON.stringify(newHistory))
     }
   }
 
@@ -220,29 +281,22 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
     e.stopPropagation()
     setSearchHistory([])
     if (typeof window !== 'undefined') {
-      localStorage.removeItem('searchHistory')
+      localStorage.removeItem('ranking-arena-recent-searches')
     }
   }
 
   // 保存搜索到历史记录
   const saveToHistory = (searchQuery: string) => {
     if (!searchQuery.trim()) return
-    
-    const newItem: SearchHistoryItem = {
-      id: Date.now().toString(),
-      query: searchQuery.trim(),
-      timestamp: Date.now(),
-    }
-    
-    // 移除重复项，添加新项到最前面
+
     const newHistory = [
-      newItem,
-      ...searchHistory.filter(item => item.query !== searchQuery.trim())
-    ].slice(0, 10) // 最多保留10条
-    
+      searchQuery.trim(),
+      ...searchHistory.filter(item => item !== searchQuery.trim())
+    ].slice(0, 10)
+
     setSearchHistory(newHistory)
     if (typeof window !== 'undefined') {
-      localStorage.setItem('searchHistory', JSON.stringify(newHistory))
+      localStorage.setItem('ranking-arena-recent-searches', JSON.stringify(newHistory))
     }
   }
 
@@ -275,7 +329,8 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
   }
 
   return (
-    <Box
+    <div
+      ref={containerRef}
       style={{
         position: 'absolute',
         top: 'calc(100% + 8px)',
@@ -304,7 +359,10 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
             </Text>
           </Box>
           {searching ? (
-            <Box style={{ padding: tokens.spacing[4], textAlign: 'center' }}>
+            <Box style={{ padding: tokens.spacing[4], display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{ animation: 'spin 1s linear infinite' }}>
+                <circle cx="12" cy="12" r="10" stroke={tokens.colors.text.tertiary} strokeWidth="3" strokeDasharray="31.4 31.4" strokeLinecap="round" />
+              </svg>
               <Text size="sm" color="tertiary">搜索中...</Text>
             </Box>
           ) : searchResults.length === 0 ? (
@@ -312,7 +370,7 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
               <Text size="sm" color="tertiary">未找到相关结果</Text>
             </Box>
           ) : (
-            searchResults.map((result) => (
+            searchResults.map((result, index) => (
               <Link
                 key={`${result.type}-${result.id}`}
                 href={result.href}
@@ -327,12 +385,16 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
                     padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
                     borderBottom: `1px solid ${tokens.colors.border.primary}`,
                     cursor: 'pointer',
+                    background: index === selectedIndex ? tokens.colors.bg.tertiary : 'transparent',
                   }}
                   onMouseEnter={(e) => {
+                    setSelectedIndex(index)
                     e.currentTarget.style.background = tokens.colors.bg.tertiary
                   }}
                   onMouseLeave={(e) => {
-                    e.currentTarget.style.background = 'transparent'
+                    if (index !== selectedIndex) {
+                      e.currentTarget.style.background = 'transparent'
+                    }
                   }}
                 >
                   <Text size="lg">{getTypeIcon(result.type)}</Text>
@@ -347,9 +409,43 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
                       )}
                     </Box>
                   </Box>
+                  {result.roi !== undefined && (
+                    <Text
+                      size="xs"
+                      style={{ color: result.roi >= 0 ? '#22c55e' : '#ef4444' }}
+                    >
+                      {result.roi >= 0 ? '+' : ''}{result.roi.toFixed(1)}%
+                    </Text>
+                  )}
                 </Box>
               </Link>
             ))
+          )}
+          {/* 查看全部搜索结果链接 */}
+          {searchResults.length > 0 && (
+            <Link
+              href={`/search?q=${encodeURIComponent(query)}`}
+              style={{ textDecoration: 'none' }}
+              onClick={handleResultClick}
+            >
+              <Box
+                style={{
+                  padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+                  textAlign: 'center',
+                  cursor: 'pointer',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = tokens.colors.bg.tertiary
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'transparent'
+                }}
+              >
+                <Text size="xs" color="tertiary">
+                  查看全部搜索结果 →
+                </Text>
+              </Box>
+            </Link>
           )}
         </Box>
       )}
@@ -384,9 +480,9 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
             </button>
           </Box>
           <Box>
-            {searchHistory.map((item) => (
+            {searchHistory.map((term, idx) => (
               <Box
-                key={item.id}
+                key={`${term}-${idx}`}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -402,16 +498,16 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
                 }}
               >
                 <Link
-                  href={`/search?q=${encodeURIComponent(item.query)}`}
+                  href={`/search?q=${encodeURIComponent(term)}`}
                   style={{ textDecoration: 'none', flex: 1 }}
                   onClick={onClose}
                 >
                   <Text size="sm" style={{ color: tokens.colors.text.primary }}>
-                    {item.query}
+                    {term}
                   </Text>
                 </Link>
                 <button
-                  onClick={(e) => handleDeleteHistory(item.id, e)}
+                  onClick={(e) => handleDeleteHistory(term, e)}
                   style={{
                     background: 'transparent',
                     border: 'none',
@@ -452,7 +548,6 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
           </Box>
           <Box>
             {loading ? (
-              // 骨架屏加载状态，避免布局跳动
               <Box style={{ padding: `${tokens.spacing[2]} 0` }}>
                 {[1, 2, 3, 4, 5].map((i) => (
                   <Box
@@ -496,7 +591,7 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
               hotPosts.map((post) => (
                 <Link
                   key={post.id}
-                  href={`/groups?post=${post.id}`}
+                  href={`/post/${post.id}`}
                   style={{ textDecoration: 'none' }}
                   onClick={onClose}
                 >
@@ -516,12 +611,11 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
                       e.currentTarget.style.background = 'transparent'
                     }}
                   >
-                    {/* 排名 - 前三标橙 */}
                     <Text
                       size="sm"
                       weight="black"
                       style={{
-                        color: post.rank <= 3 ? '#FF9800' : tokens.colors.text.tertiary, // 橙色
+                        color: post.rank <= 3 ? '#FF9800' : tokens.colors.text.tertiary,
                         minWidth: 24,
                         textAlign: 'right',
                       }}
@@ -551,6 +645,6 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
           </Box>
         </Box>
       )}
-    </Box>
+    </div>
   )
 }

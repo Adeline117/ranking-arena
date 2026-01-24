@@ -24,6 +24,7 @@ export default function AccountSwitcher({ onClose }: AccountSwitcherProps) {
     signOutAll,
   } = useMultiAccount()
   const [switchingId, setSwitchingId] = useState<string | null>(null)
+  const [signingOut, setSigningOut] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const handleSwitch = async (userId: string) => {
@@ -183,9 +184,17 @@ export default function AccountSwitcher({ onClose }: AccountSwitcherProps) {
       {accounts.length > 1 && (
         <Box
           onClick={async () => {
-            await signOutAll()
-            onClose?.()
-            router.push('/')
+            if (signingOut) return
+            setSigningOut(true)
+            try {
+              await signOutAll()
+              onClose?.()
+              router.push('/')
+            } catch (err) {
+              console.error('Sign out failed:', err)
+            } finally {
+              setSigningOut(false)
+            }
           }}
           style={{
             display: 'flex',
@@ -193,13 +202,16 @@ export default function AccountSwitcher({ onClose }: AccountSwitcherProps) {
             gap: tokens.spacing[2],
             padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
             borderRadius: tokens.radius.md,
-            cursor: 'pointer',
+            cursor: signingOut ? 'wait' : 'pointer',
+            opacity: signingOut ? 0.5 : 1,
             transition: `all ${tokens.transition.base}`,
           }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = tokens.colors.bg.secondary }}
+          onMouseEnter={(e) => { if (!signingOut) e.currentTarget.style.background = tokens.colors.bg.secondary }}
           onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
         >
-          <Text size="xs" style={{ color: tokens.colors.accent.error }}>退出所有账号</Text>
+          <Text size="xs" style={{ color: tokens.colors.accent.error }}>
+            {signingOut ? '退出中...' : '退出所有账号'}
+          </Text>
         </Box>
       )}
     </Box>
