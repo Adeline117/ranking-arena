@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useEffect, useState, useRef } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
 import ThemeToggle from '../ui/ThemeToggle'
@@ -18,6 +18,7 @@ import { useInboxStore } from '@/lib/stores/inboxStore'
 
 export default function TopNav({ email }: { email: string | null }) {
   const { t } = useLanguage()
+  const pathname = usePathname()
   const router = useRouter()
   const [myId, setMyId] = useState<string | null>(null)
   const [myHandle, setMyHandle] = useState<string | null>(null)
@@ -334,6 +335,50 @@ export default function TopNav({ email }: { email: string | null }) {
               </Box>
             </Box>
           </Link>
+
+          {/* 导航链接 - 移动端隐藏 */}
+          <Box as="nav" className="hide-mobile" style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1] }}>
+            {[
+              { href: '/', labelKey: 'home' as const },
+              { href: '/groups', labelKey: 'groups' as const },
+              { href: '/hot', labelKey: 'hot' as const },
+            ].map((item) => {
+              const label = t(item.labelKey)
+              const isActive = pathname === item.href || (item.href === '/' && pathname === '/')
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  style={{
+                    padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+                    borderRadius: tokens.radius.md,
+                    color: isActive ? tokens.colors.text.primary : tokens.colors.text.secondary,
+                    textDecoration: 'none',
+                    fontWeight: isActive ? 800 : 600,
+                    fontSize: tokens.typography.fontSize.sm,
+                    background: isActive ? tokens.colors.bg.secondary : 'transparent',
+                    transition: `all ${tokens.transition.base}`,
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isActive) {
+                      e.currentTarget.style.color = tokens.colors.text.primary
+                      e.currentTarget.style.background = tokens.colors.bg.secondary
+                      e.currentTarget.style.transform = 'translateY(-1px)'
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isActive) {
+                      e.currentTarget.style.color = tokens.colors.text.secondary
+                      e.currentTarget.style.background = 'transparent'
+                      e.currentTarget.style.transform = 'translateY(0)'
+                    }
+                  }}
+                >
+                  {label}
+                </Link>
+              )
+            })}
+          </Box>
         </Box>
 
         {/* 中：搜索 - 移动端隐藏 */}
