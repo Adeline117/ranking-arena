@@ -3,10 +3,10 @@ import type { Metadata } from 'next'
 export async function generateMetadata({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string }>
+  searchParams?: Promise<{ q?: string }>
 }): Promise<Metadata> {
-  const { q } = await searchParams
-  const query = q?.trim()
+  const resolved = searchParams ? await searchParams : {}
+  const query = resolved.q?.trim()
 
   const title = query
     ? `"${query}" - 搜索结果 | Ranking Arena`

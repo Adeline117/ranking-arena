@@ -6,6 +6,8 @@
  */
 
 import { NextResponse, type NextRequest } from 'next/server'
+import { Ratelimit } from '@upstash/ratelimit'
+import { Redis } from '@upstash/redis'
 import { generateRequestId } from '@/lib/utils/logger'
 
 // CSRF 配置
@@ -60,6 +62,56 @@ const SKIP_ROUTES = [
   '/favicon.ico',
   '/api/health',
   '/api/cron',
+]
+
+// ============================================
+// Rate Limiting (从 middleware.ts 合并)
+// ============================================
+
+let ratelimit: Ratelimit | null = null
+function getRateLimiter(): Ratelimit | null {
+  if (ratelimit) return ratelimit
+  const url = process.env.UPSTASH_REDIS_REST_URL
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN
+  if (!url || !token) return null
+  try {
+    ratelimit = new Ratelimit({
+      redis: new Redis({ url, token }),
+      limiter: Ratelimit.slidingWindow(120, '60 s'),
+      prefix: 'mw:ratelimit',
+      analytics: false,
+    })
+    return ratelimit
+  } catch {
+    return null
+  }
+}
+
+let writeRatelimit: Ratelimit | null = null
+function getWriteRateLimiter(): Ratelimit | null {
+  if (writeRatelimit) return writeRatelimit
+  const url = process.env.UPSTASH_REDIS_REST_URL
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN
+  if (!url || !token) return null
+  try {
+    writeRatelimit = new Ratelimit({
+      redis: new Redis({ url, token }),
+      limiter: Ratelimit.slidingWindow(30, '60 s'),
+      prefix: 'mw:ratelimit:write',
+      analytics: false,
+    })
+    return writeRatelimit
+  } catch {
+    return null
+  }
+}
+
+const WRITE_PATHS = [
+  '/api/posts',
+  '/api/comments',
+  '/api/trader-alerts',
+  '/api/saved-filters',
+  '/api/avoid-list',
 ]
 
 // 允许的 CORS 源
@@ -353,6 +405,37 @@ export async function proxy(request: NextRequest) {
     return response
   }
   
+  // API 路由限流检查
+  if (pathname.startsWith('/api/')) {
+    const isWriteMethod = ['POST', 'PUT', 'DELETE', 'PATCH'].includes(method)
+    const isWritePath = WRITE_PATHS.some(p => pathname.startsWith(p))
+    const useWriteLimit = isWriteMethod && isWritePath
+    const limiter = useWriteLimit ? getWriteRateLimiter() : getRateLimiter()
+
+    if (limiter) {
+      try {
+        const forwarded = request.headers.get('x-forwarded-for')
+        const ip = forwarded?.split(',')[0]?.trim() || request.headers.get('x-real-ip') || 'anonymous'
+        const { success, limit, remaining, reset } = await limiter.limit(ip)
+
+        if (!success) {
+          const rateLimitResponse = NextResponse.json(
+            { success: false, error: '请求过于频繁，请稍后再试', code: 'RATE_LIMIT_EXCEEDED' },
+            { status: 429 }
+          )
+          rateLimitResponse.headers.set('X-RateLimit-Limit', limit.toString())
+          rateLimitResponse.headers.set('X-RateLimit-Remaining', remaining.toString())
+          rateLimitResponse.headers.set('X-RateLimit-Reset', reset.toString())
+          rateLimitResponse.headers.set('X-Request-ID', requestId)
+          addCorsHeaders(request, rateLimitResponse)
+          return rateLimitResponse
+        }
+      } catch {
+        // 限流检查失败时放行 (fail-open)
+      }
+    }
+  }
+
   // 检查受保护路由的认证（仅 API 路由）
   // 页面路由让客户端自己处理认证，避免 cookie 检查不准确导致的错误重定向
   if (isProtectedRoute(pathname, method) && pathname.startsWith('/api/')) {
