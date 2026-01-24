@@ -28,6 +28,13 @@ const CompareIcon = ({ size = 14 }: { size?: number }) => (
   </svg>
 )
 
+const SortIndicator = ({ active, dir }: { active: boolean; dir: 'asc' | 'desc' }) => (
+  <svg width={8} height={10} viewBox="0 0 8 10" style={{ opacity: active ? 1 : 0.3, transition: 'opacity 0.2s', flexShrink: 0 }}>
+    <path d="M4 0L7 4H1L4 0Z" fill="currentColor" opacity={dir === 'asc' && active ? 1 : 0.3} />
+    <path d="M4 10L1 6H7L4 10Z" fill="currentColor" opacity={dir === 'desc' && active ? 1 : 0.3} />
+  </svg>
+)
+
 const LockIconSmall = ({ size = 10 }: { size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
     <path d="M19 11H5C3.9 11 3 11.9 3 13V20C3 21.1 3.9 22 5 22H19C20.1 22 21 21.1 21 20V13C21 11.9 20.1 11 19 11Z" />
@@ -369,6 +376,8 @@ export default function RankingTable(props: {
   const [currentPage, setCurrentPage] = useState(1)
   const [showRules, setShowRules] = useState(false)
   const [showScoreRulesModal, setShowScoreRulesModal] = useState(false)
+  const [sortColumn, setSortColumn] = useState<'score' | 'roi' | 'winrate' | 'mdd'>('score')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
   const itemsPerPage = 20 // 每页显示 20 条
 
   // Inject styles on mount
@@ -376,9 +385,30 @@ export default function RankingTable(props: {
     injectStyles()
   }, [])
 
-  // API 已经完成了过滤（PNL >= $1000）和排序（ROI 降序 → 回撤小 → 交易次数多）
-  // 前端直接使用 API 返回的数据，不再重复过滤和排序
-  const sortedTraders = traders.slice(0, 100) // 确保最多显示100人
+  const handleSort = (col: 'score' | 'roi' | 'winrate' | 'mdd') => {
+    if (sortColumn === col) {
+      setSortDir(d => d === 'desc' ? 'asc' : 'desc')
+    } else {
+      setSortColumn(col)
+      setSortDir('desc')
+    }
+    setCurrentPage(1)
+  }
+
+  // 客户端排序
+  const sortedTraders = React.useMemo(() => {
+    const data = traders.slice(0, 100)
+    return [...data].sort((a, b) => {
+      let aVal = 0, bVal = 0
+      switch (sortColumn) {
+        case 'score': aVal = a.arena_score ?? 0; bVal = b.arena_score ?? 0; break
+        case 'roi': aVal = a.roi ?? 0; bVal = b.roi ?? 0; break
+        case 'winrate': aVal = a.win_rate ?? 0; bVal = b.win_rate ?? 0; break
+        case 'mdd': aVal = Math.abs(a.max_drawdown ?? 0); bVal = Math.abs(b.max_drawdown ?? 0); break
+      }
+      return sortDir === 'desc' ? bVal - aVal : aVal - bVal
+    })
+  }, [traders, sortColumn, sortDir])
   
   // 计算分页
   const totalPages = Math.ceil(sortedTraders.length / itemsPerPage)
@@ -662,45 +692,41 @@ export default function RankingTable(props: {
             ?
           </button>
         </Box>
-        <Text
+        <Box
           className="col-score"
-          size="sm"
-          weight="bold"
-          color="tertiary"
-          title={language === 'zh' ? 'Arena Score: 综合评分 (0-100)，收益+风险+稳定性加权' : 'Arena Score: Overall rating (0-100), weighted by return, risk & stability'}
-          style={{ textAlign: 'center', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap', fontSize: '12px', alignItems: 'center', justifyContent: 'center', cursor: 'help' }}
+          as="button"
+          onClick={() => handleSort('score')}
+          title={language === 'zh' ? 'Arena Score: 综合评分 (0-100)' : 'Arena Score: Overall rating (0-100)'}
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, background: 'none', border: 'none', padding: 0, cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap', fontSize: '12px', fontWeight: 700, color: sortColumn === 'score' ? tokens.colors.accent.primary : tokens.colors.text.tertiary }}
         >
-          Score
-        </Text>
-        <Text
-          size="sm"
-          weight="bold"
-          color="tertiary"
-          title={language === 'zh' ? `ROI: 投资回报率 (${timeRange})，盈亏金额 / 本金` : `ROI: Return on Investment (${timeRange}), PnL / Principal`}
-          style={{ textAlign: 'right', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap', fontSize: '12px', cursor: 'help' }}
+          Score <SortIndicator active={sortColumn === 'score'} dir={sortDir} />
+        </Box>
+        <Box
+          as="button"
+          onClick={() => handleSort('roi')}
+          title={language === 'zh' ? `ROI: 投资回报率 (${timeRange})` : `ROI: Return on Investment (${timeRange})`}
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4, background: 'none', border: 'none', padding: 0, cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap', fontSize: '12px', fontWeight: 700, color: sortColumn === 'roi' ? tokens.colors.accent.primary : tokens.colors.text.tertiary }}
         >
-          ROI
-        </Text>
-        <Text
+          ROI <SortIndicator active={sortColumn === 'roi'} dir={sortDir} />
+        </Box>
+        <Box
           className="col-winrate"
-          size="sm"
-          weight="bold"
-          color="tertiary"
-          title={language === 'zh' ? 'Win%: 胜率，盈利交易次数 / 总交易次数' : 'Win%: Win Rate, profitable trades / total trades'}
-          style={{ textAlign: 'right', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap', fontSize: '12px', alignItems: 'center', justifyContent: 'flex-end', cursor: 'help' }}
+          as="button"
+          onClick={() => handleSort('winrate')}
+          title={language === 'zh' ? 'Win%: 胜率' : 'Win%: Win Rate'}
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4, background: 'none', border: 'none', padding: 0, cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap', fontSize: '12px', fontWeight: 700, color: sortColumn === 'winrate' ? tokens.colors.accent.primary : tokens.colors.text.tertiary }}
         >
-          Win%
-        </Text>
-        <Text
+          Win% <SortIndicator active={sortColumn === 'winrate'} dir={sortDir} />
+        </Box>
+        <Box
           className="col-mdd"
-          size="sm"
-          weight="bold"
-          color="tertiary"
-          title={language === 'zh' ? 'MDD: 最大回撤，峰值到谷底的最大跌幅' : 'MDD: Max Drawdown, largest peak-to-trough decline'}
-          style={{ textAlign: 'right', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap', fontSize: '12px', alignItems: 'center', justifyContent: 'flex-end', cursor: 'help' }}
+          as="button"
+          onClick={() => handleSort('mdd')}
+          title={language === 'zh' ? 'MDD: 最大回撤' : 'MDD: Max Drawdown'}
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4, background: 'none', border: 'none', padding: 0, cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap', fontSize: '12px', fontWeight: 700, color: sortColumn === 'mdd' ? tokens.colors.accent.primary : tokens.colors.text.tertiary }}
         >
-          MDD
-        </Text>
+          MDD <SortIndicator active={sortColumn === 'mdd'} dir={sortDir} />
+        </Box>
       </Box>
 
       {/* 排名规则说明 */}
