@@ -237,7 +237,7 @@ export default function MobileBottomNav() {
                 flexDirection: 'column',
                 alignItems: 'center',
                 justifyContent: 'center',
-                gap: 3,
+                gap: 4,
                 padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
                 textDecoration: 'none',
                 color: active ? tokens.colors.accent.primary : tokens.colors.text.tertiary,
@@ -302,7 +302,7 @@ export default function MobileBottomNav() {
               {/* 标签 */}
               <span
                 style={{
-                  fontSize: 10,
+                  fontSize: 11,
                   fontWeight: active ? 700 : 500,
                   letterSpacing: '0.3px',
                   transition: `all ${tokens.transition.fast}`,

@@ -663,7 +663,7 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
         </PullToRefreshWrapper>
 
         {/* Right Sidebar */}
-        <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}>
+        <Box className="hide-mobile" style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}>
           <RelatedGroupsSidebar
             groups={relatedGroups}
             loading={loadingRelatedGroups}

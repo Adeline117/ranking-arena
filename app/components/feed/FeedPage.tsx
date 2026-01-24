@@ -64,13 +64,13 @@ export default function FeedPage() {
               key={tab.key}
               onClick={() => setActiveTab(tab.key)}
               style={{
-                padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
+                padding: `${tokens.spacing[2]} ${tokens.spacing[5]}`,
                 borderRadius: tokens.radius.lg,
                 border: 'none',
                 background: activeTab === tab.key ? tokens.gradient.primary : 'transparent',
                 color: activeTab === tab.key ? '#fff' : tokens.colors.text.secondary,
                 fontWeight: activeTab === tab.key ? 800 : 600,
-                fontSize: tokens.typography.fontSize.sm,
+                fontSize: tokens.typography.fontSize.base,
                 cursor: 'pointer',
                 transition: `all ${tokens.transition.base}`,
               }}
