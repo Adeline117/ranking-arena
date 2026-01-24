@@ -46,24 +46,24 @@ function getPlatformCircuitBreaker(platform: string) {
 // 平台脚本配置
 export const PLATFORM_SCRIPTS: Record<string, Array<{ name: string; script: string; args: string[] }>> = {
   binance_futures: [
-    { name: 'binance_futures_7d', script: 'scripts/import_binance_futures.mjs', args: ['7D'] },
-    { name: 'binance_futures_30d', script: 'scripts/import_binance_futures.mjs', args: ['30D'] },
-    { name: 'binance_futures_90d', script: 'scripts/import_binance_futures.mjs', args: ['90D'] },
+    { name: 'binance_futures_7d', script: 'scripts/import/import_binance_futures.mjs', args: ['7D'] },
+    { name: 'binance_futures_30d', script: 'scripts/import/import_binance_futures.mjs', args: ['30D'] },
+    { name: 'binance_futures_90d', script: 'scripts/import/import_binance_futures.mjs', args: ['90D'] },
   ],
   binance_spot: [
-    { name: 'binance_spot_7d', script: 'scripts/import_binance_spot.mjs', args: ['7D'] },
-    { name: 'binance_spot_30d', script: 'scripts/import_binance_spot.mjs', args: ['30D'] },
-    { name: 'binance_spot_90d', script: 'scripts/import_binance_spot.mjs', args: ['90D'] },
+    { name: 'binance_spot_7d', script: 'scripts/import/import_binance_spot.mjs', args: ['7D'] },
+    { name: 'binance_spot_30d', script: 'scripts/import/import_binance_spot.mjs', args: ['30D'] },
+    { name: 'binance_spot_90d', script: 'scripts/import/import_binance_spot.mjs', args: ['90D'] },
   ],
   binance_web3: [
-    { name: 'binance_web3_7d', script: 'scripts/import_binance_web3.mjs', args: ['7D'] },
-    { name: 'binance_web3_30d', script: 'scripts/import_binance_web3.mjs', args: ['30D'] },
-    { name: 'binance_web3_90d', script: 'scripts/import_binance_web3.mjs', args: ['90D'] },
+    { name: 'binance_web3_7d', script: 'scripts/import/import_binance_web3.mjs', args: ['7D'] },
+    { name: 'binance_web3_30d', script: 'scripts/import/import_binance_web3.mjs', args: ['30D'] },
+    { name: 'binance_web3_90d', script: 'scripts/import/import_binance_web3.mjs', args: ['90D'] },
   ],
   bybit: [
-    { name: 'bybit_7d', script: 'scripts/import_bybit.mjs', args: ['7D'] },
-    { name: 'bybit_30d', script: 'scripts/import_bybit.mjs', args: ['30D'] },
-    { name: 'bybit_90d', script: 'scripts/import_bybit.mjs', args: ['90D'] },
+    { name: 'bybit_7d', script: 'scripts/import/import_bybit.mjs', args: ['7D'] },
+    { name: 'bybit_30d', script: 'scripts/import/import_bybit.mjs', args: ['30D'] },
+    { name: 'bybit_90d', script: 'scripts/import/import_bybit.mjs', args: ['90D'] },
   ],
   bitget_futures: [
     { name: 'bitget_futures_7d', script: 'scripts/import/import_bitget_futures_v2.mjs', args: ['7D'] },
@@ -76,28 +76,28 @@ export const PLATFORM_SCRIPTS: Record<string, Array<{ name: string; script: stri
     { name: 'bitget_spot_90d', script: 'scripts/import/import_bitget_spot_v2.mjs', args: ['90D'] },
   ],
   mexc: [
-    { name: 'mexc_7d', script: 'scripts/import_mexc.mjs', args: ['7D'] },
-    { name: 'mexc_30d', script: 'scripts/import_mexc.mjs', args: ['30D'] },
-    { name: 'mexc_90d', script: 'scripts/import_mexc.mjs', args: ['90D'] },
+    { name: 'mexc_7d', script: 'scripts/import/import_mexc.mjs', args: ['7D'] },
+    { name: 'mexc_30d', script: 'scripts/import/import_mexc.mjs', args: ['30D'] },
+    { name: 'mexc_90d', script: 'scripts/import/import_mexc.mjs', args: ['90D'] },
   ],
   coinex: [
-    { name: 'coinex_7d', script: 'scripts/import_coinex.mjs', args: ['7D'] },
-    { name: 'coinex_30d', script: 'scripts/import_coinex.mjs', args: ['30D'] },
-    { name: 'coinex_90d', script: 'scripts/import_coinex.mjs', args: ['90D'] },
+    { name: 'coinex_7d', script: 'scripts/import/import_coinex.mjs', args: ['7D'] },
+    { name: 'coinex_30d', script: 'scripts/import/import_coinex.mjs', args: ['30D'] },
+    { name: 'coinex_90d', script: 'scripts/import/import_coinex.mjs', args: ['90D'] },
   ],
   okx_web3: [
-    { name: 'okx_web3_7d', script: 'scripts/import_okx_web3.mjs', args: ['7D'] },
-    { name: 'okx_web3_30d', script: 'scripts/import_okx_web3.mjs', args: ['30D'] },
-    { name: 'okx_web3_90d', script: 'scripts/import_okx_web3.mjs', args: ['90D'] },
+    { name: 'okx_web3_7d', script: 'scripts/import/import_okx_web3.mjs', args: ['7D'] },
+    { name: 'okx_web3_30d', script: 'scripts/import/import_okx_web3.mjs', args: ['30D'] },
+    { name: 'okx_web3_90d', script: 'scripts/import/import_okx_web3.mjs', args: ['90D'] },
   ],
   kucoin: [
-    { name: 'kucoin_7d', script: 'scripts/import_kucoin.mjs', args: ['7D'] },
-    { name: 'kucoin_30d', script: 'scripts/import_kucoin.mjs', args: ['30D'] },
-    { name: 'kucoin_90d', script: 'scripts/import_kucoin.mjs', args: ['90D'] },
+    { name: 'kucoin_7d', script: 'scripts/import/import_kucoin.mjs', args: ['7D'] },
+    { name: 'kucoin_30d', script: 'scripts/import/import_kucoin.mjs', args: ['30D'] },
+    { name: 'kucoin_90d', script: 'scripts/import/import_kucoin.mjs', args: ['90D'] },
   ],
   gmx: [
-    { name: 'gmx_7d', script: 'scripts/import_gmx.mjs', args: ['7D'] },
-    { name: 'gmx_30d', script: 'scripts/import_gmx.mjs', args: ['30D'] },
+    { name: 'gmx_7d', script: 'scripts/import/import_gmx.mjs', args: ['7D'] },
+    { name: 'gmx_30d', script: 'scripts/import/import_gmx.mjs', args: ['30D'] },
     // GMX 没有 90D 数据
   ],
 }
@@ -121,15 +121,23 @@ export function getSupabaseEnv() {
 
 /**
  * 验证 Cron 请求授权
+ * Vercel Cron 使用 Authorization: Bearer <CRON_SECRET> 格式
  */
 export function isAuthorized(req: Request): boolean {
-  const header = req.headers.get('x-cron-secret') || ''
-  const secret = process.env.CRON_SECRET || ''
-  // 如果没有配置 CRON_SECRET，在开发环境允许访问
-  if (!secret && process.env.NODE_ENV === 'development') {
+  const authHeader = req.headers.get('authorization')
+  const cronSecret = process.env.CRON_SECRET
+
+  // 开发环境允许无密钥访问
+  if (!cronSecret && process.env.NODE_ENV === 'development') {
     return true
   }
-  return Boolean(secret) && header === secret
+
+  if (!cronSecret) {
+    console.error('[Cron] CRON_SECRET 环境变量未设置')
+    return false
+  }
+
+  return authHeader === `Bearer ${cronSecret}`
 }
 
 /**

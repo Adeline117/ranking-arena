@@ -21,11 +21,14 @@ function getSupabaseEnv() {
 }
 
 function isAuthorized(req: Request) {
-  // 检查 admin secret 或 cron secret
-  const adminSecret = req.headers.get('x-admin-secret') || ''
-  const cronSecret = req.headers.get('x-cron-secret') || ''
   const secret = process.env.ADMIN_SECRET || process.env.CRON_SECRET || ''
-  return Boolean(secret) && (adminSecret === secret || cronSecret === secret)
+  if (!secret) return false
+
+  // 支持多种认证方式
+  const authHeader = req.headers.get('authorization')
+  const adminSecret = req.headers.get('x-admin-secret') || ''
+
+  return authHeader === `Bearer ${secret}` || adminSecret === secret
 }
 
 interface TraderData {
@@ -213,7 +216,7 @@ export async function GET() {
     description: 'Import Binance Copy Trading leaderboard data manually',
     headers: {
       'Content-Type': 'application/json',
-      'x-admin-secret': 'Your admin secret (or x-cron-secret)',
+      'Authorization': 'Bearer <ADMIN_SECRET or CRON_SECRET>',
     },
     body: {
       period: '7D | 30D | 90D',

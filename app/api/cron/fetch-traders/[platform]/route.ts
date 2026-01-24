@@ -1,18 +1,19 @@
 /**
  * 单平台交易员数据抓取 API
- * POST /api/cron/fetch-traders/[platform]
- * 
+ * GET /api/cron/fetch-traders/[platform]
+ *
  * 支持的平台:
  * - binance_futures, binance_spot, binance_web3
  * - bybit
  * - bitget_futures, bitget_spot
  * - mexc, coinex
  * - okx_web3, kucoin, gmx
+ *
+ * Vercel Cron 通过 GET 请求调用，使用 Authorization: Bearer 验证
  */
 
 import { NextResponse } from 'next/server'
 import {
-  isAuthorized,
   createSupabaseAdmin,
   executePlatformScripts,
   logCronExecution,
@@ -28,26 +29,37 @@ type Params = {
   params: Promise<{ platform: string }>
 }
 
-export async function GET(request: Request, { params }: Params) {
-  const { platform } = await params
-  const supported = getSupportedPlatforms()
+/**
+ * 验证 Vercel Cron 授权
+ * Vercel Cron 使用 Authorization: Bearer <CRON_SECRET> 格式
+ */
+function isVercelCronAuthorized(request: Request): boolean {
+  const authHeader = request.headers.get('authorization')
+  const cronSecret = process.env.CRON_SECRET
 
-  return NextResponse.json({
-    ok: true,
-    platform,
-    supported: supported.includes(platform),
-    message: supported.includes(platform)
-      ? `平台 ${platform} 端点正常`
-      : `未知平台，支持的平台: ${supported.join(', ')}`,
-  })
+  // 开发环境允许无密钥访问
+  if (!cronSecret && process.env.NODE_ENV === 'development') {
+    return true
+  }
+
+  if (!cronSecret) {
+    console.error('[Cron] CRON_SECRET 环境变量未设置')
+    return false
+  }
+
+  return authHeader === `Bearer ${cronSecret}`
 }
 
-export async function POST(request: Request, { params }: Params) {
+/**
+ * GET /api/cron/fetch-traders/[platform]
+ * Vercel Cron 调用此端点执行抓取任务
+ */
+export async function GET(request: Request, { params }: Params) {
   const { platform } = await params
 
   try {
-    // 1) 验证授权
-    if (!isAuthorized(request)) {
+    // 1) 验证授权 (Vercel Cron 使用 Authorization: Bearer 格式)
+    if (!isVercelCronAuthorized(request)) {
       return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
     }
 
