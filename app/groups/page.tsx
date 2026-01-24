@@ -435,22 +435,32 @@ function GroupsList() {
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: tokens.spacing[2],
-                padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-                borderRadius: tokens.radius.md,
+                gap: tokens.spacing[3],
+                padding: `${tokens.spacing[3]} ${tokens.spacing[3]}`,
+                borderRadius: tokens.radius.lg,
                 textDecoration: 'none',
                 color: tokens.colors.text.primary,
-                transition: 'background 0.15s ease',
+                background: tokens.colors.bg.secondary,
+                border: `1px solid ${tokens.colors.border.primary}`,
+                transition: 'all 0.2s ease',
               }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = tokens.colors.bg.tertiary }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'linear-gradient(135deg, rgba(139,111,168,0.08), rgba(139,111,168,0.03))'
+                e.currentTarget.style.borderColor = 'rgba(139,111,168,0.3)'
+                e.currentTarget.style.transform = 'translateX(2px)'
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = tokens.colors.bg.secondary
+                e.currentTarget.style.borderColor = tokens.colors.border.primary
+                e.currentTarget.style.transform = 'translateX(0)'
+              }}
             >
               <Box style={{
-                width: 28,
-                height: 28,
-                borderRadius: tokens.radius.md,
-                background: 'linear-gradient(135deg, rgba(139,111,168,0.2), rgba(139,111,168,0.1))',
-                border: `1px solid ${tokens.colors.border.primary}`,
+                width: 36,
+                height: 36,
+                borderRadius: tokens.radius.lg,
+                background: 'linear-gradient(135deg, rgba(139,111,168,0.25), rgba(139,111,168,0.1))',
+                border: `1px solid rgba(139,111,168,0.2)`,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -460,21 +470,21 @@ function GroupsList() {
                 {group.avatar_url ? (
                   <img src={group.avatar_url} alt={group.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                 ) : (
-                  <Text size="xs" weight="bold" style={{ color: '#c9b8db' }}>
+                  <Text size="sm" weight="bold" style={{ color: '#c9b8db' }}>
                     {group.name.charAt(0).toUpperCase()}
                   </Text>
                 )}
               </Box>
               <Box style={{ flex: 1, minWidth: 0 }}>
-                <Text size="xs" weight="bold" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {group.name}
+                <Text size="sm" weight="bold" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 2 }}>
+                  {language === 'zh' ? group.name : (group.name_en || group.name)}
                 </Text>
+                {group.member_count != null && (
+                  <Text size="xs" color="tertiary">
+                    {group.member_count.toLocaleString()} {language === 'zh' ? '成员' : 'members'}
+                  </Text>
+                )}
               </Box>
-              {group.member_count != null && (
-                <Text size="xs" color="tertiary" style={{ flexShrink: 0 }}>
-                  {group.member_count}
-                </Text>
-              )}
             </Link>
           ))}
         </Box>
@@ -609,6 +619,7 @@ function GroupsContent() {
             display: grid;
             gap: 16px;
             grid-template-columns: 1fr;
+            align-items: start;
           }
           @media (min-width: 768px) {
             .groups-page-grid {
