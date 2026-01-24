@@ -594,6 +594,21 @@
   }
 }
 
+/* 用户主页 2 列网格 */
+@media (min-width: 768px) {
+  .profile-grid {
+    grid-template-columns: 1fr 320px !important;
+    gap: 24px !important;
+  }
+}
+
+@media (min-width: 1024px) {
+  .profile-grid {
+    grid-template-columns: 1fr 340px !important;
+    gap: 32px !important;
+  }
+}
+
 /* ============================================
    移动端数据显示优化
    ============================================ */
