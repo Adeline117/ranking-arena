@@ -333,7 +333,7 @@ function EquityCurveSection({
       </Box>
 
       {hasData ? (
-        <Box style={{ height: 280 }}>
+        <Box className="chart-container" style={{ height: 280 }}>
           <SimpleLineChart 
             data={currentData} 
             dataKey={chartType} 
@@ -1158,9 +1158,8 @@ function PositionHistoryCard({ position }: { position: PositionHistoryItem }) {
       </Box>
 
       {/* Data Grid */}
-      <Box style={{ 
-        display: 'grid', 
-        gridTemplateColumns: 'repeat(4, 1fr)', 
+      <Box className="trading-stats-grid" style={{
+        display: 'grid',
         gap: tokens.spacing[4],
       }}>
         <Box>

@@ -52,6 +52,9 @@ export default function TraderTabs({ activeTab, onTabChange, isPro = false, onPr
         position: 'relative',
         padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
         paddingBottom: tokens.spacing[3],
+        overflowX: 'auto',
+        WebkitOverflowScrolling: 'touch',
+        scrollbarWidth: 'none',
       }}
     >
       {tabs.map((tab) => {
@@ -95,7 +98,8 @@ export default function TraderTabs({ activeTab, onTabChange, isPro = false, onPr
               border: activeTab === tab.key
                 ? `1px solid ${tokens.colors.accent.primary}30`
                 : '1px solid transparent',
-              padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
+              padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+              minHeight: 44,
               cursor: isProLocked ? 'not-allowed' : 'pointer',
               position: 'relative',
               borderRadius: tokens.radius.lg,
