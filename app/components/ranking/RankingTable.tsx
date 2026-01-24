@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, memo } from 'react'
+import React, { useState, useEffect, useRef, memo } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
@@ -13,6 +13,7 @@ import { ScoreRulesModal } from '../ui/ScoreRulesModal'
 import CategoryRankingTabs, { CategoryType } from './CategoryRankingTabs'
 import { ProLabel } from '../premium/PremiumGate'
 import ExportButton from '../Utils/ExportButton'
+import { VirtualList } from '../ui/VirtualList'
 
 // 图标组件
 const FilterIcon = ({ size = 14 }: { size?: number }) => (
@@ -93,6 +94,41 @@ function getPnLTooltip(source: string, language: string): string {
 
   return language === 'zh' ? 'PnL = 盈亏金额' : 'PnL = Profit/Loss'
 }
+
+// Column customization types
+export type ColumnKey = 'score' | 'roi' | 'winrate' | 'mdd'
+
+const ALL_TOGGLEABLE_COLUMNS: ColumnKey[] = ['score', 'roi', 'winrate', 'mdd']
+const DEFAULT_VISIBLE_COLUMNS: ColumnKey[] = ['score', 'roi', 'winrate', 'mdd']
+const COLUMN_LABELS: Record<ColumnKey, { zh: string; en: string }> = {
+  score: { zh: 'Arena Score', en: 'Arena Score' },
+  roi: { zh: 'ROI', en: 'ROI' },
+  winrate: { zh: '胜率', en: 'Win Rate' },
+  mdd: { zh: '最大回撤', en: 'Max Drawdown' },
+}
+const LS_KEY_COLUMNS = 'ranking-visible-columns'
+
+function getStoredColumns(): ColumnKey[] {
+  if (typeof window === 'undefined') return DEFAULT_VISIBLE_COLUMNS
+  try {
+    const stored = localStorage.getItem(LS_KEY_COLUMNS)
+    if (stored) {
+      const parsed = JSON.parse(stored) as ColumnKey[]
+      if (Array.isArray(parsed) && parsed.every(c => ALL_TOGGLEABLE_COLUMNS.includes(c))) {
+        return parsed
+      }
+    }
+  } catch { /* ignore */ }
+  return DEFAULT_VISIBLE_COLUMNS
+}
+
+// Settings icon
+const SettingsIcon = ({ size = 14 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" strokeLinecap="round" strokeLinejoin="round" />
+    <circle cx="12" cy="12" r="3" />
+  </svg>
+)
 
 export interface Trader {
   id: string
@@ -220,7 +256,7 @@ const TraderRow = memo(function TraderRow({
       tabIndex={0}
     >
       <Box
-        className="ranking-row ranking-table-grid touch-target"
+        className="ranking-row ranking-table-grid ranking-table-grid-custom touch-target"
         role="row"
         style={{
           display: 'grid',
@@ -380,6 +416,45 @@ export default function RankingTable(props: {
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
   const itemsPerPage = 20 // 每页显示 20 条
 
+  // Column customization
+  const [visibleColumns, setVisibleColumns] = useState<ColumnKey[]>(DEFAULT_VISIBLE_COLUMNS)
+  const [showColumnSettings, setShowColumnSettings] = useState(false)
+
+  // Load stored columns on mount
+  useEffect(() => {
+    setVisibleColumns(getStoredColumns())
+  }, [])
+
+  const toggleColumn = (col: ColumnKey) => {
+    setVisibleColumns(prev => {
+      const next = prev.includes(col)
+        ? prev.filter(c => c !== col)
+        : [...prev, col]
+      // Ensure at least one column is visible
+      if (next.length === 0) return prev
+      localStorage.setItem(LS_KEY_COLUMNS, JSON.stringify(next))
+      return next
+    })
+  }
+
+  const resetColumns = () => {
+    setVisibleColumns(DEFAULT_VISIBLE_COLUMNS)
+    localStorage.setItem(LS_KEY_COLUMNS, JSON.stringify(DEFAULT_VISIBLE_COLUMNS))
+  }
+
+  // Compute dynamic grid template for desktop based on visible columns
+  const desktopGridTemplate = React.useMemo(() => {
+    let template = '44px minmax(140px, 1.5fr)' // Rank + Trader (always visible)
+    if (visibleColumns.includes('score')) template += ' 64px'
+    if (visibleColumns.includes('roi')) template += ' 90px'
+    if (visibleColumns.includes('winrate')) template += ' 70px'
+    if (visibleColumns.includes('mdd')) template += ' 70px'
+    return template
+  }, [visibleColumns])
+
+  // Virtual scrolling ref
+  const virtualListRef = useRef<HTMLDivElement>(null)
+
   // Inject styles on mount
   useEffect(() => {
     injectStyles()
@@ -409,7 +484,18 @@ export default function RankingTable(props: {
       return sortDir === 'desc' ? bVal - aVal : aVal - bVal
     })
   }, [traders, sortColumn, sortDir])
-  
+
+  // Virtual scrolling for large datasets
+  const useVirtualScroll = sortedTraders.length > 50
+
+  // Scroll to top when sort changes (for virtual list)
+  useEffect(() => {
+    if (useVirtualScroll && virtualListRef.current) {
+      const scrollContainer = virtualListRef.current.querySelector('[style*="overflow"]') as HTMLElement
+      if (scrollContainer) scrollContainer.scrollTop = 0
+    }
+  }, [sortColumn, sortDir, useVirtualScroll])
+
   // 计算分页
   const totalPages = Math.ceil(sortedTraders.length / itemsPerPage)
   const startIndex = (currentPage - 1) * itemsPerPage
@@ -485,6 +571,19 @@ export default function RankingTable(props: {
   }
 
   return (
+    <>
+    {/* Dynamic grid template override for column customization */}
+    <style>{`
+      @media (min-width: 768px) {
+        .ranking-table-grid-custom {
+          grid-template-columns: ${desktopGridTemplate} !important;
+        }
+        ${!visibleColumns.includes('score') ? '.ranking-table-grid-custom .col-score { display: none !important; }' : ''}
+        ${!visibleColumns.includes('winrate') ? '.ranking-table-grid-custom .col-winrate { display: none !important; }' : ''}
+        ${!visibleColumns.includes('mdd') ? '.ranking-table-grid-custom .col-mdd { display: none !important; }' : ''}
+        ${!visibleColumns.includes('roi') ? '.ranking-table-grid-custom .roi-cell { display: none !important; }' : ''}
+      }
+    `}</style>
     <Box
       className="glass-card"
       p={0}
@@ -618,6 +717,91 @@ export default function RankingTable(props: {
               {!isPro && <LockIconSmall size={8} />}
             </Link>
 
+            {/* 列设置按钮 */}
+            <Box style={{ position: 'relative' }}>
+              <Box
+                onClick={() => setShowColumnSettings(!showColumnSettings)}
+                title={language === 'en' ? 'Column Settings' : '列设置'}
+                className="touch-target-sm"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: 32,
+                  height: 32,
+                  borderRadius: tokens.radius.md,
+                  background: showColumnSettings ? 'var(--color-pro-glow)' : 'var(--color-bg-tertiary)',
+                  border: showColumnSettings ? '1px solid var(--color-pro-gradient-start)' : '1px solid var(--color-border-secondary)',
+                  color: showColumnSettings ? 'var(--color-pro-gradient-start)' : 'var(--color-text-secondary)',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                }}
+              >
+                <SettingsIcon size={14} />
+              </Box>
+              {/* Column Settings Dropdown */}
+              {showColumnSettings && (
+                <Box
+                  style={{
+                    position: 'absolute',
+                    top: '100%',
+                    right: 0,
+                    marginTop: tokens.spacing[2],
+                    padding: tokens.spacing[3],
+                    background: tokens.colors.bg.primary,
+                    border: `1px solid ${tokens.colors.border.primary}`,
+                    borderRadius: tokens.radius.lg,
+                    boxShadow: tokens.shadow.lg,
+                    zIndex: tokens.zIndex.dropdown,
+                    minWidth: 180,
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>
+                    {language === 'zh' ? '列设置' : 'Column Settings'}
+                  </Text>
+                  {ALL_TOGGLEABLE_COLUMNS.map(col => (
+                    <label
+                      key={col}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: tokens.spacing[2],
+                        padding: `${tokens.spacing[1]} 0`,
+                        cursor: 'pointer',
+                        fontSize: tokens.typography.fontSize.sm,
+                        color: tokens.colors.text.primary,
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={visibleColumns.includes(col)}
+                        onChange={() => toggleColumn(col)}
+                        style={{ cursor: 'pointer' }}
+                      />
+                      {language === 'zh' ? COLUMN_LABELS[col].zh : COLUMN_LABELS[col].en}
+                    </label>
+                  ))}
+                  <button
+                    onClick={resetColumns}
+                    style={{
+                      marginTop: tokens.spacing[2],
+                      padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
+                      fontSize: tokens.typography.fontSize.xs,
+                      color: tokens.colors.accent.primary,
+                      background: 'transparent',
+                      border: `1px solid ${tokens.colors.accent.primary}40`,
+                      borderRadius: tokens.radius.sm,
+                      cursor: 'pointer',
+                      width: '100%',
+                    }}
+                  >
+                    {language === 'zh' ? '恢复默认' : 'Reset to Default'}
+                  </button>
+                </Box>
+              )}
+            </Box>
+
             {/* 导出按钮 */}
             {isPro && traders.length > 0 && (
               <ExportButton
@@ -642,7 +826,7 @@ export default function RankingTable(props: {
 
       {/* Header - 增大字体和间距 */}
       <Box
-        className="ranking-table-header ranking-table-grid"
+        className="ranking-table-header ranking-table-grid ranking-table-grid-custom"
         style={{
           display: 'grid',
           gap: tokens.spacing[2],
@@ -702,6 +886,7 @@ export default function RankingTable(props: {
           Score <SortIndicator active={sortColumn === 'score'} dir={sortDir} />
         </Box>
         <Box
+          className="roi-cell"
           as="button"
           onClick={() => handleSort('roi')}
           title={language === 'zh' ? `ROI: 投资回报率 (${timeRange})` : `ROI: Return on Investment (${timeRange})`}
@@ -848,6 +1033,28 @@ export default function RankingTable(props: {
         >
           {t('noTraderData')}
         </Box>
+      ) : useVirtualScroll ? (
+        /* Virtual scrolling for large datasets (>50 traders) */
+        <div ref={virtualListRef}>
+          <VirtualList
+            items={sortedTraders}
+            itemHeight={72}
+            height={600}
+            overscan={5}
+            keyExtractor={(trader, idx) => `${trader.id}-${trader.source || 'unknown'}-${idx}`}
+            renderItem={(trader, idx) => (
+              <TraderRow
+                trader={trader}
+                rank={idx + 1}
+                source={source}
+                language={language}
+                getMedalGlowClass={getMedalGlowClass}
+                parseSourceInfo={parseSourceInfo}
+                getPnLTooltipFn={getPnLTooltip}
+              />
+            )}
+          />
+        </div>
       ) : (
         <>
           <Box style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
@@ -869,7 +1076,7 @@ export default function RankingTable(props: {
               )
             })}
           </Box>
-          
+
           {/* 分页控件 */}
           {totalPages > 1 && (
             <Box
@@ -1041,5 +1248,6 @@ export default function RankingTable(props: {
         </>
       )}
     </Box>
+    </>
   )
 }
