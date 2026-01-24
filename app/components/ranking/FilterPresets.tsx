@@ -27,14 +27,6 @@ export const PRESETS: PresetConfig[] = [
     label: { zh: '高收益', en: 'High ROI' },
     filter: (t) => t.roi > 100,
   },
-  {
-    id: 'web3',
-    label: { zh: '链上', en: 'Web3' },
-    filter: (t) => {
-      const src = (t.source || '').toLowerCase()
-      return src.includes('web3') || src === 'gmx'
-    },
-  },
 ]
 
 interface FilterPresetsProps {
