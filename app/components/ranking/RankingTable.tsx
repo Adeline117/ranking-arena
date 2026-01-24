@@ -318,7 +318,7 @@ const TraderRow = memo(function TraderRow({
                 const info = parseSourceInfo(trader.source || source || '')
                 return (
                   <Box style={{ padding: '2px 6px', borderRadius: tokens.radius.sm, background: `${info.typeColor}15`, border: `1px solid ${info.typeColor}30` }}>
-                    <Text size="xs" weight="bold" style={{ color: info.typeColor, fontSize: '9px', lineHeight: 1.2 }}>
+                    <Text size="xs" weight="bold" style={{ color: info.typeColor, fontSize: '10px', lineHeight: 1.2 }}>
                       {info.type}
                     </Text>
                   </Box>
@@ -350,7 +350,7 @@ const TraderRow = memo(function TraderRow({
           <Text size="md" weight="black" className="roi-value" style={{ color: (trader.roi || 0) >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error, lineHeight: 1.2, fontSize: '16px', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis' }} title={`${(trader.roi || 0) >= 0 ? '+' : ''}${(trader.roi || 0).toFixed(2)}%`}>
             {formatROI(trader.roi || 0)}
           </Text>
-          <Text size="xs" weight="semibold" className="pnl-value" style={{ color: trader.pnl != null ? (trader.pnl >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error) : tokens.colors.text.tertiary, lineHeight: 1.2, fontSize: '11px', opacity: trader.pnl != null ? 0.85 : 0.5, cursor: trader.pnl != null ? 'help' : 'default' }} title={trader.pnl != null ? getPnLTooltipFn(trader.source || source || '', language) : undefined}>
+          <Text size="xs" weight="semibold" className="pnl-value" style={{ color: trader.pnl != null ? (trader.pnl >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error) : tokens.colors.text.tertiary, lineHeight: 1.2, fontSize: '12px', opacity: trader.pnl != null ? 0.85 : 0.5, cursor: trader.pnl != null ? 'help' : 'default' }} title={trader.pnl != null ? getPnLTooltipFn(trader.source || source || '', language) : undefined}>
             {trader.pnl != null ? `${trader.pnl >= 0 ? '+' : ''}${formatPnL(trader.pnl)}` : '—'}
           </Text>
         </Box>

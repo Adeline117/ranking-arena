@@ -711,6 +711,13 @@
   grid-template-columns: 1fr !important;
 }
 
+@media (max-width: 767px) {
+  .content-sidebar-grid {
+    gap: 12px !important;
+    padding: 12px 10px !important;
+  }
+}
+
 /* 平板及以上：2列 */
 @media (min-width: 768px) {
   .content-sidebar-grid {
@@ -795,23 +802,38 @@
     min-height: 72px !important;
     padding: 16px 12px !important;
   }
-  
+
   .ranking-row .trader-avatar {
     width: 40px !important;
     height: 40px !important;
   }
-  
+
   .ranking-row .roi-value {
     font-size: 17px !important;
   }
-  
+
   .ranking-row .pnl-value {
     font-size: 12px !important;
   }
-  
-  /* 排行榜卡片 */
+
+  /* Reduce rank column width to save space */
+  .ranking-table-grid {
+    grid-template-columns: 32px 1fr 76px !important;
+    gap: 6px !important;
+  }
+
+  /* Header: prevent wrapping, readable size */
   .ranking-table-header {
-    padding: 12px !important;
+    padding: 10px !important;
+    gap: 6px !important;
+  }
+
+  /* Make toolbar buttons 40px touch targets */
+  .touch-target-sm {
+    min-width: 36px !important;
+    min-height: 36px !important;
+    width: 36px !important;
+    height: 36px !important;
   }
 }
 
@@ -979,6 +1001,32 @@
 @media (min-width: 1024px) {
   .fab-container {
     right: 40px !important;
+  }
+}
+
+/* ============================================
+   Trading stats 4-column grid
+   ============================================ */
+
+.trading-stats-grid {
+  grid-template-columns: repeat(2, 1fr) !important;
+}
+
+@media (min-width: 640px) {
+  .trading-stats-grid {
+    grid-template-columns: repeat(4, 1fr) !important;
+  }
+}
+
+/* ============================================
+   Trader/User page container mobile padding
+   ============================================ */
+
+@media (max-width: 767px) {
+  .page-container {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+    padding-top: 16px !important;
   }
 }
 
