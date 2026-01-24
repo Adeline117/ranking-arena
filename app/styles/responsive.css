@@ -586,6 +586,12 @@
     align-items: center !important;
     text-align: center;
   }
+
+  .profile-header-avatar {
+    width: 56px !important;
+    height: 56px !important;
+    font-size: 16px !important;
+  }
 }
 
 /* ============================================
