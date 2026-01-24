@@ -22,7 +22,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     // 获取帖子，验证是否是作者
     const { data: post, error: postError } = await supabase
       .from('posts')
-      .select('id, author_id, is_pinned')
+      .select('id, author_id, is_pinned, group_id')
       .eq('id', postId)
       .single()
 
@@ -30,8 +30,24 @@ export async function POST(request: NextRequest, context: RouteContext) {
       throw new Error('帖子不存在')
     }
 
-    if (post.author_id !== user.id) {
-      throw new Error('只有作者可以置顶帖子')
+    // Check authorization: author OR group admin/owner
+    let authorized = post.author_id === user.id
+
+    if (!authorized && post.group_id) {
+      const { data: membership } = await supabase
+        .from('group_members')
+        .select('role')
+        .eq('group_id', post.group_id)
+        .eq('user_id', user.id)
+        .maybeSingle()
+
+      if (membership?.role === 'owner' || membership?.role === 'admin') {
+        authorized = true
+      }
+    }
+
+    if (!authorized) {
+      throw new Error('无权置顶此帖子')
     }
 
     // 切换置顶状态
@@ -47,18 +63,32 @@ export async function POST(request: NextRequest, context: RouteContext) {
       throw new Error('更新置顶状态失败: ' + updateError.message)
     }
 
-    // 如果成功置顶了，取消该用户其他帖子的置顶
+    // If pinning, unpin other posts in the same context
     if (newPinnedState) {
-      const { error: unpinError } = await supabase
-        .from('posts')
-        .update({ is_pinned: false })
-        .eq('author_id', user.id)
-        .eq('is_pinned', true)
-        .neq('id', postId)  // 排除刚刚置顶的帖子
+      if (post.group_id) {
+        // In a group, only one pinned post per group
+        const { error: unpinError } = await supabase
+          .from('posts')
+          .update({ is_pinned: false })
+          .eq('group_id', post.group_id)
+          .eq('is_pinned', true)
+          .neq('id', postId)
 
-      if (unpinError) {
-        // Log but don't fail - the main operation succeeded
-        console.error('Failed to unpin other posts:', unpinError)
+        if (unpinError) {
+          console.error('Failed to unpin other posts:', unpinError)
+        }
+      } else {
+        // Personal pin: unpin user's other posts
+        const { error: unpinError } = await supabase
+          .from('posts')
+          .update({ is_pinned: false })
+          .eq('author_id', user.id)
+          .eq('is_pinned', true)
+          .neq('id', postId)
+
+        if (unpinError) {
+          console.error('Failed to unpin other posts:', unpinError)
+        }
       }
     }
 

@@ -1,61 +1,98 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useState, Suspense } from 'react'
+import { useEffect, useState, Suspense, lazy } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/layout/TopNav'
-import RankingTableCompact from '@/app/components/ranking/RankingTableCompact'
 import PostFeed from '@/app/components/post/PostFeed'
 import Card from '@/app/components/ui/Card'
 import { Box, Text, Button } from '@/app/components/base'
-import type { Trader } from '@/app/components/ranking/RankingTable'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
-import { RankingSkeleton } from '@/app/components/ui/Skeleton'
+import { RankingSkeleton, SkeletonCard } from '@/app/components/ui/Skeleton'
 import { useToast } from '@/app/components/ui/Toast'
+import { ErrorBoundary } from '@/app/components/Providers/ErrorBoundary'
+import ProFeaturesPanel from '@/app/components/premium/ProFeaturesPanel'
+import { useSubscription } from '@/app/components/home/hooks/useSubscription'
+
+const MarketPanel = lazy(() => import('@/app/components/home/MarketPanel'))
 
 type Group = {
   id: string
   name: string
+  name_en?: string | null
   avatar_url?: string | null
   member_count?: number | null
 }
 
-function GroupsList() {
+type PopularTrader = {
+  source: string
+  source_trader_id: string
+  handle?: string | null
+  avatar_url?: string | null
+  followers?: number | null
+  roi?: number | null
+}
+
+function PopularTraders() {
   const { language } = useLanguage()
   const { showToast } = useToast()
-  const [groups, setGroups] = useState<Group[]>([])
+  const [traders, setTraders] = useState<PopularTrader[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [hoveredGroup, setHoveredGroup] = useState<string | null>(null)
+  const [hoveredTrader, setHoveredTrader] = useState<string | null>(null)
 
   useEffect(() => {
     const load = async () => {
       try {
         setError(null)
         const { data, error: supabaseError } = await supabase
-          .from('groups')
-          .select('id, name, avatar_url, member_count')
-          .order('member_count', { ascending: false, nullsFirst: false })
+          .from('trader_sources')
+          .select('source, source_trader_id, handle, avatar_url, roi, arena_score')
+          .order('arena_score', { ascending: false, nullsFirst: false })
           .limit(10)
 
         if (supabaseError) {
-          const errorMsg = language === 'zh' 
-            ? '加载小组列表失败，请稍后重试' 
-            : 'Failed to load groups, please try again later'
+          const errorMsg = language === 'zh'
+            ? '加载热门交易员失败，请稍后重试'
+            : 'Failed to load popular traders, please try again later'
           setError(errorMsg)
           showToast(errorMsg, 'error')
-          console.error('Error loading groups:', JSON.stringify(supabaseError))
+          return
         }
-        setGroups(data || [])
+
+        // Fetch followers from latest snapshots for display
+        const traderKeys = (data || []).map(t => t.source_trader_id)
+        let followersMap: Record<string, number> = {}
+        if (traderKeys.length > 0) {
+          const { data: snapshots } = await supabase
+            .from('trader_snapshots')
+            .select('source_trader_id, followers')
+            .in('source_trader_id', traderKeys)
+            .order('captured_at', { ascending: false })
+            .limit(traderKeys.length)
+
+          if (snapshots) {
+            for (const s of snapshots) {
+              if (!followersMap[s.source_trader_id] && s.followers != null) {
+                followersMap[s.source_trader_id] = s.followers
+              }
+            }
+          }
+        }
+
+        setTraders((data || []).map(t => ({
+          ...t,
+          followers: followersMap[t.source_trader_id] ?? null,
+        })))
       } catch (err) {
         const errorMsg = language === 'zh'
           ? '网络错误，请检查网络连接后重试'
           : 'Network error, please check your connection and try again'
         setError(errorMsg)
         showToast(errorMsg, 'error')
-        console.error('Error loading groups:', err)
+        console.error('Error loading popular traders:', err)
       } finally {
         setLoading(false)
       }
@@ -78,70 +115,40 @@ function GroupsList() {
         <Text size="sm" style={{ color: '#DC2626', marginBottom: tokens.spacing[2] }}>
           {error}
         </Text>
-        <Button 
-          variant="secondary" 
-          size="sm"
-          onClick={() => {
-            setLoading(true)
-            setError(null)
-            const load = async () => {
-              try {
-                const { data, error: supabaseError } = await supabase
-                  .from('groups')
-                  .select('id, name, avatar_url, member_count')
-                  .order('member_count', { ascending: false, nullsFirst: false })
-                  .limit(10)
-                if (supabaseError) {
-                  const errorMsg = language === 'zh' 
-                    ? '加载小组列表失败，请稍后重试' 
-                    : 'Failed to load groups, please try again later'
-                  setError(errorMsg)
-                  showToast(errorMsg, 'error')
-                } else {
-                  setGroups(data || [])
-                }
-              } catch (_err) {
-                const errorMsg = language === 'zh'
-                  ? '网络错误，请检查网络连接后重试'
-                  : 'Network error, please check your connection and try again'
-                setError(errorMsg)
-                showToast(errorMsg, 'error')
-              } finally {
-                setLoading(false)
-              }
-            }
-            load()
-          }}
-        >
+        <Button variant="secondary" size="sm" onClick={() => window.location.reload()}>
           {language === 'zh' ? '重试' : 'Retry'}
         </Button>
       </Box>
     )
   }
 
-  if (groups.length === 0) {
+  if (traders.length === 0) {
     return (
       <Text size="sm" color="tertiary" style={{ padding: tokens.spacing[4], textAlign: 'center' }}>
-        {language === 'zh' ? '暂无小组' : 'No groups available'}
+        {language === 'zh' ? '暂无数据' : 'No data available'}
       </Text>
     )
   }
 
   return (
     <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
-      {groups.map((group, _idx) => {
-        const isHovered = hoveredGroup === group.id
+      {traders.map((trader, index) => {
+        const traderId = `${trader.source}-${trader.source_trader_id}`
+        const isHovered = hoveredTrader === traderId
+        const displayName = trader.handle || trader.source_trader_id.slice(0, 8)
+        const href = trader.handle ? `/trader/${trader.handle}` : `/trader/${trader.source_trader_id}`
+
         return (
           <Link
-            key={group.id}
-            href={`/groups/${group.id}`}
+            key={traderId}
+            href={href}
             style={{
               display: 'flex',
               alignItems: 'center',
               gap: tokens.spacing[3],
               padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
               borderRadius: tokens.radius.lg,
-              background: isHovered 
+              background: isHovered
                 ? 'linear-gradient(135deg, rgba(139, 111, 168, 0.12) 0%, rgba(139, 111, 168, 0.05) 100%)'
                 : tokens.colors.bg.secondary,
               border: `1px solid ${isHovered ? 'rgba(139, 111, 168, 0.3)' : tokens.colors.border.primary}`,
@@ -149,102 +156,74 @@ function GroupsList() {
               color: tokens.colors.text.primary,
               transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
               cursor: 'pointer',
-              transform: isHovered ? 'translateX(6px) scale(1.02)' : 'translateX(0) scale(1)',
-              boxShadow: isHovered ? '0 8px 24px rgba(139, 111, 168, 0.15)' : 'none',
-              position: 'relative',
-              overflow: 'hidden',
+              transform: isHovered ? 'translateX(4px)' : 'translateX(0)',
             }}
-            onMouseEnter={() => setHoveredGroup(group.id)}
-            onMouseLeave={() => setHoveredGroup(null)}
+            onMouseEnter={() => setHoveredTrader(traderId)}
+            onMouseLeave={() => setHoveredTrader(null)}
           >
-            {/* Hover glow effect */}
-            {isHovered && (
-              <Box
-                style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  background: 'linear-gradient(90deg, transparent 0%, rgba(139, 111, 168, 0.08) 50%, transparent 100%)',
-                  pointerEvents: 'none',
-                }}
-              />
-            )}
-            
+            {/* Rank */}
+            <Text size="sm" weight="bold" style={{ color: index < 3 ? '#c9b8db' : tokens.colors.text.tertiary, width: 20, textAlign: 'center', flexShrink: 0 }}>
+              {index + 1}
+            </Text>
+
             {/* Avatar */}
             <Box
               style={{
-                width: 44,
-                height: 44,
-                borderRadius: tokens.radius.lg,
-                background: `linear-gradient(135deg, rgba(139, 111, 168, 0.2) 0%, rgba(139, 111, 168, 0.1) 100%)`,
-                border: isHovered 
-                  ? '2px solid rgba(139, 111, 168, 0.4)'
-                  : `1px solid ${tokens.colors.border.primary}`,
+                width: 36,
+                height: 36,
+                borderRadius: tokens.radius.full,
+                background: 'linear-gradient(135deg, rgba(139, 111, 168, 0.2) 0%, rgba(139, 111, 168, 0.1) 100%)',
+                border: `1px solid ${tokens.colors.border.primary}`,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 overflow: 'hidden',
                 flexShrink: 0,
-                transition: 'all 0.25s ease',
-                transform: isHovered ? 'scale(1.08)' : 'scale(1)',
-                boxShadow: isHovered ? '0 4px 12px rgba(139, 111, 168, 0.2)' : 'none',
               }}
             >
-              {group.avatar_url ? (
+              {trader.avatar_url ? (
                 <img
-                  src={group.avatar_url}
-                  alt={group.name}
+                  src={trader.avatar_url}
+                  alt={displayName}
                   style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                 />
               ) : (
-                <Text size="md" weight="bold" style={{ color: '#c9b8db' }}>
-                  {group.name.charAt(0).toUpperCase()}
+                <Text size="xs" weight="bold" style={{ color: '#c9b8db' }}>
+                  {displayName.charAt(0).toUpperCase()}
                 </Text>
               )}
             </Box>
 
             {/* Info */}
-            <Box style={{ flex: 1, minWidth: 0, position: 'relative', zIndex: 1 }}>
-              <Text 
-                size="sm" 
-                weight="bold" 
-                style={{ 
-                  marginBottom: tokens.spacing[1],
-                  color: isHovered ? '#c9b8db' : tokens.colors.text.primary,
-                  transition: 'color 0.2s ease',
+            <Box style={{ flex: 1, minWidth: 0 }}>
+              <Text size="sm" weight="bold" style={{ marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {displayName}
+              </Text>
+              <Box style={{ display: 'flex', gap: tokens.spacing[2], alignItems: 'center' }}>
+                <Text size="xs" color="tertiary">
+                  {trader.source}
+                </Text>
+                {trader.followers != null && (
+                  <Text size="xs" color="tertiary">
+                    {trader.followers.toLocaleString()} {language === 'zh' ? '跟单' : 'copiers'}
+                  </Text>
+                )}
+              </Box>
+            </Box>
+
+            {/* ROI */}
+            {trader.roi != null && (
+              <Text
+                size="xs"
+                weight="bold"
+                style={{
+                  color: Number(trader.roi) >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error,
+                  flexShrink: 0,
                 }}
               >
-                {group.name}
+                {Number(trader.roi) >= 0 ? '+' : ''}{Number(trader.roi).toFixed(1)}%
               </Text>
-              {group.member_count !== null && group.member_count !== undefined && (
-                <Text size="xs" color="tertiary" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <span style={{ 
-                    display: 'inline-block', 
-                    width: 6, 
-                    height: 6, 
-                    borderRadius: '50%', 
-                    background: isHovered ? '#8b6fa8' : tokens.colors.text.tertiary,
-                    transition: 'background 0.2s ease',
-                  }} />
-                  {group.member_count} {language === 'zh' ? '位成员' : 'members'}
-                </Text>
-              )}
-            </Box>
-            
-            {/* Arrow indicator on hover */}
-            <Box
-              style={{
-                opacity: isHovered ? 1 : 0,
-                transform: isHovered ? 'translateX(0)' : 'translateX(-8px)',
-                transition: 'all 0.25s ease',
-                color: '#8b6fa8',
-                fontSize: 16,
-              }}
-            >
-              →
-            </Box>
+            )}
           </Link>
         )
       })}
@@ -252,14 +231,309 @@ function GroupsList() {
   )
 }
 
+function GroupsList() {
+  const { language } = useLanguage()
+  const { showToast } = useToast()
+  const [groups, setGroups] = useState<Group[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [debouncedQuery, setDebouncedQuery] = useState('')
+  const [activeGroupTab, setActiveGroupTab] = useState<'all' | 'mine' | 'hot'>('all')
+  const [userId, setUserId] = useState<string | null>(null)
+  const [myGroupIds, setMyGroupIds] = useState<string[]>([])
+
+  // Get user for "Mine" tab
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      setUserId(data.user?.id ?? null)
+    })
+  }, [])
+
+  // Load user's group memberships
+  useEffect(() => {
+    if (!userId) return
+    const loadMemberships = async () => {
+      const { data } = await supabase
+        .from('group_members')
+        .select('group_id')
+        .eq('user_id', userId)
+      setMyGroupIds((data || []).map(m => m.group_id))
+    }
+    loadMemberships()
+  }, [userId])
+
+  // Debounce search query
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedQuery(searchQuery), 300)
+    return () => clearTimeout(timer)
+  }, [searchQuery])
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        setLoading(true)
+        setError(null)
+        let query = supabase
+          .from('groups')
+          .select('id, name, avatar_url, member_count, name_en')
+          .order('member_count', { ascending: false, nullsFirst: false })
+          .limit(20)
+
+        // Apply search filter
+        if (debouncedQuery) {
+          query = query.or(`name.ilike.%${debouncedQuery}%,name_en.ilike.%${debouncedQuery}%`)
+        }
+
+        // Apply tab filter
+        if (activeGroupTab === 'mine' && myGroupIds.length > 0) {
+          query = query.in('id', myGroupIds)
+        } else if (activeGroupTab === 'mine' && myGroupIds.length === 0) {
+          setGroups([])
+          setLoading(false)
+          return
+        }
+
+        const { data, error: supabaseError } = await query
+
+        if (supabaseError) {
+          setError(language === 'zh' ? '加载失败' : 'Failed to load')
+          showToast(language === 'zh' ? '加载小组列表失败' : 'Failed to load groups', 'error')
+        }
+        setGroups(data || [])
+      } catch (err) {
+        setError(language === 'zh' ? '网络错误' : 'Network error')
+        console.error('Error loading groups:', err)
+      } finally {
+        setLoading(false)
+      }
+    }
+    load()
+  }, [debouncedQuery, activeGroupTab, myGroupIds, language, showToast])
+
+  return (
+    <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
+      {/* Search input */}
+      <input
+        type="text"
+        value={searchQuery}
+        onChange={(e) => setSearchQuery(e.target.value)}
+        placeholder={language === 'zh' ? '搜索小组...' : 'Search groups...'}
+        style={{
+          width: '100%',
+          padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+          borderRadius: tokens.radius.md,
+          border: `1px solid ${tokens.colors.border.primary}`,
+          background: tokens.colors.bg.primary,
+          color: tokens.colors.text.primary,
+          fontSize: tokens.typography.fontSize.sm,
+        }}
+      />
+
+      {/* Tabs */}
+      <Box style={{ display: 'flex', gap: tokens.spacing[1] }}>
+        {(['all', 'mine', 'hot'] as const).map(tab => (
+          <button
+            key={tab}
+            onClick={() => setActiveGroupTab(tab)}
+            style={{
+              padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
+              borderRadius: tokens.radius.md,
+              border: 'none',
+              cursor: 'pointer',
+              background: activeGroupTab === tab ? `${tokens.colors.accent?.primary || '#8b6fa8'}20` : 'transparent',
+              color: activeGroupTab === tab ? tokens.colors.accent?.primary || '#8b6fa8' : tokens.colors.text.secondary,
+              fontSize: tokens.typography.fontSize.xs,
+              fontWeight: activeGroupTab === tab ? 'bold' : 'normal',
+            }}
+          >
+            {tab === 'all' ? (language === 'zh' ? '全部' : 'All')
+              : tab === 'mine' ? (language === 'zh' ? '我的' : 'Mine')
+              : (language === 'zh' ? '热门' : 'Hot')}
+          </button>
+        ))}
+      </Box>
+
+      {/* Results */}
+      {loading ? (
+        <Text size="sm" color="tertiary" style={{ padding: tokens.spacing[3], textAlign: 'center' }}>
+          {language === 'zh' ? '加载中...' : 'Loading...'}
+        </Text>
+      ) : error ? (
+        null
+      ) : groups.length === 0 ? (
+        <Text size="sm" color="tertiary" style={{ padding: tokens.spacing[3], textAlign: 'center' }}>
+          {debouncedQuery
+            ? (language === 'zh' ? '未找到匹配的小组' : 'No groups found')
+            : activeGroupTab === 'mine'
+              ? (language === 'zh' ? '还未加入任何小组' : 'Not joined any groups')
+              : (language === 'zh' ? '暂无小组' : 'No groups available')}
+        </Text>
+      ) : (
+        <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
+          {groups.map((group) => (
+            <Link
+              key={group.id}
+              href={`/groups/${group.id}`}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: tokens.spacing[2],
+                padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+                borderRadius: tokens.radius.md,
+                textDecoration: 'none',
+                color: tokens.colors.text.primary,
+                transition: 'background 0.15s ease',
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = tokens.colors.bg.tertiary }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+            >
+              <Box style={{
+                width: 28,
+                height: 28,
+                borderRadius: tokens.radius.md,
+                background: 'linear-gradient(135deg, rgba(139,111,168,0.2), rgba(139,111,168,0.1))',
+                border: `1px solid ${tokens.colors.border.primary}`,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                overflow: 'hidden',
+                flexShrink: 0,
+              }}>
+                {group.avatar_url ? (
+                  <img src={group.avatar_url} alt={group.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                ) : (
+                  <Text size="xs" weight="bold" style={{ color: '#c9b8db' }}>
+                    {group.name.charAt(0).toUpperCase()}
+                  </Text>
+                )}
+              </Box>
+              <Box style={{ flex: 1, minWidth: 0 }}>
+                <Text size="xs" weight="bold" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {group.name}
+                </Text>
+              </Box>
+              {group.member_count != null && (
+                <Text size="xs" color="tertiary" style={{ flexShrink: 0 }}>
+                  {group.member_count}
+                </Text>
+              )}
+            </Link>
+          ))}
+        </Box>
+      )}
+    </Box>
+  )
+}
+
+function MyGroups() {
+  const { language } = useLanguage()
+  const [groups, setGroups] = useState<Group[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const load = async () => {
+      const { data: userData } = await supabase.auth.getUser()
+      if (!userData.user) {
+        setLoading(false)
+        return
+      }
+
+      const { data: memberships } = await supabase
+        .from('group_members')
+        .select('group_id')
+        .eq('user_id', userData.user.id)
+
+      if (!memberships || memberships.length === 0) {
+        setLoading(false)
+        return
+      }
+
+      const groupIds = memberships.map(m => m.group_id)
+      const { data: groupsData } = await supabase
+        .from('groups')
+        .select('id, name, avatar_url, member_count')
+        .in('id', groupIds)
+
+      setGroups(groupsData || [])
+      setLoading(false)
+    }
+    load()
+  }, [])
+
+  if (loading) {
+    return (
+      <Text size="sm" color="tertiary" style={{ padding: tokens.spacing[4], textAlign: 'center' }}>
+        {language === 'zh' ? '加载中...' : 'Loading...'}
+      </Text>
+    )
+  }
+
+  if (groups.length === 0) {
+    return (
+      <Text size="sm" color="tertiary" style={{ padding: tokens.spacing[4], textAlign: 'center' }}>
+        {language === 'zh' ? '还未加入任何小组' : 'Not joined any groups yet'}
+      </Text>
+    )
+  }
+
+  return (
+    <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
+      {groups.map((group) => (
+        <Link
+          key={group.id}
+          href={`/groups/${group.id}`}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: tokens.spacing[2],
+            padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+            borderRadius: tokens.radius.md,
+            textDecoration: 'none',
+            color: tokens.colors.text.primary,
+            transition: 'background 0.15s ease',
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = tokens.colors.bg.tertiary }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+        >
+          <Box style={{
+            width: 32,
+            height: 32,
+            borderRadius: tokens.radius.md,
+            background: 'linear-gradient(135deg, rgba(139,111,168,0.2), rgba(139,111,168,0.1))',
+            border: `1px solid ${tokens.colors.border.primary}`,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            overflow: 'hidden',
+            flexShrink: 0,
+          }}>
+            {group.avatar_url ? (
+              <img src={group.avatar_url} alt={group.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            ) : (
+              <Text size="xs" weight="bold" style={{ color: '#c9b8db' }}>
+                {group.name.charAt(0).toUpperCase()}
+              </Text>
+            )}
+          </Box>
+          <Box style={{ flex: 1, minWidth: 0 }}>
+            <Text size="xs" weight="bold" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {group.name}
+            </Text>
+          </Box>
+        </Link>
+      ))}
+    </Box>
+  )
+}
+
 function GroupsContent() {
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
   const searchParams = useSearchParams()
   const initialPostId = searchParams.get('post')
   const [email, setEmail] = useState<string | null>(null)
   const [loggedIn, setLoggedIn] = useState(false)
-  const [traders, setTraders] = useState<Trader[]>([])
-  const [loadingTraders, setLoadingTraders] = useState(true)
+  const { isPro } = useSubscription()
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -268,49 +542,11 @@ function GroupsContent() {
     })
   }, [])
 
-  // 加载交易员数据 - 使用统一的 API
-  useEffect(() => {
-    const load = async () => {
-      setLoadingTraders(true)
-      try {
-        const response = await fetch('/api/traders?timeRange=90D')
-        const json = await response.json()
-        
-        // API 返回格式是 { traders: [...] }
-        const tradersData = json.traders || json.data || []
-        if (tradersData.length > 0) {
-          // 取前10名
-          const top10 = tradersData.slice(0, 10).map((item: any) => ({
-            id: item.id || item.source_trader_id,
-            handle: item.handle || item.source_trader_id,
-            roi: item.roi || 0,
-            pnl: item.pnl || 0,
-            win_rate: item.win_rate || 0,
-            max_drawdown: item.max_drawdown,
-            followers: item.followers || 0,
-            source: item.source || 'binance',
-          }))
-          setTraders(top10)
-        } else {
-          setTraders([])
-        }
-      } catch (error) {
-        console.error('加载排行榜失败:', error)
-        // 排行榜加载失败不影响页面，静默处理
-        setTraders([])
-      } finally {
-        setLoadingTraders(false)
-      }
-    }
-    load()
-  }, [])
-
   return (
     <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
       <TopNav email={email} />
-      
+
       <Box as="main" className="container-padding" px={4} py={6} style={{ maxWidth: 1200, margin: '0 auto' }}>
-        {/* 响应式三栏布局 */}
         <style jsx global>{`
           .groups-page-grid {
             display: grid;
@@ -319,55 +555,38 @@ function GroupsContent() {
           }
           @media (min-width: 768px) {
             .groups-page-grid {
-              grid-template-columns: 1fr 280px;
+              grid-template-columns: 260px 1fr;
             }
-            .groups-page-grid .left-sidebar {
+            .groups-page-grid .right-sidebar {
               display: none;
             }
           }
           @media (min-width: 1024px) {
             .groups-page-grid {
-              grid-template-columns: 260px 1fr 280px;
+              grid-template-columns: 240px 1fr 240px;
             }
-            .groups-page-grid .left-sidebar {
+            .groups-page-grid .right-sidebar {
               display: block;
             }
           }
           @media (max-width: 767px) {
-            .groups-page-grid .right-sidebar {
+            .groups-page-grid .left-sidebar {
               order: -1;
             }
           }
         `}</style>
         <Box className="groups-page-grid">
-          {/* 左：排名前十 - 仅桌面端显示 */}
-          <Box as="section" className="left-sidebar">
-            <Card title={t('top10')}>
-              <RankingTableCompact traders={traders} loading={loadingTraders} loggedIn={loggedIn} />
+          {/* 左：热门交易员 + 小组推荐 + 市场 */}
+          <Box as="section" className="left-sidebar" style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}>
+            {/* 热门交易员 */}
+            <Card title={language === 'zh' ? '热门交易员' : 'Popular Traders'}>
+              <PopularTraders />
             </Card>
-          </Box>
 
-          {/* 中：算法推荐帖子 */}
-          <Box as="section" className="main-content">
-            <Card title={t('recommendedPosts')}>
-              <Text size="sm" color="secondary" style={{ marginBottom: tokens.spacing[3] }}>
-                {loggedIn ? t('loggedInShowAll') : t('notLoggedInShowLimited')}
-              </Text>
-              <PostFeed variant={loggedIn ? 'full' : 'compact'} initialPostId={initialPostId} />
-            </Card>
-          </Box>
-
-          {/* 右：小组推荐 */}
-          <Box as="section" className="right-sidebar" style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}>
             {/* 小组推荐 */}
             <Card title={t('groupRecommendations')}>
-              <Text size="sm" color="secondary" style={{ marginBottom: tokens.spacing[3] }}>
-                {t('hotGroups')}
-              </Text>
               <GroupsList />
-              
-              {/* 申请创办小组按钮 */}
-              <Link href="/groups/apply" style={{ display: 'block', marginTop: tokens.spacing[4] }}>
+              <Link href="/groups/apply" style={{ display: 'block', marginTop: tokens.spacing[3] }}>
                 <Button
                   variant="secondary"
                   style={{
@@ -376,19 +595,46 @@ function GroupsContent() {
                     alignItems: 'center',
                     justifyContent: 'center',
                     gap: tokens.spacing[2],
-                    padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+                    padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
                     borderRadius: tokens.radius.lg,
                     border: `1px dashed ${tokens.colors.border.primary}`,
                     background: 'transparent',
                     color: tokens.colors.text.secondary,
                     cursor: 'pointer',
-                    transition: `all ${tokens.transition.base}`,
+                    fontSize: tokens.typography.fontSize.xs,
                   }}
                 >
-                  <span style={{ fontSize: '18px' }}>+</span>
+                  <span style={{ fontSize: '14px' }}>+</span>
                   {t('applyCreateGroup')}
                 </Button>
               </Link>
+            </Card>
+
+            {/* 市场数据 */}
+            <ErrorBoundary>
+              <Suspense fallback={<SkeletonCard />}>
+                <MarketPanel />
+              </Suspense>
+            </ErrorBoundary>
+          </Box>
+
+          {/* 中：帖子瀑布流 */}
+          <Box as="section" className="main-content">
+            <Card title={language === 'zh' ? '推荐动态' : 'Recommended'}>
+              <PostFeed layout="masonry" variant={loggedIn ? 'full' : 'compact'} initialPostId={initialPostId} />
+            </Card>
+          </Box>
+
+          {/* 右：Pro功能 + 我的小组 */}
+          <Box as="section" className="right-sidebar" style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}>
+            {/* Pro功能 - pro会员不显示 */}
+            {!isPro && (
+              <ProFeaturesPanel compact />
+            )}
+
+            {/* 我的小组 */}
+            <Card title={language === 'zh' ? '我的小组' : 'My Groups'}>
+              <MyGroups />
             </Card>
           </Box>
         </Box>

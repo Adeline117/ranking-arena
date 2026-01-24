@@ -62,6 +62,46 @@ type Rule = {
   en: string
 }
 
+function ActivityLogSection({ groupId }: { groupId: string }) {
+  const { language } = useLanguage()
+  const [activities, setActivities] = useState<Array<{ id: string; type: string; title: string; message: string; created_at: string; actor_id?: string }>>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    if (!groupId) return
+    const load = async () => {
+      setLoading(true)
+      const { data } = await supabase
+        .from('notifications')
+        .select('id, type, title, message, created_at, actor_id')
+        .eq('reference_id', groupId)
+        .eq('type', 'system')
+        .order('created_at', { ascending: false })
+        .limit(50)
+      setActivities(data || [])
+      setLoading(false)
+    }
+    load()
+  }, [groupId])
+
+  if (loading) return <Text size="sm" color="tertiary">{language === 'zh' ? '加载中...' : 'Loading...'}</Text>
+  if (activities.length === 0) return <Text size="sm" color="tertiary">{language === 'zh' ? '暂无活动' : 'No activity'}</Text>
+
+  return (
+    <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
+      {activities.map(activity => (
+        <Box key={activity.id} style={{ padding: tokens.spacing[2], background: tokens.colors.bg.secondary, borderRadius: tokens.radius.md, borderLeft: `3px solid ${tokens.colors.accent?.primary || '#8b6fa8'}` }}>
+          <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Text size="sm" weight="bold">{activity.title}</Text>
+            <Text size="xs" color="tertiary">{new Date(activity.created_at).toLocaleString(language === 'zh' ? 'zh-CN' : 'en-US')}</Text>
+          </Box>
+          <Text size="xs" color="secondary" style={{ marginTop: 2 }}>{activity.message}</Text>
+        </Box>
+      ))}
+    </Box>
+  )
+}
+
 export default function GroupManagePage({ params }: { params: { id: string } | Promise<{ id: string }> }) {
   const [groupId, setGroupId] = useState<string>('')
   
@@ -88,7 +128,7 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
   const [comments, setComments] = useState<Comment[]>([])
   const [userRole, setUserRole] = useState<'owner' | 'admin' | 'member' | null>(null)
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<'members' | 'content' | 'settings'>('members')
+  const [activeTab, setActiveTab] = useState<'members' | 'content' | 'settings' | 'activity'>('members')
   
   // 编辑小组信息状态
   const [editMode, setEditMode] = useState(false)
@@ -117,6 +157,13 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
 
   // 内容搜索
   const [contentSearch, setContentSearch] = useState('')
+
+  // Member search
+  const [memberSearch, setMemberSearch] = useState('')
+
+  // Invite link
+  const [inviteUrl, setInviteUrl] = useState<string | null>(null)
+  const [generatingInvite, setGeneratingInvite] = useState(false)
 
   // 禁言弹窗状态
   const [showMuteModal, setShowMuteModal] = useState<string | null>(null)
@@ -324,8 +371,8 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
 
       if (res.ok) {
         // 更新本地状态
-        setMembers(prev => prev.map(m => 
-          m.user_id === targetUserId 
+        setMembers(prev => prev.map(m =>
+          m.user_id === targetUserId
             ? { ...m, muted_until: muteUntil, mute_reason: muteReason }
             : m
         ))
@@ -333,8 +380,8 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
         setMuteReason('')
         showToast(language === 'zh' ? '禁言成功' : 'Muted successfully', 'success')
       } else {
-        const data = await res.json()
-        showToast(data.error || (language === 'zh' ? '操作失败' : 'Operation failed'), 'error')
+        const data = res.headers.get('content-type')?.includes('application/json') ? await res.json() : null
+        showToast(data?.error || (language === 'zh' ? '操作失败' : 'Operation failed'), 'error')
       }
     } catch (err) {
       console.error('Mute error:', err)
@@ -356,15 +403,15 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
       })
 
       if (res.ok) {
-        setMembers(prev => prev.map(m => 
-          m.user_id === targetUserId 
+        setMembers(prev => prev.map(m =>
+          m.user_id === targetUserId
             ? { ...m, muted_until: null, mute_reason: null }
             : m
         ))
         showToast(language === 'zh' ? '已解除禁言' : 'Unmuted successfully', 'success')
       } else {
-        const data = await res.json()
-        showToast(data.error || (language === 'zh' ? '操作失败' : 'Operation failed'), 'error')
+        const data = res.headers.get('content-type')?.includes('application/json') ? await res.json() : null
+        showToast(data?.error || (language === 'zh' ? '操作失败' : 'Operation failed'), 'error')
       }
     } catch (err) {
       console.error('Unmute error:', err)
@@ -403,8 +450,8 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
           'success'
         )
       } else {
-        const data = await res.json()
-        showToast(data.error || (language === 'zh' ? '发送失败' : 'Send failed'), 'error')
+        const data = res.headers.get('content-type')?.includes('application/json') ? await res.json() : null
+        showToast(data?.error || (language === 'zh' ? '发送失败' : 'Send failed'), 'error')
       }
     } catch (err) {
       console.error('Notify error:', err)
@@ -700,20 +747,89 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
               {language === 'zh' ? '小组设置' : 'Settings'}
             </button>
           )}
+            <button
+              onClick={() => setActiveTab('activity')}
+              style={{
+                padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
+                borderRadius: tokens.radius.lg,
+                border: 'none',
+                cursor: 'pointer',
+                background: activeTab === 'activity' ? `${tokens.colors.accent?.primary || '#8b6fa8'}20` : 'transparent',
+                color: activeTab === 'activity' ? tokens.colors.accent?.primary || '#8b6fa8' : tokens.colors.text.secondary,
+                fontSize: tokens.typography.fontSize.sm,
+                fontWeight: activeTab === 'activity' ? tokens.typography.fontWeight.bold : tokens.typography.fontWeight.normal,
+                transition: `all ${tokens.transition.base}`,
+              }}
+            >
+              {language === 'zh' ? '活动日志' : 'Activity'}
+            </button>
         </Box>
 
         {/* 成员管理 */}
         {activeTab === 'members' && (
           <Card title={language === 'zh' ? `成员列表 (${members.length})` : `Members (${members.length})`}>
-            {/* 通知成员按钮 */}
-            <Box style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: tokens.spacing[3] }}>
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={() => setShowNotifyModal(true)}
-              >
-                {language === 'zh' ? '通知成员' : 'Notify Members'}
-              </Button>
+            {/* Member search + actions */}
+            <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3], marginBottom: tokens.spacing[3] }}>
+              <Box style={{ display: 'flex', gap: tokens.spacing[2], flexWrap: 'wrap' }}>
+                <input
+                  type="text"
+                  value={memberSearch}
+                  onChange={(e) => setMemberSearch(e.target.value)}
+                  placeholder={language === 'zh' ? '搜索成员...' : 'Search members...'}
+                  style={{
+                    flex: 1,
+                    minWidth: 150,
+                    padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+                    borderRadius: tokens.radius.md,
+                    border: `1px solid ${tokens.colors.border.primary}`,
+                    background: tokens.colors.bg.primary,
+                    color: tokens.colors.text.primary,
+                    fontSize: tokens.typography.fontSize.sm,
+                  }}
+                />
+                <Button variant="primary" size="sm" onClick={() => setShowNotifyModal(true)}>
+                  {language === 'zh' ? '通知成员' : 'Notify'}
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={generatingInvite}
+                  onClick={async () => {
+                    setGeneratingInvite(true)
+                    try {
+                      const res = await fetch(`/api/groups/${groupId}/invite`, {
+                        method: 'POST',
+                        headers: { Authorization: `Bearer ${accessToken}`, ...getCsrfHeaders() }
+                      })
+                      if (res.ok) {
+                        const data = await res.json()
+                        if (data.invite_url) {
+                          const fullUrl = `${window.location.origin}${data.invite_url}`
+                          setInviteUrl(fullUrl)
+                          await navigator.clipboard.writeText(fullUrl)
+                          showToast(language === 'zh' ? '邀请链接已复制' : 'Invite link copied', 'success')
+                        } else {
+                          showToast(language === 'zh' ? '生成失败' : 'Failed to generate', 'error')
+                        }
+                      } else {
+                        const data = res.headers.get('content-type')?.includes('application/json') ? await res.json() : null
+                        showToast(data?.error || (language === 'zh' ? '生成失败' : 'Failed to generate'), 'error')
+                      }
+                    } catch {
+                      showToast(language === 'zh' ? '网络错误' : 'Network error', 'error')
+                    } finally {
+                      setGeneratingInvite(false)
+                    }
+                  }}
+                >
+                  {generatingInvite ? '...' : (language === 'zh' ? '邀请链接' : 'Invite Link')}
+                </Button>
+              </Box>
+              {inviteUrl && (
+                <Box style={{ padding: tokens.spacing[2], background: tokens.colors.bg.primary, borderRadius: tokens.radius.md, border: `1px solid ${tokens.colors.border.primary}` }}>
+                  <Text size="xs" color="tertiary" style={{ wordBreak: 'break-all' }}>{inviteUrl}</Text>
+                </Box>
+              )}
             </Box>
             <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
               {members.length === 0 && (
@@ -721,7 +837,7 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
                   {language === 'zh' ? '暂无成员数据' : 'No members data'}
                 </Text>
               )}
-              {members.map((member) => {
+              {members.filter(m => !memberSearch || (m.handle || '').toLowerCase().includes(memberSearch.toLowerCase())).map((member) => {
                 const isMuted = member.muted_until && new Date(member.muted_until) > new Date()
                 // 兼容旧数据：在没有 owner 角色的情况下，如果用户是创建者就是组长
                 const memberIsOwner = member.role === 'owner' || (member.role === 'admin' && group?.created_by === member.user_id)
@@ -837,6 +953,37 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
                               : (language === 'zh' ? '设为管理员' : 'Make Admin')}
                           </Button>
                         )}
+
+                        {/* Kick member */}
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={async () => {
+                            const confirmed = await showDangerConfirm(
+                              language === 'zh' ? '踢出成员' : 'Kick Member',
+                              language === 'zh' ? `确定将 @${member.handle || 'Unknown'} 移出小组吗？` : `Are you sure you want to kick @${member.handle || 'Unknown'}?`
+                            )
+                            if (!confirmed) return
+                            try {
+                              const res = await fetch(`/api/groups/${groupId}/members/${member.user_id}/kick`, {
+                                method: 'POST',
+                                headers: { Authorization: `Bearer ${accessToken}`, ...getCsrfHeaders() }
+                              })
+                              if (res.ok) {
+                                setMembers(prev => prev.filter(m => m.user_id !== member.user_id))
+                                showToast(language === 'zh' ? '已踢出' : 'Kicked', 'success')
+                              } else {
+                                const data = res.headers.get('content-type')?.includes('application/json') ? await res.json() : null
+                                showToast(data?.error || (language === 'zh' ? '操作失败' : 'Failed'), 'error')
+                              }
+                            } catch {
+                              showToast(language === 'zh' ? '网络错误' : 'Network error', 'error')
+                            }
+                          }}
+                          style={{ color: '#ff6b6b' }}
+                        >
+                          {language === 'zh' ? '踢出' : 'Kick'}
+                        </Button>
                       </Box>
                     )}
                   </Box>
@@ -1532,6 +1679,13 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
                 )}
               </Box>
             </Box>
+          </Card>
+        )}
+
+        {/* Activity Log */}
+        {activeTab === 'activity' && (
+          <Card title={language === 'zh' ? '活动日志' : 'Activity Log'}>
+            <ActivityLogSection groupId={groupId} />
           </Card>
         )}
 

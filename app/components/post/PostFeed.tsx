@@ -235,7 +235,7 @@ function AvatarLink({ handle, avatarUrl }: { handle?: string | null; avatarUrl?:
 
 type SortType = 'time' | 'likes'
 
-export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?: string; authorHandle?: string; initialPostId?: string | null; showSortButtons?: boolean } = {}) {
+export default function PostFeed(props: { variant?: 'compact' | 'full'; layout?: 'list' | 'masonry'; groupId?: string; authorHandle?: string; initialPostId?: string | null; showSortButtons?: boolean } = {}) {
   const { t, language } = useLanguage()
   const { showToast } = useToast()
   const { showDangerConfirm } = useDialog()
@@ -1722,7 +1722,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
           </button>
         </div>
       )}
-      <div>
+      <div style={props.layout === 'masonry' ? { columns: 2, columnGap: 12 } : undefined} className={props.layout === 'masonry' ? 'post-feed-masonry' : undefined}>
         {/* 只在个人主页（有 authorHandle）时才将置顶帖子排在最上面 */}
         {(props.authorHandle ? [...posts].sort((a, b) => {
           // 置顶帖子优先（仅在个人主页生效）
@@ -1735,6 +1735,8 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
           const _label = pollLabel(winner, t)
           const _color = pollColor(winner)
 
+          const isMasonry = props.layout === 'masonry'
+
           return (
             <div
               key={p.id}
@@ -1743,7 +1745,17 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
                 if ((e.target as HTMLElement).closest('a, button, [role="button"], input, textarea, select')) return
                 handleOpenPost(p)
               }}
-              style={{
+              style={isMasonry ? {
+                breakInside: 'avoid',
+                marginBottom: 12,
+                padding: tokens.spacing[3],
+                borderRadius: tokens.radius.lg,
+                background: tokens.colors.bg.secondary,
+                border: `1px solid ${tokens.colors.border.primary}`,
+                cursor: 'pointer',
+                color: tokens.colors.text.primary,
+                transition: 'transform 0.2s ease, box-shadow 0.2s ease',
+              } : {
                 width: '100%',
                 textAlign: 'left',
                 border: 'none',
@@ -1755,10 +1767,20 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; groupId?
                 transition: `background-color ${tokens.transition.base}`,
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.background = tokens.colors.bg.secondary
+                if (isMasonry) {
+                  e.currentTarget.style.transform = 'translateY(-2px)'
+                  e.currentTarget.style.boxShadow = '0 6px 20px rgba(139,111,168,0.15)'
+                } else {
+                  e.currentTarget.style.background = tokens.colors.bg.secondary
+                }
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'transparent'
+                if (isMasonry) {
+                  e.currentTarget.style.transform = 'translateY(0)'
+                  e.currentTarget.style.boxShadow = 'none'
+                } else {
+                  e.currentTarget.style.background = 'transparent'
+                }
               }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>

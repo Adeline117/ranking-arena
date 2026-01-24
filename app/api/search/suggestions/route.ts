@@ -40,33 +40,33 @@ export const GET = withPublic(
 
     const suggestions: SearchSuggestion[] = []
 
-    // 搜索交易员（从 trader_sources 表）
+    // 搜索交易员（从 trader_sources_v2 表）
     const { data: traders } = await supabase
-      .from('trader_sources')
-      .select('source_trader_id, handle, source, profile_url')
-      .or(`handle.ilike.%${sanitizedQuery}%,source_trader_id.ilike.%${sanitizedQuery}%`)
+      .from('trader_sources_v2')
+      .select('trader_key, display_name, platform, profile_url')
+      .or(`display_name.ilike.%${sanitizedQuery}%,trader_key.ilike.%${sanitizedQuery}%`)
+      .eq('is_active', true)
       .limit(limit)
 
     if (traders?.length) {
-      // 获取这些交易员的最新快照数据（ROI）
-      const traderIds = traders.map(t => t.source_trader_id)
+      // 获取最新快照数据（ROI）
+      const traderKeys = traders.map(t => t.trader_key)
       const { data: snapshots } = await supabase
-        .from('trader_snapshots')
-        .select('source_trader_id, source, roi, season_id')
-        .in('source_trader_id', traderIds)
-        .eq('season_id', '90D')
-        .order('captured_at', { ascending: false })
+        .from('trader_snapshots_v2')
+        .select('trader_key, platform, roi_pct, window')
+        .in('trader_key', traderKeys)
+        .eq('window', '90d')
+        .order('as_of_ts', { ascending: false })
 
       // 构建 ROI 映射
       const roiMap = new Map<string, number>()
       snapshots?.forEach(s => {
-        const key = `${s.source}:${s.source_trader_id}`
-        if (!roiMap.has(key)) {
-          roiMap.set(key, s.roi)
+        const key = `${s.platform}:${s.trader_key}`
+        if (!roiMap.has(key) && s.roi_pct != null) {
+          roiMap.set(key, s.roi_pct)
         }
       })
 
-      // 交易所名称映射
       const sourceLabels: Record<string, string> = {
         'binance_futures': 'Binance',
         'binance_spot': 'Binance',
@@ -82,19 +82,19 @@ export const GET = withPublic(
       }
 
       traders.forEach(trader => {
-        const key = `${trader.source}:${trader.source_trader_id}`
+        const key = `${trader.platform}:${trader.trader_key}`
         const roi = roiMap.get(key)
-        const exchangeName = sourceLabels[trader.source] || trader.source
+        const exchangeName = sourceLabels[trader.platform] || trader.platform
 
         suggestions.push({
           type: 'trader',
-          value: trader.handle || trader.source_trader_id,
-          label: `@${trader.handle || trader.source_trader_id}`,
+          value: trader.display_name || trader.trader_key,
+          label: `@${trader.display_name || trader.trader_key}`,
           subLabel: roi !== undefined
             ? `${exchangeName} · ROI ${roi >= 0 ? '+' : ''}${roi.toFixed(1)}%`
             : exchangeName,
           avatar: trader.profile_url,
-          source: trader.source,
+          source: trader.platform,
           roi,
         })
       })

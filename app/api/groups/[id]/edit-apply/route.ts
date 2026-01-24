@@ -4,20 +4,33 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js'
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 
-// 检查用户是否是小组组长
+// 检查用户是否是小组组长（兼容旧数据：admin + 创建者也视为组长）
 async function isGroupOwner(
-  supabase: SupabaseClient<any>, 
-  groupId: string, 
+  supabase: SupabaseClient<any>,
+  groupId: string,
   userId: string
 ): Promise<boolean> {
-  const { data } = await supabase
+  const { data: memberData } = await supabase
     .from('group_members')
     .select('role')
     .eq('group_id', groupId)
     .eq('user_id', userId)
     .maybeSingle()
-  
-  return data?.role === 'owner'
+
+  if (memberData?.role === 'owner') return true
+
+  // 兼容旧数据：如果用户是 admin 且是小组创建者，也视为组长
+  if (memberData?.role === 'admin') {
+    const { data: groupData } = await supabase
+      .from('groups')
+      .select('created_by')
+      .eq('id', groupId)
+      .single()
+
+    if (groupData?.created_by === userId) return true
+  }
+
+  return false
 }
 
 // 提交小组信息修改申请
@@ -58,17 +71,34 @@ export async function POST(
       return NextResponse.json({ error: '您已有待审核的修改申请，请等待审核结果' }, { status: 400 })
     }
 
-    const body = await request.json()
-    const { 
-      name, 
-      name_en, 
-      description, 
-      description_en, 
+    let body: {
+      name?: string
+      name_en?: string
+      description?: string
+      description_en?: string
+      avatar_url?: string
+      rules_json?: unknown
+      rules?: string
+      rules_en?: string
+      role_names?: unknown
+      is_premium_only?: boolean
+    }
+    try {
+      body = await request.json()
+    } catch {
+      return NextResponse.json({ error: '请求格式错误' }, { status: 400 })
+    }
+    const {
+      name,
+      name_en,
+      description,
+      description_en,
       avatar_url,
       rules_json,
       rules,
       rules_en,
-      role_names
+      role_names,
+      is_premium_only
     } = body
 
     // 验证
@@ -95,6 +125,7 @@ export async function POST(
         rules: rules || null,
         rules_en: rules_en || null,
         role_names: role_names || null,
+        is_premium_only: is_premium_only ?? null,
         status: 'pending'
       })
       .select()

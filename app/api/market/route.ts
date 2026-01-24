@@ -36,9 +36,8 @@ const PAIRS: Pair[] = [
   { symbol: 'DOT-USD', cgId: 'polkadot', cbProduct: 'DOT-USD' },
 ]
 
-// ---- 简单内存缓存（60s）----
-// 注意：在 Serverless 环境可能会被重置（但仍然能显著减少调用）。
-let cache: { ts: number; rows: MarketRow[]; source: string } | null = null
+// ---- 内存缓存（按 pairs key 缓存）----
+const cacheMap = new Map<string, { ts: number; rows: MarketRow[]; source: string }>()
 
 function formatRow(symbol: string, priceNum: number, pctNum: number): MarketRow {
   const direction: 'up' | 'down' = pctNum >= 0 ? 'up' : 'down'
@@ -66,46 +65,37 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const pairsParam = searchParams.get('pairs')
-    
-    // 检查内存缓存（如果存在且未过期）
-    if (cache && Date.now() - cache.ts < TTL_MS) {
-      return NextResponse.json({ rows: cache.rows })
-    }
-    
-    // 如果提供了自定义pairs，使用它们；否则使用默认PAIRS
+
+    // 确定目标 pairs
     let targetPairs = PAIRS
     if (pairsParam) {
       const requestedPairs = pairsParam.split(',').filter(Boolean)
-      // 只使用在PAIRS中存在的币种
       targetPairs = PAIRS.filter((p) => requestedPairs.includes(p.symbol))
       if (targetPairs.length === 0) {
-        targetPairs = PAIRS // 如果都不存在，回退到默认
+        targetPairs = PAIRS
       }
     }
 
-    // 1) 命中缓存直接返回（如果请求的pairs与缓存一致）
+    // 缓存 key 基于请求的 pairs
+    const cacheKey = targetPairs.map(p => p.symbol).sort().join(',')
     const now = Date.now()
-    if (cache && now - cache.ts < TTL_MS && !pairsParam) {
-      return NextResponse.json({ rows: cache.rows, source: cache.source, cached: true })
+    const cached = cacheMap.get(cacheKey)
+
+    // 命中缓存直接返回
+    if (cached && now - cached.ts < TTL_MS) {
+      return NextResponse.json({ rows: cached.rows, source: cached.source, cached: true })
     }
 
-    // 2) 先主源 CoinGecko
+    // 先尝试 CoinGecko
     try {
       const rows = await fetchFromCoinGeckoForPairs(targetPairs)
-      
-      if (!pairsParam) {
-        cache = { ts: now, rows, source: 'coingecko' }
-      }
+      cacheMap.set(cacheKey, { ts: now, rows, source: 'coingecko' })
       return NextResponse.json(
         { rows, source: 'coingecko', cached: false },
-        {
-          headers: {
-            'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300',
-          },
-        }
+        { headers: { 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300' } }
       )
     } catch (e1) {
-      // 3) fallback 到 Coinbase（包括 429 速率限制错误）
+      // Fallback 到 Coinbase
       const errorMessage = e1 instanceof Error ? e1.message : String(e1)
       const isRateLimit = errorMessage.includes('429') || errorMessage.includes('Rate limit')
       if (isRateLimit) {
@@ -113,36 +103,28 @@ export async function GET(request: NextRequest) {
       } else {
         logger.warn('CoinGecko 失败, 尝试 Coinbase', { error: errorMessage })
       }
-      
+
+      // 如果有过期缓存，429 时优先返回过期数据
+      if (isRateLimit && cached) {
+        return NextResponse.json({ rows: cached.rows, source: cached.source, cached: true, stale: true })
+      }
+
       try {
         const rows = await fetchFromCoinbaseForPairs(targetPairs)
-        
-        if (!pairsParam) {
-          cache = { ts: now, rows, source: 'coinbase' }
-        }
+        cacheMap.set(cacheKey, { ts: now, rows, source: 'coinbase' })
         return NextResponse.json(
-          {
-            rows,
-            source: 'coinbase',
-            cached: false,
-            warning: isRateLimit 
-              ? 'CoinGecko rate limit exceeded, using Coinbase' 
-              : `Primary failed: ${errorMessage}`,
-          },
-          {
-            headers: {
-              'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300',
-            },
-          }
+          { rows, source: 'coinbase', cached: false },
+          { headers: { 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300' } }
         )
       } catch (e2: unknown) {
-        const errorMessage = e2 instanceof Error ? e2.message : 'unknown error'
-        logger.error('Coinbase 也失败', { error: errorMessage })
+        // 最后手段：返回过期缓存
+        if (cached) {
+          return NextResponse.json({ rows: cached.rows, source: cached.source, cached: true, stale: true })
+        }
+        const e2Msg = e2 instanceof Error ? e2.message : 'unknown error'
+        logger.error('Coinbase 也失败', { error: e2Msg })
         return NextResponse.json(
-          { 
-            rows: [], 
-            error: `Both sources failed. CoinGecko: ${e1 instanceof Error ? e1.message : 'unknown'}, Coinbase: ${errorMessage}` 
-          },
+          { rows: [], error: `Both sources failed. CoinGecko: ${errorMessage}, Coinbase: ${e2Msg}` },
           { status: 500 }
         )
       }

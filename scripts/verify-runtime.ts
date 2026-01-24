@@ -594,7 +594,7 @@ async function verifyTraderDetailAPI(client: Client) {
     `, [platform, traderKey]),
     client.query(`
       SELECT series_type, data, as_of_ts
-      FROM trader_timeseries_v2
+      FROM trader_timeseries
       WHERE platform = $1 AND trader_key = $2
     `, [platform, traderKey]),
   ])
@@ -819,7 +819,7 @@ async function runV2Verification(client: Client) {
       (SELECT COUNT(*) FROM trader_sources_v2) AS sources,
       (SELECT COUNT(*) FROM trader_profiles_v2) AS profiles,
       (SELECT COUNT(*) FROM trader_snapshots_v2) AS snapshots,
-      (SELECT COUNT(*) FROM trader_timeseries_v2) AS timeseries,
+      (SELECT COUNT(*) FROM trader_timeseries) AS timeseries,
       (SELECT COUNT(*) FROM refresh_jobs) AS jobs
   `)
   console.log('[DB] Table counts:', counts.rows[0])

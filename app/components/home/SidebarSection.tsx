@@ -9,6 +9,7 @@ import { ErrorBoundary } from '../Providers/ErrorBoundary'
 import { SkeletonCard } from '../ui/Skeleton'
 import { useLanguage } from '../Providers/LanguageProvider'
 import ProFeaturesPanel from '../premium/ProFeaturesPanel'
+import { useSubscription } from './hooks/useSubscription'
 
 // 懒加载组件
 const PostFeed = lazy(() => import('../post/PostFeed'))
@@ -25,6 +26,7 @@ interface SidebarSectionProps {
  */
 export default function SidebarSection({ position }: SidebarSectionProps) {
   const { t } = useLanguage()
+  const { isPro } = useSubscription()
 
   if (position === 'left') {
     return (
@@ -101,18 +103,20 @@ export default function SidebarSection({ position }: SidebarSectionProps) {
         gap: tokens.spacing[4],
       }}
     >
-      {/* Pro 功能面板 - 可滚动区域 */}
-      <Box
-        style={{
-          flex: 1,
-          overflowY: 'auto',
-          minHeight: 0,
-          paddingRight: tokens.spacing[1],
-        }}
-        className="scrollbar-thin"
-      >
-        <ProFeaturesPanel compact />
-      </Box>
+      {/* Pro 功能面板 - pro会员不显示 */}
+      {!isPro && (
+        <Box
+          style={{
+            flex: 1,
+            overflowY: 'auto',
+            minHeight: 0,
+            paddingRight: tokens.spacing[1],
+          }}
+          className="scrollbar-thin"
+        >
+          <ProFeaturesPanel compact />
+        </Box>
+      )}
       
       {/* 市场数据 - 固定在底部 */}
       <Box style={{ flexShrink: 0 }}>

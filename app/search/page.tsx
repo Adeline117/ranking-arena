@@ -35,7 +35,7 @@ function SearchContent() {
   const [loading, setLoading] = useState(false)
   const [email, setEmail] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'all' | 'users' | 'traders' | 'posts' | 'groups'>('all')
-  const [_searchError, setSearchError] = useState(false)
+  const [searchError, setSearchError] = useState(false)
   const { showToast } = useToast()
 
   useEffect(() => {
@@ -86,6 +86,7 @@ function SearchContent() {
 
     const search = async () => {
       setLoading(true)
+      setSearchError(false)
       const results: SearchResult[] = []
 
       // 转义 LIKE 通配符防止注入
@@ -99,130 +100,97 @@ function SearchContent() {
       }
 
       try {
-        // 搜索用户（通过 handle 或 UID）
         const isNumericQuery = /^\d+$/.test(query.trim())
-        
-        if (isNumericQuery) {
-          // 按 UID 搜索
-          const { data: usersByUid } = await supabase
-            .from('user_profiles')
-            .select('id, handle, avatar_url, bio, uid')
-            .eq('uid', parseInt(query.trim()))
-            .limit(10)
-          
-          if (usersByUid) {
-            usersByUid.forEach((u: any) => {
-              results.push({
-                type: 'user',
-                id: u.id,
-                title: u.handle || '未设置昵称',
-                subtitle: u.bio?.substring(0, 80) || '',
-                meta: `UID: ${u.uid}`,
-                uid: u.uid,
-              })
+
+        // 并行查询所有数据源
+        const [usersData, tradersData, postsData, groupsData] = await Promise.all([
+          // 搜索用户
+          isNumericQuery
+            ? supabase.from('user_profiles').select('id, handle, avatar_url, bio, uid').eq('uid', parseInt(query.trim())).limit(10)
+            : supabase.from('user_profiles').select('id, handle, avatar_url, bio, uid').ilike('handle', `%${sanitizedQuery}%`).limit(10),
+          // 搜索交易者（v2 表）
+          supabase.from('trader_sources_v2').select('trader_key, display_name, platform').ilike('display_name', `%${sanitizedQuery}%`).limit(10),
+          // 搜索帖子
+          supabase.from('posts').select('id, title, content, author_handle, created_at').or(`title.ilike.%${sanitizedQuery}%,content.ilike.%${sanitizedQuery}%`).limit(10),
+          // 搜索小组
+          supabase.from('groups').select('id, name').ilike('name', `%${sanitizedQuery}%`).limit(10),
+        ])
+
+        // 处理用户结果
+        if (usersData.data) {
+          usersData.data.forEach((u: Record<string, unknown>) => {
+            results.push({
+              type: 'user',
+              id: u.id as string,
+              title: (u.handle as string) || '未设置昵称',
+              subtitle: ((u.bio as string) || '').substring(0, 80),
+              meta: u.uid ? `UID: ${u.uid}` : undefined,
+              uid: u.uid as number | undefined,
             })
-          }
-        } else {
-          // 按 handle 搜索
-          const { data: usersByHandle } = await supabase
-            .from('user_profiles')
-            .select('id, handle, avatar_url, bio, uid')
-            .ilike('handle', `%${sanitizedQuery}%`)
-            .limit(10)
-          
-          if (usersByHandle) {
-            usersByHandle.forEach((u: any) => {
-              results.push({
-                type: 'user',
-                id: u.id,
-                title: u.handle || '未设置昵称',
-                subtitle: u.bio?.substring(0, 80) || '',
-                meta: u.uid ? `UID: ${u.uid}` : undefined,
-                uid: u.uid,
-              })
-            })
-          }
+          })
         }
 
-        // 搜索交易者（包含排行榜数据）
-        const { data: traders } = await supabase
-          .from('trader_sources')
-          .select('source_trader_id, handle, source')
-          .ilike('handle', `%${sanitizedQuery}%`)
-          .limit(10)
-
+        // 处理交易员结果 - 批量获取快照数据
+        const traders = tradersData.data
         if (traders && traders.length > 0) {
-          // 批量获取所有交易员的快照数据（避免 N+1 查询）
-          const traderIds = traders.map(t => t.source_trader_id)
+          const traderKeys = traders.map(t => t.trader_key)
           const { data: allSnapshots } = await supabase
-            .from('trader_snapshots')
-            .select('source_trader_id, season_id, roi, pnl, arena_score, win_rate, max_drawdown, captured_at')
-            .in('source_trader_id', traderIds)
+            .from('trader_snapshots_v2')
+            .select('trader_key, window, roi_pct, arena_score, as_of_ts')
+            .in('trader_key', traderKeys)
             .not('arena_score', 'is', null)
-            .order('captured_at', { ascending: false })
+            .order('as_of_ts', { ascending: false })
 
-          // 构建每个 trader 的最佳快照映射（优先 90D > 30D > 7D）
-          const snapshotMap = new Map<string, { season_id: string; roi: number; arena_score: number }>()
-          const periodPriority: Record<string, number> = { '90D': 3, '30D': 2, '7D': 1 }
+          // 构建映射（优先 90d > 30d > 7d）
+          const snapshotMap = new Map<string, { window: string; roi_pct: number; arena_score: number }>()
+          const windowPriority: Record<string, number> = { '90d': 3, '30d': 2, '7d': 1 }
 
-          allSnapshots?.forEach((s: any) => {
-            const existing = snapshotMap.get(s.source_trader_id)
-            const currentPriority = periodPriority[s.season_id] || 0
-            const existingPriority = existing ? (periodPriority[existing.season_id] || 0) : 0
-
-            if (!existing || currentPriority > existingPriority) {
-              snapshotMap.set(s.source_trader_id, s)
+          allSnapshots?.forEach((s: Record<string, unknown>) => {
+            const key = s.trader_key as string
+            const existing = snapshotMap.get(key)
+            const currentP = windowPriority[s.window as string] || 0
+            const existingP = existing ? (windowPriority[existing.window] || 0) : 0
+            if (!existing || currentP > existingP) {
+              snapshotMap.set(key, { window: s.window as string, roi_pct: s.roi_pct as number, arena_score: s.arena_score as number })
             }
           })
 
           for (const trader of traders) {
-            const latest = snapshotMap.get(trader.source_trader_id)
+            const latest = snapshotMap.get(trader.trader_key)
+            const platformLabel = (trader.platform || '').replace(/_/g, ' ').toUpperCase()
             const subtitle = latest
-              ? `${latest.season_id}: ROI ${latest.roi?.toFixed(1)}% • Score ${latest.arena_score?.toFixed(1)}`
-              : `来源: ${String(trader.source || '').toUpperCase()}`
-
+              ? `${latest.window}: ROI ${latest.roi_pct?.toFixed(1)}% • Score ${latest.arena_score?.toFixed(1)}`
+              : platformLabel
             results.push({
               type: 'trader',
-              id: trader.source_trader_id,
-              title: trader.handle,
+              id: trader.trader_key,
+              title: trader.display_name || trader.trader_key,
               subtitle,
-              meta: latest ? `来源: ${String(trader.source || '').toUpperCase()}` : undefined,
+              meta: platformLabel || undefined,
             })
           }
         }
 
-        // 搜索帖子
-        const { data: posts } = await supabase
-          .from('posts')
-          .select('id, title, content, author_handle, created_at')
-          .or(`title.ilike.%${sanitizedQuery}%,content.ilike.%${sanitizedQuery}%`)
-          .limit(10)
-
-        if (posts) {
-          posts.forEach((p: any) => {
+        // 处理帖子结果
+        if (postsData.data) {
+          postsData.data.forEach((p: Record<string, unknown>) => {
             results.push({
               type: 'post',
-              id: p.id,
-              title: p.title,
-              subtitle: p.content?.substring(0, 100),
-              meta: `作者: ${p.author_handle || '未知'}`,
+              id: p.id as string,
+              title: (p.title as string) || '',
+              subtitle: ((p.content as string) || '').substring(0, 100),
+              meta: `作者: ${(p.author_handle as string) || '未知'}`,
             })
           })
         }
 
-        // 搜索小组
-        const { data: groups } = await supabase
-          .from('groups')
-          .select('id, name')
-          .ilike('name', `%${sanitizedQuery}%`)
-          .limit(10)
-
-        if (groups) {
-          groups.forEach((g: any) => {
+        // 处理小组结果
+        if (groupsData.data) {
+          groupsData.data.forEach((g: Record<string, unknown>) => {
             results.push({
               type: 'group',
-              id: g.id,
-              title: g.name,
+              id: g.id as string,
+              title: (g.name as string) || '',
               subtitle: '',
             })
           })
@@ -343,6 +311,11 @@ function SearchContent() {
 
         {loading ? (
           <RankingSkeleton />
+        ) : searchError ? (
+          <EmptyState
+            title="搜索失败"
+            description="请稍后重试"
+          />
         ) : !query ? (
           <EmptyState 
             title="开始搜索"
