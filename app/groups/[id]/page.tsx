@@ -18,6 +18,7 @@ import GroupHeader from './ui/GroupHeader'
 import GroupPostList from './ui/GroupPostList'
 import { GroupInfoModal, MembersListModal } from './ui/GroupMembersSection'
 import { useGroupPosts } from './hooks/useGroupPosts'
+import PullToRefreshWrapper from '@/app/components/ui/PullToRefreshWrapper'
 
 type Group = {
   id: string
@@ -544,6 +545,10 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
         }}
       >
         {/* Main Content */}
+        <PullToRefreshWrapper
+          onRefresh={async () => { await postsHook.loadPosts() }}
+          disabled={!isMember}
+        >
         <Box>
           <GroupHeader
             group={group}
@@ -655,6 +660,7 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
             </Link>
           )}
         </Box>
+        </PullToRefreshWrapper>
 
         {/* Right Sidebar */}
         <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}>

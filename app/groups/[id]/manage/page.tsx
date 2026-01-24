@@ -158,8 +158,19 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
   // 内容搜索
   const [contentSearch, setContentSearch] = useState('')
 
-  // Member search
+  // Member search + pagination
   const [memberSearch, setMemberSearch] = useState('')
+  const [debouncedMemberSearch, setDebouncedMemberSearch] = useState('')
+  const [memberPage, setMemberPage] = useState(0)
+  const [memberRoleFilter, setMemberRoleFilter] = useState<'all' | 'owner' | 'admin' | 'member'>('all')
+  const [memberTotal, setMemberTotal] = useState(0)
+  const MEMBERS_PER_PAGE = 20
+
+  // Post pagination
+  const [postsPage, setPostsPage] = useState(0)
+  const [hasMorePosts, setHasMorePosts] = useState(false)
+  const [loadingMorePosts, setLoadingMorePosts] = useState(false)
+  const POSTS_PER_PAGE = 20
 
   // Invite link
   const [inviteUrl, setInviteUrl] = useState<string | null>(null)
@@ -183,6 +194,20 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
       setAccessToken(data.session?.access_token ?? null)
     })
   }, [])
+
+  // Debounce member search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedMemberSearch(memberSearch)
+      setMemberPage(0)
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [memberSearch])
+
+  // Reset member page when role filter changes
+  useEffect(() => {
+    setMemberPage(0)
+  }, [memberRoleFilter])
 
   // 加载数据
   useEffect(() => {
@@ -295,19 +320,21 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
           }
         }
 
-        // 获取帖子
+        // 获取帖子 (paginated)
         const { data: postsData, error: postsError } = await supabase
           .from('posts')
           .select('id, title, content, author_handle, created_at')
           .eq('group_id', groupId)
           .order('created_at', { ascending: false })
-          .limit(50)
+          .limit(POSTS_PER_PAGE)
 
         if (postsError) {
           console.error('Error loading posts:', postsError)
         }
 
-        setPosts((postsData || []).map(p => ({ ...p, deleted_at: null })) as Post[])
+        const loadedPosts = (postsData || []).map(p => ({ ...p, deleted_at: null })) as Post[]
+        setPosts(loadedPosts)
+        setHasMorePosts(loadedPosts.length === POSTS_PER_PAGE)
 
         // 获取评论
         const postIds = (postsData || []).map(p => p.id)
@@ -557,6 +584,34 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
     }
   }
 
+  // 加载更多帖子
+  const loadMorePosts = async () => {
+    if (loadingMorePosts || !hasMorePosts || posts.length === 0) return
+    setLoadingMorePosts(true)
+    try {
+      const lastPost = posts[posts.length - 1]
+      const { data } = await supabase
+        .from('posts')
+        .select('id, title, content, author_handle, created_at')
+        .eq('group_id', groupId)
+        .lt('created_at', lastPost.created_at)
+        .order('created_at', { ascending: false })
+        .limit(POSTS_PER_PAGE)
+
+      if (data && data.length > 0) {
+        const newPosts = data.map(p => ({ ...p, deleted_at: null })) as Post[]
+        setPosts(prev => [...prev, ...newPosts])
+        setHasMorePosts(data.length === POSTS_PER_PAGE)
+      } else {
+        setHasMorePosts(false)
+      }
+    } catch (err) {
+      console.error('Load more posts error:', err)
+    } finally {
+      setLoadingMorePosts(false)
+    }
+  }
+
   // 添加规则
   const addRule = () => {
     const zhText = newRuleZh.trim()
@@ -768,7 +823,7 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
         {/* 成员管理 */}
         {activeTab === 'members' && (
           <Card title={language === 'zh' ? `成员列表 (${members.length})` : `Members (${members.length})`}>
-            {/* Member search + actions */}
+            {/* Member search + role filter + actions */}
             <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3], marginBottom: tokens.spacing[3] }}>
               <Box style={{ display: 'flex', gap: tokens.spacing[2], flexWrap: 'wrap' }}>
                 <input
@@ -778,7 +833,7 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
                   placeholder={language === 'zh' ? '搜索成员...' : 'Search members...'}
                   style={{
                     flex: 1,
-                    minWidth: 150,
+                    minWidth: 120,
                     padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
                     borderRadius: tokens.radius.md,
                     border: `1px solid ${tokens.colors.border.primary}`,
@@ -787,6 +842,24 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
                     fontSize: tokens.typography.fontSize.sm,
                   }}
                 />
+                <select
+                  value={memberRoleFilter}
+                  onChange={(e) => setMemberRoleFilter(e.target.value as 'all' | 'owner' | 'admin' | 'member')}
+                  style={{
+                    padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+                    borderRadius: tokens.radius.md,
+                    border: `1px solid ${tokens.colors.border.primary}`,
+                    background: tokens.colors.bg.primary,
+                    color: tokens.colors.text.primary,
+                    fontSize: tokens.typography.fontSize.sm,
+                    cursor: 'pointer',
+                  }}
+                >
+                  <option value="all">{language === 'zh' ? '全部角色' : 'All Roles'}</option>
+                  <option value="owner">{language === 'zh' ? '组长' : 'Owner'}</option>
+                  <option value="admin">{language === 'zh' ? '管理员' : 'Admin'}</option>
+                  <option value="member">{language === 'zh' ? '成员' : 'Member'}</option>
+                </select>
                 <Button variant="primary" size="sm" onClick={() => setShowNotifyModal(true)}>
                   {language === 'zh' ? '通知成员' : 'Notify'}
                 </Button>
@@ -837,7 +910,22 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
                   {language === 'zh' ? '暂无成员数据' : 'No members data'}
                 </Text>
               )}
-              {members.filter(m => !memberSearch || (m.handle || '').toLowerCase().includes(memberSearch.toLowerCase())).map((member) => {
+              {(() => {
+                const filtered = members
+                  .filter(m => memberRoleFilter === 'all' || m.role === memberRoleFilter)
+                  .filter(m => !debouncedMemberSearch || (m.handle || '').toLowerCase().includes(debouncedMemberSearch.toLowerCase()))
+                const totalFiltered = filtered.length
+                const totalMemberPages = Math.ceil(totalFiltered / MEMBERS_PER_PAGE)
+                const paginatedMembers = filtered.slice(memberPage * MEMBERS_PER_PAGE, (memberPage + 1) * MEMBERS_PER_PAGE)
+
+                return (
+                  <>
+                    {paginatedMembers.length === 0 && members.length > 0 && (
+                      <Text color="tertiary" style={{ textAlign: 'center', padding: tokens.spacing[4] }}>
+                        {language === 'zh' ? '没有匹配的成员' : 'No matching members'}
+                      </Text>
+                    )}
+                    {paginatedMembers.map((member) => {
                 const isMuted = member.muted_until && new Date(member.muted_until) > new Date()
                 // 兼容旧数据：在没有 owner 角色的情况下，如果用户是创建者就是组长
                 const memberIsOwner = member.role === 'owner' || (member.role === 'admin' && group?.created_by === member.user_id)
@@ -989,6 +1077,35 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
                   </Box>
                 )
               })}
+                    {/* Member pagination controls */}
+                    {totalMemberPages > 1 && (
+                      <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: tokens.spacing[3], marginTop: tokens.spacing[4], paddingTop: tokens.spacing[3], borderTop: `1px solid ${tokens.colors.border.primary}` }}>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          disabled={memberPage === 0}
+                          onClick={() => setMemberPage(p => Math.max(0, p - 1))}
+                        >
+                          {language === 'zh' ? '上一页' : 'Prev'}
+                        </Button>
+                        <Text size="sm" color="secondary">
+                          {language === 'zh'
+                            ? `第 ${memberPage + 1} / ${totalMemberPages} 页`
+                            : `Page ${memberPage + 1} of ${totalMemberPages}`}
+                        </Text>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          disabled={memberPage >= totalMemberPages - 1}
+                          onClick={() => setMemberPage(p => Math.min(totalMemberPages - 1, p + 1))}
+                        >
+                          {language === 'zh' ? '下一页' : 'Next'}
+                        </Button>
+                      </Box>
+                    )}
+                  </>
+                )
+              })()}
             </Box>
           </Card>
         )}
@@ -1093,6 +1210,20 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
                       ? (language === 'zh' ? '没有匹配的帖子' : 'No matching posts')
                       : (language === 'zh' ? '暂无帖子' : 'No posts')}
                   </Text>
+                )}
+                {/* Load More button */}
+                {hasMorePosts && !contentSearch && (
+                  <Box style={{ textAlign: 'center', marginTop: tokens.spacing[3] }}>
+                    <Button
+                      variant="secondary"
+                      onClick={loadMorePosts}
+                      disabled={loadingMorePosts}
+                    >
+                      {loadingMorePosts
+                        ? (language === 'zh' ? '加载中...' : 'Loading...')
+                        : (language === 'zh' ? '加载更多' : 'Load More')}
+                    </Button>
+                  </Box>
                 )}
               </Box>
             </Card>
