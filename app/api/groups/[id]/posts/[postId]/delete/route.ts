@@ -99,6 +99,15 @@ export async function POST(
       }
     }
 
+    // Audit log (fire-and-forget)
+    void Promise.resolve(supabase.from('group_audit_log').insert({
+      group_id: groupId,
+      actor_id: user.id,
+      action: 'delete_post',
+      target_id: postId,
+      details: { reason: null }
+    })).catch(() => {})
+
     return NextResponse.json({ success: true })
 
   } catch (error) {

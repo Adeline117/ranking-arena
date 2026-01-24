@@ -1,0 +1,121 @@
+/**
+ * 2FA Verify API
+ * POST: Verify TOTP code and enable 2FA, generate backup codes
+ */
+
+import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
+import { verifyTotpCode, generateBackupCodes, hashBackupCode } from '@/lib/services/totp'
+
+export const dynamic = 'force-dynamic'
+
+function getSupabaseAdmin() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { persistSession: false } }
+  )
+}
+
+interface VerifyRequestBody {
+  code: string
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const authHeader = request.headers.get('authorization')
+    if (!authHeader?.startsWith('Bearer ')) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    const token = authHeader.substring(7)
+    const supabase = getSupabaseAdmin()
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token)
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const body = (await request.json()) as VerifyRequestBody
+    const { code } = body
+
+    if (!code || typeof code !== 'string') {
+      return NextResponse.json({ error: 'Missing or invalid code' }, { status: 400 })
+    }
+
+    // Get the stored TOTP secret
+    const { data: profile, error: profileError } = await supabase
+      .from('user_profiles')
+      .select('totp_secret, totp_enabled')
+      .eq('id', user.id)
+      .single()
+
+    if (profileError || !profile) {
+      console.error('[2FA Verify] Profile fetch error:', profileError)
+      return NextResponse.json({ error: 'Failed to fetch user profile' }, { status: 500 })
+    }
+
+    if (profile.totp_enabled) {
+      return NextResponse.json({ error: '2FA is already enabled' }, { status: 400 })
+    }
+
+    if (!profile.totp_secret) {
+      return NextResponse.json(
+        { error: 'No TOTP secret found. Please run setup first.' },
+        { status: 400 }
+      )
+    }
+
+    // Verify the code
+    const isValid = verifyTotpCode(profile.totp_secret, code)
+    if (!isValid) {
+      return NextResponse.json({ error: 'Invalid verification code' }, { status: 400 })
+    }
+
+    // Enable 2FA
+    const { error: updateError } = await supabase
+      .from('user_profiles')
+      .update({ totp_enabled: true })
+      .eq('id', user.id)
+
+    if (updateError) {
+      console.error('[2FA Verify] Enable error:', updateError)
+      return NextResponse.json({ error: 'Failed to enable 2FA' }, { status: 500 })
+    }
+
+    // Generate backup codes
+    const backupCodes = generateBackupCodes(8)
+    const hashedCodes = backupCodes.map((plainCode: string) => ({
+      user_id: user.id,
+      code_hash: hashBackupCode(plainCode),
+      used: false,
+    }))
+
+    // Delete any existing backup codes for this user
+    await supabase
+      .from('backup_codes')
+      .delete()
+      .eq('user_id', user.id)
+
+    // Store hashed backup codes
+    const { error: insertError } = await supabase
+      .from('backup_codes')
+      .insert(hashedCodes)
+
+    if (insertError) {
+      console.error('[2FA Verify] Backup codes insert error:', insertError)
+      // 2FA is already enabled, but backup codes failed - log but don't fail
+      return NextResponse.json({
+        success: true,
+        backupCodes: [],
+        warning: 'Backup codes could not be generated. Please regenerate them.',
+      })
+    }
+
+    return NextResponse.json({
+      success: true,
+      backupCodes,
+    })
+  } catch (error) {
+    console.error('[2FA Verify] Unexpected error:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}

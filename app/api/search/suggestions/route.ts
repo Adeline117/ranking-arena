@@ -1,10 +1,14 @@
 /**
  * 搜索建议 API
  * 提供交易员、交易对等的实时搜索建议
+ * - Redis 缓存热门查询 (TTL 60s)
+ * - PostgreSQL pg_trgm 模糊匹配
+ * - 搜索分析日志
  */
 
 import { withPublic } from '@/lib/api/middleware'
 import { success } from '@/lib/api/response'
+import { get as cacheGet, set as cacheSet } from '@/lib/cache'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,6 +20,7 @@ interface SearchSuggestion {
   avatar?: string | null
   source?: string
   roi?: number
+  arenaScore?: number
 }
 
 export const GET = withPublic(
@@ -26,6 +31,17 @@ export const GET = withPublic(
 
     if (!query || query.length < 1) {
       return success({ suggestions: [] })
+    }
+
+    // Check Redis cache for hot queries
+    const cacheKey = `search:suggestions:${query.toLowerCase().slice(0, 50)}`
+    try {
+      const cached = await cacheGet<{ suggestions: SearchSuggestion[]; query: string }>(cacheKey)
+      if (cached) {
+        return success(cached)
+      }
+    } catch {
+      // Cache miss or error, continue with DB query
     }
 
     // 限制查询长度并转义 PostgREST 特殊字符，防止注入
@@ -40,7 +56,7 @@ export const GET = withPublic(
 
     const suggestions: SearchSuggestion[] = []
 
-    // 搜索交易员（从 trader_sources_v2 表）
+    // 搜索交易员（从 trader_sources_v2 表，利用 pg_trgm 模糊匹配）
     const { data: traders } = await supabase
       .from('trader_sources_v2')
       .select('trader_key, display_name, platform, profile_url')
@@ -49,21 +65,25 @@ export const GET = withPublic(
       .limit(limit)
 
     if (traders?.length) {
-      // 获取最新快照数据（ROI）
+      // 获取最新快照数据（ROI + Arena Score）
       const traderKeys = traders.map(t => t.trader_key)
       const { data: snapshots } = await supabase
         .from('trader_snapshots_v2')
-        .select('trader_key, platform, roi_pct, window')
+        .select('trader_key, platform, roi_pct, arena_score, window')
         .in('trader_key', traderKeys)
         .eq('window', '90d')
         .order('as_of_ts', { ascending: false })
 
-      // 构建 ROI 映射
+      // 构建 ROI 和 Arena Score 映射
       const roiMap = new Map<string, number>()
+      const scoreMap = new Map<string, number>()
       snapshots?.forEach(s => {
         const key = `${s.platform}:${s.trader_key}`
         if (!roiMap.has(key) && s.roi_pct != null) {
           roiMap.set(key, s.roi_pct)
+        }
+        if (!scoreMap.has(key) && s.arena_score != null) {
+          scoreMap.set(key, s.arena_score)
         }
       })
 
@@ -84,6 +104,7 @@ export const GET = withPublic(
       traders.forEach(trader => {
         const key = `${trader.platform}:${trader.trader_key}`
         const roi = roiMap.get(key)
+        const arenaScore = scoreMap.get(key)
         const exchangeName = sourceLabels[trader.platform] || trader.platform
 
         suggestions.push({
@@ -96,6 +117,7 @@ export const GET = withPublic(
           avatar: trader.profile_url,
           source: trader.platform,
           roi,
+          arenaScore,
         })
       })
     }
@@ -131,10 +153,30 @@ export const GET = withPublic(
       return order[a.type] - order[b.type]
     })
 
-    return success({
+    const result = {
       suggestions: suggestions.slice(0, limit),
       query,
-    })
+    }
+
+    // Cache the result for 60 seconds
+    try {
+      await cacheSet(cacheKey, result, { ttl: 60 })
+    } catch {
+      // Cache write failure is non-critical
+    }
+
+    // Log search analytics asynchronously (fire-and-forget)
+    void Promise.resolve(
+      supabase
+        .from('search_analytics')
+        .insert({
+          query: query.slice(0, 200),
+          result_count: suggestions.length,
+          source: 'dropdown',
+        })
+    ).catch(() => {})
+
+    return success(result)
   },
   { name: 'search-suggestions', rateLimit: 'read' }
 )
