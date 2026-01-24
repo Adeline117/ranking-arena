@@ -54,7 +54,7 @@ export default function MasonryPostCard({ post, language = 'zh', onLike, onComme
         )}
 
         {/* Content */}
-        <Box className="masonry-card-content" style={{ padding: tokens.spacing[3] }}>
+        <Box style={{ padding: tokens.spacing[3] }}>
           {/* Title */}
           <Text
             size="sm"
