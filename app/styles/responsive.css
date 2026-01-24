@@ -179,32 +179,29 @@
 }
 
 .ranking-table-grid .col-score,
-.ranking-table-grid .col-pnl,
 .ranking-table-grid .col-winrate,
 .ranking-table-grid .col-mdd {
   display: none !important;
 }
 
-/* 平板 (640px): add Score + PnL */
+/* 平板：显示 Rank | Trader | Score | ROI */
 @media (min-width: 640px) {
   .ranking-table-grid {
-    grid-template-columns: 40px 1fr 60px 80px 80px !important;
+    grid-template-columns: 40px 1fr 60px 80px !important;
   }
-
-  .ranking-table-grid .col-score,
-  .ranking-table-grid .col-pnl {
+  
+  .ranking-table-grid .col-score {
     display: flex !important;
   }
 }
 
-/* 桌面 (768px): all columns */
+/* 桌面：显示所有列 */
 @media (min-width: 768px) {
   .ranking-table-grid {
-    grid-template-columns: 44px minmax(140px, 1.5fr) 80px 80px 70px 70px 64px !important;
+    grid-template-columns: 44px minmax(140px, 1.5fr) 64px 90px 70px 70px !important;
   }
 
   .ranking-table-grid .col-score,
-  .ranking-table-grid .col-pnl,
   .ranking-table-grid .col-winrate,
   .ranking-table-grid .col-mdd {
     display: flex !important;
@@ -251,7 +248,7 @@
    帖子瀑布流响应式
    ============================================ */
 
-/* Xiaohongshu-style 2-column waterfall on all sizes */
+/* 手机端：小红书双列瀑布流 */
 .post-feed-masonry {
   columns: 2 !important;
   column-gap: 10px !important;
@@ -264,10 +261,38 @@
   }
 }
 
-@media (min-width: 1024px) {
-  .post-feed-masonry {
-    columns: 3 !important;
-    column-gap: 16px !important;
+/* ============================================
+   手机端专用优化（不影响桌面端）
+   ============================================ */
+
+@media (max-width: 767px) {
+  /* 排行榜：移除横向滚动，只显示 Rank | Trader | ROI */
+  .rankings-container {
+    overflow-x: hidden !important;
+  }
+
+  .rankings-min-width {
+    min-width: 0 !important;
+  }
+
+  .rankings-grid-row {
+    grid-template-columns: 36px 1fr 80px !important;
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+    min-height: 56px !important;
+  }
+
+  .rankings-col-hide {
+    display: none !important;
+  }
+
+  /* 瀑布流卡片紧凑间距 */
+  .post-feed-masonry > div {
+    margin-bottom: 10px !important;
+  }
+
+  .masonry-card-content {
+    padding: 8px !important;
   }
 }
 
@@ -809,30 +834,6 @@
    排行榜列表移动端优化
    ============================================ */
 
-/* Masonry card padding reduction on mobile */
-@media (max-width: 639px) {
-  .post-feed-masonry > div {
-    margin-bottom: 10px !important;
-  }
-
-  .masonry-card {
-    border-radius: 12px !important;
-  }
-
-  .masonry-card-content {
-    padding: 8px !important;
-  }
-}
-
-/* Ranking rows touch-friendly on mobile */
-@media (max-width: 639px) {
-  .ranking-table-grid {
-    padding-left: 12px !important;
-    padding-right: 12px !important;
-    min-height: 56px !important;
-  }
-}
-
 @media (max-width: 639px) {
   .ranking-row {
     min-height: 72px !important;
@@ -1103,11 +1104,11 @@
     grid-template-columns: 1fr 260px !important;
     gap: 16px !important;
   }
-
+  
   .ranking-table-grid {
-    grid-template-columns: 40px 1fr 80px 80px 56px !important;
+    grid-template-columns: 40px 1fr 56px 80px !important;
   }
-
+  
   .ranking-table-grid .col-winrate,
   .ranking-table-grid .col-mdd {
     display: none !important;
