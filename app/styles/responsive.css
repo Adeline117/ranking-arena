@@ -44,6 +44,7 @@
   display: grid;
   gap: 16px;
   grid-template-columns: 1fr;
+  align-items: start;
 }
 
 @media (min-width: 768px) {
@@ -214,6 +215,9 @@
 
 /* 移动端：单列堆叠，隐藏侧边栏 */
 .hot-grid {
+  display: grid;
+  gap: 16px;
+  align-items: start;
   grid-template-columns: 1fr !important;
 }
 

@@ -84,8 +84,7 @@ function HotContent() {
   const [posts, setPosts] = useState<Post[]>([])
   const [loadingPosts, setLoadingPosts] = useState(true)
 
-  // Time range filter state
-  const [timeRange, setTimeRange] = useState<string>('24h')
+  // Time range removed - sort by real-time hotness only
 
   // Tabbed sections state
   const [activeHotTab, setActiveHotTab] = useState<'posts' | 'traders' | 'groups'>('posts')
@@ -122,43 +121,31 @@ function HotContent() {
     })
   }, [])
 
-  // 加载交易员数据 - 使用统一的 API
+  // 加载交易员数据 - 直接查询 trader_sources 表
   useEffect(() => {
     const load = async () => {
       setLoadingTraders(true)
       try {
-        const response = await fetch('/api/traders?timeRange=90D')
-        const json = await response.json()
-        
-        // API 返回格式是 { traders: [...] }
-        const tradersData = json.traders || json.data || []
-        if (tradersData.length > 0) {
-          // 取前10名
-          interface TraderResponse {
-            id?: string
-            source_trader_id?: string
-            handle?: string
-            roi?: number
-            pnl?: number
-            win_rate?: number
-            max_drawdown?: number
-            followers?: number
-            source?: string
-          }
-          const top10 = tradersData.slice(0, 10).map((item: TraderResponse) => ({
-            id: item.id || item.source_trader_id || '',
-            handle: item.handle || item.source_trader_id || null,
-            roi: item.roi || 0,
-            pnl: item.pnl || 0,
-            win_rate: item.win_rate || 0,
-            max_drawdown: item.max_drawdown,
-            followers: item.followers || 0,
-            source: item.source || 'binance',
-          }))
-          setTraders(top10)
-        } else {
+        const { data, error: supabaseError } = await supabase
+          .from('trader_sources')
+          .select('source, source_trader_id, handle, avatar_url, roi, arena_score')
+          .order('arena_score', { ascending: false, nullsFirst: false })
+          .limit(10)
+
+        if (supabaseError) {
           setTraders([])
+          showToast(language === 'zh' ? '加载交易员数据失败' : 'Failed to load traders', 'error')
+          return
         }
+
+        setTraders((data || []).map(item => ({
+          id: item.source_trader_id || '',
+          handle: item.handle || item.source_trader_id || null,
+          roi: item.roi || 0,
+          win_rate: 0,
+          followers: 0,
+          source: item.source || 'binance',
+        })))
       } catch (_error) {
         setTraders([])
         showToast(language === 'zh' ? '加载交易员数据失败' : 'Failed to load traders', 'error')
@@ -173,7 +160,7 @@ function HotContent() {
   const loadPosts = useCallback(async () => {
     setLoadingPosts(true)
     try {
-      const res = await fetch(`/api/posts?sort_by=hot_score&sort_order=desc&limit=20&time_range=${timeRange}`)
+      const res = await fetch(`/api/posts?sort_by=hot_score&sort_order=desc&limit=20`)
       const json = await res.json()
       const data = json.posts || json.data?.posts || []
 
@@ -231,7 +218,7 @@ function HotContent() {
     } finally {
       setLoadingPosts(false)
     }
-  }, [timeRange, showToast, language])
+  }, [showToast, language])
 
   useEffect(() => {
     loadPosts()
@@ -668,7 +655,7 @@ function HotContent() {
       <TopNav email={email} />
 
       <Box as="main" className="container-padding" px={4} py={6} style={{ maxWidth: 1200, margin: '0 auto' }}>
-        <Box className="hot-grid" style={{ display: 'grid', gridTemplateColumns: '260px 1fr 280px', gap: tokens.spacing[4] }}>
+        <Box className="hot-grid">
           {/* 左：排名前十 */}
           <Box as="section">
             <Card title={t('top10')}>
@@ -682,50 +669,6 @@ function HotContent() {
               <Text size="sm" color="secondary" style={{ marginBottom: tokens.spacing[3] }}>
                 {loggedIn ? t('loggedInShowAllHot') : t('notLoggedInShowLimitedHot')}
               </Text>
-
-              {/* Time Range Filter */}
-              <Box style={{ display: 'flex', gap: '8px', marginBottom: tokens.spacing[3], flexWrap: 'wrap' }}>
-                {([
-                  { value: '1h', label: '1小时' },
-                  { value: '6h', label: '6小时' },
-                  { value: '24h', label: '24小时' },
-                  { value: '7d', label: '7天' },
-                  { value: 'all', label: '全部' },
-                ] as const).map((option) => (
-                  <button
-                    key={option.value}
-                    onClick={() => setTimeRange(option.value)}
-                    style={{
-                      padding: '8px 16px',
-                      borderRadius: tokens.radius.lg,
-                      border: timeRange === option.value ? 'none' : tokens.glass.border.light,
-                      background: timeRange === option.value ? tokens.gradient.primary : tokens.glass.bg.light,
-                      backdropFilter: tokens.glass.blur.sm,
-                      WebkitBackdropFilter: tokens.glass.blur.sm,
-                      color: timeRange === option.value ? '#fff' : tokens.colors.text.secondary,
-                      fontWeight: timeRange === option.value ? 900 : 600,
-                      fontSize: '12px',
-                      cursor: 'pointer',
-                      transition: tokens.transition.all,
-                      boxShadow: timeRange === option.value ? `0 4px 12px ${tokens.colors.accent.primary}40` : 'none',
-                    }}
-                    onMouseEnter={(e) => {
-                      if (timeRange !== option.value) {
-                        e.currentTarget.style.background = tokens.glass.bg.medium
-                        e.currentTarget.style.color = tokens.colors.text.primary
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      if (timeRange !== option.value) {
-                        e.currentTarget.style.background = tokens.glass.bg.light
-                        e.currentTarget.style.color = tokens.colors.text.secondary
-                      }
-                    }}
-                  >
-                    {option.label}
-                  </button>
-                ))}
-              </Box>
 
               {/* Tabbed Sections */}
               <Box style={{ display: 'flex', gap: '8px', marginBottom: tokens.spacing[3], flexWrap: 'wrap' }}>

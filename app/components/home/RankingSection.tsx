@@ -314,25 +314,26 @@ export default function RankingSection({
         minWidth: 0,
       }}
     >
-      {/* 顶部工具栏 - 时间选择器 + 数据新鲜度 */}
+      {/* 紧凑工具栏 */}
       <Box
         className="ranking-toolbar"
         style={{
-          marginBottom: tokens.spacing[3],
+          marginBottom: tokens.spacing[2],
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          flexWrap: 'wrap',
-          gap: tokens.spacing[2],
+          gap: tokens.spacing[1],
         }}
       >
-        <TimeRangeSelector
-          activeRange={activeTimeRange}
-          onChange={onTimeRangeChange}
-          disabled={loading}
-        />
-        <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
-          {/* Feature 9: Share Top 10 button */}
+        <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1], flexWrap: 'wrap', flex: 1, minWidth: 0 }}>
+          <TimeRangeSelector
+            activeRange={activeTimeRange}
+            onChange={onTimeRangeChange}
+            disabled={loading}
+          />
+          <FilterPresets activePreset={activePreset} onPresetChange={handlePresetChange} />
+        </Box>
+        <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1], flexShrink: 0 }}>
           {!loading && filteredTraders.length > 0 && (
             <ShareTop10Button
               traders={filteredTraders}
@@ -340,7 +341,6 @@ export default function RankingSection({
               disabled={loading}
             />
           )}
-          {/* 快照分享按钮 */}
           {!loading && isLoggedIn && (
             <CreateSnapshotButton
               timeRange={activeTimeRange}
@@ -355,7 +355,6 @@ export default function RankingSection({
               disabled={loading || traders.length === 0}
             />
           )}
-          {/* Feature 4: Manual refresh button */}
           {!loading && onRefresh && (
             <button
               onClick={onRefresh}
@@ -364,9 +363,9 @@ export default function RankingSection({
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                width: 28,
-                height: 28,
-                borderRadius: tokens.radius.md,
+                width: 24,
+                height: 24,
+                borderRadius: tokens.radius.sm,
                 background: tokens.glass.bg.light,
                 border: `1px solid ${tokens.colors.border.primary}`,
                 color: tokens.colors.text.secondary,
@@ -374,27 +373,26 @@ export default function RankingSection({
                 transition: `all ${tokens.transition.fast}`,
               }}
             >
-              <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M1 4v6h6M23 20v-6h-6" strokeLinecap="round" strokeLinejoin="round" />
                 <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </button>
           )}
-          {/* 数据新鲜度指示器 */}
           {!loading && (
             <DataFreshnessIndicator
               lastUpdated={lastUpdated}
               updateTier="standard"
-              showDetails={true}
+              showDetails={false}
               size="sm"
             />
           )}
         </Box>
       </Box>
-      
+
       {/* 高级筛选面板 */}
       {showAdvancedFilter && isPro && (
-        <Box style={{ marginBottom: tokens.spacing[3] }}>
+        <Box style={{ marginBottom: tokens.spacing[2] }}>
           <AdvancedFilter
             currentFilter={filterConfig}
             savedFilters={savedFilters}
@@ -406,11 +404,6 @@ export default function RankingSection({
           />
         </Box>
       )}
-
-      {/* Feature 6: Filter Presets */}
-      <Box style={{ marginBottom: tokens.spacing[2] }}>
-        <FilterPresets activePreset={activePreset} onPresetChange={handlePresetChange} />
-      </Box>
 
       <RankingTable
         traders={filteredTraders}
