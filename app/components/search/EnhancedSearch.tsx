@@ -22,18 +22,36 @@ interface HotSearch {
   trend: 'up' | 'down' | 'stable'
 }
 
-// ============================================
-// 热门搜索（可后续接入 API）
-// ============================================
+const DEFAULT_RECENT_SEARCHES: string[] = []
 
-const HOT_SEARCHES: HotSearch[] = [
-  { keyword: 'BTC', count: 12500, trend: 'up' },
-  { keyword: 'ETH', count: 8900, trend: 'up' },
-  { keyword: 'SOL', count: 4200, trend: 'up' },
-  { keyword: 'PEPE', count: 3800, trend: 'stable' },
+const FALLBACK_HOT_SEARCHES: HotSearch[] = [
+  { keyword: 'BTC', count: 1000, trend: 'up' },
+  { keyword: 'ETH', count: 800, trend: 'up' },
+  { keyword: 'SOL', count: 500, trend: 'stable' },
 ]
 
-const DEFAULT_RECENT_SEARCHES: string[] = []
+// ============================================
+// 热门搜索 Hook
+// ============================================
+
+function useHotSearches() {
+  const [hotSearches, setHotSearches] = useState<HotSearch[]>(FALLBACK_HOT_SEARCHES)
+
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/search/hot')
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (!cancelled && data?.hotSearches?.length > 0) {
+          setHotSearches(data.hotSearches)
+        }
+      })
+      .catch(() => {}) // Use fallback on error
+    return () => { cancelled = true }
+  }, [])
+
+  return hotSearches
+}
 
 // ============================================
 // 搜索建议 Hook - 使用真实 API
@@ -140,8 +158,10 @@ export function EnhancedSearch({
   const [query, setQuery] = useState('')
   const [isFocused, setIsFocused] = useState(false)
   const [recentSearches, setRecentSearches] = useState<string[]>([])
-  
+  const [selectedIndex, setSelectedIndex] = useState(-1)
+
   const { suggestions, loading } = useSearchSuggestions(query)
+  const hotSearches = useHotSearches()
   const showDropdown = isFocused && (query.length > 0 || recentSearches.length > 0)
 
   // Cleanup blur timer on unmount
@@ -152,6 +172,11 @@ export function EnhancedSearch({
       }
     }
   }, [])
+
+  // Reset selected index when suggestions change
+  useEffect(() => {
+    setSelectedIndex(-1)
+  }, [suggestions])
 
   // 加载历史搜索
   useEffect(() => {
@@ -207,12 +232,27 @@ export function EnhancedSearch({
   // 键盘事件
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
-      handleSearch(query)
+      if (selectedIndex >= 0 && selectedIndex < suggestions.length) {
+        e.preventDefault()
+        handleSuggestionClick(suggestions[selectedIndex])
+      } else {
+        handleSearch(query)
+      }
     } else if (e.key === 'Escape') {
       setIsFocused(false)
       inputRef.current?.blur()
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      setSelectedIndex(prev =>
+        prev < suggestions.length - 1 ? prev + 1 : 0
+      )
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      setSelectedIndex(prev =>
+        prev > 0 ? prev - 1 : suggestions.length - 1
+      )
     }
-  }, [query, handleSearch])
+  }, [query, handleSearch, suggestions, selectedIndex, handleSuggestionClick])
 
   return (
     <div className={`relative ${className}`}>
@@ -261,15 +301,21 @@ export function EnhancedSearch({
           {query && suggestions.length > 0 && (
             <div className="p-2">
               {loading ? (
-                <div className="py-4 text-center text-sm text-[var(--color-text-tertiary)]">
-                  {t('searching')}
+                <div className="py-4 flex items-center justify-center gap-2 text-sm text-[var(--color-text-tertiary)]">
+                  <svg className="animate-spin" width="14" height="14" viewBox="0 0 24 24" fill="none">
+                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="31.4 31.4" strokeLinecap="round" />
+                  </svg>
+                  <span>{t('searching')}</span>
                 </div>
               ) : (
                 suggestions.map((suggestion, idx) => (
                   <button
                     key={idx}
                     onClick={() => handleSuggestionClick(suggestion)}
-                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-[var(--color-bg-tertiary)] transition-colors text-left"
+                    onMouseEnter={() => setSelectedIndex(idx)}
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-left ${
+                      idx === selectedIndex ? 'bg-[var(--color-bg-tertiary)]' : 'hover:bg-[var(--color-bg-tertiary)]'
+                    }`}
                   >
                     <div className="w-8 h-8 rounded-full bg-[var(--color-bg-tertiary)] flex items-center justify-center text-xs font-bold text-[var(--color-text-tertiary)]">
                       {suggestion.type === 'trader' && 'T'}
@@ -323,7 +369,7 @@ export function EnhancedSearch({
             <div className="p-3">
               <div className="text-xs font-semibold text-[var(--color-text-tertiary)] mb-2">{t('hotSearches')}</div>
               <div className="space-y-1">
-                {HOT_SEARCHES.map((hot, idx) => (
+                {hotSearches.map((hot, idx) => (
                   <button
                     key={idx}
                     onClick={() => handleSearch(hot.keyword)}
