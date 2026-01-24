@@ -13,7 +13,6 @@ import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useRankingsV2 } from '@/lib/hooks/useRankingsV2'
 import TopNav from '@/app/components/layout/TopNav'
-import DesktopSidebar from '@/app/components/layout/DesktopSidebar'
 import MobileBottomNav from '@/app/components/layout/MobileBottomNav'
 import DataStateWrapper from '@/app/components/ui/DataStateWrapper'
 import { RankingSkeleton } from '@/app/components/ui/Skeleton'
@@ -68,9 +67,6 @@ function RankingsContent() {
   return (
     <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
       <TopNav email={null} />
-      <div className="hide-mobile hide-tablet">
-        <DesktopSidebar />
-      </div>
       <div className="feed-main-content max-w-5xl mx-auto px-4 py-6" style={{ paddingBottom: 80 }}>
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-2xl font-bold" style={{ color: tokens.colors.text.primary }}>

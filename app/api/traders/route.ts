@@ -98,6 +98,12 @@ export const GET = withPublic(
     const timeRange = (searchParams.get('timeRange') || '90D') as Period
     const exchangeFilter = searchParams.get('exchange') // 可选：筛选特定交易所
 
+    // Feature 1: Server-side pagination & sorting params
+    const sortBy = searchParams.get('sortBy') as 'arena_score' | 'roi' | 'win_rate' | 'max_drawdown' | null
+    const order = (searchParams.get('order') || 'desc') as 'asc' | 'desc'
+    const page = Math.max(0, parseInt(searchParams.get('page') || '0', 10) || 0)
+    const limit = Math.min(200, Math.max(1, parseInt(searchParams.get('limit') || '100', 10) || 100))
+
     const allTraders: TraderData[] = []
     const staleSources: string[] = [] // 跟踪陈旧数据的交易所
 
@@ -319,8 +325,111 @@ export const GET = withPublic(
         return a.id.localeCompare(b.id)
       })
 
-    // 取前 100 名，移除内部字段
-    const topTraders = scoredTraders.slice(0, 100).map(({ _meetsThreshold, ...t }) => t)
+    // Feature 1: Re-sort if sortBy is specified and differs from arena_score
+    if (sortBy && sortBy !== 'arena_score') {
+      scoredTraders.sort((a, b) => {
+        let aVal = 0, bVal = 0
+        switch (sortBy) {
+          case 'roi': aVal = a.roi ?? 0; bVal = b.roi ?? 0; break
+          case 'win_rate': aVal = a.win_rate ?? 0; bVal = b.win_rate ?? 0; break
+          case 'max_drawdown': aVal = Math.abs(a.max_drawdown ?? 0); bVal = Math.abs(b.max_drawdown ?? 0); break
+        }
+        return order === 'desc' ? bVal - aVal : aVal - bVal
+      })
+    } else if (order === 'asc') {
+      scoredTraders.reverse()
+    }
+
+    // Feature 7: Duplicate trader detection - group by handle across sources
+    const handleSourceMap = new Map<string, string[]>()
+    scoredTraders.forEach(trader => {
+      const handle = trader.handle || trader.id
+      // Skip wallet addresses (0x...)
+      if (handle.startsWith('0x') && handle.length > 20) return
+      const existing = handleSourceMap.get(handle.toLowerCase()) || []
+      if (!existing.includes(trader.source)) {
+        existing.push(trader.source)
+      }
+      handleSourceMap.set(handle.toLowerCase(), existing)
+    })
+
+    // Feature 1: Paginate
+    const totalScored = scoredTraders.length
+    const startIdx = page * limit
+    const paginatedTraders = scoredTraders.slice(startIdx, startIdx + limit)
+    const hasMore = startIdx + limit < totalScored
+
+    // Feature 3: Rank change indicators - query yesterday's data
+    let rankChangeMap: Map<string, number> | null = null
+    let newTraderSet: Set<string> | null = null
+    try {
+      const yesterday = new Date()
+      yesterday.setDate(yesterday.getDate() - 1)
+      const yesterdayStart = new Date(yesterday)
+      yesterdayStart.setHours(0, 0, 0, 0)
+      const yesterdayEnd = new Date(yesterday)
+      yesterdayEnd.setHours(23, 59, 59, 999)
+
+      // Get yesterday's snapshot trader IDs ordered by arena_score
+      const { data: yesterdaySnapshots } = await supabase
+        .from('trader_snapshots')
+        .select('source_trader_id, source, arena_score')
+        .gte('captured_at', yesterdayStart.toISOString())
+        .lte('captured_at', yesterdayEnd.toISOString())
+        .order('arena_score', { ascending: false })
+        .limit(500)
+
+      if (yesterdaySnapshots?.length) {
+        // Dedupe yesterday's data and build rank map
+        const yesterdayRanks = new Map<string, number>()
+        const seenYesterday = new Set<string>()
+        let rank = 1
+        for (const snap of yesterdaySnapshots) {
+          const key = `${snap.source}:${snap.source_trader_id}`
+          if (!seenYesterday.has(key)) {
+            seenYesterday.add(key)
+            yesterdayRanks.set(key, rank++)
+          }
+        }
+
+        rankChangeMap = new Map()
+        newTraderSet = new Set()
+
+        paginatedTraders.forEach((trader, idx) => {
+          const key = `${trader.source}:${trader.id}`
+          const currentRank = startIdx + idx + 1
+          const prevRank = yesterdayRanks.get(key)
+          if (prevRank != null) {
+            // Positive = moved up (rank number decreased)
+            rankChangeMap!.set(key, prevRank - currentRank)
+          } else {
+            newTraderSet!.add(key)
+          }
+        })
+      }
+    } catch (err) {
+      logger.warn('Failed to compute rank changes:', err)
+    }
+
+    // Build final trader objects with all features, removing internal fields
+    const topTraders = paginatedTraders.map(({ _meetsThreshold, ...t }) => {
+      const key = `${t.source}:${t.id}`
+      const handle = t.handle || t.id
+      const handleLower = handle.toLowerCase()
+
+      // Feature 7: also_on
+      const allSources = handleSourceMap.get(handleLower) || []
+      const alsoOn = allSources.filter(s => s !== t.source)
+
+      return {
+        ...t,
+        // Feature 3: rank change
+        rank_change: rankChangeMap?.get(key) ?? null,
+        is_new: newTraderSet?.has(key) ?? false,
+        // Feature 7: duplicate detection
+        also_on: alsoOn.length > 0 ? alsoOn : undefined,
+      }
+    })
 
     // 获取最新数据的时间戳（用于前端显示）
     const { data: latestData } = await supabase
@@ -343,11 +452,15 @@ export const GET = withPublic(
       // 数据新鲜度标识
       isStale,
       staleSources: isStale ? staleSources : undefined,
+      // Feature 1: Pagination metadata
+      page,
+      limit,
+      hasMore,
     })
-    
+
     // 添加缓存头，提高页面加载速度
     response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300')
-    
+
     return response
   },
   { name: 'traders', rateLimit: 'read' }

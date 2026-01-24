@@ -5,25 +5,33 @@ import type { Trader } from '../../ranking/RankingTable'
 import { useTraderDataSync, type TraderDataPayload } from '@/lib/hooks/useBroadcastSync'
 
 export type TimeRange = '90D' | '30D' | '7D'
+export type SortBy = 'arena_score' | 'roi' | 'win_rate' | 'max_drawdown'
+export type SortOrder = 'asc' | 'desc'
 
 // 本地存储 key
 const TIME_RANGE_STORAGE_KEY = 'ranking_time_range'
 
+// Feature 4: Stale threshold for visibility-based refresh (5 minutes)
+const STALE_THRESHOLD_MS = 5 * 60 * 1000
+
 interface CachedData {
   traders: Trader[]
   lastUpdated: string | null
+  fetchedAt: number // timestamp when data was fetched
 }
 
 interface UseTraderDataOptions {
   autoRefreshInterval?: number // 自动刷新间隔（毫秒）
+  sortBy?: SortBy
+  sortOrder?: SortOrder
 }
 
 // 全局请求去重 Map（跨组件实例共享，避免并发重复请求）
 const pendingRequests = new Map<string, Promise<CachedData>>()
 
 export function useTraderData(options: UseTraderDataOptions = {}) {
-  // 默认 10 分钟自动刷新（数据每 2 小时更新一次，无需频繁刷新）
-  const { autoRefreshInterval = 10 * 60 * 1000 } = options
+  // Feature 4: Default 5 min refresh when visible (reduced from 10 min)
+  const { autoRefreshInterval = 5 * 60 * 1000, sortBy, sortOrder } = options
 
   // 使用 Map 缓存已加载的数据
   const tradersCache = useRef<Map<string, CachedData>>(new Map())
@@ -55,6 +63,7 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
         const cached: CachedData = {
           traders: payload.traders as Trader[],
           lastUpdated: payload.lastUpdated,
+          fetchedAt: Date.now(),
         }
         tradersCache.current.set(activeTimeRange, cached)
         setCurrentTraders(cached.traders)
@@ -69,7 +78,7 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
   const loadTimeRange = useCallback(async (timeRange: TimeRange, forceRefresh = false): Promise<CachedData> => {
     // 检查缓存（非强制刷新时）
     if (!forceRefresh && tradersCache.current.has(timeRange)) {
-      return tradersCache.current.get(timeRange) || { traders: [], lastUpdated: null }
+      return tradersCache.current.get(timeRange) || { traders: [], lastUpdated: null, fetchedAt: 0 }
     }
 
     // 请求去重：如果有相同 key 的请求正在进行，复用该 Promise
@@ -80,16 +89,22 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
 
     const requestPromise = (async (): Promise<CachedData> => {
       try {
-        const response = await fetch(`/api/traders?timeRange=${timeRange}`)
+        // Feature 1: Include sort params in fetch URL
+        let url = `/api/traders?timeRange=${timeRange}`
+        if (sortBy && sortBy !== 'arena_score') {
+          url += `&sortBy=${sortBy}&order=${sortOrder || 'desc'}`
+        }
+        const response = await fetch(url)
         if (!response.ok) {
           const errorMsg = `加载排行榜数据失败 (${response.status})`
           setError(errorMsg)
-          return tradersCache.current.get(timeRange) || { traders: [], lastUpdated: null }
+          return tradersCache.current.get(timeRange) || { traders: [], lastUpdated: null, fetchedAt: 0 }
         }
         const data = await response.json()
         const cached: CachedData = {
           traders: data.traders || [],
           lastUpdated: data.lastUpdated || null,
+          fetchedAt: Date.now(),
         }
 
         // 更新缓存
@@ -107,7 +122,7 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : '网络连接失败，请检查网络'
         setError(errorMsg)
-        return tradersCache.current.get(timeRange) || { traders: [], lastUpdated: null }
+        return tradersCache.current.get(timeRange) || { traders: [], lastUpdated: null, fetchedAt: 0 }
       } finally {
         // 请求完成后移除 pending 标记
         pendingRequests.delete(cacheKey)
@@ -116,7 +131,7 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
 
     pendingRequests.set(cacheKey, requestPromise)
     return requestPromise
-  }, [broadcast])
+  }, [broadcast, sortBy, sortOrder])
 
   // 加载当前选中时间段的数据
   const loadCurrentData = useCallback(async (forceRefresh = false) => {
@@ -148,22 +163,60 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
     }
   }, [activeTimeRange])
   
-  // 自动刷新（静默刷新，不显示 loading）
+  // Feature 4: Smarter auto-refresh with Page Visibility API
   useEffect(() => {
-    if (autoRefreshInterval > 0) {
-      const interval = setInterval(() => {
-        // 静默刷新：不设置 loading 状态
-        loadTimeRange(activeTimeRange, true)
-          .then(cached => {
-            setCurrentTraders(cached.traders)
-            setLastUpdated(cached.lastUpdated)
-          })
-          .catch(() => {
-            // 静默刷新失败不干扰用户，loadTimeRange 已设置 error 状态
-          })
-      }, autoRefreshInterval)
+    if (autoRefreshInterval <= 0) return
 
-      return () => clearInterval(interval)
+    let intervalId: ReturnType<typeof setInterval> | null = null
+
+    const silentRefresh = () => {
+      loadTimeRange(activeTimeRange, true)
+        .then(cached => {
+          setCurrentTraders(cached.traders)
+          setLastUpdated(cached.lastUpdated)
+        })
+        .catch(() => {
+          // Silent refresh failure - loadTimeRange already sets error
+        })
+    }
+
+    const startInterval = () => {
+      if (intervalId) clearInterval(intervalId)
+      intervalId = setInterval(silentRefresh, autoRefreshInterval)
+    }
+
+    const stopInterval = () => {
+      if (intervalId) {
+        clearInterval(intervalId)
+        intervalId = null
+      }
+    }
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        // Tab hidden: pause refresh
+        stopInterval()
+      } else {
+        // Tab visible: check if data is stale
+        const cached = tradersCache.current.get(activeTimeRange)
+        const isStale = !cached || (Date.now() - cached.fetchedAt > STALE_THRESHOLD_MS)
+        if (isStale) {
+          silentRefresh()
+        }
+        startInterval()
+      }
+    }
+
+    // Start interval only if tab is visible
+    if (!document.hidden) {
+      startInterval()
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    return () => {
+      stopInterval()
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
   }, [autoRefreshInterval, activeTimeRange, loadTimeRange])
 

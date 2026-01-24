@@ -52,6 +52,7 @@ export default function HomePage() {
     activeTimeRange,
     changeTimeRange,
     lastUpdated,
+    refresh,
   } = useTraderData()
 
   // Sync time range with URL on initial load
@@ -137,6 +138,7 @@ export default function HomePage() {
             activeTimeRange={activeTimeRange}
             onTimeRangeChange={handleTimeRangeChange}
             lastUpdated={lastUpdated}
+            onRefresh={refresh}
           />
 
           {/* 右侧：市场数据（移动端隐藏） */}
