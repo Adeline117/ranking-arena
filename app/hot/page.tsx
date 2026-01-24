@@ -147,6 +147,7 @@ function HotContent() {
         }
       } catch (_error) {
         setTraders([])
+        showToast(language === 'zh' ? '加载交易员数据失败' : 'Failed to load traders', 'error')
       } finally {
         setLoadingTraders(false)
       }
@@ -207,6 +208,7 @@ function HotContent() {
       } catch (e) {
         console.error('Failed to load posts:', e)
         setPosts([])
+        showToast(language === 'zh' ? '加载热榜失败' : 'Failed to load hot posts', 'error')
       } finally {
         setLoadingPosts(false)
       }
@@ -246,10 +248,11 @@ function HotContent() {
       console.error('[HotPage] 加载评论失败:', err)
       setComments([])
       setHasMoreComments(false)
+      showToast(language === 'zh' ? '加载评论失败' : 'Failed to load comments', 'error')
     } finally {
       setLoadingComments(false)
     }
-  }, [])
+  }, [showToast, language])
 
   // 加载更多评论
   const loadMoreComments = useCallback(async () => {
@@ -595,8 +598,9 @@ function HotContent() {
       }
     } catch (err) {
       console.error('[HotPage] 点赞失败:', err)
+      showToast(language === 'zh' ? '操作失败，请重试' : 'Action failed, please retry', 'error')
     }
-  }, [accessToken, openPost?.id, showToast])
+  }, [accessToken, openPost?.id, showToast, language])
 
   return (
     <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>

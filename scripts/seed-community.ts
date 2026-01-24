@@ -564,7 +564,7 @@ async function seed() {
         .from('comments')
         .insert({
           post_id: post.id,
-          author_id: commentAuthorId,
+          user_id: commentAuthorId,
           author_handle: commentAuthor,
           content,
           parent_id: parentId,

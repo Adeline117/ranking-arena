@@ -9,6 +9,8 @@ import { Box, Text } from '@/app/components/base'
 import { RankingSkeleton } from '@/app/components/ui/Skeleton'
 import EmptyState from '@/app/components/ui/EmptyState'
 import Avatar from '@/app/components/ui/Avatar'
+import { useToast } from '@/app/components/ui/Toast'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 // 平台配置
 const sourceConfig: Record<string, { label: string; color: string }> = {
@@ -45,6 +47,8 @@ type FollowItem = {
 
 export default function FollowingPage() {
   const router = useRouter()
+  const { showToast } = useToast()
+  const { language } = useLanguage()
   const [email, setEmail] = useState<string | null>(null)
   const [userId, setUserId] = useState<string | null>(null)
   const [items, setItems] = useState<FollowItem[]>([])
@@ -72,6 +76,7 @@ export default function FollowingPage() {
         if (!response.ok) {
           console.error('Error fetching following:', data.error)
           setItems([])
+          showToast(language === 'zh' ? '加载关注列表失败' : 'Failed to load following list', 'error')
           return
         }
 
@@ -79,6 +84,7 @@ export default function FollowingPage() {
       } catch (error) {
         console.error('Error loading following:', error)
         setItems([])
+        showToast(language === 'zh' ? '加载关注列表失败' : 'Failed to load following list', 'error')
       } finally {
         setLoading(false)
       }

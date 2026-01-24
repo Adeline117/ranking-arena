@@ -21,6 +21,7 @@ import { usePostComments } from './hooks/usePostComments'
 import { usePostActions } from './hooks/usePostActions'
 import { usePostTranslation, useAutoTranslateList, useAutoTranslateComments } from './hooks/usePostTranslation'
 import CommentsModal from './CommentsModal'
+import { SectionErrorBoundary } from '../Utils/ErrorBoundary'
 
 // 本地类型（扩展后端类型）
 type Post = PostWithUserState
@@ -1557,7 +1558,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; layout?:
   }
 
   return (
-    <>
+    <SectionErrorBoundary>
       {/* 排序按钮 */}
       {props.showSortButtons && (
         <div style={{ display: 'flex', gap: tokens.spacing[2], marginBottom: tokens.spacing[3] }}>
@@ -2992,7 +2993,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; layout?:
         onSelect={handleBookmarkToFolder}
         postId={bookmarkingPostId || ''}
       />
-    </>
+    </SectionErrorBoundary>
   )
 }
 
