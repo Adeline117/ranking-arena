@@ -135,16 +135,16 @@ export default function GroupPostList(props: GroupPostListProps) {
       <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: tokens.spacing[4] }}>
         <Box style={{ display: 'flex', gap: tokens.spacing[2] }}>
           <Button variant={sortMode === 'latest' ? 'primary' : 'secondary'} size="sm" onClick={() => setSortMode('latest')}>
-            {language === 'zh' ? '最新' : 'Latest'}
+            最新
           </Button>
           <Button variant={sortMode === 'hot' ? 'primary' : 'secondary'} size="sm" onClick={() => setSortMode('hot')}>
-            {language === 'zh' ? '热门' : 'Hot'}
+            热门
           </Button>
         </Box>
         <Box style={{ display: 'flex', gap: tokens.spacing[1] }}>
           <button
             onClick={() => setViewMode('list')}
-            title={language === 'zh' ? '列表视图' : 'List view'}
+            title="列表视图"
             style={{
               padding: tokens.spacing[2],
               borderRadius: tokens.radius.md,
@@ -162,7 +162,7 @@ export default function GroupPostList(props: GroupPostListProps) {
           </button>
           <button
             onClick={() => setViewMode('masonry')}
-            title={language === 'zh' ? '瀑布流视图' : 'Grid view'}
+            title="瀑布流视图"
             style={{
               padding: tokens.spacing[2],
               borderRadius: tokens.radius.md,
@@ -206,9 +206,7 @@ export default function GroupPostList(props: GroupPostListProps) {
         <Card title={language === 'zh' ? `帖子 (${sortedPosts.length})` : `Posts (${sortedPosts.length})`}>
           {sortedPosts.length === 0 ? (
             <Box style={{ color: tokens.colors.text.tertiary, padding: `${tokens.spacing[10]} ${tokens.spacing[5]}`, textAlign: 'center' }}>
-              <Text size="sm" color="tertiary">
-                {language === 'zh' ? '还没有帖子，成为第一个发帖的人吧！' : 'No posts yet. Be the first to post!'}
-              </Text>
+              <Text size="sm" color="tertiary">还没有帖子，成为第一个发帖的人吧！</Text>
             </Box>
           ) : (
             <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}>
@@ -267,9 +265,7 @@ export default function GroupPostList(props: GroupPostListProps) {
       {/* Empty masonry state */}
       {viewMode === 'masonry' && sortedPosts.length === 0 && (
         <Box style={{ color: tokens.colors.text.tertiary, padding: `${tokens.spacing[10]} ${tokens.spacing[5]}`, textAlign: 'center' }}>
-          <Text size="sm" color="tertiary">
-            {language === 'zh' ? '还没有帖子，成为第一个发帖的人吧！' : 'No posts yet. Be the first to post!'}
-          </Text>
+          <Text size="sm" color="tertiary">还没有帖子，成为第一个发帖的人吧！</Text>
         </Box>
       )}
 
@@ -534,7 +530,7 @@ function PostListItem(props: PostListItemProps) {
                 overflow: 'hidden', position: 'relative',
               }}>
                 {post.author_avatar_url ? (
-                  <img src={post.author_avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} referrerPolicy="no-referrer" onError={(e) => { e.currentTarget.style.display = 'none' }} />
+                  <img src={post.author_avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} referrerPolicy="no-referrer" />
                 ) : (
                   <span style={{ color: '#fff', fontSize: 10, fontWeight: 700 }}>
                     {(post.author_handle || 'U').charAt(0).toUpperCase()}
@@ -728,7 +724,7 @@ function CommentsSection(props: CommentsSectionProps) {
         <Box style={{ display: 'flex', gap: tokens.spacing[2], marginBottom: tokens.spacing[3] }}>
           <input
             type="text"
-            placeholder={language === 'zh' ? '写评论...' : 'Write a comment...'}
+            placeholder="写评论..."
             value={newComment}
             onChange={(e) => setNewComment(prev => ({ ...prev, [postId]: e.target.value }))}
             onKeyDown={(e) => e.key === 'Enter' && submitComment(postId)}
@@ -743,7 +739,7 @@ function CommentsSection(props: CommentsSectionProps) {
             }}
           />
           <Button variant="primary" size="sm" onClick={() => submitComment(postId)} disabled={commentLoading || !newComment.trim()}>
-            {language === 'zh' ? '发送' : 'Send'}
+            发送
           </Button>
         </Box>
       )}
@@ -769,7 +765,7 @@ function CommentsSection(props: CommentsSectionProps) {
                         overflow: 'hidden',
                       }}>
                         {comment.author_avatar_url ? (
-                          <img src={comment.author_avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} referrerPolicy="no-referrer" onError={(e) => { e.currentTarget.style.display = 'none' }} />
+                          <img src={comment.author_avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} referrerPolicy="no-referrer" />
                         ) : (
                           <span style={{ color: '#fff', fontSize: 9, fontWeight: 700 }}>
                             {(comment.author_handle || 'U').charAt(0).toUpperCase()}
@@ -848,7 +844,7 @@ function CommentsSection(props: CommentsSectionProps) {
                               overflow: 'hidden',
                             }}>
                               {reply.author_avatar_url ? (
-                                <img src={reply.author_avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} referrerPolicy="no-referrer" onError={(e) => { e.currentTarget.style.display = 'none' }} />
+                                <img src={reply.author_avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} referrerPolicy="no-referrer" />
                               ) : (
                                 <span style={{ color: '#fff', fontSize: 8, fontWeight: 700 }}>
                                   {reply.author_handle.charAt(0).toUpperCase()}
