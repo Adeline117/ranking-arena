@@ -53,6 +53,7 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
   const [_feed, setFeed] = useState<TraderFeedItem[]>([])
   const [similarTraders, setSimilarTraders] = useState<TraderProfile[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
   const [proBadgeTier, setProBadgeTier] = useState<'pro' | null>(null)
   const [socialLinks, setSocialLinks] = useState<{ twitter?: string; telegram?: string; discord?: string; github?: string; website?: string }>({})
   
@@ -528,6 +529,8 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
       } catch (error) {
         console.error('Error loading user data:', error)
         setProfile(null)
+        setLoadError(true)
+        showToast('加载用户数据失败', 'error')
       } finally {
         setLoading(false)
       }
@@ -543,6 +546,36 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
         <TopNav email={email} />
         <Box style={{ maxWidth: 1200, margin: '0 auto', padding: tokens.spacing[6] }}>
           <RankingSkeleton />
+        </Box>
+      </Box>
+    )
+  }
+
+  if (!profile && loadError) {
+    return (
+      <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
+        <TopNav email={email} />
+        <Box style={{ maxWidth: 1200, margin: '0 auto', padding: tokens.spacing[6], textAlign: 'center' }}>
+          <Text size="xl" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>
+            加载失败
+          </Text>
+          <Text size="sm" color="tertiary" style={{ marginBottom: tokens.spacing[4] }}>
+            无法加载用户数据，请检查网络后重试
+          </Text>
+          <button
+            onClick={() => window.location.reload()}
+            style={{
+              padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
+              background: tokens.colors.accent.primary,
+              color: '#fff',
+              border: 'none',
+              borderRadius: tokens.radius.md,
+              cursor: 'pointer',
+              fontWeight: 600,
+            }}
+          >
+            重试
+          </button>
         </Box>
       </Box>
     )
@@ -645,11 +678,11 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
         {/* Tab Content */}
         {activeTab === 'overview' && (
           <Box
-            className="profile-grid main-grid"
+            className="profile-grid"
             style={{
               display: 'grid',
-              gridTemplateColumns: '1fr 340px',
-              gap: tokens.spacing[8],
+              gridTemplateColumns: '1fr',
+              gap: tokens.spacing[6],
             }}
           >
             {/* Left Column - 核心绩效指标和动态 */}
