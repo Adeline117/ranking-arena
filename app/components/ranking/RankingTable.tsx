@@ -751,13 +751,14 @@ export default function RankingTable(props: {
         border: tokens.glass.border.light,
       }}
     >
-      {/* Category Tabs */}
+      {/* Category Tabs + 工具按钮 - 同一行 */}
       {onCategoryChange && (
         <Box
           style={{
             padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
             display: 'flex',
             alignItems: 'center',
+            justifyContent: 'space-between',
             gap: tokens.spacing[2],
             borderBottom: `1px solid var(--glass-border-light)`,
             background: tokens.glass.bg.light,
@@ -765,166 +766,151 @@ export default function RankingTable(props: {
             flexWrap: 'wrap',
           }}
         >
-          <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], flexShrink: 0 }}>
-            <Text size="sm" weight="bold" color="secondary">
-              {language === 'en' ? 'Category' : '分类'}
-            </Text>
-            <ProLabel size="xs" />
+          {/* 左侧：分类标签 */}
+          <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], flex: 1, minWidth: 0, flexWrap: 'wrap' }}>
+            <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1], flexShrink: 0 }}>
+              <Text size="xs" weight="bold" color="secondary">
+                {language === 'en' ? 'Category' : '分类'}
+              </Text>
+              <ProLabel size="xs" />
+            </Box>
+            <CategoryRankingTabs
+              currentCategory={category}
+              onCategoryChange={onCategoryChange}
+              isPro={isPro}
+              onProRequired={onProRequired}
+            />
           </Box>
-          <CategoryRankingTabs
-            currentCategory={category}
-            onCategoryChange={onCategoryChange}
-            isPro={isPro}
-            onProRequired={onProRequired}
-          />
-        </Box>
-      )}
 
-      {/* 工具按钮行 - 筛选 对比 设置 */}
-      <Box
-        style={{
-          padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
-          display: 'flex',
-          alignItems: 'center',
-          gap: tokens.spacing[2],
-          borderBottom: `1px solid var(--glass-border-light)`,
-          background: tokens.glass.bg.light,
-        }}
-      >
-        {/* 高级筛选按钮 */}
-        <Box
-          onClick={isPro ? onFilterToggle : onProRequired}
-          title={language === 'en' ? 'Advanced Filter' : '高级筛选'}
-          className="touch-target-sm"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 4,
-            padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
-            height: 28,
-            borderRadius: tokens.radius.md,
-            position: 'relative',
-            background: hasActiveFilters ? 'var(--color-pro-glow)' : 'var(--color-bg-tertiary)',
-            border: hasActiveFilters ? '1px solid var(--color-pro-gradient-start)' : '1px solid var(--color-border-secondary)',
-            color: hasActiveFilters ? 'var(--color-pro-gradient-start)' : isPro ? 'var(--color-text-secondary)' : 'var(--color-text-tertiary)',
-            cursor: isPro ? 'pointer' : 'not-allowed',
-            transition: 'all 0.2s',
-            opacity: isPro ? 1 : 0.5,
-            fontSize: tokens.typography.fontSize.xs,
-          }}
-          onMouseEnter={(e) => {
-            if (isPro) {
-              e.currentTarget.style.borderColor = 'var(--color-pro-gradient-start)'
-              e.currentTarget.style.color = 'var(--color-pro-gradient-start)'
-              e.currentTarget.style.background = 'var(--color-pro-glow)'
-            }
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.borderColor = 'var(--color-border-secondary)'
-            e.currentTarget.style.color = isPro ? 'var(--color-text-secondary)' : 'var(--color-text-tertiary)'
-            e.currentTarget.style.background = 'var(--color-bg-tertiary)'
-          }}
-        >
-          <FilterIcon size={12} />
-          <span>{language === 'zh' ? '筛选' : 'Filter'}</span>
-          {!isPro && <LockIconSmall size={8} />}
-          {hasActiveFilters && (
-            <Box style={{
-              position: 'absolute',
-              top: 2,
-              right: 2,
-              width: 5,
-              height: 5,
-              borderRadius: '50%',
-              background: tokens.colors.accent.primary,
-            }} />
-          )}
-        </Box>
-
-        {/* 对比按钮 */}
-        <Link
-          href={isPro ? '/compare' : '/pricing'}
-          title={language === 'en' ? 'Compare Traders' : '交易员对比'}
-          className="touch-target-sm"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 4,
-            padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
-            height: 28,
-            borderRadius: tokens.radius.md,
-            background: isPro ? 'var(--color-pro-glow)' : 'var(--color-bg-tertiary)',
-            border: isPro ? '1px solid var(--color-pro-gradient-start)' : '1px solid var(--color-border-secondary)',
-            color: isPro ? 'var(--color-pro-gradient-start)' : 'var(--color-text-tertiary)',
-            textDecoration: 'none',
-            cursor: isPro ? 'pointer' : 'not-allowed',
-            transition: 'all 0.2s',
-            opacity: isPro ? 1 : 0.5,
-            fontSize: tokens.typography.fontSize.xs,
-          }}
-          onMouseEnter={(e) => {
-            if (isPro) {
-              e.currentTarget.style.background = 'var(--color-pro-badge-bg)'
-              e.currentTarget.style.color = '#fff'
-            }
-          }}
-          onMouseLeave={(e) => {
-            if (isPro) {
-              e.currentTarget.style.background = 'var(--color-pro-glow)'
-              e.currentTarget.style.color = 'var(--color-pro-gradient-start)'
-            }
-          }}
-        >
-          <CompareIcon size={12} />
-          <span>{language === 'zh' ? '对比' : 'Compare'}</span>
-          {!isPro && <LockIconSmall size={8} />}
-        </Link>
-
-        {/* 列设置按钮 */}
-        <Box style={{ position: 'relative' }}>
-          <Box
-            onClick={() => setShowColumnSettings(!showColumnSettings)}
-            title={language === 'en' ? 'Column Settings' : '列设置'}
-            className="touch-target-sm"
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 4,
-              padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
-              height: 28,
-              borderRadius: tokens.radius.md,
-              background: showColumnSettings ? 'var(--color-pro-glow)' : 'var(--color-bg-tertiary)',
-              border: showColumnSettings ? '1px solid var(--color-pro-gradient-start)' : '1px solid var(--color-border-secondary)',
-              color: showColumnSettings ? 'var(--color-pro-gradient-start)' : 'var(--color-text-secondary)',
-              cursor: 'pointer',
-              transition: 'all 0.2s',
-              fontSize: tokens.typography.fontSize.xs,
-            }}
-          >
-            <SettingsIcon size={12} />
-            <span>{language === 'zh' ? '设置' : 'Settings'}</span>
-          </Box>
-          {/* Column Settings Dropdown */}
-          {showColumnSettings && (
+          {/* 右侧：工具按钮 */}
+          <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1], flexShrink: 0 }}>
+            {/* 高级筛选按钮 - 点击显示模糊预览 */}
             <Box
+              onClick={onFilterToggle}
+              title={language === 'en' ? 'Advanced Filter' : '高级筛选'}
+              className="touch-target-sm"
               style={{
-                position: 'absolute',
-                top: '100%',
-                left: 0,
-                marginTop: tokens.spacing[1],
-                padding: tokens.spacing[3],
-                background: tokens.colors.bg.primary,
-                border: `1px solid ${tokens.colors.border.primary}`,
-                borderRadius: tokens.radius.lg,
-                boxShadow: tokens.shadow.lg,
-                zIndex: 9999,
-                minWidth: 180,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 3,
+                padding: `4px 8px`,
+                height: 26,
+                borderRadius: tokens.radius.md,
+                position: 'relative',
+                background: hasActiveFilters ? 'var(--color-pro-glow)' : 'var(--color-bg-tertiary)',
+                border: hasActiveFilters ? '1px solid var(--color-pro-gradient-start)' : '1px solid var(--color-border-secondary)',
+                color: hasActiveFilters ? 'var(--color-pro-gradient-start)' : 'var(--color-text-secondary)',
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+                fontSize: 11,
               }}
-              onClick={(e) => e.stopPropagation()}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = 'var(--color-pro-gradient-start)'
+                e.currentTarget.style.color = 'var(--color-pro-gradient-start)'
+                e.currentTarget.style.background = 'var(--color-pro-glow)'
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = hasActiveFilters ? 'var(--color-pro-gradient-start)' : 'var(--color-border-secondary)'
+                e.currentTarget.style.color = hasActiveFilters ? 'var(--color-pro-gradient-start)' : 'var(--color-text-secondary)'
+                e.currentTarget.style.background = hasActiveFilters ? 'var(--color-pro-glow)' : 'var(--color-bg-tertiary)'
+              }}
             >
+              <FilterIcon size={11} />
+              <span>{language === 'zh' ? '筛选' : 'Filter'}</span>
+              {!isPro && <LockIconSmall size={7} />}
+              {hasActiveFilters && (
+                <Box style={{
+                  position: 'absolute',
+                  top: 2,
+                  right: 2,
+                  width: 4,
+                  height: 4,
+                  borderRadius: '50%',
+                  background: tokens.colors.accent.primary,
+                }} />
+              )}
+            </Box>
+
+            {/* 对比按钮 - 点击跳转到对比页面（非Pro显示锁） */}
+            <Link
+              href="/compare"
+              title={language === 'en' ? 'Compare Traders' : '交易员对比'}
+              className="touch-target-sm"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 3,
+                padding: `4px 8px`,
+                height: 26,
+                borderRadius: tokens.radius.md,
+                background: 'var(--color-bg-tertiary)',
+                border: '1px solid var(--color-border-secondary)',
+                color: 'var(--color-text-secondary)',
+                textDecoration: 'none',
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+                fontSize: 11,
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = 'var(--color-pro-gradient-start)'
+                e.currentTarget.style.color = 'var(--color-pro-gradient-start)'
+                e.currentTarget.style.background = 'var(--color-pro-glow)'
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'var(--color-bg-tertiary)'
+                e.currentTarget.style.borderColor = 'var(--color-border-secondary)'
+                e.currentTarget.style.color = 'var(--color-text-secondary)'
+              }}
+            >
+              <CompareIcon size={11} />
+              <span>{language === 'zh' ? '对比' : 'Compare'}</span>
+              {!isPro && <LockIconSmall size={7} />}
+            </Link>
+
+            {/* 列设置按钮 */}
+            <Box style={{ position: 'relative' }}>
+              <Box
+                onClick={() => setShowColumnSettings(!showColumnSettings)}
+                title={language === 'en' ? 'Column Settings' : '列设置'}
+                className="touch-target-sm"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 3,
+                  padding: `4px 8px`,
+                  height: 26,
+                  borderRadius: tokens.radius.md,
+                  background: showColumnSettings ? 'var(--color-pro-glow)' : 'var(--color-bg-tertiary)',
+                  border: showColumnSettings ? '1px solid var(--color-pro-gradient-start)' : '1px solid var(--color-border-secondary)',
+                  color: showColumnSettings ? 'var(--color-pro-gradient-start)' : 'var(--color-text-secondary)',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  fontSize: 11,
+                }}
+              >
+                <SettingsIcon size={11} />
+              </Box>
+              {/* Column Settings Dropdown */}
+              {showColumnSettings && (
+                <Box
+                  style={{
+                    position: 'absolute',
+                    top: '100%',
+                    right: 0,
+                    marginTop: tokens.spacing[1],
+                    padding: tokens.spacing[3],
+                    background: tokens.colors.bg.primary,
+                    border: `1px solid ${tokens.colors.border.primary}`,
+                    borderRadius: tokens.radius.lg,
+                    boxShadow: tokens.shadow.lg,
+                    zIndex: 9999,
+                    minWidth: 160,
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                >
                   <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>
                     {language === 'zh' ? '列设置' : 'Column Settings'}
                   </Text>
@@ -970,25 +956,27 @@ export default function RankingTable(props: {
               )}
             </Box>
 
-        {/* 导出按钮 */}
-        {isPro && traders.length > 0 && (
-          <ExportButton
-            data={traders.map(t => ({
-              rank: traders.indexOf(t) + 1,
-              handle: t.handle || t.id,
-              source: t.source || '',
-              arena_score: t.arena_score ?? '',
-              roi: t.roi,
-              pnl: t.pnl ?? '',
-              win_rate: t.win_rate ?? '',
-              max_drawdown: t.max_drawdown ?? '',
-              followers: t.followers,
-            }))}
-            filename={`ranking-arena-${source || 'all'}-${timeRange || '90D'}`}
-            format="csv"
-          />
-        )}
-      </Box>
+            {/* 导出按钮 */}
+            {isPro && traders.length > 0 && (
+              <ExportButton
+                data={traders.map(t => ({
+                  rank: traders.indexOf(t) + 1,
+                  handle: t.handle || t.id,
+                  source: t.source || '',
+                  arena_score: t.arena_score ?? '',
+                  roi: t.roi,
+                  pnl: t.pnl ?? '',
+                  win_rate: t.win_rate ?? '',
+                  max_drawdown: t.max_drawdown ?? '',
+                  followers: t.followers,
+                }))}
+                filename={`ranking-arena-${source || 'all'}-${timeRange || '90D'}`}
+                format="csv"
+              />
+            )}
+          </Box>
+        </Box>
+      )}
 
       {/* Feature 2: Inline Table Search */}
       <Box
