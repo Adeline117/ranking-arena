@@ -27,7 +27,7 @@ export const PLATFORM_VALIDATION_CONFIGS = {
     minCount: 80,
   },
   binance_spot: {
-    minTopRoi: 200,
+    minTopRoi: 30,  // Spot 交易 ROI 通常比 Futures 低
     minCount: 60,
   },
   binance_web3: {

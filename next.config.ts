@@ -122,9 +122,74 @@ const nextConfig: NextConfig = {
     ];
   },
   
-  // 响应头配置 - 缓存优化
+  // 响应头配置 - 缓存优化 + 安全头
   async headers() {
+    // Content Security Policy - 允许必要的第三方服务
+    const cspDirectives = [
+      "default-src 'self'",
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com https://challenges.cloudflare.com",
+      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+      "img-src 'self' data: blob: https: http:",
+      "font-src 'self' https://fonts.gstatic.com",
+      "connect-src 'self' https://*.supabase.co https://*.stripe.com https://*.sentry.io wss://*.supabase.co https://api.coingecko.com",
+      "frame-src 'self' https://js.stripe.com https://challenges.cloudflare.com",
+      "frame-ancestors 'none'",
+      "form-action 'self'",
+      "base-uri 'self'",
+      "object-src 'none'",
+      "upgrade-insecure-requests",
+    ].join('; ');
+
+    // Permissions Policy - 限制浏览器功能访问
+    const permissionsPolicy = [
+      'camera=(self)',
+      'microphone=()',
+      'geolocation=()',
+      'interest-cohort=()',
+      'payment=(self)',
+      'usb=()',
+      'bluetooth=()',
+    ].join(', ');
+
     return [
+      {
+        // 全局安全头
+        source: '/:path*',
+        headers: [
+          {
+            key: 'X-DNS-Prefetch-Control',
+            value: 'on',
+          },
+          {
+            key: 'Strict-Transport-Security',
+            value: 'max-age=31536000; includeSubDomains; preload',
+          },
+          {
+            key: 'X-Content-Type-Options',
+            value: 'nosniff',
+          },
+          {
+            key: 'X-Frame-Options',
+            value: 'DENY',
+          },
+          {
+            key: 'X-XSS-Protection',
+            value: '1; mode=block',
+          },
+          {
+            key: 'Referrer-Policy',
+            value: 'strict-origin-when-cross-origin',
+          },
+          {
+            key: 'Permissions-Policy',
+            value: permissionsPolicy,
+          },
+          {
+            key: 'Content-Security-Policy',
+            value: cspDirectives,
+          },
+        ],
+      },
       {
         // 静态资源缓存 1 年
         source: '/:all*(svg|jpg|jpeg|png|gif|ico|webp|avif|woff|woff2)',
@@ -136,17 +201,19 @@ const nextConfig: NextConfig = {
         ],
       },
       {
-        // API 响应添加安全头（包括 v1 版本）
-        source: '/api/:path*',
+        // Apple App Site Association - serve with correct content type
+        source: '/.well-known/apple-app-site-association',
         headers: [
           {
-            key: 'X-Content-Type-Options',
-            value: 'nosniff',
+            key: 'Content-Type',
+            value: 'application/json',
           },
-          {
-            key: 'X-Frame-Options',
-            value: 'DENY',
-          },
+        ],
+      },
+      {
+        // API 响应添加版本头
+        source: '/api/:path*',
+        headers: [
           {
             key: 'X-API-Version',
             value: 'v1',

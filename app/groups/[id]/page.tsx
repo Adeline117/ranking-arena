@@ -19,6 +19,7 @@ import GroupPostList from './ui/GroupPostList'
 import { GroupInfoModal, MembersListModal } from './ui/GroupMembersSection'
 import { useGroupPosts } from './hooks/useGroupPosts'
 import PullToRefreshWrapper from '@/app/components/ui/PullToRefreshWrapper'
+import { useAuthSession } from '@/lib/hooks/useAuthSession'
 
 type Group = {
   id: string
@@ -62,11 +63,7 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
   const { showDangerConfirm } = useDialog()
   const { isPro } = useSubscription()
   const searchParams = useSearchParams()
-
-  // Auth state
-  const [email, setEmail] = useState<string | null>(null)
-  const [userId, setUserId] = useState<string | null>(null)
-  const [accessToken, setAccessToken] = useState<string | null>(null)
+  const { accessToken, email, userId } = useAuthSession()
 
   // Group state
   const [group, setGroup] = useState<Group | null>(null)
@@ -101,14 +98,6 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
     showDangerConfirm,
   })
 
-  // Auth session
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setEmail(data.session?.user?.email ?? null)
-      setUserId(data.session?.user?.id ?? null)
-      setAccessToken(data.session?.access_token ?? null)
-    })
-  }, [])
 
   // Chinese text detection
   const isChineseText = useCallback((text: string) => {

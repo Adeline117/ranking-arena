@@ -7,6 +7,8 @@ import { Box, Text, Button } from '../base'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { useToast } from '../ui/Toast'
 import { supabase } from '@/lib/supabase/client'
+import { useAuthSession } from '@/lib/hooks/useAuthSession'
+import { getCsrfHeaders } from '@/lib/api/client'
 
 interface Comment {
   id: string
@@ -39,6 +41,7 @@ export default function TraderDiscussion({
 }: TraderDiscussionProps) {
   const { language, t: _t } = useLanguage()
   const { showToast } = useToast()
+  const { getAuthHeaders } = useAuthSession()
   const [comments, setComments] = useState<Comment[]>([])
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
@@ -94,11 +97,21 @@ export default function TraderDiscussion({
   const handleSubmit = async () => {
     if (!newComment.trim() || !user || submitting) return
 
+    const authHeaders = getAuthHeaders()
+    if (!authHeaders) {
+      showToast(language === 'zh' ? '请先登录' : 'Please login first', 'error')
+      return
+    }
+
     setSubmitting(true)
     try {
       const response = await fetch(`/api/traders/${encodeURIComponent(traderId)}/discussions`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...authHeaders,
+          ...getCsrfHeaders(),
+        },
         body: JSON.stringify({ content: newComment.trim() }),
       })
 
@@ -124,6 +137,12 @@ export default function TraderDiscussion({
   const handleLike = async (commentId: string) => {
     if (!user) return
 
+    const authHeaders = getAuthHeaders()
+    if (!authHeaders) {
+      showToast(language === 'zh' ? '请先登录' : 'Please login first', 'error')
+      return
+    }
+
     // 乐观更新：立即更新 UI
     setComments(prev => prev.map(c =>
       c.id === commentId
@@ -134,15 +153,21 @@ export default function TraderDiscussion({
     try {
       const response = await fetch(`/api/traders/${encodeURIComponent(traderId)}/discussions/${commentId}/like`, {
         method: 'POST',
+        headers: {
+          ...authHeaders,
+          ...getCsrfHeaders(),
+        },
       })
       if (!response.ok) {
         // 如果失败，回滚乐观更新
         fetchComments()
+        showToast(language === 'zh' ? '操作失败' : 'Action failed', 'error')
       }
     } catch (error) {
       console.error('Error liking comment:', error)
       // 网络错误，回滚乐观更新
       fetchComments()
+      showToast(language === 'zh' ? '网络错误' : 'Network error', 'error')
     }
   }
 

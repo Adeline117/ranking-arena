@@ -3,7 +3,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/layout/TopNav'
 import Card from '@/app/components/ui/Card'
@@ -12,6 +11,7 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useSubscription } from '@/app/components/home/hooks/useSubscription'
 import { useToast } from '@/app/components/ui/Toast'
 import { getCsrfHeaders } from '@/lib/api/client'
+import { useAuthSession } from '@/lib/hooks/useAuthSession'
 
 type RoleNames = {
   admin: { zh: string; en: string }
@@ -29,9 +29,7 @@ export default function ApplyGroupPage() {
   const { isPro } = useSubscription()
   const { showToast } = useToast()
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const [email, setEmail] = useState<string | null>(null)
-  const [accessToken, setAccessToken] = useState<string | null>(null)
-  const [userId, setUserId] = useState<string | null>(null)
+  const { accessToken, email, userId } = useAuthSession()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
@@ -69,16 +67,10 @@ export default function ApplyGroupPage() {
   const [existingApplications, setExistingApplications] = useState<any[]>([])
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setEmail(data.session?.user?.email ?? null)
-      setAccessToken(data.session?.access_token ?? null)
-      setUserId(data.session?.user?.id ?? null)
-
-      if (data.session?.access_token) {
-        fetchMyApplications(data.session.access_token)
-      }
-    })
-  }, [])
+    if (accessToken) {
+      fetchMyApplications(accessToken)
+    }
+  }, [accessToken])
 
   const fetchMyApplications = async (token: string) => {
     try {

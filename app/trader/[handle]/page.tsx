@@ -18,7 +18,7 @@ import TraderFeed from '@/app/components/trader/TraderFeed'
 import StatsPage from '@/app/components/trader/stats/StatsPage'
 // PinnedPost 组件已集成到 TraderFeed 中（置顶帖子自动显示在动态列表最上方）
 import PortfolioTable from '@/app/components/trader/PortfolioTable'
-import ScoreBreakdown from '@/app/components/premium/ScoreBreakdown'
+// ScoreBreakdown 已整合到 OverviewPerformanceCard 中，免费展示
 import { Box, Text } from '@/app/components/base'
 import { RankingSkeleton } from '@/app/components/ui/Skeleton'
 import { useSubscription } from '@/app/components/home/hooks/useSubscription'
@@ -78,6 +78,7 @@ function TraderContent(props: { params: { handle: string } | Promise<{ handle: s
   
   const [handle, setHandle] = useState<string>('')
   const [email, setEmail] = useState<string | null>(null)
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [profile, setProfile] = useState<TraderProfile | null>(null)
   const [performance, setPerformance] = useState<TraderPerformance | null>(null)
   const [stats, setStats] = useState<TraderStats | null>(null)
@@ -111,21 +112,15 @@ function TraderContent(props: { params: { handle: string } | Promise<{ handle: s
     router.replace(newUrl, { scroll: false })
   }
 
-  // Sync with URL changes
+  // Sync with URL changes (allow all users to view stats/portfolio with blurred data)
   useEffect(() => {
     const tab = searchParams.get('tab') as TabKey | null
     if (tab && ['overview', 'stats', 'portfolio'].includes(tab)) {
-      // Gate pro-only tabs
-      if (!isPro && (tab === 'stats' || tab === 'portfolio')) {
-        setActiveTab('overview')
-        router.replace(pathname, { scroll: false })
-      } else {
-        setActiveTab(tab)
-      }
+      setActiveTab(tab)
     } else if (!tab) {
       setActiveTab('overview')
     }
-  }, [searchParams, isPro, pathname, router])
+  }, [searchParams])
 
   // 解析 params
   useEffect(() => {
@@ -150,6 +145,7 @@ function TraderContent(props: { params: { handle: string } | Promise<{ handle: s
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
       setEmail(data.user?.email ?? null)
+      setCurrentUserId(data.user?.id ?? null)
     })
   }, [])
 
@@ -301,24 +297,17 @@ function TraderContent(props: { params: { handle: string } | Promise<{ handle: s
                 gap: tokens.spacing[8],
               }}
             >
-              {/* Left Column - 核心绩效指标和评分 */}
+              {/* Left Column - 核心绩效指标和评分（评分详情已整合，免费展示） */}
               <Box className="stagger-enter" style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[6] }}>
                 {performance ? (
-                  <>
-                    <OverviewPerformanceCard
-                      performance={performance}
-                      equityCurve={equityCurve?.['90D']}
-                    />
-                    <ScoreBreakdown
-                      arenaScore={performance.arena_score ?? null}
-                      returnScore={performance.return_score ?? null}
-                      drawdownScore={performance.drawdown_score ?? null}
-                      stabilityScore={performance.stability_score ?? null}
-                      source={profile.source}
-                      isPro={isPro}
-                      onUnlock={() => router.push('/pricing')}
-                    />
-                  </>
+                  <OverviewPerformanceCard
+                    performance={performance}
+                    equityCurve={equityCurve?.['90D']}
+                    arenaScore={performance.arena_score}
+                    returnScore={performance.return_score}
+                    drawdownScore={performance.drawdown_score}
+                    stabilityScore={performance.stability_score}
+                  />
                 ) : (
                   <Box style={{
                     padding: tokens.spacing[6],
@@ -359,31 +348,42 @@ function TraderContent(props: { params: { handle: string } | Promise<{ handle: s
             </Box>
           )}
 
-          {activeTab === 'stats' && (
-            stats ? (
-              <StatsPage
-                stats={stats}
-                traderHandle={profile.handle}
-                assetBreakdown={assetBreakdown}
-                equityCurve={equityCurve}
-                positionHistory={extendedPositionHistory}
-              />
-            ) : (
-              <Box style={{
-                padding: tokens.spacing[6],
-                background: tokens.colors.bg.secondary,
-                borderRadius: tokens.radius.xl,
-                border: `1px solid ${tokens.colors.border.primary}`,
-                textAlign: 'center',
-              }}>
-                <Text size="sm" color="tertiary">
-                  {language === 'zh' ? '暂无统计数据' : 'No statistics available'}
-                </Text>
-              </Box>
-            )
-          )}
+          {/* 用户看自己的主页不需要会员 */}
+          {(() => {
+            const isOwnProfile = !!(currentUserId && profile.id === currentUserId)
+            const canViewFull = isPro || isOwnProfile
+            return (
+              <>
+                {activeTab === 'stats' && (
+                  stats ? (
+                    <StatsPage
+                      stats={stats}
+                      traderHandle={profile.handle}
+                      assetBreakdown={assetBreakdown}
+                      equityCurve={equityCurve}
+                      positionHistory={extendedPositionHistory}
+                      isPro={canViewFull}
+                      onUnlock={() => router.push('/pricing')}
+                    />
+                  ) : (
+                    <Box style={{
+                      padding: tokens.spacing[6],
+                      background: tokens.colors.bg.secondary,
+                      borderRadius: tokens.radius.xl,
+                      border: `1px solid ${tokens.colors.border.primary}`,
+                      textAlign: 'center',
+                    }}>
+                      <Text size="sm" color="tertiary">
+                        {language === 'zh' ? '暂无统计数据' : 'No statistics available'}
+                      </Text>
+                    </Box>
+                  )
+                )}
 
-          {activeTab === 'portfolio' && <PortfolioTable items={portfolio} history={positionHistory} />}
+                {activeTab === 'portfolio' && <PortfolioTable items={portfolio} history={positionHistory} isPro={canViewFull} onUnlock={() => router.push('/pricing')} />}
+              </>
+            )
+          })()}
         </Box>
       </Box>
     </Box>

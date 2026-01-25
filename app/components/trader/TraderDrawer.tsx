@@ -6,6 +6,7 @@ import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { supabase } from '@/lib/supabase/client'
 import { useToast } from '@/app/components/ui/Toast'
+import { useAuthSession } from '@/lib/hooks/useAuthSession'
 
 export type Trader = {
   id: string
@@ -53,21 +54,14 @@ export default function TraderDrawer({
 }) {
   const { t } = useLanguage()
   const { showToast } = useToast()
+  const { userId } = useAuthSession()
   const [tab, setTab] = useState<'overview' | 'stats' | 'portfolio'>(
     'overview'
   )
   const [perfRange, setPerfRange] = useState<'90D' | '7D' | '30D' | 'Years'>('90D')
-  const [userId, setUserId] = useState<string | null>(null)
   const [following, setFollowing] = useState(false)
   const [followLoading, setFollowLoading] = useState(false)
   const [lastUpdated, setLastUpdated] = useState<string>('')
-
-  // 获取用户登录状态
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setUserId(data.session?.user?.id ?? null)
-    })
-  }, [])
 
   // 检查关注状态
   useEffect(() => {
@@ -332,7 +326,7 @@ export default function TraderDrawer({
         {/* body */}
         <div style={{ flex: 1, overflow: 'auto', padding: 16 }}>
           {tab === 'overview' && (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 360px', gap: 16 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 320px), 1fr))', gap: 16 }}>
               {/* left */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                 <div style={panel}>

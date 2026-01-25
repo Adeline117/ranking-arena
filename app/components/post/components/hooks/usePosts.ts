@@ -1,9 +1,9 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { supabase } from '@/lib/supabase/client'
 import { type PostWithUserState } from '@/lib/types'
 import { getCsrfHeaders } from '@/lib/api/client'
+import { useAuthSession } from '@/lib/hooks/useAuthSession'
 
 type Post = PostWithUserState
 type SortType = 'time' | 'likes' | 'hot'
@@ -32,28 +32,12 @@ interface UsePostsResult {
  */
 export function usePosts(options: UsePostsOptions = {}): UsePostsResult {
   const { groupId, authorHandle, initialSortType = 'time' } = options
-  
+
   const [posts, setPosts] = useState<Post[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [sortType, setSortType] = useState<SortType>(initialSortType)
-  const [accessToken, setAccessToken] = useState<string | null>(null)
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
-  
-  // 获取认证状态
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setAccessToken(session?.access_token || null)
-      setCurrentUserId(session?.user?.id || null)
-    })
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setAccessToken(session?.access_token || null)
-      setCurrentUserId(session?.user?.id || null)
-    })
-
-    return () => subscription.unsubscribe()
-  }, [])
+  const { accessToken, userId: currentUserId } = useAuthSession()
 
   // 加载帖子
   const loadPosts = useCallback(async () => {

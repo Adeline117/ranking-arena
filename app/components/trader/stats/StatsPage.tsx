@@ -43,58 +43,141 @@ interface ExtendedStatsPageProps {
   assetBreakdown?: AssetBreakdownData
   equityCurve?: EquityCurveData
   positionHistory?: PositionHistoryItem[]
+  isPro?: boolean
+  onUnlock?: () => void
 }
 
-export default function StatsPage({ 
-  stats, 
-  traderHandle, 
+export default function StatsPage({
+  stats,
+  traderHandle,
   assetBreakdown,
   equityCurve,
   positionHistory = [],
+  isPro = true,
+  onUnlock,
 }: ExtendedStatsPageProps) {
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
   const [mounted, setMounted] = useState(false)
-  
+
   useEffect(() => {
     setMounted(true)
   }, [])
-  
+
   const frequentlyTraded = stats.frequentlyTraded || []
   const trading = stats.trading
   const additionalStats = stats.additionalStats
 
   return (
-    <Box 
-      style={{ 
-        display: 'flex', 
-        flexDirection: 'column', 
+    <Box
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
         gap: tokens.spacing[6],
         opacity: mounted ? 1 : 0,
         transform: mounted ? 'translateY(0)' : 'translateY(20px)',
         transition: 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
+        position: 'relative',
       }}
     >
-      {/* Asset Breakdown */}
-      <BreakdownSection 
-        assetBreakdown={assetBreakdown} 
-        fallbackData={frequentlyTraded} 
-        delay={0}
-      />
+      {/* Pro Lock Overlay - shows UI but blurs content */}
+      {!isPro && (
+        <Box
+          style={{
+            position: 'absolute',
+            inset: 0,
+            zIndex: 10,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            pointerEvents: 'none',
+          }}
+        >
+          <Box
+            style={{
+              background: `linear-gradient(135deg, ${tokens.colors.bg.primary}F0, ${tokens.colors.bg.secondary}E8)`,
+              backdropFilter: 'blur(4px)',
+              borderRadius: tokens.radius.xl,
+              padding: tokens.spacing[6],
+              border: `1px solid ${tokens.colors.accent.primary}40`,
+              boxShadow: `0 8px 32px rgba(139, 111, 168, 0.2)`,
+              textAlign: 'center',
+              pointerEvents: 'auto',
+              maxWidth: 360,
+            }}
+          >
+            <Box style={{
+              width: 48,
+              height: 48,
+              borderRadius: tokens.radius.full,
+              background: `linear-gradient(135deg, ${tokens.colors.accent.primary}30, ${tokens.colors.accent.brand}20)`,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto',
+              marginBottom: tokens.spacing[4],
+            }}>
+              <svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke={tokens.colors.accent.primary} strokeWidth="2">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+              </svg>
+            </Box>
+            <Text size="lg" weight="bold" style={{ color: tokens.colors.text.primary, marginBottom: tokens.spacing[2] }}>
+              {language === 'zh' ? '解锁完整数据统计' : 'Unlock Full Statistics'}
+            </Text>
+            <Text size="sm" color="secondary" style={{ marginBottom: tokens.spacing[4] }}>
+              {language === 'zh'
+                ? '升级 Pro 会员查看详细的交易统计数据、收益曲线和历史表现'
+                : 'Upgrade to Pro to view detailed trading stats, equity curves and historical performance'}
+            </Text>
+            {onUnlock && (
+              <button
+                onClick={onUnlock}
+                style={{
+                  padding: `${tokens.spacing[3]} ${tokens.spacing[6]}`,
+                  borderRadius: tokens.radius.lg,
+                  border: 'none',
+                  background: `linear-gradient(135deg, ${tokens.colors.accent.primary}, ${tokens.colors.accent.brand})`,
+                  color: '#fff',
+                  fontWeight: tokens.typography.fontWeight.bold,
+                  fontSize: tokens.typography.fontSize.sm,
+                  cursor: 'pointer',
+                  transition: 'all 0.25s ease',
+                  fontFamily: tokens.typography.fontFamily.sans.join(', '),
+                }}
+              >
+                {language === 'zh' ? '升级 Pro' : 'Upgrade to Pro'}
+              </button>
+            )}
+          </Box>
+        </Box>
+      )}
 
-      {/* Chart + Compare Two Columns */}
-      <Box className="stats-two-col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: tokens.spacing[6] }}>
-        <EquityCurveSection equityCurve={equityCurve} traderHandle={traderHandle} delay={0.1} />
-        <ComparePortfolioSection traderHandle={traderHandle} equityCurve={equityCurve} delay={0.15} />
+      {/* Content with blur when not Pro */}
+      <Box style={{ filter: isPro ? 'none' : 'blur(6px)', pointerEvents: isPro ? 'auto' : 'none' }}>
+        {/* Asset Breakdown */}
+        <BreakdownSection
+          assetBreakdown={assetBreakdown}
+          fallbackData={frequentlyTraded}
+          delay={0}
+        />
+
+        {/* Chart + Compare Two Columns */}
+        <Box className="stats-two-col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: tokens.spacing[6], marginTop: tokens.spacing[6] }}>
+          <EquityCurveSection equityCurve={equityCurve} traderHandle={traderHandle} delay={0.1} />
+          <ComparePortfolioSection traderHandle={traderHandle} equityCurve={equityCurve} delay={0.15} />
+        </Box>
+
+        {/* Trading Section */}
+        <Box style={{ marginTop: tokens.spacing[6] }}>
+          <TradingSection
+            trading={trading}
+            additionalStats={additionalStats}
+            positionHistory={positionHistory}
+            t={t}
+            delay={0.2}
+          />
+        </Box>
       </Box>
-
-      {/* Trading Section */}
-      <TradingSection 
-        trading={trading} 
-        additionalStats={additionalStats}
-        positionHistory={positionHistory}
-        t={t}
-        delay={0.2}
-      />
     </Box>
   )
 }

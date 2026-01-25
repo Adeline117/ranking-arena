@@ -28,6 +28,11 @@ export interface OverviewPerformanceCardProps {
   profitableWeeksPct?: number
   equityCurve?: Array<{ date: string; roi: number; pnl: number }>
   lastUpdated?: string
+  // Score breakdown props (integrated, free for all users)
+  arenaScore?: number | null
+  returnScore?: number | null
+  drawdownScore?: number | null
+  stabilityScore?: number | null
 }
 
 type Period = '7D' | '30D' | '90D'
@@ -77,7 +82,16 @@ function MiniSparkline({ data, color, width = 80, height = 28 }: { data: number[
  * Performance卡片 - 交易员主页核心指标
  * 优化版：信息层级分明，主指标突出，次指标用徽章展示
  */
-export default function OverviewPerformanceCard({ performance, profitableWeeksPct, equityCurve, lastUpdated }: OverviewPerformanceCardProps) {
+export default function OverviewPerformanceCard({
+  performance,
+  profitableWeeksPct,
+  equityCurve,
+  lastUpdated,
+  arenaScore,
+  returnScore,
+  drawdownScore,
+  stabilityScore,
+}: OverviewPerformanceCardProps) {
   void profitableWeeksPct
   const { t, language } = useLanguage()
   const [period, setPeriod] = useState<Period>('90D')
@@ -377,10 +391,173 @@ export default function OverviewPerformanceCard({ performance, profitableWeeksPc
               value={winningPositions !== undefined && totalPositions !== undefined ? `${winningPositions}/${totalPositions}` : '—'}
             />
           </Box>
+
+          {/* 评分详情 - 免费展示 */}
+          {(arenaScore !== undefined || returnScore !== undefined || drawdownScore !== undefined || stabilityScore !== undefined) && (
+            <Box
+              style={{
+                marginTop: tokens.spacing[5],
+                paddingTop: tokens.spacing[5],
+                borderTop: `1px solid ${tokens.colors.border.primary}40`,
+                opacity: isVisible ? 1 : 0,
+                transform: isVisible ? 'translateY(0)' : 'translateY(10px)',
+                transition: 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1) 0.4s',
+              }}
+            >
+              <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], marginBottom: tokens.spacing[4] }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={tokens.colors.accent.warning} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                </svg>
+                <Text size="md" weight="bold" style={{ color: tokens.colors.text.primary }}>
+                  {language === 'zh' ? '评分详情' : 'Score Breakdown'}
+                </Text>
+                {/* Arena Score 总分 */}
+                {arenaScore != null && (
+                  <Box
+                    style={{
+                      marginLeft: 'auto',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: tokens.spacing[2],
+                      padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
+                      background: `${getScoreColor(arenaScore, 100)}15`,
+                      borderRadius: tokens.radius.full,
+                      border: `1px solid ${getScoreColor(arenaScore, 100)}30`,
+                    }}
+                  >
+                    <Text size="xs" color="secondary" weight="bold">Arena Score</Text>
+                    <Text
+                      size="sm"
+                      weight="black"
+                      style={{
+                        color: getScoreColor(arenaScore, 100),
+                        fontFamily: tokens.typography.fontFamily.mono.join(', '),
+                      }}
+                    >
+                      {arenaScore.toFixed(0)}
+                    </Text>
+                  </Box>
+                )}
+              </Box>
+
+              {/* 分数条 */}
+              <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
+                <ScoreBar
+                  label={language === 'zh' ? '收益分' : 'Return Score'}
+                  score={returnScore ?? null}
+                  maxScore={85}
+                  isVisible={isVisible}
+                  delay={500}
+                />
+                <ScoreBar
+                  label={language === 'zh' ? '回撤分' : 'Drawdown Score'}
+                  score={drawdownScore ?? null}
+                  maxScore={8}
+                  isVisible={isVisible}
+                  delay={600}
+                />
+                <ScoreBar
+                  label={language === 'zh' ? '稳定分' : 'Stability Score'}
+                  score={stabilityScore ?? null}
+                  maxScore={7}
+                  isVisible={isVisible}
+                  delay={700}
+                />
+              </Box>
+
+              {/* 评分说明 */}
+              <Box
+                style={{
+                  marginTop: tokens.spacing[4],
+                  padding: tokens.spacing[3],
+                  background: tokens.colors.bg.tertiary,
+                  borderRadius: tokens.radius.md,
+                  borderLeft: `3px solid ${tokens.colors.accent.warning}40`,
+                }}
+              >
+                <Text size="xs" color="tertiary" style={{ lineHeight: 1.6 }}>
+                  <strong style={{ color: tokens.colors.text.secondary }}>
+                    {language === 'zh' ? '评分说明' : 'Score Guide'}
+                  </strong><br />
+                  {language === 'zh'
+                    ? <>收益分 (0-85)：基于 ROI 强度计算 | 回撤分 (0-8)：回撤越小分数越高 | 稳定分 (0-7)：基于胜率计算</>
+                    : <>Return (0-85): Based on ROI | Drawdown (0-8): Lower = higher | Stability (0-7): Based on win rate</>
+                  }
+                </Text>
+              </Box>
+            </Box>
+          )}
         </Box>
       </Box>
     </Box>
     </div>
+  )
+}
+
+/**
+ * 分数配色
+ */
+function getScoreColor(score: number | null, max: number): string {
+  if (score == null) return tokens.colors.text.tertiary
+  const ratio = score / max
+  if (ratio >= 0.7) return tokens.colors.accent.success
+  if (ratio >= 0.4) return tokens.colors.accent.warning
+  return tokens.colors.accent.error
+}
+
+/**
+ * 分数进度条
+ */
+function ScoreBar({
+  label,
+  score,
+  maxScore,
+  isVisible = false,
+  delay = 0,
+}: {
+  label: string
+  score: number | null
+  maxScore: number
+  isVisible?: boolean
+  delay?: number
+}) {
+  const color = getScoreColor(score, maxScore)
+  const width = score != null ? (score / maxScore) * 100 : 0
+  const animatedWidth = isVisible ? width : 0
+
+  return (
+    <Box>
+      <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+        <Text size="sm" color="secondary" weight="bold">{label}</Text>
+        <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
+          <Text size="sm" weight="black" style={{ color, fontFamily: tokens.typography.fontFamily.mono.join(', ') }}>
+            {score != null ? score.toFixed(1) : '—'}
+          </Text>
+          <Text size="xs" color="tertiary">/ {maxScore}</Text>
+        </Box>
+      </Box>
+      <Box
+        style={{
+          height: 8,
+          background: tokens.colors.bg.tertiary,
+          borderRadius: tokens.radius.full,
+          overflow: 'hidden',
+          position: 'relative',
+          boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.15)',
+        }}
+      >
+        <Box
+          style={{
+            height: '100%',
+            width: `${animatedWidth}%`,
+            background: `linear-gradient(90deg, ${color}99 0%, ${color} 100%)`,
+            borderRadius: tokens.radius.full,
+            transition: `width 1s cubic-bezier(0.4, 0, 0.2, 1) ${delay}ms`,
+            boxShadow: isVisible ? `0 0 8px ${color}40` : 'none',
+          }}
+        />
+      </Box>
+    </Box>
   )
 }
 

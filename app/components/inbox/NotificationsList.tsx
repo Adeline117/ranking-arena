@@ -1,13 +1,14 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import Link from 'next/link'
-import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
+import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { formatTimeAgo } from '@/lib/utils/date'
 import { useInboxStore } from '@/lib/stores/inboxStore'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { type NotificationWithActor } from '@/lib/types'
+import { useToast } from '@/app/components/ui/Toast'
 
 type Notification = NotificationWithActor
 
@@ -15,15 +16,13 @@ export default function NotificationsList() {
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [loading, setLoading] = useState(true)
   const [collapsed, setCollapsed] = useState(false)
-  const [accessToken, setAccessToken] = useState<string | null>(null)
+  const { accessToken } = useAuthSession()
   const setUnreadNotifications = useInboxStore((s) => s.setUnreadNotifications)
   const unreadNotifications = useInboxStore((s) => s.unreadNotifications)
-
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setAccessToken(data.session?.access_token ?? null)
-    })
-  }, [])
+  const { showToast } = useToast()
+  // 用于防止重复请求和回滚
+  const pendingMarkAllRef = useRef(false)
+  const pendingMarkRef = useRef<Set<string>>(new Set())
 
   const loadNotifications = useCallback(async () => {
     if (!accessToken) return
@@ -49,35 +48,78 @@ export default function NotificationsList() {
     if (accessToken) loadNotifications()
   }, [accessToken, loadNotifications])
 
-  const markAllAsRead = useCallback(() => {
-    if (!accessToken) return
+  const markAllAsRead = useCallback(async () => {
+    if (!accessToken || pendingMarkAllRef.current) return
+    pendingMarkAllRef.current = true
+
+    // 保存原状态用于回滚
+    const prevNotifications = [...notifications]
+    const prevUnreadCount = unreadNotifications
+
+    // 乐观更新
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })))
     setUnreadNotifications(0)
-    fetch('/api/notifications', {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${accessToken}`,
-        ...getCsrfHeaders(),
-      },
-      body: JSON.stringify({ mark_all: true }),
-    }).catch(() => {})
-  }, [accessToken, setUnreadNotifications])
 
-  const markAsRead = useCallback((id: string) => {
-    if (!accessToken) return
+    try {
+      const response = await fetch('/api/notifications', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`,
+          ...getCsrfHeaders(),
+        },
+        body: JSON.stringify({ mark_all: true }),
+      })
+      if (!response.ok) {
+        throw new Error('Failed to mark all as read')
+      }
+    } catch {
+      // 回滚
+      setNotifications(prevNotifications)
+      setUnreadNotifications(prevUnreadCount)
+      showToast('操作失败，请重试', 'error')
+    } finally {
+      pendingMarkAllRef.current = false
+    }
+  }, [accessToken, notifications, unreadNotifications, setUnreadNotifications, showToast])
+
+  const markAsRead = useCallback(async (id: string) => {
+    if (!accessToken || pendingMarkRef.current.has(id)) return
+    pendingMarkRef.current.add(id)
+
+    // 找到当前通知的状态
+    const currentNotification = notifications.find(n => n.id === id)
+    if (!currentNotification || currentNotification.read) {
+      pendingMarkRef.current.delete(id)
+      return
+    }
+
+    // 乐观更新
     setNotifications((prev) => prev.map((n) => n.id === id ? { ...n, read: true } : n))
     setUnreadNotifications(Math.max(0, unreadNotifications - 1))
-    fetch('/api/notifications', {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${accessToken}`,
-        ...getCsrfHeaders(),
-      },
-      body: JSON.stringify({ notification_id: id }),
-    }).catch(() => {})
-  }, [accessToken, unreadNotifications, setUnreadNotifications])
+
+    try {
+      const response = await fetch('/api/notifications', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`,
+          ...getCsrfHeaders(),
+        },
+        body: JSON.stringify({ notification_id: id }),
+      })
+      if (!response.ok) {
+        throw new Error('Failed to mark as read')
+      }
+    } catch {
+      // 回滚
+      setNotifications((prev) => prev.map((n) => n.id === id ? { ...n, read: false } : n))
+      setUnreadNotifications(unreadNotifications)
+      showToast('操作失败', 'error')
+    } finally {
+      pendingMarkRef.current.delete(id)
+    }
+  }, [accessToken, notifications, unreadNotifications, setUnreadNotifications, showToast])
 
   const getIcon = (type: string) => {
     if (type === 'follow') return '关'

@@ -24,7 +24,7 @@ if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
 const SOURCE = 'okx_web3'
-const BASE_URL = 'https://web3.okx.com/copy-trade/leaderboard/solana'
+const BASE_URL = 'https://web3.okx.com/zh-hans/copy-trade/leaderboard'
 const TARGET_COUNT = 100
 
 // Arena Score 计算逻辑

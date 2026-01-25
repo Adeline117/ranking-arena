@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { useToast } from './Toast'
 import { apiPost } from '@/lib/api/client'
@@ -34,6 +34,7 @@ export default function UserFollowButton({
   const [followedBy, setFollowedBy] = useState(false)
   const [loading, setLoading] = useState(false)
   const [initialLoading, setInitialLoading] = useState(true) // 初始加载状态
+  const pendingRef = useRef(false)
 
   useEffect(() => {
     if (!currentUserId || currentUserId === targetUserId) {
@@ -80,6 +81,9 @@ export default function UserFollowButton({
       return
     }
 
+    // Prevent double-click
+    if (pendingRef.current) return
+    pendingRef.current = true
     setLoading(true)
     try {
       const result = await apiPost<{ following: boolean; mutual?: boolean; tableNotFound?: boolean }>('/api/users/follow', {
@@ -110,13 +114,14 @@ export default function UserFollowButton({
       showToast('操作失败，请重试', 'error')
     } finally {
       setLoading(false)
+      pendingRef.current = false
     }
   }
 
   const sizeStyles = {
-    sm: { padding: '6px 12px', fontSize: '12px', borderRadius: '6px' },
-    md: { padding: '10px 16px', fontSize: '14px', borderRadius: '10px' },
-    lg: { padding: '12px 20px', fontSize: '15px', borderRadius: '12px' },
+    sm: { padding: '10px 16px', fontSize: '13px', borderRadius: '8px', minHeight: '44px' },
+    md: { padding: '12px 20px', fontSize: '14px', borderRadius: '10px', minHeight: '44px' },
+    lg: { padding: '14px 24px', fontSize: '15px', borderRadius: '12px', minHeight: '48px' },
   }
 
   const isMutual = following && followedBy
@@ -130,7 +135,7 @@ export default function UserFollowButton({
           width: fullWidth ? '100%' : 'auto',
           border: '1px solid rgba(255,255,255,0.2)',
           background: 'rgba(255,255,255,0.05)',
-          color: '#eaeaea',
+          color: tokens.colors.text.primary,
           fontWeight: 700,
           cursor: 'pointer',
         }}
@@ -155,7 +160,7 @@ export default function UserFollowButton({
           width: fullWidth ? '100%' : 'auto',
           border: '1px solid rgba(255,255,255,0.2)',
           background: 'rgba(255,255,255,0.05)',
-          color: '#fff',
+          color: tokens.colors.white,
           fontWeight: 700,
           cursor: 'not-allowed',
           opacity: 0.6,
@@ -174,8 +179,8 @@ export default function UserFollowButton({
         ...sizeStyles[size],
         width: fullWidth ? '100%' : 'auto',
         border: following ? '1px solid rgba(255,255,255,0.2)' : 'none',
-        background: following ? 'rgba(255,255,255,0.05)' : '#8b6fa8',
-        color: '#fff',
+        background: following ? tokens.glass.bg.light : tokens.colors.accent.brand,
+        color: tokens.colors.white,
         fontWeight: 700,
         cursor: loading ? 'not-allowed' : 'pointer',
         opacity: loading ? 0.6 : 1,

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, memo } from 'react'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
@@ -14,12 +14,12 @@ interface SimilarTradersProps {
 /**
  * 带动画的头像组件
  */
-function AnimatedAvatar({ 
-  avatarUrl, 
-  handle, 
-  traderId, 
-  size = 40 
-}: { 
+const AnimatedAvatar = memo(function AnimatedAvatar({
+  avatarUrl,
+  handle,
+  traderId,
+  size = 40
+}: {
   avatarUrl?: string
   handle: string
   traderId: string
@@ -28,9 +28,12 @@ function AnimatedAvatar({
   const [imageLoaded, setImageLoaded] = useState(false)
   const [imageError, setImageError] = useState(false)
   const [isHovered, setIsHovered] = useState(false)
-  
+
+  const handleMouseEnter = useCallback(() => setIsHovered(true), [])
+  const handleMouseLeave = useCallback(() => setIsHovered(false), [])
+
   const showFallback = !avatarUrl || imageError || !imageLoaded
-  
+
   return (
     <Box
       style={{
@@ -48,8 +51,8 @@ function AnimatedAvatar({
         position: 'relative',
         transform: isHovered ? 'scale(1.1)' : 'scale(1)',
       }}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
     >
       {avatarUrl && !imageError && (
         <img 
@@ -89,7 +92,7 @@ function AnimatedAvatar({
       )}
     </Box>
   )
-}
+})
 
 export default function SimilarTraders({ traders }: SimilarTradersProps) {
   const [mounted, setMounted] = useState(false)

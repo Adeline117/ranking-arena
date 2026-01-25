@@ -12,6 +12,7 @@ import { useSubscription } from '@/app/components/home/hooks/useSubscription'
 import { useToast } from '@/app/components/ui/Toast'
 import { useDialog } from '@/app/components/ui/Dialog'
 import { getCsrfHeaders } from '@/lib/api/client'
+import { useAuthSession } from '@/lib/hooks/useAuthSession'
 
 type GroupMember = {
   user_id: string
@@ -119,9 +120,7 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
   const { isPro } = useSubscription()
   const { showToast } = useToast()
   const { showDangerConfirm } = useDialog()
-  const [email, setEmail] = useState<string | null>(null)
-  const [userId, setUserId] = useState<string | null>(null)
-  const [accessToken, setAccessToken] = useState<string | null>(null)
+  const { accessToken, email, userId } = useAuthSession()
   const [group, setGroup] = useState<Group | null>(null)
   const [members, setMembers] = useState<GroupMember[]>([])
   const [posts, setPosts] = useState<Post[]>([])
@@ -187,13 +186,6 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
   const [notifyMessage, setNotifyMessage] = useState('')
   const [notifySending, setNotifySending] = useState(false)
 
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setEmail(data.session?.user?.email ?? null)
-      setUserId(data.session?.user?.id ?? null)
-      setAccessToken(data.session?.access_token ?? null)
-    })
-  }, [])
 
   // Debounce member search
   useEffect(() => {
