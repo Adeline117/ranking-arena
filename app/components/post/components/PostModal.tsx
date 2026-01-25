@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { tokens } from '@/lib/design-tokens'
+import { useAutoFocusTrap } from '@/lib/hooks/useFocusTrap'
 
 interface ModalProps {
   children: React.ReactNode
@@ -11,6 +12,7 @@ interface ModalProps {
 
 export function Modal({ children, onClose }: ModalProps) {
   const [mounted, setMounted] = useState(false)
+  const modalRef = useAutoFocusTrap<HTMLDivElement>(mounted)
 
   useEffect(() => {
     setMounted(true)
@@ -48,6 +50,7 @@ export function Modal({ children, onClose }: ModalProps) {
       }}
     >
       <div
+        ref={modalRef}
         onClick={(e) => e.stopPropagation()}
         style={{
           width: 'min(760px, 100%)',

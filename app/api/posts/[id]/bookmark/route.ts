@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { apiLogger } from '@/lib/utils/logger'
+import { validateCsrfToken, CSRF_COOKIE_NAME, CSRF_HEADER_NAME } from '@/lib/utils/csrf'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -50,7 +51,14 @@ export async function GET(request: NextRequest, context: RouteContext) {
 export async function POST(request: NextRequest, context: RouteContext) {
   try {
     const { id } = await context.params
-    
+
+    // CSRF 验证
+    const cookieToken = request.cookies.get(CSRF_COOKIE_NAME)?.value
+    const headerToken = request.headers.get(CSRF_HEADER_NAME) ?? undefined
+    if (!validateCsrfToken(cookieToken, headerToken)) {
+      return NextResponse.json({ error: 'CSRF 验证失败' }, { status: 403 })
+    }
+
     const authHeader = request.headers.get('Authorization')
     if (!authHeader?.startsWith('Bearer ')) {
       return NextResponse.json({ error: '未登录' }, { status: 401 })

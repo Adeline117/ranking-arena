@@ -6,6 +6,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { supabase } from '@/lib/supabase/client'
+import { useCapacitorHaptics } from '@/lib/hooks/useCapacitor'
 
 // ============================================
 // SVG 图标组件
@@ -101,9 +102,15 @@ interface NavItem {
 export default function MobileBottomNav() {
   const pathname = usePathname()
   const { t } = useLanguage()
+  const { impact } = useCapacitorHaptics()
   const [userHandle, setUserHandle] = useState<string | null>(null)
   const [isVisible, setIsVisible] = useState(true)
   const [lastScrollY, setLastScrollY] = useState(0)
+
+  // Haptic feedback on nav item click
+  const handleNavClick = useCallback(() => {
+    impact('light')
+  }, [impact])
 
   // 获取当前用户的 handle
   useEffect(() => {
@@ -232,6 +239,7 @@ export default function MobileBottomNav() {
               className="touch-target"
               aria-label={t(item.labelKey)}
               aria-current={active ? 'page' : undefined}
+              onClick={handleNavClick}
               style={{
                 display: 'flex',
                 flexDirection: 'column',

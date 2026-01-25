@@ -481,6 +481,7 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
             </Text>
             <button
               onClick={handleClearAllHistory}
+              aria-label="清空搜索历史"
               style={{
                 background: 'transparent',
                 border: 'none',
@@ -522,6 +523,7 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
                 </Link>
                 <button
                   onClick={(e) => handleDeleteHistory(term, e)}
+                  aria-label={`删除搜索记录: ${term}`}
                   style={{
                     background: 'transparent',
                     border: 'none',

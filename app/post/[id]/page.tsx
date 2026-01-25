@@ -6,8 +6,10 @@ import { supabase } from '@/lib/supabase/client'
 import TopNav from '@/app/components/layout/TopNav'
 import PostFeed from '@/app/components/post/PostFeed'
 import { tokens } from '@/lib/design-tokens'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { JsonLd } from '@/app/components/Providers/JsonLd'
 import { generatePostArticleSchema, generateBreadcrumbSchema, combineSchemas } from '@/lib/seo'
+import { useAuthSession } from '@/lib/hooks/useAuthSession'
 
 interface PostData {
   id: string
@@ -23,7 +25,8 @@ interface PostData {
 
 export default function PostDetailPage(props: { params: Promise<{ id: string }> }) {
   const router = useRouter()
-  const [email, setEmail] = useState<string | null>(null)
+  const { email } = useAuthSession()
+  const { language } = useLanguage()
   const [postId, setPostId] = useState<string | null>(null)
   const [postData, setPostData] = useState<PostData | null>(null)
 
@@ -37,7 +40,7 @@ export default function PostDetailPage(props: { params: Promise<{ id: string }> 
   // 获取帖子数据用于 SEO
   useEffect(() => {
     if (!postId) return
-    
+
     supabase
       .from('posts')
       .select('id, title, content, author_handle, created_at, updated_at, like_count, comment_count, view_count')
@@ -50,19 +53,6 @@ export default function PostDetailPage(props: { params: Promise<{ id: string }> 
       })
   }, [postId])
 
-  // 检查登录状态
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setEmail(session?.user?.email ?? null)
-    })
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_, session) => {
-      setEmail(session?.user?.email ?? null)
-    })
-
-    return () => subscription.unsubscribe()
-  }, [])
-
   if (!postId) {
     return (
       <div style={{ 
@@ -71,13 +61,13 @@ export default function PostDetailPage(props: { params: Promise<{ id: string }> 
         color: tokens.colors.text.primary 
       }}>
         <TopNav email={email} />
-        <div style={{ 
-          maxWidth: 800, 
-          margin: '0 auto', 
+        <div style={{
+          maxWidth: 800,
+          margin: '0 auto',
           padding: tokens.spacing[6],
           textAlign: 'center',
         }}>
-          加载中...
+          {language === 'zh' ? '加载中...' : 'Loading...'}
         </div>
       </div>
     )

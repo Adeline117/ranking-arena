@@ -380,7 +380,7 @@ export function DialogProvider({ children }: { children: ReactNode }) {
                     borderRadius: tokens.radius.lg,
                     border: 'none',
                     background: buttonConfig.gradient,
-                    color: '#ffffff',
+                    color: tokens.colors.white,
                     fontWeight: tokens.typography.fontWeight.black,
                     fontSize: tokens.typography.fontSize.sm,
                     cursor: isLoading ? 'not-allowed' : 'pointer',
@@ -405,12 +405,12 @@ export function DialogProvider({ children }: { children: ReactNode }) {
                   }}
                 >
                   {isLoading && (
-                    <span 
-                      className="spinner-sm" 
-                      style={{ 
-                        borderColor: 'rgba(255,255,255,0.3)',
-                        borderTopColor: '#fff',
-                      }} 
+                    <span
+                      className="spinner-sm"
+                      style={{
+                        borderColor: `${tokens.colors.white}4d`,
+                        borderTopColor: tokens.colors.white,
+                      }}
                     />
                   )}
                   {state.options.confirmText || t('confirm')}

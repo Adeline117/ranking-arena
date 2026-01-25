@@ -2,11 +2,16 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { createLogger } from '@/lib/utils/logger'
 import { deleteServerCacheByPrefix } from '@/lib/utils/server-cache'
+import { validateCsrfToken, CSRF_COOKIE_NAME, CSRF_HEADER_NAME } from '@/lib/utils/csrf'
 
 const logger = createLogger('posts-edit')
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+
+// 内容长度限制
+const MAX_TITLE_LENGTH = 200
+const MAX_CONTENT_LENGTH = 50000
 
 export async function PUT(
   request: NextRequest,
@@ -14,6 +19,13 @@ export async function PUT(
 ) {
   try {
     const { id: postId } = await params
+
+    // CSRF 验证
+    const cookieToken = request.cookies.get(CSRF_COOKIE_NAME)?.value
+    const headerToken = request.headers.get(CSRF_HEADER_NAME) ?? undefined
+    if (!validateCsrfToken(cookieToken, headerToken)) {
+      return NextResponse.json({ error: 'CSRF 验证失败' }, { status: 403 })
+    }
 
     // 验证用户身份
     const authHeader = request.headers.get('Authorization')
@@ -36,6 +48,15 @@ export async function PUT(
 
     if (!title?.trim()) {
       return NextResponse.json({ error: '标题不能为空' }, { status: 400 })
+    }
+
+    // 内容长度验证
+    if (title.length > MAX_TITLE_LENGTH) {
+      return NextResponse.json({ error: `标题不能超过${MAX_TITLE_LENGTH}个字符` }, { status: 400 })
+    }
+
+    if (content && content.length > MAX_CONTENT_LENGTH) {
+      return NextResponse.json({ error: `内容不能超过${MAX_CONTENT_LENGTH}个字符` }, { status: 400 })
     }
 
     // 获取帖子信息，验证所有权

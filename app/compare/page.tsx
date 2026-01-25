@@ -9,6 +9,7 @@ import { Box, Text, Button } from '@/app/components/base'
 import TraderComparison from '@/app/components/premium/TraderComparison'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useToast } from '@/app/components/ui/Toast'
+import { useAuthSession } from '@/lib/hooks/useAuthSession'
 
 interface TraderCompareData {
   id: string
@@ -34,10 +35,8 @@ function CompareContent() {
   const searchParams = useSearchParams()
   const { t } = useLanguage()
   const { showToast } = useToast()
-  
-  const [email, setEmail] = useState<string | null>(null)
-  const [_userId, setUserId] = useState<string | null>(null)
-  const [accessToken, setAccessToken] = useState<string | null>(null)
+  const { accessToken, authChecked, email } = useAuthSession()
+
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [traders, setTraders] = useState<TraderCompareData[]>([])
@@ -46,18 +45,12 @@ function CompareContent() {
   const [searching, setSearching] = useState(false)
   const [isPro, setIsPro] = useState(false)
 
-  // 获取用户信息
+  // 检查登录状态
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setEmail(data.session?.user?.email ?? null)
-      setUserId(data.session?.user?.id ?? null)
-      setAccessToken(data.session?.access_token ?? null)
-      
-      if (!data.session) {
-        router.push('/login?redirect=/compare')
-      }
-    })
-  }, [router])
+    if (authChecked && !accessToken) {
+      router.push('/login?redirect=/compare')
+    }
+  }, [authChecked, accessToken, router])
 
   // 检查 Pro 权限并加载初始数据
   useEffect(() => {

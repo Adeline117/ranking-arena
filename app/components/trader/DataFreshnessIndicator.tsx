@@ -29,7 +29,7 @@ export default function DataFreshnessIndicator({
   staleReason,
 }: DataFreshnessIndicatorProps) {
   const traderId = buildTraderId(platform, traderKey)
-  const { triggerRefresh, jobStatus, isRefreshing, error } = useTraderRefresh(traderId)
+  const { triggerRefresh, isRefreshing, error } = useTraderRefresh(traderId)
   const [refreshTriggered, setRefreshTriggered] = useState(false)
 
   const latestUpdate = lastSnapshotAt || lastProfileAt

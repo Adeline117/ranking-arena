@@ -933,14 +933,18 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; layout?:
       // 移除图片后再翻译（避免翻译图片链接）
       const textToTranslate = removeImagesFromContent(content)
       
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        ...getCsrfHeaders(),
+      }
+      if (accessToken) {
+        headers['Authorization'] = `Bearer ${accessToken}`
+      }
       const response = await fetch('/api/translate', {
         method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          ...getCsrfHeaders()
-        },
-        body: JSON.stringify({ 
-          text: textToTranslate, 
+        headers,
+        body: JSON.stringify({
+          text: textToTranslate,
           targetLang,
           contentType: 'post_content',
           contentId: postId,

@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
-import { Box, Text, Button } from '@/app/components/base'
+import { Box, Text } from '@/app/components/base'
 import Avatar from '@/app/components/ui/Avatar'
 import { useMultiAccount } from '@/lib/hooks/useMultiAccount'
 import { useRouter } from 'next/navigation'
@@ -17,7 +17,6 @@ export default function AccountSwitcher({ onClose }: AccountSwitcherProps) {
     accounts,
     activeAccount,
     inactiveAccounts,
-    canAddAccount,
     isPro,
     switchAccount,
     removeAccount,
@@ -96,7 +95,7 @@ export default function AccountSwitcher({ onClose }: AccountSwitcherProps) {
       {inactiveAccounts.map((account) => (
         <Box
           key={account.userId}
-          onClick={() => handleSwitch(account.userId)}
+          onClick={(e) => { e.stopPropagation(); handleSwitch(account.userId) }}
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -142,7 +141,7 @@ export default function AccountSwitcher({ onClose }: AccountSwitcherProps) {
 
       {/* Add account */}
       <Box
-        onClick={handleAddAccount}
+        onClick={(e) => { e.stopPropagation(); handleAddAccount() }}
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -183,7 +182,8 @@ export default function AccountSwitcher({ onClose }: AccountSwitcherProps) {
       {/* Sign out all */}
       {accounts.length > 1 && (
         <Box
-          onClick={async () => {
+          onClick={async (e) => {
+            e.stopPropagation()
             if (signingOut) return
             setSigningOut(true)
             try {

@@ -14,7 +14,7 @@ interface TraderTabsProps {
   onProRequired?: () => void
 }
 
-export default function TraderTabs({ activeTab, onTabChange, isPro = false, onProRequired }: TraderTabsProps) {
+export default function TraderTabs({ activeTab, onTabChange, isPro = false, onProRequired: _onProRequired }: TraderTabsProps) {
   const { t } = useLanguage()
   const [indicatorStyle, setIndicatorStyle] = useState({ left: 0, width: 0 })
   const tabRefs = useRef<Map<TabKey, HTMLButtonElement>>(new Map())
@@ -58,27 +58,18 @@ export default function TraderTabs({ activeTab, onTabChange, isPro = false, onPr
       }}
     >
       {tabs.map((tab) => {
-        const isProLocked = !isPro && (tab.key === 'stats' || tab.key === 'portfolio')
+        const isProTab = tab.key === 'stats' || tab.key === 'portfolio'
+        const showProBadge = !isPro && isProTab
         return (
           <button
             key={tab.key}
             ref={(el) => { if (el) tabRefs.current.set(tab.key, el) }}
             className="profile-tab-button interactive-scale"
-            onClick={() => {
-              if (isProLocked && onProRequired) {
-                onProRequired()
-              } else {
-                onTabChange(tab.key)
-              }
-            }}
+            onClick={() => onTabChange(tab.key)}
             onKeyDown={(e) => {
               if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault()
-                if (isProLocked && onProRequired) {
-                  onProRequired()
-                } else {
-                  onTabChange(tab.key)
-                }
+                onTabChange(tab.key)
               } else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
                 e.preventDefault()
                 const currentIndex = tabs.findIndex((t) => t.key === activeTab)
@@ -100,23 +91,22 @@ export default function TraderTabs({ activeTab, onTabChange, isPro = false, onPr
                 : '1px solid transparent',
               padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
               minHeight: 44,
-              cursor: isProLocked ? 'not-allowed' : 'pointer',
+              cursor: 'pointer',
               position: 'relative',
               borderRadius: tokens.radius.lg,
               transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
               display: 'flex',
               alignItems: 'center',
               gap: tokens.spacing[2],
-              opacity: isProLocked ? 0.6 : 1,
             }}
             onMouseEnter={(e) => {
-              if (activeTab !== tab.key && !isProLocked) {
+              if (activeTab !== tab.key) {
                 e.currentTarget.style.background = `${tokens.colors.bg.tertiary}80`
                 e.currentTarget.style.transform = 'translateY(-2px)'
               }
             }}
             onMouseLeave={(e) => {
-              if (activeTab !== tab.key && !isProLocked) {
+              if (activeTab !== tab.key) {
                 e.currentTarget.style.background = 'transparent'
                 e.currentTarget.style.transform = 'translateY(0)'
               }
@@ -132,11 +122,17 @@ export default function TraderTabs({ activeTab, onTabChange, isPro = false, onPr
             >
               {tab.label}
             </Text>
-            {isProLocked && (
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.6 }}>
-                <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-              </svg>
+            {showProBadge && (
+              <Box style={{
+                padding: '1px 6px',
+                borderRadius: tokens.radius.sm,
+                background: `linear-gradient(135deg, ${tokens.colors.accent.primary}25, ${tokens.colors.accent.brand}15)`,
+                border: `1px solid ${tokens.colors.accent.primary}30`,
+              }}>
+                <Text size="xs" weight="bold" style={{ color: tokens.colors.accent.primary, fontSize: 9 }}>
+                  PRO
+                </Text>
+              </Box>
             )}
           </button>
         )
