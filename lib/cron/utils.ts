@@ -46,9 +46,9 @@ function getPlatformCircuitBreaker(platform: string) {
 // 平台脚本配置
 export const PLATFORM_SCRIPTS: Record<string, Array<{ name: string; script: string; args: string[] }>> = {
   binance_futures: [
-    { name: 'binance_futures_7d', script: 'scripts/import/import_binance_futures.mjs', args: ['7D'] },
-    { name: 'binance_futures_30d', script: 'scripts/import/import_binance_futures.mjs', args: ['30D'] },
-    { name: 'binance_futures_90d', script: 'scripts/import/import_binance_futures.mjs', args: ['90D'] },
+    { name: 'binance_futures_7d', script: 'scripts/import/import_binance_futures_api.mjs', args: ['7D'] },
+    { name: 'binance_futures_30d', script: 'scripts/import/import_binance_futures_api.mjs', args: ['30D'] },
+    { name: 'binance_futures_90d', script: 'scripts/import/import_binance_futures_api.mjs', args: ['90D'] },
   ],
   binance_spot: [
     { name: 'binance_spot_7d', script: 'scripts/import/import_binance_spot.mjs', args: ['7D'] },

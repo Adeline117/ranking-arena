@@ -1,6 +1,10 @@
 {
   "crons": [
     {
+      "path": "/api/scrape/proxy?period=all",
+      "schedule": "0 */4 * * *"
+    },
+    {
       "path": "/api/cron/fetch-followed-traders",
       "schedule": "0 * * * *"
     },
@@ -9,24 +13,8 @@
       "schedule": "0 */3 * * *"
     },
     {
-      "path": "/api/scrape/binance?period=all",
-      "schedule": "0 */4 * * *"
-    },
-    {
-      "path": "/api/cron/fetch-traders/binance_spot",
-      "schedule": "5 */4 * * *"
-    },
-    {
-      "path": "/api/cron/fetch-traders/binance_web3",
-      "schedule": "10 */4 * * *"
-    },
-    {
-      "path": "/api/cron/fetch-traders/bybit",
-      "schedule": "15 */4 * * *"
-    },
-    {
-      "path": "/api/cron/fetch-traders/bitget_futures",
-      "schedule": "20 */4 * * *"
+      "path": "/api/cron/discover-rankings",
+      "schedule": "30 */4 * * *"
     },
     {
       "path": "/api/cron/fetch-traders/bitget_spot",

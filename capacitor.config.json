@@ -1,35 +1,51 @@
 {
   "appId": "com.arenafi.app",
   "appName": "Arena",
-  "webDir": "public",
+  "webDir": "out",
   "server": {
-    "url": "http://10.18.245.4:3000",
-    "cleartext": true,
+    "url": "https://www.arenafi.org",
+    "cleartext": false,
     "allowNavigation": [
       "www.arenafi.org",
+      "arenafi.org",
       "*.supabase.co",
       "accounts.google.com",
-      "*.stripe.com",
-      "10.18.245.4:3000"
+      "*.stripe.com"
     ]
   },
   "android": {
-    "allowMixedContent": true
+    "allowMixedContent": false,
+    "backgroundColor": "#0B0A10"
   },
   "ios": {
-    "contentInset": "automatic"
+    "contentInset": "automatic",
+    "backgroundColor": "#0B0A10",
+    "preferredContentMode": "mobile",
+    "allowsLinkPreview": true
   },
   "plugins": {
     "SplashScreen": {
-      "launchShowDuration": 2000,
-      "launchAutoHide": true,
+      "launchShowDuration": 0,
+      "launchAutoHide": false,
       "backgroundColor": "#0B0A10",
       "showSpinner": true,
-      "spinnerColor": "#8b6fa8"
+      "spinnerColor": "#8b6fa8",
+      "splashImmersive": true
     },
     "StatusBar": {
       "style": "LIGHT",
-      "backgroundColor": "#0B0A10"
+      "backgroundColor": "#0B0A10",
+      "overlaysWebView": false
+    },
+    "Keyboard": {
+      "resize": "body",
+      "resizeOnFullScreen": true
+    },
+    "PushNotifications": {
+      "presentationOptions": ["badge", "sound", "alert"]
+    },
+    "Browser": {
+      "windowName": "_blank"
     }
   }
 }

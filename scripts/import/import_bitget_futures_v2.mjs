@@ -33,8 +33,8 @@ const TARGET_COUNT = 100
 // URL 参数: rule=2 (ROI排序)
 // sort: 1=7D, 2=30D, 0=all/90D
 const PERIOD_CONFIG = {
-  '7D': { url: 'https://www.bitget.com/copy-trading/futures/all?rule=2&sort=1', periodParam: '7D' },
-  '30D': { url: 'https://www.bitget.com/copy-trading/futures/all?rule=2&sort=2', periodParam: '30D' },
+  '7D': { url: 'https://www.bitget.com/copy-trading/futures/all?rule=2&sort=0', periodParam: '7D' },
+  '30D': { url: 'https://www.bitget.com/copy-trading/futures/all?rule=2&sort=0', periodParam: '30D' },
   '90D': { url: 'https://www.bitget.com/copy-trading/futures/all?rule=2&sort=0', periodParam: '90D' },
 }
 
@@ -49,7 +49,11 @@ async function fetchLeaderboard(browser, period) {
   const traders = []
   
   try {
-    await page.goto(config.url, { waitUntil: 'networkidle2', timeout: 45000 })
+    try {
+      await page.goto(config.url, { waitUntil: 'networkidle2', timeout: 90000 })
+    } catch (e) {
+      console.log('  ⚠ 页面加载超时，继续尝试...')
+    }
     
     // 智能等待：等待交易员卡片出现
     await page.waitForSelector('a[href*="/trader/"]', { timeout: 10000 }).catch(() => {})

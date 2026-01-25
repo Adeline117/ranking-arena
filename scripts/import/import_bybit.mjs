@@ -28,7 +28,7 @@ if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
 const SOURCE = 'bybit'
-const BASE_URL = 'https://www.bybit.com/copyTrade/tradeCenter/leaderBoard'
+const BASE_URL = 'https://www.bybit.com/copyTrade/'
 const TARGET_COUNT = 100
 const CONCURRENCY = 5
 
@@ -92,7 +92,8 @@ async function fetchLeaderboardData(period) {
 
   const browser = await puppeteer.launch({
     headless: 'new',
-    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-blink-features=AutomationControlled'],
+    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-blink-features=AutomationControlled', '--disable-dev-shm-usage'],
+    timeout: 60000,
   })
 
   const allTraders = new Map()
@@ -211,71 +212,150 @@ async function fetchLeaderboardData(period) {
     // 如果仍然不够，从 DOM 提取
     if (allTraders.size < TARGET_COUNT) {
       console.log('\n📄 从页面 DOM 提取数据...')
+
+      // 调试：打印页面信息
+      const debugInfo = await page.evaluate(() => {
+        const buttons = document.querySelectorAll('button')
+        const copyButtons = Array.from(buttons).filter(b => b.innerText?.includes('Copy'))
+        const allText = document.body.innerText
+
+        // 查找所有包含 % 的文本片段
+        const percentMatches = allText.match(/\S{0,5}\d+\.\d+%/g) || []
+        // 尝试更宽松的 ROI 匹配
+        const roiMatches = allText.match(/\d{1,4}\.\d{1,2}\s*%/g) || []
+
+        // 找到第一个 Copy 按钮附近的文本
+        let nearCopyText = ''
+        if (copyButtons.length > 0) {
+          const card = copyButtons[0].closest('div')?.parentElement?.parentElement
+          if (card) {
+            nearCopyText = card.innerText?.slice(0, 200) || ''
+          }
+        }
+
+        return {
+          totalButtons: buttons.length,
+          copyButtons: copyButtons.length,
+          percentMatches: percentMatches.slice(0, 10),
+          roiMatches: roiMatches.slice(0, 10),
+          nearCopyText: nearCopyText.replace(/\n/g, ' | '),
+        }
+      })
+      console.log(`  调试信息:`)
+      console.log(`    - 总按钮数: ${debugInfo.totalButtons}`)
+      console.log(`    - Copy按钮: ${debugInfo.copyButtons}`)
+      console.log(`    - 百分比匹配: ${debugInfo.percentMatches.join(', ')}`)
+      console.log(`    - ROI匹配: ${debugInfo.roiMatches.join(', ')}`)
+      console.log(`    - 卡片文本: ${debugInfo.nearCopyText.slice(0, 150)}`)
+
       const domTraders = await page.evaluate(() => {
         const results = []
-        
-        // 方法1: 从卡片提取完整数据
-        const cards = document.querySelectorAll('[class*="trader"], [class*="leader"], [class*="card"], [class*="item"]')
-        cards.forEach(card => {
-          const text = card.innerText || ''
-          
+        const seen = new Set()
+
+        // Bybit 使用卡片布局展示交易员
+        // 方法1: 查找所有带 "Copy" 按钮的卡片
+        const copyButtons = document.querySelectorAll('button')
+        copyButtons.forEach(btn => {
+          if (btn.innerText?.trim() !== 'Copy') return
+
+          // 找到包含这个按钮的卡片容器
+          const card = btn.closest('div[class*="card"], div[class*="Item"], div[class*="trader"]') || btn.parentElement?.parentElement?.parentElement
+
+          if (!card) return
+
+          // 清理文本 - 移除不可见字符
+          const text = (card.innerText || '').replace(/[\u200B-\u200D\u200E\u200F\uFEFF]/g, '')
+
+          // 提取 ROI - 格式如 "+40.04%" "+87.02%"，可能有特殊字符
+          // 匹配: +40.04% 或 -10.5% (允许数字和%之间有任意字符)
+          const roiMatch = text.match(/([+-])(\d{1,4}(?:\.\d{1,2})?)[\s\u200B-\u200F]*%/)
+          if (!roiMatch) return
+
+          const sign = roiMatch[1] === '-' ? -1 : 1
+          const roi = parseFloat(roiMatch[2]) * sign
+
+          // 提取名字 - 通常在卡片顶部，可能有特殊字符
+          // 查找包含名字的元素（不是数字开头的文本）
+          let nickname = ''
+          const textElements = card.querySelectorAll('span, div, a')
+          for (const el of textElements) {
+            const t = (el.innerText || '').replace(/[\u200B-\u200D\u200E\u200F\uFEFF]/g, '').trim()
+            // 名字通常是2-20字符，不以数字或+/-开头
+            if (t.length >= 2 && t.length <= 25 && !t.match(/^[0-9+\-$%]/) && !t.includes('Copy') && !t.includes('MYT') && !t.includes('ROI') && !t.includes('Drawdown')) {
+              nickname = t.split('\n')[0].trim()
+              break
+            }
+          }
+
+          if (!nickname) return
+
+          // 生成一个基于名字的唯一 ID（因为卡片可能没有链接）
+          const traderId = nickname.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase()
+
+          if (seen.has(traderId)) return
+          seen.add(traderId)
+
           // 提取头像
-          const img = card.querySelector('img[src*="avatar"], img[src*="user"], img[class*="avatar"]')
+          const img = card.querySelector('img')
           let avatar = null
           if (img?.src && !img.src.includes('placeholder') && !img.src.includes('default')) {
             avatar = img.src
           }
-          
-          // 提取链接和 ID
-          const link = card.querySelector('a[href*="leader"], a[href*="trader"]')
-          const href = link?.href || ''
-          const idMatch = href.match(/\/(\d+)(?:$|\?)/) || href.match(/leaderId=(\d+)/)
-          
-          // 提取名字
-          const nameEl = card.querySelector('[class*="name"], [class*="nick"]')
-          const nickname = nameEl?.innerText?.trim()?.split('\n')[0] || ''
-          
-          // 提取 ROI
-          const roiMatch = text.match(/([+-]?[\d,]+\.?\d*)\s*%/)
-          const roi = roiMatch ? parseFloat(roiMatch[1].replace(/,/g, '')) : 0
-          
-          if (idMatch && nickname && roi > 0) {
-            results.push({
-              traderId: idMatch[1],
-              nickname,
-              avatar,
-              roi,
-            })
-          }
+
+          results.push({
+            traderId,
+            nickname,
+            avatar,
+            roi,
+          })
         })
-        
-        // 方法2: 从链接获取基础信息
+
+        // 方法2: 通过页面文本块提取
         if (results.length < 10) {
-          const links = document.querySelectorAll('a[href*="leader"], a[href*="trader"]')
-          links.forEach(link => {
-            const href = link.href
-            const idMatch = href.match(/\/(\d+)(?:$|\?)/) || href.match(/leaderId=(\d+)/)
-            if (idMatch) {
-              const text = link.textContent?.trim() || ''
-              // 尝试获取附近的头像
-              const parent = link.closest('[class*="card"], [class*="item"], div')
-              const img = parent?.querySelector('img')
-              let avatar = null
-              if (img?.src && img.src.includes('avatar')) {
-                avatar = img.src
-              }
-              
-              if (text && text.length >= 2 && text.length <= 30) {
-                results.push({
-                  traderId: idMatch[1],
-                  nickname: text.split('\n')[0].trim(),
-                  avatar,
-                })
+          // 清理整个页面文本
+          const allText = (document.body.innerText || '').replace(/[\u200B-\u200D\u200E\u200F\uFEFF]/g, '')
+          // 按 "Copy" 按钮分割，每个交易员卡片都有一个 Copy 按钮
+          const blocks = allText.split(/\bCopy\b/)
+
+          blocks.forEach((block, idx) => {
+            if (idx === 0) return // 第一个块是页面头部
+
+            // 提取 ROI - 处理特殊字符
+            const roiMatch = block.match(/([+-])(\d{1,4}(?:\.\d{1,2})?)[\s]*%/)
+            if (!roiMatch) return
+
+            const sign = roiMatch[1] === '-' ? -1 : 1
+            const roi = parseFloat(roiMatch[2]) * sign
+
+            // 提取名字 - 在 ROI 之前的文本
+            const beforeRoi = block.split(roiMatch[0])[0]
+            const lines = beforeRoi.split('\n').filter(l => l.trim().length > 1)
+
+            let nickname = ''
+            for (const line of lines) {
+              const t = line.trim()
+              if (t.length >= 2 && t.length <= 25 && !t.match(/^[0-9+\-$%.]/) && !t.includes('MYT') && !t.includes('ROI') && !t.includes('Drawdown')) {
+                nickname = t
+                break
               }
             }
+
+            if (!nickname) return
+
+            const traderId = nickname.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase()
+
+            if (seen.has(traderId)) return
+            seen.add(traderId)
+
+            results.push({
+              traderId,
+              nickname,
+              avatar: null,
+              roi,
+            })
           })
         }
-        
+
         return results
       })
       

@@ -19,6 +19,8 @@ interface ExtendedPositionHistoryItem extends PositionHistoryItem {
 interface PortfolioTableProps {
   items: PortfolioItem[]
   history?: (PositionHistoryItem | ExtendedPositionHistoryItem)[]
+  isPro?: boolean
+  onUnlock?: () => void
 }
 
 type ViewMode = 'current' | 'history'
@@ -27,8 +29,8 @@ type ViewMode = 'current' | 'history'
  * Portfolio页面 - 显示当前持仓和历史仓位
  * 现代化设计，流畅动画
  */
-export default function PortfolioTable({ items, history = [] }: PortfolioTableProps) {
-  const { t } = useLanguage()
+export default function PortfolioTable({ items, history = [], isPro = true, onUnlock }: PortfolioTableProps) {
+  const { t, language } = useLanguage()
   const [viewMode, setViewMode] = useState<ViewMode>('current')
   const [selectedMarket, setSelectedMarket] = useState<string | null>(null)
   const [sortBy, setSortBy] = useState<'openTime' | 'closeTime' | 'pnl'>('openTime')
@@ -80,8 +82,82 @@ export default function PortfolioTable({ items, history = [] }: PortfolioTablePr
           opacity: mounted ? 1 : 0,
           transform: mounted ? 'translateY(0)' : 'translateY(20px)',
           transition: 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
+          position: 'relative',
         }}
       >
+        {/* Pro Lock Overlay - shows UI but blurs content */}
+        {!isPro && (
+          <Box
+            style={{
+              position: 'absolute',
+              inset: 0,
+              zIndex: 10,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              pointerEvents: 'none',
+            }}
+          >
+            <Box
+              style={{
+                background: `linear-gradient(135deg, ${tokens.colors.bg.primary}F0, ${tokens.colors.bg.secondary}E8)`,
+                backdropFilter: 'blur(4px)',
+                borderRadius: tokens.radius.xl,
+                padding: tokens.spacing[6],
+                border: `1px solid ${tokens.colors.accent.primary}40`,
+                boxShadow: `0 8px 32px rgba(139, 111, 168, 0.2)`,
+                textAlign: 'center',
+                pointerEvents: 'auto',
+                maxWidth: 360,
+              }}
+            >
+              <Box style={{
+                width: 48,
+                height: 48,
+                borderRadius: tokens.radius.full,
+                background: `linear-gradient(135deg, ${tokens.colors.accent.primary}30, ${tokens.colors.accent.brand}20)`,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                margin: '0 auto',
+                marginBottom: tokens.spacing[4],
+              }}>
+                <svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke={tokens.colors.accent.primary} strokeWidth="2">
+                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                </svg>
+              </Box>
+              <Text size="lg" weight="bold" style={{ color: tokens.colors.text.primary, marginBottom: tokens.spacing[2] }}>
+                {language === 'zh' ? '解锁完整持仓数据' : 'Unlock Full Portfolio'}
+              </Text>
+              <Text size="sm" color="secondary" style={{ marginBottom: tokens.spacing[4] }}>
+                {language === 'zh'
+                  ? '升级 Pro 会员查看详细的持仓信息和历史交易记录'
+                  : 'Upgrade to Pro to view detailed positions and trading history'}
+              </Text>
+              {onUnlock && (
+                <button
+                  onClick={onUnlock}
+                  style={{
+                    padding: `${tokens.spacing[3]} ${tokens.spacing[6]}`,
+                    borderRadius: tokens.radius.lg,
+                    border: 'none',
+                    background: `linear-gradient(135deg, ${tokens.colors.accent.primary}, ${tokens.colors.accent.brand})`,
+                    color: '#fff',
+                    fontWeight: tokens.typography.fontWeight.bold,
+                    fontSize: tokens.typography.fontSize.sm,
+                    cursor: 'pointer',
+                    transition: 'all 0.25s ease',
+                    fontFamily: tokens.typography.fontFamily.sans.join(', '),
+                  }}
+                >
+                  {language === 'zh' ? '升级 Pro' : 'Upgrade to Pro'}
+                </button>
+              )}
+            </Box>
+          </Box>
+        )}
+
         {/* Header */}
         <Box
           style={{
@@ -157,7 +233,7 @@ export default function PortfolioTable({ items, history = [] }: PortfolioTablePr
         </Box>
 
         {/* Content */}
-        <Box style={{ padding: tokens.spacing[5] }}>
+        <Box style={{ padding: tokens.spacing[5], filter: isPro ? 'none' : 'blur(6px)', pointerEvents: isPro ? 'auto' : 'none' }}>
           {viewMode === 'current' ? (
             // Current Holdings
             items.length > 0 ? (

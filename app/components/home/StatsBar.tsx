@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, memo } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
 
@@ -73,7 +73,7 @@ const marketConfig: Record<string, { label: string; color: string; icon: React.R
 // 单个数据源标签
 // ============================================
 
-function SourceTag({ source, isDark }: { source: DataSource; isDark: boolean }) {
+const SourceTag = memo(function SourceTag({ source, isDark }: { source: DataSource; isDark: boolean }) {
   const market = marketConfig[source.market]
   const tagBg = hexToRgba(market.color, isDark ? 0.03 : 0.08)
   const tagBorder = hexToRgba(market.color, isDark ? 0.14 : 0.25)
@@ -122,7 +122,7 @@ function SourceTag({ source, isDark }: { source: DataSource; isDark: boolean }) 
       </Box>
     </Box>
   )
-}
+})
 
 // ============================================
 // 主组件 - 滚动数据源展示
@@ -143,8 +143,8 @@ export function StatsBar() {
     return () => observer.disconnect()
   }, [])
 
-  // 双份列表实现无缝滚动
-  const items = [...dataSources, ...dataSources]
+  // 双份列表实现无缝滚动 - 使用 useMemo 避免重复创建
+  const items = useMemo(() => [...dataSources, ...dataSources], [])
 
   return (
     <Box

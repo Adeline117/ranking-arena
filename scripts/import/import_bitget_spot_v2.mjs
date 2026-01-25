@@ -58,8 +58,8 @@ function calculateArenaScore(roi, pnl, maxDrawdown, winRate, period) {
 
 // Spot URL - rule=2 是按 ROI 排序
 const PERIOD_CONFIG = {
-  '7D': { url: 'https://www.bitget.com/copy-trading/spot/all?rule=2&sort=1' },
-  '30D': { url: 'https://www.bitget.com/copy-trading/spot/all?rule=2&sort=2' },
+  '7D': { url: 'https://www.bitget.com/copy-trading/spot/all?rule=2&sort=0' },
+  '30D': { url: 'https://www.bitget.com/copy-trading/spot/all?rule=2&sort=0' },
   '90D': { url: 'https://www.bitget.com/copy-trading/spot/all?rule=2&sort=0' },
 }
 
@@ -115,7 +115,7 @@ async function fetchLeaderboard(browser, period) {
   })
   
   try {
-    await page.goto(config.url, { waitUntil: 'networkidle2', timeout: 45000 })
+    await page.goto(config.url, { waitUntil: 'networkidle0', timeout: 90000 })
     await sleep(5000)
     
     // 关闭弹窗
@@ -131,33 +131,88 @@ async function fetchLeaderboard(browser, period) {
     
     console.log(`  API 拦截到: ${traders.size} 个`)
     
-    // 获取交易员链接作为备份
-    const links = await page.evaluate(() => {
+    // 从卡片中提取交易员数据（包括 ROI）
+    const cardData = await page.evaluate(() => {
+      const results = []
+      const seen = new Set()
+      let debugInfo = []
+
+      // 查找所有交易员链接
       const anchors = document.querySelectorAll('a[href*="/trader/"]')
-      return Array.from(anchors).map(a => {
-        const href = a.href
+
+      anchors.forEach((anchor, idx) => {
+        const href = anchor.href
         const match = href.match(/\/trader\/([a-f0-9]+)\//)
-        if (match) {
-          return {
-            traderId: match[1],
-            text: a.textContent?.slice(0, 100),
+        if (!match) return
+
+        const traderId = match[1]
+        if (seen.has(traderId)) return
+        seen.add(traderId)
+
+        // 找到包含这个链接的卡片容器 - 尝试多种方式
+        let card = anchor.closest('[class*="card"], [class*="item"], [class*="trader"], [class*="list"] > div')
+        if (!card) {
+          // 向上遍历找到包含百分比的父元素
+          let parent = anchor.parentElement
+          for (let i = 0; i < 8 && parent; i++) {
+            const text = parent.innerText || ''
+            if (text.includes('%')) {
+              card = parent
+              break
+            }
+            parent = parent.parentElement
           }
         }
-        return null
-      }).filter(Boolean)
+
+        const cardText = card?.innerText || ''
+
+        // 调试：记录前几个卡片的文本
+        if (idx < 3) {
+          debugInfo.push({
+            traderId: traderId.slice(0, 8),
+            cardTextSample: cardText.slice(0, 150).replace(/\n/g, ' | '),
+          })
+        }
+
+        // 提取 ROI - 查找格式如 +1.92%, -0.5%, 0%
+        const roiMatch = cardText.match(/([+-]?)(\d{1,4}(?:\.\d{1,2})?)\s*%/)
+        let roi = 0
+        if (roiMatch) {
+          const sign = roiMatch[1] === '-' ? -1 : 1
+          roi = parseFloat(roiMatch[2]) * sign
+        }
+
+        // 提取昵称
+        const nameEl = card?.querySelector('[class*="name"], [class*="nick"]') || anchor
+        let nickname = nameEl?.innerText?.trim()?.split('\n')[0] || traderId.slice(0, 8)
+        // 清理昵称（移除 @ 后面的内容）
+        nickname = nickname.replace(/@.*/, '').trim()
+
+        results.push({
+          traderId,
+          nickname: nickname || traderId.slice(0, 8),
+          roi,
+        })
+      })
+
+      return { results, debugInfo }
     })
-    
-    // 合并链接数据
-    for (const link of links) {
-      if (!traders.has(link.traderId)) {
-        const text = link.text || ''
-        const nickMatch = text.match(/^([^@]+)@/)
-        const roiMatch = text.match(/([+-]?[\d,]+\.?\d*)%/)
-        
-        traders.set(link.traderId, {
-          traderId: link.traderId,
-          nickname: nickMatch ? nickMatch[1].trim() : link.traderId.slice(0, 8),
-          roi: roiMatch ? parseFloat(roiMatch[1].replace(/,/g, '')) : 0,
+
+    // 打印调试信息
+    if (cardData.debugInfo && cardData.debugInfo.length > 0) {
+      console.log('  调试 - 卡片文本示例:')
+      cardData.debugInfo.forEach((d, i) => {
+        console.log(`    ${i + 1}. ${d.traderId}: ${d.cardTextSample}`)
+      })
+    }
+
+    // 合并卡片数据
+    for (const card of cardData.results) {
+      if (!traders.has(card.traderId)) {
+        traders.set(card.traderId, {
+          traderId: card.traderId,
+          nickname: card.nickname,
+          roi: card.roi,
         })
       }
     }
@@ -204,32 +259,53 @@ async function fetchLeaderboard(browser, period) {
         
         await sleep(3000)
         
-        // 重新获取链接
-        const moreLinks = await page.evaluate(() => {
+        // 重新获取卡片数据（使用卡片提取 ROI）
+        const moreCards = await page.evaluate(() => {
+          const results = []
+          const seen = new Set()
           const anchors = document.querySelectorAll('a[href*="/trader/"]')
-          return Array.from(anchors).map(a => {
-            const href = a.href
+
+          anchors.forEach(anchor => {
+            const href = anchor.href
             const match = href.match(/\/trader\/([a-f0-9]+)\//)
-            if (match) {
-              return {
-                traderId: match[1],
-                text: a.textContent?.slice(0, 100),
-              }
+            if (!match) return
+
+            const traderId = match[1]
+            if (seen.has(traderId)) return
+            seen.add(traderId)
+
+            // 找到包含这个链接的卡片容器
+            const card = anchor.closest('[class*="card"], [class*="item"], [class*="trader"]') ||
+                         anchor.parentElement?.parentElement?.parentElement?.parentElement
+
+            const cardText = card?.innerText || ''
+
+            // 提取 ROI
+            const roiMatch = cardText.match(/([+-]?)(\d{1,4}(?:\.\d{1,2})?)\s*%/)
+            let roi = 0
+            if (roiMatch) {
+              const sign = roiMatch[1] === '-' ? -1 : 1
+              roi = parseFloat(roiMatch[2]) * sign
             }
-            return null
-          }).filter(Boolean)
+
+            // 提取昵称
+            const nameEl = card?.querySelector('[class*="name"], [class*="nick"]') || anchor
+            let nickname = nameEl?.innerText?.trim()?.split('\n')[0] || traderId.slice(0, 8)
+            nickname = nickname.replace(/@.*/, '').trim()
+
+            results.push({ traderId, nickname, roi })
+          })
+
+          return results
         })
-        
+
         let newCount = 0
-        for (const link of moreLinks) {
-          if (!traders.has(link.traderId)) {
-            const text = link.text || ''
-            const nickMatch = text.match(/^([^@]+)@/)
-            const roiMatch = text.match(/([+-]?[\d,]+\.?\d*)%/)
-            traders.set(link.traderId, {
-              traderId: link.traderId,
-              nickname: nickMatch ? nickMatch[1].trim() : link.traderId.slice(0, 8),
-              roi: roiMatch ? parseFloat(roiMatch[1].replace(/,/g, '')) : 0,
+        for (const card of moreCards) {
+          if (!traders.has(card.traderId)) {
+            traders.set(card.traderId, {
+              traderId: card.traderId,
+              nickname: card.nickname,
+              roi: card.roi,
             })
             newCount++
           }

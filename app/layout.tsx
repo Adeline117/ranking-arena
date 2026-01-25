@@ -1,12 +1,31 @@
 import type { Metadata, Viewport } from "next";
 import { Suspense } from "react";
+import { Inter, Noto_Sans_SC } from "next/font/google";
 import "./globals.css";
 import KeyboardShortcuts from "./components/Providers/KeyboardShortcuts";
 import Providers from "./components/Providers";
+import CapacitorProvider from "./components/Providers/CapacitorProvider";
 import { GlobalProgress } from "./components/ui/GlobalProgress";
 import { ServiceWorkerRegistration } from "./components/Providers/ServiceWorkerRegistration";
 import CookieConsent from "./components/ui/CookieConsent";
 import { SkipLink } from "./components/Providers/Accessibility";
+import { WebVitals } from "./components/Providers/WebVitals";
+
+// Optimized font loading with next/font
+const inter = Inter({
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-inter",
+  preload: true,
+});
+
+const notoSansSC = Noto_Sans_SC({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  display: "swap",
+  variable: "--font-noto-sans-sc",
+  preload: true,
+});
 
 export const viewport: Viewport = {
   width: 'device-width',
@@ -72,21 +91,25 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="zh-CN" data-theme="dark" translate="no">
+    <html lang="zh-CN" data-theme="dark" translate="no" className={`${inter.variable} ${notoSansSC.variable}`}>
       <body
         className="font-sans antialiased"
+        style={{ fontFamily: 'var(--font-inter), var(--font-noto-sans-sc), system-ui, sans-serif' }}
       >
         <Providers>
-          <SkipLink targetId="main-content" />
-          <ServiceWorkerRegistration />
-          <Suspense fallback={null}>
-            <GlobalProgress />
-          </Suspense>
-          <KeyboardShortcuts />
-          <main id="main-content" tabIndex={-1}>
-            {children}
-          </main>
-          <CookieConsent />
+          <CapacitorProvider>
+            <WebVitals />
+            <SkipLink targetId="main-content" />
+            <ServiceWorkerRegistration />
+            <Suspense fallback={null}>
+              <GlobalProgress />
+            </Suspense>
+            <KeyboardShortcuts />
+            <main id="main-content" tabIndex={-1}>
+              {children}
+            </main>
+            <CookieConsent />
+          </CapacitorProvider>
         </Providers>
       </body>
     </html>

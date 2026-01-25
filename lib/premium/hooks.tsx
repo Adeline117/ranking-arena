@@ -52,11 +52,24 @@ export function PremiumProvider({ children, initialSubscription }: PremiumProvid
   const loadSubscription = useCallback(async () => {
     try {
       setIsLoading(true)
-      
+
       // 动态导入 supabase 避免服务端问题
       const { supabase } = await import('@/lib/supabase/client')
-      const { data: { session } } = await supabase.auth.getSession()
-      
+      let { data: { session } } = await supabase.auth.getSession()
+
+      // 检查 token 是否过期或即将过期，尝试刷新
+      if (session?.expires_at) {
+        const now = Math.floor(Date.now() / 1000)
+        if (session.expires_at - now < 60) {
+          const { data: refreshed } = await supabase.auth.refreshSession()
+          session = refreshed.session
+        }
+      } else if (!session?.access_token) {
+        // 尝试刷新获取新 session
+        const { data: refreshed } = await supabase.auth.refreshSession()
+        session = refreshed.session
+      }
+
       if (!session?.access_token) {
         // 未登录，使用默认免费订阅
         const defaultSub = premiumService.getSubscription()

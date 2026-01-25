@@ -4,7 +4,6 @@ import { useEffect, useState, use } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createPortal } from 'react-dom'
-import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/layout/TopNav'
 import { Box, Text, Button } from '@/app/components/base'
@@ -14,6 +13,7 @@ import { formatTimeAgo } from '@/lib/utils/date'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { useToast } from '@/app/components/ui/Toast'
 import { useDialog } from '@/app/components/ui/Dialog'
+import { useAuthSession } from '@/lib/hooks/useAuthSession'
 
 interface BookmarkFolder {
   id: string
@@ -51,41 +51,33 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
   const router = useRouter()
   const { showToast } = useToast()
   const { showDangerConfirm } = useDialog()
+  const { accessToken, email } = useAuthSession()
 
-  const [email, setEmail] = useState<string | null>(null)
-  const [accessToken, setAccessToken] = useState<string | null>(null)
   const [folder, setFolder] = useState<BookmarkFolder | null>(null)
   const [posts, setPosts] = useState<BookmarkedPost[]>([])
   const [isOwner, setIsOwner] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  
+
   // 编辑状态
   const [isEditing, setIsEditing] = useState(false)
   const [editName, setEditName] = useState('')
   const [editDescription, setEditDescription] = useState('')
   const [editIsPublic, setEditIsPublic] = useState(false)
   const [saving, setSaving] = useState(false)
-  
+
   // 订阅状态
   const [isSubscribed, setIsSubscribed] = useState(false)
   const [subscribing, setSubscribing] = useState(false)
   const [subscriberCount, setSubscriberCount] = useState(0)
-  
+
   // 帖子详情弹窗状态
   const [selectedPost, setSelectedPost] = useState<BookmarkedPost | null>(null)
   const [postDetailLoading, setPostDetailLoading] = useState(false)
   const [fullPostContent, setFullPostContent] = useState<string | null>(null)
-  
+
   // 移除收藏状态
   const [removingBookmark, setRemovingBookmark] = useState<Record<string, boolean>>({})
-
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setEmail(data.session?.user?.email ?? null)
-      setAccessToken(data.session?.access_token ?? null)
-    })
-  }, [])
 
   useEffect(() => {
     if (!folderId) {

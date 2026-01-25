@@ -92,6 +92,8 @@ export default function VoteButtons({
       <button
         onClick={(e) => handleVote(e, 'up')}
         disabled={disabled}
+        aria-label={isUpActive ? '取消赞同' : '赞同'}
+        aria-pressed={isUpActive}
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -140,6 +142,8 @@ export default function VoteButtons({
       <button
         onClick={(e) => handleVote(e, 'down')}
         disabled={disabled}
+        aria-label={isDownActive ? '取消反对' : '反对'}
+        aria-pressed={isDownActive}
         style={{
           display: 'flex',
           alignItems: 'center',

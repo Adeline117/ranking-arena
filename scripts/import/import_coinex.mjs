@@ -74,7 +74,8 @@ async function fetchLeaderboardData(period) {
 
   const browser = await puppeteer.launch({
     headless: 'new',
-    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-blink-features=AutomationControlled'],
+    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-blink-features=AutomationControlled', '--disable-dev-shm-usage'],
+    timeout: 60000,  // 增加启动超时到 60 秒
   })
 
   try {

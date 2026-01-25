@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import { useToast } from './Toast'
@@ -31,6 +31,7 @@ export default function ContactSupportButton({
   const [loading, setLoading] = useState(false)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [supportUserId, setSupportUserId] = useState<string | null>(null)
+  const pendingRef = useRef(false)
 
   // 获取当前用户和客服用户 ID
   useEffect(() => {
@@ -82,6 +83,9 @@ export default function ContactSupportButton({
       return
     }
 
+    // Prevent double-click
+    if (pendingRef.current) return
+    pendingRef.current = true
     setLoading(true)
     try {
       const { data: { session } } = await supabase.auth.getSession()
@@ -115,15 +119,16 @@ export default function ContactSupportButton({
       showToast('操作失败，请重试', 'error')
     } finally {
       setLoading(false)
+      pendingRef.current = false
     }
   }
 
   const defaultLabel = label || '联系客服'
   
   const sizeStyles = {
-    sm: { padding: '6px 12px', fontSize: '12px', borderRadius: '6px' },
-    md: { padding: '10px 16px', fontSize: '14px', borderRadius: '10px' },
-    lg: { padding: '12px 20px', fontSize: '15px', borderRadius: '12px' },
+    sm: { padding: '10px 16px', fontSize: '13px', borderRadius: '8px', minHeight: '44px' },
+    md: { padding: '12px 20px', fontSize: '14px', borderRadius: '10px', minHeight: '44px' },
+    lg: { padding: '14px 24px', fontSize: '15px', borderRadius: '12px', minHeight: '48px' },
   }
 
   // 链接样式
@@ -217,7 +222,7 @@ export default function ContactSupportButton({
         width: fullWidth ? '100%' : 'auto',
         border: '1px solid rgba(255,255,255,0.2)',
         background: 'rgba(255,255,255,0.05)',
-        color: '#eaeaea',
+        color: tokens.colors.text.primary,
         fontWeight: 700,
         cursor: loading ? 'not-allowed' : 'pointer',
         opacity: loading ? 0.6 : 1,
@@ -237,7 +242,7 @@ export default function ContactSupportButton({
 // 消息图标
 function MessageIcon({ size = 16 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
       <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
     </svg>
   )

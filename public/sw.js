@@ -3,7 +3,7 @@
  * 提供离线支持和缓存策略
  */
 
-const CACHE_NAME = 'ranking-arena-v1';
+const CACHE_NAME = 'ranking-arena-v2';
 const OFFLINE_URL = '/offline';
 
 // 预缓存的静态资源
@@ -11,13 +11,55 @@ const PRECACHE_ASSETS = [
   '/',
   '/offline',
   '/manifest.json',
+  '/rankings',
+  '/groups',
 ];
 
-// 需要缓存的 API 路由模式
-const API_CACHE_ROUTES = [
-  '/api/traders',
-  '/api/market',
-];
+// API 缓存配置 - 路由模式及其 TTL（毫秒）
+const API_CACHE_CONFIG = {
+  // 核心数据 - 短缓存（5分钟）
+  '/api/traders': 5 * 60 * 1000,
+  '/api/market': 5 * 60 * 1000,
+  '/api/hot': 5 * 60 * 1000,
+
+  // 用户数据 - 中等缓存（15分钟）
+  '/api/user/profile': 15 * 60 * 1000,
+  '/api/followers': 15 * 60 * 1000,
+  '/api/following': 15 * 60 * 1000,
+  '/api/bookmarks': 15 * 60 * 1000,
+
+  // 内容数据 - 中等缓存（15分钟）
+  '/api/posts': 15 * 60 * 1000,
+  '/api/comments': 15 * 60 * 1000,
+  '/api/groups': 15 * 60 * 1000,
+
+  // 交易员详情 - 长缓存（1小时）
+  '/api/trader/': 60 * 60 * 1000,
+
+  // 搜索结果 - 短缓存（5分钟）
+  '/api/search': 5 * 60 * 1000,
+
+  // 静态配置 - 长缓存（24小时）
+  '/api/config': 24 * 60 * 60 * 1000,
+  '/api/exchanges': 24 * 60 * 60 * 1000,
+};
+
+// 获取 API 路由的缓存 TTL
+function getApiCacheTTL(pathname) {
+  for (const [route, ttl] of Object.entries(API_CACHE_CONFIG)) {
+    if (pathname.startsWith(route)) {
+      return ttl;
+    }
+  }
+  return null; // 不缓存
+}
+
+// 检查缓存是否过期
+function isCacheExpired(response, ttl) {
+  const cachedTime = response.headers.get('sw-cached-at');
+  if (!cachedTime) return true;
+  return Date.now() - parseInt(cachedTime, 10) > ttl;
+}
 
 // 安装事件 - 预缓存静态资源
 self.addEventListener('install', (event) => {
@@ -89,29 +131,63 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // API 请求 - 网络优先，缓存作为回退
+  // API 请求 - 网络优先，带 TTL 的缓存回退
   if (url.pathname.startsWith('/api/')) {
-    const shouldCache = API_CACHE_ROUTES.some(route => url.pathname.startsWith(route));
-    
-    if (shouldCache) {
+    const ttl = getApiCacheTTL(url.pathname);
+
+    if (ttl !== null && request.method === 'GET') {
       event.respondWith(
-        fetch(request)
-          .then((response) => {
-            // 只缓存成功的 GET 请求
-            if (request.method === 'GET' && response.status === 200) {
-              const responseClone = response.clone();
-              caches.open(CACHE_NAME).then((cache) => {
-                cache.put(request, responseClone);
+        (async () => {
+          // 先尝试从缓存获取
+          const cachedResponse = await caches.match(request);
+
+          // 如果有缓存且未过期，直接返回（同时后台更新）
+          if (cachedResponse && !isCacheExpired(cachedResponse, ttl)) {
+            // 后台更新缓存（stale-while-revalidate 策略）
+            fetch(request).then(async (response) => {
+              if (response.status === 200) {
+                const cache = await caches.open(CACHE_NAME);
+                // 添加缓存时间戳
+                const headers = new Headers(response.headers);
+                headers.set('sw-cached-at', Date.now().toString());
+                const responseWithTimestamp = new Response(await response.blob(), {
+                  status: response.status,
+                  statusText: response.statusText,
+                  headers,
+                });
+                await cache.put(request, responseWithTimestamp);
+              }
+            }).catch(() => {});
+
+            return cachedResponse;
+          }
+
+          // 缓存不存在或已过期，发起网络请求
+          try {
+            const response = await fetch(request);
+
+            if (response.status === 200) {
+              const cache = await caches.open(CACHE_NAME);
+              // 添加缓存时间戳
+              const headers = new Headers(response.headers);
+              headers.set('sw-cached-at', Date.now().toString());
+              const responseWithTimestamp = new Response(await response.clone().blob(), {
+                status: response.status,
+                statusText: response.statusText,
+                headers,
               });
+              await cache.put(request, responseWithTimestamp);
             }
+
             return response;
-          })
-          .catch(async () => {
-            const cachedResponse = await caches.match(request);
+          } catch (error) {
+            // 网络请求失败，返回过期缓存（如果有的话）
             if (cachedResponse) {
+              console.log('[SW] 网络请求失败，返回过期缓存:', url.pathname);
               return cachedResponse;
             }
-            // 返回标准的服务不可用响应
+
+            // 无缓存时返回离线响应
             return new Response(
               JSON.stringify({ error: 'Service unavailable', offline: true }),
               {
@@ -119,7 +195,8 @@ self.addEventListener('fetch', (event) => {
                 headers: { 'Content-Type': 'application/json' }
               }
             );
-          })
+          }
+        })()
       );
       return;
     }

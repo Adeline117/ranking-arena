@@ -694,6 +694,10 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
                 <OverviewPerformanceCard
                   performance={performance}
                   profitableWeeksPct={stats?.additionalStats?.profitableWeeksPct}
+                  arenaScore={performance.arena_score}
+                  returnScore={performance.return_score}
+                  drawdownScore={performance.drawdown_score}
+                  stabilityScore={performance.stability_score}
                 />
               )}
               {/* 交易员动态 - 使用 PostFeed 组件（置顶帖子会自动显示在最上面） */}

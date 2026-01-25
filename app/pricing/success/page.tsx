@@ -61,10 +61,20 @@ export default function PaymentSuccessPage() {
     try {
       // 获取有效 session（自动刷新过期 token）
       let { data: { session } } = await supabase.auth.getSession()
-      if (!session?.access_token) {
+
+      // 检查 token 是否过期或即将过期
+      if (session?.expires_at) {
+        const now = Math.floor(Date.now() / 1000)
+        if (session.expires_at - now < 60) {
+          // Token 过期或即将过期，强制刷新
+          const { data: refreshed } = await supabase.auth.refreshSession()
+          session = refreshed.session
+        }
+      } else if (!session?.access_token) {
         const { data: refreshed } = await supabase.auth.refreshSession()
         session = refreshed.session
       }
+
       if (!session?.access_token || !session?.user?.id) return false
 
       // 优先通过 API 查询（使用 service role，不受 RLS 限制）
@@ -83,7 +93,7 @@ export default function PaymentSuccessPage() {
         // API 失败，继续尝试直接查询
       }
 
-      // 降级：直接查 subscriptions 表
+      // 降级：直接查 subscriptions 表（需要有效 JWT 才能通过 RLS）
       const { data: sub } = await supabase
         .from('subscriptions')
         .select('tier, status')
@@ -128,28 +138,33 @@ export default function PaymentSuccessPage() {
     setVerificationStatus('verifying')
 
     try {
+      // 尝试获取 token（但不强制要求，verify-session 通过 Stripe metadata 识别用户）
       const accessToken = await getValidAccessToken()
 
-      if (!accessToken) {
-        console.error('[Payment Success] No valid session after refresh')
-        setVerificationStatus('error')
-        return
+      // 调用验证 API 更新数据库 - 即使没有 token 也尝试调用
+      // verify-session 通过 Stripe session metadata 中的 userId 识别用户，不依赖调用者 token
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        ...getCsrfHeaders(),
+      }
+      if (accessToken) {
+        headers['Authorization'] = `Bearer ${accessToken}`
       }
 
-      // 调用验证 API 更新数据库
       const response = await fetch('/api/stripe/verify-session', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`,
-          ...getCsrfHeaders()
-        },
+        headers,
         body: JSON.stringify({ sessionId }),
       })
 
       if (response.ok) {
-        const data = await response.json()
-        console.log('[Payment Success] Subscription verified:', data)
+        await response.json()
+
+        // 验证成功后，尝试刷新 auth session 以获取最新状态
+        if (!accessToken) {
+          // token 过期了，尝试刷新
+          await supabase.auth.refreshSession()
+        }
 
         clearSubscriptionCache()
         await refreshPremium()
@@ -170,6 +185,10 @@ export default function PaymentSuccessPage() {
       }
 
       // 验证 API 失败，可能 webhook 已经处理了，通过轮询数据库确认
+      // 先尝试刷新 session 以确保后续查询有有效 token
+      if (!accessToken) {
+        await supabase.auth.refreshSession()
+      }
       clearSubscriptionCache()
 
       // 轮询检查（最多尝试 4 次，间隔递增）
@@ -193,7 +212,8 @@ export default function PaymentSuccessPage() {
     } catch (error) {
       console.error('Failed to verify subscription:', error)
 
-      // 清除缓存，尝试直接查询确认
+      // 清除缓存，尝试刷新 session 后直接查询确认
+      await supabase.auth.refreshSession()
       clearSubscriptionCache()
       const isProNow = await checkSubscriptionDirect()
       if (isProNow) {
@@ -209,12 +229,15 @@ export default function PaymentSuccessPage() {
     }
   }, [searchParams, hasVerified, refreshPremium, showToast, language, checkSubscriptionDirect, getValidAccessToken])
 
-  // 手动重试
+  // 手动重试 - 先刷新 session，再触发重新验证
   const handleRetry = useCallback(async () => {
     setRetrying(true)
     setVerificationStatus('verifying')
+    // 重试前先尝试刷新 session
+    await supabase.auth.refreshSession()
+    clearSubscriptionCache()
     setHasVerified(false)
-    // 触发重新验证（hasVerified 重置后 verifyAndRefresh 会重新执行）
+    // hasVerified 重置后 verifyAndRefresh 的 useEffect 会重新触发
   }, [])
 
   useEffect(() => {

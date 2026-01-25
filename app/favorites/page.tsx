@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/layout/TopNav'
 import { Box, Text, Button } from '@/app/components/base'
@@ -10,6 +9,7 @@ import { ListSkeleton } from '@/app/components/ui/Skeleton'
 import EmptyState from '@/app/components/ui/EmptyState'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { useToast } from '@/app/components/ui/Toast'
+import { useAuthSession } from '@/lib/hooks/useAuthSession'
 
 interface BookmarkFolder {
   id: string
@@ -35,9 +35,7 @@ interface SubscribedFolder {
 
 export default function FavoritesPage() {
   const { showToast } = useToast()
-  const [email, setEmail] = useState<string | null>(null)
-  const [accessToken, setAccessToken] = useState<string | null>(null)
-  const [authChecked, setAuthChecked] = useState(false)  // 追踪认证检查是否完成
+  const { accessToken, authChecked, email } = useAuthSession()
   const [folders, setFolders] = useState<BookmarkFolder[]>([])
   const [subscribedFolders, setSubscribedFolders] = useState<SubscribedFolder[]>([])
   const [loading, setLoading] = useState(true)
@@ -48,14 +46,6 @@ export default function FavoritesPage() {
   const [newFolderName, setNewFolderName] = useState('')
   const [newFolderPublic, setNewFolderPublic] = useState(false)
   const [creating, setCreating] = useState(false)
-
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setEmail(data.session?.user?.email ?? null)
-      setAccessToken(data.session?.access_token ?? null)
-      setAuthChecked(true)  // 认证检查完成
-    })
-  }, [])
 
   useEffect(() => {
     // 等待认证检查完成
@@ -110,6 +100,7 @@ export default function FavoritesPage() {
     }
 
     load()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken, authChecked])
 
   const createFolder = async () => {

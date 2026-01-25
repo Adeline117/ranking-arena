@@ -1,27 +1,23 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/layout/TopNav'
 import MobileBottomNav from '@/app/components/layout/MobileBottomNav'
 import NotificationsList from '@/app/components/inbox/NotificationsList'
 import ConversationsList from '@/app/components/inbox/ConversationsList'
+import { useAuthSession } from '@/lib/hooks/useAuthSession'
 
 export default function InboxPage() {
   const router = useRouter()
-  const [email, setEmail] = useState<string | null>(null)
+  const { email, authChecked, accessToken } = useAuthSession()
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!session) {
-        router.push('/login')
-        return
-      }
-      setEmail(session.user?.email ?? null)
-    })
-  }, [router])
+    if (authChecked && !accessToken) {
+      router.push('/login')
+    }
+  }, [authChecked, accessToken, router])
 
   return (
     <div style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>

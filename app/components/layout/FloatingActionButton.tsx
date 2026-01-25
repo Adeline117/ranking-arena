@@ -137,6 +137,8 @@ export default function FloatingActionButton() {
       <button
         onClick={() => setMenuOpen(!menuOpen)}
         aria-label={language === 'zh' ? '创建帖子' : 'Create post'}
+        aria-expanded={menuOpen}
+        aria-haspopup="true"
         style={{
           width: 56,
           height: 56,

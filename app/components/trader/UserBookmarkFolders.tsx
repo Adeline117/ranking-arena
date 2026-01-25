@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
+import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import Card from '@/app/components/ui/Card'
 import { Box, Text } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -33,20 +34,11 @@ export default function UserBookmarkFolders({ userId, isOwnProfile = false }: Us
   const { language } = useLanguage()
   const { showToast } = useToast()
   const router = useRouter()
+  const { accessToken, userId: currentUserId } = useAuthSession()
   const [folders, setFolders] = useState<BookmarkFolder[]>([])
   const [loading, setLoading] = useState(true)
-  const [accessToken, setAccessToken] = useState<string | null>(null)
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [subscriptions, setSubscriptions] = useState<Record<string, boolean>>({})
   const [subscribing, setSubscribing] = useState<Record<string, boolean>>({})
-
-  // 获取当前用户信息
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setAccessToken(data.session?.access_token ?? null)
-      setCurrentUserId(data.session?.user?.id ?? null)
-    })
-  }, [])
 
   useEffect(() => {
     if (!userId) {
@@ -80,7 +72,6 @@ export default function UserBookmarkFolders({ userId, isOwnProfile = false }: Us
           setFolders([])
           return
         }
-        console.log('[UserBookmarkFolders] Loaded folders:', data?.length, 'isOwnProfile:', isOwnProfile)
         setFolders(data || [])
         
         // 如果不是自己的主页，获取当前用户对这些收藏夹的订阅状态

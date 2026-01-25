@@ -111,19 +111,32 @@ export default function CopyTradeButton({
         style={{
           display: 'flex',
           alignItems: 'center',
-          gap: tokens.spacing[2],
-          padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
-          borderRadius: tokens.radius.lg,
-          background: `linear-gradient(135deg, rgba(139, 111, 168, 0.15) 0%, rgba(139, 111, 168, 0.05) 100%)`,
-          border: `1px dashed rgba(139, 111, 168, 0.4)`,
+          gap: tokens.spacing[3],
+          padding: `${tokens.spacing[3]} ${tokens.spacing[5]}`,
+          borderRadius: tokens.radius.xl,
+          background: `linear-gradient(135deg, rgba(156, 163, 175, 0.2) 0%, rgba(107, 114, 128, 0.15) 100%)`,
+          border: `2px dashed rgba(156, 163, 175, 0.5)`,
           cursor: 'not-allowed',
+          boxShadow: `0 2px 8px rgba(0, 0, 0, 0.1)`,
         }}
       >
-        <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="rgba(139, 111, 168, 0.6)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-          <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-        </svg>
-        <Text size="sm" weight="bold" style={{ color: 'rgba(139, 111, 168, 0.8)' }}>
+        <Box
+          style={{
+            width: 28,
+            height: 28,
+            borderRadius: tokens.radius.full,
+            background: 'rgba(156, 163, 175, 0.2)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="rgba(107, 114, 128, 0.8)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+            <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+          </svg>
+        </Box>
+        <Text size="sm" weight="bold" style={{ color: 'rgba(107, 114, 128, 0.9)', fontSize: 14 }}>
           {language === 'zh' ? '暂不支持跟单' : 'Copy trading unavailable'}
         </Text>
       </Box>
@@ -140,35 +153,59 @@ export default function CopyTradeButton({
 
   return (
     <>
-      {/* 跟单按钮 */}
+      {/* 跟单按钮 - 醒目设计 */}
       <Button
         variant="primary"
         size="sm"
         onClick={() => setShowWarning(true)}
         style={{
-          background: `linear-gradient(135deg, ${tokens.colors.accent.success} 0%, #00D4AA 100%)`,
-          border: 'none',
-          padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
-          borderRadius: tokens.radius.lg,
-          boxShadow: `0 4px 12px ${tokens.colors.accent.success}40`,
+          background: `linear-gradient(135deg, #00C853 0%, #00E676 50%, #69F0AE 100%)`,
+          border: '2px solid rgba(255, 255, 255, 0.3)',
+          padding: `${tokens.spacing[3]} ${tokens.spacing[5]}`,
+          borderRadius: tokens.radius.xl,
+          boxShadow: `0 4px 20px rgba(0, 200, 83, 0.5), 0 0 40px rgba(0, 230, 118, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.3)`,
           display: 'flex',
           alignItems: 'center',
           gap: tokens.spacing[2],
-          transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+          transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+          animation: 'pulseGlow 2s ease-in-out infinite',
+          position: 'relative',
+          overflow: 'hidden',
         }}
         onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => {
-          e.currentTarget.style.transform = 'translateY(-2px)'
-          e.currentTarget.style.boxShadow = `0 6px 20px ${tokens.colors.accent.success}50`
+          e.currentTarget.style.transform = 'translateY(-3px) scale(1.02)'
+          e.currentTarget.style.boxShadow = `0 8px 30px rgba(0, 200, 83, 0.6), 0 0 60px rgba(0, 230, 118, 0.4)`
         }}
         onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => {
-          e.currentTarget.style.transform = 'translateY(0)'
-          e.currentTarget.style.boxShadow = `0 4px 12px ${tokens.colors.accent.success}40`
+          e.currentTarget.style.transform = 'translateY(0) scale(1)'
+          e.currentTarget.style.boxShadow = `0 4px 20px rgba(0, 200, 83, 0.5), 0 0 40px rgba(0, 230, 118, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.3)`
         }}
       >
-        <ExternalLinkIcon size={14} />
-        <span style={{ fontWeight: 700 }}>
+        <style>{`
+          @keyframes pulseGlow {
+            0%, 100% { box-shadow: 0 4px 20px rgba(0, 200, 83, 0.5), 0 0 40px rgba(0, 230, 118, 0.3); }
+            50% { box-shadow: 0 4px 25px rgba(0, 200, 83, 0.7), 0 0 50px rgba(0, 230, 118, 0.5); }
+          }
+        `}</style>
+        <Box
+          style={{
+            width: 24,
+            height: 24,
+            borderRadius: tokens.radius.full,
+            background: 'rgba(255, 255, 255, 0.25)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <ExternalLinkIcon size={14} />
+        </Box>
+        <span style={{ fontWeight: 800, fontSize: 14, letterSpacing: '0.3px', textShadow: '0 1px 2px rgba(0,0,0,0.2)' }}>
           {language === 'zh' ? `去 ${exchangeName} 跟单` : `Copy on ${exchangeName}`}
         </span>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M5 12h14M12 5l7 7-7 7" />
+        </svg>
       </Button>
 
       {/* 风险提示弹窗 */}

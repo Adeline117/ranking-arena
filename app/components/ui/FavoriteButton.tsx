@@ -96,19 +96,26 @@ export default function FavoriteButton({ traderId, userId, initialFavorited = fa
     <button
       onClick={handleToggle}
       disabled={!userId || loading}
+      aria-label={favorited ? '取消收藏' : '收藏'}
+      aria-pressed={favorited}
       style={{
-        padding: '6px 12px',
+        padding: '10px 14px',
         borderRadius: '8px',
         border: 'none',
         background: 'transparent',
         color: favorited ? '#ff7c7c' : '#9a9a9a',
         cursor: userId && !loading ? 'pointer' : 'not-allowed',
-        fontSize: '18px',
+        fontSize: '20px',
+        minHeight: '44px',
+        minWidth: '44px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
         transition: 'all 200ms ease',
       }}
       title={favorited ? '取消收藏' : '收藏'}
     >
-      {favorited ? '★' : '☆'}
+      <span aria-hidden="true">{favorited ? '★' : '☆'}</span>
     </button>
   )
 }

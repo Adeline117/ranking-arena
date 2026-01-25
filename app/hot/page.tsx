@@ -17,6 +17,7 @@ import { formatTimeAgo } from '@/lib/utils/date'
 import { RankingSkeleton } from '@/app/components/ui/Skeleton'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { renderContentWithLinks } from '@/lib/utils/content'
+import { useAuthSession } from '@/lib/hooks/useAuthSession'
 
 // Use design tokens for brand color
 const ARENA_PURPLE = '#8b6fa8' // fallback, prefer tokens.colors.accent.brand
@@ -65,9 +66,9 @@ function HotContent() {
   const { showToast } = useToast()
   const router = useRouter()
   const searchParams = useSearchParams()
-  const [loggedIn, setLoggedIn] = useState(false)
-  const [email, setEmail] = useState<string | null>(null)
-  const [accessToken, setAccessToken] = useState<string | null>(null)
+  const { accessToken, authChecked, email, userId: currentUserId } = useAuthSession()
+  const loggedIn = authChecked && !!accessToken
+
   // 翻译相关状态
   const [translatedContent, setTranslatedContent] = useState<string | null>(null)
   const [showingOriginal, setShowingOriginal] = useState(true)
@@ -78,7 +79,6 @@ function HotContent() {
   const [translatingList, setTranslatingList] = useState(false)
   // 展开/收起状态
   const [expandedPosts, setExpandedPosts] = useState<Record<string, boolean>>({})
-  const [_currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [traders, setTraders] = useState<Trader[]>([])
   const [loadingTraders, setLoadingTraders] = useState(true)
   const [posts, setPosts] = useState<Post[]>([])
@@ -103,23 +103,15 @@ function HotContent() {
   const [loadingComments, setLoadingComments] = useState(false)
   const [newComment, setNewComment] = useState('')
   const [submittingComment, setSubmittingComment] = useState(false)
-  
+
   // 评论分页状态
   const COMMENTS_PER_PAGE = 10
   const [commentsOffset, setCommentsOffset] = useState(0)
   const [hasMoreComments, setHasMoreComments] = useState(true)
   const [loadingMoreComments, setLoadingMoreComments] = useState(false)
 
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      setEmail(data.user?.email ?? null)
-      setLoggedIn(!!data.user)
-      setCurrentUserId(data.user?.id ?? null)
-    })
-    supabase.auth.getSession().then(({ data }) => {
-      setAccessToken(data.session?.access_token ?? null)
-    })
-  }, [])
+  // Suppress unused variable warning
+  void currentUserId
 
   // 加载交易员数据 - 直接查询 trader_sources 表
   useEffect(() => {

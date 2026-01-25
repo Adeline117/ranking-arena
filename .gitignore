@@ -60,6 +60,7 @@ android/local.properties
 android/*.iml
 android/.idea/
 *.keystore
+android/app/google-services.json
 
 # iOS
 ios/App/Pods/
@@ -67,3 +68,8 @@ ios/App/App.xcworkspace/xcuserdata/
 ios/App/build/
 ios/DerivedData/
 *.xcuserstate
+ios/App/App/GoogleService-Info.plist
+
+# APNs keys
+*.p8
+secrets/

@@ -16,6 +16,8 @@ import { CreateSnapshotButton } from '../snapshot'
 import AdvancedFilter, { type FilterConfig, type SavedFilter } from '../premium/AdvancedFilter'
 import FilterPresets, { type PresetId, PRESETS } from '../ranking/FilterPresets'
 import ShareTop10Button from '../ranking/ShareTop10Button'
+import { useAuthSession } from '@/lib/hooks/useAuthSession'
+import { getCsrfHeaders } from '@/lib/api/client'
 
 interface RankingSectionProps {
   traders: Trader[]
@@ -54,6 +56,7 @@ export default function RankingSection({
   const { showToast } = useToast()
   const { language, t } = useLanguage()
   const { isPro, isLoading: premiumLoading } = useSubscription()
+  const { getAuthHeaders } = useAuthSession()
 
   // 分类状态
   const [category, setCategory] = useState<CategoryType>('all')
@@ -221,16 +224,28 @@ export default function RankingSection({
 
   // Saved filter handlers
   const handleSaveFilter = async (name: string, description?: string) => {
+    const authHeaders = getAuthHeaders()
+    if (!authHeaders) {
+      showToast(language === 'zh' ? '请先登录' : 'Please login first', 'error')
+      return
+    }
     try {
       const res = await fetch('/api/saved-filters', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...authHeaders,
+          ...getCsrfHeaders(),
+        },
         body: JSON.stringify({ name, description, filter_config: filterConfig }),
       })
       if (res.ok) {
         const data = await res.json()
         setSavedFilters(prev => [...prev, data.filter])
         showToast(language === 'zh' ? '筛选已保存' : 'Filter saved', 'success')
+      } else {
+        const errorData = await res.json().catch(() => ({}))
+        showToast(errorData.error || (language === 'zh' ? '保存失败' : 'Save failed'), 'error')
       }
     } catch {
       showToast(language === 'zh' ? '保存失败' : 'Save failed', 'error')
@@ -242,9 +257,25 @@ export default function RankingSection({
   }
 
   const handleDeleteFilter = async (filterId: string) => {
+    const authHeaders = getAuthHeaders()
+    if (!authHeaders) {
+      showToast(language === 'zh' ? '请先登录' : 'Please login first', 'error')
+      return
+    }
     try {
-      await fetch(`/api/saved-filters/${filterId}`, { method: 'DELETE' })
-      setSavedFilters(prev => prev.filter(f => f.id !== filterId))
+      const res = await fetch(`/api/saved-filters/${filterId}`, {
+        method: 'DELETE',
+        headers: {
+          ...authHeaders,
+          ...getCsrfHeaders(),
+        },
+      })
+      if (res.ok) {
+        setSavedFilters(prev => prev.filter(f => f.id !== filterId))
+        showToast(language === 'zh' ? '已删除' : 'Deleted', 'success')
+      } else {
+        showToast(language === 'zh' ? '删除失败' : 'Delete failed', 'error')
+      }
     } catch {
       showToast(language === 'zh' ? '删除失败' : 'Delete failed', 'error')
     }
@@ -417,8 +448,8 @@ export default function RankingSection({
         onProRequired={handleProRequired}
         onFilterToggle={() => setShowAdvancedFilter(prev => !prev)}
         hasActiveFilters={hasActiveFilters}
-        error={null}
-        onRetry={undefined}
+        error={error}
+        onRetry={onRetry}
         // Feature 8: Controlled props
         controlledSortColumn={sortColumn}
         controlledSortDir={sortDir}
@@ -449,7 +480,7 @@ export default function RankingSection({
         >
           <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], flexWrap: 'wrap' }}>
             <span>{language === 'zh' ? '数据来源:' : 'Sources:'}</span>
-            {dataSources.slice(0, 5).map((src, i) => (
+            {dataSources.slice(0, 5).map((src) => (
               <span
                 key={src}
                 style={{

@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect, useRef, memo, useCallback } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
 import { RankingSkeleton } from '../ui/Skeleton'
 import { RankingBadge } from '../icons'
@@ -527,7 +526,6 @@ export default function RankingTable(props: {
     onSortChange, onPageChange, onSearchChange,
   } = props
   const { t, language } = useLanguage()
-  const router = useRouter()
 
   // 分页状态 (internal state, overridden by controlled props)
   const [internalPage, setInternalPage] = useState(1)
@@ -713,8 +711,6 @@ export default function RankingTable(props: {
     'kucoin': 'KuCoin 合约',
     'gmx': 'GMX 链上',
   }
-  
-  const sourceLabel = source ? sourceLabels[source] || source : t('unknownSource')
 
   // Get medal glow class based on rank
   const getMedalGlowClass = (rank: number) => {

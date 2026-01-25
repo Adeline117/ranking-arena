@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '../base'
 import { useLanguage } from '../Providers/LanguageProvider'
@@ -83,23 +83,23 @@ export default function AdvancedFilter({
   const [saving, setSaving] = useState(false)
 
   // 更新筛选条件
-  const updateFilter = (key: keyof FilterConfig, value: any) => {
+  const updateFilter = useCallback((key: keyof FilterConfig, value: unknown) => {
     onFilterChange({ ...currentFilter, [key]: value })
-  }
+  }, [currentFilter, onFilterChange])
 
   // 切换多选项
-  const toggleArrayItem = (key: 'category' | 'exchange', value: string) => {
+  const toggleArrayItem = useCallback((key: 'category' | 'exchange', value: string) => {
     const current = currentFilter[key] || []
     const newValue = current.includes(value)
       ? current.filter(v => v !== value)
       : [...current, value]
-    updateFilter(key, newValue.length > 0 ? newValue : undefined)
-  }
+    onFilterChange({ ...currentFilter, [key]: newValue.length > 0 ? newValue : undefined })
+  }, [currentFilter, onFilterChange])
 
   // 重置筛选
-  const resetFilter = () => {
+  const resetFilter = useCallback(() => {
     onFilterChange({})
-  }
+  }, [onFilterChange])
 
   // 保存筛选
   const handleSave = async () => {

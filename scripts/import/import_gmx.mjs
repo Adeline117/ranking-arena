@@ -82,7 +82,8 @@ async function fetchLeaderboardData(period) {
 
   const browser = await puppeteer.launch({
     headless: 'new',
-    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-blink-features=AutomationControlled'],
+    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-blink-features=AutomationControlled', '--disable-dev-shm-usage'],
+    timeout: 60000,
   })
 
   try {
@@ -93,18 +94,22 @@ async function fetchLeaderboardData(period) {
     // 提取函数
     const extractTraders = async () => {
       return await page.evaluate(() => {
-        const rows = document.querySelectorAll('tr')
         const results = []
+
+        // 方法1: 从表格行提取
+        const rows = document.querySelectorAll('tr, [role="row"]')
         rows.forEach(row => {
-          const text = row.innerText
-          const addrMatch = text.match(/0x[a-fA-F0-9]+\.{3}[a-fA-F0-9]+/)
-          // 提取 ROI (百分比)
-          const roiMatch = text.match(/([+-])\s*([\d,]+\.\d+)\s*%/)
-          // 提取 PnL (金额，通常是 $xxx 格式)
+          const text = row.innerText || ''
+          // 匹配各种地址格式: 0x1234...5678 或完整地址
+          const addrMatch = text.match(/0x[a-fA-F0-9]{4,}\.{0,3}[a-fA-F0-9]{0,}/) || text.match(/(0x[a-fA-F0-9]{8,42})/)
+          // 提取 ROI - 更灵活的匹配
+          const roiMatch = text.match(/([+-]?)\s*([\d,]+\.?\d*)\s*%/)
+          // 提取 PnL
           const pnlMatch = text.match(/\$\s*([+-]?[\d,]+\.?\d*)/)
 
           if (addrMatch && roiMatch) {
-            const roi = parseFloat(roiMatch[2].replace(/,/g, '')) * (roiMatch[1] === '-' ? -1 : 1)
+            const sign = roiMatch[1] === '-' ? -1 : 1
+            const roi = parseFloat(roiMatch[2].replace(/,/g, '')) * sign
             let pnl = null
             if (pnlMatch) {
               pnl = parseFloat(pnlMatch[1].replace(/,/g, ''))
@@ -112,6 +117,27 @@ async function fetchLeaderboardData(period) {
             results.push({ address: addrMatch[0], roi, pnl })
           }
         })
+
+        // 方法2: 从整个页面文本中提取（备用）
+        if (results.length === 0) {
+          const pageText = document.body.innerText || ''
+          // 按行分割
+          const lines = pageText.split('\n')
+          let currentAddr = null
+          lines.forEach(line => {
+            const addrMatch = line.match(/(0x[a-fA-F0-9]{4,})/)
+            if (addrMatch) {
+              currentAddr = addrMatch[1]
+            }
+            const roiMatch = line.match(/([+-]?)([\d,]+\.?\d*)\s*%/)
+            if (currentAddr && roiMatch) {
+              const roi = parseFloat(roiMatch[2].replace(/,/g, '')) * (roiMatch[1] === '-' ? -1 : 1)
+              results.push({ address: currentAddr, roi, pnl: null })
+              currentAddr = null
+            }
+          })
+        }
+
         return results
       })
     }
@@ -152,45 +178,70 @@ async function fetchLeaderboardData(period) {
     traders.forEach(t => allTraders.set(t.address, t))
     console.log(`  第1页: ${allTraders.size} 个`)
 
-    // 分页获取
-    console.log('\n📄 分页获取数据...')
-    
-    for (let pageNum = 2; pageNum <= MAX_PAGES; pageNum++) {
+    // 分页获取 - 使用滚动加载
+    console.log('\n📄 滚动加载更多数据...')
+
+    for (let scroll = 1; scroll <= 20; scroll++) {
       if (allTraders.size >= TARGET_COUNT) {
         console.log(`  ✓ 已达到目标 ${TARGET_COUNT}`)
         break
       }
 
-      // 点击页码
-      const clicked = await page.evaluate((pageNum) => {
-        const buttons = document.querySelectorAll('button')
+      // 滚动页面
+      await page.evaluate(() => window.scrollBy(0, 800))
+      await sleep(2000)
+
+      // 尝试点击 "Load More" 或类似按钮
+      await page.evaluate(() => {
+        const buttons = document.querySelectorAll('button, [role="button"]')
         for (const btn of buttons) {
-          if (btn.textContent?.trim() === String(pageNum)) {
+          const text = (btn.textContent || '').toLowerCase()
+          if (text.includes('load more') || text.includes('show more') || text.includes('更多')) {
             btn.click()
             return true
           }
         }
-        // 尝试点击下一页 >
+        // 尝试点击下一页
         for (const btn of buttons) {
-          if (btn.textContent?.trim() === '>') {
+          const text = btn.textContent?.trim()
+          if (text === '>' || text === '»' || text?.includes('Next')) {
             btn.click()
-            return 'next'
+            return true
           }
         }
         return false
-      }, pageNum)
+      })
 
-      if (!clicked) {
-        console.log(`  无法翻到第 ${pageNum} 页`)
-        break
+      await sleep(2000)
+
+      // 提取新数据
+      const newTraders = await extractTraders()
+      const before = allTraders.size
+      newTraders.forEach(t => allTraders.set(t.address, t))
+
+      if (scroll % 5 === 0) {
+        console.log(`  滚动 ${scroll}, 当前: ${allTraders.size} 个 (+${allTraders.size - before})`)
       }
 
-      await sleep(3000)
+      // 如果没有新数据，尝试点击页码
+      if (allTraders.size === before) {
+        const clicked = await page.evaluate((targetPage) => {
+          const buttons = document.querySelectorAll('button, [role="button"], a')
+          for (const btn of buttons) {
+            if (btn.textContent?.trim() === String(targetPage)) {
+              btn.click()
+              return true
+            }
+          }
+          return false
+        }, Math.floor(scroll / 2) + 2)
 
-      traders = await extractTraders()
-      const before = allTraders.size
-      traders.forEach(t => allTraders.set(t.address, t))
-      console.log(`  第${pageNum}页: ${traders.length} 个, 新增 ${allTraders.size - before}, 累计 ${allTraders.size}`)
+        if (clicked) {
+          await sleep(3000)
+          const pageTraders = await extractTraders()
+          pageTraders.forEach(t => allTraders.set(t.address, t))
+        }
+      }
     }
 
     console.log(`\n📊 共获取 ${allTraders.size} 个交易员数据`)

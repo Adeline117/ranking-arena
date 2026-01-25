@@ -48,7 +48,6 @@ export default function HomePage() {
   const {
     traders,
     loading,
-    error,
     activeTimeRange,
     changeTimeRange,
     lastUpdated,

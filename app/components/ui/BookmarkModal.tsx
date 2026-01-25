@@ -4,9 +4,9 @@ import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '../base'
-import { supabase } from '@/lib/supabase/client'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { useToast } from './Toast'
+import { useAuthSession } from '@/lib/hooks/useAuthSession'
 
 type BookmarkFolder = {
   id: string
@@ -27,22 +27,16 @@ interface BookmarkModalProps {
 
 export default function BookmarkModal({ isOpen, onClose, onSelect, postId: _postId }: BookmarkModalProps) {
   const { showToast } = useToast()
+  const { accessToken, authChecked } = useAuthSession()
   const [folders, setFolders] = useState<BookmarkFolder[]>([])
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [newFolderName, setNewFolderName] = useState('')
   const [newFolderPublic, setNewFolderPublic] = useState(true)
-  const [accessToken, setAccessToken] = useState<string | null>(null)
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setAccessToken(data.session?.access_token ?? null)
-    })
-  }, [])
-
-  useEffect(() => {
-    if (isOpen && accessToken) {
+    if (isOpen && authChecked && accessToken) {
       loadFolders()
     }
     // 关闭时重置状态
@@ -52,7 +46,7 @@ export default function BookmarkModal({ isOpen, onClose, onSelect, postId: _post
       setNewFolderPublic(true)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, accessToken])
+  }, [isOpen, authChecked, accessToken])
 
   // 打开弹窗时禁止背景滚动，ESC 键关闭
   useEffect(() => {
@@ -78,24 +72,14 @@ export default function BookmarkModal({ isOpen, onClose, onSelect, postId: _post
     setLoading(true)
 
     try {
-      // 统一获取 token，避免竞争条件
-      let token = accessToken
-      if (!token) {
-        const { data } = await supabase.auth.getSession()
-        token = data.session?.access_token ?? null
-        if (token) {
-          setAccessToken(token)
-        }
-      }
-
-      if (!token) {
+      if (!accessToken) {
         setFolders([])
         return
       }
 
       const response = await fetch('/api/bookmark-folders', {
         headers: {
-          'Authorization': `Bearer ${token}`
+          'Authorization': `Bearer ${accessToken}`
         }
       })
 

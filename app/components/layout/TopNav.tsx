@@ -331,7 +331,7 @@ export default function TopNav({ email }: { email: string | null }) {
                   fontFamily: 'var(--font-geist-sans), system-ui, sans-serif',
                 }}
               >
-                <span style={{ color: '#8B5CF6', fontWeight: 800 }}>a</span>rena
+                <span style={{ color: tokens.colors.accent.brand, fontWeight: 800 }}>a</span>rena
               </Box>
             </Box>
           </Link>
@@ -544,7 +544,7 @@ export default function TopNav({ email }: { email: string | null }) {
                       height: 18,
                       borderRadius: '50%',
                       background: tokens.gradient.error,
-                      color: '#fff',
+                      color: tokens.colors.white,
                       fontSize: 10,
                       fontWeight: 900,
                       display: 'flex',
@@ -714,8 +714,8 @@ export default function TopNav({ email }: { email: string | null }) {
                             minWidth: 16,
                             height: 16,
                             borderRadius: '50%',
-                            background: '#ff4d4d',
-                            color: '#fff',
+                            background: tokens.colors.accent.error,
+                            color: tokens.colors.white,
                             fontSize: 10,
                             fontWeight: 900,
                             display: 'flex',
@@ -775,7 +775,7 @@ export default function TopNav({ email }: { email: string | null }) {
                 padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
                 borderRadius: tokens.radius.lg,
                 background: tokens.gradient.primary,
-                color: '#ffffff',
+                color: tokens.colors.white,
                 textDecoration: 'none',
                 fontWeight: tokens.typography.fontWeight.black,
                 fontSize: tokens.typography.fontSize.sm,
