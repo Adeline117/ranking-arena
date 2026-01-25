@@ -104,7 +104,31 @@ export default function CopyTradeButton({
   const copyTradeUrl = getCopyTradeUrl(source, traderId)
   const exchangeName = getExchangeName(source)
 
-  if (!copyTradeUrl) return null
+  // 如果不支持跟单，显示醒目的锁定按钮
+  if (!copyTradeUrl) {
+    return (
+      <Box
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: tokens.spacing[2],
+          padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
+          borderRadius: tokens.radius.lg,
+          background: `linear-gradient(135deg, rgba(139, 111, 168, 0.15) 0%, rgba(139, 111, 168, 0.05) 100%)`,
+          border: `1px dashed rgba(139, 111, 168, 0.4)`,
+          cursor: 'not-allowed',
+        }}
+      >
+        <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="rgba(139, 111, 168, 0.6)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+          <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+        </svg>
+        <Text size="sm" weight="bold" style={{ color: 'rgba(139, 111, 168, 0.8)' }}>
+          {language === 'zh' ? '暂不支持跟单' : 'Copy trading unavailable'}
+        </Text>
+      </Box>
+    )
+  }
 
   const handleConfirm = () => {
     if (acknowledged) {
