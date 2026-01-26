@@ -6,9 +6,12 @@ import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '../base'
 import type { TraderPerformance } from '@/lib/data/trader'
 import type { TraderFeedItem } from '@/lib/data/trader'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+
 type Group = {
   id: string
   name: string
+  name_en?: string | null
 }
 
 interface UserHomeLayoutProps {
@@ -32,6 +35,7 @@ export default function UserHomeLayout({
   isOwnProfile = false,
 }: UserHomeLayoutProps) {
   const router = useRouter()
+  const { language } = useLanguage()
 
   const handleEditProfile = () => {
     router.push('/settings')
@@ -218,7 +222,7 @@ export default function UserHomeLayout({
                     }}
                   >
                     <Text size="base" weight="bold">
-                      {group.name}
+                      {language === 'zh' ? group.name : (group.name_en || group.name)}
                     </Text>
                   </Box>
                 </Link>
