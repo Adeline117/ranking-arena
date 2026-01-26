@@ -51,6 +51,11 @@ function getCopyTradeUrl(source: string | undefined, traderId: string): string |
     bitget: `https://www.bitget.com/zh-CN/copy-trading/trader?id=${traderId}`,
     // OKX
     okx: `https://www.okx.com/copy-trading/trader/${traderId}`,
+    // HTX
+    htx: `https://futures.htx.com/en-us/copytrading/futures/detail/${traderId}`,
+    htx_futures: `https://futures.htx.com/en-us/copytrading/futures/detail/${traderId}`,
+    // Weex
+    weex: `https://www.weex.com/zh-CN/copy-trading/trader/${traderId}`,
   }
 
   return urlMap[source.toLowerCase()] || null
@@ -77,6 +82,11 @@ function getExchangeName(source: string | undefined): string {
     bitget: 'Bitget',
     // OKX
     okx: 'OKX',
+    // HTX
+    htx: 'HTX',
+    htx_futures: 'HTX',
+    // Weex
+    weex: 'Weex',
   }
 
   return nameMap[source.toLowerCase()] || source

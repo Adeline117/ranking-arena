@@ -578,7 +578,7 @@ export const HOME_TOUR_STEPS: TourStep[] = [
   {
     target: '[data-tour="exchange-filter"]',
     title: '交易所筛选',
-    content: '选择特定交易所来筛选交易员，支持 Binance、Bybit、Bitget 等。',
+    content: '选择特定交易所来筛选交易员，支持 Binance、Bybit、Bitget、HTX、Weex 等。',
     placement: 'bottom',
   },
   {

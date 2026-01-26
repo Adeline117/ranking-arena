@@ -87,7 +87,7 @@ function HotContent() {
   // Time range removed - sort by real-time hotness only
 
   // Tabbed sections state
-  const [activeHotTab, setActiveHotTab] = useState<'posts' | 'traders' | 'groups'>('posts')
+  const [activeHotTab, setActiveHotTab] = useState<'posts' | 'groups'>('posts')
 
   // Groups data for the groups tab
   const [groups, setGroups] = useState<{ id: string; name: string; member_count: number }[]>([])
@@ -113,34 +113,76 @@ function HotContent() {
   // Suppress unused variable warning
   void currentUserId
 
-  // 加载交易员数据 - 直接查询 trader_sources 表
+  // 加载交易员数据 - 查询 trader_snapshots 表 (90D)
   useEffect(() => {
     const load = async () => {
       setLoadingTraders(true)
       try {
-        const { data, error: supabaseError } = await supabase
-          .from('trader_sources')
-          .select('source, source_trader_id, handle, avatar_url, roi, arena_score')
-          .order('arena_score', { ascending: false, nullsFirst: false })
-          .limit(10)
+        // 获取90天排名前10的交易员 (season_id 使用大写)
+        let { data, error: supabaseError } = await supabase
+          .from('trader_snapshots')
+          .select('source, source_trader_id, roi, arena_score, followers, win_rate')
+          .eq('season_id', '90D')
+          .not('arena_score', 'is', null)
+          .gt('arena_score', 0)
+          .order('arena_score', { ascending: false })
+          .limit(30)
+
+        // 如果没有 arena_score 数据，fallback 到 ROI 排序
+        if (!data || data.length === 0) {
+          const fallbackResult = await supabase
+            .from('trader_snapshots')
+            .select('source, source_trader_id, roi, arena_score, followers, win_rate')
+            .eq('season_id', '90D')
+            .not('roi', 'is', null)
+            .order('roi', { ascending: false })
+            .limit(30)
+
+          data = fallbackResult.data
+          supabaseError = fallbackResult.error
+        }
 
         if (supabaseError) {
+          console.error('Trader load error:', supabaseError)
           setTraders([])
-          showToast(language === 'zh' ? '加载交易员数据失败' : 'Failed to load traders', 'error')
           return
         }
 
-        setTraders((data || []).map(item => ({
+        // 去重并取前10
+        const seen = new Set<string>()
+        const uniqueData = (data || []).filter(row => {
+          const key = `${row.source}:${row.source_trader_id}`
+          if (seen.has(key)) return false
+          seen.add(key)
+          return true
+        }).slice(0, 10)
+
+        // 获取 handle 信息
+        const traderKeys = uniqueData.map(t => t.source_trader_id)
+        let handleMap: Record<string, string> = {}
+        if (traderKeys.length > 0) {
+          const { data: sources } = await supabase
+            .from('trader_sources')
+            .select('source_trader_id, handle')
+            .in('source_trader_id', traderKeys)
+          if (sources) {
+            for (const s of sources) {
+              handleMap[s.source_trader_id] = s.handle || s.source_trader_id
+            }
+          }
+        }
+
+        setTraders(uniqueData.map(item => ({
           id: item.source_trader_id || '',
-          handle: item.handle || item.source_trader_id || null,
-          roi: item.roi || 0,
-          win_rate: 0,
-          followers: 0,
+          handle: handleMap[item.source_trader_id] || item.source_trader_id?.slice(0, 8) || null,
+          roi: typeof item.roi === 'string' ? parseFloat(item.roi) : (item.roi || 0),
+          win_rate: typeof item.win_rate === 'string' ? parseFloat(item.win_rate) : (item.win_rate || 0),
+          followers: item.followers || 0,
           source: item.source || 'binance',
         })))
-      } catch (_error) {
+      } catch (error) {
+        console.error('Trader load error:', error)
         setTraders([])
-        showToast(language === 'zh' ? '加载交易员数据失败' : 'Failed to load traders', 'error')
       } finally {
         setLoadingTraders(false)
       }
@@ -224,13 +266,15 @@ function HotContent() {
       try {
         const res = await fetch('/api/groups?sort_by=activity&limit=10')
         const json = await res.json()
-        const data = json.groups || json.data || []
+        // Handle both old and new API response formats
+        const data = json.data?.groups || json.groups || json.data || []
         setGroups(data.map((g: Record<string, unknown>) => ({
           id: (g.id as string) || '',
           name: (g.name as string) || '',
           member_count: (g.member_count as number) || 0,
         })))
-      } catch {
+      } catch (error) {
+        console.error('Groups load error:', error)
         setGroups([])
       } finally {
         setLoadingGroups(false)
@@ -646,17 +690,17 @@ function HotContent() {
     <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
       <TopNav email={email} />
 
-      <Box as="main" className="container-padding" px={4} py={6} style={{ maxWidth: 1200, margin: '0 auto' }}>
-        <Box className="hot-grid">
-          {/* 左：排名前十 */}
-          <Box as="section">
+      <Box as="main" className="container-padding" px={4} py={6} style={{ maxWidth: 1400, margin: '0 auto' }}>
+        <Box className="main-grid">
+          {/* 左：排名前十（仅桌面端显示） */}
+          <Box as="section" className="hide-tablet">
             <Card title={t('top10')}>
               <RankingTableCompact traders={traders} loading={loadingTraders} loggedIn={loggedIn} />
             </Card>
           </Box>
 
           {/* 中：热榜 */}
-          <Box as="section">
+          <Box as="section" style={{ minWidth: 0 }}>
             <Card title={t('hotList')}>
               <Text size="sm" color="secondary" style={{ marginBottom: tokens.spacing[3] }}>
                 {loggedIn ? t('loggedInShowAllHot') : t('notLoggedInShowLimitedHot')}
@@ -666,7 +710,6 @@ function HotContent() {
               <Box style={{ display: 'flex', gap: '8px', marginBottom: tokens.spacing[3], flexWrap: 'wrap' }}>
                 {([
                   { value: 'posts' as const, label: '热门帖子' },
-                  { value: 'traders' as const, label: '热门交易员' },
                   { value: 'groups' as const, label: '热门小组' },
                 ]).map((tab) => (
                   <button
@@ -931,69 +974,6 @@ function HotContent() {
                 </>
               )}
 
-              {/* Tab Content: Hot Traders */}
-              {activeHotTab === 'traders' && (
-                <>
-                  {loadingTraders ? (
-                    <Box style={{ padding: tokens.spacing[4], textAlign: 'center' }}>
-                      <Text color="tertiary">{t('loading')}</Text>
-                    </Box>
-                  ) : traders.length === 0 ? (
-                    <Box style={{ padding: tokens.spacing[4], textAlign: 'center' }}>
-                      <Text color="tertiary">{t('noData')}</Text>
-                    </Box>
-                  ) : (
-                    <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
-                      {traders.map((trader, idx) => (
-                        <Box
-                          key={trader.id}
-                          bg="primary"
-                          p={4}
-                          radius="md"
-                          border="primary"
-                          style={{ cursor: 'pointer' }}
-                          onClick={() => {
-                            if (trader.handle) {
-                              router.push(`/trader/${encodeURIComponent(trader.handle)}`)
-                            }
-                          }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.background = tokens.colors.bg.secondary
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.background = tokens.colors.bg.primary
-                          }}
-                        >
-                          <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
-                              <Text size="sm" weight="black" style={{ color: idx < 3 ? tokens.colors.accent.warning : tokens.colors.text.secondary }}>
-                                #{idx + 1}
-                              </Text>
-                              <Text size="base" weight="bold">
-                                {trader.handle || 'Unknown'}
-                              </Text>
-                              {trader.source && (
-                                <Text size="xs" color="tertiary" style={{ textTransform: 'uppercase' }}>
-                                  {trader.source}
-                                </Text>
-                              )}
-                            </Box>
-                            <Box style={{ display: 'flex', gap: tokens.spacing[4], alignItems: 'center' }}>
-                              <Text size="sm" style={{ color: trader.roi >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error }}>
-                                ROI {trader.roi.toFixed(1)}%
-                              </Text>
-                              <Text size="xs" color="tertiary">
-                                {trader.followers.toLocaleString()} followers
-                              </Text>
-                            </Box>
-                          </Box>
-                        </Box>
-                      ))}
-                    </Box>
-                  )}
-                </>
-              )}
-
               {/* Tab Content: Hot Groups */}
               {activeHotTab === 'groups' && (
                 <>
@@ -1045,8 +1025,8 @@ function HotContent() {
             </Card>
           </Box>
 
-          {/* 右：市场 */}
-          <Box as="section">
+          {/* 右：市场（平板及以上显示） */}
+          <Box as="section" className="hide-mobile">
             <MarketPanel />
           </Box>
         </Box>

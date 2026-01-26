@@ -8,7 +8,7 @@ import { RankingBadge } from '../icons'
 import { Box, Text } from '../base'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { getAvatarGradient, getAvatarInitial } from '@/lib/utils/avatar'
-import { ScoreRulesModal } from '../ui/ScoreRulesModal'
+import { DynamicScoreRulesModal as ScoreRulesModal } from '../ui/dynamic'
 import CategoryRankingTabs, { CategoryType } from './CategoryRankingTabs'
 import { ProLabel } from '../premium/PremiumGate'
 import ExportButton from '../Utils/ExportButton'
@@ -29,7 +29,13 @@ const CompareIcon = ({ size = 14 }: { size?: number }) => (
 )
 
 const SortIndicator = ({ active, dir }: { active: boolean; dir: 'asc' | 'desc' }) => (
-  <svg width={8} height={10} viewBox="0 0 8 10" style={{ opacity: active ? 1 : 0.3, transition: 'opacity 0.2s', flexShrink: 0 }}>
+  <svg
+    width={8}
+    height={10}
+    viewBox="0 0 8 10"
+    className={`sort-indicator ${dir}`}
+    style={{ opacity: active ? 1 : 0.3, transition: 'opacity 0.2s, transform 0.2s ease-out', flexShrink: 0 }}
+  >
     <path d="M4 0L7 4H1L4 0Z" fill="currentColor" opacity={dir === 'asc' && active ? 1 : 0.3} />
     <path d="M4 10L1 6H7L4 10Z" fill="currentColor" opacity={dir === 'desc' && active ? 1 : 0.3} />
   </svg>
@@ -75,7 +81,7 @@ function formatROI(roi: number): string {
  */
 function getPnLTooltip(source: string, language: string): string {
   const traderPnlSources = ['binance', 'binance_futures', 'binance_spot', 'binance_web3']
-  const followerPnlSources = ['bybit', 'bitget', 'bitget_futures', 'bitget_spot', 'kucoin', 'mexc']
+  const followerPnlSources = ['bybit', 'bitget', 'bitget_futures', 'bitget_spot', 'kucoin', 'mexc', 'htx', 'htx_futures', 'weex']
 
   const sourceLower = source.toLowerCase()
 
@@ -106,6 +112,19 @@ const COLUMN_LABELS: Record<ColumnKey, { zh: string; en: string }> = {
   mdd: { zh: '最大回撤', en: 'Max Drawdown' },
 }
 const LS_KEY_COLUMNS = 'ranking-visible-columns'
+const LS_KEY_VIEW_MODE = 'ranking-view-mode'
+
+// View mode type
+export type ViewMode = 'table' | 'card'
+
+function getStoredViewMode(): ViewMode {
+  if (typeof window === 'undefined') return 'table'
+  try {
+    const stored = localStorage.getItem(LS_KEY_VIEW_MODE)
+    if (stored === 'table' || stored === 'card') return stored
+  } catch { /* ignore */ }
+  return 'table'
+}
 
 function getStoredColumns(): ColumnKey[] {
   if (typeof window === 'undefined') return DEFAULT_VISIBLE_COLUMNS
@@ -120,6 +139,23 @@ function getStoredColumns(): ColumnKey[] {
   } catch { /* ignore */ }
   return DEFAULT_VISIBLE_COLUMNS
 }
+
+// View toggle icons
+const TableViewIcon = ({ size = 14 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <rect x="3" y="3" width="18" height="18" rx="2" />
+    <path d="M3 9h18M3 15h18M9 3v18" />
+  </svg>
+)
+
+const CardViewIcon = ({ size = 14 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <rect x="3" y="3" width="7" height="7" rx="1" />
+    <rect x="14" y="3" width="7" height="7" rx="1" />
+    <rect x="3" y="14" width="7" height="7" rx="1" />
+    <rect x="14" y="14" width="7" height="7" rx="1" />
+  </svg>
+)
 
 // Settings icon
 const SettingsIcon = ({ size = 14 }: { size?: number }) => (
@@ -417,6 +453,183 @@ const TraderRow = memo(function TraderRow({
   )
 })
 
+// ============ Memoized Card Component ============
+
+interface TraderCardProps {
+  trader: Trader
+  rank: number
+  source?: string
+  language: string
+  getMedalGlowClass: (rank: number) => string
+  parseSourceInfo: (src: string) => { exchange: string; type: string; typeColor: string }
+}
+
+const TraderCard = memo(function TraderCard({
+  trader,
+  rank,
+  source,
+  language,
+  getMedalGlowClass,
+  parseSourceInfo,
+}: TraderCardProps) {
+  const traderHandle = trader.handle || trader.id
+  const href = `/trader/${encodeURIComponent(traderHandle)}`
+
+  const formatDisplayName = (name: string) => {
+    if (name.startsWith('0x') && name.length > 20) {
+      return `${name.substring(0, 6)}...${name.substring(name.length - 4)}`
+    }
+    return name
+  }
+
+  const displayName = formatDisplayName(traderHandle)
+  const sourceInfo = parseSourceInfo(trader.source || source || '')
+
+  return (
+    <Link
+      href={href}
+      style={{ textDecoration: 'none', display: 'block' }}
+      aria-label={`#${rank} ${displayName}, ROI ${(trader.roi || 0) >= 0 ? '+' : ''}${(trader.roi || 0).toFixed(2)}%`}
+    >
+      <Box
+        className="ranking-row"
+        style={{
+          padding: tokens.spacing[4],
+          background: tokens.glass.bg.light,
+          border: `1px solid var(--glass-border-light)`,
+          borderRadius: tokens.radius.lg,
+          cursor: 'pointer',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: tokens.spacing[3],
+          minHeight: 140,
+        }}
+      >
+        {/* Top row: Rank + Avatar + Name */}
+        <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3] }}>
+          {/* Rank */}
+          <Box style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, minWidth: 32 }}>
+            {rank <= 3 ? (
+              <Box className={getMedalGlowClass(rank)} style={{ transform: 'scale(1.1)' }}>
+                <RankingBadge rank={rank as 1 | 2 | 3} size={28} />
+              </Box>
+            ) : (
+              <Text size="sm" weight="bold" color="tertiary" style={{ fontSize: '14px' }}>
+                #{rank}
+              </Text>
+            )}
+            {trader.is_new ? (
+              <span style={{ fontSize: '9px', fontWeight: 700, color: tokens.colors.accent.primary, lineHeight: 1 }}>NEW</span>
+            ) : trader.rank_change != null && trader.rank_change !== 0 ? (
+              <span style={{ fontSize: '9px', fontWeight: 700, color: trader.rank_change > 0 ? tokens.colors.accent.success : tokens.colors.accent.error, lineHeight: 1 }}>
+                {trader.rank_change > 0 ? `+${trader.rank_change}` : trader.rank_change}
+              </span>
+            ) : null}
+          </Box>
+
+          {/* Avatar */}
+          <div
+            style={{
+              width: '44px', height: '44px', minWidth: '44px',
+              borderRadius: '50%', background: getAvatarGradient(trader.id),
+              border: '2px solid var(--color-border-primary)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              overflow: 'hidden', flexShrink: 0, position: 'relative',
+              boxShadow: rank <= 3 ? `0 0 12px ${rank === 1 ? 'rgba(255, 215, 0, 0.4)' : rank === 2 ? 'rgba(192, 192, 192, 0.4)' : 'rgba(205, 127, 50, 0.4)'}` : 'none',
+            }}
+          >
+            <span style={{ color: '#ffffff', fontSize: '16px', fontWeight: 900, lineHeight: 1, textShadow: '0 1px 3px rgba(0,0,0,0.8)' }}>
+              {getAvatarInitial(displayName)}
+            </span>
+            {trader.avatar_url && !trader.avatar_url.includes('t.co') && !trader.avatar_url.includes('/banner/') && (
+              <img
+                src={trader.avatar_url}
+                alt={displayName}
+                referrerPolicy="no-referrer"
+                loading="lazy"
+                style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', inset: 0, zIndex: 1 }}
+                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+              />
+            )}
+          </div>
+
+          {/* Name + Source */}
+          <Box style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <Text size="md" weight="bold" style={{ color: tokens.colors.text.primary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {displayName}
+            </Text>
+            <Box style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Box style={{ padding: '2px 6px', borderRadius: tokens.radius.sm, background: `${sourceInfo.typeColor}15`, border: `1px solid ${sourceInfo.typeColor}30` }}>
+                <Text size="xs" weight="bold" style={{ color: sourceInfo.typeColor, fontSize: '10px', lineHeight: 1.2 }}>
+                  {sourceInfo.type}
+                </Text>
+              </Box>
+              {trader.also_on && trader.also_on.length > 0 && (
+                <Text size="xs" style={{ fontSize: '9px', color: tokens.colors.text.tertiary }}>
+                  +{trader.also_on.length}
+                </Text>
+              )}
+            </Box>
+          </Box>
+
+          {/* Arena Score */}
+          {trader.arena_score != null && (
+            <Box style={{
+              minWidth: 50, height: 28, borderRadius: tokens.radius.md,
+              background: trader.arena_score >= 60 ? tokens.gradient.successSubtle : trader.arena_score >= 40 ? tokens.gradient.warningSubtle : tokens.glass.bg.light,
+              border: `1px solid ${trader.arena_score >= 60 ? `${tokens.colors.accent.success}50` : trader.arena_score >= 40 ? `${tokens.colors.accent.warning}40` : 'rgba(255, 255, 255, 0.15)'}`,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              <Text size="sm" weight="black" style={{ color: trader.arena_score >= 60 ? tokens.colors.accent.success : trader.arena_score >= 40 ? tokens.colors.accent.warning : tokens.colors.text.secondary, fontSize: '13px' }}>
+                {trader.arena_score.toFixed(0)}
+              </Text>
+            </Box>
+          )}
+        </Box>
+
+        {/* Stats row */}
+        <Box style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: tokens.spacing[2] }}>
+          {/* ROI */}
+          <Box style={{ textAlign: 'center', padding: `${tokens.spacing[2]} 0`, background: tokens.glass.bg.light, borderRadius: tokens.radius.md }}>
+            <Text size="xs" color="tertiary" style={{ marginBottom: 2, display: 'block' }}>ROI</Text>
+            <Text size="md" weight="black" style={{ color: (trader.roi || 0) >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error }}>
+              {formatROI(trader.roi || 0)}
+            </Text>
+          </Box>
+
+          {/* Win Rate */}
+          <Box style={{ textAlign: 'center', padding: `${tokens.spacing[2]} 0`, background: tokens.glass.bg.light, borderRadius: tokens.radius.md }}>
+            <Text size="xs" color="tertiary" style={{ marginBottom: 2, display: 'block' }}>{language === 'zh' ? '胜率' : 'Win%'}</Text>
+            <Text size="md" weight="semibold" style={{ color: trader.win_rate != null && trader.win_rate > 50 ? tokens.colors.accent.success : tokens.colors.text.secondary }}>
+              {trader.win_rate != null ? `${trader.win_rate.toFixed(0)}%` : '—'}
+            </Text>
+          </Box>
+
+          {/* Max Drawdown */}
+          <Box style={{ textAlign: 'center', padding: `${tokens.spacing[2]} 0`, background: tokens.glass.bg.light, borderRadius: tokens.radius.md }}>
+            <Text size="xs" color="tertiary" style={{ marginBottom: 2, display: 'block' }}>MDD</Text>
+            <Text size="md" weight="semibold" style={{ color: trader.max_drawdown != null ? tokens.colors.accent.error : tokens.colors.text.tertiary }}>
+              {trader.max_drawdown != null ? `-${Math.abs(trader.max_drawdown).toFixed(0)}%` : '—'}
+            </Text>
+          </Box>
+        </Box>
+      </Box>
+    </Link>
+  )
+}, (prev, next) => {
+  return (
+    prev.trader.id === next.trader.id &&
+    prev.trader.roi === next.trader.roi &&
+    prev.trader.arena_score === next.trader.arena_score &&
+    prev.trader.win_rate === next.trader.win_rate &&
+    prev.trader.max_drawdown === next.trader.max_drawdown &&
+    prev.trader.rank_change === next.trader.rank_change &&
+    prev.trader.is_new === next.trader.is_new &&
+    prev.rank === next.rank &&
+    prev.language === next.language
+  )
+})
+
 // Feature 2: Search icon
 const SearchIcon = ({ size = 14 }: { size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -533,6 +746,8 @@ export default function RankingTable(props: {
   const [showScoreRulesModal, setShowScoreRulesModal] = useState(false)
   const [internalSortColumn, setInternalSortColumn] = useState<'score' | 'roi' | 'winrate' | 'mdd'>('score')
   const [internalSortDir, setInternalSortDir] = useState<'asc' | 'desc'>('desc')
+  const [justSortedColumn, setJustSortedColumn] = useState<string | null>(null)
+  const [sortAnimationKey, setSortAnimationKey] = useState(0)
   const itemsPerPage = 20 // 每页显示 20 条
 
   // Feature 2: Inline search state
@@ -554,10 +769,21 @@ export default function RankingTable(props: {
   const [visibleColumns, setVisibleColumns] = useState<ColumnKey[]>(DEFAULT_VISIBLE_COLUMNS)
   const [showColumnSettings, setShowColumnSettings] = useState(false)
 
-  // Load stored columns on mount
+  // View mode (table or card)
+  const [viewMode, setViewMode] = useState<ViewMode>('table')
+
+  // Load stored columns and view mode on mount
   useEffect(() => {
     setVisibleColumns(getStoredColumns())
+    setViewMode(getStoredViewMode())
   }, [])
+
+  const toggleViewMode = (mode: ViewMode) => {
+    setViewMode(mode)
+    try {
+      localStorage.setItem(LS_KEY_VIEW_MODE, mode)
+    } catch { /* ignore */ }
+  }
 
   const toggleColumn = (col: ColumnKey) => {
     setVisibleColumns(prev => {
@@ -603,6 +829,11 @@ export default function RankingTable(props: {
       setInternalSortDir(newDir)
     }
     setCurrentPage(1)
+
+    // Trigger sorting animation
+    setJustSortedColumn(col)
+    setSortAnimationKey(prev => prev + 1)
+    setTimeout(() => setJustSortedColumn(null), 400)
   }
 
   // Feature 2: Handle search input
@@ -638,7 +869,8 @@ export default function RankingTable(props: {
   }, [traders, sortColumn, sortDir, debouncedSearch])
 
   // Virtual scrolling for large datasets
-  const useVirtualScroll = sortedTraders.length > 50
+  // 禁用虚拟滚动，统一使用分页（每页20条）
+  const useVirtualScroll = false
 
   // Scroll to top when sort changes (for virtual list)
   useEffect(() => {
@@ -664,6 +896,8 @@ export default function RankingTable(props: {
       'bybit': 'Bybit',
       'bitget': 'Bitget',
       'mexc': 'MEXC',
+      'htx': 'HTX',
+      'weex': 'Weex',
       'coinex': 'CoinEx',
       'okx': 'OKX',
       'kucoin': 'KuCoin',
@@ -685,7 +919,7 @@ export default function RankingTable(props: {
     // 特殊处理 bybit（默认合约）、gmx（链上）
     if (src === 'bybit') type = 'futures'
     if (src === 'gmx') type = 'web3'
-    if (src === 'mexc' || src === 'coinex' || src === 'kucoin') type = 'futures'
+    if (src === 'mexc' || src === 'coinex' || src === 'kucoin' || src === 'htx' || src === 'weex') type = 'futures'
     
     const exchangeName = exchangeMap[exchange] || exchange.charAt(0).toUpperCase() + exchange.slice(1)
     const typeInfo = typeMap[type] || { label: type, color: tokens.colors.text.tertiary }
@@ -706,6 +940,9 @@ export default function RankingTable(props: {
     'bitget_futures': 'Bitget 合约',
     'bitget_spot': 'Bitget 现货',
     'mexc': 'MEXC 合约',
+    'htx': 'HTX 合约',
+    'htx_futures': 'HTX 合约',
+    'weex': 'Weex 合约',
     'coinex': 'CoinEx 合约',
     'okx_web3': 'OKX 链上',
     'kucoin': 'KuCoin 合约',
@@ -780,6 +1017,49 @@ export default function RankingTable(props: {
 
           {/* 右侧：工具按钮 */}
           <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1], flexShrink: 0 }}>
+            {/* 视图切换按钮 */}
+            <Box style={{ display: 'flex', alignItems: 'center', borderRadius: tokens.radius.md, border: '1px solid var(--color-border-secondary)', overflow: 'hidden' }}>
+              <button
+                onClick={() => toggleViewMode('table')}
+                title={language === 'en' ? 'Table View' : '表格视图'}
+                className="touch-target-sm"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '4px 8px',
+                  height: 26,
+                  background: viewMode === 'table' ? 'var(--color-pro-glow)' : 'var(--color-bg-tertiary)',
+                  border: 'none',
+                  borderRight: '1px solid var(--color-border-secondary)',
+                  color: viewMode === 'table' ? 'var(--color-pro-gradient-start)' : 'var(--color-text-tertiary)',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                }}
+              >
+                <TableViewIcon size={12} />
+              </button>
+              <button
+                onClick={() => toggleViewMode('card')}
+                title={language === 'en' ? 'Card View' : '卡片视图'}
+                className="touch-target-sm"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '4px 8px',
+                  height: 26,
+                  background: viewMode === 'card' ? 'var(--color-pro-glow)' : 'var(--color-bg-tertiary)',
+                  border: 'none',
+                  color: viewMode === 'card' ? 'var(--color-pro-gradient-start)' : 'var(--color-text-tertiary)',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                }}
+              >
+                <CardViewIcon size={12} />
+              </button>
+            </Box>
+
             {/* 高级筛选按钮 - 点击显示模糊预览 */}
             <Box
               onClick={onFilterToggle}
@@ -1015,7 +1295,8 @@ export default function RankingTable(props: {
         )}
       </Box>
 
-      {/* Header - 增大字体和间距 */}
+      {/* Header - 增大字体和间距 (only show in table view) */}
+      {viewMode === 'table' && (
       <Box
         className="ranking-table-header ranking-table-grid ranking-table-grid-custom"
         style={{
@@ -1068,42 +1349,47 @@ export default function RankingTable(props: {
           </button>
         </Box>
         <Box
-          className="col-score"
+          className={`col-score ${sortColumn === 'score' ? 'active' : ''} ${justSortedColumn === 'score' ? 'just-sorted' : ''}`}
           as="button"
           onClick={() => handleSort('score')}
           title={language === 'zh' ? 'Arena Score: 综合评分 (0-100)' : 'Arena Score: Overall rating (0-100)'}
-          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, background: 'none', border: 'none', padding: 0, cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap', fontSize: '12px', fontWeight: 700, color: sortColumn === 'score' ? tokens.colors.accent.primary : tokens.colors.text.tertiary }}
+          data-sortable
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, background: 'none', border: 'none', padding: 0, cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap', fontSize: '12px', fontWeight: 700, color: sortColumn === 'score' ? tokens.colors.accent.primary : tokens.colors.text.tertiary, transition: 'color 0.2s' }}
         >
           Score <SortIndicator active={sortColumn === 'score'} dir={sortDir} />
         </Box>
         <Box
-          className="roi-cell"
+          className={`roi-cell ${sortColumn === 'roi' ? 'active' : ''} ${justSortedColumn === 'roi' ? 'just-sorted' : ''}`}
           as="button"
           onClick={() => handleSort('roi')}
           title={language === 'zh' ? `ROI: 投资回报率 (${timeRange})` : `ROI: Return on Investment (${timeRange})`}
-          style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4, background: 'none', border: 'none', padding: 0, cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap', fontSize: '12px', fontWeight: 700, color: sortColumn === 'roi' ? tokens.colors.accent.primary : tokens.colors.text.tertiary }}
+          data-sortable
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4, background: 'none', border: 'none', padding: 0, cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap', fontSize: '12px', fontWeight: 700, color: sortColumn === 'roi' ? tokens.colors.accent.primary : tokens.colors.text.tertiary, transition: 'color 0.2s' }}
         >
           ROI <SortIndicator active={sortColumn === 'roi'} dir={sortDir} />
         </Box>
         <Box
-          className="col-winrate"
+          className={`col-winrate ${sortColumn === 'winrate' ? 'active' : ''} ${justSortedColumn === 'winrate' ? 'just-sorted' : ''}`}
           as="button"
           onClick={() => handleSort('winrate')}
           title={language === 'zh' ? 'Win%: 胜率' : 'Win%: Win Rate'}
-          style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4, background: 'none', border: 'none', padding: 0, cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap', fontSize: '12px', fontWeight: 700, color: sortColumn === 'winrate' ? tokens.colors.accent.primary : tokens.colors.text.tertiary }}
+          data-sortable
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4, background: 'none', border: 'none', padding: 0, cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap', fontSize: '12px', fontWeight: 700, color: sortColumn === 'winrate' ? tokens.colors.accent.primary : tokens.colors.text.tertiary, transition: 'color 0.2s' }}
         >
           Win% <SortIndicator active={sortColumn === 'winrate'} dir={sortDir} />
         </Box>
         <Box
-          className="col-mdd"
+          className={`col-mdd ${sortColumn === 'mdd' ? 'active' : ''} ${justSortedColumn === 'mdd' ? 'just-sorted' : ''}`}
           as="button"
           onClick={() => handleSort('mdd')}
           title={language === 'zh' ? 'MDD: 最大回撤' : 'MDD: Max Drawdown'}
-          style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4, background: 'none', border: 'none', padding: 0, cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap', fontSize: '12px', fontWeight: 700, color: sortColumn === 'mdd' ? tokens.colors.accent.primary : tokens.colors.text.tertiary }}
+          data-sortable
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4, background: 'none', border: 'none', padding: 0, cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap', fontSize: '12px', fontWeight: 700, color: sortColumn === 'mdd' ? tokens.colors.accent.primary : tokens.colors.text.tertiary, transition: 'color 0.2s' }}
         >
           MDD <SortIndicator active={sortColumn === 'mdd'} dir={sortDir} />
         </Box>
       </Box>
+      )}
 
       {/* 排名规则说明 */}
       {showRules && (
@@ -1224,8 +1510,93 @@ export default function RankingTable(props: {
         >
           {t('noTraderData')}
         </Box>
+      ) : viewMode === 'card' ? (
+        /* Card view */
+        <>
+          <Box style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+            gap: tokens.spacing[3],
+            padding: tokens.spacing[4]
+          }}>
+            {paginatedTraders.map((trader, idx) => {
+              const rank = startIndex + idx + 1
+              const uniqueKey = `${trader.id}-${trader.source || 'unknown'}-${startIndex + idx}`
+
+              return (
+                <TraderCard
+                  key={uniqueKey}
+                  trader={trader}
+                  rank={rank}
+                  source={source}
+                  language={language}
+                  getMedalGlowClass={getMedalGlowClass}
+                  parseSourceInfo={parseSourceInfo}
+                />
+              )
+            })}
+          </Box>
+
+          {/* 分页控件 - Card View */}
+          {totalPages > 1 && (
+            <Box
+              style={{
+                padding: `${tokens.spacing[5]} ${tokens.spacing[4]}`,
+                borderTop: `2px solid ${tokens.colors.border.primary}`,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: tokens.spacing[3],
+                background: tokens.colors.bg.primary,
+                borderRadius: `0 0 ${tokens.radius.lg} ${tokens.radius.lg}`,
+              }}
+            >
+              <button
+                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                disabled={currentPage === 1}
+                style={{
+                  padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
+                  background: currentPage === 1 ? tokens.colors.bg.secondary : `${tokens.colors.accent.primary}20`,
+                  border: `1px solid ${currentPage === 1 ? tokens.colors.border.primary : tokens.colors.accent.primary}40`,
+                  borderRadius: tokens.radius.md,
+                  color: currentPage === 1 ? tokens.colors.text.tertiary : tokens.colors.text.primary,
+                  cursor: currentPage === 1 ? 'not-allowed' : 'pointer',
+                  fontSize: tokens.typography.fontSize.sm,
+                  fontWeight: tokens.typography.fontWeight.semibold,
+                  transition: `all ${tokens.transition.base}`,
+                  opacity: currentPage === 1 ? 0.5 : 1,
+                }}
+              >
+                {t('prevPage')}
+              </button>
+
+              <Text size="sm" color="secondary">
+                {currentPage} / {totalPages}
+              </Text>
+
+              <button
+                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                disabled={currentPage === totalPages}
+                style={{
+                  padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
+                  background: currentPage === totalPages ? tokens.colors.bg.secondary : `${tokens.colors.accent.primary}20`,
+                  border: `1px solid ${currentPage === totalPages ? tokens.colors.border.primary : tokens.colors.accent.primary}40`,
+                  borderRadius: tokens.radius.md,
+                  color: currentPage === totalPages ? tokens.colors.text.tertiary : tokens.colors.text.primary,
+                  cursor: currentPage === totalPages ? 'not-allowed' : 'pointer',
+                  fontSize: tokens.typography.fontSize.sm,
+                  fontWeight: tokens.typography.fontWeight.semibold,
+                  transition: `all ${tokens.transition.base}`,
+                  opacity: currentPage === totalPages ? 0.5 : 1,
+                }}
+              >
+                {t('nextPage')}
+              </button>
+            </Box>
+          )}
+        </>
       ) : useVirtualScroll ? (
-        /* Virtual scrolling for large datasets (>50 traders) */
+        /* Virtual scrolling for large datasets (>50 traders) - table view */
         <div ref={virtualListRef}>
           <VirtualList
             items={sortedTraders}
