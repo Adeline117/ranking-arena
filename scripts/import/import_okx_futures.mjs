@@ -99,14 +99,15 @@ async function fetchLeaderboardData(period) {
 
   try {
     // OKX 公开 API - 获取 lead trader 排行
-    const apiUrl = `https://www.okx.com/api/v5/copytrading/public-lead-traders?instType=SWAP&sortType=1&state=1&limit=100`
+    const apiUrl = `https://www.okx.com/api/v5/copytrading/public-lead-traders?instType=SWAP`
 
     console.log(`📡 调用 OKX API...`)
 
     const response = await fetch(apiUrl, {
+      method: 'GET',
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
-        'Accept': 'application/json',
+        'Accept': '*/*',
+        'Accept-Language': 'en-US,en;q=0.9',
       }
     })
 
@@ -119,35 +120,34 @@ async function fetchLeaderboardData(period) {
 
     if (json.code !== '0') {
       console.log(`  ⚠ API 返回错误: ${json.code} - ${json.msg}`)
-
-      // 尝试备用方法 - 从网页抓取
-      console.log('\n📱 尝试从网页抓取...')
-      return await fetchFromWebpage(period)
+      return []
     }
 
-    const traders = json.data || []
-    console.log(`  ✓ 获取到 ${traders.length} 个交易员`)
+    // OKX API 返回格式: { code: "0", data: [{ dataVer, ranks: [...] }] }
+    const ranks = json.data?.[0]?.ranks || []
+    console.log(`  ✓ 获取到 ${ranks.length} 个交易员`)
 
-    for (const t of traders) {
-      // OKX API 返回格式
-      // uniqueCode, nickName, portrait, pnl, pnlRatio, winRatio,
-      // copyTraderNum, aum, maxDrawdown
-
-      const roi = parseFloat(t.pnlRatio || 0) * 100  // 转换为百分比
-      const winRate = parseFloat(t.winRatio || 0) * 100
-      const maxDrawdown = parseFloat(t.maxDrawdown || 0) * 100
+    for (const t of ranks) {
+      // OKX ranks 字段: nickName, pnl, pnlRatio, copyTraderNum, aum, portLink, traderInsts
+      // pnlRatio 是小数格式 (如 2.9149 = 291.49%)
+      const roi = parseFloat(t.pnlRatio || 0) * 100
       const pnl = parseFloat(t.pnl || 0)
+      const followers = parseInt(t.copyTraderNum || 0)
+      const aum = parseFloat(t.aum || 0)
+
+      // 生成唯一 ID (使用昵称 hash)
+      const traderId = t.nickName ? Buffer.from(t.nickName).toString('base64').replace(/[^a-zA-Z0-9]/g, '').slice(0, 20) : `okx_${Date.now()}`
 
       allTraders.push({
-        traderId: t.uniqueCode || t.uniqueName,
-        nickname: t.nickName || `OKX_${t.uniqueCode}`,
-        avatar: t.portrait || null,
+        traderId: traderId,
+        nickname: t.nickName || 'Unknown',
+        avatar: t.portLink || null,
         roi: roi,
         pnl: pnl,
-        winRate: winRate,
-        maxDrawdown: maxDrawdown,
-        followers: parseInt(t.copyTraderNum || 0),
-        aum: parseFloat(t.aum || 0),
+        winRate: null,  // OKX API 不返回胜率
+        maxDrawdown: null,
+        followers: followers,
+        aum: aum,
       })
     }
 
