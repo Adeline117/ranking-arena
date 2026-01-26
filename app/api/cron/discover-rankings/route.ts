@@ -36,6 +36,11 @@ const RANKING_PLATFORMS = [
   { platform: 'gmx', market_type: 'perp', priority: 15 },
   { platform: 'dydx', market_type: 'perp', priority: 15 },
   { platform: 'hyperliquid', market_type: 'perp', priority: 15 },
+  // Dune on-chain leaderboards (lower priority due to rate limits)
+  { platform: 'dune_gmx', market_type: 'perp', priority: 20 },
+  { platform: 'dune_hyperliquid', market_type: 'perp', priority: 20 },
+  { platform: 'dune_uniswap', market_type: 'spot', priority: 20 },
+  { platform: 'dune_defi', market_type: 'web3', priority: 25 },
 ];
 
 export async function GET(request: Request) {

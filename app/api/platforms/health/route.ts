@@ -24,17 +24,17 @@ export async function GET() {
 
     // Also get latest snapshot timestamps per platform
     const { data: freshness } = await supabase
-      .from('trader_snapshots_v2')
-      .select('platform, market_type, as_of_ts')
-      .order('as_of_ts', { ascending: false })
+      .from('trader_snapshots')
+      .select('source, captured_at')
+      .order('captured_at', { ascending: false })
       .limit(50);
 
     // Aggregate freshness by platform
     const latestByPlatform = new Map<string, string>();
     for (const row of freshness || []) {
-      const key = `${row.platform}:${row.market_type}`;
+      const key = row.source;
       if (!latestByPlatform.has(key)) {
-        latestByPlatform.set(key, row.as_of_ts);
+        latestByPlatform.set(key, row.captured_at);
       }
     }
 

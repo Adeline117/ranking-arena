@@ -134,8 +134,8 @@ function SearchContent() {
           isNumericQuery
             ? supabase.from('user_profiles').select('id, handle, avatar_url, bio, uid').eq('uid', parseInt(query.trim())).limit(PAGE_SIZE + 1)
             : supabase.from('user_profiles').select('id, handle, avatar_url, bio, uid').ilike('handle', `%${sanitizedQuery}%`).limit(PAGE_SIZE + 1),
-          // 搜索交易者（v2 表）
-          supabase.from('trader_sources_v2').select('trader_key, display_name, platform').ilike('display_name', `%${sanitizedQuery}%`).limit(PAGE_SIZE + 1),
+          // 搜索交易者
+          supabase.from('trader_sources').select('source_trader_id, handle, source').or(`handle.ilike.%${sanitizedQuery}%,source_trader_id.ilike.%${sanitizedQuery}%`).limit(PAGE_SIZE + 1),
           // 搜索帖子
           supabase.from('posts').select('id, title, content, author_handle, created_at').or(`title.ilike.%${sanitizedQuery}%,content.ilike.%${sanitizedQuery}%`).limit(PAGE_SIZE + 1),
           // 搜索小组
@@ -173,38 +173,40 @@ function SearchContent() {
         // 处理交易员结果 - 批量获取快照数据
         const traders = tradersData.data?.slice(0, PAGE_SIZE) ?? null
         if (traders && traders.length > 0) {
-          const traderKeys = traders.map(t => t.trader_key)
+          const traderKeys = traders.map(t => t.source_trader_id)
           const { data: allSnapshots } = await supabase
-            .from('trader_snapshots_v2')
-            .select('trader_key, window, roi_pct, arena_score, as_of_ts')
-            .in('trader_key', traderKeys)
+            .from('trader_snapshots')
+            .select('source_trader_id, season_id, roi, arena_score, captured_at')
+            .in('source_trader_id', traderKeys)
             .not('arena_score', 'is', null)
-            .order('as_of_ts', { ascending: false })
+            .order('captured_at', { ascending: false })
 
-          // 构建映射（优先 90d > 30d > 7d）
-          const snapshotMap = new Map<string, { window: string; roi_pct: number; arena_score: number }>()
-          const windowPriority: Record<string, number> = { '90d': 3, '30d': 2, '7d': 1 }
+          // 构建映射（优先 90D > 30D > 7D）
+          const snapshotMap = new Map<string, { season_id: string; roi: number; arena_score: number }>()
+          const windowPriority: Record<string, number> = { '90D': 3, '30D': 2, '7D': 1 }
 
           allSnapshots?.forEach((s: Record<string, unknown>) => {
-            const key = s.trader_key as string
+            const key = s.source_trader_id as string
             const existing = snapshotMap.get(key)
-            const currentP = windowPriority[s.window as string] || 0
-            const existingP = existing ? (windowPriority[existing.window] || 0) : 0
+            const currentP = windowPriority[s.season_id as string] || 0
+            const existingP = existing ? (windowPriority[existing.season_id] || 0) : 0
             if (!existing || currentP > existingP) {
-              snapshotMap.set(key, { window: s.window as string, roi_pct: s.roi_pct as number, arena_score: s.arena_score as number })
+              const roi = typeof s.roi === 'string' ? parseFloat(s.roi) : (s.roi as number)
+              const arenaScore = typeof s.arena_score === 'string' ? parseFloat(s.arena_score) : (s.arena_score as number)
+              snapshotMap.set(key, { season_id: s.season_id as string, roi, arena_score: arenaScore })
             }
           })
 
           for (const trader of traders) {
-            const latest = snapshotMap.get(trader.trader_key)
-            const platformLabel = (trader.platform || '').replace(/_/g, ' ').toUpperCase()
+            const latest = snapshotMap.get(trader.source_trader_id)
+            const platformLabel = (trader.source || '').replace(/_/g, ' ').toUpperCase()
             const subtitle = latest
-              ? `${latest.window}: ROI ${latest.roi_pct?.toFixed(1)}% • Score ${latest.arena_score?.toFixed(1)}`
+              ? `${latest.season_id}: ROI ${latest.roi?.toFixed(1)}% • Score ${latest.arena_score?.toFixed(1)}`
               : platformLabel
             results.push({
               type: 'trader',
-              id: trader.trader_key,
-              title: trader.display_name || trader.trader_key,
+              id: trader.source_trader_id,
+              title: trader.handle || trader.source_trader_id,
               subtitle,
               meta: platformLabel || undefined,
             })
@@ -289,43 +291,45 @@ function SearchContent() {
           })
         }
       } else if (type === 'traders') {
-        const { data } = await supabase.from('trader_sources_v2').select('trader_key, display_name, platform').ilike('display_name', `%${sanitizedQuery}%`).range(offset, offset + PAGE_SIZE)
+        const { data } = await supabase.from('trader_sources').select('source_trader_id, handle, source').or(`handle.ilike.%${sanitizedQuery}%,source_trader_id.ilike.%${sanitizedQuery}%`).range(offset, offset + PAGE_SIZE)
         if (data) {
           if (data.length <= PAGE_SIZE) {
             setHasMore(prev => ({ ...prev, traders: false }))
           }
           const traders = data.slice(0, PAGE_SIZE)
           if (traders.length > 0) {
-            const traderKeys = traders.map(t => t.trader_key)
+            const traderKeys = traders.map(t => t.source_trader_id)
             const { data: allSnapshots } = await supabase
-              .from('trader_snapshots_v2')
-              .select('trader_key, window, roi_pct, arena_score, as_of_ts')
-              .in('trader_key', traderKeys)
+              .from('trader_snapshots')
+              .select('source_trader_id, season_id, roi, arena_score, captured_at')
+              .in('source_trader_id', traderKeys)
               .not('arena_score', 'is', null)
-              .order('as_of_ts', { ascending: false })
+              .order('captured_at', { ascending: false })
 
-            const snapshotMap = new Map<string, { window: string; roi_pct: number; arena_score: number }>()
-            const windowPriority: Record<string, number> = { '90d': 3, '30d': 2, '7d': 1 }
+            const snapshotMap = new Map<string, { season_id: string; roi: number; arena_score: number }>()
+            const windowPriority: Record<string, number> = { '90D': 3, '30D': 2, '7D': 1 }
             allSnapshots?.forEach((s: Record<string, unknown>) => {
-              const key = s.trader_key as string
+              const key = s.source_trader_id as string
               const existing = snapshotMap.get(key)
-              const currentP = windowPriority[s.window as string] || 0
-              const existingP = existing ? (windowPriority[existing.window] || 0) : 0
+              const currentP = windowPriority[s.season_id as string] || 0
+              const existingP = existing ? (windowPriority[existing.season_id] || 0) : 0
               if (!existing || currentP > existingP) {
-                snapshotMap.set(key, { window: s.window as string, roi_pct: s.roi_pct as number, arena_score: s.arena_score as number })
+                const roi = typeof s.roi === 'string' ? parseFloat(s.roi) : (s.roi as number)
+                const arenaScore = typeof s.arena_score === 'string' ? parseFloat(s.arena_score) : (s.arena_score as number)
+                snapshotMap.set(key, { season_id: s.season_id as string, roi, arena_score: arenaScore })
               }
             })
 
             for (const trader of traders) {
-              const latest = snapshotMap.get(trader.trader_key)
-              const platformLabel = (trader.platform || '').replace(/_/g, ' ').toUpperCase()
+              const latest = snapshotMap.get(trader.source_trader_id)
+              const platformLabel = (trader.source || '').replace(/_/g, ' ').toUpperCase()
               const subtitle = latest
-                ? `${latest.window}: ROI ${latest.roi_pct?.toFixed(1)}% • Score ${latest.arena_score?.toFixed(1)}`
+                ? `${latest.season_id}: ROI ${latest.roi?.toFixed(1)}% • Score ${latest.arena_score?.toFixed(1)}`
                 : platformLabel
               newResults.push({
                 type: 'trader',
-                id: trader.trader_key,
-                title: trader.display_name || trader.trader_key,
+                id: trader.source_trader_id,
+                title: trader.handle || trader.source_trader_id,
                 subtitle,
                 meta: platformLabel || undefined,
               })
