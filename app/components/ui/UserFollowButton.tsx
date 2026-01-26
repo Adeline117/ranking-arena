@@ -3,8 +3,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { useToast } from './Toast'
-import { apiPost } from '@/lib/api/client'
 import { tokens } from '@/lib/design-tokens'
+import { useAuthSession } from '@/lib/hooks/useAuthSession'
 
 type UserFollowButtonProps = {
   targetUserId: string
@@ -31,6 +31,7 @@ export default function UserFollowButton({
 }: UserFollowButtonProps) {
   const router = useRouter()
   const { showToast } = useToast()
+  const { getAuthHeadersAsync } = useAuthSession()
   const [following, setFollowing] = useState(initialFollowing)
   const [followedBy, setFollowedBy] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -47,9 +48,13 @@ export default function UserFollowButton({
 
     ;(async () => {
       try {
+        const authHeaders = await getAuthHeadersAsync()
         const response = await fetch(
-          `/api/users/follow?followerId=${currentUserId}&followingId=${targetUserId}`,
-          { signal: abortController.signal }
+          `/api/users/follow?followingId=${targetUserId}`,
+          {
+            signal: abortController.signal,
+            headers: authHeaders,
+          }
         )
         if (response.ok) {
           const data = await response.json()
@@ -68,7 +73,7 @@ export default function UserFollowButton({
     return () => {
       abortController.abort()
     }
-  }, [currentUserId, targetUserId])
+  }, [currentUserId, targetUserId, getAuthHeadersAsync])
 
   const handleToggle = async () => {
     if (!currentUserId) {
@@ -87,26 +92,33 @@ export default function UserFollowButton({
     pendingRef.current = true
     setLoading(true)
     try {
-      const result = await apiPost<{ following: boolean; mutual?: boolean; tableNotFound?: boolean }>('/api/users/follow', {
-        followerId: currentUserId,
-        followingId: targetUserId,
-        action: following ? 'unfollow' : 'follow',
+      const authHeaders = await getAuthHeadersAsync()
+      const response = await fetch('/api/users/follow', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...authHeaders,
+        },
+        body: JSON.stringify({
+          followingId: targetUserId,
+          action: following ? 'unfollow' : 'follow',
+        }),
       })
 
-      if (result.success && result.data) {
-        setFollowing(result.data.following)
+      const result = await response.json()
+
+      if (response.ok && result.success !== false) {
+        setFollowing(result.following)
         // 根据 API 返回的 mutual 状态更新 followedBy（互关时对方也关注了我）
-        if (result.data.mutual !== undefined) {
-          setFollowedBy(result.data.mutual)
+        if (result.mutual !== undefined) {
+          setFollowedBy(result.mutual)
         }
-        onFollowChange?.(result.data.following, result.data.mutual ?? false)
-        showToast(result.data.following ? '关注成功' : '已取消关注', 'success')
-      } else if (result.data?.tableNotFound) {
+        onFollowChange?.(result.following, result.mutual ?? false)
+        showToast(result.following ? '关注成功' : '已取消关注', 'success')
+      } else if (result.tableNotFound) {
         showToast('关注功能暂未开放', 'warning')
       } else {
-        const errorMsg = typeof result.error === 'string' 
-          ? result.error 
-          : result.error?.message || '操作失败，请重试'
+        const errorMsg = result.error || '操作失败，请重试'
         console.error('Toggle follow error:', errorMsg)
         showToast(errorMsg, 'error')
       }

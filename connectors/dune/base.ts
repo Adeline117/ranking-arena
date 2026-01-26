@@ -175,7 +175,7 @@ export abstract class DuneBaseConnector extends BaseConnector {
 
       const entries: LeaderboardEntry[] = result.result.rows
         .slice(0, limit)
-        .map((row, idx) => this.rowToLeaderboardEntry(row as DuneLeaderboardRow, idx + 1));
+        .map((row, idx) => this.rowToLeaderboardEntry(row as unknown as DuneLeaderboardRow, idx + 1));
 
       return this.success(entries, {
         source_url: `${DUNE_APP}/queries/${this.queryId}`,
@@ -223,8 +223,8 @@ export abstract class DuneBaseConnector extends BaseConnector {
       }
 
       const row = result.result.rows.find(
-        r => (r.address as string)?.toLowerCase() === trader_key.toLowerCase()
-      ) as DuneLeaderboardRow | undefined;
+        r => String(r.address || '').toLowerCase() === trader_key.toLowerCase()
+      ) as unknown as DuneLeaderboardRow | undefined;
 
       if (!row) {
         return this.failure(`Trader ${trader_key} not found in leaderboard`);
