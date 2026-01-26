@@ -16,9 +16,12 @@ import type {
   SnapshotMetrics,
 } from '../base/types';
 
-// GMX V2 Arbitrum subgraph
-const SUBGRAPH_URL = 'https://subgraph.satsuma-prod.com/3b2ced13c8d9/gmx/synthetics-arbitrum-stats/api';
+// GMX V2 Arbitrum - Subsquid GraphQL API (replaces deprecated Satsuma subgraph)
+const SUBSQUID_URL = 'https://gmx.squids.live/gmx-synthetics-arbitrum:prod/api/graphql';
 const GMX_APP = 'https://app.gmx.io';
+
+// Subsquid uses 1e30 scale for values
+const VALUE_SCALE = 1e30;
 
 export class GmxConnector extends BaseConnector {
   platform: Platform = 'gmx';
@@ -28,76 +31,85 @@ export class GmxConnector extends BaseConnector {
 
   async discoverLeaderboard(window: Window, limit = 100): Promise<ConnectorResult<LeaderboardEntry[]>> {
     try {
-      const periodSeconds = window === '7d' ? 604800 : window === '30d' ? 2592000 : 7776000;
-      const since = Math.floor(Date.now() / 1000) - periodSeconds;
-
-      // GMX leaderboard via stats subgraph
+      // GMX leaderboard via Subsquid GraphQL API
+      // Query accountStats which contains cumulative trading data
       const query = `{
-        periodAccountStats(
-          first: ${Math.min(limit, 1000)},
-          orderBy: totalPnlAfterFees,
-          orderDirection: desc,
-          where: { period: "total", totalTrades_gt: 0, timestamp_gt: ${since} }
+        accountStats(
+          limit: ${Math.min(limit * 2, 2000)},
+          orderBy: realizedPnl_DESC
         ) {
           id
-          account
-          totalPnlAfterFees
-          totalCollateral
-          totalTrades
-          winCount
-          lossCount
-          maxCollateral
-          timestamp
+          wins
+          losses
+          realizedPnl
+          volume
+          netCapital
+          maxCapital
+          closedCount
         }
       }`;
 
-      const response = await this.postJSON<{ data: { periodAccountStats: GmxAccountStat[] } }>(
-        SUBGRAPH_URL,
+      const response = await this.postJSON<{ data: { accountStats: GmxSubsquidAccountStat[] } }>(
+        SUBSQUID_URL,
         { query },
       );
 
-      if (!response?.data?.periodAccountStats) {
+      if (!response?.data?.accountStats) {
         // Fallback: try the leaderboard API
         return this.tryLeaderboardApi(window, limit);
       }
 
-      const entries: LeaderboardEntry[] = response.data.periodAccountStats
+      const entries: LeaderboardEntry[] = response.data.accountStats
         .map((item, idx) => {
-          const collateral = Number(item.totalCollateral) / 1e30;
-          const pnl = Number(item.totalPnlAfterFees) / 1e30;
-          const roi = collateral > 0 ? (pnl / collateral) * 100 : 0;
+          // Values are in wei (1e30 scale)
+          const pnl = Number(BigInt(item.realizedPnl || '0')) / VALUE_SCALE;
+          const volume = Number(BigInt(item.volume || '0')) / VALUE_SCALE;
+          const netCapital = Number(BigInt(item.netCapital || '0')) / VALUE_SCALE;
+          const maxCapital = Number(BigInt(item.maxCapital || '0')) / VALUE_SCALE;
+
+          // Calculate ROI based on max capital deployed
+          // Avoid division by zero and unrealistic ROI from tiny positions
+          const roi = maxCapital > 100 ? (pnl / maxCapital) * 100 : 0;
+
+          const totalTrades = (item.wins || 0) + (item.losses || 0);
+          const winRate = totalTrades > 0 ? (item.wins / totalTrades) * 100 : null;
 
           return {
-            trader_key: item.account.toLowerCase(),
-            display_name: `${item.account.slice(0, 6)}...${item.account.slice(-4)}`,
+            trader_key: item.id.toLowerCase(),
+            display_name: `${item.id.slice(0, 6)}...${item.id.slice(-4)}`,
             avatar_url: null,
-            profile_url: `${GMX_APP}/#/actions/${item.account}`,
+            profile_url: `${GMX_APP}/#/actions/${item.id}`,
             rank: idx + 1,
             metrics: {
               roi_pct: roi,
               pnl_usd: pnl,
-              win_rate: item.winCount + item.lossCount > 0
-                ? (item.winCount / (item.winCount + item.lossCount)) * 100
-                : null,
+              win_rate: winRate,
               max_drawdown: null,
-              trades_count: item.totalTrades,
+              trades_count: item.closedCount || totalTrades,
               followers: null,
               copiers: null,
               sharpe_ratio: null,
-              aum: collateral,
+              aum: netCapital > 0 ? netCapital : maxCapital,
+              volume,
             },
             raw: item as unknown as Record<string, unknown>,
           };
+        })
+        // Filter out traders with unrealistic data
+        .filter(e => {
+          const roi = e.metrics.roi_pct ?? 0;
+          const pnl = e.metrics.pnl_usd ?? 0;
+          return roi >= -100 && roi <= 10000 && pnl >= -10000000 && pnl <= 100000000;
         })
         // Sort by ROI descending
         .sort((a, b) => ((b.metrics.roi_pct ?? -Infinity) - (a.metrics.roi_pct ?? -Infinity)));
 
       return this.success(entries.slice(0, limit), {
-        source_url: SUBGRAPH_URL,
+        source_url: SUBSQUID_URL,
         platform_sorting: 'roi_desc',
         platform_window: window,
-        reason: 'Sorted client-side by ROI from on-chain PnL/collateral',
-      });
+        reason: 'Subsquid data is cumulative (all-time), sorted client-side by ROI',
+      }, { window_not_supported: true, reason: 'Subsquid provides cumulative data only' });
     } catch (error) {
       return this.failure(`GMX leaderboard failed: ${(error as Error).message}`);
     }
@@ -151,47 +163,53 @@ export class GmxConnector extends BaseConnector {
 
   async fetchTraderSnapshot(trader_key: string, window: Window): Promise<ConnectorResult<CanonicalSnapshot>> {
     try {
-      const periodSeconds = window === '7d' ? 604800 : window === '30d' ? 2592000 : 7776000;
-      const since = Math.floor(Date.now() / 1000) - periodSeconds;
-
+      // Query specific trader from Subsquid
       const query = `{
-        periodAccountStats(
-          where: { account: "${trader_key.toLowerCase()}", period: "total", timestamp_gt: ${since} }
-          first: 1
+        accountStats(
+          where: { id_eq: "${trader_key.toLowerCase()}" }
+          limit: 1
         ) {
-          totalPnlAfterFees
-          totalCollateral
-          totalTrades
-          winCount
-          lossCount
-          maxCollateral
+          id
+          wins
+          losses
+          realizedPnl
+          volume
+          netCapital
+          maxCapital
+          closedCount
         }
       }`;
 
-      const response = await this.postJSON<{ data: { periodAccountStats: GmxAccountStat[] } }>(
-        SUBGRAPH_URL,
+      const response = await this.postJSON<{ data: { accountStats: GmxSubsquidAccountStat[] } }>(
+        SUBSQUID_URL,
         { query },
       );
 
-      const stats = response?.data?.periodAccountStats?.[0];
-      if (!stats) return this.failure('No on-chain stats found for this period');
+      const stats = response?.data?.accountStats?.[0];
+      if (!stats) return this.failure('No on-chain stats found for this trader');
 
-      const collateral = Number(stats.totalCollateral) / 1e30;
-      const pnl = Number(stats.totalPnlAfterFees) / 1e30;
-      const roi = collateral > 0 ? (pnl / collateral) * 100 : 0;
+      // Values are in wei (1e30 scale)
+      const pnl = Number(BigInt(stats.realizedPnl || '0')) / VALUE_SCALE;
+      const volume = Number(BigInt(stats.volume || '0')) / VALUE_SCALE;
+      const netCapital = Number(BigInt(stats.netCapital || '0')) / VALUE_SCALE;
+      const maxCapital = Number(BigInt(stats.maxCapital || '0')) / VALUE_SCALE;
+
+      // Calculate ROI based on max capital deployed
+      const roi = maxCapital > 100 ? (pnl / maxCapital) * 100 : 0;
+
+      const totalTrades = (stats.wins || 0) + (stats.losses || 0);
+      const winRate = totalTrades > 0 ? (stats.wins / totalTrades) * 100 : null;
 
       const metrics: SnapshotMetrics = {
         roi_pct: roi,
         pnl_usd: pnl,
-        win_rate: stats.winCount + stats.lossCount > 0
-          ? (stats.winCount / (stats.winCount + stats.lossCount)) * 100
-          : null,
+        win_rate: winRate,
         max_drawdown: null,
-        trades_count: stats.totalTrades,
+        trades_count: stats.closedCount || totalTrades,
         followers: null,
         copiers: null,
         sharpe_ratio: null,
-        aum: collateral,
+        aum: netCapital > 0 ? netCapital : maxCapital,
       };
 
       return this.success<CanonicalSnapshot>({
@@ -201,8 +219,13 @@ export class GmxConnector extends BaseConnector {
         window,
         as_of_ts: new Date().toISOString(),
         metrics,
-        quality_flags: { missing_drawdown: true, missing_sharpe: true },
-        provenance: this.buildProvenance(SUBGRAPH_URL, { platform_sorting: 'roi_desc', platform_window: window }),
+        quality_flags: {
+          missing_drawdown: true,
+          missing_sharpe: true,
+          window_not_supported: true,
+          reason: 'Subsquid provides cumulative (all-time) data only, window parameter ignored',
+        },
+        provenance: this.buildProvenance(SUBSQUID_URL, { platform_sorting: 'roi_desc', platform_window: window }),
       });
     } catch (error) {
       return this.failure(`Snapshot fetch failed: ${(error as Error).message}`);
@@ -233,6 +256,7 @@ export class GmxConnector extends BaseConnector {
   }
 }
 
+// Legacy interface for old Satsuma subgraph (deprecated)
 interface GmxAccountStat {
   id: string;
   account: string;
@@ -243,4 +267,16 @@ interface GmxAccountStat {
   lossCount: number;
   maxCollateral: string;
   timestamp: number;
+}
+
+// New interface for Subsquid GraphQL API
+interface GmxSubsquidAccountStat {
+  id: string;              // Wallet address
+  wins: number;            // Number of winning trades
+  losses: number;          // Number of losing trades
+  realizedPnl: string;     // Total realized PnL in wei (1e30 scale)
+  volume: string;          // Total trading volume in wei
+  netCapital: string;      // Net capital (deposits - withdrawals)
+  maxCapital: string;      // Maximum capital deployed
+  closedCount: number;     // Number of closed positions
 }

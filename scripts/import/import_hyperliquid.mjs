@@ -30,21 +30,39 @@ function calculateArenaScore(roi, pnl, maxDrawdown, winRate, period) {
 async function fetchLeaderboardData(period) {
   console.log('\n=== 抓取 Hyperliquid ' + period + ' ===')
   const timeWindowMap = { '7D': 'week', '30D': 'month', '90D': 'allTime' }
+  const windowKey = timeWindowMap[period] || 'allTime'
   try {
-    const response = await fetch('https://api.hyperliquid.xyz/info', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type: 'leaderboard', timeWindow: timeWindowMap[period] || 'allTime' })
+    // 使用 stats-data 端点获取排行榜数据
+    const response = await fetch('https://stats-data.hyperliquid.xyz/Mainnet/leaderboard', {
+      method: 'GET',
+      headers: { 'Accept': 'application/json' }
     })
     const data = await response.json()
     const traders = data.leaderboardRows || data || []
     console.log('  获取到 ' + traders.length + ' 条')
-    return traders.map(t => ({
-      traderId: t.ethAddress || t.user || '',
-      nickname: t.displayName || (t.ethAddress ? t.ethAddress.slice(0,6) + '...' + t.ethAddress.slice(-4) : 'Unknown'),
-      roi: parseFloat(t.roi || 0) * 100,
-      pnl: parseFloat(t.pnl || 0),
-      winRate: null, maxDrawdown: null, followers: 0
-    }))
+
+    // 解析每个交易员的对应时间窗口数据
+    return traders.map(t => {
+      // windowPerformances 是一个数组: [["day", {...}], ["week", {...}], ...]
+      const performances = t.windowPerformances || []
+      const perfMap = {}
+      performances.forEach(([key, val]) => { perfMap[key] = val })
+
+      const perf = perfMap[windowKey] || perfMap['allTime'] || {}
+      const roi = parseFloat(perf.roi || 0) * 100  // roi 是小数形式
+      const pnl = parseFloat(perf.pnl || 0)
+
+      return {
+        traderId: t.ethAddress || '',
+        nickname: t.displayName || (t.ethAddress ? t.ethAddress.slice(0,6) + '...' + t.ethAddress.slice(-4) : 'Unknown'),
+        roi,
+        pnl,
+        winRate: null,
+        maxDrawdown: null,
+        followers: 0,
+        accountValue: parseFloat(t.accountValue || 0)
+      }
+    }).filter(t => t.traderId && t.roi !== 0)
   } catch (e) { console.error('Error:', e.message); return [] }
 }
 
@@ -67,7 +85,11 @@ async function saveTraders(traders, period) {
 }
 
 async function main() {
-  for (const period of ['30D', '90D']) {
+  const targetPeriods = process.argv[2] === 'ALL' ? ['7D', '30D', '90D'] :
+    process.argv[2] && ['7D', '30D', '90D'].includes(process.argv[2].toUpperCase()) ?
+    [process.argv[2].toUpperCase()] : ['7D', '30D', '90D']
+
+  for (const period of targetPeriods) {
     const traders = await fetchLeaderboardData(period)
     if (traders.length > 0) await saveTraders(traders, period)
     await new Promise(r => setTimeout(r, 2000))

@@ -339,98 +339,11 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
               } catch {
                 // 创建 profile 失败，静默处理
               }
-            } else {
-              // 如果 handle 不匹配，尝试通过 ID 查找
-              const { data: profileById } = await supabase
-                .from('user_profiles')
-                .select('*, cover_url')
-                .eq('id', user.id)
-                .maybeSingle()
-
-              if (profileById) {
-                // 如果找到用户且有 handle，重定向到正确的 handle
-                if (profileById.handle && profileById.handle !== handle) {
-                  window.location.href = `/u/${profileById.handle}`
-                  return
-                }
-                // 如果用户没有设置 handle，使用当前 profile 数据显示页面
-                const { count: followersCount } = await supabase
-                  .from('user_follows')
-                  .select('*', { count: 'exact', head: true })
-                  .eq('following_id', profileById.id)
-
-                const { count: followingCount } = await supabase
-                  .from('user_follows')
-                  .select('*', { count: 'exact', head: true })
-                  .eq('follower_id', profileById.id)
-
-                profileData = {
-                  handle: profileById.handle || decodedHandle,
-                  id: profileById.id,
-                  uid: profileById.uid || undefined,
-                  bio: profileById.bio || null,
-                  followers: followersCount || 0,
-                  following: followingCount || 0,
-                  copiers: 0,
-                  avatar_url: profileById.avatar_url || undefined,
-                  cover_url: profileById.cover_url || undefined,
-                  isRegistered: true,
-                  showFollowers: profileById.show_followers !== false,
-                  showFollowing: profileById.show_following !== false,
-                }
-              } else {
-                // 如果找不到，尝试创建新的 profile
-                try {
-                  const { data: userProfileData, error: _insertError } = await supabase
-                    .from('user_profiles')
-                    .upsert({
-                      id: user.id,
-                      handle: emailHandle,
-                    }, { onConflict: 'id' })
-                    .select()
-                    .single()
-
-                  if (userProfileData) {
-                    // 如果新创建的 handle 与当前 URL 不同，重定向（防止循环）
-                    const targetHandle = userProfileData.handle
-                    if (targetHandle && targetHandle !== decodedHandle && targetHandle !== handle) {
-                      const targetUrl = `/u/${encodeURIComponent(targetHandle)}`
-                      if (typeof window !== 'undefined' && window.location.pathname !== targetUrl) {
-                        window.location.href = targetUrl
-                        return
-                      }
-                    }
-                    // 否则直接使用创建的数据
-                    const { count: followersCount } = await supabase
-                      .from('user_follows')
-                      .select('*', { count: 'exact', head: true })
-                      .eq('following_id', userProfileData.id)
-
-                    const { count: followingCount } = await supabase
-                      .from('user_follows')
-                      .select('*', { count: 'exact', head: true })
-                      .eq('follower_id', userProfileData.id)
-
-                    profileData = {
-                      handle: userProfileData.handle || decodedHandle,
-                      id: userProfileData.id,
-                      uid: userProfileData.uid || undefined,
-                      bio: userProfileData.bio || null,
-                      followers: followersCount || 0,
-                      following: followingCount || 0,
-                      copiers: 0,
-                      avatar_url: userProfileData.avatar_url || undefined,
-                      cover_url: userProfileData.cover_url || undefined,
-                      isRegistered: true,
-                      showFollowers: true,
-                      showFollowing: true,
-                    }
-                  }
-                } catch {
-                  // 创建 profile 失败，静默处理
-                }
-              }
             }
+            // IMPORTANT: When the URL handle does NOT match the current user's
+            // email prefix or ID, we should NOT show the current user's profile.
+            // This prevents the bug where clicking someone else's profile shows your own.
+            // Simply do nothing here - profileData remains null and the "user not found" page will show.
             // When the URL handle does NOT match the current user's identifiers,
             // do NOT show the current user's profile - this prevents the bug where
             // clicking someone else's avatar shows your own profile.
