@@ -2,9 +2,11 @@ import { Metadata } from 'next'
 import { createClient } from '@supabase/supabase-js'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || ''
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+// 使用 anon key 而非 service role key，确保 RLS 策略被遵守
+// 公开的用户信息应该通过 RLS 允许匿名读取
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
 
-const adminSupabase = supabaseUrl && supabaseKey 
+const publicSupabase = supabaseUrl && supabaseKey
   ? createClient(supabaseUrl, supabaseKey, { auth: { persistSession: false } })
   : null
 
@@ -13,9 +15,9 @@ export async function generateMetadata({ params }: { params: { handle: string } 
   const handle = decodeURIComponent(resolvedParams.handle)
   
   try {
-    if (adminSupabase) {
+    if (publicSupabase) {
       // 从 user_profiles 获取用户信息
-      const { data: profile } = await adminSupabase
+      const { data: profile } = await publicSupabase
         .from('user_profiles')
         .select('handle, bio, avatar_url')
         .eq('handle', handle)

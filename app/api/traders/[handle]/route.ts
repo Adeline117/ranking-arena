@@ -47,17 +47,22 @@ const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_P
 // 支持的交易所 - 需要与数据库中的 source 值保持一致
 // 支持的交易所 source 列表
 const TRADER_SOURCES = [
+  // CEX 合约
   'binance_futures',
-  'binance_spot',
-  'binance_web3',
   'bitget_futures',
-  'bitget_spot',
   'bybit',
   'mexc',
   'coinex',
   'okx_web3',
   'kucoin',
+  // CEX 现货
+  'binance_spot',
+  'bitget_spot',
+  'binance_web3',
+  // DEX / On-chain
   'gmx',
+  'hyperliquid',
+  'dydx',
 ] as const
 type SourceType = typeof TRADER_SOURCES[number]
 
