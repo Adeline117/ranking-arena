@@ -23,15 +23,19 @@ import type { SnapshotWindow, RankedTraderV2, Platform } from '@/lib/types/tradi
 const WINDOWS: SnapshotWindow[] = ['7D', '30D', '90D']
 
 const PLATFORM_LABELS: Record<string, string> = {
-  binance_futures: 'Binance',
+  binance_futures: 'Binance 合约',
+  binance_spot: 'Binance 现货',
+  binance_web3: 'Binance Web3',
   bybit: 'Bybit',
-  bitget_futures: 'Bitget',
-  okx_web3: 'OKX',
+  bitget_futures: 'Bitget 合约',
+  bitget_spot: 'Bitget 现货',
+  okx_web3: 'OKX Web3',
   mexc: 'MEXC',
   htx_futures: 'HTX',
   weex: 'Weex',
   kucoin: 'KuCoin',
   coinex: 'CoinEx',
+  gmx: 'GMX',
 }
 
 const FILTER_PLATFORMS = Object.keys(PLATFORM_LABELS)
