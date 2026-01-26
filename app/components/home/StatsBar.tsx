@@ -23,19 +23,25 @@ interface DataSource {
 }
 
 const dataSources: DataSource[] = [
+  // CEX 合约
   { exchange: 'Binance', market: 'futures', key: 'binance_futures' },
-  { exchange: 'Binance', market: 'spot', key: 'binance_spot' },
-  { exchange: 'Binance', market: 'on-chain', key: 'binance_web3' },
   { exchange: 'Bybit', market: 'futures', key: 'bybit' },
   { exchange: 'Bitget', market: 'futures', key: 'bitget_futures' },
-  { exchange: 'Bitget', market: 'spot', key: 'bitget_spot' },
-  { exchange: 'OKX', market: 'on-chain', key: 'okx_web3' },
+  { exchange: 'OKX', market: 'futures', key: 'okx_futures' },
   { exchange: 'MEXC', market: 'futures', key: 'mexc' },
   { exchange: 'HTX', market: 'futures', key: 'htx_futures' },
   { exchange: 'Weex', market: 'futures', key: 'weex' },
   { exchange: 'KuCoin', market: 'futures', key: 'kucoin' },
   { exchange: 'CoinEx', market: 'futures', key: 'coinex' },
+  // CEX 现货
+  { exchange: 'Binance', market: 'spot', key: 'binance_spot' },
+  { exchange: 'Bitget', market: 'spot', key: 'bitget_spot' },
+  // 链上/DEX
+  { exchange: 'Binance', market: 'on-chain', key: 'binance_web3' },
+  { exchange: 'OKX', market: 'on-chain', key: 'okx_web3' },
   { exchange: 'GMX', market: 'on-chain', key: 'gmx' },
+  { exchange: 'Hyperliquid', market: 'on-chain', key: 'hyperliquid' },
+  { exchange: 'dYdX', market: 'on-chain', key: 'dydx' },
 ]
 
 const marketConfig: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
