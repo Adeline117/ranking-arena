@@ -498,7 +498,7 @@ function MyGroups() {
       const groupIds = memberships.map(m => m.group_id)
       const { data: groupsData } = await supabase
         .from('groups')
-        .select('id, name, avatar_url, member_count')
+        .select('id, name, name_en, avatar_url, member_count')
         .in('id', groupIds)
 
       setGroups(groupsData || [])
@@ -564,7 +564,7 @@ function MyGroups() {
           </Box>
           <Box style={{ flex: 1, minWidth: 0 }}>
             <Text size="xs" weight="bold" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {group.name}
+              {language === 'zh' ? group.name : (group.name_en || group.name)}
             </Text>
           </Box>
         </Link>

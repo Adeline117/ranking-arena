@@ -12,6 +12,7 @@ import EmptyState from '@/app/components/ui/EmptyState'
 import { formatTimeAgo } from '@/lib/utils/date'
 import { useToast } from '@/app/components/ui/Toast'
 import { useDialog } from '@/app/components/ui/Dialog'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 interface Post {
   id: string
@@ -23,6 +24,7 @@ interface Post {
   group_id: string | null
   group?: {
     name: string
+    name_en?: string | null
   } | null
 }
 
@@ -30,6 +32,7 @@ export default function MyPostsPage() {
   const router = useRouter()
   const { showToast } = useToast()
   const { showDangerConfirm } = useDialog()
+  const { language } = useLanguage()
   const [email, setEmail] = useState<string | null>(null)
   const [userId, setUserId] = useState<string | null>(null)
   const [userHandle, setUserHandle] = useState<string | null>(null)
@@ -84,7 +87,8 @@ export default function MyPostsPage() {
             comment_count,
             group_id,
             group:groups (
-              name
+              name,
+              name_en
             )
           `)
           .eq('author_id', userId)
@@ -258,7 +262,7 @@ export default function MyPostsPage() {
                     <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[4] }}>
                       {post.group && (
                         <Text size="xs" color="tertiary">
-                          {post.group.name}
+                          {language === 'zh' ? post.group.name : (post.group.name_en || post.group.name)}
                         </Text>
                       )}
                       <Text size="xs" color="tertiary">

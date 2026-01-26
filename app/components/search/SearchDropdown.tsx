@@ -7,6 +7,7 @@ import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
 import { CloseIcon } from '../icons'
 import { supabase } from '@/lib/supabase/client'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 interface SearchDropdownProps {
   open: boolean
@@ -42,6 +43,7 @@ interface SearchResult {
  */
 export default function SearchDropdown({ open, query, onClose }: SearchDropdownProps) {
   const router = useRouter()
+  const { language } = useLanguage()
   const [searchHistory, setSearchHistory] = useState<string[]>([])
   const [hotPosts, setHotPosts] = useState<HotPost[]>([])
   const [loading, setLoading] = useState(false)
@@ -177,8 +179,8 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
             .limit(3),
           supabase
             .from('groups')
-            .select('id, name')
-            .ilike('name', `%${sanitizedQuery}%`)
+            .select('id, name, name_en')
+            .or(`name.ilike.%${sanitizedQuery}%,name_en.ilike.%${sanitizedQuery}%`)
             .limit(3),
         ])
 
@@ -187,7 +189,7 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
             results.push({
               id: post.id,
               type: 'post',
-              title: post.title || '无标题',
+              title: post.title || (language === 'zh' ? '无标题' : 'Untitled'),
               subtitle: post.author_handle ? `@${post.author_handle}` : undefined,
               href: `/post/${post.id}`,
             })
@@ -199,7 +201,7 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
             results.push({
               id: group.id,
               type: 'group',
-              title: group.name,
+              title: language === 'zh' ? group.name : (group.name_en || group.name),
               href: `/groups/${group.id}`,
             })
           })

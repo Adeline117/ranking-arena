@@ -90,7 +90,7 @@ function HotContent() {
   const [activeHotTab, setActiveHotTab] = useState<'posts' | 'groups'>('posts')
 
   // Groups data for the groups tab
-  const [groups, setGroups] = useState<{ id: string; name: string; member_count: number }[]>([])
+  const [groups, setGroups] = useState<{ id: string; name: string; name_en?: string | null; member_count: number }[]>([])
   const [loadingGroups, setLoadingGroups] = useState(false)
 
   // New content polling state
@@ -271,6 +271,7 @@ function HotContent() {
         setGroups(data.map((g: Record<string, unknown>) => ({
           id: (g.id as string) || '',
           name: (g.name as string) || '',
+          name_en: (g.name_en as string | null) || null,
           member_count: (g.member_count as number) || 0,
         })))
       } catch (error) {
@@ -1009,11 +1010,11 @@ function HotContent() {
                                 #{idx + 1}
                               </Text>
                               <Text size="base" weight="bold">
-                                {group.name}
+                                {language === 'zh' ? group.name : (group.name_en || group.name)}
                               </Text>
                             </Box>
                             <Text size="xs" color="tertiary">
-                              {group.member_count.toLocaleString()} 成员
+                              {group.member_count.toLocaleString()} {language === 'zh' ? '成员' : 'members'}
                             </Text>
                           </Box>
                         </Box>
