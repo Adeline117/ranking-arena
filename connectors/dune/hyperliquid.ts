@@ -59,21 +59,36 @@ export class DuneHyperliquidConnector extends DuneBaseConnector {
 /**
  * Example Dune SQL Query to create for Hyperliquid:
  *
+ * 重要：在创建查询前，先在 Dune 验证表和字段是否存在：
+ * SELECT * FROM hyperliquid.trades LIMIT 10
+ * -- 或者
+ * SELECT * FROM dex_perp.trades WHERE project = 'hyperliquid' LIMIT 10
+ *
+ * 表名和字段名可能不同，请在 Dune Data Explorer 搜索确认。
+ *
  * ```sql
  * SELECT
  *   user_address as address,
  *   SUM(pnl) as total_pnl,
- *   SUM(pnl) / NULLIF(SUM(margin), 0) * 100 as roi_pct,
+ *   -- 近似 ROI：添加最小分母阈值
+ *   CASE
+ *     WHEN SUM(ABS(margin)) > 100
+ *     THEN SUM(pnl) / SUM(ABS(margin)) * 100
+ *     ELSE NULL
+ *   END as roi_pct,
  *   COUNT(*) as trade_count,
  *   SUM(CASE WHEN pnl > 0 THEN 1 ELSE 0 END) * 100.0 / NULLIF(COUNT(*), 0) as win_rate,
  *   SUM(margin) as total_margin
- * FROM hyperliquid.trades
+ * FROM hyperliquid.trades  -- 确认实际表名
  * WHERE block_time > NOW() - INTERVAL '{{days}} days'
  * GROUP BY user_address
  * HAVING COUNT(*) >= 5
+ *   AND SUM(ABS(margin)) > 100  -- 最小保证金阈值
  * ORDER BY total_pnl DESC
  * LIMIT 500
  * ```
  *
- * After creating this query on Dune, set the query ID in DUNE_HYPERLIQUID_QUERY_ID env var.
+ * 注意：
+ * - ROI 是近似值，可能被小额高杠杆交易极端放大
+ * - 创建查询后，将 Query ID 设置到 DUNE_HYPERLIQUID_QUERY_ID 环境变量
  */

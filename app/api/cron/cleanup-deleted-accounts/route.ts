@@ -38,27 +38,45 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ message: 'No accounts to cleanup', deleted: 0 })
     }
 
-    let deleted = 0
     const errors: string[] = []
 
-    for (const account of expiredAccounts) {
-      try {
-        // Hard delete from auth
-        const { error: deleteError } = await supabase.auth.admin.deleteUser(account.id)
-        if (deleteError) {
-          errors.push(`Failed to delete ${account.id}: ${deleteError.message}`)
-          continue
+    // 并行处理删除，限制并发数避免过载
+    const BATCH_SIZE = 10
+    let deleted = 0
+
+    for (let i = 0; i < expiredAccounts.length; i += BATCH_SIZE) {
+      const batch = expiredAccounts.slice(i, i + BATCH_SIZE)
+
+      const results = await Promise.allSettled(
+        batch.map(async (account) => {
+          // Hard delete from auth
+          const { error: deleteError } = await supabase.auth.admin.deleteUser(account.id)
+          if (deleteError) {
+            throw new Error(`Auth delete failed: ${deleteError.message}`)
+          }
+
+          // Delete profile data
+          const { error: profileError } = await supabase
+            .from('user_profiles')
+            .delete()
+            .eq('id', account.id)
+
+          if (profileError) {
+            throw new Error(`Profile delete failed: ${profileError.message}`)
+          }
+
+          return account.id
+        })
+      )
+
+      // 统计结果
+      for (let j = 0; j < results.length; j++) {
+        const result = results[j]
+        if (result.status === 'fulfilled') {
+          deleted++
+        } else {
+          errors.push(`Failed to delete ${batch[j].id}: ${result.reason}`)
         }
-
-        // Delete profile data
-        await supabase
-          .from('user_profiles')
-          .delete()
-          .eq('id', account.id)
-
-        deleted++
-      } catch (err) {
-        errors.push(`Error deleting ${account.id}: ${err}`)
       }
     }
 

@@ -59,21 +59,35 @@ export class DuneGmxConnector extends DuneBaseConnector {
 /**
  * Example Dune SQL Query to create for GMX:
  *
+ * 重要：在创建查询前，先在 Dune 验证表和字段是否存在：
+ * SELECT * FROM gmx_v2_arbitrum.position_decrease LIMIT 10
+ *
+ * 表名可能是 gmx_v2_arbitrum.position_decrease 或其他，请在 Dune 搜索确认。
+ *
  * ```sql
  * SELECT
  *   account as address,
- *   SUM(realized_pnl) as total_pnl,
- *   SUM(realized_pnl) / NULLIF(SUM(ABS(collateral_delta)), 0) * 100 as roi_pct,
+ *   SUM(realized_pnl_usd) as total_pnl,
+ *   -- 近似 ROI：PnL / 保证金，添加最小分母阈值避免极端值
+ *   CASE
+ *     WHEN SUM(ABS(collateral_delta_usd)) > 100
+ *     THEN SUM(realized_pnl_usd) / SUM(ABS(collateral_delta_usd)) * 100
+ *     ELSE NULL
+ *   END as roi_pct,
  *   COUNT(*) as trade_count,
- *   SUM(CASE WHEN realized_pnl > 0 THEN 1 ELSE 0 END) * 100.0 / NULLIF(COUNT(*), 0) as win_rate,
- *   MAX(realized_pnl) - MIN(realized_pnl) as pnl_range
- * FROM gmx_v2_arbitrum.trades
+ *   SUM(CASE WHEN realized_pnl_usd > 0 THEN 1 ELSE 0 END) * 100.0 / NULLIF(COUNT(*), 0) as win_rate
+ * FROM gmx_v2_arbitrum.position_decrease  -- 确认实际表名
  * WHERE block_time > NOW() - INTERVAL '{{days}} days'
+ *   AND realized_pnl_usd IS NOT NULL
  * GROUP BY account
  * HAVING COUNT(*) >= 5
+ *   AND SUM(ABS(collateral_delta_usd)) > 100  -- 最小保证金阈值
  * ORDER BY total_pnl DESC
  * LIMIT 500
  * ```
  *
- * After creating this query on Dune, set the query ID in DUNE_GMX_QUERY_ID env var.
+ * 注意：
+ * - ROI 是近似值，计算方式为 PnL/保证金，不同于 CEX 的标准 ROI
+ * - ORDER BY total_pnl 会让本金大的人排前面，不一定反映交易技能
+ * - 创建查询后，将 Query ID 设置到 DUNE_GMX_QUERY_ID 环境变量
  */

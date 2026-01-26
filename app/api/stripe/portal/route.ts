@@ -1,8 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { createPortalSession } from '@/lib/stripe'
+import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
 export async function POST(request: NextRequest) {
+  // 敏感操作限流
+  const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.sensitive)
+  if (rateLimitResponse) {
+    return rateLimitResponse
+  }
+
   try {
     // 前置校验：确保 Stripe 环境变量已配置
     if (!process.env.STRIPE_SECRET_KEY) {

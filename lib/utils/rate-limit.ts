@@ -100,6 +100,39 @@ export function getIdentifier(request: NextRequest, userId?: string): string {
   return `ip:${ip}`
 }
 
+// 内存限流作为 Redis 不可用时的后备（简单的时间窗口计数）
+const memoryRateLimits = new Map<string, { count: number; resetAt: number }>()
+
+function checkMemoryRateLimit(
+  identifier: string,
+  config: RateLimitConfig
+): { success: boolean; remaining: number; reset: number } {
+  const now = Date.now()
+  const key = `${config.prefix}:${identifier}`
+  const entry = memoryRateLimits.get(key)
+
+  // 清理过期条目（每100次检查清理一次）
+  if (Math.random() < 0.01) {
+    for (const [k, v] of memoryRateLimits.entries()) {
+      if (v.resetAt < now) memoryRateLimits.delete(k)
+    }
+  }
+
+  if (!entry || entry.resetAt < now) {
+    // 新窗口
+    const resetAt = now + config.window * 1000
+    memoryRateLimits.set(key, { count: 1, resetAt })
+    return { success: true, remaining: config.requests - 1, reset: resetAt }
+  }
+
+  if (entry.count >= config.requests) {
+    return { success: false, remaining: 0, reset: entry.resetAt }
+  }
+
+  entry.count++
+  return { success: true, remaining: config.requests - entry.count, reset: entry.resetAt }
+}
+
 /**
  * 检查限流
  * @returns 如果未超过限制返回 null，超过限制返回 429 响应
@@ -109,17 +142,39 @@ export async function checkRateLimit(
   config?: Partial<RateLimitConfig>,
   userId?: string
 ): Promise<NextResponse | null> {
+  const finalConfig = { ...defaultConfig, ...config }
+  const identifier = getIdentifier(request, userId)
+
   try {
     const redisClient = getUpstashRedis()
-    
-    // Redis 不可用时，跳过限流检查（fail-open）
+
+    // Redis 不可用时，使用内存限流作为后备（不再完全跳过）
     if (!redisClient) {
+      const memResult = checkMemoryRateLimit(identifier, finalConfig)
+      if (!memResult.success) {
+        const retryAfter = Math.ceil((memResult.reset - Date.now()) / 1000)
+        return new NextResponse(
+          JSON.stringify({
+            success: false,
+            error: '请求过于频繁，请稍后再试',
+            code: 'RATE_LIMIT_EXCEEDED',
+            retryAfter,
+          }),
+          {
+            status: 429,
+            headers: {
+              'Content-Type': 'application/json',
+              'X-RateLimit-Limit': finalConfig.requests.toString(),
+              'X-RateLimit-Remaining': '0',
+              'X-RateLimit-Reset': memResult.reset.toString(),
+              'Retry-After': retryAfter.toString(),
+            },
+          }
+        )
+      }
       return null
     }
 
-    const finalConfig = { ...defaultConfig, ...config }
-    const identifier = getIdentifier(request, userId)
-    
     const limiter = getRateLimiter(finalConfig, redisClient)
     const { success, limit, remaining: _remaining, reset } = await limiter.limit(identifier)
     
