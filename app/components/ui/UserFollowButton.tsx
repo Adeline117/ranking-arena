@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { useToast } from './Toast'
 import { apiPost } from '@/lib/api/client'
+import { tokens } from '@/lib/design-tokens'
 
 type UserFollowButtonProps = {
   targetUserId: string
