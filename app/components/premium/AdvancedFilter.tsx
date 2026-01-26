@@ -47,6 +47,8 @@ const EXCHANGES = [
   { value: 'bitget', label: 'Bitget' },
   { value: 'okx', label: 'OKX' },
   { value: 'mexc', label: 'MEXC' },
+  { value: 'htx', label: 'HTX' },
+  { value: 'weex', label: 'Weex' },
   { value: 'coinex', label: 'CoinEx' },
   { value: 'kucoin', label: 'KuCoin' },
   { value: 'gmx', label: 'GMX' },

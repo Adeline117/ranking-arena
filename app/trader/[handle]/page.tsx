@@ -307,6 +307,7 @@ function TraderContent(props: { params: { handle: string } | Promise<{ handle: s
                     returnScore={performance.return_score}
                     drawdownScore={performance.drawdown_score}
                     stabilityScore={performance.stability_score}
+                    source={profile?.source}
                   />
                 ) : (
                   <Box style={{

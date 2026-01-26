@@ -18,6 +18,7 @@ export const SUPPORTED_PLATFORMS = [
   'kucoin',
   'coinex',
   'gmx',
+  'htx_futures',
 ] as const
 
 export type Platform = typeof SUPPORTED_PLATFORMS[number]

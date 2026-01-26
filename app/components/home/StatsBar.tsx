@@ -31,6 +31,8 @@ const dataSources: DataSource[] = [
   { exchange: 'Bitget', market: 'spot', key: 'bitget_spot' },
   { exchange: 'OKX', market: 'on-chain', key: 'okx_web3' },
   { exchange: 'MEXC', market: 'futures', key: 'mexc' },
+  { exchange: 'HTX', market: 'futures', key: 'htx_futures' },
+  { exchange: 'Weex', market: 'futures', key: 'weex' },
   { exchange: 'KuCoin', market: 'futures', key: 'kucoin' },
   { exchange: 'CoinEx', market: 'futures', key: 'coinex' },
   { exchange: 'GMX', market: 'on-chain', key: 'gmx' },
