@@ -18,6 +18,9 @@ import type {
 } from '../types/leaderboard'
 import { connectorRegistry, initializeConnectors } from '../connectors'
 import type { PlatformConnector } from '../connectors/types'
+import { createLogger } from '../utils/logger'
+
+const jobLogger = createLogger('JobProcessor')
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnySupabaseClient = SupabaseClient<any, any, any>
@@ -83,13 +86,13 @@ export class JobProcessor {
     }
 
     this.running = true
-    console.log(`[JobProcessor] Started worker ${this.config.workerId}`)
+    jobLogger.info(`Started worker ${this.config.workerId}`)
 
     while (this.running) {
       try {
         await this.processBatch()
       } catch (error) {
-        console.error('[JobProcessor] Batch error:', error)
+        jobLogger.error('Batch error:', error)
       }
 
       await this.sleep(this.config.pollInterval)
@@ -98,7 +101,7 @@ export class JobProcessor {
 
   stop(): void {
     this.running = false
-    console.log(`[JobProcessor] Stopping worker ${this.config.workerId}`)
+    jobLogger.info(`Stopping worker ${this.config.workerId}`)
   }
 
   // ============================================
@@ -113,7 +116,7 @@ export class JobProcessor {
     const jobs = await this.claimJobs()
     if (jobs.length === 0) return
 
-    console.log(`[JobProcessor] Claimed ${jobs.length} jobs`)
+    jobLogger.info(`Claimed ${jobs.length} jobs`)
 
     // Process jobs concurrently (respecting platform limits)
     await Promise.allSettled(
@@ -123,7 +126,7 @@ export class JobProcessor {
 
   private async processJob(job: RefreshJob): Promise<void> {
     const startTime = Date.now()
-    console.log(`[JobProcessor] Processing job ${job.id}: ${job.job_type} ${job.platform}/${job.market_type}/${job.trader_key || '*'}`)
+    jobLogger.info(`Processing job ${job.id}: ${job.job_type} ${job.platform}/${job.market_type}/${job.trader_key || '*'}`)
 
     try {
       // Check circuit breaker
@@ -166,7 +169,7 @@ export class JobProcessor {
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error)
-      console.error(`[JobProcessor] Job ${job.id} failed:`, errorMessage)
+      jobLogger.error(`Job ${job.id} failed:`, errorMessage)
 
       await this.recordPlatformFailure(job.platform, job.market_type)
 
@@ -211,7 +214,7 @@ export class JobProcessor {
 
     if (error) throw new Error(`Upsert trader_sources failed: ${error.message}`)
 
-    console.log(`[Discover] ${job.platform}/${job.market_type}: found ${result.traders.length} traders`)
+    jobLogger.info(`[Discover] ${job.platform}/${job.market_type}: found ${result.traders.length} traders`)
   }
 
   private async handleSnapshotRefresh(job: RefreshJob, connector: PlatformConnector): Promise<void> {
@@ -223,7 +226,7 @@ export class JobProcessor {
 
     if (!result) {
       // No data available - record quality flag but don't fail
-      console.log(`[Snapshot] No data for ${job.platform}/${job.trader_key}/${window}`)
+      jobLogger.info(`[Snapshot] No data for ${job.platform}/${job.trader_key}/${window}`)
       return
     }
 
@@ -264,13 +267,13 @@ export class JobProcessor {
     if (error) {
       // If dedup conflict, just update
       if (error.code === '23505') {
-        console.log(`[Snapshot] Duplicate snapshot, skipping`)
+        jobLogger.info(`[Snapshot] Duplicate snapshot, skipping`)
         return
       }
       throw new Error(`Upsert snapshot failed: ${error.message}`)
     }
 
-    console.log(`[Snapshot] Updated ${job.platform}/${job.trader_key}/${window}: score=${result.metrics.arena_score}`)
+    jobLogger.info(`[Snapshot] Updated ${job.platform}/${job.trader_key}/${window}: score=${result.metrics.arena_score}`)
   }
 
   private async handleProfileEnrich(job: RefreshJob, connector: PlatformConnector): Promise<void> {
@@ -301,7 +304,7 @@ export class JobProcessor {
 
     if (error) throw new Error(`Upsert profile failed: ${error.message}`)
 
-    console.log(`[Profile] Enriched ${job.platform}/${job.trader_key}`)
+    jobLogger.info(`[Profile] Enriched ${job.platform}/${job.trader_key}`)
   }
 
   private async handleTimeseriesRefresh(job: RefreshJob, connector: PlatformConnector): Promise<void> {
@@ -327,7 +330,7 @@ export class JobProcessor {
       if (error) throw new Error(`Upsert timeseries failed: ${error.message}`)
     }
 
-    console.log(`[Timeseries] Updated ${result.series.length} series for ${job.platform}/${job.trader_key}`)
+    jobLogger.info(`[Timeseries] Updated ${result.series.length} series for ${job.platform}/${job.trader_key}`)
   }
 
   // ============================================
@@ -343,7 +346,7 @@ export class JobProcessor {
       })
 
     if (error) {
-      console.error('[JobProcessor] Failed to claim jobs:', error.message)
+      jobLogger.error('Failed to claim jobs:', error.message)
       return []
     }
 
@@ -395,7 +398,7 @@ export class JobProcessor {
       p_stale_threshold: '5 minutes',
     })
     if (data && data > 0) {
-      console.log(`[JobProcessor] Released ${data} stale jobs`)
+      jobLogger.info(`Released ${data} stale jobs`)
     }
   }
 
@@ -509,7 +512,7 @@ export async function createRefreshJob(params: {
     if (error.code === '23505') {
       return null
     }
-    console.error('[createRefreshJob] Error:', error.message)
+    jobLogger.error('[createRefreshJob] Error:', error.message)
     return null
   }
 

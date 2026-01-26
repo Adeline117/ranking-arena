@@ -174,8 +174,8 @@ export function calculateReturnScore(roi: number, period: Period): number {
  */
 export function calculateDrawdownScore(maxDrawdown: number | null, period: Period): number {
   if (maxDrawdown === null || maxDrawdown === undefined) {
-    // 无回撤数据时给予低分（惩罚缺失数据，而非奖励）
-    return ARENA_CONFIG.MAX_DRAWDOWN_SCORE * 0.25
+    // 无回撤数据时给予中等分数（不惩罚也不奖励）
+    return ARENA_CONFIG.MAX_DRAWDOWN_SCORE * 0.5
   }
 
   // 归一化：如果 |maxDrawdown| <= 1，认为是小数格式（0.20），需要转换为百分比（20）
@@ -196,8 +196,8 @@ export function calculateDrawdownScore(maxDrawdown: number | null, period: Perio
  */
 export function calculateStabilityScore(winRate: number | null, period: Period): number {
   if (winRate === null || winRate === undefined) {
-    // 无胜率数据时给予低分（惩罚缺失数据，而非奖励）
-    return ARENA_CONFIG.MAX_STABILITY_SCORE * 0.25
+    // 无胜率数据时给予中等分数（不惩罚也不奖励）
+    return ARENA_CONFIG.MAX_STABILITY_SCORE * 0.5
   }
 
   // 归一化：如果 winRate <= 1，认为是小数格式（0.60），需要转换为百分比（60）

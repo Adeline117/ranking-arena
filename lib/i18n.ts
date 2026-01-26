@@ -580,7 +580,7 @@ export const translations = {
     welcomeJoin: '欢迎加入',
     welcomeDesc: '这里汇聚了各大交易所的顶级交易员',
     stepViewRanking: '查看交易员排名',
-    stepViewRankingDesc: '聚合 5 大交易所实时 ROI 数据',
+    stepViewRankingDesc: '聚合 22 大交易所 26+ 数据源实时 ROI 数据',
     stepFollowTraders: '关注优秀交易员',
     stepFollowTradersDesc: '追踪他们的动态和策略分享',
     stepJoinCommunity: '参与社区讨论',
@@ -1188,7 +1188,7 @@ export const translations = {
     welcomeJoin: 'Welcome',
     welcomeDesc: 'Home to top traders from major exchanges',
     stepViewRanking: 'View Trader Rankings',
-    stepViewRankingDesc: 'Real-time ROI data from 5 exchanges',
+    stepViewRankingDesc: 'Real-time ROI data from 22 exchanges, 26+ data sources',
     stepFollowTraders: 'Follow Top Traders',
     stepFollowTradersDesc: 'Track their updates and strategies',
     stepJoinCommunity: 'Join Community',
@@ -1220,7 +1220,7 @@ export const translations = {
   },
 }
 
-let currentLanguage: Language = 'zh'
+let currentLanguage: Language = 'en'
 
 export function getLanguage(): Language {
   if (typeof window !== 'undefined') {
