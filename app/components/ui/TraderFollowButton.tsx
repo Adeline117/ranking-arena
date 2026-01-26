@@ -4,9 +4,9 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useToast } from './Toast'
 import { tokens } from '@/lib/design-tokens'
-import { useApiMutation } from '@/lib/hooks/useApiMutation'
-import { apiRequest } from '@/lib/api/client'
 import { useFollowSync, type FollowChangePayload } from '@/lib/hooks/useBroadcastSync'
+import { useAuthSession } from '@/lib/hooks/useAuthSession'
+import { getCsrfHeaders } from '@/lib/api/client'
 
 type TraderFollowButtonProps = {
   traderId: string
@@ -31,6 +31,7 @@ type FollowResponse = {
 export default function TraderFollowButton({ traderId, userId, initialFollowing = false, onFollowChange }: TraderFollowButtonProps) {
   const router = useRouter()
   const { showToast } = useToast()
+  const { getAuthHeadersAsync } = useAuthSession()
   const [following, setFollowing] = useState(initialFollowing)
   const [featureDisabled, setFeatureDisabled] = useState(false)
 
@@ -69,61 +70,80 @@ export default function TraderFollowButton({ traderId, userId, initialFollowing 
     return unsubscribe
   }, [traderId, userId, on, onFollowChange])
 
-  // 使用 useApiMutation 处理关注/取消关注
-  const { mutate, isLoading } = useApiMutation<FollowResponse, { action: 'follow' | 'unfollow' }>(
-    async ({ action }) => {
-      return apiRequest<FollowResponse>('/api/follow', {
-        method: 'POST',
-        body: { userId, traderId, action },
-      })
-    },
-    {
-      onSuccess: (data) => {
-        // 清除超时保护
-        if (timeoutRef.current) {
-          clearTimeout(timeoutRef.current)
-          timeoutRef.current = null
-        }
-        pendingRef.current = false
-        expectedStateRef.current = null
-        if (data.tableNotFound) {
-          setFeatureDisabled(true)
-          showToast('Follow feature coming soon', 'info')
-          return
-        }
-        setFollowing(data.following)
-        onFollowChange?.(data.following)
+  // Loading state for follow action
+  const [isLoading, setIsLoading] = useState(false)
 
-        // 广播状态变化到其他窗口
-        if (userId) {
-          broadcast('FOLLOW_CHANGED', {
-            traderId,
-            following: data.following,
-            userId,
-          })
-        }
-      },
-      onError: (error: any) => {
-        // 清除超时保护
-        if (timeoutRef.current) {
-          clearTimeout(timeoutRef.current)
-          timeoutRef.current = null
-        }
-        pendingRef.current = false
-        // 回滚乐观更新
-        if (expectedStateRef.current !== null) {
-          setFollowing(!expectedStateRef.current)
-          expectedStateRef.current = null
-        }
-        if (error?.tableNotFound || error?.message?.includes('table') || error?.message?.includes('503')) {
-          setFeatureDisabled(true)
-          showToast('Follow feature coming soon', 'info')
-        }
-      },
-      showToast: true,
-      retryCount: 1,
+  // 执行关注/取消关注操作
+  const executeFollow = useCallback(async (action: 'follow' | 'unfollow') => {
+    setIsLoading(true)
+    try {
+      const authHeaders = await getAuthHeadersAsync()
+      const csrfHeaders = getCsrfHeaders()
+      const response = await fetch('/api/follow', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...authHeaders,
+          ...csrfHeaders,
+        },
+        body: JSON.stringify({ traderId, action }),
+      })
+
+      const result = await response.json()
+      const data = result.data || result // Handle wrapped or unwrapped response
+
+      // 清除超时保护
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current)
+        timeoutRef.current = null
+      }
+      pendingRef.current = false
+      expectedStateRef.current = null
+
+      if (data.tableNotFound) {
+        setFeatureDisabled(true)
+        showToast('Follow feature coming soon', 'info')
+        return
+      }
+
+      if (!response.ok) {
+        throw new Error(data.error || '操作失败')
+      }
+
+      setFollowing(data.following)
+      onFollowChange?.(data.following)
+
+      // 广播状态变化到其他窗口
+      if (userId) {
+        broadcast('FOLLOW_CHANGED', {
+          traderId,
+          following: data.following,
+          userId,
+        })
+      }
+    } catch (error: unknown) {
+      // 清除超时保护
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current)
+        timeoutRef.current = null
+      }
+      pendingRef.current = false
+      // 回滚乐观更新
+      if (expectedStateRef.current !== null) {
+        setFollowing(!expectedStateRef.current)
+        expectedStateRef.current = null
+      }
+      const errorMsg = error instanceof Error ? error.message : '操作失败'
+      if (errorMsg.includes('table') || errorMsg.includes('503')) {
+        setFeatureDisabled(true)
+        showToast('Follow feature coming soon', 'info')
+      } else {
+        showToast(errorMsg, 'error')
+      }
+    } finally {
+      setIsLoading(false)
     }
-  )
+  }, [traderId, userId, getAuthHeadersAsync, showToast, broadcast, onFollowChange])
 
   useEffect(() => {
     if (!userId) return
@@ -132,15 +152,19 @@ export default function TraderFollowButton({ traderId, userId, initialFollowing 
 
     ;(async () => {
       try {
+        const authHeaders = await getAuthHeadersAsync()
         const response = await fetch(
-          `/api/follow?userId=${userId}&traderId=${traderId}`,
-          { signal: abortController.signal }
+          `/api/follow?traderId=${traderId}`,
+          {
+            signal: abortController.signal,
+            headers: authHeaders,
+          }
         )
         if (response.ok) {
           const data = await response.json()
           // 只有在没有待处理操作时才更新状态
           if (!pendingRef.current) {
-            setFollowing(data.following)
+            setFollowing(data.following || data.data?.following)
           }
         }
       } catch (error) {
@@ -153,7 +177,7 @@ export default function TraderFollowButton({ traderId, userId, initialFollowing 
     return () => {
       abortController.abort()
     }
-  }, [userId, traderId])
+  }, [userId, traderId, getAuthHeadersAsync])
 
   const handleToggle = useCallback(() => {
     if (!userId) {
@@ -189,8 +213,8 @@ export default function TraderFollowButton({ traderId, userId, initialFollowing 
     // 乐观更新 UI
     setFollowing(newState)
 
-    mutate({ action: newState ? 'follow' : 'unfollow' })
-  }, [userId, following, isLoading, mutate, showToast])
+    executeFollow(newState ? 'follow' : 'unfollow')
+  }, [userId, following, isLoading, executeFollow, showToast])
 
   // 功能未开放时显示禁用状态
   if (featureDisabled) {
