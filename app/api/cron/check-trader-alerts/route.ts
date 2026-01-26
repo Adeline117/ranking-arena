@@ -103,11 +103,13 @@ export async function POST(req: Request) {
 
     const supabase = getSupabaseAdmin()
 
-    // 1. 获取所有启用的提醒配置
+    // 1. 获取启用的提醒配置（限制最大数量防止内存爆炸）
+    const MAX_ALERTS_PER_RUN = 1000
     const { data: alerts, error: alertsError } = await supabase
       .from('trader_alerts')
       .select('*')
       .eq('enabled', true)
+      .limit(MAX_ALERTS_PER_RUN)
 
     if (alertsError) {
       console.error('[TraderAlerts Cron] 获取提醒配置失败:', alertsError)
@@ -145,9 +147,10 @@ export async function POST(req: Request) {
 
     const { data: snapshots, error: snapshotsError } = await supabase
       .from('trader_snapshots')
-      .select('*')
+      .select('trader_id, source, roi_90d, pnl_90d, max_drawdown, arena_score')
       .in('trader_id', traderIds)
       .eq('snapshot_date', yesterdayStr)
+      .limit(MAX_ALERTS_PER_RUN)
 
     if (snapshotsError) {
       console.error('[TraderAlerts Cron] 获取快照失败:', snapshotsError)
@@ -200,7 +203,7 @@ export async function POST(req: Request) {
       }
     }
 
-    // 6. 检测变动并发送提醒
+    // 6. 检测变动并发送提醒（批量处理）
     let alertsSent = 0
     const alertsToSend: Array<{
       user_id: string
@@ -211,12 +214,24 @@ export async function POST(req: Request) {
       link: string
     }> = []
 
+    // 收集所有日志，最后批量插入
+    const alertLogsToInsert: Array<{
+      alert_id: string
+      user_id: string
+      trader_id: string
+      alert_type: string
+      old_value: number | null | undefined
+      new_value: number | null | undefined
+      change_percent?: number
+      message: string
+    }> = []
+
     for (const alert of alerts as AlertConfig[]) {
       const key = `${alert.trader_id}_${alert.source || ''}`
-      const currentData = traderDataMap.get(key) || 
+      const currentData = traderDataMap.get(key) ||
         // 尝试不带 source 的匹配
         Array.from(traderDataMap.values()).find(t => t.source_trader_id === alert.trader_id)
-      
+
       if (!currentData) continue
 
       const snapshotKey = `${alert.trader_id}_${currentData.source}`
@@ -238,8 +253,8 @@ export async function POST(req: Request) {
             link: `/trader/${encodeURIComponent(alert.trader_id)}`,
           })
 
-          // 记录日志
-          await supabase.from('trader_alert_logs').insert({
+          // 收集日志（不再单独插入）
+          alertLogsToInsert.push({
             alert_id: alert.id,
             user_id: alert.user_id,
             trader_id: alert.trader_id,
@@ -265,7 +280,7 @@ export async function POST(req: Request) {
             link: `/trader/${encodeURIComponent(alert.trader_id)}`,
           })
 
-          await supabase.from('trader_alert_logs').insert({
+          alertLogsToInsert.push({
             alert_id: alert.id,
             user_id: alert.user_id,
             trader_id: alert.trader_id,
@@ -291,7 +306,7 @@ export async function POST(req: Request) {
             link: `/trader/${encodeURIComponent(alert.trader_id)}`,
           })
 
-          await supabase.from('trader_alert_logs').insert({
+          alertLogsToInsert.push({
             alert_id: alert.id,
             user_id: alert.user_id,
             trader_id: alert.trader_id,
@@ -302,6 +317,17 @@ export async function POST(req: Request) {
             message: `Arena Score ${direction} ${change.toFixed(1)} 分`,
           })
         }
+      }
+    }
+
+    // 批量插入日志（替代单个插入）
+    if (alertLogsToInsert.length > 0) {
+      const { error: logsError } = await supabase
+        .from('trader_alert_logs')
+        .insert(alertLogsToInsert)
+
+      if (logsError) {
+        console.error('[TraderAlerts Cron] 批量保存日志失败:', logsError)
       }
     }
 

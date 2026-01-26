@@ -154,6 +154,26 @@ export async function POST(request: NextRequest) {
         break
       }
 
+      // 退款处理
+      case 'charge.refunded': {
+        const charge = event.data.object as Stripe.Charge
+        await handleChargeRefunded(charge)
+        break
+      }
+
+      case 'charge.refund.updated': {
+        const refund = event.data.object as Stripe.Refund
+        await handleRefundUpdated(refund)
+        break
+      }
+
+      // 试用期即将结束通知
+      case 'customer.subscription.trial_will_end': {
+        const subscription = event.data.object as Stripe.Subscription
+        await handleTrialWillEnd(subscription)
+        break
+      }
+
       default:
         logger.info(`Unhandled event type: ${event.type}`)
     }
@@ -579,4 +599,120 @@ async function handleTipPaymentCompleted(session: Stripe.Checkout.Session) {
   }
 
   logger.info('Tip recorded successfully', { tipId, amountCents })
+}
+
+// 处理退款
+async function handleChargeRefunded(charge: Stripe.Charge) {
+  const customerId = typeof charge.customer === 'string' ? charge.customer : charge.customer?.id
+  if (!customerId) {
+    logger.warn('Charge refunded without customer ID', { chargeId: charge.id })
+    return
+  }
+
+  const { data: profile } = await getSupabase()
+    .from('user_profiles')
+    .select('id, subscription_tier')
+    .eq('stripe_customer_id', customerId)
+    .single()
+
+  if (!profile) {
+    logger.warn('Refund processed but no user found', { customerId, chargeId: charge.id })
+    return
+  }
+
+  // 记录退款
+  try {
+    await getSupabase()
+      .from('payment_history')
+      .insert({
+        user_id: profile.id,
+        stripe_payment_intent_id: charge.payment_intent as string,
+        amount: -(charge.amount_refunded || 0),
+        currency: charge.currency,
+        status: 'refunded',
+        created_at: new Date().toISOString(),
+      })
+  } catch (err) {
+    logger.error('Failed to record refund', { error: err })
+  }
+
+  // 如果是全额退款且与订阅相关，降级用户
+  if (charge.refunded && charge.amount === charge.amount_refunded) {
+    // 检查是否有活跃订阅
+    const { data: subscription } = await getSupabase()
+      .from('subscriptions')
+      .select('id, status')
+      .eq('user_id', profile.id)
+      .eq('status', 'active')
+      .single()
+
+    if (!subscription) {
+      // 没有活跃订阅，降级用户
+      await getSupabase()
+        .from('user_profiles')
+        .update({
+          subscription_tier: 'free',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', profile.id)
+
+      // 离开 Pro 群
+      try {
+        await leaveProOfficialGroup(profile.id)
+      } catch (leaveError) {
+        logger.error('Error leaving Pro group after refund', { error: leaveError })
+      }
+
+      logger.info(`User ${profile.id} downgraded to free after full refund`)
+    }
+  }
+
+  logger.info('Charge refunded', { userId: profile.id, chargeId: charge.id, amount: charge.amount_refunded })
+}
+
+// 处理退款状态更新
+async function handleRefundUpdated(refund: Stripe.Refund) {
+  logger.info('Refund updated', { refundId: refund.id, status: refund.status })
+
+  // 如果退款失败，可以在这里处理
+  if (refund.status === 'failed') {
+    logger.warn('Refund failed', { refundId: refund.id, reason: refund.failure_reason })
+  }
+}
+
+// 处理试用期即将结束
+async function handleTrialWillEnd(subscription: Stripe.Subscription) {
+  const customerId = subscription.customer as string
+
+  const { data: profile } = await getSupabase()
+    .from('user_profiles')
+    .select('id, email')
+    .eq('stripe_customer_id', customerId)
+    .single()
+
+  if (!profile) {
+    logger.warn('Trial ending but no user found', { customerId })
+    return
+  }
+
+  // 发送站内通知
+  try {
+    const trialEndDate = subscription.trial_end
+      ? new Date(subscription.trial_end * 1000).toLocaleDateString('zh-CN')
+      : '即将'
+
+    await getSupabase()
+      .from('notifications')
+      .insert({
+        user_id: profile.id,
+        type: 'subscription',
+        title: '试用期即将结束',
+        body: `您的 Pro 会员试用期将于 ${trialEndDate} 结束。届时将开始正式计费，如需取消请前往设置页面。`,
+        data: { subscriptionId: subscription.id },
+      })
+
+    logger.info(`Trial ending notification sent to user ${profile.id}`)
+  } catch (err) {
+    logger.error('Failed to send trial ending notification', { error: err })
+  }
 }

@@ -68,20 +68,29 @@ export class DuneUniswapConnector extends DuneBaseConnector {
 /**
  * Example Dune SQL Query to create for Uniswap:
  *
+ * 重要：在创建查询前，先在 Dune 验证表和字段是否存在：
+ * SELECT * FROM dex.trades WHERE project = 'uniswap' LIMIT 10
+ *
+ * 字段名可能是 trader, taker, tx_from 等，请确认实际字段名。
+ *
  * ```sql
  * SELECT
- *   trader as address,
+ *   taker as address,  -- 字段名可能不同，请确认
  *   SUM(amount_usd) as total_volume,
  *   COUNT(*) as swap_count,
  *   COUNT(DISTINCT token_bought_address) as tokens_traded
  * FROM dex.trades
  * WHERE project = 'uniswap'
  *   AND block_time > NOW() - INTERVAL '{{days}} days'
- * GROUP BY trader
- * HAVING SUM(amount_usd) > 10000
+ *   AND amount_usd > 0
+ * GROUP BY taker
+ * HAVING SUM(amount_usd) > 10000  -- 最小交易量阈值
  * ORDER BY total_volume DESC
  * LIMIT 500
  * ```
  *
- * After creating this query on Dune, set the query ID in DUNE_UNISWAP_QUERY_ID env var.
+ * 注意：
+ * - Uniswap 是现货 DEX，没有 PnL/ROI 概念，只能按交易量排名
+ * - 交易量大不代表交易技能高，仅反映活跃度
+ * - 创建查询后，将 Query ID 设置到 DUNE_UNISWAP_QUERY_ID 环境变量
  */

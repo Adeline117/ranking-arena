@@ -48,40 +48,25 @@ interface TraderSourceResult {
   source_trader_id: string
 }
 
-// 查找交易员来源
+// 查找交易员来源 - 使用单个查询替代 N+1 循环
 async function findTraderSource(
-   
   supabase: any,
   handle: string
 ): Promise<{ traderId: string; source: SourceType } | null> {
   const decodedHandle = decodeURIComponent(handle)
-  
-  for (const sourceType of TRADER_SOURCES) {
-    const { data: byHandle } = await supabase
-      .from('trader_sources')
-      .select('source_trader_id')
-      .eq('source', sourceType)
-      .eq('handle', decodedHandle)
-      .limit(1)
-      .maybeSingle() as { data: TraderSourceResult | null }
-    
-    if (byHandle) {
-      return { traderId: byHandle.source_trader_id, source: sourceType }
-    }
-    
-    const { data: byId } = await supabase
-      .from('trader_sources')
-      .select('source_trader_id')
-      .eq('source', sourceType)
-      .eq('source_trader_id', decodedHandle)
-      .limit(1)
-      .maybeSingle() as { data: TraderSourceResult | null }
-    
-    if (byId) {
-      return { traderId: byId.source_trader_id, source: sourceType }
-    }
+
+  // 单个查询同时匹配 handle 或 source_trader_id
+  const { data: results } = await supabase
+    .from('trader_sources')
+    .select('source_trader_id, source')
+    .or(`handle.eq.${decodedHandle},source_trader_id.eq.${decodedHandle}`)
+    .in('source', TRADER_SOURCES)
+    .limit(1) as { data: Array<{ source_trader_id: string; source: SourceType }> | null }
+
+  if (results && results.length > 0) {
+    return { traderId: results[0].source_trader_id, source: results[0].source }
   }
-  
+
   return null
 }
 

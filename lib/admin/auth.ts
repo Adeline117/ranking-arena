@@ -6,10 +6,10 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
 
 // 管理员邮箱白名单（与前端 useAdminAuth 保持一致）
-// 可以通过环境变量覆盖
+// 必须通过环境变量 ADMIN_EMAILS 配置，生产环境不能为空
 const ADMIN_EMAILS: string[] = process.env.ADMIN_EMAILS
-  ? process.env.ADMIN_EMAILS.split(',').map(e => e.trim())
-  : ['test@example.com']
+  ? process.env.ADMIN_EMAILS.split(',').map(e => e.trim()).filter(e => e.length > 0)
+  : [] // 安全默认值：空数组，不允许任何未配置的管理员
 
 /**
  * 创建 Supabase Admin 客户端

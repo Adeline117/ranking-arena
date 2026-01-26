@@ -76,7 +76,7 @@ export async function POST(request: NextRequest) {
       .update({ author_handle: null })
       .eq('user_id', user.id)
 
-    // Cleanup related data
+    // Cleanup related data (GDPR compliant - 删除所有用户相关数据)
     const cleanupPromises = [
       // Remove exchange connections
       supabase.from('user_exchange_connections').delete().eq('user_id', user.id),
@@ -95,6 +95,28 @@ export async function POST(request: NextRequest) {
       supabase.from('user_profiles').update({ totp_secret: null, totp_enabled: false }).eq('id', user.id),
       // Remove notifications
       supabase.from('notifications').delete().eq('user_id', user.id),
+      // Remove post likes
+      supabase.from('post_likes').delete().eq('user_id', user.id),
+      // Remove post votes
+      supabase.from('post_votes').delete().eq('user_id', user.id),
+      // Remove trader follows
+      supabase.from('trader_follows').delete().eq('user_id', user.id),
+      // Remove user follows (both directions)
+      supabase.from('user_follows').delete().eq('follower_id', user.id),
+      supabase.from('user_follows').delete().eq('following_id', user.id),
+      // Remove bookmarks and bookmark folders
+      supabase.from('bookmarks').delete().eq('user_id', user.id),
+      supabase.from('bookmark_folders').delete().eq('user_id', user.id),
+      // Remove trader alerts
+      supabase.from('trader_alerts').delete().eq('user_id', user.id),
+      // Remove push subscriptions
+      supabase.from('push_subscriptions').delete().eq('user_id', user.id),
+      // Remove saved searches
+      supabase.from('saved_searches').delete().eq('user_id', user.id),
+      // Remove user preferences
+      supabase.from('user_preferences').delete().eq('user_id', user.id),
+      // Anonymize messages (keep for recipient, but remove sender info)
+      supabase.from('messages').update({ sender_id: null }).eq('sender_id', user.id),
     ]
 
     // Execute all cleanup in parallel, don't fail the deletion if some cleanup fails
