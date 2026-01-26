@@ -45,6 +45,14 @@
       "schedule": "55 */4 * * *"
     },
     {
+      "path": "/api/cron/fetch-traders/okx_futures",
+      "schedule": "0 */4 * * *"
+    },
+    {
+      "path": "/api/cron/fetch-traders/weex",
+      "schedule": "5 */4 * * *"
+    },
+    {
       "path": "/api/cron/fetch-details?concurrency=50&limit=300",
       "schedule": "30 */2 * * *"
     },
