@@ -40,7 +40,7 @@ const CompareTraders = lazy(() => import('../trader/CompareTraders'))
  * 管理整体布局和状态协调
  */
 export default function HomePage() {
-  useLanguage() // Initialize language context
+  const { language } = useLanguage()
   const { email, isLoggedIn } = useAuth()
   const searchParams = useSearchParams()
   const router = useRouter()
@@ -169,7 +169,7 @@ export default function HomePage() {
               background: tokens.colors.bg.secondary, border: `1px solid ${tokens.colors.border.primary}`,
               boxShadow: tokens.shadow.lg, zIndex: 40,
             }}>
-              <Text size="sm" color="secondary">加载对比面板...</Text>
+              <Text size="sm" color="secondary">{language === 'zh' ? '加载对比面板...' : 'Loading comparison...'}</Text>
             </Box>
           }>
             <CompareTraders
