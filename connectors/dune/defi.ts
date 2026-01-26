@@ -78,56 +78,46 @@ export class DuneDefiConnector extends DuneBaseConnector {
 /**
  * Example Dune SQL Query to create for DeFi Activity:
  *
+ * 重要：crosschain.transactions 可能不存在，需要组合多个协议的表。
+ * 先验证可用的表：
+ * SELECT * FROM aave_v3_ethereum.borrow LIMIT 10
+ * SELECT * FROM dex.trades LIMIT 10
+ *
+ * 推荐使用组合查询：
  * ```sql
+ * WITH defi_activity AS (
+ *   -- Aave 借贷
+ *   SELECT tx_from as address, 'aave' as protocol, amount_usd
+ *   FROM aave_v3_ethereum.borrow
+ *   WHERE block_time > NOW() - INTERVAL '{{days}} days'
+ *     AND amount_usd > 0
+ *
+ *   UNION ALL
+ *
+ *   -- Uniswap 交易
+ *   SELECT taker as address, 'uniswap' as protocol, amount_usd
+ *   FROM dex.trades
+ *   WHERE project = 'uniswap'
+ *     AND block_time > NOW() - INTERVAL '{{days}} days'
+ *     AND amount_usd > 0
+ *
+ *   -- 可以添加更多协议...
+ * )
  * SELECT
- *   "from" as address,
+ *   address,
  *   COUNT(DISTINCT protocol) as protocols_used,
  *   SUM(amount_usd) as total_volume,
  *   COUNT(*) as tx_count
- * FROM crosschain.transactions
- * WHERE block_time > NOW() - INTERVAL '{{days}} days'
- *   AND amount_usd > 0
- * GROUP BY "from"
- * HAVING COUNT(DISTINCT protocol) >= 3
+ * FROM defi_activity
+ * GROUP BY address
+ * HAVING COUNT(DISTINCT protocol) >= 2  -- 至少使用 2 个协议
+ *   AND SUM(amount_usd) > 1000  -- 最小交易量阈值
  * ORDER BY total_volume DESC
  * LIMIT 500
  * ```
  *
- * Alternative query for DeFi power users:
- * ```sql
- * WITH defi_users AS (
- *   SELECT
- *     "from" as address,
- *     COUNT(DISTINCT protocol) as protocols,
- *     SUM(amount_usd) as volume,
- *     COUNT(*) as txns,
- *     ARRAY_AGG(DISTINCT protocol) as protocol_list
- *   FROM (
- *     SELECT "from", protocol, amount_usd
- *     FROM aave_v3.transactions
- *     WHERE block_time > NOW() - INTERVAL '{{days}} days'
- *     UNION ALL
- *     SELECT sender as "from", 'uniswap' as protocol, amount_usd
- *     FROM dex.trades
- *     WHERE project = 'uniswap' AND block_time > NOW() - INTERVAL '{{days}} days'
- *     UNION ALL
- *     SELECT depositor as "from", 'lido' as protocol, amount_usd
- *     FROM lido.deposits
- *     WHERE block_time > NOW() - INTERVAL '{{days}} days'
- *   ) combined
- *   GROUP BY "from"
- * )
- * SELECT
- *   address,
- *   protocols as protocols_used,
- *   volume as total_volume,
- *   txns as tx_count,
- *   protocol_list
- * FROM defi_users
- * WHERE protocols >= 2 AND volume > 1000
- * ORDER BY volume DESC
- * LIMIT 500
- * ```
- *
- * After creating this query on Dune, set the query ID in DUNE_DEFI_QUERY_ID env var.
+ * 注意：
+ * - DeFi 钱包活动按交易量排名，不反映收益或技能
+ * - 表名和字段名因协议而异，请在 Dune 确认
+ * - 创建查询后，将 Query ID 设置到 DUNE_DEFI_QUERY_ID 环境变量
  */

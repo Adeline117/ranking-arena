@@ -6,6 +6,7 @@ import {
   createCheckoutSession
 } from '@/lib/stripe'
 import { createLogger } from '@/lib/utils/logger'
+import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
 // 懒加载 Supabase Admin 客户端，避免构建时环境变量缺失
 function getSupabaseAdmin() {
@@ -20,6 +21,12 @@ function getSupabaseAdmin() {
 }
 
 export async function POST(request: NextRequest) {
+  // 敏感操作限流
+  const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.sensitive)
+  if (rateLimitResponse) {
+    return rateLimitResponse
+  }
+
   try {
     // 前置校验：确保 Stripe 环境变量已配置
     if (!process.env.STRIPE_SECRET_KEY) {
