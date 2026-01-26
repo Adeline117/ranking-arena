@@ -41,6 +41,10 @@
       "schedule": "50 */4 * * *"
     },
     {
+      "path": "/api/cron/fetch-traders/htx",
+      "schedule": "55 */4 * * *"
+    },
+    {
       "path": "/api/cron/fetch-details?concurrency=50&limit=300",
       "schedule": "30 */2 * * *"
     },

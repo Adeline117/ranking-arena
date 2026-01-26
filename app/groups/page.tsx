@@ -41,17 +41,35 @@ function PopularTraders() {
   const [traders, setTraders] = useState<PopularTrader[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [hoveredTrader, setHoveredTrader] = useState<string | null>(null)
 
   useEffect(() => {
     const load = async () => {
       try {
         setError(null)
-        const { data, error: supabaseError } = await supabase
-          .from('trader_sources')
-          .select('source, source_trader_id, handle, avatar_url, roi, arena_score')
-          .order('arena_score', { ascending: false, nullsFirst: false })
-          .limit(10)
+
+        // Query from trader_snapshots - 90D window
+        let { data, error: supabaseError } = await supabase
+          .from('trader_snapshots')
+          .select('source, source_trader_id, roi, arena_score, followers')
+          .eq('season_id', '90D')
+          .not('arena_score', 'is', null)
+          .gt('arena_score', 0)
+          .order('arena_score', { ascending: false })
+          .limit(30)
+
+        // Fallback to ROI if no arena_score data
+        if (!data || data.length === 0) {
+          const fallbackResult = await supabase
+            .from('trader_snapshots')
+            .select('source, source_trader_id, roi, arena_score, followers')
+            .eq('season_id', '90D')
+            .not('roi', 'is', null)
+            .order('roi', { ascending: false })
+            .limit(30)
+
+          data = fallbackResult.data
+          supabaseError = fallbackResult.error
+        }
 
         if (supabaseError) {
           const errorMsg = language === 'zh'
@@ -62,29 +80,38 @@ function PopularTraders() {
           return
         }
 
-        // Fetch followers from latest snapshots for display
-        const traderKeys = (data || []).map(t => t.source_trader_id)
-        let followersMap: Record<string, number> = {}
-        if (traderKeys.length > 0) {
-          const { data: snapshots } = await supabase
-            .from('trader_snapshots')
-            .select('source_trader_id, followers')
-            .in('source_trader_id', traderKeys)
-            .order('captured_at', { ascending: false })
-            .limit(traderKeys.length)
+        // Deduplicate by source:source_trader_id, keep first (highest score)
+        const seen = new Set<string>()
+        const dedupedData = (data || []).filter(row => {
+          const key = `${row.source}:${row.source_trader_id}`
+          if (seen.has(key)) return false
+          seen.add(key)
+          return true
+        }).slice(0, 10) // Take top 10
 
-          if (snapshots) {
-            for (const s of snapshots) {
-              if (!followersMap[s.source_trader_id] && s.followers != null) {
-                followersMap[s.source_trader_id] = s.followers
-              }
+        // Fetch handle and avatar from trader_sources
+        const traderKeys = dedupedData.map(t => t.source_trader_id)
+        let profileMap: Record<string, { handle: string | null; avatar_url: string | null }> = {}
+        if (traderKeys.length > 0) {
+          const { data: sources } = await supabase
+            .from('trader_sources')
+            .select('source_trader_id, handle')
+            .in('source_trader_id', traderKeys)
+
+          if (sources) {
+            for (const s of sources) {
+              profileMap[s.source_trader_id] = { handle: s.handle, avatar_url: null }
             }
           }
         }
 
-        setTraders((data || []).map(t => ({
-          ...t,
-          followers: followersMap[t.source_trader_id] ?? null,
+        setTraders(dedupedData.map(t => ({
+          source: t.source,
+          source_trader_id: t.source_trader_id,
+          handle: profileMap[t.source_trader_id]?.handle || null,
+          avatar_url: profileMap[t.source_trader_id]?.avatar_url || null,
+          roi: t.roi ? parseFloat(t.roi) : null,
+          followers: t.followers ?? null,
         })))
       } catch (err) {
         const errorMsg = language === 'zh'
@@ -131,10 +158,9 @@ function PopularTraders() {
   }
 
   return (
-    <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
+    <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
       {traders.map((trader, index) => {
         const traderId = `${trader.source}-${trader.source_trader_id}`
-        const isHovered = hoveredTrader === traderId
         const displayName = trader.handle || trader.source_trader_id.slice(0, 8)
         const href = trader.handle ? `/trader/${trader.handle}` : `/trader/${trader.source_trader_id}`
 
@@ -145,71 +171,25 @@ function PopularTraders() {
             style={{
               display: 'flex',
               alignItems: 'center',
-              gap: tokens.spacing[3],
-              padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
-              borderRadius: tokens.radius.lg,
-              background: isHovered
-                ? 'linear-gradient(135deg, rgba(139, 111, 168, 0.12) 0%, rgba(139, 111, 168, 0.05) 100%)'
-                : tokens.colors.bg.secondary,
-              border: `1px solid ${isHovered ? 'rgba(139, 111, 168, 0.3)' : tokens.colors.border.primary}`,
+              gap: tokens.spacing[2],
+              padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+              borderRadius: tokens.radius.md,
               textDecoration: 'none',
               color: tokens.colors.text.primary,
-              transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
-              cursor: 'pointer',
-              transform: isHovered ? 'translateX(4px)' : 'translateX(0)',
+              transition: 'background 0.15s ease',
             }}
-            onMouseEnter={() => setHoveredTrader(traderId)}
-            onMouseLeave={() => setHoveredTrader(null)}
+            onMouseEnter={(e) => { e.currentTarget.style.background = tokens.colors.bg.tertiary }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
           >
             {/* Rank */}
-            <Text size="sm" weight="bold" style={{ color: index < 3 ? '#c9b8db' : tokens.colors.text.tertiary, width: 20, textAlign: 'center', flexShrink: 0 }}>
+            <Text size="xs" weight="bold" style={{ color: index < 3 ? '#c9b8db' : tokens.colors.text.tertiary, width: 16 }}>
               {index + 1}
             </Text>
 
-            {/* Avatar */}
-            <Box
-              style={{
-                width: 36,
-                height: 36,
-                borderRadius: tokens.radius.full,
-                background: 'linear-gradient(135deg, rgba(139, 111, 168, 0.2) 0%, rgba(139, 111, 168, 0.1) 100%)',
-                border: `1px solid ${tokens.colors.border.primary}`,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                overflow: 'hidden',
-                flexShrink: 0,
-              }}
-            >
-              {trader.avatar_url ? (
-                <img
-                  src={trader.avatar_url}
-                  alt={displayName}
-                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                />
-              ) : (
-                <Text size="xs" weight="bold" style={{ color: '#c9b8db' }}>
-                  {displayName.charAt(0).toUpperCase()}
-                </Text>
-              )}
-            </Box>
-
-            {/* Info */}
-            <Box style={{ flex: 1, minWidth: 0 }}>
-              <Text size="sm" weight="bold" style={{ marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {displayName}
-              </Text>
-              <Box style={{ display: 'flex', gap: tokens.spacing[2], alignItems: 'center' }}>
-                <Text size="xs" color="tertiary">
-                  {trader.source}
-                </Text>
-                {trader.followers != null && (
-                  <Text size="xs" color="tertiary">
-                    {trader.followers.toLocaleString()} {language === 'zh' ? '跟单' : 'copiers'}
-                  </Text>
-                )}
-              </Box>
-            </Box>
+            {/* Name */}
+            <Text size="sm" weight="semibold" style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {displayName}
+            </Text>
 
             {/* ROI */}
             {trader.roi != null && (
@@ -218,7 +198,6 @@ function PopularTraders() {
                 weight="bold"
                 style={{
                   color: Number(trader.roi) >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error,
-                  flexShrink: 0,
                 }}
               >
                 {Number(trader.roi) >= 0 ? '+' : ''}{Number(trader.roi).toFixed(1)}%
@@ -613,39 +592,10 @@ function GroupsContent() {
     <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
       <TopNav email={email} />
 
-      <Box as="main" className="container-padding" px={4} py={6} style={{ maxWidth: 1200, margin: '0 auto' }}>
-        <style jsx global>{`
-          .groups-page-grid {
-            display: grid;
-            gap: 16px;
-            grid-template-columns: 1fr;
-            align-items: start;
-          }
-          @media (min-width: 768px) {
-            .groups-page-grid {
-              grid-template-columns: 260px 1fr;
-            }
-            .groups-page-grid .right-sidebar {
-              display: none;
-            }
-          }
-          @media (min-width: 1024px) {
-            .groups-page-grid {
-              grid-template-columns: 240px 1fr 240px;
-            }
-            .groups-page-grid .right-sidebar {
-              display: block;
-            }
-          }
-          @media (max-width: 767px) {
-            .groups-page-grid .left-sidebar {
-              order: -1;
-            }
-          }
-        `}</style>
-        <Box className="groups-page-grid">
-          {/* 左：热门交易员 + 小组推荐 + 市场 */}
-          <Box as="section" className="left-sidebar" style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}>
+      <Box as="main" className="container-padding" px={4} py={6} style={{ maxWidth: 1400, margin: '0 auto' }}>
+        <Box className="main-grid">
+          {/* 左：热门交易员 + 小组推荐（仅桌面端显示） */}
+          <Box as="section" className="hide-tablet" style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}>
             {/* 热门交易员 */}
             <Card title={language === 'zh' ? '热门交易员' : 'Popular Traders'}>
               <PopularTraders />
@@ -677,24 +627,17 @@ function GroupsContent() {
                 </Button>
               </Link>
             </Card>
-
-            {/* 市场数据 */}
-            <ErrorBoundary>
-              <Suspense fallback={<SkeletonCard />}>
-                <MarketPanel />
-              </Suspense>
-            </ErrorBoundary>
           </Box>
 
           {/* 中：帖子瀑布流 */}
-          <Box as="section" className="main-content">
+          <Box as="section" style={{ minWidth: 0 }}>
             <Card title={language === 'zh' ? '推荐动态' : 'Recommended'}>
               <PostFeed layout="masonry" variant={loggedIn ? 'full' : 'compact'} initialPostId={initialPostId} />
             </Card>
           </Box>
 
-          {/* 右：Pro功能 + 我的小组 */}
-          <Box as="section" className="right-sidebar" style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}>
+          {/* 右：Pro功能 + 我的小组 + 市场数据（平板及以上显示） */}
+          <Box as="section" className="hide-mobile" style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}>
             {/* Pro功能 - pro会员不显示 */}
             {!isPro && (
               <ProFeaturesPanel compact />
@@ -704,6 +647,13 @@ function GroupsContent() {
             <Card title={language === 'zh' ? '我的小组' : 'My Groups'}>
               <MyGroups />
             </Card>
+
+            {/* 市场数据 */}
+            <ErrorBoundary>
+              <Suspense fallback={<SkeletonCard />}>
+                <MarketPanel />
+              </Suspense>
+            </ErrorBoundary>
           </Box>
         </Box>
       </Box>

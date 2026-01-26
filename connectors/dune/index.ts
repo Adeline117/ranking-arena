@@ -1,11 +1,17 @@
 /**
- * Dune Analytics Data Enrichment Connector
+ * Dune Analytics Connectors
  *
  * Source: https://dune.com
- * Purpose: On-chain analytics, trader activity enrichment via public queries
- * Note: Uses Dune's public query results. Full API access requires DUNE_API_KEY.
- * Windows: N/A (enrichment, queries are pre-built)
- * ROI Sort: N/A (enrichment only)
+ * Purpose: On-chain analytics via Dune API queries
+ *
+ * This file exports:
+ * - DuneConnector: Original enrichment connector for wallet data
+ * - DuneGmxConnector: GMX (Arbitrum) perpetual traders leaderboard
+ * - DuneHyperliquidConnector: Hyperliquid perpetual traders leaderboard
+ * - DuneUniswapConnector: Uniswap DEX spot traders leaderboard
+ * - DuneDefiConnector: General DeFi wallet activity leaderboard
+ *
+ * Required: DUNE_API_KEY environment variable for all connectors
  */
 
 import { BaseConnector } from '../base/connector';
@@ -15,6 +21,12 @@ import type {
   CanonicalProfile, CanonicalSnapshot, CanonicalTimeseries,
   SnapshotMetrics,
 } from '../base/types';
+
+// Re-export leaderboard connectors
+export { DuneGmxConnector } from './gmx';
+export { DuneHyperliquidConnector } from './hyperliquid';
+export { DuneUniswapConnector } from './uniswap';
+export { DuneDefiConnector } from './defi';
 
 const DUNE_API = 'https://api.dune.com/api/v1';
 const DUNE_APP = 'https://dune.com';

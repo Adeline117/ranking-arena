@@ -40,9 +40,10 @@ export const stripe = {
 }
 
 // 价格 ID 配置 - Pro 会员的月付/年付价格
+// Falls back to STRIPE_PRO_PRICE_ID for both if specific monthly/yearly IDs not set
 export const STRIPE_PRICE_IDS = {
-  monthly: process.env.STRIPE_PRO_MONTHLY_PRICE_ID || process.env.STRIPE_PRICE_MONTHLY_ID || 'price_pro_monthly',
-  yearly: process.env.STRIPE_PRO_YEARLY_PRICE_ID || process.env.STRIPE_PRICE_YEARLY_ID || 'price_pro_yearly',
+  monthly: process.env.STRIPE_PRO_MONTHLY_PRICE_ID || process.env.STRIPE_PRICE_MONTHLY_ID || process.env.STRIPE_PRO_PRICE_ID || '',
+  yearly: process.env.STRIPE_PRO_YEARLY_PRICE_ID || process.env.STRIPE_PRICE_YEARLY_ID || process.env.STRIPE_ELITE_PRICE_ID || process.env.STRIPE_PRO_PRICE_ID || '',
 }
 
 // 订阅计划配置 - 与 Stripe 价格保持一致
@@ -127,6 +128,14 @@ export async function createCheckoutSession(params: {
   metadata?: Record<string, string>
   promotionCode?: string
 }): Promise<Stripe.Checkout.Session> {
+  // Validate priceId before making Stripe API call
+  if (!params.priceId || !params.priceId.startsWith('price_')) {
+    throw new Error(
+      `Invalid Stripe price ID: "${params.priceId}". ` +
+      `Please configure STRIPE_PRO_MONTHLY_PRICE_ID and STRIPE_PRO_YEARLY_PRICE_ID environment variables.`
+    )
+  }
+
   const sessionParams: Stripe.Checkout.SessionCreateParams = {
     customer: params.customerId,
     payment_method_types: ['card', 'link'],

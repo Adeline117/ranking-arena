@@ -12,7 +12,9 @@ export type Platform =
   | 'okx' | 'okx_wallet' | 'kucoin' | 'bitmart' | 'phemex'
   | 'htx' | 'weex'
   | 'gmx' | 'dydx' | 'hyperliquid'
-  | 'nansen' | 'dune';
+  | 'nansen' | 'dune'
+  // Dune on-chain leaderboards
+  | 'dune_gmx' | 'dune_hyperliquid' | 'dune_uniswap' | 'dune_defi';
 
 export type MarketType = 'futures' | 'spot' | 'web3' | 'perp' | 'enrichment';
 

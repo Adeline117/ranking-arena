@@ -47,23 +47,34 @@
   align-items: start;
 }
 
+/* 平板: 2栏布局（右侧边栏显示） */
 @media (min-width: 768px) {
   .main-grid {
-    grid-template-columns: 1fr 280px;
-    gap: 20px;
+    grid-template-columns: 1fr 220px;
+    gap: 16px;
   }
 }
 
+/* 桌面: 3栏布局 */
 @media (min-width: 1024px) {
   .main-grid {
-    grid-template-columns: 240px 1fr 280px;
+    grid-template-columns: 200px 1fr 220px;
+    gap: 16px;
+  }
+}
+
+/* 大屏 */
+@media (min-width: 1280px) {
+  .main-grid {
+    grid-template-columns: 220px 1fr 240px;
     gap: 20px;
   }
 }
 
-@media (min-width: 1280px) {
+/* 超大屏 */
+@media (min-width: 1440px) {
   .main-grid {
-    grid-template-columns: 260px 1fr 300px;
+    grid-template-columns: 240px 1fr 260px;
     gap: 24px;
   }
 }
@@ -80,15 +91,18 @@
   display: block;
 }
 
+/* 平板端 (768px+) 显示右侧边栏 */
 @media (min-width: 768px) {
   .hide-mobile {
     display: block;
   }
-  
+
   .show-mobile {
     display: none !important;
   }
 }
+
+/* 首页左侧边栏样式已移到文件末尾统一管理 */
 
 /* ============================================
    移动端底部导航栏
@@ -180,29 +194,32 @@
 }
 
 .ranking-table-grid .col-score,
+.ranking-table-grid .col-pnl,
 .ranking-table-grid .col-winrate,
 .ranking-table-grid .col-mdd {
   display: none !important;
 }
 
-/* 平板：显示 Rank | Trader | Score | ROI */
+/* 平板 (640px): 显示 Rank | Trader | ROI | Score | PnL */
 @media (min-width: 640px) {
   .ranking-table-grid {
-    grid-template-columns: 40px 1fr 60px 80px !important;
+    grid-template-columns: 40px 1fr 80px 60px 80px !important;
   }
-  
-  .ranking-table-grid .col-score {
+
+  .ranking-table-grid .col-score,
+  .ranking-table-grid .col-pnl {
     display: flex !important;
   }
 }
 
-/* 桌面：显示所有列 */
+/* 桌面 (768px+)：显示所有列 */
 @media (min-width: 768px) {
   .ranking-table-grid {
-    grid-template-columns: 44px minmax(140px, 1.5fr) 64px 90px 70px 70px !important;
+    grid-template-columns: 44px minmax(140px, 1.5fr) 80px 80px 70px 70px 64px !important;
   }
 
   .ranking-table-grid .col-score,
+  .ranking-table-grid .col-pnl,
   .ranking-table-grid .col-winrate,
   .ranking-table-grid .col-mdd {
     display: flex !important;
@@ -249,17 +266,26 @@
 }
 
 /* ============================================
-   帖子瀑布流响应式
+   帖子瀑布流响应式 (Xiaohongshu-style 2-column waterfall)
    ============================================ */
 
+/* All sizes: 2-column masonry layout */
 .post-feed-masonry {
-  columns: 1 !important;
+  columns: 2 !important;
+  column-gap: 10px !important;
 }
 
 @media (min-width: 640px) {
   .post-feed-masonry {
     columns: 2 !important;
-    column-gap: 12px !important;
+    column-gap: 14px !important;
+  }
+}
+
+@media (min-width: 1024px) {
+  .post-feed-masonry {
+    columns: 3 !important;
+    column-gap: 16px !important;
   }
 }
 
@@ -803,41 +829,42 @@
 
 @media (max-width: 639px) {
   .ranking-row {
-    min-height: 72px !important;
-    padding: 16px 12px !important;
+    min-height: 56px !important;
+    padding: 12px !important;
   }
 
   .ranking-row .trader-avatar {
-    width: 40px !important;
-    height: 40px !important;
+    width: 32px !important;
+    height: 32px !important;
   }
 
   .ranking-row .roi-value {
-    font-size: 17px !important;
+    font-size: 14px !important;
   }
 
   .ranking-row .pnl-value {
     font-size: 12px !important;
   }
 
-  /* Reduce rank column width to save space */
+  /* Mobile ranking grid: 3 columns only (Rank | Trader | ROI) */
   .ranking-table-grid {
-    grid-template-columns: 32px 1fr 76px !important;
+    grid-template-columns: 36px 1fr 80px !important;
     gap: 6px !important;
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+    min-height: 56px !important;
   }
 
   /* Header: prevent wrapping, readable size */
   .ranking-table-header {
-    padding: 10px !important;
+    padding: 10px 12px !important;
     gap: 6px !important;
   }
 
-  /* Make toolbar buttons 40px touch targets */
+  /* Make toolbar buttons 36px touch targets */
   .touch-target-sm {
     min-width: 36px !important;
     min-height: 36px !important;
-    width: 36px !important;
-    height: 36px !important;
   }
 }
 
@@ -1062,25 +1089,7 @@
   display: none;
 }
 
-/* ============================================
-   iPad 适配
-   ============================================ */
-
-@media (min-width: 768px) and (max-width: 1024px) {
-  .main-grid {
-    grid-template-columns: 1fr 260px !important;
-    gap: 16px !important;
-  }
-
-  .ranking-table-grid {
-    grid-template-columns: 40px 1fr 56px 80px !important;
-  }
-
-  .ranking-table-grid .col-winrate,
-  .ranking-table-grid .col-mdd {
-    display: none !important;
-  }
-}
+/* iPad适配已通过768px媒体查询覆盖 */
 
 /* ============================================
    Mobile-Only Overrides (max-width: 767px)
@@ -1180,5 +1189,97 @@
 @media (min-width: 640px) {
   .mobile-score-badge {
     display: none !important;
+  }
+}
+
+/* ============================================
+   首页三栏布局
+   ============================================ */
+
+/* 左侧边栏 - 填满整个高度 */
+.home-left-section {
+  display: flex;
+  flex-direction: column;
+}
+
+/* 右侧边栏 - 填满整个高度 */
+.home-right-section {
+  display: flex;
+  flex-direction: column;
+}
+
+/* ============================================
+   Sorting Animation Styles
+   Smooth transitions for ranking table sorting
+   ============================================ */
+
+/* Sort indicator rotation animation */
+.sort-indicator {
+  transition: transform 0.2s ease-out;
+}
+
+.sort-indicator.asc {
+  transform: rotate(180deg);
+}
+
+/* Column header active state */
+.ranking-table-header [data-sortable]:hover {
+  color: var(--color-accent-primary, #8b6fa8);
+}
+
+.ranking-table-header [data-sortable].active {
+  color: var(--color-accent-primary, #8b6fa8);
+}
+
+/* Row sorting animation */
+.ranking-row {
+  transition: transform 0.25s ease-out, opacity 0.2s ease-out, background 0.15s ease;
+}
+
+/* Animate rows entering after sort */
+.ranking-row.sorting-enter {
+  animation: sortFadeIn 0.3s ease-out forwards;
+}
+
+@keyframes sortFadeIn {
+  0% {
+    opacity: 0.7;
+    transform: translateY(-4px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Staggered animation for rows */
+.ranking-row:nth-child(1) { animation-delay: 0ms; }
+.ranking-row:nth-child(2) { animation-delay: 15ms; }
+.ranking-row:nth-child(3) { animation-delay: 30ms; }
+.ranking-row:nth-child(4) { animation-delay: 45ms; }
+.ranking-row:nth-child(5) { animation-delay: 60ms; }
+.ranking-row:nth-child(6) { animation-delay: 75ms; }
+.ranking-row:nth-child(7) { animation-delay: 90ms; }
+.ranking-row:nth-child(8) { animation-delay: 105ms; }
+.ranking-row:nth-child(9) { animation-delay: 120ms; }
+.ranking-row:nth-child(10) { animation-delay: 135ms; }
+
+/* Sort column highlight pulse */
+@keyframes sortPulse {
+  0% { background: transparent; }
+  50% { background: rgba(139, 111, 168, 0.1); }
+  100% { background: transparent; }
+}
+
+.ranking-table-header [data-sortable].just-sorted {
+  animation: sortPulse 0.4s ease-out;
+}
+
+/* Reduce motion for accessibility */
+@media (prefers-reduced-motion: reduce) {
+  .ranking-row,
+  .sort-indicator {
+    transition: none;
+    animation: none;
   }
 }

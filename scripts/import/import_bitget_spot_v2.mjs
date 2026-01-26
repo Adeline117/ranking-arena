@@ -56,11 +56,11 @@ function calculateArenaScore(roi, pnl, maxDrawdown, winRate, period) {
   return Math.round((returnScore + drawdownScore + stabilityScore) * 100) / 100
 }
 
-// Spot URL - rule=2 是按 ROI 排序
+// Spot URL - 使用用户提供的 URL
 const PERIOD_CONFIG = {
-  '7D': { url: 'https://www.bitget.com/copy-trading/spot/all?rule=2&sort=0' },
-  '30D': { url: 'https://www.bitget.com/copy-trading/spot/all?rule=2&sort=0' },
-  '90D': { url: 'https://www.bitget.com/copy-trading/spot/all?rule=2&sort=0' },
+  '7D': { url: 'https://www.bitget.com/asia/copy-trading/spot?rule=2&sort=0' },
+  '30D': { url: 'https://www.bitget.com/asia/copy-trading/spot?rule=2&sort=0' },
+  '90D': { url: 'https://www.bitget.com/asia/copy-trading/spot?rule=2&sort=0' },
 }
 
 function sleep(ms) {
@@ -115,78 +115,204 @@ async function fetchLeaderboard(browser, period) {
   })
   
   try {
+    // 设置更真实的浏览器环境
+    await page.evaluateOnNewDocument(() => {
+      Object.defineProperty(navigator, 'webdriver', { get: () => false })
+      Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] })
+      Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en', 'zh-CN'] })
+    })
+
     await page.goto(config.url, { waitUntil: 'networkidle0', timeout: 90000 })
-    await sleep(5000)
-    
-    // 关闭弹窗
+    await sleep(3000)
+
+    // 检查是否遇到 Cloudflare 挑战
+    const isCloudflare = await page.evaluate(() => {
+      const text = document.body?.innerText || ''
+      return text.includes('Verify you are human') || text.includes('Cloudflare')
+    })
+
+    if (isCloudflare) {
+      console.log('  ⚠ 检测到 Cloudflare 挑战，等待 15 秒...')
+      // 尝试点击 Cloudflare checkbox
+      await page.evaluate(() => {
+        const checkbox = document.querySelector('input[type="checkbox"], [class*="checkbox"]')
+        if (checkbox) checkbox.click()
+      }).catch(() => {})
+      await sleep(15000)
+
+      // 重新检查
+      const stillBlocked = await page.evaluate(() => {
+        const text = document.body?.innerText || ''
+        return text.includes('Verify you are human') || text.includes('Cloudflare')
+      })
+      if (stillBlocked) {
+        console.log('  ⚠ 仍然被 Cloudflare 阻止，尝试刷新...')
+        await page.reload({ waitUntil: 'networkidle0', timeout: 60000 })
+        await sleep(5000)
+      }
+    }
+
+    await sleep(3000)
+
+    // 关闭所有弹窗（包括 Region Restricted 弹窗）
     await page.evaluate(() => {
-      document.querySelectorAll('button').forEach(btn => {
-        const text = btn.textContent || ''
-        if (text.includes('OK') || text.includes('Got') || text.includes('Accept') || text.includes('Confirm')) {
+      // 关闭各类弹窗按钮
+      document.querySelectorAll('button, [role="button"]').forEach(btn => {
+        const text = (btn.textContent || '').toLowerCase()
+        if (text.includes('ok') || text.includes('got') || text.includes('accept') ||
+            text.includes('confirm') || text.includes('close') || text.includes('dismiss') ||
+            text.includes('continue') || text.includes('i understand') || text.includes('stay')) {
           try { btn.click() } catch {}
         }
+      })
+      // 关闭模态框的 X 按钮
+      document.querySelectorAll('[class*="close"], [class*="dismiss"], [aria-label*="close"]').forEach(el => {
+        try { el.click() } catch {}
       })
     }).catch(() => {})
     await sleep(2000)
     
     console.log(`  API 拦截到: ${traders.size} 个`)
     
-    // 从卡片中提取交易员数据（包括 ROI）
+    // 从页面提取交易员数据 - 使用多种方法
     const cardData = await page.evaluate(() => {
       const results = []
       const seen = new Set()
       let debugInfo = []
 
-      // 查找所有交易员链接
-      const anchors = document.querySelectorAll('a[href*="/trader/"]')
+      // 方法1: 查找包含 ROI 百分比的卡片元素
+      // Bitget Spot 的卡片通常有特定的 class
+      const allElements = document.querySelectorAll('*')
+      let cardCandidates = []
 
-      anchors.forEach((anchor, idx) => {
-        const href = anchor.href
-        const match = href.match(/\/trader\/([a-f0-9]+)\//)
-        if (!match) return
+      // 找到所有可能的卡片（包含百分比且大小合适）
+      allElements.forEach(el => {
+        const text = el.innerText || ''
+        // 卡片特征: 包含 +/-百分比，有合适的文本长度
+        if (text.match(/[+-]\d{1,3}\.\d{1,2}%/) && text.length > 50 && text.length < 800) {
+          // 检查是否包含 "is copying"，如果包含则跳过
+          if (text.includes('is copying')) return
+          // 检查是否有子元素也匹配（避免重复）
+          let isParent = false
+          cardCandidates.forEach(c => {
+            if (el.contains(c.el) && el !== c.el) isParent = true
+          })
+          if (!isParent) {
+            cardCandidates.push({ el, text })
+          }
+        }
+      })
 
-        const traderId = match[1]
-        if (seen.has(traderId)) return
-        seen.add(traderId)
+      // 去重: 保留最小的包含元素
+      const finalCards = []
+      cardCandidates.forEach(c => {
+        let hasChild = false
+        cardCandidates.forEach(c2 => {
+          if (c.el !== c2.el && c.el.contains(c2.el)) hasChild = true
+        })
+        if (!hasChild) finalCards.push(c)
+      })
 
-        // 找到包含这个链接的卡片容器 - 尝试多种方式
-        let card = anchor.closest('[class*="card"], [class*="item"], [class*="trader"], [class*="list"] > div')
-        if (!card) {
-          // 向上遍历找到包含百分比的父元素
-          let parent = anchor.parentElement
-          for (let i = 0; i < 8 && parent; i++) {
-            const text = parent.innerText || ''
-            if (text.includes('%')) {
-              card = parent
-              break
+      debugInfo.push({ type: 'stats', cardCandidates: cardCandidates.length, finalCards: finalCards.length })
+
+      finalCards.slice(0, 100).forEach((card, idx) => {
+        const cardText = card.text
+
+        // 提取 trader ID - 尝试多种方法
+        let traderId = ''
+
+        // 方法1: 从卡片内的链接获取
+        const link = card.el.querySelector('a[href*="/trader/"], a[href*="/spot/trader/"]')
+        if (link) {
+          const match = link.href.match(/\/trader\/([a-f0-9]+)/)
+          if (match) traderId = match[1]
+        }
+
+        // 方法2: 检查卡片元素本身是否有链接
+        if (!traderId && card.el.tagName === 'A') {
+          const match = card.el.href?.match(/\/trader\/([a-f0-9]+)/)
+          if (match) traderId = match[1]
+        }
+
+        // 方法3: 查找任何包含 trader id 的链接（包括父元素）
+        if (!traderId) {
+          let parent = card.el
+          for (let i = 0; i < 5 && parent; i++) {
+            if (parent.tagName === 'A' && parent.href) {
+              const match = parent.href.match(/\/trader\/([a-f0-9]+)/)
+              if (match) {
+                traderId = match[1]
+                break
+              }
+            }
+            // 检查子元素
+            const anyLink = parent.querySelector('a[href*="trader"]')
+            if (anyLink) {
+              const match = anyLink.href.match(/\/trader\/([a-f0-9]+)/)
+              if (match) {
+                traderId = match[1]
+                break
+              }
             }
             parent = parent.parentElement
           }
         }
 
-        const cardText = card?.innerText || ''
-
-        // 调试：记录前几个卡片的文本
-        if (idx < 3) {
-          debugInfo.push({
-            traderId: traderId.slice(0, 8),
-            cardTextSample: cardText.slice(0, 150).replace(/\n/g, ' | '),
+        // 方法4: 从 data 属性获取
+        if (!traderId) {
+          const dataEls = card.el.querySelectorAll('[data-trader-id], [data-uid], [data-id]')
+          dataEls.forEach(el => {
+            if (!traderId) {
+              traderId = el.dataset.traderId || el.dataset.uid || el.dataset.id || ''
+            }
           })
         }
 
-        // 提取 ROI - 查找格式如 +1.92%, -0.5%, 0%
-        const roiMatch = cardText.match(/([+-]?)(\d{1,4}(?:\.\d{1,2})?)\s*%/)
+        // 方法5: 提取 username 作为临时 ID（如 @BGUSER-QP8YFFZE）
+        if (!traderId) {
+          const usernameMatch = cardText.match(/@(BGUSER-[A-Z0-9]+|[a-zA-Z0-9_-]+)/i)
+          if (usernameMatch) {
+            // 用 username 的 hash 作为临时 traderId
+            const username = usernameMatch[1]
+            traderId = 'spot_' + username.toLowerCase().replace(/[^a-z0-9]/g, '')
+          }
+        }
+
+        // 如果还是没有，跳过这个卡片
+        if (!traderId || seen.has(traderId)) {
+          if (idx < 5) {
+            debugInfo.push({
+              idx,
+              noTraderId: true,
+              cardTextSample: cardText.slice(0, 150).replace(/\n/g, ' | ')
+            })
+          }
+          return
+        }
+        seen.add(traderId)
+
+        // 提取 ROI
         let roi = 0
+        const roiMatch = cardText.match(/([+-])(\d{1,3}(?:\.\d{1,2})?)\s*%/)
         if (roiMatch) {
           const sign = roiMatch[1] === '-' ? -1 : 1
           roi = parseFloat(roiMatch[2]) * sign
         }
 
-        // 提取昵称
-        const nameEl = card?.querySelector('[class*="name"], [class*="nick"]') || anchor
-        let nickname = nameEl?.innerText?.trim()?.split('\n')[0] || traderId.slice(0, 8)
-        // 清理昵称（移除 @ 后面的内容）
-        nickname = nickname.replace(/@.*/, '').trim()
+        // 提取昵称 - 第一行通常是名字
+        const lines = cardText.split('\n').filter(l => l.trim() && l.length > 1 && l.length < 50)
+        let nickname = lines[0]?.trim() || traderId.slice(0, 8)
+        nickname = nickname.replace(/[+-]\d.*%.*/, '').trim()
+
+        if (idx < 5) {
+          debugInfo.push({
+            idx,
+            traderId: traderId.slice(0, 8),
+            roi,
+            nickname: nickname.slice(0, 20),
+            cardTextSample: cardText.slice(0, 100).replace(/\n/g, ' | ')
+          })
+        }
 
         results.push({
           traderId,
@@ -200,9 +326,16 @@ async function fetchLeaderboard(browser, period) {
 
     // 打印调试信息
     if (cardData.debugInfo && cardData.debugInfo.length > 0) {
-      console.log('  调试 - 卡片文本示例:')
-      cardData.debugInfo.forEach((d, i) => {
-        console.log(`    ${i + 1}. ${d.traderId}: ${d.cardTextSample}`)
+      console.log('  调试信息:')
+      cardData.debugInfo.forEach((d) => {
+        if (d.type === 'stats') {
+          console.log(`    卡片候选: ${d.cardCandidates}, 最终卡片: ${d.finalCards}`)
+        } else if (d.noTraderId) {
+          console.log(`    ${d.idx}. 无trader ID: ${d.cardTextSample?.slice(0, 80)}`)
+        } else {
+          console.log(`    ${d.idx}. ${d.traderId}: ROI=${d.roi}% name=${d.nickname}`)
+          console.log(`       ${d.cardTextSample?.slice(0, 80)}`)
+        }
       })
     }
 
@@ -263,37 +396,66 @@ async function fetchLeaderboard(browser, period) {
         const moreCards = await page.evaluate(() => {
           const results = []
           const seen = new Set()
-          const anchors = document.querySelectorAll('a[href*="/trader/"]')
+
+          // 过滤掉侧边栏的 "is copying" 区域
+          const allAnchors = document.querySelectorAll('a[href*="/trader/"]')
+          const anchors = Array.from(allAnchors).filter(a => {
+            const parentText = a.parentElement?.parentElement?.innerText || ''
+            if (parentText.includes('is copying') && parentText.length < 200) return false
+            return true
+          })
 
           anchors.forEach(anchor => {
             const href = anchor.href
-            const match = href.match(/\/trader\/([a-f0-9]+)\//)
+            const match = href.match(/\/trader\/([a-f0-9]+)/)
             if (!match) return
 
             const traderId = match[1]
             if (seen.has(traderId)) return
             seen.add(traderId)
 
-            // 找到包含这个链接的卡片容器
-            const card = anchor.closest('[class*="card"], [class*="item"], [class*="trader"]') ||
-                         anchor.parentElement?.parentElement?.parentElement?.parentElement
+            // 找到卡片容器
+            let card = null
+            let parent = anchor
+            for (let i = 0; i < 10 && parent; i++) {
+              const text = parent.innerText || ''
+              if (text.includes('%') && !text.includes('is copying')) {
+                if (text.length < 1000 && text.length > 10) {
+                  card = parent
+                  break
+                }
+              }
+              parent = parent.parentElement
+            }
 
-            const cardText = card?.innerText || ''
+            if (!card) return
+
+            const cardText = card.innerText || ''
 
             // 提取 ROI
-            const roiMatch = cardText.match(/([+-]?)(\d{1,4}(?:\.\d{1,2})?)\s*%/)
             let roi = 0
+            const roiMatch = cardText.match(/([+-])(\d{1,4}(?:\.\d{1,2})?)\s*%/) ||
+                             cardText.match(/(\d{1,4}(?:\.\d{1,2})?)\s*%/)
             if (roiMatch) {
-              const sign = roiMatch[1] === '-' ? -1 : 1
-              roi = parseFloat(roiMatch[2]) * sign
+              if (roiMatch.length === 3) {
+                const sign = roiMatch[1] === '-' ? -1 : 1
+                roi = parseFloat(roiMatch[2]) * sign
+              } else {
+                roi = parseFloat(roiMatch[1])
+              }
             }
 
             // 提取昵称
-            const nameEl = card?.querySelector('[class*="name"], [class*="nick"]') || anchor
-            let nickname = nameEl?.innerText?.trim()?.split('\n')[0] || traderId.slice(0, 8)
-            nickname = nickname.replace(/@.*/, '').trim()
+            const nameEl = card.querySelector('[class*="name"], [class*="nick"]')
+            let nickname = nameEl?.innerText?.trim()?.split('\n')[0] || ''
+            if (!nickname) {
+              const lines = cardText.split('\n').filter(l => l.trim())
+              nickname = lines[0]?.trim() || traderId.slice(0, 8)
+            }
+            nickname = nickname.replace(/@.*/, '').replace(/is copying.*/, '').trim()
+            if (nickname.length > 30) nickname = nickname.slice(0, 30)
 
-            results.push({ traderId, nickname, roi })
+            results.push({ traderId, nickname: nickname || traderId.slice(0, 8), roi })
           })
 
           return results
@@ -333,9 +495,15 @@ async function fetchTraderDetails(browser, traderId, period) {
   const page = await browser.newPage()
   await page.setViewport({ width: 1920, height: 1080 })
   await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36')
-  
+
   let details = {}
-  
+
+  // 如果是合成的 trader ID（以 spot_ 开头），跳过详情获取
+  if (traderId.startsWith('spot_')) {
+    await page.close()
+    return details
+  }
+
   try {
     const url = `https://www.bitget.com/copy-trading/trader/${traderId}/spot`
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 20000 }).catch(() => {})
@@ -484,7 +652,14 @@ async function main() {
   
   const browser = await puppeteer.launch({
     headless: 'new',
-    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-blink-features=AutomationControlled'],
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-blink-features=AutomationControlled',
+      '--disable-web-security',
+      '--disable-features=IsolateOrigins,site-per-process',
+      '--window-size=1920,1080',
+    ],
   })
 
   const results = []

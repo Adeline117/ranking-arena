@@ -22,9 +22,8 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { LeaderboardService } from '@/lib/services/leaderboard';
 import type { RankingWindow, TradingCategory, Platform, GranularPlatform, RankingsQuery, RankedTraderRow } from '@/lib/types/leaderboard';
-import { LEADERBOARD_PLATFORMS, PLATFORM_CATEGORY } from '@/lib/types/leaderboard';
+import { GRANULAR_PLATFORMS, PLATFORM_CATEGORY } from '@/lib/types/leaderboard';
 import { getSupabaseAdmin } from '@/lib/supabase/server';
 
 const VALID_WINDOWS: RankingWindow[] = ['7d', '30d', '90d'];
@@ -53,8 +52,8 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const platform = searchParams.get('platform') as Platform | null;
-    if (platform && !(LEADERBOARD_PLATFORMS as readonly string[]).includes(platform)) {
+    const platform = searchParams.get('platform') as GranularPlatform | null;
+    if (platform && !(GRANULAR_PLATFORMS as readonly string[]).includes(platform)) {
       return NextResponse.json(
         { error: `Invalid platform: ${platform}` },
         { status: 400 },
@@ -71,7 +70,7 @@ export async function GET(request: NextRequest) {
 
     const sortDir = (searchParams.get('sort_dir') || 'desc') as 'asc' | 'desc';
 
-    const limit = Math.min(parseInt(searchParams.get('limit') || '100', 10) || 100, 500);
+    const limit = Math.min(parseInt(searchParams.get('limit') || '1000', 10) || 1000, 1000);
     const offset = parseInt(searchParams.get('offset') || '0', 10) || 0;
     const minPnl = searchParams.get('min_pnl') ? Number(searchParams.get('min_pnl')) : undefined;
     const minTrades = searchParams.get('min_trades') ? Number(searchParams.get('min_trades')) : undefined;
@@ -79,7 +78,8 @@ export async function GET(request: NextRequest) {
     const query: RankingsQuery = {
       window,
       category: category || undefined,
-      platform: platform || undefined,
+      // Cast to Platform for type compat - database uses granular names like 'htx_futures'
+      platform: (platform || undefined) as Platform | undefined,
       limit,
       offset,
       sort_by: sortBy,
@@ -88,16 +88,9 @@ export async function GET(request: NextRequest) {
       min_trades: minTrades,
     };
 
-    const service = new LeaderboardService();
-
-    let result;
-    try {
-      result = await service.getRankings(query);
-    } catch (dbError) {
-      // Fallback: use Supabase client when direct DB connection fails
-      console.warn('[API /rankings] Direct DB failed, using Supabase fallback:', (dbError as Error).message);
-      result = await getRankingsFallback(query);
-    }
+    // Use Supabase fallback directly as it queries trader_snapshots (with actual data)
+    // LeaderboardService queries trader_snapshots_v2 which is empty
+    const result = await getRankingsFallback(query);
 
     return NextResponse.json(result, {
       headers: {
@@ -116,6 +109,7 @@ export async function GET(request: NextRequest) {
 /**
  * Fallback: fetch rankings via Supabase client when direct DB pool fails.
  * Returns the same response shape as LeaderboardService.getRankings().
+ * Queries trader_snapshots table (legacy) which has actual data.
  */
 async function getRankingsFallback(rankingsQuery: RankingsQuery) {
   const {
@@ -131,41 +125,46 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery) {
   } = rankingsQuery;
 
   const supabase = getSupabaseAdmin();
-  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-  const safeLimit = Math.min(limit, 500);
+  const safeLimit = Math.min(limit, 1000);
+  // Fetch more rows to account for duplicates (each trader may have multiple snapshots)
+  const fetchLimit = Math.min(safeLimit * 10, 10000);
 
-  // Map sort column
+  // Map sort column for trader_snapshots table
   const sortColumnMap: Record<string, string> = {
     arena_score: 'arena_score',
-    roi: 'roi_pct',
-    pnl: 'pnl_usd',
-    drawdown: 'max_drawdown_pct',
-    copiers: 'copier_count',
+    roi: 'roi',
+    pnl: 'pnl',
+    drawdown: 'max_drawdown',
+    copiers: 'copiers',
   };
   const sortColumn = sortColumnMap[sort_by] || 'arena_score';
 
-  // Build query
+  // Map lowercase window to uppercase season_id (e.g., '90d' -> '90D')
+  const seasonId = window.toUpperCase();
+
+  // Build query against trader_snapshots (legacy table with actual data)
+  // Note: this table uses 'season_id' not 'window'
   let dbQuery = supabase
-    .from('trader_snapshots_v2')
-    .select('id, platform, trader_key, window, as_of_ts, metrics, quality, arena_score, roi_pct, pnl_usd, max_drawdown_pct, win_rate_pct, trades_count, copier_count')
-    .eq('window', window)
-    .gte('as_of_ts', cutoff)
+    .from('trader_snapshots')
+    .select('id, source, source_trader_id, season_id, captured_at, arena_score, roi, pnl, max_drawdown, win_rate, trades_count, followers', { count: 'exact' })
+    .eq('season_id', seasonId)
+    .not('arena_score', 'is', null)
     .order(sortColumn, { ascending: sort_dir === 'asc', nullsFirst: false })
-    .range(offset, offset + safeLimit - 1);
+    .range(0, fetchLimit - 1);
 
   if (platform) {
-    dbQuery = dbQuery.eq('platform', platform);
+    dbQuery = dbQuery.eq('source', platform);
   } else if (category) {
     const platformsInCategory = Object.entries(PLATFORM_CATEGORY)
       .filter(([, cat]) => cat === category)
       .map(([p]) => p);
     if (platformsInCategory.length > 0) {
-      dbQuery = dbQuery.in('platform', platformsInCategory);
+      dbQuery = dbQuery.in('source', platformsInCategory);
     }
   }
 
   if (min_pnl != null) {
-    dbQuery = dbQuery.gte('pnl_usd', min_pnl);
+    dbQuery = dbQuery.gte('pnl', min_pnl);
   }
   if (min_trades != null) {
     dbQuery = dbQuery.gte('trades_count', min_trades);
@@ -177,64 +176,122 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery) {
     throw new Error(`Supabase fallback failed: ${error.message}`);
   }
 
-  // Fetch display names
-  const traderKeys = [...new Set((rows || []).map(r => r.trader_key))];
-  const platforms = [...new Set((rows || []).map(r => r.platform))];
+  // Fetch display names from trader_profiles and trader_sources
+  const traderKeys = [...new Set((rows || []).map(r => r.source_trader_id))];
+  const platforms = [...new Set((rows || []).map(r => r.source))];
   const displayNameMap = new Map<string, { display_name: string | null; avatar_url: string | null }>();
 
   if (traderKeys.length > 0) {
-    const { data: sources } = await supabase
-      .from('trader_sources_v2')
+    // Try trader_profiles first
+    const { data: profiles } = await supabase
+      .from('trader_profiles')
       .select('platform, trader_key, display_name, avatar_url')
       .in('platform', platforms)
       .in('trader_key', traderKeys);
 
+    if (profiles) {
+      for (const p of profiles) {
+        displayNameMap.set(`${p.platform}:${p.trader_key}`, {
+          display_name: p.display_name,
+          avatar_url: p.avatar_url,
+        });
+      }
+    }
+
+    // Fallback to trader_sources for missing entries
+    const { data: sources } = await supabase
+      .from('trader_sources')
+      .select('source, source_trader_id, handle, display_name')
+      .in('source', platforms)
+      .in('source_trader_id', traderKeys);
+
     if (sources) {
       for (const src of sources) {
-        displayNameMap.set(`${src.platform}:${src.trader_key}`, {
-          display_name: src.display_name,
-          avatar_url: src.avatar_url,
-        });
+        const key = `${src.source}:${src.source_trader_id}`;
+        if (!displayNameMap.has(key)) {
+          displayNameMap.set(key, {
+            display_name: src.display_name || src.handle,
+            avatar_url: null,
+          });
+        }
       }
     }
   }
 
-  // Deduplicate by platform:trader_key
+  // Deduplicate by source:source_trader_id (keep first occurrence which has highest score)
   const seen = new Set<string>();
-  const deduped = (rows || []).filter(row => {
-    const key = `${row.platform}:${row.trader_key}`;
+  const allDeduped = (rows || []).filter(row => {
+    const key = `${row.source}:${row.source_trader_id}`;
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
   });
 
-  const rankedRows: RankedTraderRow[] = deduped.map((row, idx) => {
-    const source = displayNameMap.get(`${row.platform}:${row.trader_key}`);
+  // Apply pagination after deduplication
+  const totalUniqueTraders = allDeduped.length;
+  const paginatedDeduped = allDeduped.slice(offset, offset + safeLimit);
+
+  const rankedRows: RankedTraderRow[] = paginatedDeduped.map((row, idx) => {
+    const sourceInfo = displayNameMap.get(`${row.source}:${row.source_trader_id}`);
+    const roi = row.roi ? parseFloat(row.roi) : 0;
+    const pnl = row.pnl ? parseFloat(row.pnl) : 0;
+    const winRate = row.win_rate ? parseFloat(row.win_rate) : null;
+    const maxDrawdown = row.max_drawdown ? parseFloat(row.max_drawdown) : null;
+    const arenaScore = row.arena_score ? parseFloat(row.arena_score) : null;
+
     return {
       rank: offset + idx + 1,
-      platform: row.platform as Platform,
-      trader_key: row.trader_key,
-      display_name: source?.display_name || null,
-      avatar_url: source?.avatar_url || null,
-      category: PLATFORM_CATEGORY[row.platform as unknown as GranularPlatform] || 'futures',
-      metrics: row.metrics,
-      quality: row.quality,
-      as_of_ts: row.as_of_ts,
+      platform: row.source as Platform,
+      trader_key: row.source_trader_id,
+      display_name: sourceInfo?.display_name || null,
+      avatar_url: sourceInfo?.avatar_url || null,
+      category: PLATFORM_CATEGORY[row.source as unknown as GranularPlatform] || 'futures',
+      metrics: {
+        roi,
+        pnl,
+        win_rate: winRate,
+        max_drawdown: maxDrawdown,
+        trades_count: row.trades_count ?? null,
+        followers: row.followers ?? null,
+        copiers: null, // Not available in this table
+        aum: null, // Not available in this table
+        arena_score: arenaScore,
+        return_score: null, // Not available in this table
+        drawdown_score: null, // Not available in this table
+        stability_score: null, // Not available in this table
+        sharpe_ratio: null, // Not available in this table
+        sortino_ratio: null, // Not available in this table
+        platform_rank: offset + idx + 1,
+      },
+      quality: { is_complete: true, missing_fields: [], confidence: 1.0, is_interpolated: false },
+      as_of_ts: row.captured_at,
     };
   });
 
+  // Calculate staleness - data older than 1 hour is considered stale
+  const latestCapturedAt = paginatedDeduped.length > 0
+    ? Math.max(...paginatedDeduped.map(r => new Date(r.captured_at).getTime()))
+    : Date.now();
+  const stalenessMs = Date.now() - latestCapturedAt;
+  const isStale = stalenessMs > 3600 * 1000; // > 1 hour
+
+  // Transform to RankingsResponse format expected by frontend
+  const traders = rankedRows.map(row => ({
+    platform: row.platform,
+    trader_key: row.trader_key,
+    display_name: row.display_name,
+    avatar_url: row.avatar_url,
+    rank: row.rank,
+    metrics: row.metrics,
+    quality_flags: { is_suspicious: false, suspicion_reasons: [], data_completeness: 1.0 },
+    updated_at: row.as_of_ts,
+  }));
+
   return {
-    data: rankedRows,
-    meta: {
-      window,
-      category: category || 'all' as const,
-      platform: platform || 'all' as const,
-      total_count: count || deduped.length,
-      limit: safeLimit,
-      offset,
-      cached_at: new Date().toISOString(),
-      sort_by,
-      sort_dir,
-    },
+    traders,
+    window: window.toUpperCase() as '7D' | '30D' | '90D',
+    total_count: totalUniqueTraders,
+    as_of: new Date(latestCapturedAt).toISOString(),
+    is_stale: isStale,
   };
 }

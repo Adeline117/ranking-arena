@@ -12,7 +12,6 @@ import { CategoryType, filterByCategory } from '../ranking/CategoryRankingTabs'
 import { useSubscription } from './hooks/useSubscription'
 import { useLanguage } from '../Providers/LanguageProvider'
 import DataFreshnessIndicator from '../ui/DataFreshnessIndicator'
-import { CreateSnapshotButton } from '../snapshot'
 import AdvancedFilter, { type FilterConfig, type SavedFilter } from '../premium/AdvancedFilter'
 import FilterPresets, { type PresetId, PRESETS } from '../ranking/FilterPresets'
 import ShareTop10Button from '../ranking/ShareTop10Button'
@@ -370,20 +369,6 @@ export default function RankingSection({
               traders={filteredTraders}
               timeRange={activeTimeRange}
               disabled={loading}
-            />
-          )}
-          {!loading && isLoggedIn && (
-            <CreateSnapshotButton
-              timeRange={activeTimeRange}
-              onSuccess={(snapshot) => {
-                const url = snapshot.shareUrl || `${window.location.origin}/s/${snapshot.shareToken}`
-                navigator.clipboard.writeText(url).then(() => {
-                  showToast(language === 'zh' ? '快照已创建，链接已复制' : 'Snapshot created, link copied', 'success')
-                }).catch(() => {
-                  showToast(language === 'zh' ? `快照已创建: ${url}` : `Snapshot created: ${url}`, 'success')
-                })
-              }}
-              disabled={loading || traders.length === 0}
             />
           )}
           {!loading && onRefresh && (

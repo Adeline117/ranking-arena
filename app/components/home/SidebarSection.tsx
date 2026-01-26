@@ -3,7 +3,7 @@
 import { lazy, Suspense } from 'react'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
-import { Box } from '../base'
+import { Box, Text } from '../base'
 import Card from '../ui/Card'
 import { ErrorBoundary } from '../Providers/ErrorBoundary'
 import { SkeletonCard } from '../ui/Skeleton'
@@ -22,7 +22,7 @@ interface SidebarSectionProps {
 /**
  * 侧边栏组件
  * 左侧：热门讨论
- * 右侧：市场数据
+ * 右侧：Pro功能 + 市场数据
  */
 export default function SidebarSection({ position }: SidebarSectionProps) {
   const { t } = useLanguage()
@@ -34,28 +34,26 @@ export default function SidebarSection({ position }: SidebarSectionProps) {
         as="section"
         className="home-left-section card-enter"
         style={{
-          position: 'sticky',
-          top: 80,
-          animationDelay: '0.1s',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: tokens.spacing[3],
         }}
       >
         <Card title={t('hotDiscussion')} variant="glass">
           <ErrorBoundary>
             <Suspense fallback={<SkeletonCard />}>
-              <PostFeed />
+              <PostFeed variant="compact" limit={5} />
             </Suspense>
           </ErrorBoundary>
         </Card>
+
         <Link
           href="/groups"
-          className="btn-press"
           style={{
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             gap: tokens.spacing[2],
-            marginTop: tokens.spacing[3],
-            textAlign: 'center',
             padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
             background: tokens.glass.bg.light,
             backdropFilter: tokens.glass.blur.sm,
@@ -67,65 +65,34 @@ export default function SidebarSection({ position }: SidebarSectionProps) {
             fontSize: tokens.typography.fontSize.sm,
             fontWeight: tokens.typography.fontWeight.bold,
             transition: tokens.transition.all,
-            boxShadow: tokens.shadow.sm,
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = tokens.glass.bg.medium
-            e.currentTarget.style.transform = 'translateY(-2px)'
-            e.currentTarget.style.boxShadow = tokens.shadow.md
-            e.currentTarget.style.borderColor = `${tokens.colors.accent.primary}40`
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = tokens.glass.bg.light
-            e.currentTarget.style.transform = 'translateY(0)'
-            e.currentTarget.style.boxShadow = tokens.shadow.sm
-            e.currentTarget.style.borderColor = 'var(--glass-border-light)'
           }}
         >
-          {t('more')} 
-          <span style={{ transition: 'transform 0.2s', display: 'inline-block' }}>→</span>
+          {t('more')} →
         </Link>
       </Box>
     )
   }
 
+  // 右侧边栏
   return (
     <Box
       as="section"
       className="home-right-section card-enter"
       style={{
-        position: 'sticky',
-        top: 80,
-        maxHeight: 'calc(100vh - 100px)',
-        animationDelay: '0.2s',
         display: 'flex',
         flexDirection: 'column',
-        gap: tokens.spacing[4],
+        gap: tokens.spacing[3],
       }}
     >
-      {/* Pro 功能面板 - pro会员不显示 */}
-      {!isPro && (
-        <Box
-          style={{
-            flex: 1,
-            overflowY: 'auto',
-            minHeight: 0,
-            paddingRight: tokens.spacing[1],
-          }}
-          className="scrollbar-thin"
-        >
-          <ProFeaturesPanel compact />
-        </Box>
-      )}
-      
-      {/* 市场数据 - 固定在底部 */}
-      <Box style={{ flexShrink: 0 }}>
-        <ErrorBoundary>
-          <Suspense fallback={<SkeletonCard />}>
-            <MarketPanel />
-          </Suspense>
-        </ErrorBoundary>
-      </Box>
+      {/* Pro 功能面板 */}
+      {!isPro && <ProFeaturesPanel compact />}
+
+      {/* 市场数据 */}
+      <ErrorBoundary>
+        <Suspense fallback={<SkeletonCard />}>
+          <MarketPanel />
+        </Suspense>
+      </ErrorBoundary>
     </Box>
   )
 }

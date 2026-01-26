@@ -313,8 +313,13 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
           membershipConfirmed = !!membership
         }
 
+        // 直接加载帖子，不依赖 useEffect 的竞态条件
+        // 修复冷启动时帖子不显示的问题
         if (membershipConfirmed) {
-          // Posts will be loaded by the hook after isMember updates
+          // 延迟一帧确保状态已更新
+          setTimeout(() => {
+            postsHook.loadPosts()
+          }, 0)
         }
       } catch (err) {
         if (controller.signal.aborted) return
@@ -337,9 +342,9 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [groupId, userId])
 
-  // Load posts when membership is confirmed
+  // Fallback: Load posts when membership state changes (for non-cold-start cases)
   useEffect(() => {
-    if (isMember && groupId && !loading) {
+    if (isMember && groupId && !loading && postsHook.posts.length === 0 && !postsHook.loadingMore) {
       postsHook.loadPosts()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

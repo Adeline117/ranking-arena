@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useToast } from './Toast'
+import { tokens } from '@/lib/design-tokens'
 import { useApiMutation } from '@/lib/hooks/useApiMutation'
 import { apiRequest } from '@/lib/api/client'
 import { useFollowSync, type FollowChangePayload } from '@/lib/hooks/useBroadcastSync'
@@ -200,12 +201,12 @@ export default function TraderFollowButton({ traderId, userId, initialFollowing 
         style={{
           width: '100%',
           padding: '12px 16px',
-          borderRadius: '12px',
-          border: '1px solid rgba(255,255,255,0.1)',
-          background: 'rgba(255,255,255,0.02)',
-          color: '#666',
+          borderRadius: tokens.radius.lg,
+          border: tokens.glass.border.light,
+          background: tokens.glass.bg.light,
+          color: tokens.colors.text.tertiary,
           fontWeight: 700,
-          fontSize: '14px',
+          fontSize: tokens.typography.fontSize.base,
           cursor: 'not-allowed',
           opacity: 0.5,
         }}
@@ -220,13 +221,13 @@ export default function TraderFollowButton({ traderId, userId, initialFollowing 
       <button
         onClick={() => router.push('/login?returnUrl=' + encodeURIComponent(typeof window !== 'undefined' ? window.location.pathname : '/'))}
         style={{
-          padding: '8px 16px',
-          borderRadius: '8px',
-          border: '1px solid rgba(255,255,255,0.2)',
-          background: 'rgba(255,255,255,0.05)',
-          color: '#eaeaea',
+          padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
+          borderRadius: tokens.radius.md,
+          border: tokens.glass.border.light,
+          background: tokens.glass.bg.light,
+          color: tokens.colors.text.primary,
           fontWeight: 700,
-          fontSize: '13px',
+          fontSize: tokens.typography.fontSize.sm,
           cursor: 'pointer',
         }}
       >
@@ -241,20 +242,20 @@ export default function TraderFollowButton({ traderId, userId, initialFollowing 
       disabled={isLoading}
       style={{
         width: '100%',
-        padding: '12px 16px',
-        borderRadius: '12px',
-        border: following ? '1px solid rgba(255,255,255,0.2)' : 'none',
-        background: following ? 'rgba(255,255,255,0.05)' : '#8b6fa8',
-        color: '#fff',
+        padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+        borderRadius: tokens.radius.lg,
+        border: following ? tokens.glass.border.light : 'none',
+        background: following ? tokens.glass.bg.light : tokens.colors.accent.brand,
+        color: tokens.colors.white,
         fontWeight: 900,
-        fontSize: '14px',
+        fontSize: tokens.typography.fontSize.base,
         cursor: isLoading ? 'not-allowed' : 'pointer',
         opacity: isLoading ? 0.6 : 1,
-        transition: 'all 200ms ease',
+        transition: tokens.transition.base,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        gap: '8px',
+        gap: tokens.spacing[2],
       }}
     >
       {isLoading && <LoadingSpinner size={14} />}
