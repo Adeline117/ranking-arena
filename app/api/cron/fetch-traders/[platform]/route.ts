@@ -7,7 +7,8 @@
  * - bybit
  * - bitget_futures, bitget_spot
  * - mexc, coinex
- * - okx_web3, kucoin, gmx
+ * - okx_futures, okx_web3
+ * - kucoin, gmx, htx, weex
  *
  * Vercel Cron 通过 GET 请求调用，使用 Authorization: Bearer 验证
  */

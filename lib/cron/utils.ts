@@ -105,6 +105,16 @@ export const PLATFORM_SCRIPTS: Record<string, Array<{ name: string; script: stri
     { name: 'htx_futures_30d', script: 'scripts/import/import_htx.mjs', args: ['30D'] },
     { name: 'htx_futures_90d', script: 'scripts/import/import_htx.mjs', args: ['90D'] },
   ],
+  okx_futures: [
+    { name: 'okx_futures_7d', script: 'scripts/import/import_okx_futures.mjs', args: ['7D'] },
+    { name: 'okx_futures_30d', script: 'scripts/import/import_okx_futures.mjs', args: ['30D'] },
+    { name: 'okx_futures_90d', script: 'scripts/import/import_okx_futures.mjs', args: ['90D'] },
+  ],
+  weex: [
+    { name: 'weex_7d', script: 'scripts/import/import_weex.mjs', args: ['7D'] },
+    { name: 'weex_30d', script: 'scripts/import/import_weex.mjs', args: ['30D'] },
+    { name: 'weex_90d', script: 'scripts/import/import_weex.mjs', args: ['90D'] },
+  ],
 }
 
 export type ScriptResult = {
