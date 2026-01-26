@@ -17,6 +17,8 @@ const EXCHANGE_LOGOS: Record<string, string> = {
   bybit: 'https://assets.coingecko.com/coins/images/21149/small/bybit.png',
   bitget: 'https://assets.coingecko.com/coins/images/11610/small/photo_2022-01-24_14-14-56.jpg',
   mexc: 'https://assets.coingecko.com/coins/images/12958/small/mexc.png',
+  htx: 'https://assets.coingecko.com/coins/images/2822/small/huobi-token-logo.png',
+  weex: 'https://assets.coingecko.com/coins/images/28526/small/weex.png',
   coinex: 'https://assets.coingecko.com/coins/images/4812/small/coinex.png',
   okx: 'https://assets.coingecko.com/coins/images/13708/small/okb_logo.png',
   kucoin: 'https://assets.coingecko.com/coins/images/1047/small/kucoin.png',
@@ -51,6 +53,15 @@ const EXCHANGE_SVG: Record<string, string> = {
     <rect width="24" height="24" rx="4" fill="#00D5FF"/>
     <path d="M12 2L2 7V17L12 22L22 17V7L12 2Z" fill="white"/>
     <path d="M12 6L8 8V16L12 18L16 16V8L12 6Z" fill="#00D5FF"/>
+  </svg>`,
+  htx: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <rect width="24" height="24" rx="4" fill="#1B4AEF"/>
+    <path d="M12 4C8.5 7 7 10.5 7 13.5C7 17 9.2 20 12 20C14.8 20 17 17 17 13.5C17 10.5 15.5 7 12 4Z" fill="white"/>
+    <circle cx="12" cy="14" r="2.5" fill="#1B4AEF"/>
+  </svg>`,
+  weex: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <rect width="24" height="24" rx="4" fill="#00E676"/>
+    <path d="M4 8L8 16L12 10L16 16L20 8" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
   </svg>`,
   coinex: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
     <rect width="24" height="24" rx="4" fill="#5542F6"/>

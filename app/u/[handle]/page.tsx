@@ -126,25 +126,14 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
         // 如果找不到，从 user_profiles 表获取注册用户信息（profiles 表不存在）
         if (!profileData) {
           
-          // 检查是否在排行榜上（即使不是trader，也可能在trader_sources中）
-          // 尝试所有数据源查找
-          const sources = ['binance_web3', 'binance', 'bybit', 'bitget', 'mexc', 'coinex']
-          let foundInRanking = false
-          
-          for (const sourceType of sources) {
-            const { data: sourceData } = await supabase
-              .from('trader_sources')
-              .select('source_trader_id')
-              .eq('source', sourceType)
-              .eq('handle', decodedHandle)
-              .maybeSingle()
-            
-            if (sourceData) {
-              foundInRanking = true
-              break
-            }
-          }
-          
+          // 检查是否在排行榜上 - 使用单一查询替代循环
+          const { data: rankingData } = await supabase
+            .from('trader_sources')
+            .select('source_trader_id')
+            .eq('handle', decodedHandle)
+            .limit(1)
+
+          const foundInRanking = !!(rankingData && rankingData.length > 0)
           _isTraderInRanking = foundInRanking
 
           // 直接使用 user_profiles 表（因为 profiles 表不存在）
@@ -320,22 +309,14 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
                     .select('*', { count: 'exact', head: true })
                     .eq('follower_id', newProfile.id)
 
-                  // 检查新创建的用户是否在排行榜上
-                  let foundInRankingForNewProfile = false
-                  const sources = ['binance_web3', 'binance', 'bybit', 'bitget', 'mexc', 'coinex']
-                  for (const sourceType of sources) {
-                    const { data: sourceData } = await supabase
-                      .from('trader_sources')
-                      .select('source_trader_id')
-                      .eq('source', sourceType)
-                      .eq('handle', newProfile.handle || defaultHandle)
-                      .maybeSingle()
-                    
-                    if (sourceData) {
-                      foundInRankingForNewProfile = true
-                      break
-                    }
-                  }
+                  // 检查新创建的用户是否在排行榜上 - 使用单一查询
+                  const { data: rankingCheck } = await supabase
+                    .from('trader_sources')
+                    .select('source_trader_id')
+                    .eq('handle', newProfile.handle || defaultHandle)
+                    .limit(1)
+
+                  const foundInRankingForNewProfile = !!(rankingCheck && rankingCheck.length > 0)
                   
                   // 使用新创建的 profile
                   profileData = {
@@ -473,6 +454,11 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
           }
         }
 
+        // 先设置 profile 让页面尽快显示
+        setProfile(profileData)
+        setLoading(false) // 提前结束 loading 状态
+
+        // 并行加载其他数据（非阻塞）
         const [performanceData, statsData, portfolioData, feedData, similarData] = await Promise.all([
           getTraderPerformance(handle).catch(() => null),
           getTraderStats(handle).catch(() => null),
@@ -481,61 +467,67 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
           getSimilarTraders(handle).catch(() => []),
         ])
 
-        // 获取用户的 Pro 徽章显示状态
-        if (profileData?.id) {
-          const { data: userSettings } = await supabase
-            .from('user_profiles')
-            .select('show_pro_badge')
-            .eq('id', profileData.id)
-            .maybeSingle()
-          
-          if (userSettings?.show_pro_badge !== false) {
-            // 获取订阅等级
-            const { data: subscription } = await supabase
-              .from('subscriptions')
-              .select('tier, status')
-              .eq('user_id', profileData.id)
-              .eq('status', 'active')
-              .maybeSingle()
-            
-            if (subscription && subscription.tier === 'pro') {
-              setProBadgeTier('pro')
-            }
-          }
-        }
-
-        // Fetch social links
-        if (profileData?.id) {
-          const { data: socialData } = await supabase
-            .from('user_profiles')
-            .select('social_twitter, social_telegram, social_discord, social_github, social_website')
-            .eq('id', profileData.id)
-            .maybeSingle()
-
-          if (socialData) {
-            setSocialLinks({
-              twitter: (socialData as Record<string, unknown>).social_twitter as string || undefined,
-              telegram: (socialData as Record<string, unknown>).social_telegram as string || undefined,
-              discord: (socialData as Record<string, unknown>).social_discord as string || undefined,
-              github: (socialData as Record<string, unknown>).social_github as string || undefined,
-              website: (socialData as Record<string, unknown>).social_website as string || undefined,
-            })
-          }
-        }
-
-        setProfile(profileData)
         setPerformance(performanceData)
         setStats(statsData)
         setPortfolio(portfolioData)
         setFeed(feedData)
         setSimilarTraders(similarData)
+
+        // 异步加载 Pro 徽章和社交链接（不阻塞主流程）
+        if (profileData?.id) {
+          // 使用 Promise.all 并行加载 Pro 状态和社交链接
+          Promise.all([
+            // Pro 徽章
+            (async () => {
+              try {
+                const { data: userSettings } = await supabase
+                  .from('user_profiles')
+                  .select('show_pro_badge')
+                  .eq('id', profileData.id)
+                  .maybeSingle()
+
+                if (userSettings?.show_pro_badge !== false) {
+                  const { data: subscription } = await supabase
+                    .from('subscriptions')
+                    .select('tier, status')
+                    .eq('user_id', profileData.id)
+                    .eq('status', 'active')
+                    .maybeSingle()
+
+                  if (subscription && subscription.tier === 'pro') {
+                    setProBadgeTier('pro')
+                  }
+                }
+              } catch { /* ignore */ }
+            })(),
+            // 社交链接
+            (async () => {
+              try {
+                const { data: socialData } = await supabase
+                  .from('user_profiles')
+                  .select('social_twitter, social_telegram, social_discord, social_github, social_website')
+                  .eq('id', profileData.id)
+                  .maybeSingle()
+
+                if (socialData) {
+                  setSocialLinks({
+                    twitter: (socialData as Record<string, unknown>).social_twitter as string || undefined,
+                    telegram: (socialData as Record<string, unknown>).social_telegram as string || undefined,
+                    discord: (socialData as Record<string, unknown>).social_discord as string || undefined,
+                    github: (socialData as Record<string, unknown>).social_github as string || undefined,
+                    website: (socialData as Record<string, unknown>).social_website as string || undefined,
+                  })
+                }
+              } catch { /* ignore */ }
+            })(),
+          ])
+        }
       } catch (error) {
         console.error('Error loading user data:', error)
         setProfile(null)
         setLoadError(true)
+        setLoading(false) // 确保错误时也关闭 loading
         showToast(isZh ? '加载用户数据失败' : 'Failed to load user data', 'error')
-      } finally {
-        setLoading(false)
       }
     }
 
@@ -698,6 +690,7 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
                   returnScore={performance.return_score}
                   drawdownScore={performance.drawdown_score}
                   stabilityScore={performance.stability_score}
+                  source={profile?.source}
                 />
               )}
               {/* 交易员动态 - 使用 PostFeed 组件（置顶帖子会自动显示在最上面） */}

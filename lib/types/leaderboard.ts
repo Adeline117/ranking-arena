@@ -89,6 +89,7 @@ export const GRANULAR_PLATFORMS = [
   'bitmart',
   'phemex',
   'htx',
+  'htx_futures',
   'weex',
 ] as const
 
@@ -113,6 +114,7 @@ export const PLATFORM_CATEGORY: Record<GranularPlatform, TradingCategory> = {
   bitmart: 'futures',
   phemex: 'futures',
   htx: 'futures',
+  htx_futures: 'futures',
   weex: 'futures',
 }
 
@@ -414,6 +416,7 @@ export const PLATFORM_RATE_LIMITS: Record<GranularPlatform, RateLimiterConfig> =
   bitmart: { max_requests: 15, window_ms: 60_000, min_delay_ms: 3000, max_delay_ms: 6000, max_concurrent: 2 },
   phemex: { max_requests: 15, window_ms: 60_000, min_delay_ms: 3000, max_delay_ms: 6000, max_concurrent: 2 },
   htx: { max_requests: 15, window_ms: 60_000, min_delay_ms: 3000, max_delay_ms: 6000, max_concurrent: 2 },
+  htx_futures: { max_requests: 15, window_ms: 60_000, min_delay_ms: 3000, max_delay_ms: 6000, max_concurrent: 2 },
   weex: { max_requests: 10, window_ms: 60_000, min_delay_ms: 4000, max_delay_ms: 8000, max_concurrent: 1 },
 }
 

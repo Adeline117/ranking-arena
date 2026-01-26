@@ -138,16 +138,17 @@ export default function CategoryRankingTabs({
 // 过滤函数
 export function filterByCategory(source: string, category: CategoryType): boolean {
   if (category === 'all') return true
-  
+
   const sourceLower = source.toLowerCase()
-  
+
   switch (category) {
     case 'futures':
-      return sourceLower.includes('futures') || 
-             sourceLower === 'bybit' || 
-             sourceLower === 'mexc' || 
-             sourceLower === 'coinex' || 
-             sourceLower === 'kucoin'
+      return sourceLower.includes('futures') ||
+             sourceLower === 'bybit' ||
+             sourceLower === 'mexc' ||
+             sourceLower === 'coinex' ||
+             sourceLower === 'kucoin' ||
+             sourceLower === 'weex'
     case 'spot':
       return sourceLower.includes('spot')
     case 'web3':
@@ -161,7 +162,7 @@ export function filterByCategory(source: string, category: CategoryType): boolea
 export function getSourcesForCategory(category: CategoryType): string[] {
   switch (category) {
     case 'futures':
-      return ['binance_futures', 'bybit', 'bitget_futures', 'mexc', 'coinex', 'kucoin']
+      return ['binance_futures', 'bybit', 'bitget_futures', 'mexc', 'htx_futures', 'coinex', 'kucoin', 'weex']
     case 'spot':
       return ['binance_spot', 'bitget_spot']
     case 'web3':

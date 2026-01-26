@@ -33,6 +33,8 @@ export interface OverviewPerformanceCardProps {
   returnScore?: number | null
   drawdownScore?: number | null
   stabilityScore?: number | null
+  // Data source for period mapping notes
+  source?: string
 }
 
 type Period = '7D' | '30D' | '90D'
@@ -82,6 +84,19 @@ function MiniSparkline({ data, color, width = 80, height = 28 }: { data: number[
  * Performance卡片 - 交易员主页核心指标
  * 优化版：信息层级分明，主指标突出，次指标用徽章展示
  */
+// 数据来源周期映射说明
+const DATA_SOURCE_NOTES: Record<string, { zh: string; en: string; periods: Record<string, string> }> = {
+  weex: {
+    zh: 'Weex 数据说明',
+    en: 'Weex Data Note',
+    periods: {
+      '7D': '--',        // Weex 无 7D 数据
+      '30D': '3周',      // 30D 实际是 Weex 3周数据
+      '90D': '全时间',   // 90D 实际是 Weex 全时间数据
+    },
+  },
+}
+
 export default function OverviewPerformanceCard({
   performance,
   profitableWeeksPct,
@@ -91,6 +106,7 @@ export default function OverviewPerformanceCard({
   returnScore,
   drawdownScore,
   stabilityScore,
+  source,
 }: OverviewPerformanceCardProps) {
   void profitableWeeksPct
   const { t, language } = useLanguage()
@@ -225,41 +241,80 @@ export default function OverviewPerformanceCard({
           </Box>
 
           {/* Period Selector */}
-          <Box
-            style={{
-              display: 'flex',
-              gap: 4,
-              background: tokens.colors.bg.tertiary,
-              padding: 3,
-              borderRadius: tokens.radius.lg,
-              border: `1px solid ${tokens.colors.border.primary}`,
-            }}
-          >
-            {(['7D', '30D', '90D'] as Period[]).map((p) => {
-              const label = p === '7D' ? '7D' : p === '30D' ? '30D' : '90D'
-              return (
-                <button
-                  key={p}
-                  onClick={() => handlePeriodChange(p)}
-                  style={{
-                    padding: `6px 14px`,
-                    minHeight: 36,
-                    borderRadius: tokens.radius.md,
-                    border: 'none',
-                    background: period === p ? tokens.colors.bg.primary : 'transparent',
-                    color: period === p ? tokens.colors.text.primary : tokens.colors.text.secondary,
-                    fontSize: 13,
-                    fontWeight: period === p ? 600 : 400,
-                    cursor: 'pointer',
-                    transition: 'all 0.2s ease',
-                    fontFamily: tokens.typography.fontFamily.sans.join(', '),
-                    boxShadow: period === p ? '0 2px 8px rgba(0,0,0,0.1)' : 'none',
-                  }}
-                >
-                  {label}
-                </button>
-              )
-            })}
+          <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
+            {/* 数据来源提示 */}
+            {source && DATA_SOURCE_NOTES[source.toLowerCase()] && (
+              <Box
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  padding: `4px 8px`,
+                  background: tokens.colors.accent.warning + '15',
+                  borderRadius: tokens.radius.md,
+                  border: `1px solid ${tokens.colors.accent.warning}30`,
+                }}
+                title={language === 'zh'
+                  ? `${DATA_SOURCE_NOTES[source.toLowerCase()].zh}: 30D=${DATA_SOURCE_NOTES[source.toLowerCase()].periods['30D']}, 90D=${DATA_SOURCE_NOTES[source.toLowerCase()].periods['90D']}`
+                  : `${DATA_SOURCE_NOTES[source.toLowerCase()].en}: 30D=${DATA_SOURCE_NOTES[source.toLowerCase()].periods['30D']}, 90D=${DATA_SOURCE_NOTES[source.toLowerCase()].periods['90D']}`
+                }
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={tokens.colors.accent.warning} strokeWidth="2">
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="12" y1="16" x2="12" y2="12" />
+                  <line x1="12" y1="8" x2="12.01" y2="8" />
+                </svg>
+                <Text size="xs" style={{ color: tokens.colors.accent.warning, fontWeight: 500 }}>
+                  {DATA_SOURCE_NOTES[source.toLowerCase()].periods[period] || period}
+                </Text>
+              </Box>
+            )}
+
+            <Box
+              style={{
+                display: 'flex',
+                gap: 4,
+                background: tokens.colors.bg.tertiary,
+                padding: 3,
+                borderRadius: tokens.radius.lg,
+                border: `1px solid ${tokens.colors.border.primary}`,
+              }}
+            >
+              {(['7D', '30D', '90D'] as Period[]).map((p) => {
+                const sourceNote = source && DATA_SOURCE_NOTES[source.toLowerCase()]
+                const isDisabled = !!(sourceNote && sourceNote.periods[p] === '--')
+                const label = p === '7D' ? '7D' : p === '30D' ? '30D' : '90D'
+                return (
+                  <button
+                    key={p}
+                    onClick={() => !isDisabled && handlePeriodChange(p)}
+                    disabled={isDisabled}
+                    style={{
+                      padding: `6px 14px`,
+                      minHeight: 36,
+                      borderRadius: tokens.radius.md,
+                      border: 'none',
+                      background: period === p ? tokens.colors.bg.primary : 'transparent',
+                      color: isDisabled
+                        ? tokens.colors.text.tertiary
+                        : period === p
+                          ? tokens.colors.text.primary
+                          : tokens.colors.text.secondary,
+                      fontSize: 13,
+                      fontWeight: period === p ? 600 : 400,
+                      cursor: isDisabled ? 'not-allowed' : 'pointer',
+                      transition: 'all 0.2s ease',
+                      fontFamily: tokens.typography.fontFamily.sans.join(', '),
+                      boxShadow: period === p ? '0 2px 8px rgba(0,0,0,0.1)' : 'none',
+                      opacity: isDisabled ? 0.5 : 1,
+                    }}
+                    title={isDisabled ? (language === 'zh' ? '此数据源无此周期数据' : 'No data for this period') : undefined}
+                  >
+                    {label}
+                  </button>
+                )
+              })}
+            </Box>
           </Box>
         </Box>
 

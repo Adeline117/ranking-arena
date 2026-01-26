@@ -9,7 +9,7 @@ export * from './mexc'
 export * from './coinex'
 export * from './encryption'
 
-export type Exchange = 'binance' | 'bybit' | 'bitget' | 'mexc' | 'coinex' | 'okx' | 'kucoin' | 'gate'
+export type Exchange = 'binance' | 'bybit' | 'bitget' | 'mexc' | 'htx' | 'weex' | 'coinex' | 'okx' | 'kucoin' | 'gate'
 
 export interface ExchangeConnection {
   id: string
@@ -108,6 +108,8 @@ export function getExchangeName(exchange: Exchange): string {
     bybit: 'Bybit',
     bitget: 'Bitget',
     mexc: 'MEXC',
+    htx: 'HTX',
+    weex: 'Weex',
     coinex: 'CoinEx',
     okx: 'OKX',
     kucoin: 'KuCoin',
@@ -117,4 +119,4 @@ export function getExchangeName(exchange: Exchange): string {
 }/**
  * 支持的交易所列表
  */
-export const SUPPORTED_EXCHANGES: Exchange[] = ['binance', 'bybit', 'bitget', 'mexc', 'coinex']
+export const SUPPORTED_EXCHANGES: Exchange[] = ['binance', 'bybit', 'bitget', 'mexc', 'htx', 'weex', 'coinex']
