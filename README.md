@@ -1,6 +1,33 @@
 # Arena
 
-加密货币交易员排行榜与社区平台。聚合 Binance、Bybit、Bitget、MEXC、OKX、KuCoin、CoinEx、GMX 等交易所的跟单数据，提供透明的交易员排名和社区讨论功能。
+加密货币交易员排行榜与社区平台。聚合 20+ CEX/DEX 交易所和 DeFi 协议的跟单数据，提供透明的交易员排名和社区讨论功能。
+
+## 最近更新 ✨
+
+### v2.0 - 2026年1月
+
+**新增交易所支持:**
+- HTX (火币) - 期货跟单排行榜
+- Weex - 期货跟单排行榜
+- Hyperliquid - L1 永续 DEX 排行榜
+- dYdX - 永续 DEX 排行榜
+- Uniswap - 现货交易排行榜 (via Dune)
+
+**DeFi 数据集成:**
+- Dune Analytics 连接器 - 链上数据聚合
+- GMX / Hyperliquid / Uniswap 链上排行榜
+- Nansen 钱包分析集成
+
+**架构升级:**
+- 统一连接器架构 (`connectors/`) - 标准化数据源接入
+- Cloudflare Worker 代理 - 绕过交易所 IP 限制
+- 原子计数器函数 - 防止并发竞争条件
+- Rankings API 优化 - 更好的筛选和排序
+
+**移动端改进:**
+- PullToRefresh 下拉刷新组件
+- 推送通知 API
+- 响应式 CSS 优化
 
 ## 目录
 
@@ -26,14 +53,26 @@
 ### 核心功能
 
 - **多交易所排行榜** - 聚合主流交易所 Copy Trading 数据
-  - Binance (期货/现货/Web3)
-  - Bybit
-  - Bitget (期货/现货)
-  - MEXC
-  - OKX Web3
-  - KuCoin
-  - CoinEx
-  - GMX (去中心化)
+  - **CEX 交易所**
+    - Binance (期货/现货/Web3)
+    - Bybit
+    - Bitget (期货/现货)
+    - MEXC
+    - OKX (期货/Web3钱包)
+    - KuCoin
+    - CoinEx
+    - BitMart
+    - Phemex
+    - HTX (火币) ✨ *新增*
+    - Weex ✨ *新增*
+  - **DeFi / 链上协议**
+    - GMX (Arbitrum 永续)
+    - Hyperliquid (L1 永续) ✨ *新增*
+    - dYdX (永续 DEX) ✨ *新增*
+    - Uniswap (现货 DEX) ✨ *新增*
+  - **链上数据源**
+    - Dune Analytics (GMX / Hyperliquid / Uniswap / DeFi)
+    - Nansen (钱包分析)
 
 - **Arena Score 评分系统** - 综合评估交易员的收益能力和风险控制
   - 收益分 (85%): 基于年化收益强度
@@ -60,6 +99,36 @@
 - **风险提醒** - 监控关注交易员的异常变动
 - **组合建议** - 基于风险偏好的交易员组合推荐
 - **Premium 订阅** - 解锁高级功能
+- **Cloudflare Worker 代理** - 绕过交易所 IP 限制 ✨ *新增*
+- **移动端推送通知** - 实时接收交易员动态 ✨ *新增*
+
+### 数据连接器架构 (Connectors)
+
+项目采用统一的连接器架构管理所有数据源:
+
+```
+connectors/
+├── base/              # 基础连接器接口和类型定义
+├── binance/           # Binance 期货/现货/Web3
+├── bybit/             # Bybit 期货
+├── bitget/            # Bitget 期货/现货
+├── mexc/              # MEXC 期货
+├── okx/               # OKX 期货/钱包
+├── kucoin/            # KuCoin 期货
+├── coinex/            # CoinEx 期货
+├── bitmart/           # BitMart 期货
+├── phemex/            # Phemex 期货
+├── htx/               # HTX 期货 ✨
+├── weex/              # Weex 期货 ✨
+├── gmx/               # GMX 永续 (Arbitrum)
+├── hyperliquid/       # Hyperliquid 永续 ✨
+├── dydx/              # dYdX 永续 ✨
+├── dune/              # Dune Analytics 链上数据 ✨
+│   ├── gmx.ts         # GMX 链上排行榜
+│   ├── hyperliquid.ts # Hyperliquid 链上排行榜
+│   ├── uniswap.ts     # Uniswap 交易排行榜
+│   └── defi.ts        # 综合 DeFi 排行榜
+└── nansen/            # Nansen 钱包分析
 
 ## 技术栈
 
@@ -111,25 +180,48 @@
 ```
 ranking-arena/
 ├── app/                          # Next.js App Router
-│   ├── api/                      # API 路由 (110+ endpoints)
+│   ├── api/                      # API 路由 (120+ endpoints)
 │   │   ├── traders/              # 交易员相关
 │   │   ├── posts/                # 帖子相关
 │   │   ├── groups/               # 小组相关
+│   │   ├── rankings/             # 排行榜 API ✨
 │   │   ├── exchange/             # 交易所绑定
+│   │   ├── scrape/               # 数据抓取 (含代理) ✨
+│   │   ├── push/                 # 推送通知 ✨
 │   │   ├── cron/                 # 定时任务
 │   │   ├── admin/                # 管理后台
 │   │   └── stripe/               # 支付相关
 │   ├── components/               # React 组件
 │   │   ├── Base/                 # 基础组件 (Button, Text, Box)
-│   │   ├── UI/                   # UI 组件 (Card, Modal, Toast)
+│   │   ├── UI/                   # UI 组件 (Card, Modal, Toast, PullToRefresh)
 │   │   ├── Trader/               # 交易员组件
 │   │   ├── Features/             # 功能组件
 │   │   ├── Charts/               # 图表组件
+│   │   ├── Providers/            # Context Providers ✨
 │   │   └── Layout/               # 布局组件
 │   ├── trader/[handle]/          # 交易员详情页
 │   ├── groups/                   # 小组功能
+│   ├── compare/                  # 交易员对比 ✨
+│   ├── hot/                      # 热门交易员 ✨
 │   ├── admin/                    # 管理后台
 │   └── [其他路由]/
+│
+├── connectors/                   # 数据连接器 ✨
+│   ├── base/                     # 基础连接器接口
+│   ├── binance/                  # Binance 连接器
+│   ├── bybit/                    # Bybit 连接器
+│   ├── bitget/                   # Bitget 连接器
+│   ├── htx/                      # HTX 连接器 ✨
+│   ├── weex/                     # Weex 连接器 ✨
+│   ├── gmx/                      # GMX 连接器
+│   ├── hyperliquid/              # Hyperliquid 连接器 ✨
+│   ├── dydx/                     # dYdX 连接器 ✨
+│   ├── dune/                     # Dune Analytics 连接器 ✨
+│   └── ...                       # 其他交易所
+│
+├── cloudflare-worker/            # Cloudflare Worker 代理 ✨
+│   ├── src/                      # Worker 源码
+│   └── wrangler.toml             # Wrangler 配置
 │
 ├── lib/                          # 共享库
 │   ├── api/                      # API 工具 (中间件/错误处理/验证)
@@ -142,6 +234,7 @@ ranking-arena/
 │   ├── types/                    # TypeScript 类型
 │   ├── analytics/                # 埋点分析
 │   ├── cache/                    # 缓存策略
+│   ├── cron/                     # Cron 工具 ✨
 │   ├── compliance/               # 合规 (GDPR)
 │   └── security/                 # 安全工具
 │
@@ -267,6 +360,25 @@ ls supabase/migrations/
 00003_add_season_id_constraint.sql
 00004_performance_optimizations.sql
 ...
+00021_atomic_counter_functions.sql  # 原子计数器函数 ✨
+```
+
+### 原子计数器函数 ✨
+
+数据库提供原子操作函数，防止并发竞争条件:
+
+```sql
+-- 点赞/取消点赞
+SELECT * FROM increment_like_count(post_id);
+SELECT * FROM decrement_like_count(post_id);
+
+-- 收藏/取消收藏
+SELECT * FROM increment_bookmark_count(post_id);
+SELECT * FROM decrement_bookmark_count(post_id);
+
+-- 评论计数
+SELECT * FROM increment_comment_count(post_id);
+SELECT * FROM decrement_comment_count(post_id);
 ```
 
 ## 开发指南
@@ -383,8 +495,11 @@ E2E 测试覆盖:
 | 热门交易员 | 每15分钟 | 抓取热门交易员数据 |
 | 关注交易员 | 每小时 | 更新关注交易员数据 |
 | 数据新鲜度检查 | 每3小时 | 检测数据是否过期 |
-| 各交易所数据 | 每4小时 | 抓取各交易所排行榜 |
+| CEX 交易所数据 | 每4小时 | 抓取各 CEX 排行榜 |
+| DeFi 协议数据 | 每4小时 | 抓取 GMX/Hyperliquid/dYdX ✨ |
+| Dune 链上数据 | 每6小时 | 抓取链上排行榜数据 ✨ |
 | 交易员详情 | 每2小时 | 抓取交易员详细信息 |
+| 发现新排行榜 | 每日 | 自动发现新交易所/协议 ✨ |
 
 ### 手动抓取
 
@@ -393,10 +508,16 @@ E2E 测试覆盖:
 npm run scrape:details
 npm run scrape:details:force   # 强制更新所有
 
-# 使用独立脚本
+# CEX 交易所脚本
 node scripts/fetch_binance_trader_details.mjs
 node scripts/fetch_bybit_trader_details.mjs
 node scripts/fetch_bitget_trader_details.mjs
+
+# DeFi / 链上数据脚本 ✨
+node scripts/import/import_hyperliquid.mjs
+node scripts/import/import_dydx.mjs
+node scripts/import/import_dune.mjs
+node scripts/import/import_okx_futures.mjs
 ```
 
 ### Worker 服务
@@ -409,6 +530,32 @@ npm install
 npm run dev                     # 开发模式
 npm run scrape:all             # 抓取所有交易所
 npm run scrape:binance         # 只抓取 Binance
+```
+
+### Cloudflare Worker 代理 ✨
+
+用于绕过交易所 IP 限制的代理服务:
+
+```bash
+cd cloudflare-worker
+npm install
+npx wrangler dev               # 本地开发
+npx wrangler deploy            # 部署到 Cloudflare
+```
+
+**支持的交易所代理:**
+- Binance API
+- Bybit API
+- Bitget API
+
+**使用方式:**
+```bash
+# API 端点
+POST /api/scrape/proxy
+{
+  "exchange": "binance",
+  "endpoint": "/api/v1/copy-trading/..."
+}
 ```
 
 ## 部署
@@ -465,6 +612,26 @@ API 遵循 RESTful 设计，主要端点:
 | POST | `/api/users/follow` | 关注用户 |
 | GET | `/api/following` | 获取关注列表 |
 | GET | `/api/notifications` | 获取通知 |
+
+### 排行榜 API ✨
+
+| 方法 | 端点 | 说明 |
+|------|------|------|
+| GET | `/api/rankings` | 统一排行榜接口 (支持筛选/排序) |
+| GET | `/api/platforms/health` | 平台健康状态 |
+
+**排行榜查询参数:**
+- `platform` - 交易所/协议 (binance, bybit, gmx, hyperliquid...)
+- `market_type` - 市场类型 (futures, spot, perp, web3)
+- `time_range` - 时间范围 (7d, 30d, 90d)
+- `sort_by` - 排序字段 (roi, arena_score, followers)
+- `limit` / `offset` - 分页
+
+### 数据抓取 API ✨
+
+| 方法 | 端点 | 说明 |
+|------|------|------|
+| POST | `/api/scrape/proxy` | 通过 CF Worker 代理抓取 |
 
 ### 健康检查
 

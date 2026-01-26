@@ -3,9 +3,11 @@ import { getTraderByHandle } from '@/lib/data/trader'
 import { createClient } from '@supabase/supabase-js'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || ''
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+// 使用 anon key 而非 service role key，确保 RLS 策略被遵守
+// 公开的 trader 信息应该通过 RLS 允许匿名读取
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
 
-const adminSupabase = supabaseUrl && supabaseKey 
+const publicSupabase = supabaseUrl && supabaseKey
   ? createClient(supabaseUrl, supabaseKey, { auth: { persistSession: false } })
   : null
 
@@ -16,7 +18,7 @@ export async function generateMetadata({ params }: { params: { handle: string } 
   const canonicalUrl = `${baseUrl}/trader/${encodeURIComponent(handle)}`
   
   try {
-    const profile = adminSupabase ? await getTraderByHandle(handle) : null
+    const profile = publicSupabase ? await getTraderByHandle(handle) : null
     
     if (profile) {
       const title = `${profile.handle} · Arena`

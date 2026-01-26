@@ -17,12 +17,13 @@ import type {
 } from '../base/types';
 
 const API_BASE = 'https://api.hyperliquid.xyz';
+const STATS_API = 'https://stats-data.hyperliquid.xyz/Mainnet';
 const APP_BASE = 'https://app.hyperliquid.xyz';
 
 const WINDOW_MAP: Record<Window, string> = {
   '7d': 'week',
   '30d': 'month',
-  '90d': 'allTime', // Hyperliquid may not have 90d specifically
+  '90d': 'allTime',
 };
 
 export class HyperliquidConnector extends BaseConnector {
@@ -33,25 +34,26 @@ export class HyperliquidConnector extends BaseConnector {
 
   async discoverLeaderboard(window: Window, limit = 100): Promise<ConnectorResult<LeaderboardEntry[]>> {
     try {
-      // Hyperliquid uses POST to /info endpoint with action type
-      const response = await this.postJSON<HyperliquidLeaderboardResponse>(
-        `${API_BASE}/info`,
-        {
-          type: 'leaderboard',
-          timeWindow: WINDOW_MAP[window],
-        }
+      // Use the stats-data endpoint which has full leaderboard (29k+ traders)
+      const response = await this.fetchJSON<HyperliquidLeaderboardResponse>(
+        `${STATS_API}/leaderboard`
       );
 
       if (!response?.leaderboardRows) {
-        // Try clearinghouse state approach
-        return this.tryClearinghouseApproach(window, limit);
+        // Fallback to API info endpoint
+        return this.tryApiInfoApproach(window, limit);
       }
 
       const entries: LeaderboardEntry[] = response.leaderboardRows
         .map((item, idx) => {
-          const pnl = Number(item.accountValue) - Number(item.windowPerformances?.[WINDOW_MAP[window]]?.startingValue || item.accountValue);
-          const startingValue = Number(item.windowPerformances?.[WINDOW_MAP[window]]?.startingValue || 1);
-          const roi = startingValue > 0 ? (pnl / startingValue) * 100 : this.parseNumber(item.roi);
+          // Stats API returns windowPerformances as array: [["day", {...}], ["week", {...}], ...]
+          const windowKey = WINDOW_MAP[window];
+          const windowData = Array.isArray(item.windowPerformances)
+            ? item.windowPerformances.find(([key]) => key === windowKey)?.[1]
+            : item.windowPerformances?.[windowKey];
+
+          const pnl = windowData?.pnl ? Number(windowData.pnl) : this.parseNumber(item.pnl);
+          const roi = windowData?.roi ? Number(windowData.roi) * 100 : this.parseNumber(item.roi);
 
           return {
             trader_key: item.ethAddress.toLowerCase(),
@@ -60,8 +62,8 @@ export class HyperliquidConnector extends BaseConnector {
             profile_url: `${APP_BASE}/@${item.ethAddress}`,
             rank: idx + 1,
             metrics: {
-              roi_pct: roi ?? this.parseNumber(item.pnl),
-              pnl_usd: pnl || this.parseNumber(item.pnl),
+              roi_pct: roi,
+              pnl_usd: pnl,
               win_rate: null,
               max_drawdown: null,
               trades_count: null,
@@ -86,9 +88,9 @@ export class HyperliquidConnector extends BaseConnector {
     }
   }
 
-  private async tryClearinghouseApproach(window: Window, limit: number): Promise<ConnectorResult<LeaderboardEntry[]>> {
+  private async tryApiInfoApproach(window: Window, limit: number): Promise<ConnectorResult<LeaderboardEntry[]>> {
     try {
-      // Alternative: use the clearinghouse state for top traders
+      // Fallback: use the /info API endpoint
       const response = await this.postJSON<{ leaderboard: Record<string, unknown>[] }>(
         `${API_BASE}/info`,
         { type: 'frontendLeaderboard', timeWindow: WINDOW_MAP[window] }
@@ -217,11 +219,18 @@ interface HyperliquidLeaderboardResponse {
   leaderboardRows: HyperliquidLeaderEntry[];
 }
 
-interface HyperliquidLeaderEntry {
-  ethAddress: string;
-  displayName: string;
-  accountValue: string;
+interface WindowPerformance {
   pnl: string;
   roi: string;
-  windowPerformances: Record<string, { startingValue: string }>;
+  vlm: string;
+}
+
+interface HyperliquidLeaderEntry {
+  ethAddress: string;
+  displayName: string | null;
+  accountValue: string;
+  pnl?: string;
+  roi?: string;
+  // Stats API returns array format: [["day", {...}], ["week", {...}], ...]
+  windowPerformances: [string, WindowPerformance][] | Record<string, WindowPerformance>;
 }
