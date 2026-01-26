@@ -18,9 +18,10 @@
 export const PLATFORMS = [
   // CEX
   'binance', 'bybit', 'bitget', 'mexc', 'coinex', 'okx', 'kucoin',
-  'bitmart', 'phemex', 'htx', 'weex',
+  'bitmart', 'phemex', 'htx', 'weex', 'bingx', 'gateio', 'xt', 'pionex',
+  'lbank', 'blofin',
   // DEX / On-chain / Perp
-  'gmx', 'dydx', 'hyperliquid',
+  'gmx', 'dydx', 'hyperliquid', 'kwenta', 'gains', 'mux',
   // Data/Intelligence (enrichment only)
   'nansen', 'dune',
   // Dune on-chain leaderboards
@@ -34,8 +35,9 @@ export type Platform = typeof PLATFORMS[number]
 /** Platforms that provide leaderboard data */
 export const LEADERBOARD_PLATFORMS = [
   'binance', 'bybit', 'bitget', 'mexc', 'coinex', 'okx', 'kucoin',
-  'bitmart', 'phemex', 'htx', 'weex',
-  'gmx', 'dydx', 'hyperliquid',
+  'bitmart', 'phemex', 'htx', 'weex', 'bingx', 'gateio', 'xt', 'pionex',
+  'lbank', 'blofin',
+  'gmx', 'dydx', 'hyperliquid', 'kwenta', 'gains', 'mux',
   // Dune on-chain leaderboards
   'dune_gmx', 'dune_hyperliquid', 'dune_uniswap', 'dune_defi',
 ] as const
@@ -97,6 +99,15 @@ export const GRANULAR_PLATFORMS = [
   'htx',
   'htx_futures',
   'weex',
+  'bingx',
+  'gateio',
+  'xt',
+  'pionex',
+  'kwenta',
+  'gains',
+  'mux',
+  'lbank',
+  'blofin',
   // Dune on-chain leaderboards
   'dune_gmx',
   'dune_hyperliquid',
@@ -129,6 +140,15 @@ export const PLATFORM_CATEGORY: Record<GranularPlatform, TradingCategory> = {
   htx: 'futures',
   htx_futures: 'futures',
   weex: 'futures',
+  bingx: 'futures',
+  gateio: 'futures',
+  xt: 'futures',
+  pionex: 'futures',
+  kwenta: 'onchain',
+  gains: 'onchain',
+  mux: 'onchain',
+  lbank: 'futures',
+  blofin: 'futures',
   // Dune on-chain leaderboards
   dune_gmx: 'onchain',
   dune_hyperliquid: 'onchain',
@@ -438,6 +458,15 @@ export const PLATFORM_RATE_LIMITS: Record<GranularPlatform, RateLimiterConfig> =
   htx: { max_requests: 15, window_ms: 60_000, min_delay_ms: 3000, max_delay_ms: 6000, max_concurrent: 2 },
   htx_futures: { max_requests: 15, window_ms: 60_000, min_delay_ms: 3000, max_delay_ms: 6000, max_concurrent: 2 },
   weex: { max_requests: 10, window_ms: 60_000, min_delay_ms: 4000, max_delay_ms: 8000, max_concurrent: 1 },
+  bingx: { max_requests: 20, window_ms: 60_000, min_delay_ms: 3000, max_delay_ms: 6000, max_concurrent: 2 },
+  gateio: { max_requests: 20, window_ms: 60_000, min_delay_ms: 3000, max_delay_ms: 6000, max_concurrent: 2 },
+  xt: { max_requests: 15, window_ms: 60_000, min_delay_ms: 3000, max_delay_ms: 6000, max_concurrent: 2 },
+  pionex: { max_requests: 10, window_ms: 60_000, min_delay_ms: 4000, max_delay_ms: 8000, max_concurrent: 1 },
+  kwenta: { max_requests: 30, window_ms: 60_000, min_delay_ms: 1000, max_delay_ms: 3000, max_concurrent: 5 },
+  gains: { max_requests: 30, window_ms: 60_000, min_delay_ms: 1000, max_delay_ms: 3000, max_concurrent: 5 },
+  mux: { max_requests: 30, window_ms: 60_000, min_delay_ms: 1000, max_delay_ms: 3000, max_concurrent: 5 },
+  lbank: { max_requests: 20, window_ms: 60_000, min_delay_ms: 3000, max_delay_ms: 6000, max_concurrent: 2 },
+  blofin: { max_requests: 30, window_ms: 60_000, min_delay_ms: 2000, max_delay_ms: 5000, max_concurrent: 3 },
   // Dune API rate limits (Free tier: 10 queries/day, Plus tier: 1000 queries/month)
   dune_gmx: { max_requests: 5, window_ms: 60_000, min_delay_ms: 12000, max_delay_ms: 20000, max_concurrent: 1 },
   dune_hyperliquid: { max_requests: 5, window_ms: 60_000, min_delay_ms: 12000, max_delay_ms: 20000, max_concurrent: 1 },

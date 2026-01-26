@@ -78,9 +78,19 @@ export default {
       return handleBitgetCopyTrading(request, url);
     }
 
+    // 快捷端点: /kucoin/copy-trading
+    if (url.pathname === '/kucoin/copy-trading') {
+      return handleKuCoinCopyTrading(request, url);
+    }
+
+    // 快捷端点: /binance/spot-copy-trading
+    if (url.pathname === '/binance/spot-copy-trading') {
+      return handleBinanceSpotCopyTrading(request, url);
+    }
+
     return Response.json({
       error: 'Not found',
-      endpoints: ['/health', '/proxy', '/binance/copy-trading', '/bybit/copy-trading', '/bitget/copy-trading']
+      endpoints: ['/health', '/proxy', '/binance/copy-trading', '/binance/spot-copy-trading', '/bybit/copy-trading', '/bitget/copy-trading', '/kucoin/copy-trading']
     }, { status: 404 });
   },
 };
@@ -250,6 +260,89 @@ async function handleBitgetCopyTrading(request: Request, url: URL): Promise<Resp
   } catch (error) {
     return Response.json({
       error: 'Bitget API error',
+      details: error instanceof Error ? error.message : 'Unknown'
+    }, {
+      status: 500,
+      headers: { 'Access-Control-Allow-Origin': '*' },
+    });
+  }
+}
+
+async function handleKuCoinCopyTrading(request: Request, url: URL): Promise<Response> {
+  const page = parseInt(url.searchParams.get('page') || '1');
+  const pageSize = parseInt(url.searchParams.get('pageSize') || '12');
+
+  // KuCoin 跟单 API
+  const apiUrl = 'https://www.kucoin.com/_api/copy-trading/future/public/leaderboard';
+
+  try {
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+        'Accept': 'application/json',
+        'Origin': 'https://www.kucoin.com',
+        'Referer': 'https://www.kucoin.com/copy-trading/leaderboard',
+      },
+      body: JSON.stringify({
+        currentPage: page,
+        pageSize: pageSize,
+        sortBy: 'ROI',
+        sortDirection: 'DESC',
+      }),
+    });
+
+    const data = await response.json();
+
+    return Response.json(data, {
+      headers: { 'Access-Control-Allow-Origin': '*' },
+    });
+  } catch (error) {
+    return Response.json({
+      error: 'KuCoin API error',
+      details: error instanceof Error ? error.message : 'Unknown'
+    }, {
+      status: 500,
+      headers: { 'Access-Control-Allow-Origin': '*' },
+    });
+  }
+}
+
+async function handleBinanceSpotCopyTrading(request: Request, url: URL): Promise<Response> {
+  const period = url.searchParams.get('period') || '90D';
+  const page = parseInt(url.searchParams.get('page') || '1');
+
+  const apiUrl = 'https://www.binance.com/bapi/futures/v1/friendly/future/copy-trade/home-page/query-list';
+
+  try {
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+        'Accept': 'application/json',
+        'Origin': 'https://www.binance.com',
+        'Referer': 'https://www.binance.com/en/copy-trading/spot',
+      },
+      body: JSON.stringify({
+        pageNumber: page,
+        pageSize: 20,
+        timeRange: period,
+        dataType: 'ROI',
+        favoriteOnly: false,
+        tradeType: 'SPOT',
+      }),
+    });
+
+    const data = await response.json();
+
+    return Response.json(data, {
+      headers: { 'Access-Control-Allow-Origin': '*' },
+    });
+  } catch (error) {
+    return Response.json({
+      error: 'Binance Spot API error',
       details: error instanceof Error ? error.message : 'Unknown'
     }, {
       status: 500,

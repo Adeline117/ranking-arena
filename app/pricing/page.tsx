@@ -611,10 +611,18 @@ export default function PricingPage() {
           >
             <Box>
               <Text size="3xl" weight="black" style={{ color: 'var(--color-pro-gradient-start)' }}>
-                8
+                22
               </Text>
               <Text size="sm" color="secondary">
                 {language === 'zh' ? '交易所覆盖' : 'Exchanges Supported'}
+              </Text>
+            </Box>
+            <Box>
+              <Text size="3xl" weight="black" style={{ color: 'var(--color-pro-gradient-start)' }}>
+                26+
+              </Text>
+              <Text size="sm" color="secondary">
+                {language === 'zh' ? '数据源' : 'Data Sources'}
               </Text>
             </Box>
             <Box>

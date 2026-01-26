@@ -40,19 +40,19 @@ export const viewport: Viewport = {
 
 export const metadata: Metadata = {
   title: {
-    default: "Arena · 加密交易员排行榜与社区",
+    default: "Arena · Crypto Trader Leaderboard & Community",
     template: "%s · Arena",
   },
   description:
-    "聚合 Binance/Bybit/Bitget/MEXC/CoinEx 等交易员 90 天 ROI 排行，支持关注、发帖与个人主页。",
+    "Aggregating 90-day ROI rankings from Binance, Bybit, Bitget, MEXC, OKX, KuCoin, CoinEx, GMX and more. Follow top traders and join the community.",
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "https://www.arenafi.org"),
   applicationName: "Arena",
   keywords: [
     "Copy Trading",
     "Trader Ranking",
-    "加密交易员",
-    "ROI 排行",
-    "跟单",
+    "Crypto Traders",
+    "ROI Leaderboard",
+    "Trading Community",
   ],
   manifest: "/manifest.json",
   appleWebApp: {
@@ -65,9 +65,9 @@ export const metadata: Metadata = {
   },
   openGraph: {
     type: "website",
-    title: "Arena · 加密交易员排行榜与社区",
+    title: "Arena · Crypto Trader Leaderboard & Community",
     description:
-      "聚合多交易所 90 天 ROI 排行，实时更新，支持关注与发帖。",
+      "Aggregating 90-day ROI rankings from multiple exchanges. Real-time updates, follow traders and share insights.",
     url: process.env.NEXT_PUBLIC_APP_URL || "https://www.arenafi.org",
     siteName: "Arena",
     images: [
@@ -91,7 +91,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="zh-CN" data-theme="dark" translate="no" className={`${inter.variable} ${notoSansSC.variable}`}>
+    <html lang="en" data-theme="dark" translate="no" className={`${inter.variable} ${notoSansSC.variable}`}>
       <body
         className="font-sans antialiased"
         style={{ fontFamily: 'var(--font-inter), var(--font-noto-sans-sc), system-ui, sans-serif' }}

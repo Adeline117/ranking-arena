@@ -9,6 +9,7 @@
 import { useEffect, useRef, useCallback, useState } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import type { RealtimeChannel, RealtimePostgresChangesPayload } from '@supabase/supabase-js'
+import { realtimeLogger } from '@/lib/utils/logger'
 
 // ============================================
 // 类型定义
@@ -194,7 +195,7 @@ export function useRealtime<T extends Record<string, unknown>>(
     }
 
     const delay = calculateBackoffDelay(retryCount, retryBaseDelay)
-    console.log(`[Realtime] 将在 ${delay}ms 后重连 (尝试 ${retryCount + 1}/${maxRetries})`)
+    realtimeLogger.info(`将在 ${delay}ms 后重连 (尝试 ${retryCount + 1}/${maxRetries})`)
     
     setStatus('reconnecting')
     isReconnectingRef.current = true
@@ -318,14 +319,14 @@ export function useRealtime<T extends Record<string, unknown>>(
     if (typeof window === 'undefined') return
 
     const handleOnline = () => {
-      console.log('[Realtime] 网络恢复，尝试重连')
+      realtimeLogger.info('网络恢复，尝试重连')
       if (status !== 'connected' && enabled) {
         reconnect()
       }
     }
 
     const handleOffline = () => {
-      console.log('[Realtime] 网络断开')
+      realtimeLogger.warn('网络断开')
       setStatus('disconnected')
       setError('网络连接断开')
     }

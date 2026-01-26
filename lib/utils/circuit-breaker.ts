@@ -8,6 +8,10 @@
  * - HALF_OPEN: 半开状态，允许少量请求测试服务是否恢复
  */
 
+import { createLogger } from './logger'
+
+const cbLogger = createLogger('CircuitBreaker')
+
 export type CircuitState = 'CLOSED' | 'OPEN' | 'HALF_OPEN'
 
 export interface CircuitBreakerOptions {
@@ -95,7 +99,7 @@ export class CircuitBreaker {
         this.transitionTo('HALF_OPEN')
       } else {
         // 熔断器打开，直接失败或返回降级结果
-        console.warn(`[CircuitBreaker] ${this.name} 熔断器打开，拒绝请求`)
+        cbLogger.warn(`${this.name} 熔断器打开，拒绝请求`)
         return this.handleFailure(new Error('Circuit breaker is OPEN'))
       }
     }
@@ -143,7 +147,7 @@ export class CircuitBreaker {
     this.lastFailureTime = Date.now()
     this.failures++
 
-    console.error(`[CircuitBreaker] ${this.name} 请求失败 (${this.failures}/${this.failureThreshold}):`, error)
+    cbLogger.error(`${this.name} 请求失败 (${this.failures}/${this.failureThreshold}):`, error)
 
     if (this.state === 'HALF_OPEN') {
       // 半开状态失败，回到熔断状态
@@ -159,7 +163,7 @@ export class CircuitBreaker {
    */
   private async handleFailure<T>(error: unknown): Promise<T> {
     if (this.fallback) {
-      console.log(`[CircuitBreaker] ${this.name} 使用降级响应`)
+      cbLogger.info(`${this.name} 使用降级响应`)
       return this.fallback()
     }
     throw error
@@ -182,7 +186,7 @@ export class CircuitBreaker {
     const oldState = this.state
     this.state = newState
 
-    console.log(`[CircuitBreaker] ${this.name} 状态变化: ${oldState} -> ${newState}`)
+    cbLogger.info(`${this.name} 状态变化: ${oldState} -> ${newState}`)
 
     if (newState === 'HALF_OPEN') {
       this.halfOpenRequests = 0
@@ -278,7 +282,7 @@ export async function withRetry<T>(
       }
 
       onRetry?.(attempt + 1, error, delay)
-      console.log(`[Retry] 第 ${attempt + 1} 次重试，等待 ${Math.round(delay)}ms`)
+      cbLogger.info(`第 ${attempt + 1} 次重试，等待 ${Math.round(delay)}ms`)
 
       await sleep(delay)
     }

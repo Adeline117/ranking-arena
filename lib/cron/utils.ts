@@ -14,8 +14,10 @@ import {
   isTransientError,
   getAllCircuitBreakerStats,
 } from '@/lib/utils/circuit-breaker'
+import { createLogger } from '@/lib/utils/logger'
 
 const execAsync = promisify(exec)
+const cronLogger = createLogger('Cron')
 
 // 脚本执行超时时间（毫秒）
 export const SCRIPT_TIMEOUT = 180000 // 3分钟
@@ -27,17 +29,17 @@ function getPlatformCircuitBreaker(platform: string) {
     successThreshold: 1, // 1 次成功后恢复
     timeout: 300000, // 5 分钟后尝试恢复
     onStateChange: async (from, to, name) => {
-      console.log(`[Cron] 熔断器 ${name} 状态变化: ${from} -> ${to}`)
+      cronLogger.info(`熔断器 ${name} 状态变化: ${from} -> ${to}`)
       
       // 记录熔断器状态变化
       if (to === 'OPEN') {
-        console.error(`[Cron] 熔断器已打开: ${name} - 平台 ${platform} 连续失败次数过多`)
+        cronLogger.error(`熔断器已打开: ${name} - 平台 ${platform} 连续失败次数过多`)
       }
       if (from === 'OPEN' && to === 'HALF_OPEN') {
-        console.log(`[Cron] 熔断器尝试恢复: ${name} - 平台 ${platform}`)
+        cronLogger.info(`熔断器尝试恢复: ${name} - 平台 ${platform}`)
       }
       if (from === 'HALF_OPEN' && to === 'CLOSED') {
-        console.log(`[Cron] 熔断器已恢复: ${name} - 平台 ${platform}`)
+        cronLogger.info(`熔断器已恢复: ${name} - 平台 ${platform}`)
       }
     },
   })
@@ -148,7 +150,7 @@ export function isAuthorized(req: Request): boolean {
   }
 
   if (!cronSecret) {
-    console.error('[Cron] CRON_SECRET 环境变量未设置')
+    cronLogger.error('CRON_SECRET 环境变量未设置')
     return false
   }
 
@@ -200,7 +202,7 @@ export async function executeScript(
   const startTime = Date.now()
 
   try {
-    console.log(`[Cron] 开始执行 ${name}...`)
+    cronLogger.info(`开始执行 ${name}...`)
 
     // 使用重试机制执行脚本
     const { stdout, stderr } = await withRetry(
@@ -213,13 +215,13 @@ export async function executeScript(
           return isTransientError(error)
         },
         onRetry: (attempt, error, delay) => {
-          console.warn(`[Cron] ${name} 第 ${attempt} 次重试，等待 ${Math.round(delay)}ms`)
+          cronLogger.warn(`${name} 第 ${attempt} 次重试，等待 ${Math.round(delay)}ms`)
         },
       }
     )
 
     const duration = Date.now() - startTime
-    console.log(`[Cron] ${name} 完成，耗时 ${duration}ms`)
+    cronLogger.info(`${name} 完成，耗时 ${duration}ms`)
 
     return {
       name,
@@ -230,7 +232,7 @@ export async function executeScript(
   } catch (error: unknown) {
     const duration = Date.now() - startTime
     const errorMessage = error instanceof Error ? error.message : String(error)
-    console.error(`[Cron] ${name} 失败:`, errorMessage)
+    cronLogger.error(`${name} 失败:`, errorMessage)
 
     return {
       name,
@@ -291,15 +293,15 @@ export async function executePlatformScripts(platform: string): Promise<{
       })
       failedScripts.push(platform)
     }
-    console.error(`[Cron] 平台 ${platform} 执行被熔断器阻止或失败:`, error)
+    cronLogger.error(`平台 ${platform} 执行被熔断器阻止或失败:`, error)
   }
 
   // 记录执行结果
   const circuitBreakerState = circuitBreaker.getState()
   if (failedScripts.length > 0) {
-    console.error(`[Cron] 爬虫执行失败: ${platform} - 失败脚本: ${failedScripts.join(', ')} - 熔断器状态: ${circuitBreakerState}`)
+    cronLogger.error(`爬虫执行失败: ${platform} - 失败脚本: ${failedScripts.join(', ')} - 熔断器状态: ${circuitBreakerState}`)
   } else if (circuitBreakerState === 'OPEN') {
-    console.warn(`[Cron] 平台熔断器已打开: ${platform} - 请求将被阻止`)
+    cronLogger.warn(`平台熔断器已打开: ${platform} - 请求将被阻止`)
   }
 
   return {
@@ -330,7 +332,7 @@ export async function logCronExecution(
     ])
   } catch (error) {
     // 静默处理日志表不存在的情况
-    console.warn('[Cron] 无法记录日志:', error)
+    cronLogger.warn('无法记录日志:', error)
   }
 }
 
@@ -380,7 +382,7 @@ export async function sendScrapeSummaryAlert(
       ?.map(d => `${d.platform}: ${d.scripts.join(', ')}`)
       .join('\n') || '未知'
 
-    console.error(`[Cron] 爬虫批量执行完成 - 有失败
+    cronLogger.error(`爬虫批量执行完成 - 有失败
 平台: ${successPlatforms}/${totalPlatforms} 成功
 脚本: ${successScripts}/${totalScripts} 成功
 耗时: ${Math.round(duration / 1000)}s
@@ -388,6 +390,6 @@ export async function sendScrapeSummaryAlert(
 失败详情:
 ${failedList}`)
   } else {
-    console.log(`[Cron] 爬虫批量执行完成: ${successPlatforms}/${totalPlatforms} 平台成功, 耗时 ${Math.round(duration / 1000)}s`)
+    cronLogger.info(`爬虫批量执行完成: ${successPlatforms}/${totalPlatforms} 平台成功, 耗时 ${Math.round(duration / 1000)}s`)
   }
 }

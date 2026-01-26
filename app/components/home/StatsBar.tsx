@@ -33,6 +33,13 @@ const dataSources: DataSource[] = [
   { exchange: 'Weex', market: 'futures', key: 'weex' },
   { exchange: 'KuCoin', market: 'futures', key: 'kucoin' },
   { exchange: 'CoinEx', market: 'futures', key: 'coinex' },
+  { exchange: 'Phemex', market: 'futures', key: 'phemex' },
+  { exchange: 'BingX', market: 'futures', key: 'bingx' },
+  { exchange: 'Gate.io', market: 'futures', key: 'gateio' },
+  { exchange: 'XT.com', market: 'futures', key: 'xt' },
+  { exchange: 'Pionex', market: 'futures', key: 'pionex' },
+  { exchange: 'LBank', market: 'futures', key: 'lbank' },
+  { exchange: 'BloFin', market: 'futures', key: 'blofin' },
   // CEX 现货
   { exchange: 'Binance', market: 'spot', key: 'binance_spot' },
   { exchange: 'Bitget', market: 'spot', key: 'bitget_spot' },
@@ -42,6 +49,9 @@ const dataSources: DataSource[] = [
   { exchange: 'GMX', market: 'on-chain', key: 'gmx' },
   { exchange: 'Hyperliquid', market: 'on-chain', key: 'hyperliquid' },
   { exchange: 'dYdX', market: 'on-chain', key: 'dydx' },
+  { exchange: 'Kwenta', market: 'on-chain', key: 'kwenta' },
+  { exchange: 'Gains', market: 'on-chain', key: 'gains' },
+  { exchange: 'MUX', market: 'on-chain', key: 'mux' },
 ]
 
 const marketConfig: Record<string, { label: string; color: string; icon: React.ReactNode }> = {

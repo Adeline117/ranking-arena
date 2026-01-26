@@ -210,19 +210,28 @@ async function saveTraders(traders, period) {
         followers: null,
         arena_score: arenaScore,
         captured_at: capturedAt,
-        raw_data: {
-          volume: trader.volume,
-          maxCapital: trader.maxCapital,
-          closedCount: trader.closedCount,
-        },
       });
 
       if (error) {
-        errors++;
+        // 如果是重复键错误，尝试更新
+        if (error.code === '23505') {
+          const { error: updateError } = await supabase
+            .from('trader_snapshots')
+            .update({ roi: trader.roi, pnl: trader.pnl, arena_score: arenaScore, captured_at: capturedAt })
+            .eq('source', SOURCE)
+            .eq('source_trader_id', trader.address)
+            .eq('season_id', period);
+          if (!updateError) saved++;
+          else errors++;
+        } else {
+          if (errors < 3) console.log('   错误: ' + error.message);
+          errors++;
+        }
       } else {
         saved++;
       }
     } catch (e) {
+      if (errors < 3) console.log('   异常: ' + e.message);
       errors++;
     }
 
