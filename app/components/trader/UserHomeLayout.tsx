@@ -71,7 +71,7 @@ export default function UserHomeLayout({
                 Performance
               </Text>
               <Button variant="ghost" size="sm" onClick={handleViewPerformance}>
-                详情 →
+                {language === 'zh' ? '详情 →' : 'Details →'}
               </Button>
             </Box>
             <Box>
@@ -90,7 +90,7 @@ export default function UserHomeLayout({
         {feed.length > 0 && (
           <Box bg="secondary" p={6} radius="xl" border="primary">
             <Text size="lg" weight="black" style={{ marginBottom: tokens.spacing[4] }}>
-              动态
+              {language === 'zh' ? '动态' : 'Feed'}
             </Text>
             <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
               {feed.map((item) => (
@@ -153,7 +153,7 @@ export default function UserHomeLayout({
         {/* Badges */}
         <Box bg="secondary" p={6} radius="xl" border="primary" style={{ marginBottom: tokens.spacing[4] }}>
           <Text size="lg" weight="black" style={{ marginBottom: tokens.spacing[4] }}>
-            徽章
+            {language === 'zh' ? '徽章' : 'Badges'}
           </Text>
           <Box style={{ display: 'flex', flexWrap: 'wrap', gap: tokens.spacing[2] }}>
             <Box
@@ -167,7 +167,7 @@ export default function UserHomeLayout({
                 fontWeight: tokens.typography.fontWeight.bold,
               }}
             >
-              VIP交易者
+              {language === 'zh' ? 'VIP交易者' : 'VIP Trader'}
             </Box>
             <Box
               bg="primary"
@@ -180,12 +180,12 @@ export default function UserHomeLayout({
                 fontWeight: tokens.typography.fontWeight.bold,
               }}
             >
-              顶尖表现者
+              {language === 'zh' ? '顶尖表现者' : 'Top Performer'}
             </Box>
           </Box>
           {isOwnProfile && (
             <Button variant="ghost" size="md" style={{ width: '100%', marginTop: tokens.spacing[4] }} onClick={handleEditProfile}>
-              编辑个人资料
+              {language === 'zh' ? '编辑个人资料' : 'Edit Profile'}
             </Button>
           )}
         </Box>
@@ -193,11 +193,11 @@ export default function UserHomeLayout({
         {/* Joined Groups */}
         <Box bg="secondary" p={6} radius="xl" border="primary">
           <Text size="lg" weight="black" style={{ marginBottom: tokens.spacing[4] }}>
-            加入小组
+            {language === 'zh' ? '加入小组' : 'Joined Groups'}
           </Text>
           {groups.length === 0 ? (
             <Text size="sm" color="tertiary">
-              暂未加入任何小组
+              {language === 'zh' ? '暂未加入任何小组' : 'Not joined any groups yet'}
             </Text>
           ) : (
             <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>

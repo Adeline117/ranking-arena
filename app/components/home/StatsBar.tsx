@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo, memo } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
+import { useLanguage } from '../Providers/LanguageProvider'
 
 // Convert hex color to rgba with given alpha
 function hexToRgba(hex: string, alpha: number): string {
@@ -54,9 +55,9 @@ const dataSources: DataSource[] = [
   { exchange: 'MUX', market: 'on-chain', key: 'mux' },
 ]
 
-const marketConfig: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
+const getMarketConfig = (language: string): Record<string, { label: string; color: string; icon: React.ReactNode }> => ({
   futures: {
-    label: '合约',
+    label: language === 'zh' ? '合约' : 'Futures',
     color: '#3b82f6',
     icon: (
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -66,7 +67,7 @@ const marketConfig: Record<string, { label: string; color: string; icon: React.R
     ),
   },
   spot: {
-    label: '现货',
+    label: language === 'zh' ? '现货' : 'Spot',
     color: '#22c55e',
     icon: (
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -76,7 +77,7 @@ const marketConfig: Record<string, { label: string; color: string; icon: React.R
     ),
   },
   'on-chain': {
-    label: '链上',
+    label: language === 'zh' ? '链上' : 'On-chain',
     color: '#a855f7',
     icon: (
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -85,13 +86,14 @@ const marketConfig: Record<string, { label: string; color: string; icon: React.R
       </svg>
     ),
   },
-}
+})
 
 // ============================================
 // 单个数据源标签
 // ============================================
 
-const SourceTag = memo(function SourceTag({ source, isDark }: { source: DataSource; isDark: boolean }) {
+const SourceTag = memo(function SourceTag({ source, isDark, language }: { source: DataSource; isDark: boolean; language: string }) {
+  const marketConfig = getMarketConfig(language)
   const market = marketConfig[source.market]
   const tagBg = hexToRgba(market.color, isDark ? 0.03 : 0.08)
   const tagBorder = hexToRgba(market.color, isDark ? 0.14 : 0.25)
@@ -147,6 +149,7 @@ const SourceTag = memo(function SourceTag({ source, isDark }: { source: DataSour
 // ============================================
 
 export function StatsBar() {
+  const { language } = useLanguage()
   const [isDark, setIsDark] = useState(true)
 
   useEffect(() => {
@@ -167,7 +170,7 @@ export function StatsBar() {
   return (
     <Box
       role="region"
-      aria-label="数据来源"
+      aria-label={language === 'zh' ? '数据来源' : 'Data Sources'}
       style={{
         marginBottom: 16,
         overflow: 'hidden',
@@ -186,7 +189,7 @@ export function StatsBar() {
         }}
       >
         {items.map((source, index) => (
-          <SourceTag key={`${source.key}-${index}`} source={source} isDark={isDark} />
+          <SourceTag key={`${source.key}-${index}`} source={source} isDark={isDark} language={language} />
         ))}
       </Box>
     </Box>
