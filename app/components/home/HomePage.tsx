@@ -7,7 +7,7 @@ import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
 import TopNav from '../layout/TopNav'
 import MobileBottomNav from '../layout/MobileBottomNav'
-import ExchangeQuickConnect from '../exchange/ExchangeQuickConnect'
+// ExchangeQuickConnect 已移除 - 不在首页展示
 import { ErrorBoundary } from '../Providers/ErrorBoundary'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { JsonLd } from '../Providers/JsonLd'
@@ -15,6 +15,7 @@ import { generateWebSiteSchema, generateOrganizationSchema, combineSchemas } fro
 
 import RankingSection from './RankingSection'
 import StatsBar from './StatsBar'
+import PullToRefresh from '../ui/PullToRefresh'
 import { useTraderData, useAuth } from './hooks'
 import type { Trader } from '../ranking/RankingTable'
 import type { TimeRange } from './hooks/useTraderData'
@@ -72,6 +73,15 @@ export default function HomePage() {
     router.replace(`?${params.toString()}`, { scroll: false })
   }
 
+  // Pull-to-refresh handler (async for PullToRefresh component)
+  const handlePullRefresh = async () => {
+    if (refresh) {
+      refresh()
+      // Wait a bit for the refresh to process
+      await new Promise(resolve => setTimeout(resolve, 500))
+    }
+  }
+
   // 交易者对比状态
   const [compareTraders, setCompareTraders] = useState<Trader[]>([])
 
@@ -102,50 +112,52 @@ export default function HomePage() {
       {/* 顶部导航 */}
       <TopNav email={email} />
 
-      {/* 主体 */}
-      <Box
-        as="main"
-        className="container-padding page-enter has-mobile-nav"
-        style={{
-          maxWidth: 1200,
-          margin: '0 auto',
-          position: 'relative',
-          zIndex: 1,
-          padding: '16px 12px',
-        }}
-      >
-        {/* 快速绑定交易所 */}
-        <ExchangeQuickConnect />
-
-        {/* 数据来源滚动展示 */}
-        <StatsBar />
-
-        {/* 响应式三栏布局 */}
+      {/* 主体 - 包裹在 PullToRefresh 中实现下拉刷新 */}
+      <PullToRefresh onRefresh={handlePullRefresh} disabled={loading}>
         <Box
-          className="main-grid stagger-children"
+          as="main"
+          className="container-padding page-enter has-mobile-nav"
+          style={{
+            maxWidth: 1400,
+            margin: '0 auto',
+            position: 'relative',
+            zIndex: 1,
+            padding: '16px 16px',
+          }}
         >
-          {/* 左侧：热门讨论（移动端隐藏） */}
-          <Box className="hide-mobile">
-            <SidebarSection position="left" />
-          </Box>
 
-          {/* 中间：排名榜（始终显示） */}
-          <RankingSection
-            traders={traders}
-            loading={loading}
-            isLoggedIn={isLoggedIn}
-            activeTimeRange={activeTimeRange}
-            onTimeRangeChange={handleTimeRangeChange}
-            lastUpdated={lastUpdated}
-            onRefresh={refresh}
-          />
+          {/* 数据来源滚动展示 */}
+          <StatsBar />
 
-          {/* 右侧：市场数据（移动端隐藏） */}
-          <Box className="hide-mobile">
-            <SidebarSection position="right" />
+          {/* 响应式三栏布局 */}
+          <Box
+            className="main-grid stagger-children"
+          >
+            {/* 左侧：热门讨论（仅桌面端显示，1024px+） */}
+            <Box className="hide-tablet">
+              <SidebarSection position="left" />
+            </Box>
+
+            {/* 中间：排名榜（始终显示） */}
+            <Box style={{ minWidth: 0 }}>
+              <RankingSection
+                traders={traders}
+                loading={loading}
+                isLoggedIn={isLoggedIn}
+                activeTimeRange={activeTimeRange}
+                onTimeRangeChange={handleTimeRangeChange}
+                lastUpdated={lastUpdated}
+                onRefresh={refresh}
+              />
+            </Box>
+
+            {/* 右侧：市场数据（移动端隐藏） */}
+            <Box className="hide-mobile">
+              <SidebarSection position="right" />
+            </Box>
           </Box>
         </Box>
-      </Box>
+      </PullToRefresh>
 
       {/* 交易者对比面板 */}
       {compareTraders.length > 0 && (

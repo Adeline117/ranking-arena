@@ -19,7 +19,7 @@ import { GmxConnector } from './gmx';
 import { DydxConnector } from './dydx';
 import { HyperliquidConnector } from './hyperliquid';
 import { NansenConnector } from './nansen';
-import { DuneConnector } from './dune';
+import { DuneConnector, DuneGmxConnector, DuneHyperliquidConnector, DuneUniswapConnector, DuneDefiConnector } from './dune';
 
 export type ConnectorKey = `${Platform}:${MarketType}`;
 
@@ -44,6 +44,11 @@ const CONNECTOR_MAP: Record<string, () => IConnector> = {
   'hyperliquid:perp': () => new HyperliquidConnector(),
   'nansen:enrichment': () => new NansenConnector(),
   'dune:enrichment': () => new DuneConnector(),
+  // Dune on-chain leaderboards
+  'dune_gmx:perp': () => new DuneGmxConnector(),
+  'dune_hyperliquid:perp': () => new DuneHyperliquidConnector(),
+  'dune_uniswap:spot': () => new DuneUniswapConnector(),
+  'dune_defi:web3': () => new DuneDefiConnector(),
 };
 
 /**

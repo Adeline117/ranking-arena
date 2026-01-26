@@ -100,6 +100,11 @@ export const PLATFORM_SCRIPTS: Record<string, Array<{ name: string; script: stri
     { name: 'gmx_30d', script: 'scripts/import/import_gmx.mjs', args: ['30D'] },
     // GMX 没有 90D 数据
   ],
+  htx: [
+    { name: 'htx_futures_7d', script: 'scripts/import/import_htx.mjs', args: ['7D'] },
+    { name: 'htx_futures_30d', script: 'scripts/import/import_htx.mjs', args: ['30D'] },
+    { name: 'htx_futures_90d', script: 'scripts/import/import_htx.mjs', args: ['90D'] },
+  ],
 }
 
 export type ScriptResult = {

@@ -56,34 +56,33 @@ export const GET = withPublic(
 
     const suggestions: SearchSuggestion[] = []
 
-    // 搜索交易员（从 trader_sources_v2 表，利用 pg_trgm 模糊匹配）
+    // 搜索交易员（从 trader_sources 表）
     const { data: traders } = await supabase
-      .from('trader_sources_v2')
-      .select('trader_key, display_name, platform, profile_url')
-      .or(`display_name.ilike.%${sanitizedQuery}%,trader_key.ilike.%${sanitizedQuery}%`)
-      .eq('is_active', true)
+      .from('trader_sources')
+      .select('source_trader_id, handle, source')
+      .or(`handle.ilike.%${sanitizedQuery}%,source_trader_id.ilike.%${sanitizedQuery}%`)
       .limit(limit)
 
     if (traders?.length) {
-      // 获取最新快照数据（ROI + Arena Score）
-      const traderKeys = traders.map(t => t.trader_key)
+      // 获取最新快照数据（ROI + Arena Score）- 使用 trader_snapshots 表
+      const traderKeys = traders.map(t => t.source_trader_id)
       const { data: snapshots } = await supabase
-        .from('trader_snapshots_v2')
-        .select('trader_key, platform, roi_pct, arena_score, window')
-        .in('trader_key', traderKeys)
-        .eq('window', '90d')
-        .order('as_of_ts', { ascending: false })
+        .from('trader_snapshots')
+        .select('source_trader_id, source, roi, arena_score, season_id')
+        .in('source_trader_id', traderKeys)
+        .eq('season_id', '90D')
+        .order('captured_at', { ascending: false })
 
       // 构建 ROI 和 Arena Score 映射
       const roiMap = new Map<string, number>()
       const scoreMap = new Map<string, number>()
       snapshots?.forEach(s => {
-        const key = `${s.platform}:${s.trader_key}`
-        if (!roiMap.has(key) && s.roi_pct != null) {
-          roiMap.set(key, s.roi_pct)
+        const key = `${s.source}:${s.source_trader_id}`
+        if (!roiMap.has(key) && s.roi != null) {
+          roiMap.set(key, typeof s.roi === 'string' ? parseFloat(s.roi) : s.roi)
         }
         if (!scoreMap.has(key) && s.arena_score != null) {
-          scoreMap.set(key, s.arena_score)
+          scoreMap.set(key, typeof s.arena_score === 'string' ? parseFloat(s.arena_score) : s.arena_score)
         }
       })
 
@@ -102,20 +101,19 @@ export const GET = withPublic(
       }
 
       traders.forEach(trader => {
-        const key = `${trader.platform}:${trader.trader_key}`
+        const key = `${trader.source}:${trader.source_trader_id}`
         const roi = roiMap.get(key)
         const arenaScore = scoreMap.get(key)
-        const exchangeName = sourceLabels[trader.platform] || trader.platform
+        const exchangeName = sourceLabels[trader.source] || trader.source
 
         suggestions.push({
           type: 'trader',
-          value: trader.display_name || trader.trader_key,
-          label: `@${trader.display_name || trader.trader_key}`,
+          value: trader.handle || trader.source_trader_id,
+          label: `@${trader.handle || trader.source_trader_id}`,
           subLabel: roi !== undefined
             ? `${exchangeName} · ROI ${roi >= 0 ? '+' : ''}${roi.toFixed(1)}%`
             : exchangeName,
-          avatar: trader.profile_url,
-          source: trader.platform,
+          source: trader.source,
           roi,
           arenaScore,
         })

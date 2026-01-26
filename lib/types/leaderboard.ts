@@ -23,6 +23,8 @@ export const PLATFORMS = [
   'gmx', 'dydx', 'hyperliquid',
   // Data/Intelligence (enrichment only)
   'nansen', 'dune',
+  // Dune on-chain leaderboards
+  'dune_gmx', 'dune_hyperliquid', 'dune_uniswap', 'dune_defi',
   // Wallet (mapped/degraded)
   'okx_wallet',
 ] as const
@@ -34,6 +36,8 @@ export const LEADERBOARD_PLATFORMS = [
   'binance', 'bybit', 'bitget', 'mexc', 'coinex', 'okx', 'kucoin',
   'bitmart', 'phemex', 'htx', 'weex',
   'gmx', 'dydx', 'hyperliquid',
+  // Dune on-chain leaderboards
+  'dune_gmx', 'dune_hyperliquid', 'dune_uniswap', 'dune_defi',
 ] as const
 
 export type LeaderboardPlatform = typeof LEADERBOARD_PLATFORMS[number]
@@ -91,6 +95,11 @@ export const GRANULAR_PLATFORMS = [
   'htx',
   'htx_futures',
   'weex',
+  // Dune on-chain leaderboards
+  'dune_gmx',
+  'dune_hyperliquid',
+  'dune_uniswap',
+  'dune_defi',
 ] as const
 
 export type GranularPlatform = (typeof GRANULAR_PLATFORMS)[number]
@@ -116,6 +125,11 @@ export const PLATFORM_CATEGORY: Record<GranularPlatform, TradingCategory> = {
   htx: 'futures',
   htx_futures: 'futures',
   weex: 'futures',
+  // Dune on-chain leaderboards
+  dune_gmx: 'onchain',
+  dune_hyperliquid: 'onchain',
+  dune_uniswap: 'spot',
+  dune_defi: 'onchain',
 }
 
 // ============================================
@@ -418,6 +432,11 @@ export const PLATFORM_RATE_LIMITS: Record<GranularPlatform, RateLimiterConfig> =
   htx: { max_requests: 15, window_ms: 60_000, min_delay_ms: 3000, max_delay_ms: 6000, max_concurrent: 2 },
   htx_futures: { max_requests: 15, window_ms: 60_000, min_delay_ms: 3000, max_delay_ms: 6000, max_concurrent: 2 },
   weex: { max_requests: 10, window_ms: 60_000, min_delay_ms: 4000, max_delay_ms: 8000, max_concurrent: 1 },
+  // Dune API rate limits (Free tier: 10 queries/day, Plus tier: 1000 queries/month)
+  dune_gmx: { max_requests: 5, window_ms: 60_000, min_delay_ms: 12000, max_delay_ms: 20000, max_concurrent: 1 },
+  dune_hyperliquid: { max_requests: 5, window_ms: 60_000, min_delay_ms: 12000, max_delay_ms: 20000, max_concurrent: 1 },
+  dune_uniswap: { max_requests: 5, window_ms: 60_000, min_delay_ms: 12000, max_delay_ms: 20000, max_concurrent: 1 },
+  dune_defi: { max_requests: 5, window_ms: 60_000, min_delay_ms: 12000, max_delay_ms: 20000, max_concurrent: 1 },
 }
 
 // ============================================
@@ -649,6 +668,35 @@ export const FIELD_DEGRADATIONS: Record<string, FieldDegradation> = {
     reason: 'platform_not_provided',
     explanation_zh: '该平台未提供90天数据窗口',
     explanation_en: 'This platform does not provide 90-day window',
+    fallback: 'show_na',
+  },
+  // Dune on-chain data limitations
+  dune_gmx_followers: {
+    field: 'followers',
+    reason: 'not_applicable',
+    explanation_zh: 'Dune GMX 数据来自链上，无跟单功能',
+    explanation_en: 'Dune GMX data is on-chain, no copy trading',
+    fallback: 'show_na',
+  },
+  dune_hyperliquid_followers: {
+    field: 'followers',
+    reason: 'not_applicable',
+    explanation_zh: 'Dune Hyperliquid 数据来自链上，无跟单功能',
+    explanation_en: 'Dune Hyperliquid data is on-chain, no copy trading',
+    fallback: 'show_na',
+  },
+  dune_uniswap_roi: {
+    field: 'roi',
+    reason: 'different_calculation',
+    explanation_zh: 'Uniswap 交易量而非收益率',
+    explanation_en: 'Uniswap tracks volume, not ROI',
+    fallback: 'show_warning',
+  },
+  dune_defi_followers: {
+    field: 'followers',
+    reason: 'not_applicable',
+    explanation_zh: 'DeFi 钱包活动无跟单功能',
+    explanation_en: 'DeFi wallet activity has no copy trading',
     fallback: 'show_na',
   },
 }

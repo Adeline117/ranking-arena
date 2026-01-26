@@ -13,12 +13,11 @@ import { type PollChoice, type PostWithUserState, getPollWinner } from '@/lib/ty
 import { useToast } from '../ui/Toast'
 import { useDialog } from '../ui/Dialog'
 import { getCsrfHeaders } from '@/lib/api/client'
-import BookmarkModal from '../ui/BookmarkModal'
+import { DynamicBookmarkModal as BookmarkModal, DynamicCommentsModal as CommentsModal } from '../ui/dynamic'
 import { useUnifiedAuth } from '@/lib/hooks/useUnifiedAuth'
 import { usePostStore, type PostData } from '@/lib/stores/postStore'
 import { renderContentWithLinks, ARENA_PURPLE } from '@/lib/utils/content'
 import { usePostComments, type Comment } from './hooks/usePostComments'
-import CommentsModal from './CommentsModal'
 import { SectionErrorBoundary } from '../Utils/ErrorBoundary'
 import { PostSkeleton } from '../ui/Skeleton'
 
@@ -91,7 +90,7 @@ function AvatarLink({ handle, avatarUrl }: { handle?: string | null; avatarUrl?:
 
 type SortType = 'time' | 'likes'
 
-export default function PostFeed(props: { variant?: 'compact' | 'full'; layout?: 'list' | 'masonry'; groupId?: string; groupIds?: string[]; authorHandle?: string; initialPostId?: string | null; showSortButtons?: boolean; sortBy?: string } = {}) {
+export default function PostFeed(props: { variant?: 'compact' | 'full'; layout?: 'list' | 'masonry'; groupId?: string; groupIds?: string[]; authorHandle?: string; initialPostId?: string | null; showSortButtons?: boolean; sortBy?: string; limit?: number } = {}) {
   const { t, language } = useLanguage()
   const { showToast } = useToast()
   const { showDangerConfirm } = useDialog()
@@ -192,7 +191,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; layout?:
       setError(null)
 
       const params = new URLSearchParams()
-      params.set('limit', '20')
+      params.set('limit', String(props.limit || 20))
       // 根据排序类型设置排序方式
       if (props.sortBy) {
         params.set('sort_by', props.sortBy)
