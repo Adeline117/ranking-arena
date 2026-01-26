@@ -24,7 +24,7 @@ export async function generateMetadata({ params }: { params: { handle: string } 
       const title = `${profile.handle} · Arena`
       const description = profile.bio 
         ? `${profile.bio.substring(0, 150)}${profile.bio.length > 150 ? '...' : ''}`
-        : `查看 ${profile.handle} 的交易员资料，包括90天ROI、胜率、粉丝数等统计数据。`
+        : `View ${profile.handle}'s trader profile, including 90-day ROI, win rate, followers and more.`
       
       return {
         title,
@@ -65,7 +65,7 @@ export async function generateMetadata({ params }: { params: { handle: string } 
   // 默认metadata
   return {
     title: `${handle} · Arena`,
-    description: `查看 ${handle} 的交易员资料`,
+    description: `View ${handle}'s trader profile on Arena`,
     alternates: {
       canonical: canonicalUrl,
     },

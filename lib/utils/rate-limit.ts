@@ -6,6 +6,9 @@
 import { Ratelimit } from '@upstash/ratelimit'
 import { Redis } from '@upstash/redis'
 import { NextRequest, NextResponse } from 'next/server'
+import { createLogger } from './logger'
+
+const rateLimitLogger = createLogger('RateLimit')
 
 // Upstash Redis 客户端（限流专用）
 let redis: Redis | null = null
@@ -32,10 +35,10 @@ function getUpstashRedis(): Redis | null {
 
   try {
     redis = new Redis({ url, token })
-    console.log('[RateLimit] Upstash Redis 连接成功')
+    rateLimitLogger.info('Upstash Redis 连接成功')
     return redis
   } catch (error) {
-    console.warn('[RateLimit] Upstash Redis 连接失败，限流功能已禁用:', error)
+    rateLimitLogger.warn('Upstash Redis 连接失败，限流功能已禁用:', error)
     connectionFailed = true
     return null
   }
@@ -204,7 +207,7 @@ export async function checkRateLimit(
     return null // 未超过限制
   } catch (error) {
     // 限流服务出错时，允许请求通过（fail-open）
-    console.error('[RateLimit] 限流检查失败:', error)
+    rateLimitLogger.error('限流检查失败:', error)
     return null
   }
 }

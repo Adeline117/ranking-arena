@@ -25,6 +25,7 @@ import type {
   RateLimiterConfig,
   GranularPlatform,
 } from '../types/leaderboard'
+import { exchangeLogger } from '../utils/logger'
 import { PLATFORM_RATE_LIMITS } from '../types/leaderboard'
 import type { PlatformConnector, ConnectorConfig, RateLimiter } from './types'
 import { ConnectorError, DEFAULT_CONNECTOR_CONFIG } from './types'
@@ -468,7 +469,7 @@ export abstract class BaseConnectorLegacy {
 
           if (attempt < retries) {
             const backoff = Math.pow(2, attempt) * 1000 + Math.random() * 1000
-            console.warn(
+            exchangeLogger.warn(
               `[${this.platform}] ${label} attempt ${attempt + 1} failed, retrying in ${Math.round(backoff)}ms: ${lastError.message}`
             )
             await sleep(backoff)

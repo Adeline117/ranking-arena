@@ -1,14 +1,14 @@
 {
   "name": "Arena",
   "short_name": "Arena",
-  "description": "加密货币交易员排行榜与社区平台",
+  "description": "Crypto trader leaderboard and community platform",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0B0A10",
   "theme_color": "#8b6fa8",
   "orientation": "portrait-primary",
   "scope": "/",
-  "lang": "zh-CN",
+  "lang": "en",
   "icons": [
     {
       "src": "/icons/icon-72x72.png",

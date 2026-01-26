@@ -133,6 +133,15 @@ export async function initializeConnectors(): Promise<void> {
   const { HyperliquidPerpConnector } = await import('./platforms/hyperliquid-perp')
   const { DydxPerpConnector } = await import('./platforms/dydx-perp')
   const { GmxPerpConnector } = await import('./platforms/gmx-perp')
+  const { BingxFuturesConnector } = await import('./platforms/bingx-futures')
+  const { GateioFuturesConnector } = await import('./platforms/gateio-futures')
+  const { XtFuturesConnector } = await import('./platforms/xt-futures')
+  const { PionexFuturesConnector } = await import('./platforms/pionex-futures')
+  const { KwentaPerpConnector } = await import('./platforms/kwenta-perp')
+  const { GainsPerpConnector } = await import('./platforms/gains-perp')
+  const { MuxPerpConnector } = await import('./platforms/mux-perp')
+  const { LbankFuturesConnector } = await import('./platforms/lbank-futures')
+  const { BlofinFuturesConnector } = await import('./platforms/blofin-futures')
 
   // CEX Connectors
   connectorRegistry.register(new BinanceFuturesConnector())
@@ -146,11 +155,20 @@ export async function initializeConnectors(): Promise<void> {
   connectorRegistry.register(new PhemexFuturesConnector())
   connectorRegistry.register(new HtxFuturesConnector())
   connectorRegistry.register(new WeexFuturesConnector())
+  connectorRegistry.register(new BingxFuturesConnector())
+  connectorRegistry.register(new GateioFuturesConnector())
+  connectorRegistry.register(new XtFuturesConnector())
+  connectorRegistry.register(new PionexFuturesConnector())
+  connectorRegistry.register(new LbankFuturesConnector())
+  connectorRegistry.register(new BlofinFuturesConnector())
 
   // DEX Connectors
   connectorRegistry.register(new HyperliquidPerpConnector())
   connectorRegistry.register(new DydxPerpConnector())
   connectorRegistry.register(new GmxPerpConnector())
+  connectorRegistry.register(new KwentaPerpConnector())
+  connectorRegistry.register(new GainsPerpConnector())
+  connectorRegistry.register(new MuxPerpConnector())
 }
 
 // ============================================
