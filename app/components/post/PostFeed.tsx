@@ -1764,11 +1764,11 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
                   display: 'inline-block',
                 }}
               >
-                {openPost.group_name}
+                {language === 'zh' ? openPost.group_name : (openPost.group_name_en || openPost.group_name)}
               </Link>
             ) : (
               <div style={{ fontSize: 12, color: ARENA_PURPLE }}>
-                {openPost.group_name}
+                {language === 'zh' ? openPost.group_name : (openPost.group_name_en || openPost.group_name)}
               </div>
             )
           )}
