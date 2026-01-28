@@ -3,6 +3,8 @@
  * 提供图片加载优化、WebP 转换、尺寸调整等功能
  */
 
+import React from 'react'
+
 /**
  * 图片优化选项
  */
