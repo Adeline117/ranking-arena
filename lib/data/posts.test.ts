@@ -111,13 +111,17 @@ describe('getPosts', () => {
   test('should filter by author_handle when provided', async () => {
     const mockSupabase = createMockSupabase()
 
+    // Mock the user profile lookup (first call to supabase)
+    mockSupabase.maybeSingle.mockResolvedValueOnce({ data: { id: 'user123' }, error: null })
+
     mockSupabase.range.mockReturnValueOnce({
       ...mockSupabase,
       then: (resolve: MockResolve<unknown>) => resolve({ data: [], error: null }),
     })
 
     await getPosts(mockSupabase as any, { author_handle: 'testUser' })
-    expect(mockSupabase.eq).toHaveBeenCalledWith('author_handle', 'testUser')
+    // Should filter by author_id after finding user profile
+    expect(mockSupabase.eq).toHaveBeenCalledWith('author_id', 'user123')
   })
 })
 
@@ -144,9 +148,20 @@ describe('getPostById', () => {
       original_post_id: null,
     }
 
-    mockSupabase.maybeSingle
-      .mockResolvedValueOnce({ data: mockPost, error: null })
-      .mockResolvedValueOnce({ data: { avatar_url: 'https://example.com/avatar.png' }, error: null })
+    const mockProfile = {
+      id: 'user1',
+      handle: 'testUser',
+      avatar_url: 'https://example.com/avatar.png',
+      subscription_tier: null,
+      show_pro_badge: true,
+    }
+
+    // First maybeSingle for post, then in() returns profile array
+    mockSupabase.maybeSingle.mockResolvedValueOnce({ data: mockPost, error: null })
+    mockSupabase.in.mockImplementationOnce(() => ({
+      ...mockSupabase,
+      then: (resolve: MockResolve<unknown>) => resolve({ data: [mockProfile], error: null }),
+    }))
 
     const result = await getPostById(mockSupabase as any, 'post1')
     expect(result).not.toBeNull()

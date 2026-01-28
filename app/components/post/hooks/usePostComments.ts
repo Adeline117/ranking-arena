@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from 'react'
 import { getCsrfHeaders } from '@/lib/api/client'
-import { usePostStore } from '@/lib/stores/postStore'
+import { usePostStore, type CommentData } from '@/lib/stores/postStore'
 
 export type Comment = {
   id: string
@@ -10,6 +10,8 @@ export type Comment = {
   user_id?: string
   author_handle?: string
   author_avatar_url?: string
+  author_is_pro?: boolean
+  author_show_pro_badge?: boolean
   created_at: string
   like_count?: number
   user_liked?: boolean
@@ -21,6 +23,64 @@ interface UsePostCommentsOptions {
   showToast: (msg: string, type: 'success' | 'error' | 'warning') => void
   showDangerConfirm: (title: string, message: string) => Promise<boolean>
   onCommentCountChange?: (postId: string, delta: number) => void
+}
+
+type HttpMethod = 'GET' | 'POST' | 'DELETE'
+
+// Helper to build auth headers
+function buildAuthHeaders(accessToken: string | null): Record<string, string> {
+  if (!accessToken) return {}
+  return { Authorization: `Bearer ${accessToken}` }
+}
+
+// Helper for authenticated API calls with consistent error handling
+async function apiRequest<T>(
+  url: string,
+  method: HttpMethod,
+  accessToken: string | null,
+  body?: Record<string, unknown>
+): Promise<{ ok: boolean; status: number; data: T | null }> {
+  const headers: Record<string, string> = {
+    ...buildAuthHeaders(accessToken),
+  }
+
+  if (method !== 'GET') {
+    headers['Content-Type'] = 'application/json'
+    Object.assign(headers, getCsrfHeaders())
+  }
+
+  const response = await fetch(url, {
+    method,
+    headers,
+    body: body ? JSON.stringify(body) : undefined,
+  })
+
+  const data = await response.json().catch(() => null)
+  return { ok: response.ok, status: response.status, data }
+}
+
+// Map HTTP status to user-friendly error messages
+function getErrorMessage(status: number, fallback: string): string {
+  if (status === 401) return '登录已过期，请重新登录'
+  if (status === 403) return '权限不足'
+  if (status === 429) return '操作太快，稍等一下'
+  if (status >= 500) return '服务异常，请稍后重试'
+  return fallback
+}
+
+// Convert Comment to CommentData for store compatibility
+function toCommentData(comment: Comment): CommentData {
+  return {
+    id: comment.id,
+    content: comment.content,
+    user_id: comment.user_id,
+    author_handle: comment.author_handle || '匿名',
+    author_avatar_url: comment.author_avatar_url,
+    created_at: comment.created_at,
+    like_count: comment.like_count,
+    user_liked: comment.user_liked,
+    replies: comment.replies?.map(toCommentData),
+  }
 }
 
 export function usePostComments({
@@ -40,223 +100,166 @@ export function usePostComments({
   const [expandedReplies, setExpandedReplies] = useState<Record<string, boolean>>({})
   const [deletingCommentId, setDeletingCommentId] = useState<string | null>(null)
 
-  const loadComments = useCallback(async (postId: string) => {
-    try {
-      setLoadingComments(true)
-      const headers: Record<string, string> = {}
-      if (accessToken) {
-        headers['Authorization'] = `Bearer ${accessToken}`
-      }
-      const response = await fetch(`/api/posts/${postId}/comments`, { headers })
-      const json = await response.json()
+  // Auth guard helper
+  const requireAuth = useCallback((): boolean => {
+    if (!accessToken) {
+      showToast('请先登录', 'warning')
+      return false
+    }
+    return true
+  }, [accessToken, showToast])
 
-      if (response.ok && json.success) {
-        setComments(json.data?.comments || [])
-      } else {
-        setComments([])
-      }
-    } catch (_err) {
+  const loadComments = useCallback(async (postId: string): Promise<void> => {
+    setLoadingComments(true)
+    try {
+      const { ok, data } = await apiRequest<{ success: boolean; data?: { comments: Comment[] } }>(
+        `/api/posts/${postId}/comments`,
+        'GET',
+        accessToken
+      )
+      setComments(ok && data?.success ? data.data?.comments || [] : [])
+    } catch {
       setComments([])
     } finally {
       setLoadingComments(false)
     }
   }, [accessToken])
 
-  const submitComment = useCallback(async (postId: string) => {
-    if (!accessToken) {
-      showToast('请先登录', 'warning')
-      return
-    }
-
-    if (!newComment.trim()) return
+  const submitComment = useCallback(async (postId: string): Promise<void> => {
+    if (!requireAuth() || !newComment.trim()) return
 
     setSubmittingComment(true)
     try {
-      const response = await fetch(`/api/posts/${postId}/comments`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`,
-          ...getCsrfHeaders()
-        },
-        body: JSON.stringify({ content: newComment.trim() }),
-      })
+      const { ok, status, data } = await apiRequest<{ success: boolean; error?: string; data?: { comment: Comment } }>(
+        `/api/posts/${postId}/comments`,
+        'POST',
+        accessToken,
+        { content: newComment.trim() }
+      )
 
-      if (!response.ok) {
-        if (response.status === 401) {
-          showToast('登录已过期，请重新登录', 'error')
-        } else if (response.status === 403) {
-          showToast('权限不足', 'error')
-        } else if (response.status >= 500) {
-          showToast('服务异常，请稍后重试', 'error')
-        } else {
-          const json = await response.json().catch(() => null)
-          showToast(json?.error || '发表评论失败', 'error')
-        }
+      if (!ok) {
+        showToast(getErrorMessage(status, data?.error || '发表评论失败'), 'error')
         return
       }
 
-      const json = await response.json()
-
-      if (json.success && json.data?.comment) {
-        setComments(prev => [...prev, json.data.comment])
+      if (data?.success && data.data?.comment) {
+        const newComment = data.data.comment
+        setComments(prev => [...prev, newComment])
         setNewComment('')
-        usePostStore.getState().addComment(postId, json.data.comment)
+        usePostStore.getState().addComment(postId, toCommentData(newComment))
         onCommentCountChange?.(postId, 1)
       } else {
-        showToast(json.error || '发表评论失败', 'error')
+        showToast(data?.error || '发表评论失败', 'error')
       }
-    } catch (_err) {
+    } catch {
       showToast('网络异常，请重试', 'error')
     } finally {
       setSubmittingComment(false)
     }
-  }, [accessToken, newComment, showToast, onCommentCountChange])
+  }, [accessToken, newComment, requireAuth, showToast, onCommentCountChange])
 
-  const toggleCommentLike = useCallback(async (postId: string, commentId: string) => {
-    if (!accessToken) {
-      showToast('请先登录', 'warning')
-      return
-    }
+  const toggleCommentLike = useCallback(async (postId: string, commentId: string): Promise<void> => {
+    if (!requireAuth() || commentLikeLoading[commentId]) return
 
-    if (commentLikeLoading[commentId]) return
     setCommentLikeLoading(prev => ({ ...prev, [commentId]: true }))
-
     try {
-      const response = await fetch(`/api/posts/${postId}/comments/like`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`,
-          ...getCsrfHeaders()
-        },
-        body: JSON.stringify({ comment_id: commentId }),
-      })
+      const { ok, status, data } = await apiRequest<{ success: boolean; error?: string; data?: { like_count: number; liked: boolean } }>(
+        `/api/posts/${postId}/comments/like`,
+        'POST',
+        accessToken,
+        { comment_id: commentId }
+      )
 
-      const json = await response.json()
-
-      if (response.ok && json.success) {
+      if (ok && data?.success) {
         const updateCommentLike = (comment: Comment): Comment => {
           if (comment.id === commentId) {
-            return {
-              ...comment,
-              like_count: json.data.like_count,
-              user_liked: json.data.liked,
-            }
+            return { ...comment, like_count: data.data!.like_count, user_liked: data.data!.liked }
           }
           if (comment.replies) {
-            return {
-              ...comment,
-              replies: comment.replies.map(updateCommentLike),
-            }
+            return { ...comment, replies: comment.replies.map(updateCommentLike) }
           }
           return comment
         }
         setComments(prev => prev.map(updateCommentLike))
       } else {
-        if (response.status === 429) {
-          showToast('操作太快，稍等一下', 'warning')
-        } else if (response.status === 401) {
-          showToast('登录已过期', 'warning')
-        } else {
-          showToast(json.error || '点赞失败', 'error')
-        }
+        showToast(getErrorMessage(status, data?.error || '点赞失败'), status === 429 ? 'warning' : 'error')
       }
-    } catch (_err) {
+    } catch {
       showToast('网络错误', 'error')
     } finally {
       setCommentLikeLoading(prev => ({ ...prev, [commentId]: false }))
     }
-  }, [accessToken, commentLikeLoading, showToast])
+  }, [accessToken, commentLikeLoading, requireAuth, showToast])
 
-  const submitReply = useCallback(async (postId: string, parentId: string) => {
-    if (!accessToken) {
-      showToast('请先登录', 'warning')
-      return
-    }
-
-    if (!replyContent.trim()) return
+  const submitReply = useCallback(async (postId: string, parentId: string): Promise<void> => {
+    if (!requireAuth() || !replyContent.trim()) return
 
     setSubmittingReply(true)
     try {
-      const response = await fetch(`/api/posts/${postId}/comments`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`,
-          ...getCsrfHeaders()
-        },
-        body: JSON.stringify({ content: replyContent.trim(), parent_id: parentId }),
-      })
+      const { ok, data } = await apiRequest<{ success: boolean; error?: string; data?: { comment: Comment } }>(
+        `/api/posts/${postId}/comments`,
+        'POST',
+        accessToken,
+        { content: replyContent.trim(), parent_id: parentId }
+      )
 
-      const json = await response.json()
-
-      if (response.ok && json.success) {
-        const newReply = json.data.comment
-        setComments(prev => prev.map(c => {
-          if (c.id === parentId) {
-            return { ...c, replies: [...(c.replies || []), newReply] }
-          }
-          return c
-        }))
+      if (ok && data?.success && data.data?.comment) {
+        const newReply = data.data.comment
+        setComments(prev => prev.map(c =>
+          c.id === parentId ? { ...c, replies: [...(c.replies || []), newReply] } : c
+        ))
         setReplyContent('')
         setReplyingTo(null)
         setExpandedReplies(prev => ({ ...prev, [parentId]: true }))
         onCommentCountChange?.(postId, 1)
         showToast('已回复', 'success')
       } else {
-        showToast(json.error || '回复失败', 'error')
+        showToast(data?.error || '回复失败', 'error')
       }
-    } catch (err) {
-      console.error('[usePostComments] reply error:', err)
+    } catch {
       showToast('回复失败', 'error')
     } finally {
       setSubmittingReply(false)
     }
-  }, [accessToken, replyContent, showToast, onCommentCountChange])
+  }, [accessToken, replyContent, requireAuth, showToast, onCommentCountChange])
 
-  const deleteComment = useCallback(async (postId: string, commentId: string) => {
-    if (!accessToken) {
-      showToast('请先登录', 'warning')
-      return
-    }
+  const deleteComment = useCallback(async (postId: string, commentId: string): Promise<void> => {
+    if (!requireAuth()) return
 
     const confirmed = await showDangerConfirm('删除评论', '确定要删除这条评论吗？')
     if (!confirmed) return
 
     setDeletingCommentId(commentId)
     try {
-      const response = await fetch(`/api/posts/${postId}/comments`, {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`,
-          ...getCsrfHeaders()
-        },
-        body: JSON.stringify({ comment_id: commentId }),
-      })
+      const { ok, data } = await apiRequest<{ success: boolean; error?: string }>(
+        `/api/posts/${postId}/comments`,
+        'DELETE',
+        accessToken,
+        { comment_id: commentId }
+      )
 
-      const json = await response.json()
-
-      if (response.ok && json.success) {
-        setComments(prev => prev.map(c => {
-          if (c.id === commentId) return null
-          if (c.replies && c.replies.length > 0) {
-            return { ...c, replies: c.replies.filter(r => r.id !== commentId) }
-          }
-          return c
-        }).filter(Boolean) as Comment[])
+      if (ok && data?.success) {
+        setComments(prev => prev
+          .map(c => {
+            if (c.id === commentId) return null
+            if (c.replies?.length) {
+              return { ...c, replies: c.replies.filter(r => r.id !== commentId) }
+            }
+            return c
+          })
+          .filter((c): c is Comment => c !== null)
+        )
         onCommentCountChange?.(postId, -1)
         showToast('已删除', 'success')
       } else {
-        showToast(json.error || '删除评论失败', 'error')
+        showToast(data?.error || '删除评论失败', 'error')
       }
-    } catch (_err) {
+    } catch {
       showToast('删除评论失败', 'error')
     } finally {
       setDeletingCommentId(null)
     }
-  }, [accessToken, showDangerConfirm, showToast, onCommentCountChange])
+  }, [accessToken, requireAuth, showDangerConfirm, showToast, onCommentCountChange])
 
   return {
     comments,

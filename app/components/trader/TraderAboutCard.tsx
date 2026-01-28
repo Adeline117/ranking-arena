@@ -118,6 +118,53 @@ interface SocialLinks {
   website?: string
 }
 
+const socialLinkStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 4,
+  padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
+  borderRadius: tokens.radius.md,
+  background: `${tokens.colors.bg.tertiary}80`,
+  color: tokens.colors.text.secondary,
+  fontSize: tokens.typography.fontSize.xs,
+  textDecoration: 'none',
+  transition: 'all 0.2s ease',
+  border: `1px solid ${tokens.colors.border.primary}40`,
+}
+
+function SocialLink({
+  href,
+  icon,
+  text,
+  title
+}: {
+  href?: string
+  icon: string
+  text: string
+  title: string
+}): React.ReactElement {
+  const content = (
+    <>
+      <span style={{ fontSize: '11px' }}>{icon}</span>
+      <span>{text}</span>
+    </>
+  )
+
+  if (href) {
+    return (
+      <a href={href} target="_blank" rel="noopener noreferrer" title={title} style={socialLinkStyle}>
+        {content}
+      </a>
+    )
+  }
+
+  return (
+    <span title={title} style={socialLinkStyle}>
+      {content}
+    </span>
+  )
+}
+
 interface TraderAboutCardProps {
   handle: string
   traderId?: string
@@ -281,119 +328,43 @@ export default function TraderAboutCard({
           }}
         >
           {socialLinks.twitter && (
-            <a
+            <SocialLink
               href={`https://x.com/${socialLinks.twitter}`}
-              target="_blank"
-              rel="noopener noreferrer"
+              icon="𝕏"
+              text={socialLinks.twitter}
               title={`@${socialLinks.twitter}`}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 4,
-                padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
-                borderRadius: tokens.radius.md,
-                background: `${tokens.colors.bg.tertiary}80`,
-                color: tokens.colors.text.secondary,
-                fontSize: tokens.typography.fontSize.xs,
-                textDecoration: 'none',
-                transition: 'all 0.2s ease',
-                border: `1px solid ${tokens.colors.border.primary}40`,
-              }}
-            >
-              <span style={{ fontSize: '11px' }}>𝕏</span>
-              <span>{socialLinks.twitter}</span>
-            </a>
+            />
           )}
           {socialLinks.telegram && (
-            <a
+            <SocialLink
               href={`https://t.me/${socialLinks.telegram}`}
-              target="_blank"
-              rel="noopener noreferrer"
+              icon="TG"
+              text={socialLinks.telegram}
               title={`@${socialLinks.telegram}`}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 4,
-                padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
-                borderRadius: tokens.radius.md,
-                background: `${tokens.colors.bg.tertiary}80`,
-                color: tokens.colors.text.secondary,
-                fontSize: tokens.typography.fontSize.xs,
-                textDecoration: 'none',
-                transition: 'all 0.2s ease',
-                border: `1px solid ${tokens.colors.border.primary}40`,
-              }}
-            >
-              <span style={{ fontSize: '11px' }}>TG</span>
-              <span>{socialLinks.telegram}</span>
-            </a>
+            />
           )}
           {socialLinks.discord && (
-            <span
+            <SocialLink
+              icon="DC"
+              text={socialLinks.discord.length > 12 ? socialLinks.discord.slice(0, 12) + '...' : socialLinks.discord}
               title={socialLinks.discord}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 4,
-                padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
-                borderRadius: tokens.radius.md,
-                background: `${tokens.colors.bg.tertiary}80`,
-                color: tokens.colors.text.secondary,
-                fontSize: tokens.typography.fontSize.xs,
-                border: `1px solid ${tokens.colors.border.primary}40`,
-              }}
-            >
-              <span style={{ fontSize: '11px' }}>DC</span>
-              <span>{socialLinks.discord.length > 12 ? socialLinks.discord.slice(0, 12) + '...' : socialLinks.discord}</span>
-            </span>
+            />
           )}
           {socialLinks.github && (
-            <a
+            <SocialLink
               href={`https://github.com/${socialLinks.github}`}
-              target="_blank"
-              rel="noopener noreferrer"
+              icon="GH"
+              text={socialLinks.github}
               title={socialLinks.github}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 4,
-                padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
-                borderRadius: tokens.radius.md,
-                background: `${tokens.colors.bg.tertiary}80`,
-                color: tokens.colors.text.secondary,
-                fontSize: tokens.typography.fontSize.xs,
-                textDecoration: 'none',
-                transition: 'all 0.2s ease',
-                border: `1px solid ${tokens.colors.border.primary}40`,
-              }}
-            >
-              <span style={{ fontSize: '11px' }}>GH</span>
-              <span>{socialLinks.github}</span>
-            </a>
+            />
           )}
           {socialLinks.website && (
-            <a
+            <SocialLink
               href={socialLinks.website.startsWith('http') ? socialLinks.website : `https://${socialLinks.website}`}
-              target="_blank"
-              rel="noopener noreferrer"
+              icon="🌐"
+              text={socialLinks.website.replace(/^https?:\/\//, '').slice(0, 20)}
               title={socialLinks.website}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 4,
-                padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
-                borderRadius: tokens.radius.md,
-                background: `${tokens.colors.bg.tertiary}80`,
-                color: tokens.colors.text.secondary,
-                fontSize: tokens.typography.fontSize.xs,
-                textDecoration: 'none',
-                transition: 'all 0.2s ease',
-                border: `1px solid ${tokens.colors.border.primary}40`,
-              }}
-            >
-              <span style={{ fontSize: '11px' }}>🌐</span>
-              <span>{socialLinks.website.replace(/^https?:\/\//, '').slice(0, 20)}</span>
-            </a>
+            />
           )}
         </Box>
       )}
@@ -462,14 +433,22 @@ export default function TraderAboutCard({
           zIndex: 1,
         }}
       >
-        {/* 关注中（用户 + 交易员合并） - 点击跳转到关注页面 */}
-        <Link href="/following" style={{ textDecoration: 'none' }}>
+        {/* 关注中（用户 + 交易员合并） - 只有自己主页才跳转到关注页面 */}
+        {isOwnProfile ? (
+          <Link href="/following" style={{ textDecoration: 'none' }}>
+            <StatItem
+              label="关注中"
+              value={following}
+              clickable
+            />
+          </Link>
+        ) : (
           <StatItem
             label="关注中"
             value={following}
-            clickable
+            clickable={false}
           />
-        </Link>
+        )}
 
         {/* 被关注 */}
         <StatItem

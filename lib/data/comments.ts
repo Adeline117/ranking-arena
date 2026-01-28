@@ -13,12 +13,11 @@ export interface Comment {
   like_count: number
   created_at: string
   updated_at: string
-  // 关联信息
   author_handle?: string
   author_avatar_url?: string
-  // 用户状态
+  author_is_pro?: boolean
+  author_show_pro_badge?: boolean
   user_liked?: boolean
-  // 嵌套回复
   replies?: Comment[]
 }
 
@@ -28,7 +27,6 @@ export interface CreateCommentInput {
   parent_id?: string
 }
 
-// 数据库返回的评论行类型
 interface CommentRow {
   id: string
   post_id: string
@@ -38,6 +36,77 @@ interface CommentRow {
   like_count?: number
   created_at: string
   updated_at: string
+}
+
+interface AuthorProfile {
+  handle: string
+  avatar_url: string | null
+  is_pro: boolean
+  show_pro_badge: boolean
+}
+
+/**
+ * 转换数据库行为 Comment 对象
+ */
+function toComment(
+  row: CommentRow,
+  profile?: AuthorProfile,
+  userLiked = false,
+  replies: Comment[] = []
+): Comment {
+  return {
+    id: row.id,
+    post_id: row.post_id,
+    user_id: row.user_id,
+    content: row.content,
+    parent_id: row.parent_id ?? undefined,
+    like_count: row.like_count || 0,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    author_handle: profile?.handle,
+    author_avatar_url: profile?.avatar_url ?? undefined,
+    author_is_pro: profile?.is_pro ?? false,
+    author_show_pro_badge: profile?.show_pro_badge !== false,
+    user_liked: userLiked,
+    replies,
+  }
+}
+
+/**
+ * 构建作者资料映射
+ */
+function buildProfileMap(
+  profiles: Array<{
+    id: string
+    handle: string
+    avatar_url: string | null
+    subscription_tier?: string | null
+    show_pro_badge?: boolean | null
+  }>
+): Map<string, AuthorProfile> {
+  const map = new Map<string, AuthorProfile>()
+  for (const p of profiles) {
+    map.set(p.id, {
+      handle: p.handle,
+      avatar_url: p.avatar_url,
+      is_pro: p.subscription_tier === 'pro',
+      show_pro_badge: p.show_pro_badge !== false,
+    })
+  }
+  return map
+}
+
+/**
+ * 对评论进行自定义排序：前3条按点赞数降序，其余按时间升序
+ */
+function sortComments(comments: CommentRow[]): CommentRow[] {
+  const byLikes = [...comments].sort((a, b) => (b.like_count || 0) - (a.like_count || 0))
+  const top3 = byLikes.slice(0, 3)
+  const top3Ids = new Set(top3.map(c => c.id))
+  const rest = comments
+    .filter(c => !top3Ids.has(c.id))
+    .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+  return [...top3, ...rest]
 }
 
 /**
@@ -50,40 +119,18 @@ export async function getPostComments(
 ): Promise<Comment[]> {
   const { limit = 50, offset = 0, userId } = options
 
-  // 获取所有顶级评论（不在这里排序，后面会自定义排序）
   const { data: allTopComments, error } = await supabase
     .from('comments')
     .select('*')
     .eq('post_id', postId)
     .is('parent_id', null)
 
-  if (error) {
-    throw error
-  }
-
+  if (error) throw error
   if (!allTopComments || allTopComments.length === 0) return []
 
-  // 自定义排序：前3条按点赞数降序，后面按时间升序
-  const sortedComments = [...allTopComments]
-  
-  // 按点赞数降序排序
-  const byLikes = [...sortedComments].sort((a, b) => (b.like_count || 0) - (a.like_count || 0))
-  
-  // 取前3个高赞评论
-  const top3 = byLikes.slice(0, 3)
-  const top3Ids = new Set(top3.map(c => c.id))
-  
-  // 剩余评论按时间升序
-  const rest = sortedComments
-    .filter(c => !top3Ids.has(c.id))
-    .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
-  
-  // 合并：前3高赞 + 剩余按时间
-  const comments = [...top3, ...rest].slice(offset, offset + limit)
-
+  const comments = sortComments(allTopComments).slice(offset, offset + limit)
   if (comments.length === 0) return []
 
-  // 获取所有回复
   const commentIds = comments.map(c => c.id)
   const { data: replies } = await supabase
     .from('comments')
@@ -91,85 +138,35 @@ export async function getPostComments(
     .in('parent_id', commentIds)
     .order('created_at', { ascending: true })
 
-  // 获取所有用户ID 和评论ID
   const allComments = [...comments, ...(replies || [])]
   const userIds = [...new Set(allComments.map(c => c.user_id))]
   const allCommentIds = allComments.map(c => c.id)
 
-  // 并行获取用户信息和点赞状态
   const [profilesResult, likesResult] = await Promise.all([
     supabase
       .from('user_profiles')
-      .select('id, handle, avatar_url')
+      .select('id, handle, avatar_url, subscription_tier, show_pro_badge')
       .in('id', userIds),
     userId
-      ? supabase
-          .from('comment_likes')
-          .select('comment_id')
-          .eq('user_id', userId)
-          .in('comment_id', allCommentIds)
+      ? supabase.from('comment_likes').select('comment_id').eq('user_id', userId).in('comment_id', allCommentIds)
       : Promise.resolve({ data: null }),
   ])
 
-  const profileMap = new Map<string, { handle: string; avatar_url: string | null }>()
-  if (profilesResult.data) {
-    profilesResult.data.forEach((p: { id: string; handle: string; avatar_url: string | null }) => {
-      profileMap.set(p.id, { handle: p.handle, avatar_url: p.avatar_url })
-    })
-  }
+  const profileMap = profilesResult.data ? buildProfileMap(profilesResult.data) : new Map()
+  const userLikedSet = new Set(likesResult.data?.map((like: { comment_id: string }) => like.comment_id) || [])
 
-  const userLikedMap = new Map<string, boolean>()
-  if (likesResult.data) {
-    likesResult.data.forEach((like: { comment_id: string }) => {
-      userLikedMap.set(like.comment_id, true)
-    })
-  }
-
-  // 构建回复映射
   const repliesMap = new Map<string, Comment[]>()
-  if (replies) {
-    replies.forEach((reply: CommentRow) => {
-      const profile = profileMap.get(reply.user_id)
-      const comment: Comment = {
-        id: reply.id,
-        post_id: reply.post_id,
-        user_id: reply.user_id,
-        content: reply.content,
-        parent_id: reply.parent_id ?? undefined,
-        like_count: reply.like_count || 0,
-        created_at: reply.created_at,
-        updated_at: reply.updated_at,
-        author_handle: profile?.handle,
-        author_avatar_url: profile?.avatar_url || undefined,
-        user_liked: userLikedMap.get(reply.id) || false,
-      }
-
-      if (reply.parent_id) {
-        const parentReplies = repliesMap.get(reply.parent_id) || []
-        parentReplies.push(comment)
-        repliesMap.set(reply.parent_id, parentReplies)
-      }
-    })
+  for (const reply of replies || []) {
+    if (!reply.parent_id) continue
+    const comment = toComment(reply, profileMap.get(reply.user_id), userLikedSet.has(reply.id))
+    const parentReplies = repliesMap.get(reply.parent_id) || []
+    parentReplies.push(comment)
+    repliesMap.set(reply.parent_id, parentReplies)
   }
 
-  // 构建结果
-  return comments.map((c: CommentRow) => {
-    const profile = profileMap.get(c.user_id)
-    return {
-      id: c.id,
-      post_id: c.post_id,
-      user_id: c.user_id,
-      content: c.content,
-      parent_id: c.parent_id ?? undefined,
-      like_count: c.like_count || 0,
-      created_at: c.created_at,
-      updated_at: c.updated_at,
-      author_handle: profile?.handle,
-      author_avatar_url: profile?.avatar_url || undefined,
-      user_liked: userLikedMap.get(c.id) || false,
-      replies: repliesMap.get(c.id) || [],
-    }
-  })
+  return comments.map((c: CommentRow) =>
+    toComment(c, profileMap.get(c.user_id), userLikedSet.has(c.id), repliesMap.get(c.id) || [])
+  )
 }
 
 /**
@@ -187,25 +184,14 @@ export async function getCommentById(
 
   if (error || !data) return null
 
-  // 获取用户信息
   const { data: profile } = await supabase
     .from('user_profiles')
-    .select('handle, avatar_url')
+    .select('id, handle, avatar_url, subscription_tier, show_pro_badge')
     .eq('id', data.user_id)
     .maybeSingle()
 
-  return {
-    id: data.id,
-    post_id: data.post_id,
-    user_id: data.user_id,
-    content: data.content,
-    parent_id: data.parent_id,
-    like_count: data.like_count || 0,
-    created_at: data.created_at,
-    updated_at: data.updated_at,
-    author_handle: profile?.handle,
-    author_avatar_url: profile?.avatar_url || undefined,
-  }
+  const profileMap = profile ? buildProfileMap([profile]) : new Map()
+  return toComment(data, profileMap.get(data.user_id))
 }
 
 /**
@@ -227,29 +213,16 @@ export async function createComment(
     .select()
     .single()
 
-  if (error) {
-    throw error
-  }
+  if (error) throw error
 
-  // 获取用户信息
   const { data: profile } = await supabase
     .from('user_profiles')
-    .select('handle, avatar_url')
+    .select('id, handle, avatar_url, subscription_tier, show_pro_badge')
     .eq('id', userId)
     .maybeSingle()
 
-  return {
-    id: data.id,
-    post_id: data.post_id,
-    user_id: data.user_id,
-    content: data.content,
-    parent_id: data.parent_id,
-    like_count: 0,
-    created_at: data.created_at,
-    updated_at: data.updated_at,
-    author_handle: profile?.handle,
-    author_avatar_url: profile?.avatar_url || undefined,
-  }
+  const profileMap = profile ? buildProfileMap([profile]) : new Map()
+  return toComment(data, profileMap.get(userId))
 }
 
 /**
@@ -263,20 +236,14 @@ export async function updateComment(
 ): Promise<Comment> {
   const { data, error } = await supabase
     .from('comments')
-    .update({
-      content,
-      updated_at: new Date().toISOString(),
-    })
+    .update({ content, updated_at: new Date().toISOString() })
     .eq('id', commentId)
-    .eq('user_id', userId) // 确保只能更新自己的评论
+    .eq('user_id', userId)
     .select()
     .single()
 
-  if (error) {
-    throw error
-  }
-
-  return data
+  if (error) throw error
+  return toComment(data)
 }
 
 /**
@@ -291,11 +258,9 @@ export async function deleteComment(
     .from('comments')
     .delete()
     .eq('id', commentId)
-    .eq('user_id', userId) // 确保只能删除自己的评论
+    .eq('user_id', userId)
 
-  if (error) {
-    throw error
-  }
+  if (error) throw error
 }
 
 /**

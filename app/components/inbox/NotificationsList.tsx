@@ -9,6 +9,7 @@ import { useInboxStore } from '@/lib/stores/inboxStore'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { type NotificationWithActor } from '@/lib/types'
 import { useToast } from '@/app/components/ui/Toast'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 type Notification = NotificationWithActor
 
@@ -20,6 +21,7 @@ export default function NotificationsList() {
   const setUnreadNotifications = useInboxStore((s) => s.setUnreadNotifications)
   const unreadNotifications = useInboxStore((s) => s.unreadNotifications)
   const { showToast } = useToast()
+  const { t } = useLanguage()
   // 用于防止重复请求和回滚
   const pendingMarkAllRef = useRef(false)
   const pendingMarkRef = useRef<Set<string>>(new Set())
@@ -77,11 +79,11 @@ export default function NotificationsList() {
       // 回滚
       setNotifications(prevNotifications)
       setUnreadNotifications(prevUnreadCount)
-      showToast('操作失败，请重试', 'error')
+      showToast(t('operationFailed'), 'error')
     } finally {
       pendingMarkAllRef.current = false
     }
-  }, [accessToken, notifications, unreadNotifications, setUnreadNotifications, showToast])
+  }, [accessToken, notifications, unreadNotifications, setUnreadNotifications, showToast, t])
 
   const markAsRead = useCallback(async (id: string) => {
     if (!accessToken || pendingMarkRef.current.has(id)) return
@@ -115,18 +117,25 @@ export default function NotificationsList() {
       // 回滚
       setNotifications((prev) => prev.map((n) => n.id === id ? { ...n, read: false } : n))
       setUnreadNotifications(unreadNotifications)
-      showToast('操作失败', 'error')
+      showToast(t('operationFailed'), 'error')
     } finally {
       pendingMarkRef.current.delete(id)
     }
-  }, [accessToken, notifications, unreadNotifications, setUnreadNotifications, showToast])
+  }, [accessToken, notifications, unreadNotifications, setUnreadNotifications, showToast, t])
 
-  const getIcon = (type: string) => {
-    if (type === 'follow') return '关'
-    if (type === 'like') return '赞'
-    if (type === 'comment') return '评'
-    if (type === 'mention') return '@'
-    return '通'
+  function getIcon(type: string): string {
+    switch (type) {
+      case 'follow':
+        return t('notifIconFollow')
+      case 'like':
+        return t('notifIconLike')
+      case 'comment':
+        return t('notifIconComment')
+      case 'mention':
+        return t('notifIconMention')
+      default:
+        return t('notifIconDefault')
+    }
   }
 
   return (
@@ -160,7 +169,7 @@ export default function NotificationsList() {
             <polyline points="6 9 12 15 18 9" />
           </svg>
           <span style={{ fontWeight: 700, fontSize: tokens.typography.fontSize.sm, color: tokens.colors.text.primary }}>
-            通知
+            {t('notifications')}
           </span>
           {unreadNotifications > 0 && (
             <span
@@ -193,7 +202,7 @@ export default function NotificationsList() {
               cursor: 'pointer',
             }}
           >
-            全部已读
+            {t('markAllAsRead')}
           </button>
         )}
       </div>
@@ -203,11 +212,11 @@ export default function NotificationsList() {
         <div style={{ maxHeight: 400, overflowY: 'auto' }}>
           {loading ? (
             <div style={{ padding: tokens.spacing[4], textAlign: 'center', color: tokens.colors.text.tertiary, fontSize: 13 }}>
-              加载中...
+              {t('loading')}
             </div>
           ) : notifications.length === 0 ? (
             <div style={{ padding: tokens.spacing[4], textAlign: 'center', color: tokens.colors.text.tertiary, fontSize: 13 }}>
-              暂无通知
+              {t('noNotifications')}
             </div>
           ) : (
             notifications.slice(0, 20).map((notif) => {
