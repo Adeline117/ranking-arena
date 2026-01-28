@@ -1,0 +1,216 @@
+'use client'
+
+import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { supabase } from '@/lib/supabase/client'
+import { tokens } from '@/lib/design-tokens'
+import { Box, Text, Button } from '@/app/components/base'
+import Card from '@/app/components/ui/Card'
+import TopNav from '@/app/components/layout/TopNav'
+import { useToast } from '@/app/components/ui/Toast'
+import HealthScoreCard from './components/HealthScoreCard'
+import AlertsPanel from './components/AlertsPanel'
+import SchedulerMetrics from './components/SchedulerMetrics'
+import AnomalyMetrics from './components/AnomalyMetrics'
+import SystemMetrics from './components/SystemMetrics'
+
+interface MonitoringData {
+  ok: boolean
+  timestamp: string
+  health: {
+    score: number
+    status: 'healthy' | 'warning' | 'critical'
+    color: string
+    message: string
+  }
+  alerts: {
+    total: number
+    critical: number
+    warning: number
+    items: Array<{
+      id: string
+      severity: 'info' | 'warning' | 'critical'
+      title: string
+      message: string
+      timestamp: string
+    }>
+  }
+  scheduler: any
+  anomalyDetection: any
+  system: any
+}
+
+export default function MonitoringPage() {
+  const router = useRouter()
+  const { showToast } = useToast()
+  const [email, setEmail] = useState<string | null>(null)
+  const [accessToken, setAccessToken] = useState<string | null>(null)
+  const [data, setData] = useState<MonitoringData | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [autoRefresh, setAutoRefresh] = useState(true)
+
+  // Check authentication
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) {
+        router.push('/login')
+        return
+      }
+      setEmail(user.email || null)
+    })
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.access_token) {
+        setAccessToken(session.access_token)
+      }
+    })
+  }, [router])
+
+  // Load monitoring data
+  const loadData = async () => {
+    if (!accessToken) return
+
+    try {
+      setLoading(true)
+      const response = await fetch('/api/admin/monitoring/overview', {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch monitoring data')
+      }
+
+      const result = await response.json()
+      setData(result)
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to load data'
+      showToast(errorMessage, 'error')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Initial load
+  useEffect(() => {
+    if (accessToken) {
+      loadData()
+    }
+  }, [accessToken])
+
+  // Auto-refresh every 30 seconds
+  useEffect(() => {
+    if (!autoRefresh || !accessToken) return
+
+    const interval = setInterval(() => {
+      loadData()
+    }, 30000)
+
+    return () => clearInterval(interval)
+  }, [autoRefresh, accessToken])
+
+  if (!email) {
+    return (
+      <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary }}>
+        <TopNav email={null} />
+        <Box style={{ padding: tokens.spacing[6], textAlign: 'center' }}>
+          <Text>Loading...</Text>
+        </Box>
+      </Box>
+    )
+  }
+
+  return (
+    <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary }}>
+      <TopNav email={email} />
+
+      <Box style={{ maxWidth: '1400px', margin: '0 auto', padding: tokens.spacing[6] }}>
+        {/* Header */}
+        <Box
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: tokens.spacing[6],
+          }}
+        >
+          <Box>
+            <Text size="3xl" weight="black" style={{ marginBottom: tokens.spacing[2] }}>
+              Performance Monitoring
+            </Text>
+            <Text size="sm" color="tertiary">
+              Real-time system health and performance metrics
+            </Text>
+          </Box>
+
+          <Box style={{ display: 'flex', gap: tokens.spacing[3], alignItems: 'center' }}>
+            <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
+              <input
+                type="checkbox"
+                id="auto-refresh"
+                checked={autoRefresh}
+                onChange={(e) => setAutoRefresh(e.target.checked)}
+                style={{ cursor: 'pointer' }}
+              />
+              <label htmlFor="auto-refresh" style={{ cursor: 'pointer' }}>
+                <Text size="sm" color="secondary">
+                  Auto-refresh (30s)
+                </Text>
+              </label>
+            </Box>
+            <Button variant="secondary" size="sm" onClick={loadData} disabled={loading}>
+              {loading ? 'Refreshing...' : 'Refresh Now'}
+            </Button>
+          </Box>
+        </Box>
+
+        {loading && !data ? (
+          <Card>
+            <Box style={{ padding: tokens.spacing[8], textAlign: 'center' }}>
+              <Text color="tertiary">Loading monitoring data...</Text>
+            </Box>
+          </Card>
+        ) : data ? (
+          <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}>
+            {/* Health Score & Alerts Row */}
+            <Box
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'minmax(300px, 1fr) 2fr',
+                gap: tokens.spacing[4],
+              }}
+            >
+              <HealthScoreCard health={data.health} timestamp={data.timestamp} />
+              <AlertsPanel alerts={data.alerts} />
+            </Box>
+
+            {/* Scheduler Metrics */}
+            <SchedulerMetrics data={data.scheduler} />
+
+            {/* Anomaly Detection Metrics */}
+            <AnomalyMetrics data={data.anomalyDetection} />
+
+            {/* System Metrics */}
+            <SystemMetrics data={data.system} />
+          </Box>
+        ) : (
+          <Card>
+            <Box style={{ padding: tokens.spacing[8], textAlign: 'center' }}>
+              <Text color="tertiary">No data available</Text>
+            </Box>
+          </Card>
+        )}
+
+        {/* Last updated */}
+        {data && (
+          <Box style={{ marginTop: tokens.spacing[4], textAlign: 'center' }}>
+            <Text size="xs" color="tertiary">
+              Last updated: {new Date(data.timestamp).toLocaleString()}
+            </Text>
+          </Box>
+        )}
+      </Box>
+    </Box>
+  )
+}
