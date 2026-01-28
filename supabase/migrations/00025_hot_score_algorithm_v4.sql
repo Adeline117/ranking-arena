@@ -36,24 +36,51 @@ DECLARE
   v_tier TEXT;
   v_followers INTEGER;
   v_weight NUMERIC := 1.0;
+  v_has_tier_col BOOLEAN;
+  v_has_follower_col BOOLEAN;
 BEGIN
-  SELECT subscription_tier, follower_count
-  INTO v_tier, v_followers
-  FROM user_profiles
-  WHERE id = p_author_id;
+  -- Check if subscription_tier column exists
+  SELECT EXISTS (
+    SELECT FROM information_schema.columns
+    WHERE table_schema = 'public'
+    AND table_name = 'user_profiles'
+    AND column_name = 'subscription_tier'
+  ) INTO v_has_tier_col;
 
-  -- Pro user boost
-  IF v_tier = 'pro' THEN
-    v_weight := v_weight * 1.3;
+  -- Check if follower_count column exists
+  SELECT EXISTS (
+    SELECT FROM information_schema.columns
+    WHERE table_schema = 'public'
+    AND table_name = 'user_profiles'
+    AND column_name = 'follower_count'
+  ) INTO v_has_follower_col;
+
+  -- Get tier if column exists
+  IF v_has_tier_col THEN
+    EXECUTE 'SELECT subscription_tier FROM user_profiles WHERE id = $1'
+    INTO v_tier
+    USING p_author_id;
+
+    -- Pro user boost
+    IF v_tier = 'pro' THEN
+      v_weight := v_weight * 1.3;
+    END IF;
   END IF;
 
-  -- Follower-based boost
-  IF v_followers >= 1000 THEN
-    v_weight := v_weight * 1.2;
-  ELSIF v_followers >= 100 THEN
-    v_weight := v_weight * 1.1;
-  ELSIF v_followers >= 10 THEN
-    v_weight := v_weight * 1.05;
+  -- Get followers if column exists
+  IF v_has_follower_col THEN
+    EXECUTE 'SELECT follower_count FROM user_profiles WHERE id = $1'
+    INTO v_followers
+    USING p_author_id;
+
+    -- Follower-based boost
+    IF COALESCE(v_followers, 0) >= 1000 THEN
+      v_weight := v_weight * 1.2;
+    ELSIF COALESCE(v_followers, 0) >= 100 THEN
+      v_weight := v_weight * 1.1;
+    ELSIF COALESCE(v_followers, 0) >= 10 THEN
+      v_weight := v_weight * 1.05;
+    END IF;
   END IF;
 
   RETURN v_weight;
