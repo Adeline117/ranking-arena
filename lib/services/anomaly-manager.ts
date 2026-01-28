@@ -13,7 +13,7 @@ import {
   type AnomalyResult,
   type SeverityLevel,
 } from './anomaly-detection'
-import type { TraderRankingData } from '../archive/ranking'
+import type { TraderRankingData } from '../utils/ranking'
 
 // ============================================
 // Types
@@ -100,13 +100,11 @@ function getSupabaseClient(): SupabaseClient {
 function convertToTraderRankingData(trader: TraderData): TraderRankingData {
   return {
     id: trader.id,
-    handle: trader.id,
     roi: trader.roi,
     pnl: trader.pnl,
-    win_rate: trader.win_rate ?? 0,
-    max_drawdown: trader.max_drawdown ?? 0,
-    trades_count: trader.trades_count ?? 0,
-    followers: 0,
+    win_rate: trader.win_rate ?? null,
+    max_drawdown: trader.max_drawdown ?? null,
+    trades_count: trader.trades_count ?? null,
     source: trader.platform,
   }
 }
