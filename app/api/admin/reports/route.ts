@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
     const page = parseInt(searchParams.get('page') || '1')
     const limit = parseInt(searchParams.get('limit') || '20')
     const status = searchParams.get('status') || 'pending' // pending, resolved, dismissed, all
-    const contentType = searchParams.get('content_type') || 'all' // post, comment, all
+    const contentType = searchParams.get('content_type') || 'all' // post, comment, message, user, all
     
     const offset = (page - 1) * limit
     
@@ -107,6 +107,53 @@ export async function GET(req: NextRequest) {
             contentAuthor = {
               id: comment.author_id,
               handle: comment.author_handle,
+            }
+          }
+        } else if (report.content_type === 'message') {
+          // For message reports, content_id is the conversation_id
+          const { data: conversation } = await supabase
+            .from('conversations')
+            .select('id, user1_id, user2_id, last_message_preview, last_message_at')
+            .eq('id', report.content_id)
+            .maybeSingle()
+
+          if (conversation) {
+            // Get the other user (not the reporter)
+            const otherUserId = conversation.user1_id === report.reporter_id
+              ? conversation.user2_id
+              : conversation.user1_id
+
+            const { data: otherUser } = await supabase
+              .from('user_profiles')
+              .select('id, handle, avatar_url')
+              .eq('id', otherUserId)
+              .maybeSingle()
+
+            contentPreview = {
+              title: `对话 ID: ${conversation.id.slice(0, 8)}...`,
+              content: conversation.last_message_preview || '(无消息预览)',
+            }
+            contentAuthor = otherUser ? {
+              id: otherUser.id,
+              handle: otherUser.handle,
+            } : null
+          }
+        } else if (report.content_type === 'user') {
+          // For user reports, content_id is the user being reported
+          const { data: reportedUser } = await supabase
+            .from('user_profiles')
+            .select('id, handle, avatar_url, bio')
+            .eq('id', report.content_id)
+            .maybeSingle()
+
+          if (reportedUser) {
+            contentPreview = {
+              title: `用户: @${reportedUser.handle || reportedUser.id.slice(0, 8)}`,
+              content: reportedUser.bio || '(无个人简介)',
+            }
+            contentAuthor = {
+              id: reportedUser.id,
+              handle: reportedUser.handle,
             }
           }
         }

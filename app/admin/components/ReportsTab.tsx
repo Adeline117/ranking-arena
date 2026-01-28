@@ -15,7 +15,15 @@ const REASON_LABELS: Record<string, string> = {
   harassment: '骚扰',
   inappropriate: '不当内容',
   misinformation: '虚假信息',
+  fraud: '诈骗/欺诈',
   other: '其他',
+}
+
+const CONTENT_TYPE_LABELS: Record<string, string> = {
+  post: '帖子',
+  comment: '评论',
+  message: '私信',
+  user: '用户',
 }
 
 export default function ReportsTab({ accessToken }: ReportsTabProps) {
@@ -29,7 +37,7 @@ export default function ReportsTab({ accessToken }: ReportsTabProps) {
   } = useReports(accessToken)
 
   const [status, setStatus] = useState<'pending' | 'resolved' | 'dismissed' | 'all'>('pending')
-  const [contentType, setContentType] = useState<'post' | 'comment' | 'all'>('all')
+  const [contentType, setContentType] = useState<'post' | 'comment' | 'message' | 'user' | 'all'>('all')
 
   useEffect(() => {
     if (accessToken) {
@@ -59,16 +67,16 @@ export default function ReportsTab({ accessToken }: ReportsTabProps) {
           ))}
         </Box>
         
-        <Box style={{ display: 'flex', gap: tokens.spacing[2], alignItems: 'center' }}>
+        <Box style={{ display: 'flex', gap: tokens.spacing[2], alignItems: 'center', flexWrap: 'wrap' }}>
           <Text size="sm" color="secondary">类型:</Text>
-          {(['all', 'post', 'comment'] as const).map((t) => (
+          {(['all', 'post', 'comment', 'message', 'user'] as const).map((t) => (
             <Button
               key={t}
               variant={contentType === t ? 'primary' : 'secondary'}
               size="sm"
               onClick={() => setContentType(t)}
             >
-              {t === 'all' ? '全部' : t === 'post' ? '帖子' : '评论'}
+              {t === 'all' ? '全部' : CONTENT_TYPE_LABELS[t] || t}
             </Button>
           ))}
         </Box>
@@ -103,12 +111,18 @@ export default function ReportsTab({ accessToken }: ReportsTabProps) {
                       style={{
                         padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
                         borderRadius: tokens.radius.sm,
-                        background: report.content_type === 'post' ? tokens.colors.accent.primary : tokens.colors.accent.warning,
+                        background: report.content_type === 'post'
+                          ? tokens.colors.accent.primary
+                          : report.content_type === 'message'
+                            ? '#9575cd'
+                            : report.content_type === 'user'
+                              ? '#f44336'
+                              : tokens.colors.accent.warning,
                         color: '#fff',
                         fontSize: tokens.typography.fontSize.xs,
                       }}
                     >
-                      {report.content_type === 'post' ? '帖子' : '评论'}
+                      {CONTENT_TYPE_LABELS[report.content_type] || report.content_type}
                     </Box>
                     <Box
                       style={{
