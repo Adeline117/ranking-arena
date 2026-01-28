@@ -126,7 +126,7 @@ DECLARE
   v_dislike_ratio NUMERIC;
 BEGIN
   -- Calculate dislike ratio
-  IF p_like_count > 0 THEN
+  IF COALESCE(p_like_count, 0) > 0 THEN
     v_dislike_ratio := COALESCE(p_dislike_count, 0)::NUMERIC / p_like_count;
   ELSE
     v_dislike_ratio := CASE WHEN COALESCE(p_dislike_count, 0) > 0 THEN 1.0 ELSE 0 END;
@@ -141,7 +141,7 @@ BEGIN
     v_penalty := v_penalty * 0.85;
   END IF;
 
-  -- Report penalty
+  -- Report penalty (only if report_count is provided)
   IF COALESCE(p_report_count, 0) >= 3 THEN
     v_penalty := v_penalty * 0.3;
   ELSIF COALESCE(p_report_count, 0) >= 2 THEN
@@ -348,8 +348,21 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 CREATE OR REPLACE FUNCTION update_post_report_counts()
 RETURNS INTEGER AS $$
 DECLARE
-  updated_count INTEGER;
+  updated_count INTEGER := 0;
+  table_exists BOOLEAN;
 BEGIN
+  -- Check if content_reports table exists
+  SELECT EXISTS (
+    SELECT FROM information_schema.tables
+    WHERE table_schema = 'public'
+    AND table_name = 'content_reports'
+  ) INTO table_exists;
+
+  IF NOT table_exists THEN
+    -- Table doesn't exist, just return 0
+    RETURN 0;
+  END IF;
+
   UPDATE posts p SET
     report_count = (
       SELECT COUNT(*)
@@ -367,6 +380,7 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- ============================================
 -- 11. Trigger to update report_count on new reports
+-- (Only created if content_reports table exists)
 -- ============================================
 
 CREATE OR REPLACE FUNCTION trigger_update_post_report_count()
@@ -387,11 +401,21 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-DROP TRIGGER IF EXISTS trigger_content_report_update_post ON content_reports;
-CREATE TRIGGER trigger_content_report_update_post
-  AFTER INSERT OR UPDATE ON content_reports
-  FOR EACH ROW
-  EXECUTE FUNCTION trigger_update_post_report_count();
+-- Only create trigger if content_reports table exists
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT FROM information_schema.tables
+    WHERE table_schema = 'public'
+    AND table_name = 'content_reports'
+  ) THEN
+    DROP TRIGGER IF EXISTS trigger_content_report_update_post ON content_reports;
+    CREATE TRIGGER trigger_content_report_update_post
+      AFTER INSERT OR UPDATE ON content_reports
+      FOR EACH ROW
+      EXECUTE FUNCTION trigger_update_post_report_count();
+  END IF;
+END $$;
 
 -- ============================================
 -- 12. Initialize hot scores with new algorithm
