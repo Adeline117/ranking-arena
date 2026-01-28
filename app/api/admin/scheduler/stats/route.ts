@@ -45,6 +45,9 @@ export async function GET(req: Request) {
     }
 
     const supabase = createSupabaseAdmin()
+    if (!supabase) {
+      return NextResponse.json({ ok: false, error: 'Database connection failed' }, { status: 500 })
+    }
     const scheduleManager = createScheduleManager()
 
     // 1. Get tier statistics

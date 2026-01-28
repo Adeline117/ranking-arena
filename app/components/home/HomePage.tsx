@@ -21,12 +21,13 @@ import type { Trader } from '../ranking/RankingTable'
 import type { TimeRange } from './hooks/useTraderData'
 
 // 动态加载侧边栏（移动端不需要，减少首屏 JS）
+// 优化：移除动画骨架以减少 LCP 阻塞
 const SidebarSection = dynamic(() => import('./SidebarSection'), {
   ssr: false,
   loading: () => (
     <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
-      {[1, 2, 3].map(i => (
-        <Box key={i} style={{ height: 80, borderRadius: tokens.radius.lg, background: tokens.colors.bg.secondary, animation: 'pulse 1.5s ease-in-out infinite' }} />
+      {[1, 2].map(i => (
+        <Box key={i} style={{ height: 80, borderRadius: tokens.radius.lg, background: tokens.colors.bg.secondary }} />
       ))}
     </Box>
   ),
@@ -95,7 +96,7 @@ export default function HomePage() {
         position: 'relative',
       }}
     >
-      {/* Background mesh gradient */}
+      {/* Background mesh gradient - 优化渲染性能 */}
       <Box
         style={{
           position: 'fixed',
@@ -104,6 +105,8 @@ export default function HomePage() {
           opacity: 0.5,
           pointerEvents: 'none',
           zIndex: 0,
+          willChange: 'auto',
+          contain: 'strict',
         }}
       />
       
