@@ -84,6 +84,95 @@ const nextConfig: NextConfig = {
         protocol: 'https',
         hostname: '**.mocortech.com',
       },
+      // Bybit 头像 CDN
+      {
+        protocol: 'https',
+        hostname: '**.bybit.com',
+      },
+      {
+        protocol: 'https',
+        hostname: '**.staticimg.com',
+      },
+      {
+        protocol: 'https',
+        hostname: '**.bycsi.com',
+      },
+      // OKX 头像 CDN
+      {
+        protocol: 'https',
+        hostname: '**.okx.com',
+      },
+      {
+        protocol: 'https',
+        hostname: '**.okcoin.com',
+      },
+      // KuCoin 头像 CDN
+      {
+        protocol: 'https',
+        hostname: '**.kucoin.com',
+      },
+      // Gate.io 头像 CDN
+      {
+        protocol: 'https',
+        hostname: '**.gateimg.com',
+      },
+      {
+        protocol: 'https',
+        hostname: '**.gate.io',
+      },
+      // HTX 头像 CDN
+      {
+        protocol: 'https',
+        hostname: '**.htx.com',
+      },
+      {
+        protocol: 'https',
+        hostname: '**.huobi.com',
+      },
+      // BingX 头像 CDN
+      {
+        protocol: 'https',
+        hostname: '**.bingx.com',
+      },
+      // CoinEx 头像 CDN
+      {
+        protocol: 'https',
+        hostname: '**.coinex.com',
+      },
+      // LBank 头像 CDN
+      {
+        protocol: 'https',
+        hostname: '**.lbkrs.com',
+      },
+      // Other exchanges
+      {
+        protocol: 'https',
+        hostname: '**.phemex.com',
+      },
+      {
+        protocol: 'https',
+        hostname: '**.bitmart.com',
+      },
+      {
+        protocol: 'https',
+        hostname: '**.xt.com',
+      },
+      {
+        protocol: 'https',
+        hostname: '**.pionex.com',
+      },
+      {
+        protocol: 'https',
+        hostname: '**.weex.com',
+      },
+      {
+        protocol: 'https',
+        hostname: '**.wexx.one',
+      },
+      {
+        protocol: 'https',
+        hostname: '**.blofin.com',
+      },
     ],
     
     // 图片尺寸配置 - 对齐 Tailwind 响应式断点

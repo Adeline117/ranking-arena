@@ -3,10 +3,11 @@
 import { useState, type ReactElement } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
-import { 
-  getAvatarGradient, 
+import {
+  getAvatarGradient,
   getAvatarInitial,
   getUserAvatarUrl,
+  getTraderAvatarUrl,
   type AvatarProps
 } from '@/lib/utils/avatar'
 
@@ -35,20 +36,16 @@ export default function Avatar({
   const initial = getAvatarInitial(name || userId)
   const backgroundGradient = getAvatarGradient(userId)
   
-  // 对于 trader：如果有 avatarUrl 则使用，否则显示首字母头像（不生成）
+  // 对于 trader：如果有 avatarUrl 则使用代理，否则显示首字母头像（不生成）
   // 对于普通用户：
   // - avatarUrl 有值且不为空：使用设置的头像
   // - avatarUrl 为 null：在排行榜上但没有设置头像，显示首字母（不生成）
   // - avatarUrl 为 undefined：不在排行榜上，生成默认头像
   let finalAvatarUrl: string | null | undefined = null
-  
+
   if (isTrader) {
-    // trader：如果有 avatarUrl 且不为空，则使用；否则显示首字母头像（不生成）
-    if (avatarUrl && typeof avatarUrl === 'string' && avatarUrl.trim() !== '') {
-      finalAvatarUrl = avatarUrl.trim()
-    } else {
-      finalAvatarUrl = null // 没有头像URL，显示首字母头像
-    }
+    // trader：使用代理URL来解决CORS问题
+    finalAvatarUrl = getTraderAvatarUrl(avatarUrl)
   } else {
     // 普通用户
     if (avatarUrl && avatarUrl.trim() !== '') {
