@@ -13,7 +13,7 @@ if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) { console.error('Missing env');
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
 const SOURCE = 'mux'
-const TARGET_COUNT = 200
+const TARGET_COUNT = 500
 // The Graph decentralized network - requires API key (100k free queries/month)
 // Get API key from: https://thegraph.com/studio/apikeys/
 // MUX Protocol Arbitrum subgraph ID: 7hUM4US9DPz6JqLD6ySqwFmLq4XiAF7cEZLmEesQnYgR (Optimism data)

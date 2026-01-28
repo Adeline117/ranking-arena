@@ -52,6 +52,7 @@ export default function HomePage() {
     activeTimeRange,
     changeTimeRange,
     lastUpdated,
+    availableSources,
     refresh,
   } = useTraderData()
 
@@ -148,6 +149,7 @@ export default function HomePage() {
                 onTimeRangeChange={handleTimeRangeChange}
                 lastUpdated={lastUpdated}
                 onRefresh={refresh}
+                availableSources={availableSources}
               />
             </Box>
 

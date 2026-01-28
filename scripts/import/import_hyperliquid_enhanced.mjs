@@ -25,7 +25,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 const SOURCE = 'hyperliquid'
 const STATS_API = 'https://stats-data.hyperliquid.xyz/Mainnet'
 const INFO_API = 'https://api.hyperliquid.xyz/info'
-const TARGET_COUNT = 100
+const TARGET_COUNT = 500
 const CONCURRENCY = 5
 const DELAY_MS = 200
 

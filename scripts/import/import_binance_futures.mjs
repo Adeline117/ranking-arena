@@ -31,7 +31,7 @@ const SOURCE = 'binance_futures'
 const BASE_URL = 'https://www.binance.com/zh-CN/copy-trading'
 
 // 每页 18 个，抓 200 个需要 12 页（扩大范围确保全面）
-const TARGET_COUNT = 200
+const TARGET_COUNT = 500
 const PER_PAGE = 18
 const MAX_PAGES = Math.ceil(TARGET_COUNT / PER_PAGE) + 1
 

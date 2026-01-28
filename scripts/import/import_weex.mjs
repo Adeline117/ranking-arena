@@ -31,7 +31,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
 const SOURCE = 'weex'
 const BASE_URL = 'https://www.weex.com/zh-CN/copy-trading'
-const TARGET_COUNT = 50  // 目标抓取 50 个交易员
+const TARGET_COUNT = 500  // 目标抓取 50 个交易员
 const MIN_COUNT = 30     // Weex 主页只显示约 30 个交易员（3 分类 x 9 个/分类 + 部分重叠）
 const CONCURRENCY = 5
 

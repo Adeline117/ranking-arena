@@ -27,7 +27,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
 const SOURCE = 'xt'
 const BASE_URL = 'https://www.xt.com/en/copy-trading/futures'
-const TARGET_COUNT = 100
+const TARGET_COUNT = 500
 const MIN_COUNT = 30
 
 // XT.com 周期映射

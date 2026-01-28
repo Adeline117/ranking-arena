@@ -27,7 +27,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 const SOURCE = 'binance_spot'
 const BASE_URL = 'https://www.binance.com/zh-CN/copy-trading/spot'
 
-const TARGET_COUNT = 100
+const TARGET_COUNT = 500
 const PER_PAGE = 100
 const MAX_PAGES = 2
 

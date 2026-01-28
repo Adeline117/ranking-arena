@@ -32,6 +32,8 @@ interface RankingSectionProps {
   onRetry?: () => void
   /** Feature 4: Manual refresh callback */
   onRefresh?: () => void
+  /** 所有可用的数据来源 */
+  availableSources?: string[]
 }
 
 /**
@@ -49,6 +51,7 @@ export default function RankingSection({
   error,
   onRetry,
   onRefresh,
+  availableSources,
 }: RankingSectionProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -316,8 +319,10 @@ export default function RankingSection({
 
   const source = traders.length > 0 ? traders[0].source : 'all'
 
-  // Get unique data sources from traders
-  const dataSources = [...new Set(traders.map(t => t.source).filter(Boolean))]
+  // Get unique data sources - prefer availableSources from API if provided
+  const dataSources = availableSources && availableSources.length > 0
+    ? availableSources
+    : [...new Set(traders.map(t => t.source).filter(Boolean))]
 
   // Format last updated time
   const formatLastUpdated = (dateStr: string | null | undefined) => {

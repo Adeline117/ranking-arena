@@ -28,7 +28,7 @@ puppeteer.use(StealthPlugin())
 const supabase = getSupabaseClient()
 
 const SOURCE = 'bitget_futures'
-const TARGET_COUNT = 100
+const TARGET_COUNT = 500
 
 // URL 参数: rule=2 (ROI排序)
 // sort: 1=7D, 2=30D, 0=all/90D

@@ -13,7 +13,7 @@ if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) { console.error('Missing env');
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
 const SOURCE = 'kwenta'
-const TARGET_COUNT = 200
+const TARGET_COUNT = 500
 // The Graph decentralized network - requires API key (100k free queries/month)
 // Get API key from: https://thegraph.com/studio/apikeys/
 // Kwenta Optimism subgraph ID: 5sbJJTTJQQ4kYuVYNBVw9sX8C5juRpVJNLHg7uFugw2e
