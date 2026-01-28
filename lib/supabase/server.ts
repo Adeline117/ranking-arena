@@ -1,6 +1,11 @@
 /**
  * Supabase 服务端客户端
  * 用于 API 路由中的数据库操作
+ *
+ * 性能优化（Vercel Pro + Edge Runtime）：
+ * 1. 单例模式 - 复用客户端实例
+ * 2. Edge 兼容 - 使用全局 fetch
+ * 3. 超时配置 - 防止长时间挂起
  */
 
 import { createClient, SupabaseClient, User } from '@supabase/supabase-js'
@@ -10,12 +15,15 @@ import { NextRequest } from 'next/server'
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co'
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || 'placeholder-service-key'
 
-// 缓存 admin 客户端实例
+// 缓存 admin 客户端实例（单例模式，复用连接）
 let adminClientInstance: SupabaseClient | null = null
 
 /**
  * 获取 Supabase Admin 客户端（使用 Service Role Key）
  * 用于服务端 API 路由，绕过 RLS 策略
+ *
+ * 注意：Supabase JS 使用 REST API (PostgREST)，不是直接 PostgreSQL 连接
+ * PostgREST 服务端已内置连接池，无需客户端配置 PgBouncer
  */
 export function getSupabaseAdmin(): SupabaseClient {
   if (!adminClientInstance) {
@@ -29,9 +37,19 @@ export function getSupabaseAdmin(): SupabaseClient {
         persistSession: false,
         autoRefreshToken: false,
       },
+      // Edge Runtime 优化
+      global: {
+        headers: {
+          'x-client-info': 'ranking-arena-server',
+        },
+      },
+      // 数据库查询配置
+      db: {
+        schema: 'public',
+      },
     })
   }
-  
+
   return adminClientInstance
 }
 

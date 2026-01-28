@@ -23,7 +23,7 @@ import {
   type Period,
 } from '@/lib/utils/arena-score'
 import { createLogger } from '@/lib/utils/logger'
-import { getOrSetWithLock, CacheKey, CACHE_TTL } from '@/lib/cache'
+import { getOrSetWithLock, CacheKey } from '@/lib/cache'
 
 const logger = createLogger('traders-api')
 
