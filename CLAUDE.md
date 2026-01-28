@@ -178,7 +178,7 @@ npm run scrape:details:force  # Force fetch all details
 ### 2.1 用户旅程分析
 - [ ] **新用户引导流程**
   - 优化首次访问的 onboarding 流程
-  - 添加交互式教程 (使用 OnboardingTour.tsx)
+  - 添加交互式教程
   - 突出核心功能（排行榜、搜索、关注）
 
 - [ ] **核心操作流程优化**
