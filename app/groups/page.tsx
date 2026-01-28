@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useState, Suspense, lazy } from 'react'
+import { useEffect, useState, Suspense, lazy, useCallback } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
@@ -18,7 +18,7 @@ import { useSubscription } from '@/app/components/home/hooks/useSubscription'
 
 const MarketPanel = lazy(() => import('@/app/components/home/MarketPanel'))
 
-type Group = {
+interface Group {
   id: string
   name: string
   name_en?: string | null
@@ -26,7 +26,7 @@ type Group = {
   member_count?: number | null
 }
 
-type PopularTrader = {
+interface PopularTrader {
   source: string
   source_trader_id: string
   handle?: string | null
@@ -35,7 +35,97 @@ type PopularTrader = {
   roi?: number | null
 }
 
-function PopularTraders() {
+// Bilingual text helper
+function t(zh: string, en: string, language: string): string {
+  return language === 'zh' ? zh : en
+}
+
+// Shared group avatar component
+interface GroupAvatarProps {
+  avatarUrl?: string | null
+  name: string
+  size?: number
+}
+
+function GroupAvatar({ avatarUrl, name, size = 32 }: GroupAvatarProps): React.ReactElement {
+  return (
+    <Box
+      style={{
+        width: size,
+        height: size,
+        borderRadius: tokens.radius.md,
+        background: 'linear-gradient(135deg, rgba(139,111,168,0.2), rgba(139,111,168,0.1))',
+        border: `1px solid ${tokens.colors.border.primary}`,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        overflow: 'hidden',
+        flexShrink: 0,
+      }}
+    >
+      {avatarUrl ? (
+        <img src={avatarUrl} alt={name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+      ) : (
+        <Text size="xs" weight="bold" style={{ color: '#c9b8db' }}>
+          {name.charAt(0).toUpperCase()}
+        </Text>
+      )}
+    </Box>
+  )
+}
+
+// Shared hover link style handler
+function createHoverHandlers(): {
+  onMouseEnter: (e: React.MouseEvent<HTMLAnchorElement>) => void
+  onMouseLeave: (e: React.MouseEvent<HTMLAnchorElement>) => void
+} {
+  return {
+    onMouseEnter: (e) => { e.currentTarget.style.background = tokens.colors.bg.tertiary },
+    onMouseLeave: (e) => { e.currentTarget.style.background = 'transparent' },
+  }
+}
+
+const hoverHandlers = createHoverHandlers()
+
+// Loading/empty/error state component
+interface DataStateProps {
+  loading: boolean
+  error: string | null
+  isEmpty: boolean
+  language: string
+  emptyMessage?: string
+  children: React.ReactNode
+}
+
+function DataState({ loading, error, isEmpty, language, emptyMessage, children }: DataStateProps): React.ReactElement {
+  if (loading) {
+    return (
+      <Text size="sm" color="tertiary" style={{ padding: tokens.spacing[4], textAlign: 'center' }}>
+        {t('加载中...', 'Loading...', language)}
+      </Text>
+    )
+  }
+  if (error) {
+    return (
+      <Box style={{ padding: tokens.spacing[4], textAlign: 'center' }}>
+        <Text size="sm" style={{ color: '#DC2626', marginBottom: tokens.spacing[2] }}>{error}</Text>
+        <Button variant="secondary" size="sm" onClick={() => window.location.reload()}>
+          {t('重试', 'Retry', language)}
+        </Button>
+      </Box>
+    )
+  }
+  if (isEmpty) {
+    return (
+      <Text size="sm" color="tertiary" style={{ padding: tokens.spacing[4], textAlign: 'center' }}>
+        {emptyMessage || t('暂无数据', 'No data available', language)}
+      </Text>
+    )
+  }
+  return <>{children}</>
+}
+
+function PopularTraders(): React.ReactElement {
   const { language } = useLanguage()
   const { showToast } = useToast()
   const [traders, setTraders] = useState<PopularTrader[]>([])
@@ -43,7 +133,7 @@ function PopularTraders() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    const load = async () => {
+    async function loadTraders(): Promise<void> {
       try {
         setError(null)
 
@@ -66,57 +156,47 @@ function PopularTraders() {
             .not('roi', 'is', null)
             .order('roi', { ascending: false })
             .limit(30)
-
           data = fallbackResult.data
           supabaseError = fallbackResult.error
         }
 
         if (supabaseError) {
-          const errorMsg = language === 'zh'
-            ? '加载热门交易员失败，请稍后重试'
-            : 'Failed to load popular traders, please try again later'
+          const errorMsg = t('加载热门交易员失败，请稍后重试', 'Failed to load popular traders, please try again later', language)
           setError(errorMsg)
           showToast(errorMsg, 'error')
           return
         }
 
-        // Deduplicate by source:source_trader_id, keep first (highest score)
+        // Deduplicate by source:source_trader_id
         const seen = new Set<string>()
         const dedupedData = (data || []).filter(row => {
           const key = `${row.source}:${row.source_trader_id}`
           if (seen.has(key)) return false
           seen.add(key)
           return true
-        }).slice(0, 10) // Take top 10
+        }).slice(0, 10)
 
-        // Fetch handle and avatar from trader_sources
-        const traderKeys = dedupedData.map(t => t.source_trader_id)
-        let profileMap: Record<string, { handle: string | null; avatar_url: string | null }> = {}
+        // Fetch handles from trader_sources
+        const traderKeys = dedupedData.map(item => item.source_trader_id)
+        const profileMap: Record<string, string | null> = {}
         if (traderKeys.length > 0) {
           const { data: sources } = await supabase
             .from('trader_sources')
             .select('source_trader_id, handle')
             .in('source_trader_id', traderKeys)
-
-          if (sources) {
-            for (const s of sources) {
-              profileMap[s.source_trader_id] = { handle: s.handle, avatar_url: null }
-            }
-          }
+          sources?.forEach(s => { profileMap[s.source_trader_id] = s.handle })
         }
 
-        setTraders(dedupedData.map(t => ({
-          source: t.source,
-          source_trader_id: t.source_trader_id,
-          handle: profileMap[t.source_trader_id]?.handle || null,
-          avatar_url: profileMap[t.source_trader_id]?.avatar_url || null,
-          roi: t.roi ? parseFloat(t.roi) : null,
-          followers: t.followers ?? null,
+        setTraders(dedupedData.map(item => ({
+          source: item.source,
+          source_trader_id: item.source_trader_id,
+          handle: profileMap[item.source_trader_id] || null,
+          avatar_url: null,
+          roi: item.roi ? parseFloat(item.roi) : null,
+          followers: item.followers ?? null,
         })))
       } catch (err) {
-        const errorMsg = language === 'zh'
-          ? '网络错误，请检查网络连接后重试'
-          : 'Network error, please check your connection and try again'
+        const errorMsg = t('网络错误，请检查网络连接后重试', 'Network error, please check your connection and try again', language)
         setError(errorMsg)
         showToast(errorMsg, 'error')
         console.error('Error loading popular traders:', err)
@@ -124,93 +204,93 @@ function PopularTraders() {
         setLoading(false)
       }
     }
-
-    load()
+    loadTraders()
   }, [language, showToast])
 
-  if (loading) {
-    return (
-      <Text size="sm" color="tertiary" style={{ padding: tokens.spacing[4], textAlign: 'center' }}>
-        {language === 'zh' ? '加载中...' : 'Loading...'}
-      </Text>
-    )
-  }
-
-  if (error) {
-    return (
-      <Box style={{ padding: tokens.spacing[4], textAlign: 'center' }}>
-        <Text size="sm" style={{ color: '#DC2626', marginBottom: tokens.spacing[2] }}>
-          {error}
-        </Text>
-        <Button variant="secondary" size="sm" onClick={() => window.location.reload()}>
-          {language === 'zh' ? '重试' : 'Retry'}
-        </Button>
-      </Box>
-    )
-  }
-
-  if (traders.length === 0) {
-    return (
-      <Text size="sm" color="tertiary" style={{ padding: tokens.spacing[4], textAlign: 'center' }}>
-        {language === 'zh' ? '暂无数据' : 'No data available'}
-      </Text>
-    )
-  }
-
   return (
-    <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
-      {traders.map((trader, index) => {
-        const traderId = `${trader.source}-${trader.source_trader_id}`
-        const displayName = trader.handle || trader.source_trader_id.slice(0, 8)
-        const href = trader.handle ? `/trader/${trader.handle}` : `/trader/${trader.source_trader_id}`
+    <DataState loading={loading} error={error} isEmpty={traders.length === 0} language={language}>
+      <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
+        {traders.map((trader, index) => {
+          const displayName = trader.handle || trader.source_trader_id.slice(0, 8)
+          const href = trader.handle ? `/trader/${trader.handle}` : `/trader/${trader.source_trader_id}`
+          const roiValue = trader.roi != null ? Number(trader.roi) : null
 
-        return (
-          <Link
-            key={traderId}
-            href={href}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: tokens.spacing[2],
-              padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-              borderRadius: tokens.radius.md,
-              textDecoration: 'none',
-              color: tokens.colors.text.primary,
-              transition: 'background 0.15s ease',
-            }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = tokens.colors.bg.tertiary }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
-          >
-            {/* Rank */}
-            <Text size="xs" weight="bold" style={{ color: index < 3 ? '#c9b8db' : tokens.colors.text.tertiary, width: 16 }}>
-              {index + 1}
-            </Text>
-
-            {/* Name */}
-            <Text size="sm" weight="semibold" style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {displayName}
-            </Text>
-
-            {/* ROI */}
-            {trader.roi != null && (
-              <Text
-                size="xs"
-                weight="bold"
-                style={{
-                  color: Number(trader.roi) >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error,
-                }}
-              >
-                {Number(trader.roi) >= 0 ? '+' : ''}{Number(trader.roi).toFixed(1)}%
+          return (
+            <Link
+              key={`${trader.source}-${trader.source_trader_id}`}
+              href={href}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: tokens.spacing[2],
+                padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+                borderRadius: tokens.radius.md,
+                textDecoration: 'none',
+                color: tokens.colors.text.primary,
+                transition: 'background 0.15s ease',
+              }}
+              {...hoverHandlers}
+            >
+              <Text size="xs" weight="bold" style={{ color: index < 3 ? '#c9b8db' : tokens.colors.text.tertiary, width: 16 }}>
+                {index + 1}
               </Text>
-            )}
-          </Link>
-        )
-      })}
-    </Box>
+              <Text size="sm" weight="semibold" style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {displayName}
+              </Text>
+              {roiValue !== null && (
+                <Text size="xs" weight="bold" style={{ color: roiValue >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error }}>
+                  {roiValue >= 0 ? '+' : ''}{roiValue.toFixed(1)}%
+                </Text>
+              )}
+            </Link>
+          )
+        })}
+      </Box>
+    </DataState>
   )
 }
 
-function GroupsList() {
+// Shared group link component
+interface GroupLinkProps {
+  group: Group
+  language: string
+}
+
+function GroupLink({ group, language }: GroupLinkProps): React.ReactElement {
+  const displayName = language === 'zh' ? group.name : (group.name_en || group.name)
+  return (
+    <Link
+      href={`/groups/${group.id}`}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: tokens.spacing[2],
+        padding: `${tokens.spacing[2]} ${tokens.spacing[2]}`,
+        borderRadius: tokens.radius.md,
+        textDecoration: 'none',
+        color: tokens.colors.text.primary,
+        transition: 'all 0.15s ease',
+      }}
+      {...hoverHandlers}
+    >
+      <GroupAvatar avatarUrl={group.avatar_url} name={group.name} />
+      <Box style={{ flex: 1, minWidth: 0 }}>
+        <Text size="xs" weight="semibold" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {displayName}
+        </Text>
+        {group.member_count != null && (
+          <Text size="xs" color="tertiary" style={{ fontSize: 10 }}>
+            {group.member_count.toLocaleString()} {t('成员', 'members', language)}
+          </Text>
+        )}
+      </Box>
+    </Link>
+  )
+}
+
+type GroupTab = 'all' | 'mine' | 'hot'
+
+function GroupsList(): React.ReactElement {
   const { language } = useLanguage()
   const { showToast } = useToast()
   const [groups, setGroups] = useState<Group[]>([])
@@ -218,10 +298,11 @@ function GroupsList() {
   const [error, setError] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [debouncedQuery, setDebouncedQuery] = useState('')
-  const escapeIlike = (s: string) => s.replace(/[%_\\]/g, c => `\\${c}`)
-  const [activeGroupTab, setActiveGroupTab] = useState<'all' | 'mine' | 'hot'>('all')
+  const [activeGroupTab, setActiveGroupTab] = useState<GroupTab>('all')
   const [userId, setUserId] = useState<string | null>(null)
   const [myGroupIds, setMyGroupIds] = useState<string[]>([])
+
+  const escapeIlike = useCallback((s: string) => s.replace(/[%_\\]/g, c => `\\${c}`), [])
 
   // Get user for "Mine" tab
   useEffect(() => {
@@ -233,14 +314,11 @@ function GroupsList() {
   // Load user's group memberships
   useEffect(() => {
     if (!userId) return
-    const loadMemberships = async () => {
-      const { data } = await supabase
-        .from('group_members')
-        .select('group_id')
-        .eq('user_id', userId)
-      setMyGroupIds((data || []).map(m => m.group_id))
-    }
-    loadMemberships()
+    supabase
+      .from('group_members')
+      .select('group_id')
+      .eq('user_id', userId)
+      .then(({ data }) => setMyGroupIds((data || []).map(m => m.group_id)))
   }, [userId])
 
   // Debounce search query
@@ -249,8 +327,9 @@ function GroupsList() {
     return () => clearTimeout(timer)
   }, [searchQuery])
 
+  // Load groups
   useEffect(() => {
-    const load = async () => {
+    async function loadGroups(): Promise<void> {
       try {
         setLoading(true)
         setError(null)
@@ -262,7 +341,21 @@ function GroupsList() {
           return
         }
 
-        // "Hot" tab: rank by recent activity (posts in last 7 days)
+        // Build base query
+        const buildQuery = (groupIds?: string[]) => {
+          let query = supabase
+            .from('groups')
+            .select('id, name, avatar_url, member_count, name_en')
+            .order('member_count', { ascending: false, nullsFirst: false })
+            .limit(3)
+          if (groupIds) query = query.in('id', groupIds)
+          if (debouncedQuery) {
+            query = query.or(`name.ilike.%${escapeIlike(debouncedQuery)}%,name_en.ilike.%${escapeIlike(debouncedQuery)}%`)
+          }
+          return query
+        }
+
+        // "Hot" tab: rank by recent activity
         if (activeGroupTab === 'hot') {
           const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
           const { data: recentPosts } = await supabase
@@ -271,90 +364,58 @@ function GroupsList() {
             .gte('created_at', sevenDaysAgo)
             .not('group_id', 'is', null)
 
-          // Count posts per group
           const activityMap: Record<string, number> = {}
-          for (const p of recentPosts || []) {
-            if (p.group_id) {
-              activityMap[p.group_id] = (activityMap[p.group_id] || 0) + 1
-            }
-          }
+          recentPosts?.forEach(p => { if (p.group_id) activityMap[p.group_id] = (activityMap[p.group_id] || 0) + 1 })
 
           const activeGroupIds = Object.keys(activityMap)
-          if (activeGroupIds.length === 0) {
-            // Fallback to member_count if no recent activity
-            const { data } = await supabase
-              .from('groups')
-              .select('id, name, avatar_url, member_count, name_en')
-              .order('member_count', { ascending: false, nullsFirst: false })
-              .limit(20)
-            setGroups(data || [])
-            setLoading(false)
-            return
-          }
+          const { data, error: supabaseError } = activeGroupIds.length > 0
+            ? await buildQuery(activeGroupIds)
+            : await buildQuery()
 
-          let query = supabase
-            .from('groups')
-            .select('id, name, avatar_url, member_count, name_en')
-            .in('id', activeGroupIds)
-            .limit(20)
+          if (supabaseError) throw supabaseError
 
-          if (debouncedQuery) {
-            query = query.or(`name.ilike.%${escapeIlike(debouncedQuery)}%,name_en.ilike.%${escapeIlike(debouncedQuery)}%`)
-          }
-
-          const { data, error: supabaseError } = await query
-          if (supabaseError) {
-            setError(language === 'zh' ? '加载失败' : 'Failed to load')
-            showToast(language === 'zh' ? '加载小组列表失败' : 'Failed to load groups', 'error')
-          }
-
-          // Sort by activity count (descending)
-          const sorted = (data || []).sort((a, b) => (activityMap[b.id] || 0) - (activityMap[a.id] || 0))
+          const sorted = activeGroupIds.length > 0
+            ? (data || []).sort((a, b) => (activityMap[b.id] || 0) - (activityMap[a.id] || 0))
+            : data || []
           setGroups(sorted)
-          setLoading(false)
           return
         }
 
-        // "All" and "Mine" tabs: sort by member_count
-        let query = supabase
-          .from('groups')
-          .select('id, name, avatar_url, member_count, name_en')
-          .order('member_count', { ascending: false, nullsFirst: false })
-          .limit(20)
-
-        if (debouncedQuery) {
-          query = query.or(`name.ilike.%${escapeIlike(debouncedQuery)}%,name_en.ilike.%${escapeIlike(debouncedQuery)}%`)
-        }
-
-        if (activeGroupTab === 'mine') {
-          query = query.in('id', myGroupIds)
-        }
-
-        const { data, error: supabaseError } = await query
-
-        if (supabaseError) {
-          setError(language === 'zh' ? '加载失败' : 'Failed to load')
-          showToast(language === 'zh' ? '加载小组列表失败' : 'Failed to load groups', 'error')
-        }
+        // "All" and "Mine" tabs
+        const groupIds = activeGroupTab === 'mine' ? myGroupIds : undefined
+        const { data, error: supabaseError } = await buildQuery(groupIds)
+        if (supabaseError) throw supabaseError
         setGroups(data || [])
       } catch (err) {
-        setError(language === 'zh' ? '网络错误' : 'Network error')
+        setError(t('加载失败', 'Failed to load', language))
+        showToast(t('加载小组列表失败', 'Failed to load groups', language), 'error')
         console.error('Error loading groups:', err)
       } finally {
         setLoading(false)
       }
     }
-    load()
-  }, [debouncedQuery, activeGroupTab, myGroupIds, language, showToast])
+    loadGroups()
+  }, [debouncedQuery, activeGroupTab, myGroupIds, language, showToast, escapeIlike])
+
+  const getEmptyMessage = (): string => {
+    if (debouncedQuery) return t('未找到匹配的小组', 'No groups found', language)
+    if (activeGroupTab === 'mine') return t('还未加入任何小组', 'Not joined any groups', language)
+    return t('暂无小组', 'No groups available', language)
+  }
+
+  const tabLabels: Record<GroupTab, string> = {
+    all: t('全部', 'All', language),
+    mine: t('我的', 'Mine', language),
+    hot: t('热门', 'Hot', language),
+  }
 
   return (
     <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
-      {/* Search input */}
       <input
         type="text"
         value={searchQuery}
         onChange={(e) => setSearchQuery(e.target.value)}
-        placeholder={language === 'zh' ? '搜索小组...' : 'Search groups...'}
+        placeholder={t('搜索小组...', 'Search groups...', language)}
         style={{
           width: '100%',
           padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
@@ -366,7 +427,6 @@ function GroupsList() {
         }}
       />
 
-      {/* Tabs */}
       <Box style={{ display: 'flex', gap: tokens.spacing[1] }}>
         {(['all', 'mine', 'hot'] as const).map(tab => (
           <button
@@ -383,102 +443,27 @@ function GroupsList() {
               fontWeight: activeGroupTab === tab ? 'bold' : 'normal',
             }}
           >
-            {tab === 'all' ? (language === 'zh' ? '全部' : 'All')
-              : tab === 'mine' ? (language === 'zh' ? '我的' : 'Mine')
-              : (language === 'zh' ? '热门' : 'Hot')}
+            {tabLabels[tab]}
           </button>
         ))}
       </Box>
 
-      {/* Results */}
-      {loading ? (
-        <Text size="sm" color="tertiary" style={{ padding: tokens.spacing[3], textAlign: 'center' }}>
-          {language === 'zh' ? '加载中...' : 'Loading...'}
-        </Text>
-      ) : error ? (
-        null
-      ) : groups.length === 0 ? (
-        <Text size="sm" color="tertiary" style={{ padding: tokens.spacing[3], textAlign: 'center' }}>
-          {debouncedQuery
-            ? (language === 'zh' ? '未找到匹配的小组' : 'No groups found')
-            : activeGroupTab === 'mine'
-              ? (language === 'zh' ? '还未加入任何小组' : 'Not joined any groups')
-              : (language === 'zh' ? '暂无小组' : 'No groups available')}
-        </Text>
-      ) : (
-        <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
-          {groups.map((group) => (
-            <Link
-              key={group.id}
-              href={`/groups/${group.id}`}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: tokens.spacing[3],
-                padding: `${tokens.spacing[3]} ${tokens.spacing[3]}`,
-                borderRadius: tokens.radius.lg,
-                textDecoration: 'none',
-                color: tokens.colors.text.primary,
-                background: tokens.colors.bg.secondary,
-                border: `1px solid ${tokens.colors.border.primary}`,
-                transition: 'all 0.2s ease',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = 'linear-gradient(135deg, rgba(139,111,168,0.08), rgba(139,111,168,0.03))'
-                e.currentTarget.style.borderColor = 'rgba(139,111,168,0.3)'
-                e.currentTarget.style.transform = 'translateX(2px)'
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = tokens.colors.bg.secondary
-                e.currentTarget.style.borderColor = tokens.colors.border.primary
-                e.currentTarget.style.transform = 'translateX(0)'
-              }}
-            >
-              <Box style={{
-                width: 36,
-                height: 36,
-                borderRadius: tokens.radius.lg,
-                background: 'linear-gradient(135deg, rgba(139,111,168,0.25), rgba(139,111,168,0.1))',
-                border: `1px solid rgba(139,111,168,0.2)`,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                overflow: 'hidden',
-                flexShrink: 0,
-              }}>
-                {group.avatar_url ? (
-                  <img src={group.avatar_url} alt={group.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                ) : (
-                  <Text size="sm" weight="bold" style={{ color: '#c9b8db' }}>
-                    {group.name.charAt(0).toUpperCase()}
-                  </Text>
-                )}
-              </Box>
-              <Box style={{ flex: 1, minWidth: 0 }}>
-                <Text size="sm" weight="bold" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 2 }}>
-                  {language === 'zh' ? group.name : (group.name_en || group.name)}
-                </Text>
-                {group.member_count != null && (
-                  <Text size="xs" color="tertiary">
-                    {group.member_count.toLocaleString()} {language === 'zh' ? '成员' : 'members'}
-                  </Text>
-                )}
-              </Box>
-            </Link>
-          ))}
+      <DataState loading={loading} error={error} isEmpty={groups.length === 0} language={language} emptyMessage={getEmptyMessage()}>
+        <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[1] }}>
+          {groups.map((group) => <GroupLink key={group.id} group={group} language={language} />)}
         </Box>
-      )}
+      </DataState>
     </Box>
   )
 }
 
-function MyGroups() {
+function MyGroups(): React.ReactElement {
   const { language } = useLanguage()
   const [groups, setGroups] = useState<Group[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const load = async () => {
+    async function loadMyGroups(): Promise<void> {
       const { data: userData } = await supabase.auth.getUser()
       if (!userData.user) {
         setLoading(false)
@@ -495,81 +480,52 @@ function MyGroups() {
         return
       }
 
-      const groupIds = memberships.map(m => m.group_id)
       const { data: groupsData } = await supabase
         .from('groups')
         .select('id, name, name_en, avatar_url, member_count')
-        .in('id', groupIds)
+        .in('id', memberships.map(m => m.group_id))
 
       setGroups(groupsData || [])
       setLoading(false)
     }
-    load()
+    loadMyGroups()
   }, [])
 
-  if (loading) {
-    return (
-      <Text size="sm" color="tertiary" style={{ padding: tokens.spacing[4], textAlign: 'center' }}>
-        {language === 'zh' ? '加载中...' : 'Loading...'}
-      </Text>
-    )
-  }
-
-  if (groups.length === 0) {
-    return (
-      <Text size="sm" color="tertiary" style={{ padding: tokens.spacing[4], textAlign: 'center' }}>
-        {language === 'zh' ? '还未加入任何小组' : 'Not joined any groups yet'}
-      </Text>
-    )
-  }
-
   return (
-    <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
-      {groups.map((group) => (
-        <Link
-          key={group.id}
-          href={`/groups/${group.id}`}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: tokens.spacing[2],
-            padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-            borderRadius: tokens.radius.md,
-            textDecoration: 'none',
-            color: tokens.colors.text.primary,
-            transition: 'background 0.15s ease',
-          }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = tokens.colors.bg.tertiary }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
-        >
-          <Box style={{
-            width: 32,
-            height: 32,
-            borderRadius: tokens.radius.md,
-            background: 'linear-gradient(135deg, rgba(139,111,168,0.2), rgba(139,111,168,0.1))',
-            border: `1px solid ${tokens.colors.border.primary}`,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            overflow: 'hidden',
-            flexShrink: 0,
-          }}>
-            {group.avatar_url ? (
-              <img src={group.avatar_url} alt={group.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-            ) : (
-              <Text size="xs" weight="bold" style={{ color: '#c9b8db' }}>
-                {group.name.charAt(0).toUpperCase()}
+    <DataState
+      loading={loading}
+      error={null}
+      isEmpty={groups.length === 0}
+      language={language}
+      emptyMessage={t('还未加入任何小组', 'Not joined any groups yet', language)}
+    >
+      <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
+        {groups.map((group) => (
+          <Link
+            key={group.id}
+            href={`/groups/${group.id}`}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: tokens.spacing[2],
+              padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+              borderRadius: tokens.radius.md,
+              textDecoration: 'none',
+              color: tokens.colors.text.primary,
+              transition: 'background 0.15s ease',
+            }}
+            {...hoverHandlers}
+          >
+            <GroupAvatar avatarUrl={group.avatar_url} name={group.name} />
+            <Box style={{ flex: 1, minWidth: 0 }}>
+              <Text size="xs" weight="bold" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {language === 'zh' ? group.name : (group.name_en || group.name)}
               </Text>
-            )}
-          </Box>
-          <Box style={{ flex: 1, minWidth: 0 }}>
-            <Text size="xs" weight="bold" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {language === 'zh' ? group.name : (group.name_en || group.name)}
-            </Text>
-          </Box>
-        </Link>
-      ))}
-    </Box>
+            </Box>
+          </Link>
+        ))}
+      </Box>
+    </DataState>
   )
 }
 
@@ -632,7 +588,7 @@ function GroupsContent() {
           {/* 中：帖子瀑布流 */}
           <Box as="section" style={{ minWidth: 0 }}>
             <Card title={language === 'zh' ? '推荐动态' : 'Recommended'}>
-              <PostFeed layout="masonry" variant={loggedIn ? 'full' : 'compact'} initialPostId={initialPostId} />
+              <PostFeed layout="masonry" variant={loggedIn ? 'full' : 'compact'} initialPostId={initialPostId} showRefreshButton />
             </Card>
           </Box>
 

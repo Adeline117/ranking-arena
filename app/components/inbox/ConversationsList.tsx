@@ -4,8 +4,9 @@ import { useEffect, useState, useCallback } from 'react'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import { useInboxStore } from '@/lib/stores/inboxStore'
-import { getAuthSession, refreshAuthToken } from '@/lib/auth/client'
+import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import Avatar from '@/app/components/ui/Avatar'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 type Conversation = {
   id: string
@@ -19,67 +20,85 @@ type Conversation = {
   unread_count: number
 }
 
-export default function ConversationsList() {
+function calculateTotalUnread(conversations: Conversation[]): number {
+  return conversations.reduce((sum, c) => sum + c.unread_count, 0)
+}
+
+function UnreadBadge({ count }: { count: number }): React.ReactElement | null {
+  if (count <= 0) return null
+
+  return (
+    <span
+      style={{
+        minWidth: 18,
+        height: 18,
+        borderRadius: 9,
+        background: tokens.colors.accent.primary,
+        color: '#fff',
+        fontSize: 10,
+        fontWeight: 700,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '0 4px',
+        flexShrink: 0,
+      }}
+    >
+      {count > 99 ? '99+' : count}
+    </span>
+  )
+}
+
+export default function ConversationsList(): React.ReactElement {
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [loading, setLoading] = useState(true)
   const setUnreadMessages = useInboxStore((s) => s.setUnreadMessages)
+  const { language, t } = useLanguage()
+  const { accessToken, getAuthHeadersAsync } = useAuthSession()
 
   const loadConversations = useCallback(async () => {
+    if (!accessToken) return
+
     try {
       setLoading(true)
-      let auth = await getAuthSession()
-      if (!auth) {
-        auth = await refreshAuthToken()
-        if (!auth) return
-      }
+      const headers = await getAuthHeadersAsync()
+      const res = await fetch('/api/conversations', { headers })
 
-      const res = await fetch('/api/conversations', {
-        headers: { 'Authorization': `Bearer ${auth.accessToken}` },
-      })
-
-      if (res.status === 401) {
-        const refreshed = await refreshAuthToken()
-        if (refreshed) {
-          const retryRes = await fetch('/api/conversations', {
-            headers: { 'Authorization': `Bearer ${refreshed.accessToken}` },
-          })
-          const retryData = await retryRes.json()
-          if (retryRes.ok && retryData.conversations) {
-            setConversations(retryData.conversations)
-            const totalUnread = retryData.conversations.reduce((sum: number, c: Conversation) => sum + c.unread_count, 0)
-            setUnreadMessages(totalUnread)
-            return
-          }
-        }
-        return
-      }
+      if (!res.ok) return
 
       const data = await res.json()
       if (data.conversations) {
         setConversations(data.conversations)
-        const totalUnread = data.conversations.reduce((sum: number, c: Conversation) => sum + c.unread_count, 0)
-        setUnreadMessages(totalUnread)
+        setUnreadMessages(calculateTotalUnread(data.conversations))
       }
     } catch (err) {
       console.error('Failed to load conversations:', err)
     } finally {
       setLoading(false)
     }
-  }, [setUnreadMessages])
+  }, [accessToken, getAuthHeadersAsync, setUnreadMessages])
 
   useEffect(() => {
-    loadConversations()
-  }, [loadConversations])
+    if (accessToken) loadConversations()
+  }, [accessToken, loadConversations])
 
-  const formatTime = (dateString: string) => {
+  function formatTime(dateString: string): string {
     const date = new Date(dateString)
     const now = new Date()
-    const diff = now.getTime() - date.getTime()
-    const days = Math.floor(diff / (1000 * 60 * 60 * 24))
-    if (days === 0) return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-    if (days === 1) return '昨天'
-    if (days < 7) return `${days}天前`
-    return date.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })
+    const diffMs = now.getTime() - date.getTime()
+    const days = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+    const locale = language === 'zh' ? 'zh-CN' : 'en-US'
+
+    if (days === 0) {
+      return date.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })
+    }
+    if (days === 1) {
+      return t('yesterday')
+    }
+    if (days < 7) {
+      return t('daysAgo').replace('{days}', String(days))
+    }
+    return date.toLocaleDateString(locale, { month: 'short', day: 'numeric' })
   }
 
   return (
@@ -92,16 +111,16 @@ export default function ConversationsList() {
           color: tokens.colors.text.primary,
         }}
       >
-        私信
+        {t('messages')}
       </div>
 
       {loading ? (
         <div style={{ padding: tokens.spacing[4], textAlign: 'center', color: tokens.colors.text.tertiary, fontSize: 13 }}>
-          加载中...
+          {t('loading')}
         </div>
       ) : conversations.length === 0 ? (
         <div style={{ padding: tokens.spacing[4], textAlign: 'center', color: tokens.colors.text.tertiary, fontSize: 13 }}>
-          暂无私信
+          {t('noMessages')}
         </div>
       ) : (
         <div style={{ maxHeight: 400, overflowY: 'auto' }}>
@@ -152,28 +171,9 @@ export default function ConversationsList() {
                         flex: 1,
                       }}
                     >
-                      {conv.last_message_preview || '开始聊天'}
+                      {conv.last_message_preview || t('startChat')}
                     </span>
-                    {conv.unread_count > 0 && (
-                      <span
-                        style={{
-                          minWidth: 18,
-                          height: 18,
-                          borderRadius: 9,
-                          background: tokens.colors.accent.primary,
-                          color: '#fff',
-                          fontSize: 10,
-                          fontWeight: 700,
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          padding: '0 4px',
-                          flexShrink: 0,
-                        }}
-                      >
-                        {conv.unread_count > 99 ? '99+' : conv.unread_count}
-                      </span>
-                    )}
+                    <UnreadBadge count={conv.unread_count} />
                   </div>
                 </div>
               </div>

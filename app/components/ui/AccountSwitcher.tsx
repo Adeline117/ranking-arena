@@ -1,133 +1,165 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
 import Avatar from '@/app/components/ui/Avatar'
 import { useMultiAccount } from '@/lib/hooks/useMultiAccount'
 import { useRouter } from 'next/navigation'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 interface AccountSwitcherProps {
   onClose?: () => void
 }
 
-export default function AccountSwitcher({ onClose }: AccountSwitcherProps) {
+const truncateStyle: React.CSSProperties = {
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+}
+
+interface AccountRowProps {
+  userId: string
+  avatarUrl?: string | null
+  handle?: string | null
+  email: string
+  isActive?: boolean
+  isSwitching?: boolean
+  disabled?: boolean
+  switchingLabel?: string
+  onClick?: () => void
+}
+
+function AccountRow({
+  userId,
+  avatarUrl,
+  handle,
+  email,
+  isActive,
+  isSwitching,
+  disabled,
+  switchingLabel,
+  onClick,
+}: AccountRowProps): React.ReactElement {
+  const displayName = handle || email
+
+  return (
+    <Box
+      onClick={onClick}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: tokens.spacing[2],
+        padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+        borderRadius: tokens.radius.md,
+        background: isActive ? `${tokens.colors.accent.primary}10` : 'transparent',
+        cursor: onClick ? (disabled ? 'wait' : 'pointer') : undefined,
+        opacity: disabled && !isSwitching ? 0.5 : 1,
+        transition: `all ${tokens.transition.base}`,
+      }}
+      onMouseEnter={(e) => {
+        if (onClick && !disabled && !isActive) {
+          e.currentTarget.style.background = tokens.colors.bg.secondary
+        }
+      }}
+      onMouseLeave={(e) => {
+        if (!isActive) {
+          e.currentTarget.style.background = 'transparent'
+        }
+      }}
+    >
+      <Avatar userId={userId} avatarUrl={avatarUrl} name={displayName} size={28} />
+      <Box style={{ flex: 1, minWidth: 0 }}>
+        <Text size="sm" weight={isActive ? 'bold' : undefined} style={truncateStyle}>
+          {displayName}
+        </Text>
+        {isActive && handle && (
+          <Text size="xs" color="tertiary" style={truncateStyle}>
+            {email}
+          </Text>
+        )}
+      </Box>
+      {isActive && <Text size="xs" style={{ color: tokens.colors.accent.success }}>✓</Text>}
+      {isSwitching && <Text size="xs" color="tertiary">{switchingLabel}</Text>}
+    </Box>
+  )
+}
+
+export default function AccountSwitcher({ onClose }: AccountSwitcherProps): React.ReactElement {
   const router = useRouter()
-  const {
-    accounts,
-    activeAccount,
-    inactiveAccounts,
-    isPro,
-    switchAccount,
-    removeAccount,
-    signOutAll,
-  } = useMultiAccount()
+  const { t } = useLanguage()
+  const { accounts, activeAccount, inactiveAccounts, isPro, switchAccount, removeAccount, signOutAll } = useMultiAccount()
   const [switchingId, setSwitchingId] = useState<string | null>(null)
   const [signingOut, setSigningOut] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const handleSwitch = async (userId: string) => {
+  const handleSwitch = useCallback(async (userId: string) => {
     setSwitchingId(userId)
     setError(null)
     const result = await switchAccount(userId)
     setSwitchingId(null)
 
     if (!result.success) {
+      const errorMessage = result.error === 'session_expired' ? t('sessionExpired') : t('switchFailed')
+      setError(errorMessage)
       if (result.error === 'session_expired') {
-        setError('会话已过期，请重新登录此账号')
         removeAccount(userId)
-      } else {
-        setError('切换失败，请重试')
       }
       return
     }
 
     onClose?.()
     router.refresh()
-  }
+  }, [switchAccount, removeAccount, onClose, router, t])
 
-  const handleAddAccount = () => {
+  const handleAddAccount = useCallback(() => {
+    onClose?.()
     if (!isPro) {
       router.push('/settings?section=subscription')
-      onClose?.()
       return
     }
-    // Sign out current and redirect to login to add another
-    onClose?.()
     router.push('/login?addAccount=true')
-  }
+  }, [isPro, onClose, router])
+
+  const handleSignOutAll = useCallback(async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (signingOut) return
+    setSigningOut(true)
+    try {
+      await signOutAll()
+      onClose?.()
+      router.push('/')
+    } catch (err) {
+      console.error('Sign out failed:', err)
+    } finally {
+      setSigningOut(false)
+    }
+  }, [signingOut, signOutAll, onClose, router])
 
   return (
     <Box style={{ padding: `${tokens.spacing[1]} 0` }}>
-      {/* Current account */}
       {activeAccount && (
-        <Box
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: tokens.spacing[2],
-            padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-            borderRadius: tokens.radius.md,
-            background: `${tokens.colors.accent.primary}10`,
-          }}
-        >
-          <Avatar
-            userId={activeAccount.userId}
-            avatarUrl={activeAccount.avatarUrl}
-            name={activeAccount.handle || activeAccount.email}
-            size={28}
-          />
-          <Box style={{ flex: 1, minWidth: 0 }}>
-            <Text size="sm" weight="bold" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {activeAccount.handle || activeAccount.email}
-            </Text>
-            {activeAccount.handle && (
-              <Text size="xs" color="tertiary" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {activeAccount.email}
-              </Text>
-            )}
-          </Box>
-          <Text size="xs" style={{ color: tokens.colors.accent.success }}>✓</Text>
-        </Box>
+        <AccountRow
+          userId={activeAccount.userId}
+          avatarUrl={activeAccount.avatarUrl}
+          handle={activeAccount.handle}
+          email={activeAccount.email}
+          isActive
+        />
       )}
 
-      {/* Inactive accounts */}
       {inactiveAccounts.map((account) => (
-        <Box
+        <AccountRow
           key={account.userId}
-          onClick={(e) => { e.stopPropagation(); handleSwitch(account.userId) }}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: tokens.spacing[2],
-            padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-            borderRadius: tokens.radius.md,
-            cursor: switchingId ? 'wait' : 'pointer',
-            opacity: switchingId && switchingId !== account.userId ? 0.5 : 1,
-            transition: `all ${tokens.transition.base}`,
-          }}
-          onMouseEnter={(e) => {
-            if (!switchingId) e.currentTarget.style.background = tokens.colors.bg.secondary
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = 'transparent'
-          }}
-        >
-          <Avatar
-            userId={account.userId}
-            avatarUrl={account.avatarUrl}
-            name={account.handle || account.email}
-            size={28}
-          />
-          <Box style={{ flex: 1, minWidth: 0 }}>
-            <Text size="sm" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {account.handle || account.email}
-            </Text>
-          </Box>
-          {switchingId === account.userId && (
-            <Text size="xs" color="tertiary">切换中...</Text>
-          )}
-        </Box>
+          userId={account.userId}
+          avatarUrl={account.avatarUrl}
+          handle={account.handle}
+          email={account.email}
+          isSwitching={switchingId === account.userId}
+          disabled={Boolean(switchingId)}
+          switchingLabel={t('switchingAccount')}
+          onClick={() => handleSwitch(account.userId)}
+        />
       ))}
 
       {error && (
@@ -136,84 +168,88 @@ export default function AccountSwitcher({ onClose }: AccountSwitcherProps) {
         </Text>
       )}
 
-      {/* Divider */}
       <Box style={{ height: 1, background: tokens.colors.border.primary, margin: `${tokens.spacing[2]} 0` }} />
 
-      {/* Add account */}
-      <Box
-        onClick={(e) => { e.stopPropagation(); handleAddAccount() }}
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: tokens.spacing[2],
-          padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-          borderRadius: tokens.radius.md,
-          cursor: 'pointer',
-          transition: `all ${tokens.transition.base}`,
-        }}
-        onMouseEnter={(e) => { e.currentTarget.style.background = tokens.colors.bg.secondary }}
-        onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
-      >
-        <Box style={{
-          width: 28, height: 28,
-          borderRadius: '50%',
-          border: `1px dashed ${tokens.colors.border.secondary}`,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 14, color: tokens.colors.text.tertiary,
-        }}>
-          +
-        </Box>
-        <Text size="sm" color="secondary">添加账号</Text>
-        {!isPro && (
-          <Box style={{
-            marginLeft: 'auto',
-            padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
-            borderRadius: tokens.radius.sm,
-            background: 'linear-gradient(135deg, #8b6fa8, #b794d4)',
-            color: '#fff',
-            fontSize: 10,
-            fontWeight: 700,
-          }}>
-            Pro
-          </Box>
-        )}
-      </Box>
-
-      {/* Sign out all */}
-      {accounts.length > 1 && (
+      <MenuRow onClick={handleAddAccount}>
         <Box
-          onClick={async (e) => {
-            e.stopPropagation()
-            if (signingOut) return
-            setSigningOut(true)
-            try {
-              await signOutAll()
-              onClose?.()
-              router.push('/')
-            } catch (err) {
-              console.error('Sign out failed:', err)
-            } finally {
-              setSigningOut(false)
-            }
-          }}
           style={{
+            width: 28,
+            height: 28,
+            borderRadius: '50%',
+            border: `1px dashed ${tokens.colors.border.secondary}`,
             display: 'flex',
             alignItems: 'center',
-            gap: tokens.spacing[2],
-            padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-            borderRadius: tokens.radius.md,
-            cursor: signingOut ? 'wait' : 'pointer',
-            opacity: signingOut ? 0.5 : 1,
-            transition: `all ${tokens.transition.base}`,
+            justifyContent: 'center',
+            fontSize: 14,
+            color: tokens.colors.text.tertiary,
           }}
-          onMouseEnter={(e) => { if (!signingOut) e.currentTarget.style.background = tokens.colors.bg.secondary }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
         >
-          <Text size="xs" style={{ color: tokens.colors.accent.error }}>
-            {signingOut ? '退出中...' : '退出所有账号'}
-          </Text>
+          +
         </Box>
+        <Text size="sm" color="secondary">{t('addAccount')}</Text>
+        {!isPro && <ProBadge />}
+      </MenuRow>
+
+      {accounts.length > 1 && (
+        <MenuRow onClick={handleSignOutAll} disabled={signingOut}>
+          <Text size="xs" style={{ color: tokens.colors.accent.error }}>
+            {signingOut ? t('signingOut') : t('signOutAll')}
+          </Text>
+        </MenuRow>
       )}
+    </Box>
+  )
+}
+
+interface MenuRowProps {
+  onClick: (e: React.MouseEvent) => void
+  disabled?: boolean
+  children: React.ReactNode
+}
+
+function MenuRow({ onClick, disabled, children }: MenuRowProps): React.ReactElement {
+  return (
+    <Box
+      onClick={(e) => {
+        e.stopPropagation()
+        if (!disabled) onClick(e)
+      }}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: tokens.spacing[2],
+        padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+        borderRadius: tokens.radius.md,
+        cursor: disabled ? 'wait' : 'pointer',
+        opacity: disabled ? 0.5 : 1,
+        transition: `all ${tokens.transition.base}`,
+      }}
+      onMouseEnter={(e) => {
+        if (!disabled) e.currentTarget.style.background = tokens.colors.bg.secondary
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.background = 'transparent'
+      }}
+    >
+      {children}
+    </Box>
+  )
+}
+
+function ProBadge(): React.ReactElement {
+  return (
+    <Box
+      style={{
+        marginLeft: 'auto',
+        padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
+        borderRadius: tokens.radius.sm,
+        background: 'linear-gradient(135deg, #8b6fa8, #b794d4)',
+        color: '#fff',
+        fontSize: 10,
+        fontWeight: 700,
+      }}
+    >
+      Pro
     </Box>
   )
 }

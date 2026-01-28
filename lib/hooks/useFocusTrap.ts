@@ -129,7 +129,8 @@ export function useFocusTrap<T extends HTMLElement = HTMLElement>() {
     containerRef,
     activate,
     deactivate,
-    isActive: isActive.current,
+    // Note: isActive is not exposed to avoid accessing ref during render
+    // If you need to check if active, use a state variable instead
   }
 }
 

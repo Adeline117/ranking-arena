@@ -26,7 +26,6 @@ export interface Post {
   is_pinned: boolean
   created_at: string
   updated_at?: string
-  // 转发相关
   original_post_id?: string | null
 }
 
@@ -42,8 +41,10 @@ export interface OriginalPost {
 
 export interface PostWithAuthor extends Post {
   author_avatar_url?: string
-  // 原始帖子信息（如果是转发）
+  author_is_pro?: boolean
+  author_show_pro_badge?: boolean
   original_post?: OriginalPost | null
+  images?: string[] | null
 }
 
 export interface CreatePostInput {
@@ -63,7 +64,6 @@ export interface PostListOptions {
   sort_order?: 'asc' | 'desc'
 }
 
-// 数据库返回的帖子行类型
 interface PostRow {
   id: string
   title: string
@@ -85,24 +85,97 @@ interface PostRow {
   hot_score?: number
   is_pinned?: boolean
   images?: string[]
-  link_preview_url?: string
-  link_preview_title?: string
-  link_preview_description?: string
-  link_preview_image?: string
   created_at: string
   updated_at?: string
   original_post_id?: string | null
   groups?: { name: string } | { name: string }[]
-  original_posts?: {
+}
+
+interface AuthorProfile {
+  handle: string | null
+  avatar_url: string | null
+  is_pro: boolean
+  show_pro_badge: boolean
+}
+
+/**
+ * 构建作者资料映射
+ */
+function buildAuthorProfileMap(
+  profiles: Array<{
     id: string
-    title: string
-    content: string
-    author_handle: string
-    images?: string[]
-    created_at: string
-    user_profiles?: { avatar_url?: string }
+    handle: string | null
+    avatar_url: string | null
+    subscription_tier?: string | null
+    show_pro_badge?: boolean | null
+  }>
+): Map<string, AuthorProfile> {
+  const map = new Map<string, AuthorProfile>()
+  for (const p of profiles) {
+    map.set(p.id, {
+      handle: p.handle,
+      avatar_url: p.avatar_url,
+      is_pro: p.subscription_tier === 'pro',
+      show_pro_badge: p.show_pro_badge !== false,
+    })
+  }
+  return map
+}
+
+/**
+ * 提取 group name
+ */
+function extractGroupName(groups: PostRow['groups']): string | undefined {
+  if (!groups) return undefined
+  return Array.isArray(groups) ? groups[0]?.name : groups.name
+}
+
+/**
+ * 转换数据库行为 PostWithAuthor 对象
+ */
+function toPostWithAuthor(
+  row: PostRow,
+  profile?: AuthorProfile,
+  originalPost?: OriginalPost | null
+): PostWithAuthor {
+  return {
+    id: row.id,
+    title: row.title,
+    content: row.content,
+    author_id: row.author_id,
+    author_handle: profile?.handle || row.author_handle,
+    author_avatar_url: profile?.avatar_url ?? undefined,
+    author_is_pro: profile?.is_pro ?? false,
+    author_show_pro_badge: profile?.show_pro_badge !== false,
+    group_id: row.group_id,
+    group_name: extractGroupName(row.groups),
+    poll_enabled: row.poll_enabled || false,
+    poll_bull: row.poll_bull || 0,
+    poll_bear: row.poll_bear || 0,
+    poll_wait: row.poll_wait || 0,
+    like_count: row.like_count || 0,
+    dislike_count: row.dislike_count || 0,
+    comment_count: row.comment_count || 0,
+    bookmark_count: row.bookmark_count || 0,
+    repost_count: row.repost_count || 0,
+    view_count: row.view_count || 0,
+    hot_score: row.hot_score || 0,
+    is_pinned: row.is_pinned || false,
+    images: row.images || null,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    original_post_id: row.original_post_id || null,
+    original_post: originalPost ?? null,
   }
 }
+
+const POST_SELECT_FIELDS = `
+  id, title, content, author_id, author_handle, group_id,
+  poll_enabled, poll_id, poll_bull, poll_bear, poll_wait,
+  like_count, dislike_count, comment_count, bookmark_count,
+  repost_count, view_count, hot_score, is_pinned, images,
+  created_at, updated_at, original_post_id, groups(name)
+`
 
 /**
  * 获取帖子列表
@@ -121,35 +194,9 @@ export async function getPosts(
     sort_order = 'desc',
   } = options
 
-  // 查询帖子列表，包含转发的原始帖子信息
   let query = supabase
     .from('posts')
-    .select(`
-      id,
-      title,
-      content,
-      author_id,
-      author_handle,
-      group_id,
-      poll_enabled,
-      poll_id,
-      poll_bull,
-      poll_bear,
-      poll_wait,
-      like_count,
-      dislike_count,
-      comment_count,
-      bookmark_count,
-      repost_count,
-      view_count,
-      hot_score,
-      is_pinned,
-      images,
-      created_at,
-      updated_at,
-      original_post_id,
-      groups(name)
-    `)
+    .select(POST_SELECT_FIELDS)
     .range(offset, offset + limit - 1)
     .order(sort_by, { ascending: sort_order === 'asc' })
 
@@ -160,76 +207,59 @@ export async function getPosts(
   }
 
   if (author_handle) {
-    // 先通过 handle 查找用户 ID，再用 author_id 过滤（避免改名后找不到旧帖子）
     const { data: authorProfile } = await supabase
       .from('user_profiles')
       .select('id')
       .eq('handle', author_handle)
       .maybeSingle()
 
-    if (authorProfile?.id) {
-      query = query.eq('author_id', authorProfile.id)
-    } else {
-      // 如果找不到用户，降级为直接用 handle 查询
-      query = query.eq('author_handle', author_handle)
-    }
+    query = authorProfile?.id
+      ? query.eq('author_id', authorProfile.id)
+      : query.eq('author_handle', author_handle)
   }
 
   const { data, error } = await query
+  if (error) throw error
+  if (!data || data.length === 0) return []
 
-  if (error) {
-    throw error
-  }
+  const authorIds = [...new Set(data.map(p => p.author_id).filter(Boolean))]
+  const originalPostIds = [...new Set(data.map(p => p.original_post_id).filter((id): id is string => !!id))]
 
-  // 收集所有需要的作者 ID 和原始帖子 ID
-  const authorIds = [...new Set((data || []).map(p => p.author_id).filter(Boolean))]
-  const originalPostIds = [...new Set(
-    (data || [])
-      .map(p => p.original_post_id)
-      .filter((id): id is string => !!id)
-  )]
-
-  // 并行获取作者资料（通过 author_id 获取最新 handle 和头像）和原始帖子数据
   const [profilesResult, originalPostsResult] = await Promise.all([
     authorIds.length > 0
-      ? supabase.from('user_profiles').select('id, handle, avatar_url').in('id', authorIds)
+      ? supabase.from('user_profiles').select('id, handle, avatar_url, subscription_tier, show_pro_badge').in('id', authorIds)
       : Promise.resolve({ data: null }),
     originalPostIds.length > 0
       ? supabase.from('posts').select('id, title, content, author_id, author_handle, images, created_at').in('id', originalPostIds)
       : Promise.resolve({ data: null }),
   ])
 
-  // 构建作者资料映射 (author_id → { handle, avatar_url })
-  const authorProfileMap = new Map<string, { handle: string | null; avatar_url: string | null }>()
-  if (profilesResult.data) {
-    profilesResult.data.forEach((p: { id: string; handle: string | null; avatar_url: string | null }) => {
-      authorProfileMap.set(p.id, { handle: p.handle, avatar_url: p.avatar_url })
-    })
-  }
+  const authorProfileMap = profilesResult.data ? buildAuthorProfileMap(profilesResult.data) : new Map()
 
-  // 处理原始帖子 + 获取原始帖子作者资料
   const originalPostMap = new Map<string, OriginalPost>()
   if (originalPostsResult.data && originalPostsResult.data.length > 0) {
-    const originalAuthorIds = [...new Set(
-      originalPostsResult.data.map((p: { author_id: string }) => p.author_id).filter(Boolean)
-    )]
-
-    // 仅查询作者资料映射中不存在的 IDs
+    const originalAuthorIds = [...new Set(originalPostsResult.data.map((p: { author_id: string }) => p.author_id).filter(Boolean))]
     const missingIds = originalAuthorIds.filter(id => !authorProfileMap.has(id))
+
     if (missingIds.length > 0) {
       const { data: originalProfiles } = await supabase
         .from('user_profiles')
-        .select('id, handle, avatar_url')
+        .select('id, handle, avatar_url, subscription_tier, show_pro_badge')
         .in('id', missingIds)
 
       if (originalProfiles) {
-        originalProfiles.forEach((p: { id: string; handle: string | null; avatar_url: string | null }) => {
-          authorProfileMap.set(p.id, { handle: p.handle, avatar_url: p.avatar_url })
-        })
+        for (const p of originalProfiles) {
+          authorProfileMap.set(p.id, {
+            handle: p.handle,
+            avatar_url: p.avatar_url,
+            is_pro: p.subscription_tier === 'pro',
+            show_pro_badge: p.show_pro_badge !== false,
+          })
+        }
       }
     }
 
-    originalPostsResult.data.forEach((op: { id: string; title: string; content: string; author_id: string; author_handle: string; images?: string[]; created_at: string }) => {
+    for (const op of originalPostsResult.data) {
       const opProfile = authorProfileMap.get(op.author_id)
       originalPostMap.set(op.id, {
         id: op.id,
@@ -240,39 +270,16 @@ export async function getPosts(
         images: op.images || null,
         created_at: op.created_at,
       })
-    })
+    }
   }
 
-  return (data || []).map((post: PostRow) => {
-    const profile = authorProfileMap.get(post.author_id)
-    return {
-    id: post.id,
-    title: post.title,
-    content: post.content,
-    author_id: post.author_id,
-    author_handle: profile?.handle || post.author_handle,
-    author_avatar_url: profile?.avatar_url || undefined,
-    group_id: post.group_id,
-    group_name: Array.isArray(post.groups) ? post.groups[0]?.name : post.groups?.name,
-    poll_enabled: post.poll_enabled || false,
-    poll_id: post.poll_id || null,
-    poll_bull: post.poll_bull || 0,
-    poll_bear: post.poll_bear || 0,
-    poll_wait: post.poll_wait || 0,
-    like_count: post.like_count || 0,
-    dislike_count: post.dislike_count || 0,
-    comment_count: post.comment_count || 0,
-    bookmark_count: post.bookmark_count || 0,
-    repost_count: post.repost_count || 0,
-    view_count: post.view_count || 0,
-    hot_score: post.hot_score || 0,
-    is_pinned: post.is_pinned || false,
-    images: post.images || null,
-    created_at: post.created_at,
-    updated_at: post.updated_at,
-    original_post_id: post.original_post_id || null,
-    original_post: post.original_post_id ? originalPostMap.get(post.original_post_id) || null : null,
-  }})
+  return data.map((post: PostRow) =>
+    toPostWithAuthor(
+      post,
+      authorProfileMap.get(post.author_id),
+      post.original_post_id ? originalPostMap.get(post.original_post_id) : null
+    )
+  )
 }
 
 /**
@@ -284,123 +291,61 @@ export async function getPostById(
 ): Promise<PostWithAuthor | null> {
   const { data, error } = await supabase
     .from('posts')
-    .select(`
-      id,
-      title,
-      content,
-      author_id,
-      author_handle,
-      group_id,
-      poll_enabled,
-      poll_bull,
-      poll_bear,
-      poll_wait,
-      like_count,
-      dislike_count,
-      comment_count,
-      bookmark_count,
-      repost_count,
-      view_count,
-      hot_score,
-      is_pinned,
-      created_at,
-      updated_at,
-      original_post_id,
-      groups(name)
-    `)
+    .select(POST_SELECT_FIELDS)
     .eq('id', postId)
     .maybeSingle()
 
-  if (error) {
-    throw error
-  }
-
+  if (error) throw error
   if (!data) return null
 
-  // 获取作者当前 handle 和头像（通过 author_id 查找，避免改名后的旧 handle 问题）
-  let author_avatar_url: string | undefined
-  let current_author_handle: string = data.author_handle || ''
-  if (data.author_id) {
-    const { data: profile } = await supabase
-      .from('user_profiles')
-      .select('handle, avatar_url')
-      .eq('id', data.author_id)
-      .maybeSingle()
+  const authorIds = [data.author_id].filter(Boolean)
+  const originalPostId = data.original_post_id
 
-    author_avatar_url = profile?.avatar_url || undefined
-    current_author_handle = profile?.handle || data.author_handle || ''
-  }
+  const [profileResult, originalPostResult] = await Promise.all([
+    authorIds.length > 0
+      ? supabase.from('user_profiles').select('id, handle, avatar_url, subscription_tier, show_pro_badge').in('id', authorIds)
+      : Promise.resolve({ data: null }),
+    originalPostId
+      ? supabase.from('posts').select('id, title, content, author_id, author_handle, images, created_at').eq('id', originalPostId).maybeSingle()
+      : Promise.resolve({ data: null }),
+  ])
 
-  // 获取原始帖子数据（如果是转发）
-  let original_post: OriginalPost | null = null
-  if (data.original_post_id) {
-    const { data: originalPostData } = await supabase
-      .from('posts')
-      .select(`
-        id,
-        title,
-        content,
-        author_id,
-        author_handle,
-        images,
-        created_at
-      `)
-      .eq('id', data.original_post_id)
-      .maybeSingle()
+  const authorProfileMap = profileResult.data ? buildAuthorProfileMap(profileResult.data) : new Map()
 
-    if (originalPostData) {
-      // 获取原始帖子作者当前 handle 和头像（通过 author_id）
-      let original_author_avatar_url: string | null = null
-      let original_author_handle: string = originalPostData.author_handle || ''
-      if (originalPostData.author_id) {
-        const { data: originalProfile } = await supabase
-          .from('user_profiles')
-          .select('handle, avatar_url')
-          .eq('id', originalPostData.author_id)
-          .maybeSingle()
+  let originalPost: OriginalPost | null = null
+  if (originalPostResult.data) {
+    const op = originalPostResult.data
+    let opProfile = authorProfileMap.get(op.author_id)
 
-        original_author_avatar_url = originalProfile?.avatar_url || null
-        original_author_handle = originalProfile?.handle || originalPostData.author_handle || ''
+    if (!opProfile && op.author_id) {
+      const { data: opProfileData } = await supabase
+        .from('user_profiles')
+        .select('id, handle, avatar_url, subscription_tier, show_pro_badge')
+        .eq('id', op.author_id)
+        .maybeSingle()
+
+      if (opProfileData) {
+        opProfile = {
+          handle: opProfileData.handle,
+          avatar_url: opProfileData.avatar_url,
+          is_pro: opProfileData.subscription_tier === 'pro',
+          show_pro_badge: opProfileData.show_pro_badge !== false,
+        }
       }
+    }
 
-      original_post = {
-        id: originalPostData.id,
-        title: originalPostData.title,
-        content: originalPostData.content,
-        author_handle: original_author_handle,
-        author_avatar_url: original_author_avatar_url,
-        images: originalPostData.images || null,
-        created_at: originalPostData.created_at,
-      }
+    originalPost = {
+      id: op.id,
+      title: op.title,
+      content: op.content,
+      author_handle: opProfile?.handle || op.author_handle,
+      author_avatar_url: opProfile?.avatar_url || null,
+      images: op.images || null,
+      created_at: op.created_at,
     }
   }
 
-  return {
-    id: data.id,
-    title: data.title,
-    content: data.content,
-    author_id: data.author_id,
-    author_handle: current_author_handle,
-    author_avatar_url,
-    group_id: data.group_id,
-    group_name: (() => { const g = (data as PostRow).groups; return Array.isArray(g) ? g[0]?.name : g?.name; })(),
-    poll_enabled: data.poll_enabled || false,
-    poll_bull: data.poll_bull || 0,
-    poll_bear: data.poll_bear || 0,
-    poll_wait: data.poll_wait || 0,
-    like_count: data.like_count || 0,
-    dislike_count: data.dislike_count || 0,
-    comment_count: data.comment_count || 0,
-    bookmark_count: data.bookmark_count || 0,
-    repost_count: data.repost_count || 0,
-    view_count: data.view_count || 0,
-    hot_score: data.hot_score || 0,
-    is_pinned: data.is_pinned || false,
-    created_at: data.created_at,
-    updated_at: data.updated_at,
-    original_post_id: data.original_post_id || null,
-    original_post,
-  }
+  return toPostWithAuthor(data as PostRow, authorProfileMap.get(data.author_id), originalPost)
 }
 
 /**
@@ -425,10 +370,7 @@ export async function createPost(
     .select()
     .single()
 
-  if (error) {
-    throw error
-  }
-
+  if (error) throw error
   return data
 }
 
@@ -443,19 +385,13 @@ export async function updatePost(
 ): Promise<Post> {
   const { data, error } = await supabase
     .from('posts')
-    .update({
-      ...updates,
-      updated_at: new Date().toISOString(),
-    })
+    .update({ ...updates, updated_at: new Date().toISOString() })
     .eq('id', postId)
-    .eq('author_id', userId) // 确保只能更新自己的帖子
+    .eq('author_id', userId)
     .select()
     .single()
 
-  if (error) {
-    throw error
-  }
-
+  if (error) throw error
   return data
 }
 
@@ -471,11 +407,9 @@ export async function deletePost(
     .from('posts')
     .delete()
     .eq('id', postId)
-    .eq('author_id', userId) // 确保只能删除自己的帖子
+    .eq('author_id', userId)
 
-  if (error) {
-    throw error
-  }
+  if (error) throw error
 }
 
 /**
@@ -486,13 +420,9 @@ export async function incrementViewCount(
   postId: string
 ): Promise<void> {
   const { error } = await supabase.rpc('increment_post_view', { post_id: postId })
-  
-  // 如果 RPC 不存在，直接更新
   if (error) {
-    await supabase
-      .from('posts')
-      .update({ view_count: supabase.rpc('coalesce', { value: 0 }) })
-      .eq('id', postId)
+    // RPC 不存在时的降级处理（view_count 在数据库层自增更安全）
+    console.warn('increment_post_view RPC not available:', error.message)
   }
 }
 
