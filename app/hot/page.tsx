@@ -159,7 +159,7 @@ function HotContent() {
 
         // 获取 handle 信息
         const traderKeys = uniqueData.map(t => t.source_trader_id)
-        let handleMap: Record<string, string> = {}
+        const handleMap: Record<string, string> = {}
         if (traderKeys.length > 0) {
           const { data: sources } = await supabase
             .from('trader_sources')
@@ -194,7 +194,7 @@ function HotContent() {
   const loadPosts = useCallback(async () => {
     setLoadingPosts(true)
     try {
-      const res = await fetch(`/api/posts?sort_by=hot_score&sort_order=desc&limit=20`)
+      const res = await fetch(`/api/posts?sort_by=hot_score&sort_order=desc&limit=100`)
       const json = await res.json()
       const data = json.posts || json.data?.posts || []
 

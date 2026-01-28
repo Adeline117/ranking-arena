@@ -2,7 +2,13 @@
  * Cron: Refresh hot_score on posts table
  * Schedule: Every 5 minutes
  *
- * Improved formula: (likes*3 + comments*5 + reposts*2 + views*0.1) * quality_boost / power(hours+2, 1.5)
+ * Algorithm V4 includes:
+ * - Author quality weight (Pro users, followers)
+ * - Content quality signals (length, links, mentions)
+ * - Negative signal penalties (dislikes, reports)
+ * - Segmented time decay
+ * - Interaction velocity boost (recent engagement)
+ *
  * Uses incremental updates - only processes posts with changes since last refresh.
  * Invalidates Redis cache after refresh.
  */
@@ -13,7 +19,7 @@ import { del as cacheDelete } from '@/lib/cache'
 import { createLogger } from '@/lib/utils/logger'
 
 export const dynamic = 'force-dynamic'
-export const maxDuration = 30
+export const maxDuration = 60  // Increased for velocity updates
 
 const logger = createLogger('refresh-hot-scores')
 const HOT_POSTS_CACHE_KEY = 'hot_posts:top50'
@@ -28,7 +34,23 @@ export async function GET(request: NextRequest) {
   try {
     const supabase = getSupabaseAdmin()
 
-    // Try incremental refresh first (only posts with changes)
+    // Step 1: Update velocity metrics (likes/comments in last hour)
+    const { data: velocityCount, error: velocityError } = await supabase.rpc('update_post_velocity')
+    if (velocityError) {
+      logger.warn('Velocity update failed', { error: velocityError.message })
+    } else {
+      logger.info('Velocity metrics updated', { count: velocityCount })
+    }
+
+    // Step 2: Update report counts
+    const { data: reportCount, error: reportError } = await supabase.rpc('update_post_report_counts')
+    if (reportError) {
+      logger.warn('Report count update failed', { error: reportError.message })
+    } else {
+      logger.info('Report counts updated', { count: reportCount })
+    }
+
+    // Step 3: Try incremental refresh first (only posts with changes)
     const { data: incrementalCount, error: incrementalError } = await supabase.rpc('refresh_hot_scores_incremental')
 
     if (!incrementalError && incrementalCount !== null) {
@@ -45,6 +67,8 @@ export async function GET(request: NextRequest) {
         success: true,
         count: incrementalCount,
         method: 'incremental',
+        velocityUpdated: velocityCount,
+        reportCountsUpdated: reportCount,
       })
     }
 
@@ -67,6 +91,8 @@ export async function GET(request: NextRequest) {
         success: true,
         count: fullCount,
         method: 'full',
+        velocityUpdated: velocityCount,
+        reportCountsUpdated: reportCount,
       })
     }
 
