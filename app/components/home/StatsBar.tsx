@@ -204,4 +204,4 @@ export function StatsBar() {
   )
 }
 
-export default StatsBar
+export default memo(StatsBar)
