@@ -70,7 +70,7 @@
     "isomorphic-dompurify": "^2.35.0",
     "lightweight-charts": "^5.1.0",
     "lucide-react": "^0.562.0",
-    "next": "16.1.4",
+    "next": "^16.1.6",
     "otpauth": "^9.4.1",
     "p-limit": "^7.2.0",
     "pg": "^8.17.2",
@@ -91,8 +91,8 @@
     "@playwright/test": "^1.57.0",
     "@storybook/addon-essentials": "^8.6.14",
     "@storybook/addon-interactions": "^8.6.14",
-    "@storybook/nextjs": "^10.1.11",
-    "@storybook/react": "^10.1.11",
+    "@storybook/nextjs": "^10.2.1",
+    "@storybook/react": "^10.2.1",
     "@storybook/test": "^8.6.15",
     "@tailwindcss/postcss": "^4",
     "@testing-library/dom": "^10.4.1",
@@ -109,7 +109,7 @@
     "jest": "^30.2.0",
     "jest-environment-jsdom": "^30.2.0",
     "prettier": "^3.4.2",
-    "storybook": "^10.1.11",
+    "storybook": "^10.2.1",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

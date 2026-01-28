@@ -351,6 +351,8 @@ const TraderRow = memo(function TraderRow({
                 <img
                   src={proxyAvatarUrl}
                   alt={displayName}
+                  width={36}
+                  height={36}
                   referrerPolicy="no-referrer"
                   loading="lazy"
                   style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', inset: 0, zIndex: 1 }}
@@ -550,6 +552,8 @@ const TraderCard = memo(function TraderCard({
                 <img
                   src={proxyAvatarUrl}
                   alt={displayName}
+                  width={36}
+                  height={36}
                   referrerPolicy="no-referrer"
                   loading="lazy"
                   style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', inset: 0, zIndex: 1 }}
