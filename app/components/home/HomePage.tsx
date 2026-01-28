@@ -24,6 +24,13 @@ const StatsBar = dynamic(() => import('./StatsBar'), {
 import { useTraderData, useAuth } from './hooks'
 import type { Trader } from '../ranking/RankingTable'
 import type { TimeRange } from './hooks/useTraderData'
+import type { InitialTrader } from '@/lib/server/getInitialTraders'
+
+// Props interface for server-side data
+interface HomePageProps {
+  initialTraders?: InitialTrader[]
+  initialLastUpdated?: string | null
+}
 
 // 动态加载侧边栏（移动端不需要，减少首屏 JS）
 // 优化：移除动画骨架以减少 LCP 阻塞
@@ -45,13 +52,13 @@ const CompareTraders = lazy(() => import('../trader/CompareTraders'))
  * 首页主容器组件
  * 管理整体布局和状态协调
  */
-export default function HomePage() {
+export default function HomePage({ initialTraders, initialLastUpdated }: HomePageProps) {
   const { language } = useLanguage()
   const { email, isLoggedIn } = useAuth()
   const searchParams = useSearchParams()
   const router = useRouter()
 
-  // 交易者数据管理
+  // 交易者数据管理 - 传入服务端预获取的数据
   const {
     traders,
     loading,
@@ -60,7 +67,10 @@ export default function HomePage() {
     lastUpdated,
     availableSources,
     refresh,
-  } = useTraderData()
+  } = useTraderData({
+    initialTraders: initialTraders as Trader[] | undefined,
+    initialLastUpdated,
+  })
 
   // Sync time range with URL on initial load
   useEffect(() => {

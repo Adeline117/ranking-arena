@@ -89,13 +89,18 @@ export default function BookmarkModal({ isOpen, onClose, onSelect, postId: _post
         return
       }
 
-      const data = await response.json()
-      if (response.ok) {
-        // API 返回格式: { success: true, data: { folders: [...] } }
-        setFolders(data.data?.folders || data.folders || [])
+      if (!response.ok) {
+        showToast('加载收藏夹失败', 'error')
+        setFolders([])
+        return
       }
+
+      const data = await response.json()
+      // API 返回格式: { success: true, data: { folders: [...] } }
+      setFolders(data.data?.folders || data.folders || [])
     } catch (error) {
       console.error('加载收藏夹失败:', error)
+      showToast('加载收藏夹失败', 'error')
       setFolders([])
     } finally {
       setLoading(false)
@@ -104,7 +109,7 @@ export default function BookmarkModal({ isOpen, onClose, onSelect, postId: _post
 
   const createFolder = async () => {
     if (!newFolderName.trim() || !accessToken) return
-    
+
     setCreating(true)
     try {
       const response = await fetch('/api/bookmark-folders', {
@@ -119,21 +124,23 @@ export default function BookmarkModal({ isOpen, onClose, onSelect, postId: _post
           is_public: newFolderPublic
         })
       })
-      
-      const data = await response.json()
-      if (response.ok) {
-        // API 返回格式: { success: true, data: { folder: {...} } }
-        const newFolder = data.data?.folder || data.folder
-        if (newFolder) {
-          setFolders(prev => [...prev, newFolder])
-        }
-        setNewFolderName('')
-        setNewFolderPublic(true)  // 重置为默认公开
-        setShowCreateForm(false)
-        showToast('收藏夹创建成功', 'success')
-      } else {
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({ error: '创建失败' }))
         showToast(data.error?.message || data.error || '创建失败', 'error')
+        return
       }
+
+      const data = await response.json()
+      // API 返回格式: { success: true, data: { folder: {...} } }
+      const newFolder = data.data?.folder || data.folder
+      if (newFolder) {
+        setFolders(prev => [...prev, newFolder])
+      }
+      setNewFolderName('')
+      setNewFolderPublic(true)  // 重置为默认公开
+      setShowCreateForm(false)
+      showToast('收藏夹创建成功', 'success')
     } catch (error) {
       console.error('创建收藏夹失败:', error)
       showToast('创建失败', 'error')
