@@ -264,7 +264,7 @@ async function getFollowingPosts(
 export async function GET(req: NextRequest) {
   try {
     // Rate limiting
-    const rateLimitResponse = await checkRateLimit(req, RateLimitPresets.standard)
+    const rateLimitResponse = await checkRateLimit(req, RateLimitPresets.search)
     if (rateLimitResponse) {
       return rateLimitResponse
     }
