@@ -25,6 +25,8 @@ interface UseTraderDataOptions {
   autoRefreshInterval?: number // 自动刷新间隔（毫秒）
   sortBy?: SortBy
   sortOrder?: SortOrder
+  initialTraders?: Trader[] // Server-side pre-fetched traders for SSR
+  initialLastUpdated?: string | null // Server-side last updated timestamp
 }
 
 // 全局请求去重 Map（跨组件实例共享，避免并发重复请求）
@@ -32,14 +34,23 @@ const pendingRequests = new Map<string, Promise<CachedData>>()
 
 export function useTraderData(options: UseTraderDataOptions = {}) {
   // Feature 4: Default 5 min refresh when visible (reduced from 10 min)
-  const { autoRefreshInterval = 5 * 60 * 1000, sortBy, sortOrder } = options
+  const {
+    autoRefreshInterval = 5 * 60 * 1000,
+    sortBy,
+    sortOrder,
+    initialTraders,
+    initialLastUpdated,
+  } = options
+
+  // Use initial data if provided (SSR optimization)
+  const hasInitialData = initialTraders && initialTraders.length > 0
 
   // 使用 Map 缓存已加载的数据
   const tradersCache = useRef<Map<string, CachedData>>(new Map())
-  const [currentTraders, setCurrentTraders] = useState<Trader[]>([])
-  const [loading, setLoading] = useState(true)
+  const [currentTraders, setCurrentTraders] = useState<Trader[]>(initialTraders || [])
+  const [loading, setLoading] = useState(!hasInitialData) // Don't show loading if we have initial data
   const [error, setError] = useState<string | null>(null)
-  const [lastUpdated, setLastUpdated] = useState<string | null>(null)
+  const [lastUpdated, setLastUpdated] = useState<string | null>(initialLastUpdated || null)
   const [availableSources, setAvailableSources] = useState<string[]>([])
 
   // 多窗口同步
@@ -157,10 +168,38 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
     }
   }, [activeTimeRange, loadTimeRange])
 
-  // 初次加载和时间段切换时加载数据
+  // Seed cache with initial data if provided
+  const initialDataSeeded = useRef(false)
   useEffect(() => {
+    if (hasInitialData && !initialDataSeeded.current) {
+      initialDataSeeded.current = true
+      // Seed the cache with initial data for 90D
+      tradersCache.current.set('90D', {
+        traders: initialTraders!,
+        lastUpdated: initialLastUpdated || null,
+        fetchedAt: Date.now(),
+      })
+    }
+  }, [hasInitialData, initialTraders, initialLastUpdated])
+
+  // 初次加载和时间段切换时加载数据
+  // Skip initial fetch if we have server-provided data for 90D
+  useEffect(() => {
+    // If we have initial data and we're on 90D, don't fetch immediately
+    if (hasInitialData && activeTimeRange === '90D' && !initialDataSeeded.current) {
+      return
+    }
+    // If cache already has this time range, use it
+    if (tradersCache.current.has(activeTimeRange)) {
+      const cached = tradersCache.current.get(activeTimeRange)!
+      setCurrentTraders(cached.traders)
+      setLastUpdated(cached.lastUpdated)
+      setAvailableSources(cached.availableSources || [])
+      setLoading(false)
+      return
+    }
     loadCurrentData()
-  }, [loadCurrentData])
+  }, [loadCurrentData, activeTimeRange, hasInitialData])
 
   // 保存时间段偏好到 localStorage
   useEffect(() => {

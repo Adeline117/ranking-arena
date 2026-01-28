@@ -112,22 +112,52 @@ function useUserHandle(): string | null {
 
   useEffect(() => {
     let alive = true
-    supabase.auth.getUser().then(({ data }) => {
-      if (!alive) return
-      const userId = data.user?.id
-      if (!userId) return
+    const abortController = new AbortController()
 
-      supabase
-        .from('user_profiles')
-        .select('handle')
-        .eq('id', userId)
-        .maybeSingle()
-        .then(({ data: profile }) => {
-          if (!alive) return
-          setUserHandle(profile?.handle || data.user?.email?.split('@')[0] || null)
-        })
-    })
-    return () => { alive = false }
+    supabase.auth.getUser()
+      .then(({ data, error }) => {
+        if (!alive) return
+
+        if (error) {
+          console.error('Error fetching user in MobileBottomNav:', error)
+          return
+        }
+
+        const userId = data.user?.id
+        if (!userId) return
+
+        supabase
+          .from('user_profiles')
+          .select('handle')
+          .eq('id', userId)
+          .maybeSingle()
+          .then(({ data: profile, error: profileError }) => {
+            if (!alive) return
+
+            if (profileError) {
+              console.error('Error fetching user profile in MobileBottomNav:', profileError)
+              // Fallback to email-based handle
+              setUserHandle(data.user?.email?.split('@')[0] || null)
+              return
+            }
+
+            setUserHandle(profile?.handle || data.user?.email?.split('@')[0] || null)
+          })
+          .catch((err) => {
+            if (!alive) return
+            console.error('Unexpected error fetching user profile:', err)
+            setUserHandle(data.user?.email?.split('@')[0] || null)
+          })
+      })
+      .catch((err) => {
+        if (!alive) return
+        console.error('Unexpected error in auth check:', err)
+      })
+
+    return () => {
+      alive = false
+      abortController.abort()
+    }
   }, [])
 
   return userHandle

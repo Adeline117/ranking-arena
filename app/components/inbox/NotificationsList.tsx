@@ -26,28 +26,49 @@ export default function NotificationsList() {
   const pendingMarkAllRef = useRef(false)
   const pendingMarkRef = useRef<Set<string>>(new Set())
 
-  const loadNotifications = useCallback(async () => {
+  const loadNotifications = useCallback(async (abortSignal?: AbortSignal) => {
     if (!accessToken) return
     try {
       setLoading(true)
       const response = await fetch('/api/notifications', {
         headers: { 'Authorization': `Bearer ${accessToken}` },
+        signal: abortSignal
       })
-      const result = await response.json()
-      if (response.ok) {
-        const data = result.data || result
-        setNotifications(data.notifications || [])
-        setUnreadNotifications(data.unread_count || 0)
+
+      if (abortSignal?.aborted) return
+
+      if (!response.ok) {
+        const errorMessage = response.status === 401 ? t('authenticationFailed') : t('failedToLoadNotifications')
+        showToast(errorMessage, 'error')
+        return
       }
+
+      const result = await response.json()
+      const data = result.data || result
+      setNotifications(data.notifications || [])
+      setUnreadNotifications(data.unread_count || 0)
     } catch (err) {
+      if (abortSignal?.aborted) return
+
       console.error('Failed to load notifications:', err)
+      showToast(t('unexpectedError'), 'error')
     } finally {
-      setLoading(false)
+      if (!abortSignal?.aborted) {
+        setLoading(false)
+      }
     }
-  }, [accessToken, setUnreadNotifications])
+  }, [accessToken, setUnreadNotifications, showToast, t])
 
   useEffect(() => {
-    if (accessToken) loadNotifications()
+    const abortController = new AbortController()
+
+    if (accessToken) {
+      loadNotifications(abortController.signal)
+    }
+
+    return () => {
+      abortController.abort()
+    }
   }, [accessToken, loadNotifications])
 
   const markAllAsRead = useCallback(async () => {
