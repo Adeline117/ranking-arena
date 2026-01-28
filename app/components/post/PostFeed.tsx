@@ -69,6 +69,8 @@ function AvatarLink({ handle, avatarUrl, isPro, showProBadge = true }: { handle?
         gap: 6,
         textDecoration: 'none',
         color: tokens.colors.text.primary,
+        flexShrink: 0,
+        maxWidth: 120,
       }}
       title="进入交易者主页"
     >
@@ -101,7 +103,7 @@ function AvatarLink({ handle, avatarUrl, isPro, showProBadge = true }: { handle?
           (handle?.[0] || 'U').toUpperCase()
         )}
       </span>
-      <span style={{ fontWeight: 850, fontSize: 12, color: tokens.colors.text.secondary }}>{handle}</span>
+      <span style={{ fontWeight: 850, fontSize: 12, color: tokens.colors.text.secondary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{handle}</span>
       {shouldShowBadge && (
         <span
           style={{
@@ -1435,7 +1437,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
                 }
               }}
             >
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'nowrap', minWidth: 0 }}>
                 {p.group_id ? (
                   <Link
                     href={`/groups/${p.group_id}`}
@@ -1445,6 +1447,11 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
                       color: ARENA_PURPLE,
                       textDecoration: 'none',
                       cursor: 'pointer',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                      flexShrink: 1,
+                      minWidth: 0,
                     }}
                   >
                     {language === 'zh' ? (p.group_name || '小组') : (p.group_name_en || p.group_name || 'Group')}
