@@ -34,6 +34,7 @@ const CSRF_EXEMPT_ROUTES = [
   '/api/follow',           // 交易员关注 API 需要认证
   '/api/messages',         // 消息 API 需要认证
   '/api/notifications',    // 通知 API 需要认证
+  '/api/upload-profile-image', // 头像/背景图上传 API，通过 userId 验证
 ]
 
 // 需要认证的路由前缀

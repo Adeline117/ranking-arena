@@ -10,10 +10,12 @@ jest.mock('@/lib/design-tokens', () => ({
     shadow: { sm: '0 1px 3px rgba(0,0,0,0.1)' },
     colors: {
       bg: { secondary: '#1a1a2e' },
+      text: { primary: '#fff', secondary: '#ccc', tertiary: '#999' },
     },
     typography: {
-      fontWeight: { black: 900 },
-      fontSize: { sm: '14px' },
+      fontWeight: { black: 900, bold: 700, semibold: 600, medium: 500, regular: 400 },
+      fontSize: { sm: '14px', md: '16px', lg: '18px', xl: '20px', '2xl': '24px' },
+      lineHeight: { tight: 1.2, normal: 1.5, relaxed: 1.7 },
     },
   },
 }))

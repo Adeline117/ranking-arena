@@ -39,19 +39,26 @@ afterAll(() => {
 
 describe('getAdminEmails', () => {
   test('should return admin emails from environment', () => {
-    const emails = getAdminEmails()
+    // ADMIN_EMAILS is initialized at module load time
+    // Need to reset modules and re-import with env set
+    jest.resetModules()
+    process.env.ADMIN_EMAILS = 'admin@example.com,superadmin@example.com'
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { getAdminEmails: freshGetAdminEmails } = require('./auth')
+    const emails = freshGetAdminEmails()
     expect(emails).toContain('admin@example.com')
     expect(emails).toContain('superadmin@example.com')
   })
 
-  test('should return default when no env var set', () => {
+  test('should return empty array when no env var set (secure default)', () => {
     delete process.env.ADMIN_EMAILS
     // Need to reimport to get fresh module
     jest.resetModules()
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { getAdminEmails } = require('./auth')
-    const emails = getAdminEmails()
-    expect(emails).toContain('test@example.com')
+    const { getAdminEmails: freshGetAdminEmails } = require('./auth')
+    const emails = freshGetAdminEmails()
+    // Secure default: empty array (no default admins)
+    expect(emails).toEqual([])
   })
 })
 
@@ -129,6 +136,12 @@ describe('verifyAdmin', () => {
   })
 
   test('should verify admin by email whitelist', async () => {
+    // Reset modules to load with proper ADMIN_EMAILS
+    jest.resetModules()
+    process.env.ADMIN_EMAILS = 'admin@example.com,superadmin@example.com'
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { verifyAdmin: freshVerifyAdmin } = require('./auth')
+
     const mockUser = {
       id: 'user123',
       email: 'admin@example.com',
@@ -144,7 +157,7 @@ describe('verifyAdmin', () => {
       maybeSingle: jest.fn().mockResolvedValue({ data: { role: 'user' }, error: null }),
     }
 
-    const result = await verifyAdmin(mockSupabase as any, 'Bearer validtoken')
+    const result = await freshVerifyAdmin(mockSupabase as any, 'Bearer validtoken')
     expect(result).toEqual({ id: 'user123', email: 'admin@example.com' })
   })
 

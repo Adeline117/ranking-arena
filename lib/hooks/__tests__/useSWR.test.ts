@@ -5,6 +5,18 @@
 
 import { fetcher, fetcherWithAuth } from '../useSWR'
 
+// Mock i18n to return English messages (matching actual behavior)
+jest.mock('@/lib/i18n', () => ({
+  t: (key: string) => {
+    const translations: Record<string, string> = {
+      errorTimeout: 'Request timed out, please try again',
+      errorRequestFailed: 'Request failed',
+      errorNetworkFailed: 'Network connection failed, please check your network',
+    }
+    return translations[key] || key
+  },
+}))
+
 // Mock fetch
 global.fetch = jest.fn()
 
@@ -42,7 +54,7 @@ describe('fetcher', () => {
     
     ;(global.fetch as jest.Mock).mockRejectedValueOnce(timeoutError)
 
-    await expect(fetcher('/api/test')).rejects.toThrow('请求超时，请稍后重试')
+    await expect(fetcher('/api/test')).rejects.toThrow('Request timed out, please try again')
   })
 
   it('应该处理 HTTP 错误状态', async () => {
@@ -52,7 +64,7 @@ describe('fetcher', () => {
       json: async () => ({ error: 'Not Found' }),
     })
 
-    await expect(fetcher('/api/test')).rejects.toThrow('请求失败')
+    await expect(fetcher('/api/test')).rejects.toThrow('Request failed')
   })
 
   it('应该处理网络错误', async () => {
@@ -60,7 +72,7 @@ describe('fetcher', () => {
       new Error('Failed to fetch')
     )
 
-    await expect(fetcher('/api/test')).rejects.toThrow('网络连接失败，请检查网络')
+    await expect(fetcher('/api/test')).rejects.toThrow('Network connection failed, please check your network')
   })
 })
 

@@ -144,7 +144,7 @@ describe('isAuthorized', () => {
   test('should return true when header matches secret', () => {
     const req = {
       headers: {
-        get: jest.fn().mockReturnValue('test-secret'),
+        get: jest.fn().mockReturnValue('Bearer test-secret'),
       },
     } as unknown as Request
 
@@ -390,7 +390,8 @@ describe('getSupportedPlatforms', () => {
 
 describe('sendScrapeSummaryAlert', () => {
   test('should log success summary', async () => {
-    const consoleSpy = jest.spyOn(console, 'log').mockImplementation()
+    // cronLogger uses console.info for info level logs
+    const consoleSpy = jest.spyOn(console, 'info').mockImplementation()
 
     await sendScrapeSummaryAlert({
       totalPlatforms: 5,

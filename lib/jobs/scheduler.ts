@@ -13,7 +13,7 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import type { LeaderboardPlatform, MarketType, Window } from '../types/leaderboard'
 import { LEADERBOARD_PLATFORMS } from '../types/leaderboard'
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 type AnySupabaseClient = SupabaseClient<any, any, any>
 import { createRefreshJob, createPreheatJobs } from './processor'
 import { PLATFORM_CAPABILITIES } from '../connectors/capabilities'

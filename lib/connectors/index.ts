@@ -31,7 +31,7 @@ export type { PlatformConnector, ConnectorConfig, RateLimiter, CircuitState, Cir
 export { ConnectorError, DEFAULT_CONNECTOR_CONFIG } from './types'
 
 // Legacy createConnector function (simplified)
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 export function createConnector(platform: GranularPlatform): any {
   switch (platform) {
     case 'bybit':

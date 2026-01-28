@@ -28,7 +28,7 @@ const USER_AGENTS = [
   'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
 ]
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 type BybitApiResponse = Record<string, any>
 
 // Simple delay-based rate limiter

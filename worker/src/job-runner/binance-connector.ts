@@ -28,7 +28,7 @@ const USER_AGENTS = [
 ]
 
 // External API response type - loosely typed since Binance API shapes vary per endpoint
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 type BinanceApiResponse = Record<string, any>
 
 // Simple delay-based rate limiter

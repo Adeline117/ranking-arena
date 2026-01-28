@@ -31,6 +31,8 @@ export interface Post {
 
 export interface PostWithAuthor extends Post {
   author_avatar_url?: string | null
+  author_is_pro?: boolean
+  author_show_pro_badge?: boolean
   group_name?: string | null
   // 原始帖子信息（如果是转发）
   original_post?: {
@@ -39,6 +41,8 @@ export interface PostWithAuthor extends Post {
     content: string
     author_handle: string
     author_avatar_url?: string | null
+    author_is_pro?: boolean
+    author_show_pro_badge?: boolean
     images?: string[] | null
     created_at: string
   } | null
