@@ -1,0 +1,764 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Ranking Arena API",
+    "description": "Cryptocurrency trader leaderboard and community platform API",
+    "version": "1.0.0",
+    "contact": {
+      "name": "Ranking Arena"
+    }
+  },
+  "servers": [
+    {
+      "url": "https://ranking-arena.vercel.app/api",
+      "description": "Production"
+    },
+    {
+      "url": "http://localhost:3000/api",
+      "description": "Local Development"
+    }
+  ],
+  "tags": [
+    { "name": "Health", "description": "Health check endpoints" },
+    { "name": "Posts", "description": "Post management" },
+    { "name": "Rankings", "description": "Trader rankings" },
+    { "name": "Traders", "description": "Trader information" },
+    { "name": "Translation", "description": "Content translation" },
+    { "name": "Groups", "description": "Community groups" },
+    { "name": "Users", "description": "User management" },
+    { "name": "Notifications", "description": "User notifications" }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": ["Health"],
+        "summary": "Health Check",
+        "description": "Check API health status",
+        "responses": {
+          "200": {
+            "description": "Healthy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": { "type": "string", "example": "healthy" },
+                    "timestamp": { "type": "string", "format": "date-time" },
+                    "version": { "type": "string", "example": "0.1.0" },
+                    "uptime": { "type": "number" },
+                    "checks": {
+                      "type": "object",
+                      "properties": {
+                        "database": {
+                          "type": "object",
+                          "properties": {
+                            "status": { "type": "string" },
+                            "latency": { "type": "number" }
+                          }
+                        },
+                        "memory": {
+                          "type": "object",
+                          "properties": {
+                            "status": { "type": "string" },
+                            "message": { "type": "string" }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/posts": {
+      "get": {
+        "tags": ["Posts"],
+        "summary": "Get Posts List",
+        "description": "Retrieve a list of posts with optional filtering and sorting",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Number of posts to return (max 100)",
+            "schema": { "type": "integer", "default": 20, "maximum": 100 }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Offset for pagination",
+            "schema": { "type": "integer", "default": 0 }
+          },
+          {
+            "name": "sort_by",
+            "in": "query",
+            "description": "Sort field",
+            "schema": { "type": "string", "enum": ["created_at", "hot_score", "like_count"], "default": "created_at" }
+          },
+          {
+            "name": "sort_order",
+            "in": "query",
+            "description": "Sort order",
+            "schema": { "type": "string", "enum": ["asc", "desc"], "default": "desc" }
+          },
+          {
+            "name": "group_id",
+            "in": "query",
+            "description": "Filter by group ID",
+            "schema": { "type": "string", "format": "uuid" }
+          },
+          {
+            "name": "author_handle",
+            "in": "query",
+            "description": "Filter by author handle",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "posts": {
+                          "type": "array",
+                          "items": { "$ref": "#/components/schemas/Post" }
+                        }
+                      }
+                    },
+                    "pagination": { "$ref": "#/components/schemas/Pagination" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": ["Posts"],
+        "summary": "Create Post",
+        "description": "Create a new post",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["title", "content"],
+                "properties": {
+                  "title": { "type": "string", "maxLength": 200 },
+                  "content": { "type": "string", "maxLength": 10000 },
+                  "group_id": { "type": "string", "format": "uuid" },
+                  "poll_enabled": { "type": "boolean", "default": false }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Post created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "data": { "$ref": "#/components/schemas/Post" }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "description": "Unauthorized" }
+        }
+      }
+    },
+    "/posts/{id}/like": {
+      "post": {
+        "tags": ["Posts"],
+        "summary": "Like/Unlike Post",
+        "description": "Toggle like or dislike on a post",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["reaction_type"],
+                "properties": {
+                  "reaction_type": { "type": "string", "enum": ["up", "down"] }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Success" },
+          "401": { "description": "Unauthorized" }
+        }
+      }
+    },
+    "/posts/{id}/comments": {
+      "get": {
+        "tags": ["Posts"],
+        "summary": "Get Post Comments",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid" }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": { "type": "integer", "default": 20 }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": { "type": "integer", "default": 0 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "comments": { "type": "array", "items": { "$ref": "#/components/schemas/Comment" } }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": ["Posts"],
+        "summary": "Add Comment",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["content"],
+                "properties": {
+                  "content": { "type": "string", "maxLength": 2000 },
+                  "parent_id": { "type": "string", "format": "uuid" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Comment added" },
+          "401": { "description": "Unauthorized" }
+        }
+      }
+    },
+    "/rankings": {
+      "get": {
+        "tags": ["Rankings"],
+        "summary": "Get Trader Rankings",
+        "description": "Get trader leaderboard with various filters",
+        "parameters": [
+          {
+            "name": "season_id",
+            "in": "query",
+            "description": "Time range for ranking",
+            "schema": { "type": "string", "enum": ["7D", "30D", "90D"], "default": "90D" }
+          },
+          {
+            "name": "source",
+            "in": "query",
+            "description": "Filter by exchange",
+            "schema": { "type": "string", "enum": ["binance", "bybit", "bitget", "okx", "mexc", "kucoin", "gmx"] }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": { "type": "integer", "default": 50, "maximum": 100 }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": { "type": "integer", "default": 0 }
+          },
+          {
+            "name": "sort_by",
+            "in": "query",
+            "schema": { "type": "string", "enum": ["arena_score", "roi", "pnl", "mdd", "followers"], "default": "arena_score" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "traders": {
+                          "type": "array",
+                          "items": { "$ref": "#/components/schemas/Trader" }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/traders/{handle}": {
+      "get": {
+        "tags": ["Traders"],
+        "summary": "Get Trader Details",
+        "parameters": [
+          {
+            "name": "handle",
+            "in": "path",
+            "required": true,
+            "description": "Trader handle or ID",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "data": { "$ref": "#/components/schemas/TraderDetail" }
+                  }
+                }
+              }
+            }
+          },
+          "404": { "description": "Trader not found" }
+        }
+      }
+    },
+    "/traders/{handle}/positions": {
+      "get": {
+        "tags": ["Traders"],
+        "summary": "Get Trader Positions",
+        "parameters": [
+          {
+            "name": "handle",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "positions": { "type": "array", "items": { "$ref": "#/components/schemas/Position" } }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/translate": {
+      "post": {
+        "tags": ["Translation"],
+        "summary": "Translate Text",
+        "description": "Batch translate text content",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["items", "targetLang"],
+                "properties": {
+                  "items": {
+                    "type": "array",
+                    "maxItems": 20,
+                    "items": {
+                      "type": "object",
+                      "required": ["id", "text", "contentType", "contentId"],
+                      "properties": {
+                        "id": { "type": "string" },
+                        "text": { "type": "string", "maxLength": 5000 },
+                        "contentType": { "type": "string", "enum": ["post_title", "post_content", "comment"] },
+                        "contentId": { "type": "string" }
+                      }
+                    }
+                  },
+                  "targetLang": { "type": "string", "enum": ["zh", "en"] }
+                }
+              },
+              "example": {
+                "items": [
+                  {
+                    "id": "test1",
+                    "text": "这是一条测试内容",
+                    "contentType": "post_content",
+                    "contentId": "123"
+                  }
+                ],
+                "targetLang": "en"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "results": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "object",
+                            "properties": {
+                              "translatedText": { "type": "string" },
+                              "cached": { "type": "boolean" }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/groups": {
+      "get": {
+        "tags": ["Groups"],
+        "summary": "Get Groups List",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": { "type": "integer", "default": 20 }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": { "type": "integer", "default": 0 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "groups": { "type": "array", "items": { "$ref": "#/components/schemas/Group" } }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/follow": {
+      "post": {
+        "tags": ["Users"],
+        "summary": "Follow/Unfollow Trader",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["trader_id"],
+                "properties": {
+                  "trader_id": { "type": "string" },
+                  "action": { "type": "string", "enum": ["follow", "unfollow"] }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Success" },
+          "401": { "description": "Unauthorized" }
+        }
+      }
+    },
+    "/notifications": {
+      "get": {
+        "tags": ["Notifications"],
+        "summary": "Get Notifications",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": { "type": "integer", "default": 20 }
+          },
+          {
+            "name": "unread_only",
+            "in": "query",
+            "schema": { "type": "boolean", "default": false }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "notifications": { "type": "array", "items": { "$ref": "#/components/schemas/Notification" } },
+                        "unread_count": { "type": "integer" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "description": "Unauthorized" }
+        }
+      }
+    },
+    "/reports": {
+      "post": {
+        "tags": ["Users"],
+        "summary": "Report Content",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["content_type", "content_id", "reason"],
+                "properties": {
+                  "content_type": { "type": "string", "enum": ["post", "comment", "message", "user"] },
+                  "content_id": { "type": "string" },
+                  "reason": { "type": "string", "enum": ["spam", "harassment", "inappropriate", "misinformation", "fraud", "other"] },
+                  "description": { "type": "string", "maxLength": 1000 }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Report submitted" },
+          "401": { "description": "Unauthorized" }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "Supabase access token from login"
+      }
+    },
+    "schemas": {
+      "Pagination": {
+        "type": "object",
+        "properties": {
+          "limit": { "type": "integer" },
+          "offset": { "type": "integer" },
+          "has_more": { "type": "boolean" }
+        }
+      },
+      "Post": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "title": { "type": "string" },
+          "content": { "type": "string" },
+          "author_id": { "type": "string", "format": "uuid" },
+          "author_handle": { "type": "string" },
+          "author_avatar_url": { "type": "string" },
+          "group_id": { "type": "string", "format": "uuid" },
+          "group_name": { "type": "string" },
+          "group_name_en": { "type": "string" },
+          "like_count": { "type": "integer" },
+          "dislike_count": { "type": "integer" },
+          "comment_count": { "type": "integer" },
+          "view_count": { "type": "integer" },
+          "hot_score": { "type": "number" },
+          "images": { "type": "array", "items": { "type": "string" } },
+          "poll_id": { "type": "string", "format": "uuid" },
+          "created_at": { "type": "string", "format": "date-time" },
+          "user_reaction": { "type": "string", "enum": ["up", "down", null] }
+        }
+      },
+      "Comment": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "content": { "type": "string" },
+          "author_handle": { "type": "string" },
+          "author_avatar_url": { "type": "string" },
+          "like_count": { "type": "integer" },
+          "parent_id": { "type": "string", "format": "uuid" },
+          "created_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "Trader": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "handle": { "type": "string" },
+          "source": { "type": "string" },
+          "source_trader_id": { "type": "string" },
+          "roi": { "type": "number" },
+          "pnl": { "type": "number" },
+          "mdd": { "type": "number" },
+          "arena_score": { "type": "number" },
+          "followers": { "type": "integer" },
+          "aum": { "type": "number" },
+          "win_rate": { "type": "number" },
+          "sharpe_ratio": { "type": "number" }
+        }
+      },
+      "TraderDetail": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "handle": { "type": "string" },
+          "source": { "type": "string" },
+          "roi": { "type": "number" },
+          "pnl": { "type": "number" },
+          "mdd": { "type": "number" },
+          "arena_score": { "type": "number" },
+          "followers": { "type": "integer" },
+          "aum": { "type": "number" },
+          "win_rate": { "type": "number" },
+          "sharpe_ratio": { "type": "number" },
+          "equity_history": { "type": "array", "items": { "type": "object" } },
+          "recent_trades": { "type": "array", "items": { "type": "object" } }
+        }
+      },
+      "Position": {
+        "type": "object",
+        "properties": {
+          "symbol": { "type": "string" },
+          "side": { "type": "string", "enum": ["long", "short"] },
+          "size": { "type": "number" },
+          "entry_price": { "type": "number" },
+          "mark_price": { "type": "number" },
+          "pnl": { "type": "number" },
+          "pnl_percent": { "type": "number" },
+          "leverage": { "type": "number" }
+        }
+      },
+      "Group": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "name": { "type": "string" },
+          "name_en": { "type": "string" },
+          "description": { "type": "string" },
+          "avatar_url": { "type": "string" },
+          "member_count": { "type": "integer" },
+          "post_count": { "type": "integer" },
+          "created_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "Notification": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "type": { "type": "string", "enum": ["like", "comment", "follow", "mention", "system"] },
+          "title": { "type": "string" },
+          "body": { "type": "string" },
+          "is_read": { "type": "boolean" },
+          "created_at": { "type": "string", "format": "date-time" },
+          "data": { "type": "object" }
+        }
+      }
+    }
+  }
+}
