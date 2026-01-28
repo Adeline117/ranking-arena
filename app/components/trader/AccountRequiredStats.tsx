@@ -92,16 +92,16 @@ export default function AccountRequiredStats({ userId }: { userId: string }) {
 
       if (!response.ok) {
         const error = await response.json()
-        showToast('同步失败: ' + (error.error || 'Unknown error'), 'error')
+        showToast(t('syncError') + ': ' + (error.error || 'Unknown error'), 'error')
         return
       }
 
       // 重新加载数据
       await loadData()
-      showToast('同步成功！', 'success')
+      showToast(t('syncSuccess'), 'success')
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : '同步失败'
-      showToast('同步失败: ' + errorMessage, 'error')
+      const errorMessage = err instanceof Error ? err.message : t('syncError')
+      showToast(t('syncError') + ': ' + errorMessage, 'error')
     } finally {
       setSyncing({ ...syncing, [exchange]: false })
     }
@@ -109,21 +109,21 @@ export default function AccountRequiredStats({ userId }: { userId: string }) {
 
   if (loading) {
     return (
-      <Card title="账户必需数据">
-        <Text size="sm" color="tertiary">加载中...</Text>
+      <Card title={t('accountRequiredStats')}>
+        <Text size="sm" color="tertiary">{t('loading')}</Text>
       </Card>
     )
   }
 
   if (connections.length === 0) {
     return (
-      <Card title="账户必需数据">
+      <Card title={t('accountRequiredStats')}>
         <Text size="sm" color="secondary" style={{ marginBottom: tokens.spacing[4] }}>
-          绑定交易所账号后，可查看详细的交易数据和分析指标。
+          {t('bindExchangeToViewStats')}
         </Text>
         <Link href="/exchange/auth">
           <Button variant="primary" size="sm">
-            + 绑定交易所
+            {t('addBindExchange')}
           </Button>
         </Link>
       </Card>
@@ -131,7 +131,7 @@ export default function AccountRequiredStats({ userId }: { userId: string }) {
   }
 
   return (
-    <Card title="账户必需数据">
+    <Card title={t('accountRequiredStats')}>
       <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}>
         {connections.map((conn) => {
           const data = tradingData[conn.exchange]
@@ -158,39 +158,39 @@ export default function AccountRequiredStats({ userId }: { userId: string }) {
                   onClick={() => handleSync(conn.exchange)}
                   disabled={syncing[conn.exchange]}
                 >
-                  {syncing[conn.exchange] ? '同步中...' : '同步数据'}
+                  {syncing[conn.exchange] ? t('syncing') : t('syncData')}
                 </Button>
               </Box>
 
               {data ? (
                 <Box style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: tokens.spacing[3] }}>
                   <Box>
-                    <Text size="xs" color="tertiary">总交易次数</Text>
+                    <Text size="xs" color="tertiary">{t('totalTrades')}</Text>
                     <Text size="lg" weight="bold">{data.total_trades}</Text>
                   </Box>
                   <Box>
-                    <Text size="xs" color="tertiary">盈利交易百分比</Text>
+                    <Text size="xs" color="tertiary">{t('profitableTradesPct')}</Text>
                     <Text size="lg" weight="bold">{data.profitable_trades_pct.toFixed(1)}%</Text>
                   </Box>
                   <Box>
-                    <Text size="xs" color="tertiary">平均盈利</Text>
+                    <Text size="xs" color="tertiary">{t('avgProfit')}</Text>
                     <Text size="lg" weight="bold" style={{ color: '#7CFFB2' }}>
                       ${data.avg_profit.toFixed(2)}
                     </Text>
                   </Box>
                   <Box>
-                    <Text size="xs" color="tertiary">平均亏损</Text>
+                    <Text size="xs" color="tertiary">{t('avgLoss')}</Text>
                     <Text size="lg" weight="bold" style={{ color: '#ff7c7c' }}>
                       ${Math.abs(data.avg_loss).toFixed(2)}
                     </Text>
                   </Box>
                   <Box>
-                    <Text size="xs" color="tertiary">平均持仓时间</Text>
-                    <Text size="lg" weight="bold">{data.avg_holding_time_days.toFixed(1)} 天</Text>
+                    <Text size="xs" color="tertiary">{t('avgHoldingTime')}</Text>
+                    <Text size="lg" weight="bold">{data.avg_holding_time_days.toFixed(1)} {t('days')}</Text>
                   </Box>
                   {conn.last_sync_at && (
                     <Box>
-                      <Text size="xs" color="tertiary">最后同步</Text>
+                      <Text size="xs" color="tertiary">{t('lastSync')}</Text>
                       <Text size="sm" color="secondary">
                         {new Date(conn.last_sync_at).toLocaleString('zh-CN')}
                       </Text>
@@ -200,7 +200,7 @@ export default function AccountRequiredStats({ userId }: { userId: string }) {
               ) : (
                 <Box style={{ textAlign: 'center', padding: tokens.spacing[4] }}>
                   <Text size="sm" color="tertiary" style={{ marginBottom: tokens.spacing[2] }}>
-                    暂无交易数据
+                    {t('noTradingData')}
                   </Text>
                   <Button
                     variant="secondary"
@@ -208,7 +208,7 @@ export default function AccountRequiredStats({ userId }: { userId: string }) {
                     onClick={() => handleSync(conn.exchange)}
                     disabled={syncing[conn.exchange]}
                   >
-                    {syncing[conn.exchange] ? '同步中...' : '立即同步'}
+                    {syncing[conn.exchange] ? t('syncing') : t('syncNow')}
                   </Button>
                 </Box>
               )}

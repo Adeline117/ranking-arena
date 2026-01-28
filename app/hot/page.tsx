@@ -375,52 +375,78 @@ function HotContent() {
     return chineseRatio > 0.1
   }, [])
 
-  // 批量翻译列表帖子（使用批量API，带缓存）
+  // 批量翻译列表帖子（使用批量API，带缓存）- 翻译标题和正文
   const translateListPosts = useCallback(async (postsToTranslate: Post[], targetLang: 'zh' | 'en') => {
     if (translatingList) return
-    
+
     const needsTranslation = postsToTranslate.filter(p => {
-      if (translatedListPosts[p.id]?.title) return false
-      if (!p.title) return false
-      const titleIsChinese = isChineseText(p.title)
-      return targetLang === 'en' ? titleIsChinese : !titleIsChinese
+      if (translatedListPosts[p.id]?.title && translatedListPosts[p.id]?.body) return false
+      if (!p.title && !p.body) return false
+      const titleIsChinese = isChineseText(p.title || '')
+      const bodyIsChinese = isChineseText(p.body || '')
+      return targetLang === 'en' ? (titleIsChinese || bodyIsChinese) : (!titleIsChinese || !bodyIsChinese)
     })
-    
+
     if (needsTranslation.length === 0) return
-    
+
     setTranslatingList(true)
-    
+
     try {
-      // 使用批量翻译API
-      const items = needsTranslation.slice(0, 20).map(post => ({
-        id: post.id,
-        text: post.title || '',
-        contentType: 'post_title' as const,
-        contentId: post.id,
-      }))
+      // 使用批量翻译API - 同时翻译标题和正文
+      const items: Array<{ id: string; text: string; contentType: 'post_title' | 'post_content'; contentId: string }> = []
+
+      needsTranslation.slice(0, 10).forEach(post => {
+        // 添加标题翻译请求
+        if (post.title && !translatedListPosts[post.id]?.title) {
+          items.push({
+            id: `${post.id}_title`,
+            text: post.title,
+            contentType: 'post_title',
+            contentId: post.id,
+          })
+        }
+        // 添加正文翻译请求
+        if (post.body && !translatedListPosts[post.id]?.body) {
+          items.push({
+            id: `${post.id}_body`,
+            text: post.body.slice(0, 500), // 限制长度
+            contentType: 'post_content',
+            contentId: post.id,
+          })
+        }
+      })
+
+      if (items.length === 0) return
 
       const response = await fetch('/api/translate', {
         method: 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
           ...getCsrfHeaders()
         },
         body: JSON.stringify({ items, targetLang }),
       })
       const data = await response.json()
-      
+
       if (response.ok && data.success && data.data?.results) {
         const results = data.data.results as Record<string, { translatedText: string; cached: boolean }>
-        
+
         setTranslatedListPosts(prev => {
           const updated = { ...prev }
           for (const [id, result] of Object.entries(results)) {
-            const post = postsToTranslate.find(p => p.id === id)
-            updated[id] = { title: result.translatedText, body: post?.body }
+            const [postId, type] = id.split('_')
+            if (!updated[postId]) {
+              updated[postId] = {}
+            }
+            if (type === 'title') {
+              updated[postId].title = result.translatedText
+            } else if (type === 'body') {
+              updated[postId].body = result.translatedText
+            }
           }
           return updated
         })
-        
+
       }
     } catch {
       // 翻译失败，静默处理
@@ -841,13 +867,15 @@ function HotContent() {
                             </Text>
                             {(() => {
                               const isExpanded = expandedPosts[p.id]
-                              const isLongContent = p.body.length > 100
+                              // Use translated body if available
+                              const displayBody = translatedListPosts[p.id]?.body || p.body
+                              const isLongContent = displayBody.length > 100
                               const contentToShow = isExpanded || !isLongContent
-                                ? p.body
-                                : p.body.slice(0, 100) + '...'
+                                ? displayBody
+                                : displayBody.slice(0, 100) + '...'
                               return (
                                 <>
-                                  <Text className="hot-post-body" size="sm" color="secondary" style={{ marginBottom: tokens.spacing[2], lineHeight: 1.5 }}>
+                                  <Text className="hot-post-body" size="sm" color="secondary" style={{ marginBottom: tokens.spacing[2], lineHeight: 1.5, color: translatedListPosts[p.id]?.body ? tokens.colors.accent.translated : undefined }}>
                                     {renderContentWithLinks(contentToShow)}
                                   </Text>
                                   {isLongContent && (
