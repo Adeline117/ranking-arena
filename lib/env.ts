@@ -119,8 +119,8 @@ export function validateEnv() {
     return parsed
   } catch (error) {
     if (error instanceof z.ZodError) {
-      const missingVars = error.errors
-        .map((err) => `  - ${err.path.join('.')}: ${err.message}`)
+      const missingVars = error.issues
+        .map((err: { path: (string | number)[]; message: string }) => `  - ${err.path.join('.')}: ${err.message}`)
         .join('\n')
 
       throw new Error(
