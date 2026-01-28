@@ -13,7 +13,7 @@
  * @module lib/services/anomaly-detection
  */
 
-import type { TraderRankingData } from '../archive/ranking'
+import type { TraderRankingData } from '../utils/ranking'
 
 // ============================================
 // Types & Interfaces
