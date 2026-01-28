@@ -611,7 +611,7 @@ export default function TraderHeader({
               </svg>
             }
           >
-            编辑资料
+            {t('editProfile')}
           </ActionButton>
         )}
 
@@ -620,7 +620,7 @@ export default function TraderHeader({
         )}
 
         <ActionButton onClick={() => router.push('/')} variant="ghost">
-          ← 返回
+          ← {t('back')}
         </ActionButton>
 
         {!isOwnProfile && !isRegistered && userId && (
