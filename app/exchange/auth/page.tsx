@@ -9,6 +9,7 @@ import { Box, Text, Button } from '@/app/components/base'
 import ExchangeLogo from '@/app/components/ui/ExchangeLogo'
 import { useToast } from '@/app/components/ui/Toast'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { t as staticT } from '@/lib/i18n'
 
 const EXCHANGES = [
   { id: 'binance', name: 'Binance', oauthSupported: true },
@@ -42,7 +43,7 @@ function ExchangeAuthContent() {
 
   const handleOAuth = async (exchange: string) => {
     if (!userId) {
-      showToast('请先登录', 'warning')
+      showToast(t('pleaseLogin'), 'warning')
       router.push('/login')
       return
     }
@@ -62,7 +63,7 @@ function ExchangeAuthContent() {
       // 重定向到交易所 OAuth 页面
       window.location.href = data.authUrl
     } catch (err: any) {
-      setError(err.message || '授权失败')
+      setError(err.message || t('authorizationFailed'))
       setLoading(false)
     }
   }
@@ -76,7 +77,7 @@ function ExchangeAuthContent() {
       <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
         <TopNav email={null} />
         <Box style={{ maxWidth: 600, margin: '0 auto', padding: tokens.spacing[10] }}>
-          <Text size="lg">加载中...</Text>
+          <Text size="lg">{t('loading')}</Text>
         </Box>
       </Box>
     )
@@ -125,7 +126,7 @@ function ExchangeAuthContent() {
             </Box>
 
             <Text size="sm" color="secondary" style={{ marginBottom: tokens.spacing[4] }}>
-              选择授权方式：
+              {t('selectAuthMethod')}
             </Text>
 
             <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
@@ -136,20 +137,20 @@ function ExchangeAuthContent() {
                   disabled={loading}
                   fullWidth
                 >
-                  {loading ? '授权中...' : `使用 OAuth 授权 ${selectedExchange.name}`}
+                  {loading ? t('authorizing') : t('useOAuthAuthorize').replace('{exchange}', selectedExchange.name)}
                 </Button>
               ) : (
                 <Text size="sm" color="tertiary" style={{ marginBottom: tokens.spacing[2] }}>
-                  {selectedExchange.name} 暂不支持 OAuth 授权
+                  {t('oauthNotSupported').replace('{exchange}', selectedExchange.name)}
                 </Text>
               )}
-              
+
               <Button
                 variant="secondary"
                 onClick={() => handleApiKey(selectedExchange.id)}
                 fullWidth
               >
-                使用 API Key 授权
+                {t('useApiKeyAuthorize')}
               </Button>
             </Box>
           </Box>
@@ -162,7 +163,7 @@ function ExchangeAuthContent() {
             style={{ marginBottom: tokens.spacing[4] }}
           >
             <Text size="sm" color="secondary" style={{ marginBottom: tokens.spacing[4] }}>
-              选择要绑定的交易所：
+              {t('selectExchangeToBind')}
             </Text>
 
             <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
@@ -186,7 +187,7 @@ function ExchangeAuthContent() {
           onClick={() => router.push('/settings')}
           style={{ marginTop: tokens.spacing[4] }}
         >
-          ← 返回设置
+          ← {t('returnToSettings')}
         </Button>
       </Box>
     </Box>
@@ -199,7 +200,7 @@ export default function ExchangeAuthPage() {
       <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
         <TopNav email={null} />
         <Box style={{ maxWidth: 600, margin: '0 auto', padding: tokens.spacing[10] }}>
-          <Text size="lg">加载中...</Text>
+          <Text size="lg">{staticT('loading')}</Text>
         </Box>
       </Box>
     }>

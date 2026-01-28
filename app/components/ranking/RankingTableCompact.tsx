@@ -5,6 +5,7 @@ import { tokens } from '@/lib/design-tokens'
 import { RankingSkeleton } from '../ui/Skeleton'
 import { RankingBadge } from '../icons'
 import { Box, Text } from '../base'
+import { useLanguage } from '../Providers/LanguageProvider'
 import type { Trader } from './RankingTable'
 
 /**
@@ -17,6 +18,7 @@ export default function RankingTableCompact(props: {
   loggedIn: boolean
 }) {
   const { traders, loading } = props
+  const { language } = useLanguage()
 
   // 按90天ROI排序（固定）
   const sortedTraders = [...traders].sort((a, b) => b.roi - a.roi)
@@ -32,20 +34,20 @@ export default function RankingTableCompact(props: {
       <Box
         style={{
           display: 'grid',
-          gridTemplateColumns: '50px 1fr 90px', // Rank | ID | ROI (90D)
-          gap: tokens.spacing[3],
+          gridTemplateColumns: '40px minmax(80px, 1fr) 80px', // Rank | ID | ROI (90D)
+          gap: tokens.spacing[2],
           padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
           borderBottom: `1px solid ${tokens.colors.border.primary}`,
         }}
       >
-        <Text size="xs" weight="bold" color="tertiary" style={{ textAlign: 'center' }}>
-          排名
+        <Text size="xs" weight="bold" color="tertiary" style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
+          {language === 'zh' ? '排名' : 'Rank'}
         </Text>
-        <Text size="xs" weight="bold" color="tertiary">
-          交易员
+        <Text size="xs" weight="bold" color="tertiary" style={{ whiteSpace: 'nowrap' }}>
+          {language === 'zh' ? '交易员' : 'Trader'}
         </Text>
-        <Text size="xs" weight="bold" color="tertiary" style={{ textAlign: 'right' }}>
-          ROI (90D)
+        <Text size="xs" weight="bold" color="tertiary" style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+          ROI
         </Text>
       </Box>
 
@@ -60,7 +62,7 @@ export default function RankingTableCompact(props: {
             fontSize: tokens.typography.fontSize.sm,
           }}
         >
-          暂无交易者数据
+          {language === 'zh' ? '暂无交易者数据' : 'No trader data'}
         </Box>
       ) : (
         <Box style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
@@ -78,9 +80,9 @@ export default function RankingTableCompact(props: {
                 <Box
                   style={{
                     display: 'grid',
-                    gridTemplateColumns: '50px 1fr 90px',
+                    gridTemplateColumns: '40px minmax(80px, 1fr) 80px',
                     alignItems: 'center',
-                    gap: tokens.spacing[3],
+                    gap: tokens.spacing[2],
                     padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
                     borderBottom: `1px solid ${tokens.colors.border.primary}`,
                     cursor: 'pointer',
