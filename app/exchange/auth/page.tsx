@@ -8,6 +8,7 @@ import TopNav from '@/app/components/layout/TopNav'
 import { Box, Text, Button } from '@/app/components/base'
 import ExchangeLogo from '@/app/components/ui/ExchangeLogo'
 import { useToast } from '@/app/components/ui/Toast'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 const EXCHANGES = [
   { id: 'binance', name: 'Binance', oauthSupported: true },
@@ -23,6 +24,7 @@ function ExchangeAuthContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const { showToast } = useToast()
+  const { t } = useLanguage()
   const exchangeParam = searchParams.get('exchange')
   const [userId, setUserId] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -88,7 +90,7 @@ function ExchangeAuthContent() {
       
       <Box style={{ maxWidth: 600, margin: '0 auto', padding: tokens.spacing[10] }}>
         <Text size="2xl" weight="black" style={{ marginBottom: tokens.spacing[6] }}>
-          绑定交易所账号
+          {t('bindExchangeAccount')}
         </Text>
 
         {error && (
