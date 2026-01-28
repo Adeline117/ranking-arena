@@ -34,7 +34,7 @@ type PostDetailModalProps = {
 }
 
 export default function PostDetailModal({ postId, onClose }: PostDetailModalProps) {
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
   const { showToast } = useToast()
   const auth = useUnifiedAuth({
     onUnauthenticated: () => showToast('请先登录', 'warning'),
@@ -209,7 +209,7 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
             {post.author_handle || '匿名'}
           </Link>
           <span>&middot;</span>
-          <span>{formatTimeAgo(post.created_at)}</span>
+          <span>{formatTimeAgo(post.created_at, language)}</span>
           <span>&middot;</span>
           <CommentIcon size={12} /> {post.comment_count}
         </div>
@@ -358,7 +358,7 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
                       </span>
                     )}
                     <span style={{ fontSize: 11, color: tokens.colors.text.tertiary }}>
-                      {formatTimeAgo(comment.created_at)}
+                      {formatTimeAgo(comment.created_at, language)}
                     </span>
                   </div>
                   <div translate="no" style={{ fontSize: 13, color: tokens.colors.text.primary, lineHeight: 1.6 }}>

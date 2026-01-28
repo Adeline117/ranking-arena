@@ -44,7 +44,7 @@ export function PostCard({
   translatedTitle,
   translatedContent,
 }: PostCardProps) {
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
   const isCompact = variant === 'compact'
 
   // 显示的标题和内容
@@ -130,7 +130,7 @@ export function PostCard({
               {post.comment_count || 0}
             </span>
             
-            <span>{formatTimeAgo(post.created_at)}</span>
+            <span>{formatTimeAgo(post.created_at, language)}</span>
           </div>
         </div>
       </div>
@@ -192,7 +192,7 @@ export function PostCard({
             </Link>
           )}
           <span style={{ fontSize: tokens.typography.fontSize.xs, color: tokens.colors.text.tertiary }}>
-            {formatTimeAgo(post.created_at)}
+            {formatTimeAgo(post.created_at, language)}
           </span>
         </div>
       </div>
