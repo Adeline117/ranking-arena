@@ -50,6 +50,8 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
   const [searchResults, setSearchResults] = useState<SearchResult[]>([])
   const [searching, setSearching] = useState(false)
   const [selectedIndex, setSelectedIndex] = useState(-1)
+  const [translatedTitles, setTranslatedTitles] = useState<Record<string, string>>({})
+  const [translating, setTranslating] = useState(false)
   const abortControllerRef = useRef<AbortController | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
@@ -109,6 +111,58 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
   useEffect(() => {
     loadHotPosts()
   }, [loadHotPosts])
+
+  // Auto-translate hot post titles when language is English
+  useEffect(() => {
+    if (language !== 'en' || hotPosts.length === 0 || translating) return
+
+    // Check if we already have translations
+    const needsTranslation = hotPosts.some(post => !translatedTitles[post.id])
+    if (!needsTranslation) return
+
+    const translateTitles = async () => {
+      setTranslating(true)
+      try {
+        const titlesToTranslate = hotPosts
+          .filter(post => !translatedTitles[post.id])
+          .map(post => ({ id: post.id, title: post.title }))
+
+        if (titlesToTranslate.length === 0) return
+
+        // Batch translate all titles
+        const textsToTranslate = titlesToTranslate.map(p => p.title).join('\n---SPLIT---\n')
+
+        const res = await fetch('/api/translate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            text: textsToTranslate,
+            targetLang: 'en',
+            sourceLang: 'zh',
+          }),
+        })
+
+        if (res.ok) {
+          const data = await res.json()
+          const translatedTexts = (data.translatedText || '').split('\n---SPLIT---\n')
+
+          const newTranslations: Record<string, string> = { ...translatedTitles }
+          titlesToTranslate.forEach((post, idx) => {
+            if (translatedTexts[idx]) {
+              newTranslations[post.id] = translatedTexts[idx].trim()
+            }
+          })
+          setTranslatedTitles(newTranslations)
+        }
+      } catch (e) {
+        console.error('Failed to translate hot posts:', e)
+      } finally {
+        setTranslating(false)
+      }
+    }
+
+    translateTitles()
+  }, [language, hotPosts, translatedTitles, translating])
 
   // 实时搜索 - 使用 API 和 AbortController
   useEffect(() => {
@@ -479,11 +533,11 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
             }}
           >
             <Text size="xs" weight="bold" color="tertiary" style={{ textTransform: 'uppercase' }}>
-              搜索历史
+              {language === 'en' ? 'Search History' : '搜索历史'}
             </Text>
             <button
               onClick={handleClearAllHistory}
-              aria-label="清空搜索历史"
+              aria-label={language === 'en' ? 'Clear search history' : '清空搜索历史'}
               style={{
                 background: 'transparent',
                 border: 'none',
@@ -493,7 +547,7 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
                 padding: 0,
               }}
             >
-              清空
+              {language === 'en' ? 'Clear' : '清空'}
             </button>
           </Box>
           <Box>
@@ -561,7 +615,7 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
             }}
           >
             <Text size="xs" weight="bold" color="tertiary" style={{ textTransform: 'uppercase' }}>
-              热榜帖子
+              {language === 'en' ? 'Hot Posts' : '热榜帖子'}
             </Text>
           </Box>
           <Box>
@@ -603,7 +657,9 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
               </Box>
             ) : hotPosts.length === 0 ? (
               <Box style={{ padding: tokens.spacing[4], textAlign: 'center' }}>
-                <Text size="sm" color="tertiary">暂无热门帖子</Text>
+                <Text size="sm" color="tertiary">
+                  {language === 'en' ? 'No hot posts yet' : '暂无热门帖子'}
+                </Text>
               </Box>
             ) : (
               hotPosts.map((post) => (
@@ -648,11 +704,13 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
                           lineHeight: 1.5,
                         }}
                       >
-                        {post.title}
+                        {language === 'en' && translatedTitles[post.id]
+                          ? translatedTitles[post.id]
+                          : post.title}
                       </Text>
                       {post.view_count !== undefined && post.view_count > 0 && (
                         <Text size="xs" color="tertiary" style={{ marginTop: tokens.spacing[1] }}>
-                          {post.view_count.toLocaleString()} 浏览
+                          {post.view_count.toLocaleString()} {language === 'en' ? 'views' : '浏览'}
                         </Text>
                       )}
                     </Box>
