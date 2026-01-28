@@ -44,7 +44,11 @@
     "version:sync": "node scripts/sync-version.mjs",
     "version:bump:patch": "node scripts/sync-version.mjs --bump patch",
     "version:bump:minor": "node scripts/sync-version.mjs --bump minor",
-    "version:bump:major": "node scripts/sync-version.mjs --bump major"
+    "version:bump:major": "node scripts/sync-version.mjs --bump major",
+    "security:audit": "npm audit",
+    "security:audit:json": "npm audit --json > docs/audit-report-$(date +%Y%m%d).json",
+    "security:fix": "npm audit fix",
+    "security:check": "npm run security:audit && npm run type-check && npm run lint"
   },
   "dependencies": {
     "@capacitor/android": "^7.2.0",
