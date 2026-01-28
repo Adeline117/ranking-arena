@@ -163,3 +163,88 @@ export interface AvatarProps {
   isTrader?: boolean // 是否是 trader，如果是 trader 且没有头像，只显示首字母，不生成头像
 }
 
+/**
+ * 需要通过代理加载的头像域名列表
+ * 这些域名通常有CORS或Referrer限制
+ */
+const PROXY_REQUIRED_DOMAINS = [
+  // Binance
+  'bnbstatic.com',
+  'tylhh.net',
+  'nftstatic.com',
+  'bscdnweb.com',
+  'myqcloud.com',
+  // Bitget
+  'bgstatic.com',
+  // MEXC
+  'mocortech.com',
+  // Bybit
+  'bybit.com',
+  'staticimg.com',
+  'bycsi.com',
+  // OKX
+  'okx.com',
+  'okcoin.com',
+  // KuCoin
+  'kucoin.com',
+  // Gate.io
+  'gateimg.com',
+  'gate.io',
+  // HTX
+  'htx.com',
+  'huobi.com',
+  // BingX
+  'bingx.com',
+  // CoinEx
+  'coinex.com',
+  // Others
+  'lbkrs.com',
+  'weex.com',
+  'wexx.one',
+  'phemex.com',
+  'bitmart.com',
+  'xt.com',
+  'pionex.com',
+  'blofin.com',
+]
+
+/**
+ * 检查URL是否需要通过代理加载
+ */
+export function needsProxy(url: string | null | undefined): boolean {
+  if (!url) return false
+  try {
+    const hostname = new URL(url).hostname.toLowerCase()
+    return PROXY_REQUIRED_DOMAINS.some(domain => hostname.includes(domain))
+  } catch {
+    return false
+  }
+}
+
+/**
+ * 获取交易员头像URL（通过代理以解决CORS问题）
+ * @param avatarUrl 原始头像URL
+ * @returns 代理后的URL或原始URL
+ */
+export function getTraderAvatarUrl(avatarUrl: string | null | undefined): string | null {
+  if (!avatarUrl || avatarUrl.trim() === '') return null
+
+  // 过滤掉无效的URL
+  if (
+    avatarUrl.includes('t.co') ||
+    avatarUrl.includes('/banner/') ||
+    avatarUrl.includes('placeholder') ||
+    avatarUrl.includes('default')
+  ) {
+    return null
+  }
+
+  // 如果是需要代理的域名，使用代理API
+  if (needsProxy(avatarUrl)) {
+    return `/api/avatar?url=${encodeURIComponent(avatarUrl)}`
+  }
+
+  // 其他URL直接返回
+  return avatarUrl
+}
+

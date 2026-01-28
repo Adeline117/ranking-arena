@@ -25,21 +25,49 @@ export async function GET(request: Request) {
     // 验证 URL 是否来自允许的域名
     const allowedDomains = [
       // MEXC
-      'public.mocortech.com',
-      'images.mocortech.com',
+      'mocortech.com',
       // Bitget
-      'qrc.bgstatic.com',
-      'img.bgstatic.com',
+      'bgstatic.com',
       // Binance (多个 CDN 域名)
-      'public.bnbstatic.com',
-      'bin.bnbstatic.com',
-      'public.tylhh.net',
-      'public.nftstatic.com',
-      'public.bscdnweb.com',
+      'bnbstatic.com',
+      'tylhh.net',
+      'nftstatic.com',
+      'bscdnweb.com',
       'myqcloud.com',
       // Bybit
-      'api.bybit.com',
-      'assets.staticimg.com',
+      'bybit.com',
+      'staticimg.com',
+      'bycsi.com',
+      // OKX
+      'okx.com',
+      'okcoin.com',
+      // KuCoin
+      'kucoin.com',
+      // Gate.io
+      'gateimg.com',
+      'gate.io',
+      // HTX
+      'htx.com',
+      'huobi.com',
+      // BingX
+      'bingx.com',
+      // CoinEx
+      'coinex.com',
+      // LBank
+      'lbkrs.com',
+      // Phemex
+      'phemex.com',
+      // Bitmart
+      'bitmart.com',
+      // XT
+      'xt.com',
+      // Pionex
+      'pionex.com',
+      // Weex
+      'weex.com',
+      'wexx.one',
+      // Blofin
+      'blofin.com',
     ]
     
     const urlObj = new URL(decodedUrl)
