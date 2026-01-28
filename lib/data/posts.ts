@@ -12,6 +12,7 @@ export interface Post {
   author_handle: string
   group_id?: string
   group_name?: string
+  group_name_en?: string
   poll_enabled: boolean
   poll_bull: number
   poll_bear: number
@@ -88,7 +89,7 @@ interface PostRow {
   created_at: string
   updated_at?: string
   original_post_id?: string | null
-  groups?: { name: string } | { name: string }[]
+  groups?: { name: string; name_en?: string | null } | { name: string; name_en?: string | null }[]
 }
 
 interface AuthorProfile {
@@ -131,6 +132,15 @@ function extractGroupName(groups: PostRow['groups']): string | undefined {
 }
 
 /**
+ * 提取 group name_en
+ */
+function extractGroupNameEn(groups: PostRow['groups']): string | undefined {
+  if (!groups) return undefined
+  const g = Array.isArray(groups) ? groups[0] : groups
+  return g?.name_en ?? undefined
+}
+
+/**
  * 转换数据库行为 PostWithAuthor 对象
  */
 function toPostWithAuthor(
@@ -149,6 +159,7 @@ function toPostWithAuthor(
     author_show_pro_badge: profile?.show_pro_badge !== false,
     group_id: row.group_id,
     group_name: extractGroupName(row.groups),
+    group_name_en: extractGroupNameEn(row.groups),
     poll_enabled: row.poll_enabled || false,
     poll_bull: row.poll_bull || 0,
     poll_bear: row.poll_bear || 0,
@@ -174,7 +185,7 @@ const POST_SELECT_FIELDS = `
   poll_enabled, poll_id, poll_bull, poll_bear, poll_wait,
   like_count, dislike_count, comment_count, bookmark_count,
   repost_count, view_count, hot_score, is_pinned, images,
-  created_at, updated_at, original_post_id, groups(name)
+  created_at, updated_at, original_post_id, groups(name, name_en)
 `
 
 /**

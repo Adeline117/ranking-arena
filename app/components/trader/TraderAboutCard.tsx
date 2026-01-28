@@ -11,6 +11,7 @@ import UserFollowButton from '../ui/UserFollowButton'
 import MessageButton from '../ui/MessageButton'
 import { DynamicFollowListModal as FollowListModal } from '../ui/dynamic'
 import { getAvatarGradient, getAvatarInitial } from '@/lib/utils/avatar'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 /**
  * 带动画的头像组件
@@ -200,6 +201,7 @@ export default function TraderAboutCard({
   const [mounted, setMounted] = useState(false)
   const [followersCount, setFollowersCount] = useState(followers)
   const router = useRouter()
+  const { t } = useLanguage()
 
   useEffect(() => {
     setMounted(true)
@@ -386,7 +388,7 @@ export default function TraderAboutCard({
               transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
             }}
           >
-            编辑个人资料
+            {t('editProfile')}
           </Button>
         ) : traderId && userId ? (
           <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2], marginBottom: tokens.spacing[5] }}>
@@ -437,14 +439,14 @@ export default function TraderAboutCard({
         {isOwnProfile ? (
           <Link href="/following" style={{ textDecoration: 'none' }}>
             <StatItem
-              label="关注中"
+              label={t('following')}
               value={following}
               clickable
             />
           </Link>
         ) : (
           <StatItem
-            label="关注中"
+            label={t('following')}
             value={following}
             clickable={false}
           />
@@ -452,7 +454,7 @@ export default function TraderAboutCard({
 
         {/* 被关注 */}
         <StatItem
-          label="被关注"
+          label={t('followers')}
           value={followersCount}
           onClick={handleFollowersClick}
           clickable={isRegistered && (isOwnProfile || showFollowers)}

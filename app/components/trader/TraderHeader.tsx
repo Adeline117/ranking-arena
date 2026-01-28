@@ -525,7 +525,7 @@ export default function TraderHeader({
           
           {/* Stats row */}
           <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3], flexWrap: 'wrap' }}>
-            <StatItem value={followers} label="粉丝" hasCover={hasCover} />
+            <StatItem value={followers} label={t('fans')} hasCover={hasCover} />
 
             {copiers !== undefined && copiers > 0 && (
               <StatItem
@@ -538,7 +538,7 @@ export default function TraderHeader({
                   </svg>
                 }
                 value={copiers}
-                label="跟单"
+                label={t('copiers')}
                 hasCover={hasCover}
               />
             )}

@@ -34,6 +34,7 @@ export interface PostWithAuthor extends Post {
   author_is_pro?: boolean
   author_show_pro_badge?: boolean
   group_name?: string | null
+  group_name_en?: string | null
   // 原始帖子信息（如果是转发）
   original_post?: {
     id: string

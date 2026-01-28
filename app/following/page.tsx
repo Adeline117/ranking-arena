@@ -48,7 +48,7 @@ type FollowItem = {
 export default function FollowingPage() {
   const router = useRouter()
   const { showToast } = useToast()
-  const { language } = useLanguage()
+  const { language, t } = useLanguage()
   const [email, setEmail] = useState<string | null>(null)
   const [userId, setUserId] = useState<string | null>(null)
   const [items, setItems] = useState<FollowItem[]>([])
@@ -221,12 +221,12 @@ export default function FollowingPage() {
                       </Text>
                       {item.win_rate !== undefined && (
                         <Text size="xs" color="tertiary">
-                          胜率: {(item.win_rate || 0).toFixed(1)}%
+                          {t('winRate')}: {(item.win_rate || 0).toFixed(1)}%
                         </Text>
                       )}
                       {item.followers !== undefined && item.followers > 0 && (
                         <Text size="xs" color="tertiary">
-                          跟单: {item.followers.toLocaleString()}
+                          {t('copiers')}: {item.followers.toLocaleString()}
                         </Text>
                       )}
                     </Box>

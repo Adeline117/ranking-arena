@@ -6,6 +6,7 @@ import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
 import Avatar from './Avatar'
 import UserFollowButton from './UserFollowButton'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 type FollowUser = {
   id: string
@@ -36,6 +37,7 @@ export default function FollowListModal({
   isPublic = true,
 }: FollowListModalProps) {
   const router = useRouter()
+  const { t } = useLanguage()
   const [users, setUsers] = useState<FollowUser[]>([])
   const [loading, setLoading] = useState(true)
   const [hidden, setHidden] = useState(false)
@@ -108,7 +110,7 @@ export default function FollowListModal({
 
   if (!isOpen) return null
 
-  const title = type === 'followers' ? '被关注' : '关注中'
+  const title = type === 'followers' ? t('followers') : t('following')
 
   return (
     <Box

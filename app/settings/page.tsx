@@ -15,6 +15,7 @@ import { formatTimeAgo } from '@/lib/utils/date'
 import AdvancedAlerts from '@/app/components/pro/AdvancedAlerts'
 import { useSubscription } from '@/app/components/home/hooks/useSubscription'
 import { useMultiAccount } from '@/lib/hooks/useMultiAccount'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import {
   validateHandle,
   validateEmail,
@@ -406,6 +407,7 @@ function DeleteAccountModal({
   deleting: boolean
   onDelete: () => void
 }): React.ReactElement | null {
+  const { t } = useLanguage()
   if (!isOpen) return null
 
   return (
@@ -432,11 +434,11 @@ function DeleteAccountModal({
         }}
       >
         <Text size="lg" weight="bold" style={{ color: tokens.colors.accent.error, marginBottom: tokens.spacing[3] }}>
-          确认注销账号
+          {t('deleteAccountTitle')}
         </Text>
         <Box style={{ marginBottom: tokens.spacing[4] }}>
           <Text size="sm" color="secondary" style={{ lineHeight: 1.6 }}>
-            注销后，你的账号将在 30 天内被永久删除。在此期间，你可以通过登录恢复账号。
+            {t('deleteAccountDesc')}
           </Text>
           <Box style={{
             marginTop: tokens.spacing[3],
@@ -446,17 +448,17 @@ function DeleteAccountModal({
             border: `1px solid ${tokens.colors.accent.warning}30`,
           }}>
             <Text size="xs" style={{ color: tokens.colors.accent.warning }}>
-              注意：注销后你的帖子和评论将显示为&ldquo;已注销用户&rdquo;，关注者将无法看到你的动态。
+              {t('deleteAccountWarning')}
             </Text>
           </Box>
         </Box>
         <Box style={{ marginBottom: tokens.spacing[3] }}>
-          <Text size="sm" weight="medium" style={{ marginBottom: tokens.spacing[2] }}>输入密码确认</Text>
+          <Text size="sm" weight="medium" style={{ marginBottom: tokens.spacing[2] }}>{t('enterPasswordToConfirm')}</Text>
           <input
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            placeholder="请输入当前密码"
+            placeholder={t('enterCurrentPassword')}
             style={{
               width: '100%',
               padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
@@ -469,12 +471,12 @@ function DeleteAccountModal({
           />
         </Box>
         <Box style={{ marginBottom: tokens.spacing[4] }}>
-          <Text size="sm" weight="medium" style={{ marginBottom: tokens.spacing[2] }}>注销原因（可选）</Text>
+          <Text size="sm" weight="medium" style={{ marginBottom: tokens.spacing[2] }}>{t('deleteReasonOptional')}</Text>
           <input
             type="text"
             value={reason}
             onChange={(e) => setReason(e.target.value)}
-            placeholder="告诉我们为什么..."
+            placeholder={t('tellUsWhy')}
             style={{
               width: '100%',
               padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
@@ -493,7 +495,7 @@ function DeleteAccountModal({
         )}
         <Box style={{ display: 'flex', gap: tokens.spacing[3], justifyContent: 'flex-end' }}>
           <Button variant="secondary" size="sm" onClick={onClose}>
-            取消
+            {t('cancel')}
           </Button>
           <Button
             variant="primary"
@@ -505,7 +507,7 @@ function DeleteAccountModal({
               opacity: !password || deleting ? 0.5 : 1,
             }}
           >
-            {deleting ? '处理中...' : '确认注销'}
+            {deleting ? t('processing') : t('confirmDeleteAccount')}
           </Button>
         </Box>
       </Box>
@@ -516,6 +518,7 @@ function DeleteAccountModal({
 function MultiAccountSection() {
   const { accounts, activeAccount, inactiveAccounts, canAddAccount, isPro, removeAccount, switchAccount, signOutAll } = useMultiAccount()
   const router = useRouter()
+  const { t } = useLanguage()
   const [switchingId, setSwitchingId] = useState<string | null>(null)
 
   const handleSwitch = async (userId: string) => {
@@ -556,7 +559,7 @@ function MultiAccountSection() {
             </Text>
           </Box>
           {account.isActive ? (
-            <Text size="xs" style={{ color: tokens.colors.accent.success }}>当前</Text>
+            <Text size="xs" style={{ color: tokens.colors.accent.success }}>{t('current')}</Text>
           ) : (
             <Box style={{ display: 'flex', gap: tokens.spacing[1] }}>
               <button
@@ -568,7 +571,7 @@ function MultiAccountSection() {
                   opacity: switchingId ? 0.5 : 1,
                 }}
               >
-                {switchingId === account.userId ? '...' : '切换'}
+                {switchingId === account.userId ? '...' : t('switchAccount')}
               </button>
               <button
                 onClick={() => removeAccount(account.userId)}
@@ -577,7 +580,7 @@ function MultiAccountSection() {
                   fontSize: 11, color: tokens.colors.text.tertiary,
                 }}
               >
-                移除
+                {t('removeAccount')}
               </button>
             </Box>
           )}
@@ -600,7 +603,7 @@ function MultiAccountSection() {
           transition: `all ${tokens.transition.base}`,
         }}
       >
-        <Text size="xs" color="tertiary">+ 添加账号</Text>
+        <Text size="xs" color="tertiary">+ {t('addAccount')}</Text>
         {!isPro && (
           <Box style={{
             marginLeft: 'auto',

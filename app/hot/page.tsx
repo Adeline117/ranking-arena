@@ -36,6 +36,7 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 type Post = {
   id: string
   group: string
+  group_en?: string
   group_id?: string
   title: string
   author: string
@@ -211,6 +212,7 @@ function HotContent() {
           else timeStr = `${Math.floor(diffMs / 60000)}m`
 
           const groupName = (post.group_name as string) || '综合讨论'
+          const groupNameEn = (post.group_name_en as string) || 'General'
 
           const hotScore = (post.hot_score as number) || (() => {
             const hours = diffMs / 3600000
@@ -223,6 +225,7 @@ function HotContent() {
           return {
             id: post.id as string,
             group: groupName,
+            group_en: groupNameEn,
             group_id: (post.group_id as string) || undefined,
             title: (post.title as string) || '无标题',
             author: (post.author_handle as string) || '匿名',
@@ -710,8 +713,8 @@ function HotContent() {
               {/* Tabbed Sections */}
               <Box style={{ display: 'flex', gap: '8px', marginBottom: tokens.spacing[3], flexWrap: 'wrap' }}>
                 {([
-                  { value: 'posts' as const, label: '热门帖子' },
-                  { value: 'groups' as const, label: '热门小组' },
+                  { value: 'posts' as const, label: language === 'zh' ? '热门帖子' : 'Hot Posts' },
+                  { value: 'groups' as const, label: language === 'zh' ? '热门小组' : 'Hot Groups' },
                 ]).map((tab) => (
                   <button
                     key={tab.value}
@@ -781,7 +784,7 @@ function HotContent() {
                             fontSize: '13px',
                           }}
                         >
-                          {newPostCount} 条新帖子
+                          {language === 'zh' ? `${newPostCount} 条新帖子` : `${newPostCount} new posts`}
                         </Box>
                       )}
 
@@ -826,10 +829,10 @@ function HotContent() {
                                     borderRadius: tokens.radius.sm,
                                   }}
                                 >
-                                  {p.group}
+                                  {language === 'zh' ? p.group : (p.group_en || p.group)}
                                 </Link>
                               ) : (
-                                <Text size="xs" color="secondary">{p.group}</Text>
+                                <Text size="xs" color="secondary">{language === 'zh' ? p.group : (p.group_en || p.group)}</Text>
                               )}
                               <Text size="xs" color="tertiary">{(p.views ?? 0).toLocaleString()} {t('views')}</Text>
                             </Box>
@@ -922,7 +925,7 @@ function HotContent() {
                                   <Text size="sm" weight="black" style={{ color: tokens.colors.text.secondary }}>
                                     #{rank}
                                   </Text>
-                                  <Text size="xs" color="secondary">{p.group}</Text>
+                                  <Text size="xs" color="secondary">{language === 'zh' ? p.group : (p.group_en || p.group)}</Text>
                                   <Text size="xs" color="tertiary">{(p.views ?? 0).toLocaleString()} {t('views')}</Text>
                                 </Box>
                                 <Text size="base" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>
@@ -947,10 +950,10 @@ function HotContent() {
                             textAlign: 'center',
                           }}>
                             <Text size="lg" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>
-                              登录查看完整热榜
+                              {language === 'zh' ? '登录查看完整热榜' : 'Log in to view full hot list'}
                             </Text>
                             <Text size="sm" color="secondary" style={{ marginBottom: tokens.spacing[4] }}>
-                              登录后解锁所有热门帖子和交互功能
+                              {language === 'zh' ? '登录后解锁所有热门帖子和交互功能' : 'Unlock all hot posts and interactions after logging in'}
                             </Text>
                             <Link
                               href="/login"
@@ -965,7 +968,7 @@ function HotContent() {
                                 fontSize: '14px',
                               }}
                             >
-                              立即登录
+                              {language === 'zh' ? '立即登录' : 'Log in now'}
                             </Link>
                           </Box>
                         </>
@@ -1100,11 +1103,11 @@ function HotContent() {
                   display: 'inline-block',
                 }}
               >
-                {openPost.group}
+                {language === 'zh' ? openPost.group : (openPost.group_en || openPost.group)}
               </Link>
             ) : (
               <div style={{ fontSize: 12, color: ARENA_PURPLE }}>
-                {openPost.group}
+                {language === 'zh' ? openPost.group : (openPost.group_en || openPost.group)}
               </div>
             )}
 
@@ -1228,7 +1231,7 @@ function HotContent() {
                 <textarea
                   value={newComment}
                   onChange={(e) => setNewComment(e.target.value)}
-                  placeholder={accessToken ? t('writeComment') : '请先登录后发表评论'}
+                  placeholder={accessToken ? t('writeComment') : (language === 'zh' ? '请先登录后发表评论' : 'Please log in to comment')}
                   disabled={!accessToken || submittingComment}
                   style={{
                     width: '100%',
@@ -1259,16 +1262,16 @@ function HotContent() {
                       cursor: newComment.trim() && !submittingComment ? 'pointer' : 'not-allowed',
                     }}
                   >
-                    {submittingComment ? '发送中...' : '发表评论'}
+                    {submittingComment ? (language === 'zh' ? '发送中...' : 'Sending...') : (language === 'zh' ? '发表评论' : 'Post comment')}
                   </button>
                 )}
               </div>
 
               {/* 评论列表 */}
               {loadingComments ? (
-                <div style={{ color: tokens.colors.text.tertiary, fontSize: 13 }}>加载评论中...</div>
+                <div style={{ color: tokens.colors.text.tertiary, fontSize: 13 }}>{language === 'zh' ? '加载评论中...' : 'Loading comments...'}</div>
               ) : comments.length === 0 ? (
-                <div style={{ color: tokens.colors.text.tertiary, fontSize: 13 }}>暂无评论，来发表第一条评论吧</div>
+                <div style={{ color: tokens.colors.text.tertiary, fontSize: 13 }}>{language === 'zh' ? '暂无评论，来发表第一条评论吧' : 'No comments yet. Be the first to comment!'}</div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                   {comments.filter(Boolean).map((comment) => (
@@ -1296,7 +1299,7 @@ function HotContent() {
                           </Link>
                         ) : (
                           <span style={{ fontSize: 12, fontWeight: 700, color: tokens.colors.text.secondary }}>
-                            匿名
+                            {language === 'zh' ? '匿名' : 'Anonymous'}
                           </span>
                         )}
                         <span style={{ fontSize: 11, color: tokens.colors.text.tertiary }}>
@@ -1339,7 +1342,7 @@ function HotContent() {
                         e.currentTarget.style.color = tokens.colors.text.secondary
                       }}
                     >
-                      {loadingMoreComments ? '加载中...' : '加载更多评论'}
+                      {loadingMoreComments ? (language === 'zh' ? '加载中...' : 'Loading...') : (language === 'zh' ? '加载更多评论' : 'Load more comments')}
                     </button>
                   )}
                 </div>
