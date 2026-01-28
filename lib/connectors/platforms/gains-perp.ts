@@ -47,12 +47,12 @@ export class GainsPerpConnector extends BaseConnector {
     platform: 'gains' as any,
     market_types: ['perp'],
     native_windows: ['7d', '30d', '90d'],
-    available_fields: ['roi', 'pnl', 'trades_count'],
+    available_fields: ['roi', 'pnl', 'win_rate', 'max_drawdown', 'trades_count'],
     has_timeseries: false,
     has_profiles: false,
     scraping_difficulty: 2, // REST API + subgraph available
     rate_limit: { rpm: 30, concurrency: 5 },
-    notes: ['Arbitrum DEX', 'gTrade platform', 'REST API available', 'No copy trading'],
+    notes: ['Arbitrum DEX', 'gTrade platform', 'REST API available', 'No copy trading', 'Metrics calculated from trade history'],
   }
 
   private readonly API_BASE = 'https://backend-arbitrum.gains.trade'
@@ -146,28 +146,65 @@ export class GainsPerpConnector extends BaseConnector {
         { method: 'GET', headers: this.getHeaders() }
       )
 
-      // Calculate stats from history
+      // Calculate stats from history within the window
       let totalPnl = 0
+      let totalCollateral = 0
       let totalTrades = 0
+      let winningTrades = 0
+      let maxEquity = 0
+      let minEquityFromPeak = 0
+      let runningEquity = 0
+
       const now = new Date()
       const windowDays = window === '7d' ? 7 : window === '30d' ? 30 : 90
 
-      for (const trade of history || []) {
-        if (trade.date) {
+      // Sort history by date ascending for drawdown calculation
+      const sortedHistory = (history || [])
+        .filter(trade => {
+          if (!trade.date) return false
           const tradeDate = new Date(trade.date)
           const daysDiff = (now.getTime() - tradeDate.getTime()) / (1000 * 60 * 60 * 24)
-          if (daysDiff <= windowDays) {
-            totalPnl += trade.pnl || 0
-            totalTrades++
-          }
+          return daysDiff <= windowDays
+        })
+        .sort((a, b) => new Date(a.date!).getTime() - new Date(b.date!).getTime())
+
+      for (const trade of sortedHistory) {
+        const pnl = trade.pnl || 0
+        const collateral = trade.collateral || 0
+
+        totalPnl += pnl
+        totalCollateral += collateral
+        totalTrades++
+
+        if (pnl > 0) {
+          winningTrades++
+        }
+
+        // Track equity curve for drawdown calculation
+        runningEquity += pnl
+        if (runningEquity > maxEquity) {
+          maxEquity = runningEquity
+        }
+        const drawdownFromPeak = maxEquity - runningEquity
+        if (drawdownFromPeak > minEquityFromPeak) {
+          minEquityFromPeak = drawdownFromPeak
         }
       }
 
+      // Calculate ROI: totalPnl / totalCollateral * 100
+      const roi = totalCollateral > 0 ? (totalPnl / totalCollateral) * 100 : null
+
+      // Calculate win rate
+      const winRate = totalTrades > 0 ? (winningTrades / totalTrades) * 100 : null
+
+      // Calculate max drawdown as percentage of peak equity
+      const maxDrawdown = maxEquity > 0 ? (minEquityFromPeak / maxEquity) * 100 : null
+
       const metrics: SnapshotMetrics = {
-        roi: null, // Would need initial capital to calculate
+        roi,
         pnl: totalPnl || null,
-        win_rate: null,
-        max_drawdown: null,
+        win_rate: winRate,
+        max_drawdown: maxDrawdown,
         sharpe_ratio: null,
         sortino_ratio: null,
         trades_count: totalTrades || null,
@@ -181,11 +218,16 @@ export class GainsPerpConnector extends BaseConnector {
         stability_score: null,
       }
 
+      const missingFields: string[] = ['sharpe_ratio', 'sortino_ratio', 'followers', 'copiers', 'aum']
+      if (roi === null) missingFields.push('roi')
+      if (winRate === null) missingFields.push('win_rate')
+      if (maxDrawdown === null) missingFields.push('max_drawdown')
+
       const quality_flags: QualityFlags = {
-        missing_fields: ['roi', 'win_rate', 'max_drawdown', 'sharpe_ratio', 'followers', 'copiers', 'aum'],
+        missing_fields: missingFields,
         non_standard_fields: { open_positions: String(openTrades?.length || 0) },
         window_native: true,
-        notes: ['Gains Network Arbitrum DEX', `${openTrades?.length || 0} open positions`],
+        notes: ['Gains Network Arbitrum DEX', `${openTrades?.length || 0} open positions`, 'ROI/WinRate/MDD calculated from trade history'],
       }
 
       return { metrics, quality_flags, fetched_at: new Date().toISOString() }

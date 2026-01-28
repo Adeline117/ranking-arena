@@ -64,6 +64,7 @@ export default function RankingSection({
   const [showAdvancedFilter, setShowAdvancedFilter] = useState(false)
   const [filterConfig, setFilterConfig] = useState<FilterConfig>({})
   const [savedFilters, setSavedFilters] = useState<SavedFilter[]>([])
+  const [savedFiltersLoaded, setSavedFiltersLoaded] = useState(false)
 
   // Feature 6: Filter presets
   const [activePreset, setActivePreset] = useState<PresetId | null>(null)
@@ -115,6 +116,32 @@ export default function RankingSection({
     if (urlQ) setSearchQuery(urlQ)
     if (urlPreset && PRESETS.some(p => p.id === urlPreset)) setActivePreset(urlPreset)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 加载已保存的筛选配置 (Pro 用户)
+  useEffect(() => {
+    if (!isPro || savedFiltersLoaded) return
+
+    const loadSavedFilters = async () => {
+      const authHeaders = getAuthHeaders()
+      if (!authHeaders) return
+
+      try {
+        const res = await fetch('/api/saved-filters', {
+          headers: authHeaders,
+        })
+        if (res.ok) {
+          const data = await res.json()
+          setSavedFilters(data.filters || [])
+        }
+      } catch {
+        // 静默失败，不影响用户体验
+      } finally {
+        setSavedFiltersLoaded(true)
+      }
+    }
+
+    loadSavedFilters()
+  }, [isPro, savedFiltersLoaded, getAuthHeaders])
 
   // Feature 8: Sync all state to URL via replaceState
   const syncStateToUrl = useCallback((overrides: {
@@ -262,7 +289,7 @@ export default function RankingSection({
       return
     }
     try {
-      const res = await fetch(`/api/saved-filters/${filterId}`, {
+      const res = await fetch(`/api/saved-filters?id=${filterId}`, {
         method: 'DELETE',
         headers: {
           ...authHeaders,

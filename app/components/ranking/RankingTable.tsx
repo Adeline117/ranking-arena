@@ -845,7 +845,7 @@ export default function RankingTable(props: {
 
   // Feature 2: Filter by search, then sort
   const sortedTraders = React.useMemo(() => {
-    let data = traders.slice(0, 100)
+    let data = traders.slice(0, 1000) // 最大显示 1000 人
 
     // Feature 2: Apply search filter
     if (debouncedSearch.trim()) {
