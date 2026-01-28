@@ -7,7 +7,7 @@ import { RankingSkeleton } from '../ui/Skeleton'
 import { RankingBadge } from '../icons'
 import { Box, Text } from '../base'
 import { useLanguage } from '../Providers/LanguageProvider'
-import { getAvatarGradient, getAvatarInitial } from '@/lib/utils/avatar'
+import { getAvatarGradient, getAvatarInitial, getTraderAvatarUrl } from '@/lib/utils/avatar'
 import { DynamicScoreRulesModal as ScoreRulesModal } from '../ui/dynamic'
 import CategoryRankingTabs, { CategoryType } from './CategoryRankingTabs'
 import { ProLabel } from '../premium/PremiumGate'
@@ -345,16 +345,19 @@ const TraderRow = memo(function TraderRow({
             <span style={{ color: '#ffffff', fontSize: '14px', fontWeight: 900, lineHeight: 1, textShadow: '0 1px 3px rgba(0,0,0,0.8)' }}>
               {getAvatarInitial(displayName)}
             </span>
-            {trader.avatar_url && !trader.avatar_url.includes('t.co') && !trader.avatar_url.includes('/banner/') && (
-              <img
-                src={trader.avatar_url}
-                alt={displayName}
-                referrerPolicy="no-referrer"
-                loading="lazy"
-                style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', inset: 0, zIndex: 1 }}
-                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
-              />
-            )}
+            {(() => {
+              const proxyAvatarUrl = getTraderAvatarUrl(trader.avatar_url)
+              return proxyAvatarUrl && (
+                <img
+                  src={proxyAvatarUrl}
+                  alt={displayName}
+                  referrerPolicy="no-referrer"
+                  loading="lazy"
+                  style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', inset: 0, zIndex: 1 }}
+                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+                />
+              )
+            })()}
           </div>
           <Box style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0, flex: 1 }}>
             <Box style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -541,16 +544,19 @@ const TraderCard = memo(function TraderCard({
             <span style={{ color: '#ffffff', fontSize: '16px', fontWeight: 900, lineHeight: 1, textShadow: '0 1px 3px rgba(0,0,0,0.8)' }}>
               {getAvatarInitial(displayName)}
             </span>
-            {trader.avatar_url && !trader.avatar_url.includes('t.co') && !trader.avatar_url.includes('/banner/') && (
-              <img
-                src={trader.avatar_url}
-                alt={displayName}
-                referrerPolicy="no-referrer"
-                loading="lazy"
-                style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', inset: 0, zIndex: 1 }}
-                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
-              />
-            )}
+            {(() => {
+              const proxyAvatarUrl = getTraderAvatarUrl(trader.avatar_url)
+              return proxyAvatarUrl && (
+                <img
+                  src={proxyAvatarUrl}
+                  alt={displayName}
+                  referrerPolicy="no-referrer"
+                  loading="lazy"
+                  style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', inset: 0, zIndex: 1 }}
+                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+                />
+              )
+            })()}
           </div>
 
           {/* Name + Source */}
@@ -906,9 +912,9 @@ export default function RankingTable(props: {
     
     // 类型映射（中英文）- 统一颜色，不做颜色区分
     const typeMap: Record<string, { label: string; color: string }> = {
-      'futures': { label: '合约', color: tokens.colors.text.secondary },
-      'spot': { label: '现货', color: tokens.colors.text.secondary },
-      'web3': { label: '链上', color: tokens.colors.text.secondary },
+      'futures': { label: t('categoryFutures'), color: tokens.colors.text.secondary },
+      'spot': { label: t('categorySpot'), color: tokens.colors.text.secondary },
+      'web3': { label: t('categoryWeb3'), color: tokens.colors.text.secondary },
     }
     
     // 解析 source 字符串
@@ -933,20 +939,20 @@ export default function RankingTable(props: {
   
   // 保留原有的完整标签映射（用于可访问性）
   const sourceLabels: Record<string, string> = {
-    'binance_futures': 'Binance 合约',
-    'binance_spot': 'Binance 现货',
-    'binance_web3': 'Binance 链上',
-    'bybit': 'Bybit 合约',
-    'bitget_futures': 'Bitget 合约',
-    'bitget_spot': 'Bitget 现货',
-    'mexc': 'MEXC 合约',
-    'htx': 'HTX 合约',
-    'htx_futures': 'HTX 合约',
-    'weex': 'Weex 合约',
-    'coinex': 'CoinEx 合约',
-    'okx_web3': 'OKX 链上',
-    'kucoin': 'KuCoin 合约',
-    'gmx': 'GMX 链上',
+    'binance_futures': `Binance ${t('categoryFutures')}`,
+    'binance_spot': `Binance ${t('categorySpot')}`,
+    'binance_web3': `Binance ${t('categoryWeb3')}`,
+    'bybit': `Bybit ${t('categoryFutures')}`,
+    'bitget_futures': `Bitget ${t('categoryFutures')}`,
+    'bitget_spot': `Bitget ${t('categorySpot')}`,
+    'mexc': `MEXC ${t('categoryFutures')}`,
+    'htx': `HTX ${t('categoryFutures')}`,
+    'htx_futures': `HTX ${t('categoryFutures')}`,
+    'weex': `Weex ${t('categoryFutures')}`,
+    'coinex': `CoinEx ${t('categoryFutures')}`,
+    'okx_web3': `OKX ${t('categoryWeb3')}`,
+    'kucoin': `KuCoin ${t('categoryFutures')}`,
+    'gmx': `GMX ${t('categoryWeb3')}`,
   }
 
   // Get medal glow class based on rank

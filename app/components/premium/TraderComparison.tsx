@@ -4,7 +4,7 @@ import React from 'react'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
-import { getAvatarGradient, getAvatarInitial } from '@/lib/utils/avatar'
+import { getAvatarGradient, getAvatarInitial, getTraderAvatarUrl } from '@/lib/utils/avatar'
 import { useLanguage } from '../Providers/LanguageProvider'
 
 interface TraderCompareData {
@@ -76,23 +76,26 @@ function getBestIndex(values: (number | undefined | null)[], isHigherBetter = tr
   return bestIdx
 }
 
-// 来源标签映射
-const sourceLabels: Record<string, string> = {
-  'binance_futures': 'Binance 合约',
-  'binance_spot': 'Binance 现货',
-  'binance_web3': 'Binance 链上',
-  'bybit': 'Bybit 合约',
-  'bitget_futures': 'Bitget 合约',
-  'bitget_spot': 'Bitget 现货',
-  'mexc': 'MEXC 合约',
-  'coinex': 'CoinEx 合约',
-  'okx_web3': 'OKX 链上',
-  'kucoin': 'KuCoin 合约',
-  'gmx': 'GMX 链上',
+// 来源标签映射 - 使用函数以支持多语言
+function getSourceLabels(t: (key: string) => string): Record<string, string> {
+  return {
+    'binance_futures': `Binance ${t('categoryFutures')}`,
+    'binance_spot': `Binance ${t('categorySpot')}`,
+    'binance_web3': `Binance ${t('categoryWeb3')}`,
+    'bybit': `Bybit ${t('categoryFutures')}`,
+    'bitget_futures': `Bitget ${t('categoryFutures')}`,
+    'bitget_spot': `Bitget ${t('categorySpot')}`,
+    'mexc': `MEXC ${t('categoryFutures')}`,
+    'coinex': `CoinEx ${t('categoryFutures')}`,
+    'okx_web3': `OKX ${t('categoryWeb3')}`,
+    'kucoin': `KuCoin ${t('categoryFutures')}`,
+    'gmx': `GMX ${t('categoryWeb3')}`,
+  }
 }
 
 export default function TraderComparison({ traders, onRemove, showRemoveButton = true }: TraderComparisonProps) {
-  const { t: _t } = useLanguage()
+  const { t } = useLanguage()
+  const sourceLabels = getSourceLabels(t)
   
   if (traders.length === 0) {
     return (
@@ -194,33 +197,39 @@ export default function TraderComparison({ traders, onRemove, showRemoveButton =
             
             {/* 头像 */}
             <Link href={`/trader/${encodeURIComponent(trader.id)}`}>
-              <Box
-                style={{
-                  width: 56,
-                  height: 56,
-                  borderRadius: tokens.radius.full,
-                  background: trader.avatar_url ? tokens.colors.bg.secondary : getAvatarGradient(trader.id),
-                  border: `2px solid ${tokens.colors.border.primary}`,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  overflow: 'hidden',
-                  cursor: 'pointer',
-                  transition: 'border-color 0.2s',
-                }}
-              >
-                {trader.avatar_url ? (
-                  <img
-                    src={trader.avatar_url}
-                    alt={trader.handle || trader.id}
-                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                  />
-                ) : (
-                  <Text size="lg" weight="black" style={{ color: '#fff' }}>
-                    {getAvatarInitial(trader.handle || trader.id)}
-                  </Text>
-                )}
-              </Box>
+              {(() => {
+                const proxyAvatarUrl = getTraderAvatarUrl(trader.avatar_url)
+                return (
+                  <Box
+                    style={{
+                      width: 56,
+                      height: 56,
+                      borderRadius: tokens.radius.full,
+                      background: proxyAvatarUrl ? tokens.colors.bg.secondary : getAvatarGradient(trader.id),
+                      border: `2px solid ${tokens.colors.border.primary}`,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      overflow: 'hidden',
+                      cursor: 'pointer',
+                      transition: 'border-color 0.2s',
+                    }}
+                  >
+                    {proxyAvatarUrl ? (
+                      <img
+                        src={proxyAvatarUrl}
+                        alt={trader.handle || trader.id}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+                      />
+                    ) : (
+                      <Text size="lg" weight="black" style={{ color: '#fff' }}>
+                        {getAvatarInitial(trader.handle || trader.id)}
+                      </Text>
+                    )}
+                  </Box>
+                )
+              })()}
             </Link>
             
             {/* 名称 */}
