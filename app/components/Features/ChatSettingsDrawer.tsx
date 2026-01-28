@@ -7,6 +7,7 @@ import Avatar from '@/app/components/ui/Avatar'
 import { useToast } from '@/app/components/ui/Toast'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { getProfileUrl } from '@/lib/utils/profile-navigation'
+import ReportModal from '@/app/components/ui/ReportModal'
 
 type ChatSettings = {
   remark: string | null
@@ -56,6 +57,7 @@ export default function ChatSettingsDrawer({
   const [editingRemark, setEditingRemark] = useState(false)
   const [remarkInput, setRemarkInput] = useState('')
   const [saving, setSaving] = useState(false)
+  const [reportModalOpen, setReportModalOpen] = useState(false)
 
   const loadSettings = useCallback(async () => {
     try {
@@ -448,7 +450,7 @@ export default function ChatSettingsDrawer({
                 danger={!settings.is_blocked}
               />
 
-              {/* Report (placeholder) */}
+              {/* Report */}
               <SettingsButton
                 icon={
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -457,13 +459,23 @@ export default function ChatSettingsDrawer({
                   </svg>
                 }
                 label="举报"
-                onClick={() => showToast('举报功能即将上线', 'info')}
-                muted
+                onClick={() => setReportModalOpen(true)}
+                danger
               />
             </Box>
           </Box>
         )}
       </Box>
+
+      {/* Report Modal */}
+      <ReportModal
+        isOpen={reportModalOpen}
+        onClose={() => setReportModalOpen(false)}
+        contentType="message"
+        contentId={conversationId}
+        accessToken={accessToken}
+        targetName={`@${otherUser.handle || `User ${otherUser.id.slice(0, 8)}`}`}
+      />
     </>
   )
 }

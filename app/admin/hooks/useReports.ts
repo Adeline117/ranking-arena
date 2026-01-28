@@ -8,7 +8,7 @@ type ToastFn = (message: string, type: 'success' | 'error' | 'warning' | 'info')
 export interface ContentReport {
   id: string
   reporter_id: string
-  content_type: 'post' | 'comment'
+  content_type: 'post' | 'comment' | 'message' | 'user'
   content_id: string
   reason: string
   description: string | null
@@ -53,7 +53,7 @@ export function useReports(accessToken: string | null, showToast?: ToastFn) {
   const loadReports = useCallback(async (
     page: number = 1,
     status: 'pending' | 'resolved' | 'dismissed' | 'all' = 'pending',
-    contentType: 'post' | 'comment' | 'all' = 'all'
+    contentType: 'post' | 'comment' | 'message' | 'user' | 'all' = 'all'
   ) => {
     if (!accessToken) return
     
