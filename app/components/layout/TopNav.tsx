@@ -549,7 +549,7 @@ export default function TopNav({ email }: { email: string | null }) {
                       position: 'absolute',
                       top: 2,
                       right: 2,
-                      minWidth: 18,
+                      width: 18,
                       height: 18,
                       borderRadius: '50%',
                       background: tokens.gradient.error,
@@ -559,12 +559,11 @@ export default function TopNav({ email }: { email: string | null }) {
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      padding: '0 4px',
                       border: `2px solid ${tokens.colors.bg.primary}`,
                       boxShadow: tokens.shadow.glowError,
                     }}
                   >
-                    {formatUnreadBadge(totalUnread)}
+                    {totalUnread > 9 ? '9+' : totalUnread}
                   </Box>
                 )}
               </button>
@@ -603,6 +602,8 @@ export default function TopNav({ email }: { email: string | null }) {
                   <img
                     src={myAvatarUrl}
                     alt={t('avatar')}
+                    width={36}
+                    height={36}
                     style={{
                       width: 36,
                       height: 36,
