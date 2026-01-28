@@ -4,7 +4,7 @@ import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import { getCsrfHeaders } from '@/lib/api/client'
 
-export type Post = {
+export interface Post {
   id: string
   group_id: string
   title: string
@@ -23,7 +23,7 @@ export type Post = {
   user_reposted?: boolean
 }
 
-export type CommentWithAuthor = {
+export interface CommentWithAuthor {
   id: string
   post_id: string
   user_id: string
@@ -47,6 +47,64 @@ interface UseGroupPostsOptions {
   showDangerConfirm: (title: string, message: string) => Promise<boolean>
 }
 
+const POST_PAGE_SIZE = 20
+const POST_SELECT_FIELDS = 'id, group_id, title, content, created_at, author_handle, author_id, like_count, comment_count, bookmark_count, repost_count, is_pinned'
+
+// Helper to create bilingual messages
+function msg(zh: string, en: string, language: string): string {
+  return language === 'zh' ? zh : en
+}
+
+// Generic fetch for user interactions (likes, bookmarks, reposts)
+async function fetchUserInteractions(
+  table: string,
+  postIds: string[],
+  userId: string
+): Promise<Record<string, boolean>> {
+  if (!userId || postIds.length === 0) return {}
+  const { data } = await supabase
+    .from(table)
+    .select('post_id')
+    .eq('user_id', userId)
+    .in('post_id', postIds)
+  const map: Record<string, boolean> = {}
+  data?.forEach(item => { map[item.post_id] = true })
+  return map
+}
+
+// Fetch author avatars in batch and mutate posts
+async function enrichPostsWithAvatars(postsList: Post[]): Promise<void> {
+  const authorIds = [...new Set(postsList.map(p => p.author_id).filter(Boolean))] as string[]
+  if (authorIds.length === 0) return
+  const { data: profiles } = await supabase
+    .from('user_profiles')
+    .select('id, avatar_url')
+    .in('id', authorIds)
+  if (profiles) {
+    const avatarMap = new Map(profiles.map(p => [p.id, p.avatar_url]))
+    postsList.forEach(post => {
+      if (post.author_id) {
+        post.author_avatar_url = avatarMap.get(post.author_id) || null
+      }
+    })
+  }
+}
+
+// Enrich posts with user interactions
+async function enrichPostsWithUserState(postsList: Post[], userId: string): Promise<void> {
+  const postIds = postsList.map(p => p.id)
+  const [likeMap, bookmarkMap, repostMap] = await Promise.all([
+    fetchUserInteractions('post_likes', postIds, userId),
+    fetchUserInteractions('post_bookmarks', postIds, userId),
+    fetchUserInteractions('reposts', postIds, userId),
+  ])
+  postsList.forEach(post => {
+    post.user_liked = likeMap[post.id] || false
+    post.user_bookmarked = bookmarkMap[post.id] || false
+    post.user_reposted = repostMap[post.id] || false
+  })
+}
+
 export function useGroupPosts({
   groupId,
   userId,
@@ -56,6 +114,7 @@ export function useGroupPosts({
   showToast,
   showDangerConfirm,
 }: UseGroupPostsOptions) {
+  // Core state
   const [posts, setPosts] = useState<Post[]>([])
   const [sortMode, setSortMode] = useState<'latest' | 'hot'>('latest')
   const [viewMode, setViewMode] = useState<'list' | 'masonry'>(() => {
@@ -68,21 +127,21 @@ export function useGroupPosts({
   const [loadingMore, setLoadingMore] = useState(false)
   const sentinelRef = useRef<HTMLDivElement>(null)
 
-  // Post editing
+  // Post editing state
   const [editingPost, setEditingPost] = useState<string | null>(null)
   const [editTitle, setEditTitle] = useState('')
   const [editContent, setEditContent] = useState('')
   const [savingEdit, setSavingEdit] = useState(false)
   const [deletingPost, setDeletingPost] = useState<string | null>(null)
 
-  // Interactions loading
+  // Interaction loading states (using single object for each type)
   const [likeLoading, setLikeLoading] = useState<Record<string, boolean>>({})
   const [bookmarkLoading, setBookmarkLoading] = useState<Record<string, boolean>>({})
   const [repostLoading, setRepostLoading] = useState<Record<string, boolean>>({})
   const [showRepostModal, setShowRepostModal] = useState<string | null>(null)
   const [repostComment, setRepostComment] = useState('')
 
-  // Comments
+  // Comments state
   const [expandedComments, setExpandedComments] = useState<Record<string, boolean>>({})
   const [comments, setComments] = useState<Record<string, CommentWithAuthor[]>>({})
   const [newComment, setNewComment] = useState<Record<string, string>>({})
@@ -91,110 +150,64 @@ export function useGroupPosts({
   const [replyContent, setReplyContent] = useState<Record<string, string>>({})
   const [expandedReplies, setExpandedReplies] = useState<Record<string, boolean>>({})
 
-  // Content expand
+  // Content expansion
   const [expandedPosts, setExpandedPosts] = useState<Record<string, boolean>>({})
 
-  // Fetch user likes/bookmarks/reposts
-  const fetchUserLikes = useCallback(async (postIds: string[], uid: string) => {
-    if (!uid || postIds.length === 0) return {}
-    const { data } = await supabase
-      .from('post_likes')
-      .select('post_id')
-      .eq('user_id', uid)
-      .in('post_id', postIds)
-    const likeMap: Record<string, boolean> = {}
-    data?.forEach(item => { likeMap[item.post_id] = true })
-    return likeMap
+  // Helper to set loading state for a specific post
+  const setPostLoading = useCallback((
+    setter: React.Dispatch<React.SetStateAction<Record<string, boolean>>>,
+    postId: string,
+    loading: boolean
+  ) => {
+    setter(prev => ({ ...prev, [postId]: loading }))
   }, [])
 
-  const fetchUserBookmarks = useCallback(async (postIds: string[], uid: string) => {
-    if (!uid || postIds.length === 0) return {}
-    const { data } = await supabase
-      .from('post_bookmarks')
-      .select('post_id')
-      .eq('user_id', uid)
-      .in('post_id', postIds)
-    const bookmarkMap: Record<string, boolean> = {}
-    data?.forEach(item => { bookmarkMap[item.post_id] = true })
-    return bookmarkMap
-  }, [])
+  // Fetch posts from database with optional cursor
+  const fetchPosts = useCallback(async (cursor?: string): Promise<Post[]> => {
+    let query = supabase
+      .from('posts')
+      .select(POST_SELECT_FIELDS)
+      .eq('group_id', groupId)
+      .is('deleted_at', null)
+      .order('created_at', { ascending: false })
+      .limit(POST_PAGE_SIZE)
 
-  const fetchUserReposts = useCallback(async (postIds: string[], uid: string) => {
-    if (!uid || postIds.length === 0) return {}
-    const { data } = await supabase
-      .from('reposts')
-      .select('post_id')
-      .eq('user_id', uid)
-      .in('post_id', postIds)
-    const repostMap: Record<string, boolean> = {}
-    data?.forEach(item => { repostMap[item.post_id] = true })
-    return repostMap
-  }, [])
-
-  // Fetch author avatars in batch
-  const fetchAuthorAvatars = useCallback(async (postsList: Post[]) => {
-    const authorIds = [...new Set(postsList.map(p => p.author_id).filter(Boolean))] as string[]
-    if (authorIds.length === 0) return
-    const { data: profiles } = await supabase
-      .from('user_profiles')
-      .select('id, avatar_url')
-      .in('id', authorIds)
-    if (profiles) {
-      const avatarMap = new Map(profiles.map(p => [p.id, p.avatar_url]))
-      postsList.forEach(post => {
-        if (post.author_id) {
-          post.author_avatar_url = avatarMap.get(post.author_id) || null
-        }
-      })
+    if (cursor) {
+      query = query.lt('created_at', cursor)
     }
-  }, [])
+
+    const { data, error } = await query
+    if (error) throw error
+    return (data || []) as Post[]
+  }, [groupId])
+
+  // Enrich posts with avatars and user state
+  const enrichPosts = useCallback(async (postsList: Post[]): Promise<void> => {
+    const promises: Promise<void>[] = [enrichPostsWithAvatars(postsList)]
+    if (userId) {
+      promises.push(enrichPostsWithUserState(postsList, userId))
+    }
+    await Promise.all(promises)
+  }, [userId])
 
   // Load initial posts
-  const loadPosts = useCallback(async () => {
-    if (!groupId || !isMember) {
+  const loadPosts = useCallback(async (forceLoad = false) => {
+    if (!groupId || (!isMember && !forceLoad)) {
       setPosts([])
       setHasMorePosts(false)
       return
     }
 
-    const { data: postsData, error: postsErr } = await supabase
-      .from('posts')
-      .select('id, group_id, title, content, created_at, author_handle, author_id, like_count, comment_count, bookmark_count, repost_count, is_pinned')
-      .eq('group_id', groupId)
-      .is('deleted_at', null)
-      .order('created_at', { ascending: false })
-      .limit(20)
-
-    if (postsErr) {
-      showToast(postsErr.message, 'error')
-      return
+    try {
+      const postsList = await fetchPosts()
+      await enrichPosts(postsList)
+      setPosts(postsList)
+      setHasMorePosts(postsList.length === POST_PAGE_SIZE)
+    } catch (err) {
+      const error = err instanceof Error ? err.message : 'Failed to load posts'
+      showToast(error, 'error')
     }
-
-    const postsList = (postsData || []) as Post[]
-
-    // Fetch avatars and user interactions in parallel
-    const promises: Promise<unknown>[] = [fetchAuthorAvatars(postsList)]
-    if (userId) {
-      const postIds = postsList.map(p => p.id)
-      promises.push(
-        Promise.all([
-          fetchUserLikes(postIds, userId),
-          fetchUserBookmarks(postIds, userId),
-          fetchUserReposts(postIds, userId)
-        ]).then(([likeMap, bookmarkMap, repostMap]) => {
-          postsList.forEach(post => {
-            post.user_liked = likeMap[post.id] || false
-            post.user_bookmarked = bookmarkMap[post.id] || false
-            post.user_reposted = repostMap[post.id] || false
-          })
-        })
-      )
-    }
-    await Promise.all(promises)
-
-    setPosts(postsList)
-    setHasMorePosts(postsList.length === 20)
-  }, [groupId, isMember, userId, fetchUserLikes, fetchUserBookmarks, fetchUserReposts, fetchAuthorAvatars, showToast])
+  }, [groupId, isMember, fetchPosts, enrichPosts, showToast])
 
   // Infinite scroll: load more
   const loadMorePosts = useCallback(async () => {
@@ -203,37 +216,12 @@ export function useGroupPosts({
     setLoadingMore(true)
     try {
       const lastPost = posts[posts.length - 1]
-      const { data: morePosts } = await supabase
-        .from('posts')
-        .select('id, group_id, title, content, created_at, author_handle, author_id, like_count, comment_count, bookmark_count, repost_count, is_pinned')
-        .eq('group_id', groupId)
-        .is('deleted_at', null)
-        .lt('created_at', lastPost.created_at)
-        .order('created_at', { ascending: false })
-        .limit(20)
+      const postsList = await fetchPosts(lastPost.created_at)
 
-      if (morePosts && morePosts.length > 0) {
-        const postsList = morePosts as Post[]
-        const promises: Promise<unknown>[] = [fetchAuthorAvatars(postsList)]
-        if (userId) {
-          const postIds = postsList.map(p => p.id)
-          promises.push(
-            Promise.all([
-              fetchUserLikes(postIds, userId),
-              fetchUserBookmarks(postIds, userId),
-              fetchUserReposts(postIds, userId)
-            ]).then(([likeMap, bookmarkMap, repostMap]) => {
-              postsList.forEach(post => {
-                post.user_liked = likeMap[post.id] || false
-                post.user_bookmarked = bookmarkMap[post.id] || false
-                post.user_reposted = repostMap[post.id] || false
-              })
-            })
-          )
-        }
-        await Promise.all(promises)
+      if (postsList.length > 0) {
+        await enrichPosts(postsList)
         setPosts(prev => [...prev, ...postsList])
-        setHasMorePosts(postsList.length === 20)
+        setHasMorePosts(postsList.length === POST_PAGE_SIZE)
       } else {
         setHasMorePosts(false)
       }
@@ -242,7 +230,7 @@ export function useGroupPosts({
     } finally {
       setLoadingMore(false)
     }
-  }, [loadingMore, hasMorePosts, posts, isMember, groupId, userId, fetchUserLikes, fetchUserBookmarks, fetchUserReposts, fetchAuthorAvatars])
+  }, [loadingMore, hasMorePosts, posts, isMember, fetchPosts, enrichPosts])
 
   // IntersectionObserver for infinite scroll
   useEffect(() => {
@@ -303,241 +291,179 @@ export function useGroupPosts({
     return `rgb(${r}, ${g}, ${b})`
   }
 
-  // Like handler
-  const handleLike = useCallback(async (postId: string) => {
-    if (!accessToken) {
-      showToast(language === 'zh' ? '请先登录' : 'Please login first', 'warning')
-      return
-    }
-    setLikeLoading(prev => ({ ...prev, [postId]: true }))
+  // Generic API call helper
+  const apiCall = useCallback(async (
+    url: string,
+    options: { method?: string; body?: unknown; headers?: Record<string, string> } = {}
+  ): Promise<{ ok: boolean; data?: unknown; error?: string }> => {
     try {
-      const response = await fetch(`/api/posts/${postId}/like`, {
-        method: 'POST',
+      const response = await fetch(url, {
+        method: options.method || 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${accessToken}`,
-          ...getCsrfHeaders()
+          ...getCsrfHeaders(),
+          ...options.headers,
         },
-        body: JSON.stringify({ reaction_type: 'up' }),
+        body: options.body ? JSON.stringify(options.body) : undefined,
       })
-      if (response.ok) {
-        setPosts(prev => prev.map(p => {
-          if (p.id === postId) {
-            const wasLiked = p.user_liked
-            return {
-              ...p,
-              user_liked: !wasLiked,
-              like_count: wasLiked
-                ? Math.max(0, (p.like_count || 0) - 1)
-                : (p.like_count || 0) + 1,
-            }
-          }
-          return p
-        }))
-      } else {
-        const result = await response.json()
-        showToast(result.error || (language === 'zh' ? '操作失败' : 'Operation failed'), 'error')
-      }
-    } catch (err) {
-      console.error('Like error:', err)
-      showToast(language === 'zh' ? '网络错误' : 'Network error', 'error')
-    } finally {
-      setLikeLoading(prev => ({ ...prev, [postId]: false }))
+      const data = await response.json().catch(() => ({}))
+      return { ok: response.ok, data, error: data.error }
+    } catch {
+      return { ok: false, error: msg('网络错误', 'Network error', language) }
     }
-  }, [accessToken, language, showToast])
+  }, [accessToken, language])
+
+  // Like handler
+  const handleLike = useCallback(async (postId: string) => {
+    if (!accessToken) {
+      showToast(msg('请先登录', 'Please login first', language), 'warning')
+      return
+    }
+    setPostLoading(setLikeLoading, postId, true)
+    const result = await apiCall(`/api/posts/${postId}/like`, { body: { reaction_type: 'up' } })
+    if (result.ok) {
+      setPosts(prev => prev.map(p => {
+        if (p.id !== postId) return p
+        const wasLiked = p.user_liked
+        return {
+          ...p,
+          user_liked: !wasLiked,
+          like_count: wasLiked ? Math.max(0, (p.like_count || 0) - 1) : (p.like_count || 0) + 1,
+        }
+      }))
+    } else {
+      showToast(result.error || msg('操作失败', 'Operation failed', language), 'error')
+    }
+    setPostLoading(setLikeLoading, postId, false)
+  }, [accessToken, language, showToast, apiCall, setPostLoading])
 
   // Bookmark handler
   const handleBookmark = useCallback(async (postId: string) => {
     if (!accessToken) {
-      showToast(language === 'zh' ? '请先登录' : 'Please login first', 'warning')
+      showToast(msg('请先登录', 'Please login first', language), 'warning')
       return
     }
-    setBookmarkLoading(prev => ({ ...prev, [postId]: true }))
-    try {
-      const response = await fetch(`/api/posts/${postId}/bookmark`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${accessToken}`, ...getCsrfHeaders() },
-      })
-      const result = await response.json()
-      if (response.ok) {
-        setPosts(prev => prev.map(p => {
-          if (p.id === postId) {
-            return { ...p, user_bookmarked: result.bookmarked, bookmark_count: result.bookmark_count }
-          }
-          return p
-        }))
-      } else {
-        showToast(result.error || (language === 'zh' ? '操作失败' : 'Operation failed'), 'error')
-      }
-    } catch (err) {
-      console.error('Bookmark error:', err)
-      showToast(language === 'zh' ? '网络错误' : 'Network error', 'error')
-    } finally {
-      setBookmarkLoading(prev => ({ ...prev, [postId]: false }))
+    setPostLoading(setBookmarkLoading, postId, true)
+    const result = await apiCall(`/api/posts/${postId}/bookmark`)
+    if (result.ok) {
+      const data = result.data as { bookmarked: boolean; bookmark_count: number }
+      setPosts(prev => prev.map(p =>
+        p.id === postId ? { ...p, user_bookmarked: data.bookmarked, bookmark_count: data.bookmark_count } : p
+      ))
+    } else {
+      showToast(result.error || msg('操作失败', 'Operation failed', language), 'error')
     }
-  }, [accessToken, language, showToast])
+    setPostLoading(setBookmarkLoading, postId, false)
+  }, [accessToken, language, showToast, apiCall, setPostLoading])
 
   // Repost handler
   const handleRepost = useCallback(async (postId: string, comment?: string) => {
     if (!accessToken) {
-      showToast(language === 'zh' ? '请先登录' : 'Please login first', 'warning')
+      showToast(msg('请先登录', 'Please login first', language), 'warning')
       return
     }
     const post = posts.find(p => p.id === postId)
     if (post?.author_id === userId) {
-      showToast(language === 'zh' ? '不能转发自己的帖子' : 'Cannot repost your own post', 'warning')
+      showToast(msg('不能转发自己的帖子', 'Cannot repost your own post', language), 'warning')
       return
     }
     if (post?.user_reposted) {
-      showToast(language === 'zh' ? '已经转发过此帖子' : 'Already reposted', 'warning')
+      showToast(msg('已经转发过此帖子', 'Already reposted', language), 'warning')
       return
     }
-    setRepostLoading(prev => ({ ...prev, [postId]: true }))
-    try {
-      const response = await fetch(`/api/posts/${postId}/repost`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`,
-          ...getCsrfHeaders()
-        },
-        body: JSON.stringify({ comment }),
-      })
-      const result = await response.json()
-      if (response.ok) {
-        setPosts(prev => prev.map(p => {
-          if (p.id === postId) {
-            return { ...p, user_reposted: true, repost_count: result.repost_count }
-          }
-          return p
-        }))
-        setShowRepostModal(null)
-        setRepostComment('')
-        showToast(language === 'zh' ? '转发成功！' : 'Reposted successfully!', 'success')
-      } else {
-        showToast(result.error || (language === 'zh' ? '转发失败' : 'Repost failed'), 'error')
-      }
-    } catch (err) {
-      console.error('Repost error:', err)
-      showToast(language === 'zh' ? '网络错误' : 'Network error', 'error')
-    } finally {
-      setRepostLoading(prev => ({ ...prev, [postId]: false }))
+    setPostLoading(setRepostLoading, postId, true)
+    const result = await apiCall(`/api/posts/${postId}/repost`, { body: { comment } })
+    if (result.ok) {
+      const data = result.data as { repost_count: number }
+      setPosts(prev => prev.map(p =>
+        p.id === postId ? { ...p, user_reposted: true, repost_count: data.repost_count } : p
+      ))
+      setShowRepostModal(null)
+      setRepostComment('')
+      showToast(msg('转发成功！', 'Reposted successfully!', language), 'success')
+    } else {
+      showToast(result.error || msg('转发失败', 'Repost failed', language), 'error')
     }
-  }, [accessToken, language, showToast, posts, userId])
+    setPostLoading(setRepostLoading, postId, false)
+  }, [accessToken, language, showToast, posts, userId, apiCall, setPostLoading])
 
   // Delete post
   const handleDeletePost = useCallback(async (postId: string) => {
     const confirmed = await showDangerConfirm(
-      language === 'zh' ? '删除帖子' : 'Delete Post',
-      language === 'zh' ? '确定删除此帖子吗？此操作不可撤销。' : 'Are you sure you want to delete this post? This cannot be undone.'
+      msg('删除帖子', 'Delete Post', language),
+      msg('确定删除此帖子吗？此操作不可撤销。', 'Are you sure you want to delete this post? This cannot be undone.', language)
     )
     if (!confirmed) return
 
     setDeletingPost(postId)
-    try {
-      const res = await fetch(`/api/posts/${postId}/delete`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${accessToken}`, ...getCsrfHeaders() }
-      })
-      if (res.ok) {
-        setPosts(prev => prev.filter(p => p.id !== postId))
-        showToast(language === 'zh' ? '帖子已删除' : 'Post deleted', 'success')
-      } else {
-        const data = await res.json()
-        showToast(data.error || (language === 'zh' ? '删除失败' : 'Delete failed'), 'error')
-      }
-    } catch (err) {
-      console.error('Delete post error:', err)
-      showToast(language === 'zh' ? '网络错误' : 'Network error', 'error')
-    } finally {
-      setDeletingPost(null)
+    const result = await apiCall(`/api/posts/${postId}/delete`, { method: 'DELETE' })
+    if (result.ok) {
+      setPosts(prev => prev.filter(p => p.id !== postId))
+      showToast(msg('帖子已删除', 'Post deleted', language), 'success')
+    } else {
+      showToast(result.error || msg('删除失败', 'Delete failed', language), 'error')
     }
-  }, [accessToken, language, showToast, showDangerConfirm])
+    setDeletingPost(null)
+  }, [language, showToast, showDangerConfirm, apiCall])
 
   // Save edit
   const handleSaveEdit = useCallback(async (postId: string) => {
     if (!editTitle.trim()) {
-      showToast(language === 'zh' ? '标题不能为空' : 'Title cannot be empty', 'warning')
+      showToast(msg('标题不能为空', 'Title cannot be empty', language), 'warning')
       return
     }
     setSavingEdit(true)
-    try {
-      const res = await fetch(`/api/posts/${postId}/edit`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${accessToken}`,
-          ...getCsrfHeaders()
-        },
-        body: JSON.stringify({ title: editTitle.trim(), content: editContent.trim() })
-      })
-      if (res.ok) {
-        setPosts(prev => prev.map(p =>
-          p.id === postId ? { ...p, title: editTitle.trim(), content: editContent.trim() } : p
-        ))
-        setEditingPost(null)
-        showToast(language === 'zh' ? '修改成功' : 'Updated successfully', 'success')
-      } else {
-        const data = await res.json()
-        showToast(data.error || (language === 'zh' ? '修改失败' : 'Update failed'), 'error')
-      }
-    } catch (err) {
-      console.error('Edit post error:', err)
-      showToast(language === 'zh' ? '网络错误' : 'Network error', 'error')
-    } finally {
-      setSavingEdit(false)
+    const result = await apiCall(`/api/posts/${postId}/edit`, {
+      method: 'PUT',
+      body: { title: editTitle.trim(), content: editContent.trim() },
+    })
+    if (result.ok) {
+      setPosts(prev => prev.map(p =>
+        p.id === postId ? { ...p, title: editTitle.trim(), content: editContent.trim() } : p
+      ))
+      setEditingPost(null)
+      showToast(msg('修改成功', 'Updated successfully', language), 'success')
+    } else {
+      showToast(result.error || msg('修改失败', 'Update failed', language), 'error')
     }
-  }, [accessToken, language, showToast, editTitle, editContent])
+    setSavingEdit(false)
+  }, [language, showToast, editTitle, editContent, apiCall])
 
   // Pin/unpin
   const handlePinPost = useCallback(async (postId: string) => {
-    try {
-      const res = await fetch(`/api/posts/${postId}/pin`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${accessToken}`, ...getCsrfHeaders() }
-      })
-      if (res.ok) {
-        const data = await res.json()
-        const newPinned = data.data?.is_pinned ?? data.is_pinned
-        setPosts(prev => prev.map(p => {
-          if (p.id === postId) return { ...p, is_pinned: newPinned }
-          if (newPinned) return { ...p, is_pinned: false }
-          return p
-        }))
-        showToast(
-          newPinned
-            ? (language === 'zh' ? '已置顶' : 'Pinned')
-            : (language === 'zh' ? '已取消置顶' : 'Unpinned'),
-          'success'
-        )
-      } else {
-        const data = await res.json()
-        showToast(data.error || (language === 'zh' ? '操作失败' : 'Operation failed'), 'error')
-      }
-    } catch (err) {
-      console.error('Pin post error:', err)
-      showToast(language === 'zh' ? '网络错误' : 'Network error', 'error')
+    const result = await apiCall(`/api/posts/${postId}/pin`)
+    if (result.ok) {
+      const data = result.data as { data?: { is_pinned: boolean }; is_pinned?: boolean }
+      const newPinned = data.data?.is_pinned ?? data.is_pinned
+      setPosts(prev => prev.map(p => {
+        if (p.id === postId) return { ...p, is_pinned: newPinned }
+        if (newPinned) return { ...p, is_pinned: false }
+        return p
+      }))
+      showToast(msg(newPinned ? '已置顶' : '已取消置顶', newPinned ? 'Pinned' : 'Unpinned', language), 'success')
+    } else {
+      showToast(result.error || msg('操作失败', 'Operation failed', language), 'error')
     }
-  }, [accessToken, language, showToast])
+  }, [language, showToast, apiCall])
 
-  // Comments
+  // Load comments for a post
   const loadComments = useCallback(async (postId: string) => {
-    setCommentLoading(prev => ({ ...prev, [postId]: true }))
+    setPostLoading(setCommentLoading, postId, true)
     try {
       const response = await fetch(`/api/posts/${postId}/comments`)
       const json = await response.json()
       if (response.ok && json.success) {
         setComments(prev => ({ ...prev, [postId]: json.data?.comments || [] }))
       } else {
-        showToast(language === 'zh' ? '加载评论失败' : 'Failed to load comments', 'error')
+        showToast(msg('加载评论失败', 'Failed to load comments', language), 'error')
       }
-    } catch (err) {
-      console.error('Load comments error:', err)
-      showToast(language === 'zh' ? '网络错误' : 'Network error', 'error')
+    } catch {
+      showToast(msg('网络错误', 'Network error', language), 'error')
     } finally {
-      setCommentLoading(prev => ({ ...prev, [postId]: false }))
+      setPostLoading(setCommentLoading, postId, false)
     }
-  }, [language, showToast])
+  }, [language, showToast, setPostLoading])
 
   const toggleComments = useCallback((postId: string) => {
     const isExpanded = expandedComments[postId]
@@ -549,78 +475,47 @@ export function useGroupPosts({
 
   const submitComment = useCallback(async (postId: string) => {
     if (!accessToken) {
-      showToast(language === 'zh' ? '请先登录' : 'Please login first', 'warning')
+      showToast(msg('请先登录', 'Please login first', language), 'warning')
       return
     }
     const content = newComment[postId]?.trim()
     if (!content) return
 
-    setCommentLoading(prev => ({ ...prev, [postId]: true }))
-    try {
-      const response = await fetch(`/api/posts/${postId}/comments`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`,
-          ...getCsrfHeaders()
-        },
-        body: JSON.stringify({ content }),
-      })
+    setPostLoading(setCommentLoading, postId, true)
+    const result = await apiCall(`/api/posts/${postId}/comments`, { body: { content } })
 
-      if (!response.ok) {
-        if (response.status === 401) {
-          showToast(language === 'zh' ? '登录已过期' : 'Session expired', 'error')
-        } else {
-          const result = await response.json().catch(() => null)
-          showToast(result?.error || (language === 'zh' ? '评论发布失败' : 'Failed to post comment'), 'error')
-        }
-        return
-      }
-
-      const result = await response.json()
-      if (result.success && result.data?.comment) {
-        setNewComment(prev => ({ ...prev, [postId]: '' }))
-        setExpandedComments(prev => ({ ...prev, [postId]: true }))
-        setComments(prev => ({
-          ...prev,
-          [postId]: [...(prev[postId] || []), result.data.comment]
-        }))
-        setPosts(prev => prev.map(p => {
-          if (p.id === postId) {
-            return { ...p, comment_count: (p.comment_count || 0) + 1 }
-          }
-          return p
-        }))
-      } else {
-        showToast(result.error || (language === 'zh' ? '评论发布失败' : 'Failed to post comment'), 'error')
-      }
-    } catch (err) {
-      console.error('Submit comment error:', err)
-      showToast(language === 'zh' ? '网络错误' : 'Network error', 'error')
-    } finally {
-      setCommentLoading(prev => ({ ...prev, [postId]: false }))
+    if (!result.ok) {
+      const errorMsg = result.error || msg('评论发布失败', 'Failed to post comment', language)
+      showToast(errorMsg, 'error')
+      setPostLoading(setCommentLoading, postId, false)
+      return
     }
-  }, [accessToken, language, showToast, newComment])
+
+    const data = result.data as { success: boolean; data?: { comment: CommentWithAuthor }; error?: string }
+    if (data.success && data.data?.comment) {
+      setNewComment(prev => ({ ...prev, [postId]: '' }))
+      setExpandedComments(prev => ({ ...prev, [postId]: true }))
+      setComments(prev => ({ ...prev, [postId]: [...(prev[postId] || []), data.data!.comment] }))
+      setPosts(prev => prev.map(p =>
+        p.id === postId ? { ...p, comment_count: (p.comment_count || 0) + 1 } : p
+      ))
+    } else {
+      showToast(data.error || msg('评论发布失败', 'Failed to post comment', language), 'error')
+    }
+    setPostLoading(setCommentLoading, postId, false)
+  }, [accessToken, language, showToast, newComment, apiCall, setPostLoading])
 
   const submitReply = useCallback(async (postId: string, commentId: string) => {
     if (!accessToken || !replyContent[commentId]?.trim()) return
-    try {
-      const res = await fetch(`/api/posts/${postId}/comments`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${accessToken}`,
-          ...getCsrfHeaders()
-        },
-        body: JSON.stringify({ content: replyContent[commentId].trim(), parent_id: commentId })
-      })
-      if (res.ok) {
-        setReplyContent(prev => ({ ...prev, [commentId]: '' }))
-        setReplyingTo(prev => ({ ...prev, [postId]: null }))
-        loadComments(postId)
-      }
-    } catch { /* ignore */ }
-  }, [accessToken, replyContent, loadComments])
+    const result = await apiCall(`/api/posts/${postId}/comments`, {
+      body: { content: replyContent[commentId].trim(), parent_id: commentId },
+    })
+    if (result.ok) {
+      setReplyContent(prev => ({ ...prev, [commentId]: '' }))
+      setReplyingTo(prev => ({ ...prev, [postId]: null }))
+      loadComments(postId)
+    }
+  }, [accessToken, replyContent, loadComments, apiCall])
 
   // View mode setter
   const setViewModeWithPersist = useCallback((mode: 'list' | 'masonry') => {

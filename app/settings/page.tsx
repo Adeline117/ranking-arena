@@ -15,10 +15,14 @@ import { formatTimeAgo } from '@/lib/utils/date'
 import AdvancedAlerts from '@/app/components/pro/AdvancedAlerts'
 import { useSubscription } from '@/app/components/home/hooks/useSubscription'
 import { useMultiAccount } from '@/lib/hooks/useMultiAccount'
-
-// Constants
-const MAX_BIO_LENGTH = 200
-const MAX_HANDLE_LENGTH = 30
+import {
+  validateHandle,
+  validateEmail,
+  validatePassword,
+  validatePasswordMatch,
+  MAX_BIO_LENGTH,
+  MAX_HANDLE_LENGTH,
+} from './validation'
 
 // Section IDs for navigation
 type SectionId = 'profile' | 'security' | 'exchanges' | 'alerts' | 'notifications' | 'privacy' | 'account'
@@ -77,46 +81,6 @@ const SECTIONS: { id: SectionId; label: string }[] = [
   { id: 'privacy', label: '隐私设置' },
   { id: 'account', label: '账号管理' },
 ]
-
-// Validation functions
-function validateHandle(handle: string): { valid: boolean; message: string } {
-  if (!handle) return { valid: true, message: '' }
-  if (handle.length < 2) {
-    return { valid: false, message: '用户名至少需要2个字符' }
-  }
-  if (handle.length > MAX_HANDLE_LENGTH) {
-    return { valid: false, message: `用户名不能超过${MAX_HANDLE_LENGTH}个字符` }
-  }
-  if (!/^[a-zA-Z0-9_\u4e00-\u9fa5]+$/.test(handle)) {
-    return { valid: false, message: '用户名只能包含字母、数字、下划线和中文' }
-  }
-  return { valid: true, message: '' }
-}
-
-function validateEmail(email: string): { valid: boolean; message: string } {
-  if (!email) return { valid: true, message: '' }
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-  if (!emailRegex.test(email)) {
-    return { valid: false, message: '请输入有效的邮箱地址' }
-  }
-  return { valid: true, message: '' }
-}
-
-function validatePassword(password: string): { valid: boolean; message: string } {
-  if (!password) return { valid: true, message: '' }
-  if (password.length < 6) {
-    return { valid: false, message: '密码至少需要6个字符' }
-  }
-  return { valid: true, message: '' }
-}
-
-function validatePasswordMatch(password: string, confirmPassword: string): { valid: boolean; message: string } {
-  if (!confirmPassword) return { valid: true, message: '' }
-  if (password !== confirmPassword) {
-    return { valid: false, message: '两次输入的密码不一致' }
-  }
-  return { valid: true, message: '' }
-}
 
 // Toggle switch component
 function ToggleSwitch({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
@@ -359,7 +323,7 @@ function TraderLinksSection({ userId }: { userId: string }) {
 }
 
 // Reusable input styles
-function getInputStyle(hasError = false) {
+function getInputStyle(hasError = false): React.CSSProperties {
   return {
     width: '100%',
     padding: tokens.spacing[3],
@@ -372,6 +336,181 @@ function getInputStyle(hasError = false) {
     outline: 'none',
     transition: 'border-color 0.2s ease',
   }
+}
+
+// Reusable radio option component
+function RadioOption<T extends string>({
+  value,
+  currentValue,
+  label,
+  description,
+  onChange,
+  name,
+}: {
+  value: T
+  currentValue: T
+  label: string
+  description: string
+  onChange: (v: T) => void
+  name: string
+}): React.ReactElement {
+  const isSelected = currentValue === value
+  return (
+    <label
+      style={{
+        display: 'flex',
+        alignItems: 'flex-start',
+        gap: tokens.spacing[3],
+        cursor: 'pointer',
+        padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+        borderRadius: tokens.radius.md,
+        border: `1px solid ${isSelected ? tokens.colors.accent.primary + '40' : 'transparent'}`,
+        background: isSelected ? `${tokens.colors.accent.primary}08` : 'transparent',
+        transition: 'all 0.15s ease',
+      }}
+    >
+      <input
+        type="radio"
+        name={name}
+        checked={isSelected}
+        onChange={() => onChange(value)}
+        style={{ width: 18, height: 18, accentColor: '#8b6fa8', marginTop: 2 }}
+      />
+      <Box>
+        <Text size="sm" weight="medium">{label}</Text>
+        <Text size="xs" color="tertiary">{description}</Text>
+      </Box>
+    </label>
+  )
+}
+
+// Delete Account Modal Component
+function DeleteAccountModal({
+  isOpen,
+  onClose,
+  password,
+  setPassword,
+  reason,
+  setReason,
+  error,
+  deleting,
+  onDelete,
+}: {
+  isOpen: boolean
+  onClose: () => void
+  password: string
+  setPassword: (v: string) => void
+  reason: string
+  setReason: (v: string) => void
+  error: string | null
+  deleting: boolean
+  onDelete: () => void
+}): React.ReactElement | null {
+  if (!isOpen) return null
+
+  return (
+    <Box
+      style={{
+        position: 'fixed',
+        top: 0, left: 0, right: 0, bottom: 0,
+        background: 'rgba(0,0,0,0.6)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        zIndex: 9999,
+        padding: tokens.spacing[4],
+      }}
+      onClick={onClose}
+    >
+      <Box
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: tokens.colors.bg.primary,
+          borderRadius: tokens.radius.xl,
+          padding: tokens.spacing[6],
+          maxWidth: 420,
+          width: '100%',
+          border: `1px solid ${tokens.colors.accent.error}40`,
+        }}
+      >
+        <Text size="lg" weight="bold" style={{ color: tokens.colors.accent.error, marginBottom: tokens.spacing[3] }}>
+          确认注销账号
+        </Text>
+        <Box style={{ marginBottom: tokens.spacing[4] }}>
+          <Text size="sm" color="secondary" style={{ lineHeight: 1.6 }}>
+            注销后，你的账号将在 30 天内被永久删除。在此期间，你可以通过登录恢复账号。
+          </Text>
+          <Box style={{
+            marginTop: tokens.spacing[3],
+            padding: tokens.spacing[3],
+            borderRadius: tokens.radius.md,
+            background: `${tokens.colors.accent.warning}10`,
+            border: `1px solid ${tokens.colors.accent.warning}30`,
+          }}>
+            <Text size="xs" style={{ color: tokens.colors.accent.warning }}>
+              注意：注销后你的帖子和评论将显示为&ldquo;已注销用户&rdquo;，关注者将无法看到你的动态。
+            </Text>
+          </Box>
+        </Box>
+        <Box style={{ marginBottom: tokens.spacing[3] }}>
+          <Text size="sm" weight="medium" style={{ marginBottom: tokens.spacing[2] }}>输入密码确认</Text>
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="请输入当前密码"
+            style={{
+              width: '100%',
+              padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+              borderRadius: tokens.radius.md,
+              border: `1px solid ${tokens.colors.border.primary}`,
+              background: tokens.colors.bg.secondary,
+              color: tokens.colors.text.primary,
+              fontSize: tokens.typography.fontSize.sm,
+            }}
+          />
+        </Box>
+        <Box style={{ marginBottom: tokens.spacing[4] }}>
+          <Text size="sm" weight="medium" style={{ marginBottom: tokens.spacing[2] }}>注销原因（可选）</Text>
+          <input
+            type="text"
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder="告诉我们为什么..."
+            style={{
+              width: '100%',
+              padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+              borderRadius: tokens.radius.md,
+              border: `1px solid ${tokens.colors.border.primary}`,
+              background: tokens.colors.bg.secondary,
+              color: tokens.colors.text.primary,
+              fontSize: tokens.typography.fontSize.sm,
+            }}
+          />
+        </Box>
+        {error && (
+          <Text size="xs" style={{ color: tokens.colors.accent.error, marginBottom: tokens.spacing[3] }}>
+            {error}
+          </Text>
+        )}
+        <Box style={{ display: 'flex', gap: tokens.spacing[3], justifyContent: 'flex-end' }}>
+          <Button variant="secondary" size="sm" onClick={onClose}>
+            取消
+          </Button>
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={onDelete}
+            disabled={!password || deleting}
+            style={{
+              background: tokens.colors.accent.error,
+              opacity: !password || deleting ? 0.5 : 1,
+            }}
+          >
+            {deleting ? '处理中...' : '确认注销'}
+          </Button>
+        </Box>
+      </Box>
+    </Box>
+  )
 }
 
 function MultiAccountSection() {
@@ -825,26 +964,26 @@ function SettingsContent() {
         return null
       }
 
-      const fileName = `${userId}-${Date.now()}.${fileExt}`
+      // Use server-side API for upload (bypasses RLS)
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('userId', userId)
+      formData.append('bucket', bucket)
 
-      const { error: uploadError } = await supabase.storage
-        .from(bucket)
-        .upload(fileName, file, { upsert: true })
+      const response = await fetch('/api/upload-profile-image', {
+        method: 'POST',
+        body: formData
+      })
 
-      if (uploadError) {
-        uiLogger.error(`${bucket} upload error:`, uploadError)
-        if (uploadError.message?.includes('Bucket not found')) {
-          showToast('存储服务未配置，请联系管理员', 'error')
-        } else if (uploadError.message?.includes('security') || uploadError.message?.includes('policy')) {
-          showToast('没有上传权限，请联系管理员', 'error')
-        } else {
-          showToast(`上传失败: ${uploadError.message}`, 'error')
-        }
+      const result = await response.json()
+
+      if (!response.ok) {
+        uiLogger.error(`${bucket} upload error:`, result.error)
+        showToast(result.error || '上传失败', 'error')
         return null
       }
 
-      const { data } = supabase.storage.from(bucket).getPublicUrl(fileName)
-      return data.publicUrl
+      return result.url
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : '未知错误'
       showToast(`上传异常: ${errorMessage}`, 'error')
@@ -875,6 +1014,7 @@ function SettingsContent() {
 
       let finalAvatarUrl = avatarUrl
       let finalCoverUrl = coverUrl
+      let uploadFailed = false
 
       if (avatarFile) {
         const uploadedUrl = await uploadFile(avatarFile, 'avatars', userId, 5 * 1024 * 1024)
@@ -883,8 +1023,14 @@ function SettingsContent() {
           setAvatarUrl(uploadedUrl)
           setPreviewUrl(uploadedUrl)
         } else {
+          // 上传失败，恢复原来的头像
+          uploadFailed = true
+          setAvatarFile(null)
           if (currentProfile?.avatar_url) {
             finalAvatarUrl = currentProfile.avatar_url
+            setPreviewUrl(currentProfile.avatar_url)
+          } else {
+            setPreviewUrl(null)
           }
         }
       }
@@ -896,8 +1042,14 @@ function SettingsContent() {
           setCoverUrl(uploadedUrl)
           setCoverPreviewUrl(uploadedUrl)
         } else {
+          // 上传失败，恢复原来的背景图
+          uploadFailed = true
+          setCoverFile(null)
           if (currentProfile?.cover_url) {
             finalCoverUrl = currentProfile.cover_url
+            setCoverPreviewUrl(currentProfile.cover_url)
+          } else {
+            setCoverPreviewUrl(null)
           }
         }
       }
@@ -953,7 +1105,11 @@ function SettingsContent() {
       setAvatarFile(null)
       setCoverFile(null)
 
-      showToast('所有设置已保存', 'success')
+      if (uploadFailed) {
+        showToast('其他设置已保存，但图片上传失败', 'warning')
+      } else {
+        showToast('所有设置已保存', 'success')
+      }
     } catch (error) {
       uiLogger.error('Error saving:', error)
       showToast('保存失败，请重试', 'error')
@@ -1707,8 +1863,8 @@ function SettingsContent() {
                   width: '100%',
                   height: 120,
                   borderRadius: tokens.radius.lg,
-                  background: coverPreviewUrl
-                    ? `url(${coverPreviewUrl}) center/cover no-repeat`
+                  background: (coverPreviewUrl || coverUrl)
+                    ? `url(${coverPreviewUrl || coverUrl}) center/cover no-repeat`
                     : `linear-gradient(135deg, ${tokens.colors.bg.tertiary} 0%, ${tokens.colors.bg.secondary} 100%)`,
                   border: `1px solid ${tokens.colors.border.primary}`,
                   display: 'flex',
@@ -1717,7 +1873,7 @@ function SettingsContent() {
                   marginBottom: tokens.spacing[2],
                 }}
               >
-                {!coverPreviewUrl && (
+                {!coverPreviewUrl && !coverUrl && (
                   <Text size="sm" color="tertiary">暂无背景图片</Text>
                 )}
               </Box>
@@ -1745,12 +1901,13 @@ function SettingsContent() {
                 >
                   更换背景
                 </label>
-                {coverPreviewUrl && (
+                {(coverPreviewUrl || coverUrl) && (
                   <button
                     onClick={() => {
                       setCoverFile(null)
                       setCoverPreviewUrl(null)
                       setCoverUrl(null)
+                      showToast('背景图已标记移除，请点击保存按钮确认', 'info')
                     }}
                     style={{
                       padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
@@ -2387,38 +2544,30 @@ function SettingsContent() {
                 选择是否通过邮件接收活动摘要
               </Text>
               <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
-                {([
-                  { value: 'none' as const, label: '不发送', desc: '不通过邮件发送摘要' },
-                  { value: 'daily' as const, label: '每日摘要', desc: '每天发送一封活动总结邮件' },
-                  { value: 'weekly' as const, label: '每周摘要', desc: '每周发送一封活动总结邮件' },
-                ]).map(option => (
-                  <label
-                    key={option.value}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'flex-start',
-                      gap: tokens.spacing[3],
-                      cursor: 'pointer',
-                      padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-                      borderRadius: tokens.radius.md,
-                      border: `1px solid ${emailDigest === option.value ? tokens.colors.accent.primary + '40' : 'transparent'}`,
-                      background: emailDigest === option.value ? `${tokens.colors.accent.primary}08` : 'transparent',
-                      transition: 'all 0.15s ease',
-                    }}
-                  >
-                    <input
-                      type="radio"
-                      name="emailDigest"
-                      checked={emailDigest === option.value}
-                      onChange={() => handleEmailDigestChange(option.value)}
-                      style={{ width: 18, height: 18, accentColor: '#8b6fa8', marginTop: 2 }}
-                    />
-                    <Box>
-                      <Text size="sm" weight="medium">{option.label}</Text>
-                      <Text size="xs" color="tertiary">{option.desc}</Text>
-                    </Box>
-                  </label>
-                ))}
+                <RadioOption
+                  name="emailDigest"
+                  value="none"
+                  currentValue={emailDigest}
+                  label="不发送"
+                  description="不通过邮件发送摘要"
+                  onChange={handleEmailDigestChange}
+                />
+                <RadioOption
+                  name="emailDigest"
+                  value="daily"
+                  currentValue={emailDigest}
+                  label="每日摘要"
+                  description="每天发送一封活动总结邮件"
+                  onChange={handleEmailDigestChange}
+                />
+                <RadioOption
+                  name="emailDigest"
+                  value="weekly"
+                  currentValue={emailDigest}
+                  label="每周摘要"
+                  description="每周发送一封活动总结邮件"
+                  onChange={handleEmailDigestChange}
+                />
               </Box>
             </Box>
           </SectionCard>
@@ -2480,38 +2629,30 @@ function SettingsContent() {
                 谁可以给我发私信
               </Text>
               <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
-                {([
-                  { value: 'all' as const, label: '所有人', desc: '任何人都可以给你发私信' },
-                  { value: 'mutual' as const, label: '互相关注的人', desc: '非互关者最多发3条，你回复后对方可继续' },
-                  { value: 'none' as const, label: '不接收私信', desc: '关闭所有私信功能' },
-                ]).map(option => (
-                  <label
-                    key={option.value}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'flex-start',
-                      gap: tokens.spacing[3],
-                      cursor: 'pointer',
-                      padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-                      borderRadius: tokens.radius.md,
-                      border: `1px solid ${dmPermission === option.value ? tokens.colors.accent.primary + '40' : 'transparent'}`,
-                      background: dmPermission === option.value ? `${tokens.colors.accent.primary}08` : 'transparent',
-                      transition: 'all 0.15s ease',
-                    }}
-                  >
-                    <input
-                      type="radio"
-                      name="dmPermission"
-                      checked={dmPermission === option.value}
-                      onChange={() => setDmPermission(option.value)}
-                      style={{ width: 18, height: 18, accentColor: '#8b6fa8', marginTop: 2 }}
-                    />
-                    <Box>
-                      <Text size="sm" weight="medium">{option.label}</Text>
-                      <Text size="xs" color="tertiary">{option.desc}</Text>
-                    </Box>
-                  </label>
-                ))}
+                <RadioOption
+                  name="dmPermission"
+                  value="all"
+                  currentValue={dmPermission}
+                  label="所有人"
+                  description="任何人都可以给你发私信"
+                  onChange={setDmPermission}
+                />
+                <RadioOption
+                  name="dmPermission"
+                  value="mutual"
+                  currentValue={dmPermission}
+                  label="互相关注的人"
+                  description="非互关者最多发3条，你回复后对方可继续"
+                  onChange={setDmPermission}
+                />
+                <RadioOption
+                  name="dmPermission"
+                  value="none"
+                  currentValue={dmPermission}
+                  label="不接收私信"
+                  description="关闭所有私信功能"
+                  onChange={setDmPermission}
+                />
               </Box>
             </Box>
 
@@ -2660,110 +2801,17 @@ function SettingsContent() {
             </Box>
           </SectionCard>
 
-          {/* Account Deletion Modal */}
-          {showDeleteAccountModal && (
-            <Box
-              style={{
-                position: 'fixed',
-                top: 0, left: 0, right: 0, bottom: 0,
-                background: 'rgba(0,0,0,0.6)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                zIndex: 9999,
-                padding: tokens.spacing[4],
-              }}
-              onClick={() => setShowDeleteAccountModal(false)}
-            >
-              <Box
-                onClick={(e) => e.stopPropagation()}
-                style={{
-                  background: tokens.colors.bg.primary,
-                  borderRadius: tokens.radius.xl,
-                  padding: tokens.spacing[6],
-                  maxWidth: 420,
-                  width: '100%',
-                  border: `1px solid ${tokens.colors.accent.error}40`,
-                }}
-              >
-                <Text size="lg" weight="bold" style={{ color: tokens.colors.accent.error, marginBottom: tokens.spacing[3] }}>
-                  确认注销账号
-                </Text>
-                <Box style={{ marginBottom: tokens.spacing[4] }}>
-                  <Text size="sm" color="secondary" style={{ lineHeight: 1.6 }}>
-                    注销后，你的账号将在 30 天内被永久删除。在此期间，你可以通过登录恢复账号。
-                  </Text>
-                  <Box style={{
-                    marginTop: tokens.spacing[3],
-                    padding: tokens.spacing[3],
-                    borderRadius: tokens.radius.md,
-                    background: `${tokens.colors.accent.warning}10`,
-                    border: `1px solid ${tokens.colors.accent.warning}30`,
-                  }}>
-                    <Text size="xs" style={{ color: tokens.colors.accent.warning }}>
-                      注意：注销后你的帖子和评论将显示为"已注销用户"，关注者将无法看到你的动态。
-                    </Text>
-                  </Box>
-                </Box>
-                <Box style={{ marginBottom: tokens.spacing[3] }}>
-                  <Text size="sm" weight="medium" style={{ marginBottom: tokens.spacing[2] }}>输入密码确认</Text>
-                  <input
-                    type="password"
-                    value={deletePassword}
-                    onChange={(e) => setDeletePassword(e.target.value)}
-                    placeholder="请输入当前密码"
-                    style={{
-                      width: '100%',
-                      padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-                      borderRadius: tokens.radius.md,
-                      border: `1px solid ${tokens.colors.border.primary}`,
-                      background: tokens.colors.bg.secondary,
-                      color: tokens.colors.text.primary,
-                      fontSize: tokens.typography.fontSize.sm,
-                    }}
-                  />
-                </Box>
-                <Box style={{ marginBottom: tokens.spacing[4] }}>
-                  <Text size="sm" weight="medium" style={{ marginBottom: tokens.spacing[2] }}>注销原因（可选）</Text>
-                  <input
-                    type="text"
-                    value={deleteReason}
-                    onChange={(e) => setDeleteReason(e.target.value)}
-                    placeholder="告诉我们为什么..."
-                    style={{
-                      width: '100%',
-                      padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-                      borderRadius: tokens.radius.md,
-                      border: `1px solid ${tokens.colors.border.primary}`,
-                      background: tokens.colors.bg.secondary,
-                      color: tokens.colors.text.primary,
-                      fontSize: tokens.typography.fontSize.sm,
-                    }}
-                  />
-                </Box>
-                {deleteError && (
-                  <Text size="xs" style={{ color: tokens.colors.accent.error, marginBottom: tokens.spacing[3] }}>
-                    {deleteError}
-                  </Text>
-                )}
-                <Box style={{ display: 'flex', gap: tokens.spacing[3], justifyContent: 'flex-end' }}>
-                  <Button variant="secondary" size="sm" onClick={() => setShowDeleteAccountModal(false)}>
-                    取消
-                  </Button>
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    onClick={handleDeleteAccount}
-                    disabled={!deletePassword || deletingAccount}
-                    style={{
-                      background: tokens.colors.accent.error,
-                      opacity: !deletePassword || deletingAccount ? 0.5 : 1,
-                    }}
-                  >
-                    {deletingAccount ? '处理中...' : '确认注销'}
-                  </Button>
-                </Box>
-              </Box>
-            </Box>
-          )}
+          <DeleteAccountModal
+            isOpen={showDeleteAccountModal}
+            onClose={() => setShowDeleteAccountModal(false)}
+            password={deletePassword}
+            setPassword={setDeletePassword}
+            reason={deleteReason}
+            setReason={setDeleteReason}
+            error={deleteError}
+            deleting={deletingAccount}
+            onDelete={handleDeleteAccount}
+          />
 
           {/* ===== Floating Save Bar ===== */}
           {hasUnsavedChanges() && (

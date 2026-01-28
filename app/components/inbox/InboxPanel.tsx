@@ -3,30 +3,34 @@
 import { useEffect, useRef } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { useInboxStore } from '@/lib/stores/inboxStore'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import NotificationsList from './NotificationsList'
 import ConversationsList from './ConversationsList'
 
-export default function InboxPanel() {
+export default function InboxPanel(): React.ReactElement | null {
   const panelOpen = useInboxStore((s) => s.panelOpen)
   const closePanel = useInboxStore((s) => s.closePanel)
   const panelRef = useRef<HTMLDivElement>(null)
+  const { t } = useLanguage()
 
-  // Close on click outside
   useEffect(() => {
     if (!panelOpen) return
-    const handleClickOutside = (e: MouseEvent) => {
-      if (panelRef.current && !panelRef.current.contains(e.target as Node)) {
-        // Check if the click target is the bell button itself
+
+    function handleClickOutside(e: MouseEvent): void {
+      if (!panelRef.current?.contains(e.target as Node)) {
         const target = e.target as HTMLElement
         if (target.closest('[data-inbox-trigger]')) return
         closePanel()
       }
     }
-    const handleEsc = (e: KeyboardEvent) => {
+
+    function handleEsc(e: KeyboardEvent): void {
       if (e.key === 'Escape') closePanel()
     }
+
     document.addEventListener('mousedown', handleClickOutside)
     document.addEventListener('keydown', handleEsc)
+
     return () => {
       document.removeEventListener('mousedown', handleClickOutside)
       document.removeEventListener('keydown', handleEsc)
@@ -70,7 +74,7 @@ export default function InboxPanel() {
         }}
       >
         <span style={{ fontWeight: 800, fontSize: tokens.typography.fontSize.lg, color: tokens.colors.text.primary }}>
-          收件箱
+          {t('inbox')}
         </span>
         <button
           onClick={closePanel}

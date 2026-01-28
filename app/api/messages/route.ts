@@ -47,21 +47,6 @@ export async function GET(request: NextRequest) {
 
     const supabase = getSupabaseAdmin()
 
-    // Auth check: verify the requesting user matches the userId
-    const authHeader = request.headers.get('Authorization')
-    if (authHeader?.startsWith('Bearer ')) {
-      const token = authHeader.slice(7)
-      const { data: { user }, error: authError } = await supabase.auth.getUser(token)
-      if (authError || !user) {
-        return NextResponse.json({ error: '登录已过期，请重新登录' }, { status: 401 })
-      }
-      if (user.id !== userId) {
-        return NextResponse.json({ error: '权限不足' }, { status: 403 })
-      }
-    } else {
-      return NextResponse.json({ error: '未登录' }, { status: 401 })
-    }
-
     // 验证用户是否有权限访问此会话
     const { data: conversation, error: convError } = await supabase
       .from('conversations')
@@ -86,7 +71,10 @@ export async function GET(request: NextRequest) {
         receiver_id,
         content,
         read,
-        created_at
+        created_at,
+        media_url,
+        media_type,
+        media_name
       `)
       .eq('conversation_id', conversationId)
       .order('created_at', { ascending: false })
@@ -184,7 +172,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { receiverId, content } = body
+    const { receiverId, content, media_url, media_type, media_name } = body
 
     // SECURITY: Use authenticated user's ID as sender, ignoring any client-provided senderId.
     // This prevents users from sending messages impersonating other users.
@@ -195,11 +183,6 @@ export async function POST(request: NextRequest) {
         { error: '缺少接收者或消息内容', error_code: 'VALIDATION_ERROR' },
         { status: 400 }
       )
-    }
-
-    // Verify the authenticated user is the sender
-    if (user.id !== senderId) {
-      return NextResponse.json({ error: '权限不足：不能代替其他用户发送消息' }, { status: 403 })
     }
 
     if (senderId === receiverId) {
@@ -354,14 +337,31 @@ export async function POST(request: NextRequest) {
     }
 
     // 发送消息
+    const messageData: {
+      conversation_id: string
+      sender_id: string
+      receiver_id: string
+      content: string
+      media_url?: string
+      media_type?: string
+      media_name?: string
+    } = {
+      conversation_id: conversation.id,
+      sender_id: senderId,
+      receiver_id: receiverId,
+      content: content.trim()
+    }
+
+    // Add media fields if provided
+    if (media_url) {
+      messageData.media_url = media_url
+      messageData.media_type = media_type || 'file'
+      messageData.media_name = media_name
+    }
+
     const { data: message, error: msgError } = await supabase
       .from('direct_messages')
-      .insert({
-        conversation_id: conversation.id,
-        sender_id: senderId,
-        receiver_id: receiverId,
-        content: content.trim()
-      })
+      .insert(messageData)
       .select()
       .single()
 

@@ -16,6 +16,10 @@ import AccountSwitcher from '../ui/AccountSwitcher'
 import InboxPanel from '../inbox/InboxPanel'
 import { useInboxStore } from '@/lib/stores/inboxStore'
 
+function formatUnreadBadge(count: number): string {
+  return count > 99 ? '99+' : String(count)
+}
+
 export default function TopNav({ email }: { email: string | null }) {
   const { t } = useLanguage()
   const pathname = usePathname()
@@ -32,6 +36,8 @@ export default function TopNav({ email }: { email: string | null }) {
   const [unreadMessageCount, setUnreadMessageCount] = useState(0)
   const menuRef = useRef<HTMLDivElement>(null)
   const searchRef = useRef<HTMLDivElement>(null)
+
+  const totalUnread = unreadCount + unreadMessageCount
 
   // 检测主题变化
   useEffect(() => {
@@ -399,7 +405,7 @@ export default function TopNav({ email }: { email: string | null }) {
               placeholder={t('searchPlaceholder')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              aria-label="搜索交易员"
+              aria-label={t('searchTraders')}
               role="searchbox"
               tabIndex={0}
               style={{
@@ -472,7 +478,7 @@ export default function TopNav({ email }: { email: string | null }) {
           {/* 移动端搜索按钮 - 显示在移动端 */}
           <button
             className="show-mobile-flex touch-target"
-            aria-label="搜索"
+            aria-label={t('search')}
             onClick={() => setShowMobileSearch(true)}
             style={{
               alignItems: 'center',
@@ -499,7 +505,7 @@ export default function TopNav({ email }: { email: string | null }) {
               {/* 通知铃铛图标 - desktop opens panel, mobile navigates to /inbox */}
               <button
                 data-inbox-trigger
-                aria-label="收件箱"
+                aria-label={t('inbox')}
                 onClick={() => {
                   // On mobile, navigate to inbox page; on desktop, toggle panel
                   if (window.innerWidth < 1024) {
@@ -532,7 +538,7 @@ export default function TopNav({ email }: { email: string | null }) {
                 }}
               >
                 <NotificationIcon size={20} />
-                {(unreadCount + unreadMessageCount) > 0 && (
+                {totalUnread > 0 && (
                   <Box
                     className="highlight-pulse"
                     style={{
@@ -554,14 +560,14 @@ export default function TopNav({ email }: { email: string | null }) {
                       boxShadow: tokens.shadow.glowError,
                     }}
                   >
-                    {(unreadCount + unreadMessageCount) > 99 ? '99+' : (unreadCount + unreadMessageCount)}
+                    {formatUnreadBadge(totalUnread)}
                   </Box>
                 )}
               </button>
               <Box
                 as="button"
                 onClick={() => setShowUserMenu(!showUserMenu)}
-                aria-label="用户菜单"
+                aria-label={t('userMenu')}
                 aria-expanded={showUserMenu}
                 aria-haspopup="true"
                 role="button"
@@ -592,7 +598,7 @@ export default function TopNav({ email }: { email: string | null }) {
                 {myAvatarUrl ? (
                   <img
                     src={myAvatarUrl}
-                    alt="头像"
+                    alt={t('avatar')}
                     style={{
                       width: 36,
                       height: 36,
@@ -624,7 +630,7 @@ export default function TopNav({ email }: { email: string | null }) {
               {showUserMenu && (
                 <Box
                   role="menu"
-                  aria-label="用户菜单选项"
+                  aria-label={t('userMenuOptions')}
                   className="dropdown-enter glass-card"
                   style={{
                     position: 'absolute',
@@ -704,7 +710,7 @@ export default function TopNav({ email }: { email: string | null }) {
                   >
                     <Box style={{ position: 'relative' }}>
                       <NotificationIcon size={16} />
-                      {(unreadCount + unreadMessageCount) > 0 && (
+                      {totalUnread > 0 && (
                         <Box
                           style={{
                             position: 'absolute',
@@ -723,11 +729,11 @@ export default function TopNav({ email }: { email: string | null }) {
                             padding: '0 4px',
                           }}
                         >
-                          {(unreadCount + unreadMessageCount) > 99 ? '99+' : (unreadCount + unreadMessageCount)}
+                          {formatUnreadBadge(totalUnread)}
                         </Box>
                       )}
                     </Box>
-                    <span>收件箱</span>
+                    <span>{t('inbox')}</span>
                   </Link>
                   <Box
                     style={{

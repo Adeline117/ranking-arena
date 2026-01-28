@@ -24,6 +24,14 @@ import ChatSearchOverlay from '@/app/components/Features/ChatSearchOverlay'
 
 type MessageStatus = 'sending' | 'sent' | 'failed'
 
+type MediaAttachment = {
+  url: string
+  type: 'image' | 'video' | 'file'
+  fileName?: string
+  originalName?: string
+  fileSize?: number
+}
+
 type Message = {
   id: string
   sender_id: string
@@ -31,10 +39,14 @@ type Message = {
   content: string
   read: boolean
   created_at: string
-  _status?: MessageStatus // client-side only: optimistic UI state
-  _tempId?: string // client-side only: temporary ID before server confirms
-  _errorCode?: MessageErrorCode // client-side only: failure reason
-  _errorMessage?: string // client-side only: user-facing error message
+  media_url?: string | null
+  media_type?: 'image' | 'video' | 'file' | null
+  media_name?: string | null
+  _status?: MessageStatus
+  _tempId?: string
+  _errorCode?: MessageErrorCode
+  _errorMessage?: string
+  _attachment?: MediaAttachment
 }
 
 type OtherUser = {
@@ -42,6 +54,50 @@ type OtherUser = {
   handle: string | null
   avatar_url?: string | null
   bio?: string | null
+}
+
+// Helper to get media type label in Chinese
+function getMediaTypeLabel(type: 'image' | 'video' | 'file'): string {
+  switch (type) {
+    case 'image': return '图片'
+    case 'video': return '视频'
+    case 'file': return '文件'
+  }
+}
+
+// Helper to calculate message bubble border radius based on grouping
+function getBubbleBorderRadius(isMine: boolean, isSameSenderAsPrev: boolean, isSameSenderAsNext: boolean): string {
+  if (isMine) {
+    if (isSameSenderAsPrev && isSameSenderAsNext) return '18px 6px 6px 18px'
+    if (isSameSenderAsPrev) return '18px 6px 18px 18px'
+    if (isSameSenderAsNext) return '18px 18px 6px 18px'
+    return '18px'
+  }
+  if (isSameSenderAsPrev && isSameSenderAsNext) return '6px 18px 18px 6px'
+  if (isSameSenderAsPrev) return '6px 18px 18px 18px'
+  if (isSameSenderAsNext) return '18px 18px 18px 6px'
+  return '18px'
+}
+
+// Helper to update message status in state
+function updateMessageStatus(
+  messages: Message[],
+  identifier: string,
+  isTemp: boolean,
+  status: MessageStatus,
+  errorCode?: MessageErrorCode,
+  errorMessage?: string
+): Message[] {
+  return messages.map(m => {
+    const match = isTemp ? m._tempId === identifier : m.id === identifier
+    if (!match) return m
+    return {
+      ...m,
+      _status: status,
+      _errorCode: errorCode,
+      _errorMessage: errorMessage,
+    }
+  })
 }
 
 export default function ConversationPage({ params }: { params: { conversationId: string } | Promise<{ conversationId: string }> }) {
@@ -67,8 +123,12 @@ export default function ConversationPage({ params }: { params: { conversationId:
   const [hasMore, setHasMore] = useState(true)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
   const messageRefs = useRef<Record<string, HTMLDivElement | null>>({})
+  const [pendingAttachment, setPendingAttachment] = useState<MediaAttachment | null>(null)
+  const [uploading, setUploading] = useState(false)
+  const [previewOpen, setPreviewOpen] = useState<{ type: 'image' | 'video'; url: string } | null>(null)
 
   // 注入 spin 动画样式
   useEffect(() => {
@@ -288,8 +348,15 @@ export default function ConversationPage({ params }: { params: { conversationId:
   const sendMessageRequest = async (
     receiverId: string,
     content: string,
-    token: string
+    token: string,
+    attachment?: MediaAttachment | null
   ): Promise<{ ok: boolean; status: number; data: Record<string, unknown> }> => {
+    const body: Record<string, unknown> = { receiverId, content }
+    if (attachment) {
+      body.media_url = attachment.url
+      body.media_type = attachment.type
+      body.media_name = attachment.originalName
+    }
     const res = await fetch('/api/messages', {
       method: 'POST',
       headers: {
@@ -297,14 +364,15 @@ export default function ConversationPage({ params }: { params: { conversationId:
         'Authorization': `Bearer ${token}`,
         ...getCsrfHeaders()
       },
-      body: JSON.stringify({ receiverId, content })
+      body: JSON.stringify(body)
     })
     const data = await res.json()
     return { ok: res.ok, status: res.status, data }
   }
 
   const handleSend = async () => {
-    if (!newMessage.trim() || !userId || !otherUser || sending) return
+    const hasContent = newMessage.trim() || pendingAttachment
+    if (!hasContent || !userId || !otherUser || sending) return
 
     const content = newMessage.trim()
     if (content.length > 2000) {
@@ -325,35 +393,45 @@ export default function ConversationPage({ params }: { params: { conversationId:
       id: tempId,
       sender_id: userId,
       receiver_id: otherUser.id,
-      content,
+      content: content || (pendingAttachment ? `[${getMediaTypeLabel(pendingAttachment.type)}]` : ''),
       read: false,
       created_at: new Date().toISOString(),
       _status: 'sending',
       _tempId: tempId,
+      _attachment: pendingAttachment || undefined,
+      media_url: pendingAttachment?.url,
+      media_type: pendingAttachment?.type,
+      media_name: pendingAttachment?.originalName,
     }
 
     // Optimistic: show message immediately
     setMessages(prev => [...prev, optimisticMessage])
     setNewMessage('')
+    setPendingAttachment(null)
     inputRef.current?.focus()
 
     setSending(true)
     try {
-      let result = await sendMessageRequest(otherUser.id, content, auth.accessToken)
+      let result = await sendMessageRequest(
+        otherUser.id,
+        content || (pendingAttachment ? `[${getMediaTypeLabel(pendingAttachment.type)}]` : ''),
+        auth.accessToken,
+        pendingAttachment
+      )
 
       // 如果 401，尝试刷新 token 后重试一次
       if (result.status === 401) {
         const refreshed = await refreshAuthToken()
         if (refreshed) {
-          result = await sendMessageRequest(otherUser.id, content, refreshed.accessToken)
+          result = await sendMessageRequest(
+            otherUser.id,
+            content || (optimisticMessage._attachment ? `[${getMediaTypeLabel(optimisticMessage._attachment.type)}]` : ''),
+            refreshed.accessToken,
+            optimisticMessage._attachment
+          )
         } else {
-          // 刷新失败，用户需要重新登录
           const errorCode = MessageErrorCode.NOT_AUTHENTICATED
-          setMessages(prev => prev.map(m =>
-            m._tempId === tempId
-              ? { ...m, _status: 'failed' as MessageStatus, _errorCode: errorCode, _errorMessage: getErrorMessage(errorCode) }
-              : m
-          ))
+          setMessages(prev => updateMessageStatus(prev, tempId, true, 'failed', errorCode, getErrorMessage(errorCode)))
           showToast('登录已过期，请重新登录', 'error')
           return
         }
@@ -362,17 +440,12 @@ export default function ConversationPage({ params }: { params: { conversationId:
       if (!result.ok) {
         const errorCode = resolveErrorCode(result.status, result.data as { error_code?: string; error?: string })
         const errorMsg = getErrorMessage(errorCode, result.data.error as string)
-        setMessages(prev => prev.map(m =>
-          m._tempId === tempId
-            ? { ...m, _status: 'failed' as MessageStatus, _errorCode: errorCode, _errorMessage: errorMsg }
-            : m
-        ))
+        setMessages(prev => updateMessageStatus(prev, tempId, true, 'failed', errorCode, errorMsg))
         showToast(errorMsg, 'error')
         return
       }
 
       if (result.data.message) {
-        // Replace optimistic message with server-confirmed message
         setMessages(prev => prev.map(m =>
           m._tempId === tempId
             ? { ...(result.data.message as Message), _status: 'sent' as MessageStatus }
@@ -380,14 +453,9 @@ export default function ConversationPage({ params }: { params: { conversationId:
         ))
       }
     } catch {
-      // Network error
       const errorCode = MessageErrorCode.NETWORK_ERROR
       const errorMsg = getErrorMessage(errorCode)
-      setMessages(prev => prev.map(m =>
-        m._tempId === tempId
-          ? { ...m, _status: 'failed' as MessageStatus, _errorCode: errorCode, _errorMessage: errorMsg }
-          : m
-      ))
+      setMessages(prev => updateMessageStatus(prev, tempId, true, 'failed', errorCode, errorMsg))
       showToast(errorMsg, 'error')
     } finally {
       setSending(false)
@@ -417,29 +485,18 @@ export default function ConversationPage({ params }: { params: { conversationId:
       return
     }
 
-    // Update status to sending, clear previous error
-    setMessages(prev => prev.map(m =>
-      m.id === failedMsg.id
-        ? { ...m, _status: 'sending' as MessageStatus, _errorCode: undefined, _errorMessage: undefined }
-        : m
-    ))
+    setMessages(prev => updateMessageStatus(prev, failedMsg.id, false, 'sending'))
 
     try {
-      let result = await sendMessageRequest(otherUser.id, failedMsg.content, currentAuth.accessToken)
+      let result = await sendMessageRequest(otherUser.id, failedMsg.content, currentAuth.accessToken, failedMsg._attachment)
 
-      // 如果 401，尝试刷新 token 后重试一次
       if (result.status === 401) {
         const refreshed = await refreshAuthToken()
         if (refreshed) {
-
-          result = await sendMessageRequest(otherUser.id, failedMsg.content, refreshed.accessToken)
+          result = await sendMessageRequest(otherUser.id, failedMsg.content, refreshed.accessToken, failedMsg._attachment)
         } else {
           const errorCode = MessageErrorCode.NOT_AUTHENTICATED
-          setMessages(prev => prev.map(m =>
-            m.id === failedMsg.id
-              ? { ...m, _status: 'failed' as MessageStatus, _errorCode: errorCode, _errorMessage: getErrorMessage(errorCode) }
-              : m
-          ))
+          setMessages(prev => updateMessageStatus(prev, failedMsg.id, false, 'failed', errorCode, getErrorMessage(errorCode)))
           showToast('登录已过期，请重新登录', 'error')
           return
         }
@@ -448,11 +505,7 @@ export default function ConversationPage({ params }: { params: { conversationId:
       if (!result.ok) {
         const errorCode = resolveErrorCode(result.status, result.data as { error_code?: string; error?: string })
         const errorMsg = getErrorMessage(errorCode, result.data.error as string)
-        setMessages(prev => prev.map(m =>
-          m.id === failedMsg.id
-            ? { ...m, _status: 'failed' as MessageStatus, _errorCode: errorCode, _errorMessage: errorMsg }
-            : m
-        ))
+        setMessages(prev => updateMessageStatus(prev, failedMsg.id, false, 'failed', errorCode, errorMsg))
         showToast(errorMsg, 'error')
         return
       }
@@ -467,11 +520,7 @@ export default function ConversationPage({ params }: { params: { conversationId:
     } catch {
       const errorCode = MessageErrorCode.NETWORK_ERROR
       const errorMsg = getErrorMessage(errorCode)
-      setMessages(prev => prev.map(m =>
-        m.id === failedMsg.id
-          ? { ...m, _status: 'failed' as MessageStatus, _errorCode: errorCode, _errorMessage: errorMsg }
-          : m
-      ))
+      setMessages(prev => updateMessageStatus(prev, failedMsg.id, false, 'failed', errorCode, errorMsg))
       showToast(errorMsg, 'error')
     }
   }
@@ -481,6 +530,59 @@ export default function ConversationPage({ params }: { params: { conversationId:
       e.preventDefault()
       handleSend()
     }
+  }
+
+  // File upload handler
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file || !userId || !conversationId) return
+
+    // Reset input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+
+    setUploading(true)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('userId', userId)
+      formData.append('conversationId', conversationId)
+
+      const res = await fetch('/api/chat/upload', {
+        method: 'POST',
+        body: formData,
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        showToast(data.error || '上传失败', 'error')
+        return
+      }
+
+      setPendingAttachment({
+        url: data.url,
+        type: data.category,
+        fileName: data.fileName,
+        originalName: data.originalName,
+        fileSize: data.fileSize,
+      })
+    } catch {
+      showToast('上传失败，请重试', 'error')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const clearAttachment = () => {
+    setPendingAttachment(null)
+  }
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
   }
 
   const formatTime = (dateString: string) => {
@@ -753,6 +855,41 @@ export default function ConversationPage({ params }: { params: { conversationId:
           )
         })()}
 
+        {/* Search button */}
+        {otherUser && (
+          <button
+            onClick={() => setSearchOpen(true)}
+            style={{
+              width: 36,
+              height: 36,
+              borderRadius: tokens.radius.full,
+              border: 'none',
+              background: 'transparent',
+              color: tokens.colors.text.secondary,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              transition: 'all 0.2s',
+              flexShrink: 0,
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = tokens.colors.bg.tertiary || 'rgba(255,255,255,0.1)'
+              e.currentTarget.style.color = tokens.colors.text.primary
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'transparent'
+              e.currentTarget.style.color = tokens.colors.text.secondary
+            }}
+            title="搜索聊天记录"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="11" cy="11" r="8" />
+              <path d="m21 21-4.35-4.35" />
+            </svg>
+          </button>
+        )}
+
         {/* Settings button */}
         {otherUser && (
           <button
@@ -779,6 +916,7 @@ export default function ConversationPage({ params }: { params: { conversationId:
               e.currentTarget.style.background = 'transparent'
               e.currentTarget.style.color = tokens.colors.text.secondary
             }}
+            title="聊天设置"
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="1" />
@@ -948,55 +1086,157 @@ export default function ConversationPage({ params }: { params: { conversationId:
                       </Box>
                     )}
 
-                  {/* 气泡 */}
+                  {/* Message bubble */}
                   <Box
                     style={{
                       maxWidth: '75%',
                       minWidth: 48,
-                      padding: '10px 14px',
-                      borderRadius: isMine
-                        ? isSameSenderAsPrev && isSameSenderAsNext
-                          ? '18px 6px 6px 18px'  // 中间
-                          : isSameSenderAsPrev
-                            ? '18px 6px 18px 18px' // 最后
-                            : isSameSenderAsNext
-                              ? '18px 18px 6px 18px' // 第一条
-                              : '18px' // 单独一条
-                        : isSameSenderAsPrev && isSameSenderAsNext
-                          ? '6px 18px 18px 6px'  // 中间
-                          : isSameSenderAsPrev
-                            ? '6px 18px 18px 18px' // 最后
-                            : isSameSenderAsNext
-                              ? '18px 18px 18px 6px' // 第一条
-                              : '18px', // 单独一条
+                      padding: (msg.media_url && msg.media_type !== 'file') ? '4px' : '10px 14px',
+                      borderRadius: getBubbleBorderRadius(isMine, isSameSenderAsPrev, isSameSenderAsNext),
                       background: isMine
-                        ? msg._status === 'failed'
-                          ? 'linear-gradient(135deg, #9575cd 0%, #7e57c2 100%)'
-                          : 'linear-gradient(135deg, #9575cd 0%, #7e57c2 100%)'
+                        ? 'linear-gradient(135deg, #9575cd 0%, #7e57c2 100%)'
                         : tokens.colors.bg.secondary,
                       color: isMine ? '#fff' : tokens.colors.text.primary,
                       border: isMine
-                        ? msg._status === 'failed'
-                          ? '1px solid rgba(244, 67, 54, 0.6)'
-                          : 'none'
+                        ? msg._status === 'failed' ? '1px solid rgba(244, 67, 54, 0.6)' : 'none'
                         : `1px solid ${tokens.colors.border.primary}`,
                       boxShadow: isMine
                         ? '0 1px 2px rgba(126, 87, 194, 0.2)'
                         : '0 1px 2px rgba(0,0,0,0.05)',
                       opacity: msg._status === 'sending' ? 0.7 : 1,
                       transition: 'opacity 0.2s',
+                      overflow: 'hidden',
                     }}
                   >
-                    <Text
-                      size="sm"
-                      style={{
-                        whiteSpace: 'pre-wrap',
-                        wordBreak: 'break-word',
-                        lineHeight: 1.5,
-                      }}
-                    >
-                      {msg.content}
-                    </Text>
+                    {/* Media content */}
+                    {msg.media_url && msg.media_type === 'image' && (
+                      <img
+                        src={msg.media_url}
+                        alt=""
+                        onClick={() => setPreviewOpen({ type: 'image', url: msg.media_url! })}
+                        style={{
+                          maxWidth: '100%',
+                          maxHeight: 300,
+                          borderRadius: 14,
+                          cursor: 'pointer',
+                          display: 'block',
+                        }}
+                      />
+                    )}
+                    {msg.media_url && msg.media_type === 'video' && (
+                      <Box
+                        onClick={() => setPreviewOpen({ type: 'video', url: msg.media_url! })}
+                        style={{
+                          position: 'relative',
+                          cursor: 'pointer',
+                          borderRadius: 14,
+                          overflow: 'hidden',
+                        }}
+                      >
+                        <video
+                          src={msg.media_url}
+                          style={{
+                            maxWidth: '100%',
+                            maxHeight: 300,
+                            display: 'block',
+                          }}
+                        />
+                        <Box style={{
+                          position: 'absolute',
+                          inset: 0,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          background: 'rgba(0,0,0,0.3)',
+                        }}>
+                          <Box style={{
+                            width: 48,
+                            height: 48,
+                            borderRadius: '50%',
+                            background: 'rgba(255,255,255,0.9)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          }}>
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="#333">
+                              <polygon points="5 3 19 12 5 21 5 3" />
+                            </svg>
+                          </Box>
+                        </Box>
+                      </Box>
+                    )}
+                    {msg.media_url && msg.media_type === 'file' && (
+                      <a
+                        href={msg.media_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 10,
+                          textDecoration: 'none',
+                          color: 'inherit',
+                        }}
+                      >
+                        <Box style={{
+                          width: 40,
+                          height: 40,
+                          borderRadius: 8,
+                          background: isMine ? 'rgba(255,255,255,0.2)' : tokens.colors.bg.tertiary,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexShrink: 0,
+                        }}>
+                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                            <polyline points="14 2 14 8 20 8" />
+                          </svg>
+                        </Box>
+                        <Box style={{ flex: 1, minWidth: 0 }}>
+                          <Text size="sm" style={{
+                            fontWeight: 600,
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                          }}>
+                            {msg.media_name || '文件'}
+                          </Text>
+                          <Text size="xs" style={{ opacity: 0.7 }}>
+                            点击下载
+                          </Text>
+                        </Box>
+                      </a>
+                    )}
+                    {/* Text content */}
+                    {msg.content && !msg.content.startsWith('[') && (
+                      <Text
+                        size="sm"
+                        style={{
+                          whiteSpace: 'pre-wrap',
+                          wordBreak: 'break-word',
+                          lineHeight: 1.5,
+                          marginTop: msg.media_url ? 8 : 0,
+                          padding: msg.media_url && msg.media_type !== 'file' ? '0 10px 6px' : 0,
+                        }}
+                      >
+                        {msg.content}
+                      </Text>
+                    )}
+                    {/* Show text for messages without media */}
+                    {!msg.media_url && (
+                      <Text
+                        size="sm"
+                        style={{
+                          whiteSpace: 'pre-wrap',
+                          wordBreak: 'break-word',
+                          lineHeight: 1.5,
+                        }}
+                      >
+                        {msg.content}
+                      </Text>
+                    )}
                   </Box>
                   </Box>{/* close message row with avatar */}
 
@@ -1142,6 +1382,80 @@ export default function ConversationPage({ params }: { params: { conversationId:
         />
       )}
 
+      {/* Media Preview Overlay */}
+      {previewOpen && (
+        <Box
+          onClick={() => setPreviewOpen(null)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.9)',
+            zIndex: 9999,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+          }}
+        >
+          <button
+            onClick={() => setPreviewOpen(null)}
+            style={{
+              position: 'absolute',
+              top: 16,
+              right: 16,
+              width: 40,
+              height: 40,
+              borderRadius: '50%',
+              border: 'none',
+              background: 'rgba(255,255,255,0.1)',
+              color: '#fff',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M18 6L6 18M6 6l12 12" />
+            </svg>
+          </button>
+          {previewOpen.type === 'image' ? (
+            <img
+              src={previewOpen.url}
+              alt=""
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                maxWidth: '90vw',
+                maxHeight: '90vh',
+                objectFit: 'contain',
+                borderRadius: 8,
+              }}
+            />
+          ) : (
+            <video
+              src={previewOpen.url}
+              controls
+              autoPlay
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                maxWidth: '90vw',
+                maxHeight: '90vh',
+                borderRadius: 8,
+              }}
+            />
+          )}
+        </Box>
+      )}
+
+      {/* Hidden file input */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip,.rar"
+        onChange={handleFileSelect}
+        style={{ display: 'none' }}
+      />
+
       {/* Input Area */}
       <Box
         style={{
@@ -1150,6 +1464,102 @@ export default function ConversationPage({ params }: { params: { conversationId:
           borderTop: `1px solid ${tokens.colors.border.primary}`,
         }}
       >
+        {/* Attachment preview */}
+        {pendingAttachment && (
+          <Box style={{
+            maxWidth: 800,
+            margin: '0 auto',
+            marginBottom: 8,
+            padding: 8,
+            background: tokens.colors.bg.tertiary,
+            borderRadius: 12,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+          }}>
+            {pendingAttachment.type === 'image' ? (
+              <img
+                src={pendingAttachment.url}
+                alt=""
+                style={{
+                  width: 60,
+                  height: 60,
+                  objectFit: 'cover',
+                  borderRadius: 8,
+                  cursor: 'pointer',
+                }}
+                onClick={() => setPreviewOpen({ type: 'image', url: pendingAttachment.url })}
+              />
+            ) : pendingAttachment.type === 'video' ? (
+              <Box
+                onClick={() => setPreviewOpen({ type: 'video', url: pendingAttachment.url })}
+                style={{
+                  width: 60,
+                  height: 60,
+                  borderRadius: 8,
+                  background: tokens.colors.bg.primary,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                }}
+              >
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={tokens.colors.text.secondary} strokeWidth="2">
+                  <polygon points="5 3 19 12 5 21 5 3" />
+                </svg>
+              </Box>
+            ) : (
+              <Box style={{
+                width: 60,
+                height: 60,
+                borderRadius: 8,
+                background: tokens.colors.bg.primary,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={tokens.colors.text.secondary} strokeWidth="2">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                  <polyline points="14 2 14 8 20 8" />
+                </svg>
+              </Box>
+            )}
+            <Box style={{ flex: 1, minWidth: 0 }}>
+              <Text size="sm" style={{
+                fontWeight: 600,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}>
+                {pendingAttachment.originalName}
+              </Text>
+              <Text size="xs" color="tertiary">
+                {pendingAttachment.fileSize ? formatFileSize(pendingAttachment.fileSize) : ''} • {getMediaTypeLabel(pendingAttachment.type)}
+              </Text>
+            </Box>
+            <button
+              onClick={clearAttachment}
+              style={{
+                width: 28,
+                height: 28,
+                borderRadius: '50%',
+                border: 'none',
+                background: 'rgba(244, 67, 54, 0.15)',
+                color: '#f44336',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+              }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M18 6L6 18M6 6l12 12" />
+              </svg>
+            </button>
+          </Box>
+        )}
+
         {/* Character counter - show when approaching limit */}
         {newMessage.length > 1800 && (
           <Box style={{
@@ -1168,18 +1578,54 @@ export default function ConversationPage({ params }: { params: { conversationId:
             </Text>
           </Box>
         )}
-        <Box style={{ 
-          maxWidth: 800, 
+        <Box style={{
+          maxWidth: 800,
           margin: '0 auto',
           display: 'flex',
           gap: tokens.spacing[2],
           alignItems: 'flex-end',
           background: tokens.colors.bg.primary,
           borderRadius: 24,
-          padding: '6px 6px 6px 16px',
+          padding: '6px 6px 6px 12px',
           border: `1px solid ${tokens.colors.border.primary}`,
           transition: 'border-color 0.2s, box-shadow 0.2s',
         }}>
+          {/* File upload button */}
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            style={{
+              width: 36,
+              height: 36,
+              borderRadius: '50%',
+              border: 'none',
+              background: 'transparent',
+              color: tokens.colors.text.tertiary,
+              cursor: uploading ? 'not-allowed' : 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+              opacity: uploading ? 0.5 : 1,
+              transition: 'all 0.2s',
+            }}
+            title="发送图片/视频/文件"
+          >
+            {uploading ? (
+              <Box style={{
+                width: 18,
+                height: 18,
+                border: '2px solid currentColor',
+                borderTopColor: 'transparent',
+                borderRadius: '50%',
+                animation: 'spin 1s linear infinite',
+              }} />
+            ) : (
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+              </svg>
+            )}
+          </button>
           <textarea
             ref={inputRef}
             value={newMessage}
@@ -1218,17 +1664,17 @@ export default function ConversationPage({ params }: { params: { conversationId:
           />
           <button
             onClick={handleSend}
-            disabled={!newMessage.trim() || sending || newMessage.length > 2000}
+            disabled={(!newMessage.trim() && !pendingAttachment) || sending || newMessage.length > 2000}
             style={{
               width: 40,
               height: 40,
               borderRadius: '50%',
               border: 'none',
-              background: newMessage.trim() && newMessage.length <= 2000
+              background: (newMessage.trim() || pendingAttachment) && newMessage.length <= 2000
                 ? 'linear-gradient(135deg, #9575cd 0%, #7e57c2 100%)'
                 : tokens.colors.bg.tertiary || 'rgba(255,255,255,0.1)',
-              color: newMessage.trim() && newMessage.length <= 2000 ? '#fff' : tokens.colors.text.tertiary,
-              cursor: newMessage.trim() && !sending && newMessage.length <= 2000 ? 'pointer' : 'default',
+              color: (newMessage.trim() || pendingAttachment) && newMessage.length <= 2000 ? '#fff' : tokens.colors.text.tertiary,
+              cursor: (newMessage.trim() || pendingAttachment) && !sending && newMessage.length <= 2000 ? 'pointer' : 'default',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',

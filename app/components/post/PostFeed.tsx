@@ -7,9 +7,9 @@ import { createPortal } from 'react-dom'
 import { tokens } from '@/lib/design-tokens'
 import { ThumbsUpIcon, ThumbsDownIcon, CommentIcon } from '../icons'
 import { useLanguage } from '../Providers/LanguageProvider'
-import { supabase } from '@/lib/supabase/client'
+// Note: supabase import removed - using REST API instead
 import { formatTimeAgo } from '@/lib/utils/date'
-import { type PollChoice, type PostWithUserState, getPollWinner } from '@/lib/types'
+import { type PollChoice, type PostWithUserState } from '@/lib/types'
 import { useToast } from '../ui/Toast'
 import { useDialog } from '../ui/Dialog'
 import { getCsrfHeaders } from '@/lib/api/client'
@@ -26,21 +26,39 @@ type Post = PostWithUserState
 
 
 
-function pollLabel(choice: PollChoice | 'tie', t: (key: keyof typeof import('@/lib/i18n').translations.zh) => string) {
-  if (choice === 'bull') return t('bullish')
-  if (choice === 'bear') return t('bearish')
-  return t('wait')
+// Sort buttons component to avoid duplication
+function SortButtons({ sortType, setSortType, language }: {
+  sortType: SortType
+  setSortType: (type: SortType) => void
+  language: string
+}): React.ReactNode {
+  const getSortButtonStyle = (isActive: boolean) => ({
+    padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
+    borderRadius: tokens.radius.md,
+    border: `1px solid ${isActive ? ARENA_PURPLE : tokens.colors.border.primary}`,
+    background: isActive ? 'rgba(139, 111, 168, 0.15)' : tokens.colors.bg.primary,
+    color: isActive ? tokens.colors.text.primary : tokens.colors.text.secondary,
+    fontSize: tokens.typography.fontSize.xs,
+    fontWeight: isActive ? 700 : 400,
+    cursor: 'pointer',
+  })
+
+  return (
+    <div style={{ display: 'flex', gap: tokens.spacing[2], marginBottom: tokens.spacing[3] }}>
+      <button onClick={() => setSortType('time')} style={getSortButtonStyle(sortType === 'time')}>
+        {language === 'zh' ? '最新' : 'Latest'}
+      </button>
+      <button onClick={() => setSortType('likes')} style={getSortButtonStyle(sortType === 'likes')}>
+        {language === 'zh' ? '最热' : 'Hot'}
+      </button>
+    </div>
+  )
 }
 
-function pollColor(choice: PollChoice | 'tie') {
-  if (choice === 'bull') return '#7CFFB2'
-  if (choice === 'bear') return '#FF7C7C'
-  return '#A9A9A9'
-}
-
-function AvatarLink({ handle, avatarUrl }: { handle?: string | null; avatarUrl?: string | null }) {
+function AvatarLink({ handle, avatarUrl, isPro, showProBadge = true }: { handle?: string | null; avatarUrl?: string | null; isPro?: boolean; showProBadge?: boolean }) {
   if (!handle) return null
   const href = `/u/${encodeURIComponent(handle)}`
+  const shouldShowBadge = isPro && showProBadge
   return (
     <Link
       href={href}
@@ -48,7 +66,7 @@ function AvatarLink({ handle, avatarUrl }: { handle?: string | null; avatarUrl?:
       style={{
         display: 'inline-flex',
         alignItems: 'center',
-        gap: 8,
+        gap: 6,
         textDecoration: 'none',
         color: tokens.colors.text.primary,
       }}
@@ -84,18 +102,50 @@ function AvatarLink({ handle, avatarUrl }: { handle?: string | null; avatarUrl?:
         )}
       </span>
       <span style={{ fontWeight: 850, fontSize: 12, color: tokens.colors.text.secondary }}>{handle}</span>
+      {shouldShowBadge && (
+        <span
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: 16,
+            height: 16,
+            borderRadius: '50%',
+            background: 'var(--color-pro-badge-bg)',
+            boxShadow: '0 0 4px var(--color-pro-badge-shadow)',
+          }}
+        >
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="#fff">
+            <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
+          </svg>
+        </span>
+      )}
     </Link>
   )
 }
 
 type SortType = 'time' | 'likes'
 
-export default function PostFeed(props: { variant?: 'compact' | 'full'; layout?: 'list' | 'masonry'; groupId?: string; groupIds?: string[]; authorHandle?: string; initialPostId?: string | null; showSortButtons?: boolean; sortBy?: string; limit?: number } = {}) {
+interface PostFeedProps {
+  variant?: 'compact' | 'full'
+  layout?: 'list' | 'masonry'
+  groupId?: string
+  groupIds?: string[]
+  authorHandle?: string
+  initialPostId?: string | null
+  showSortButtons?: boolean
+  sortBy?: string
+  limit?: number
+  showRefreshButton?: boolean
+}
+
+export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
   const { t, language } = useLanguage()
   const { showToast } = useToast()
   const { showDangerConfirm } = useDialog()
   const [posts, setPosts] = useState<Post[]>([])
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [sortType, setSortType] = useState<SortType>('time')
   const [openPost, setOpenPost] = useState<Post | null>(null)
@@ -158,15 +208,16 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; layout?:
   const [votingCustomPoll, setVotingCustomPoll] = useState(false)
   const [selectedPollOptions, setSelectedPollOptions] = useState<number[]>([])
   // 收藏和转发状态
-  const [_bookmarkLoading, setBookmarkLoading] = useState<Record<string, boolean>>({})
+  // Note: bookmarkLoading state tracks loading but value is not currently displayed in UI
+  const [, setBookmarkLoading] = useState<Record<string, boolean>>({})
   const [repostLoading, setRepostLoading] = useState<Record<string, boolean>>({})
   const [showRepostModal, setShowRepostModal] = useState<string | null>(null)
   const [repostComment, setRepostComment] = useState('')
   // 用户收藏和转发状态
   const [userBookmarks, setUserBookmarks] = useState<Record<string, boolean>>({})
-  const [_userReposts, _setUserReposts] = useState<Record<string, boolean>>({})
   const [bookmarkCounts, setBookmarkCounts] = useState<Record<string, number>>({})
-  const [_repostCounts, setRepostCounts] = useState<Record<string, number>>({})
+  // Note: repostCounts tracks counts but value is not currently displayed in UI
+  const [, setRepostCounts] = useState<Record<string, number>>({})
   // 收藏夹选择弹窗状态
   const [showBookmarkModal, setShowBookmarkModal] = useState(false)
   const [bookmarkingPostId, setBookmarkingPostId] = useState<string | null>(null)
@@ -291,6 +342,14 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; layout?:
       }
     }
   }, [])
+
+  // 手动刷新帖子
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true)
+    await loadPosts()
+    setRefreshing(false)
+    showToast(language === 'zh' ? '已刷新' : 'Refreshed', 'success')
+  }, [loadPosts, showToast, language])
 
   // 加载用户收藏状态 - 必须在使用它的 useEffect 之前定义
   // 注意：转发状态不再需要检查，因为新设计允许多次转发
@@ -480,7 +539,8 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; layout?:
     }
   }, [accessToken, openPost?.id, showToast])
 
-  // 投票
+  // Built-in poll voting (bull/bear/wait) - preserved for future use
+   
   const _toggleVote = useCallback(async (postId: string, choice: PollChoice) => {
     if (!accessToken) {
       showToast('请先登录', 'warning')
@@ -971,62 +1031,99 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; layout?:
     }
   }, [translationCache, showToast, extractImagesFromContent, removeImagesFromContent])
 
-  // 批量翻译帖子标题（使用批量API，减少请求次数）
+  // 批量翻译帖子标题和内容预览（使用批量API，减少请求次数）
   const translateListPosts = useCallback(async (postsToTranslate: Post[], targetLang: 'zh' | 'en') => {
     if (translatingList) return
-    
-    // 过滤出需要翻译的帖子
+
+    // 过滤出需要翻译的帖子（标题或内容需要翻译）
     const needsTranslation = postsToTranslate.filter(p => {
-      const alreadyTranslated = translatedListPosts[p.id]?.title
+      const alreadyTranslated = translatedListPosts[p.id]?.title && translatedListPosts[p.id]?.body
       if (alreadyTranslated) return false
-      if (!p.title) return false
-      
-      const titleIsChinese = isChineseText(p.title)
-      // 中文标题 + 目标英文 = 需要翻译 | 英文标题 + 目标中文 = 需要翻译
-      return targetLang === 'en' ? titleIsChinese : !titleIsChinese
+
+      const titleIsChinese = p.title ? isChineseText(p.title) : false
+      const contentIsChinese = p.content ? isChineseText(p.content) : false
+
+      // 检查标题或内容是否需要翻译
+      const needsTitleTranslation = p.title && (targetLang === 'en' ? titleIsChinese : !titleIsChinese)
+      const needsContentTranslation = p.content && (targetLang === 'en' ? contentIsChinese : !contentIsChinese)
+
+      return needsTitleTranslation || needsContentTranslation
     })
-    
+
     if (needsTranslation.length === 0) return
-    
+
     setTranslatingList(true)
-    
+
     try {
-      // 使用批量翻译API（最多20个）
-      const items = needsTranslation.slice(0, 20).map(post => ({
-        id: post.id,
-        text: post.title || '',
-        contentType: 'post_title' as const,
-        contentId: post.id,
-      }))
+      // 使用批量翻译API（最多10个帖子，每个帖子有标题+内容）
+      const items: Array<{ id: string; text: string; contentType: 'post_title' | 'post_content'; contentId: string }> = []
+
+      for (const post of needsTranslation.slice(0, 10)) {
+        // 添加标题翻译项
+        if (post.title && !translatedListPosts[post.id]?.title) {
+          items.push({
+            id: `${post.id}_title`,
+            text: post.title,
+            contentType: 'post_title' as const,
+            contentId: post.id,
+          })
+        }
+        // 添加内容预览翻译项（只翻译前200字符以节省API调用）
+        if (post.content && !translatedListPosts[post.id]?.body) {
+          const contentPreview = removeImagesFromContent(post.content).slice(0, 200)
+          if (contentPreview) {
+            items.push({
+              id: `${post.id}_body`,
+              text: contentPreview,
+              contentType: 'post_content' as const,
+              contentId: post.id,
+            })
+          }
+        }
+      }
+
+      if (items.length === 0) {
+        setTranslatingList(false)
+        return
+      }
 
       const response = await fetch('/api/translate', {
         method: 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
           ...getCsrfHeaders()
         },
         body: JSON.stringify({ items, targetLang }),
       })
       const data = await response.json()
-      
+
       if (response.ok && data.success && data.data?.results) {
         const results = data.data.results as Record<string, { translatedText: string; cached: boolean }>
-        
+
         setTranslatedListPosts(prev => {
           const updated = { ...prev }
           for (const [id, result] of Object.entries(results)) {
-            updated[id] = { title: result.translatedText }
+            // 解析ID：postId_title 或 postId_body
+            const [postId, type] = id.split('_')
+            if (!updated[postId]) {
+              updated[postId] = {}
+            }
+            if (type === 'title') {
+              updated[postId].title = result.translatedText
+            } else if (type === 'body') {
+              updated[postId].body = result.translatedText
+            }
           }
           return updated
         })
-        
+
       }
     } catch {
       // 批量翻译失败，静默处理
     } finally {
       setTranslatingList(false)
     }
-  }, [translatingList, translatedListPosts, isChineseText])
+  }, [translatingList, translatedListPosts, isChineseText, removeImagesFromContent])
 
   // 当语言变化时翻译列表帖子
   useEffect(() => {
@@ -1215,41 +1312,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; layout?:
   if (posts.length === 0) {
     return (
       <div>
-        {/* 排序按钮 */}
-        {props.showSortButtons && (
-          <div style={{ display: 'flex', gap: tokens.spacing[2], marginBottom: tokens.spacing[3] }}>
-            <button
-              onClick={() => setSortType('time')}
-              style={{
-                padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
-                borderRadius: tokens.radius.md,
-                border: `1px solid ${sortType === 'time' ? ARENA_PURPLE : tokens.colors.border.primary}`,
-                background: sortType === 'time' ? 'rgba(139, 111, 168, 0.15)' : tokens.colors.bg.primary,
-                color: sortType === 'time' ? tokens.colors.text.primary : tokens.colors.text.secondary,
-                fontSize: tokens.typography.fontSize.xs,
-                fontWeight: sortType === 'time' ? 700 : 400,
-                cursor: 'pointer',
-              }}
-            >
-              {language === 'zh' ? '最新' : 'Latest'}
-            </button>
-            <button
-              onClick={() => setSortType('likes')}
-              style={{
-                padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
-                borderRadius: tokens.radius.md,
-                border: `1px solid ${sortType === 'likes' ? ARENA_PURPLE : tokens.colors.border.primary}`,
-                background: sortType === 'likes' ? 'rgba(139, 111, 168, 0.15)' : tokens.colors.bg.primary,
-                color: sortType === 'likes' ? tokens.colors.text.primary : tokens.colors.text.secondary,
-                fontSize: tokens.typography.fontSize.xs,
-                fontWeight: sortType === 'likes' ? 700 : 400,
-                cursor: 'pointer',
-              }}
-            >
-              {language === 'zh' ? '最热' : 'Hot'}
-            </button>
-          </div>
-        )}
+        {props.showSortButtons && <SortButtons sortType={sortType} setSortType={setSortType} language={language} />}
         <div style={{
           padding: tokens.spacing[6],
           textAlign: 'center',
@@ -1259,9 +1322,6 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; layout?:
           alignItems: 'center',
           gap: tokens.spacing[2],
         }}>
-          <span style={{ fontSize: tokens.typography.fontSize.lg }}>
-            {language === 'zh' ? '📝' : '📝'}
-          </span>
           <span>{language === 'zh' ? '暂无帖子' : 'No posts yet'}</span>
           <span style={{ fontSize: tokens.typography.fontSize.xs }}>
             {language === 'zh' ? '成为第一个发帖的人吧！' : 'Be the first to post!'}
@@ -1273,41 +1333,52 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; layout?:
 
   return (
     <SectionErrorBoundary>
-      {/* 排序按钮 */}
-      {props.showSortButtons && (
-        <div style={{ display: 'flex', gap: tokens.spacing[2], marginBottom: tokens.spacing[3] }}>
+      {/* 刷新按钮 */}
+      {props.showRefreshButton && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: tokens.spacing[2] }}>
           <button
-            onClick={() => setSortType('time')}
+            onClick={handleRefresh}
+            disabled={refreshing}
             style={{
-              padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
+              display: 'flex',
+              alignItems: 'center',
+              gap: tokens.spacing[1],
+              padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
               borderRadius: tokens.radius.md,
-              border: `1px solid ${sortType === 'time' ? ARENA_PURPLE : tokens.colors.border.primary}`,
-              background: sortType === 'time' ? 'rgba(139, 111, 168, 0.15)' : tokens.colors.bg.primary,
-              color: sortType === 'time' ? tokens.colors.text.primary : tokens.colors.text.secondary,
+              border: `1px solid ${tokens.colors.border.primary}`,
+              background: tokens.colors.bg.secondary,
+              color: tokens.colors.text.secondary,
               fontSize: tokens.typography.fontSize.xs,
-              fontWeight: sortType === 'time' ? 700 : 400,
-              cursor: 'pointer',
+              cursor: refreshing ? 'not-allowed' : 'pointer',
+              opacity: refreshing ? 0.6 : 1,
+              transition: 'all 0.15s ease',
             }}
+            onMouseEnter={(e) => { if (!refreshing) e.currentTarget.style.background = tokens.colors.bg.tertiary }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = tokens.colors.bg.secondary }}
           >
-            最新
-          </button>
-          <button
-            onClick={() => setSortType('likes')}
-            style={{
-              padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
-              borderRadius: tokens.radius.md,
-              border: `1px solid ${sortType === 'likes' ? ARENA_PURPLE : tokens.colors.border.primary}`,
-              background: sortType === 'likes' ? 'rgba(139, 111, 168, 0.15)' : tokens.colors.bg.primary,
-              color: sortType === 'likes' ? tokens.colors.text.primary : tokens.colors.text.secondary,
-              fontSize: tokens.typography.fontSize.xs,
-              fontWeight: sortType === 'likes' ? 700 : 400,
-              cursor: 'pointer',
-            }}
-          >
-            最热
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              style={{
+                animation: refreshing ? 'spin 1s linear infinite' : 'none',
+              }}
+            >
+              <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+              <path d="M3 3v5h5" />
+              <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
+              <path d="M16 21h5v-5" />
+            </svg>
+            {refreshing ? (language === 'zh' ? '刷新中...' : 'Refreshing...') : (language === 'zh' ? '刷新' : 'Refresh')}
           </button>
         </div>
       )}
+      {props.showSortButtons && <SortButtons sortType={sortType} setSortType={setSortType} language={language} />}
       <div style={props.layout === 'masonry' ? { columnGap: 12 } : undefined} className={`stagger-children${props.layout === 'masonry' ? ' post-feed-masonry' : ''}`}>
         {/* 只在个人主页（有 authorHandle）时才将置顶帖子排在最上面 */}
         {(props.authorHandle ? [...posts].sort((a, b) => {
@@ -1316,11 +1387,6 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; layout?:
           if (!a.is_pinned && b.is_pinned) return 1
           return 0
         }) : posts).map((p) => {
-          const poll = { bull: p.poll_bull, bear: p.poll_bear, wait: p.poll_wait }
-          const winner = p.poll_enabled ? getPollWinner(poll) : 'tie'
-          const _label = pollLabel(winner, t)
-          const _color = pollColor(winner)
-
           const isMasonry = props.layout === 'masonry'
 
           return (
@@ -1384,7 +1450,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; layout?:
                     {p.group_name || '小组'}
                   </Link>
                 ) : null}
-                <AvatarLink handle={p.author_handle} avatarUrl={p.author_avatar_url} />
+                <AvatarLink handle={p.author_handle} avatarUrl={p.author_avatar_url} isPro={p.author_is_pro} showProBadge={p.author_show_pro_badge} />
               </div>
 
               <div style={{ marginTop: 6, fontWeight: 950, lineHeight: 1.25, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -1499,7 +1565,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; layout?:
                   onClick={(e) => e.stopPropagation()}
                 >
                   <div style={{ marginBottom: 8 }}>
-                    <AvatarLink handle={p.original_post.author_handle} avatarUrl={p.original_post.author_avatar_url} />
+                    <AvatarLink handle={p.original_post.author_handle} avatarUrl={p.original_post.author_avatar_url} isPro={p.original_post.author_is_pro} showProBadge={p.original_post.author_show_pro_badge} />
                   </div>
                   {p.original_post.title && (
                     <div style={{ 
@@ -1721,7 +1787,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; layout?:
                 : (translatedListPosts[openPost.id]?.title || openPost.title)
               }
             </div>
-            <AvatarLink handle={openPost.author_handle} avatarUrl={openPost.author_avatar_url} />
+            <AvatarLink handle={openPost.author_handle} avatarUrl={openPost.author_avatar_url} isPro={openPost.author_is_pro} showProBadge={openPost.author_show_pro_badge} />
           </div>
 
           <div style={{ marginTop: 8, fontSize: 12, color: tokens.colors.text.tertiary, display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -1774,7 +1840,7 @@ export default function PostFeed(props: { variant?: 'compact' | 'full'; layout?:
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                 <span style={{ fontSize: 11, color: tokens.colors.text.tertiary }}>转发自</span>
-                <AvatarLink handle={openPost.original_post.author_handle} avatarUrl={openPost.original_post.author_avatar_url} />
+                <AvatarLink handle={openPost.original_post.author_handle} avatarUrl={openPost.original_post.author_avatar_url} isPro={openPost.original_post.author_is_pro} showProBadge={openPost.original_post.author_show_pro_badge} />
               </div>
               {openPost.original_post.title && (
                 <div style={{ 

@@ -2,63 +2,75 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { supabase } from '@/lib/supabase/client'
 import { useCapacitorHaptics } from '@/lib/hooks/useCapacitor'
 
-// ============================================
-// SVG 图标组件
-// ============================================
+interface IconProps {
+  active: boolean
+}
 
-function HomeIcon({ active }: { active: boolean }) {
+const ICON_SIZE = 22
+const ICON_PROPS = { width: ICON_SIZE, height: ICON_SIZE, viewBox: '0 0 24 24', strokeWidth: 2, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, 'aria-hidden': true as const }
+
+function NavIcon({ active, children }: IconProps & { children: React.ReactNode }): React.ReactElement {
   return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill={active ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-      <polyline points="9 22 9 12 15 12 15 22" />
+    <svg {...ICON_PROPS} fill={active ? 'currentColor' : 'none'} stroke="currentColor">
+      {children}
     </svg>
   )
 }
 
-function TrophyIcon({ active }: { active: boolean }) {
+function HomeIcon({ active }: IconProps): React.ReactElement {
   return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill={active ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <NavIcon active={active}>
+      <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+      <polyline points="9 22 9 12 15 12 15 22" />
+    </NavIcon>
+  )
+}
+
+function TrophyIcon({ active }: IconProps): React.ReactElement {
+  return (
+    <NavIcon active={active}>
       <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" />
       <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" />
       <path d="M4 22h16" />
       <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22" />
       <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22" />
       <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z" />
-    </svg>
+    </NavIcon>
   )
 }
 
-function GroupsIcon({ active }: { active: boolean }) {
+function GroupsIcon({ active }: IconProps): React.ReactElement {
   return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill={active ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <NavIcon active={active}>
       <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
       <circle cx="9" cy="7" r="4" />
       <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
       <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-    </svg>
+    </NavIcon>
   )
 }
 
-function UserIcon({ active }: { active: boolean }) {
+function UserIcon({ active }: IconProps): React.ReactElement {
   return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill={active ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <NavIcon active={active}>
       <circle cx="12" cy="8" r="5" />
       <path d="M20 21a8 8 0 1 0-16 0" />
-    </svg>
+    </NavIcon>
   )
 }
 
-// ============================================
-// 通知徽章组件
-// ============================================
+interface NotificationBadgeProps {
+  count: number
+  ariaLabel: string
+}
 
-function NotificationBadge({ count }: { count: number }) {
+function NotificationBadge({ count, ariaLabel }: NotificationBadgeProps): React.ReactElement | null {
   if (count <= 0) return null
 
   return (
@@ -80,7 +92,7 @@ function NotificationBadge({ count }: { count: number }) {
         justifyContent: 'center',
         boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
       }}
-      aria-label={`${count} 条未读通知`}
+      aria-label={ariaLabel}
     >
       {count > 99 ? '99+' : count}
     </span>
@@ -88,125 +100,97 @@ function NotificationBadge({ count }: { count: number }) {
 }
 
 interface NavItem {
-  href: string | (() => string)
+  href: string
   labelKey: string
-  icon: (props: { active: boolean }) => React.ReactNode
+  Icon: (props: IconProps) => React.ReactElement
   badge?: number
   highlight?: boolean
 }
 
-// ============================================
-// 主组件
-// ============================================
-
-export default function MobileBottomNav() {
-  const pathname = usePathname()
-  const { t } = useLanguage()
-  const { impact } = useCapacitorHaptics()
+function useUserHandle(): string | null {
   const [userHandle, setUserHandle] = useState<string | null>(null)
-  const [isVisible, setIsVisible] = useState(true)
-  const [lastScrollY, setLastScrollY] = useState(0)
 
-  // Haptic feedback on nav item click
-  const handleNavClick = useCallback(() => {
-    impact('light')
-  }, [impact])
-
-  // 获取当前用户的 handle
   useEffect(() => {
     let alive = true
     supabase.auth.getUser().then(({ data }) => {
       if (!alive) return
       const userId = data.user?.id
-      if (userId) {
-        supabase
-          .from('user_profiles')
-          .select('handle')
-          .eq('id', userId)
-          .maybeSingle()
-          .then(({ data: profile }) => {
-            if (!alive) return
-            if (profile?.handle) {
-              setUserHandle(profile.handle)
-            } else if (data.user?.email) {
-              setUserHandle(data.user.email.split('@')[0])
-            }
-          })
-      }
+      if (!userId) return
+
+      supabase
+        .from('user_profiles')
+        .select('handle')
+        .eq('id', userId)
+        .maybeSingle()
+        .then(({ data: profile }) => {
+          if (!alive) return
+          setUserHandle(profile?.handle || data.user?.email?.split('@')[0] || null)
+        })
     })
     return () => { alive = false }
   }, [])
 
-  // 滚动隐藏/显示导航栏
-  const handleScroll = useCallback(() => {
-    const currentScrollY = window.scrollY
-    const scrollDelta = currentScrollY - lastScrollY
+  return userHandle
+}
 
-    // 向下滚动超过 50px 时隐藏
-    if (scrollDelta > 50 && currentScrollY > 100) {
-      setIsVisible(false)
-    }
-    // 向上滚动时显示
-    else if (scrollDelta < -10) {
-      setIsVisible(true)
-    }
-
-    setLastScrollY(currentScrollY)
-  }, [lastScrollY])
+function useScrollVisibility(): boolean {
+  const [isVisible, setIsVisible] = useState(true)
+  const [lastScrollY, setLastScrollY] = useState(0)
 
   useEffect(() => {
+    function handleScroll(): void {
+      const currentScrollY = window.scrollY
+      const scrollDelta = currentScrollY - lastScrollY
+
+      if (scrollDelta > 50 && currentScrollY > 100) {
+        setIsVisible(false)
+      } else if (scrollDelta < -10) {
+        setIsVisible(true)
+      }
+
+      setLastScrollY(currentScrollY)
+    }
+
     window.addEventListener('scroll', handleScroll, { passive: true })
     return () => window.removeEventListener('scroll', handleScroll)
-  }, [handleScroll])
+  }, [lastScrollY])
 
-  // 4-tab navigation: Home, Rankings, Groups, Profile
-  const navItems: NavItem[] = [
-    {
-      href: '/',
-      labelKey: 'home',
-      icon: HomeIcon,
-    },
-    {
-      href: '/rankings',
-      labelKey: 'rankings',
-      icon: TrophyIcon,
-    },
-    {
-      href: '/groups',
-      labelKey: 'groups',
-      icon: GroupsIcon,
-    },
-    {
-      href: userHandle ? `/u/${encodeURIComponent(userHandle)}` : '/settings',
-      labelKey: 'me',
-      icon: UserIcon,
-    },
-  ]
+  return isVisible
+}
 
-  const isActive = (href: string) => {
-    if (href === '/') {
-      return pathname === '/'
-    }
-    // 个人主页特殊处理
-    if (href.startsWith('/u/') || href === '/settings') {
-      return pathname.startsWith('/u/') || pathname === '/settings'
-    }
-    return pathname.startsWith(href)
+function isActivePath(href: string, pathname: string): boolean {
+  if (href === '/') return pathname === '/'
+  if (href.startsWith('/u/') || href === '/settings') {
+    return pathname.startsWith('/u/') || pathname === '/settings'
   }
+  return pathname.startsWith(href)
+}
+
+export default function MobileBottomNav(): React.ReactElement {
+  const pathname = usePathname()
+  const { t } = useLanguage()
+  const { impact } = useCapacitorHaptics()
+  const userHandle = useUserHandle()
+  const isVisible = useScrollVisibility()
+
+  const handleNavClick = useCallback(() => {
+    impact('light')
+  }, [impact])
+
+  const navItems: NavItem[] = useMemo(() => [
+    { href: '/', labelKey: 'home', Icon: HomeIcon },
+    { href: '/rankings', labelKey: 'rankings', Icon: TrophyIcon },
+    { href: '/groups', labelKey: 'groups', Icon: GroupsIcon },
+    { href: userHandle ? `/u/${encodeURIComponent(userHandle)}` : '/settings', labelKey: 'me', Icon: UserIcon },
+  ], [userHandle])
 
   return (
     <>
-      {/* 占位元素，防止内容被底部导航遮挡 - 只在移动端显示 */}
-      <div
-        className="mobile-bottom-nav-spacer has-mobile-nav"
-        style={{ height: 0 }}
-        aria-hidden="true"
-      />
+      <div className="mobile-bottom-nav-spacer has-mobile-nav" style={{ height: 0 }} aria-hidden="true" />
 
-      {/* 底部导航栏 - 只在移动端显示 */}
       <nav
         role="navigation"
-        aria-label="主导航"
+        aria-label={t('mainNavigation')}
         className="mobile-bottom-nav safe-area-inset-bottom"
         style={{
           position: 'fixed',
@@ -227,101 +211,121 @@ export default function MobileBottomNav() {
           transition: 'transform 0.3s ease',
         }}
       >
-        {navItems.map((item) => {
-          const href = typeof item.href === 'function' ? item.href() : item.href
-          const active = isActive(href)
-          const hasBadge = item.badge && item.badge > 0
-
-          return (
-            <Link
-              key={href}
-              href={href}
-              className="touch-target"
-              aria-label={t(item.labelKey)}
-              aria-current={active ? 'page' : undefined}
-              onClick={handleNavClick}
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 4,
-                padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
-                textDecoration: 'none',
-                color: active ? tokens.colors.accent.primary : tokens.colors.text.tertiary,
-                transition: `all ${tokens.transition.fast}`,
-                borderRadius: tokens.radius.md,
-                position: 'relative',
-                minWidth: 56,
-                minHeight: 48,
-              }}
-            >
-              {/* 活动指示器 */}
-              {active && (
-                <span
-                  style={{
-                    position: 'absolute',
-                    top: 0,
-                    left: '50%',
-                    transform: 'translateX(-50%)',
-                    width: 24,
-                    height: 3,
-                    borderRadius: '0 0 3px 3px',
-                    background: tokens.colors.accent.primary,
-                  }}
-                  aria-hidden="true"
-                />
-              )}
-
-              {/* 图标容器 */}
-              <span
-                style={{
-                  position: 'relative',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  transition: `all ${tokens.transition.fast}`,
-                  opacity: active ? 1 : 0.7,
-                  transform: active ? 'scale(1.1)' : 'scale(1)',
-                }}
-              >
-                <item.icon active={active} />
-
-                {/* 通知徽章 */}
-                {hasBadge && <NotificationBadge count={item.badge!} />}
-
-                {/* 热门高亮点 */}
-                {item.highlight && !active && (
-                  <span
-                    style={{
-                      position: 'absolute',
-                      top: -2,
-                      right: -2,
-                      width: 6,
-                      height: 6,
-                      borderRadius: 3,
-                      background: tokens.colors.accent?.error || '#ff4d4d',
-                    }}
-                    aria-hidden="true"
-                  />
-                )}
-              </span>
-
-              {/* 标签 */}
-              <span
-                style={{
-                  fontSize: 11,
-                  fontWeight: active ? 700 : 500,
-                  letterSpacing: '0.3px',
-                  transition: `all ${tokens.transition.fast}`,
-                }}
-              >
-                {t(item.labelKey)}
-              </span>
-            </Link>
-          )
-        })}
+        {navItems.map((item) => (
+          <NavItemLink
+            key={item.href}
+            item={item}
+            active={isActivePath(item.href, pathname)}
+            onClick={handleNavClick}
+            t={t}
+          />
+        ))}
       </nav>
     </>
+  )
+}
+
+interface NavItemLinkProps {
+  item: NavItem
+  active: boolean
+  onClick: () => void
+  t: (key: string) => string
+}
+
+function NavItemLink({ item, active, onClick, t }: NavItemLinkProps): React.ReactElement {
+  const hasBadge = item.badge && item.badge > 0
+
+  return (
+    <Link
+      href={item.href}
+      className="touch-target"
+      aria-label={t(item.labelKey)}
+      aria-current={active ? 'page' : undefined}
+      onClick={onClick}
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 4,
+        padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
+        textDecoration: 'none',
+        color: active ? tokens.colors.accent.primary : tokens.colors.text.tertiary,
+        transition: `all ${tokens.transition.fast}`,
+        borderRadius: tokens.radius.md,
+        position: 'relative',
+        minWidth: 56,
+        minHeight: 48,
+      }}
+    >
+      {active && <ActiveIndicator />}
+
+      <span
+        style={{
+          position: 'relative',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          transition: `all ${tokens.transition.fast}`,
+          opacity: active ? 1 : 0.7,
+          transform: active ? 'scale(1.1)' : 'scale(1)',
+        }}
+      >
+        <item.Icon active={active} />
+        {hasBadge && (
+          <NotificationBadge
+            count={item.badge!}
+            ariaLabel={t('unreadNotificationsCount').replace('{count}', String(item.badge))}
+          />
+        )}
+        {item.highlight && !active && <HighlightDot />}
+      </span>
+
+      <span
+        style={{
+          fontSize: 11,
+          fontWeight: active ? 700 : 500,
+          letterSpacing: '0.3px',
+          transition: `all ${tokens.transition.fast}`,
+        }}
+      >
+        {t(item.labelKey)}
+      </span>
+    </Link>
+  )
+}
+
+function ActiveIndicator(): React.ReactElement {
+  return (
+    <span
+      style={{
+        position: 'absolute',
+        top: 0,
+        left: '50%',
+        transform: 'translateX(-50%)',
+        width: 24,
+        height: 3,
+        borderRadius: '0 0 3px 3px',
+        background: tokens.colors.accent.primary,
+      }}
+      aria-hidden="true"
+    />
+  )
+}
+
+function HighlightDot(): React.ReactElement {
+  return (
+    <span
+      style={{
+        position: 'absolute',
+        top: -2,
+        right: -2,
+        width: 6,
+        height: 6,
+        borderRadius: 3,
+        background: tokens.colors.accent?.error || '#ff4d4d',
+      }}
+      aria-hidden="true"
+    />
   )
 }

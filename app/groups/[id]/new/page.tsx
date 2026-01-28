@@ -31,8 +31,11 @@ interface PollOption {
 const TITLE_MAX_LENGTH = 100
 const CONTENT_MAX_LENGTH = 10000
 const DRAFT_KEY_PREFIX = 'group_post_draft_'
+const MAX_IMAGES = 9
+const MAX_VIDEO_SIZE_MB = 100
+const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp']
+const ALLOWED_VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime', 'video/x-msvideo', 'video/x-matroska']
 
-// 投票持续时间选项
 const POLL_DURATION_OPTIONS = [
   { label: '1小时', value: 1 },
   { label: '6小时', value: 6 },
@@ -42,43 +45,136 @@ const POLL_DURATION_OPTIONS = [
   { label: '7天', value: 168 },
 ]
 
-export default function NewGroupPostPage() {
+// Shared input style
+const inputStyle: React.CSSProperties = {
+  width: '100%',
+  borderRadius: tokens.radius.md,
+  border: `1px solid ${tokens.colors.border.primary}`,
+  background: tokens.colors.bg.secondary,
+  color: tokens.colors.text.primary,
+  fontSize: tokens.typography.fontSize.base,
+  outline: 'none',
+  fontFamily: tokens.typography.fontFamily.sans.join(', '),
+}
+
+// Character count component
+interface CharCountProps {
+  current: number
+  max: number
+}
+
+function CharCount({ current, max }: CharCountProps): React.ReactElement {
+  const isOver = current > max
+  return (
+    <Text size="xs" style={{ color: isOver ? tokens.colors.accent.error : tokens.colors.text.tertiary }}>
+      {current}/{max}
+    </Text>
+  )
+}
+
+// Toggle switch component
+interface ToggleSwitchProps {
+  enabled: boolean
+  onToggle: () => void
+  label: string
+  description?: string
+}
+
+function ToggleSwitch({ enabled, onToggle, label, description }: ToggleSwitchProps): React.ReactElement {
+  return (
+    <Box
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: tokens.spacing[3],
+        padding: tokens.spacing[4],
+        borderRadius: tokens.radius.md,
+        border: `1px solid ${enabled ? '#8b6fa8' : tokens.colors.border.primary}`,
+        background: enabled ? 'rgba(139, 111, 168, 0.1)' : tokens.colors.bg.secondary,
+        cursor: 'pointer',
+        transition: 'all 0.2s ease',
+      }}
+      onClick={onToggle}
+    >
+      <Box
+        style={{
+          width: 44,
+          height: 24,
+          borderRadius: 12,
+          background: enabled ? '#8b6fa8' : tokens.colors.border.primary,
+          position: 'relative',
+          transition: 'background 0.2s ease',
+        }}
+      >
+        <Box
+          style={{
+            width: 20,
+            height: 20,
+            borderRadius: '50%',
+            background: '#fff',
+            position: 'absolute',
+            top: 2,
+            left: enabled ? 22 : 2,
+            transition: 'left 0.2s ease',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+          }}
+        />
+      </Box>
+      <Box>
+        <Text size="sm" weight="bold" style={{ color: enabled ? '#8b6fa8' : tokens.colors.text.primary }}>
+          {label}
+        </Text>
+        {description && <Text size="xs" color="tertiary">{description}</Text>}
+      </Box>
+    </Box>
+  )
+}
+
+export default function NewGroupPostPage(): React.ReactElement {
   const params = useParams<{ id: string }>()
   const groupId = params.id as string
   const router = useRouter()
   const { showToast } = useToast()
   const { t, language } = useLanguage()
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const submitRef = useRef(false) // 防止双重提交
+  const videoInputRef = useRef<HTMLInputElement>(null)
+  const submitRef = useRef(false)
 
+  // User state
   const [email, setEmail] = useState<string | null>(null)
   const [userId, setUserId] = useState<string | null>(null)
   const [userHandle, setUserHandle] = useState<string | null>(null)
+
+  // Form state
   const [groupName, setGroupName] = useState<string>('')
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
   const [loading, setLoading] = useState(false)
-  const [images, setImages] = useState<UploadedImage[]>([])
-  const [uploading, setUploading] = useState(false)
   const [showPreview, setShowPreview] = useState(false)
   const [draftSaved, setDraftSaved] = useState(false)
-  // 投票相关状态
+
+  // Media state
+  const [images, setImages] = useState<UploadedImage[]>([])
+  const [uploading, setUploading] = useState(false)
+  const [videos, setVideos] = useState<UploadedVideo[]>([])
+  const [videoUploading, setVideoUploading] = useState(false)
+  const [videoUploadProgress, setVideoUploadProgress] = useState(0)
+
+  // Poll state
   const [pollEnabled, setPollEnabled] = useState(false)
   const [pollOptions, setPollOptions] = useState<PollOption[]>([
     { text: '', votes: 0 },
     { text: '', votes: 0 },
   ])
-  const [pollDuration, setPollDuration] = useState(24) // 默认1天
+  const [pollDuration, setPollDuration] = useState(24)
   const [pollType, setPollType] = useState<'single' | 'multiple'>('single')
-  // 视频相关状态
-  const videoInputRef = useRef<HTMLInputElement>(null)
-  const [videos, setVideos] = useState<UploadedVideo[]>([])
-  const [videoUploading, setVideoUploading] = useState(false)
-  const [videoUploadProgress, setVideoUploadProgress] = useState(0)
 
   const draftKey = `${DRAFT_KEY_PREFIX}${groupId}`
 
   useEffect(() => {
+    // 等待 groupId 解析完成
+    if (!groupId) return
+
     supabase.auth.getUser().then(async ({ data }) => {
       setEmail(data.user?.email ?? null)
       setUserId(data.user?.id ?? null)
@@ -91,12 +187,18 @@ export default function NewGroupPostPage() {
       loadUserHandle(data.user.id)
 
       // Check membership and mute status
-      const { data: membership } = await supabase
+      const { data: membership, error: membershipError } = await supabase
         .from('group_members')
         .select('role, muted_until')
         .eq('group_id', groupId)
         .eq('user_id', data.user.id)
         .maybeSingle()
+
+      if (membershipError) {
+        console.error('Membership check error:', membershipError)
+        showToast(language === 'zh' ? '检查会员状态失败' : 'Failed to check membership', 'error')
+        return
+      }
 
       if (!membership) {
         showToast(language === 'zh' ? '需要加入小组才能发帖' : 'You must be a member to post', 'warning')
@@ -196,8 +298,8 @@ export default function NewGroupPostPage() {
     }
   }, [draftKey])
 
-  // 处理图片上传
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Image upload handler
+  const handleImageUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files
     if (!files || files.length === 0) return
 
@@ -206,7 +308,7 @@ export default function NewGroupPostPage() {
       return
     }
 
-    if (images.length + files.length > 9) {
+    if (images.length + files.length > MAX_IMAGES) {
       showToast(t('maxImages'), 'warning')
       return
     }
@@ -215,8 +317,7 @@ export default function NewGroupPostPage() {
     const newImages: UploadedImage[] = []
 
     for (const file of Array.from(files)) {
-      const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp']
-      if (!allowedTypes.includes(file.type)) {
+      if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
         showToast(`${file.name} ${t('formatNotSupported')}`, 'error')
         continue
       }
@@ -233,30 +334,18 @@ export default function NewGroupPostPage() {
 
         const response = await fetch('/api/posts/upload-image', {
           method: 'POST',
-          headers: {
-            ...getCsrfHeaders()
-          },
+          headers: getCsrfHeaders(),
           body: formData,
         })
 
         if (!response.ok) {
-          let errorMsg = '上传失败'
-          try {
-            const data = await response.json()
-            errorMsg = data.error || errorMsg
-          } catch {
-            // JSON 解析失败，使用默认错误消息
-            errorMsg = `上传失败 (${response.status})`
-          }
-          showToast(`${file.name}: ${errorMsg}`, 'error')
+          const data = await response.json().catch(() => ({}))
+          showToast(`${file.name}: ${data.error || `上传失败 (${response.status})`}`, 'error')
           continue
         }
 
         const data = await response.json()
-        newImages.push({
-          url: data.url,
-          fileName: data.fileName,
-        })
+        newImages.push({ url: data.url, fileName: data.fileName })
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : '网络错误，请稍后重试'
         showToast(`${file.name}: ${errorMsg}`, 'error')
@@ -269,25 +358,20 @@ export default function NewGroupPostPage() {
     }
 
     setUploading(false)
-    if (fileInputRef.current) {
-      fileInputRef.current.value = ''
-    }
-  }
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }, [userId, images.length, showToast, t])
 
-  // 移除图片
-  const removeImage = (index: number) => {
+  const removeImage = useCallback((index: number) => {
     setImages(prev => prev.filter((_, i) => i !== index))
-  }
+  }, [])
 
-  // 插入图片到内容
-  const insertImageToContent = (url: string) => {
-    const imageMarkdown = `\n![image](${url})\n`
-    setContent(prev => prev + imageMarkdown)
+  const insertImageToContent = useCallback((url: string) => {
+    setContent(prev => prev + `\n![image](${url})\n`)
     showToast(t('imageInserted'), 'info')
-  }
+  }, [showToast, t])
 
-  // 处理视频上传
-  const handleVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Video upload handler
+  const handleVideoUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files
     if (!files || files.length === 0) return
 
@@ -296,7 +380,6 @@ export default function NewGroupPostPage() {
       return
     }
 
-    // 最多上传1个视频
     if (videos.length >= 1) {
       showToast('每篇帖子最多上传1个视频', 'warning')
       return
@@ -304,17 +387,13 @@ export default function NewGroupPostPage() {
 
     const file = files[0]
 
-    // 验证文件类型
-    const allowedTypes = ['video/mp4', 'video/webm', 'video/quicktime', 'video/x-msvideo', 'video/x-matroska']
-    if (!allowedTypes.includes(file.type)) {
+    if (!ALLOWED_VIDEO_TYPES.includes(file.type)) {
       showToast('不支持的视频格式。支持: MP4, WebM, MOV, AVI, MKV', 'error')
       return
     }
 
-    // 验证文件大小 (100MB)
-    const maxSize = 100 * 1024 * 1024
-    if (file.size > maxSize) {
-      showToast('视频文件过大，最大允许100MB', 'error')
+    if (file.size > MAX_VIDEO_SIZE_MB * 1024 * 1024) {
+      showToast(`视频文件过大，最大允许${MAX_VIDEO_SIZE_MB}MB`, 'error')
       return
     }
 
@@ -326,62 +405,39 @@ export default function NewGroupPostPage() {
       formData.append('file', file)
       formData.append('userId', userId)
 
-      // 使用 XMLHttpRequest 以支持进度监控
-      const xhr = new XMLHttpRequest()
+      const data = await new Promise<{ url: string; fileName: string; fileSize: number }>((resolve, reject) => {
+        const xhr = new XMLHttpRequest()
 
-      const uploadPromise = new Promise<{ url: string; fileName: string; fileSize: number }>((resolve, reject) => {
         xhr.upload.addEventListener('progress', (event) => {
           if (event.lengthComputable) {
-            const progress = Math.round((event.loaded / event.total) * 100)
-            setVideoUploadProgress(progress)
+            setVideoUploadProgress(Math.round((event.loaded / event.total) * 100))
           }
         })
 
         xhr.addEventListener('load', () => {
           if (xhr.status >= 200 && xhr.status < 300) {
             try {
-              const data = JSON.parse(xhr.responseText)
-              resolve(data)
+              resolve(JSON.parse(xhr.responseText))
             } catch {
               reject(new Error('解析响应失败'))
             }
           } else {
-            try {
-              const error = JSON.parse(xhr.responseText)
-              reject(new Error(error.error || '上传失败'))
-            } catch {
-              reject(new Error(`上传失败 (${xhr.status})`))
-            }
+            const error = JSON.parse(xhr.responseText).error || `上传失败 (${xhr.status})`
+            reject(new Error(error))
           }
         })
 
-        xhr.addEventListener('error', () => {
-          reject(new Error('网络错误，请稍后重试'))
-        })
+        xhr.addEventListener('error', () => reject(new Error('网络错误，请稍后重试')))
 
         xhr.open('POST', '/api/posts/upload-video')
-
-        // 添加 CSRF headers
-        const csrfHeaders = getCsrfHeaders()
-        Object.entries(csrfHeaders).forEach(([key, value]) => {
+        Object.entries(getCsrfHeaders()).forEach(([key, value]) => {
           if (value) xhr.setRequestHeader(key, value)
         })
-
         xhr.send(formData)
       })
 
-      const data = await uploadPromise
-
-      setVideos([{
-        url: data.url,
-        fileName: data.fileName,
-        fileSize: data.fileSize,
-      }])
-
-      // 自动插入视频链接到内容
-      const videoMarkdown = `\n[视频](${data.url})\n`
-      setContent(prev => prev + videoMarkdown)
-
+      setVideos([{ url: data.url, fileName: data.fileName, fileSize: data.fileSize }])
+      setContent(prev => prev + `\n[视频](${data.url})\n`)
       showToast('视频上传成功', 'success')
     } catch (error) {
       console.error('Video upload error:', error)
@@ -389,19 +445,15 @@ export default function NewGroupPostPage() {
     } finally {
       setVideoUploading(false)
       setVideoUploadProgress(0)
-      if (videoInputRef.current) {
-        videoInputRef.current.value = ''
-      }
+      if (videoInputRef.current) videoInputRef.current.value = ''
     }
-  }
+  }, [userId, videos.length, showToast, t])
 
-  // 移除视频
-  const removeVideo = () => {
+  const removeVideo = useCallback(() => {
     setVideos([])
-    // 从内容中移除视频链接
     setContent(prev => prev.replace(/\n?\[视频\]\([^)]+\)\n?/g, ''))
     showToast('视频已移除', 'info')
-  }
+  }, [showToast])
 
   const handleSubmit = async () => {
     // 防止双重提交
@@ -468,7 +520,7 @@ export default function NewGroupPostPage() {
         pollId = pollData.id
       }
 
-      const { error } = await supabase.from('posts').insert({
+      const { data: postData, error } = await supabase.from('posts').insert({
         title,
         content: finalContent,
         author_handle: userHandle || email?.split('@')[0] || 'anonymous',
@@ -477,14 +529,20 @@ export default function NewGroupPostPage() {
         images: images.map(img => img.url),
         poll_enabled: pollEnabled,
         poll_id: pollId,
-      })
+      }).select('id').single()
 
       if (error) {
-        showToast(error.message || '创建失败，请检查权限', 'error')
+        console.error('Post creation error:', error)
+        const errorMsg = error.code === '42501'
+          ? (language === 'zh' ? '权限不足，请确认已加入小组' : 'Permission denied, please make sure you joined the group')
+          : (error.message || (language === 'zh' ? '创建失败，请稍后重试' : 'Failed to create post'))
+        showToast(errorMsg, 'error')
         setLoading(false)
         submitRef.current = false
         return
       }
+
+      console.log('Post created successfully:', postData?.id)
 
       clearDraft()
       showToast(t('publishSuccess'), 'success')
@@ -512,15 +570,8 @@ export default function NewGroupPostPage() {
         <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}>
           <Box>
             <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: tokens.spacing[2] }}>
-              <Text size="sm" weight="bold">
-                {t('titleLabel')}
-              </Text>
-              <Text 
-                size="xs" 
-                style={{ color: title.length > TITLE_MAX_LENGTH ? tokens.colors.accent.error : tokens.colors.text.tertiary }}
-              >
-                {title.length}/{TITLE_MAX_LENGTH}
-              </Text>
+              <Text size="sm" weight="bold">{t('titleLabel')}</Text>
+              <CharCount current={title.length} max={TITLE_MAX_LENGTH} />
             </Box>
             <input
               type="text"
@@ -528,17 +579,7 @@ export default function NewGroupPostPage() {
               value={title}
               onChange={(e) => setTitle(e.target.value.slice(0, TITLE_MAX_LENGTH))}
               maxLength={TITLE_MAX_LENGTH}
-              style={{
-                width: '100%',
-                padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
-                borderRadius: tokens.radius.md,
-                border: `1px solid ${title.length > TITLE_MAX_LENGTH ? tokens.colors.accent.error : tokens.colors.border.primary}`,
-                background: tokens.colors.bg.secondary,
-                color: tokens.colors.text.primary,
-                fontSize: tokens.typography.fontSize.base,
-                outline: 'none',
-                fontFamily: tokens.typography.fontFamily.sans.join(', '),
-              }}
+              style={{ ...inputStyle, padding: `${tokens.spacing[3]} ${tokens.spacing[4]}` }}
             />
           </Box>
 
@@ -593,12 +634,7 @@ export default function NewGroupPostPage() {
                   </Text>
                 )}
               </Box>
-              <Text 
-                size="xs" 
-                style={{ color: content.length > CONTENT_MAX_LENGTH ? tokens.colors.accent.error : tokens.colors.text.tertiary }}
-              >
-                {content.length}/{CONTENT_MAX_LENGTH}
-              </Text>
+              <CharCount current={content.length} max={CONTENT_MAX_LENGTH} />
             </Box>
             
             {showPreview ? (
@@ -642,19 +678,7 @@ export default function NewGroupPostPage() {
                 onChange={(e) => setContent(e.target.value.slice(0, CONTENT_MAX_LENGTH))}
                 maxLength={CONTENT_MAX_LENGTH}
                 rows={12}
-                style={{
-                  width: '100%',
-                  padding: tokens.spacing[4],
-                  borderRadius: tokens.radius.md,
-                  border: `1px solid ${content.length > CONTENT_MAX_LENGTH ? tokens.colors.accent.error : tokens.colors.border.primary}`,
-                  background: tokens.colors.bg.secondary,
-                  color: tokens.colors.text.primary,
-                  fontSize: tokens.typography.fontSize.base,
-                  outline: 'none',
-                  fontFamily: tokens.typography.fontFamily.sans.join(', '),
-                  resize: 'vertical',
-                  lineHeight: 1.6,
-                }}
+                style={{ ...inputStyle, padding: tokens.spacing[4], resize: 'vertical', lineHeight: 1.6 }}
               />
             )}
             <Text size="xs" color="tertiary" style={{ marginTop: tokens.spacing[1] }}>
@@ -662,54 +686,12 @@ export default function NewGroupPostPage() {
             </Text>
           </Box>
 
-          {/* 投票功能开关 */}
-          <Box
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: tokens.spacing[3],
-              padding: tokens.spacing[4],
-              borderRadius: tokens.radius.md,
-              border: `1px solid ${pollEnabled ? '#8b6fa8' : tokens.colors.border.primary}`,
-              background: pollEnabled ? 'rgba(139, 111, 168, 0.1)' : tokens.colors.bg.secondary,
-              cursor: 'pointer',
-              transition: 'all 0.2s ease',
-            }}
-            onClick={() => setPollEnabled(!pollEnabled)}
-          >
-            <Box
-              style={{
-                width: 44,
-                height: 24,
-                borderRadius: 12,
-                background: pollEnabled ? '#8b6fa8' : tokens.colors.border.primary,
-                position: 'relative',
-                transition: 'background 0.2s ease',
-              }}
-            >
-              <Box
-                style={{
-                  width: 20,
-                  height: 20,
-                  borderRadius: '50%',
-                  background: '#fff',
-                  position: 'absolute',
-                  top: 2,
-                  left: pollEnabled ? 22 : 2,
-                  transition: 'left 0.2s ease',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
-                }}
-              />
-            </Box>
-            <Box>
-              <Text size="sm" weight="bold" style={{ color: pollEnabled ? '#8b6fa8' : tokens.colors.text.primary }}>
-                {t('enablePoll')}
-              </Text>
-              <Text size="xs" color="tertiary">
-                {t('pollDescription')}
-              </Text>
-            </Box>
-          </Box>
+          <ToggleSwitch
+            enabled={pollEnabled}
+            onToggle={() => setPollEnabled(!pollEnabled)}
+            label={t('enablePoll')}
+            description={t('pollDescription')}
+          />
 
           {/* 投票设置 */}
           {pollEnabled && (

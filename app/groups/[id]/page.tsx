@@ -17,11 +17,11 @@ import { SectionErrorBoundary } from '@/app/components/Utils/ErrorBoundary'
 import GroupHeader from './ui/GroupHeader'
 import GroupPostList from './ui/GroupPostList'
 import { GroupInfoModal, MembersListModal } from './ui/GroupMembersSection'
-import { useGroupPosts } from './hooks/useGroupPosts'
+import { useGroupPosts, Post } from './hooks/useGroupPosts'
 import PullToRefreshWrapper from '@/app/components/ui/PullToRefreshWrapper'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 
-type Group = {
+interface Group {
   id: string
   name: string
   name_en?: string | null
@@ -32,16 +32,46 @@ type Group = {
   created_at?: string | null
   created_by?: string | null
   rules?: string | null
+  rules_en?: string | null
+  rules_json?: Array<{ zh: string; en: string }> | null
   owner_handle?: string | null
   is_premium_only?: boolean | null
 }
 
-type GroupMember = {
+interface GroupMember {
   user_id: string
   role: string
   handle?: string | null
   avatar_url?: string | null
   joined_at?: string | null
+}
+
+// Bilingual text helper
+function t(zh: string, en: string, language: string): string {
+  return language === 'zh' ? zh : en
+}
+
+// Check if text contains significant Chinese characters
+function isChineseText(text: string): boolean {
+  if (!text) return false
+  const chineseMatches = text.match(/[\u4e00-\u9fa5]/g)
+  const chineseRatio = chineseMatches ? chineseMatches.length / text.length : 0
+  return chineseRatio > 0.1
+}
+
+// Page wrapper for consistent styling
+interface PageWrapperProps {
+  email: string | null
+  children: React.ReactNode
+}
+
+function PageWrapper({ email, children }: PageWrapperProps): React.ReactElement {
+  return (
+    <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
+      <TopNav email={email} />
+      {children}
+    </Box>
+  )
 }
 
 export default function GroupDetailPage({ params }: { params: { id: string } | Promise<{ id: string }> }) {
@@ -99,17 +129,9 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
   })
 
 
-  // Chinese text detection
-  const isChineseText = useCallback((text: string) => {
-    if (!text) return false
-    const chineseRegex = /[\u4e00-\u9fa5]/g
-    const chineseMatches = text.match(chineseRegex)
-    const chineseRatio = chineseMatches ? chineseMatches.length / text.length : 0
-    return chineseRatio > 0.1
-  }, [])
 
   // Batch translate posts
-  const translatePosts = useCallback(async (postsToTranslate: Array<{id: string; title: string; content?: string | null}>, targetLang: 'zh' | 'en') => {
+  const translatePosts = useCallback(async (postsToTranslate: Post[], targetLang: 'zh' | 'en') => {
     if (translatingPosts) return
     setTranslatingPosts(true)
 
@@ -128,12 +150,8 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
     try {
       const items: Array<{id: string; text: string; contentType: 'post_title' | 'post_content'; contentId: string}> = []
       needsTranslation.slice(0, 10).forEach(post => {
-        if (post.title) {
-          items.push({ id: `${post.id}-title`, text: post.title, contentType: 'post_title', contentId: post.id })
-        }
-        if (post.content) {
-          items.push({ id: `${post.id}-content`, text: post.content, contentType: 'post_content', contentId: post.id })
-        }
+        if (post.title) items.push({ id: `${post.id}-title`, text: post.title, contentType: 'post_title', contentId: post.id })
+        if (post.content) items.push({ id: `${post.id}-content`, text: post.content, contentType: 'post_content', contentId: post.id })
       })
 
       if (items.length === 0) {
@@ -159,11 +177,9 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
         setTranslatedPosts(prev => {
           const updated = { ...prev }
           needsTranslation.forEach(post => {
-            const titleResult = results[`${post.id}-title`]
-            const contentResult = results[`${post.id}-content`]
             updated[post.id] = {
-              title: titleResult?.translatedText || post.title || '',
-              content: contentResult?.translatedText || post.content || '',
+              title: results[`${post.id}-title`]?.translatedText || post.title || '',
+              content: results[`${post.id}-content`]?.translatedText || post.content || '',
             }
           })
           return updated
@@ -174,7 +190,7 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
     } finally {
       setTranslatingPosts(false)
     }
-  }, [isChineseText, translatingPosts, translatedPosts])
+  }, [translatingPosts, translatedPosts])
 
   // Trigger translation when posts change
   useEffect(() => {
@@ -278,7 +294,7 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
       try {
         const { data: groupData, error: groupErr } = await supabase
           .from('groups')
-          .select('id, name, name_en, description, description_en, avatar_url, member_count, created_at, created_by, rules, is_premium_only')
+          .select('id, name, name_en, description, description_en, avatar_url, member_count, created_at, created_by, rules, rules_en, rules_json, is_premium_only')
           .eq('id', groupId)
           .maybeSingle()
 
@@ -316,10 +332,8 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
         // 直接加载帖子，不依赖 useEffect 的竞态条件
         // 修复冷启动时帖子不显示的问题
         if (membershipConfirmed) {
-          // 延迟一帧确保状态已更新
-          setTimeout(() => {
-            postsHook.loadPosts()
-          }, 0)
+          // 使用 forceLoad=true 绕过 isMember 检查，因为状态可能还未更新
+          postsHook.loadPosts(true)
         }
       } catch (err) {
         if (controller.signal.aborted) return
@@ -345,7 +359,7 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
   // Fallback: Load posts when membership state changes (for non-cold-start cases)
   useEffect(() => {
     if (isMember && groupId && !loading && postsHook.posts.length === 0 && !postsHook.loadingMore) {
-      postsHook.loadPosts()
+      postsHook.loadPosts(true)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isMember, groupId, loading])
@@ -372,81 +386,67 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
   }, [searchParams, userId, groupId, isMember, loading])
 
   // Join group
-  const handleJoin = async (bypassPro = false) => {
+  const handleJoin = useCallback(async (bypassPro = false) => {
     if (!userId) {
-      showToast(language === 'zh' ? '请先登录' : 'Please login first', 'warning')
+      showToast(t('请先登录', 'Please login first', language), 'warning')
       return
     }
     if (!bypassPro && group?.is_premium_only && !isPro) {
-      showToast(language === 'zh' ? '此小组仅限 Pro 会员加入' : 'This group is Pro members only', 'warning')
+      showToast(t('此小组仅限 Pro 会员加入', 'This group is Pro members only', language), 'warning')
       return
     }
 
     setJoining(true)
     try {
-      const { error } = await supabase
-        .from('group_members')
-        .insert({ group_id: groupId, user_id: userId })
+      const { error } = await supabase.from('group_members').insert({ group_id: groupId, user_id: userId })
       if (error) throw error
 
-      // Update member count
       await supabase.rpc('increment_member_count', { p_group_id: groupId, p_delta: 1 })
       setGroup(prev => prev ? { ...prev, member_count: (prev.member_count || 0) + 1 } : prev)
-
       setIsMember(true)
       setUserRole('member')
-      showToast(language === 'zh' ? '加入成功' : 'Joined successfully', 'success')
+      showToast(t('加入成功', 'Joined successfully', language), 'success')
 
       // Notify group owner
       if (group?.created_by && group.created_by !== userId) {
         await supabase.from('notifications').insert({
           user_id: group.created_by,
           type: 'system' as const,
-          title: language === 'zh' ? '新成员加入' : 'New Member Joined',
-          message: language === 'zh' ? '有新成员加入了您的小组' : 'A new member joined your group',
+          title: t('新成员加入', 'New Member Joined', language),
+          message: t('有新成员加入了您的小组', 'A new member joined your group', language),
           link: `/groups/${groupId}`,
           actor_id: userId,
           reference_id: groupId,
         })
       }
-
-      // Posts will auto-load via the isMember effect
     } catch (err) {
       console.error('Join error:', err)
-      const errorMsg = err instanceof Error ? err.message : (language === 'zh' ? '加入失败' : 'Failed to join')
-      showToast(errorMsg, 'error')
+      showToast(err instanceof Error ? err.message : t('加入失败', 'Failed to join', language), 'error')
     } finally {
       setJoining(false)
     }
-  }
+  }, [userId, group, isPro, groupId, language, showToast])
 
   // Leave group
-  const handleLeave = async () => {
+  const handleLeave = useCallback(async () => {
     if (!userId) return
     setJoining(true)
     try {
-      const { error } = await supabase
-        .from('group_members')
-        .delete()
-        .eq('group_id', groupId)
-        .eq('user_id', userId)
+      const { error } = await supabase.from('group_members').delete().eq('group_id', groupId).eq('user_id', userId)
       if (error) throw error
 
-      // Update member count
       await supabase.rpc('increment_member_count', { p_group_id: groupId, p_delta: -1 })
       setGroup(prev => prev ? { ...prev, member_count: Math.max(0, (prev.member_count || 1) - 1) } : prev)
-
       setIsMember(false)
       setUserRole(null)
-      showToast(language === 'zh' ? '已退出小组' : 'Left group successfully', 'success')
+      showToast(t('已退出小组', 'Left group successfully', language), 'success')
     } catch (err) {
       console.error('Leave error:', err)
-      const errorMsg = err instanceof Error ? err.message : (language === 'zh' ? '退出失败' : 'Failed to leave')
-      showToast(errorMsg, 'error')
+      showToast(err instanceof Error ? err.message : t('退出失败', 'Failed to leave', language), 'error')
     } finally {
       setJoining(false)
     }
-  }
+  }, [userId, groupId, language, showToast])
 
   // Load members
   const loadMembers = async () => {
@@ -496,8 +496,7 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
   // Loading state
   if (loading) {
     return (
-      <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
-        <TopNav email={email} />
+      <PageWrapper email={email}>
         <Box as="main" style={{ maxWidth: 900, margin: '0 auto', padding: tokens.spacing[6] }}>
           <Box style={{ marginBottom: tokens.spacing[6] }}>
             <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[4], marginBottom: tokens.spacing[4] }}>
@@ -510,34 +509,31 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
             <Skeleton width="100%" height="60px" />
           </Box>
           <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}>
-            {[1, 2, 3].map((i) => (<PostSkeleton key={i} />))}
+            {[1, 2, 3].map((i) => <PostSkeleton key={i} />)}
           </Box>
         </Box>
-      </Box>
+      </PageWrapper>
     )
   }
 
   // Error state
   if (error || !group) {
     return (
-      <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
-        <TopNav email={email} />
+      <PageWrapper email={email}>
         <Box as="main" style={{ maxWidth: 900, margin: '0 auto', padding: tokens.spacing[10] }}>
           <Text size="lg" weight="bold" style={{ marginBottom: tokens.spacing[2], color: '#ff7c7c' }}>
-            {language === 'zh' ? '错误' : 'Error'}: {error || (language === 'zh' ? '小组不存在' : 'Group not found')}
+            {t('错误', 'Error', language)}: {error || t('小组不存在', 'Group not found', language)}
           </Text>
           <Link href="/groups" style={{ color: tokens.colors.accent?.primary || tokens.colors.text.secondary, textDecoration: 'none', marginTop: tokens.spacing[3], display: 'inline-block' }}>
-            ← {language === 'zh' ? '返回小组列表' : 'Back to Groups'}
+            ← {t('返回小组列表', 'Back to Groups', language)}
           </Link>
         </Box>
-      </Box>
+      </PageWrapper>
     )
   }
 
   return (
-    <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
-      <TopNav email={email} />
-
+    <PageWrapper email={email}>
       <Box
         as="main"
         className="content-sidebar-grid"
@@ -696,13 +692,9 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
           />
         )}
       </Box>
-    </Box>
+    </PageWrapper>
   )
 }
-
-// ─────────────────────────────────────────────
-// Related Groups Sidebar
-// ─────────────────────────────────────────────
 
 function RelatedGroupsSidebar({ groups, loading, language }: {
   groups: Array<{id: string; name: string; name_en?: string | null; avatar_url?: string | null; member_count?: number | null}>
