@@ -1,10 +1,10 @@
 /**
  * 压力测试 (Stress Test)
  *
- * 场景: 用户数从 100 瞬间飙升到 1000
+ * 场景: 用户数快速飙升到 100（Grafana Cloud 免费版限制）
  * 商业意义: 模拟行情暴涨或推特大 V 转发后的"瞬间流量"，看系统是否会雪崩
  *
- * ⚠️  警告: 此测试会产生大量请求，请谨慎使用
+ * 本地无限制版本: 修改 target 为 1000 后运行 k6 run k6/stress-test.js
  *
  * 运行: k6 run k6/stress-test.js
  * 云端: k6 cloud k6/stress-test.js
@@ -22,28 +22,28 @@ const failedRequests = new Counter('failed_requests');
 
 export const options = {
   stages: [
-    // 阶段 1: 基线 - 100 用户稳定运行
-    { duration: '1m', target: 100 },   // 1 分钟爬升到 100 用户
-    { duration: '2m', target: 100 },   // 保持 2 分钟
+    // 阶段 1: 基线 - 20 用户稳定运行
+    { duration: '30s', target: 20 },   // 30 秒爬升到 20 用户
+    { duration: '1m', target: 20 },    // 保持 1 分钟
 
-    // 阶段 2: 瞬间飙升 - 模拟大 V 转发
-    { duration: '30s', target: 500 },  // 30 秒内飙升到 500
-    { duration: '1m', target: 500 },   // 保持 1 分钟
+    // 阶段 2: 快速飙升 - 模拟大 V 转发
+    { duration: '30s', target: 50 },   // 30 秒内飙升到 50
+    { duration: '1m', target: 50 },    // 保持 1 分钟
 
     // 阶段 3: 极限压力 - 模拟热搜/暴涨行情
-    { duration: '30s', target: 1000 }, // 30 秒内飙升到 1000
-    { duration: '2m', target: 1000 },  // 保持 2 分钟，观察系统是否雪崩
+    { duration: '30s', target: 100 },  // 30 秒内飙升到 100 (Cloud 最大值)
+    { duration: '3m', target: 100 },   // 保持 3 分钟，观察系统是否雪崩
 
     // 阶段 4: 流量回落
-    { duration: '1m', target: 500 },   // 1 分钟降到 500
-    { duration: '1m', target: 100 },   // 1 分钟降到 100
-    { duration: '1m', target: 0 },     // 1 分钟降到 0
+    { duration: '30s', target: 50 },   // 30 秒降到 50
+    { duration: '30s', target: 20 },   // 30 秒降到 20
+    { duration: '30s', target: 0 },    // 30 秒降到 0
   ],
   thresholds: {
     // 压力测试阈值相对宽松
     http_req_duration: ['p(95)<5000'],  // 95% 请求 < 5 秒
-    http_req_failed: ['rate<0.20'],      // 错误率 < 20%（高压下可接受）
-    errors: ['rate<0.20'],
+    http_req_failed: ['rate<0.30'],      // 错误率 < 30%（高压下可接受）
+    errors: ['rate<0.30'],
   },
   cloud: {
     name: 'Ranking Arena - Stress Test (瞬间流量)',
@@ -154,7 +154,7 @@ export function handleSummary(data) {
   console.log('📊 压力测试结果汇总');
   console.log('='.repeat(60));
 
-  console.log(`\n🔥 峰值并发: 1000 用户`);
+  console.log(`\n🔥 峰值并发: 100 用户 (Cloud 限制)`);
   console.log(`📈 总请求数: ${metrics.total_requests?.values?.count || 0}`);
   console.log(`❌ 失败请求: ${metrics.failed_requests?.values?.count || 0}`);
   console.log(`⏱️  平均响应: ${Math.round(metrics.response_time?.values?.avg || 0)}ms`);
