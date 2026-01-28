@@ -126,11 +126,13 @@ function useUserHandle(): string | null {
         const userId = data.user?.id
         if (!userId) return
 
-        supabase
-          .from('user_profiles')
-          .select('handle')
-          .eq('id', userId)
-          .maybeSingle()
+        Promise.resolve(
+          supabase
+            .from('user_profiles')
+            .select('handle')
+            .eq('id', userId)
+            .maybeSingle()
+        )
           .then(({ data: profile, error: profileError }) => {
             if (!alive) return
 
