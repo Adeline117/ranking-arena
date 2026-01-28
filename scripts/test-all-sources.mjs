@@ -45,13 +45,13 @@ const PLATFORMS = {
   okx_futures: { script: 'import_okx_futures.mjs', category: 'CEX', name: 'OKX Futures' },
   okx_web3: { script: 'import_okx_web3.mjs', category: 'CEX', name: 'OKX Web3' },
   kucoin: { script: 'import_kucoin.mjs', category: 'CEX', name: 'KuCoin' },
-  htx_futures: { script: 'import_htx.mjs', category: 'CEX', name: 'HTX Futures' },
+  htx_futures: { script: 'import_htx_enhanced.mjs', category: 'CEX', name: 'HTX Futures' },
   weex: { script: 'import_weex.mjs', category: 'CEX', name: 'Weex' },
 
   // DeFi / 链上
-  gmx: { script: 'import_gmx.mjs', category: 'DeFi', name: 'GMX' },
-  hyperliquid: { script: 'import_hyperliquid.mjs', category: 'DeFi', name: 'Hyperliquid' },
-  dydx: { script: 'import_dydx.mjs', category: 'DeFi', name: 'dYdX' },
+  gmx: { script: 'import_gmx_enhanced.mjs', category: 'DeFi', name: 'GMX' },
+  hyperliquid: { script: 'import_hyperliquid_enhanced.mjs', category: 'DeFi', name: 'Hyperliquid' },
+  dydx: { script: 'import_dydx_enhanced.mjs', category: 'DeFi', name: 'dYdX' },
 
   // Dune Analytics
   dune_gmx: { script: 'import_dune.mjs', category: 'Dune', name: 'Dune GMX', args: ['gmx'] },
