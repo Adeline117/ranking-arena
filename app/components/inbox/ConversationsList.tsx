@@ -7,6 +7,7 @@ import { useInboxStore } from '@/lib/stores/inboxStore'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import Avatar from '@/app/components/ui/Avatar'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { useToast } from '@/app/components/ui/Toast'
 
 type Conversation = {
   id: string
@@ -52,19 +53,34 @@ function UnreadBadge({ count }: { count: number }): React.ReactElement | null {
 export default function ConversationsList(): React.ReactElement {
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const setUnreadMessages = useInboxStore((s) => s.setUnreadMessages)
   const { language, t } = useLanguage()
   const { accessToken, getAuthHeadersAsync } = useAuthSession()
+  const { showToast } = useToast()
 
-  const loadConversations = useCallback(async () => {
+  const loadConversations = useCallback(async (abortSignal?: AbortSignal) => {
     if (!accessToken) return
 
     try {
       setLoading(true)
+      setError(null)
       const headers = await getAuthHeadersAsync()
-      const res = await fetch('/api/conversations', { headers })
+      const res = await fetch('/api/conversations', {
+        headers,
+        signal: abortSignal
+      })
 
-      if (!res.ok) return
+      if (abortSignal?.aborted) return
+
+      if (!res.ok) {
+        const errorMessage = res.status === 401
+          ? t('authenticationFailed')
+          : t('failedToLoadConversations')
+        setError(errorMessage)
+        showToast(errorMessage, 'error')
+        return
+      }
 
       const data = await res.json()
       if (data.conversations) {
@@ -72,14 +88,29 @@ export default function ConversationsList(): React.ReactElement {
         setUnreadMessages(calculateTotalUnread(data.conversations))
       }
     } catch (err) {
+      if (abortSignal?.aborted) return
+
       console.error('Failed to load conversations:', err)
+      const errorMessage = err instanceof Error ? err.message : t('unexpectedError')
+      setError(errorMessage)
+      showToast(t('failedToLoadConversations'), 'error')
     } finally {
-      setLoading(false)
+      if (!abortSignal?.aborted) {
+        setLoading(false)
+      }
     }
-  }, [accessToken, getAuthHeadersAsync, setUnreadMessages])
+  }, [accessToken, getAuthHeadersAsync, setUnreadMessages, showToast, t])
 
   useEffect(() => {
-    if (accessToken) loadConversations()
+    const abortController = new AbortController()
+
+    if (accessToken) {
+      loadConversations(abortController.signal)
+    }
+
+    return () => {
+      abortController.abort()
+    }
   }, [accessToken, loadConversations])
 
   function formatTime(dateString: string): string {
@@ -117,6 +148,36 @@ export default function ConversationsList(): React.ReactElement {
       {loading ? (
         <div style={{ padding: tokens.spacing[4], textAlign: 'center', color: tokens.colors.text.tertiary, fontSize: 13 }}>
           {t('loading')}
+        </div>
+      ) : error ? (
+        <div style={{ padding: tokens.spacing[4], textAlign: 'center' }}>
+          <div style={{ color: tokens.colors.accent.error, fontSize: 13, marginBottom: tokens.spacing[2] }}>
+            {error}
+          </div>
+          <button
+            onClick={() => loadConversations()}
+            style={{
+              padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+              borderRadius: tokens.radius.md,
+              background: tokens.colors.accent.primary,
+              color: tokens.colors.white,
+              border: 'none',
+              cursor: 'pointer',
+              fontSize: 12,
+              fontWeight: 600,
+              transition: `all ${tokens.transition.base}`,
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = 'translateY(-1px)'
+              e.currentTarget.style.boxShadow = tokens.shadow.sm
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = 'translateY(0)'
+              e.currentTarget.style.boxShadow = 'none'
+            }}
+          >
+            {t('retry')}
+          </button>
         </div>
       ) : conversations.length === 0 ? (
         <div style={{ padding: tokens.spacing[4], textAlign: 'center', color: tokens.colors.text.tertiary, fontSize: 13 }}>

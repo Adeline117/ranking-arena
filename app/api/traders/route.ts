@@ -2,7 +2,12 @@
  * 获取排行榜交易员数据 API
  * 合并所有交易所数据，使用 Arena Score 排名算法
  * 支持 7D/30D/90D 时间段分别显示
- * 
+ *
+ * 性能优化（Vercel Pro）：
+ * 1. Redis 缓存 - 60 秒 TTL，避免重复数据库查询
+ * 2. Edge Runtime - 更快的冷启动和全球分布
+ * 3. 带锁缓存 - 防止缓存击穿（cache stampede）
+ *
  * 排名逻辑（统一在此处计算）：
  * 1. 从数据库获取各交易所最新快照数据
  * 2. 过滤超过 24 小时的陈旧数据
@@ -12,14 +17,19 @@
 
 import { NextResponse } from 'next/server'
 import { withPublic } from '@/lib/api/middleware'
-import { 
-  calculateArenaScore, 
-  ARENA_CONFIG, 
+import {
+  calculateArenaScore,
+  ARENA_CONFIG,
   type Period,
 } from '@/lib/utils/arena-score'
 import { createLogger } from '@/lib/utils/logger'
+import { getOrSetWithLock, CacheKey, CACHE_TTL } from '@/lib/cache'
 
 const logger = createLogger('traders-api')
+
+// Edge Runtime for faster cold starts (Vercel Pro)
+export const runtime = 'edge'
+export const preferredRegion = ['iad1', 'sfo1', 'hnd1'] // US East, US West, Tokyo
 
 export const dynamic = 'force-dynamic'
 
@@ -175,6 +185,56 @@ export const GET = withPublic(
     const page = Math.max(0, parseInt(searchParams.get('page') || '0', 10) || 0)
     const limit = Math.min(3000, Math.max(1, parseInt(searchParams.get('limit') || '1000', 10) || 1000))
 
+    // 生成缓存键
+    const cacheKey = CacheKey.traders.list({
+      timeRange,
+      exchange: exchangeFilter || 'all',
+      limit,
+      page,
+    }) + `:${sortBy || 'arena_score'}:${order}`
+
+    // 尝试从缓存获取数据
+    const cachedData = await getOrSetWithLock(
+      cacheKey,
+      async () => {
+        // 缓存未命中，执行数据库查询
+        return await fetchTradersData(supabase, {
+          timeRange,
+          exchangeFilter,
+          sortBy,
+          order,
+          page,
+          limit,
+        })
+      },
+      { ttl: 60, lockTtl: 10 } // 60 秒缓存，10 秒锁超时
+    )
+
+    const response = NextResponse.json(cachedData)
+
+    // 添加缓存头，提高页面加载速度
+    response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300')
+    response.headers.set('X-Cache-Key', cacheKey)
+
+    return response
+  },
+  { name: 'traders', rateLimit: 'read' }
+)
+
+// 数据获取逻辑（抽取为单独函数以支持缓存）
+async function fetchTradersData(
+  supabase: ReturnType<typeof import('@/lib/supabase/server').getSupabaseAdmin>,
+  params: {
+    timeRange: Period
+    exchangeFilter: string | null
+    sortBy: 'arena_score' | 'roi' | 'win_rate' | 'max_drawdown' | null
+    order: 'asc' | 'desc'
+    page: number
+    limit: number
+  }
+) {
+  const { timeRange, exchangeFilter, sortBy, order, page, limit } = params
+
     const allTraders: TraderData[] = []
     const staleSources: string[] = [] // 跟踪陈旧数据的交易所
 
@@ -239,9 +299,9 @@ export const GET = withPublic(
 
       // 使用分页查询获取所有数据（Supabase默认限制1000条）
       const allSnapshots = []
-      let page = 0
+      let dbPage = 0
       const pageSize = 1000
-      
+
       while (true) {
         const { data, error } = await supabase
           .from('trader_snapshots')
@@ -249,18 +309,18 @@ export const GET = withPublic(
           .eq('source', source)
           .eq('season_id', seasonId)
           .order('captured_at', { ascending: false })
-          .range(page * pageSize, (page + 1) * pageSize - 1)
-        
+          .range(dbPage * pageSize, (dbPage + 1) * pageSize - 1)
+
         if (error) {
           console.error(`[Traders API] ${source} 查询错误:`, error.message)
           break
         }
-        
+
         if (!data?.length) break
-        
+
         allSnapshots.push(...data)
         if (data.length < pageSize) break
-        page++
+        dbPage++
       }
       
       if (!allSnapshots.length) return { traders: [], isStale: false }
@@ -515,7 +575,8 @@ export const GET = withPublic(
     // 收集所有有数据的来源
     const allAvailableSources = [...new Set(allTraders.map(t => t.source))].sort()
 
-    const response = NextResponse.json({
+    // 返回数据对象（用于缓存）
+    return {
       traders: topTraders,
       timeRange,
       totalCount: allTraders.length,
@@ -531,12 +592,5 @@ export const GET = withPublic(
       hasMore,
       // 所有有数据的来源（用于底部来源显示）
       availableSources: allAvailableSources,
-    })
-
-    // 添加缓存头，提高页面加载速度
-    response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300')
-
-    return response
-  },
-  { name: 'traders', rateLimit: 'read' }
-)
+    }
+}

@@ -62,45 +62,80 @@ export default function TopNav({ email }: { email: string | null }) {
 
   useEffect(() => {
     let alive = true
-    supabase.auth.getUser().then(({ data }) => {
-      if (!alive) return
-      const userId = data.user?.id ?? null
-      setMyId(userId)
-      
-      // 获取用户的handle和头像
-      if (userId) {
-        // 直接使用 user_profiles 表（profiles 表不存在）
-        supabase
-          .from('user_profiles')
-          .select('handle, avatar_url')
-          .eq('id', userId)
-          .maybeSingle()
-          .then(({ data: userProfile }) => {
-            if (!alive) return
-            if (userProfile) {
-              if (userProfile.handle) {
-                setMyHandle(userProfile.handle)
-              } else if (data.user?.email) {
-                // 如果没有 handle，使用邮箱前缀
-                const defaultHandle = data.user.email.split('@')[0]
-                setMyHandle(defaultHandle)
+    const abortController = new AbortController()
+
+    supabase.auth.getUser()
+      .then(({ data, error }) => {
+        if (!alive) return
+
+        if (error) {
+          console.error('Error fetching user:', error)
+          return
+        }
+
+        const userId = data.user?.id ?? null
+        setMyId(userId)
+
+        // 获取用户的handle和头像
+        if (userId) {
+          // 直接使用 user_profiles 表（profiles 表不存在）
+          supabase
+            .from('user_profiles')
+            .select('handle, avatar_url')
+            .eq('id', userId)
+            .maybeSingle()
+            .then(({ data: userProfile, error: profileError }) => {
+              if (!alive) return
+
+              if (profileError) {
+                console.error('Error fetching user profile:', profileError)
+                // Fallback to email-based handle
+                if (data.user?.email) {
+                  const defaultHandle = data.user.email.split('@')[0]
+                  setMyHandle(defaultHandle)
+                }
+                return
               }
-              // 设置头像
-              if (userProfile.avatar_url) {
-                setMyAvatarUrl(userProfile.avatar_url)
+
+              if (userProfile) {
+                if (userProfile.handle) {
+                  setMyHandle(userProfile.handle)
+                } else if (data.user?.email) {
+                  // 如果没有 handle，使用邮箱前缀
+                  const defaultHandle = data.user.email.split('@')[0]
+                  setMyHandle(defaultHandle)
+                }
+                // 设置头像
+                if (userProfile.avatar_url) {
+                  setMyAvatarUrl(userProfile.avatar_url)
+                }
+              } else {
+                // 如果没有 profile，使用邮箱前缀作为 handle
+                if (data.user?.email) {
+                  const defaultHandle = data.user.email.split('@')[0]
+                  setMyHandle(defaultHandle)
+                }
               }
-            } else {
-              // 如果没有 profile，使用邮箱前缀作为 handle
+            })
+            .catch((err) => {
+              if (!alive) return
+              console.error('Unexpected error fetching user profile:', err)
+              // Fallback to email-based handle
               if (data.user?.email) {
                 const defaultHandle = data.user.email.split('@')[0]
                 setMyHandle(defaultHandle)
               }
-            }
-          })
-      }
-    })
+            })
+        }
+      })
+      .catch((err) => {
+        if (!alive) return
+        console.error('Unexpected error in auth check:', err)
+      })
+
     return () => {
       alive = false
+      abortController.abort()
     }
   }, [])
 
