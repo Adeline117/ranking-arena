@@ -16,17 +16,24 @@ export interface InitialTrader {
   max_drawdown: number | null
   followers: number
   source: string
+  source_type: 'futures' | 'spot' | 'web3'
   avatar_url: string | null
   arena_score: number
 }
 
-// Top sources to fetch for initial render (most popular)
+// Source type mapping
+const SOURCE_TYPE_MAP: Record<string, 'futures' | 'spot' | 'web3'> = {
+  'binance_futures': 'futures',
+  'bybit': 'futures',
+  'bitget_futures': 'futures',
+}
+
+// Top sources to fetch for initial render (most popular exchanges)
+// Using fewer sources speeds up initial query
 const PRIORITY_SOURCES = [
   'binance_futures',
   'bybit',
   'bitget_futures',
-  'okx_futures',
-  'hyperliquid',
 ]
 
 export async function getInitialTraders(
@@ -44,33 +51,37 @@ export async function getInitialTraders(
   const supabase = createClient(supabaseUrl, supabaseKey)
 
   try {
-    // Get latest snapshot timestamp
-    const { data: latestSnapshot } = await supabase
-      .from('trader_snapshots')
-      .select('captured_at')
-      .order('captured_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
+    // Single optimized query: fetch top traders with high arena_score
+    // Use Promise.all to parallelize snapshot and timestamp queries
+    const [snapshotsResult, timestampResult] = await Promise.all([
+      supabase
+        .from('trader_snapshots')
+        .select(`
+          source_trader_id,
+          source,
+          roi,
+          pnl,
+          win_rate,
+          max_drawdown,
+          followers,
+          arena_score
+        `)
+        .in('source', PRIORITY_SOURCES)
+        .eq('season_id', timeRange)
+        .gte('arena_score', 60) // Only fetch high-score traders
+        .order('arena_score', { ascending: false })
+        .limit(limit * 2), // Fetch extra to account for duplicates
 
-    // Fetch top traders from priority sources with high arena_score
-    // This is much faster than fetching all sources
-    const { data: snapshots, error } = await supabase
-      .from('trader_snapshots')
-      .select(`
-        source_trader_id,
-        source,
-        roi,
-        pnl,
-        win_rate,
-        max_drawdown,
-        followers,
-        arena_score
-      `)
-      .in('source', PRIORITY_SOURCES)
-      .eq('season_id', timeRange)
-      .gte('arena_score', 60) // Only fetch high-score traders
-      .order('arena_score', { ascending: false })
-      .limit(limit * 2) // Fetch extra to account for duplicates
+      supabase
+        .from('trader_snapshots')
+        .select('captured_at')
+        .order('captured_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+    ])
+
+    const { data: snapshots, error } = snapshotsResult
+    const latestSnapshot = timestampResult.data
 
     if (error || !snapshots?.length) {
       console.error('[getInitialTraders] Query error:', error?.message)
@@ -86,7 +97,7 @@ export async function getInitialTraders(
       return true
     }).slice(0, limit)
 
-    // Get handles from trader_sources
+    // Get handles from trader_sources - parallelize with other work if needed
     const traderIds = uniqueSnapshots.map(s => s.source_trader_id)
     const { data: sources } = await supabase
       .from('trader_sources')
@@ -118,6 +129,7 @@ export async function getInitialTraders(
         max_drawdown: snap.max_drawdown,
         followers: snap.followers ?? 0,
         source: snap.source,
+        source_type: SOURCE_TYPE_MAP[snap.source] || 'futures',
         avatar_url: info.avatar_url,
         arena_score: snap.arena_score ?? 0,
       }
