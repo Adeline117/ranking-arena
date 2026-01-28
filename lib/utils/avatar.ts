@@ -222,6 +222,71 @@ export function needsProxy(url: string | null | undefined): boolean {
 }
 
 /**
+ * 检查URL是否像是有效的图片URL
+ */
+function isLikelyImageUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url)
+    const pathname = parsed.pathname.toLowerCase()
+    const hash = parsed.hash
+
+    // 1. 有hash片段的URL通常是SPA页面，不是图片
+    if (hash && hash.length > 1) {
+      return false
+    }
+
+    // 2. 只有域名没有实际路径的URL不是图片
+    if (pathname === '/' || pathname === '') {
+      return false
+    }
+
+    // 3. 明显是HTML页面的路径模式
+    const pagePatterns = [
+      '/detail/',
+      '/account/',
+      '/actions/',
+      '/portfolio/',
+      '/trader/',
+      '/profile/',
+      '/user/',
+      '/copytrading/',
+      '/copy-trading/',
+    ]
+    if (pagePatterns.some(pattern => pathname.includes(pattern))) {
+      return false
+    }
+
+    // 4. 如果URL以常见图片扩展名结尾，认为是图片
+    const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.ico', '.avif']
+    if (imageExtensions.some(ext => pathname.endsWith(ext))) {
+      return true
+    }
+
+    // 5. 如果路径包含图片相关的关键词，可能是图片
+    const imageKeywords = ['image', 'avatar', 'photo', 'img', 'picture', 'static', 'assets', 'media', 'upload']
+    if (imageKeywords.some(keyword => pathname.includes(keyword))) {
+      return true
+    }
+
+    // 6. 如果是已知的图片CDN域名，认为是图片
+    const imageCdnDomains = ['bgstatic.com', 'bnbstatic.com', 'bycsi.com', 'staticimg.com', 'mocortech.com', 'wexx.one']
+    if (imageCdnDomains.some(domain => parsed.hostname.includes(domain))) {
+      return true
+    }
+
+    // 默认情况：如果路径很短或没有扩展名，可能不是图片
+    // 但如果路径较长且包含数字/哈希，可能是CDN图片
+    if (pathname.length > 20 && /[a-f0-9]{8,}/.test(pathname)) {
+      return true
+    }
+
+    return false
+  } catch {
+    return false
+  }
+}
+
+/**
  * 获取交易员头像URL（通过代理以解决CORS问题）
  * @param avatarUrl 原始头像URL
  * @returns 代理后的URL或原始URL
@@ -229,13 +294,18 @@ export function needsProxy(url: string | null | undefined): boolean {
 export function getTraderAvatarUrl(avatarUrl: string | null | undefined): string | null {
   if (!avatarUrl || avatarUrl.trim() === '') return null
 
-  // 过滤掉无效的URL
+  // 过滤掉明显无效的URL
   if (
     avatarUrl.includes('t.co') ||
     avatarUrl.includes('/banner/') ||
     avatarUrl.includes('placeholder') ||
     avatarUrl.includes('default')
   ) {
+    return null
+  }
+
+  // 检查是否像是有效的图片URL
+  if (!isLikelyImageUrl(avatarUrl)) {
     return null
   }
 
