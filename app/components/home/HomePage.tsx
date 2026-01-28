@@ -15,12 +15,7 @@ import { generateWebSiteSchema, generateOrganizationSchema, combineSchemas } fro
 
 import RankingSection from './RankingSection'
 import PullToRefresh from '../ui/PullToRefresh'
-
-// 延迟加载 StatsBar 以优化 LCP
-const StatsBar = dynamic(() => import('./StatsBar'), {
-  ssr: false,
-  loading: () => <Box style={{ height: 48, marginBottom: 16 }} />,
-})
+import StatsBar from './StatsBar' // Direct import - small component, no need for dynamic
 import { useTraderData, useAuth } from './hooks'
 import type { Trader } from '../ranking/RankingTable'
 import type { TimeRange } from './hooks/useTraderData'

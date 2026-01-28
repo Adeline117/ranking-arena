@@ -11,6 +11,7 @@ import CookieConsent from "./components/ui/CookieConsent";
 import { SkipLink } from "./components/Providers/Accessibility";
 import { WebVitals } from "./components/Providers/WebVitals";
 import { SpeedInsights } from "@vercel/speed-insights/next";
+import { getCriticalCss, getResourceHints } from "@/lib/performance/critical-css";
 
 // Optimized font loading with next/font
 const inter = Inter({
@@ -96,11 +97,18 @@ export default function RootLayout({
   return (
     <html lang="en" data-theme="dark" translate="no" className={`${inter.variable} ${notoSansSC.variable}`}>
       <head>
-        {/* Preconnect to critical origins */}
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        {/* DNS prefetch for API */}
-        <link rel="dns-prefetch" href="https://supabase.co" />
+        {/* Inline critical CSS for faster initial render */}
+        <style dangerouslySetInnerHTML={{ __html: getCriticalCss() }} />
+
+        {/* Resource hints for external resources */}
+        {getResourceHints().map((hint, index) => (
+          <link
+            key={`resource-hint-${index}`}
+            rel={hint.rel}
+            href={hint.href}
+            {...(hint.crossOrigin && { crossOrigin: hint.crossOrigin })}
+          />
+        ))}
       </head>
       <body
         className="font-sans antialiased"

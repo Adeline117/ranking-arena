@@ -41,10 +41,10 @@ export async function getInitialTraders(
   limit: number = 50
 ): Promise<{ traders: InitialTrader[]; lastUpdated: string | null }> {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const supabaseKey = process.env.SUPABASE_SERVICE_KEY
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY // Fixed: was SUPABASE_SERVICE_KEY
 
   if (!supabaseUrl || !supabaseKey) {
-    console.error('[getInitialTraders] Missing Supabase config')
+    console.error('[getInitialTraders] Missing Supabase config:', { url: !!supabaseUrl, key: !!supabaseKey })
     return { traders: [], lastUpdated: null }
   }
 

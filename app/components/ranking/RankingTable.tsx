@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef, memo, useCallback } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
 import { RankingSkeleton } from '../ui/Skeleton'
 import { RankingBadge } from '../icons'
@@ -13,6 +14,12 @@ import CategoryRankingTabs, { CategoryType } from './CategoryRankingTabs'
 import { ProLabel } from '../premium/PremiumGate'
 import ExportButton from '../Utils/ExportButton'
 import { VirtualList } from '../ui/VirtualList'
+import {
+  getOptimizedImageUrl,
+  getImageLoadingStrategy,
+  handleImageError,
+  IMAGE_PLACEHOLDER,
+} from '@/lib/performance/image-optimization'
 
 // 图标组件
 const FilterIcon = ({ size = 14 }: { size?: number }) => (
@@ -347,16 +354,28 @@ const TraderRow = memo(function TraderRow({
             </span>
             {(() => {
               const proxyAvatarUrl = getTraderAvatarUrl(trader.avatar_url)
-              return proxyAvatarUrl && (
-                <img
-                  src={proxyAvatarUrl}
+              if (!proxyAvatarUrl) return null
+
+              // Get loading strategy based on position (first 3 are critical)
+              const loadingStrategy = getImageLoadingStrategy(index, 'above')
+              const isPriority = index < 3
+
+              return (
+                <Image
+                  src={getOptimizedImageUrl(proxyAvatarUrl, {
+                    width: 72, // 2x for retina
+                    quality: 85,
+                    format: 'webp',
+                  })}
                   alt={displayName}
                   width={36}
                   height={36}
-                  referrerPolicy="no-referrer"
-                  loading="lazy"
+                  priority={isPriority}
+                  loading={loadingStrategy.loading}
+                  placeholder="blur"
+                  blurDataURL={IMAGE_PLACEHOLDER.avatar}
                   style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', inset: 0, zIndex: 1 }}
-                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+                  onError={handleImageError}
                 />
               )
             })()}
@@ -548,16 +567,28 @@ const TraderCard = memo(function TraderCard({
             </span>
             {(() => {
               const proxyAvatarUrl = getTraderAvatarUrl(trader.avatar_url)
-              return proxyAvatarUrl && (
-                <img
-                  src={proxyAvatarUrl}
+              if (!proxyAvatarUrl) return null
+
+              // Get loading strategy based on position (first 3 are critical)
+              const loadingStrategy = getImageLoadingStrategy(index, 'above')
+              const isPriority = index < 3
+
+              return (
+                <Image
+                  src={getOptimizedImageUrl(proxyAvatarUrl, {
+                    width: 72, // 2x for retina
+                    quality: 85,
+                    format: 'webp',
+                  })}
                   alt={displayName}
                   width={36}
                   height={36}
-                  referrerPolicy="no-referrer"
-                  loading="lazy"
+                  priority={isPriority}
+                  loading={loadingStrategy.loading}
+                  placeholder="blur"
+                  blurDataURL={IMAGE_PLACEHOLDER.avatar}
                   style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', inset: 0, zIndex: 1 }}
-                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+                  onError={handleImageError}
                 />
               )
             })()}
