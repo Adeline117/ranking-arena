@@ -22,7 +22,7 @@ import { createLogger } from '../utils/logger'
 
 const jobLogger = createLogger('JobProcessor')
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 type AnySupabaseClient = SupabaseClient<any, any, any>
 
 // ============================================

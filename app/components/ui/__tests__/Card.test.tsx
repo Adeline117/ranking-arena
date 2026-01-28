@@ -16,6 +16,7 @@ jest.mock('@/lib/design-tokens', () => ({
     colors: {
       bg: { secondary: '#1a1a2e' },
       border: { primary: '#333' },
+      text: { primary: '#fff', secondary: '#ccc', tertiary: '#999' },
     },
     gradient: {
       primary: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
@@ -26,8 +27,9 @@ jest.mock('@/lib/design-tokens', () => ({
       cardHover: '0 20px 25px rgba(0,0,0,0.15)',
     },
     typography: {
-      fontWeight: { bold: 700, black: 900 },
-      fontSize: { sm: '14px', lg: '18px' },
+      fontWeight: { bold: 700, black: 900, semibold: 600, medium: 500, regular: 400 },
+      fontSize: { sm: '14px', md: '16px', lg: '18px', xl: '20px', '2xl': '24px' },
+      lineHeight: { tight: 1.2, normal: 1.5, relaxed: 1.7 },
     },
   },
 }))

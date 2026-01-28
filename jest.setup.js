@@ -1,6 +1,60 @@
 // Jest setup file
 import '@testing-library/jest-dom'
 
+// Polyfill for Web APIs (needed for Next.js API routes)
+import { TextEncoder, TextDecoder } from 'util'
+global.TextEncoder = TextEncoder
+global.TextDecoder = TextDecoder
+
+// Mock Request/Response for API route tests
+if (typeof Request === 'undefined') {
+  global.Request = class Request {
+    constructor(url, init = {}) {
+      this.url = url
+      this.method = init.method || 'GET'
+      this.headers = new Map(Object.entries(init.headers || {}))
+      this._body = init.body
+    }
+    async json() {
+      return JSON.parse(this._body)
+    }
+    async formData() {
+      return this._body
+    }
+  }
+}
+
+if (typeof Response === 'undefined') {
+  global.Response = class Response {
+    constructor(body, init = {}) {
+      this._body = body
+      this.status = init.status || 200
+      this.headers = new Map(Object.entries(init.headers || {}))
+    }
+    async json() {
+      return JSON.parse(this._body)
+    }
+  }
+}
+
+if (typeof Headers === 'undefined') {
+  global.Headers = class Headers extends Map {}
+}
+
+if (typeof FormData === 'undefined') {
+  global.FormData = class FormData {
+    constructor() {
+      this._data = new Map()
+    }
+    append(key, value) {
+      this._data.set(key, value)
+    }
+    get(key) {
+      return this._data.get(key)
+    }
+  }
+}
+
 // Mock Next.js router
 jest.mock('next/navigation', () => ({
   useRouter: () => ({

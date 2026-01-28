@@ -145,7 +145,7 @@ describe('RankedTraderSchema', () => {
     expect(() => RankedTraderSchema.parse(trader)).not.toThrow()
   })
 
-  test('should default followers to 0', () => {
+  test('should allow missing followers (optional for exchanges like GMX)', () => {
     const trader = {
       id: 'trader123',
       handle: 'testTrader',
@@ -153,7 +153,8 @@ describe('RankedTraderSchema', () => {
       source: 'binance',
     }
     const result = RankedTraderSchema.parse(trader)
-    expect(result.followers).toBe(0)
+    // followers is optional, so it should be undefined when not provided
+    expect(result.followers).toBeUndefined()
   })
 })
 

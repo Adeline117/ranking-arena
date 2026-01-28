@@ -69,7 +69,7 @@
 - **`ios/`** - iOS 原生项目
 
 #### 1.6 监控与错误追踪
-- **`sentry.client.config.ts`** - Sentry 客户端配置
+- **`instrumentation-client.ts`** - Sentry 客户端配置 (Turbopack compatible)
 - **`sentry.edge.config.ts`** - Sentry Edge Runtime 配置
 - **`instrumentation.ts`** - Next.js 插桩配置（用于监控）
 
