@@ -29,6 +29,20 @@ interface KwentaFuturesStat {
   smartMarginVolume?: string
 }
 
+interface KwentaFuturesPosition {
+  id: string
+  account: string
+  isOpen: boolean
+  entryPrice: string
+  exitPrice?: string
+  size: string
+  realizedPnl: string
+  netFunding: string
+  feesPaid: string
+  openTimestamp: string
+  closeTimestamp?: string
+}
+
 export class KwentaPerpConnector extends BaseConnector {
   readonly platform = 'kwenta' as const
   readonly marketType = 'perp' as const
@@ -36,12 +50,12 @@ export class KwentaPerpConnector extends BaseConnector {
     platform: 'kwenta' as any,
     market_types: ['perp'],
     native_windows: ['7d', '30d', '90d'],
-    available_fields: ['roi', 'pnl', 'trades_count'],
+    available_fields: ['roi', 'pnl', 'win_rate', 'max_drawdown', 'trades_count'],
     has_timeseries: false,
     has_profiles: false,
     scraping_difficulty: 2, // GraphQL subgraph available
     rate_limit: { rpm: 30, concurrency: 5 },
-    notes: ['Optimism DEX', 'Synthetix-powered', 'GraphQL subgraph', 'No copy trading'],
+    notes: ['Optimism DEX', 'Synthetix-powered', 'GraphQL subgraph', 'No copy trading', 'Metrics calculated from position history'],
   }
 
   private readonly SUBGRAPH_URL = 'https://api.thegraph.com/subgraphs/name/kwenta/optimism-perps'
@@ -153,7 +167,8 @@ export class KwentaPerpConnector extends BaseConnector {
 
   async fetchTraderSnapshot(traderKey: string, window: Window): Promise<SnapshotResult | null> {
     try {
-      const query = `
+      // Get trader stats
+      const statsQuery = `
         query GetTraderStats($account: String!) {
           futuresStats(where: { account: $account }) {
             id
@@ -168,15 +183,51 @@ export class KwentaPerpConnector extends BaseConnector {
         }
       `
 
-      const response = await this.request<{
-        data?: { futuresStats?: KwentaFuturesStat[] }
-      }>(this.SUBGRAPH_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query, variables: { account: traderKey.toLowerCase() } }),
-      })
+      // Get closed positions for win rate and drawdown calculation
+      const windowDays = window === '7d' ? 7 : window === '30d' ? 30 : 90
+      const windowStart = Math.floor((Date.now() - windowDays * 24 * 60 * 60 * 1000) / 1000)
 
-      const info = response?.data?.futuresStats?.[0]
+      const positionsQuery = `
+        query GetTraderPositions($account: String!, $windowStart: BigInt!) {
+          futuresPositions(
+            where: {
+              account: $account,
+              isOpen: false,
+              closeTimestamp_gte: $windowStart
+            }
+            orderBy: closeTimestamp
+            orderDirection: asc
+            first: 1000
+          ) {
+            id
+            account
+            isOpen
+            entryPrice
+            exitPrice
+            size
+            realizedPnl
+            netFunding
+            feesPaid
+            openTimestamp
+            closeTimestamp
+          }
+        }
+      `
+
+      const [statsResponse, positionsResponse] = await Promise.all([
+        this.request<{ data?: { futuresStats?: KwentaFuturesStat[] } }>(this.SUBGRAPH_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query: statsQuery, variables: { account: traderKey.toLowerCase() } }),
+        }),
+        this.request<{ data?: { futuresPositions?: KwentaFuturesPosition[] } }>(this.SUBGRAPH_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query: positionsQuery, variables: { account: traderKey.toLowerCase(), windowStart: String(windowStart) } }),
+        }),
+      ])
+
+      const info = statsResponse?.data?.futuresStats?.[0]
       if (!info) {
         return {
           metrics: this.emptyMetrics(),
@@ -185,19 +236,61 @@ export class KwentaPerpConnector extends BaseConnector {
         }
       }
 
-      // Note: Kwenta subgraph only provides all-time stats, not windowed
-      const pnl = this.parseDecimal(info.pnlWithFeesPaid)
-      const volume = this.parseDecimal(info.totalVolume)
+      const positions = positionsResponse?.data?.futuresPositions || []
+
+      // Calculate metrics from positions within window
+      let windowPnl = 0
+      let windowVolume = 0
+      let winningTrades = 0
+      let totalTrades = 0
+      let maxEquity = 0
+      let minEquityFromPeak = 0
+      let runningEquity = 0
+
+      for (const pos of positions) {
+        const realizedPnl = this.parseDecimal(pos.realizedPnl) || 0
+        const size = Math.abs(this.parseDecimal(pos.size) || 0)
+        const entryPrice = this.parseDecimal(pos.entryPrice) || 0
+        const positionValue = size * entryPrice
+
+        windowPnl += realizedPnl
+        windowVolume += positionValue
+        totalTrades++
+
+        if (realizedPnl > 0) {
+          winningTrades++
+        }
+
+        // Track equity curve for drawdown
+        runningEquity += realizedPnl
+        if (runningEquity > maxEquity) {
+          maxEquity = runningEquity
+        }
+        const drawdownFromPeak = maxEquity - runningEquity
+        if (drawdownFromPeak > minEquityFromPeak) {
+          minEquityFromPeak = drawdownFromPeak
+        }
+      }
+
+      // Use window data if available, otherwise fall back to all-time
+      const pnl = totalTrades > 0 ? windowPnl : this.parseDecimal(info.pnlWithFeesPaid)
+      const volume = totalTrades > 0 ? windowVolume : this.parseDecimal(info.totalVolume)
       const roi = volume && volume > 0 && pnl !== null ? (pnl / volume) * 100 : null
+
+      // Calculate win rate from window positions
+      const winRate = totalTrades > 0 ? (winningTrades / totalTrades) * 100 : null
+
+      // Calculate max drawdown
+      const maxDrawdown = maxEquity > 0 ? (minEquityFromPeak / maxEquity) * 100 : null
 
       const metrics: SnapshotMetrics = {
         roi,
         pnl,
-        win_rate: null, // Not available in subgraph
-        max_drawdown: null,
+        win_rate: winRate,
+        max_drawdown: maxDrawdown,
         sharpe_ratio: null,
         sortino_ratio: null,
-        trades_count: this.num(info.totalTrades),
+        trades_count: totalTrades > 0 ? totalTrades : this.num(info.totalTrades),
         followers: null,
         copiers: null,
         aum: null,
@@ -208,11 +301,18 @@ export class KwentaPerpConnector extends BaseConnector {
         stability_score: null,
       }
 
+      const missingFields: string[] = ['sharpe_ratio', 'sortino_ratio', 'followers', 'copiers', 'aum']
+      const hasWindowData = totalTrades > 0
+
       const quality_flags: QualityFlags = {
-        missing_fields: ['win_rate', 'max_drawdown', 'sharpe_ratio', 'sortino_ratio', 'followers', 'copiers', 'aum'],
-        non_standard_fields: {},
-        window_native: false, // Kwenta only provides all-time data
-        notes: ['Kwenta Optimism DEX', 'All-time stats only', `Window ${window} not natively supported`],
+        missing_fields: missingFields,
+        non_standard_fields: { liquidations: info.liquidations },
+        window_native: hasWindowData,
+        notes: [
+          'Kwenta Optimism DEX',
+          hasWindowData ? `${totalTrades} trades in ${window} window` : 'All-time stats (no trades in window)',
+          'Win rate and MDD calculated from position history',
+        ],
       }
 
       return { metrics, quality_flags, fetched_at: new Date().toISOString() }

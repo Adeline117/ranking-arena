@@ -27,6 +27,19 @@ interface MuxAccount {
   closedPositionCount?: number
 }
 
+interface MuxPosition {
+  id: string
+  account: string
+  collateralToken: string
+  indexToken: string
+  isLong: boolean
+  sizeUSD: string
+  collateralUSD: string
+  realisedPnlUSD: string
+  closedAtTimestamp?: string
+  status: string
+}
+
 export class MuxPerpConnector extends BaseConnector {
   readonly platform = 'mux' as const
   readonly marketType = 'perp' as const
@@ -34,12 +47,12 @@ export class MuxPerpConnector extends BaseConnector {
     platform: 'mux' as any,
     market_types: ['perp'],
     native_windows: ['7d', '30d', '90d'],
-    available_fields: ['roi', 'pnl', 'trades_count'],
+    available_fields: ['roi', 'pnl', 'win_rate', 'max_drawdown', 'trades_count'],
     has_timeseries: false,
     has_profiles: false,
     scraping_difficulty: 2, // GraphQL subgraph available
     rate_limit: { rpm: 30, concurrency: 5 },
-    notes: ['Multi-chain DEX', 'Arbitrum primary', 'GraphQL subgraph', 'No copy trading'],
+    notes: ['Multi-chain DEX', 'Arbitrum primary', 'GraphQL subgraph', 'No copy trading', 'Metrics calculated from position history'],
   }
 
   // MUX subgraph on Arbitrum (primary chain)
@@ -148,7 +161,8 @@ export class MuxPerpConnector extends BaseConnector {
 
   async fetchTraderSnapshot(traderKey: string, window: Window): Promise<SnapshotResult | null> {
     try {
-      const query = `
+      // Get account stats
+      const accountQuery = `
         query GetTraderStats($id: ID!) {
           account(id: $id) {
             id
@@ -161,15 +175,48 @@ export class MuxPerpConnector extends BaseConnector {
         }
       `
 
-      const response = await this.request<{
-        data?: { account?: MuxAccount }
-      }>(this.SUBGRAPH_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query, variables: { id: traderKey.toLowerCase() } }),
-      })
+      // Get closed positions for win rate and drawdown calculation
+      const windowDays = window === '7d' ? 7 : window === '30d' ? 30 : 90
+      const windowStart = Math.floor((Date.now() - windowDays * 24 * 60 * 60 * 1000) / 1000)
 
-      const info = response?.data?.account
+      const positionsQuery = `
+        query GetTraderPositions($account: String!, $windowStart: BigInt!) {
+          positions(
+            where: {
+              account: $account,
+              status: "closed",
+              closedAtTimestamp_gte: $windowStart
+            }
+            orderBy: closedAtTimestamp
+            orderDirection: asc
+            first: 1000
+          ) {
+            id
+            account
+            isLong
+            sizeUSD
+            collateralUSD
+            realisedPnlUSD
+            closedAtTimestamp
+            status
+          }
+        }
+      `
+
+      const [accountResponse, positionsResponse] = await Promise.all([
+        this.request<{ data?: { account?: MuxAccount } }>(this.SUBGRAPH_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query: accountQuery, variables: { id: traderKey.toLowerCase() } }),
+        }),
+        this.request<{ data?: { positions?: MuxPosition[] } }>(this.SUBGRAPH_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query: positionsQuery, variables: { account: traderKey.toLowerCase(), windowStart: String(windowStart) } }),
+        }),
+      ])
+
+      const info = accountResponse?.data?.account
       if (!info) {
         return {
           metrics: this.emptyMetrics(),
@@ -178,17 +225,57 @@ export class MuxPerpConnector extends BaseConnector {
         }
       }
 
-      // Calculate metrics from cumulative data
-      const pnl = this.parseDecimal(info.cumulativePnlUSD)
-      const volume = this.parseDecimal(info.cumulativeVolumeUSD)
+      const positions = positionsResponse?.data?.positions || []
+
+      // Calculate metrics from positions within window
+      let windowPnl = 0
+      let windowVolume = 0
+      let winningTrades = 0
+      let totalTrades = 0
+      let maxEquity = 0
+      let minEquityFromPeak = 0
+      let runningEquity = 0
+
+      for (const pos of positions) {
+        const realizedPnl = this.parseDecimal(pos.realisedPnlUSD) || 0
+        const sizeUSD = this.parseDecimal(pos.sizeUSD) || 0
+
+        windowPnl += realizedPnl
+        windowVolume += sizeUSD
+        totalTrades++
+
+        if (realizedPnl > 0) {
+          winningTrades++
+        }
+
+        // Track equity curve for drawdown
+        runningEquity += realizedPnl
+        if (runningEquity > maxEquity) {
+          maxEquity = runningEquity
+        }
+        const drawdownFromPeak = maxEquity - runningEquity
+        if (drawdownFromPeak > minEquityFromPeak) {
+          minEquityFromPeak = drawdownFromPeak
+        }
+      }
+
+      // Use window data if available, otherwise fall back to all-time
+      const pnl = totalTrades > 0 ? windowPnl : this.parseDecimal(info.cumulativePnlUSD)
+      const volume = totalTrades > 0 ? windowVolume : this.parseDecimal(info.cumulativeVolumeUSD)
       const roi = volume && volume > 0 && pnl !== null ? (pnl / volume) * 100 : null
-      const tradesCount = (info.openPositionCount || 0) + (info.closedPositionCount || 0)
+      const tradesCount = totalTrades > 0 ? totalTrades : ((info.openPositionCount || 0) + (info.closedPositionCount || 0))
+
+      // Calculate win rate from window positions
+      const winRate = totalTrades > 0 ? (winningTrades / totalTrades) * 100 : null
+
+      // Calculate max drawdown
+      const maxDrawdown = maxEquity > 0 ? (minEquityFromPeak / maxEquity) * 100 : null
 
       const metrics: SnapshotMetrics = {
         roi,
         pnl,
-        win_rate: null,
-        max_drawdown: null,
+        win_rate: winRate,
+        max_drawdown: maxDrawdown,
         sharpe_ratio: null,
         sortino_ratio: null,
         trades_count: tradesCount || null,
@@ -202,14 +289,21 @@ export class MuxPerpConnector extends BaseConnector {
         stability_score: null,
       }
 
+      const missingFields: string[] = ['sharpe_ratio', 'sortino_ratio', 'followers', 'copiers', 'aum']
+      const hasWindowData = totalTrades > 0
+
       const quality_flags: QualityFlags = {
-        missing_fields: ['win_rate', 'max_drawdown', 'sharpe_ratio', 'sortino_ratio', 'followers', 'copiers', 'aum'],
+        missing_fields: missingFields,
         non_standard_fields: {
           open_positions: String(info.openPositionCount || 0),
           closed_positions: String(info.closedPositionCount || 0),
         },
-        window_native: false, // MUX only provides all-time data
-        notes: ['MUX Protocol multi-chain DEX', 'All-time stats only', `Window ${window} not natively supported`],
+        window_native: hasWindowData,
+        notes: [
+          'MUX Protocol multi-chain DEX',
+          hasWindowData ? `${totalTrades} trades in ${window} window` : 'All-time stats (no trades in window)',
+          'Win rate and MDD calculated from position history',
+        ],
       }
 
       return { metrics, quality_flags, fetched_at: new Date().toISOString() }

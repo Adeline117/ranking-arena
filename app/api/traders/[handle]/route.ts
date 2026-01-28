@@ -63,6 +63,9 @@ const TRADER_SOURCES = [
   'gmx',
   'hyperliquid',
   'dydx',
+  'gains',
+  'kwenta',
+  'mux',
 ] as const
 type SourceType = typeof TRADER_SOURCES[number]
 

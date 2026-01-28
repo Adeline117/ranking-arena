@@ -42,6 +42,7 @@ interface AdvancedFilterProps {
 
 // 交易所选项
 const EXCHANGES = [
+  // CEX
   { value: 'binance', label: 'Binance' },
   { value: 'bybit', label: 'Bybit' },
   { value: 'bitget', label: 'Bitget' },
@@ -51,7 +52,21 @@ const EXCHANGES = [
   { value: 'weex', label: 'Weex' },
   { value: 'coinex', label: 'CoinEx' },
   { value: 'kucoin', label: 'KuCoin' },
+  { value: 'phemex', label: 'Phemex' },
+  { value: 'bitmart', label: 'BitMart' },
+  { value: 'bingx', label: 'BingX' },
+  { value: 'gateio', label: 'Gate.io' },
+  { value: 'xt', label: 'XT.com' },
+  { value: 'pionex', label: 'Pionex' },
+  { value: 'lbank', label: 'LBank' },
+  { value: 'blofin', label: 'BloFin' },
+  // DEX
   { value: 'gmx', label: 'GMX' },
+  { value: 'dydx', label: 'dYdX' },
+  { value: 'hyperliquid', label: 'Hyperliquid' },
+  { value: 'kwenta', label: 'Kwenta' },
+  { value: 'gains', label: 'Gains' },
+  { value: 'mux', label: 'MUX' },
 ]
 
 // 类型选项 - 使用 i18n key
