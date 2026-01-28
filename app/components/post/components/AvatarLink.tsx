@@ -2,17 +2,21 @@
 
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
+import ProBadge from '@/app/components/ui/ProBadge'
 
 interface AvatarLinkProps {
   handle?: string | null
   avatarUrl?: string | null
+  isPro?: boolean
+  showProBadge?: boolean
 }
 
-export function AvatarLink({ handle, avatarUrl }: AvatarLinkProps) {
+export function AvatarLink({ handle, avatarUrl, isPro, showProBadge = true }: AvatarLinkProps) {
   if (!handle) return null
-  
+
   const href = `/u/${encodeURIComponent(handle)}`
-  
+  const shouldShowBadge = isPro && showProBadge
+
   return (
     <Link
       href={href}
@@ -20,7 +24,7 @@ export function AvatarLink({ handle, avatarUrl }: AvatarLinkProps) {
       style={{
         display: 'inline-flex',
         alignItems: 'center',
-        gap: 8,
+        gap: 6,
         textDecoration: 'none',
         color: tokens.colors.text.primary,
       }}
@@ -54,6 +58,9 @@ export function AvatarLink({ handle, avatarUrl }: AvatarLinkProps) {
       <span style={{ fontWeight: 850, fontSize: 12, color: tokens.colors.text.secondary }}>
         {handle}
       </span>
+      {shouldShowBadge && (
+        <ProBadge size="sm" showLabel={false} />
+      )}
     </Link>
   )
 }
