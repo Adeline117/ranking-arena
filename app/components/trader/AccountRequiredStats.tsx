@@ -10,6 +10,7 @@ import Link from 'next/link'
 import { getCsrfHeaders } from '@/lib/api/client'
 import type { Exchange } from '@/lib/exchange'
 import { useToast } from '@/app/components/ui/Toast'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 interface TradingData {
   total_trades: number
@@ -30,6 +31,7 @@ interface ExchangeConnection {
 
 export default function AccountRequiredStats({ userId }: { userId: string }) {
   const { showToast } = useToast()
+  const { t } = useLanguage()
   const [connections, setConnections] = useState<ExchangeConnection[]>([])
   const [tradingData, setTradingData] = useState<Record<string, TradingData>>({})
   const [loading, setLoading] = useState(true)
