@@ -73,8 +73,22 @@ function createMockRequest(body: string, signature: string | null): NextRequest 
 }
 
 describe('Stripe Webhook Route', () => {
+  const originalEnv = process.env
+
   beforeEach(() => {
     jest.clearAllMocks()
+    // Set required environment variables for tests
+    process.env = {
+      ...originalEnv,
+      STRIPE_SECRET_KEY: 'sk_test_xxx',
+      STRIPE_WEBHOOK_SECRET: 'whsec_test_xxx',
+      NEXT_PUBLIC_SUPABASE_URL: 'https://test.supabase.co',
+      SUPABASE_SERVICE_ROLE_KEY: 'test_service_key',
+    }
+  })
+
+  afterEach(() => {
+    process.env = originalEnv
   })
 
   describe('Request Validation', () => {

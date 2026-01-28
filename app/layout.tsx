@@ -10,6 +10,7 @@ import { ServiceWorkerRegistration } from "./components/Providers/ServiceWorkerR
 import CookieConsent from "./components/ui/CookieConsent";
 import { SkipLink } from "./components/Providers/Accessibility";
 import { WebVitals } from "./components/Providers/WebVitals";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 
 // Optimized font loading with next/font
 const inter = Inter({
@@ -99,6 +100,7 @@ export default function RootLayout({
         <Providers>
           <CapacitorProvider>
             <WebVitals />
+            <SpeedInsights />
             <SkipLink targetId="main-content" />
             <ServiceWorkerRegistration />
             <Suspense fallback={null}>

@@ -57,10 +57,15 @@ describe('PREMIUM_FEATURES', () => {
     })
   })
 
-  test('每个功能都指定了可用等级', () => {
+  test('每个功能都指定了可用等级（已下线功能除外）', () => {
+    // 已下线的功能 tier 为空数组是正常的
+    const deprecatedFeatures = ['portfolio_suggestions']
+
     PREMIUM_FEATURES.forEach(feature => {
       expect(Array.isArray(feature.tier)).toBe(true)
-      expect(feature.tier.length).toBeGreaterThan(0)
+      if (!deprecatedFeatures.includes(feature.id)) {
+        expect(feature.tier.length).toBeGreaterThan(0)
+      }
     })
   })
 })

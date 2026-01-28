@@ -1,6 +1,8 @@
 /**
- * Sentry 客户端配置
- * 用于捕获浏览器端错误和性能监控
+ * Next.js Client Instrumentation
+ * Sentry client-side configuration for browser error and performance monitoring
+ *
+ * This file replaces sentry.client.config.ts for Turbopack compatibility
  */
 
 import * as Sentry from '@sentry/nextjs'
@@ -9,79 +11,79 @@ const SENTRY_DSN = process.env.NEXT_PUBLIC_SENTRY_DSN
 
 Sentry.init({
   dsn: SENTRY_DSN,
-  
-  // 启用性能监控 - 生产环境采样 20%，开发环境 100%
+
+  // Performance monitoring - 20% in production, 100% in development
   tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.2 : 1.0,
-  
-  // 启用 Session Replay
+
+  // Session Replay
   replaysSessionSampleRate: 0.1,
   replaysOnErrorSampleRate: 1.0,
-  
-  // 启用性能分析
+
+  // Profiling
   profilesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 0,
-  
-  // 环境标识
+
+  // Environment
   environment: process.env.NODE_ENV,
   release: process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA || 'development',
-  
-  // 禁用调试模式（避免潜在的渲染问题）
+
+  // Disable debug mode
   debug: false,
-  
-  // 过滤已知的非关键错误
+
+  // Filter known non-critical errors
   ignoreErrors: [
-    // 浏览器扩展错误
+    // Browser extension errors
     /^chrome-extension:\/\//,
     /^moz-extension:\/\//,
-    // 网络错误
+    // Network errors
     'Network request failed',
     'Failed to fetch',
     'Load failed',
-    // 用户取消操作
+    // User cancellation
     'AbortError',
-    // ResizeObserver 错误（通常无害）
+    // ResizeObserver errors (usually harmless)
     'ResizeObserver loop limit exceeded',
     'ResizeObserver loop completed with undelivered notifications',
-    // Hydration 错误（通常由浏览器扩展引起）
+    // Hydration errors (usually caused by browser extensions)
     'Hydration failed',
     'Text content does not match',
   ],
-  
-  // 过滤不重要的事务
+
+  // Filter unimportant transactions
   tracesSampler: (samplingContext) => {
     const name = samplingContext.name
-    
-    // 静态资源请求不采样
+
+    // Don't sample static resource requests
     if (name?.includes('/_next/static') || name?.includes('/favicon')) {
       return 0
     }
-    
-    // API 请求提高采样率
+
+    // Higher sampling rate for API requests
     if (name?.includes('/api/')) {
       return process.env.NODE_ENV === 'production' ? 0.3 : 1.0
     }
-    
-    // 关键用户操作页面
+
+    // Critical user action pages
     if (name?.includes('/trader/') || name?.includes('/post/')) {
       return process.env.NODE_ENV === 'production' ? 0.25 : 1.0
     }
-    
-    // 默认采样率
+
+    // Default sampling rate
     return process.env.NODE_ENV === 'production' ? 0.2 : 1.0
   },
-  
-  // 在发送前处理事件
+
+  // Process events before sending
   beforeSend(event, _hint) {
-    // 过滤开发环境的错误
+    // Log events in development
     if (process.env.NODE_ENV === 'development') {
       console.log('[Sentry] Would send event:', event)
     }
-    
-    // 脱敏处理
+
+    // Sanitize user data
     if (event.user) {
       delete event.user.ip_address
     }
-    
-    // 添加自定义上下文
+
+    // Add custom context
     if (typeof window !== 'undefined') {
       event.contexts = {
         ...event.contexts,
@@ -94,59 +96,61 @@ Sentry.init({
         },
       }
     }
-    
+
     return event
   },
-  
-  // 在发送事务前处理
+
+  // Process transactions before sending
   beforeSendTransaction(transaction) {
-    // 过滤掉过短的事务（可能是取消的请求）
+    // Filter out very short transactions (likely cancelled requests)
     const duration = transaction.timestamp && transaction.start_timestamp
       ? (transaction.timestamp - transaction.start_timestamp) * 1000
       : 0
-    
+
     if (duration < 10) {
       return null
     }
-    
+
     return transaction
   },
-  
-  // 设置标签
+
+  // Set tags
   initialScope: {
     tags: {
       app: 'ranking-arena',
       platform: 'web',
     },
   },
-  
-  // 集成配置
+
+  // Integrations
   integrations: [
     Sentry.replayIntegration({
-      // 隐藏敏感信息
+      // Privacy settings
       maskAllText: false,
       maskAllInputs: true,
       blockAllMedia: false,
     }),
     Sentry.browserTracingIntegration({
-      // 追踪页面加载
+      // Track page load
       enableLongTask: true,
       enableInp: true,
     }),
     Sentry.feedbackIntegration({
-      // 用户反馈配置
+      // Feedback configuration
       colorScheme: 'dark',
-      buttonLabel: '反馈问题',
-      submitButtonLabel: '提交',
-      cancelButtonLabel: '取消',
-      formTitle: '反馈问题',
-      messagePlaceholder: '请描述您遇到的问题...',
-      successMessageText: '感谢您的反馈！',
+      buttonLabel: 'Feedback',
+      submitButtonLabel: 'Submit',
+      cancelButtonLabel: 'Cancel',
+      formTitle: 'Report an Issue',
+      messagePlaceholder: 'Please describe the issue you encountered...',
+      successMessageText: 'Thank you for your feedback!',
       showBranding: false,
-      autoInject: false, // 手动控制显示
+      autoInject: false,
     }),
   ],
 })
 
-// 导出 Sentry 用于自定义追踪
+// Export for navigation instrumentation
+export const onRouterTransitionStart = Sentry.captureRouterTransitionStart
+
 export { Sentry }

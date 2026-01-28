@@ -15,7 +15,7 @@ const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
 /**
  * 验证用户身份并返回用户ID
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 async function authenticateUser(request: NextRequest, supabase: ReturnType<typeof createClient<any>>): Promise<{ userId: string } | { error: string; status: number }> {
   const authHeader = request.headers.get('Authorization')
   if (!authHeader?.startsWith('Bearer ')) {
