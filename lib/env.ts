@@ -120,7 +120,7 @@ export function validateEnv() {
   } catch (error) {
     if (error instanceof z.ZodError) {
       const missingVars = error.issues
-        .map((err: { path: (string | number)[]; message: string }) => `  - ${err.path.join('.')}: ${err.message}`)
+        .map((err) => `  - ${String(err.path.join('.'))}: ${err.message}`)
         .join('\n')
 
       throw new Error(
