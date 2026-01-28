@@ -18,6 +18,7 @@ const inter = Inter({
   display: "swap",
   variable: "--font-inter",
   preload: true,
+  adjustFontFallback: true,
 });
 
 const notoSansSC = Noto_Sans_SC({
@@ -25,7 +26,8 @@ const notoSansSC = Noto_Sans_SC({
   weight: ["400", "500", "600", "700"],
   display: "swap",
   variable: "--font-noto-sans-sc",
-  preload: true,
+  preload: false,  // 延迟加载中文字体以优化首屏
+  adjustFontFallback: true,
 });
 
 export const viewport: Viewport = {
