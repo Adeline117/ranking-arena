@@ -6,6 +6,7 @@ import { tokens } from '@/lib/design-tokens'
 import { ThumbsUpIcon } from '../icons'
 import { renderContentWithLinks, ARENA_PURPLE } from '@/lib/utils/content'
 import { formatTimeAgo } from '@/lib/utils/date'
+import { useLanguage } from '../Providers/LanguageProvider'
 import { CompactErrorBoundary } from '../Utils/ErrorBoundary'
 import type { Comment } from './hooks/usePostComments'
 
@@ -203,6 +204,7 @@ export default function CommentsModal({
   setExpandedReplies,
   translatedComments = {},
 }: CommentsModalProps) {
+  const { language } = useLanguage()
   const commentInputRef = useRef<HTMLTextAreaElement>(null)
 
   // Auto-focus reply input
@@ -258,7 +260,7 @@ export default function CommentsModal({
               </Link>
               {showProBadge && <ProBadge />}
               <span style={{ fontSize: 11, color: tokens.colors.text.tertiary }}>
-                {formatTimeAgo(comment.created_at)}
+                {formatTimeAgo(comment.created_at, language)}
               </span>
             </div>
 

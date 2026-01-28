@@ -21,7 +21,7 @@ export default function NotificationsList() {
   const setUnreadNotifications = useInboxStore((s) => s.setUnreadNotifications)
   const unreadNotifications = useInboxStore((s) => s.unreadNotifications)
   const { showToast } = useToast()
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
   // 用于防止重复请求和回滚
   const pendingMarkAllRef = useRef(false)
   const pendingMarkRef = useRef<Set<string>>(new Set())
@@ -262,7 +262,7 @@ export default function NotificationsList() {
                       {notif.message}
                     </div>
                     <div style={{ fontSize: 11, color: tokens.colors.text.tertiary }}>
-                      {formatTimeAgo(notif.created_at)}
+                      {formatTimeAgo(notif.created_at, language)}
                     </div>
                   </div>
                   {!notif.read && (
