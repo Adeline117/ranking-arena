@@ -8,10 +8,12 @@ import MobileBottomNav from '@/app/components/layout/MobileBottomNav'
 import NotificationsList from '@/app/components/inbox/NotificationsList'
 import ConversationsList from '@/app/components/inbox/ConversationsList'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 export default function InboxPage() {
   const router = useRouter()
   const { email, authChecked, accessToken } = useAuthSession()
+  const { t } = useLanguage()
 
   useEffect(() => {
     if (authChecked && !accessToken) {
@@ -31,7 +33,7 @@ export default function InboxPage() {
           }}
         >
           <h1 style={{ fontSize: tokens.typography.fontSize['2xl'], fontWeight: 900, margin: 0 }}>
-            收件箱
+            {t('inbox')}
           </h1>
         </div>
 
