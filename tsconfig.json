@@ -46,6 +46,8 @@
     ".next",
     "out",
     "dist",
-    "build"
+    "build",
+    "lib/archive",
+    "docs/archive"
   ]
 }
