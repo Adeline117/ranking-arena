@@ -135,6 +135,13 @@ export default function CategoryRankingTabs({
   )
 }
 
+// Onchain 平台列表（与 PLATFORM_CATEGORY 保持同步）
+const ONCHAIN_PLATFORMS = [
+  'gmx', 'dydx', 'hyperliquid', 'kwenta', 'gains', 'mux',
+  'binance_web3', 'okx_web3', 'okx_wallet',
+  'dune_gmx', 'dune_hyperliquid', 'dune_uniswap', 'dune_defi',
+]
+
 // 过滤函数
 export function filterByCategory(source: string, category: CategoryType): boolean {
   if (category === 'all') return true
@@ -148,11 +155,23 @@ export function filterByCategory(source: string, category: CategoryType): boolea
              sourceLower === 'mexc' ||
              sourceLower === 'coinex' ||
              sourceLower === 'kucoin' ||
-             sourceLower === 'weex'
+             sourceLower === 'weex' ||
+             sourceLower === 'bingx' ||
+             sourceLower === 'gateio' ||
+             sourceLower === 'xt' ||
+             sourceLower === 'pionex' ||
+             sourceLower === 'lbank' ||
+             sourceLower === 'blofin' ||
+             sourceLower === 'bitmart' ||
+             sourceLower === 'phemex'
     case 'spot':
-      return sourceLower.includes('spot')
+      return sourceLower.includes('spot') ||
+             sourceLower === 'dune_uniswap'
     case 'web3':
-      return sourceLower.includes('web3') || sourceLower === 'gmx'
+      return sourceLower.includes('web3') ||
+             sourceLower.includes('wallet') ||
+             sourceLower.startsWith('dune_') ||
+             ONCHAIN_PLATFORMS.includes(sourceLower)
     default:
       return true
   }
@@ -162,11 +181,22 @@ export function filterByCategory(source: string, category: CategoryType): boolea
 export function getSourcesForCategory(category: CategoryType): string[] {
   switch (category) {
     case 'futures':
-      return ['binance_futures', 'bybit', 'bitget_futures', 'mexc', 'htx_futures', 'coinex', 'kucoin', 'weex']
+      return [
+        'binance_futures', 'bybit', 'bitget_futures', 'mexc', 'htx_futures',
+        'coinex', 'kucoin', 'weex', 'okx_futures', 'phemex', 'bitmart',
+        'bingx', 'gateio', 'xt', 'pionex', 'lbank', 'blofin'
+      ]
     case 'spot':
-      return ['binance_spot', 'bitget_spot']
+      return ['binance_spot', 'bitget_spot', 'dune_uniswap']
     case 'web3':
-      return ['binance_web3', 'okx_web3', 'gmx']
+      return [
+        // CEX Web3 钱包
+        'binance_web3', 'okx_web3', 'okx_wallet',
+        // DEX/链上永续合约
+        'gmx', 'dydx', 'hyperliquid', 'kwenta', 'gains', 'mux',
+        // Dune 链上数据
+        'dune_gmx', 'dune_hyperliquid', 'dune_uniswap', 'dune_defi'
+      ]
     case 'all':
     default:
       return []
