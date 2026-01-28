@@ -1447,7 +1447,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
                       cursor: 'pointer',
                     }}
                   >
-                    {p.group_name || '小组'}
+                    {language === 'zh' ? (p.group_name || '小组') : (p.group_name_en || p.group_name || 'Group')}
                   </Link>
                 ) : null}
                 <AvatarLink handle={p.author_handle} avatarUrl={p.author_avatar_url} isPro={p.author_is_pro} showProBadge={p.author_show_pro_badge} />
@@ -1470,7 +1470,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
                       background: 'rgba(139,111,168,0.1)',
                     }}
                   >
-                    投票
+                    {language === 'zh' ? '投票' : 'Poll'}
                   </span>
                 )}
                 {/* 图片标识 */}
@@ -1482,7 +1482,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
                       fontWeight: 600,
                     }}
                   >
-                    {p.images.length}图
+                    {p.images.length} {language === 'zh' ? '图' : 'img'}
                   </span>
                 )}
               </div>
@@ -1653,20 +1653,20 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
                   <CommentIcon size={14} /> {p.comment_count}
                 </span>
                 <span style={{ color: tokens.colors.text.tertiary }}>
-                  {formatTimeAgo(p.created_at)}
+                  {formatTimeAgo(p.created_at, language)}
                 </span>
                 
                 {/* 置顶标识 */}
                 {p.is_pinned && (
-                  <span style={{ 
-                    fontSize: 11, 
-                    color: ARENA_PURPLE, 
+                  <span style={{
+                    fontSize: 11,
+                    color: ARENA_PURPLE,
                     fontWeight: 700,
                     padding: '2px 6px',
                     background: 'rgba(139,111,168,0.1)',
                     borderRadius: 4,
                   }}>
-                    置顶
+                    {language === 'zh' ? '置顶' : 'Pinned'}
                   </span>
                 )}
                 
@@ -1693,7 +1693,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
                         e.currentTarget.style.background = p.is_pinned ? 'rgba(139,111,168,0.1)' : 'transparent'
                       }}
                     >
-                      {p.is_pinned ? '取消置顶' : '置顶'}
+                      {p.is_pinned ? (language === 'zh' ? '取消置顶' : 'Unpin') : (language === 'zh' ? '置顶' : 'Pin')}
                     </button>
                     <button
                       onClick={(e) => handleStartEdit(p, e)}
@@ -1715,7 +1715,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
                         e.currentTarget.style.background = 'transparent'
                       }}
                     >
-                      编辑
+                      {language === 'zh' ? '编辑' : 'Edit'}
                     </button>
                     <button
                       onClick={(e) => handleDeletePost(p, e)}
@@ -1737,7 +1737,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
                         e.currentTarget.style.background = 'transparent'
                       }}
                     >
-                      删除
+                      {language === 'zh' ? '删除' : 'Delete'}
                     </button>
                   </span>
                 )}
@@ -1803,10 +1803,10 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
                 @{openPost.author_handle}
               </Link>
             ) : (
-              <span>匿名</span>
+              <span>{language === 'zh' ? '匿名' : 'Anonymous'}</span>
             )}
             <span>·</span>
-            <span>{formatTimeAgo(openPost.created_at)}</span>
+            <span>{formatTimeAgo(openPost.created_at, language)}</span>
             <span>·</span>
             <CommentIcon size={12} />
             <span>{openPost.comment_count}</span>
@@ -1839,7 +1839,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                <span style={{ fontSize: 11, color: tokens.colors.text.tertiary }}>转发自</span>
+                <span style={{ fontSize: 11, color: tokens.colors.text.tertiary }}>{language === 'zh' ? '转发自' : 'Reposted from'}</span>
                 <AvatarLink handle={openPost.original_post.author_handle} avatarUrl={openPost.original_post.author_avatar_url} isPro={openPost.original_post.author_is_pro} showProBadge={openPost.original_post.author_show_pro_badge} />
               </div>
               {openPost.original_post.title && (
@@ -2114,7 +2114,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
             {/* 收藏 */}
             <Action
               icon={<span style={{ fontSize: 14 }}>{userBookmarks[openPost.id] ? '★' : '☆'}</span>}
-              text={userBookmarks[openPost.id] ? '已收藏' : '收藏'}
+              text={userBookmarks[openPost.id] ? (language === 'zh' ? '已收藏' : 'Saved') : (language === 'zh' ? '收藏' : 'Save')}
               onClick={(e) => {
                 if (e) {
                   e.preventDefault()
@@ -2152,7 +2152,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
                   e.currentTarget.style.background = 'transparent'
                   e.currentTarget.style.color = tokens.colors.text.tertiary
                 }}
-                title="选择收藏夹"
+                title={language === 'zh' ? '选择收藏夹' : 'Select folder'}
               >
                 ▼
               </button>
@@ -2160,7 +2160,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
             {/* 转发 */}
             <Action
               icon={<span style={{ fontSize: 14 }}>↗</span>}
-              text="转发"
+              text={language === 'zh' ? '转发' : 'Repost'}
               onClick={(e) => {
                 if (e) {
                   e.preventDefault()
@@ -2233,11 +2233,11 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
               padding: 24,
             }}
           >
-            <h2 style={{ fontSize: 18, fontWeight: 900, marginBottom: 20, color: tokens.colors.text.primary }}>编辑帖子</h2>
+            <h2 style={{ fontSize: 18, fontWeight: 900, marginBottom: 20, color: tokens.colors.text.primary }}>{language === 'zh' ? '编辑帖子' : 'Edit Post'}</h2>
             
             <div style={{ marginBottom: 16 }}>
               <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 800, color: tokens.colors.text.primary }}>
-                标题
+                {language === 'zh' ? '标题' : 'Title'}
               </label>
               <input
                 type="text"
@@ -2258,7 +2258,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
 
             <div style={{ marginBottom: 20 }}>
               <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 800, color: tokens.colors.text.primary }}>
-                内容
+                {language === 'zh' ? '内容' : 'Content'}
               </label>
               <textarea
                 value={editContent}
@@ -2294,7 +2294,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
                   cursor: savingEdit ? 'not-allowed' : 'pointer',
                 }}
               >
-                取消
+                {language === 'zh' ? '取消' : 'Cancel'}
               </button>
               <button
                 onClick={handleSaveEdit}
@@ -2310,7 +2310,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
                   cursor: savingEdit || !editTitle.trim() ? 'not-allowed' : 'pointer',
                 }}
               >
-                {savingEdit ? '保存中...' : '保存'}
+                {savingEdit ? (language === 'zh' ? '保存中...' : 'Saving...') : (language === 'zh' ? '保存' : 'Save')}
               </button>
             </div>
           </div>
@@ -2348,13 +2348,13 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
             }}
           >
             <h2 style={{ fontSize: 18, fontWeight: 900, marginBottom: 16, color: tokens.colors.text.primary }}>
-              转发到主页
+              {language === 'zh' ? '转发到主页' : 'Repost to Feed'}
             </h2>
-            
+
             <textarea
               value={repostComment}
               onChange={(e) => setRepostComment(e.target.value)}
-              placeholder="添加评论（可选）..."
+              placeholder={language === 'zh' ? '添加评论（可选）...' : 'Add comment (optional)...'}
               style={{
                 width: '100%',
                 minHeight: 80,
@@ -2388,7 +2388,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
                   cursor: 'pointer',
                 }}
               >
-                取消
+                {language === 'zh' ? '取消' : 'Cancel'}
               </button>
               <button
                 onClick={() => handleRepost(showRepostModal, repostComment)}
@@ -2404,7 +2404,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
                   cursor: repostLoading[showRepostModal] ? 'not-allowed' : 'pointer',
                 }}
               >
-                {repostLoading[showRepostModal] ? '转发中...' : '转发'}
+                {repostLoading[showRepostModal] ? (language === 'zh' ? '转发中...' : 'Reposting...') : (language === 'zh' ? '转发' : 'Repost')}
               </button>
             </div>
           </div>
