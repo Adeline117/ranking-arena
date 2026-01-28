@@ -26,7 +26,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
 const SOURCE = 'coinex'
 const BASE_URL = 'https://www.coinex.com/en/copy-trading/futures'
-const TARGET_COUNT = 100
+const TARGET_COUNT = 500
 const MAX_PAGES = 17
 
 // Arena Score 计算逻辑

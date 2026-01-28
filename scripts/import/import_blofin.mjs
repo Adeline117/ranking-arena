@@ -28,7 +28,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 const SOURCE = 'blofin'
 const BASE_URL = 'https://blofin.com/en/copy-trade'
 const API_BASE = 'https://openapi.blofin.com/api/v1/copytrading'
-const TARGET_COUNT = 100
+const TARGET_COUNT = 500
 const MIN_COUNT = 20
 
 // BloFin 周期映射

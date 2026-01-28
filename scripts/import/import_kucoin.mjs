@@ -28,7 +28,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
 const SOURCE = 'kucoin'
 const BASE_URL = 'https://www.kucoin.com/copytrading'
-const TARGET_COUNT = 100
+const TARGET_COUNT = 500
 const MAX_PAGES = 25
 
 const PERIOD_CONFIG = {

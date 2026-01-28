@@ -27,7 +27,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
 const SOURCE = 'lbank'
 const BASE_URL = 'https://www.lbank.com/copy-trading'
-const TARGET_COUNT = 100
+const TARGET_COUNT = 500
 const MIN_COUNT = 20
 
 // LBank 周期映射

@@ -1,12 +1,11 @@
 /**
- * Hyperliquid 增强版导入脚本
+ * GMX 增强版导入脚本
  *
- * 通过以下 API 获取完整数据:
- * 1. 排行榜: https://stats-data.hyperliquid.xyz/Mainnet/leaderboard
- * 2. 胜率: https://api.hyperliquid.xyz/info (userFillsByTime)
- * 3. 最大回撤: https://api.hyperliquid.xyz/info (portfolio)
+ * 通过 Subsquid GraphQL API 获取完整数据:
+ * 1. 排行榜: accountStats (wins, losses, realizedPnl)
+ * 2. 最大回撤: tradeActions 历史计算
  *
- * 用法: node scripts/import/import_hyperliquid_enhanced.mjs [7D|30D|90D|ALL]
+ * 用法: node scripts/import/import_gmx_enhanced.mjs [7D|30D|90D|ALL]
  */
 
 import 'dotenv/config'
@@ -22,24 +21,14 @@ if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
-const SOURCE = 'hyperliquid'
-const STATS_API = 'https://stats-data.hyperliquid.xyz/Mainnet'
-const INFO_API = 'https://api.hyperliquid.xyz/info'
+const SOURCE = 'gmx'
+const SUBSQUID_URL = 'https://gmx.squids.live/gmx-synthetics-arbitrum:prod/api/graphql'
 const TARGET_COUNT = 500
-const CONCURRENCY = 5
-const DELAY_MS = 200
+const CONCURRENCY = 3
+const DELAY_MS = 500
+const VALUE_SCALE = 1e30
 
-const WINDOW_MAP = {
-  '7D': 'week',
-  '30D': 'month',
-  '90D': 'allTime'
-}
-
-const WINDOW_DAYS = {
-  '7D': 7,
-  '30D': 30,
-  '90D': 90
-}
+const WINDOW_DAYS = { '7D': 7, '30D': 30, '90D': 90 }
 
 // Arena Score 计算
 const clip = (v, min, max) => Math.max(min, Math.min(max, v))
@@ -77,34 +66,62 @@ function getTargetPeriods() {
 async function fetchLeaderboard(period) {
   console.log(`\n📊 获取排行榜数据 (${period})...`)
 
-  const response = await fetch(`${STATS_API}/leaderboard`)
-  const data = await response.json()
+  const query = `{
+    accountStats(
+      limit: ${TARGET_COUNT * 2},
+      orderBy: realizedPnl_DESC
+    ) {
+      id
+      wins
+      losses
+      realizedPnl
+      volume
+      netCapital
+      maxCapital
+      closedCount
+    }
+  }`
 
-  if (!data?.leaderboardRows) {
+  const response = await fetch(SUBSQUID_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query })
+  })
+
+  const result = await response.json()
+
+  if (!result?.data?.accountStats) {
     throw new Error('无法获取排行榜数据')
   }
 
-  const windowKey = WINDOW_MAP[period]
-
-  const traders = data.leaderboardRows
+  const traders = result.data.accountStats
     .map(item => {
-      // windowPerformances 是数组格式: [["day", {...}], ["week", {...}], ...]
-      const windowData = Array.isArray(item.windowPerformances)
-        ? item.windowPerformances.find(([key]) => key === windowKey)?.[1]
-        : item.windowPerformances?.[windowKey]
+      const pnl = Number(BigInt(item.realizedPnl || '0')) / VALUE_SCALE
+      const maxCapital = Number(BigInt(item.maxCapital || '0')) / VALUE_SCALE
+      const netCapital = Number(BigInt(item.netCapital || '0')) / VALUE_SCALE
+      const volume = Number(BigInt(item.volume || '0')) / VALUE_SCALE
 
-      const pnl = windowData?.pnl ? Number(windowData.pnl) : 0
-      const roi = windowData?.roi ? Number(windowData.roi) * 100 : 0
+      // ROI 基于最大资本
+      const roi = maxCapital > 100 ? (pnl / maxCapital) * 100 : 0
+
+      // 胜率从 wins/losses 计算
+      const totalTrades = (item.wins || 0) + (item.losses || 0)
+      const winRate = totalTrades > 0 ? (item.wins / totalTrades) * 100 : null
 
       return {
-        address: item.ethAddress.toLowerCase(),
-        displayName: item.displayName || `${item.ethAddress.slice(0, 6)}...${item.ethAddress.slice(-4)}`,
+        address: item.id.toLowerCase(),
+        originalAddress: item.id, // Keep original case for API queries
+        displayName: `${item.id.slice(0, 6)}...${item.id.slice(-4)}`,
         roi,
         pnl,
-        accountValue: Number(item.accountValue) || 0
+        winRate,
+        maxDrawdown: null, // 需要单独计算
+        tradesCount: item.closedCount || totalTrades,
+        aum: netCapital > 0 ? netCapital : maxCapital,
+        volume
       }
     })
-    .filter(t => t.roi > 0) // 只保留正收益的交易员
+    .filter(t => t.roi >= -100 && t.roi <= 10000 && t.pnl >= -10000000 && t.pnl <= 100000000)
     .sort((a, b) => b.roi - a.roi)
     .slice(0, TARGET_COUNT)
 
@@ -113,137 +130,95 @@ async function fetchLeaderboard(period) {
 }
 
 /**
- * 获取交易员的胜率 (通过 userFillsByTime)
+ * 获取交易员的最大回撤 (通过 positionChanges 历史)
+ * @param {string} originalAddress - Must use original case from API
  */
-async function fetchWinRate(address, period) {
+async function fetchMaxDrawdown(originalAddress) {
   try {
-    const days = WINDOW_DAYS[period]
-    const startTime = Date.now() - days * 24 * 60 * 60 * 1000
+    // GMX GraphQL API is case-sensitive, must use exact case
+    const query = `{
+      positionChanges(
+        where: { account_eq: "${originalAddress}" }
+        orderBy: timestamp_ASC
+        limit: 500
+      ) {
+        timestamp
+        basePnlUsd
+        sizeDeltaUsd
+      }
+    }`
 
-    const response = await fetch(INFO_API, {
+    const response = await fetch(SUBSQUID_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        type: 'userFillsByTime',
-        user: address,
-        startTime,
-        aggregateByTime: true
-      })
+      body: JSON.stringify({ query })
     })
 
-    const fills = await response.json()
+    const result = await response.json()
+    const changes = result?.data?.positionChanges
 
-    if (!Array.isArray(fills) || fills.length === 0) {
+    if (!changes || changes.length < 2) {
       return null
     }
 
-    // 过滤有 closedPnl 的交易（实际平仓）
-    const closedTrades = fills.filter(f => {
-      const pnl = parseFloat(f.closedPnl || '0')
+    // 只处理有 basePnlUsd 的 position changes (平仓操作)
+    const closingChanges = changes.filter(c => {
+      const pnl = c.basePnlUsd ? Number(BigInt(c.basePnlUsd)) / VALUE_SCALE : 0
       return pnl !== 0
     })
 
-    if (closedTrades.length === 0) {
+    if (closingChanges.length < 2) {
       return null
     }
 
-    const winningTrades = closedTrades.filter(f => parseFloat(f.closedPnl) > 0)
-    return (winningTrades.length / closedTrades.length) * 100
-  } catch (e) {
-    return null
-  }
-}
-
-/**
- * 获取交易员的最大回撤 (通过 portfolio)
- */
-async function fetchMaxDrawdown(address, period) {
-  try {
-    const response = await fetch(INFO_API, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        type: 'portfolio',
-        user: address
-      })
-    })
-
-    const portfolio = await response.json()
-
-    if (!Array.isArray(portfolio)) {
-      return null
-    }
-
-    // 根据周期选择数据: week=7D, month=30D, allTime=90D
-    const periodKey = { '7D': 'perpWeek', '30D': 'perpMonth', '90D': 'perpAllTime' }[period] || 'perpMonth'
-    const periodData = portfolio.find(([key]) => key === periodKey)?.[1]
-
-    if (!periodData?.accountValueHistory || !periodData?.pnlHistory) {
-      return null
-    }
-
-    const accountValueHistory = periodData.accountValueHistory
-    const pnlHistory = periodData.pnlHistory
-
-    if (accountValueHistory.length === 0 || pnlHistory.length === 0) {
-      return null
-    }
-
-    // 计算最大回撤
-    // Hyperliquid 公式: max((pnl(end) - pnl(start)) / account_value(start)) for all end > start
+    // 计算累计权益曲线和最大回撤
+    let cumulativePnl = 0
+    let peakEquity = 0
     let maxDrawdown = 0
 
-    for (let i = 0; i < pnlHistory.length; i++) {
-      const startAccountValue = parseFloat(accountValueHistory[i][1])
-      const startPnl = parseFloat(pnlHistory[i][1])
+    for (const change of closingChanges) {
+      const pnl = Number(BigInt(change.basePnlUsd || '0')) / VALUE_SCALE
+      cumulativePnl += pnl
 
-      if (startAccountValue <= 0) continue
+      if (cumulativePnl > peakEquity) {
+        peakEquity = cumulativePnl
+      }
 
-      for (let j = i + 1; j < pnlHistory.length; j++) {
-        const endPnl = parseFloat(pnlHistory[j][1])
-        const drawdown = (endPnl - startPnl) / startAccountValue
-
-        if (drawdown < maxDrawdown) {
-          maxDrawdown = drawdown
+      if (peakEquity > 0) {
+        const currentDrawdown = ((peakEquity - cumulativePnl) / peakEquity) * 100
+        if (currentDrawdown > maxDrawdown) {
+          maxDrawdown = currentDrawdown
         }
       }
     }
 
-    // 返回正值百分比
-    return Math.abs(maxDrawdown) * 100
+    return maxDrawdown > 0 && maxDrawdown < 200 ? maxDrawdown : null
   } catch (e) {
     return null
   }
 }
 
 /**
- * 批量获取详细数据
+ * 批量获取最大回撤数据
  */
-async function enrichTraders(traders, period) {
-  console.log(`\n📈 获取详细数据 (胜率 + 最大回撤)...`)
+async function enrichTraders(traders) {
+  console.log(`\n📈 获取最大回撤数据...`)
   console.log(`  交易员数: ${traders.length}, 并发: ${CONCURRENCY}`)
 
   let processed = 0
 
-  // 分批处理
   for (let i = 0; i < traders.length; i += CONCURRENCY) {
     const batch = traders.slice(i, i + CONCURRENCY)
 
     await Promise.all(batch.map(async (trader) => {
-      const [winRate, maxDrawdown] = await Promise.all([
-        fetchWinRate(trader.address, period),
-        fetchMaxDrawdown(trader.address, period)
-      ])
-
-      trader.winRate = winRate
-      trader.maxDrawdown = maxDrawdown
+      // Use originalAddress for case-sensitive API query
+      trader.maxDrawdown = await fetchMaxDrawdown(trader.originalAddress)
     }))
 
     processed += batch.length
-    if (processed % 20 === 0 || processed === traders.length) {
-      const withWr = traders.filter(t => t.winRate !== null).length
+    if (processed % 15 === 0 || processed === traders.length) {
       const withMdd = traders.filter(t => t.maxDrawdown !== null).length
-      console.log(`  进度: ${processed}/${traders.length} | 胜率: ${withWr} | MDD: ${withMdd}`)
+      console.log(`  进度: ${processed}/${traders.length} | MDD: ${withMdd}`)
     }
 
     await sleep(DELAY_MS)
@@ -259,17 +234,14 @@ async function saveTraders(traders, period) {
   console.log(`\n💾 保存 ${traders.length} 个交易员...`)
 
   const capturedAt = new Date().toISOString()
-
-  // 排序
   traders.sort((a, b) => (b.roi || 0) - (a.roi || 0))
 
-  // 批量 upsert trader_sources
   const sourcesData = traders.map(t => ({
     source: SOURCE,
     source_type: 'defi',
     source_trader_id: t.address,
     handle: t.displayName,
-    profile_url: `https://app.hyperliquid.xyz/@${t.address}`,
+    profile_url: `https://app.gmx.io/#/actions/${t.address}`,
     is_active: true
   }))
 
@@ -277,7 +249,6 @@ async function saveTraders(traders, period) {
     onConflict: 'source,source_trader_id'
   })
 
-  // 批量 insert trader_snapshots
   const snapshotsData = traders.map((t, idx) => ({
     source: SOURCE,
     source_trader_id: t.address,
@@ -304,7 +275,6 @@ async function saveTraders(traders, period) {
     return saved
   }
 
-  // 统计
   const withWr = traders.filter(t => t.winRate !== null).length
   const withMdd = traders.filter(t => t.maxDrawdown !== null).length
   console.log(`  ✓ 保存成功: ${traders.length} 条`)
@@ -319,12 +289,12 @@ async function main() {
   const startTime = Date.now()
 
   console.log('\n' + '='.repeat(60))
-  console.log('Hyperliquid 增强版数据抓取')
+  console.log('GMX 增强版数据抓取')
   console.log('='.repeat(60))
   console.log('时间:', new Date().toISOString())
   console.log('目标周期:', periods.join(', '))
-  console.log('数据源: Hyperliquid Stats API + Info API')
-  console.log('增强功能: 胜率 (userFillsByTime) + 最大回撤 (portfolio)')
+  console.log('数据源: GMX Subsquid GraphQL API')
+  console.log('增强功能: 胜率 (wins/losses) + 最大回撤 (tradeActions 历史)')
   console.log('='.repeat(60))
 
   const results = []
@@ -335,7 +305,6 @@ async function main() {
     console.log('='.repeat(50))
 
     try {
-      // 1. 获取排行榜
       const traders = await fetchLeaderboard(period)
 
       if (traders.length === 0) {
@@ -343,10 +312,8 @@ async function main() {
         continue
       }
 
-      // 2. 增强数据（获取胜率和最大回撤）
-      await enrichTraders(traders, period)
+      await enrichTraders(traders)
 
-      // 3. 显示 TOP 5
       console.log(`\n📋 ${period} TOP 5:`)
       traders.slice(0, 5).forEach((t, i) => {
         const wr = t.winRate !== null ? `${t.winRate.toFixed(1)}%` : 'N/A'
@@ -354,7 +321,6 @@ async function main() {
         console.log(`  ${i + 1}. ${t.displayName}: ROI ${t.roi.toFixed(2)}%, WR ${wr}, MDD ${mdd}`)
       })
 
-      // 4. 保存
       const saved = await saveTraders(traders, period)
       results.push({
         period,

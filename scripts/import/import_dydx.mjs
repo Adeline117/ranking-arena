@@ -20,7 +20,7 @@ if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) { console.error('Missing env');
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
 const SOURCE = 'dydx'
-const TARGET_COUNT = 100
+const TARGET_COUNT = 500
 // 使用更具体的排行榜 URL
 const RANKINGS_URLS = {
   '7D': 'https://trade.dydx.exchange/rankings/pnl-percent',

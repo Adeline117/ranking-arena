@@ -28,7 +28,7 @@ if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
 const SOURCE = 'bitget_spot'
-const TARGET_COUNT = 100
+const TARGET_COUNT = 500
 const CONCURRENCY = 5
 
 // Arena Score 计算逻辑

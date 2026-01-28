@@ -12,7 +12,7 @@ if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) { console.error('Missing env');
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
 const SOURCE = 'bingx'
-const TARGET_COUNT = 200
+const TARGET_COUNT = 500
 
 const clip = (v, min, max) => Math.max(min, Math.min(max, v))
 const safeLog1p = x => x <= -1 ? 0 : Math.log(1 + x)
