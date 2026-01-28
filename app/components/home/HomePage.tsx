@@ -14,8 +14,13 @@ import { JsonLd } from '../Providers/JsonLd'
 import { generateWebSiteSchema, generateOrganizationSchema, combineSchemas } from '@/lib/seo'
 
 import RankingSection from './RankingSection'
-import StatsBar from './StatsBar'
 import PullToRefresh from '../ui/PullToRefresh'
+
+// 延迟加载 StatsBar 以优化 LCP
+const StatsBar = dynamic(() => import('./StatsBar'), {
+  ssr: false,
+  loading: () => <Box style={{ height: 48, marginBottom: 16 }} />,
+})
 import { useTraderData, useAuth } from './hooks'
 import type { Trader } from '../ranking/RankingTable'
 import type { TimeRange } from './hooks/useTraderData'

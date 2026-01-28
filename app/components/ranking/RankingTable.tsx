@@ -720,8 +720,9 @@ function useDebounce<T>(value: T, delay: number): T {
 /**
  * 排行榜页面 - 核心功能，突出前三名
  * 只保留：排名、交易员ID、ROI、PnL、胜率、最大回撤
+ * 使用 memo 优化性能，减少不必要的重渲染
  */
-export default function RankingTable(props: {
+function RankingTableInner(props: {
   traders: Trader[]
   loading: boolean
   loggedIn: boolean
@@ -1823,3 +1824,7 @@ export default function RankingTable(props: {
     </>
   )
 }
+
+// 使用 memo 包装以减少不必要的重渲染，优化 INP
+const RankingTable = memo(RankingTableInner)
+export default RankingTable

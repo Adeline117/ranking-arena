@@ -23,7 +23,7 @@ const inter = Inter({
 
 const notoSansSC = Noto_Sans_SC({
   subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
+  weight: ["400", "700"],  // 减少字重以优化加载性能
   display: "swap",
   variable: "--font-noto-sans-sc",
   preload: false,  // 延迟加载中文字体以优化首屏
@@ -95,14 +95,24 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" data-theme="dark" translate="no" className={`${inter.variable} ${notoSansSC.variable}`}>
+      <head>
+        {/* Preconnect to critical origins */}
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        {/* DNS prefetch for API */}
+        <link rel="dns-prefetch" href="https://supabase.co" />
+      </head>
       <body
         className="font-sans antialiased"
         style={{ fontFamily: 'var(--font-inter), var(--font-noto-sans-sc), system-ui, sans-serif' }}
       >
         <Providers>
           <CapacitorProvider>
-            <WebVitals />
-            <SpeedInsights />
+            {/* Defer analytics to after LCP */}
+            <Suspense fallback={null}>
+              <WebVitals />
+              <SpeedInsights />
+            </Suspense>
             <SkipLink targetId="main-content" />
             <ServiceWorkerRegistration />
             <Suspense fallback={null}>

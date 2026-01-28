@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
 import { Box } from '../base'
@@ -146,7 +146,10 @@ export default function RankingSection({
     loadSavedFilters()
   }, [isPro, savedFiltersLoaded, getAuthHeaders])
 
-  // Feature 8: Sync all state to URL via replaceState
+  // Debounce ref for URL sync
+  const syncTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Feature 8: Sync all state to URL via replaceState (debounced for performance)
   const syncStateToUrl = useCallback((overrides: {
     config?: FilterConfig
     sort?: string
@@ -155,39 +158,47 @@ export default function RankingSection({
     q?: string
     preset?: string | null
   } = {}) => {
-    const params = new URLSearchParams(window.location.search)
-    const config = overrides.config ?? filterConfig
+    // Clear pending sync
+    if (syncTimeoutRef.current) {
+      clearTimeout(syncTimeoutRef.current)
+    }
 
-    // Clear old filter params
-    ;['roi_min', 'roi_max', 'dd_min', 'dd_max', 'min_pnl', 'min_score', 'min_wr', 'exchange', 'fcat', 'sort', 'order', 'page', 'q', 'preset'].forEach(k => params.delete(k))
+    // Debounce URL sync to reduce INP
+    syncTimeoutRef.current = setTimeout(() => {
+      const params = new URLSearchParams(window.location.search)
+      const config = overrides.config ?? filterConfig
 
-    // Filter params
-    if (config.roi_min != null) params.set('roi_min', String(config.roi_min))
-    if (config.roi_max != null) params.set('roi_max', String(config.roi_max))
-    if (config.drawdown_min != null) params.set('dd_min', String(config.drawdown_min))
-    if (config.drawdown_max != null) params.set('dd_max', String(config.drawdown_max))
-    if (config.min_pnl != null) params.set('min_pnl', String(config.min_pnl))
-    if (config.min_score != null) params.set('min_score', String(config.min_score))
-    if (config.min_win_rate != null) params.set('min_wr', String(config.min_win_rate))
-    if (config.exchange?.length) params.set('exchange', config.exchange.join(','))
-    if (config.category?.length) params.set('fcat', config.category.join(','))
+      // Clear old filter params
+      ;['roi_min', 'roi_max', 'dd_min', 'dd_max', 'min_pnl', 'min_score', 'min_wr', 'exchange', 'fcat', 'sort', 'order', 'page', 'q', 'preset'].forEach(k => params.delete(k))
 
-    // Feature 8: Sort/page/search/preset
-    const sort = overrides.sort ?? sortColumn
-    const order = overrides.order ?? sortDir
-    const page = overrides.page ?? currentPage
-    const q = overrides.q ?? searchQuery
-    const preset = overrides.preset !== undefined ? overrides.preset : activePreset
+      // Filter params
+      if (config.roi_min != null) params.set('roi_min', String(config.roi_min))
+      if (config.roi_max != null) params.set('roi_max', String(config.roi_max))
+      if (config.drawdown_min != null) params.set('dd_min', String(config.drawdown_min))
+      if (config.drawdown_max != null) params.set('dd_max', String(config.drawdown_max))
+      if (config.min_pnl != null) params.set('min_pnl', String(config.min_pnl))
+      if (config.min_score != null) params.set('min_score', String(config.min_score))
+      if (config.min_win_rate != null) params.set('min_wr', String(config.min_win_rate))
+      if (config.exchange?.length) params.set('exchange', config.exchange.join(','))
+      if (config.category?.length) params.set('fcat', config.category.join(','))
 
-    if (sort && sort !== 'score') params.set('sort', sort)
-    if (order && order !== 'desc') params.set('order', order)
-    if (page && page > 1) params.set('page', String(page))
-    if (q) params.set('q', q)
-    if (preset) params.set('preset', preset)
+      // Feature 8: Sort/page/search/preset
+      const sort = overrides.sort ?? sortColumn
+      const order = overrides.order ?? sortDir
+      const page = overrides.page ?? currentPage
+      const q = overrides.q ?? searchQuery
+      const preset = overrides.preset !== undefined ? overrides.preset : activePreset
 
-    const qs = params.toString()
-    const newUrl = qs ? `${window.location.pathname}?${qs}` : window.location.pathname
-    window.history.replaceState(null, '', newUrl)
+      if (sort && sort !== 'score') params.set('sort', sort)
+      if (order && order !== 'desc') params.set('order', order)
+      if (page && page > 1) params.set('page', String(page))
+      if (q) params.set('q', q)
+      if (preset) params.set('preset', preset)
+
+      const qs = params.toString()
+      const newUrl = qs ? `${window.location.pathname}?${qs}` : window.location.pathname
+      window.history.replaceState(null, '', newUrl)
+    }, 150) // 150ms debounce
   }, [filterConfig, sortColumn, sortDir, currentPage, searchQuery, activePreset])
 
   // Keep backward compatibility for syncFilterToUrl
