@@ -92,8 +92,8 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
     const requestPromise = (async (): Promise<CachedData> => {
       try {
         // Feature 1: Include sort params in fetch URL
-        // 默认获取 1000 条数据以支持更大的排行榜
-        let url = `/api/traders?timeRange=${timeRange}&limit=1000`
+        // 优化：初始加载 100 条以提升首屏性能
+        let url = `/api/traders?timeRange=${timeRange}&limit=100`
         if (sortBy && sortBy !== 'arena_score') {
           url += `&sortBy=${sortBy}&order=${sortOrder || 'desc'}`
         }

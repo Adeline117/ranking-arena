@@ -185,7 +185,15 @@ export function StatsBar() {
           display: 'flex',
           gap: 10,
           animation: 'scrollTicker 35s linear infinite',
+          animationDelay: '2s',
+          animationPlayState: 'paused',
           width: 'max-content',
+        }}
+        onAnimationStart={(e) => {
+          // 延迟启动动画，避免阻塞 LCP
+          setTimeout(() => {
+            (e.currentTarget as HTMLElement).style.animationPlayState = 'running'
+          }, 100)
         }}
       >
         {items.map((source, index) => (

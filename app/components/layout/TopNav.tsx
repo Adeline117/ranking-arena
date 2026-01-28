@@ -104,7 +104,7 @@ export default function TopNav({ email }: { email: string | null }) {
     }
   }, [])
 
-  // 获取未读通知数量并订阅实时更新
+  // 获取未读通知数量并订阅实时更新 - 延迟加载以优化 LCP
   useEffect(() => {
     if (!myId) return
 
@@ -116,7 +116,7 @@ export default function TopNav({ email }: { email: string | null }) {
           .select('*', { count: 'exact', head: true })
           .eq('user_id', myId)
           .eq('read', false)
-        
+
         if (!error && typeof count === 'number') {
           setUnreadCount(count)
         }
@@ -125,7 +125,8 @@ export default function TopNav({ email }: { email: string | null }) {
       }
     }
 
-    fetchUnreadCount()
+    // 延迟 1 秒加载，避免阻塞 LCP
+    const timer = setTimeout(fetchUnreadCount, 1000)
 
     // 订阅实时通知更新
     const channel = supabase
@@ -146,11 +147,12 @@ export default function TopNav({ email }: { email: string | null }) {
       .subscribe()
 
     return () => {
+      clearTimeout(timer)
       supabase.removeChannel(channel)
     }
   }, [myId])
 
-  // 获取未读私信数量
+  // 获取未读私信数量 - 延迟加载以优化 LCP
   useEffect(() => {
     if (!myId) return
 
@@ -173,7 +175,8 @@ export default function TopNav({ email }: { email: string | null }) {
       }
     }
 
-    fetchUnreadMessageCount()
+    // 延迟 1.2 秒加载，避免阻塞 LCP
+    const timer = setTimeout(fetchUnreadMessageCount, 1200)
 
     // 订阅实时私信更新
     const channel = supabase
@@ -193,6 +196,7 @@ export default function TopNav({ email }: { email: string | null }) {
       .subscribe()
 
     return () => {
+      clearTimeout(timer)
       supabase.removeChannel(channel)
     }
   }, [myId])
