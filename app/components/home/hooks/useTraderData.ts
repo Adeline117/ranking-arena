@@ -18,6 +18,7 @@ interface CachedData {
   traders: Trader[]
   lastUpdated: string | null
   fetchedAt: number // timestamp when data was fetched
+  availableSources?: string[] // 所有可用来源
 }
 
 interface UseTraderDataOptions {
@@ -39,6 +40,7 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [lastUpdated, setLastUpdated] = useState<string | null>(null)
+  const [availableSources, setAvailableSources] = useState<string[]>([])
 
   // 多窗口同步
   const { broadcast, on } = useTraderDataSync()
@@ -106,6 +108,7 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
           traders: data.traders || [],
           lastUpdated: data.lastUpdated || null,
           fetchedAt: Date.now(),
+          availableSources: data.availableSources || [],
         }
 
         // 更新缓存
@@ -142,11 +145,13 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
       const cached = await loadTimeRange(activeTimeRange, forceRefresh)
       setCurrentTraders(cached.traders)
       setLastUpdated(cached.lastUpdated)
+      setAvailableSources(cached.availableSources || [])
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : '加载数据失败'
       setError(errorMsg)
       setCurrentTraders([])
       setLastUpdated(null)
+      setAvailableSources([])
     } finally {
       setLoading(false)
     }
@@ -175,6 +180,7 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
         .then(cached => {
           setCurrentTraders(cached.traders)
           setLastUpdated(cached.lastUpdated)
+          setAvailableSources(cached.availableSources || [])
         })
         .catch(() => {
           // Silent refresh failure - loadTimeRange already sets error
@@ -242,6 +248,7 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
     error,
     activeTimeRange,
     lastUpdated,
+    availableSources,
     changeTimeRange,
     refresh,
     clearCache,

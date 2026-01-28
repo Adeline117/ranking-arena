@@ -173,7 +173,7 @@ export const GET = withPublic(
     const sortBy = searchParams.get('sortBy') as 'arena_score' | 'roi' | 'win_rate' | 'max_drawdown' | null
     const order = (searchParams.get('order') || 'desc') as 'asc' | 'desc'
     const page = Math.max(0, parseInt(searchParams.get('page') || '0', 10) || 0)
-    const limit = Math.min(1000, Math.max(1, parseInt(searchParams.get('limit') || '500', 10) || 500))
+    const limit = Math.min(3000, Math.max(1, parseInt(searchParams.get('limit') || '1000', 10) || 1000))
 
     const allTraders: TraderData[] = []
     const staleSources: string[] = [] // 跟踪陈旧数据的交易所
@@ -512,6 +512,9 @@ export const GET = withPublic(
     // 检查数据是否陈旧（有任何交易所数据超过 24 小时）
     const isStale = staleSources.length > 0
 
+    // 收集所有有数据的来源
+    const allAvailableSources = [...new Set(allTraders.map(t => t.source))].sort()
+
     const response = NextResponse.json({
       traders: topTraders,
       timeRange,
@@ -526,6 +529,8 @@ export const GET = withPublic(
       page,
       limit,
       hasMore,
+      // 所有有数据的来源（用于底部来源显示）
+      availableSources: allAvailableSources,
     })
 
     // 添加缓存头，提高页面加载速度

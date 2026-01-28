@@ -28,7 +28,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
 const SOURCE = 'mexc'
 const BASE_URL = 'https://www.mexc.com/futures/copyTrade/home'
-const TARGET_COUNT = 100
+const TARGET_COUNT = 500
 const MAX_PAGES = 20
 
 // Arena Score 计算逻辑
