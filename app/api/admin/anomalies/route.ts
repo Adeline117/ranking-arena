@@ -82,7 +82,7 @@ export async function GET(request: NextRequest) {
         has_more: anomalies.length === limit,
       },
     })
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('[Admin Anomalies] Error fetching anomalies:', error)
 
     return NextResponse.json(

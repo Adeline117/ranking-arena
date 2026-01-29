@@ -8,39 +8,11 @@ interface TrustStatsProps {
   stats: TraderStats
 }
 
-/**
- * Stats页面 - 信任构建功能
- * 只保留关键指标：胜率、平均持仓时间、最大回撤、Profit Factor
- */
 export default function TrustStats({ stats }: TrustStatsProps) {
-  // 从stats中提取关键指标
   const winRate = stats.trading?.profitableTradesPct || 0
   const avgHoldingTime = stats.additionalStats?.avgHoldingTime || 'N/A'
-  
-  // 从 additionalStats 获取 maxDrawdown
   const maxDrawdown = stats.additionalStats?.maxDrawdown ?? 0
-  
-  // 计算 Profit Factor: avgProfit * profitableTradesPct / (avgLoss * (1 - profitableTradesPct))
-  // 如果没有足够数据，显示 N/A
-  // 注意：profitableTradesPct 是小数形式（如 0.85 表示 85%）
-  let profitFactor = 0
-  if (stats.trading) {
-    const { avgProfit, avgLoss, profitableTradesPct } = stats.trading
-    if (avgProfit > 0 && avgLoss > 0 && profitableTradesPct > 0 && profitableTradesPct < 1) {
-      // Profit Factor = (胜率 * 平均盈利) / ((1-胜率) * 平均亏损)
-      const winPct = profitableTradesPct  // 已经是小数形式
-      const lossPct = 1 - winPct
-      if (lossPct > 0 && avgLoss > 0) {
-        profitFactor = (winPct * avgProfit) / (lossPct * avgLoss)
-      }
-    }
-  }
-
-  // 格式化显示值
-  const formatValue = (value: number, suffix: string = '', fallback: string = 'N/A') => {
-    if (value === 0 || !Number.isFinite(value)) return fallback
-    return value.toFixed(2) + suffix
-  }
+  const profitFactor = calculateProfitFactor(stats.trading)
 
   return (
     <Box bg="secondary" p={6} radius="none" border="none">
@@ -60,14 +32,10 @@ export default function TrustStats({ stats }: TrustStatsProps) {
           <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[3], fontWeight: tokens.typography.fontWeight.normal }}>
             胜率
           </Text>
-          <Text 
-            size="2xl" 
-            weight="black" 
-            style={{ 
-              color: winRate > 0.5 ? tokens.colors.accent.success : 
-                     winRate > 0 ? tokens.colors.text.primary : 
-                     tokens.colors.text.tertiary 
-            }}
+          <Text
+            size="2xl"
+            weight="black"
+            style={{ color: getWinRateColor(winRate) }}
           >
             {winRate > 0 ? `${winRate.toFixed(1)}%` : 'N/A'}
           </Text>
@@ -104,25 +72,54 @@ export default function TrustStats({ stats }: TrustStatsProps) {
           <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[3], fontWeight: tokens.typography.fontWeight.normal }}>
             Profit Factor
           </Text>
-          <Text 
-            size="2xl" 
-            weight="black" 
-            style={{ 
-              color: profitFactor > 1.5 ? tokens.colors.accent.success : 
-                     profitFactor > 1 ? tokens.colors.accent.warning :
-                     profitFactor > 0 ? tokens.colors.accent.error :
-                     tokens.colors.text.tertiary 
-            }}
+          <Text
+            size="2xl"
+            weight="black"
+            style={{ color: getProfitFactorColor(profitFactor) }}
           >
             {formatValue(profitFactor)}
           </Text>
           {profitFactor > 0 && (
             <Text size="xs" color="tertiary" style={{ marginTop: tokens.spacing[1] }}>
-              {profitFactor >= 2 ? '优秀' : profitFactor >= 1.5 ? '良好' : profitFactor >= 1 ? '及格' : '需改进'}
+              {getProfitFactorLabel(profitFactor)}
             </Text>
           )}
         </Box>
       </Box>
     </Box>
   )
+}
+
+function calculateProfitFactor(trading: TraderStats['trading']): number {
+  if (!trading) return 0
+  const { avgProfit, avgLoss, profitableTradesPct } = trading
+  if (avgProfit <= 0 || avgLoss <= 0 || profitableTradesPct <= 0 || profitableTradesPct >= 1) return 0
+  const lossPct = 1 - profitableTradesPct
+  if (lossPct <= 0) return 0
+  return (profitableTradesPct * avgProfit) / (lossPct * avgLoss)
+}
+
+function formatValue(value: number, suffix = '', fallback = 'N/A'): string {
+  if (value === 0 || !Number.isFinite(value)) return fallback
+  return value.toFixed(2) + suffix
+}
+
+function getWinRateColor(winRate: number): string {
+  if (winRate > 0.5) return tokens.colors.accent.success
+  if (winRate > 0) return tokens.colors.text.primary
+  return tokens.colors.text.tertiary
+}
+
+function getProfitFactorColor(profitFactor: number): string {
+  if (profitFactor > 1.5) return tokens.colors.accent.success
+  if (profitFactor > 1) return tokens.colors.accent.warning
+  if (profitFactor > 0) return tokens.colors.accent.error
+  return tokens.colors.text.tertiary
+}
+
+function getProfitFactorLabel(profitFactor: number): string {
+  if (profitFactor >= 2) return '优秀'
+  if (profitFactor >= 1.5) return '良好'
+  if (profitFactor >= 1) return '及格'
+  return '需改进'
 }

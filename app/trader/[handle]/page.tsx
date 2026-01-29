@@ -184,7 +184,7 @@ function TraderContent(props: { params: { handle: string } | Promise<{ handle: s
         setAssetBreakdown(data.assetBreakdown)
         setEquityCurve(data.equityCurve)
 
-      } catch (error) {
+      } catch (error: unknown) {
         console.error('Error loading trader data:', error)
         setProfile(null)
         showToast(language === 'zh' ? '加载失败，请稍后重试' : 'Failed to load, please try again', 'error')

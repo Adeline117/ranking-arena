@@ -44,7 +44,7 @@ export const GET = withAuth(
           unreadCount: alerts.length,
         },
       })
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('[risk-alerts] 获取预警失败:', error)
       return NextResponse.json({
         success: false,
@@ -95,7 +95,7 @@ export const POST = withAuth(
       return NextResponse.json({
         success: true,
       })
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('[risk-alerts] 标记预警失败:', error)
       return NextResponse.json({
         success: false,

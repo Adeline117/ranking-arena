@@ -61,7 +61,7 @@ export const POST = withAuth(
         success: true,
         results,
       })
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('[push/send] Failed to send notification:', error)
       return NextResponse.json({
         success: false,

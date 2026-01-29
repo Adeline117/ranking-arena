@@ -79,11 +79,11 @@ export default function AccountRequiredStats({ userId }: { userId: string }) {
   }
 
   const handleSync = async (exchange: string) => {
-    setSyncing({ ...syncing, [exchange]: true })
+    setSyncing(prev => ({ ...prev, [exchange]: true }))
     try {
       const response = await fetch('/api/exchange/sync', {
         method: 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
           ...getCsrfHeaders()
         },
@@ -96,14 +96,13 @@ export default function AccountRequiredStats({ userId }: { userId: string }) {
         return
       }
 
-      // 重新加载数据
       await loadData()
       showToast(t('syncSuccess'), 'success')
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : t('syncError')
       showToast(t('syncError') + ': ' + errorMessage, 'error')
     } finally {
-      setSyncing({ ...syncing, [exchange]: false })
+      setSyncing(prev => ({ ...prev, [exchange]: false }))
     }
   }
 

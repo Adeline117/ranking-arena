@@ -96,7 +96,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       is_pinned: newPinnedState,
       message: newPinnedState ? '已置顶' : '已取消置顶',
     })
-  } catch (error) {
+  } catch (error: unknown) {
     return handleError(error, 'posts/[id]/pin')
   }
 }

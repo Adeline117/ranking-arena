@@ -114,7 +114,7 @@ export async function POST(request: NextRequest) {
       success: true,
       backupCodes,
     })
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('[2FA Verify] Unexpected error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }

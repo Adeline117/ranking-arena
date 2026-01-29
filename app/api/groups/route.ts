@@ -68,7 +68,7 @@ export async function GET(request: NextRequest) {
         },
       },
     })
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Groups API error:', error)
     return NextResponse.json(
       { success: false, error: 'Internal server error' },

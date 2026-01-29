@@ -92,7 +92,7 @@ export async function POST(request: NextRequest) {
       success: true,
       message: 'Account restored successfully',
     })
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('[account/cancel-deletion] Error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }

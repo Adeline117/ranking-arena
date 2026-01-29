@@ -199,7 +199,7 @@ async function fetchFromCoinGeckoForPairs(pairs: Pair[]): Promise<MarketRow[]> {
     }
 
     return rows
-  } catch (error) {
+  } catch (error: unknown) {
     clearTimeout(timeoutId)
     if (error instanceof Error && error.name === 'AbortError') {
       throw new Error('CoinGecko request timeout')
@@ -241,7 +241,7 @@ async function fetchFromCoinbaseForPairs(pairs: Pair[]): Promise<MarketRow[]> {
         }
         const pct = ((last - open) / open) * 100
         return formatRow(p.symbol, last, pct)
-      } catch (error) {
+      } catch (error: unknown) {
         if (error instanceof Error && error.name === 'AbortError') {
           return null // 超时返回null
         }

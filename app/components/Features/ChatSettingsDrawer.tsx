@@ -154,6 +154,8 @@ export default function ChatSettingsDrawer({
     }
   }
 
+  const profileUrl = getProfileUrl(otherUser)
+
   if (!isOpen) return null
 
   return (
@@ -193,7 +195,7 @@ export default function ChatSettingsDrawer({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            padding: `${tokens.spacing[4]} ${tokens.spacing[4]}`,
+            padding: tokens.spacing[4],
             borderBottom: `1px solid ${tokens.colors.border.primary}`,
           }}
         >
@@ -264,7 +266,7 @@ export default function ChatSettingsDrawer({
             {/* Remark Section */}
             <Box
               style={{
-                padding: `${tokens.spacing[4]} ${tokens.spacing[4]}`,
+                padding: tokens.spacing[4],
                 borderBottom: `1px solid ${tokens.colors.border.primary}`,
               }}
             >
@@ -405,22 +407,18 @@ export default function ChatSettingsDrawer({
                 disabled={saving}
               />
 
-              {/* View Profile */}
-              {(() => {
-                const profileUrl = getProfileUrl(otherUser)
-                return profileUrl ? (
-                  <SettingsButton
-                    icon={
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                        <circle cx="12" cy="7" r="4" />
-                      </svg>
-                    }
-                    label="查看主页"
-                    onClick={() => { window.location.href = profileUrl }}
-                  />
-                ) : null
-              })()}
+              {profileUrl && (
+                <SettingsButton
+                  icon={
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                      <circle cx="12" cy="7" r="4" />
+                    </svg>
+                  }
+                  label="查看主页"
+                  onClick={() => { window.location.href = profileUrl }}
+                />
+              )}
 
               <Box style={{ height: 1, background: tokens.colors.border.primary, margin: `${tokens.spacing[2]} ${tokens.spacing[4]}` }} />
 
@@ -480,20 +478,20 @@ export default function ChatSettingsDrawer({
   )
 }
 
-// Reusable settings button component
 function SettingsButton({
   icon,
   label,
   onClick,
   danger,
-  muted,
 }: {
   icon: React.ReactNode
   label: string
   onClick: () => void
   danger?: boolean
-  muted?: boolean
 }) {
+  const textColor = danger ? '#f44336' : tokens.colors.text.primary
+  const iconColor = danger ? '#f44336' : tokens.colors.text.secondary
+
   return (
     <button
       onClick={onClick}
@@ -505,31 +503,28 @@ function SettingsButton({
         padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
         border: 'none',
         background: 'transparent',
-        color: danger ? '#f44336' : muted ? tokens.colors.text.tertiary : tokens.colors.text.primary,
+        color: textColor,
         fontSize: 14,
-        cursor: muted ? 'default' : 'pointer',
+        cursor: 'pointer',
         transition: 'background 0.2s',
         textAlign: 'left',
-        opacity: muted ? 0.6 : 1,
       }}
       onMouseEnter={(e) => {
-        if (!muted) e.currentTarget.style.background = tokens.colors.bg.secondary
+        e.currentTarget.style.background = tokens.colors.bg.secondary
       }}
       onMouseLeave={(e) => {
         e.currentTarget.style.background = 'transparent'
       }}
     >
-      <Box style={{ color: danger ? '#f44336' : muted ? tokens.colors.text.tertiary : tokens.colors.text.secondary, flexShrink: 0 }}>
+      <Box style={{ color: iconColor, flexShrink: 0 }}>
         {icon}
       </Box>
       <Text size="sm" style={{ color: 'inherit' }}>{label}</Text>
-      {!muted && (
-        <Box style={{ marginLeft: 'auto', color: tokens.colors.text.tertiary }}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M9 18l6-6-6-6" />
-          </svg>
-        </Box>
-      )}
+      <Box style={{ marginLeft: 'auto', color: tokens.colors.text.tertiary }}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M9 18l6-6-6-6" />
+        </svg>
+      </Box>
     </button>
   )
 }

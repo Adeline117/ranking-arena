@@ -80,7 +80,7 @@ export async function POST(request: NextRequest) {
       if (connection.access_token_encrypted && exchange === 'bitget') {
         passphrase = decrypt(connection.access_token_encrypted)
       }
-    } catch (err) {
+    } catch (err: unknown) {
       logger.error('Decryption failed', { error: String(err) })
       const error = new Error('解密凭证失败') as Error & { statusCode?: number }
       error.statusCode = 500
@@ -193,7 +193,7 @@ export async function POST(request: NextRequest) {
       tradesCount: stats?.totalTrades ?? 0,
       stats,
     })
-  } catch (error) {
+  } catch (error: unknown) {
     return handleError(error, 'exchange/sync')
   }
 }

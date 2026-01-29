@@ -40,7 +40,7 @@ async function fetchInternalAPI(path: string): Promise<any> {
     }
 
     return await response.json()
-  } catch (error) {
+  } catch (error: unknown) {
     logger.error(`Error fetching ${path}`, { error })
     return null
   }
@@ -305,7 +305,7 @@ export async function GET(req: NextRequest) {
         },
       },
     })
-  } catch (error) {
+  } catch (error: unknown) {
     logger.error('Monitoring overview API error', { error })
     const errorMessage = error instanceof Error ? error.message : 'Internal server error'
     return NextResponse.json({ error: errorMessage }, { status: 500 })

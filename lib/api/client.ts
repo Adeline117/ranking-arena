@@ -169,7 +169,7 @@ export async function apiRequest<T = unknown>(
       success: true,
       data: data as T,
     }
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('API 请求错误:', error)
     return {
       success: false,
@@ -189,20 +189,23 @@ function isProviderRateLimitResponse(data: unknown): boolean {
   if (!data || typeof data !== 'object') return false
 
   const obj = data as Record<string, unknown>
-  const error = (obj.error as Record<string, unknown>) || obj
+  const error = typeof obj.error === 'object' && obj.error !== null
+    ? (obj.error as Record<string, unknown>)
+    : obj
 
-  // Check for provider error type
-  if (error.type === 'provider' && error.reason === 'provider_error') {
-    const message = String(error.message || '').toLowerCase()
-    const providerStatus = (error.provider as Record<string, unknown>)?.status
-    return (
-      message.includes('rate limit') ||
-      message.includes('rate_limit') ||
-      providerStatus === 429
-    )
+  if (error.type !== 'provider' || error.reason !== 'provider_error') {
+    return false
   }
 
-  return false
+  const message = String(error.message || '').toLowerCase()
+  if (message.includes('rate limit') || message.includes('rate_limit')) {
+    return true
+  }
+
+  const provider = typeof error.provider === 'object' && error.provider !== null
+    ? (error.provider as Record<string, unknown>)
+    : null
+  return provider?.status === 429
 }
 
 /**

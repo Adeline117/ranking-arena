@@ -24,6 +24,12 @@ interface DialogContextType {
 
 const DialogContext = createContext<DialogContextType | null>(null)
 
+function getDialogIcon(type?: string): string {
+  if (type === 'danger') return '\u26A0'
+  if (type === 'alert') return '\u2139'
+  return '?'
+}
+
 export function useDialog() {
   const context = useContext(DialogContext)
   if (!context) {
@@ -309,7 +315,7 @@ export function DialogProvider({ children }: { children: ReactNode }) {
                     ? tokens.colors.accent.error 
                     : tokens.colors.accent.primary,
                 }}>
-                  {state.options.type === 'danger' ? '⚠' : state.options.type === 'alert' ? 'ℹ' : '?'}
+                  {getDialogIcon(state.options.type)}
                 </span>
               </div>
               

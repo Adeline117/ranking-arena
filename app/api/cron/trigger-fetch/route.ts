@@ -79,7 +79,7 @@ export async function POST(req: Request) {
       workerResponse: result,
       timestamp: new Date().toISOString(),
     })
-  } catch (error) {
+  } catch (error: unknown) {
     const err = error instanceof Error ? error : new Error(String(error))
     return NextResponse.json({
       ok: false,

@@ -40,7 +40,7 @@ async function _getBinanceAccountId(config: BinanceConfig): Promise<string | nul
     // 暂时返回null，表示无法直接获取
     // 实际验证需要通过对比交易数据或其他方式
     return null
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('[verify-ownership] 获取Binance账号ID失败:', error)
     return null
   }

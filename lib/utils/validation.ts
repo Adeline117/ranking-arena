@@ -1,7 +1,3 @@
-/**
- * 通用验证工具函数
- */
-
 import type { Locale } from './date'
 
 export type ValidationResult = {
@@ -46,10 +42,6 @@ export function validateEmail(email: string, locale: Locale = 'zh'): ValidationR
   return VALID_RESULT
 }
 
-/** @deprecated Use validateEmail with locale parameter */
-export function validateEmailEn(email: string): ValidationResult {
-  return validateEmail(email, 'en')
-}
 
 /**
  * 验证密码强度
@@ -60,10 +52,6 @@ export function validatePassword(password: string, minLength = 6, locale: Locale
   return VALID_RESULT
 }
 
-/** @deprecated Use validatePassword with locale parameter */
-export function validatePasswordEn(password: string, minLength = 6): ValidationResult {
-  return validatePassword(password, minLength, 'en')
-}
 
 /**
  * 验证两次密码是否匹配
@@ -74,10 +62,6 @@ export function validatePasswordMatch(password: string, confirmPassword: string,
   return VALID_RESULT
 }
 
-/** @deprecated Use validatePasswordMatch with locale parameter */
-export function validatePasswordMatchEn(password: string, confirmPassword: string): ValidationResult {
-  return validatePasswordMatch(password, confirmPassword, 'en')
-}
 
 /**
  * 验证用户名格式
@@ -89,10 +73,6 @@ export function validateHandle(handle: string, minLength = 1, locale: Locale = '
   return VALID_RESULT
 }
 
-/** @deprecated Use validateHandle with locale parameter */
-export function validateHandleEn(handle: string, minLength = 1): ValidationResult {
-  return validateHandle(handle, minLength, 'en')
-}
 
 /**
  * 计算密码强度

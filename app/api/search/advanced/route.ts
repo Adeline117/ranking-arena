@@ -143,7 +143,7 @@ async function searchTraders(
       updatedAt: trader.updated_at,
       url: `/trader/${trader.trader_id}`,
     }))
-  } catch (error) {
+  } catch (error: unknown) {
     logger.error('searchTraders exception', { error })
     return []
   }
@@ -241,7 +241,7 @@ async function searchPosts(
       createdAt: post.created_at,
       url: `/posts/${post.id}`,
     }))
-  } catch (error) {
+  } catch (error: unknown) {
     logger.error('searchPosts exception', { error })
     return []
   }
@@ -278,7 +278,7 @@ async function searchUsers(
       followers: user.follower_count,
       url: `/u/${user.handle}`,
     }))
-  } catch (error) {
+  } catch (error: unknown) {
     logger.error('searchUsers exception', { error })
     return []
   }
@@ -360,7 +360,7 @@ export async function GET(req: NextRequest) {
       success: true,
       data: results,
     })
-  } catch (error) {
+  } catch (error: unknown) {
     logger.error('Advanced search error', { error })
     const errorMessage = error instanceof Error ? error.message : 'Internal server error'
     return NextResponse.json(

@@ -110,7 +110,7 @@ export async function POST(
 
     return NextResponse.json({ success: true })
 
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Delete post error:', error)
     return NextResponse.json({ error: '服务器错误' }, { status: 500 })
   }

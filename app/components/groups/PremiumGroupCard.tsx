@@ -6,7 +6,6 @@ import { Box, Text, Button } from '../base'
 import { useLanguage } from '../Providers/LanguageProvider'
 
 interface PremiumGroupCardProps {
-  groupId: string
   groupName: string
   description?: string
   avatarUrl?: string
@@ -36,12 +35,21 @@ const CheckIcon = ({ size = 14 }: { size?: number }) => (
   </svg>
 )
 
+function getSubscriptionLabel(
+  tier: 'monthly' | 'yearly' | 'trial' | undefined,
+  language: string,
+  t: (key: string) => string
+): string {
+  if (tier === 'yearly') return t('yearlyPlan')
+  if (tier === 'trial') return language === 'en' ? 'Trial' : '试用中'
+  return t('monthlyPlan')
+}
+
 function formatPrice(price: number): string {
   return `$${price.toFixed(price % 1 === 0 ? 0 : 2)}`
 }
 
 export default function PremiumGroupCard({
-  groupId: _groupId,
   groupName,
   description,
   avatarUrl,
@@ -60,9 +68,6 @@ export default function PremiumGroupCard({
   const [selectedTier, setSelectedTier] = useState<'monthly' | 'yearly'>('yearly')
   const [hoveredTier, setHoveredTier] = useState<'monthly' | 'yearly' | null>(null)
 
-  const _monthlyDiscount = originalPriceMonthly
-    ? Math.round((1 - priceMonthly / originalPriceMonthly) * 100)
-    : 0
   const yearlySavings = Math.round((1 - (priceYearly / 12) / priceMonthly) * 100)
 
   return (
@@ -155,12 +160,7 @@ export default function PremiumGroupCard({
                   </Text>
                 </Box>
                 <Text size="xs" color="tertiary">
-                  {subscriptionTier === 'yearly' 
-                    ? t('yearlyPlan') 
-                    : subscriptionTier === 'trial' 
-                      ? (language === 'en' ? 'Trial' : '试用中')
-                      : t('monthlyPlan')
-                  }
+                  {getSubscriptionLabel(subscriptionTier, language, t)}
                   {expiresAt && ` · ${language === 'en' ? 'Expires:' : '到期：'}${new Date(expiresAt).toLocaleDateString()}`}
                 </Text>
               </Box>

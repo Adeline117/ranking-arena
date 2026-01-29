@@ -118,7 +118,7 @@ export async function GET(
     }
 
     return success({ percentile, category: categoryFilter })
-  } catch (err) {
+  } catch (err: unknown) {
     return handleError(err)
   }
 }

@@ -130,7 +130,7 @@ function ToastItem({ toast, onClose }: { toast: Toast; onClose: () => void }) {
           display: 'flex',
           alignItems: 'center',
           gap: tokens.spacing[3],
-          padding: `${tokens.spacing[4]} ${tokens.spacing[4]}`,
+          padding: tokens.spacing[4],
         }}
       >
         {/* Icon */}
@@ -231,8 +231,6 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([])
   const dismissTimersRef = useRef<Map<string, NodeJS.Timeout>>(new Map())
 
-  // Cleanup all timers on unmount
-   
   useEffect(() => {
     const timers = dismissTimersRef.current
     return () => {

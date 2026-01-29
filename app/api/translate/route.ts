@@ -85,7 +85,7 @@ Rules:
 
     const data = await response.json()
     return data.choices?.[0]?.message?.content?.trim() || null
-  } catch (error) {
+  } catch (error: unknown) {
     logger.error('OpenAI request failed', { error: String(error) })
     return null
   }
@@ -114,7 +114,7 @@ export async function POST(request: NextRequest) {
 
     // 单个翻译请求
     return handleSingleTranslate(body as SingleTranslateRequest, supabase)
-  } catch (error) {
+  } catch (error: unknown) {
     logger.error('Translation error', { error: String(error) })
     return NextResponse.json(
       { success: false, error: '翻译服务出错' },
@@ -176,7 +176,7 @@ async function handleSingleTranslate(
           }
         })
       }
-    } catch (err) {
+    } catch (err: unknown) {
       logger.warn('Cache query failed', { error: String(err) })
     }
   }
@@ -209,7 +209,7 @@ async function handleSingleTranslate(
           onConflict: 'content_type,content_id,target_lang',
         })
       logger.debug(`Cache saved: ${contentType}/${contentId}`)
-    } catch (err) {
+    } catch (err: unknown) {
       logger.warn('Cache save failed', { error: String(err) })
     }
   }
@@ -286,7 +286,7 @@ async function handleBatchTranslate(
         // 没有缓存，全部需要翻译
         needsTranslation.push(...limitedItems.filter(i => i.contentType === contentType))
       }
-    } catch (err) {
+    } catch (err: unknown) {
       logger.warn('Batch cache query failed', { error: String(err) })
       needsTranslation.push(...limitedItems.filter(i => i.contentType === contentType))
     }

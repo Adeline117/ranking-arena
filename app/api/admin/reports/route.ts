@@ -188,7 +188,7 @@ export async function GET(req: NextRequest) {
         totalPages: Math.ceil((count || 0) / limit),
       },
     })
-  } catch (error) {
+  } catch (error: unknown) {
     logger.error('Reports API error', { error })
     const errorMessage = error instanceof Error ? error.message : 'Internal server error'
     return NextResponse.json({ error: errorMessage }, { status: 500 })

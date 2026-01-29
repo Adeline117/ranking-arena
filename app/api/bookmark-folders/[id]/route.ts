@@ -135,7 +135,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
             .from('bookmark_folders')
             .update({ post_count: Math.max(0, folder.post_count - orphanedBookmarkIds.length) })
             .eq('id', id)
-        } catch (err) {
+        } catch (err: unknown) {
           console.error('Error cleaning orphaned bookmarks:', err)
         }
       })()
@@ -164,7 +164,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
         has_more: posts.length === limit,
       },
     })
-  } catch (error) {
+  } catch (error: unknown) {
     return handleError(error, 'bookmark-folders/[id] GET')
   }
 }
@@ -241,7 +241,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     }
 
     return success({ folder: updatedFolder })
-  } catch (error) {
+  } catch (error: unknown) {
     return handleError(error, 'bookmark-folders/[id] PATCH')
   }
 }
@@ -284,7 +284,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
     }
 
     return success({ message: '收藏夹已删除' })
-  } catch (error) {
+  } catch (error: unknown) {
     return handleError(error, 'bookmark-folders/[id] DELETE')
   }
 }

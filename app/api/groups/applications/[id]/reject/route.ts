@@ -83,7 +83,7 @@ export async function POST(
       message: '已拒绝该小组申请'
     })
 
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Error rejecting application:', error)
     return NextResponse.json({ error: '服务器错误' }, { status: 500 })
   }

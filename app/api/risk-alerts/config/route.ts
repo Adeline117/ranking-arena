@@ -55,7 +55,7 @@ export const GET = withAuth(
           defaultThresholds: DEFAULT_THRESHOLDS,
         },
       })
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('[risk-alerts/config] 获取配置失败:', error)
       return NextResponse.json({
         success: false,
@@ -123,7 +123,7 @@ export const POST = withAuth(
         success: true,
         data: config,
       })
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('[risk-alerts/config] 创建配置失败:', error)
       return NextResponse.json({
         success: false,
@@ -172,7 +172,7 @@ export const DELETE = withAuth(
       return NextResponse.json({
         success: true,
       })
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('[risk-alerts/config] 删除配置失败:', error)
       return NextResponse.json({
         success: false,

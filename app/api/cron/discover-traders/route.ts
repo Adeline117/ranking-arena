@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
       platforms: results,
       timestamp: new Date().toISOString(),
     });
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('[Cron /discover-traders] Error:', error);
     return NextResponse.json(
       { error: 'Discovery scheduling failed' },

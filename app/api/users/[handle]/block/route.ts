@@ -74,7 +74,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     }
 
     return NextResponse.json({ success: true })
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('[Block User] Unexpected error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
@@ -112,7 +112,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
     }
 
     return NextResponse.json({ success: true })
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('[Unblock User] Unexpected error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
