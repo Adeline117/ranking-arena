@@ -13,6 +13,7 @@ import { useLanguage } from '../Providers/LanguageProvider'
 import { SearchIcon, UserIcon, NotificationIcon } from '../icons'
 import { Box } from '../base'
 import { useInboxStore } from '@/lib/stores/inboxStore'
+import { usePostStore } from '@/lib/stores/postStore'
 
 // Lazy load non-critical components
 const MobileSearchOverlay = dynamic(() => import('../search/MobileSearchOverlay'), { ssr: false })
@@ -344,6 +345,12 @@ export default function TopNav({ email }: { email: string | null }) {
                 <Link
                   key={item.href}
                   href={item.href}
+                  onClick={() => {
+                    // Trigger feed refresh when clicking groups link while already on groups page
+                    if (item.href === '/groups' && isActive) {
+                      usePostStore.getState().triggerFeedRefresh()
+                    }
+                  }}
                   style={{
                     padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
                     borderRadius: tokens.radius.md,

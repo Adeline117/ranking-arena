@@ -21,19 +21,59 @@ export interface InitialTrader {
   arena_score: number
 }
 
-// Source type mapping
+// Source type mapping - comprehensive list of all active platforms
 const SOURCE_TYPE_MAP: Record<string, 'futures' | 'spot' | 'web3'> = {
+  // Futures platforms
   'binance_futures': 'futures',
   'bybit': 'futures',
   'bitget_futures': 'futures',
+  'okx_futures': 'futures',
+  'mexc': 'futures',
+  'kucoin': 'futures',
+  'coinex': 'futures',
+  'htx': 'futures',
+  'weex': 'futures',
+  'phemex': 'futures',
+  'bingx': 'futures',
+  'gateio': 'futures',
+  'xt': 'futures',
+  'pionex': 'futures',
+  'lbank': 'futures',
+  'blofin': 'futures',
+  // Web3/DEX platforms
+  'gmx': 'web3',
+  'kwenta': 'web3',
+  'gains': 'web3',
+  'mux': 'web3',
+  'okx_web3': 'web3',
+  'hyperliquid': 'web3',
+  'dydx': 'web3',
+  // Spot platforms
+  'bitget_spot': 'spot',
+  'binance_spot': 'spot',
 }
 
-// Top sources to fetch for initial render (most popular exchanges)
-// Using fewer sources speeds up initial query
+// All active sources for initial render (expanded to include all scraped platforms)
 const PRIORITY_SOURCES = [
+  // Top CEX futures (highest volume)
   'binance_futures',
   'bybit',
   'bitget_futures',
+  'okx_futures',
+  // Secondary CEX
+  'mexc',
+  'kucoin',
+  'htx',
+  'coinex',
+  'bingx',
+  'gateio',
+  'phemex',
+  // Web3/DEX
+  'gmx',
+  'hyperliquid',
+  'kwenta',
+  'gains',
+  'okx_web3',
 ]
 
 export async function getInitialTraders(
@@ -68,7 +108,7 @@ export async function getInitialTraders(
         `)
         .in('source', PRIORITY_SOURCES)
         .eq('season_id', timeRange)
-        .gte('arena_score', 60) // Only fetch high-score traders
+        // Removed arena_score >= 60 filter to show all traders with valid data
         .order('arena_score', { ascending: false })
         .limit(limit * 2), // Fetch extra to account for duplicates
 
