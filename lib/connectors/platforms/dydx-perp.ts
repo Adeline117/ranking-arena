@@ -19,6 +19,23 @@ import type {
 
 const WINDOW_MAP: Record<Window, string> = { '7d': 'PERIOD_7D', '30d': 'PERIOD_30D', '90d': 'PERIOD_90D' }
 
+/**
+ * Resolve dYdX API base URL.
+ * Uses Cloudflare Worker proxy (DYDX_PROXY_URL env) to bypass geo-blocking.
+ * Falls back to direct indexer if proxy is not configured.
+ */
+function getDydxBaseUrl(): string {
+  const proxyUrl = typeof process !== 'undefined'
+    ? (process.env?.DYDX_PROXY_URL || process.env?.CF_WORKER_PROXY_URL)
+    : undefined
+  return proxyUrl || 'https://indexer.dydx.trade'
+}
+
+/** Returns true if we are routing through the CF Worker proxy */
+function isUsingProxy(): boolean {
+  return !!getDydxBaseUrl() && getDydxBaseUrl() !== 'https://indexer.dydx.trade'
+}
+
 export class DydxPerpConnector extends BaseConnector {
   readonly platform = 'dydx' as const
   readonly marketType = 'perp' as const
@@ -31,15 +48,52 @@ export class DydxPerpConnector extends BaseConnector {
     has_profiles: false,
     scraping_difficulty: 1,
     rate_limit: { rpm: 60, concurrency: 3 },
-    notes: ['Public indexer API', 'PnL-sorted only (ROI computed)', 'No profiles', 'All windows supported'],
+    notes: [
+      'Public indexer API',
+      'PnL-sorted only (ROI computed)',
+      'No profiles',
+      'All windows supported',
+      'Uses CF Worker proxy to bypass geo-blocking when DYDX_PROXY_URL is set',
+    ],
+  }
+
+  /**
+   * Build the proxied or direct URL for a dYdX indexer endpoint.
+   * If CF Worker proxy is configured, routes through /dydx/* shortcuts or /proxy?url=.
+   */
+  private buildUrl(path: string, params?: Record<string, string>): string {
+    const base = getDydxBaseUrl()
+    const query = params ? '?' + new URLSearchParams(params).toString() : ''
+
+    if (isUsingProxy()) {
+      // CF Worker proxy: use shortcut endpoints or /proxy?url=
+      // Shortcut paths: /dydx/leaderboard, /dydx/historical-pnl, /dydx/subaccount
+      if (path.startsWith('/v4/leaderboard/pnl')) {
+        return `${base}/dydx/leaderboard${query}`
+      }
+      if (path.startsWith('/v4/historical-pnl')) {
+        return `${base}/dydx/historical-pnl${query}`
+      }
+      if (path.includes('/subaccounts/')) {
+        // /v4/addresses/{addr}/subaccounts/{num} → /dydx/subaccount?address=&subaccountNumber=
+        const match = path.match(/\/v4\/addresses\/([^/]+)\/subaccounts\/(\d+)/)
+        if (match) {
+          return `${base}/dydx/subaccount?address=${match[1]}&subaccountNumber=${match[2]}`
+        }
+      }
+      // Fallback: generic /proxy?url= pass-through
+      const directUrl = `https://indexer.dydx.trade${path}${query}`
+      return `${base}/proxy?url=${encodeURIComponent(directUrl)}`
+    }
+
+    // Direct access (no proxy)
+    return `https://indexer.dydx.trade${path}${query}`
   }
 
   async discoverLeaderboard(window: Window, limit = 100, _offset = 0): Promise<DiscoverResult> {
     const period = WINDOW_MAP[window]
-    const data = await this.request<any>(
-      `https://indexer.dydx.trade/v4/leaderboard/pnl?period=${period}&limit=${limit}`,
-      { method: 'GET' }
-    )
+    const url = this.buildUrl('/v4/leaderboard/pnl', { period, limit: String(limit) })
+    const data = await this.request<any>(url, { method: 'GET' })
     const rankings = data?.pnlRanking || []
 
     const traders: TraderSource[] = (Array.isArray(rankings) ? rankings : []).map((item: Record<string, unknown>) => {
@@ -72,19 +126,15 @@ export class DydxPerpConnector extends BaseConnector {
   }
 
   async fetchTraderSnapshot(traderKey: string, window: Window): Promise<SnapshotResult | null> {
-    // Get subaccount for equity
-    const subData = await this.request<any>(
-      `https://indexer.dydx.trade/v4/addresses/${traderKey}/subaccounts/0`,
-      { method: 'GET' }
-    )
+    // Get subaccount for equity (through proxy if configured)
+    const subUrl = this.buildUrl(`/v4/addresses/${traderKey}/subaccounts/0`)
+    const subData = await this.request<any>(subUrl, { method: 'GET' })
     const equity = Number(subData?.subaccount?.equity) || 0
 
-    // Get PnL from leaderboard for this address
+    // Get PnL from leaderboard for this address (through proxy if configured)
     const period = WINDOW_MAP[window]
-    const lbData = await this.request<any>(
-      `https://indexer.dydx.trade/v4/leaderboard/pnl?period=${period}&limit=1000`,
-      { method: 'GET' }
-    )
+    const lbUrl = this.buildUrl('/v4/leaderboard/pnl', { period, limit: '1000' })
+    const lbData = await this.request<any>(lbUrl, { method: 'GET' })
     const rankings = lbData?.pnlRanking || []
     const entry = rankings.find((r: Record<string, unknown>) => String(r.address) === traderKey)
 
@@ -122,10 +172,8 @@ export class DydxPerpConnector extends BaseConnector {
   }
 
   async fetchTimeseries(traderKey: string): Promise<TimeseriesResult> {
-    const data = await this.request<any>(
-      `https://indexer.dydx.trade/v4/historical-pnl?address=${traderKey}&subaccountNumber=0&limit=90`,
-      { method: 'GET' }
-    )
+    const tsUrl = this.buildUrl('/v4/historical-pnl', { address: traderKey, subaccountNumber: '0', limit: '90' })
+    const data = await this.request<any>(tsUrl, { method: 'GET' })
     const historicalPnl = data?.historicalPnl || []
 
     const series: TraderTimeseries[] = []
