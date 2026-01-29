@@ -7,6 +7,7 @@ import { Button } from '../base'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { useToast } from '../ui/Toast'
 import { useDialog } from '../ui/Dialog'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 interface ClaimTraderButtonProps {
   traderId: string
@@ -19,6 +20,7 @@ export default function ClaimTraderButton({ traderId, handle, userId, source = '
   const router = useRouter()
   const { showToast } = useToast()
   const { showConfirm } = useDialog()
+  const { t } = useLanguage()
   const [loading, setLoading] = useState(false)
   const [claimed, setClaimed] = useState(false)
   const [hasConnection, setHasConnection] = useState(false)
@@ -82,8 +84,8 @@ export default function ClaimTraderButton({ traderId, handle, userId, source = '
     // 1. 检查是否已绑定交易所账号
     if (!hasConnection) {
       const goToSettings = await showConfirm(
-        '需要绑定交易所账号',
-        `认领交易员账号需要先绑定您的交易所账号。\n请先在设置页面绑定您的 ${source.toUpperCase()} 账号，然后才能认领。\n是否前往设置页面？`
+        t('needBindExchange'),
+        `${t('needBindExchangeDesc')}\n${t('bindExchangeFirst').replace('{exchange}', source.toUpperCase())}\n${t('goToSettings')}`
       )
       if (goToSettings) {
         router.push('/settings')
@@ -93,8 +95,8 @@ export default function ClaimTraderButton({ traderId, handle, userId, source = '
 
     // 2. 确认认领
     const confirmed = await showConfirm(
-      '确认认领',
-      `确认认领交易员 "@${handle}"？\n系统将验证您是否真的拥有此账号，验证通过后才会完成认领。`
+      t('confirmClaim'),
+      `${t('confirmClaimDesc').replace('{handle}', handle)}\n${t('verifyOwnership')}`
     )
     if (!confirmed) {
       return
@@ -103,7 +105,7 @@ export default function ClaimTraderButton({ traderId, handle, userId, source = '
     // 3. 获取用户token（在 setLoading 之前检查，避免 loading 状态泄漏）
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) {
-      showToast('请先登录', 'warning')
+      showToast(t('pleaseLoginFirst'), 'warning')
       return
     }
 
@@ -129,20 +131,20 @@ export default function ClaimTraderButton({ traderId, handle, userId, source = '
       if (!verifyResponse.ok) {
         if (verifyResult.needConnect) {
           const goToSettings = await showConfirm(
-            '需要绑定账号',
-            verifyResult.message + '\n是否前往设置页面绑定账号？'
+            t('needBindExchange'),
+            verifyResult.message + '\n' + t('goToSettings')
           )
           if (goToSettings) {
             router.push('/settings')
           }
         } else {
-          showToast(verifyResult.message || '账号验证失败，请确保您拥有此交易员账号。', 'error')
+          showToast(verifyResult.message || t('verifyFailed'), 'error')
         }
         return
       }
 
       if (!verifyResult.verified) {
-        showToast('账号验证失败：您可能不拥有此交易员账号，或者API凭证无效。', 'error')
+        showToast(t('verifyFailedInvalid'), 'error')
         return
       }
 
@@ -161,19 +163,19 @@ export default function ClaimTraderButton({ traderId, handle, userId, source = '
       if (error) {
         if (error.code === '23505') {
           // 已存在认领申请
-          showToast('您已经认领过此交易员账号。', 'warning')
+          showToast(t('claimAlreadySubmitted'), 'warning')
         } else {
           throw error
         }
       } else {
         setClaimed(true)
-        showToast('认领成功！您的账号已与此交易员账号合并。', 'success')
+        showToast(t('claimSuccess'), 'success')
         // 刷新页面
         window.location.reload()
       }
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : '未知错误'
-      showToast('认领失败：' + errorMessage, 'error')
+      const errorMessage = err instanceof Error ? err.message : t('unknownError')
+      showToast(t('claimFailed') + ': ' + errorMessage, 'error')
     } finally {
       setLoading(false)
     }
@@ -182,7 +184,7 @@ export default function ClaimTraderButton({ traderId, handle, userId, source = '
   if (claimed) {
     return (
       <Button variant="ghost" size="sm" disabled>
-        已提交认领申请
+        {t('claimSubmitted')}
       </Button>
     )
   }
@@ -194,7 +196,7 @@ export default function ClaimTraderButton({ traderId, handle, userId, source = '
       onClick={handleClaim}
       disabled={loading}
     >
-      {loading ? '申请中...' : '申请认领'}
+      {loading ? t('claiming') : t('claimTrader')}
     </Button>
   )
 }

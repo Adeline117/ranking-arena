@@ -189,11 +189,41 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
 
   // 初次加载和时间段切换时加载数据
   // Skip initial fetch if we have server-provided data for 90D
+  // Performance: Defer full data fetch until after LCP using requestIdleCallback
   useEffect(() => {
-    // If we have initial data and we're on 90D, don't fetch immediately
-    if (hasInitialData && activeTimeRange === '90D' && !initialDataSeeded.current) {
-      return
+    // If we have initial data and we're on 90D, defer full fetch to avoid blocking LCP
+    if (hasInitialData && activeTimeRange === '90D') {
+      // Use initial data immediately - don't block for full fetch
+      setLoading(false)
+
+      // Defer full 3000 trader fetch until browser is idle (after LCP)
+      const deferredFetch = () => {
+        // Only fetch full data if user hasn't switched time range
+        if (activeTimeRange === '90D') {
+          loadTimeRange('90D', false).then(cached => {
+            // Only update if we got more data than initial
+            if (cached.traders.length > (initialTraders?.length || 0)) {
+              setCurrentTraders(cached.traders)
+              setLastUpdated(cached.lastUpdated)
+              setAvailableSources(cached.availableSources || [])
+            }
+          }).catch(() => {
+            // Silent fail - we still have initial data
+          })
+        }
+      }
+
+      // Use requestIdleCallback to defer fetch, with 3s timeout fallback
+      if ('requestIdleCallback' in window) {
+        const idleId = requestIdleCallback(deferredFetch, { timeout: 3000 })
+        return () => cancelIdleCallback(idleId)
+      } else {
+        // Safari fallback: wait 2s after page load
+        const timerId = setTimeout(deferredFetch, 2000)
+        return () => clearTimeout(timerId)
+      }
     }
+
     // If cache already has this time range, use it
     if (tradersCache.current.has(activeTimeRange)) {
       const cached = tradersCache.current.get(activeTimeRange)!
@@ -204,7 +234,7 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
       return
     }
     loadCurrentData()
-  }, [loadCurrentData, activeTimeRange, hasInitialData])
+  }, [loadCurrentData, activeTimeRange, hasInitialData, loadTimeRange, initialTraders?.length])
 
   // 保存时间段偏好到 localStorage
   useEffect(() => {

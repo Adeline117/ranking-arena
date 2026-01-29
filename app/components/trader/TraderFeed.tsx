@@ -7,6 +7,7 @@ import { Box, Text } from '../base'
 import ClaimTraderButton from './ClaimTraderButton'
 import { supabase } from '@/lib/supabase/client'
 import type { TraderFeedItem } from '@/lib/data/trader'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 interface TraderFeedProps {
   items: TraderFeedItem[]
@@ -30,23 +31,25 @@ function cleanContent(text: string, maxLength = 140): string {
   return cleanText
 }
 
-function formatRelativeTime(dateString: string): string {
+function formatRelativeTime(dateString: string, isZh: boolean): string {
   const date = new Date(dateString)
   const now = new Date()
   const diff = now.getTime() - date.getTime()
   const hours = Math.floor(diff / (1000 * 60 * 60))
   const days = Math.floor(hours / 24)
-  
-  if (hours < 1) return '刚刚'
-  if (hours < 24) return `${hours}小时前`
-  if (days < 7) return `${days}天前`
-  return date.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })
+
+  if (hours < 1) return isZh ? '刚刚' : 'Just now'
+  if (hours < 24) return isZh ? `${hours}小时前` : `${hours}h ago`
+  if (days < 7) return isZh ? `${days}天前` : `${days}d ago`
+  return date.toLocaleDateString(isZh ? 'zh-CN' : 'en-US', { month: 'short', day: 'numeric' })
 }
 
 export default function TraderFeed({ items, title, showPostButton = false, onPostClick, isRegistered, traderId, traderHandle, source }: TraderFeedProps) {
   const [sortType, setSortType] = useState<SortType>('all')
   const [hoveredId, setHoveredId] = useState<string | null>(null)
   const [userId, setUserId] = useState<string | null>(null)
+  const { t, language } = useLanguage()
+  const isZh = language === 'zh'
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -173,12 +176,12 @@ export default function TraderFeed({ items, title, showPostButton = false, onPos
                 e.currentTarget.style.boxShadow = `0 4px 12px ${tokens.colors.accent.brand}40`
               }}
             >
-              发动态
+              {t('newPost')}
             </button>
           )}
         </Box>
       </Box>
-      
+
       {/* 交易员未入驻提示 */}
       {isRegistered === false ? (
         <Box
@@ -198,10 +201,10 @@ export default function TraderFeed({ items, title, showPostButton = false, onPos
             <line x1="9" y1="14" x2="15" y2="14" />
           </svg>
           <Text size="base" weight="bold" style={{ color: tokens.colors.text.secondary }}>
-            交易员未入驻
+            {t('traderNotRegistered')}
           </Text>
           <Text size="sm" color="tertiary">
-            该交易员尚未认领此账号
+            {t('traderNotRegisteredDesc')}
           </Text>
           {userId && traderId && traderHandle && (
             <Box style={{ marginTop: tokens.spacing[2] }}>
@@ -226,11 +229,11 @@ export default function TraderFeed({ items, title, showPostButton = false, onPos
           }}
         >
           <Text size="base" color="tertiary">
-            暂无动态
+            {t('noData')}
           </Text>
           {showPostButton && onPostClick && (
             <Text size="sm" color="tertiary">
-              发布你的第一条动态吧！
+              {isZh ? '发布你的第一条动态吧！' : 'Post your first update!'}
             </Text>
           )}
         </Box>
@@ -363,7 +366,7 @@ export default function TraderFeed({ items, title, showPostButton = false, onPos
                       </Box>
                     )}
                     <Text size="xs" color="tertiary">
-                      {formatRelativeTime(item.time)}
+                      {formatRelativeTime(item.time, isZh)}
                     </Text>
                   </Box>
                 </Box>
