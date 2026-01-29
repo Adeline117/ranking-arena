@@ -236,18 +236,21 @@ function TraderLinksSection({ userId }: { userId: string }) {
   }
 
   const getSourceLabel = (source: string) => {
+    const futuresLabel = t('futures')
+    const spotLabel = t('spot')
+    const onChainLabel = t('onChain')
     const map: Record<string, string> = {
-      binance_futures: '合约',
-      binance_spot: '现货',
-      binance_web3: '链上',
-      bybit: '合约',
-      bitget_futures: '合约',
-      bitget_spot: '现货',
-      mexc: '合约',
-      coinex: '合约',
-      okx_web3: '链上',
-      kucoin: '合约',
-      gmx: '链上',
+      binance_futures: futuresLabel,
+      binance_spot: spotLabel,
+      binance_web3: onChainLabel,
+      bybit: futuresLabel,
+      bitget_futures: futuresLabel,
+      bitget_spot: spotLabel,
+      mexc: futuresLabel,
+      coinex: futuresLabel,
+      okx_web3: onChainLabel,
+      kucoin: futuresLabel,
+      gmx: onChainLabel,
     }
     return map[source] || source
   }
@@ -2013,14 +2016,14 @@ function SettingsContent() {
           <SectionCard id="security" title={t('securitySection')} description={t('twoFADesc')}>
             {/* Current Email Display */}
             <Box style={{ marginBottom: tokens.spacing[5], padding: tokens.spacing[3], borderRadius: tokens.radius.md, background: tokens.colors.bg.primary }}>
-              <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[1] }}>当前登录邮箱</Text>
+              <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[1] }}>{t('currentLoginEmail')}</Text>
               <Text size="sm" weight="bold">{email}</Text>
             </Box>
 
             {/* Change Email */}
             <Box style={{ marginBottom: tokens.spacing[6] }}>
               <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>
-                修改邮箱
+                {t('changeEmailButton')}
               </Text>
               <Box style={{ display: 'flex', gap: tokens.spacing[3] }}>
                 <input
@@ -2028,7 +2031,7 @@ function SettingsContent() {
                   value={newEmail}
                   onChange={(e) => setNewEmail(e.target.value)}
                   onBlur={() => markTouched('newEmail')}
-                  placeholder="输入新邮箱地址"
+                  placeholder={t('enterNewEmail')}
                   style={{ ...getInputStyle(touchedFields.newEmail && !newEmailValidation.valid), flex: 1 }}
                 />
                 <Button
@@ -2036,7 +2039,7 @@ function SettingsContent() {
                   onClick={handleChangeEmail}
                   disabled={savingEmail || !newEmail || !newEmailValidation.valid}
                 >
-                  {savingEmail ? '发送中...' : '验证'}
+                  {savingEmail ? t('sendingVerification') : t('verifyButton')}
                 </Button>
               </Box>
               {touchedFields.newEmail && newEmail && !newEmailValidation.valid && (
@@ -2045,14 +2048,14 @@ function SettingsContent() {
                 </Text>
               )}
               <Text size="xs" color="tertiary" style={{ marginTop: tokens.spacing[1] }}>
-                修改后需要在新邮箱中确认验证链接
+                {t('emailChangeNote')}
               </Text>
             </Box>
 
             {/* Change Password */}
             <Box>
               <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[3] }}>
-                修改密码
+                {t('changePasswordTitle')}
               </Text>
 
               {/* Mode Selector */}
@@ -2071,7 +2074,7 @@ function SettingsContent() {
                     transition: 'all 0.2s ease',
                   }}
                 >
-                  用当前密码修改
+                  {t('useCurrentPassword')}
                 </button>
                 <button
                   onClick={() => setPasswordResetMode('code')}
@@ -2087,7 +2090,7 @@ function SettingsContent() {
                     transition: 'all 0.2s ease',
                   }}
                 >
-                  通过邮箱重置
+                  {t('useEmailReset')}
                 </button>
               </Box>
 
@@ -2097,7 +2100,7 @@ function SettingsContent() {
                     type="password"
                     value={currentPassword}
                     onChange={(e) => setCurrentPassword(e.target.value)}
-                    placeholder="当前密码"
+                    placeholder={t('currentPasswordPlaceholder')}
                     style={getInputStyle()}
                   />
                   <Box>
@@ -2106,7 +2109,7 @@ function SettingsContent() {
                       value={newPassword}
                       onChange={(e) => setNewPassword(e.target.value)}
                       onBlur={() => markTouched('newPassword')}
-                      placeholder="新密码（至少6位）"
+                      placeholder={t('newPasswordPlaceholder')}
                       style={getInputStyle(touchedFields.newPassword && !newPasswordValidation.valid)}
                     />
                     {touchedFields.newPassword && newPassword && !newPasswordValidation.valid && (
@@ -2121,7 +2124,7 @@ function SettingsContent() {
                       value={confirmNewPassword}
                       onChange={(e) => setConfirmNewPassword(e.target.value)}
                       onBlur={() => markTouched('confirmPassword')}
-                      placeholder="确认新密码"
+                      placeholder={t('confirmPasswordPlaceholder')}
                       style={getInputStyle(touchedFields.confirmPassword && !confirmPasswordValidation.valid)}
                     />
                     {touchedFields.confirmPassword && confirmNewPassword && !confirmPasswordValidation.valid && (
@@ -2131,7 +2134,7 @@ function SettingsContent() {
                     )}
                     {touchedFields.confirmPassword && confirmNewPassword && confirmPasswordValidation.valid && (
                       <Text size="xs" style={{ color: tokens.colors.accent.success, marginTop: tokens.spacing[1] }}>
-                        密码匹配
+                        {t('passwordMatch')}
                       </Text>
                     )}
                   </Box>
@@ -2141,17 +2144,17 @@ function SettingsContent() {
                       onClick={handleChangePassword}
                       disabled={savingPassword || !currentPassword || !newPassword || !newPasswordValidation.valid || !confirmPasswordValidation.valid}
                     >
-                      {savingPassword ? '修改中...' : '修改密码'}
+                      {savingPassword ? t('changingPassword') : t('changePassword')}
                     </Button>
                   </Box>
                 </Box>
               ) : (
                 <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
                   <Text size="sm" color="secondary">
-                    将发送密码重置链接到：{email}
+                    {t('resetLinkWillSendTo')}{email}
                   </Text>
                   <Text size="xs" color="tertiary">
-                    点击邮件中的链接即可设置新密码，有效期 1 小时
+                    {t('resetLinkNote')}
                   </Text>
                   <Box style={{ display: 'flex', justifyContent: 'flex-end' }}>
                     <Button
@@ -2160,12 +2163,12 @@ function SettingsContent() {
                       disabled={sendingResetCode || resetCountdown > 0}
                     >
                       {sendingResetCode
-                        ? '发送中...'
+                        ? t('sendingVerification')
                         : resetCountdown > 0
-                          ? `${resetCountdown}s 后可重发`
+                          ? `${resetCountdown}${t('resendAfter')}`
                           : resetCodeSent
-                            ? '重新发送'
-                            : '发送重置邮件'}
+                            ? t('resendResetEmail')
+                            : t('sendResetEmail')}
                     </Button>
                   </Box>
                   {resetCodeSent && (
@@ -2178,7 +2181,7 @@ function SettingsContent() {
                       }}
                     >
                       <Text size="sm" style={{ color: tokens.colors.accent.success }}>
-                        重置邮件已发送，请查收并点击链接
+                        {t('resetEmailSentNote')}
                       </Text>
                     </Box>
                   )}
@@ -2190,7 +2193,7 @@ function SettingsContent() {
             <Box style={{ marginTop: tokens.spacing[6], paddingTop: tokens.spacing[6], borderTop: `1px solid ${tokens.colors.border.primary}` }}>
               <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], marginBottom: tokens.spacing[3] }}>
                 <Text size="sm" weight="bold">
-                  两步验证 (2FA)
+                  {t('twoFactorAuthTitle')}
                 </Text>
                 {twoFAEnabled && (
                   <span style={{
@@ -2202,7 +2205,7 @@ function SettingsContent() {
                     fontSize: tokens.typography.fontSize.xs,
                     fontWeight: Number(tokens.typography.fontWeight.bold),
                   }}>
-                    已开启
+                    {t('twoFAStatusEnabled')}
                   </span>
                 )}
               </Box>
@@ -2210,7 +2213,7 @@ function SettingsContent() {
               {!twoFAEnabled && !twoFASetupData && backupCodes.length === 0 && (
                 <Box>
                   <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[3] }}>
-                    启用两步验证以增强账号安全性。登录时需要输入验证器应用中的动态验证码。
+                    {t('twoFAEnableDesc')}
                   </Text>
                   <Button
                     variant="secondary"
@@ -2218,7 +2221,7 @@ function SettingsContent() {
                     onClick={handleSetup2FA}
                     disabled={twoFALoading}
                   >
-                    {twoFALoading ? '加载中...' : '开启两步验证'}
+                    {twoFALoading ? t('loading') : t('enable2FAButton')}
                   </Button>
                 </Box>
               )}
@@ -2226,7 +2229,7 @@ function SettingsContent() {
               {twoFASetupData && !twoFAEnabled && (
                 <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}>
                   <Text size="xs" color="secondary" style={{ lineHeight: 1.6 }}>
-                    使用验证器应用（如 Google Authenticator、Authy）扫描以下二维码，或手动输入密钥。
+                    {t('scanQRCodeDesc')}
                   </Text>
                   <Box style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: tokens.spacing[3] }}>
                     <img
@@ -2251,7 +2254,7 @@ function SettingsContent() {
                       maxWidth: 320,
                     }}>
                       <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[1] }}>
-                        手动输入密钥：
+                        {t('manualEntryKey')}
                       </Text>
                       <Text size="sm" weight="bold" style={{ fontFamily: 'monospace', wordBreak: 'break-all' }}>
                         {twoFASetupData.secret}
@@ -2260,7 +2263,7 @@ function SettingsContent() {
                   </Box>
                   <Box>
                     <Text size="xs" weight="medium" style={{ marginBottom: tokens.spacing[2] }}>
-                      输入验证器中显示的6位验证码：
+                      {t('enter6DigitCodeDesc')}
                     </Text>
                     <Box style={{ display: 'flex', gap: tokens.spacing[3], alignItems: 'center' }}>
                       <input
@@ -2284,7 +2287,7 @@ function SettingsContent() {
                         onClick={handleVerify2FA}
                         disabled={twoFALoading || twoFACode.length !== 6}
                       >
-                        {twoFALoading ? '验证中...' : '验证并开启'}
+                        {twoFALoading ? t('verifyingCode') : t('verifyAndEnable')}
                       </Button>
                     </Box>
                   </Box>
@@ -2300,10 +2303,10 @@ function SettingsContent() {
                   border: `1px solid ${tokens.colors.accent.warning}30`,
                 }}>
                   <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[2], color: tokens.colors.accent.warning }}>
-                    备份恢复码
+                    {t('backupRecoveryCodes')}
                   </Text>
                   <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[3], lineHeight: 1.6 }}>
-                    请妥善保存以下恢复码。当无法使用验证器时，可以用恢复码登录。每个恢复码只能使用一次。
+                    {t('backupCodesNote')}
                   </Text>
                   <Box style={{
                     display: 'grid',
@@ -2337,7 +2340,7 @@ function SettingsContent() {
                       borderColor: tokens.colors.accent.error + '40',
                     }}
                   >
-                    关闭两步验证
+                    {t('disable2FAButton')}
                   </Button>
                 </Box>
               )}
@@ -2351,14 +2354,14 @@ function SettingsContent() {
                   border: `1px solid ${tokens.colors.accent.error}30`,
                 }}>
                   <Text size="sm" weight="medium" style={{ marginBottom: tokens.spacing[2] }}>
-                    输入密码以关闭两步验证：
+                    {t('enterPasswordToDisable')}
                   </Text>
                   <Box style={{ display: 'flex', gap: tokens.spacing[3], alignItems: 'center' }}>
                     <input
                       type="password"
                       value={disablePassword}
                       onChange={(e) => setDisablePassword(e.target.value)}
-                      placeholder="输入当前密码"
+                      placeholder={t('enterCurrentPasswordPlaceholder')}
                       style={{ ...getInputStyle(), maxWidth: 240 }}
                     />
                     <Button
@@ -2371,14 +2374,14 @@ function SettingsContent() {
                         borderColor: tokens.colors.accent.error + '40',
                       }}
                     >
-                      {twoFALoading ? '处理中...' : '确认关闭'}
+                      {twoFALoading ? t('processingText') : t('confirmDisableButton')}
                     </Button>
                     <Button
                       variant="ghost"
                       size="sm"
                       onClick={() => { setShowDisable2FA(false); setDisablePassword('') }}
                     >
-                      取消
+                      {t('cancel')}
                     </Button>
                   </Box>
                 </Box>
@@ -2388,16 +2391,16 @@ function SettingsContent() {
             {/* ===== Active Sessions Section ===== */}
             <Box style={{ marginTop: tokens.spacing[6], paddingTop: tokens.spacing[6], borderTop: `1px solid ${tokens.colors.border.primary}` }}>
               <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[3] }}>
-                活跃会话
+                {t('activeSessionsTitle')}
               </Text>
               <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[4] }}>
-                查看和管理你在不同设备上的登录状态
+                {t('activeSessionsDesc')}
               </Text>
 
               {loadingSessions ? (
-                <Text size="sm" color="tertiary">加载中...</Text>
+                <Text size="sm" color="tertiary">{t('loading')}</Text>
               ) : sessions.length === 0 ? (
-                <Text size="sm" color="tertiary">暂无会话信息</Text>
+                <Text size="sm" color="tertiary">{t('noSessionInfo')}</Text>
               ) : (
                 <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
                   {sessions.map((session) => (
@@ -2416,7 +2419,7 @@ function SettingsContent() {
                       <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[1] }}>
                         <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
                           <Text size="sm" weight="medium">
-                            {session.deviceInfo?.browser || '未知浏览器'}
+                            {session.deviceInfo?.browser || t('unknownBrowser')}
                             {session.deviceInfo?.os ? ` - ${session.deviceInfo.os}` : ''}
                           </Text>
                           {session.isCurrent && (
@@ -2428,7 +2431,7 @@ function SettingsContent() {
                               fontSize: tokens.typography.fontSize.xs,
                               fontWeight: Number(tokens.typography.fontWeight.bold),
                             }}>
-                              当前会话
+                              {t('currentSessionLabel')}
                             </span>
                           )}
                         </Box>
@@ -2455,7 +2458,7 @@ function SettingsContent() {
                             fontSize: tokens.typography.fontSize.xs,
                           }}
                         >
-                          撤销
+                          {t('revokeSession')}
                         </Button>
                       )}
                     </Box>
@@ -2472,7 +2475,7 @@ function SettingsContent() {
                           borderColor: tokens.colors.accent.error + '40',
                         }}
                       >
-                        登出所有其他设备
+                        {t('logoutOtherDevicesButton')}
                       </Button>
                     </Box>
                   )}
@@ -2496,12 +2499,12 @@ function SettingsContent() {
           </Box>
 
           {/* ===== Trader Links Section ===== */}
-          <SectionCard id="trader-links" title="我的交易员账号" description="管理您在排行榜上认领的交易员身份">
+          <SectionCard id="trader-links" title={t('myTraderAccounts')} description={t('myTraderAccountsDesc')}>
             {userId && <TraderLinksSection userId={userId} />}
           </SectionCard>
 
           {/* ===== Trader Alerts Section ===== */}
-          <SectionCard id="alerts" title="交易员警报" description="设置自定义警报条件，及时掌握交易员动态（Pro 功能）">
+          <SectionCard id="alerts" title={t('traderAlertsTitle')} description={t('traderAlertsDesc2')}>
             <AdvancedAlerts
               isPro={isPro}
               isLoggedIn={!!userId}
@@ -2532,8 +2535,7 @@ function SettingsContent() {
                   onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
                 >
                   <Box>
-                    <Text size="sm" weight="medium">{item.label}</Text>
-                    <Text size="xs" color="tertiary">{item.desc}</Text>
+                    <Text size="sm" weight="medium">{t(item.labelKey as keyof typeof import('@/lib/i18n').translations.zh)}</Text>
                   </Box>
                   <ToggleSwitch
                     checked={item.value}
@@ -2546,34 +2548,34 @@ function SettingsContent() {
             {/* ===== Email Digest Section ===== */}
             <Box style={{ marginTop: tokens.spacing[5], paddingTop: tokens.spacing[5], borderTop: `1px solid ${tokens.colors.border.primary}` }}>
               <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>
-                邮件摘要
+                {t('emailDigest')}
               </Text>
               <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[3] }}>
-                选择是否通过邮件接收活动摘要
+                {t('emailDigestDesc')}
               </Text>
               <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
                 <RadioOption
                   name="emailDigest"
                   value="none"
                   currentValue={emailDigest}
-                  label="不发送"
-                  description="不通过邮件发送摘要"
+                  label={t('digestNone')}
+                  description=""
                   onChange={handleEmailDigestChange}
                 />
                 <RadioOption
                   name="emailDigest"
                   value="daily"
                   currentValue={emailDigest}
-                  label="每日摘要"
-                  description="每天发送一封活动总结邮件"
+                  label={t('digestDaily')}
+                  description=""
                   onChange={handleEmailDigestChange}
                 />
                 <RadioOption
                   name="emailDigest"
                   value="weekly"
                   currentValue={emailDigest}
-                  label="每周摘要"
-                  description="每周发送一封活动总结邮件"
+                  label={t('digestWeekly')}
+                  description=""
                   onChange={handleEmailDigestChange}
                 />
               </Box>
@@ -2585,10 +2587,10 @@ function SettingsContent() {
             {/* Follow lists visibility */}
             <Box style={{ marginBottom: tokens.spacing[5] }}>
               <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>
-                关注列表可见性
+                {t('showFollowerList')}
               </Text>
               <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[3] }}>
-                关闭后，其他用户将无法查看对应列表
+                {t('followListVisibilityNote')}
               </Text>
               <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3], cursor: 'pointer' }}>
@@ -2598,7 +2600,7 @@ function SettingsContent() {
                     onChange={(e) => setShowFollowing(e.target.checked)}
                     style={{ width: 18, height: 18, accentColor: '#8b6fa8' }}
                   />
-                  <Text size="sm">公开我的关注列表</Text>
+                  <Text size="sm">{t('showFollowingListLabel')}</Text>
                 </label>
                 <label style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3], cursor: 'pointer' }}>
                   <input
@@ -2607,7 +2609,7 @@ function SettingsContent() {
                     onChange={(e) => setShowFollowers(e.target.checked)}
                     style={{ width: 18, height: 18, accentColor: '#8b6fa8' }}
                   />
-                  <Text size="sm">公开我的粉丝列表</Text>
+                  <Text size="sm">{t('showFollowersListLabel')}</Text>
                 </label>
               </Box>
             </Box>
@@ -2615,7 +2617,7 @@ function SettingsContent() {
             {/* Pro Badge */}
             <Box style={{ marginBottom: tokens.spacing[5] }}>
               <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>
-                Pro 徽章
+                {t('proBadgeTitle')}
               </Text>
               <label style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3], cursor: 'pointer' }}>
                 <input
@@ -2625,8 +2627,8 @@ function SettingsContent() {
                   style={{ width: 18, height: 18, accentColor: '#8b6fa8' }}
                 />
                 <Box>
-                  <Text size="sm">在主页显示 Pro 徽章</Text>
-                  <Text size="xs" color="tertiary">关闭后其他用户看不到你的会员标识</Text>
+                  <Text size="sm">{t('showProBadgeLabel')}</Text>
+                  <Text size="xs" color="tertiary">{t('proBadgeNote')}</Text>
                 </Box>
               </label>
             </Box>
@@ -2634,31 +2636,31 @@ function SettingsContent() {
             {/* DM Permission */}
             <Box>
               <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>
-                谁可以给我发私信
+                {t('dmPermissionsTitle')}
               </Text>
               <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
                 <RadioOption
                   name="dmPermission"
                   value="all"
                   currentValue={dmPermission}
-                  label="所有人"
-                  description="任何人都可以给你发私信"
+                  label={t('dmEveryoneLabel')}
+                  description={t('dmEveryoneDesc')}
                   onChange={setDmPermission}
                 />
                 <RadioOption
                   name="dmPermission"
                   value="mutual"
                   currentValue={dmPermission}
-                  label="互相关注的人"
-                  description="非互关者最多发3条，你回复后对方可继续"
+                  label={t('dmMutualLabel')}
+                  description={t('dmMutualDesc')}
                   onChange={setDmPermission}
                 />
                 <RadioOption
                   name="dmPermission"
                   value="none"
                   currentValue={dmPermission}
-                  label="不接收私信"
-                  description="关闭所有私信功能"
+                  label={t('dmNoneLabel')}
+                  description={t('dmNoneDesc')}
                   onChange={setDmPermission}
                 />
               </Box>
@@ -2667,14 +2669,14 @@ function SettingsContent() {
             {/* ===== Blocked Users Section ===== */}
             <Box style={{ marginTop: tokens.spacing[5], paddingTop: tokens.spacing[5], borderTop: `1px solid ${tokens.colors.border.primary}` }}>
               <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>
-                屏蔽用户
+                {t('blockedUsersTitle')}
               </Text>
               <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[3] }}>
-                已屏蔽的用户将无法查看你的内容或与你互动
+                {t('blockedUsersDesc')}
               </Text>
 
               {loadingBlockedUsers ? (
-                <Text size="sm" color="tertiary">加载中...</Text>
+                <Text size="sm" color="tertiary">{t('loading')}</Text>
               ) : blockedUsers.length === 0 ? (
                 <Box style={{
                   padding: tokens.spacing[4],
@@ -2682,7 +2684,7 @@ function SettingsContent() {
                   borderRadius: tokens.radius.md,
                   background: tokens.colors.bg.primary,
                 }}>
-                  <Text size="sm" color="tertiary">暂无屏蔽用户</Text>
+                  <Text size="sm" color="tertiary">{t('noBlockedUsers')}</Text>
                 </Box>
               ) : (
                 <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
@@ -2722,10 +2724,10 @@ function SettingsContent() {
                         </Box>
                         <Box>
                           <Text size="sm" weight="medium">
-                            {blockedUser.handle || '未知用户'}
+                            {blockedUser.handle || t('unknownUser')}
                           </Text>
                           <Text size="xs" color="tertiary">
-                            {formatTimeAgo(blockedUser.createdAt)} 屏蔽
+                            {formatTimeAgo(blockedUser.createdAt)} {t('blockedAt')}
                           </Text>
                         </Box>
                       </Box>
@@ -2739,7 +2741,7 @@ function SettingsContent() {
                           color: tokens.colors.accent.primary,
                         }}
                       >
-                        {unblockingId === blockedUser.blockedId ? '...' : '解除屏蔽'}
+                        {unblockingId === blockedUser.blockedId ? '...' : t('unblockButton')}
                       </Button>
                     </Box>
                   ))}
@@ -2756,8 +2758,8 @@ function SettingsContent() {
               <Box>
                 <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: tokens.spacing[2] }}>
                   <Box>
-                    <Text size="sm" weight="medium">已关联账号</Text>
-                    <Text size="xs" color="tertiary">快速切换多个账号（Pro 会员最多 5 个）</Text>
+                    <Text size="sm" weight="medium">{t('linkedAccountsTitle')}</Text>
+                    <Text size="xs" color="tertiary">{t('linkedAccountsDesc')}</Text>
                   </Box>
                 </Box>
                 <MultiAccountSection />
@@ -2769,8 +2771,8 @@ function SettingsContent() {
               {/* Logout */}
               <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <Box>
-                  <Text size="sm" weight="medium">退出登录</Text>
-                  <Text size="xs" color="tertiary">退出当前账号，需要重新登录才能访问设置</Text>
+                  <Text size="sm" weight="medium">{t('logout')}</Text>
+                  <Text size="xs" color="tertiary">{t('logoutDesc')}</Text>
                 </Box>
                 <Button
                   variant="secondary"
@@ -2781,7 +2783,7 @@ function SettingsContent() {
                     borderColor: tokens.colors.accent.error + '40',
                   }}
                 >
-                  退出登录
+                  {t('logout')}
                 </Button>
               </Box>
 
@@ -2791,8 +2793,8 @@ function SettingsContent() {
               {/* Account Deletion */}
               <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <Box>
-                  <Text size="sm" weight="medium" style={{ color: tokens.colors.accent.error }}>注销账号</Text>
-                  <Text size="xs" color="tertiary">永久删除你的账号和所有数据，30天内可恢复</Text>
+                  <Text size="sm" weight="medium" style={{ color: tokens.colors.accent.error }}>{t('deleteAccount')}</Text>
+                  <Text size="xs" color="tertiary">{t('deleteAccountDesc2')}</Text>
                 </Box>
                 <Button
                   variant="secondary"
@@ -2803,7 +2805,7 @@ function SettingsContent() {
                     borderColor: tokens.colors.accent.error + '40',
                   }}
                 >
-                  注销账号
+                  {t('deleteAccount')}
                 </Button>
               </Box>
             </Box>
@@ -2839,14 +2841,14 @@ function SettingsContent() {
               }}
             >
               <Text size="sm" style={{ color: tokens.colors.accent.warning }}>
-                有未保存的更改
+                {t('unsavedChanges')}
               </Text>
               <Box style={{ display: 'flex', gap: tokens.spacing[3] }}>
                 <Button
                   variant="secondary"
                   size="sm"
                   onClick={async () => {
-                    const confirmed = await showConfirm('放弃更改', '确定要放弃所有未保存的更改吗？')
+                    const confirmed = await showConfirm(t('discardChanges'), t('discardChangesConfirm'))
                     if (confirmed && userId) {
                       setTouchedFields({ handle: false, newPassword: false, confirmPassword: false, newEmail: false })
                       setHandleAvailable(null)
@@ -2857,7 +2859,7 @@ function SettingsContent() {
                   }}
                   disabled={saving}
                 >
-                  放弃
+                  {t('discard')}
                 </Button>
                 <Button
                   variant="primary"
@@ -2865,7 +2867,7 @@ function SettingsContent() {
                   onClick={handleSaveProfile}
                   disabled={saving}
                 >
-                  {saving ? '保存中...' : '保存所有更改'}
+                  {saving ? t('savingChanges') : t('saveAllChanges')}
                 </Button>
               </Box>
             </Box>

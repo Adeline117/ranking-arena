@@ -63,182 +63,127 @@ export default function TopNav({ email }: { email: string | null }) {
     return () => observer.disconnect()
   }, [])
 
+  // Performance: Fetch user auth and profile/notifications/messages in parallel
   useEffect(() => {
     let alive = true
-    const abortController = new AbortController()
 
-    supabase.auth.getUser()
-      .then(({ data, error }) => {
-        if (!alive) return
+    const initAuth = async () => {
+      try {
+        const { data, error } = await supabase.auth.getUser()
+        if (!alive || error || !data.user) return
 
-        if (error) {
-          console.error('Error fetching user:', error)
-          return
-        }
-
-        const userId = data.user?.id ?? null
+        const userId = data.user.id
         setMyId(userId)
 
-        // 获取用户的handle和头像
-        if (userId) {
-          // 直接使用 user_profiles 表（profiles 表不存在）
-          ;(async () => {
-            try {
-              const { data: userProfile, error: profileError } = await supabase
-                .from('user_profiles')
-                .select('handle, avatar_url')
-                .eq('id', userId)
-                .maybeSingle()
+        // Parallel fetch: profile, notifications, messages (instead of sequential)
+        const [profileResult, notificationsResult, messagesResult] = await Promise.all([
+          // Fetch profile
+          supabase
+            .from('user_profiles')
+            .select('handle, avatar_url')
+            .eq('id', userId)
+            .maybeSingle(),
+          // Fetch unread notifications count
+          supabase
+            .from('notifications')
+            .select('*', { count: 'exact', head: true })
+            .eq('user_id', userId)
+            .eq('read', false),
+          // Fetch unread messages count
+          supabase
+            .from('direct_messages')
+            .select('*', { count: 'exact', head: true })
+            .eq('receiver_id', userId)
+            .eq('read', false),
+        ])
 
-              if (!alive) return
-
-              if (profileError) {
-                console.error('Error fetching user profile:', profileError)
-                // Fallback to email-based handle
-                if (data.user?.email) {
-                  const defaultHandle = data.user.email.split('@')[0]
-                  setMyHandle(defaultHandle)
-                }
-                return
-              }
-
-              if (userProfile) {
-                if (userProfile.handle) {
-                  setMyHandle(userProfile.handle)
-                } else if (data.user?.email) {
-                  // 如果没有 handle，使用邮箱前缀
-                  const defaultHandle = data.user.email.split('@')[0]
-                  setMyHandle(defaultHandle)
-                }
-                // 设置头像
-                if (userProfile.avatar_url) {
-                  setMyAvatarUrl(userProfile.avatar_url)
-                }
-              } else {
-                // 如果没有 profile，使用邮箱前缀作为 handle
-                if (data.user?.email) {
-                  const defaultHandle = data.user.email.split('@')[0]
-                  setMyHandle(defaultHandle)
-                }
-              }
-            } catch (err) {
-              if (!alive) return
-              console.error('Unexpected error fetching user profile:', err)
-              // Fallback to email-based handle
-              if (data.user?.email) {
-                const defaultHandle = data.user.email.split('@')[0]
-                setMyHandle(defaultHandle)
-              }
-            }
-          })()
-        }
-      })
-      .catch((err) => {
         if (!alive) return
-        console.error('Unexpected error in auth check:', err)
-      })
 
-    return () => {
-      alive = false
-      abortController.abort()
-    }
-  }, [])
+        // Process profile
+        const userProfile = profileResult.data
+        if (userProfile?.handle) {
+          setMyHandle(userProfile.handle)
+        } else if (data.user.email) {
+          setMyHandle(data.user.email.split('@')[0])
+        }
+        if (userProfile?.avatar_url) {
+          setMyAvatarUrl(userProfile.avatar_url)
+        }
 
-  // 获取未读通知数量并订阅实时更新 - 延迟加载以优化 LCP
-  useEffect(() => {
-    if (!myId) return
+        // Process notification count
+        if (!notificationsResult.error && typeof notificationsResult.count === 'number') {
+          setUnreadCount(notificationsResult.count)
+        }
 
-    // 初始获取未读数量
-    const fetchUnreadCount = async () => {
-      try {
-        const { count, error } = await supabase
-          .from('notifications')
-          .select('*', { count: 'exact', head: true })
-          .eq('user_id', myId)
-          .eq('read', false)
-
-        if (!error && typeof count === 'number') {
-          setUnreadCount(count)
+        // Process message count
+        if (!messagesResult.error && typeof messagesResult.count === 'number') {
+          setUnreadMessageCount(messagesResult.count)
         }
       } catch (err) {
-        console.error('Error fetching unread count:', err)
+        if (!alive) return
+        console.error('Error in auth initialization:', err)
       }
     }
 
-    // 延迟 1 秒加载，避免阻塞 LCP
-    const timer = setTimeout(fetchUnreadCount, 1000)
+    initAuth()
 
-    // 订阅实时通知更新
+    return () => {
+      alive = false
+    }
+  }, [])
+
+  // Real-time subscription for notifications (initial fetch done in auth effect)
+  useEffect(() => {
+    if (!myId) return
+
+    const fetchUnreadCount = async () => {
+      const { count, error } = await supabase
+        .from('notifications')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', myId)
+        .eq('read', false)
+      if (!error && typeof count === 'number') {
+        setUnreadCount(count)
+      }
+    }
+
     const channel = supabase
       .channel(`notifications:${myId}`)
       .on(
         'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'notifications',
-          filter: `user_id=eq.${myId}`,
-        },
-        (_payload) => {
-          // 收到新通知或通知状态更新时，重新获取未读数量
-          fetchUnreadCount()
-        }
+        { event: '*', schema: 'public', table: 'notifications', filter: `user_id=eq.${myId}` },
+        () => fetchUnreadCount()
       )
       .subscribe()
 
-    return () => {
-      clearTimeout(timer)
-      supabase.removeChannel(channel)
-    }
+    return () => { supabase.removeChannel(channel) }
   }, [myId])
 
-  // 获取未读私信数量 - 延迟加载以优化 LCP
+  // Real-time subscription for messages (initial fetch done in auth effect)
   useEffect(() => {
     if (!myId) return
 
     const fetchUnreadMessageCount = async () => {
-      try {
-        const { count, error } = await supabase
-          .from('direct_messages')
-          .select('*', { count: 'exact', head: true })
-          .eq('receiver_id', myId)
-          .eq('read', false)
-        
-        if (!error && typeof count === 'number') {
-          setUnreadMessageCount(count)
-        }
-      } catch (err) {
-        // 如果表不存在，静默处理
-        if (!String(err).includes('Could not find')) {
-          console.error('Error fetching unread message count:', err)
-        }
+      const { count, error } = await supabase
+        .from('direct_messages')
+        .select('*', { count: 'exact', head: true })
+        .eq('receiver_id', myId)
+        .eq('read', false)
+      if (!error && typeof count === 'number') {
+        setUnreadMessageCount(count)
       }
     }
 
-    // 延迟 1.2 秒加载，避免阻塞 LCP
-    const timer = setTimeout(fetchUnreadMessageCount, 1200)
-
-    // 订阅实时私信更新
     const channel = supabase
       .channel(`messages:${myId}`)
       .on(
         'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'direct_messages',
-          filter: `receiver_id=eq.${myId}`,
-        },
-        () => {
-          fetchUnreadMessageCount()
-        }
+        { event: '*', schema: 'public', table: 'direct_messages', filter: `receiver_id=eq.${myId}` },
+        () => fetchUnreadMessageCount()
       )
       .subscribe()
 
-    return () => {
-      clearTimeout(timer)
-      supabase.removeChannel(channel)
-    }
+    return () => { supabase.removeChannel(channel) }
   }, [myId])
 
   useEffect(() => {
