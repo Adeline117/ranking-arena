@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
     })
 
     if (signInError) {
-      return NextResponse.json({ error: '密码错误' }, { status: 403 })
+      return NextResponse.json({ error: 'Invalid password', code: 'INVALID_PASSWORD' }, { status: 403 })
     }
 
     // Get current profile info for recovery
@@ -130,7 +130,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       deletion_scheduled_at: scheduledDeletion.toISOString(),
-      message: '账号已标记为注销，30天内可恢复',
+      message: 'Account marked for deletion, recoverable within 30 days',
     })
   } catch (error) {
     console.error('[account/delete] Error:', error)
