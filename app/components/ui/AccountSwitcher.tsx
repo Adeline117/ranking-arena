@@ -109,7 +109,8 @@ export default function AccountSwitcher({ onClose }: AccountSwitcherProps): Reac
     }
 
     onClose?.()
-    router.refresh()
+    // 完整刷新页面以确保session正确切换
+    window.location.reload()
   }, [switchAccount, removeAccount, onClose, router, t])
 
   const handleAddAccount = useCallback(() => {

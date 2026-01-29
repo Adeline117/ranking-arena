@@ -371,26 +371,9 @@ export default function TraderAboutCard({
         </Box>
       )}
 
-      {/* 操作按钮 */}
+      {/* 操作按钮 - 只在非自己的主页显示（编辑按钮在 TraderHeader 中） */}
       <Box style={{ position: 'relative', zIndex: 1 }}>
-        {isOwnProfile ? (
-          <Button
-            variant="primary"
-            size="md"
-            fullWidth
-            onClick={() => router.push('/settings')}
-            style={{
-              marginBottom: tokens.spacing[5],
-              fontWeight: tokens.typography.fontWeight.black,
-              background: `linear-gradient(135deg, ${tokens.colors.accent.primary}, ${tokens.colors.accent.brand})`,
-              border: 'none',
-              boxShadow: `0 4px 16px ${tokens.colors.accent.primary}40`,
-              transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-            }}
-          >
-            {t('editProfile')}
-          </Button>
-        ) : traderId && userId ? (
+        {!isOwnProfile && traderId && userId ? (
           <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2], marginBottom: tokens.spacing[5] }}>
             {isRegistered ? (
               <>
