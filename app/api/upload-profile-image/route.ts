@@ -32,7 +32,8 @@ export async function POST(request: NextRequest) {
     const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp']
     if (!allowedTypes.includes(file.type)) {
       return NextResponse.json({
-        error: '只支持 JPG、PNG、GIF、WebP 格式'
+        error: 'Only JPG, PNG, GIF, WebP formats are supported',
+        code: 'INVALID_FILE_TYPE'
       }, { status: 400 })
     }
 
@@ -40,7 +41,8 @@ export async function POST(request: NextRequest) {
     const maxSize = bucket === 'avatars' ? 5 * 1024 * 1024 : 10 * 1024 * 1024
     if (file.size > maxSize) {
       return NextResponse.json({
-        error: `文件大小不能超过 ${maxSize / 1024 / 1024}MB`
+        error: `File size cannot exceed ${maxSize / 1024 / 1024}MB`,
+        code: 'FILE_TOO_LARGE'
       }, { status: 400 })
     }
 
@@ -66,7 +68,7 @@ export async function POST(request: NextRequest) {
 
       if (uploadError.message?.includes('Bucket not found')) {
         return NextResponse.json({
-          error: '存储桶未配置，请联系管理员',
+          error: 'Storage bucket not configured, please contact administrator',
           code: 'BUCKET_NOT_FOUND'
         }, { status: 503 })
       }

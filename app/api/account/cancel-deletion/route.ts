@@ -33,12 +33,12 @@ export async function POST(request: NextRequest) {
       .maybeSingle()
 
     if (!profile) {
-      return NextResponse.json({ error: '未找到待注销的账号' }, { status: 404 })
+      return NextResponse.json({ error: 'No pending account deletion found', code: 'NOT_FOUND' }, { status: 404 })
     }
 
     // Check if still within grace period
     if (profile.deletion_scheduled_at && new Date(profile.deletion_scheduled_at) < new Date()) {
-      return NextResponse.json({ error: '恢复期已过，账号已永久删除' }, { status: 410 })
+      return NextResponse.json({ error: 'Recovery period has passed, account permanently deleted', code: 'EXPIRED' }, { status: 410 })
     }
 
     // Verify password
@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
       await supabase.auth.admin.updateUserById(profile.id, {
         ban_duration: '876000h',
       })
-      return NextResponse.json({ error: '密码错误' }, { status: 403 })
+      return NextResponse.json({ error: 'Invalid password', code: 'INVALID_PASSWORD' }, { status: 403 })
     }
 
     // Restore profile
@@ -90,7 +90,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: '账号已恢复',
+      message: 'Account restored successfully',
     })
   } catch (error) {
     console.error('[account/cancel-deletion] Error:', error)
