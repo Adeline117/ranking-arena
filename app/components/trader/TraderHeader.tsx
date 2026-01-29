@@ -385,73 +385,78 @@ export default function TraderHeader({
           zIndex: 1,
         }}
       >
-        {/* Avatar */}
+        {/* Avatar with Pro Badge wrapper */}
         <Box
-          className="profile-header-avatar"
           style={{
-            width: 72,
-            height: 72,
-            borderRadius: tokens.radius.full,
-            background: avatarUrl ? tokens.colors.bg.secondary : getAvatarGradient(traderId),
-            border: `3px solid ${avatarHovered ? tokens.colors.accent.primary : tokens.colors.border.primary}`,
-            display: 'grid',
-            placeItems: 'center',
-            fontWeight: tokens.typography.fontWeight.black,
-            fontSize: tokens.typography.fontSize.xl,
-            color: '#ffffff',
-            overflow: 'hidden',
-            flexShrink: 0,
-            boxShadow: avatarHovered 
-              ? `0 8px 32px rgba(139, 111, 168, 0.4), 0 0 0 4px ${tokens.colors.accent.primary}20`
-              : `0 4px 16px rgba(0, 0, 0, 0.15)`,
-            transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
             position: 'relative',
-            transform: avatarHovered ? 'scale(1.08)' : 'scale(1)',
-            cursor: 'pointer',
+            flexShrink: 0,
           }}
           onMouseEnter={() => setAvatarHovered(true)}
           onMouseLeave={() => setAvatarHovered(false)}
         >
-          {avatarUrl ? (
-            <img 
-              src={`/api/avatar?url=${encodeURIComponent(avatarUrl)}`}
-              alt={handle} 
-              loading="lazy"
-              style={{ 
-                width: '100%', 
-                height: '100%', 
-                objectFit: 'cover',
-                transition: 'all 0.4s ease',
-              }}
-              onError={(e) => {
-                const img = e.target as HTMLImageElement
-                img.style.display = 'none'
-                const container = img.parentElement
-                if (container) {
-                  container.style.background = getAvatarGradient(traderId)
-                  // 添加备用文字
-                  const fallback = document.createElement('span')
-                  fallback.textContent = getAvatarInitial(handle)
-                  fallback.style.cssText = 'color: #fff; font-size: 32px; font-weight: 900; line-height: 1; text-shadow: 0 2px 8px rgba(0,0,0,0.4);'
-                  container.appendChild(fallback)
-                }
-              }}
-            />
-          ) : (
-            <Text 
-              size="2xl" 
-              weight="black" 
-              style={{ 
-                color: '#ffffff',
-                textShadow: '0 2px 8px rgba(0, 0, 0, 0.4)',
-                fontSize: '32px',
-                lineHeight: '1',
-              }}
-            >
-              {getAvatarInitial(handle)}
-            </Text>
-          )}
-          {/* Pro 徽章 */}
+          <Box
+            className="profile-header-avatar"
+            style={{
+              width: 72,
+              height: 72,
+              borderRadius: tokens.radius.full,
+              background: avatarUrl ? tokens.colors.bg.secondary : getAvatarGradient(traderId),
+              border: `3px solid ${avatarHovered ? tokens.colors.accent.primary : tokens.colors.border.primary}`,
+              display: 'grid',
+              placeItems: 'center',
+              fontWeight: tokens.typography.fontWeight.black,
+              fontSize: tokens.typography.fontSize.xl,
+              color: '#ffffff',
+              overflow: 'hidden',
+              boxShadow: avatarHovered
+                ? `0 8px 32px rgba(139, 111, 168, 0.4), 0 0 0 4px ${tokens.colors.accent.primary}20`
+                : `0 4px 16px rgba(0, 0, 0, 0.15)`,
+              transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
+              transform: avatarHovered ? 'scale(1.08)' : 'scale(1)',
+              cursor: 'pointer',
+            }}
+          >
+            {avatarUrl ? (
+              <img
+                src={`/api/avatar?url=${encodeURIComponent(avatarUrl)}`}
+                alt={handle}
+                loading="lazy"
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'cover',
+                  transition: 'all 0.4s ease',
+                }}
+                onError={(e) => {
+                  const img = e.target as HTMLImageElement
+                  img.style.display = 'none'
+                  const container = img.parentElement
+                  if (container) {
+                    container.style.background = getAvatarGradient(traderId)
+                    // 添加备用文字
+                    const fallback = document.createElement('span')
+                    fallback.textContent = getAvatarInitial(handle)
+                    fallback.style.cssText = 'color: #fff; font-size: 32px; font-weight: 900; line-height: 1; text-shadow: 0 2px 8px rgba(0,0,0,0.4);'
+                    container.appendChild(fallback)
+                  }
+                }}
+              />
+            ) : (
+              <Text
+                size="2xl"
+                weight="black"
+                style={{
+                  color: '#ffffff',
+                  textShadow: '0 2px 8px rgba(0, 0, 0, 0.4)',
+                  fontSize: '32px',
+                  lineHeight: '1',
+                }}
+              >
+                {getAvatarInitial(handle)}
+              </Text>
+            )}
+          </Box>
+          {/* Pro 徽章 - 放在头像容器外面避免被 overflow:hidden 裁剪 */}
           {proBadgeTier === 'pro' && (
             <ProBadgeOverlay position="bottom-right" />
           )}
