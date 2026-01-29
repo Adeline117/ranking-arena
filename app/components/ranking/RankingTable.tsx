@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useRef, memo, useCallback } from 'react'
+import React, { useState, useEffect, useRef, memo, useCallback, useTransition } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
@@ -784,6 +784,9 @@ function RankingTableInner(props: {
   } = props
   const { t, language } = useLanguage()
 
+  // useTransition for non-urgent sort/filter updates to reduce INP
+  const [, startTransition] = useTransition()
+
   // 分页状态 (internal state, overridden by controlled props)
   const [internalPage, setInternalPage] = useState(1)
   const [showRules, setShowRules] = useState(false)
@@ -866,25 +869,31 @@ function RankingTableInner(props: {
 
   const handleSort = (col: 'score' | 'roi' | 'winrate' | 'mdd') => {
     const newDir = sortColumn === col ? (sortDir === 'desc' ? 'asc' : 'desc') : 'desc'
-    if (onSortChange) {
-      onSortChange(col, newDir)
-    } else {
-      setInternalSortColumn(col)
-      setInternalSortDir(newDir)
-    }
-    setCurrentPage(1)
 
-    // Trigger sorting animation
+    // Trigger animation immediately (urgent)
     setJustSortedColumn(col)
     setSortAnimationKey(prev => prev + 1)
     setTimeout(() => setJustSortedColumn(null), 400)
+
+    // Defer expensive sort re-computation (non-urgent)
+    startTransition(() => {
+      if (onSortChange) {
+        onSortChange(col, newDir)
+      } else {
+        setInternalSortColumn(col)
+        setInternalSortDir(newDir)
+      }
+      setCurrentPage(1)
+    })
   }
 
-  // Feature 2: Handle search input
+  // Feature 2: Handle search input - defer page reset
   const handleSearchInput = (value: string) => {
     if (onSearchChange) onSearchChange(value)
     else setInternalSearchQuery(value)
-    setCurrentPage(1)
+    startTransition(() => {
+      setCurrentPage(1)
+    })
   }
 
   // Feature 2: Filter by search, then sort

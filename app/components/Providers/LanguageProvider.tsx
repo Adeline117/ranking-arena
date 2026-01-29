@@ -1,7 +1,7 @@
 'use client'
 
 import { createContext, useContext, useState, useEffect, useMemo, ReactNode } from 'react'
-import { Language, getLanguage, setLanguage as setLang, translations } from '@/lib/i18n'
+import { Language, getLanguage, setLanguage as setLang, translations, loadEnTranslations } from '@/lib/i18n'
 
 // Translation function type - accepts any string but returns the key if not found
 export type TranslationFunction = (key: string) => string
@@ -26,8 +26,17 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     const savedLanguage = getLanguage()
     setLanguageState(savedLanguage)
 
+    // Load English translations on-demand if needed
+    if (savedLanguage === 'en') {
+      loadEnTranslations().then(() => setLanguageState('en'))
+    }
+
     const handleLanguageChange = (e: CustomEvent<Language>) => {
-      setLanguageState(e.detail)
+      if (e.detail === 'en') {
+        loadEnTranslations().then(() => setLanguageState(e.detail))
+      } else {
+        setLanguageState(e.detail)
+      }
     }
 
     window.addEventListener('languageChange', handleLanguageChange as EventListener)
@@ -36,7 +45,11 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
 
   const setLanguage = (lang: Language) => {
     setLang(lang)
-    setLanguageState(lang)
+    if (lang === 'en') {
+      loadEnTranslations().then(() => setLanguageState(lang))
+    } else {
+      setLanguageState(lang)
+    }
   }
 
   // 创建一个响应式的翻译函数，依赖于 language 状态
