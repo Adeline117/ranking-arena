@@ -34,7 +34,15 @@ const nextConfig: NextConfig = {
   images: {
     // 优先使用 AVIF（更小），回退到 WebP
     formats: ['image/avif', 'image/webp'],
-    
+
+    // 本地 API 路由图片（允许 query string）
+    localPatterns: [
+      {
+        pathname: '/api/avatar',
+        search: '?url=*',
+      },
+    ],
+
     // 远程图片域名白名单
     remotePatterns: [
       {
