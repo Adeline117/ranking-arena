@@ -393,15 +393,22 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
             // Pro 徽章
             (async () => {
               try {
-                const { data: userSettings } = await supabase
+                const { data: userSettings, error: settingsError } = await supabase
                   .from('user_profiles')
                   .select('show_pro_badge, subscription_tier')
                   .eq('id', profileData.id)
                   .maybeSingle()
 
+                console.log('[Pro Badge] userSettings:', {
+                  profileId: profileData.id,
+                  show_pro_badge: userSettings?.show_pro_badge,
+                  subscription_tier: userSettings?.subscription_tier,
+                  error: settingsError?.message
+                })
+
                 if (userSettings?.show_pro_badge !== false) {
                   // 优先检查 subscriptions 表
-                  const { data: subscription } = await supabase
+                  const { data: subscription, error: subError } = await supabase
                     .from('subscriptions')
                     .select('tier, status')
                     .eq('user_id', profileData.id)
@@ -410,14 +417,27 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
                     .limit(1)
                     .maybeSingle()
 
+                  console.log('[Pro Badge] subscription:', {
+                    subscription,
+                    error: subError?.message
+                  })
+
                   if (subscription && subscription.tier === 'pro') {
+                    console.log('[Pro Badge] Setting pro from subscriptions table')
                     setProBadgeTier('pro')
                   } else if (userSettings?.subscription_tier === 'pro') {
                     // 备用：检查 user_profiles.subscription_tier（webhook 可能有延迟）
+                    console.log('[Pro Badge] Setting pro from user_profiles.subscription_tier')
                     setProBadgeTier('pro')
+                  } else {
+                    console.log('[Pro Badge] No pro status found')
                   }
+                } else {
+                  console.log('[Pro Badge] Badge display disabled by user')
                 }
-              } catch { /* ignore */ }
+              } catch (err) {
+                console.error('[Pro Badge] Error:', err)
+              }
             })(),
             // 社交链接
             (async () => {
