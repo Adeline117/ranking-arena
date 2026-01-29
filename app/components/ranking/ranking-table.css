@@ -1,0 +1,75 @@
+/* Ranking Table Animations & Styles */
+
+/* 奖牌发光效果 */
+@keyframes medalGlowGold {
+  0%, 100% {
+    filter: drop-shadow(0 0 4px rgba(255, 215, 0, 0.6)) drop-shadow(0 0 8px rgba(255, 215, 0, 0.4));
+  }
+  50% {
+    filter: drop-shadow(0 0 8px rgba(255, 215, 0, 0.8)) drop-shadow(0 0 16px rgba(255, 215, 0, 0.5));
+  }
+}
+
+@keyframes medalGlowSilver {
+  0%, 100% {
+    filter: drop-shadow(0 0 3px rgba(192, 192, 192, 0.6)) drop-shadow(0 0 6px rgba(192, 192, 192, 0.4));
+  }
+  50% {
+    filter: drop-shadow(0 0 6px rgba(192, 192, 192, 0.8)) drop-shadow(0 0 12px rgba(192, 192, 192, 0.5));
+  }
+}
+
+@keyframes medalGlowBronze {
+  0%, 100% {
+    filter: drop-shadow(0 0 3px rgba(205, 127, 50, 0.6)) drop-shadow(0 0 6px rgba(205, 127, 50, 0.4));
+  }
+  50% {
+    filter: drop-shadow(0 0 6px rgba(205, 127, 50, 0.8)) drop-shadow(0 0 12px rgba(205, 127, 50, 0.5));
+  }
+}
+
+/* 奖牌发光类 */
+.medal-glow-gold {
+  animation: medalGlowGold 2s ease-in-out infinite;
+}
+
+.medal-glow-silver {
+  animation: medalGlowSilver 2s ease-in-out infinite;
+}
+
+.medal-glow-bronze {
+  animation: medalGlowBronze 2s ease-in-out infinite;
+}
+
+/* 普通行样式 */
+.ranking-row {
+  transition: all 0.2s ease;
+}
+
+.ranking-row:hover {
+  background: var(--glass-bg-light) !important;
+}
+
+/* Pagination hover effects (CSS-only, no JS onMouseEnter/Leave) */
+.pagination-btn.pagination-nav:not(.pagination-disabled):hover {
+  background: var(--color-accent-primary-30, rgba(99, 102, 241, 0.3)) !important;
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm, 0 1px 2px rgba(0, 0, 0, 0.2));
+}
+
+.pagination-btn.pagination-page:not(.pagination-active):hover {
+  background: var(--color-accent-primary-20, rgba(99, 102, 241, 0.2)) !important;
+  border-color: var(--color-accent-primary, #6366f1) !important;
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm, 0 1px 2px rgba(0, 0, 0, 0.2));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .medal-glow-gold, .medal-glow-silver, .medal-glow-bronze {
+    animation: none;
+  }
+
+  .pagination-btn {
+    transition: none !important;
+  }
+}

@@ -1,11 +1,11 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { Box } from '../base'
 import RankingSection from './RankingSection'
 import PullToRefresh from '../ui/PullToRefresh'
-import { useTraderData } from './hooks'
+import { useTraderData, useAuth } from './hooks'
 import type { Trader } from '../ranking/RankingTable'
 import type { TimeRange } from './hooks/useTraderData'
 import type { InitialTrader } from '@/lib/getInitialTraders'
@@ -13,7 +13,6 @@ import type { InitialTrader } from '@/lib/getInitialTraders'
 interface HomePageClientProps {
   initialTraders?: InitialTrader[]
   initialLastUpdated?: string | null
-  isLoggedIn: boolean
 }
 
 /**
@@ -23,8 +22,8 @@ interface HomePageClientProps {
 export default function HomePageClient({
   initialTraders,
   initialLastUpdated,
-  isLoggedIn
 }: HomePageClientProps) {
+  const { isLoggedIn } = useAuth()
   const searchParams = useSearchParams()
   const router = useRouter()
 
