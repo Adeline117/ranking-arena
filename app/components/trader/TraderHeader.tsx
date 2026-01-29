@@ -114,8 +114,8 @@ function getActiveDays(activeSince?: string): number | null {
   return Math.floor((now.getTime() - start.getTime()) / (1000 * 60 * 60 * 24))
 }
 
-function formatActiveDays(days: number): string {
-  return days > 365 ? `${Math.floor(days / 365)}年` : `${days}天`
+function formatActiveDays(days: number, t: (key: string) => string): string {
+  return days > 365 ? `${Math.floor(days / 365)}${t('activeYears')}` : `${days}${t('activeDaysUnit')}`
 }
 
 // Action button with hover effects
@@ -178,13 +178,13 @@ interface CopyTradeSectionProps {
   router: ReturnType<typeof useRouter>
 }
 
-function CopyTradeSection({ isPro, traderId, source, handle, router }: CopyTradeSectionProps): React.ReactElement {
+function CopyTradeSection({ isPro, traderId, source, handle, router, t }: CopyTradeSectionProps & { t: (key: string) => string }): React.ReactElement {
   if (isPro) {
     return (
       <Box style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
         <CopyTradeButton traderId={traderId} source={source} traderHandle={handle} />
         <Text size="xs" color="tertiary" style={{ fontSize: 11, opacity: 0.7 }}>
-          跳转至交易所跟单
+          {t('jumpToExchange')}
         </Text>
       </Box>
     )
@@ -214,10 +214,10 @@ function CopyTradeSection({ isPro, traderId, source, handle, router }: CopyTrade
           <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
           <path d="M7 11V7a5 5 0 0 1 10 0v4" />
         </svg>
-        跟单 Pro
+        {t('copyTradePro')}
       </Button>
       <Text size="xs" color="tertiary" style={{ fontSize: 11, opacity: 0.7 }}>
-        解锁后跳转交易所跟单
+        {t('unlockToJumpExchange')}
       </Text>
     </Box>
   )
@@ -478,7 +478,7 @@ export default function TraderHeader({
             </Text>
 
             {uid && (
-              <Badge color={tokens.colors.accent.primary} style={{ padding: `3px ${tokens.spacing[2]}` }} title="用户编号">
+              <Badge color={tokens.colors.accent.primary} style={{ padding: `3px ${tokens.spacing[2]}` }} title={t('userNumber')}>
                 <Text size="xs" weight="bold" style={{ color: tokens.colors.accent.primary, fontFamily: 'monospace', letterSpacing: '0.5px' }}>
                   #{uid.toString().padStart(6, '0')}
                 </Text>
@@ -505,7 +505,7 @@ export default function TraderHeader({
                   borderRadius: tokens.radius.full,
                   boxShadow: `0 2px 8px ${tokens.colors.accent.success}40`,
                 }}
-                title="已认证用户"
+                title={t('verifiedUser')}
               >
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                   <polyline points="20 6 9 17 4 12" />
@@ -514,7 +514,7 @@ export default function TraderHeader({
             )}
 
             {communityScore && communityScore.review_count > 0 && (
-              <Badge color="#FFD700" title={`${communityScore.review_count} 条用户评价`} style={{ gap: tokens.spacing[1] }}>
+              <Badge color="#FFD700" title={`${communityScore.review_count} ${t('userReviews')}`} style={{ gap: tokens.spacing[1] }}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="#FFD700" stroke="#FFD700" strokeWidth="1">
                   <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
                 </svg>
@@ -570,8 +570,8 @@ export default function TraderHeader({
                     <polyline points="12 6 12 12 16 14" />
                   </svg>
                 }
-                value={formatActiveDays(activeDays)}
-                label="活跃"
+                value={formatActiveDays(activeDays, t)}
+                label={t('activeDays')}
                 hasCover={hasCover}
               />
             )}
@@ -621,7 +621,7 @@ export default function TraderHeader({
         )}
 
         {!isOwnProfile && (
-          <CopyTradeSection isPro={isPro} traderId={traderId} source={source} handle={handle} router={router} />
+          <CopyTradeSection isPro={isPro} traderId={traderId} source={source} handle={handle} router={router} t={t} />
         )}
 
         <ActionButton onClick={() => router.push('/')} variant="ghost">

@@ -12,7 +12,8 @@ export const revalidate = 60
  */
 export default async function Page() {
   // Fetch initial traders server-side to eliminate client waterfall
-  const { traders: initialTraders, lastUpdated } = await getInitialTraders('90D', 50)
+  // Increased from 50 to 200 for better LCP (covers most user views without client fetch)
+  const { traders: initialTraders, lastUpdated } = await getInitialTraders('90D', 200)
 
   return (
     <Suspense>
