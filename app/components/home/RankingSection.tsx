@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useTransition } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import { tokens } from '@/lib/design-tokens'
@@ -84,7 +84,6 @@ export default function RankingSection({
   const [showAdvancedFilter, setShowAdvancedFilter] = useState(false)
   const [filterConfig, setFilterConfig] = useState<FilterConfig>({})
   const [savedFilters, setSavedFilters] = useState<SavedFilter[]>([])
-  const [savedFiltersLoaded, setSavedFiltersLoaded] = useState(false)
 
   // Feature 6: Filter presets
   const [activePreset, setActivePreset] = useState<PresetId | null>(null)
@@ -141,7 +140,7 @@ export default function RankingSection({
 
   // Debounce ref for URL sync
   const syncTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const [isPending, startTransition] = useTransition()
+  const [, startTransition] = useTransition()
 
   // Feature 8: Sync all state to URL via replaceState (debounced for performance)
   const syncStateToUrl = useCallback((overrides: {

@@ -308,7 +308,7 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
 
   // 刷新数据
   const refresh = useCallback(() => {
-    loadCurrentData(true)
+    return loadCurrentData(true)
   }, [loadCurrentData])
 
   // 清除缓存

@@ -120,8 +120,8 @@ export default function ExchangeConnectionManager({ userId }: ExchangeConnection
 
       showToast(t('syncSuccess'), 'success')
       await loadConnections()
-    } catch (err: any) {
-      showToast(err.message || t('syncError'), 'error')
+    } catch (err: unknown) {
+      showToast(err instanceof Error ? err.message : t('syncError'), 'error')
     } finally {
       setSyncing(null)
     }

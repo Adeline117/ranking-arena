@@ -62,8 +62,8 @@ function ExchangeAuthContent() {
 
       // 重定向到交易所 OAuth 页面
       window.location.href = data.authUrl
-    } catch (err: any) {
-      setError(err.message || t('authorizationFailed'))
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : t('authorizationFailed'))
       setLoading(false)
     }
   }

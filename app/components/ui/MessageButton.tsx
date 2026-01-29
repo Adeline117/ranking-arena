@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation'
 import { useToast } from './Toast'
+import { ButtonSpinner } from './LoadingSpinner'
 import { useApiMutation } from '@/lib/hooks/useApiMutation'
 import { apiRequest } from '@/lib/api/client'
 import { supabase } from '@/lib/supabase/client'
@@ -144,7 +145,7 @@ export default function MessageButton({
       }}
     >
       {isLoading ? (
-        <LoadingSpinner size={size === 'sm' ? 12 : 14} />
+        <ButtonSpinner size="xs" />
       ) : (
         <MessageIcon size={size === 'sm' ? 14 : 16} />
       )}
@@ -162,36 +163,3 @@ function MessageIcon({ size = 16 }: { size?: number }) {
   )
 }
 
-// 加载指示器
-function LoadingSpinner({ size = 14 }: { size?: number }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      style={{ animation: 'spin 1s linear infinite' }}
-      aria-hidden="true"
-    >
-      <circle
-        cx="12"
-        cy="12"
-        r="10"
-        stroke="currentColor"
-        strokeWidth="3"
-        strokeLinecap="round"
-        strokeDasharray="31.4 31.4"
-        strokeDashoffset="31.4"
-        style={{ animation: 'spinner-dash 1.5s ease-in-out infinite' }}
-      />
-      <style>{`
-        @keyframes spin { to { transform: rotate(360deg); } }
-        @keyframes spinner-dash {
-          0% { stroke-dashoffset: 31.4; }
-          50% { stroke-dashoffset: 0; }
-          100% { stroke-dashoffset: -31.4; }
-        }
-      `}</style>
-    </svg>
-  )
-}
