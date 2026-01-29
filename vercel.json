@@ -1,96 +1,12 @@
 {
   "crons": [
     {
-      "path": "/api/scrape/proxy?period=all",
-      "schedule": "0 */4 * * *"
-    },
-    {
       "path": "/api/cron/fetch-followed-traders",
       "schedule": "0 * * * *"
     },
     {
       "path": "/api/cron/check-data-freshness",
       "schedule": "0 */3 * * *"
-    },
-    {
-      "path": "/api/cron/discover-rankings",
-      "schedule": "30 */4 * * *"
-    },
-    {
-      "path": "/api/cron/fetch-traders/bitget_spot",
-      "schedule": "25 */4 * * *"
-    },
-    {
-      "path": "/api/cron/fetch-traders/mexc",
-      "schedule": "30 */4 * * *"
-    },
-    {
-      "path": "/api/cron/fetch-traders/coinex",
-      "schedule": "35 */4 * * *"
-    },
-    {
-      "path": "/api/cron/fetch-traders/okx_web3",
-      "schedule": "40 */4 * * *"
-    },
-    {
-      "path": "/api/cron/fetch-traders/kucoin",
-      "schedule": "45 */4 * * *"
-    },
-    {
-      "path": "/api/cron/fetch-traders/gmx",
-      "schedule": "50 */4 * * *"
-    },
-    {
-      "path": "/api/cron/fetch-traders/htx",
-      "schedule": "55 */4 * * *"
-    },
-    {
-      "path": "/api/cron/fetch-traders/okx_futures",
-      "schedule": "0 */4 * * *"
-    },
-    {
-      "path": "/api/cron/fetch-traders/weex",
-      "schedule": "5 */4 * * *"
-    },
-    {
-      "path": "/api/cron/fetch-traders/phemex",
-      "schedule": "10 */4 * * *"
-    },
-    {
-      "path": "/api/cron/fetch-traders/bingx",
-      "schedule": "15 */4 * * *"
-    },
-    {
-      "path": "/api/cron/fetch-traders/gateio",
-      "schedule": "20 */4 * * *"
-    },
-    {
-      "path": "/api/cron/fetch-traders/xt",
-      "schedule": "25 */4 * * *"
-    },
-    {
-      "path": "/api/cron/fetch-traders/pionex",
-      "schedule": "30 */4 * * *"
-    },
-    {
-      "path": "/api/cron/fetch-traders/kwenta",
-      "schedule": "35 */4 * * *"
-    },
-    {
-      "path": "/api/cron/fetch-traders/gains",
-      "schedule": "40 */4 * * *"
-    },
-    {
-      "path": "/api/cron/fetch-traders/mux",
-      "schedule": "45 */4 * * *"
-    },
-    {
-      "path": "/api/cron/fetch-traders/lbank",
-      "schedule": "50 */4 * * *"
-    },
-    {
-      "path": "/api/cron/fetch-traders/blofin",
-      "schedule": "55 */4 * * *"
     },
     {
       "path": "/api/cron/fetch-details?concurrency=50&limit=300",
@@ -109,10 +25,6 @@
       "schedule": "*/15 * * * *"
     },
     {
-      "path": "/api/cron/discover-traders",
-      "schedule": "10 */4 * * *"
-    },
-    {
       "path": "/api/cron/cleanup-deleted-accounts",
       "schedule": "0 3 * * *"
     },
@@ -123,7 +35,35 @@
     {
       "path": "/api/cron/calculate-tiers",
       "schedule": "*/15 * * * *"
-    }
+    },
+
+    { "_comment": "=== fetch-traders: high priority first, 3 min spacing ===" },
+    { "path": "/api/cron/fetch-traders/bitget_spot",   "schedule": "0 */4 * * *" },
+    { "path": "/api/cron/fetch-traders/okx_futures",    "schedule": "3 */4 * * *" },
+    { "path": "/api/cron/fetch-traders/okx_web3",       "schedule": "6 */4 * * *" },
+    { "path": "/api/cron/fetch-traders/bingx",          "schedule": "9 */4 * * *" },
+    { "path": "/api/cron/fetch-traders/gateio",         "schedule": "12 */4 * * *" },
+    { "path": "/api/cron/fetch-traders/mexc",           "schedule": "15 */4 * * *" },
+    { "path": "/api/cron/fetch-traders/coinex",         "schedule": "18 */4 * * *" },
+    { "path": "/api/cron/fetch-traders/kucoin",         "schedule": "21 */4 * * *" },
+    { "path": "/api/cron/fetch-traders/htx",            "schedule": "24 */4 * * *" },
+    { "path": "/api/cron/fetch-traders/weex",           "schedule": "27 */4 * * *" },
+    { "path": "/api/cron/fetch-traders/phemex",         "schedule": "30 */4 * * *" },
+    { "path": "/api/cron/fetch-traders/xt",             "schedule": "33 */4 * * *" },
+    { "path": "/api/cron/fetch-traders/pionex",         "schedule": "36 */4 * * *" },
+    { "path": "/api/cron/fetch-traders/gmx",            "schedule": "39 */4 * * *" },
+    { "path": "/api/cron/fetch-traders/kwenta",         "schedule": "42 */4 * * *" },
+    { "path": "/api/cron/fetch-traders/gains",          "schedule": "45 */4 * * *" },
+    { "path": "/api/cron/fetch-traders/mux",            "schedule": "48 */4 * * *" },
+    { "path": "/api/cron/fetch-traders/lbank",          "schedule": "51 */4 * * *" },
+    { "path": "/api/cron/fetch-traders/blofin",         "schedule": "54 */4 * * *" },
+
+    { "_comment": "=== discover: after fetch block ===" },
+    { "path": "/api/cron/discover-traders",    "schedule": "56 */4 * * *" },
+    { "path": "/api/cron/discover-rankings",   "schedule": "58 */4 * * *" },
+
+    { "_comment": "=== scrape/proxy: separate 4h cycle, offset +2h ===" },
+    { "path": "/api/scrape/proxy?period=all",  "schedule": "0 2,6,10,14,18,22 * * *" }
   ],
   "headers": [
     {
