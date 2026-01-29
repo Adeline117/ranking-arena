@@ -33,11 +33,11 @@
   --color-bg-tertiary: #1C1926;
   --color-bg-hover: #252232;
   
-  /* Text colors */
+  /* Text colors (WCAG AA on #0B0A10) */
   --color-text-primary: #EDEDED;
   --color-text-secondary: #A8A8B3;
-  --color-text-tertiary: #6B6B7B;
-  --color-text-quaternary: #4A4A5A;
+  --color-text-tertiary: #858594;
+  --color-text-quaternary: #717185;
   
   /* Border colors */
   --color-border-primary: #2A2836;
@@ -89,11 +89,11 @@
   --color-bg-tertiary: #F0F0F4;
   --color-bg-hover: #E8E8EC;
   
-  /* Text colors */
+  /* Text colors (WCAG AA on #FFFFFF) */
   --color-text-primary: #1A1A1A;
   --color-text-secondary: #5A5A6A;
-  --color-text-tertiary: #8A8A9A;
-  --color-text-quaternary: #B0B0BA;
+  --color-text-tertiary: #717180;
+  --color-text-quaternary: #767680;
   
   /* Border colors */
   --color-border-primary: #E0E0E6;

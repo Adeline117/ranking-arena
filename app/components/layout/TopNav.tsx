@@ -121,7 +121,9 @@ export default function TopNav({ email }: { email: string | null }) {
         }
       } catch (err) {
         if (!alive) return
-        console.error('Error in auth initialization:', err)
+        // Only log unexpected errors, not auth session failures (expected for non-logged-in users)
+        if (err instanceof Error && err.message?.includes('Auth session')) return
+        console.warn('[TopNav] Auth initialization error:', err)
       }
     }
 
@@ -401,14 +403,13 @@ export default function TopNav({ email }: { email: string | null }) {
             position: 'relative',
           }}
         >
-          <form onSubmit={handleSearch} style={{ width: '100%', position: 'relative' }}>
+          <form onSubmit={handleSearch} role="search" style={{ width: '100%', position: 'relative' }}>
             <input
-              type="text"
+              type="search"
               placeholder={t('searchPlaceholder')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               aria-label={t('searchTraders')}
-              role="searchbox"
               tabIndex={0}
               style={{
                 width: '100%',
@@ -570,8 +571,7 @@ export default function TopNav({ email }: { email: string | null }) {
                 onClick={() => setShowUserMenu(!showUserMenu)}
                 aria-label={t('userMenu')}
                 aria-expanded={showUserMenu}
-                aria-haspopup="true"
-                role="button"
+                aria-haspopup="menu"
                 tabIndex={0}
                 style={{
                   display: 'flex',
@@ -652,10 +652,11 @@ export default function TopNav({ email }: { email: string | null }) {
                 >
                   {/* Account Switcher */}
                   <AccountSwitcher onClose={() => setShowUserMenu(false)} />
-                  <Box style={{ height: 1, background: tokens.colors.border.primary, margin: `${tokens.spacing[1]} 0` }} />
+                  <Box style={{ height: 1, background: tokens.colors.border.primary, margin: `${tokens.spacing[1]} 0` }} role="separator" />
 
                   <Link
                     href={myHandle ? `/u/${encodeURIComponent(myHandle)}` : '/'}
+                    role="menuitem"
                     onClick={(e) => {
                       if (!myHandle) {
                         e.preventDefault()
@@ -673,6 +674,7 @@ export default function TopNav({ email }: { email: string | null }) {
                   </Link>
                   <Link
                     href="/inbox"
+                    role="menuitem"
                     style={{ ...MENU_LINK_STYLE, position: 'relative' }}
                     onMouseEnter={applyMenuHoverIn}
                     onMouseLeave={applyMenuHoverOut}
@@ -707,6 +709,7 @@ export default function TopNav({ email }: { email: string | null }) {
                   </Link>
                   <Link
                     href="/settings"
+                    role="menuitem"
                     style={MENU_LINK_STYLE}
                     onMouseEnter={applyMenuHoverIn}
                     onMouseLeave={applyMenuHoverOut}
@@ -719,6 +722,7 @@ export default function TopNav({ email }: { email: string | null }) {
                     <span>{t('settings')}</span>
                   </Link>
                   <Box
+                    role="separator"
                     style={{
                       height: 1,
                       background: tokens.colors.border.primary,
@@ -727,6 +731,7 @@ export default function TopNav({ email }: { email: string | null }) {
                   />
                   <Link
                     href="/logout"
+                    role="menuitem"
                     style={{
                       display: 'block',
                       padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
@@ -757,7 +762,6 @@ export default function TopNav({ email }: { email: string | null }) {
               href="/login"
               aria-label={t('login')}
               tabIndex={0}
-              role="button"
               className="btn-press touch-target"
               style={{
                 padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,

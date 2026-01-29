@@ -320,7 +320,7 @@ export default function TraderComparison({ traders, onRemove, showRemoveButton =
         {activeTab === 'metrics' && (
           <>
             {metrics.map((metric, metricIdx) => {
-              const values = traders.map(tr => (tr as Record<string, unknown>)[metric.key] as number | undefined)
+              const values = traders.map(tr => (tr as unknown as Record<string, unknown>)[metric.key] as number | undefined)
               const bestIdx = getBestIndex(values, metric.higherBetter)
 
               return (
@@ -340,7 +340,7 @@ export default function TraderComparison({ traders, onRemove, showRemoveButton =
                   </Text>
 
                   {traders.map((trader, traderIdx) => {
-                    const value = (trader as Record<string, unknown>)[metric.key] as number | undefined
+                    const value = (trader as unknown as Record<string, unknown>)[metric.key] as number | undefined
                     const isBest = traderIdx === bestIdx && value != null
                     const color = metric.isPercent || metric.isNegative
                       ? getValueColor(value, metric.higherBetter)

@@ -52,7 +52,6 @@ export const TraderRow = memo(function TraderRow({
     >
       <Box
         className="ranking-row ranking-table-grid ranking-table-grid-custom touch-target"
-        role="row"
         style={{
           display: 'grid',
           alignItems: 'center',

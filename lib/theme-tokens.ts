@@ -18,11 +18,11 @@ export const lightTokens = {
       hover: '#E5E5E5',        // Hover states
     },
     
-    // Text hierarchy
+    // Text hierarchy (WCAG AA contrast ratios on #FFFFFF)
     text: {
-      primary: '#1A1A1A',      // Almost black text
-      secondary: '#666666',    // Secondary text
-      tertiary: '#999999',     // Muted text
+      primary: '#1A1A1A',      // Almost black text (16.6:1)
+      secondary: '#666666',    // Secondary text (5.7:1)
+      tertiary: '#737380',     // Muted text (4.7:1)
       disabled: '#CCCCCC',     // Disabled text
     },
     
@@ -66,11 +66,11 @@ export const darkTokens = {
       hover: '#23222B',        // Subtle hover
     },
     
-    // Text hierarchy
+    // Text hierarchy (WCAG AA contrast ratios on #0B0A10)
     text: {
-      primary: '#EDEDED',      // Primary text
-      secondary: '#9A9A9A',    // Secondary text
-      tertiary: '#6F6F6F',     // Muted text
+      primary: '#EDEDED',      // Primary text (14.5:1)
+      secondary: '#9A9A9A',    // Secondary text (7.0:1)
+      tertiary: '#898998',     // Muted text (5.7:1)
       disabled: '#404040',     // Disabled text
     },
     

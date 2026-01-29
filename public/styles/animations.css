@@ -209,11 +209,7 @@
   20%, 40%, 60%, 80% { transform: translateX(5px); }
 }
 
-@keyframes wiggle {
-  0%, 100% { transform: rotate(0deg); }
-  25% { transform: rotate(-3deg); }
-  75% { transform: rotate(3deg); }
-}
+/* Removed unused keyframe: wiggle */
 
 /* 光泽效果 */
 @keyframes shimmer {
@@ -251,51 +247,9 @@
   to { transform: scaleX(1); }
 }
 
-@keyframes progressStripe {
-  from { background-position: 40px 0; }
-  to { background-position: 0 0; }
-}
+/* Removed unused keyframe: progressStripe */
 
-/* 浮动效果 */
-@keyframes float {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-10px); }
-}
-
-@keyframes floatSoft {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-5px); }
-}
-
-/* 数字变化动画 */
-@keyframes countUp {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-/* 打字机效果 */
-@keyframes typing {
-  from { width: 0; }
-  to { width: 100%; }
-}
-
-/* 呼吸效果 */
-@keyframes breathe {
-  0%, 100% { opacity: 0.6; transform: scale(1); }
-  50% { opacity: 1; transform: scale(1.02); }
-}
-
-/* 旋转渐变边框 */
-@keyframes borderRotate {
-  from { background-position: 0% 50%; }
-  to { background-position: 100% 50%; }
-}
+/* Removed unused keyframes: float, floatSoft, countUp, typing, breathe, borderRotate */
 
 /* 骨架屏闪烁 */
 @keyframes skeletonPulse {
@@ -364,9 +318,7 @@
   animation: fadeInScale 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards;
 }
 
-.card-float {
-  animation: floatSoft 3s ease-in-out infinite;
-}
+/* Removed unused class: .card-float (floatSoft keyframe removed) */
 
 /* ============================================
    4. 按钮交互类
@@ -553,41 +505,8 @@
   background-clip: text;
 }
 
-.gradient-text-success {
-  background: linear-gradient(135deg, #2fe57d 0%, #22c55e 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
-.gradient-text-error {
-  background: linear-gradient(135deg, #ff7c7c 0%, #ef4444 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
-.gradient-border {
-  position: relative;
-  background: var(--color-bg-primary);
-  border-radius: 12px;
-}
-
-.gradient-border::before {
-  content: '';
-  position: absolute;
-  inset: -1px;
-  border-radius: inherit;
-  background: linear-gradient(135deg, rgba(139, 111, 168, 0.5) 0%, rgba(124, 58, 237, 0.3) 100%);
-  z-index: -1;
-}
-
-.gradient-bg-mesh {
-  background: 
-    radial-gradient(at 40% 20%, rgba(139, 111, 168, 0.15) 0px, transparent 50%),
-    radial-gradient(at 80% 0%, rgba(124, 58, 237, 0.1) 0px, transparent 50%),
-    radial-gradient(at 0% 50%, rgba(167, 139, 250, 0.1) 0px, transparent 50%);
-}
+/* Removed unused gradient classes: .gradient-text-success, .gradient-text-error,
+   .gradient-border, .gradient-bg-mesh (no TSX references found) */
 
 /* ============================================
    8. 骨架屏效果
@@ -790,15 +709,7 @@ input:focus + .input-label-float {
   animation: pulseSoft 1s ease-in-out infinite;
 }
 
-/* 数字变化 */
-.number-change {
-  animation: countUp 0.4s ease-out;
-}
-
-/* 成功打勾 */
-.success-check {
-  animation: scaleInBounce 0.5s ease-out forwards;
-}
+/* Removed unused: .number-change (countUp removed), .success-check (no references) */
 
 /* 错误摇晃 */
 .error-shake {
@@ -810,16 +721,7 @@ input:focus + .input-label-float {
   animation: glowPulse 2s ease-in-out infinite;
 }
 
-/* 价格变化闪烁 */
-.price-up {
-  animation: fadeIn 0.2s ease-out;
-  color: #2fe57d !important;
-}
-
-.price-down {
-  animation: fadeIn 0.2s ease-out;
-  color: #ff7c7c !important;
-}
+/* Removed unused: .price-up, .price-down (no TSX references) */
 
 /* ============================================
    16. 无障碍：减少动效

@@ -547,7 +547,6 @@ export default function RankingSection({
           textAlign: 'center',
           fontSize: tokens.typography.fontSize.xs,
           color: tokens.colors.text.tertiary,
-          opacity: 0.7,
         }}
       >
         {t('notInvestmentAdvice')}

@@ -126,6 +126,16 @@ main{min-height:100vh;background:var(--bg-primary,#0B0A10)}
 .mesh-gradient-bg{position:fixed;inset:0;opacity:0.5;pointer-events:none;z-index:0;transform:translateZ(0);backface-visibility:hidden;contain:strict layout paint}
 
 /* ============================================
+   Ranking Table Layout - LCP Element
+   Minimum layout for the ranking table grid so
+   rows render at the correct size before async CSS loads.
+   ============================================ */
+.ranking-table-grid{display:grid;gap:8px;align-items:center;min-height:52px;padding:0 16px;contain:layout style}
+.ranking-row{display:grid;gap:8px;align-items:center;min-height:52px;padding:0 16px;transition:background 0.15s ease}
+.sort-header{display:flex;align-items:center;gap:4px;background:none;border:none;padding:0;cursor:pointer;text-transform:uppercase;letter-spacing:0.5px;white-space:nowrap;font-size:12px;font-weight:700;color:var(--text-tertiary,#6B6B7B)}
+.toolbar-btn{display:flex;align-items:center;justify-content:center;gap:3px;padding:4px 8px;height:26px;border-radius:6px;border:1px solid var(--border-secondary,#3A3848);background:var(--bg-tertiary,#1C1926);color:var(--text-secondary,#A8A8B3);cursor:pointer;font-size:11px}
+
+/* ============================================
    防止布局偏移 (CLS)
    ============================================ */
 img{display:block;max-width:100%;height:auto}
@@ -182,11 +192,37 @@ export function getFontPreloadLinks(): Array<{ href: string; as: string; type: s
 /**
  * 资源提示
  * 预连接到关键域
+ *
+ * preconnect: Establishes early connection (DNS + TCP + TLS) -- use for origins fetched within seconds.
+ * dns-prefetch: DNS lookup only -- cheaper fallback for browsers that cap preconnects.
  */
 export function getResourceHints(): Array<{ rel: string; href: string; crossOrigin?: 'anonymous' | 'use-credentials' | '' }> {
-  return [
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://supabase.co'
+  const upstashUrl = process.env.UPSTASH_REDIS_REST_URL || ''
+
+  // Extract origin from full URL (e.g. "https://x.upstash.io/path" -> "https://x.upstash.io")
+  let upstashOrigin = ''
+  try {
+    if (upstashUrl) {
+      upstashOrigin = new URL(upstashUrl).origin
+    }
+  } catch {
+    // Ignore invalid URL
+  }
+
+  const hints: Array<{ rel: string; href: string; crossOrigin?: 'anonymous' | 'use-credentials' | '' }> = [
+    // Google Fonts -- used by next/font
     { rel: 'preconnect', href: 'https://fonts.googleapis.com' },
     { rel: 'preconnect', href: 'https://fonts.gstatic.com', crossOrigin: 'anonymous' },
-    { rel: 'dns-prefetch', href: process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://supabase.co' },
+    // Supabase -- API calls on every page (rankings, auth, etc.)
+    { rel: 'preconnect', href: supabaseUrl },
+    { rel: 'dns-prefetch', href: supabaseUrl },
   ]
+
+  // Upstash Redis -- server-side cache, add dns-prefetch only (not fetched from browser)
+  if (upstashOrigin) {
+    hints.push({ rel: 'dns-prefetch', href: upstashOrigin })
+  }
+
+  return hints
 }
