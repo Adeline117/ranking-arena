@@ -198,7 +198,6 @@ export default function MobileBottomNav(): React.ReactElement {
       <div className="mobile-bottom-nav-spacer has-mobile-nav" style={{ height: 0 }} aria-hidden="true" />
 
       <nav
-        role="navigation"
         aria-label={t('mainNavigation')}
         className="mobile-bottom-nav safe-area-inset-bottom"
         style={{

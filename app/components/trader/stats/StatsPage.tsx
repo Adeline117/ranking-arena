@@ -6,7 +6,7 @@ import { Box, Text } from '../../base'
 import type { TraderStats } from '@/lib/data/trader'
 import TradingViewShell from '../TradingViewShell'
 import { useLanguage } from '../../Providers/LanguageProvider'
-import { createChart, ColorType, LineSeries, LineData, Time } from 'lightweight-charts'
+import type { LineData, Time } from 'lightweight-charts'
 
 // 扩展类型以支持新数据
 interface AssetBreakdownData {
@@ -780,82 +780,98 @@ function CompareChart({
   useEffect(() => {
     if (!mounted || !chartContainerRef.current) return
 
-    const container = chartContainerRef.current
-    const containerWidth = container.clientWidth || 400
-    const chartHeight = height - 16
+    let disposed = false
+    let resizeHandler: (() => void) | null = null
+    let chartInstance: { remove: () => void } | null = null
 
-    // 创建图表
-    const chart = createChart(container, {
-      layout: {
-        background: { type: ColorType.Solid, color: 'transparent' },
-        textColor: tokens.colors.text.tertiary,
-        fontFamily: tokens.typography.fontFamily.mono.join(', '),
-      },
-      width: containerWidth,
-      height: chartHeight,
-      grid: {
-        vertLines: { color: `${tokens.colors.border.primary}30` },
-        horzLines: { color: `${tokens.colors.border.primary}30` },
-      },
-      rightPriceScale: {
-        borderColor: tokens.colors.border.primary,
-        scaleMargins: { top: 0.1, bottom: 0.1 },
-      },
-      timeScale: {
-        borderColor: tokens.colors.border.primary,
-        timeVisible: false,
-      },
-      crosshair: {
-        mode: 1,
-        vertLine: {
-          color: tokens.colors.text.tertiary,
-          width: 1,
-          labelBackgroundColor: tokens.colors.bg.tertiary,
+    // Dynamically import lightweight-charts to keep it out of the initial bundle
+    import('lightweight-charts').then(({ createChart, ColorType, LineSeries }) => {
+      if (disposed || !chartContainerRef.current) return
+
+      const container = chartContainerRef.current
+      const containerWidth = container.clientWidth || 400
+      const chartHeight = height - 16
+
+      // 创建图表
+      const chart = createChart(container, {
+        layout: {
+          background: { type: ColorType.Solid, color: 'transparent' },
+          textColor: tokens.colors.text.tertiary,
+          fontFamily: tokens.typography.fontFamily.mono.join(', '),
         },
-        horzLine: {
-          color: tokens.colors.text.tertiary,
-          width: 1,
-          labelBackgroundColor: tokens.colors.bg.tertiary,
+        width: containerWidth,
+        height: chartHeight,
+        grid: {
+          vertLines: { color: `${tokens.colors.border.primary}30` },
+          horzLines: { color: `${tokens.colors.border.primary}30` },
         },
-      },
-    })
+        rightPriceScale: {
+          borderColor: tokens.colors.border.primary,
+          scaleMargins: { top: 0.1, bottom: 0.1 },
+        },
+        timeScale: {
+          borderColor: tokens.colors.border.primary,
+          timeVisible: false,
+        },
+        crosshair: {
+          mode: 1,
+          vertLine: {
+            color: tokens.colors.text.tertiary,
+            width: 1,
+            labelBackgroundColor: tokens.colors.bg.tertiary,
+          },
+          horzLine: {
+            color: tokens.colors.text.tertiary,
+            width: 1,
+            labelBackgroundColor: tokens.colors.bg.tertiary,
+          },
+        },
+      })
 
-    // 添加用户ROI线（紫色）
-    const traderSeries = chart.addSeries(LineSeries, {
-      color: tokens.colors.accent.primary,
-      lineWidth: 2,
-      priceFormat: {
-        type: 'custom',
-        formatter: (price: number) => `${(price - 100).toFixed(1)}%`,
-      },
-    })
-    traderSeries.setData(chartData.traderData)
+      chartInstance = chart
 
-    // 添加比较资产线（橙色）
-    const compareSeries = chart.addSeries(LineSeries, {
-      color: tokens.colors.accent.warning,
-      lineWidth: 2,
-      priceFormat: {
-        type: 'custom',
-        formatter: (price: number) => `${(price - 100).toFixed(1)}%`,
-      },
-    })
-    compareSeries.setData(chartData.compareData)
+      // 添加用户ROI线（紫色）
+      const traderSeries = chart.addSeries(LineSeries, {
+        color: tokens.colors.accent.primary,
+        lineWidth: 2,
+        priceFormat: {
+          type: 'custom',
+          formatter: (price: number) => `${(price - 100).toFixed(1)}%`,
+        },
+      })
+      traderSeries.setData(chartData.traderData)
 
-    chart.timeScale().fitContent()
+      // 添加比较资产线（橙色）
+      const compareSeries = chart.addSeries(LineSeries, {
+        color: tokens.colors.accent.warning,
+        lineWidth: 2,
+        priceFormat: {
+          type: 'custom',
+          formatter: (price: number) => `${(price - 100).toFixed(1)}%`,
+        },
+      })
+      compareSeries.setData(chartData.compareData)
 
-    // 响应式调整
-    const handleResize = () => {
-      if (container) {
-        chart.applyOptions({ width: container.clientWidth })
+      chart.timeScale().fitContent()
+
+      // 响应式调整
+      resizeHandler = () => {
+        if (container) {
+          chart.applyOptions({ width: container.clientWidth })
+        }
       }
-    }
 
-    window.addEventListener('resize', handleResize)
+      window.addEventListener('resize', resizeHandler)
+    })
 
     return () => {
-      window.removeEventListener('resize', handleResize)
-      chart.remove()
+      disposed = true
+      if (resizeHandler) {
+        window.removeEventListener('resize', resizeHandler)
+      }
+      if (chartInstance) {
+        chartInstance.remove()
+      }
     }
   }, [mounted, chartData, height])
 

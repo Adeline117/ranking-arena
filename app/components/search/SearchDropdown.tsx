@@ -62,8 +62,9 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
       if (stored) {
         try {
           setSearchHistory(JSON.parse(stored))
-        } catch (e) {
-          console.error('Failed to parse search history:', e)
+        } catch {
+          // Silently handle corrupted localStorage data
+          localStorage.removeItem('ranking-arena-recent-searches')
         }
       }
     }

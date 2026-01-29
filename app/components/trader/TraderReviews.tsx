@@ -307,7 +307,7 @@ function ReviewCard({
               </Box>
             )}
             <StarRating rating={review.rating} size={14} />
-            <Text size="xs" color="tertiary">{formatTimeAgo(review.created_at, language)}</Text>
+            <Text size="xs" color="tertiary">{formatTimeAgo(review.created_at, language as 'zh' | 'en')}</Text>
           </Box>
 
           {/* Content */}
