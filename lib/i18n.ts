@@ -648,8 +648,6 @@ export const translations = {
     loadUserDataFailed: '加载用户数据失败',
     failedToLoad: '加载失败',
     unableToLoadUserData: '无法加载用户数据，请检查网络后重试',
-    retry: '重试',
-    verifiedUser: '已认证用户',
     posts: '动态',
     // 欢迎页面
     welcomeJoin: '欢迎加入',
@@ -1582,8 +1580,6 @@ export const translations = {
     loadUserDataFailed: 'Failed to load user data',
     failedToLoad: 'Failed to Load',
     unableToLoadUserData: 'Unable to load user data. Please check your network and try again.',
-    retry: 'Retry',
-    verifiedUser: 'Verified User',
     posts: 'Posts',
     // Welcome Page
     welcomeJoin: 'Welcome',
