@@ -98,7 +98,7 @@ export function getFontPreloadLinks(): Array<{ href: string; as: string; type: s
  * 资源提示
  * 预连接到关键域
  */
-export function getResourceHints(): Array<{ rel: string; href: string; crossOrigin?: string }> {
+export function getResourceHints(): Array<{ rel: string; href: string; crossOrigin?: 'anonymous' | 'use-credentials' | '' }> {
   return [
     { rel: 'preconnect', href: 'https://fonts.googleapis.com' },
     { rel: 'preconnect', href: 'https://fonts.gstatic.com', crossOrigin: 'anonymous' },

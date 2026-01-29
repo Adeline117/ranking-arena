@@ -357,8 +357,9 @@ const TraderRow = memo(function TraderRow({
               if (!proxyAvatarUrl) return null
 
               // Get loading strategy based on position (first 3 are critical)
-              const loadingStrategy = getImageLoadingStrategy(index, 'above')
-              const isPriority = index < 3
+              const rowIndex = rank - 1
+              const loadingStrategy = getImageLoadingStrategy(rowIndex, 'above')
+              const isPriority = rowIndex < 3
 
               return (
                 <Image
@@ -570,8 +571,9 @@ const TraderCard = memo(function TraderCard({
               if (!proxyAvatarUrl) return null
 
               // Get loading strategy based on position (first 3 are critical)
-              const loadingStrategy = getImageLoadingStrategy(index, 'above')
-              const isPriority = index < 3
+              const rowIndex = rank - 1
+              const loadingStrategy = getImageLoadingStrategy(rowIndex, 'above')
+              const isPriority = rowIndex < 3
 
               return (
                 <Image
