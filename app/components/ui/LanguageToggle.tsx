@@ -1,17 +1,20 @@
 'use client'
 
-import { useTransition } from 'react'
+import { useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 export default function LanguageToggle() {
   const { language, setLanguage } = useLanguage()
-  const [isPending, startTransition] = useTransition()
+  const [isChanging, setIsChanging] = useState(false)
 
   const toggleLanguage = () => {
-    startTransition(() => {
-      setLanguage(language === 'zh' ? 'en' : 'zh')
-    })
+    if (isChanging) return
+    setIsChanging(true)
+    const newLang = language === 'zh' ? 'en' : 'zh'
+    setLanguage(newLang)
+    // Brief delay for visual feedback, then reset
+    setTimeout(() => setIsChanging(false), 300)
   }
 
   return (
@@ -32,9 +35,8 @@ export default function LanguageToggle() {
         color: tokens.colors.text.secondary,
         fontSize: tokens.typography.fontSize.sm,
         fontWeight: tokens.typography.fontWeight.medium,
-        cursor: isPending ? 'wait' : 'pointer',
+        cursor: 'pointer',
         transition: `all ${tokens.transition.fast}`,
-        opacity: isPending ? 0.6 : 1,
       }}
     >
       {language === 'zh' ? 'EN' : '中'}
