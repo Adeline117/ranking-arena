@@ -13,8 +13,6 @@ import type { InitialTrader } from '@/lib/getInitialTraders'
 interface HomePageProps {
   initialTraders?: InitialTrader[]
   initialLastUpdated?: string | null
-  email?: string | null
-  isLoggedIn: boolean
 }
 
 // 懒加载侧边栏组件（非关键路径）- 在客户端延迟加载
@@ -32,8 +30,6 @@ const SidebarSection = lazy(() => import('./SidebarSection'))
 export default function HomePage({
   initialTraders,
   initialLastUpdated,
-  email,
-  isLoggedIn
 }: HomePageProps) {
   return (
     <Box
@@ -63,8 +59,8 @@ export default function HomePage({
       {/* JSON-LD 结构化数据 */}
       <JsonLd data={combineSchemas(generateWebSiteSchema(), generateOrganizationSchema())} />
 
-      {/* 顶部导航 */}
-      <TopNav email={email ?? null} />
+      {/* 顶部导航 - Auth handled client-side */}
+      <TopNav email={null} />
 
       {/* 主体容器 */}
       <Box
@@ -107,7 +103,6 @@ export default function HomePage({
               <HomePageClient
                 initialTraders={initialTraders}
                 initialLastUpdated={initialLastUpdated}
-                isLoggedIn={isLoggedIn}
               />
             </Suspense>
           </Box>
