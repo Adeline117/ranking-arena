@@ -35,23 +35,6 @@ export type { LogLevel, LoggerConfig, LogEntry } from './logger'
 export * from './rate-limit'
 // Export from circuit-breaker (includes withRetry)
 export * from './circuit-breaker'
-// Export from provider-error except isProviderRateLimitError (to avoid conflict with circuit-breaker)
-export {
-  parseProviderError,
-  isRetryableProviderError,
-  withProviderRetry,
-  createRetryableProviderCall,
-  ProviderRetryPresets,
-  toUserFriendlyError,
-  formatWaitTime,
-} from './provider-error'
-export type {
-  ProviderErrorDetails,
-  ProviderError,
-  ParsedProviderError,
-  UserFriendlyError,
-  ProviderRetryOptions,
-} from './provider-error'
 export * from './validation'
 export * from './content'
 export * from './server-cache'

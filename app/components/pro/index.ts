@@ -5,6 +5,4 @@
  * for Pro subscribers.
  */
 
-export { default as DetailedExplanation, ProFeatureTeaser } from './DetailedExplanation'
-export { default as CrossExchangeComparison } from './CrossExchangeComparison'
 export { default as AdvancedAlerts } from './AdvancedAlerts'

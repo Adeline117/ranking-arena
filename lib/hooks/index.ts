@@ -16,9 +16,6 @@ export { useSubmit, useDebounceClick } from './useSubmit'
 export { useCsrf, getCsrfToken, createCsrfHeaders } from './useCsrf'
 export { useDebounce, useDebouncedCallback } from './useDebounce'
 
-// 基础数据获取（低级 API，一般不直接使用）
-export { useFetch, invalidateCache } from './useDataFetching'
-
 // 实时更新
 export {
   useRealtime,
@@ -28,23 +25,6 @@ export {
   useMessagesRealtime,
   usePresence,
 } from './useRealtime'
-
-// 性能优化
-export {
-  useIntersectionObserver,
-  useLazyLoad,
-  useInfiniteScroll,
-  useVisibilityTracking,
-} from './useIntersectionObserver'
-
-// 乐观更新
-export {
-  useOptimisticUpdate,
-  useOptimisticLike,
-  useOptimisticBookmark,
-  useOptimisticFollow,
-  useOptimisticList,
-} from './useOptimisticUpdate'
 
 // ============================================
 // SWR 数据获取 - 推荐使用
