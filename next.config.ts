@@ -35,11 +35,12 @@ const nextConfig: NextConfig = {
     // 优先使用 AVIF（更小），回退到 WebP
     formats: ['image/avif', 'image/webp'],
 
-    // 本地 API 路由图片（允许 query string）
+    // 本地 API 路由图片（允许任意 query string）
+    // 注意：省略 search 属性以允许任何查询字符串
     localPatterns: [
       {
         pathname: '/api/avatar',
-        search: '?url=*',
+        // search 省略以允许 ?url=* 等查询参数
       },
     ],
 
