@@ -65,6 +65,7 @@
     "@capacitor/splash-screen": "^7.0.1",
     "@capacitor/status-bar": "^7.0.1",
     "@sentry/nextjs": "10.35.0",
+    "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.91.0",
     "@types/pg": "^8.16.0",
     "@upstash/ratelimit": "^2.0.8",
