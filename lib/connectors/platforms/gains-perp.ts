@@ -44,7 +44,7 @@ export class GainsPerpConnector extends BaseConnector {
   readonly platform = 'gains' as const
   readonly marketType = 'perp' as const
   readonly capabilities: PlatformCapabilities = {
-    platform: 'gains' as any,
+    platform: 'gains',
     market_types: ['perp'],
     native_windows: ['7d', '30d', '90d'],
     available_fields: ['roi', 'pnl', 'win_rate', 'max_drawdown', 'trades_count'],
@@ -81,7 +81,7 @@ export class GainsPerpConnector extends BaseConnector {
         if (trade.trader && !traderSet.has(trade.trader.toLowerCase())) {
           traderSet.add(trade.trader.toLowerCase())
           traders.push({
-            platform: 'gains' as any,
+            platform: 'gains',
             market_type: 'perp' as const,
             trader_key: trade.trader.toLowerCase(),
             display_name: `${trade.trader.slice(0, 6)}...${trade.trader.slice(-4)}`,
@@ -105,7 +105,7 @@ export class GainsPerpConnector extends BaseConnector {
   async fetchTraderProfile(traderKey: string): Promise<ProfileResult | null> {
     try {
       const profile: TraderProfile = {
-        platform: 'gains' as any,
+        platform: 'gains',
         market_type: 'perp',
         trader_key: traderKey.toLowerCase(),
         display_name: `${traderKey.slice(0, 6)}...${traderKey.slice(-4)}`,

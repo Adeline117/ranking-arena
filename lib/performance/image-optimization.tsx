@@ -118,7 +118,6 @@ export function preloadCriticalImages(images: string[]): React.ReactElement[] {
       rel="preload"
       as="image"
       href={getOptimizedImageUrl(src, { width: 72, quality: 85, format: 'webp' })}
-      // @ts-ignore
       imageSrcSet={getAvatarSrcSet(src)}
       imageSizes="72px"
     />

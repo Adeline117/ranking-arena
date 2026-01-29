@@ -94,6 +94,7 @@ export interface SnapshotMetrics {
   return_score: number | null
   drawdown_score: number | null
   stability_score: number | null
+  score_confidence?: 'full' | 'partial' | 'minimal' | null
   rank: number | null
 }
 

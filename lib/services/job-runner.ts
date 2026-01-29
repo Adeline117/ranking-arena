@@ -17,7 +17,7 @@
 
 import { query, queryOne } from '@/lib/db';
 import { getConnector } from '@/lib/connectors/registry';
-import { calculateArenaScore, type Period } from '@/lib/utils/arena-score';
+import { calculateArenaScore, type Period, type ScoreConfidence } from '@/lib/utils/arena-score';
 import type {
   Platform,
   GranularPlatform,
@@ -319,21 +319,22 @@ export class JobRunner {
   private calculateScores(
     metrics: SnapshotMetricsLegacy,
     window: RankingWindow,
-  ): Pick<SnapshotMetricsLegacy, 'arena_score' | 'return_score' | 'drawdown_score' | 'stability_score'> {
+  ): Pick<SnapshotMetricsLegacy, 'arena_score' | 'return_score' | 'drawdown_score' | 'stability_score'> & { score_confidence: ScoreConfidence | null } {
     if (metrics.roi_pct == null) {
-      return { arena_score: null, return_score: null, drawdown_score: null, stability_score: null };
+      return { arena_score: null, return_score: null, drawdown_score: null, stability_score: null, score_confidence: null };
     }
 
     const periodMap: Record<RankingWindow, Period> = { '7d': '7D', '30d': '30D', '90d': '90D' };
     const period = periodMap[window];
 
     try {
+      // 传递原始 null 值，让 arena-score 内部使用默认中位值（WR=50%, MDD=-20%）
       const score = calculateArenaScore(
         {
           roi: metrics.roi_pct,
           pnl: metrics.pnl_usd ?? 0,
-          maxDrawdown: metrics.max_drawdown_pct ?? 0,
-          winRate: metrics.win_rate_pct ?? 50,
+          maxDrawdown: metrics.max_drawdown_pct ?? null,
+          winRate: metrics.win_rate_pct ?? null,
         },
         period,
       );
@@ -343,9 +344,10 @@ export class JobRunner {
         return_score: score.returnScore ?? null,
         drawdown_score: score.drawdownScore ?? null,
         stability_score: score.stabilityScore ?? null,
+        score_confidence: score.scoreConfidence,
       };
     } catch {
-      return { arena_score: null, return_score: null, drawdown_score: null, stability_score: null };
+      return { arena_score: null, return_score: null, drawdown_score: null, stability_score: null, score_confidence: null };
     }
   }
 }

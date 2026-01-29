@@ -305,9 +305,9 @@ export default function WelcomePage() {
 
       setShowConfetti(true)
       goToStep('complete')
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error completing onboarding:', error)
-      const errorMsg = error?.message || t('networkError')
+      const errorMsg = error instanceof Error ? error.message : t('networkError')
       showToast(errorMsg, 'error')
     } finally {
       setSaving(false)
@@ -337,9 +337,9 @@ export default function WelcomePage() {
 
       setShowConfetti(true)
       goToStep('complete')
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error skipping:', error)
-      const errorMsg = error?.message || t('networkError')
+      const errorMsg = error instanceof Error ? error.message : t('networkError')
       showToast(errorMsg, 'error')
     } finally {
       setSaving(false)

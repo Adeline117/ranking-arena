@@ -33,7 +33,7 @@ export class BlofinFuturesConnector extends BaseConnector {
   readonly platform = 'blofin' as const
   readonly marketType = 'futures' as const
   readonly capabilities: PlatformCapabilities = {
-    platform: 'blofin' as any,
+    platform: 'blofin',
     market_types: ['futures'],
     native_windows: ['7d', '30d', '90d'],
     available_fields: ['roi', 'pnl', 'win_rate', 'max_drawdown', 'sharpe_ratio', 'followers'],
@@ -66,7 +66,7 @@ export class BlofinFuturesConnector extends BaseConnector {
 
       const list = data?.data?.list || []
       const traders: TraderSource[] = list.map((item) => ({
-        platform: 'blofin' as any,
+        platform: 'blofin',
         market_type: 'futures' as const,
         trader_key: String(item.traderId || ''),
         display_name: item.nickName || null,
@@ -92,7 +92,7 @@ export class BlofinFuturesConnector extends BaseConnector {
 
       const info = data?.data
       const profile: TraderProfile = {
-        platform: 'blofin' as any,
+        platform: 'blofin',
         market_type: 'futures',
         trader_key: traderKey,
         display_name: info?.nickName || null,

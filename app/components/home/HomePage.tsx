@@ -1,4 +1,5 @@
-import { Suspense, lazy } from 'react'
+import { Suspense } from 'react'
+import dynamic from 'next/dynamic'
 import { tokens } from '@/lib/design-tokens'
 import { Box } from '../base'
 import TopNav from '../layout/TopNav'
@@ -15,8 +16,9 @@ interface HomePageProps {
   initialLastUpdated?: string | null
 }
 
-// 懒加载侧边栏组件（非关键路径）- 在客户端延迟加载
-const SidebarSection = lazy(() => import('./SidebarSection'))
+// 懒加载侧边栏组件（非关键路径）
+// 使用 next/dynamic 替代 React.lazy — 提供 ssr:false 跳过服务端渲染，加速 TTFB
+const SidebarSection = dynamic(() => import('./SidebarSection'), { ssr: false })
 
 /**
  * 首页主容器组件 - Server Component

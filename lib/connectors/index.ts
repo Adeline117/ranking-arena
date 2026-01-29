@@ -32,7 +32,7 @@ export { ConnectorError, DEFAULT_CONNECTOR_CONFIG } from './types'
 
 // Legacy createConnector function (simplified)
  
-export function createConnector(platform: GranularPlatform): any {
+export function createConnector(platform: GranularPlatform): BybitFuturesConnector | null {
   switch (platform) {
     case 'bybit':
       return new BybitFuturesConnector()

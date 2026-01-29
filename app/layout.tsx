@@ -28,7 +28,9 @@ const notoSansSC = Noto_Sans_SC({
   weight: ["400", "700"],
   display: "swap",
   variable: "--font-noto-sans-sc",
-  preload: true,  // Enable preloading to prevent CLS from font swap
+  preload: false,  // Defer CJK font subsets — they generate 100+ woff2 files (4.7MB total).
+                   // With preload:true the browser eagerly fetches all subsets, blocking LCP.
+                   // CJK glyphs load on demand via unicode-range when actually needed.
   adjustFontFallback: true,
   fallback: ['system-ui', '-apple-system', 'sans-serif'],  // Fallback stack to minimize CLS
 });
@@ -115,8 +117,9 @@ export default function RootLayout({
         {/* Preload critical API endpoint for faster data fetch */}
         <link rel="preconnect" href={process.env.NEXT_PUBLIC_APP_URL || "https://www.arenafi.org"} />
 
-        {/* Preload critical fonts to prevent layout shift */}
-        <link rel="preload" href="/_next/static/media/inter-latin-400.woff2" as="font" type="font/woff2" crossOrigin="anonymous" />
+        {/* Font preloading is handled automatically by next/font.
+            Removed hardcoded preload link — the hashed filename (e.g. be2afef9-s.woff2)
+            never matched the static path, so this was a wasted network request. */}
 
         {/* Non-critical CSS loaded via AsyncStylesheets component after hydration */}
         <noscript>
