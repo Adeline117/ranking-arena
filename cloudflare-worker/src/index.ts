@@ -30,6 +30,9 @@ const ALLOWED_HOSTS = [
   'api.gmx.io',
   'api.dydx.exchange',
   'api.hyperliquid.xyz',
+  // dYdX v4 indexer
+  'indexer.dydx.trade',
+  'indexer.v4testnet.dydx.exchange',
 ];
 
 export default {
@@ -88,9 +91,29 @@ export default {
       return handleBinanceSpotCopyTrading(request, url);
     }
 
+    // 快捷端点: /dydx/leaderboard
+    if (url.pathname === '/dydx/leaderboard') {
+      return handleDydxLeaderboard(request, url);
+    }
+
+    // 快捷端点: /dydx/historical-pnl
+    if (url.pathname === '/dydx/historical-pnl') {
+      return handleDydxHistoricalPnl(request, url);
+    }
+
+    // 快捷端点: /dydx/subaccount
+    if (url.pathname === '/dydx/subaccount') {
+      return handleDydxSubaccount(request, url);
+    }
+
     return Response.json({
       error: 'Not found',
-      endpoints: ['/health', '/proxy', '/binance/copy-trading', '/binance/spot-copy-trading', '/bybit/copy-trading', '/bitget/copy-trading', '/kucoin/copy-trading']
+      endpoints: [
+        '/health', '/proxy',
+        '/binance/copy-trading', '/binance/spot-copy-trading',
+        '/bybit/copy-trading', '/bitget/copy-trading', '/kucoin/copy-trading',
+        '/dydx/leaderboard', '/dydx/historical-pnl', '/dydx/subaccount',
+      ]
     }, { status: 404 });
   },
 };
@@ -343,6 +366,119 @@ async function handleBinanceSpotCopyTrading(request: Request, url: URL): Promise
   } catch (error) {
     return Response.json({
       error: 'Binance Spot API error',
+      details: error instanceof Error ? error.message : 'Unknown'
+    }, {
+      status: 500,
+      headers: { 'Access-Control-Allow-Origin': '*' },
+    });
+  }
+}
+
+// ============================================
+// dYdX 代理端点 (绕过地区封锁)
+// ============================================
+
+const DYDX_INDEXER = 'https://indexer.dydx.trade';
+const DYDX_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  'Accept': 'application/json',
+  'Accept-Language': 'en-US,en;q=0.9',
+};
+
+async function handleDydxLeaderboard(request: Request, url: URL): Promise<Response> {
+  const period = url.searchParams.get('period') || 'PERIOD_7D';
+  const limit = parseInt(url.searchParams.get('limit') || '100');
+
+  const apiUrl = `${DYDX_INDEXER}/v4/leaderboard/pnl?period=${period}&limit=${limit}`;
+
+  try {
+    const response = await fetch(apiUrl, {
+      method: 'GET',
+      headers: DYDX_HEADERS,
+    });
+
+    const data = await response.json();
+
+    return Response.json(data, {
+      status: response.status,
+      headers: { 'Access-Control-Allow-Origin': '*' },
+    });
+  } catch (error) {
+    return Response.json({
+      error: 'dYdX leaderboard proxy error',
+      details: error instanceof Error ? error.message : 'Unknown'
+    }, {
+      status: 500,
+      headers: { 'Access-Control-Allow-Origin': '*' },
+    });
+  }
+}
+
+async function handleDydxHistoricalPnl(request: Request, url: URL): Promise<Response> {
+  const address = url.searchParams.get('address') || '';
+  const subaccountNumber = url.searchParams.get('subaccountNumber') || '0';
+  const limit = url.searchParams.get('limit') || '90';
+
+  if (!address) {
+    return Response.json({ error: 'Missing address parameter' }, {
+      status: 400,
+      headers: { 'Access-Control-Allow-Origin': '*' },
+    });
+  }
+
+  const apiUrl = `${DYDX_INDEXER}/v4/historical-pnl?address=${address}&subaccountNumber=${subaccountNumber}&limit=${limit}`;
+
+  try {
+    const response = await fetch(apiUrl, {
+      method: 'GET',
+      headers: DYDX_HEADERS,
+    });
+
+    const data = await response.json();
+
+    return Response.json(data, {
+      status: response.status,
+      headers: { 'Access-Control-Allow-Origin': '*' },
+    });
+  } catch (error) {
+    return Response.json({
+      error: 'dYdX historical PnL proxy error',
+      details: error instanceof Error ? error.message : 'Unknown'
+    }, {
+      status: 500,
+      headers: { 'Access-Control-Allow-Origin': '*' },
+    });
+  }
+}
+
+async function handleDydxSubaccount(request: Request, url: URL): Promise<Response> {
+  const address = url.searchParams.get('address') || '';
+  const subaccountNumber = url.searchParams.get('subaccountNumber') || '0';
+
+  if (!address) {
+    return Response.json({ error: 'Missing address parameter' }, {
+      status: 400,
+      headers: { 'Access-Control-Allow-Origin': '*' },
+    });
+  }
+
+  const apiUrl = `${DYDX_INDEXER}/v4/addresses/${address}/subaccounts/${subaccountNumber}`;
+
+  try {
+    const response = await fetch(apiUrl, {
+      method: 'GET',
+      headers: DYDX_HEADERS,
+    });
+
+    const data = await response.json();
+
+    return Response.json(data, {
+      status: response.status,
+      headers: { 'Access-Control-Allow-Origin': '*' },
+    });
+  } catch (error) {
+    return Response.json({
+      error: 'dYdX subaccount proxy error',
       details: error instanceof Error ? error.message : 'Unknown'
     }, {
       status: 500,
