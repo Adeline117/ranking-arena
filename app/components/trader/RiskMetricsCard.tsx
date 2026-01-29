@@ -1,9 +1,8 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { Text } from '../base'
 import Card from '../ui/Card'
-import { useLanguage } from '../Providers/LanguageProvider'
 import { formatRiskMetric, calculateRiskLevel, type RiskMetrics } from '@/lib/services/trading-metrics'
 
 interface RiskMetricsCardProps {
@@ -20,32 +19,8 @@ const RISK_LEVEL_COLORS = {
   5: '#ff5252', // 高风险 - 红色
 }
 
-// 风险等级描述
-const _RISK_LEVEL_LABELS: Record<number, string> = {
-  1: '低风险',
-  2: '较低风险',
-  3: '中等风险',
-  4: '较高风险',
-  5: '高风险',
-}
-
-/**
- * 风险指标卡片组件
- */
 export function RiskMetricsCard({ metrics, loading }: RiskMetricsCardProps) {
-  const { t: _t } = useLanguage()
-
-  // 计算风险等级（如果未提供）
-  const riskInfo = useMemo(() => {
-    if (metrics?.riskLevel && metrics?.riskLevelDescription) {
-      return { level: metrics.riskLevel, description: metrics.riskLevelDescription }
-    }
-    return calculateRiskLevel(
-      metrics?.volatility ?? null,
-      metrics?.maxDrawdown ?? null,
-      metrics?.sharpeRatio ?? null
-    )
-  }, [metrics])
+  const riskInfo = getRiskInfo(metrics)
 
   if (loading) {
     return (
@@ -160,13 +135,17 @@ export function RiskMetricsCard({ metrics, loading }: RiskMetricsCardProps) {
   )
 }
 
-// ============================================
-// 子组件
-// ============================================
+function getRiskInfo(metrics: Partial<RiskMetrics> | null): { level: number; description: string } {
+  if (metrics?.riskLevel && metrics?.riskLevelDescription) {
+    return { level: metrics.riskLevel, description: metrics.riskLevelDescription }
+  }
+  return calculateRiskLevel(
+    metrics?.volatility ?? null,
+    metrics?.maxDrawdown ?? null,
+    metrics?.sharpeRatio ?? null
+  )
+}
 
-/**
- * 风险等级徽章
- */
 function RiskLevelBadge({ level, description }: { level: number; description: string }) {
   const color = RISK_LEVEL_COLORS[level as keyof typeof RISK_LEVEL_COLORS] || RISK_LEVEL_COLORS[3]
   
@@ -199,32 +178,29 @@ function RiskLevelBadge({ level, description }: { level: number; description: st
   )
 }
 
-/**
- * 单个指标项
- */
-function MetricItem({ 
-  label, 
-  value, 
-  description, 
-  positive, 
-  negative 
-}: { 
+function getMetricColorClass(positive?: boolean, negative?: boolean): string {
+  if (positive) return 'text-[var(--color-success)]'
+  if (negative) return 'text-[var(--color-error)]'
+  return 'text-[var(--color-text-primary)]'
+}
+
+function MetricItem({
+  label,
+  value,
+  description,
+  positive,
+  negative
+}: {
   label: string
   value: string
   description: string
   positive?: boolean
   negative?: boolean
 }) {
-  const valueColor = positive 
-    ? 'text-[var(--color-success)]' 
-    : negative 
-      ? 'text-[var(--color-error)]' 
-      : 'text-[var(--color-text-primary)]'
-
   return (
     <div className="p-3 bg-[var(--color-bg-tertiary)] rounded-lg">
       <div className="text-[10px] text-[var(--color-text-tertiary)] mb-0.5">{label}</div>
-      <div className={`text-lg font-bold ${valueColor}`}>{value}</div>
+      <div className={`text-lg font-bold ${getMetricColorClass(positive, negative)}`}>{value}</div>
       <div className="text-[9px] text-[var(--color-text-tertiary)] mt-0.5">{description}</div>
     </div>
   )

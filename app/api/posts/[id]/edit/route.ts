@@ -95,7 +95,7 @@ export async function PUT(
     deleteServerCacheByPrefix('posts:')
 
     return NextResponse.json({ success: true, post: updatedPost })
-  } catch (error) {
+  } catch (error: unknown) {
     logger.error('Error editing post', { error })
     const errorMessage = error instanceof Error ? error.message : '服务器错误'
     return NextResponse.json({ error: errorMessage }, { status: 500 })

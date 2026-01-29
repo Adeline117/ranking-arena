@@ -80,7 +80,7 @@ async function fetchBinanceViaProxy(period: string): Promise<TraderData[]> {
 
       if (traders.length >= 100) break
       await new Promise(r => setTimeout(r, 300))
-    } catch (error) {
+    } catch (error: unknown) {
       console.error(`[Binance] Page ${page} error:`, error)
       break
     }
@@ -129,7 +129,7 @@ async function fetchBybitViaProxy(period: string): Promise<TraderData[]> {
 
       if (traders.length >= 100) break
       await new Promise(r => setTimeout(r, 300))
-    } catch (error) {
+    } catch (error: unknown) {
       console.error(`[Bybit] Page ${page} error:`, error)
       break
     }
@@ -178,7 +178,7 @@ async function fetchBitgetViaProxy(period: string, type: 'futures' | 'spot' = 'f
 
       if (traders.length >= 100) break
       await new Promise(r => setTimeout(r, 300))
-    } catch (error) {
+    } catch (error: unknown) {
       console.error(`[Bitget] Page ${page} error:`, error)
       break
     }

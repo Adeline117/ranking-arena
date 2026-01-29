@@ -144,7 +144,7 @@ export async function POST(request: NextRequest) {
         'Content-Disposition': `attachment; filename="ranking-arena-export-${user.id}.json"`,
       },
     })
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('[Export] Unexpected error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }

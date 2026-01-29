@@ -94,7 +94,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     };
 
     return NextResponse.json(response, { status: 202 });
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('[API /trader/by-id/:id/refresh] Error:', error);
     return NextResponse.json(
       { error: 'Internal server error' },

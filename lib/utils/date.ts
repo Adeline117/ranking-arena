@@ -1,7 +1,3 @@
-/**
- * 日期时间工具函数
- */
-
 export type Locale = 'zh' | 'en'
 
 const translations = {
@@ -25,11 +21,6 @@ const translations = {
   },
 }
 
-/**
- * 格式化为相对时间（如 "3分钟前"）
- * @param dateString ISO 日期字符串或 Date 对象
- * @param locale 语言
- */
 export function formatTimeAgo(dateString: string | Date, locale: Locale = 'zh'): string {
   // 处理无效输入
   if (!dateString) {
@@ -62,17 +53,9 @@ export function formatTimeAgo(dateString: string | Date, locale: Locale = 'zh'):
   if (diffDays < 7) return t.daysAgo(diffDays)
   if (diffWeeks < 4) return t.weeksAgo(diffWeeks)
   if (diffMonths < 12) return t.monthsAgo(diffMonths)
-  if (diffYears >= 1) return t.yearsAgo(diffYears)
-  
-  // 超过一年显示具体日期
-  return date.toLocaleDateString(locale === 'zh' ? 'zh-CN' : 'en-US')
+  return t.yearsAgo(diffYears)
 }
 
-/**
- * 格式化日期为指定格式
- * @param dateString ISO 日期字符串或 Date 对象
- * @param format 格式模板
- */
 export function formatDate(
   dateString: string | Date,
   format: 'short' | 'long' | 'datetime' = 'short',
@@ -103,9 +86,6 @@ export function formatDate(
   }
 }
 
-/**
- * 获取两个日期之间的天数
- */
 export function daysBetween(date1: Date | string, date2: Date | string): number {
   const d1 = typeof date1 === 'string' ? new Date(date1) : date1
   const d2 = typeof date2 === 'string' ? new Date(date2) : date2
@@ -113,9 +93,6 @@ export function daysBetween(date1: Date | string, date2: Date | string): number 
   return Math.floor(diffMs / (1000 * 60 * 60 * 24))
 }
 
-/**
- * 判断日期是否在指定天数内
- */
 export function isWithinDays(date: Date | string, days: number): boolean {
   const d = typeof date === 'string' ? new Date(date) : date
   const now = new Date()

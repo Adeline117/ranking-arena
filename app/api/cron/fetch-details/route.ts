@@ -120,7 +120,7 @@ export async function GET(req: Request) {
             avgPriority,
           })
         }
-      } catch (error) {
+      } catch (error: unknown) {
         logger.error('Smart scheduler failed, falling back to default behavior', { error })
         // Continue with original parameters
       }
@@ -164,7 +164,7 @@ export async function GET(req: Request) {
         // Note: We'd need trader IDs from the script output to mark them as refreshed
         // For now, this is a placeholder - the script would need to return trader IDs
         logger.info('Smart scheduler: traders refreshed', { count: success })
-      } catch (error) {
+      } catch (error: unknown) {
         logger.error('Failed to mark traders as refreshed', { error })
       }
     }

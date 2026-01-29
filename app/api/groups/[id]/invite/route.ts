@@ -153,7 +153,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       invite_url: inviteUrl,
       expires_at: new Date(expiresAt).toISOString(),
     })
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Generate invite error:', error)
     return NextResponse.json({ error: '服务器错误' }, { status: 500 })
   }

@@ -58,7 +58,7 @@ async function checkDatabase(): Promise<CheckResult> {
     }
     
     return { status: 'pass', latency }
-  } catch (error) {
+  } catch (error: unknown) {
     const latency = Date.now() - startTime
     return {
       status: 'fail',
@@ -94,7 +94,7 @@ function checkMemory(): CheckResult {
       status: 'pass',
       message: `${heapUsedMB}MB / ${heapTotalMB}MB (${usagePercent}%)`,
     }
-  } catch (error) {
+  } catch (error: unknown) {
     return {
       status: 'fail',
       message: error instanceof Error ? error.message : 'Unknown error',

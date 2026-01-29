@@ -78,7 +78,7 @@ export async function GET(request: NextRequest) {
     }
 
     return success({ alerts: alerts || [] })
-  } catch (err) {
+  } catch (err: unknown) {
     return handleError(err)
   }
 }
@@ -176,7 +176,7 @@ export async function POST(request: NextRequest) {
     }
 
     return success({ alert: result, created: !existing })
-  } catch (err) {
+  } catch (err: unknown) {
     return handleError(err)
   }
 }
@@ -216,7 +216,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     return success({ deleted: true })
-  } catch (err) {
+  } catch (err: unknown) {
     return handleError(err)
   }
 }

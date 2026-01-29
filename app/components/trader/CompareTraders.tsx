@@ -1,16 +1,12 @@
 'use client'
 
-import React, { memo, useState, useMemo } from 'react'
+import { memo, useState, useMemo } from 'react'
 import Link from 'next/link'
 import { X, TrendingUp, TrendingDown, Minus, ChevronUp, ChevronDown, BarChart3, Share2, Maximize2 } from 'lucide-react'
 import { tokens } from '@/lib/design-tokens'
 import { formatCompact as formatNumber, formatPercent } from '@/lib/utils/format'
 import { Box, Text, Button } from '../base'
 import type { Trader } from '../ranking/RankingTable'
-
-// ============================================
-// 类型定义
-// ============================================
 
 type CompareTradersProps = {
   traders: Trader[]
@@ -26,10 +22,6 @@ type CompareMetric = {
   higherIsBetter: boolean
   colorize?: boolean
 }
-
-// ============================================
-// 配置
-// ============================================
 
 const COMPARE_METRICS: CompareMetric[] = [
   {
@@ -72,10 +64,6 @@ const COMPARE_METRICS: CompareMetric[] = [
     higherIsBetter: true,
   },
 ]
-
-// ============================================
-// 辅助函数
-// ============================================
 
 function getBestValue(traders: Trader[], metric: CompareMetric): number | null {
   const values = traders
@@ -121,10 +109,6 @@ function TrendIcon({ value, metric }: { value: number | undefined | null; metric
 
   return <Minus size={12} style={{ opacity: 0.5 }} />
 }
-
-// ============================================
-// 迷你对比浮窗
-// ============================================
 
 function CompareFloatingBar({
   traders,
@@ -233,10 +217,6 @@ function CompareFloatingBar({
     </Box>
   )
 }
-
-// ============================================
-// 详细对比表格
-// ============================================
 
 function CompareDetailTable({ traders, onRemove }: { traders: Trader[]; onRemove: (id: string) => void }) {
   const [sortMetric, setSortMetric] = useState<keyof Trader>('roi')
@@ -415,10 +395,6 @@ function CompareDetailTable({ traders, onRemove }: { traders: Trader[]; onRemove
     </Box>
   )
 }
-
-// ============================================
-// 主组件
-// ============================================
 
 function CompareTraders({ traders, onRemove, onClear, maxTraders = 5 }: CompareTradersProps) {
   const [isExpanded, setIsExpanded] = useState(false)

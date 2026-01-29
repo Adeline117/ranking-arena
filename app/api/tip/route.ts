@@ -76,7 +76,7 @@ export async function POST(request: NextRequest) {
     }
 
     return success({ message: '打赏成功' })
-  } catch (e) {
+  } catch (e: unknown) {
     return handleError(e, 'tip POST')
   }
 }

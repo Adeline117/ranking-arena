@@ -44,7 +44,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
       { comments },
       { limit, offset, has_more: comments.length === limit }
     )
-  } catch (error) {
+  } catch (error: unknown) {
     return handleError(error, 'posts/[id]/comments GET')
   }
 }
@@ -94,7 +94,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     })
 
     return success({ comment }, 201)
-  } catch (error) {
+  } catch (error: unknown) {
     return handleError(error, 'posts/[id]/comments POST')
   }
 }
@@ -113,7 +113,7 @@ export async function DELETE(request: NextRequest, _context: RouteContext) {
     await deleteComment(supabase, commentId, user.id)
 
     return success({ message: '评论已删除' })
-  } catch (error) {
+  } catch (error: unknown) {
     return handleError(error, 'posts/[id]/comments DELETE')
   }
 }

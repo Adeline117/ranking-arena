@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
       prewarmed,
       timestamp: new Date().toISOString(),
     });
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('[Cron /run-jobs] Error:', error);
     return NextResponse.json(
       { error: 'Job processing failed', details: error instanceof Error ? error.message : 'Unknown' },

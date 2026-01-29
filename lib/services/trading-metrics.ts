@@ -1,12 +1,3 @@
-/**
- * 专业交易风险指标计算服务
- * 提供夏普率、波动率、索提诺比率等专业指标的计算
- */
-
-// ============================================
-// 类型定义
-// ============================================
-
 export interface PerformanceData {
   /** 收益率序列（百分比） */
   returns: number[]
@@ -50,11 +41,6 @@ export interface TradeRecord {
   closeTime: string
 }
 
-// ============================================
-// 常量配置
-// ============================================
-
-/** 年化因子 */
 const ANNUALIZATION_FACTOR = {
   daily: Math.sqrt(365),
   weekly: Math.sqrt(52),
@@ -71,21 +57,11 @@ const RISK_LEVEL_THRESHOLDS = {
   sharpe: [2, 1, 0.5, 0],        // 夏普率阈值（倒序）
 }
 
-// ============================================
-// 基础计算函数
-// ============================================
-
-/**
- * 计算平均值
- */
 function mean(values: number[]): number {
   if (values.length === 0) return 0
   return values.reduce((sum, v) => sum + v, 0) / values.length
 }
 
-/**
- * 计算标准差
- */
 function standardDeviation(values: number[], avg?: number): number {
   if (values.length < 2) return 0
   const m = avg ?? mean(values)
@@ -93,9 +69,6 @@ function standardDeviation(values: number[], avg?: number): number {
   return Math.sqrt(mean(squaredDiffs))
 }
 
-/**
- * 计算下行标准差（只考虑负收益）
- */
 function downwardStandardDeviation(values: number[], threshold = 0): number {
   const negativeReturns = values.filter(v => v < threshold)
   if (negativeReturns.length < 2) return 0
@@ -103,14 +76,7 @@ function downwardStandardDeviation(values: number[], threshold = 0): number {
   return Math.sqrt(mean(squaredDiffs))
 }
 
-// ============================================
-// 风险指标计算函数
-// ============================================
-
-/**
- * 计算夏普率
- * Sharpe Ratio = (Portfolio Return - Risk-Free Rate) / Portfolio Std Dev
- */
+/** Sharpe Ratio = (Portfolio Return - Risk-Free Rate) / Portfolio Std Dev */
 export function calculateSharpeRatio(
   returns: number[],
   period: 'daily' | 'weekly' | 'monthly' = 'daily',
@@ -133,10 +99,7 @@ export function calculateSharpeRatio(
   return Math.round(sharpe * 100) / 100
 }
 
-/**
- * 计算索提诺比率
- * Sortino Ratio = (Portfolio Return - Target Return) / Downward Std Dev
- */
+/** Sortino Ratio = (Portfolio Return - Target Return) / Downward Std Dev */
 export function calculateSortinoRatio(
   returns: number[],
   period: 'daily' | 'weekly' | 'monthly' = 'daily',
@@ -159,10 +122,7 @@ export function calculateSortinoRatio(
   return Math.round(sortino * 100) / 100
 }
 
-/**
- * 计算卡尔马比率
- * Calmar Ratio = Annual Return / Max Drawdown
- */
+/** Calmar Ratio = Annual Return / Max Drawdown */
 export function calculateCalmarRatio(
   annualizedReturn: number,
   maxDrawdown: number
@@ -200,10 +160,7 @@ export function calculateMaxDrawdown(returns: number[]): {
   }
 
   // 计算累积收益
-  let cumulativeReturn = 100 // 从 100 开始
-  const peaks: number[] = []
-  const drawdowns: number[] = []
-  
+  let cumulativeReturn = 100
   let peak = cumulativeReturn
   let maxDD = 0
   let currentDDStart = -1
@@ -227,8 +184,6 @@ export function calculateMaxDrawdown(returns: number[]): {
       maxDD = Math.max(maxDD, dd)
     }
     
-    peaks.push(peak)
-    drawdowns.push(((peak - cumulativeReturn) / peak) * 100)
   })
 
   // 检查最后的回撤持续时间
@@ -347,13 +302,6 @@ export function calculateRiskLevel(
   return { level, description }
 }
 
-// ============================================
-// 综合计算函数
-// ============================================
-
-/**
- * 计算所有风险指标
- */
 export function calculateAllRiskMetrics(
   data: PerformanceData,
   trades?: TradeRecord[],

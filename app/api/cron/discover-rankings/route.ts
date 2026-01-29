@@ -104,7 +104,7 @@ export async function GET(request: Request) {
       blocked: Array.from(blockedPlatforms),
       platforms: jobs.map(j => `${j.platform}:${j.market_type}`),
     });
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('[cron/discover] Error:', error);
     return NextResponse.json({ error: 'Internal error' }, { status: 500 });
   }

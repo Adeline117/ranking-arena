@@ -131,7 +131,7 @@ export async function GET(request: Request) {
         }, { onConflict: 'platform' });
 
         results.push({ job_id: job.id, platform: job.platform, status: 'completed' });
-      } catch (error) {
+      } catch (error: unknown) {
         const errorMsg = (error as Error).message;
 
         const backoffMs = Math.min(60000, 5000 * Math.pow(2, job.attempts));
@@ -155,7 +155,7 @@ export async function GET(request: Request) {
       jobs_processed: results.length,
       results,
     });
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('[cron/run-worker] Error:', error);
     return NextResponse.json({ error: 'Internal error' }, { status: 500 });
   }

@@ -169,7 +169,7 @@ export default function JoinedGroups({ userId }: JoinedGroupsProps) {
                 <Text size="sm" weight="semibold" style={{ marginBottom: 2 }}>
                   {language === 'en' && group.name_en ? group.name_en : group.name}
                 </Text>
-                {group.member_count !== null && group.member_count !== undefined && (
+                {group.member_count != null && (
                   <Text size="xs" color="tertiary">
                     {group.member_count} {isZh ? '成员' : 'members'}
                   </Text>

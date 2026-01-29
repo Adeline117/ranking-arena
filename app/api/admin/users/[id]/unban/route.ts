@@ -72,7 +72,7 @@ export async function POST(
       ok: true,
       message: 'User unbanned successfully',
     })
-  } catch (error) {
+  } catch (error: unknown) {
     logger.error('Unban user API error', { error })
     const errorMessage = error instanceof Error ? error.message : 'Internal server error'
     return NextResponse.json({ error: errorMessage }, { status: 500 })

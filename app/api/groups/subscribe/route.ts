@@ -79,7 +79,7 @@ export async function GET(request: NextRequest) {
       } : null,
       is_subscribed: !!subscription,
     })
-  } catch (e) {
+  } catch (e: unknown) {
     return handleError(e)
   }
 }
@@ -217,7 +217,7 @@ export async function POST(request: NextRequest) {
       },
       message: tier === 'trial' ? '试用已开始！' : '订阅成功！',
     }, 201)
-  } catch (e) {
+  } catch (e: unknown) {
     return handleError(e)
   }
 }
@@ -269,7 +269,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     return success({ message: '订阅已取消，您可以继续使用直到当前周期结束。' })
-  } catch (e) {
+  } catch (e: unknown) {
     return handleError(e)
   }
 }

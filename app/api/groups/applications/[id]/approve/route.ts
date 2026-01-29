@@ -78,7 +78,7 @@ export async function POST(
       message: '已批准该小组申请'
     })
 
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Error approving application:', error)
     return NextResponse.json({ error: '服务器错误' }, { status: 500 })
   }

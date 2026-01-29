@@ -204,7 +204,7 @@ export async function POST(request: NextRequest) {
       message_limit: messageLimit,
       receiver_handle: receiverProfile.handle
     })
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('[Start Message API] 错误:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }

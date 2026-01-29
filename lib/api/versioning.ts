@@ -100,9 +100,7 @@ export function addVersionHeaders(
  */
 export function addDeprecationHeaders(
   response: NextResponse,
-  context: VersionContext,
-  _pathname: string,
-  _method: string
+  context: VersionContext
 ): NextResponse {
   if (context.isDeprecated) {
     response.headers.set('Deprecation', context.deprecationDate || 'true')
@@ -251,9 +249,6 @@ export interface PageBasedPaginationParams {
   cursor?: string    // 游标（用于游标分页）
 }
 
-/** @deprecated 使用 PageBasedPaginationParams 替代，避免与 lib/types/index.ts 冲突 */
-export type PaginationParams = PageBasedPaginationParams
-
 export interface PaginationMeta {
   page: number
   limit: number
@@ -270,7 +265,7 @@ export interface PaginationMeta {
 export function parsePaginationParams(
   searchParams: URLSearchParams,
   defaults: { page?: number; limit?: number } = {}
-): PaginationParams {
+): PageBasedPaginationParams {
   const page = parseInt(searchParams.get('page') || String(defaults.page || 1), 10)
   const limit = parseInt(searchParams.get('limit') || String(defaults.limit || 20), 10)
   const cursor = searchParams.get('cursor') || undefined

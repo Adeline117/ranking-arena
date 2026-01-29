@@ -4,10 +4,6 @@ import { useState, useCallback } from 'react'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { useToast } from './Toast'
 
-// ============================================
-// 类型定义
-// ============================================
-
 interface ShareData {
   title: string
   text?: string
@@ -16,10 +12,6 @@ interface ShareData {
 }
 
 type SharePlatform = 'twitter' | 'telegram' | 'wechat' | 'weibo' | 'copy' | 'native'
-
-// ============================================
-// 分享链接生成
-// ============================================
 
 function getShareUrl(platform: SharePlatform, data: ShareData): string {
   const { title, text, url } = data
@@ -36,10 +28,6 @@ function getShareUrl(platform: SharePlatform, data: ShareData): string {
       return url
   }
 }
-
-// ============================================
-// 分享按钮组件
-// ============================================
 
 interface ShareButtonProps {
   data: ShareData
@@ -165,10 +153,6 @@ export function ShareButton({
   )
 }
 
-// ============================================
-// 邀请好友组件
-// ============================================
-
 interface InviteFriendsProps {
   referralCode?: string
   onInvite?: () => void
@@ -176,7 +160,6 @@ interface InviteFriendsProps {
 
 export function InviteFriends({ referralCode, onInvite }: InviteFriendsProps) {
   const [copied, setCopied] = useState(false)
-  const { t: _t } = useLanguage()
 
   const inviteUrl = referralCode
     ? `${typeof window !== 'undefined' ? window.location.origin : ''}/welcome?ref=${referralCode}`
@@ -282,10 +265,6 @@ export function InviteFriends({ referralCode, onInvite }: InviteFriendsProps) {
   )
 }
 
-// ============================================
-// 子组件
-// ============================================
-
 function ShareOption({
   icon,
   label,
@@ -312,10 +291,6 @@ function ShareOption({
     </button>
   )
 }
-
-// ============================================
-// 图标
-// ============================================
 
 function ShareIcon() {
   return (

@@ -78,7 +78,7 @@ export async function GET(request: NextRequest) {
       timestamp: new Date().toISOString(),
     })
 
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('[Cron] Error:', error)
     return NextResponse.json(
       { error: 'Cron execution failed', details: String(error) },

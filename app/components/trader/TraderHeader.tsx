@@ -38,9 +38,7 @@ interface TraderHeaderProps {
   winRate?: number
 }
 
-type SourceLabelKey = 'categoryFutures' | 'categorySpot' | 'categoryWeb3'
-
-const SOURCE_CONFIG: Record<string, SourceLabelKey> = {
+const SOURCE_CONFIG: Record<string, string> = {
   binance_futures: 'categoryFutures',
   binance_spot: 'categorySpot',
   binance_web3: 'categoryWeb3',
@@ -68,6 +66,12 @@ const CATEGORY_COLORS: Record<string, string> = {
   futures: '#F59E0B',
 }
 
+const CATEGORY_I18N_KEYS: Record<string, string> = {
+  web3: 'categoryWeb3',
+  spot: 'categorySpot',
+  futures: 'categoryFutures',
+}
+
 function getTradingStyleTags(
   t: (key: string) => string,
   source?: string,
@@ -79,12 +83,7 @@ function getTradingStyleTags(
 
   const category = getSourceCategory(source)
   if (category) {
-    const labelKeys: Record<string, string> = {
-      web3: 'categoryWeb3',
-      spot: 'categorySpot',
-      futures: 'categoryFutures',
-    }
-    tags.push({ label: t(labelKeys[category]), color: CATEGORY_COLORS[category] })
+    tags.push({ label: t(CATEGORY_I18N_KEYS[category]), color: CATEGORY_COLORS[category] })
   }
 
   if (maxDrawdown !== undefined && Math.abs(maxDrawdown) < 10) {
@@ -118,7 +117,6 @@ function formatActiveDays(days: number, t: (key: string) => string): string {
   return days > 365 ? `${Math.floor(days / 365)}${t('activeYears')}` : `${days}${t('activeDaysUnit')}`
 }
 
-// Action button with hover effects
 interface ActionButtonProps {
   onClick: () => void
   variant: 'accent' | 'ghost'
@@ -169,16 +167,16 @@ function ActionButton({ onClick, variant, icon, children }: ActionButtonProps): 
   )
 }
 
-// Copy trade section component
 interface CopyTradeSectionProps {
   isPro: boolean
   traderId: string
   source?: string
   handle: string
   router: ReturnType<typeof useRouter>
+  t: (key: string) => string
 }
 
-function CopyTradeSection({ isPro, traderId, source, handle, router, t }: CopyTradeSectionProps & { t: (key: string) => string }): React.ReactElement {
+function CopyTradeSection({ isPro, traderId, source, handle, router, t }: CopyTradeSectionProps): React.ReactElement {
   if (isPro) {
     return (
       <Box style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
@@ -223,7 +221,6 @@ function CopyTradeSection({ isPro, traderId, source, handle, router, t }: CopyTr
   )
 }
 
-// Reusable badge component for consistent styling
 interface BadgeProps {
   children: React.ReactNode
   color: string
@@ -250,7 +247,6 @@ function Badge({ children, color, style, title }: BadgeProps): React.ReactElemen
   )
 }
 
-// Reusable stat item component
 interface StatItemProps {
   icon?: React.ReactNode
   value: string | number
@@ -373,7 +369,7 @@ export default function TraderHeader({
         </Box>
       )}
       
-      {/* 左侧：Avatar + Handle */}
+      {/* Profile Info */}
       <Box
         className="profile-header-info"
         style={{
@@ -433,7 +429,6 @@ export default function TraderHeader({
                   const container = img.parentElement
                   if (container) {
                     container.style.background = getAvatarGradient(traderId)
-                    // 添加备用文字
                     const fallback = document.createElement('span')
                     fallback.textContent = getAvatarInitial(handle)
                     fallback.style.cssText = 'color: #fff; font-size: 32px; font-weight: 900; line-height: 1; text-shadow: 0 2px 8px rgba(0,0,0,0.4);'
@@ -456,7 +451,7 @@ export default function TraderHeader({
               </Text>
             )}
           </Box>
-          {/* Pro 徽章 - 放在头像容器外面避免被 overflow:hidden 裁剪 */}
+          {/* Pro badge positioned outside avatar to avoid overflow:hidden clipping */}
           {proBadgeTier === 'pro' && (
             <ProBadgeOverlay position="bottom-right" />
           )}

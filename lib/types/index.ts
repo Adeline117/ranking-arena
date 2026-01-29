@@ -268,11 +268,6 @@ export type NonNullableFields<T> = {
 export type ArrayElement<T> = T extends readonly (infer U)[] ? U : never
 
 /**
- * 提取 Promise 返回类型
- */
-export type Awaited<T> = T extends Promise<infer U> ? U : T
-
-/**
  * 提取函数返回类型（支持异步）
  */
 export type AsyncReturnType<T extends (...args: unknown[]) => unknown> =

@@ -66,7 +66,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         'Cache-Control': 's-maxage=300, stale-while-revalidate=600',
       },
     });
-  } catch (error) {
+  } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error';
 
     if (message.includes('not found')) {

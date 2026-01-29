@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({ qrCode, secret, uri })
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('[2FA Setup] Unexpected error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }

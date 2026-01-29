@@ -156,7 +156,7 @@ export async function GET(request: NextRequest) {
       requestedIds: traderIds,
       foundCount: sortedData.length,
     })
-  } catch (err) {
+  } catch (err: unknown) {
     return handleError(err)
   }
 }

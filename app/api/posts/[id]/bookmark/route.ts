@@ -41,7 +41,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
     return NextResponse.json({ bookmarked: !!bookmark })
 
-  } catch (error) {
+  } catch (error: unknown) {
     apiLogger.error('Error checking bookmark:', error)
     return NextResponse.json({ bookmarked: false })
   }
@@ -275,7 +275,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       })
     }
 
-  } catch (error) {
+  } catch (error: unknown) {
     apiLogger.error('Error toggling bookmark:', error)
     return NextResponse.json({ error: '服务器错误' }, { status: 500 })
   }

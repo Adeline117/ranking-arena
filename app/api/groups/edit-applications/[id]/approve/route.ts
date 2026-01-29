@@ -77,7 +77,7 @@ export async function POST(
       message: '已批准该修改申请'
     })
 
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Error approving edit application:', error)
     return NextResponse.json({ error: '服务器错误' }, { status: 500 })
   }

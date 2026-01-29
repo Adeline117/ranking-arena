@@ -182,7 +182,7 @@ export async function POST(request: NextRequest) {
       subscriptionId,
     })
 
-  } catch (error) {
+  } catch (error: unknown) {
     logger.error('Verify session error', { error })
     const message = error instanceof Error ? error.message : ''
     if (message.includes('STRIPE_SECRET_KEY') || message.includes('not configured')) {

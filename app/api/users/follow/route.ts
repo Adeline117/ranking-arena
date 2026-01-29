@@ -81,7 +81,7 @@ export async function GET(request: NextRequest) {
       followedBy: !!reverseData,
       mutual: !!followData && !!reverseData
     })
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('[User Follow API] 错误:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
@@ -165,7 +165,7 @@ export async function POST(request: NextRequest) {
     } else {
       return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
     }
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('[User Follow API] 错误:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }

@@ -125,7 +125,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     })).catch(() => {})
 
     return NextResponse.json({ success: true })
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Kick member error:', error)
     return NextResponse.json({ error: '服务器错误' }, { status: 500 })
   }

@@ -86,7 +86,7 @@ async function getTrendingTraders(
       reason: 'trending',
       url: `/trader/${trader.trader_id}`,
     }))
-  } catch (error) {
+  } catch (error: unknown) {
     logger.error('getTrendingTraders exception', { error })
     return []
   }
@@ -140,7 +140,7 @@ async function getSimilarTraders(
       reason: 'similar',
       url: `/trader/${trader.trader_id}`,
     }))
-  } catch (error) {
+  } catch (error: unknown) {
     logger.error('getSimilarTraders exception', { error })
     return []
   }
@@ -189,7 +189,7 @@ async function getTrendingPosts(
       reason: 'trending',
       url: `/posts/${post.id}`,
     }))
-  } catch (error) {
+  } catch (error: unknown) {
     logger.error('getTrendingPosts exception', { error })
     return []
   }
@@ -252,7 +252,7 @@ async function getFollowingPosts(
       reason: 'following',
       url: `/posts/${post.id}`,
     }))
-  } catch (error) {
+  } catch (error: unknown) {
     logger.error('getFollowingPosts exception', { error })
     return []
   }
@@ -344,7 +344,7 @@ export async function GET(req: NextRequest) {
         },
       },
     })
-  } catch (error) {
+  } catch (error: unknown) {
     logger.error('Recommendations error', { error })
     const errorMessage = error instanceof Error ? error.message : 'Internal server error'
     return NextResponse.json(

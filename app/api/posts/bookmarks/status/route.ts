@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ bookmarks: bookmarkMap })
 
-  } catch (error) {
+  } catch (error: unknown) {
     apiLogger.error('Error checking batch bookmarks:', error)
     return NextResponse.json({ bookmarks: {} })
   }

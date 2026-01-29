@@ -111,7 +111,7 @@ export async function GET(req: Request) {
       bySource: results,
       timestamp: new Date().toISOString(),
     })
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('[FollowedTraders Cron] 执行失败:', error)
     return NextResponse.json(
       {

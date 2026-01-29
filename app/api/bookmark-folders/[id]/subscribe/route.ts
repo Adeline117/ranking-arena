@@ -47,7 +47,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
     }
 
     return success({ is_subscribed: !!subscription })
-  } catch (error) {
+  } catch (error: unknown) {
     return handleError(error, 'bookmark-folders/[id]/subscribe GET')
   }
 }
@@ -121,7 +121,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       is_subscribed: true,
       subscriber_count: subscriberCount,
     }, 201)
-  } catch (error) {
+  } catch (error: unknown) {
     return handleError(error, 'bookmark-folders/[id]/subscribe POST')
   }
 }
@@ -173,7 +173,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
       is_subscribed: false,
       subscriber_count: subscriberCount,
     })
-  } catch (error) {
+  } catch (error: unknown) {
     return handleError(error, 'bookmark-folders/[id]/subscribe DELETE')
   }
 }

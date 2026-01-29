@@ -221,7 +221,7 @@ export async function GET(
     
     return NextResponse.json({ ...result, cached: false })
 
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('[Equity API] Error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }

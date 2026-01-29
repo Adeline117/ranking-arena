@@ -45,12 +45,11 @@ interface GroupMember {
   joined_at?: string | null
 }
 
-// Bilingual text helper
-function t(zh: string, en: string, language: string): string {
+// Inline bilingual text helper (for one-off strings not in the i18n dictionary)
+function bilingualText(zh: string, en: string, language: string): string {
   return language === 'zh' ? zh : en
 }
 
-// Check if text contains significant Chinese characters
 function isChineseText(text: string): boolean {
   if (!text) return false
   const chineseMatches = text.match(/[\u4e00-\u9fa5]/g)
@@ -58,7 +57,6 @@ function isChineseText(text: string): boolean {
   return chineseRatio > 0.1
 }
 
-// Page wrapper for consistent styling
 interface PageWrapperProps {
   email: string | null
   children: React.ReactNode
@@ -126,8 +124,6 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
     showToast,
     showDangerConfirm,
   })
-
-
 
   // Batch translate posts
   const translatePosts = useCallback(async (postsToTranslate: Post[], targetLang: 'zh' | 'en') => {
@@ -205,6 +201,17 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
 
     const fetchRelatedGroups = async () => {
       setLoadingRelatedGroups(true)
+
+      const fetchHotGroupsFallback = async () => {
+        const { data } = await supabase
+          .from('groups')
+          .select('id, name, name_en, avatar_url, member_count')
+          .neq('id', groupId)
+          .order('member_count', { ascending: false, nullsFirst: false })
+          .limit(5)
+        return data || []
+      }
+
       try {
         const { data: memberData } = await supabase
           .from('group_members')
@@ -213,14 +220,7 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
           .limit(50)
 
         if (!memberData || memberData.length === 0) {
-          const { data: hotGroups } = await supabase
-            .from('groups')
-            .select('id, name, name_en, avatar_url, member_count')
-            .neq('id', groupId)
-            .order('member_count', { ascending: false, nullsFirst: false })
-            .limit(5)
-          setRelatedGroups(hotGroups || [])
-          setLoadingRelatedGroups(false)
+          setRelatedGroups(await fetchHotGroupsFallback())
           return
         }
 
@@ -232,14 +232,7 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
           .neq('group_id', groupId)
 
         if (!otherMemberships || otherMemberships.length === 0) {
-          const { data: hotGroups } = await supabase
-            .from('groups')
-            .select('id, name, name_en, avatar_url, member_count')
-            .neq('id', groupId)
-            .order('member_count', { ascending: false, nullsFirst: false })
-            .limit(5)
-          setRelatedGroups(hotGroups || [])
-          setLoadingRelatedGroups(false)
+          setRelatedGroups(await fetchHotGroupsFallback())
           return
         }
 
@@ -252,7 +245,6 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
 
         if (sortedGroupIds.length === 0) {
           setRelatedGroups([])
-          setLoadingRelatedGroups(false)
           return
         }
 
@@ -293,7 +285,7 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
       try {
         const { data: groupData, error: groupErr } = await supabase
           .from('groups')
-          .select('id, name, name_en, description, description_en, avatar_url, member_count, created_at, created_by, rules, is_premium_only')
+          .select('id, name, name_en, description, description_en, avatar_url, member_count, created_at, created_by, rules, rules_json, is_premium_only')
           .eq('id', groupId)
           .maybeSingle()
 
@@ -328,10 +320,8 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
           membershipConfirmed = !!membership
         }
 
-        // 直接加载帖子，不依赖 useEffect 的竞态条件
-        // 修复冷启动时帖子不显示的问题
+        // Load posts eagerly to avoid race with isMember state update (cold-start fix)
         if (membershipConfirmed) {
-          // 使用 forceLoad=true 绕过 isMember 检查，因为状态可能还未更新
           postsHook.loadPosts(true)
         }
       } catch (err) {
@@ -348,9 +338,7 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
 
     load()
     return () => {
-      if (controller && !controller.signal.aborted) {
-        controller.abort()
-      }
+      controller.abort()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [groupId, userId])
@@ -387,11 +375,11 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
   // Join group
   const handleJoin = useCallback(async (bypassPro = false) => {
     if (!userId) {
-      showToast(t('请先登录', 'Please login first', language), 'warning')
+      showToast(bilingualText('请先登录', 'Please login first', language), 'warning')
       return
     }
     if (!bypassPro && group?.is_premium_only && !isPro) {
-      showToast(t('此小组仅限 Pro 会员加入', 'This group is Pro members only', language), 'warning')
+      showToast(bilingualText('此小组仅限 Pro 会员加入', 'This group is Pro members only', language), 'warning')
       return
     }
 
@@ -404,15 +392,15 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
       setGroup(prev => prev ? { ...prev, member_count: (prev.member_count || 0) + 1 } : prev)
       setIsMember(true)
       setUserRole('member')
-      showToast(t('加入成功', 'Joined successfully', language), 'success')
+      showToast(bilingualText('加入成功', 'Joined successfully', language), 'success')
 
       // Notify group owner
       if (group?.created_by && group.created_by !== userId) {
         await supabase.from('notifications').insert({
           user_id: group.created_by,
           type: 'system' as const,
-          title: t('新成员加入', 'New Member Joined', language),
-          message: t('有新成员加入了您的小组', 'A new member joined your group', language),
+          title: bilingualText('新成员加入', 'New Member Joined', language),
+          message: bilingualText('有新成员加入了您的小组', 'A new member joined your group', language),
           link: `/groups/${groupId}`,
           actor_id: userId,
           reference_id: groupId,
@@ -420,7 +408,7 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
       }
     } catch (err) {
       console.error('Join error:', err)
-      showToast(err instanceof Error ? err.message : t('加入失败', 'Failed to join', language), 'error')
+      showToast(err instanceof Error ? err.message : bilingualText('加入失败', 'Failed to join', language), 'error')
     } finally {
       setJoining(false)
     }
@@ -438,10 +426,10 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
       setGroup(prev => prev ? { ...prev, member_count: Math.max(0, (prev.member_count || 1) - 1) } : prev)
       setIsMember(false)
       setUserRole(null)
-      showToast(t('已退出小组', 'Left group successfully', language), 'success')
+      showToast(bilingualText('已退出小组', 'Left group successfully', language), 'success')
     } catch (err) {
       console.error('Leave error:', err)
-      showToast(err instanceof Error ? err.message : t('退出失败', 'Failed to leave', language), 'error')
+      showToast(err instanceof Error ? err.message : bilingualText('退出失败', 'Failed to leave', language), 'error')
     } finally {
       setJoining(false)
     }
@@ -521,10 +509,10 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
       <PageWrapper email={email}>
         <Box as="main" style={{ maxWidth: 900, margin: '0 auto', padding: tokens.spacing[10] }}>
           <Text size="lg" weight="bold" style={{ marginBottom: tokens.spacing[2], color: '#ff7c7c' }}>
-            {t('错误', 'Error', language)}: {error || t('小组不存在', 'Group not found', language)}
+            {bilingualText('错误', 'Error', language)}: {error || bilingualText('小组不存在', 'Group not found', language)}
           </Text>
           <Link href="/groups" style={{ color: tokens.colors.accent?.primary || tokens.colors.text.secondary, textDecoration: 'none', marginTop: tokens.spacing[3], display: 'inline-block' }}>
-            ← {t('返回小组列表', 'Back to Groups', language)}
+            ← {bilingualText('返回小组列表', 'Back to Groups', language)}
           </Link>
         </Box>
       </PageWrapper>

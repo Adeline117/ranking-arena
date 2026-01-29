@@ -88,7 +88,7 @@ export async function GET(request: NextRequest) {
       deleted,
       errors: errors.length > 0 ? errors : undefined,
     })
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('[cleanup-deleted-accounts] Error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }

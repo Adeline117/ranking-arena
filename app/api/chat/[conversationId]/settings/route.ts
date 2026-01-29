@@ -78,7 +78,7 @@ export async function GET(
         updated_at: null,
       }
     })
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('[Chat Settings GET] Error:', error)
     return NextResponse.json({ error: '服务器错误' }, { status: 500 })
   }
@@ -176,7 +176,7 @@ export async function PATCH(
     }
 
     return NextResponse.json({ settings: result })
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('[Chat Settings PATCH] Error:', error)
     return NextResponse.json({ error: '服务器错误' }, { status: 500 })
   }

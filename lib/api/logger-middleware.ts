@@ -80,9 +80,9 @@ export function withLogging<T extends NextRequest>(
       logRequestComplete(ctx, response)
       
       return response
-    } catch (error) {
+    } catch (error: unknown) {
       const err = error instanceof Error ? error : new Error(String(error))
-      
+
       logger.errorWithException(`Request failed: ${ctx.method} ${ctx.path}`, err, {
         requestId: ctx.requestId,
       })
@@ -120,7 +120,7 @@ export function withSimpleLogging(
       const response = await handler(request)
       timer.end({ status: response.status })
       return response
-    } catch (error) {
+    } catch (error: unknown) {
       const err = error instanceof Error ? error : new Error(String(error))
       logger.errorWithException(`Request failed: ${method} ${path}`, err)
       timer.end({ status: 500, error: err.message })

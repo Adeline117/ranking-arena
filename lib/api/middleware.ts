@@ -180,7 +180,7 @@ export function withApiMiddleware<T>(
       // 7. 添加版本和弃用头
       if (versioning) {
         addVersionHeaders(response, versionContext)
-        addDeprecationHeaders(response, versionContext, request.nextUrl.pathname, request.method)
+        addDeprecationHeaders(response, versionContext)
       }
 
       // 8. 添加响应时间头
@@ -189,10 +189,10 @@ export function withApiMiddleware<T>(
 
       return response
     } catch (error: unknown) {
-      // 错误处理
-      const err = error as { statusCode?: number; message?: string }
-      const statusCode = err.statusCode || 500
-      const message = err.message || '服务器内部错误'
+      const statusCode = error instanceof Error && 'statusCode' in error
+        ? (error as { statusCode: number }).statusCode
+        : 500
+      const message = error instanceof Error ? error.message : '服务器内部错误'
       const duration = Date.now() - startTime
 
       if (statusCode >= 500) {
