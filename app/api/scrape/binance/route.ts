@@ -95,7 +95,7 @@ async function fetchBinanceData(period: string): Promise<BinanceTrader[]> {
       
       // 延迟避免限流
       await new Promise(resolve => setTimeout(resolve, 300))
-    } catch (error) {
+    } catch (error: unknown) {
       console.error(`[${period}] Page ${page} error:`, error)
       break
     }
@@ -277,7 +277,7 @@ export async function GET(request: Request) {
       avatarCount,
       top5: topTraders,
     })
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('[Binance Scrape] Error:', error)
     return NextResponse.json({
       success: false,
@@ -342,7 +342,7 @@ async function scrapeAllPeriods() {
       
       // 时间段之间延迟，避免限流
       await new Promise(resolve => setTimeout(resolve, 1000))
-    } catch (error) {
+    } catch (error: unknown) {
       console.error(`[Binance Scrape] ${period} error:`, error)
       results.push({ period, success: false, error: String(error) })
     }

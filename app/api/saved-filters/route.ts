@@ -78,7 +78,7 @@ export async function GET(request: NextRequest) {
     }
 
     return success({ filters: filters || [] })
-  } catch (err) {
+  } catch (err: unknown) {
     return handleError(err)
   }
 }
@@ -180,7 +180,7 @@ export async function POST(request: NextRequest) {
     }
 
     return success({ filter: result, created: !filter.id })
-  } catch (err) {
+  } catch (err: unknown) {
     return handleError(err)
   }
 }
@@ -230,7 +230,7 @@ export async function PUT(request: NextRequest) {
     }
 
     return success({ updated: true })
-  } catch (err) {
+  } catch (err: unknown) {
     return handleError(err)
   }
 }
@@ -262,7 +262,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     return success({ deleted: true })
-  } catch (err) {
+  } catch (err: unknown) {
     return handleError(err)
   }
 }

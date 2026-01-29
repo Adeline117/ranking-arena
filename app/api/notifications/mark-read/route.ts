@@ -76,7 +76,7 @@ export async function POST(request: NextRequest) {
       success: true, 
       message: `已标记 ${notification_ids.length} 条通知为已读`,
     })
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('[API] 标记已读错误:', error)
     return NextResponse.json(
       { error: '服务器错误' },

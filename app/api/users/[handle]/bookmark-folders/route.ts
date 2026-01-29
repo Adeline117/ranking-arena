@@ -61,7 +61,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
       folders: folders || [],
       is_own_profile: isOwnProfile,
     })
-  } catch (error) {
+  } catch (error: unknown) {
     return handleError(error, 'users/[handle]/bookmark-folders GET')
   }
 }

@@ -160,7 +160,7 @@ export async function GET(request: NextRequest, { params }: Params) {
         })) || [],
       },
     })
-  } catch (error) {
+  } catch (error: unknown) {
     logger.error('Snapshot fetch failed', { error: String(error) })
     return NextResponse.json(
       { success: false, error: 'Internal server error' },

@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
     }
 
     return success({ folders: folders || [] })
-  } catch (error) {
+  } catch (error: unknown) {
     return handleError(error, 'bookmark-folders GET')
   }
 }
@@ -87,7 +87,7 @@ export async function POST(request: NextRequest) {
     }
 
     return success({ folder }, 201)
-  } catch (error) {
+  } catch (error: unknown) {
     return handleError(error, 'bookmark-folders POST')
   }
 }

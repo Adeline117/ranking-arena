@@ -85,7 +85,7 @@ export async function POST(request: NextRequest) {
       url: portalSession.url,
     })
 
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Portal session error:', error)
     const message = error instanceof Error ? error.message : ''
     if (message.includes('STRIPE_SECRET_KEY') || message.includes('not configured')) {

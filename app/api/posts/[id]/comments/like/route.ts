@@ -116,7 +116,7 @@ export async function POST(request: NextRequest, _context: RouteContext) {
     }
 
     return success({ liked, like_count: likeCount })
-  } catch (error) {
+  } catch (error: unknown) {
     return handleError(error, 'posts/[id]/comments/like POST')
   }
 }

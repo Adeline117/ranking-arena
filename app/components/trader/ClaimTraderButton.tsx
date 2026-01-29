@@ -24,64 +24,46 @@ export default function ClaimTraderButton({ traderId, handle, userId, source = '
   const [loading, setLoading] = useState(false)
   const [claimed, setClaimed] = useState(false)
   const [hasConnection, setHasConnection] = useState(false)
-  const [_checking, setChecking] = useState(true)
 
-  // 检查用户是否已绑定交易所账号
   useEffect(() => {
+    async function checkConnection(): Promise<void> {
+      try {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) {
+          setHasConnection(false)
+          return
+        }
+
+        const actualUserId = user.id
+        if (userId !== actualUserId) {
+          console.warn('[ClaimTrader] User ID mismatch:', { provided: userId, actual: actualUserId })
+        }
+
+        const { data } = await supabase
+          .from('user_exchange_connections')
+          .select('id, exchange, is_active')
+          .eq('user_id', actualUserId)
+          .eq('exchange', source)
+          .eq('is_active', true)
+          .maybeSingle()
+
+        setHasConnection(!!data)
+      } catch (err: unknown) {
+        if (err instanceof Error) {
+          console.error('[ClaimTrader] Connection check failed:', {
+            message: err.message,
+            userId,
+            source,
+          })
+        }
+        setHasConnection(false)
+      }
+    }
+
     checkConnection()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId, source])
 
-  const checkConnection = async () => {
-    try {
-      // 检查用户是否已登录
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
-        console.warn('[ClaimTrader] 用户未登录')
-        setHasConnection(false)
-        setChecking(false)
-        return
-      }
-
-      // 确保使用正确的用户ID
-      const actualUserId = user.id
-      if (userId !== actualUserId) {
-        console.warn('[ClaimTrader] 用户ID不匹配:', { provided: userId, actual: actualUserId })
-      }
-
-      // 使用 maybeSingle() 查询连接状态
-      // 注意：maybeSingle() 在没有找到记录时会返回 { data: null, error: {} }
-      // 这是正常行为，不需要记录错误
-      const { data } = await supabase
-        .from('user_exchange_connections')
-        .select('id, exchange, is_active')
-        .eq('user_id', actualUserId)
-        .eq('exchange', source)
-        .eq('is_active', true)
-        .maybeSingle()
-
-      // 设置连接状态：有数据则已连接，无数据则未连接
-      setHasConnection(!!data)
-    } catch (err: any) {
-      // 检查是否有实际的错误内容
-      const hasErrorContent = !!(err?.message || err?.code || err?.stack)
-      if (hasErrorContent) {
-        console.error('[ClaimTrader] 检查连接异常:', {
-          error: err,
-          message: err?.message,
-          stack: err?.stack,
-          userId,
-          source,
-        })
-      }
-      setHasConnection(false)
-    } finally {
-      setChecking(false)
-    }
-  }
-
   const handleClaim = async () => {
-    // 1. 检查是否已绑定交易所账号
     if (!hasConnection) {
       const goToSettings = await showConfirm(
         t('needBindExchange'),
@@ -93,7 +75,6 @@ export default function ClaimTraderButton({ traderId, handle, userId, source = '
       return
     }
 
-    // 2. 确认认领
     const confirmed = await showConfirm(
       t('confirmClaim'),
       `${t('confirmClaimDesc').replace('{handle}', handle)}\n${t('verifyOwnership')}`
@@ -102,7 +83,7 @@ export default function ClaimTraderButton({ traderId, handle, userId, source = '
       return
     }
 
-    // 3. 获取用户token（在 setLoading 之前检查，避免 loading 状态泄漏）
+    // Check session before entering loading state to avoid leaked loading on missing auth
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) {
       showToast(t('pleaseLoginFirst'), 'warning')
@@ -111,7 +92,6 @@ export default function ClaimTraderButton({ traderId, handle, userId, source = '
 
     setLoading(true)
     try {
-      // 4. 验证账号所有权
       const verifyResponse = await fetch('/api/exchange/verify-ownership', {
         method: 'POST',
         headers: {
@@ -148,21 +128,20 @@ export default function ClaimTraderButton({ traderId, handle, userId, source = '
         return
       }
 
-      // 5. 验证通过，创建认领记录（自动批准）
+      // Verification passed -- create auto-approved claim record
       const { error } = await supabase
         .from('trader_claims')
         .insert({
           trader_id: traderId,
           user_id: userId,
-          handle: handle,
-          source: source,
-          status: 'approved', // 验证通过后自动批准
+          handle,
+          source,
+          status: 'approved',
           verified_at: new Date().toISOString(),
         })
 
       if (error) {
         if (error.code === '23505') {
-          // 已存在认领申请
           showToast(t('claimAlreadySubmitted'), 'warning')
         } else {
           throw error
@@ -170,7 +149,6 @@ export default function ClaimTraderButton({ traderId, handle, userId, source = '
       } else {
         setClaimed(true)
         showToast(t('claimSuccess'), 'success')
-        // 刷新页面
         window.location.reload()
       }
     } catch (err) {
@@ -200,8 +178,3 @@ export default function ClaimTraderButton({ traderId, handle, userId, source = '
     </Button>
   )
 }
-
-
-
-
-

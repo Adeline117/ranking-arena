@@ -78,7 +78,7 @@ async function fetchMexcData(period: string): Promise<MexcTrader[]> {
       if (traders.length >= 100) break
       
       await new Promise(resolve => setTimeout(resolve, 300))
-    } catch (error) {
+    } catch (error: unknown) {
       console.error(`Page ${page} error:`, error)
       break
     }
@@ -173,7 +173,7 @@ export async function GET(request: Request) {
       saved,
       avatarCount,
     })
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('[MEXC Scrape] Error:', error)
     return NextResponse.json({
       success: false,

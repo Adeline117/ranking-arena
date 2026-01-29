@@ -4,7 +4,7 @@ import React from 'react'
 import { useLanguage } from '../Providers/LanguageProvider'
 
 type ExportButtonProps = {
-  data: any[]
+  data: Record<string, unknown>[]
   filename: string
   format?: 'csv' | 'json'
 }
@@ -15,7 +15,9 @@ export default function ExportButton({ data, filename, format = 'csv' }: ExportB
     if (!data || data.length === 0) return
 
     if (format === 'csv') {
-      const headers = Object.keys(data[0] || {})
+      const firstRow = data[0]
+      if (!firstRow) return
+      const headers = Object.keys(firstRow)
       const csv = [
         headers.join(','),
         ...data.map(row => headers.map(header => {

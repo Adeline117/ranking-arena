@@ -125,7 +125,7 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.json({ success: true, method: 'fallback' })
-  } catch (err) {
+  } catch (err: unknown) {
     logger.error('Hot score refresh failed', { error: String(err) })
     return NextResponse.json({ success: false, error: String(err) }, { status: 500 })
   }

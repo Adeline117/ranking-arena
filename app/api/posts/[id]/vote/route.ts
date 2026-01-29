@@ -43,7 +43,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
         wait: post?.poll_wait || 0,
       },
     })
-  } catch (error) {
+  } catch (error: unknown) {
     return handleError(error, 'posts/[id]/vote')
   }
 }

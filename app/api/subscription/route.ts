@@ -132,7 +132,7 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.json({ subscription: userSubscription })
-  } catch (error) {
+  } catch (error: unknown) {
     logger.error('Subscription API error', { error })
     return NextResponse.json(
       { error: 'Internal server error' },

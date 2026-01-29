@@ -364,7 +364,7 @@ export async function POST(req: Request) {
       alertsSent,
       timestamp: new Date().toISOString(),
     })
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('[TraderAlerts Cron] 执行失败:', error)
     return NextResponse.json(
       {

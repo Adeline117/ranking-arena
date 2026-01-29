@@ -14,10 +14,6 @@
 import { create } from 'zustand'
 import { getCsrfHeaders } from '@/lib/api/client'
 
-// ============================================================
-// Types
-// ============================================================
-
 export type PostData = {
   id: string
   title: string
@@ -90,10 +86,6 @@ type PostStoreActions = {
   /** Clear all cached data */
   clear: () => void
 }
-
-// ============================================================
-// Store
-// ============================================================
 
 export const usePostStore = create<PostStoreState & PostStoreActions>((set) => ({
   posts: {},
@@ -175,10 +167,6 @@ export const usePostStore = create<PostStoreState & PostStoreActions>((set) => (
 function getDefaultPagination(): CommentsPagination {
   return { offset: 0, hasMore: true, loading: false, loadingMore: false }
 }
-
-// ============================================================
-// API Actions (side-effect functions that call API and update store)
-// ============================================================
 
 const COMMENTS_PER_PAGE = 10
 

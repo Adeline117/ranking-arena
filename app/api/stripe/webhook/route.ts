@@ -50,7 +50,7 @@ async function withRetry<T>(
   for (let i = 0; i < maxRetries; i++) {
     try {
       return await operation()
-    } catch (error) {
+    } catch (error: unknown) {
       lastError = error as Error
       logger.warn(`Retry ${i + 1}/${maxRetries} failed`, { error })
       if (i < maxRetries - 1) {
@@ -94,7 +94,7 @@ export async function POST(request: NextRequest) {
 
     try {
       event = constructWebhookEvent(body, signature)
-    } catch (err) {
+    } catch (err: unknown) {
       logger.error('Webhook signature verification failed', { error: err })
       return NextResponse.json(
         { error: 'Invalid signature' },
@@ -196,7 +196,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ received: true })
 
-  } catch (error) {
+  } catch (error: unknown) {
     logger.error('Webhook error', { error })
     return NextResponse.json(
       { error: 'Webhook handler failed' },
@@ -271,7 +271,7 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
     }
 
     logger.info(`Checkout completed for user ${userId}`, { plan, subscriptionId })
-  } catch (err) {
+  } catch (err: unknown) {
     logger.error('Failed to process checkout completion', { error: err })
     // 即使获取订阅失败，也尝试更新 user_profiles（作为降级方案）
     await withRetry(async () => {
@@ -428,7 +428,7 @@ async function handlePaymentFailed(invoice: Stripe.Invoice) {
         status: 'failed',
         created_at: new Date().toISOString(),
       })
-  } catch (err) {
+  } catch (err: unknown) {
     logger.error('Failed to record payment failure', { error: err })
   }
 
@@ -450,7 +450,7 @@ async function handlePaymentFailed(invoice: Stripe.Invoice) {
           })
           .eq('stripe_subscription_id', subscriptionId)
       }
-    } catch (err) {
+    } catch (err: unknown) {
       logger.error('Failed to update subscription status on payment failure', { error: err })
     }
   }
@@ -632,7 +632,7 @@ async function handleChargeRefunded(charge: Stripe.Charge) {
         status: 'refunded',
         created_at: new Date().toISOString(),
       })
-  } catch (err) {
+  } catch (err: unknown) {
     logger.error('Failed to record refund', { error: err })
   }
 
@@ -712,7 +712,7 @@ async function handleTrialWillEnd(subscription: Stripe.Subscription) {
       })
 
     logger.info(`Trial ending notification sent to user ${profile.id}`)
-  } catch (err) {
+  } catch (err: unknown) {
     logger.error('Failed to send trial ending notification', { error: err })
   }
 }

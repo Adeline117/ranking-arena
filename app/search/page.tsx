@@ -242,7 +242,7 @@ function SearchContent() {
 
         setResults(results)
         setSearchError(false)
-      } catch (error) {
+      } catch (error: unknown) {
         console.error('Search error:', error)
         setSearchError(true)
         showToast(isZh ? '搜索失败，请稍后重试' : 'Search failed, please try again', 'error')
@@ -375,7 +375,7 @@ function SearchContent() {
       } else {
         setHasMore(prev => ({ ...prev, [type]: false }))
       }
-    } catch (error) {
+    } catch (error: unknown) {
       console.error(`Load more ${type} error:`, error)
       showToast(isZh ? '加载更多失败，请稍后重试' : 'Failed to load more, please try again', 'error')
     } finally {
@@ -383,15 +383,18 @@ function SearchContent() {
     }
   }, [query, offsets, hasMore, loadingMore, showToast, isZh])
 
-  const filteredResults = activeTab === 'all' 
-    ? results 
-    : results.filter(r => {
-        if (activeTab === 'users') return r.type === 'user'
-        if (activeTab === 'traders') return r.type === 'trader'
-        if (activeTab === 'groups') return r.type === 'group'
-        if (activeTab === 'posts') return r.type === 'post'
-        return false
-      })
+  const TAB_TYPE_MAP: Record<TabType, SearchResult['type'] | null> = {
+    all: null,
+    users: 'user',
+    traders: 'trader',
+    posts: 'post',
+    groups: 'group',
+  }
+
+  const filterType = TAB_TYPE_MAP[activeTab]
+  const filteredResults = filterType
+    ? results.filter(r => r.type === filterType)
+    : results
 
   const getHref = (result: SearchResult) => {
     if (result.type === 'user') return `/u/${encodeURIComponent(result.title)}`
@@ -401,12 +404,32 @@ function SearchContent() {
     return '#'
   }
 
-  const getIcon = (type: string) => {
-    if (type === 'user') return 'U'
-    if (type === 'trader') return 'T'
-    if (type === 'post') return 'P'
-    if (type === 'group') return 'G'
-    return 'S'
+  const getIcon = (type: string): string => {
+    switch (type) {
+      case 'user': return 'U'
+      case 'trader': return 'T'
+      case 'post': return 'P'
+      case 'group': return 'G'
+      default: return 'S'
+    }
+  }
+
+  const getBadgeBackground = (type: string): string => {
+    switch (type) {
+      case 'user': return 'linear-gradient(135deg, rgba(139, 111, 168, 0.2), rgba(139, 111, 168, 0.1))'
+      case 'trader': return tokens.gradient.successSubtle
+      case 'post': return tokens.gradient.primarySubtle
+      default: return tokens.gradient.warningSubtle
+    }
+  }
+
+  const getBadgeColor = (type: string): string => {
+    switch (type) {
+      case 'user': return '#8b6fa8'
+      case 'trader': return tokens.colors.accent.success
+      case 'post': return tokens.colors.accent.primary
+      default: return tokens.colors.accent.warning
+    }
   }
 
   return (
@@ -474,7 +497,7 @@ function SearchContent() {
                   }
                 }}
               >
-                {tab === 'all' ? (isZh ? '全部' : 'All') : tab === 'users' ? (isZh ? '用户' : 'Users') : tab === 'traders' ? (isZh ? '交易者' : 'Traders') : tab === 'posts' ? (isZh ? '帖子' : 'Posts') : (isZh ? '小组' : 'Groups')}
+                {{ all: isZh ? '全部' : 'All', users: isZh ? '用户' : 'Users', traders: isZh ? '交易者' : 'Traders', posts: isZh ? '帖子' : 'Posts', groups: isZh ? '小组' : 'Groups' }[tab]}
               </button>
             ))}
           </div>
@@ -575,25 +598,13 @@ function SearchContent() {
                     width: 44,
                     height: 44,
                     borderRadius: tokens.radius.lg,
-                    background: result.type === 'user'
-                      ? 'linear-gradient(135deg, rgba(139, 111, 168, 0.2), rgba(139, 111, 168, 0.1))'
-                      : result.type === 'trader' 
-                        ? tokens.gradient.successSubtle 
-                        : result.type === 'post' 
-                          ? tokens.gradient.primarySubtle 
-                          : tokens.gradient.warningSubtle,
+                    background: getBadgeBackground(result.type),
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     fontSize: '18px',
                     fontWeight: 900,
-                    color: result.type === 'user'
-                      ? '#8b6fa8'
-                      : result.type === 'trader' 
-                        ? tokens.colors.accent.success 
-                        : result.type === 'post' 
-                          ? tokens.colors.accent.primary 
-                          : tokens.colors.accent.warning,
+                    color: getBadgeColor(result.type),
                     flexShrink: 0,
                   }}>
                     {getIcon(result.type)}

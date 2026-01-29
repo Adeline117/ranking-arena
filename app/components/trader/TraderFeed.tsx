@@ -24,11 +24,15 @@ type SortType = 'all' | 'top'
 
 function cleanContent(text: string, maxLength = 140): string {
   if (!text) return ''
-  const cleanText = text.replace(/!\[([^\]]*)\]\([^)]+\)/g, '').trim()
-  if (cleanText.length > maxLength) {
-    return cleanText.slice(0, maxLength) + '...'
-  }
-  return cleanText
+  const stripped = text.replace(/!\[([^\]]*)\]\([^)]+\)/g, '').trim()
+  return stripped.length > maxLength ? stripped.slice(0, maxLength) + '...' : stripped
+}
+
+function getFeedItemHref(item: TraderFeedItem): string {
+  const postId = item.type === 'repost' && item.original_post_id
+    ? item.original_post_id
+    : item.id
+  return item.groupId ? `/groups/${item.groupId}` : `/posts/${postId}`
 }
 
 function formatRelativeTime(dateString: string, isZh: boolean): string {
@@ -141,7 +145,7 @@ export default function TraderFeed({ items, title, showPostButton = false, onPos
                   textTransform: 'capitalize',
                 }}
               >
-                {type === 'all' ? '最新' : '热门'}
+                {type === 'all' ? t('sortLatest') : t('sortHot')}
               </button>
             ))}
           </Box>
@@ -233,7 +237,7 @@ export default function TraderFeed({ items, title, showPostButton = false, onPos
           </Text>
           {showPostButton && onPostClick && (
             <Text size="sm" color="tertiary">
-              {isZh ? '发布你的第一条动态吧！' : 'Post your first update!'}
+              {t('postFirstUpdate')}
             </Text>
           )}
         </Box>
@@ -242,10 +246,7 @@ export default function TraderFeed({ items, title, showPostButton = false, onPos
           {sortedItems.map((item, idx) => (
             <Link
               key={item.id}
-              href={item.type === 'repost' && item.original_post_id 
-                ? (item.groupId ? `/groups/${item.groupId}` : `/posts/${item.original_post_id}`)
-                : (item.groupId ? `/groups/${item.groupId}` : `/posts/${item.id}`)
-              }
+              href={getFeedItemHref(item)}
               style={{ textDecoration: 'none' }}
               onMouseEnter={() => setHoveredId(item.id)}
               onMouseLeave={() => setHoveredId(null)}
@@ -255,7 +256,7 @@ export default function TraderFeed({ items, title, showPostButton = false, onPos
                 style={{
                   padding: tokens.spacing[5],
                   background: hoveredId === item.id ? `${tokens.colors.accent.primary}05` : 'transparent',
-                  borderBottom: idx < items.length - 1 ? `1px solid ${tokens.colors.border.primary}30` : 'none',
+                  borderBottom: idx < sortedItems.length - 1 ? `1px solid ${tokens.colors.border.primary}30` : 'none',
                   cursor: 'pointer',
                   transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
                   transform: hoveredId === item.id ? 'translateX(6px)' : 'translateX(0)',
@@ -278,7 +279,7 @@ export default function TraderFeed({ items, title, showPostButton = false, onPos
                     }}
                   >
                     <Text size="xs" color="tertiary">
-                      转发自{' '}
+                      {t('repostFromLabel')}{' '}
                       <Link
                         href={`/u/${item.original_author_handle}`}
                         onClick={(e) => e.stopPropagation()}
@@ -332,7 +333,7 @@ export default function TraderFeed({ items, title, showPostButton = false, onPos
                         }}
                       >
                         <Text size="xs" weight="bold" style={{ color: tokens.colors.accent.warning }}>
-                          置顶
+                          {t('pinnedLabel')}
                         </Text>
                       </Box>
                     )}

@@ -69,7 +69,7 @@ export async function GET(request: NextRequest) {
         lastActiveAt: session.last_active_at,
       })),
     })
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('[Sessions] Unexpected error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
@@ -141,7 +141,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     return NextResponse.json({ error: 'Invalid request' }, { status: 400 })
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('[Sessions] Unexpected error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }

@@ -86,7 +86,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       message: '转发成功'
     })
 
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Error creating repost:', error)
     return NextResponse.json({ error: '服务器错误' }, { status: 500 })
   }

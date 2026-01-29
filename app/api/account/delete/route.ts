@@ -132,7 +132,7 @@ export async function POST(request: NextRequest) {
       deletion_scheduled_at: scheduledDeletion.toISOString(),
       message: 'Account marked for deletion, recoverable within 30 days',
     })
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('[account/delete] Error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }

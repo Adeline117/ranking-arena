@@ -125,7 +125,7 @@ export async function GET(req: Request) {
         status,
         recordCount: count || 0,
       })
-    } catch (error) {
+    } catch (error: unknown) {
       console.error(`[DataFreshness] 处理 ${platform} 时出错:`, error)
       results.push({
         platform,
@@ -161,7 +161,7 @@ export async function GET(req: Request) {
       if (alertResult.sent) {
         console.log(`[DataFreshness] 报警已发送到: ${alertResult.channels.join(', ')}`)
       }
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('[DataFreshness] 发送报警失败:', error)
     }
   }

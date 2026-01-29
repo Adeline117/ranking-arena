@@ -46,7 +46,7 @@ export async function verifyAuth(
     // 3. 返回用户和订阅等级
     const tier = (profile?.subscription_tier || 'free') as SubscriptionTier
     return { user, tier }
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('[verifyAuth] 验证失败:', error)
     return { error: '身份验证失败', status: 500 }
   }

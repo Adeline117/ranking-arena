@@ -169,7 +169,7 @@ export async function POST(request: NextRequest) {
             exchangeUserId = userInfo.data.userId
           }
         }
-      } catch (e) {
+      } catch (e: unknown) {
         logger.warn('Failed to fetch user info', { error: e, exchange })
       }
     }
@@ -203,7 +203,7 @@ export async function POST(request: NextRequest) {
       success: true,
       exchangeUserId,
     })
-  } catch (error) {
+  } catch (error: unknown) {
     logger.error('Error handling OAuth callback', { error })
     const errorMessage = error instanceof Error ? error.message : 'Failed to handle callback'
     return NextResponse.json({ error: errorMessage }, { status: 500 })

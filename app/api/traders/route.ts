@@ -537,7 +537,7 @@ async function fetchTradersData(
           }
         })
       }
-    } catch (err) {
+    } catch (err: unknown) {
       logger.warn('Failed to compute rank changes:', err)
     }
 

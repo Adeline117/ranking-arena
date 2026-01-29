@@ -139,7 +139,7 @@ export async function POST(
       application
     })
 
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Edit apply error:', error)
     return NextResponse.json({ error: '服务器错误' }, { status: 500 })
   }
@@ -184,7 +184,7 @@ export async function GET(
 
     return NextResponse.json({ applications })
 
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Get edit applications error:', error)
     return NextResponse.json({ error: '服务器错误' }, { status: 500 })
   }

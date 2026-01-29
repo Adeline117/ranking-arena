@@ -318,7 +318,7 @@ export const POST = withAuth(
           },
         },
       })
-    } catch (error) {
+    } catch (error: unknown) {
       logger.error('Snapshot creation failed', { error: String(error) })
       return NextResponse.json(
         { success: false, error: 'Internal server error' },

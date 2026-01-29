@@ -13,10 +13,6 @@ function hexToRgba(hex: string, alpha: number): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`
 }
 
-// ============================================
-// 数据源配置
-// ============================================
-
 interface DataSource {
   exchange: string
   market: 'futures' | 'spot' | 'on-chain'
@@ -88,10 +84,6 @@ const getMarketConfig = (language: string): Record<string, { label: string; colo
   },
 })
 
-// ============================================
-// 单个数据源标签
-// ============================================
-
 const SourceTag = memo(function SourceTag({ source, isDark, language }: { source: DataSource; isDark: boolean; language: string }) {
   const marketConfig = getMarketConfig(language)
   const market = marketConfig[source.market]
@@ -143,10 +135,6 @@ const SourceTag = memo(function SourceTag({ source, isDark, language }: { source
     </Box>
   )
 })
-
-// ============================================
-// 主组件 - 滚动数据源展示
-// ============================================
 
 export function StatsBar() {
   const { language } = useLanguage()

@@ -147,7 +147,7 @@ export async function GET(request: NextRequest) {
       { posts: postsWithUserState },
       { limit, offset, has_more: posts.length === limit }
     )
-  } catch (error) {
+  } catch (error: unknown) {
     return handleError(error, 'posts GET')
   }
 }
@@ -182,7 +182,7 @@ export async function POST(request: NextRequest) {
     deleteServerCacheByPrefix(POSTS_CACHE_PREFIX)
 
     return success({ post }, 201)
-  } catch (error) {
+  } catch (error: unknown) {
     return handleError(error, 'posts POST')
   }
 }

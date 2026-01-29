@@ -116,7 +116,7 @@ export async function GET(req: NextRequest) {
           critical: freshnessData.summary.critical || 0,
         }
       }
-    } catch (e) {
+    } catch (e: unknown) {
       logger.warn('Error fetching scraper health', { error: e })
     }
     
@@ -150,7 +150,7 @@ export async function GET(req: NextRequest) {
       },
       generatedAt: now.toISOString(),
     })
-  } catch (error) {
+  } catch (error: unknown) {
     logger.error('Stats API error', { error })
     const errorMessage = error instanceof Error ? error.message : 'Internal server error'
     return NextResponse.json({ error: errorMessage }, { status: 500 })

@@ -178,7 +178,7 @@ export async function POST(
 
     return NextResponse.json({ success: true })
 
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Mute error:', error)
     return NextResponse.json({ error: '服务器错误' }, { status: 500 })
   }
@@ -238,7 +238,7 @@ export async function DELETE(
 
     return NextResponse.json({ success: true })
 
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Unmute error:', error)
     return NextResponse.json({ error: '服务器错误' }, { status: 500 })
   }

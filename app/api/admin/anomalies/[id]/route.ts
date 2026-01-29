@@ -92,7 +92,7 @@ export async function GET(
       success: true,
       data,
     })
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('[Admin Anomalies] Error fetching anomaly:', error)
 
     return NextResponse.json(
@@ -139,7 +139,7 @@ export async function PATCH(
       success: true,
       message: 'Anomaly updated successfully',
     })
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('[Admin Anomalies] Error updating anomaly:', error)
 
     return NextResponse.json(

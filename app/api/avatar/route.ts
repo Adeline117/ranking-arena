@@ -108,7 +108,7 @@ export async function GET(request: Request) {
         'Access-Control-Allow-Origin': '*',
       },
     })
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Avatar proxy error:', error)
     return new NextResponse('Internal error', { status: 500 })
   }

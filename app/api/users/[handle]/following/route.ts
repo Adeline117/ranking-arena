@@ -109,7 +109,7 @@ export async function GET(
       following: formattedFollowing,
       count: formattedFollowing.length
     })
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('[Following API] 错误:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }

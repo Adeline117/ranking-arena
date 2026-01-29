@@ -44,7 +44,7 @@ export async function GET() {
     }, {
       headers: { 'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=60' },
     });
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('[platforms/health] Error:', error);
     return NextResponse.json({ error: 'Internal error' }, { status: 500 });
   }

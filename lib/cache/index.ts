@@ -139,13 +139,6 @@ function handleRedisError(error: unknown): void {
   }
 }
 
-/**
- * 获取内存缓存实例
- */
-function getMemoryCacheFallback(): MemoryCache {
-  return getMemoryCache()
-}
-
 // ============================================
 // 统计信息
 // ============================================
@@ -183,7 +176,7 @@ export function resetCacheStats(): void {
  */
 export async function get<T>(key: string): Promise<T | null> {
   const redis = await getRedis()
-  const memoryCache = getMemoryCacheFallback()
+  const memoryCache = getMemoryCache()
 
   // 1. 尝试从 Redis 获取
   if (redis) {
@@ -218,7 +211,7 @@ export async function get<T>(key: string): Promise<T | null> {
  */
 export async function set<T>(key: string, value: T, options: CacheOptions = {}): Promise<boolean> {
   const redis = await getRedis()
-  const memoryCache = getMemoryCacheFallback()
+  const memoryCache = getMemoryCache()
   const { ttl = 60, tags, skipMemory = false } = options
 
   // 1. 写入内存缓存（始终成功）
@@ -258,7 +251,7 @@ export async function set<T>(key: string, value: T, options: CacheOptions = {}):
  */
 export async function del(key: string): Promise<boolean> {
   const redis = await getRedis()
-  const memoryCache = getMemoryCacheFallback()
+  const memoryCache = getMemoryCache()
 
   // 删除内存缓存
   memoryCache.delete(key)
@@ -282,7 +275,7 @@ export async function del(key: string): Promise<boolean> {
  */
 export async function delByPattern(pattern: string): Promise<number> {
   const redis = await getRedis()
-  const memoryCache = getMemoryCacheFallback()
+  const memoryCache = getMemoryCache()
 
   // 删除内存缓存（按前缀）
   const prefix = pattern.replace(/\*/g, '')
@@ -318,7 +311,7 @@ export async function delByTag(tag: string): Promise<number> {
     if (keys.length === 0) return 0
 
     // 同时删除内存缓存
-    const memoryCache = getMemoryCacheFallback()
+    const memoryCache = getMemoryCache()
     for (const key of keys) {
       memoryCache.delete(key)
     }
@@ -415,7 +408,7 @@ export async function getOrSetWithLock<T>(
  */
 export async function exists(key: string): Promise<boolean> {
   const redis = await getRedis()
-  const memoryCache = getMemoryCacheFallback()
+  const memoryCache = getMemoryCache()
 
   // 先检查内存缓存
   if (memoryCache.has(key)) {
@@ -474,7 +467,7 @@ export async function incr(key: string, delta: number = 1): Promise<number | nul
  */
 export async function mget<T>(keys: string[]): Promise<(T | null)[]> {
   const redis = await getRedis()
-  const memoryCache = getMemoryCacheFallback()
+  const memoryCache = getMemoryCache()
 
   if (redis) {
     try {
@@ -512,7 +505,7 @@ export async function mset(
   ttlSeconds: number = 60
 ): Promise<boolean> {
   const redis = await getRedis()
-  const memoryCache = getMemoryCacheFallback()
+  const memoryCache = getMemoryCache()
 
   // 写入内存缓存
   for (const { key, value } of entries) {
@@ -547,7 +540,7 @@ export async function checkHealth(): Promise<{
   redis: boolean
   memory: { size: number; maxSize: number }
 }> {
-  const memoryCache = getMemoryCacheFallback()
+  const memoryCache = getMemoryCache()
   const redisOk = await checkRedisHealth()
 
   return {
@@ -586,7 +579,7 @@ export { MemoryCache, getMemoryCache, resetMemoryCache } from './memory-fallback
  * 用于客户端组件的简单缓存需求
  */
 export function getCache<T>(key: string): T | null {
-  const memoryCache = getMemoryCacheFallback()
+  const memoryCache = getMemoryCache()
   return memoryCache.get<T>(key)
 }
 
@@ -597,7 +590,7 @@ export function getCache<T>(key: string): T | null {
  * @param ttlMs TTL（毫秒），默认 5 分钟
  */
 export function setCache<T>(key: string, data: T, ttlMs: number = 5 * 60 * 1000): void {
-  const memoryCache = getMemoryCacheFallback()
+  const memoryCache = getMemoryCache()
   // 转换为秒
   memoryCache.set(key, data, Math.floor(ttlMs / 1000))
 }
@@ -606,6 +599,6 @@ export function setCache<T>(key: string, data: T, ttlMs: number = 5 * 60 * 1000)
  * 清除所有客户端缓存
  */
 export function clearCache(): void {
-  const memoryCache = getMemoryCacheFallback()
+  const memoryCache = getMemoryCache()
   memoryCache.clear()
 }

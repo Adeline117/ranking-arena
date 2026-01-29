@@ -143,7 +143,7 @@ export async function GET(request: NextRequest) {
       trader_pool_size: traders.length,
       generated_at: new Date().toISOString(),
     })
-  } catch (error) {
+  } catch (error: unknown) {
     return handleError(error, 'portfolio suggestions')
   }
 }

@@ -105,7 +105,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     })).catch(() => {})
 
     return NextResponse.json({ success: true })
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Ban user error:', error)
     return NextResponse.json({ error: '服务器错误' }, { status: 500 })
   }
@@ -157,7 +157,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
     })).catch(() => {})
 
     return NextResponse.json({ success: true })
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Unban user error:', error)
     return NextResponse.json({ error: '服务器错误' }, { status: 500 })
   }

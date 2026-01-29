@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
         error.statusCode = 400
         throw error
       }
-    } catch (err) {
+    } catch (err: unknown) {
       if (err instanceof Error && 'statusCode' in err && err.statusCode) throw err
       logger.error('验证凭证失败', { error: err, exchange, userId: user.id })
       const error = new Error(err instanceof Error ? err.message : 'API 凭证验证失败')
@@ -117,7 +117,7 @@ export async function POST(req: NextRequest) {
     return success({
       message: `已成功连接 ${exchange}，正在同步数据...`,
     })
-  } catch (error) {
+  } catch (error: unknown) {
     return handleError(error, 'exchange/connect')
   }
 }

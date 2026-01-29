@@ -112,11 +112,7 @@ export default function DataFreshnessIndicator({
         }}
       >
         <RefreshIcon spinning={isRefreshing} size={11} />
-        {isRefreshing
-          ? 'Refreshing...'
-          : refreshTriggered
-            ? 'Queued'
-            : 'Refresh'}
+        {getRefreshLabel(isRefreshing, refreshTriggered)}
       </button>
 
       {/* Error state */}
@@ -127,6 +123,12 @@ export default function DataFreshnessIndicator({
       )}
     </div>
   )
+}
+
+function getRefreshLabel(isRefreshing: boolean, refreshTriggered: boolean): string {
+  if (isRefreshing) return 'Refreshing...'
+  if (refreshTriggered) return 'Queued'
+  return 'Refresh'
 }
 
 function RefreshIcon({ spinning, size = 12 }: { spinning: boolean; size?: number }) {

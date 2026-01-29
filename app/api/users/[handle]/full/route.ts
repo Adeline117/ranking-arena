@@ -115,7 +115,7 @@ export async function GET(
         'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300',
       },
     })
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('[API] Error fetching user full data:', error)
     return NextResponse.json(
       { error: 'Internal server error' },

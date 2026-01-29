@@ -146,7 +146,7 @@ export async function POST(
         }
 
         successCount++
-      } catch (err) {
+      } catch (err: unknown) {
         console.error(`Failed to notify member ${memberId}:`, err)
         errors.push(memberId)
       }
@@ -159,7 +159,7 @@ export async function POST(
       total: memberIds.length,
     })
 
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Group notify error:', error)
     return NextResponse.json({ error: '服务器错误' }, { status: 500 })
   }

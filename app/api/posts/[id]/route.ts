@@ -69,7 +69,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
         user_vote,
       },
     })
-  } catch (error) {
+  } catch (error: unknown) {
     return handleError(error, 'posts/[id] GET')
   }
 }
@@ -92,7 +92,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     })
 
     return success({ post })
-  } catch (error) {
+  } catch (error: unknown) {
     return handleError(error, 'posts/[id] PUT')
   }
 }
@@ -106,7 +106,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
     await deletePost(supabase, id, user.id)
 
     return success({ message: '删除成功' })
-  } catch (error) {
+  } catch (error: unknown) {
     return handleError(error, 'posts/[id] DELETE')
   }
 }

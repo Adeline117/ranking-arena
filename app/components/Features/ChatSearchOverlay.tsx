@@ -153,6 +153,8 @@ export default function ChatSearchOverlay({
     )
   }
 
+  const isAtEnd = currentIndex >= matches.length - 1 && !nextCursor
+
   if (!isOpen) return null
 
   return (
@@ -282,19 +284,19 @@ export default function ChatSearchOverlay({
             </button>
             <button
               onClick={goToNext}
-              disabled={currentIndex >= matches.length - 1 && !nextCursor}
+              disabled={isAtEnd}
               style={{
                 width: 28,
                 height: 28,
                 borderRadius: 6,
                 border: 'none',
                 background: 'transparent',
-                color: (currentIndex >= matches.length - 1 && !nextCursor) ? tokens.colors.text.tertiary : tokens.colors.text.primary,
-                cursor: (currentIndex >= matches.length - 1 && !nextCursor) ? 'default' : 'pointer',
+                color: isAtEnd ? tokens.colors.text.tertiary : tokens.colors.text.primary,
+                cursor: isAtEnd ? 'default' : 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                opacity: (currentIndex >= matches.length - 1 && !nextCursor) ? 0.4 : 1,
+                opacity: isAtEnd ? 0.4 : 1,
               }}
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

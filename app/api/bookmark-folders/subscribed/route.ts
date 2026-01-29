@@ -104,7 +104,7 @@ export async function GET(request: NextRequest) {
         has_more: folders.length === limit,
       },
     })
-  } catch (error) {
+  } catch (error: unknown) {
     return handleError(error, 'bookmark-folders/subscribed GET')
   }
 }

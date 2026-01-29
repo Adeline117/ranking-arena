@@ -57,7 +57,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ applications })
 
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Get edit applications error:', error)
     return NextResponse.json({ error: '服务器错误' }, { status: 500 })
   }

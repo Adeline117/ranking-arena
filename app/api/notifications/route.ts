@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
       { notifications, unread_count: unreadCount },
       { limit, offset, has_more: notifications.length === limit }
     )
-  } catch (error) {
+  } catch (error: unknown) {
     return handleError(error, 'notifications GET')
   }
 }
@@ -65,7 +65,7 @@ export async function PUT(request: NextRequest) {
     } else {
       return handleError(new Error('请提供 notification_id 或设置 mark_all 为 true'), 'notifications PUT')
     }
-  } catch (error) {
+  } catch (error: unknown) {
     return handleError(error, 'notifications PUT')
   }
 }
@@ -84,7 +84,7 @@ export async function DELETE(request: NextRequest) {
 
     await deleteNotification(supabase, notification_id, user.id)
     return success({ message: '已删除通知' })
-  } catch (error) {
+  } catch (error: unknown) {
     return handleError(error, 'notifications DELETE')
   }
 }

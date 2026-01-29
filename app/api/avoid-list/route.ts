@@ -73,7 +73,7 @@ export async function GET(request: NextRequest) {
         { limit, offset, has_more: avoidList.length === limit }
       )
     }
-  } catch (error) {
+  } catch (error: unknown) {
     return handleError(error, 'avoid-list GET')
   }
 }
@@ -126,7 +126,7 @@ export async function POST(request: NextRequest) {
     })
 
     return success({ vote, message: '避雷投票已提交' })
-  } catch (error) {
+  } catch (error: unknown) {
     return handleError(error, 'avoid-list POST')
   }
 }

@@ -61,7 +61,7 @@ export async function GET(request: NextRequest) {
       data: data || null
     })
     
-  } catch (error) {
+  } catch (error: unknown) {
     logger.error('GET error', { error })
     return NextResponse.json({ error: '服务器错误' }, { status: 500 })
   }
@@ -116,7 +116,7 @@ export async function POST(request: NextRequest) {
       )
     }
     
-  } catch (error) {
+  } catch (error: unknown) {
     logger.error('POST error', { error })
     return NextResponse.json({ error: '服务器错误' }, { status: 500 })
   }
@@ -150,7 +150,7 @@ export async function DELETE(request: NextRequest) {
       message: data ? '已离开 Pro 会员官方群' : '你不在 Pro 会员官方群中'
     })
     
-  } catch (error) {
+  } catch (error: unknown) {
     logger.error('DELETE error', { error })
     return NextResponse.json({ error: '服务器错误' }, { status: 500 })
   }
@@ -194,7 +194,7 @@ export async function joinProOfficialGroup(userId: string): Promise<{
     
     return { success: false, message: data?.message || 'unknown_error' }
     
-  } catch (error) {
+  } catch (error: unknown) {
     logger.error('joinProOfficialGroup error', { error, userId })
     return { success: false, message: 'server_error' }
   }
@@ -278,7 +278,7 @@ async function joinProOfficialGroupFallback(userId: string): Promise<{
     
     return { success: true, message: 'joined', groupId }
     
-  } catch (error) {
+  } catch (error: unknown) {
     logger.error('joinProOfficialGroupFallback error', { error, userId })
     return { success: false, message: 'server_error' }
   }
@@ -363,7 +363,7 @@ async function createNewProOfficialGroup(): Promise<{
       groupId: newGroup.id
     }
     
-  } catch (error) {
+  } catch (error: unknown) {
     logger.error('createNewProOfficialGroup error', { error })
     return { success: false }
   }
@@ -384,7 +384,7 @@ async function sendWelcomeNotification(userId: string, groupId: string) {
         link: `/groups/${groupId}`,
         read: false
       })
-  } catch (error) {
+  } catch (error: unknown) {
     logger.error('sendWelcomeNotification error', { error })
   }
 }
@@ -432,7 +432,7 @@ export async function leaveProOfficialGroup(userId: string): Promise<boolean> {
     
     return data === true
     
-  } catch (error) {
+  } catch (error: unknown) {
     logger.error('leaveProOfficialGroup error', { error, userId })
     return false
   }

@@ -45,7 +45,7 @@ export async function GET(request: NextRequest) {
       verified_trader: verified,
       is_verified: !!verified,
     })
-  } catch (error) {
+  } catch (error: unknown) {
     return handleError(error, 'trader claim GET')
   }
 }
@@ -97,7 +97,7 @@ export async function POST(request: NextRequest) {
       claim,
       message: '认领申请已提交，我们将尽快审核',
     })
-  } catch (error) {
+  } catch (error: unknown) {
     return handleError(error, 'trader claim POST')
   }
 }

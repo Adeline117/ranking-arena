@@ -171,7 +171,7 @@ export async function GET(request: NextRequest) {
         duration,
       },
     })
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('[Anomaly Detection] Error:', error)
 
     return NextResponse.json(

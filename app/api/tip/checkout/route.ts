@@ -204,7 +204,7 @@ export async function POST(request: NextRequest) {
       sessionId: session.id,
       url: session.url,
     })
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('[Tip Checkout] Error:', error)
     
     const message = error instanceof Error ? error.message : 'Internal server error'

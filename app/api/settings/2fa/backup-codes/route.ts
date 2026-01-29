@@ -82,7 +82,7 @@ export async function GET(request: NextRequest) {
       success: true,
       backupCodes,
     })
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('[2FA Backup Codes] Unexpected error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }

@@ -47,7 +47,7 @@ export const POST = withAuth(
         success: true,
         data: subscription,
       })
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('[push/subscribe] 注册订阅失败:', error)
       return NextResponse.json({
         success: false,
@@ -78,7 +78,7 @@ export const DELETE = withAuth(
       return NextResponse.json({
         success: true,
       })
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('[push/subscribe] 取消订阅失败:', error)
       return NextResponse.json({
         success: false,

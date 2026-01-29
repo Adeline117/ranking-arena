@@ -97,7 +97,7 @@ export async function GET(request: NextRequest) {
         'Cache-Control': 's-maxage=60, stale-while-revalidate=300',
       },
     });
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('[API /rankings] Error:', error);
     return NextResponse.json(
       { error: 'Internal server error' },

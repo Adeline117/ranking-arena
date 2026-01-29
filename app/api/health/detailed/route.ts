@@ -170,7 +170,7 @@ async function checkDatabaseAndCron(): Promise<{
       database: { status: 'pass', latency: Date.now() - start },
       cronRuns,
     }
-  } catch (error) {
+  } catch (error: unknown) {
     return {
       database: {
         status: 'fail',
@@ -307,7 +307,7 @@ export async function GET() {
         'Content-Type': 'application/json',
       },
     })
-  } catch (error) {
+  } catch (error: unknown) {
     return NextResponse.json(
       {
         status: 'unhealthy',

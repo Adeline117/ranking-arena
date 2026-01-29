@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
 
     const result = await response.json()
     return NextResponse.json(result, { status: response.status })
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('[webhook/stripe] Proxy to /api/stripe/webhook failed:', error)
     return NextResponse.json(
       { error: 'Webhook proxy failed' },

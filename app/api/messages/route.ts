@@ -153,7 +153,7 @@ export async function GET(request: NextRequest) {
       otherUser: otherUserData,
       has_more,
     })
-  } catch (error) {
+  } catch (error: unknown) {
     logger.error('GET error', { error: String(error) })
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
@@ -393,7 +393,7 @@ export async function POST(request: NextRequest) {
       message,
       conversation_id: conversation.id
     })
-  } catch (error) {
+  } catch (error: unknown) {
     logger.error('POST error', { error: String(error) })
     return NextResponse.json(
       { error: '服务异常，请稍后重试', error_code: 'SERVER_ERROR' },

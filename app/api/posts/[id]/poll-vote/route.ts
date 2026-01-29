@@ -81,7 +81,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
       userVotes,
       hasVoted,
     })
-  } catch (error) {
+  } catch (error: unknown) {
     return handleError(error, 'posts/[id]/poll-vote GET')
   }
 }
@@ -240,7 +240,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       },
       userVotes: optionIndexes,
     })
-  } catch (error) {
+  } catch (error: unknown) {
     return handleError(error, 'posts/[id]/poll-vote POST')
   }
 }

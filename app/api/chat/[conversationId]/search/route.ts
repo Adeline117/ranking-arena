@@ -131,7 +131,7 @@ export async function GET(
       next_cursor: nextCursor,
       total_in_page: matches.length,
     })
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('[Chat Search] Error:', error)
     return NextResponse.json({ error: '服务器错误' }, { status: 500 })
   }

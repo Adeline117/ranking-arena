@@ -47,43 +47,32 @@ export default function MarketPanel() {
         .select('market_pairs')
         .eq('id', uid)
         .maybeSingle()
-      
+
       if (error) {
-        // 如果列不存在或其他错误，使用默认值
-        console.warn('[MarketPanel] 加载自定义币种失败:', error.message)
-        // fallback: localStorage
-        try {
-          const raw = localStorage.getItem('market_pairs')
-          if (raw) {
-            const parsed = JSON.parse(raw)
-            if (Array.isArray(parsed) && parsed.length > 0) {
-              setCustomPairs(parsed)
-            }
-          }
-        } catch {}
+        console.warn('[MarketPanel] Failed to load custom pairs:', error.message)
+        loadPairsFromLocalStorage()
         return
       }
-      
+
       if (data?.market_pairs && Array.isArray(data.market_pairs) && data.market_pairs.length > 0) {
         setCustomPairs(data.market_pairs)
-      } else {
-        // 如果没有自定义币种，使用默认值
-        const defaultPairs = ['BTC-USD', 'ETH-USD', 'SOL-USD', 'ARB-USD']
-        setCustomPairs(defaultPairs)
       }
     } catch (err) {
       console.error('[MarketPanel] Load custom pairs error:', err)
-      // fallback: localStorage
-      try {
-        const raw = localStorage.getItem('market_pairs')
-        if (raw) {
-          const parsed = JSON.parse(raw)
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            setCustomPairs(parsed)
-          }
-        }
-      } catch {}
+      loadPairsFromLocalStorage()
     }
+  }
+
+  const loadPairsFromLocalStorage = () => {
+    try {
+      const raw = localStorage.getItem('market_pairs')
+      if (raw) {
+        const parsed = JSON.parse(raw)
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setCustomPairs(parsed)
+        }
+      }
+    } catch { /* localStorage unavailable */ }
   }
 
   const saveCustomPairs = async (pairs: string[]) => {
@@ -132,17 +121,18 @@ export default function MarketPanel() {
         
         let res: Response
         try {
-          res = await fetch(`/api/market?pairs=${encodeURIComponent(pairsParam)}`, { 
+          res = await fetch(`/api/market?pairs=${encodeURIComponent(pairsParam)}`, {
             cache: 'default',
-            signal: AbortSignal.timeout(15000), // 15秒超时
+            signal: AbortSignal.timeout(15000),
           })
-        } catch (fetchError: any) {
-          if (fetchError.name === 'AbortError' || fetchError.name === 'TimeoutError') {
+        } catch (fetchError: unknown) {
+          const err = fetchError instanceof Error ? fetchError : new Error(String(fetchError))
+          if (err.name === 'AbortError' || err.name === 'TimeoutError') {
             setError('请求超时，请稍后重试')
             setLoading(false)
             return
           }
-          if (fetchError.message?.includes('Failed to fetch') || fetchError.message?.includes('fetch failed')) {
+          if (err.message?.includes('Failed to fetch') || err.message?.includes('fetch failed')) {
             setError('网络连接失败，请检查网络设置')
             setLoading(false)
             return
@@ -210,10 +200,10 @@ export default function MarketPanel() {
             return now
           })
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (!alive) return
         console.error('[MarketPanel] 加载市场数据异常:', err)
-        setError(err?.message || t('loadFailed'))
+        setError(err instanceof Error ? err.message : t('loadFailed'))
         if (market.length === 0) {
           setMarket([])
         }
