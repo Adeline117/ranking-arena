@@ -1,4 +1,6 @@
 import { Suspense } from 'react'
+import { cookies } from 'next/headers'
+import { createClient } from '@/lib/db'
 import { HomePage } from './components/home'
 import { getInitialTraders } from '@/lib/getInitialTraders'
 import RankingTableSkeleton from './components/home/RankingTableSkeleton'
@@ -14,14 +16,30 @@ export const revalidate = 30
  */
 export default async function Page() {
   // Fetch initial traders server-side to eliminate client waterfall
-  // Increased from 50 to 200 for better LCP (covers most user views without client fetch)
   const { traders: initialTraders, lastUpdated } = await getInitialTraders('90D', 50)
+
+  // Get auth session server-side (non-blocking)
+  let email: string | null = null
+  let isLoggedIn = false
+
+  try {
+    const cookieStore = await cookies()
+    const supabase = createClient(cookieStore)
+    const { data: { session } } = await supabase.auth.getSession()
+    email = session?.user?.email ?? null
+    isLoggedIn = !!session
+  } catch (error) {
+    // Silent fail - auth is not critical for page render
+    console.error('[Page] Auth check failed:', error)
+  }
 
   return (
     <Suspense fallback={<RankingTableSkeleton />}>
       <HomePage
         initialTraders={initialTraders}
         initialLastUpdated={lastUpdated}
+        email={email}
+        isLoggedIn={isLoggedIn}
       />
     </Suspense>
   )
