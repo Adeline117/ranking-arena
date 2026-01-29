@@ -40,9 +40,9 @@ const ARENA_CONFIG = {
     '90D': { tanhCoeff: 0.18, roiExponent: 1.6, mddThreshold: 40, winRateCap: 70 },
   },
   PNL_THRESHOLD: {
-    '7D': 300,
-    '30D': 1000,
-    '90D': 3000,
+    '7D': 200,    // 降低门槛以显示更多交易员
+    '30D': 500,   // 从$1000降到$500
+    '90D': 1000,  // 从$3000降到$1000
   },
   MAX_RETURN_SCORE: 85,
   MAX_DRAWDOWN_SCORE: 8,

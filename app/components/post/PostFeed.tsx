@@ -148,9 +148,16 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
   const [posts, setPosts] = useState<Post[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [hasMore, setHasMore] = useState(true)
+  const [offset, setOffset] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [sortType, setSortType] = useState<SortType>('time')
   const [openPost, setOpenPost] = useState<Post | null>(null)
+  const loadMoreRef = useRef<HTMLDivElement>(null)
+
+  // Listen to feed refresh trigger from store
+  const feedRefreshTrigger = usePostStore(s => s.feedRefreshTrigger)
   // Unified auth - single source of truth
   const auth = useUnifiedAuth({
     onUnauthenticated: () => showToast('请先登录', 'warning'),
@@ -228,23 +235,28 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
   // Store posts in canonical store when loaded
   const storeSetPosts = usePostStore(s => s.setPosts)
 
-  // 加载帖子
+  const pageSize = props.limit || 20
+
+  // 加载帖子（重置列表）
   const loadPosts = useCallback(async () => {
     // 取消之前的请求
     if (abortControllerRef.current) {
       abortControllerRef.current.abort()
     }
-    
+
     // 创建新的AbortController
     const controller = new AbortController()
     abortControllerRef.current = controller
-    
+
     try {
       setLoading(true)
       setError(null)
+      setOffset(0)
+      setHasMore(true)
 
       const params = new URLSearchParams()
-      params.set('limit', String(props.limit || 20))
+      params.set('limit', String(pageSize))
+      params.set('offset', '0')
       // 根据排序类型设置排序方式
       if (props.sortBy) {
         params.set('sort_by', props.sortBy)
@@ -270,28 +282,30 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
         headers['Authorization'] = `Bearer ${accessToken}`
       }
 
-      const response = await fetch(`/api/posts?${params.toString()}`, { 
+      const response = await fetch(`/api/posts?${params.toString()}`, {
         headers,
         signal: controller.signal
       })
-      
+
       // 检查请求是否被取消
       if (controller.signal.aborted) {
         return
       }
-      
+
       const data = await response.json()
 
       if (!response.ok) {
-        const errorMsg = typeof data.error === 'string' 
-          ? data.error 
+        const errorMsg = typeof data.error === 'string'
+          ? data.error
           : (data.error?.message || '获取帖子失败')
         throw new Error(errorMsg)
       }
 
-      // API 返回格式: { success: true, data: { posts: [...] } }
+      // API 返回格式: { success: true, data: { posts: [...], pagination?: { has_more } } }
       const loadedPosts = data.data?.posts || []
       setPosts(loadedPosts)
+      setOffset(loadedPosts.length)
+      setHasMore(data.data?.pagination?.has_more ?? loadedPosts.length >= pageSize)
 
       // Store in canonical postStore for cross-component consistency
       const canonicalPosts: PostData[] = loadedPosts.map((p: Post) => ({
@@ -334,7 +348,83 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
         setLoading(false)
       }
     }
-  }, [props.groupId, props.authorHandle, accessToken, sortType])
+  }, [props.groupId, props.authorHandle, accessToken, sortType, pageSize])
+
+  // 加载更多帖子（无限滚动）
+  const loadMorePosts = useCallback(async () => {
+    if (loadingMore || !hasMore || loading) return
+
+    const controller = new AbortController()
+
+    try {
+      setLoadingMore(true)
+
+      const params = new URLSearchParams()
+      params.set('limit', String(pageSize))
+      params.set('offset', String(offset))
+      if (props.sortBy) {
+        params.set('sort_by', props.sortBy)
+      } else if (sortType === 'likes') {
+        params.set('sort_by', 'like_count')
+      } else if (props.authorHandle) {
+        params.set('sort_by', 'created_at')
+      } else if (props.groupId || props.groupIds) {
+        params.set('sort_by', 'created_at')
+      } else {
+        params.set('sort_by', 'hot_score')
+      }
+      params.set('sort_order', 'desc')
+
+      if (props.groupId) params.set('group_id', props.groupId)
+      if (props.groupIds && props.groupIds.length > 0) params.set('group_ids', props.groupIds.join(','))
+      if (props.authorHandle) params.set('author_handle', props.authorHandle)
+
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      }
+      if (accessToken) {
+        headers['Authorization'] = `Bearer ${accessToken}`
+      }
+
+      const response = await fetch(`/api/posts?${params.toString()}`, {
+        headers,
+        signal: controller.signal
+      })
+
+      if (controller.signal.aborted) return
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || '加载更多失败')
+      }
+
+      const morePosts = data.data?.posts || []
+
+      // Deduplicate by ID
+      const existingIds = new Set(posts.map(p => p.id))
+      const newPosts = morePosts.filter((p: Post) => !existingIds.has(p.id))
+
+      setPosts(prev => [...prev, ...newPosts])
+      setOffset(prev => prev + newPosts.length)
+      setHasMore(data.data?.pagination?.has_more ?? morePosts.length >= pageSize)
+
+      // Update bookmark/repost counts
+      const newBookmarkCounts: Record<string, number> = {}
+      const newRepostCounts: Record<string, number> = {}
+      newPosts.forEach((post: Post) => {
+        newBookmarkCounts[post.id] = post.bookmark_count || 0
+        newRepostCounts[post.id] = post.repost_count || 0
+      })
+      setBookmarkCounts(prev => ({ ...prev, ...newBookmarkCounts }))
+      setRepostCounts(prev => ({ ...prev, ...newRepostCounts }))
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') return
+      console.error('加载更多失败:', err)
+    } finally {
+      setLoadingMore(false)
+    }
+  }, [loadingMore, hasMore, loading, offset, pageSize, props.sortBy, sortType, props.authorHandle, props.groupId, props.groupIds, accessToken, posts])
   
   // 组件卸载时取消所有请求
   useEffect(() => {
@@ -396,6 +486,32 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
     loadPosts()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.groupId, props.authorHandle, accessToken, sortType])
+
+  // Listen to feed refresh trigger from store (triggered by TopNav groups click)
+  useEffect(() => {
+    if (feedRefreshTrigger > 0) {
+      loadPosts()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [feedRefreshTrigger])
+
+  // Infinite scroll observer
+  useEffect(() => {
+    const el = loadMoreRef.current
+    if (!el) return
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasMore && !loadingMore && !loading) {
+          loadMorePosts()
+        }
+      },
+      { threshold: 0.1, rootMargin: '100px' }
+    )
+
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [hasMore, loadingMore, loading, loadMorePosts])
 
   // 加载用户收藏和转发状态
   useEffect(() => {
@@ -1753,6 +1869,56 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
           )
         })}
       </div>
+
+      {/* Infinite scroll trigger */}
+      {hasMore && (
+        <div
+          ref={loadMoreRef}
+          style={{
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            padding: tokens.spacing[4],
+            minHeight: 60,
+          }}
+        >
+          {loadingMore && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke={tokens.colors.text.tertiary}
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                style={{ animation: 'spin 1s linear infinite' }}
+              >
+                <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                <path d="M3 3v5h5" />
+              </svg>
+              <span style={{ fontSize: tokens.typography.fontSize.sm, color: tokens.colors.text.tertiary }}>
+                {language === 'zh' ? '加载更多...' : 'Loading more...'}
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* No more posts indicator */}
+      {!hasMore && posts.length > 0 && (
+        <div
+          style={{
+            textAlign: 'center',
+            padding: tokens.spacing[4],
+            color: tokens.colors.text.tertiary,
+            fontSize: tokens.typography.fontSize.sm,
+          }}
+        >
+          {language === 'zh' ? '已经到底啦' : 'No more posts'}
+        </div>
+      )}
 
       {openPost && (
         <Modal onClose={() => setOpenPost(null)}>

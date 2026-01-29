@@ -43,9 +43,9 @@ export interface OverallScoreInput {
 export const ARENA_CONFIG = {
   // 入榜 PnL 门槛（唯一硬条件）
   PNL_THRESHOLD: {
-    '7D': 300,
-    '30D': 1000,
-    '90D': 3000,
+    '7D': 200,    // 降低门槛以显示更多交易员
+    '30D': 500,   // 从$1000降到$500
+    '90D': 1000,  // 从$3000降到$1000
   },
   
   // 评分参数

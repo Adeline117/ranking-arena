@@ -62,6 +62,8 @@ type PostStoreState = {
   comments: Record<string, CommentData[]>
   /** Comment pagination state per post */
   commentsPagination: Record<string, CommentsPagination>
+  /** Feed refresh trigger - increment to signal feeds to refresh */
+  feedRefreshTrigger: number
 }
 
 type PostStoreActions = {
@@ -83,6 +85,8 @@ type PostStoreActions = {
   addComment: (postId: string, comment: CommentData) => void
   /** Update pagination state */
   setCommentsPagination: (postId: string, pagination: Partial<CommentsPagination>) => void
+  /** Trigger feed refresh - increments counter to signal feeds to reload */
+  triggerFeedRefresh: () => void
   /** Clear all cached data */
   clear: () => void
 }
@@ -95,6 +99,7 @@ export const usePostStore = create<PostStoreState & PostStoreActions>((set) => (
   posts: {},
   comments: {},
   commentsPagination: {},
+  feedRefreshTrigger: 0,
 
   setPost: (post) => set((state) => ({
     posts: { ...state.posts, [post.id]: post },
@@ -160,7 +165,11 @@ export const usePostStore = create<PostStoreState & PostStoreActions>((set) => (
     },
   })),
 
-  clear: () => set({ posts: {}, comments: {}, commentsPagination: {} }),
+  triggerFeedRefresh: () => set((state) => ({
+    feedRefreshTrigger: state.feedRefreshTrigger + 1,
+  })),
+
+  clear: () => set({ posts: {}, comments: {}, commentsPagination: {}, feedRefreshTrigger: 0 }),
 }))
 
 function getDefaultPagination(): CommentsPagination {
