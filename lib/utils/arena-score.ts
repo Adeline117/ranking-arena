@@ -15,6 +15,14 @@
 
 export type Period = '7D' | '30D' | '90D'
 
+/**
+ * 分数置信度：标记计算时数据的完整程度
+ * - 'full': win_rate 和 max_drawdown 都有真实数据
+ * - 'partial': 其中一项缺失，使用了默认中位值
+ * - 'minimal': 两项都缺失，使用了默认中位值
+ */
+export type ScoreConfidence = 'full' | 'partial' | 'minimal'
+
 export interface TraderScoreInput {
   roi: number          // ROI（百分比，如 25% = 25）
   pnl: number          // 已实现盈亏（USD）
@@ -28,6 +36,7 @@ export interface ArenaScoreResult {
   drawdownScore: number   // 回撤分 (0-8)
   stabilityScore: number  // 稳定分 (0-7)
   meetsThreshold: boolean // 是否达到入榜门槛
+  scoreConfidence: ScoreConfidence  // 数据完整性标记
 }
 
 export interface OverallScoreInput {
@@ -86,6 +95,12 @@ export const ARENA_CONFIG = {
     '7D': 0.05,
   },
   
+  // 缺失数据默认中位值
+  DEFAULTS: {
+    WIN_RATE: 50,       // 中位胜率（%）
+    MAX_DRAWDOWN: -20,  // 中位最大回撤（%）
+  },
+
   // 缺失数据惩罚
   MISSING_90D_PENALTY: 0.85,
   ONLY_7D_PENALTY: 0.70,
@@ -173,13 +188,13 @@ export function calculateReturnScore(roi: number, period: Period): number {
  * @param period 时间段
  */
 export function calculateDrawdownScore(maxDrawdown: number | null, period: Period): number {
-  if (maxDrawdown === null || maxDrawdown === undefined) {
-    // 无回撤数据时给予中等分数（不惩罚也不奖励）
-    return ARENA_CONFIG.MAX_DRAWDOWN_SCORE * 0.5
-  }
+  // 缺失时使用默认中位值（-20%）而非给予固定中等分数
+  const effectiveMdd = (maxDrawdown === null || maxDrawdown === undefined)
+    ? ARENA_CONFIG.DEFAULTS.MAX_DRAWDOWN
+    : maxDrawdown
 
   // 归一化：如果 |maxDrawdown| <= 1，认为是小数格式（0.20），需要转换为百分比（20）
-  const mddAbs = Math.abs(maxDrawdown)
+  const mddAbs = Math.abs(effectiveMdd)
   const normalizedMdd = mddAbs <= 1 ? mddAbs * 100 : mddAbs
 
   const threshold = ARENA_CONFIG.PARAMS[period].mddThreshold
@@ -195,13 +210,13 @@ export function calculateDrawdownScore(maxDrawdown: number | null, period: Perio
  * @param period 时间段
  */
 export function calculateStabilityScore(winRate: number | null, period: Period): number {
-  if (winRate === null || winRate === undefined) {
-    // 无胜率数据时给予中等分数（不惩罚也不奖励）
-    return ARENA_CONFIG.MAX_STABILITY_SCORE * 0.5
-  }
+  // 缺失时使用默认中位值（50%）而非给予固定中等分数
+  const effectiveWinRate = (winRate === null || winRate === undefined)
+    ? ARENA_CONFIG.DEFAULTS.WIN_RATE
+    : winRate
 
   // 归一化：如果 winRate <= 1，认为是小数格式（0.60），需要转换为百分比（60）
-  const normalizedWinRate = winRate <= 1 && winRate >= 0 ? winRate * 100 : winRate
+  const normalizedWinRate = effectiveWinRate <= 1 && effectiveWinRate >= 0 ? effectiveWinRate * 100 : effectiveWinRate
 
   const cap = ARENA_CONFIG.PARAMS[period].winRateCap
   const baseline = ARENA_CONFIG.WIN_RATE_BASELINE
@@ -232,6 +247,23 @@ export function meetsThreshold(pnl: number, period: Period): boolean {
  * @param period 时间段 ('7D' | '30D' | '90D')
  * @returns Arena Score 结果
  */
+/**
+ * 判断分数置信度
+ * @param maxDrawdown 原始 MDD 输入（null 表示缺失）
+ * @param winRate 原始胜率输入（null 表示缺失）
+ */
+export function getScoreConfidence(
+  maxDrawdown: number | null | undefined,
+  winRate: number | null | undefined,
+): ScoreConfidence {
+  const hasMdd = maxDrawdown !== null && maxDrawdown !== undefined
+  const hasWr = winRate !== null && winRate !== undefined
+
+  if (hasMdd && hasWr) return 'full'
+  if (hasMdd || hasWr) return 'partial'
+  return 'minimal'
+}
+
 export function calculateArenaScore(
   input: TraderScoreInput,
   period: Period
@@ -241,7 +273,10 @@ export function calculateArenaScore(
   // 检查入榜门槛
   const meets = meetsThreshold(pnl, period)
   
-  // 计算各项分数
+  // 判断数据完整性
+  const scoreConfidence = getScoreConfidence(maxDrawdown, winRate)
+  
+  // 计算各项分数（缺失数据使用默认中位值）
   const returnScore = calculateReturnScore(roi, period)
   const drawdownScore = calculateDrawdownScore(maxDrawdown, period)
   const stabilityScore = calculateStabilityScore(winRate, period)
@@ -255,6 +290,7 @@ export function calculateArenaScore(
     drawdownScore: Math.round(drawdownScore * 100) / 100,
     stabilityScore: Math.round(stabilityScore * 100) / 100,
     meetsThreshold: meets,
+    scoreConfidence,
   }
 }
 

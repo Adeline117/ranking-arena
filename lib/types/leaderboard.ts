@@ -268,6 +268,8 @@ export interface SnapshotMetrics {
   return_score: number | null
   drawdown_score: number | null
   stability_score: number | null
+  // Score confidence: 'full' = all data present, 'partial' = some defaults used, 'minimal' = most defaults used
+  score_confidence?: 'full' | 'partial' | 'minimal' | null
   // Extended metrics (may be null for some platforms)
   volatility_pct?: number | null
   avg_holding_hours?: number | null
@@ -291,6 +293,7 @@ export interface SnapshotMetricsLegacy {
   return_score: number | null
   drawdown_score: number | null
   stability_score: number | null
+  score_confidence?: 'full' | 'partial' | 'minimal' | null
 }
 
 /** A complete trader snapshot for a given window (new format) */
@@ -753,4 +756,5 @@ export const FIELD_DEGRADATION: Record<keyof SnapshotMetricsLegacy, { label: str
   return_score: { label: 'Return Score', fallback: '—' },
   drawdown_score: { label: 'Drawdown Score', fallback: '—' },
   stability_score: { label: 'Stability Score', fallback: '—' },
+  score_confidence: { label: 'Score Confidence', fallback: '—' },
 }

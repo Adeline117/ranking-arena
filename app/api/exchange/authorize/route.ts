@@ -61,10 +61,11 @@ export async function GET(req: NextRequest) {
       exchange,
       instructions: getInstructions(exchange),
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[exchange/authorize] 错误:', error)
+    const message = error instanceof Error ? error.message : '生成授权URL失败'
     return NextResponse.json(
-      { error: error.message || '生成授权URL失败' },
+      { error: message },
       { status: 500 }
     )
   }

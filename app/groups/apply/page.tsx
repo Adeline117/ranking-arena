@@ -166,9 +166,9 @@ export default function ApplyGroupPage() {
       const data = await response.json()
       setAvatarUrl(data.url)
       showToast(language === 'zh' ? '图片上传成功' : 'Image uploaded successfully', 'success')
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Upload error:', error)
-      const errorMsg = error?.message || (language === 'zh' ? '网络错误，请稍后重试' : 'Network error, please try again later')
+      const errorMsg = error instanceof Error ? error.message : (language === 'zh' ? '网络错误，请稍后重试' : 'Network error, please try again later')
       showToast(errorMsg, 'error')
     } finally {
       setUploading(false)

@@ -455,8 +455,8 @@ export default function LoginPage() {
       } else {
         setError(lang === 'zh' ? '发送失败，请重试' : 'Failed to send, please retry')
       }
-    } catch (err: any) {
-      setError(err?.message || (lang === 'zh' ? '发送失败，请检查网络连接' : 'Failed, please check network'))
+    } catch (err: unknown) {
+      setError((err instanceof Error ? err.message : undefined) || (lang === 'zh' ? '发送失败，请检查网络连接' : 'Failed, please check network'))
     } finally {
       setSendingCode(false)
     }
@@ -497,8 +497,8 @@ export default function LoginPage() {
       } else {
         setError(lang === 'zh' ? '发送失败，请重试' : 'Failed to send')
       }
-    } catch (err: any) {
-      setError(err?.message || (lang === 'zh' ? '发送失败' : 'Failed'))
+    } catch (err: unknown) {
+      setError((err instanceof Error ? err.message : undefined) || (lang === 'zh' ? '发送失败' : 'Failed'))
     } finally {
       setSendingCode(false)
     }
@@ -551,11 +551,12 @@ export default function LoginPage() {
           }
         }
       }
-    } catch (err: any) {
-      if (err?.message?.includes('expired') || err?.message?.includes('过期')) {
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : undefined
+      if (errMsg?.includes('expired') || errMsg?.includes('过期')) {
         setError(t.codeExpired)
       } else {
-        setError(err?.message || (lang === 'zh' ? '验证失败' : 'Verification failed'))
+        setError(errMsg || (lang === 'zh' ? '验证失败' : 'Verification failed'))
       }
     } finally {
       setLoading(false)
@@ -567,7 +568,7 @@ export default function LoginPage() {
       const finalHandle = userHandle || userEmail.split('@')[0]
       
       // 如果提供了 userHandle，强制更新 handle
-      const updateData: any = {
+      const updateData: Record<string, string> = {
         id: userId,
         email: userEmail,
       }
@@ -646,8 +647,8 @@ export default function LoginPage() {
       } else {
         router.push('/')
       }
-    } catch (err: any) {
-      setError(err?.message || (lang === 'zh' ? '设置失败' : 'Setup failed'))
+    } catch (err: unknown) {
+      setError((err instanceof Error ? err.message : undefined) || (lang === 'zh' ? '设置失败' : 'Setup failed'))
     } finally {
       setLoading(false)
     }
@@ -687,8 +688,8 @@ export default function LoginPage() {
       } else {
         router.push('/')
       }
-    } catch (err: any) {
-      setError(err?.message || (lang === 'zh' ? '登录失败' : 'Login failed'))
+    } catch (err: unknown) {
+      setError((err instanceof Error ? err.message : undefined) || (lang === 'zh' ? '登录失败' : 'Login failed'))
     } finally {
       setLoading(false)
     }

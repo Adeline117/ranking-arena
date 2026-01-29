@@ -323,8 +323,8 @@ function ResetPasswordContent() {
 
       setSuccess(t.emailSent)
       setCountdown(60)
-    } catch (err: any) {
-      setError(err?.message || (lang === 'zh' ? '发送失败' : 'Failed to send'))
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : (lang === 'zh' ? '发送失败' : 'Failed to send'))
     } finally {
       setLoading(false)
     }
@@ -365,8 +365,8 @@ function ResetPasswordContent() {
       setTimeout(() => {
         router.push('/login')
       }, 3000)
-    } catch (err: any) {
-      setError(err?.message || (lang === 'zh' ? '重置失败' : 'Reset failed'))
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : (lang === 'zh' ? '重置失败' : 'Reset failed'))
     } finally {
       setLoading(false)
     }

@@ -66,10 +66,11 @@ export async function GET(request: NextRequest) {
         'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400',
       },
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error fetching link preview:', error)
+    const message = error instanceof Error ? error.message : 'Failed to fetch link preview'
     return NextResponse.json(
-      { error: error.message || 'Failed to fetch link preview' },
+      { error: message },
       { status: 500 }
     )
   }

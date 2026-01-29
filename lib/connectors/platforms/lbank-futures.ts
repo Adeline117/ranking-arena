@@ -31,7 +31,7 @@ export class LbankFuturesConnector extends BaseConnector {
   readonly platform = 'lbank' as const
   readonly marketType = 'futures' as const
   readonly capabilities: PlatformCapabilities = {
-    platform: 'lbank' as any,
+    platform: 'lbank',
     market_types: ['futures'],
     native_windows: ['7d', '30d', '90d'],
     available_fields: ['roi', 'pnl', 'win_rate', 'followers'],
@@ -61,7 +61,7 @@ export class LbankFuturesConnector extends BaseConnector {
 
       const list = data?.data?.list || []
       const traders: TraderSource[] = list.map((item) => ({
-        platform: 'lbank' as any,
+        platform: 'lbank',
         market_type: 'futures' as const,
         trader_key: String(item.uid || ''),
         display_name: item.nickname || null,
@@ -80,7 +80,7 @@ export class LbankFuturesConnector extends BaseConnector {
 
   async fetchTraderProfile(traderKey: string): Promise<ProfileResult | null> {
     const profile: TraderProfile = {
-      platform: 'lbank' as any,
+      platform: 'lbank',
       market_type: 'futures',
       trader_key: traderKey,
       display_name: null,

@@ -167,9 +167,10 @@ export async function POST(request: NextRequest) {
       success: true,
       expiresAt,
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error refreshing token:', error)
-    return NextResponse.json({ error: error.message || 'Failed to refresh token' }, { status: 500 })
+    const message = error instanceof Error ? error.message : 'Failed to refresh token'
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }
 

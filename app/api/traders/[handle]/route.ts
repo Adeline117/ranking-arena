@@ -140,7 +140,7 @@ interface StatsDetailData {
 // 安全查询函数 - 处理可能不存在的表
 // 使用 PromiseLike 类型以兼容 Supabase 的 PostgrestFilterBuilder
 async function safeQuery<T>(
-  queryFn: () => PromiseLike<{ data: T | null; error: any }>
+  queryFn: () => PromiseLike<{ data: T | null; error: { code?: string; message?: string } | null }>
 ): Promise<T | null> {
   try {
     const result = await queryFn()

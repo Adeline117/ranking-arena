@@ -47,7 +47,7 @@ export class KwentaPerpConnector extends BaseConnector {
   readonly platform = 'kwenta' as const
   readonly marketType = 'perp' as const
   readonly capabilities: PlatformCapabilities = {
-    platform: 'kwenta' as any,
+    platform: 'kwenta',
     market_types: ['perp'],
     native_windows: ['7d', '30d', '90d'],
     available_fields: ['roi', 'pnl', 'win_rate', 'max_drawdown', 'trades_count'],
@@ -92,7 +92,7 @@ export class KwentaPerpConnector extends BaseConnector {
 
       const stats = response?.data?.futuresStats || []
       const traders: TraderSource[] = stats.map((item) => ({
-        platform: 'kwenta' as any,
+        platform: 'kwenta',
         market_type: 'perp' as const,
         trader_key: item.account.toLowerCase(),
         display_name: `${item.account.slice(0, 6)}...${item.account.slice(-4)}`,
@@ -138,7 +138,7 @@ export class KwentaPerpConnector extends BaseConnector {
       if (!info) return null
 
       const profile: TraderProfile = {
-        platform: 'kwenta' as any,
+        platform: 'kwenta',
         market_type: 'perp',
         trader_key: traderKey.toLowerCase(),
         display_name: `${traderKey.slice(0, 6)}...${traderKey.slice(-4)}`,

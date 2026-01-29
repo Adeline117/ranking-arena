@@ -131,7 +131,7 @@ export const TraderCard = memo(function TraderCard({
               <HighlightedName text={displayName} query={searchQuery} />
             </Text>
             <Box style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <Box style={{ padding: '2px 6px', borderRadius: tokens.radius.sm, background: `${sourceInfo.typeColor}15`, border: `1px solid ${sourceInfo.typeColor}30` }}>
+              <Box className="source-tag" style={{ background: `${sourceInfo.typeColor}15`, border: `1px solid ${sourceInfo.typeColor}30` }}>
                 <Text size="xs" weight="bold" style={{ color: sourceInfo.typeColor, fontSize: '10px', lineHeight: 1.2 }}>
                   {sourceInfo.type}
                 </Text>
