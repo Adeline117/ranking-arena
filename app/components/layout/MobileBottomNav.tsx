@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { useEffect, useState, useCallback, useMemo } from 'react'
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { supabase } from '@/lib/supabase/client'
@@ -112,54 +112,31 @@ function useUserHandle(): string | null {
 
   useEffect(() => {
     let alive = true
-    const abortController = new AbortController()
 
     supabase.auth.getUser()
       .then(({ data, error }) => {
-        if (!alive) return
-
-        if (error) {
-          console.error('Error fetching user in MobileBottomNav:', error)
-          return
-        }
+        if (!alive || error) return
 
         const userId = data.user?.id
         if (!userId) return
+        const emailHandle = data.user?.email?.split('@')[0] || null
 
-        Promise.resolve(
-          supabase
-            .from('user_profiles')
-            .select('handle')
-            .eq('id', userId)
-            .maybeSingle()
-        )
+        supabase
+          .from('user_profiles')
+          .select('handle')
+          .eq('id', userId)
+          .maybeSingle()
           .then(({ data: profile, error: profileError }) => {
             if (!alive) return
-
             if (profileError) {
-              console.error('Error fetching user profile in MobileBottomNav:', profileError)
-              // Fallback to email-based handle
-              setUserHandle(data.user?.email?.split('@')[0] || null)
+              setUserHandle(emailHandle)
               return
             }
-
-            setUserHandle(profile?.handle || data.user?.email?.split('@')[0] || null)
-          })
-          .catch((err) => {
-            if (!alive) return
-            console.error('Unexpected error fetching user profile:', err)
-            setUserHandle(data.user?.email?.split('@')[0] || null)
+            setUserHandle(profile?.handle || emailHandle)
           })
       })
-      .catch((err) => {
-        if (!alive) return
-        console.error('Unexpected error in auth check:', err)
-      })
 
-    return () => {
-      alive = false
-      abortController.abort()
-    }
+    return () => { alive = false }
   }, [])
 
   return userHandle
@@ -167,12 +144,12 @@ function useUserHandle(): string | null {
 
 function useScrollVisibility(): boolean {
   const [isVisible, setIsVisible] = useState(true)
-  const [lastScrollY, setLastScrollY] = useState(0)
+  const lastScrollYRef = useRef(0)
 
   useEffect(() => {
     function handleScroll(): void {
       const currentScrollY = window.scrollY
-      const scrollDelta = currentScrollY - lastScrollY
+      const scrollDelta = currentScrollY - lastScrollYRef.current
 
       if (scrollDelta > 50 && currentScrollY > 100) {
         setIsVisible(false)
@@ -180,12 +157,12 @@ function useScrollVisibility(): boolean {
         setIsVisible(true)
       }
 
-      setLastScrollY(currentScrollY)
+      lastScrollYRef.current = currentScrollY
     }
 
     window.addEventListener('scroll', handleScroll, { passive: true })
     return () => window.removeEventListener('scroll', handleScroll)
-  }, [lastScrollY])
+  }, [])
 
   return isVisible
 }
