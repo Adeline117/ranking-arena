@@ -12,6 +12,7 @@ import { SkipLink } from "./components/Providers/Accessibility";
 import { WebVitals } from "./components/Providers/WebVitals";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { getCriticalCss, getResourceHints } from "@/lib/performance/critical-css";
+import { AsyncStylesheets } from "./components/Providers/AsyncStylesheets";
 
 // Optimized font loading with next/font
 const inter = Inter({
@@ -24,11 +25,12 @@ const inter = Inter({
 
 const notoSansSC = Noto_Sans_SC({
   subsets: ["latin"],
-  weight: ["400", "700"],  // 减少字重以优化加载性能
+  weight: ["400", "700"],
   display: "swap",
   variable: "--font-noto-sans-sc",
-  preload: false,  // 延迟加载中文字体以优化首屏
+  preload: true,  // Enable preloading to prevent CLS from font swap
   adjustFontFallback: true,
+  fallback: ['system-ui', '-apple-system', 'sans-serif'],  // Fallback stack to minimize CLS
 });
 
 export const viewport: Viewport = {
@@ -109,6 +111,12 @@ export default function RootLayout({
             {...(hint.crossOrigin && { crossOrigin: hint.crossOrigin })}
           />
         ))}
+
+        {/* Non-critical CSS loaded via AsyncStylesheets component after hydration */}
+        <noscript>
+          <link rel="stylesheet" href="/styles/responsive.css" />
+          <link rel="stylesheet" href="/styles/animations.css" />
+        </noscript>
       </head>
       <body
         className="font-sans antialiased"
@@ -116,6 +124,8 @@ export default function RootLayout({
       >
         <Providers>
           <CapacitorProvider>
+            {/* Load non-critical CSS after hydration */}
+            <AsyncStylesheets />
             {/* Defer analytics to after LCP */}
             <Suspense fallback={null}>
               <WebVitals />

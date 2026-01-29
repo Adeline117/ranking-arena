@@ -1,0 +1,71 @@
+'use client'
+
+import { useEffect } from 'react'
+
+/**
+ * Async CSS Loader
+ * Loads non-critical CSS after the page has hydrated to improve LCP
+ *
+ * How it works:
+ * 1. Critical CSS is inlined in <head> via critical-css.ts
+ * 2. This component loads additional CSS files after React hydration
+ * 3. Uses requestIdleCallback to avoid blocking the main thread
+ */
+
+const NON_CRITICAL_STYLESHEETS = [
+  '/styles/responsive.css',
+  '/styles/animations.css',
+]
+
+function loadStylesheet(href: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    // Check if already loaded
+    if (document.querySelector(`link[href="${href}"]`)) {
+      resolve()
+      return
+    }
+
+    const link = document.createElement('link')
+    link.rel = 'stylesheet'
+    link.href = href
+    link.onload = () => resolve()
+    link.onerror = () => reject(new Error(`Failed to load ${href}`))
+    document.head.appendChild(link)
+  })
+}
+
+export function AsyncStylesheets() {
+  useEffect(() => {
+    // Use requestIdleCallback to load CSS during browser idle time
+    const loadStyles = () => {
+      NON_CRITICAL_STYLESHEETS.forEach(href => {
+        loadStylesheet(href).catch(err => {
+          console.warn('Failed to load stylesheet:', err)
+        })
+      })
+    }
+
+    if ('requestIdleCallback' in window) {
+      requestIdleCallback(loadStyles, { timeout: 2000 })
+    } else {
+      // Fallback for Safari
+      setTimeout(loadStyles, 100)
+    }
+  }, [])
+
+  return null
+}
+
+/**
+ * Load trader-specific animations only on trader pages
+ * This prevents loading 432 lines of CSS on the homepage
+ */
+export function TraderPageStylesheets() {
+  useEffect(() => {
+    loadStylesheet('/styles/trader-animations.css').catch(err => {
+      console.warn('Failed to load trader animations:', err)
+    })
+  }, [])
+
+  return null
+}

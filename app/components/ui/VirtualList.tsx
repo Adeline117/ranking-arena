@@ -237,6 +237,8 @@ export function VirtualList<T>({
         style={{
           height: totalHeight,
           position: 'relative',
+          contain: 'strict', // Performance: isolate layout/paint from parent
+          contentVisibility: 'auto', // Performance: skip rendering off-screen content
         }}
       >
         {visibleItems}
