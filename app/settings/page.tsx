@@ -13,6 +13,7 @@ import { useDialog } from '@/app/components/ui/Dialog'
 import { uiLogger } from '@/lib/utils/logger'
 import { formatTimeAgo } from '@/lib/utils/date'
 import AdvancedAlerts from '@/app/components/pro/AdvancedAlerts'
+import { ImageCropper } from '@/app/components/ui/ImageCropper'
 import { useSubscription } from '@/app/components/home/hooks/useSubscription'
 import { useMultiAccount } from '@/lib/hooks/useMultiAccount'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -649,6 +650,11 @@ function SettingsContent() {
   const [coverFile, setCoverFile] = useState<File | null>(null)
   const [coverPreviewUrl, setCoverPreviewUrl] = useState<string | null>(null)
 
+  // Image cropper state
+  const [showAvatarCropper, setShowAvatarCropper] = useState(false)
+  const [showCoverCropper, setShowCoverCropper] = useState(false)
+  const [cropImageSrc, setCropImageSrc] = useState<string | null>(null)
+
   // Initial values for tracking changes
   const initialValuesRef = useRef<{
     handle: string
@@ -937,13 +943,28 @@ function SettingsContent() {
         showToast(t('imageSizeExceed').replace('{size}', '5'), 'error')
         return
       }
-      setAvatarFile(file)
+      // Show cropper instead of directly setting the file
       const reader = new FileReader()
       reader.onloadend = () => {
-        setPreviewUrl(reader.result as string)
+        setCropImageSrc(reader.result as string)
+        setShowAvatarCropper(true)
       }
       reader.readAsDataURL(file)
     }
+    // Reset input so the same file can be selected again
+    e.target.value = ''
+  }
+
+  const handleAvatarCropComplete = (croppedBlob: Blob) => {
+    // Create a File from the Blob
+    const croppedFile = new File([croppedBlob], 'avatar.jpg', { type: 'image/jpeg' })
+    setAvatarFile(croppedFile)
+    // Create preview URL
+    const previewUrl = URL.createObjectURL(croppedBlob)
+    setPreviewUrl(previewUrl)
+    // Close cropper
+    setShowAvatarCropper(false)
+    setCropImageSrc(null)
   }
 
   const handleCoverChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -953,13 +974,28 @@ function SettingsContent() {
         showToast(t('imageSizeExceed').replace('{size}', '10'), 'error')
         return
       }
-      setCoverFile(file)
+      // Show cropper instead of directly setting the file
       const reader = new FileReader()
       reader.onloadend = () => {
-        setCoverPreviewUrl(reader.result as string)
+        setCropImageSrc(reader.result as string)
+        setShowCoverCropper(true)
       }
       reader.readAsDataURL(file)
     }
+    // Reset input so the same file can be selected again
+    e.target.value = ''
+  }
+
+  const handleCoverCropComplete = (croppedBlob: Blob) => {
+    // Create a File from the Blob
+    const croppedFile = new File([croppedBlob], 'cover.jpg', { type: 'image/jpeg' })
+    setCoverFile(croppedFile)
+    // Create preview URL
+    const coverPreview = URL.createObjectURL(croppedBlob)
+    setCoverPreviewUrl(coverPreview)
+    // Close cropper
+    setShowCoverCropper(false)
+    setCropImageSrc(null)
   }
 
   const uploadFile = async (file: File, bucket: string, userId: string, maxSize: number): Promise<string | null> => {
@@ -2877,6 +2913,36 @@ function SettingsContent() {
           <Box style={{ height: tokens.spacing[12] }} />
         </Box>
       </Box>
+
+      {/* Avatar Cropper Modal */}
+      {showAvatarCropper && cropImageSrc && (
+        <ImageCropper
+          imageSrc={cropImageSrc}
+          onCropComplete={handleAvatarCropComplete}
+          onCancel={() => {
+            setShowAvatarCropper(false)
+            setCropImageSrc(null)
+          }}
+          aspectRatio={1}
+          cropShape="round"
+          title={t('cropAvatar')}
+        />
+      )}
+
+      {/* Cover Cropper Modal */}
+      {showCoverCropper && cropImageSrc && (
+        <ImageCropper
+          imageSrc={cropImageSrc}
+          onCropComplete={handleCoverCropComplete}
+          onCancel={() => {
+            setShowCoverCropper(false)
+            setCropImageSrc(null)
+          }}
+          aspectRatio={3}
+          cropShape="rect"
+          title={t('cropCover')}
+        />
+      )}
 
       {/* Responsive styles */}
       <style>{`
