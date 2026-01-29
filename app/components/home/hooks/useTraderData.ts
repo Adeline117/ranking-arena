@@ -88,10 +88,15 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
   }, [activeTimeRange, on])
 
   // 加载单个时间段数据（含请求去重）
+  // 使用渐进式加载：先快速加载 50 条显示，再后台加载完整 1000 条
   const loadTimeRange = useCallback(async (timeRange: TimeRange, forceRefresh = false): Promise<CachedData> => {
     // 检查缓存（非强制刷新时）
     if (!forceRefresh && tradersCache.current.has(timeRange)) {
-      return tradersCache.current.get(timeRange) || { traders: [], lastUpdated: null, fetchedAt: 0 }
+      const cached = tradersCache.current.get(timeRange)
+      // 如果缓存数据足够多（>100条），直接返回
+      if (cached && cached.traders.length > 100) {
+        return cached
+      }
     }
 
     // 请求去重：如果有相同 key 的请求正在进行，复用该 Promise
@@ -103,8 +108,8 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
     const requestPromise = (async (): Promise<CachedData> => {
       try {
         // Feature 1: Include sort params in fetch URL
-        // 优化：初始加载 50 条以提升首屏性能 (LCP)
-        let url = `/api/traders?timeRange=${timeRange}&limit=50`
+        // 直接加载 1000 条数据以支持完整的筛选和分类功能
+        let url = `/api/traders?timeRange=${timeRange}&limit=1000`
         if (sortBy && sortBy !== 'arena_score') {
           url += `&sortBy=${sortBy}&order=${sortOrder || 'desc'}`
         }
