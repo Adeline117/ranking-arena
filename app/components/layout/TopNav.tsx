@@ -24,6 +24,27 @@ function formatUnreadBadge(count: number): string {
   return count > 99 ? '99+' : String(count)
 }
 
+const MENU_LINK_STYLE: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: tokens.spacing[2],
+  padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+  borderRadius: tokens.radius.md,
+  color: tokens.colors.text.primary,
+  textDecoration: 'none',
+  fontSize: tokens.typography.fontSize.base,
+  fontWeight: tokens.typography.fontWeight.bold,
+  transition: `all ${tokens.transition.base}`,
+}
+
+function applyMenuHoverIn(e: React.MouseEvent<HTMLAnchorElement>): void {
+  e.currentTarget.style.background = tokens.colors.bg.secondary
+}
+
+function applyMenuHoverOut(e: React.MouseEvent<HTMLAnchorElement>): void {
+  e.currentTarget.style.background = 'transparent'
+}
+
 export default function TopNav({ email }: { email: string | null }) {
   const { t } = useLanguage()
   const pathname = usePathname()
@@ -35,34 +56,12 @@ export default function TopNav({ email }: { email: string | null }) {
   const [searchQuery, setSearchQuery] = useState('')
   const [showSearchDropdown, setShowSearchDropdown] = useState(false)
   const [showMobileSearch, setShowMobileSearch] = useState(false)
-  const [_theme, setTheme] = useState<'light' | 'dark'>('dark')
   const [unreadCount, setUnreadCount] = useState(0)
   const [unreadMessageCount, setUnreadMessageCount] = useState(0)
   const menuRef = useRef<HTMLDivElement>(null)
   const searchRef = useRef<HTMLDivElement>(null)
 
   const totalUnread = unreadCount + unreadMessageCount
-
-  // 检测主题变化
-  useEffect(() => {
-    const updateTheme = () => {
-      if (typeof document !== 'undefined') {
-        const currentTheme = document.documentElement.getAttribute('data-theme') as 'light' | 'dark'
-        setTheme(currentTheme === 'light' ? 'light' : 'dark')
-      }
-    }
-    
-    updateTheme()
-    const observer = new MutationObserver(updateTheme)
-    if (typeof document !== 'undefined') {
-      observer.observe(document.documentElement, {
-        attributes: true,
-        attributeFilter: ['data-theme'],
-      })
-    }
-    
-    return () => observer.disconnect()
-  }, [])
 
   // Performance: Fetch user auth and profile/notifications/messages in parallel
   useEffect(() => {
@@ -133,58 +132,65 @@ export default function TopNav({ email }: { email: string | null }) {
     }
   }, [])
 
-  // Real-time subscription for notifications (initial fetch done in auth effect)
+  // Real-time subscriptions deferred to after idle to avoid competing with LCP
   useEffect(() => {
     if (!myId) return
 
-    const fetchUnreadCount = async () => {
-      const { count, error } = await supabase
-        .from('notifications')
-        .select('*', { count: 'exact', head: true })
-        .eq('user_id', myId)
-        .eq('read', false)
-      if (!error && typeof count === 'number') {
-        setUnreadCount(count)
+    let notifChannel: ReturnType<typeof supabase.channel> | null = null
+    let msgChannel: ReturnType<typeof supabase.channel> | null = null
+
+    const setupSubscriptions = () => {
+      const fetchUnreadCount = async () => {
+        const { count, error } = await supabase
+          .from('notifications')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', myId)
+          .eq('read', false)
+        if (!error && typeof count === 'number') {
+          setUnreadCount(count)
+        }
       }
+
+      const fetchUnreadMessageCount = async () => {
+        const { count, error } = await supabase
+          .from('direct_messages')
+          .select('*', { count: 'exact', head: true })
+          .eq('receiver_id', myId)
+          .eq('read', false)
+        if (!error && typeof count === 'number') {
+          setUnreadMessageCount(count)
+        }
+      }
+
+      notifChannel = supabase
+        .channel(`notifications:${myId}`)
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'notifications', filter: `user_id=eq.${myId}` },
+          () => fetchUnreadCount()
+        )
+        .subscribe()
+
+      msgChannel = supabase
+        .channel(`messages:${myId}`)
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'direct_messages', filter: `receiver_id=eq.${myId}` },
+          () => fetchUnreadMessageCount()
+        )
+        .subscribe()
     }
 
-    const channel = supabase
-      .channel(`notifications:${myId}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'notifications', filter: `user_id=eq.${myId}` },
-        () => fetchUnreadCount()
-      )
-      .subscribe()
+    const hasIdleCallback = typeof requestIdleCallback !== 'undefined'
+    const idleId = hasIdleCallback ? requestIdleCallback(setupSubscriptions, { timeout: 3000 }) : undefined
+    const fallbackTimer = hasIdleCallback ? undefined : setTimeout(setupSubscriptions, 2000)
 
-    return () => { supabase.removeChannel(channel) }
-  }, [myId])
-
-  // Real-time subscription for messages (initial fetch done in auth effect)
-  useEffect(() => {
-    if (!myId) return
-
-    const fetchUnreadMessageCount = async () => {
-      const { count, error } = await supabase
-        .from('direct_messages')
-        .select('*', { count: 'exact', head: true })
-        .eq('receiver_id', myId)
-        .eq('read', false)
-      if (!error && typeof count === 'number') {
-        setUnreadMessageCount(count)
-      }
+    return () => {
+      if (idleId !== undefined) cancelIdleCallback(idleId)
+      if (fallbackTimer !== undefined) clearTimeout(fallbackTimer)
+      if (notifChannel) supabase.removeChannel(notifChannel)
+      if (msgChannel) supabase.removeChannel(msgChannel)
     }
-
-    const channel = supabase
-      .channel(`messages:${myId}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'direct_messages', filter: `receiver_id=eq.${myId}` },
-        () => fetchUnreadMessageCount()
-      )
-      .subscribe()
-
-    return () => { supabase.removeChannel(channel) }
   }, [myId])
 
   useEffect(() => {
@@ -653,56 +659,23 @@ export default function TopNav({ email }: { email: string | null }) {
                     onClick={(e) => {
                       if (!myHandle) {
                         e.preventDefault()
-                        // 如果没有 handle，跳转到设置页面
                         router.push('/settings')
                       } else {
                         setShowUserMenu(false)
                       }
                     }}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: tokens.spacing[2],
-                      padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-                      borderRadius: tokens.radius.md,
-                      color: tokens.colors.text.primary,
-                      textDecoration: 'none',
-                      fontSize: tokens.typography.fontSize.base,
-                      fontWeight: tokens.typography.fontWeight.bold,
-                      transition: `all ${tokens.transition.base}`,
-                      cursor: 'pointer',
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.background = tokens.colors.bg.secondary
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = 'transparent'
-                    }}
+                    style={{ ...MENU_LINK_STYLE, cursor: 'pointer' }}
+                    onMouseEnter={applyMenuHoverIn}
+                    onMouseLeave={applyMenuHoverOut}
                   >
                     <UserIcon size={16} />
                     <span>{t('myHome')}</span>
                   </Link>
                   <Link
                     href="/inbox"
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: tokens.spacing[2],
-                      padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-                      borderRadius: tokens.radius.md,
-                      color: tokens.colors.text.primary,
-                      textDecoration: 'none',
-                      fontSize: tokens.typography.fontSize.base,
-                      fontWeight: tokens.typography.fontWeight.bold,
-                      transition: `all ${tokens.transition.base}`,
-                      position: 'relative',
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.background = tokens.colors.bg.secondary
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = 'transparent'
-                    }}
+                    style={{ ...MENU_LINK_STYLE, position: 'relative' }}
+                    onMouseEnter={applyMenuHoverIn}
+                    onMouseLeave={applyMenuHoverOut}
                     onClick={() => setShowUserMenu(false)}
                   >
                     <Box style={{ position: 'relative' }}>
@@ -734,24 +707,9 @@ export default function TopNav({ email }: { email: string | null }) {
                   </Link>
                   <Link
                     href="/settings"
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: tokens.spacing[2],
-                      padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-                      borderRadius: tokens.radius.md,
-                      color: tokens.colors.text.primary,
-                      textDecoration: 'none',
-                      fontSize: tokens.typography.fontSize.base,
-                      fontWeight: tokens.typography.fontWeight.bold,
-                      transition: `all ${tokens.transition.base}`,
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.background = tokens.colors.bg.secondary
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = 'transparent'
-                    }}
+                    style={MENU_LINK_STYLE}
+                    onMouseEnter={applyMenuHoverIn}
+                    onMouseLeave={applyMenuHoverOut}
                     onClick={() => setShowUserMenu(false)}
                   >
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
