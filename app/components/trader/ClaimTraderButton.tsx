@@ -85,7 +85,7 @@ export default function ClaimTraderButton({ traderId, handle, userId, source = '
     if (!hasConnection) {
       const goToSettings = await showConfirm(
         t('needBindExchange'),
-        `${t('needBindExchangeDesc')}\n${t('bindExchangeFirst').replace('{exchange}', source.toUpperCase())}\n${t('goToSettings')}`
+        `${t('needBindExchangeDesc')}\n${t('bindExchangeFirst').replace('{exchange}', source.toUpperCase())}\n${t('goToSettingsQuestion')}`
       )
       if (goToSettings) {
         router.push('/settings')
@@ -132,7 +132,7 @@ export default function ClaimTraderButton({ traderId, handle, userId, source = '
         if (verifyResult.needConnect) {
           const goToSettings = await showConfirm(
             t('needBindExchange'),
-            verifyResult.message + '\n' + t('goToSettings')
+            verifyResult.message + '\n' + t('goToSettingsQuestion')
           )
           if (goToSettings) {
             router.push('/settings')
