@@ -3,18 +3,21 @@
 import Link from 'next/link'
 import { useEffect, useState, useRef } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
+import dynamic from 'next/dynamic'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
 import ThemeToggle from '../ui/ThemeToggle'
 import LanguageSwitcher from '../ui/LanguageToggle'
 import SearchDropdown from '../search/SearchDropdown'
-import MobileSearchOverlay from '../search/MobileSearchOverlay'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { SearchIcon, UserIcon, NotificationIcon } from '../icons'
 import { Box } from '../base'
-import AccountSwitcher from '../ui/AccountSwitcher'
-import InboxPanel from '../inbox/InboxPanel'
 import { useInboxStore } from '@/lib/stores/inboxStore'
+
+// Lazy load non-critical components
+const MobileSearchOverlay = dynamic(() => import('../search/MobileSearchOverlay'), { ssr: false })
+const AccountSwitcher = dynamic(() => import('../ui/AccountSwitcher'), { ssr: false })
+const InboxPanel = dynamic(() => import('../inbox/InboxPanel'), { ssr: false })
 
 function formatUnreadBadge(count: number): string {
   return count > 99 ? '99+' : String(count)

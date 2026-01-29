@@ -194,7 +194,17 @@ const nextConfig: NextConfig = {
   
   // 实验性功能
   experimental: {
-    optimizePackageImports: ['@supabase/supabase-js', '@upstash/redis', '@upstash/ratelimit', 'lodash', 'date-fns'],
+    // Tree-shaking optimization for large packages
+    optimizePackageImports: [
+      '@supabase/supabase-js',
+      '@upstash/redis',
+      '@upstash/ratelimit',
+      'lodash',
+      'date-fns',
+      'lucide-react',
+      '@sentry/nextjs',
+      'zod',
+    ],
   },
   
   // 生产环境不生成 source maps（减少构建大小）

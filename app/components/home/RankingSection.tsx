@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import dynamic from 'next/dynamic'
 import { tokens } from '@/lib/design-tokens'
 import { Box } from '../base'
 import { useToast } from '../ui/Toast'
@@ -11,12 +12,28 @@ import type { TimeRange } from './hooks/useTraderData'
 import { CategoryType, filterByCategory } from '../ranking/CategoryRankingTabs'
 import { useSubscription } from './hooks/useSubscription'
 import { useLanguage } from '../Providers/LanguageProvider'
-import DataFreshnessIndicator from '../ui/DataFreshnessIndicator'
-import AdvancedFilter, { type FilterConfig, type SavedFilter } from '../premium/AdvancedFilter'
+import type { FilterConfig, SavedFilter } from '../premium/AdvancedFilter'
 import FilterPresets, { type PresetId, PRESETS } from '../ranking/FilterPresets'
-import ShareTop10Button from '../ranking/ShareTop10Button'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { getCsrfHeaders } from '@/lib/api/client'
+
+// Lazy load heavy components to reduce initial bundle
+const AdvancedFilter = dynamic(() => import('../premium/AdvancedFilter'), {
+  ssr: false,
+  loading: () => (
+    <Box style={{ padding: tokens.spacing[3], background: tokens.colors.bg.secondary, borderRadius: tokens.radius.md }}>
+      <Box className="skeleton" style={{ height: 40, borderRadius: tokens.radius.sm }} />
+    </Box>
+  ),
+})
+
+const DataFreshnessIndicator = dynamic(() => import('../ui/DataFreshnessIndicator'), {
+  ssr: false,
+})
+
+const ShareTop10Button = dynamic(() => import('../ranking/ShareTop10Button'), {
+  ssr: false,
+})
 
 interface RankingSectionProps {
   traders: Trader[]
