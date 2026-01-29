@@ -54,27 +54,28 @@ export type RiskPreference = 'conservative' | 'balanced' | 'aggressive'
 // ============================================
 
 const PORTFOLIO_CONFIG = {
-  // 不同风险偏好的参数
+  // 不同风险偏好的参数（Phase 3 spec thresholds）
   conservative: {
-    maxDrawdownThreshold: 15,     // 最大回撤阈值
-    minWinRate: 55,               // 最低胜率要求
-    minArenaScore: 50,            // 最低 Arena Score
+    maxDrawdownThreshold: 10,     // MDD < 10%
+    minWinRate: 60,               // WR > 60%
+    minArenaScore: 70,            // Score > 70
     traderCount: 5,               // 推荐交易员数量
     maxAllocation: 30,            // 单个交易员最大配比
   },
   balanced: {
-    maxDrawdownThreshold: 25,
-    minWinRate: 50,
-    minArenaScore: 40,
+    maxDrawdownThreshold: 25,     // MDD < 25%
+    minWinRate: 50,               // WR > 50%
+    minArenaScore: 50,            // Score > 50
     traderCount: 5,
     maxAllocation: 35,
   },
   aggressive: {
-    maxDrawdownThreshold: 40,
-    minWinRate: 45,
-    minArenaScore: 30,
+    maxDrawdownThreshold: 100,    // 不限 MDD
+    minWinRate: 0,                // 不限 WR，按 ROI 排序
+    minArenaScore: 0,             // 不限 Score
     traderCount: 4,
     maxAllocation: 40,
+    sortByRoi: true,              // 高风险按 ROI 最高排序
   },
 }
 
@@ -227,8 +228,11 @@ function selectOptimalTraders(
   const usedSources = new Set<string>()
   const usedSourceTypes = new Set<string>()
 
-  // 按 Arena Score 排序
-  const sorted = [...candidates].sort((a, b) => b.arena_score - a.arena_score)
+  // Aggressive sorts by ROI; others by Arena Score
+  const sortByRoi = (PORTFOLIO_CONFIG[preference] as Record<string, unknown>).sortByRoi === true
+  const sorted = [...candidates].sort((a, b) =>
+    sortByRoi ? b.roi - a.roi : b.arena_score - a.arena_score
+  )
 
   for (const trader of sorted) {
     if (selected.length >= config.traderCount) break

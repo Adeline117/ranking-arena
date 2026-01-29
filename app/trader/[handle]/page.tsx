@@ -19,6 +19,7 @@ import StatsPage from '@/app/components/trader/stats/StatsPage'
 // PinnedPost 组件已集成到 TraderFeed 中（置顶帖子自动显示在动态列表最上方）
 import PortfolioTable from '@/app/components/trader/PortfolioTable'
 // ScoreBreakdown 已整合到 OverviewPerformanceCard 中，免费展示
+import TraderReviews from '@/app/components/trader/TraderReviews'
 import { Box, Text } from '@/app/components/base'
 import { RankingSkeleton } from '@/app/components/ui/Skeleton'
 import { useSubscription } from '@/app/components/home/hooks/useSubscription'
@@ -38,7 +39,7 @@ import {
   combineSchemas,
 } from '@/lib/seo'
 
-type TabKey = 'overview' | 'stats' | 'portfolio'
+type TabKey = 'overview' | 'reviews' | 'stats' | 'portfolio'
 
 // 新数据类型
 interface AssetBreakdownData {
@@ -97,7 +98,7 @@ function TraderContent(props: { params: { handle: string } | Promise<{ handle: s
   // Read tab from URL, default to 'overview'
   const urlTab = searchParams.get('tab') as TabKey | null
   const [activeTab, setActiveTab] = useState<TabKey>(
-    urlTab && ['overview', 'stats', 'portfolio'].includes(urlTab) ? urlTab : 'overview'
+    urlTab && ['overview', 'reviews', 'stats', 'portfolio'].includes(urlTab) ? urlTab : 'overview'
   )
 
   // Update URL when tab changes
@@ -116,7 +117,7 @@ function TraderContent(props: { params: { handle: string } | Promise<{ handle: s
   // Sync with URL changes (allow all users to view stats/portfolio with blurred data)
   useEffect(() => {
     const tab = searchParams.get('tab') as TabKey | null
-    if (tab && ['overview', 'stats', 'portfolio'].includes(tab)) {
+    if (tab && ['overview', 'reviews', 'stats', 'portfolio'].includes(tab)) {
       setActiveTab(tab)
     } else if (!tab) {
       setActiveTab('overview')
@@ -236,6 +237,9 @@ function TraderContent(props: { params: { handle: string } | Promise<{ handle: s
       source: profile.source,
       followers: profile.followers,
       roi90d: performance?.roi_90d,
+      winRate: performance?.win_rate,
+      maxDrawdown: performance?.max_drawdown,
+      arenaScore: performance?.arena_score ?? undefined,
     }),
     generateBreadcrumbSchema([
       { name: '首页', url: process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org' },
@@ -351,6 +355,10 @@ function TraderContent(props: { params: { handle: string } | Promise<{ handle: s
                 {similarTraders.length > 0 && <SimilarTraders traders={similarTraders} />}
               </Box>
             </Box>
+          )}
+
+          {activeTab === 'reviews' && (
+            <TraderReviews traderId={profile.id} traderHandle={profile.handle} />
           )}
 
           {/* 用户看自己的主页不需要会员 */}
