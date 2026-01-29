@@ -6,6 +6,7 @@ import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
 import { getAvatarGradient, getAvatarInitial } from '@/lib/utils/avatar'
 import type { TraderProfile } from '@/lib/data/trader'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 interface SimilarTradersProps {
   traders: TraderProfile[]
@@ -97,7 +98,8 @@ const AnimatedAvatar = memo(function AnimatedAvatar({
 export default function SimilarTraders({ traders }: SimilarTradersProps) {
   const [mounted, setMounted] = useState(false)
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null)
-  
+  const { t } = useLanguage()
+
   useEffect(() => {
     setMounted(true)
   }, [])
@@ -128,14 +130,14 @@ export default function SimilarTraders({ traders }: SimilarTradersProps) {
         paddingBottom: tokens.spacing[3],
         borderBottom: `1px solid ${tokens.colors.border.primary}40`,
       }}>
-        <Text 
-          size="base" 
-          weight="black" 
-          style={{ 
+        <Text
+          size="base"
+          weight="black"
+          style={{
             color: tokens.colors.text.primary,
           }}
         >
-          相似交易员
+          {t('similarTraders')}
         </Text>
         <Box
           style={{
@@ -201,14 +203,14 @@ export default function SimilarTraders({ traders }: SimilarTradersProps) {
                     return handle
                   })()}
                 </Text>
-                <Text 
-                  size="xs" 
+                <Text
+                  size="xs"
                   color="tertiary"
                   style={{
                     fontWeight: tokens.typography.fontWeight.medium,
                   }}
                 >
-                  {trader.followers?.toLocaleString() || 0} 粉丝
+                  {trader.followers?.toLocaleString() || 0} {t('fans')}
                 </Text>
               </Box>
               

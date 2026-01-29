@@ -175,6 +175,8 @@ export function StatsBar() {
         marginBottom: 16,
         overflow: 'hidden',
         position: 'relative',
+        height: 30, // Fixed height to prevent CLS
+        minHeight: 30, // Ensure consistent height
         maskImage: 'linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)',
         WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)',
       }}
