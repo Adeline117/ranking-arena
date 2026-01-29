@@ -31,6 +31,7 @@ import type {
   TraderFeedItem,
 } from '@/lib/data/trader'
 import { JsonLd } from '@/app/components/Providers/JsonLd'
+import { TraderPageStylesheets } from '@/app/components/Providers/AsyncStylesheets'
 import {
   generateTraderProfilePageSchema,
   generateBreadcrumbSchema,
@@ -254,7 +255,10 @@ function TraderContent(props: { params: { handle: string } | Promise<{ handle: s
     >
       {/* 结构化数据（JSON-LD） */}
       {structuredData && <JsonLd data={structuredData} />}
-      
+
+      {/* Load trader-specific animations CSS only on this page */}
+      <TraderPageStylesheets />
+
       <TopNav email={email} />
 
       <Box className="page-container" style={{ maxWidth: 1200, margin: '0 auto', padding: tokens.spacing[6], paddingBottom: 100 }}>
