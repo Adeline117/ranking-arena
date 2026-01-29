@@ -213,6 +213,13 @@ const nextConfig: NextConfig = {
       'lucide-react',
       '@sentry/nextjs',
       'zod',
+      'zustand',
+      'swr',
+      'isomorphic-dompurify',
+      'html2canvas',
+      'react-easy-crop',
+      'otpauth',
+      'lightweight-charts',
     ],
 
     // Enable optimized CSS loading

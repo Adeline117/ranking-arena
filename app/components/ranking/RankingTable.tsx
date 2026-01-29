@@ -137,6 +137,9 @@ function RankingTableInner(props: {
   } = props
   const { t, language } = useLanguage()
 
+  // Load ranking-table.css asynchronously (animations, hover effects)
+  useRankingTableStyles()
+
   const [, startTransition] = useTransition()
 
   const [internalPage, setInternalPage] = useState(1)
