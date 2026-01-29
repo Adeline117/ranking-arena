@@ -395,19 +395,25 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
               try {
                 const { data: userSettings } = await supabase
                   .from('user_profiles')
-                  .select('show_pro_badge')
+                  .select('show_pro_badge, subscription_tier')
                   .eq('id', profileData.id)
                   .maybeSingle()
 
                 if (userSettings?.show_pro_badge !== false) {
+                  // 优先检查 subscriptions 表
                   const { data: subscription } = await supabase
                     .from('subscriptions')
                     .select('tier, status')
                     .eq('user_id', profileData.id)
-                    .eq('status', 'active')
+                    .in('status', ['active', 'trialing'])
+                    .order('created_at', { ascending: false })
+                    .limit(1)
                     .maybeSingle()
 
                   if (subscription && subscription.tier === 'pro') {
+                    setProBadgeTier('pro')
+                  } else if (userSettings?.subscription_tier === 'pro') {
+                    // 备用：检查 user_profiles.subscription_tier（webhook 可能有延迟）
                     setProBadgeTier('pro')
                   }
                 }
