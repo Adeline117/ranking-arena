@@ -293,7 +293,7 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
       try {
         const { data: groupData, error: groupErr } = await supabase
           .from('groups')
-          .select('id, name, name_en, description, description_en, avatar_url, member_count, created_at, created_by, rules, rules_json, is_premium_only')
+          .select('id, name, name_en, description, description_en, avatar_url, member_count, created_at, created_by, rules, is_premium_only')
           .eq('id', groupId)
           .maybeSingle()
 

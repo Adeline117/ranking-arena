@@ -246,12 +246,12 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
         setProfile(null)
         setLoadError(true)
         setLoading(false)
-        showToast(isZh ? '加载用户数据失败' : 'Failed to load user data', 'error')
+        showToast(t('loadUserDataFailed'), 'error')
       }
     }
 
     load()
-  }, [handle, isZh, showToast])
+  }, [handle, t, showToast])
 
   if (loading) {
     return (
@@ -270,10 +270,10 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
         <TopNav email={email} />
         <Box style={{ maxWidth: 1200, margin: '0 auto', padding: tokens.spacing[6], textAlign: 'center' }}>
           <Text size="xl" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>
-            {isZh ? '加载失败' : 'Failed to Load'}
+            {t('failedToLoad')}
           </Text>
           <Text size="sm" color="tertiary" style={{ marginBottom: tokens.spacing[4] }}>
-            {isZh ? '无法加载用户数据，请检查网络后重试' : 'Unable to load user data. Please check your network and try again.'}
+            {t('unableToLoadUserData')}
           </Text>
           <button
             onClick={() => window.location.reload()}
@@ -287,7 +287,7 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
               fontWeight: 600,
             }}
           >
-            {isZh ? '重试' : 'Retry'}
+            {t('retry')}
           </button>
         </Box>
       </Box>
@@ -321,7 +321,7 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
             @{handle}
           </Text>
           <Text size="sm" color="tertiary" style={{ marginBottom: tokens.spacing[4] }}>
-            {isZh ? '该用户尚未在平台注册' : 'This user has not registered on the platform'}
+            {t('userNotRegistered')}
           </Text>
           <Link
             href="/"
@@ -331,7 +331,7 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
               fontSize: tokens.typography.fontSize.sm,
             }}
           >
-            ← {isZh ? '返回首页' : 'Back to Home'}
+            ← {t('backToHome')}
           </Link>
         </Box>
       </Box>
@@ -499,7 +499,7 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
                       borderRadius: tokens.radius.full,
                       boxShadow: `0 2px 8px ${tokens.colors.accent.success}40`,
                     }}
-                    title={isZh ? '已认证用户' : 'Verified User'}
+                    title={t('verifiedUser')}
                   >
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                       <polyline points="20 6 9 17 4 12" />
@@ -681,7 +681,7 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
           <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[6] }}>
             <Box bg="secondary" p={4} radius="lg" border="primary">
               <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: tokens.spacing[4] }}>
-                <Text size="lg" weight="black">{isZh ? '动态' : 'Posts'}</Text>
+                <Text size="lg" weight="black">{t('posts')}</Text>
                 {isOwnProfile && (
                   <button
                     onClick={() => router.push(`/u/${handle}/new`)}
@@ -696,7 +696,7 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
                       cursor: 'pointer',
                     }}
                   >
-                    {isZh ? '发动态' : 'New Post'}
+                    {t('newPost')}
                   </button>
                 )}
               </Box>
