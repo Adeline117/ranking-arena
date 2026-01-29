@@ -214,6 +214,12 @@ const nextConfig: NextConfig = {
       '@sentry/nextjs',
       'zod',
     ],
+
+    // Enable optimized CSS loading
+    optimizeCss: true,
+
+    // Optimize font loading
+    optimizeServerReact: true,
   },
   
   // 生产环境不生成 source maps（减少构建大小）

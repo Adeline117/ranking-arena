@@ -112,6 +112,12 @@ export default function RootLayout({
           />
         ))}
 
+        {/* Preload critical API endpoint for faster data fetch */}
+        <link rel="preconnect" href={process.env.NEXT_PUBLIC_APP_URL || "https://www.arenafi.org"} />
+
+        {/* Preload critical fonts to prevent layout shift */}
+        <link rel="preload" href="/_next/static/media/inter-latin-400.woff2" as="font" type="font/woff2" crossOrigin="anonymous" />
+
         {/* Non-critical CSS loaded via AsyncStylesheets component after hydration */}
         <noscript>
           <link rel="stylesheet" href="/styles/responsive.css" />

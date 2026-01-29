@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
-import { ThumbsUpIcon, ThumbsDownIcon, CommentIcon } from '../../icons'
+import { ThumbsUpIcon, ThumbsDownIcon, CommentIcon } from '../../ui/icons'
 import { formatTimeAgo } from '@/lib/utils/date'
 import { renderContentWithLinks, ARENA_PURPLE, truncateText } from '@/lib/utils/content'
 import { type PollChoice, type PostWithUserState, getPollWinner } from '@/lib/types'

@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
-import { CloseIcon } from '../icons'
+import { CloseIcon } from '../ui/icons'
 import SearchDropdown from './SearchDropdown'
 
 interface MobileSearchOverlayProps {

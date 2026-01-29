@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { ThumbsUpIcon, ThumbsDownIcon } from '../icons'
+import { ThumbsUpIcon, ThumbsDownIcon } from '../ui/icons'
 import { tokens } from '@/lib/design-tokens'
 
 export interface VoteData {

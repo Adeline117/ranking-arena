@@ -19,7 +19,7 @@ import StatsBar from './StatsBar' // Direct import - small component, no need fo
 import { useTraderData, useAuth } from './hooks'
 import type { Trader } from '../ranking/RankingTable'
 import type { TimeRange } from './hooks/useTraderData'
-import type { InitialTrader } from '@/lib/server/getInitialTraders'
+import type { InitialTrader } from '@/lib/getInitialTraders'
 
 // Props interface for server-side data
 interface HomePageProps {
@@ -108,6 +108,7 @@ export default function HomePage({ initialTraders, initialLastUpdated }: HomePag
     >
       {/* Background mesh gradient - 优化渲染性能 */}
       <Box
+        className="mesh-gradient-bg"
         style={{
           position: 'fixed',
           inset: 0,
@@ -115,8 +116,9 @@ export default function HomePage({ initialTraders, initialLastUpdated }: HomePag
           opacity: 0.5,
           pointerEvents: 'none',
           zIndex: 0,
-          willChange: 'auto',
-          contain: 'strict',
+          transform: 'translateZ(0)', // Force GPU acceleration
+          backfaceVisibility: 'hidden', // Reduce paint
+          contain: 'strict layout paint', // Improved containment
         }}
       />
       
@@ -143,9 +145,9 @@ export default function HomePage({ initialTraders, initialLastUpdated }: HomePag
           {/* 数据来源滚动展示 */}
           <StatsBar />
 
-          {/* 响应式三栏布局 */}
+          {/* 响应式三栏布局 - Removed stagger-children for better LCP */}
           <Box
-            className="main-grid stagger-children"
+            className="main-grid"
           >
             {/* 左侧：热门讨论（仅桌面端显示，1024px+） */}
             <Box className="hide-tablet">

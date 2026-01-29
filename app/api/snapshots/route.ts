@@ -15,7 +15,7 @@ import { withAuth } from '@/lib/api/middleware'
 import { normalizeSubscriptionTier } from '@/lib/types/premium'
 import type { TimeRange } from '@/lib/types/trader'
 import { createLogger } from '@/lib/utils/logger'
-import { query } from '@/lib/db/pool'
+import { query } from '@/lib/db'
 
 const logger = createLogger('snapshots-api')
 

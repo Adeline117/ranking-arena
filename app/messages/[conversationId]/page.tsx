@@ -17,10 +17,10 @@ import {
   refreshAuthToken,
   resolveErrorCode,
   getErrorMessage,
-} from '@/lib/auth/client'
+} from '@/lib/auth'
 import { useRealtime } from '@/lib/hooks/useRealtime'
-import ChatSettingsDrawer from '@/app/components/Features/ChatSettingsDrawer'
-import ChatSearchOverlay from '@/app/components/Features/ChatSearchOverlay'
+import ChatSettingsDrawer from '@/app/components/features/ChatSettingsDrawer'
+import ChatSearchOverlay from '@/app/components/features/ChatSearchOverlay'
 
 type MessageStatus = 'sending' | 'sent' | 'failed'
 

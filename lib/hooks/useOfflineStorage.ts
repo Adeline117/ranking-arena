@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { drafts, cache, pendingActions, recentlyViewed, initOfflineStorage } from '../storage/indexedDB'
+import { drafts, cache, pendingActions, recentlyViewed, initOfflineStorage } from '../indexedDB'
 
 /**
  * Hook for managing draft posts/comments

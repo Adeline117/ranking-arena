@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
-import { formatRelativeTime, getFreshnessLevel } from '@/lib/adapters/leaderboard-adapter'
+import { formatRelativeTime, getFreshnessLevel } from '@/lib/leaderboard-adapter'
 import { useTraderRefresh, buildTraderId } from '@/lib/hooks/useLeaderboard'
 import type { Platform } from '@/lib/types/leaderboard'
 

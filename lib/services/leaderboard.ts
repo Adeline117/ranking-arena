@@ -9,7 +9,7 @@
  * - Trader detail: <200ms (parallel queries)
  */
 
-import { query, queryOne } from '@/lib/db/pool';
+import { query, queryOne } from '@/lib/db';
 import type {
   Platform,
   GranularPlatform,

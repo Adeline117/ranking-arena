@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { tokens } from '@/lib/design-tokens'
-import { ThumbsUpIcon, ThumbsDownIcon, CommentIcon } from '../icons'
+import { ThumbsUpIcon, ThumbsDownIcon, CommentIcon } from '../ui/icons'
 import { useLanguage } from '../Providers/LanguageProvider'
 // Note: supabase import removed - using REST API instead
 import { formatTimeAgo } from '@/lib/utils/date'
@@ -18,7 +18,7 @@ import { useUnifiedAuth } from '@/lib/hooks/useUnifiedAuth'
 import { usePostStore, type PostData } from '@/lib/stores/postStore'
 import { renderContentWithLinks, ARENA_PURPLE } from '@/lib/utils/content'
 import { usePostComments, type Comment } from './hooks/usePostComments'
-import { SectionErrorBoundary } from '../Utils/ErrorBoundary'
+import { SectionErrorBoundary } from '../utils/ErrorBoundary'
 import { PostSkeleton } from '../ui/Skeleton'
 
 // 本地类型（扩展后端类型）

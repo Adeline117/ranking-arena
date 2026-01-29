@@ -141,6 +141,7 @@ export default function RankingSection({
 
   // Debounce ref for URL sync
   const syncTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [isPending, startTransition] = useTransition()
 
   // Feature 8: Sync all state to URL via replaceState (debounced for performance)
   const syncStateToUrl = useCallback((overrides: {
@@ -156,8 +157,10 @@ export default function RankingSection({
       clearTimeout(syncTimeoutRef.current)
     }
 
-    // Debounce URL sync to reduce INP
+    // Debounce URL sync to reduce INP (increased from 150ms to 300ms)
     syncTimeoutRef.current = setTimeout(() => {
+      // Wrap in startTransition to mark as non-urgent update
+      startTransition(() => {
       const params = new URLSearchParams(window.location.search)
       const config = overrides.config ?? filterConfig
 
@@ -188,10 +191,11 @@ export default function RankingSection({
       if (q) params.set('q', q)
       if (preset) params.set('preset', preset)
 
-      const qs = params.toString()
-      const newUrl = qs ? `${window.location.pathname}?${qs}` : window.location.pathname
-      window.history.replaceState(null, '', newUrl)
-    }, 150) // 150ms debounce
+        const qs = params.toString()
+        const newUrl = qs ? `${window.location.pathname}?${qs}` : window.location.pathname
+        window.history.replaceState(null, '', newUrl)
+      })
+    }, 300) // 300ms debounce (increased for better INP)
   }, [filterConfig, sortColumn, sortDir, currentPage, searchQuery, activePreset])
 
   // Keep backward compatibility for syncFilterToUrl
