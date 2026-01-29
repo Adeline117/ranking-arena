@@ -114,8 +114,7 @@ export async function requireAuth(request: NextRequest): Promise<User> {
   const user = await getAuthUser(request)
   
   if (!user) {
-    const error = new Error('未授权')
-    ;(error as any).statusCode = 401
+    const error = Object.assign(new Error('未授权'), { statusCode: 401 })
     throw error
   }
   

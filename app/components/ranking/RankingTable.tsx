@@ -40,6 +40,7 @@ const COLUMN_LABELS: Record<ColumnKey, { zh: string; en: string }> = {
 }
 const LS_KEY_COLUMNS = 'ranking-visible-columns'
 const LS_KEY_VIEW_MODE = 'ranking-view-mode'
+const LS_KEY_VIEW_MANUAL = 'ranking-view-manual'
 
 // View mode type
 export type ViewMode = 'table' | 'card'
@@ -51,6 +52,11 @@ function getStoredViewMode(): ViewMode {
     if (stored === 'table' || stored === 'card') return stored
   } catch { /* ignore */ }
   return 'table'
+}
+
+function getStoredManualFlag(): boolean {
+  if (typeof window === 'undefined') return false
+  try { return localStorage.getItem(LS_KEY_VIEW_MANUAL) === 'true' } catch { return false }
 }
 
 function getStoredColumns(): ColumnKey[] {
@@ -82,6 +88,7 @@ export interface Trader {
   return_score?: number
   drawdown_score?: number
   stability_score?: number
+  score_confidence?: 'full' | 'partial' | 'minimal' | null
   rank_change?: number | null
   is_new?: boolean
   also_on?: string[]
@@ -158,12 +165,33 @@ function RankingTableInner(props: {
 
   useEffect(() => {
     setVisibleColumns(getStoredColumns())
-    setViewMode(getStoredViewMode())
+
+    // Mobile auto-switch: respect manual choice, otherwise follow screen width
+    const isManual = getStoredManualFlag()
+    if (isManual) {
+      setViewMode(getStoredViewMode())
+    } else {
+      const isMobile = window.matchMedia('(max-width: 767px)').matches
+      setViewMode(isMobile ? 'card' : 'table')
+    }
+
+    // Auto-switch on resize when user hasn't manually chosen
+    const mql = window.matchMedia('(max-width: 767px)')
+    const handleResize = (e: MediaQueryListEvent) => {
+      if (!getStoredManualFlag()) {
+        setViewMode(e.matches ? 'card' : 'table')
+      }
+    }
+    mql.addEventListener('change', handleResize)
+    return () => mql.removeEventListener('change', handleResize)
   }, [])
 
   const toggleViewMode = (mode: ViewMode) => {
     setViewMode(mode)
-    try { localStorage.setItem(LS_KEY_VIEW_MODE, mode) } catch { /* ignore */ }
+    try {
+      localStorage.setItem(LS_KEY_VIEW_MODE, mode)
+      localStorage.setItem(LS_KEY_VIEW_MANUAL, 'true')
+    } catch { /* ignore */ }
   }
 
   const toggleColumn = (col: ColumnKey) => {
@@ -304,22 +332,18 @@ function RankingTableInner(props: {
           {/* Tool buttons */}
           <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1], flexShrink: 0 }}>
             {/* View toggle */}
-            <Box style={{ display: 'flex', alignItems: 'center', borderRadius: tokens.radius.md, border: '1px solid var(--color-border-secondary)', overflow: 'hidden' }}>
-              <button onClick={() => toggleViewMode('table')} title={language === 'en' ? 'Table View' : '表格视图'} className="touch-target-sm"
-                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '4px 8px', height: 26, background: viewMode === 'table' ? 'var(--color-pro-glow)' : 'var(--color-bg-tertiary)', border: 'none', borderRight: '1px solid var(--color-border-secondary)', color: viewMode === 'table' ? 'var(--color-pro-gradient-start)' : 'var(--color-text-tertiary)', cursor: 'pointer', transition: 'all 0.2s' }}>
+            <Box className="view-toggle-group">
+              <button onClick={() => toggleViewMode('table')} title={language === 'en' ? 'Table View' : '表格视图'} className={`view-toggle-btn touch-target-sm${viewMode === 'table' ? ' view-toggle-active' : ''}`}>
                 <TableViewIcon size={12} />
               </button>
-              <button onClick={() => toggleViewMode('card')} title={language === 'en' ? 'Card View' : '卡片视图'} className="touch-target-sm"
-                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '4px 8px', height: 26, background: viewMode === 'card' ? 'var(--color-pro-glow)' : 'var(--color-bg-tertiary)', border: 'none', color: viewMode === 'card' ? 'var(--color-pro-gradient-start)' : 'var(--color-text-tertiary)', cursor: 'pointer', transition: 'all 0.2s' }}>
+              <button onClick={() => toggleViewMode('card')} title={language === 'en' ? 'Card View' : '卡片视图'} className={`view-toggle-btn touch-target-sm${viewMode === 'card' ? ' view-toggle-active' : ''}`}>
                 <CardViewIcon size={12} />
               </button>
             </Box>
 
             {/* Filter button */}
-            <Box onClick={onFilterToggle} title={language === 'en' ? 'Advanced Filter' : '高级筛选'} className="touch-target-sm"
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3, padding: '4px 8px', height: 26, borderRadius: tokens.radius.md, position: 'relative', background: hasActiveFilters ? 'var(--color-pro-glow)' : 'var(--color-bg-tertiary)', border: hasActiveFilters ? '1px solid var(--color-pro-gradient-start)' : '1px solid var(--color-border-secondary)', color: hasActiveFilters ? 'var(--color-pro-gradient-start)' : 'var(--color-text-secondary)', cursor: 'pointer', transition: 'all 0.2s', fontSize: 11 }}
-              onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--color-pro-gradient-start)'; e.currentTarget.style.color = 'var(--color-pro-gradient-start)'; e.currentTarget.style.background = 'var(--color-pro-glow)' }}
-              onMouseLeave={(e) => { e.currentTarget.style.borderColor = hasActiveFilters ? 'var(--color-pro-gradient-start)' : 'var(--color-border-secondary)'; e.currentTarget.style.color = hasActiveFilters ? 'var(--color-pro-gradient-start)' : 'var(--color-text-secondary)'; e.currentTarget.style.background = hasActiveFilters ? 'var(--color-pro-glow)' : 'var(--color-bg-tertiary)' }}
+            <Box onClick={onFilterToggle} title={language === 'en' ? 'Advanced Filter' : '高级筛选'} className={`toolbar-btn touch-target-sm${hasActiveFilters ? ' toolbar-btn-active' : ''}`}
+              style={{ position: 'relative' }}
             >
               <FilterIcon size={11} />
               <span>{language === 'zh' ? '筛选' : 'Filter'}</span>
@@ -330,10 +354,7 @@ function RankingTableInner(props: {
             </Box>
 
             {/* Compare button */}
-            <Link href="/compare" title={language === 'en' ? 'Compare Traders' : '交易员对比'} className="touch-target-sm"
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3, padding: '4px 8px', height: 26, borderRadius: tokens.radius.md, background: 'var(--color-bg-tertiary)', border: '1px solid var(--color-border-secondary)', color: 'var(--color-text-secondary)', textDecoration: 'none', cursor: 'pointer', transition: 'all 0.2s', fontSize: 11 }}
-              onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--color-pro-gradient-start)'; e.currentTarget.style.color = 'var(--color-pro-gradient-start)'; e.currentTarget.style.background = 'var(--color-pro-glow)' }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--color-bg-tertiary)'; e.currentTarget.style.borderColor = 'var(--color-border-secondary)'; e.currentTarget.style.color = 'var(--color-text-secondary)' }}
+            <Link href="/compare" title={language === 'en' ? 'Compare Traders' : '交易员对比'} className="toolbar-btn touch-target-sm"
             >
               <CompareIcon size={11} />
               <span>{language === 'zh' ? '对比' : 'Compare'}</span>
@@ -342,8 +363,7 @@ function RankingTableInner(props: {
 
             {/* Column settings */}
             <Box style={{ position: 'relative' }}>
-              <Box onClick={() => setShowColumnSettings(!showColumnSettings)} title={language === 'en' ? 'Column Settings' : '列设置'} className="touch-target-sm"
-                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3, padding: '4px 8px', height: 26, borderRadius: tokens.radius.md, background: showColumnSettings ? 'var(--color-pro-glow)' : 'var(--color-bg-tertiary)', border: showColumnSettings ? '1px solid var(--color-pro-gradient-start)' : '1px solid var(--color-border-secondary)', color: showColumnSettings ? 'var(--color-pro-gradient-start)' : 'var(--color-text-secondary)', cursor: 'pointer', transition: 'all 0.2s', fontSize: 11 }}>
+              <Box onClick={() => setShowColumnSettings(!showColumnSettings)} title={language === 'en' ? 'Column Settings' : '列设置'} className={`toolbar-btn touch-target-sm${showColumnSettings ? ' toolbar-btn-active' : ''}`}>
                 <SettingsIcon size={11} />
               </Box>
               {showColumnSettings && (
@@ -397,26 +417,20 @@ function RankingTableInner(props: {
         <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
           <Text size="sm" weight="bold" color="tertiary" style={{ textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap', fontSize: '12px' }}>{t('trader')}</Text>
           <button onClick={() => setShowRules(!showRules)}
-            style={{ background: 'transparent', border: `1px solid ${tokens.colors.border.primary}`, borderRadius: tokens.radius.full, width: 18, height: 18, fontSize: 11, color: tokens.colors.text.tertiary, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, transition: `all ${tokens.transition.fast}`, flexShrink: 0 }}
-            onMouseEnter={(e) => { e.currentTarget.style.borderColor = tokens.colors.accent.primary; e.currentTarget.style.color = tokens.colors.accent.primary; e.currentTarget.style.transform = 'scale(1.1)' }}
-            onMouseLeave={(e) => { e.currentTarget.style.borderColor = tokens.colors.border.primary; e.currentTarget.style.color = tokens.colors.text.tertiary; e.currentTarget.style.transform = 'scale(1)' }}
+            className="info-btn-circle"
             title="排名规则"
           >?</button>
         </Box>
-        <Box className={`col-score ${sortColumn === 'score' ? 'active' : ''} ${justSortedColumn === 'score' ? 'just-sorted' : ''}`} as="button" onClick={() => handleSort('score')} title={language === 'zh' ? 'Arena Score: 综合评分 (0-100)' : 'Arena Score: Overall rating (0-100)'} data-sortable
-          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, background: 'none', border: 'none', padding: 0, cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap', fontSize: '12px', fontWeight: 700, color: sortColumn === 'score' ? tokens.colors.accent.primary : tokens.colors.text.tertiary, transition: 'color 0.2s' }}>
+        <Box className={`col-score sort-header sort-header-center${sortColumn === 'score' ? ' sort-header-active' : ''} ${justSortedColumn === 'score' ? 'just-sorted' : ''}`} as="button" onClick={() => handleSort('score')} title={language === 'zh' ? 'Arena Score: 综合评分 (0-100)' : 'Arena Score: Overall rating (0-100)'} data-sortable>
           Score <SortIndicator active={sortColumn === 'score'} dir={sortDir} />
         </Box>
-        <Box className={`roi-cell ${sortColumn === 'roi' ? 'active' : ''} ${justSortedColumn === 'roi' ? 'just-sorted' : ''}`} as="button" onClick={() => handleSort('roi')} title={language === 'zh' ? `ROI: 投资回报率 (${timeRange})` : `ROI: Return on Investment (${timeRange})`} data-sortable
-          style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4, background: 'none', border: 'none', padding: 0, cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap', fontSize: '12px', fontWeight: 700, color: sortColumn === 'roi' ? tokens.colors.accent.primary : tokens.colors.text.tertiary, transition: 'color 0.2s' }}>
+        <Box className={`roi-cell sort-header sort-header-end${sortColumn === 'roi' ? ' sort-header-active' : ''} ${justSortedColumn === 'roi' ? 'just-sorted' : ''}`} as="button" onClick={() => handleSort('roi')} title={language === 'zh' ? `ROI: 投资回报率 (${timeRange})` : `ROI: Return on Investment (${timeRange})`} data-sortable>
           ROI <SortIndicator active={sortColumn === 'roi'} dir={sortDir} />
         </Box>
-        <Box className={`col-winrate ${sortColumn === 'winrate' ? 'active' : ''} ${justSortedColumn === 'winrate' ? 'just-sorted' : ''}`} as="button" onClick={() => handleSort('winrate')} title={language === 'zh' ? 'Win%: 胜率' : 'Win%: Win Rate'} data-sortable
-          style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4, background: 'none', border: 'none', padding: 0, cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap', fontSize: '12px', fontWeight: 700, color: sortColumn === 'winrate' ? tokens.colors.accent.primary : tokens.colors.text.tertiary, transition: 'color 0.2s' }}>
+        <Box className={`col-winrate sort-header sort-header-end${sortColumn === 'winrate' ? ' sort-header-active' : ''} ${justSortedColumn === 'winrate' ? 'just-sorted' : ''}`} as="button" onClick={() => handleSort('winrate')} title={language === 'zh' ? 'Win%: 胜率' : 'Win%: Win Rate'} data-sortable>
           Win% <SortIndicator active={sortColumn === 'winrate'} dir={sortDir} />
         </Box>
-        <Box className={`col-mdd ${sortColumn === 'mdd' ? 'active' : ''} ${justSortedColumn === 'mdd' ? 'just-sorted' : ''}`} as="button" onClick={() => handleSort('mdd')} title={language === 'zh' ? 'MDD: 最大回撤' : 'MDD: Max Drawdown'} data-sortable
-          style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4, background: 'none', border: 'none', padding: 0, cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap', fontSize: '12px', fontWeight: 700, color: sortColumn === 'mdd' ? tokens.colors.accent.primary : tokens.colors.text.tertiary, transition: 'color 0.2s' }}>
+        <Box className={`col-mdd sort-header sort-header-end${sortColumn === 'mdd' ? ' sort-header-active' : ''} ${justSortedColumn === 'mdd' ? 'just-sorted' : ''}`} as="button" onClick={() => handleSort('mdd')} title={language === 'zh' ? 'MDD: 最大回撤' : 'MDD: Max Drawdown'} data-sortable>
           MDD <SortIndicator active={sortColumn === 'mdd'} dir={sortDir} />
         </Box>
       </Box>
@@ -440,9 +454,7 @@ function RankingTableInner(props: {
             </span>
           </div>
           <button onClick={() => setShowScoreRulesModal(true)}
-            style={{ marginTop: 12, padding: '6px 14px', fontSize: tokens.typography.fontSize.xs, fontWeight: tokens.typography.fontWeight.bold, color: tokens.colors.accent.primary, background: `${tokens.colors.accent.primary}15`, border: `1px solid ${tokens.colors.accent.primary}30`, borderRadius: tokens.radius.md, cursor: 'pointer', transition: tokens.transition.base, display: 'inline-flex', alignItems: 'center', gap: 4 }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = `${tokens.colors.accent.primary}25`; e.currentTarget.style.borderColor = `${tokens.colors.accent.primary}50` }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = `${tokens.colors.accent.primary}15`; e.currentTarget.style.borderColor = `${tokens.colors.accent.primary}30` }}>
+            className="detail-btn">
             详细
           </button>
         </Box>
@@ -457,9 +469,8 @@ function RankingTableInner(props: {
           <Text size="md" color="secondary">{error}</Text>
           {onRetry && (
             <button onClick={onRetry}
-              style={{ padding: `${tokens.spacing[2]} ${tokens.spacing[5]}`, background: `${tokens.colors.accent.primary}20`, border: `1px solid ${tokens.colors.accent.primary}40`, borderRadius: tokens.radius.md, color: tokens.colors.accent.primary, cursor: 'pointer', fontSize: tokens.typography.fontSize.sm, fontWeight: tokens.typography.fontWeight.bold, transition: `all ${tokens.transition.base}` }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = `${tokens.colors.accent.primary}30` }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = `${tokens.colors.accent.primary}20` }}>
+              className="retry-btn"
+              style={{ padding: `${tokens.spacing[2]} ${tokens.spacing[5]}`, background: `${tokens.colors.accent.primary}20`, border: `1px solid ${tokens.colors.accent.primary}40`, borderRadius: tokens.radius.md, color: tokens.colors.accent.primary, cursor: 'pointer', fontSize: tokens.typography.fontSize.sm, fontWeight: tokens.typography.fontWeight.bold, transition: `all ${tokens.transition.base}` }}>
               {t('retry') || '重试'}
             </button>
           )}

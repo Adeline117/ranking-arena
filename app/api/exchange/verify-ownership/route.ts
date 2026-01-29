@@ -128,21 +128,23 @@ export async function POST(req: NextRequest) {
         verified: true,
         message: '账号验证成功',
       })
-    } catch (verifyError: any) {
+    } catch (verifyError: unknown) {
       console.error('[verify-ownership] 验证失败:', verifyError)
+      const msg = verifyError instanceof Error ? verifyError.message : '无法验证账号所有权，请检查您的API凭证是否正确。'
       return NextResponse.json(
         { 
           error: '账号验证失败',
           verified: false,
-          message: verifyError.message || '无法验证账号所有权，请检查您的API凭证是否正确。'
+          message: msg
         },
         { status: 400 }
       )
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[verify-ownership] 错误:', error)
+    const message = error instanceof Error ? error.message : '验证失败'
     return NextResponse.json(
-      { error: error.message || '验证失败' },
+      { error: message },
       { status: 500 }
     )
   }

@@ -148,7 +148,7 @@ export const TraderRow = memo(function TraderRow({
               {(() => {
                 const info = parseSourceInfo(trader.source || source || '')
                 return (
-                  <Box style={{ padding: '2px 6px', borderRadius: tokens.radius.sm, background: `${info.typeColor}15`, border: `1px solid ${info.typeColor}30` }}>
+                  <Box className="source-tag" style={{ background: `${info.typeColor}15`, border: `1px solid ${info.typeColor}30` }}>
                     <Text size="xs" weight="bold" style={{ color: info.typeColor, fontSize: '10px', lineHeight: 1.2 }}>
                       {info.type}
                     </Text>

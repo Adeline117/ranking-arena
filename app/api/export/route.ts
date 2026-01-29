@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
     // 未登录用户限制导出数量
     const actualLimit = isLoggedIn ? limit : Math.min(limit, 50)
 
-    let data: any[] = []
+    let data: Record<string, unknown>[] = []
 
     if (type === 'traders') {
       // 获取最新快照时间
@@ -186,10 +186,11 @@ export async function GET(request: NextRequest) {
         'Content-Disposition': `attachment; filename="${type}_${source}_${new Date().toISOString().split('T')[0]}.csv"`,
       },
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[export] Error:', error)
+    const message = error instanceof Error ? error.message : 'Export failed'
     return NextResponse.json(
-      { error: error?.message || 'Export failed' },
+      { error: message },
       { status: 500 }
     )
   }

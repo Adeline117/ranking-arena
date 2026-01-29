@@ -14,8 +14,10 @@ import {
   calculateOverallScore,
   calculateMomentumBonus,
   rankByArenaScore,
+  getScoreConfidence,
   ARENA_CONFIG,
   type TraderScoreInput,
+  type ScoreConfidence,
 } from '../arena-score'
 
 // ============================================
@@ -150,9 +152,10 @@ describe('calculateDrawdownScore', () => {
     expect(score).toBeCloseTo(4, 1)
   })
 
-  test('null 回撤得中等分数', () => {
+  test('null 回撤使用默认中位值 -20%', () => {
     const score = calculateDrawdownScore(null, '30D')
-    expect(score).toBe(ARENA_CONFIG.MAX_DRAWDOWN_SCORE * 0.5)
+    // MDD=-20, threshold=30: 8 * (1 - 20/30) = 8 * 0.333 ≈ 2.67
+    expect(score).toBeCloseTo(2.67, 1)
   })
 
   test('负数回撤（取绝对值）正确计算', () => {
@@ -183,9 +186,10 @@ describe('calculateStabilityScore', () => {
     expect(score).toBeCloseTo(3.5, 1)
   })
 
-  test('null 胜率得中等分数', () => {
+  test('null 胜率使用默认中位值 50%', () => {
     const score = calculateStabilityScore(null, '30D')
-    expect(score).toBe(ARENA_CONFIG.MAX_STABILITY_SCORE * 0.5)
+    // WR=50, baseline=45, cap=68: 7 * (50-45)/(68-45) = 7 * 5/23 ≈ 1.52
+    expect(score).toBeCloseTo(1.52, 1)
   })
 })
 
@@ -195,22 +199,22 @@ describe('calculateStabilityScore', () => {
 
 describe('meetsThreshold', () => {
   test('7D 门槛检查', () => {
-    expect(meetsThreshold(200, '7D')).toBe(false)
-    expect(meetsThreshold(300, '7D')).toBe(false) // 边界，不满足 >
-    expect(meetsThreshold(301, '7D')).toBe(true)
+    expect(meetsThreshold(100, '7D')).toBe(false)
+    expect(meetsThreshold(200, '7D')).toBe(false) // 边界，不满足 >
+    expect(meetsThreshold(201, '7D')).toBe(true)
     expect(meetsThreshold(500, '7D')).toBe(true)
   })
 
   test('30D 门槛检查', () => {
-    expect(meetsThreshold(900, '30D')).toBe(false)
-    expect(meetsThreshold(1000, '30D')).toBe(false)
-    expect(meetsThreshold(1001, '30D')).toBe(true)
+    expect(meetsThreshold(400, '30D')).toBe(false)
+    expect(meetsThreshold(500, '30D')).toBe(false)
+    expect(meetsThreshold(501, '30D')).toBe(true)
   })
 
   test('90D 门槛检查', () => {
-    expect(meetsThreshold(2500, '90D')).toBe(false)
-    expect(meetsThreshold(3000, '90D')).toBe(false)
-    expect(meetsThreshold(3001, '90D')).toBe(true)
+    expect(meetsThreshold(800, '90D')).toBe(false)
+    expect(meetsThreshold(1000, '90D')).toBe(false)
+    expect(meetsThreshold(1001, '90D')).toBe(true)
   })
 })
 
@@ -423,14 +427,70 @@ describe('rankByArenaScore', () => {
 })
 
 // ============================================
+// Score Confidence 测试
+// ============================================
+
+describe('getScoreConfidence', () => {
+  test('两项都有数据返回 full', () => {
+    expect(getScoreConfidence(-15, 60)).toBe('full')
+    expect(getScoreConfidence(0, 0)).toBe('full')
+  })
+
+  test('缺 MDD 返回 partial', () => {
+    expect(getScoreConfidence(null, 60)).toBe('partial')
+    expect(getScoreConfidence(undefined, 55)).toBe('partial')
+  })
+
+  test('缺 WR 返回 partial', () => {
+    expect(getScoreConfidence(-10, null)).toBe('partial')
+    expect(getScoreConfidence(-20, undefined)).toBe('partial')
+  })
+
+  test('两项都缺失返回 minimal', () => {
+    expect(getScoreConfidence(null, null)).toBe('minimal')
+    expect(getScoreConfidence(undefined, undefined)).toBe('minimal')
+  })
+})
+
+describe('calculateArenaScore scoreConfidence', () => {
+  test('完整数据标记为 full', () => {
+    const result = calculateArenaScore({
+      roi: 50, pnl: 5000, maxDrawdown: -10, winRate: 65,
+    }, '30D')
+    expect(result.scoreConfidence).toBe('full')
+  })
+
+  test('缺 MDD 标记为 partial', () => {
+    const result = calculateArenaScore({
+      roi: 50, pnl: 5000, maxDrawdown: null, winRate: 65,
+    }, '30D')
+    expect(result.scoreConfidence).toBe('partial')
+  })
+
+  test('缺 WR 标记为 partial', () => {
+    const result = calculateArenaScore({
+      roi: 50, pnl: 5000, maxDrawdown: -10, winRate: null,
+    }, '30D')
+    expect(result.scoreConfidence).toBe('partial')
+  })
+
+  test('两项都缺标记为 minimal', () => {
+    const result = calculateArenaScore({
+      roi: 50, pnl: 5000, maxDrawdown: null, winRate: null,
+    }, '30D')
+    expect(result.scoreConfidence).toBe('minimal')
+  })
+})
+
+// ============================================
 // 配置常量测试
 // ============================================
 
 describe('ARENA_CONFIG', () => {
   test('PnL 门槛配置正确', () => {
-    expect(ARENA_CONFIG.PNL_THRESHOLD['7D']).toBe(300)
-    expect(ARENA_CONFIG.PNL_THRESHOLD['30D']).toBe(1000)
-    expect(ARENA_CONFIG.PNL_THRESHOLD['90D']).toBe(3000)
+    expect(ARENA_CONFIG.PNL_THRESHOLD['7D']).toBe(200)
+    expect(ARENA_CONFIG.PNL_THRESHOLD['30D']).toBe(500)
+    expect(ARENA_CONFIG.PNL_THRESHOLD['90D']).toBe(1000)
   })
 
   test('总体权重之和为 1', () => {

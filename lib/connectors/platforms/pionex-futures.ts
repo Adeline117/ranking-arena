@@ -33,7 +33,7 @@ export class PionexFuturesConnector extends BaseConnector {
   readonly platform = 'pionex' as const
   readonly marketType = 'futures' as const
   readonly capabilities: PlatformCapabilities = {
-    platform: 'pionex' as any,
+    platform: 'pionex',
     market_types: ['futures'],
     native_windows: ['7d', '30d', '90d'],
     available_fields: ['roi', 'pnl', 'copiers', 'aum'],
@@ -66,7 +66,7 @@ export class PionexFuturesConnector extends BaseConnector {
 
       const bots = data?.data?.bots || []
       const traders: TraderSource[] = bots.map((item) => ({
-        platform: 'pionex' as any,
+        platform: 'pionex',
         market_type: 'futures' as const,
         trader_key: String(item.botId || item.creatorId || ''),
         display_name: item.creatorName || item.botName || null,

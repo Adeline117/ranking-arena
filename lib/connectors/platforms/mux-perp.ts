@@ -44,7 +44,7 @@ export class MuxPerpConnector extends BaseConnector {
   readonly platform = 'mux' as const
   readonly marketType = 'perp' as const
   readonly capabilities: PlatformCapabilities = {
-    platform: 'mux' as any,
+    platform: 'mux',
     market_types: ['perp'],
     native_windows: ['7d', '30d', '90d'],
     available_fields: ['roi', 'pnl', 'win_rate', 'max_drawdown', 'trades_count'],
@@ -88,7 +88,7 @@ export class MuxPerpConnector extends BaseConnector {
 
       const accounts = response?.data?.accounts || []
       const traders: TraderSource[] = accounts.map((item) => ({
-        platform: 'mux' as any,
+        platform: 'mux',
         market_type: 'perp' as const,
         trader_key: item.id.toLowerCase(),
         display_name: `${item.id.slice(0, 6)}...${item.id.slice(-4)}`,
@@ -132,7 +132,7 @@ export class MuxPerpConnector extends BaseConnector {
       if (!info) return null
 
       const profile: TraderProfile = {
-        platform: 'mux' as any,
+        platform: 'mux',
         market_type: 'perp',
         trader_key: traderKey.toLowerCase(),
         display_name: `${traderKey.slice(0, 6)}...${traderKey.slice(-4)}`,

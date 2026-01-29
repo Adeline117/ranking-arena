@@ -35,7 +35,7 @@ export class XtFuturesConnector extends BaseConnector {
   readonly platform = 'xt' as const
   readonly marketType = 'futures' as const
   readonly capabilities: PlatformCapabilities = {
-    platform: 'xt' as any,
+    platform: 'xt',
     market_types: ['futures'],
     native_windows: ['7d', '30d', '90d'],
     available_fields: ['roi', 'pnl', 'win_rate', 'max_drawdown', 'followers', 'copiers', 'aum'],
@@ -69,7 +69,7 @@ export class XtFuturesConnector extends BaseConnector {
 
       const list = data?.data?.list || []
       const traders: TraderSource[] = list.map((item) => ({
-        platform: 'xt' as any,
+        platform: 'xt',
         market_type: 'futures' as const,
         trader_key: String(item.uid || ''),
         display_name: item.nickname || null,
@@ -98,7 +98,7 @@ export class XtFuturesConnector extends BaseConnector {
       if (!info) return null
 
       const profile: TraderProfile = {
-        platform: 'xt' as any,
+        platform: 'xt',
         market_type: 'futures',
         trader_key: traderKey,
         display_name: info.nickname || null,
