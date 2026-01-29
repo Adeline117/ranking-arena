@@ -137,31 +137,7 @@ export default function RankingSection({
     if (urlPreset && PRESETS.some(p => p.id === urlPreset)) setActivePreset(urlPreset)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // 加载已保存的筛选配置 (Pro 用户)
-  useEffect(() => {
-    if (!isPro || savedFiltersLoaded) return
-
-    const loadSavedFilters = async () => {
-      const authHeaders = getAuthHeaders()
-      if (!authHeaders) return
-
-      try {
-        const res = await fetch('/api/saved-filters', {
-          headers: authHeaders,
-        })
-        if (res.ok) {
-          const data = await res.json()
-          setSavedFilters(data.filters || [])
-        }
-      } catch {
-        // 静默失败，不影响用户体验
-      } finally {
-        setSavedFiltersLoaded(true)
-      }
-    }
-
-    loadSavedFilters()
-  }, [isPro, savedFiltersLoaded, getAuthHeaders])
+  // Saved filters feature removed - filters are session-only
 
   // Debounce ref for URL sync
   const syncTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
