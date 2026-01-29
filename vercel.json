@@ -36,8 +36,6 @@
       "path": "/api/cron/calculate-tiers",
       "schedule": "*/15 * * * *"
     },
-
-    { "_comment": "=== fetch-traders: high priority first, 3 min spacing ===" },
     { "path": "/api/cron/fetch-traders/bitget_spot",   "schedule": "0 */4 * * *" },
     { "path": "/api/cron/fetch-traders/okx_futures",    "schedule": "3 */4 * * *" },
     { "path": "/api/cron/fetch-traders/okx_web3",       "schedule": "6 */4 * * *" },
@@ -57,12 +55,8 @@
     { "path": "/api/cron/fetch-traders/mux",            "schedule": "48 */4 * * *" },
     { "path": "/api/cron/fetch-traders/lbank",          "schedule": "51 */4 * * *" },
     { "path": "/api/cron/fetch-traders/blofin",         "schedule": "54 */4 * * *" },
-
-    { "_comment": "=== discover: after fetch block ===" },
     { "path": "/api/cron/discover-traders",    "schedule": "56 */4 * * *" },
     { "path": "/api/cron/discover-rankings",   "schedule": "58 */4 * * *" },
-
-    { "_comment": "=== scrape/proxy: separate 4h cycle, offset +2h ===" },
     { "path": "/api/scrape/proxy?period=all",  "schedule": "0 2,6,10,14,18,22 * * *" }
   ],
   "headers": [
