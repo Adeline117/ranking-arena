@@ -149,7 +149,7 @@ export async function getTraderAvoidVotes(
   if (!data || data.length === 0) return []
 
   // 获取投票者信息
-  const userIds = [...new Set(data.map(v => v.user_id))]
+  const userIds = Array.from(new Set(data.map(v => v.user_id)))
   const { data: profiles } = await supabase
     .from('user_profiles')
     .select('id, handle, avatar_url')
