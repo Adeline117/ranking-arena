@@ -489,6 +489,7 @@ function RankingTableInner(props: {
             keyExtractor={(trader, idx) => `${trader.id}-${trader.source || 'unknown'}-${idx}`}
             renderItem={(trader, idx) => (
               <TraderRow trader={trader} rank={idx + 1} source={source} language={language}
+                searchQuery={debouncedSearch}
                 getMedalGlowClass={getMedalGlowClass} parseSourceInfo={parseSourceInfoWithT} getPnLTooltipFn={getPnLTooltip} />
             )} />
         </div>
@@ -500,6 +501,7 @@ function RankingTableInner(props: {
               return (
                 <TraderRow key={`${trader.id}-${trader.source || 'unknown'}-${startIndex + idx}`}
                   trader={trader} rank={rank} source={source} language={language}
+                  searchQuery={debouncedSearch}
                   getMedalGlowClass={getMedalGlowClass} parseSourceInfo={parseSourceInfoWithT} getPnLTooltipFn={getPnLTooltip} />
               )
             })}
