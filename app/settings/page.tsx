@@ -73,15 +73,18 @@ const SECTION_ICONS: Record<SectionId, React.ReactNode> = {
   ),
 }
 
-const SECTIONS: { id: SectionId; label: string }[] = [
-  { id: 'profile', label: '个人资料' },
-  { id: 'security', label: '账号安全' },
-  { id: 'exchanges', label: '交易所绑定' },
-  { id: 'alerts', label: '交易员警报' },
-  { id: 'notifications', label: '通知偏好' },
-  { id: 'privacy', label: '隐私设置' },
-  { id: 'account', label: '账号管理' },
-]
+// Section labels are now retrieved via t() function for i18n support
+const SECTION_KEYS: Record<SectionId, string> = {
+  profile: 'profileSection',
+  security: 'securitySection',
+  exchanges: 'exchangesSection',
+  alerts: 'alertsSection',
+  notifications: 'notificationsSection',
+  privacy: 'privacySection',
+  account: 'accountSection',
+}
+
+const SECTION_IDS: SectionId[] = ['profile', 'security', 'exchanges', 'alerts', 'notifications', 'privacy', 'account']
 
 // Toggle switch component
 function ToggleSwitch({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
@@ -180,6 +183,7 @@ function TraderLinksSection({ userId }: { userId: string }) {
   const [deleting, setDeleting] = useState<string | null>(null)
   const { showToast } = useToast()
   const { showConfirm } = useDialog()
+  const { t } = useLanguage()
 
   const loadLinks = useCallback(async () => {
     try {
@@ -205,7 +209,7 @@ function TraderLinksSection({ userId }: { userId: string }) {
   }, [loadLinks])
 
   const handleDelete = async (linkId: string) => {
-    const confirmed = await showConfirm('取消关联', '确定要取消关联此交易员账号吗？')
+    const confirmed = await showConfirm(t('unlinkConfirm'), t('unlinkConfirmMsg'))
     if (!confirmed) return
 
     setDeleting(linkId)
@@ -219,13 +223,13 @@ function TraderLinksSection({ userId }: { userId: string }) {
       })
       if (res.ok) {
         setLinks((prev) => prev.filter((l) => l.id !== linkId))
-        showToast('已取消关联', 'success')
+        showToast(t('unlinked'), 'success')
       } else {
         const data = await res.json()
-        showToast(data.error || '操作失败', 'error')
+        showToast(data.error || t('operationFailed'), 'error')
       }
     } catch {
-      showToast('网络错误', 'error')
+      showToast(t('networkError'), 'error')
     } finally {
       setDeleting(null)
     }
@@ -251,7 +255,7 @@ function TraderLinksSection({ userId }: { userId: string }) {
   if (loadingLinks) {
     return (
       <Box style={{ padding: tokens.spacing[4], textAlign: 'center' }}>
-        <Text size="sm" color="tertiary">加载中...</Text>
+        <Text size="sm" color="tertiary">{t('loadingText')}</Text>
       </Box>
     )
   }
@@ -260,9 +264,9 @@ function TraderLinksSection({ userId }: { userId: string }) {
     <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}>
       {links.length === 0 ? (
         <Box style={{ padding: tokens.spacing[4], textAlign: 'center' }}>
-          <Text size="sm" color="tertiary">暂无关联的交易员账号</Text>
+          <Text size="sm" color="tertiary">{t('noLinkedTraders')}</Text>
           <Text size="xs" color="tertiary" style={{ marginTop: tokens.spacing[2] }}>
-            您可以在交易员主页上点击「申请认领」来关联您的交易员身份
+            {t('linkTraderHint')}
           </Text>
         </Box>
       ) : (
@@ -298,7 +302,7 @@ function TraderLinksSection({ userId }: { userId: string }) {
                     {link.handle || link.trader_id}
                   </Text>
                   <Text size="xs" color="tertiary">
-                    {new Date(link.verified_at).toLocaleDateString('zh-CN')} 认证
+                    {new Date(link.verified_at).toLocaleDateString()} {t('certifiedAt')}
                   </Text>
                 </Box>
               </Box>
@@ -313,7 +317,7 @@ function TraderLinksSection({ userId }: { userId: string }) {
                   padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
                 }}
               >
-                {deleting === link.id ? '...' : '取消关联'}
+                {deleting === link.id ? '...' : t('unlinkButton')}
               </Button>
             </Box>
           ))}
@@ -625,6 +629,7 @@ function SettingsContent() {
   const searchParams = useSearchParams()
   const { showToast } = useToast()
   const { showConfirm } = useDialog()
+  const { t } = useLanguage()
   const [email, setEmail] = useState<string | null>(null)
   const [userId, setUserId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -830,7 +835,7 @@ function SettingsContent() {
   // Handle section from URL
   useEffect(() => {
     const section = searchParams.get('section') as SectionId | null
-    if (section && SECTIONS.some(s => s.id === section)) {
+    if (section && SECTION_IDS.includes(section)) {
       setActiveSection(section)
       // Scroll to section after a short delay for DOM to render
       setTimeout(() => {
@@ -926,7 +931,7 @@ function SettingsContent() {
     const file = e.target.files?.[0]
     if (file) {
       if (file.size > 5 * 1024 * 1024) {
-        showToast('图片大小不能超过 5MB', 'error')
+        showToast(t('imageSizeExceed').replace('{size}', '5'), 'error')
         return
       }
       setAvatarFile(file)
@@ -942,7 +947,7 @@ function SettingsContent() {
     const file = e.target.files?.[0]
     if (file) {
       if (file.size > 10 * 1024 * 1024) {
-        showToast('图片大小不能超过 10MB', 'error')
+        showToast(t('imageSizeExceed').replace('{size}', '10'), 'error')
         return
       }
       setCoverFile(file)
@@ -957,13 +962,13 @@ function SettingsContent() {
   const uploadFile = async (file: File, bucket: string, userId: string, maxSize: number): Promise<string | null> => {
     try {
       if (file.size > maxSize) {
-        showToast(`图片大小不能超过 ${Math.round(maxSize / 1024 / 1024)}MB`, 'error')
+        showToast(t('imageSizeExceed').replace('{size}', String(Math.round(maxSize / 1024 / 1024))), 'error')
         return null
       }
 
       const fileExt = file.name.split('.').pop()?.toLowerCase()
       if (!['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(fileExt || '')) {
-        showToast('只支持 JPG、PNG、GIF、WebP 格式', 'error')
+        showToast(t('onlySupportFormats'), 'error')
         return null
       }
 
@@ -982,14 +987,14 @@ function SettingsContent() {
 
       if (!response.ok) {
         uiLogger.error(`${bucket} upload error:`, result.error)
-        showToast(result.error || '上传失败', 'error')
+        showToast(result.error || t('uploadFailed'), 'error')
         return null
       }
 
       return result.url
     } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : '未知错误'
-      showToast(`上传异常: ${errorMessage}`, 'error')
+      const errorMessage = error instanceof Error ? error.message : t('unknownError')
+      showToast(`${t('uploadException')}: ${errorMessage}`, 'error')
       return null
     }
   }
@@ -1003,7 +1008,7 @@ function SettingsContent() {
       return
     }
     if (handle && handleAvailable === false) {
-      showToast('用户名已被占用，请选择其他用户名', 'error')
+      showToast(t('usernameInUse'), 'error')
       return
     }
 
@@ -1082,9 +1087,9 @@ function SettingsContent() {
       if (saveError) {
         uiLogger.error('Error saving profile:', JSON.stringify(saveError, null, 2))
         if (saveError.code === '23505' || saveError.message?.includes('unique') || saveError.message?.includes('duplicate')) {
-          showToast('用户名已被使用，请选择其他用户名', 'error')
+          showToast(t('usernameInUse'), 'error')
         } else {
-          showToast(`保存失败: ${saveError.message || '请重试'}`, 'error')
+          showToast(t('saveFailedWithMsg').replace('{msg}', saveError.message || ''), 'error')
         }
         return
       }
@@ -1109,13 +1114,13 @@ function SettingsContent() {
       setCoverFile(null)
 
       if (uploadFailed) {
-        showToast('其他设置已保存，但图片上传失败', 'warning')
+        showToast(t('settingsPartialSaved'), 'warning')
       } else {
-        showToast('所有设置已保存', 'success')
+        showToast(t('settingsSaved'), 'success')
       }
     } catch (error) {
       uiLogger.error('Error saving:', error)
-      showToast('保存失败，请重试', 'error')
+      showToast(t('saveFailedRetry'), 'error')
     } finally {
       setSaving(false)
     }
@@ -1131,7 +1136,7 @@ function SettingsContent() {
 
   const handleSendResetCode = async () => {
     if (!email) {
-      showToast('无法获取用户邮箱', 'error')
+      showToast(t('cannotGetEmail'), 'error')
       return
     }
 
@@ -1148,9 +1153,9 @@ function SettingsContent() {
 
       setResetCodeSent(true)
       setResetCountdown(60)
-      showToast('密码重置邮件已发送，请查收邮箱', 'success')
+      showToast(t('resetEmailSent'), 'success')
     } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : '发送失败'
+      const msg = error instanceof Error ? error.message : t('sendFailed')
       showToast(msg, 'error')
     } finally {
       setSendingResetCode(false)
@@ -1159,22 +1164,22 @@ function SettingsContent() {
 
   const handleChangePassword = async () => {
     if (!currentPassword) {
-      showToast('请输入当前密码', 'warning')
+      showToast(t('enterCurrentPasswordFirst'), 'warning')
       return
     }
     if (!newPassword || !newPasswordValidation.valid) {
-      showToast('请输入有效的新密码（至少6位）', 'warning')
+      showToast(t('enterValidNewPassword'), 'warning')
       return
     }
     if (!confirmPasswordValidation.valid) {
-      showToast('两次输入的密码不一致', 'warning')
+      showToast(t('passwordsNotMatch'), 'warning')
       return
     }
 
     setSavingPassword(true)
     try {
       if (!email) {
-        showToast('无法获取用户邮箱', 'error')
+        showToast(t('cannotGetEmail'), 'error')
         return
       }
 
@@ -1184,7 +1189,7 @@ function SettingsContent() {
       })
 
       if (signInError) {
-        showToast('当前密码不正确', 'error')
+        showToast(t('currentPasswordWrong'), 'error')
         return
       }
 
@@ -1197,13 +1202,13 @@ function SettingsContent() {
         return
       }
 
-      showToast('密码修改成功', 'success')
+      showToast(t('passwordChanged'), 'success')
       setCurrentPassword('')
       setNewPassword('')
       setConfirmNewPassword('')
       setTouchedFields(prev => ({ ...prev, newPassword: false, confirmPassword: false }))
     } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : '修改失败'
+      const msg = error instanceof Error ? error.message : t('changeFailed')
       showToast(msg, 'error')
     } finally {
       setSavingPassword(false)
@@ -1212,7 +1217,7 @@ function SettingsContent() {
 
   const handleChangeEmail = async () => {
     if (!newEmail || !newEmailValidation.valid) {
-      showToast('请输入有效的邮箱地址', 'warning')
+      showToast(t('enterValidEmail'), 'warning')
       return
     }
 
@@ -1227,18 +1232,18 @@ function SettingsContent() {
         return
       }
 
-      showToast('验证邮件已发送到新邮箱，请查收确认', 'success')
+      showToast(t('verificationEmailSent'), 'success')
       setNewEmail('')
       setTouchedFields(prev => ({ ...prev, newEmail: false }))
     } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : '修改失败'
+      const msg = error instanceof Error ? error.message : t('changeFailed')
       showToast(msg, 'error')
     } finally {
       setSavingEmail(false)
     }
   }
 
-  // 保存通知偏好
+  // Save notification preferences
   const handleSaveNotifications = async () => {
     if (!userId) return
     setSavingNotifications(true)
@@ -1256,13 +1261,13 @@ function SettingsContent() {
         .eq('id', userId)
 
       if (error) {
-        showToast('保存失败，请重试', 'error')
+        showToast(t('saveFailedRetry'), 'error')
         return
       }
 
-      showToast('通知偏好已保存', 'success')
+      showToast(t('notificationsSaved'), 'success')
     } catch {
-      showToast('保存失败', 'error')
+      showToast(t('saveFailed'), 'error')
     } finally {
       setSavingNotifications(false)
     }
@@ -1274,7 +1279,7 @@ function SettingsContent() {
     try {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session?.access_token) {
-        showToast('请先登录', 'error')
+        showToast(t('pleaseLoginFirst'), 'error')
         return
       }
 
@@ -1284,12 +1289,12 @@ function SettingsContent() {
       })
       const data = await res.json()
       if (!res.ok) {
-        showToast(data.error || '设置失败', 'error')
+        showToast(data.error || t('operationFailed'), 'error')
         return
       }
       setTwoFASetupData({ qrCodeDataUrl: data.qrCode, secret: data.secret })
     } catch {
-      showToast('网络错误', 'error')
+      showToast(t('networkError'), 'error')
     } finally {
       setTwoFALoading(false)
     }
@@ -1297,14 +1302,14 @@ function SettingsContent() {
 
   const handleVerify2FA = async () => {
     if (!twoFACode || twoFACode.length !== 6) {
-      showToast('请输入6位验证码', 'warning')
+      showToast(t('enter6DigitCode'), 'warning')
       return
     }
     setTwoFALoading(true)
     try {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session?.access_token) {
-        showToast('请先登录', 'error')
+        showToast(t('pleaseLoginFirst'), 'error')
         return
       }
 
@@ -1318,16 +1323,16 @@ function SettingsContent() {
       })
       const data = await res.json()
       if (!res.ok) {
-        showToast(data.error || '验证失败', 'error')
+        showToast(data.error || t('verificationFailed'), 'error')
         return
       }
       setTwoFAEnabled(true)
       setBackupCodes(data.backupCodes || [])
       setTwoFASetupData(null)
       setTwoFACode('')
-      showToast('2FA 已开启', 'success')
+      showToast(t('twoFAEnabled'), 'success')
     } catch {
-      showToast('网络错误', 'error')
+      showToast(t('networkError'), 'error')
     } finally {
       setTwoFALoading(false)
     }
@@ -1335,14 +1340,14 @@ function SettingsContent() {
 
   const handleDisable2FA = async () => {
     if (!disablePassword) {
-      showToast('请输入密码', 'warning')
+      showToast(t('enterPassword'), 'warning')
       return
     }
     setTwoFALoading(true)
     try {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session?.access_token) {
-        showToast('请先登录', 'error')
+        showToast(t('pleaseLoginFirst'), 'error')
         return
       }
 
@@ -1356,16 +1361,16 @@ function SettingsContent() {
       })
       const data = await res.json()
       if (!res.ok) {
-        showToast(data.error || '关闭失败', 'error')
+        showToast(data.error || t('closeFailed'), 'error')
         return
       }
       setTwoFAEnabled(false)
       setShowDisable2FA(false)
       setDisablePassword('')
       setBackupCodes([])
-      showToast('2FA 已关闭', 'success')
+      showToast(t('twoFADisabled'), 'success')
     } catch {
-      showToast('网络错误', 'error')
+      showToast(t('networkError'), 'error')
     } finally {
       setTwoFALoading(false)
     }
@@ -1420,17 +1425,17 @@ function SettingsContent() {
       })
       if (res.ok) {
         setSessions(prev => prev.filter(s => s.id !== sessionId))
-        showToast('会话已撤销', 'success')
+        showToast(t('sessionRevoked'), 'success')
       } else {
-        showToast('操作失败', 'error')
+        showToast(t('operationFailed'), 'error')
       }
     } catch {
-      showToast('网络错误', 'error')
+      showToast(t('networkError'), 'error')
     }
   }
 
   const handleRevokeAllSessions = async () => {
-    const confirmed = await showConfirm('登出所有设备', '确定要登出所有其他设备吗？')
+    const confirmed = await showConfirm(t('logoutAllDevices'), t('logoutAllDevicesConfirm'))
     if (!confirmed) return
 
     try {
@@ -1447,12 +1452,12 @@ function SettingsContent() {
       })
       if (res.ok) {
         setSessions(prev => prev.filter(s => s.isCurrent))
-        showToast('已登出所有其他设备', 'success')
+        showToast(t('logoutAllSuccess'), 'success')
       } else {
-        showToast('操作失败', 'error')
+        showToast(t('operationFailed'), 'error')
       }
     } catch {
-      showToast('网络错误', 'error')
+      showToast(t('networkError'), 'error')
     }
   }
 
@@ -1506,12 +1511,12 @@ function SettingsContent() {
       })
       if (res.ok) {
         setBlockedUsers(prev => prev.filter(u => u.blockedId !== blockedId))
-        showToast('已解除屏蔽', 'success')
+        showToast(t('unblocked'), 'success')
       } else {
-        showToast('操作失败', 'error')
+        showToast(t('operationFailed'), 'error')
       }
     } catch {
-      showToast('网络错误', 'error')
+      showToast(t('networkError'), 'error')
     } finally {
       setUnblockingId(null)
     }
@@ -1530,25 +1535,25 @@ function SettingsContent() {
 
       if (error) {
         setEmailDigest(previous)
-        showToast('保存失败', 'error')
+        showToast(t('saveFailed'), 'error')
         return
       }
-      showToast('邮件摘要设置已保存', 'success')
+      showToast(t('emailDigestSaved'), 'success')
     } catch {
       setEmailDigest(previous)
-      showToast('保存失败', 'error')
+      showToast(t('saveFailed'), 'error')
     }
   }
 
   const handleLogout = async () => {
-    const confirmed = await showConfirm('退出登录', '确定要退出当前账号吗？')
+    const confirmed = await showConfirm(t('logoutTitle'), t('logoutConfirm'))
     if (!confirmed) return
 
     try {
       await supabase.auth.signOut()
       router.push('/')
     } catch {
-      showToast('退出失败，请重试', 'error')
+      showToast(t('logoutFailed'), 'error')
     }
   }
 
@@ -1559,7 +1564,7 @@ function SettingsContent() {
     try {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) {
-        setDeleteError('请先登录')
+        setDeleteError(t('pleaseLoginAgain'))
         return
       }
       const res = await fetch('/api/account/delete', {
@@ -1572,15 +1577,15 @@ function SettingsContent() {
       })
       const data = await res.json()
       if (!res.ok) {
-        setDeleteError(data.error || '注销失败')
+        setDeleteError(data.error || t('operationFailed'))
         return
       }
-      showToast('账号已标记为注销，30天内可通过登录恢复', 'success')
+      showToast(t('accountMarkedDeleted'), 'success')
       setShowDeleteAccountModal(false)
       await supabase.auth.signOut()
       router.push('/')
     } catch {
-      setDeleteError('网络错误，请重试')
+      setDeleteError(t('networkErrorRetry'))
     } finally {
       setDeletingAccount(false)
     }
@@ -1589,13 +1594,13 @@ function SettingsContent() {
   // Scroll-based active section detection
   useEffect(() => {
     const handleScroll = () => {
-      const sections = SECTIONS.map(s => document.getElementById(s.id))
+      const sections = SECTION_IDS.map(id => document.getElementById(id))
       const scrollTop = window.scrollY + 120
 
       for (let i = sections.length - 1; i >= 0; i--) {
         const section = sections[i]
         if (section && section.offsetTop <= scrollTop) {
-          setActiveSection(SECTIONS[i].id)
+          setActiveSection(SECTION_IDS[i])
           break
         }
       }
@@ -1649,16 +1654,16 @@ function SettingsContent() {
               <path d="M7 11V7a5 5 0 0 1 10 0v4" />
             </svg>
           </Box>
-          <Text size="xl" weight="bold">请先登录</Text>
+          <Text size="xl" weight="bold">{t('loginRequired')}</Text>
           <Text size="sm" color="secondary" style={{ lineHeight: 1.6 }}>
-            您需要登录才能访问设置页面
+            {t('loginRequiredDesc')}
           </Text>
           <Button
             variant="primary"
             onClick={() => router.push('/login?redirect=/settings')}
             style={{ marginTop: tokens.spacing[2] }}
           >
-            前往登录
+            {t('goToLogin')}
           </Button>
         </Box>
       </Box>
@@ -1686,7 +1691,7 @@ function SettingsContent() {
             borderRadius: '50%',
             animation: 'spin 1s linear infinite',
           }} />
-          <Text size="lg" color="secondary">加载中...</Text>
+          <Text size="lg" color="secondary">{t('loading')}</Text>
           <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
         </Box>
       </Box>
@@ -1712,12 +1717,12 @@ function SettingsContent() {
             gap: tokens.spacing[1],
           }}
         >
-          {SECTIONS.map(section => (
+          {SECTION_IDS.map(sectionId => (
             <button
-              key={section.id}
+              key={sectionId}
               onClick={() => {
-                setActiveSection(section.id)
-                document.getElementById(section.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                setActiveSection(sectionId)
+                document.getElementById(sectionId)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
               }}
               style={{
                 display: 'flex',
@@ -1726,9 +1731,9 @@ function SettingsContent() {
                 padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
                 borderRadius: tokens.radius.md,
                 border: 'none',
-                background: activeSection === section.id ? tokens.colors.bg.tertiary : 'transparent',
-                color: activeSection === section.id ? tokens.colors.text.primary : tokens.colors.text.secondary,
-                fontWeight: activeSection === section.id ? tokens.typography.fontWeight.bold : tokens.typography.fontWeight.normal,
+                background: activeSection === sectionId ? tokens.colors.bg.tertiary : 'transparent',
+                color: activeSection === sectionId ? tokens.colors.text.primary : tokens.colors.text.secondary,
+                fontWeight: activeSection === sectionId ? tokens.typography.fontWeight.bold : tokens.typography.fontWeight.normal,
                 fontSize: tokens.typography.fontSize.sm,
                 cursor: 'pointer',
                 textAlign: 'left',
@@ -1736,8 +1741,8 @@ function SettingsContent() {
                 width: '100%',
               }}
             >
-              <span style={{ fontSize: '14px', display: 'flex', alignItems: 'center' }}>{SECTION_ICONS[section.id]}</span>
-              {section.label}
+              <span style={{ fontSize: '14px', display: 'flex', alignItems: 'center' }}>{SECTION_ICONS[sectionId]}</span>
+              {t(SECTION_KEYS[sectionId] as keyof typeof import('@/lib/i18n').translations.zh)}
             </button>
           ))}
         </Box>
@@ -1745,7 +1750,7 @@ function SettingsContent() {
         {/* Main Content */}
         <Box style={{ flex: 1, minWidth: 0 }}>
           <Text size="2xl" weight="black" style={{ marginBottom: tokens.spacing[4] }}>
-            设置
+            {t('settingsTitle')}
           </Text>
 
           {/* Mobile Section Navigation - horizontal scroll tabs */}
@@ -1762,12 +1767,12 @@ function SettingsContent() {
               scrollbarWidth: 'none',
             }}
           >
-            {SECTIONS.map(section => (
+            {SECTION_IDS.map(sectionId => (
               <button
-                key={section.id}
+                key={sectionId}
                 onClick={() => {
-                  setActiveSection(section.id)
-                  document.getElementById(section.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                  setActiveSection(sectionId)
+                  document.getElementById(sectionId)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
                 }}
                 style={{
                   display: 'flex',
@@ -1775,25 +1780,25 @@ function SettingsContent() {
                   gap: tokens.spacing[1],
                   padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
                   borderRadius: tokens.radius.full,
-                  border: `1px solid ${activeSection === section.id ? tokens.colors.accent.primary + '60' : tokens.colors.border.primary}`,
-                  background: activeSection === section.id ? `${tokens.colors.accent.primary}15` : tokens.colors.bg.secondary,
-                  color: activeSection === section.id ? tokens.colors.accent.primary : tokens.colors.text.secondary,
+                  border: `1px solid ${activeSection === sectionId ? tokens.colors.accent.primary + '60' : tokens.colors.border.primary}`,
+                  background: activeSection === sectionId ? `${tokens.colors.accent.primary}15` : tokens.colors.bg.secondary,
+                  color: activeSection === sectionId ? tokens.colors.accent.primary : tokens.colors.text.secondary,
                   fontSize: tokens.typography.fontSize.xs,
-                  fontWeight: activeSection === section.id ? tokens.typography.fontWeight.bold : tokens.typography.fontWeight.normal,
+                  fontWeight: activeSection === sectionId ? tokens.typography.fontWeight.bold : tokens.typography.fontWeight.normal,
                   cursor: 'pointer',
                   whiteSpace: 'nowrap',
                   flexShrink: 0,
                   transition: 'all 0.15s ease',
                 }}
               >
-                <span style={{ fontSize: '12px', display: 'flex', alignItems: 'center' }}>{SECTION_ICONS[section.id]}</span>
-                {section.label}
+                <span style={{ fontSize: '12px', display: 'flex', alignItems: 'center' }}>{SECTION_ICONS[sectionId]}</span>
+                {t(SECTION_KEYS[sectionId] as keyof typeof import('@/lib/i18n').translations.zh)}
               </button>
             ))}
           </Box>
 
           {/* ===== Profile Section ===== */}
-          <SectionCard id="profile" title="个人资料" description="这些信息将在你的个人主页上展示给其他用户">
+          <SectionCard id="profile" title={t('profileSection')} description={t('profileDescription')}>
             {/* Avatar */}
             <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[4], marginBottom: tokens.spacing[5] }}>
               {userId ? (
@@ -1848,10 +1853,10 @@ function SettingsContent() {
                     fontSize: tokens.typography.fontSize.sm,
                   }}
                 >
-                  更换头像
+                  {t('changeAvatar')}
                 </label>
                 <Text size="xs" color="tertiary" style={{ marginTop: tokens.spacing[1], display: 'block' }}>
-                  JPG、PNG、GIF、WebP，最大 5MB
+                  {t('avatarFormatHint')}
                 </Text>
               </Box>
             </Box>
@@ -1859,7 +1864,7 @@ function SettingsContent() {
             {/* Cover Image */}
             <Box style={{ marginBottom: tokens.spacing[5] }}>
               <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>
-                背景图片
+                {t('coverImage')}
               </Text>
               <Box
                 style={{
@@ -1877,7 +1882,7 @@ function SettingsContent() {
                 }}
               >
                 {!coverPreviewUrl && !coverUrl && (
-                  <Text size="sm" color="tertiary">暂无背景图片</Text>
+                  <Text size="sm" color="tertiary">{t('noCoverImage')}</Text>
                 )}
               </Box>
               <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
@@ -1902,7 +1907,7 @@ function SettingsContent() {
                     fontSize: tokens.typography.fontSize.sm,
                   }}
                 >
-                  更换背景
+                  {t('changeCover')}
                 </label>
                 {(coverPreviewUrl || coverUrl) && (
                   <button
@@ -1910,7 +1915,7 @@ function SettingsContent() {
                       setCoverFile(null)
                       setCoverPreviewUrl(null)
                       setCoverUrl(null)
-                      showToast('背景图已标记移除，请点击保存按钮确认', 'info')
+                      showToast(t('coverRemoveHint'), 'info')
                     }}
                     style={{
                       padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
@@ -1922,11 +1927,11 @@ function SettingsContent() {
                       fontSize: tokens.typography.fontSize.sm,
                     }}
                   >
-                    移除
+                    {t('remove')}
                   </button>
                 )}
                 <Text size="xs" color="tertiary">
-                  最大 10MB，建议 1200×400
+                  {t('coverSizeHint')}
                 </Text>
               </Box>
             </Box>
@@ -1934,14 +1939,14 @@ function SettingsContent() {
             {/* Handle */}
             <Box style={{ marginBottom: tokens.spacing[5] }}>
               <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>
-                用户名
+                {t('username')}
               </Text>
               <input
                 type="text"
                 value={handle}
                 onChange={(e) => setHandle(e.target.value.slice(0, MAX_HANDLE_LENGTH))}
                 onBlur={() => markTouched('handle')}
-                placeholder="设置你的用户名"
+                placeholder={t('setUsername')}
                 style={getInputStyle(touchedFields.handle && !handleValidation.valid)}
               />
               <Box style={{ display: 'flex', justifyContent: 'space-between', marginTop: tokens.spacing[1] }}>
@@ -1953,17 +1958,17 @@ function SettingsContent() {
                   )}
                   {touchedFields.handle && handle && handleValidation.valid && checkingHandle && (
                     <Text size="xs" color="tertiary">
-                      检查中...
+                      {t('checking')}
                     </Text>
                   )}
                   {touchedFields.handle && handle && handleValidation.valid && !checkingHandle && handleAvailable === true && (
                     <Text size="xs" style={{ color: tokens.colors.accent.success }}>
-                      用户名可用
+                      {t('usernameAvailable')}
                     </Text>
                   )}
                   {touchedFields.handle && handle && handleValidation.valid && !checkingHandle && handleAvailable === false && (
                     <Text size="xs" style={{ color: tokens.colors.accent.error }}>
-                      用户名已被占用
+                      {t('usernameTaken')}
                     </Text>
                   )}
                 </Box>
@@ -1976,12 +1981,12 @@ function SettingsContent() {
             {/* Bio */}
             <Box style={{ marginBottom: tokens.spacing[4] }}>
               <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>
-                个人简介
+                {t('personalBio')}
               </Text>
               <textarea
                 value={bio}
                 onChange={(e) => setBio(e.target.value.slice(0, MAX_BIO_LENGTH))}
-                placeholder="介绍一下自己..."
+                placeholder={t('introduceSelf')}
                 rows={4}
                 style={{
                   ...getInputStyle(),
@@ -2005,7 +2010,7 @@ function SettingsContent() {
           </SectionCard>
 
           {/* ===== Security Section ===== */}
-          <SectionCard id="security" title="账号安全" description="管理你的登录凭证和账号安全设置">
+          <SectionCard id="security" title={t('securitySection')} description={t('twoFADesc')}>
             {/* Current Email Display */}
             <Box style={{ marginBottom: tokens.spacing[5], padding: tokens.spacing[3], borderRadius: tokens.radius.md, background: tokens.colors.bg.primary }}>
               <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[1] }}>当前登录邮箱</Text>
@@ -2504,14 +2509,14 @@ function SettingsContent() {
           </SectionCard>
 
           {/* ===== Notification Preferences Section ===== */}
-          <SectionCard id="notifications" title="通知偏好" description="选择你想接收的通知类型">
+          <SectionCard id="notifications" title={t('notificationsSection')} description={t('notifications')}>
             <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[1] }}>
               {[
-                { key: 'follow', label: '新粉丝通知', desc: '有人关注你时', value: notifyFollow, setter: setNotifyFollow },
-                { key: 'like', label: '点赞通知', desc: '有人点赞你的帖子时', value: notifyLike, setter: setNotifyLike },
-                { key: 'comment', label: '评论通知', desc: '有人评论你的帖子时', value: notifyComment, setter: setNotifyComment },
-                { key: 'mention', label: '@提及通知', desc: '有人在帖子中提及你时', value: notifyMention, setter: setNotifyMention },
-                { key: 'message', label: '私信通知', desc: '收到新私信时', value: notifyMessage, setter: setNotifyMessage },
+                { key: 'follow', labelKey: 'newFollowerNotify', value: notifyFollow, setter: setNotifyFollow },
+                { key: 'like', labelKey: 'postLikedNotify', value: notifyLike, setter: setNotifyLike },
+                { key: 'comment', labelKey: 'postCommentedNotify', value: notifyComment, setter: setNotifyComment },
+                { key: 'mention', labelKey: 'mentionedNotify', value: notifyMention, setter: setNotifyMention },
+                { key: 'message', labelKey: 'newMessageNotify', value: notifyMessage, setter: setNotifyMessage },
               ].map(item => (
                 <Box
                   key={item.key}
@@ -2576,7 +2581,7 @@ function SettingsContent() {
           </SectionCard>
 
           {/* ===== Privacy Settings Section ===== */}
-          <SectionCard id="privacy" title="隐私设置" description="控制谁能看到你的信息">
+          <SectionCard id="privacy" title={t('privacySection')} description={t('dmPermissions')}>
             {/* Follow lists visibility */}
             <Box style={{ marginBottom: tokens.spacing[5] }}>
               <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>
@@ -2744,7 +2749,7 @@ function SettingsContent() {
           </SectionCard>
 
           {/* ===== Account Management (Danger Zone) ===== */}
-          <SectionCard id="account" title="账号管理" variant="danger">
+          <SectionCard id="account" title={t('accountSection')} variant="danger">
             <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}>
 
               {/* Multi-Account Section */}
