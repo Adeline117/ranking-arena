@@ -485,7 +485,7 @@ export function CreateSnapshotButton({
 
     try {
       const { getCsrfHeaders } = await import('@/lib/api/client')
-      const { getAuthHeaders } = await import('@/lib/auth/client')
+      const { getAuthHeaders } = await import('@/lib/auth')
       const authHeaders = await getAuthHeaders()
       const response = await fetch('/api/snapshots', {
         method: 'POST',

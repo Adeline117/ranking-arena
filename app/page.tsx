@@ -1,10 +1,11 @@
 import { Suspense } from 'react'
 import { HomePage } from './components/home'
-import { getInitialTraders } from '@/lib/server/getInitialTraders'
+import { getInitialTraders } from '@/lib/getInitialTraders'
 import RankingTableSkeleton from './components/home/RankingTableSkeleton'
 
-// ISR: Revalidate every 60 seconds for fresh data with static benefits
-export const revalidate = 60
+// ISR: Revalidate every 30 seconds for fresh data with static benefits
+// Reduced from 60s to 30s for better data freshness while maintaining cache benefits
+export const revalidate = 30
 
 /**
  * 首页入口 - Server Component with Streaming

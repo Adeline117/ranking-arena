@@ -15,7 +15,7 @@
  * - On-demand refresh: priority 1 (user-triggered).
  */
 
-import { query, queryOne } from '@/lib/db/pool';
+import { query, queryOne } from '@/lib/db';
 import { getConnector } from '@/lib/connectors/registry';
 import { calculateArenaScore, type Period } from '@/lib/utils/arena-score';
 import type {

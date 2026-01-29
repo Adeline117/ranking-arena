@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
-import { ThumbsUpIcon, CommentIcon } from '@/app/components/icons'
+import { ThumbsUpIcon, CommentIcon } from '@/app/components/ui/icons'
 
 interface MasonryPostCardProps {
   post: {

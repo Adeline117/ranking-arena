@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import { RankingSkeleton } from '../ui/Skeleton'
-import { RankingBadge } from '../icons'
+import { RankingBadge } from '../ui/icons'
 import { Box, Text } from '../base'
 import { useLanguage } from '../Providers/LanguageProvider'
 import type { Trader } from './RankingTable'

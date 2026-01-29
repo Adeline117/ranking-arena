@@ -14,7 +14,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
-import { ThumbsUpIcon, ThumbsDownIcon, CommentIcon } from '../icons'
+import { ThumbsUpIcon, ThumbsDownIcon, CommentIcon } from '../ui/icons'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { useToast } from '../ui/Toast'
 import { formatTimeAgo } from '@/lib/utils/date'

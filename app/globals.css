@@ -283,41 +283,69 @@ body {
   animation: scaleIn 0.2s ease-out forwards;
 }
 
-/* 卡片交错进入动画 */
-.stagger-enter > * {
-  opacity: 0;
-  animation: pageEnter 0.3s ease-out forwards;
+/* 卡片交错进入动画 - Optimized for LCP */
+@media (prefers-reduced-motion: no-preference) {
+  .stagger-enter > * {
+    opacity: 0;
+    animation: pageEnter 0.2s ease-out forwards; /* Reduced from 0.3s */
+  }
+
+  /* Reduced delays for faster LCP */
+  .stagger-enter > *:nth-child(1) { animation-delay: 0ms; }
+  .stagger-enter > *:nth-child(2) { animation-delay: 20ms; } /* Reduced from 50ms */
+  .stagger-enter > *:nth-child(3) { animation-delay: 40ms; } /* Reduced from 100ms */
+  .stagger-enter > *:nth-child(4) { animation-delay: 60ms; } /* Reduced from 150ms */
+  .stagger-enter > *:nth-child(5) { animation-delay: 80ms; } /* Reduced from 200ms */
+  .stagger-enter > *:nth-child(6) { animation-delay: 100ms; } /* Reduced from 250ms */
+  .stagger-enter > *:nth-child(n+7) { animation-delay: 120ms; } /* Reduced significantly */
 }
 
-.stagger-enter > *:nth-child(1) { animation-delay: 0ms; }
-.stagger-enter > *:nth-child(2) { animation-delay: 50ms; }
-.stagger-enter > *:nth-child(3) { animation-delay: 100ms; }
-.stagger-enter > *:nth-child(4) { animation-delay: 150ms; }
-.stagger-enter > *:nth-child(5) { animation-delay: 200ms; }
-.stagger-enter > *:nth-child(6) { animation-delay: 250ms; }
-.stagger-enter > *:nth-child(7) { animation-delay: 300ms; }
-.stagger-enter > *:nth-child(8) { animation-delay: 350ms; }
-.stagger-enter > *:nth-child(n+9) { animation-delay: 400ms; }
+/* No stagger animation for reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .stagger-enter > * {
+    opacity: 1;
+    animation: none;
+  }
+}
 
 /* ============================================
    Utility Classes
    ============================================ */
 
-.hover-lift {
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+/* Performance: GPU-accelerated mesh gradient background */
+.mesh-gradient-bg {
+  will-change: transform;
+  /* Use transform instead of will-change: auto for better compositing */
 }
 
-.hover-lift:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+/* Reduce animation for performance - only animate on modern devices */
+@media (prefers-reduced-motion: no-preference) {
+  .hover-lift {
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .hover-lift:hover {
+    transform: translateY(-2px) translateZ(0); /* Add translateZ for GPU */
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+  }
+
+  .press-effect {
+    transition: transform 0.1s ease;
+  }
+
+  .press-effect:active {
+    transform: scale(0.97) translateZ(0);
+  }
 }
 
-.press-effect {
-  transition: transform 0.1s ease;
-}
-
-.press-effect:active {
-  transform: scale(0.97);
+/* Disable animations for reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  .hover-lift, .press-effect {
+    transition: none;
+  }
+  .hover-lift:hover {
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+  }
 }
 
 /* 骨架屏 - Theme-aware */
@@ -388,4 +416,32 @@ body {
 
 .scrollbar-hidden::-webkit-scrollbar {
   display: none;
+}
+
+/* ============================================
+   Performance Optimizations
+   ============================================ */
+
+/* Optimize off-screen content rendering */
+.ranking-row, .post-card, .trader-card {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 72px; /* Estimated height */
+}
+
+/* Reduce paint for fixed elements */
+.fixed-header, .fixed-nav {
+  will-change: transform;
+  backface-visibility: hidden;
+  transform: translateZ(0);
+}
+
+/* Optimize image containers */
+.trader-avatar, .post-image {
+  contain: layout style paint;
+  transform: translateZ(0);
+}
+
+/* Optimize table rows */
+.ranking-table-grid {
+  contain: layout style;
 }
