@@ -6,19 +6,10 @@ import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
 import { supabase } from '@/lib/supabase/client'
 import TopNav from '@/app/components/layout/TopNav'
-import TraderHeader from '@/app/components/trader/TraderHeader'
-import TraderTabs from '@/app/components/trader/TraderTabs'
-import OverviewPerformanceCard from '@/app/components/trader/OverviewPerformanceCard'
-import TraderAboutCard from '@/app/components/trader/TraderAboutCard'
-import SimilarTraders from '@/app/components/trader/SimilarTraders'
 import PostFeed from '@/app/components/post/PostFeed'
-import StatsPage from '@/app/components/trader/stats/StatsPage'
-// PinnedPost 组件已集成到 PostFeed 中（置顶帖子自动显示在动态列表最上方）
-import PortfolioTable from '@/app/components/trader/PortfolioTable'
-import AccountRequiredStats from '@/app/components/trader/AccountRequiredStats'
-import CreatedGroups from '@/app/components/trader/CreatedGroups'
+import JoinedGroups from '@/app/components/trader/JoinedGroups'
 import UserBookmarkFolders from '@/app/components/trader/UserBookmarkFolders'
-import { Box, Text } from '@/app/components/base'
+import { Box, Text, Button } from '@/app/components/base'
 import { RankingSkeleton } from '@/app/components/ui/Skeleton'
 import { useToast } from '@/app/components/ui/Toast'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -35,8 +26,326 @@ import {
   type PortfolioItem,
   type TraderFeedItem,
 } from '@/lib/data/trader'
+import { DynamicFollowListModal as FollowListModal } from '@/app/components/ui/dynamic'
+import UserFollowButton from '@/app/components/ui/UserFollowButton'
+import MessageButton from '@/app/components/ui/MessageButton'
+import { getAvatarGradient, getAvatarInitial } from '@/lib/utils/avatar'
+import { ProBadgeOverlay } from '@/app/components/ui/ProBadge'
 
-type TabKey = 'overview' | 'stats' | 'portfolio'
+// 简化的用户资料头部组件
+interface UserProfileHeaderProps {
+  profile: TraderProfile
+  isOwnProfile: boolean
+  proBadgeTier: 'pro' | null
+  socialLinks: { twitter?: string; telegram?: string; discord?: string; github?: string; website?: string }
+  currentUserId: string | null
+}
+
+function UserProfileHeader({
+  profile,
+  isOwnProfile,
+  proBadgeTier,
+  socialLinks,
+  currentUserId,
+}: UserProfileHeaderProps) {
+  const router = useRouter()
+  const { t, language } = useLanguage()
+  const isZh = language === 'zh'
+  const [modalType, setModalType] = useState<'followers' | 'following' | null>(null)
+  const [followersCount, setFollowersCount] = useState(profile.followers || 0)
+  const followingCount = (profile.following || 0) + (profile.followingTraders || 0)
+
+  const hasCover = Boolean(profile.cover_url)
+  const containerBackground = hasCover
+    ? `linear-gradient(to bottom, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0.6) 100%), url(${profile.cover_url}) center/cover no-repeat`
+    : `linear-gradient(135deg, ${tokens.colors.bg.secondary}F8 0%, ${tokens.colors.bg.primary}E8 100%)`
+
+  return (
+    <Box
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        padding: tokens.spacing[6],
+        background: containerBackground,
+        borderRadius: tokens.radius.xl,
+        border: `1px solid ${tokens.colors.border.primary}50`,
+        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
+        position: 'relative',
+        overflow: 'hidden',
+      }}
+    >
+      {/* 装饰背景 */}
+      {!hasCover && (
+        <Box style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none' }}>
+          <Box
+            style={{
+              position: 'absolute',
+              top: -100,
+              left: -100,
+              width: 300,
+              height: 300,
+              background: `radial-gradient(circle, ${tokens.colors.accent.primary}08 0%, transparent 70%)`,
+            }}
+          />
+        </Box>
+      )}
+
+      {/* 头像 */}
+      <Box style={{ position: 'relative', marginBottom: tokens.spacing[4] }}>
+        <Box
+          style={{
+            width: 96,
+            height: 96,
+            borderRadius: tokens.radius.full,
+            background: profile.avatar_url ? tokens.colors.bg.secondary : getAvatarGradient(profile.id),
+            border: `3px solid ${tokens.colors.border.primary}`,
+            display: 'grid',
+            placeItems: 'center',
+            overflow: 'hidden',
+            boxShadow: tokens.shadow.lg,
+          }}
+        >
+          {profile.avatar_url ? (
+            <img
+              src={`/api/avatar?url=${encodeURIComponent(profile.avatar_url)}`}
+              alt={profile.handle}
+              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+              onError={(e) => {
+                const img = e.target as HTMLImageElement
+                img.style.display = 'none'
+              }}
+            />
+          ) : (
+            <Text size="2xl" weight="black" style={{ color: '#fff', fontSize: 40 }}>
+              {getAvatarInitial(profile.handle)}
+            </Text>
+          )}
+        </Box>
+        {proBadgeTier === 'pro' && <ProBadgeOverlay position="bottom-right" />}
+      </Box>
+
+      {/* 名字 */}
+      <Text
+        size="2xl"
+        weight="black"
+        style={{
+          color: hasCover ? '#fff' : tokens.colors.text.primary,
+          textShadow: hasCover ? '0 2px 8px rgba(0,0,0,0.5)' : undefined,
+          marginBottom: tokens.spacing[2],
+        }}
+      >
+        {profile.handle}
+      </Text>
+
+      {/* 个人简介 */}
+      {profile.bio ? (
+        <Text
+          size="sm"
+          style={{
+            color: hasCover ? 'rgba(255,255,255,0.85)' : tokens.colors.text.secondary,
+            textShadow: hasCover ? '0 1px 4px rgba(0,0,0,0.3)' : undefined,
+            textAlign: 'center',
+            maxWidth: 400,
+            marginBottom: tokens.spacing[4],
+            lineHeight: 1.6,
+          }}
+        >
+          {profile.bio}
+        </Text>
+      ) : isOwnProfile ? (
+        <Text
+          size="sm"
+          style={{
+            color: hasCover ? 'rgba(255,255,255,0.6)' : tokens.colors.text.tertiary,
+            fontStyle: 'italic',
+            marginBottom: tokens.spacing[4],
+          }}
+        >
+          {isZh ? '点击编辑添加个人简介' : 'Click edit to add a bio'}
+        </Text>
+      ) : null}
+
+      {/* Following / Followers */}
+      <Box style={{ display: 'flex', gap: tokens.spacing[6], marginBottom: tokens.spacing[4] }}>
+        {/* Following */}
+        <Box
+          onClick={() => isOwnProfile && router.push('/following')}
+          style={{
+            cursor: isOwnProfile ? 'pointer' : 'default',
+            textAlign: 'center',
+            padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+            borderRadius: tokens.radius.md,
+            transition: 'background 0.2s',
+          }}
+          onMouseEnter={(e) => {
+            if (isOwnProfile) e.currentTarget.style.background = `${tokens.colors.accent.primary}15`
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'transparent'
+          }}
+        >
+          <Text
+            size="lg"
+            weight="black"
+            style={{
+              color: hasCover ? '#fff' : tokens.colors.text.primary,
+              textShadow: hasCover ? '0 1px 4px rgba(0,0,0,0.3)' : undefined,
+            }}
+          >
+            {followingCount}
+          </Text>
+          <Text
+            size="xs"
+            style={{
+              color: hasCover ? 'rgba(255,255,255,0.7)' : tokens.colors.text.tertiary,
+              textShadow: hasCover ? '0 1px 2px rgba(0,0,0,0.2)' : undefined,
+            }}
+          >
+            {t('following')}
+          </Text>
+        </Box>
+
+        {/* Followers */}
+        <Box
+          onClick={() => {
+            if (profile.isRegistered && (isOwnProfile || profile.showFollowers)) {
+              setModalType('followers')
+            }
+          }}
+          style={{
+            cursor: profile.isRegistered && (isOwnProfile || profile.showFollowers) ? 'pointer' : 'default',
+            textAlign: 'center',
+            padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+            borderRadius: tokens.radius.md,
+            transition: 'background 0.2s',
+          }}
+          onMouseEnter={(e) => {
+            if (profile.isRegistered && (isOwnProfile || profile.showFollowers)) {
+              e.currentTarget.style.background = `${tokens.colors.accent.primary}15`
+            }
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'transparent'
+          }}
+        >
+          <Text
+            size="lg"
+            weight="black"
+            style={{
+              color: hasCover ? '#fff' : tokens.colors.text.primary,
+              textShadow: hasCover ? '0 1px 4px rgba(0,0,0,0.3)' : undefined,
+            }}
+          >
+            {followersCount}
+          </Text>
+          <Text
+            size="xs"
+            style={{
+              color: hasCover ? 'rgba(255,255,255,0.7)' : tokens.colors.text.tertiary,
+              textShadow: hasCover ? '0 1px 2px rgba(0,0,0,0.2)' : undefined,
+            }}
+          >
+            {t('followers')}
+          </Text>
+        </Box>
+      </Box>
+
+      {/* 社交链接 */}
+      {socialLinks && Object.values(socialLinks).some(v => v) && (
+        <Box style={{ display: 'flex', gap: tokens.spacing[2], marginBottom: tokens.spacing[4], flexWrap: 'wrap', justifyContent: 'center' }}>
+          {socialLinks.twitter && (
+            <a
+              href={`https://x.com/${socialLinks.twitter}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
+                borderRadius: tokens.radius.md,
+                background: `${tokens.colors.bg.tertiary}80`,
+                color: tokens.colors.text.secondary,
+                fontSize: tokens.typography.fontSize.xs,
+                textDecoration: 'none',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+              }}
+            >
+              <span style={{ fontSize: 11 }}>𝕏</span>
+              <span>@{socialLinks.twitter}</span>
+            </a>
+          )}
+          {socialLinks.telegram && (
+            <a
+              href={`https://t.me/${socialLinks.telegram}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
+                borderRadius: tokens.radius.md,
+                background: `${tokens.colors.bg.tertiary}80`,
+                color: tokens.colors.text.secondary,
+                fontSize: tokens.typography.fontSize.xs,
+                textDecoration: 'none',
+              }}
+            >
+              TG @{socialLinks.telegram}
+            </a>
+          )}
+        </Box>
+      )}
+
+      {/* 操作按钮 */}
+      <Box style={{ display: 'flex', gap: tokens.spacing[3] }}>
+        {isOwnProfile ? (
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => router.push('/settings')}
+            style={{
+              background: `${tokens.colors.accent.primary}15`,
+              border: `1px solid ${tokens.colors.accent.primary}40`,
+            }}
+          >
+            {t('editProfile')}
+          </Button>
+        ) : profile.isRegistered && currentUserId ? (
+          <>
+            <UserFollowButton
+              targetUserId={profile.id}
+              currentUserId={currentUserId}
+              size="sm"
+              onFollowChange={(isFollowing) => {
+                setFollowersCount(prev => isFollowing ? prev + 1 : prev - 1)
+              }}
+            />
+            <MessageButton
+              targetUserId={profile.id}
+              currentUserId={currentUserId}
+              size="sm"
+            />
+          </>
+        ) : null}
+        <Button variant="ghost" size="sm" onClick={() => router.push('/')}>
+          ← {t('back')}
+        </Button>
+      </Box>
+
+      {/* 关注列表弹窗 */}
+      {profile.isRegistered && (
+        <FollowListModal
+          isOpen={modalType === 'followers'}
+          onClose={() => setModalType(null)}
+          type="followers"
+          handle={profile.handle}
+          currentUserId={currentUserId}
+          isOwnProfile={isOwnProfile}
+          isPublic={profile.showFollowers}
+        />
+      )}
+    </Box>
+  )
+}
 
 function UserHomeContent(props: { params: { handle: string } | Promise<{ handle: string }> }) {
   const searchParams = useSearchParams()
@@ -59,35 +368,6 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
   const [loadError, setLoadError] = useState(false)
   const [proBadgeTier, setProBadgeTier] = useState<'pro' | null>(null)
   const [socialLinks, setSocialLinks] = useState<{ twitter?: string; telegram?: string; discord?: string; github?: string; website?: string }>({})
-  
-  // Read tab from URL, default to 'overview'
-  const urlTab = searchParams.get('tab') as TabKey | null
-  const [activeTab, setActiveTab] = useState<TabKey>(
-    urlTab && ['overview', 'stats', 'portfolio'].includes(urlTab) ? urlTab : 'overview'
-  )
-
-  // Update URL when tab changes
-  const handleTabChange = (tab: TabKey) => {
-    setActiveTab(tab)
-    const params = new URLSearchParams(searchParams.toString())
-    if (tab === 'overview') {
-      params.delete('tab') // Don't show tab in URL for default
-    } else {
-      params.set('tab', tab)
-    }
-    const newUrl = params.toString() ? `${pathname}?${params.toString()}` : pathname
-    router.replace(newUrl, { scroll: false })
-  }
-
-  // Sync with URL changes
-  useEffect(() => {
-    const tab = searchParams.get('tab') as TabKey | null
-    if (tab && ['overview', 'stats', 'portfolio'].includes(tab)) {
-      setActiveTab(tab)
-    } else if (!tab) {
-      setActiveTab('overview')
-    }
-  }, [searchParams])
 
   // 解析 params
   useEffect(() => {
@@ -572,104 +852,69 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
       <TopNav email={email} />
 
       <Box className="page-container" style={{ maxWidth: 1200, margin: '0 auto', padding: tokens.spacing[6], paddingBottom: 100 }}>
-          {/* Header */}
-        <TraderHeader
-          handle={profile.handle}
-          traderId={profile.id}
-          uid={profile.uid}
-          avatarUrl={profile.avatar_url}
-          coverUrl={profile.cover_url}
-          isRegistered={profile.isRegistered}
-          followers={profile.followers}
+        {/* 简化的个人信息栏 */}
+        <UserProfileHeader
+          profile={profile}
           isOwnProfile={isOwnProfile}
-          source={profile.source}
           proBadgeTier={proBadgeTier}
+          socialLinks={socialLinks}
+          currentUserId={currentUserId}
         />
 
-        {/* Tabs */}
-        <TraderTabs activeTab={activeTab} onTabChange={handleTabChange} />
-
-        {/* Tab Content */}
-        {activeTab === 'overview' && (
-          <Box
-            className="profile-grid"
-            style={{
-              display: 'grid',
-              gridTemplateColumns: '1fr',
-              gap: tokens.spacing[6],
-            }}
-          >
-            {/* Left Column - 核心绩效指标和动态 */}
-            <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[6] }}>
-              {performance && (
-                <OverviewPerformanceCard
-                  performance={performance}
-                  profitableWeeksPct={stats?.additionalStats?.profitableWeeksPct}
-                  arenaScore={performance.arena_score}
-                  returnScore={performance.return_score}
-                  drawdownScore={performance.drawdown_score}
-                  stabilityScore={performance.stability_score}
-                  source={profile?.source}
-                />
-              )}
-              {/* 交易员动态 - 使用 PostFeed 组件（置顶帖子会自动显示在最上面） */}
-              <Box bg="secondary" p={4} radius="lg" border="primary">
-                <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: tokens.spacing[4] }}>
-                  <Text size="lg" weight="black">{isZh ? '动态' : 'Posts'}</Text>
-                  {isOwnProfile && (
-                    <button
-                      onClick={() => router.push(`/u/${handle}/new`)}
-                      style={{
-                        padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
-                        borderRadius: tokens.radius.md,
-                        border: 'none',
-                        background: tokens.colors.accent.brand,
-                        color: '#FFFFFF',
-                        fontSize: tokens.typography.fontSize.sm,
-                        fontWeight: tokens.typography.fontWeight.black,
-                        cursor: 'pointer',
-                      }}
-                    >
-                      {isZh ? '发动态' : 'New Post'}
-                    </button>
-                  )}
-                </Box>
-                <PostFeed authorHandle={profile.handle} variant="compact" showSortButtons />
+        {/* 主要内容区域 */}
+        <Box
+          className="profile-content"
+          style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr 320px',
+            gap: tokens.spacing[6],
+            marginTop: tokens.spacing[6],
+          }}
+        >
+          {/* 左侧 - 动态 */}
+          <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[6] }}>
+            <Box bg="secondary" p={4} radius="lg" border="primary">
+              <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: tokens.spacing[4] }}>
+                <Text size="lg" weight="black">{isZh ? '动态' : 'Posts'}</Text>
+                {isOwnProfile && (
+                  <button
+                    onClick={() => router.push(`/u/${handle}/new`)}
+                    style={{
+                      padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
+                      borderRadius: tokens.radius.md,
+                      border: 'none',
+                      background: tokens.colors.accent.brand,
+                      color: '#FFFFFF',
+                      fontSize: tokens.typography.fontSize.sm,
+                      fontWeight: tokens.typography.fontWeight.black,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {isZh ? '发动态' : 'New Post'}
+                  </button>
+                )}
               </Box>
-            </Box>
-
-            {/* Right Column - 交易员卡片 */}
-            <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[6] }}>
-              <TraderAboutCard
-                handle={profile.handle}
-                traderId={profile.id}
-                avatarUrl={profile.avatar_url}
-                bio={profile.bio}
-                followers={profile.followers}
-                following={(profile.following || 0) + (profile.followingTraders || 0)}
-                isRegistered={profile.isRegistered}
-                isOwnProfile={isOwnProfile}
-                showFollowers={profile.showFollowers}
-                showFollowing={profile.showFollowing}
-                socialLinks={socialLinks}
-              />
-              {/* 创办的小组 */}
-              <CreatedGroups userId={profile.id} />
-              {/* 公开收藏夹 */}
-              <UserBookmarkFolders userId={profile.id} isOwnProfile={isOwnProfile} />
-              {isOwnProfile && currentUserId && (
-                <AccountRequiredStats userId={currentUserId} />
-              )}
-              {similarTraders.length > 0 && <SimilarTraders traders={similarTraders} />}
+              <PostFeed authorHandle={profile.handle} variant="compact" showSortButtons />
             </Box>
           </Box>
-        )}
 
-        {activeTab === 'stats' && stats && (
-          <StatsPage stats={stats} traderHandle={profile.handle} />
-        )}
+          {/* 右侧 - 加入的小组 + 收藏夹 */}
+          <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[6] }}>
+            {/* 加入的小组 */}
+            <JoinedGroups userId={profile.id} />
+            {/* 公开收藏夹 */}
+            <UserBookmarkFolders userId={profile.id} isOwnProfile={isOwnProfile} />
+          </Box>
+        </Box>
 
-        {activeTab === 'portfolio' && <PortfolioTable items={portfolio} />}
+        {/* 响应式样式 */}
+        <style>{`
+          @media (max-width: 768px) {
+            .profile-content {
+              grid-template-columns: 1fr !important;
+            }
+          }
+        `}</style>
       </Box>
     </Box>
   )
