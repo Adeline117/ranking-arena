@@ -185,14 +185,17 @@ export function StatsBar() {
           display: 'flex',
           gap: 10,
           animation: 'scrollTicker 35s linear infinite',
-          animationDelay: '2s',
+          animationDelay: '3s', // Increased delay to prioritize LCP
           animationPlayState: 'paused',
           width: 'max-content',
+          contain: 'layout style', // Performance: isolate layout calculations
         }}
         onAnimationStart={(e) => {
           // 延迟启动动画，避免阻塞 LCP
           setTimeout(() => {
-            (e.currentTarget as HTMLElement).style.animationPlayState = 'running'
+            const el = e.currentTarget as HTMLElement
+            el.style.animationPlayState = 'running'
+            el.style.willChange = 'transform' // Only add will-change when animating
           }, 100)
         }}
       >
