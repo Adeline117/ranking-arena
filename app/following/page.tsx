@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
@@ -13,21 +13,25 @@ import { useToast } from '@/app/components/ui/Toast'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 // 平台配置
-const sourceConfig: Record<string, { label: string; color: string }> = {
-  binance_futures: { label: 'Binance 合约', color: '#F0B90B' },
-  binance_spot: { label: 'Binance 现货', color: '#F0B90B' },
-  binance_web3: { label: 'Binance 链上', color: '#F0B90B' },
-  bybit: { label: 'Bybit 合约', color: '#F7A600' },
-  bitget_futures: { label: 'Bitget 合约', color: '#00C853' },
-  bitget_spot: { label: 'Bitget 现货', color: '#00C853' },
-  okx_web3: { label: 'OKX 链上', color: '#000000' },
-  kucoin: { label: 'KuCoin 合约', color: '#23AF91' },
-  mexc: { label: 'MEXC 合约', color: '#1972E2' },
-  coinex: { label: 'CoinEx 合约', color: '#5799F7' },
-  gmx: { label: 'GMX 链上', color: '#4589FF' },
+const sourceConfig: Record<string, { label: string; labelEn: string; color: string }> = {
+  binance_futures: { label: 'Binance 合约', labelEn: 'Binance Futures', color: '#F0B90B' },
+  binance_spot: { label: 'Binance 现货', labelEn: 'Binance Spot', color: '#F0B90B' },
+  binance_web3: { label: 'Binance 链上', labelEn: 'Binance Web3', color: '#F0B90B' },
+  bybit: { label: 'Bybit 合约', labelEn: 'Bybit Futures', color: '#F7A600' },
+  bitget_futures: { label: 'Bitget 合约', labelEn: 'Bitget Futures', color: '#00C853' },
+  bitget_spot: { label: 'Bitget 现货', labelEn: 'Bitget Spot', color: '#00C853' },
+  okx_web3: { label: 'OKX 链上', labelEn: 'OKX Web3', color: '#000000' },
+  kucoin: { label: 'KuCoin 合约', labelEn: 'KuCoin Futures', color: '#23AF91' },
+  mexc: { label: 'MEXC 合约', labelEn: 'MEXC Futures', color: '#1972E2' },
+  coinex: { label: 'CoinEx 合约', labelEn: 'CoinEx Futures', color: '#5799F7' },
+  gmx: { label: 'GMX 链上', labelEn: 'GMX DeFi', color: '#4589FF' },
 }
 
-const getSourceDisplayName = (source: string) => sourceConfig[source]?.label || source
+const getSourceDisplayName = (source: string, lang: string) =>
+  lang === 'en'
+    ? sourceConfig[source]?.labelEn || source
+    : sourceConfig[source]?.label || source
+
 const getSourceColor = (source: string) => sourceConfig[source]?.color || '#888888'
 
 // 统一的关注项类型
@@ -38,12 +42,98 @@ type FollowItem = {
   avatar_url?: string
   bio?: string
   roi?: number
+  roi_7d?: number
+  roi_30d?: number
   pnl?: number
   win_rate?: number
   followers?: number
   source?: string
+  arena_score?: number
   followed_at?: string
 }
+
+type SortMode = 'recent' | 'roi' | 'score'
+
+// ============================================
+// 统计卡片组件
+// ============================================
+
+function StatCard({ label, value, color, subText }: {
+  label: string
+  value: string
+  color?: string
+  subText?: string
+}) {
+  return (
+    <Box style={{
+      flex: '1 1 140px',
+      padding: tokens.spacing[3],
+      background: tokens.colors.bg.secondary,
+      borderRadius: tokens.radius.lg,
+      minWidth: 0,
+    }}>
+      <Text size="xs" color="tertiary" style={{ marginBottom: 4 }}>{label}</Text>
+      <Text size="lg" weight="bold" style={{ color: color || tokens.colors.text.primary }}>
+        {value}
+      </Text>
+      {subText && (
+        <Text size="xs" color="tertiary" style={{ marginTop: 2 }}>{subText}</Text>
+      )}
+    </Box>
+  )
+}
+
+// ============================================
+// 排序按钮组件
+// ============================================
+
+function SortButton({ label, active, onClick }: {
+  label: string
+  active: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
+        borderRadius: tokens.radius.full,
+        border: 'none',
+        cursor: 'pointer',
+        fontSize: tokens.typography.fontSize.xs,
+        fontWeight: active ? 600 : 400,
+        background: active ? tokens.colors.accent.brand + '20' : 'transparent',
+        color: active ? tokens.colors.accent.brand : tokens.colors.text.secondary,
+        transition: `all ${tokens.transition.base}`,
+      }}
+    >
+      {label}
+    </button>
+  )
+}
+
+// ============================================
+// ROI 显示组件（带变化趋势）
+// ============================================
+
+function RoiDisplay({ value, label }: { value?: number; label?: string }) {
+  if (value === undefined || value === null) return null
+  const isPositive = value >= 0
+  return (
+    <Box style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+      {label && <Text size="xs" color="tertiary">{label}:</Text>}
+      <Text size="xs" weight="semibold" style={{
+        color: isPositive ? tokens.colors.accent.success : tokens.colors.accent.error,
+      }}>
+        {isPositive ? '+' : ''}{value.toFixed(2)}%
+      </Text>
+    </Box>
+  )
+}
+
+// ============================================
+// 主组件
+// ============================================
 
 export default function FollowingPage() {
   const router = useRouter()
@@ -53,6 +143,7 @@ export default function FollowingPage() {
   const [userId, setUserId] = useState<string | null>(null)
   const [items, setItems] = useState<FollowItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [sortMode, setSortMode] = useState<SortMode>('recent')
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -76,7 +167,7 @@ export default function FollowingPage() {
         if (!response.ok) {
           console.error('Error fetching following:', data.error)
           setItems([])
-          showToast(language === 'zh' ? '加载关注列表失败' : 'Failed to load following list', 'error')
+          showToast(t('loadFollowingFailed'), 'error')
           return
         }
 
@@ -84,14 +175,68 @@ export default function FollowingPage() {
       } catch (error) {
         console.error('Error loading following:', error)
         setItems([])
-        showToast(language === 'zh' ? '加载关注列表失败' : 'Failed to load following list', 'error')
+        showToast(t('loadFollowingFailed'), 'error')
       } finally {
         setLoading(false)
       }
     }
 
     load()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId])
+
+  // 排序后的列表
+  const sortedItems = useMemo(() => {
+    const sorted = [...items]
+    switch (sortMode) {
+      case 'roi':
+        sorted.sort((a, b) => (b.roi || 0) - (a.roi || 0))
+        break
+      case 'score':
+        sorted.sort((a, b) => (b.arena_score || 0) - (a.arena_score || 0))
+        break
+      case 'recent':
+      default:
+        sorted.sort((a, b) => {
+          const timeA = a.followed_at ? new Date(a.followed_at).getTime() : 0
+          const timeB = b.followed_at ? new Date(b.followed_at).getTime() : 0
+          return timeB - timeA
+        })
+        break
+    }
+    return sorted
+  }, [items, sortMode])
+
+  // 汇总统计（只计算交易员）
+  const stats = useMemo(() => {
+    const traders = items.filter((i) => i.type === 'trader')
+    const users = items.filter((i) => i.type === 'user')
+
+    if (traders.length === 0) {
+      return {
+        traderCount: 0,
+        userCount: users.length,
+        avgRoi: 0,
+        bestPerformer: null as FollowItem | null,
+        worstPerformer: null as FollowItem | null,
+      }
+    }
+
+    const rois = traders.map((t) => t.roi || 0)
+    const avgRoi = rois.reduce((sum, r) => sum + r, 0) / rois.length
+
+    const sortedByRoi = [...traders].sort((a, b) => (b.roi || 0) - (a.roi || 0))
+    const bestPerformer = sortedByRoi[0]
+    const worstPerformer = sortedByRoi[sortedByRoi.length - 1]
+
+    return {
+      traderCount: traders.length,
+      userCount: users.length,
+      avgRoi,
+      bestPerformer,
+      worstPerformer,
+    }
+  }, [items])
 
   const handleItemClick = (item: FollowItem) => {
     if (item.type === 'trader') {
@@ -101,17 +246,18 @@ export default function FollowingPage() {
     }
   }
 
-  if (!userId) {
+  // 未登录
+  if (!userId && !loading) {
     return (
       <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
         <TopNav email={email} />
         <Box style={{ maxWidth: 1200, margin: '0 auto', padding: tokens.spacing[6] }}>
           <Text size="lg" weight="bold" style={{ marginBottom: tokens.spacing[4] }}>
-            我的关注
+            {t('myFollowing')}
           </Text>
           <EmptyState
-            title="请先登录"
-            description="登录后可以查看您关注的内容"
+            title={t('loginRequired')}
+            description={t('loginRequiredDesc')}
           />
         </Box>
       </Box>
@@ -122,148 +268,236 @@ export default function FollowingPage() {
     <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
       <TopNav email={email} />
       <Box style={{ maxWidth: 1200, margin: '0 auto', padding: tokens.spacing[6] }}>
+        {/* 页面标题 */}
         <Text size="lg" weight="bold" style={{ marginBottom: tokens.spacing[4] }}>
-          我的关注
+          {t('myFollowing')}
         </Text>
+
         {loading ? (
           <ListSkeleton count={5} gap={12} />
         ) : items.length === 0 ? (
           <EmptyState
-            title="暂无关注"
-            description="关注交易员或用户后，他们会显示在这里"
+            title={t('noFollowing')}
+            description={t('noFollowingDesc')}
           />
         ) : (
-          <Box style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: tokens.spacing[2],
-            background: tokens.colors.bg.secondary,
-            borderRadius: tokens.radius.lg,
-            padding: tokens.spacing[2],
-            animation: 'fadeIn 0.3s ease-out',
-          }}>
-            {items.map((item) => (
-              <Box
-                key={`${item.type}-${item.id}`}
-                onClick={() => handleItemClick(item)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: tokens.spacing[3],
-                  padding: tokens.spacing[3],
-                  borderRadius: tokens.radius.md,
-                  cursor: 'pointer',
-                  transition: `background ${tokens.transition.base}`,
-                  background: 'transparent',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = tokens.colors.bg.tertiary
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'transparent'
-                }}
-              >
-                {/* 头像 */}
-                <Avatar
-                  userId={item.id}
-                  name={item.handle}
-                  avatarUrl={item.avatar_url}
-                  size={48}
-                  style={{ flexShrink: 0 }}
-                />
+          <>
+            {/* ============= 汇总统计卡片 ============= */}
+            <Box style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: tokens.spacing[3],
+              marginBottom: tokens.spacing[5],
+              animation: 'fadeIn 0.3s ease-out',
+            }}>
+              <StatCard
+                label={t('totalFollowing')}
+                value={`${stats.traderCount + stats.userCount}`}
+                subText={`${stats.traderCount} ${t('traders')} · ${stats.userCount} ${t('users')}`}
+              />
+              <StatCard
+                label={t('avgRoi')}
+                value={stats.traderCount > 0
+                  ? `${stats.avgRoi >= 0 ? '+' : ''}${stats.avgRoi.toFixed(2)}%`
+                  : '--'
+                }
+                color={stats.avgRoi >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error}
+              />
+              <StatCard
+                label={t('bestPerformer')}
+                value={stats.bestPerformer
+                  ? `${(stats.bestPerformer.roi || 0) >= 0 ? '+' : ''}${(stats.bestPerformer.roi || 0).toFixed(2)}%`
+                  : '--'
+                }
+                color={tokens.colors.accent.success}
+                subText={stats.bestPerformer?.handle}
+              />
+              <StatCard
+                label={t('worstPerformer')}
+                value={stats.worstPerformer
+                  ? `${(stats.worstPerformer.roi || 0) >= 0 ? '+' : ''}${(stats.worstPerformer.roi || 0).toFixed(2)}%`
+                  : '--'
+                }
+                color={tokens.colors.accent.error}
+                subText={stats.worstPerformer?.handle}
+              />
+            </Box>
 
-                {/* 信息区域 */}
-                <Box style={{ flex: 1, minWidth: 0 }}>
-                  <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
-                    <Text size="sm" weight="semibold" style={{ 
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                    }}>
-                      {item.handle}
-                    </Text>
-                    {/* 类型标签 */}
-                    <span style={{
-                      fontSize: 10,
-                      padding: '2px 6px',
-                      borderRadius: tokens.radius.sm,
-                      background: item.type === 'trader' 
-                        ? getSourceColor(item.source || 'binance') + '20'
-                        : tokens.colors.accent.brand + '20',
-                      color: item.type === 'trader'
-                        ? getSourceColor(item.source || 'binance')
-                        : tokens.colors.accent.brand,
-                      fontWeight: 500,
-                    }}>
-                      {item.type === 'trader' 
-                        ? getSourceDisplayName(item.source || 'binance')
-                        : '用户'}
-                    </span>
-                  </Box>
-                  
-                  {/* 交易员显示 ROI，用户显示 bio */}
-                  {item.type === 'trader' ? (
-                    <Box style={{ 
-                      display: 'flex', 
-                      alignItems: 'center', 
-                      gap: tokens.spacing[3],
-                      marginTop: 4,
-                    }}>
-                      <Text size="xs" color="tertiary">
-                        ROI: <span style={{ 
-                          color: (item.roi || 0) >= 0 
-                            ? tokens.colors.accent.success 
-                            : tokens.colors.accent.error,
-                          fontWeight: 500,
-                        }}>
-                          {(item.roi || 0) >= 0 ? '+' : ''}{((item.roi || 0)).toFixed(2)}%
-                        </span>
+            {/* ============= 排序控制 ============= */}
+            <Box style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: tokens.spacing[1],
+              marginBottom: tokens.spacing[3],
+              padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
+              background: tokens.colors.bg.secondary,
+              borderRadius: tokens.radius.full,
+              width: 'fit-content',
+            }}>
+              <SortButton
+                label={t('sortByRecent')}
+                active={sortMode === 'recent'}
+                onClick={() => setSortMode('recent')}
+              />
+              <SortButton
+                label={t('sortByRoi')}
+                active={sortMode === 'roi'}
+                onClick={() => setSortMode('roi')}
+              />
+              <SortButton
+                label={t('sortByScore')}
+                active={sortMode === 'score'}
+                onClick={() => setSortMode('score')}
+              />
+            </Box>
+
+            {/* ============= 关注列表 ============= */}
+            <Box style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: tokens.spacing[2],
+              background: tokens.colors.bg.secondary,
+              borderRadius: tokens.radius.lg,
+              padding: tokens.spacing[2],
+              animation: 'fadeIn 0.3s ease-out',
+            }}>
+              {sortedItems.map((item) => (
+                <Box
+                  key={`${item.type}-${item.id}`}
+                  onClick={() => handleItemClick(item)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: tokens.spacing[3],
+                    padding: tokens.spacing[3],
+                    borderRadius: tokens.radius.md,
+                    cursor: 'pointer',
+                    transition: `background ${tokens.transition.base}`,
+                    background: 'transparent',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = tokens.colors.bg.tertiary
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'transparent'
+                  }}
+                >
+                  {/* 头像 */}
+                  <Avatar
+                    userId={item.id}
+                    name={item.handle}
+                    avatarUrl={item.avatar_url}
+                    size={48}
+                    style={{ flexShrink: 0 }}
+                  />
+
+                  {/* 信息区域 */}
+                  <Box style={{ flex: 1, minWidth: 0 }}>
+                    <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
+                      <Text size="sm" weight="semibold" style={{
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}>
+                        {item.handle}
                       </Text>
-                      {item.win_rate !== undefined && (
-                        <Text size="xs" color="tertiary">
-                          {t('winRate')}: {(item.win_rate || 0).toFixed(1)}%
-                        </Text>
-                      )}
-                      {item.followers !== undefined && item.followers > 0 && (
-                        <Text size="xs" color="tertiary">
-                          {t('copiers')}: {item.followers.toLocaleString()}
-                        </Text>
-                      )}
+                      {/* 类型标签 */}
+                      <span style={{
+                        fontSize: 10,
+                        padding: '2px 6px',
+                        borderRadius: tokens.radius.sm,
+                        background: item.type === 'trader'
+                          ? getSourceColor(item.source || 'binance') + '20'
+                          : tokens.colors.accent.brand + '20',
+                        color: item.type === 'trader'
+                          ? getSourceColor(item.source || 'binance')
+                          : tokens.colors.accent.brand,
+                        fontWeight: 500,
+                      }}>
+                        {item.type === 'trader'
+                          ? getSourceDisplayName(item.source || 'binance', language)
+                          : (language === 'en' ? 'User' : '用户')}
+                      </span>
                     </Box>
-                  ) : item.bio ? (
-                    <Text size="xs" color="tertiary" style={{
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                      marginTop: 4,
-                    }}>
-                      {item.bio}
-                    </Text>
-                  ) : null}
-                </Box>
 
-                {/* 右侧箭头 */}
-                <Box style={{ 
-                  color: tokens.colors.text.tertiary,
-                  flexShrink: 0,
-                }}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="9 18 15 12 9 6"></polyline>
-                  </svg>
+                    {/* 交易员：ROI + Arena Score 行 */}
+                    {item.type === 'trader' ? (
+                      <Box style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: tokens.spacing[3],
+                        marginTop: 4,
+                        flexWrap: 'wrap',
+                      }}>
+                        <RoiDisplay value={item.roi} label="ROI" />
+                        {item.roi_7d !== undefined && (
+                          <RoiDisplay value={item.roi_7d} label="7D" />
+                        )}
+                        {item.arena_score !== undefined && item.arena_score > 0 && (
+                          <Text size="xs" color="tertiary">
+                            Score: <span style={{ color: tokens.colors.accent.brand, fontWeight: 500 }}>
+                              {item.arena_score.toFixed(1)}
+                            </span>
+                          </Text>
+                        )}
+                        {item.win_rate !== undefined && item.win_rate > 0 && (
+                          <Text size="xs" color="tertiary">
+                            {t('winRate')}: {item.win_rate.toFixed(1)}%
+                          </Text>
+                        )}
+                        {item.followers !== undefined && item.followers > 0 && (
+                          <Text size="xs" color="tertiary">
+                            {t('copiers')}: {item.followers.toLocaleString()}
+                          </Text>
+                        )}
+                      </Box>
+                    ) : item.bio ? (
+                      <Text size="xs" color="tertiary" style={{
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        marginTop: 4,
+                      }}>
+                        {item.bio}
+                      </Text>
+                    ) : null}
+                  </Box>
+
+                  {/* 右侧：Arena Score 或箭头 */}
+                  <Box style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: tokens.spacing[2],
+                    flexShrink: 0,
+                  }}>
+                    {item.type === 'trader' && item.arena_score !== undefined && item.arena_score > 0 && (
+                      <Box style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
+                        background: tokens.colors.accent.brand + '10',
+                        borderRadius: tokens.radius.md,
+                        minWidth: 50,
+                      }}>
+                        <Text size="xs" color="tertiary" style={{ fontSize: 9, lineHeight: 1 }}>Score</Text>
+                        <Text size="sm" weight="bold" style={{ color: tokens.colors.accent.brand }}>
+                          {item.arena_score.toFixed(0)}
+                        </Text>
+                      </Box>
+                    )}
+                    <Box style={{ color: tokens.colors.text.tertiary }}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="9 18 15 12 9 6"></polyline>
+                      </svg>
+                    </Box>
+                  </Box>
                 </Box>
-              </Box>
-            ))}
-          </Box>
+              ))}
+            </Box>
+          </>
         )}
       </Box>
     </Box>
   )
 }
-
-
-
-
-
-
-
-

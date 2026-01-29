@@ -7,10 +7,11 @@
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { runTraderAlertDetection } from '@/lib/services/trader-alerts'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
-export const maxDuration = 60
+export const maxDuration = 120
 
 // 验证 Cron 密钥 (Vercel Cron 使用 Authorization: Bearer 格式)
 function isAuthorized(req: Request): boolean {
@@ -101,6 +102,19 @@ export async function GET(req: Request) {
       console.log(`[FollowedTraders Cron] ${source}: ${count} 个关注的交易员需要更新`)
     }
 
+    // 6. 运行异动检测
+    let alertResult = { tradersChecked: 0, alertsDetected: 0, notificationsSaved: 0, errors: 0 }
+    try {
+      const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+      const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+      if (supabaseUrl && supabaseKey) {
+        alertResult = await runTraderAlertDetection(supabaseUrl, supabaseKey)
+        console.log(`[FollowedTraders Cron] 异动检测: ${alertResult.alertsDetected} 告警, ${alertResult.notificationsSaved} 通知`)
+      }
+    } catch (alertError) {
+      console.error('[FollowedTraders Cron] 异动检测失败:', alertError)
+    }
+
     const duration = Date.now() - startTime
 
     return NextResponse.json({
@@ -109,6 +123,7 @@ export async function GET(req: Request) {
       duration: `${duration}ms`,
       totalFollowedTraders: totalCount,
       bySource: results,
+      alertDetection: alertResult,
       timestamp: new Date().toISOString(),
     })
   } catch (error: unknown) {

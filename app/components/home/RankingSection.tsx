@@ -365,9 +365,15 @@ export default function RankingSection({
       })()
     : categoryFiltered
 
-  const filteredTraders = hasActiveFilters
+  const advancedFiltered = hasActiveFilters
     ? applyAdvancedFilter(presetFiltered, filterConfig)
     : presetFiltered
+
+  // Free users: limit to top 50 traders; Pro users: full leaderboard
+  const FREE_LEADERBOARD_LIMIT = 50
+  const filteredTraders = isPro
+    ? advancedFiltered
+    : advancedFiltered.slice(0, FREE_LEADERBOARD_LIMIT)
 
   // Pro 功能提示
   const handleProRequired = () => {

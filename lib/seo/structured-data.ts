@@ -197,6 +197,9 @@ export interface TraderSchemaInput {
   source?: string
   followers?: number
   roi90d?: number
+  winRate?: number
+  maxDrawdown?: number
+  arenaScore?: number
   profileUrl?: string
 }
 
@@ -216,9 +219,17 @@ export function generateTraderPersonSchema(trader: TraderSchemaInput): PersonSch
     personSchema.image = trader.avatarUrl
   }
   
-  if (trader.bio) {
-    personSchema.description = trader.bio
+  // Build rich description with performance data
+  const descParts: string[] = []
+  if (trader.bio) descParts.push(trader.bio)
+  if (trader.roi90d != null) {
+    descParts.push(`90-day ROI: ${trader.roi90d >= 0 ? '+' : ''}${trader.roi90d.toFixed(2)}%`)
   }
+  if (trader.winRate != null) descParts.push(`Win rate: ${trader.winRate.toFixed(1)}%`)
+  if (trader.source) descParts.push(`Trading on ${trader.source.charAt(0).toUpperCase() + trader.source.slice(1)}`)
+  personSchema.description = descParts.length > 0
+    ? descParts.join(' · ')
+    : `Crypto trader on ${SITE_NAME}`
   
   personSchema.url = `${BASE_URL}/trader/${encodeURIComponent(trader.handle)}`
   
@@ -237,13 +248,27 @@ export function generateTraderProfilePageSchema(
   trader: TraderSchemaInput,
   lastModified?: string
 ): ProfilePageSchema {
+  // Build description with performance data
+  const descParts: string[] = []
+  if (trader.bio) descParts.push(trader.bio.slice(0, 100))
+  if (trader.roi90d != null) {
+    descParts.push(`90D ROI: ${trader.roi90d >= 0 ? '+' : ''}${trader.roi90d.toFixed(2)}%`)
+  }
+  if (trader.winRate != null) descParts.push(`Win rate: ${trader.winRate.toFixed(1)}%`)
+  if (trader.followers != null && trader.followers > 0) {
+    descParts.push(`${trader.followers.toLocaleString()} followers`)
+  }
+  const description = descParts.length > 0
+    ? descParts.join(' · ')
+    : `View ${trader.handle}'s trading performance and portfolio on ${SITE_NAME}`
+
   return {
     '@context': 'https://schema.org',
     '@type': 'ProfilePage',
     mainEntity: generateTraderPersonSchema(trader),
     name: `${trader.handle} - Crypto Trader Profile`,
     url: `${BASE_URL}/trader/${encodeURIComponent(trader.handle)}`,
-    description: trader.bio || `View ${trader.handle}'s trading performance and portfolio on ${SITE_NAME}`,
+    description,
     dateModified: lastModified || new Date().toISOString(),
   }
 }

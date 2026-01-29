@@ -28,10 +28,13 @@ type FollowItem = {
   bio?: string
   // 交易员特有字段
   roi?: number
+  roi_7d?: number
+  roi_30d?: number
   pnl?: number
   win_rate?: number
   followers?: number
   source?: string
+  arena_score?: number
   // 排序用
   followed_at?: string
 }
@@ -120,11 +123,11 @@ export async function GET(request: NextRequest) {
       const [sourcesResult, snapshotsResult] = await Promise.all([
         supabase
           .from('trader_sources')
-          .select('source_trader_id, handle, source, profile_url')
+          .select('source_trader_id, handle, source, profile_url, arena_score')
           .in('source_trader_id', traderIds),
         supabase
           .from('trader_snapshots')
-          .select('source_trader_id, source, rank, roi, followers, pnl, win_rate, captured_at')
+          .select('source_trader_id, source, rank, roi, roi_7d, roi_30d, followers, pnl, win_rate, arena_score, captured_at')
           .in('source_trader_id', traderIds)
           .in('source', ALL_SOURCES)
           .order('captured_at', { ascending: false })
@@ -135,12 +138,13 @@ export async function GET(request: NextRequest) {
       const allSnapshots = snapshotsResult.data || []
 
       // 构建映射
-      const sourcesMap = new Map<string, { handle: string; source: string; avatar_url?: string }>()
+      const sourcesMap = new Map<string, { handle: string; source: string; avatar_url?: string; arena_score?: number }>()
       sources.forEach((s) => {
         sourcesMap.set(s.source_trader_id, { 
           handle: s.handle || s.source_trader_id, 
           source: s.source,
-          avatar_url: s.profile_url || undefined
+          avatar_url: s.profile_url || undefined,
+          arena_score: s.arena_score ?? undefined
         })
       })
 
@@ -176,10 +180,13 @@ export async function GET(request: NextRequest) {
           type: 'trader',
           avatar_url: sourceInfo?.avatar_url,
           roi: snapshot?.roi || 0,
+          roi_7d: snapshot?.roi_7d ?? undefined,
+          roi_30d: snapshot?.roi_30d ?? undefined,
           pnl: snapshot?.pnl !== null && snapshot?.pnl !== undefined ? snapshot.pnl : undefined,
           win_rate: snapshot?.win_rate !== null && snapshot?.win_rate !== undefined ? snapshot.win_rate : 0,
           followers: snapshot?.followers || 0,
           source: snapshot?.source || sourceInfo?.source || 'binance_futures',
+          arena_score: snapshot?.arena_score ?? sourceInfo?.arena_score ?? undefined,
           followed_at: followedAtMap.get(traderId)
         })
       }

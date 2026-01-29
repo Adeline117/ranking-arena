@@ -1,11 +1,14 @@
 'use client'
 
-import React from 'react'
+import React, { useState, useRef } from 'react'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
 import { getAvatarGradient, getAvatarInitial, getTraderAvatarUrl } from '@/lib/utils/avatar'
 import { useLanguage } from '../Providers/LanguageProvider'
+import RadarChart from './RadarChart'
+import EquityCurveOverlay, { CHART_COLORS } from './EquityCurveOverlay'
+import ShareCompareButton from './ShareCompareButton'
 
 interface TraderCompareData {
   id: string
@@ -24,6 +27,7 @@ interface TraderCompareData {
   stability_score?: number
   avatar_url?: string
   followers?: number
+  equity_curve?: Array<{ date: string; roi: number }>
 }
 
 interface TraderComparisonProps {
@@ -32,38 +36,31 @@ interface TraderComparisonProps {
   showRemoveButton?: boolean
 }
 
-// 格式化数字
+type TabKey = 'metrics' | 'radar' | 'equity'
+
+// Format helpers
 function formatNumber(num: number | undefined | null, decimals = 2): string {
   if (num == null) return '—'
   return num.toFixed(decimals)
 }
 
-// 格式化 PnL
 function formatPnL(pnl: number | undefined | null): string {
   if (pnl == null) return '—'
   const absPnL = Math.abs(pnl)
-  if (absPnL >= 1000000) {
-    return `$${(pnl / 1000000).toFixed(2)}M`
-  } else if (absPnL >= 1000) {
-    return `$${(pnl / 1000).toFixed(2)}K`
-  }
+  if (absPnL >= 1000000) return `$${(pnl / 1000000).toFixed(2)}M`
+  if (absPnL >= 1000) return `$${(pnl / 1000).toFixed(2)}K`
   return `$${pnl.toFixed(2)}`
 }
 
-// 获取数值的颜色
 function getValueColor(value: number | undefined | null, isPositiveGood = true): string {
   if (value == null) return tokens.colors.text.tertiary
-  if (isPositiveGood) {
-    return value >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error
-  }
+  if (isPositiveGood) return value >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error
   return value <= 0 ? tokens.colors.accent.success : tokens.colors.accent.error
 }
 
-// 获取最佳值的索引
 function getBestIndex(values: (number | undefined | null)[], isHigherBetter = true): number {
   let bestIdx = -1
   let bestVal = isHigherBetter ? -Infinity : Infinity
-  
   values.forEach((val, idx) => {
     if (val != null) {
       if (isHigherBetter ? val > bestVal : val < bestVal) {
@@ -72,11 +69,9 @@ function getBestIndex(values: (number | undefined | null)[], isHigherBetter = tr
       }
     }
   })
-  
   return bestIdx
 }
 
-// 来源标签映射 - 使用函数以支持多语言
 function getSourceLabels(t: (key: string) => string): Record<string, string> {
   return {
     'binance_futures': `Binance ${t('categoryFutures')}`,
@@ -96,7 +91,9 @@ function getSourceLabels(t: (key: string) => string): Record<string, string> {
 export default function TraderComparison({ traders, onRemove, showRemoveButton = true }: TraderComparisonProps) {
   const { t } = useLanguage()
   const sourceLabels = getSourceLabels(t)
-  
+  const [activeTab, setActiveTab] = useState<TabKey>('metrics')
+  const comparisonRef = useRef<HTMLDivElement>(null)
+
   if (traders.length === 0) {
     return (
       <Box
@@ -108,225 +105,290 @@ export default function TraderComparison({ traders, onRemove, showRemoveButton =
           border: `1px solid ${tokens.colors.border.primary}`,
         }}
       >
-        <Text size="lg" color="tertiary">
-          请添加交易员进行对比
-        </Text>
+        <Text size="lg" color="tertiary">{t('compareEmptyTitle')}</Text>
         <Text size="sm" color="tertiary" style={{ marginTop: tokens.spacing[2] }}>
-          最多可对比 5 位交易员
+          {t('compareEmptyDesc')}
         </Text>
       </Box>
     )
   }
 
-  // 指标行配置
+  // Metrics rows - bilingual
   const metrics = [
-    { key: 'arena_score', label: 'Arena Score', format: (v: number) => formatNumber(v, 1), higherBetter: true },
-    { key: 'roi', label: 'ROI (90D)', format: (v: number) => `${v >= 0 ? '+' : ''}${formatNumber(v)}%`, higherBetter: true, isPercent: true },
-    { key: 'roi_30d', label: 'ROI (30D)', format: (v: number) => `${v >= 0 ? '+' : ''}${formatNumber(v)}%`, higherBetter: true, isPercent: true },
-    { key: 'roi_7d', label: 'ROI (7D)', format: (v: number) => `${v >= 0 ? '+' : ''}${formatNumber(v)}%`, higherBetter: true, isPercent: true },
-    { key: 'pnl', label: 'PnL', format: formatPnL, higherBetter: true },
-    { key: 'win_rate', label: '胜率', format: (v: number) => `${formatNumber(v, 1)}%`, higherBetter: true },
-    { key: 'max_drawdown', label: '最大回撤', format: (v: number) => `-${formatNumber(Math.abs(v))}%`, higherBetter: false, isNegative: true },
-    { key: 'trades_count', label: '交易次数', format: (v: number) => v?.toString() || '—', higherBetter: true },
-    { key: 'return_score', label: '收益分', format: (v: number) => formatNumber(v, 1), higherBetter: true },
-    { key: 'drawdown_score', label: '回撤分', format: (v: number) => formatNumber(v, 1), higherBetter: true },
-    { key: 'stability_score', label: '稳定分', format: (v: number) => formatNumber(v, 1), higherBetter: true },
-    { key: 'followers', label: '关注数', format: (v: number) => v?.toString() || '0', higherBetter: true },
+    { key: 'arena_score', label: t('compareArenaScore'), format: (v: number) => formatNumber(v, 1), higherBetter: true },
+    { key: 'roi', label: t('compareROI90D'), format: (v: number) => `${v >= 0 ? '+' : ''}${formatNumber(v)}%`, higherBetter: true, isPercent: true },
+    { key: 'roi_30d', label: t('compareROI30D'), format: (v: number) => `${v >= 0 ? '+' : ''}${formatNumber(v)}%`, higherBetter: true, isPercent: true },
+    { key: 'roi_7d', label: t('compareROI7D'), format: (v: number) => `${v >= 0 ? '+' : ''}${formatNumber(v)}%`, higherBetter: true, isPercent: true },
+    { key: 'pnl', label: t('comparePnL'), format: formatPnL, higherBetter: true },
+    { key: 'win_rate', label: t('compareWinRate'), format: (v: number) => `${formatNumber(v, 1)}%`, higherBetter: true },
+    { key: 'max_drawdown', label: t('compareMDD'), format: (v: number) => `-${formatNumber(Math.abs(v))}%`, higherBetter: false, isNegative: true },
+    { key: 'trades_count', label: t('compareTrades'), format: (v: number) => v?.toString() || '—', higherBetter: true },
+    { key: 'return_score', label: t('compareReturnScore'), format: (v: number) => formatNumber(v, 1), higherBetter: true },
+    { key: 'drawdown_score', label: t('compareDrawdownScore'), format: (v: number) => formatNumber(v, 1), higherBetter: true },
+    { key: 'stability_score', label: t('compareStabilityScore'), format: (v: number) => formatNumber(v, 1), higherBetter: true },
+    { key: 'followers', label: t('compareFollowers'), format: (v: number) => v?.toString() || '0', higherBetter: true },
+  ]
+
+  // Radar chart data
+  const radarData = [
+    { label: t('compareReturnScore'), values: traders.map(tr => Math.min((tr.return_score ?? 0), 100)) },
+    { label: t('compareDrawdownScore'), values: traders.map(tr => Math.min((tr.drawdown_score ?? 0), 100)) },
+    { label: t('compareStabilityScore'), values: traders.map(tr => Math.min((tr.stability_score ?? 0), 100)) },
+    { label: t('compareWinRate'), values: traders.map(tr => Math.min((tr.win_rate ?? 0), 100)) },
+    { label: t('compareArenaScore'), values: traders.map(tr => Math.min((tr.arena_score ?? 0), 100)) },
+  ]
+
+  // Equity curve data
+  const equityTraders = traders.map((tr, i) => ({
+    traderId: tr.id,
+    traderName: tr.handle || tr.id.slice(0, 10),
+    data: tr.equity_curve || [],
+    color: CHART_COLORS[i % CHART_COLORS.length],
+  }))
+
+  const tabs: { key: TabKey; label: string }[] = [
+    { key: 'metrics', label: t('compareMetrics') },
+    { key: 'radar', label: t('compareRadar') },
+    { key: 'equity', label: t('compareEquityCurve') },
   ]
 
   return (
-    <Box
-      style={{
-        background: tokens.colors.bg.secondary,
-        borderRadius: tokens.radius.xl,
-        border: `1px solid ${tokens.colors.border.primary}`,
-        overflow: 'hidden',
-      }}
-    >
-      {/* 表头：交易员信息 */}
+    <div ref={comparisonRef}>
+      {/* Tab bar + Share */}
       <Box
         style={{
-          display: 'grid',
-          gridTemplateColumns: `140px repeat(${traders.length}, 1fr)`,
-          gap: tokens.spacing[2],
-          padding: tokens.spacing[4],
-          borderBottom: `1px solid ${tokens.colors.border.primary}`,
-          background: tokens.colors.bg.tertiary,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginBottom: tokens.spacing[4],
+          flexWrap: 'wrap',
+          gap: tokens.spacing[3],
         }}
       >
-        <Box /> {/* 空白单元格 */}
-        {traders.map((trader, _idx) => (
-          <Box
-            key={trader.id}
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              gap: tokens.spacing[2],
-              position: 'relative',
-            }}
-          >
-            {/* 删除按钮 */}
-            {showRemoveButton && onRemove && (
-              <button
-                onClick={() => onRemove(trader.id)}
-                style={{
-                  position: 'absolute',
-                  top: -8,
-                  right: -8,
-                  width: 24,
-                  height: 24,
-                  borderRadius: tokens.radius.full,
-                  background: tokens.colors.accent.error,
-                  border: 'none',
-                  color: '#fff',
-                  cursor: 'pointer',
-                  fontSize: 14,
-                  fontWeight: 'bold',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  transition: 'transform 0.2s',
-                }}
-                onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.1)'}
-                onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
-              >
-                ×
-              </button>
-            )}
-            
-            {/* 头像 */}
-            <Link href={`/trader/${encodeURIComponent(trader.id)}`}>
-              {(() => {
-                const proxyAvatarUrl = getTraderAvatarUrl(trader.avatar_url)
-                return (
-                  <Box
-                    style={{
-                      width: 56,
-                      height: 56,
-                      borderRadius: tokens.radius.full,
-                      background: proxyAvatarUrl ? tokens.colors.bg.secondary : getAvatarGradient(trader.id),
-                      border: `2px solid ${tokens.colors.border.primary}`,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      overflow: 'hidden',
-                      cursor: 'pointer',
-                      transition: 'border-color 0.2s',
-                    }}
-                  >
-                    {proxyAvatarUrl ? (
-                      <img
-                        src={proxyAvatarUrl}
-                        alt={trader.handle || trader.id}
-                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
-                      />
-                    ) : (
-                      <Text size="lg" weight="black" style={{ color: '#fff' }}>
-                        {getAvatarInitial(trader.handle || trader.id)}
-                      </Text>
-                    )}
-                  </Box>
-                )
-              })()}
-            </Link>
-            
-            {/* 名称 */}
-            <Link href={`/trader/${encodeURIComponent(trader.id)}`} style={{ textDecoration: 'none' }}>
-              <Text
-                size="sm"
-                weight="bold"
-                style={{
-                  color: tokens.colors.text.primary,
-                  maxWidth: 100,
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                  textAlign: 'center',
-                }}
-              >
-                {trader.handle || trader.id.slice(0, 10)}
-              </Text>
-            </Link>
-            
-            {/* 来源标签 */}
-            <Text size="xs" color="tertiary">
-              {sourceLabels[trader.source] || trader.source}
-            </Text>
-          </Box>
-        ))}
+        <Box style={{ display: 'flex', gap: tokens.spacing[1] }}>
+          {tabs.map((tab) => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              style={{
+                padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
+                borderRadius: tokens.radius.lg,
+                border: 'none',
+                background: activeTab === tab.key
+                  ? tokens.colors.accent.primary
+                  : tokens.colors.bg.secondary,
+                color: activeTab === tab.key
+                  ? '#fff'
+                  : tokens.colors.text.secondary,
+                fontSize: tokens.typography.fontSize.sm,
+                fontWeight: activeTab === tab.key ? 700 : 500,
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+              }}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </Box>
+
+        <ShareCompareButton
+          traderIds={traders.map(t => t.id)}
+          comparisonRef={comparisonRef}
+        />
       </Box>
 
-      {/* 指标行 */}
-      {metrics.map((metric, metricIdx) => {
-        const values = traders.map(t => (t as any)[metric.key])
-        const bestIdx = getBestIndex(values, metric.higherBetter)
-        
-        return (
-          <Box
-            key={metric.key}
-            style={{
-              display: 'grid',
-              gridTemplateColumns: `140px repeat(${traders.length}, 1fr)`,
-              gap: tokens.spacing[2],
-              padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
-              borderBottom: metricIdx < metrics.length - 1 ? `1px solid ${tokens.colors.border.primary}` : 'none',
-              background: metricIdx % 2 === 0 ? 'transparent' : `${tokens.colors.bg.tertiary}50`,
-            }}
-          >
-            {/* 指标名称 */}
-            <Text size="sm" weight="semibold" color="secondary">
-              {metric.label}
-            </Text>
-            
-            {/* 各交易员的值 */}
-            {traders.map((trader, traderIdx) => {
-              const value = (trader as any)[metric.key]
-              const isBest = traderIdx === bestIdx && value != null
-              const color = metric.isPercent || metric.isNegative
-                ? getValueColor(value, metric.higherBetter)
-                : isBest
-                  ? tokens.colors.accent.success
-                  : tokens.colors.text.primary
-              
-              return (
-                <Box
-                  key={trader.id}
+      <Box
+        style={{
+          background: tokens.colors.bg.secondary,
+          borderRadius: tokens.radius.xl,
+          border: `1px solid ${tokens.colors.border.primary}`,
+          overflow: 'hidden',
+        }}
+      >
+        {/* Header: trader avatars */}
+        <Box
+          style={{
+            display: 'grid',
+            gridTemplateColumns: `140px repeat(${traders.length}, 1fr)`,
+            gap: tokens.spacing[2],
+            padding: tokens.spacing[4],
+            borderBottom: `1px solid ${tokens.colors.border.primary}`,
+            background: tokens.colors.bg.tertiary,
+          }}
+        >
+          <Box />
+          {traders.map((trader) => (
+            <Box
+              key={trader.id}
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: tokens.spacing[2],
+                position: 'relative',
+              }}
+            >
+              {showRemoveButton && onRemove && (
+                <button
+                  onClick={() => onRemove(trader.id)}
                   style={{
+                    position: 'absolute',
+                    top: -8,
+                    right: -8,
+                    width: 24,
+                    height: 24,
+                    borderRadius: tokens.radius.full,
+                    background: tokens.colors.accent.error,
+                    border: 'none',
+                    color: '#fff',
+                    cursor: 'pointer',
+                    fontSize: 14,
+                    fontWeight: 'bold',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    transition: 'transform 0.2s',
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.1)'}
+                  onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+                >
+                  ×
+                </button>
+              )}
+
+              <Link href={`/trader/${encodeURIComponent(trader.id)}`}>
+                {(() => {
+                  const proxyAvatarUrl = getTraderAvatarUrl(trader.avatar_url)
+                  return (
+                    <Box
+                      style={{
+                        width: 56,
+                        height: 56,
+                        borderRadius: tokens.radius.full,
+                        background: proxyAvatarUrl ? tokens.colors.bg.secondary : getAvatarGradient(trader.id),
+                        border: `2px solid ${tokens.colors.border.primary}`,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        overflow: 'hidden',
+                        cursor: 'pointer',
+                        transition: 'border-color 0.2s',
+                      }}
+                    >
+                      {proxyAvatarUrl ? (
+                        <img
+                          src={proxyAvatarUrl}
+                          alt={trader.handle || trader.id}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+                        />
+                      ) : (
+                        <Text size="lg" weight="black" style={{ color: '#fff' }}>
+                          {getAvatarInitial(trader.handle || trader.id)}
+                        </Text>
+                      )}
+                    </Box>
+                  )
+                })()}
+              </Link>
+
+              <Link href={`/trader/${encodeURIComponent(trader.id)}`} style={{ textDecoration: 'none' }}>
+                <Text
+                  size="sm"
+                  weight="bold"
+                  style={{
+                    color: tokens.colors.text.primary,
+                    maxWidth: 100,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
                     textAlign: 'center',
-                    position: 'relative',
                   }}
                 >
-                  <Text
-                    size="sm"
-                    weight={isBest ? 'black' : 'semibold'}
-                    style={{
-                      color,
-                      position: 'relative',
-                    }}
-                  >
-                    {value != null ? metric.format(value) : '—'}
-                    {isBest && (
-                      <span
-                        style={{
-                          position: 'absolute',
-                          top: -2,
-                          right: -16,
-                          fontSize: 10,
-                          color: tokens.colors.accent.success,
-                        }}
-                      >
-                        ★
-                      </span>
-                    )}
+                  {trader.handle || trader.id.slice(0, 10)}
+                </Text>
+              </Link>
+
+              <Text size="xs" color="tertiary">
+                {sourceLabels[trader.source] || trader.source}
+              </Text>
+            </Box>
+          ))}
+        </Box>
+
+        {/* Tab content */}
+        {activeTab === 'metrics' && (
+          <>
+            {metrics.map((metric, metricIdx) => {
+              const values = traders.map(tr => (tr as Record<string, unknown>)[metric.key] as number | undefined)
+              const bestIdx = getBestIndex(values, metric.higherBetter)
+
+              return (
+                <Box
+                  key={metric.key}
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: `140px repeat(${traders.length}, 1fr)`,
+                    gap: tokens.spacing[2],
+                    padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+                    borderBottom: metricIdx < metrics.length - 1 ? `1px solid ${tokens.colors.border.primary}` : 'none',
+                    background: metricIdx % 2 === 0 ? 'transparent' : `${tokens.colors.bg.tertiary}50`,
+                  }}
+                >
+                  <Text size="sm" weight="semibold" color="secondary">
+                    {metric.label}
                   </Text>
+
+                  {traders.map((trader, traderIdx) => {
+                    const value = (trader as Record<string, unknown>)[metric.key] as number | undefined
+                    const isBest = traderIdx === bestIdx && value != null
+                    const color = metric.isPercent || metric.isNegative
+                      ? getValueColor(value, metric.higherBetter)
+                      : isBest
+                        ? tokens.colors.accent.success
+                        : tokens.colors.text.primary
+
+                    return (
+                      <Box key={trader.id} style={{ textAlign: 'center', position: 'relative' }}>
+                        <Text
+                          size="sm"
+                          weight={isBest ? 'black' : 'semibold'}
+                          style={{ color, position: 'relative' }}
+                        >
+                          {value != null ? metric.format(value) : '—'}
+                          {isBest && (
+                            <span style={{
+                              position: 'absolute', top: -2, right: -16,
+                              fontSize: 10, color: tokens.colors.accent.success,
+                            }}>★</span>
+                          )}
+                        </Text>
+                      </Box>
+                    )
+                  })}
                 </Box>
               )
             })}
+          </>
+        )}
+
+        {activeTab === 'radar' && (
+          <Box style={{ padding: tokens.spacing[6], display: 'flex', justifyContent: 'center' }}>
+            <RadarChart
+              data={radarData}
+              traderNames={traders.map(tr => tr.handle || tr.id.slice(0, 10))}
+              colors={CHART_COLORS}
+              size={340}
+            />
           </Box>
-        )
-      })}
-    </Box>
+        )}
+
+        {activeTab === 'equity' && (
+          <Box style={{ padding: tokens.spacing[4] }}>
+            <EquityCurveOverlay traders={equityTraders} height={300} />
+          </Box>
+        )}
+      </Box>
+    </div>
   )
 }

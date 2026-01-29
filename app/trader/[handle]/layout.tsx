@@ -1,5 +1,5 @@
 import { Metadata } from 'next'
-import { getTraderByHandle } from '@/lib/data/trader'
+import { getTraderByHandle, getTraderPerformance } from '@/lib/data/trader'
 import { createClient } from '@supabase/supabase-js'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || ''
@@ -18,13 +18,52 @@ export async function generateMetadata({ params }: { params: { handle: string } 
   const canonicalUrl = `${baseUrl}/trader/${encodeURIComponent(handle)}`
   
   try {
-    const profile = publicSupabase ? await getTraderByHandle(handle) : null
+    // Fetch profile and performance in parallel for richer metadata
+    const [profile, performance] = await Promise.all([
+      publicSupabase ? getTraderByHandle(handle) : null,
+      publicSupabase ? getTraderPerformance(handle, '90D').catch(() => null) : null,
+    ])
     
     if (profile) {
-      const title = `${profile.handle} · Arena`
-      const description = profile.bio 
-        ? `${profile.bio.substring(0, 150)}${profile.bio.length > 150 ? '...' : ''}`
-        : `View ${profile.handle}'s trader profile, including 90-day ROI, win rate, followers and more.`
+      // Build dynamic title with ROI when available
+      const roiStr = performance?.roi_90d != null
+        ? ` | 90D ROI: ${performance.roi_90d >= 0 ? '+' : ''}${performance.roi_90d.toFixed(2)}%`
+        : ''
+      const title = `${profile.handle}${roiStr}`
+
+      // Build rich description with performance data
+      const descParts: string[] = []
+      if (profile.bio) {
+        descParts.push(profile.bio.substring(0, 100))
+      }
+      if (performance?.roi_90d != null) {
+        descParts.push(`90-day ROI: ${performance.roi_90d >= 0 ? '+' : ''}${performance.roi_90d.toFixed(2)}%`)
+      }
+      if (performance?.win_rate != null) {
+        descParts.push(`Win rate: ${performance.win_rate.toFixed(1)}%`)
+      }
+      if (performance?.max_drawdown != null) {
+        descParts.push(`Max drawdown: ${performance.max_drawdown.toFixed(1)}%`)
+      }
+      if (profile.followers != null && profile.followers > 0) {
+        descParts.push(`${profile.followers.toLocaleString()} followers`)
+      }
+      if (profile.source) {
+        descParts.push(`on ${profile.source.charAt(0).toUpperCase() + profile.source.slice(1)}`)
+      }
+      const description = descParts.length > 0
+        ? descParts.join(' · ')
+        : `View ${profile.handle}'s trader profile, ROI, win rate, and portfolio on Arena.`
+
+      // Dynamic OG image with trader data
+      const ogImageUrl = new URL(`${baseUrl}/api/og`)
+      ogImageUrl.searchParams.set('handle', profile.handle)
+      if (performance?.roi_90d != null) ogImageUrl.searchParams.set('roi', String(performance.roi_90d))
+      if (performance?.win_rate != null) ogImageUrl.searchParams.set('winRate', String(performance.win_rate))
+      if (performance?.max_drawdown != null) ogImageUrl.searchParams.set('mdd', String(performance.max_drawdown))
+      if (performance?.arena_score != null) ogImageUrl.searchParams.set('score', String(performance.arena_score))
+      if (profile.source) ogImageUrl.searchParams.set('source', profile.source)
+      if (profile.avatar_url) ogImageUrl.searchParams.set('avatar', profile.avatar_url)
       
       return {
         title,
@@ -32,24 +71,33 @@ export async function generateMetadata({ params }: { params: { handle: string } 
         alternates: {
           canonical: canonicalUrl,
         },
+        keywords: [
+          profile.handle,
+          'crypto trader',
+          'ROI',
+          'copy trading',
+          profile.source || '',
+          'leaderboard',
+          'Arena',
+        ].filter(Boolean),
         openGraph: {
-          title,
+          title: `${profile.handle}${roiStr} · Arena`,
           description,
           type: 'profile',
           url: canonicalUrl,
           siteName: 'Arena',
-          images: profile.avatar_url ? [{
-            url: profile.avatar_url,
-            width: 200,
-            height: 200,
-            alt: `${profile.handle}'s avatar`,
-          }] : undefined,
+          images: [{
+            url: ogImageUrl.toString(),
+            width: 1200,
+            height: 630,
+            alt: `${profile.handle}'s trader card on Arena`,
+          }],
         },
         twitter: {
-          card: 'summary',
-          title,
+          card: 'summary_large_image',
+          title: `${profile.handle}${roiStr} · Arena`,
           description,
-          images: profile.avatar_url ? [profile.avatar_url] : undefined,
+          images: [ogImageUrl.toString()],
           creator: '@arenafi',
         },
         robots: {
@@ -65,7 +113,7 @@ export async function generateMetadata({ params }: { params: { handle: string } 
   // 默认metadata
   return {
     title: `${handle} · Arena`,
-    description: `View ${handle}'s trader profile on Arena`,
+    description: `View ${handle}'s trader profile on Arena — crypto trader leaderboard & community.`,
     alternates: {
       canonical: canonicalUrl,
     },

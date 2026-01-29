@@ -28,6 +28,7 @@ interface TraderCompareData {
   stability_score?: number
   avatar_url?: string
   followers?: number
+  equity_curve?: Array<{ date: string; roi: number }>
 }
 
 function CompareContent() {
@@ -41,24 +42,29 @@ function CompareContent() {
   const [error, setError] = useState<string | null>(null)
   const [traders, setTraders] = useState<TraderCompareData[]>([])
   const [searchInput, setSearchInput] = useState('')
-  const [searchResults, setSearchResults] = useState<any[]>([])
+  const [searchResults, setSearchResults] = useState<Array<{
+    source_trader_id: string
+    source: string
+    roi: number | null
+    arena_score: number | null
+    avatar_url: string | null
+  }>>([])
   const [searching, setSearching] = useState(false)
   const [isPro, setIsPro] = useState(false)
 
-  // 检查登录状态
+  // Check auth
   useEffect(() => {
     if (authChecked && !accessToken) {
       router.push('/login?redirect=/compare')
     }
   }, [authChecked, accessToken, router])
 
-  // 检查 Pro 权限并加载初始数据
+  // Init
   useEffect(() => {
     if (!accessToken) return
 
     const init = async () => {
       try {
-        // 检查订阅
         const subRes = await fetch('/api/subscription', {
           headers: { Authorization: `Bearer ${accessToken}` },
         })
@@ -68,13 +74,12 @@ function CompareContent() {
           setIsPro(tier === 'pro')
         }
 
-        // 从 URL 获取初始交易员 ID
         const ids = searchParams.get('ids')
         if (ids) {
           await loadTraders(ids.split(','))
         }
       } catch (err) {
-        console.error('初始化失败:', err)
+        console.error('Init failed:', err)
       } finally {
         setLoading(false)
       }
@@ -84,21 +89,21 @@ function CompareContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken, searchParams])
 
-  // 加载交易员数据
+  // Load traders with equity curve data
   const loadTraders = async (traderIds: string[]) => {
     if (!accessToken || traderIds.length === 0) return
 
     try {
-      const res = await fetch(`/api/compare?ids=${traderIds.join(',')}`, {
+      const res = await fetch(`/api/compare?ids=${traderIds.join(',')}&include_equity=1`, {
         headers: { Authorization: `Bearer ${accessToken}` },
       })
 
       if (!res.ok) {
         const data = await res.json()
         if (res.status === 403) {
-          setError('此功能需要 Pro 会员')
+          setError(t('portfolioProRequired'))
         } else {
-          setError(data.error || '加载失败')
+          setError(data.error || t('errorOccurred'))
         }
         return
       }
@@ -107,16 +112,15 @@ function CompareContent() {
       setTraders(data.traders || [])
       setError(null)
     } catch (err) {
-      console.error('加载交易员数据失败:', err)
-      setError('网络错误')
+      console.error('Load traders failed:', err)
+      setError(t('errorOccurred'))
     }
   }
 
-  // 搜索交易员
+  // Search
   const handleSearch = async () => {
     if (!searchInput.trim()) return
 
-    // 转义 LIKE 通配符防止注入
     const sanitizedInput = searchInput.trim()
       .slice(0, 100)
       .replace(/[\\%_]/g, c => `\\${c}`)
@@ -135,40 +139,34 @@ function CompareContent() {
       if (error) throw error
       setSearchResults(data || [])
     } catch (err) {
-      console.error('搜索失败:', err)
+      console.error('Search failed:', err)
     } finally {
       setSearching(false)
     }
   }
 
-  // 添加交易员到对比
+  // Add trader
   const handleAddTrader = async (traderId: string) => {
     if (traders.length >= 5) {
-      showToast('最多只能对比 5 位交易员', 'warning')
+      showToast(t('compareMax5'), 'warning')
       return
     }
     if (traders.some(t => t.id === traderId)) {
-      showToast('该交易员已在对比列表中', 'warning')
+      showToast(t('compareAlreadyAdded'), 'warning')
       return
     }
 
     const newIds = [...traders.map(t => t.id), traderId]
     await loadTraders(newIds)
-    
-    // 更新 URL
     router.replace(`/compare?ids=${newIds.join(',')}`, { scroll: false })
-    
-    // 清空搜索
     setSearchInput('')
     setSearchResults([])
   }
 
-  // 移除交易员
+  // Remove trader
   const handleRemoveTrader = (traderId: string) => {
     const newTraders = traders.filter(t => t.id !== traderId)
     setTraders(newTraders)
-    
-    // 更新 URL
     if (newTraders.length > 0) {
       router.replace(`/compare?ids=${newTraders.map(t => t.id).join(',')}`, { scroll: false })
     } else {
@@ -181,7 +179,7 @@ function CompareContent() {
       <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary }}>
         <TopNav email={email} />
         <Box style={{ maxWidth: 1200, margin: '0 auto', padding: tokens.spacing[6], textAlign: 'center' }}>
-          <Text size="lg" color="tertiary">加载中...</Text>
+          <Text size="lg" color="tertiary">{t('loading')}</Text>
         </Box>
       </Box>
     )
@@ -189,7 +187,6 @@ function CompareContent() {
 
   return (
     <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
-      {/* Background mesh */}
       <Box
         style={{
           position: 'fixed',
@@ -200,21 +197,21 @@ function CompareContent() {
           zIndex: 0,
         }}
       />
-      
+
       <TopNav email={email} />
-      
+
       <Box style={{ maxWidth: 1200, margin: '0 auto', padding: tokens.spacing[6], position: 'relative', zIndex: 1 }}>
-        {/* 标题 */}
+        {/* Title */}
         <Box style={{ marginBottom: tokens.spacing[6] }}>
           <Text size="2xl" weight="black" className="gradient-text">
-            交易员对比
+            {t('compareTraders')}
           </Text>
           <Text size="sm" color="tertiary" style={{ marginTop: tokens.spacing[2] }}>
-            最多可对比 5 位交易员，快速比较各项指标
+            {t('compareDesc')}
           </Text>
         </Box>
 
-        {/* Pro 权限检查 */}
+        {/* Pro gate */}
         {!isPro && (
           <Box
             style={{
@@ -228,15 +225,10 @@ function CompareContent() {
           >
             <Box
               style={{
-                width: 48,
-                height: 48,
-                borderRadius: tokens.radius.lg,
+                width: 48, height: 48, borderRadius: tokens.radius.lg,
                 background: 'var(--color-blur-overlay)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                margin: '0 auto',
-                marginBottom: tokens.spacing[3],
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                margin: '0 auto', marginBottom: tokens.spacing[3],
               }}
             >
               <svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke="var(--color-pro-gradient-start)" strokeWidth="2">
@@ -264,7 +256,7 @@ function CompareContent() {
           </Box>
         )}
 
-        {/* 错误提示 */}
+        {/* Error */}
         {error && (
           <Box
             style={{
@@ -275,13 +267,11 @@ function CompareContent() {
               marginBottom: tokens.spacing[4],
             }}
           >
-            <Text size="sm" style={{ color: tokens.colors.accent.error }}>
-              {error}
-            </Text>
+            <Text size="sm" style={{ color: tokens.colors.accent.error }}>{error}</Text>
           </Box>
         )}
 
-        {/* 搜索添加交易员 */}
+        {/* Search bar */}
         {isPro && (
           <Box
             style={{
@@ -293,16 +283,16 @@ function CompareContent() {
             }}
           >
             <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[3] }}>
-              添加交易员 ({traders.length}/5)
+              {t('compareAddTrader')} ({traders.length}/5)
             </Text>
-            
+
             <Box style={{ display: 'flex', gap: tokens.spacing[2] }}>
               <input
                 type="text"
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                placeholder="输入交易员 ID 搜索..."
+                placeholder={t('compareSearchPlaceholder')}
                 style={{
                   flex: 1,
                   padding: tokens.spacing[3],
@@ -319,11 +309,11 @@ function CompareContent() {
                 onClick={handleSearch}
                 disabled={searching || !searchInput.trim()}
               >
-                {searching ? '搜索中...' : '搜索'}
+                {searching ? t('compareSearching') : t('compareSearchBtn')}
               </Button>
             </Box>
 
-            {/* 搜索结果 */}
+            {/* Search results */}
             {searchResults.length > 0 && (
               <Box
                 style={{
@@ -353,7 +343,7 @@ function CompareContent() {
                   >
                     <Box>
                       <Text size="sm" weight="semibold">
-                        {result.source_trader_id.length > 20 
+                        {result.source_trader_id.length > 20
                           ? `${result.source_trader_id.slice(0, 8)}...${result.source_trader_id.slice(-6)}`
                           : result.source_trader_id}
                       </Text>
@@ -363,11 +353,15 @@ function CompareContent() {
                       <Text
                         size="sm"
                         weight="bold"
-                        style={{ color: result.roi >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error }}
+                        style={{
+                          color: (result.roi ?? 0) >= 0
+                            ? tokens.colors.accent.success
+                            : tokens.colors.accent.error,
+                        }}
                       >
-                        {result.roi >= 0 ? '+' : ''}{result.roi?.toFixed(2)}%
+                        {(result.roi ?? 0) >= 0 ? '+' : ''}{(result.roi ?? 0).toFixed(2)}%
                       </Text>
-                      {result.arena_score && (
+                      {result.arena_score != null && (
                         <Text size="xs" color="secondary">
                           Score: {result.arena_score.toFixed(1)}
                         </Text>
@@ -380,7 +374,7 @@ function CompareContent() {
           </Box>
         )}
 
-        {/* 对比表格 */}
+        {/* Comparison component */}
         {isPro && (
           <TraderComparison
             traders={traders}
@@ -397,7 +391,7 @@ export default function ComparePage() {
   return (
     <Suspense fallback={
       <Box style={{ minHeight: '100vh', background: '#0a0a0f', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <Text style={{ color: '#888' }}>加载中...</Text>
+        <Text style={{ color: '#888' }}>Loading...</Text>
       </Box>
     }>
       <CompareContent />
