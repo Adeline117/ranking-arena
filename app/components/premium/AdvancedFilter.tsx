@@ -34,7 +34,7 @@ interface AdvancedFilterProps {
   currentFilter: FilterConfig
   savedFilters: SavedFilter[]
   onFilterChange: (filter: FilterConfig) => void
-  onSaveFilter: (name: string, description?: string) => Promise<void>
+  onSaveFilter?: (name: string, description?: string) => Promise<void>  // Optional - filters are session-only
   onLoadFilter: (filter: SavedFilter) => void
   onDeleteFilter: (filterId: string) => Promise<void>
   isPro: boolean
@@ -87,17 +87,14 @@ export default function AdvancedFilter({
   currentFilter,
   savedFilters,
   onFilterChange,
-  onSaveFilter,
+  // onSaveFilter - removed, filters are session-only
   onLoadFilter,
   onDeleteFilter,
   isPro,
 }: AdvancedFilterProps) {
   const { t } = useLanguage()
   const [isExpanded, setIsExpanded] = useState(false)
-  const [showSaveModal, setShowSaveModal] = useState(false)
-  const [saveName, setSaveName] = useState('')
-  const [saveDescription, setSaveDescription] = useState('')
-  const [saving, setSaving] = useState(false)
+  // Save filter states removed - filters are session-only
 
   // 更新筛选条件
   const updateFilter = useCallback((key: keyof FilterConfig, value: unknown) => {
@@ -117,20 +114,6 @@ export default function AdvancedFilter({
   const resetFilter = useCallback(() => {
     onFilterChange({})
   }, [onFilterChange])
-
-  // 保存筛选
-  const handleSave = async () => {
-    if (!saveName.trim()) return
-    setSaving(true)
-    try {
-      await onSaveFilter(saveName.trim(), saveDescription.trim() || undefined)
-      setShowSaveModal(false)
-      setSaveName('')
-      setSaveDescription('')
-    } finally {
-      setSaving(false)
-    }
-  }
 
   // 检查是否有活动筛选
   const hasActiveFilters = Object.keys(currentFilter).some(key => {
@@ -492,117 +475,12 @@ export default function AdvancedFilter({
             >
               {t('resetFilter')}
             </button>
-            {hasActiveFilters && (
-              <button
-                onClick={() => setShowSaveModal(true)}
-                style={{
-                  padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-                  borderRadius: tokens.radius.md,
-                  border: `1px solid ${tokens.colors.accent.primary}`,
-                  background: `${tokens.colors.accent.primary}15`,
-                  color: tokens.colors.accent.primary,
-                  cursor: 'pointer',
-                  fontSize: tokens.typography.fontSize.sm,
-                  fontWeight: tokens.typography.fontWeight.bold,
-                }}
-              >
-                {t('saveFilter')}
-              </button>
-            )}
+            {/* Save filter button removed - filters are session-only */}
           </Box>
         </Box>
       )}
 
-      {/* 保存筛选弹窗 */}
-      {showSaveModal && (
-        <Box
-          style={{
-            position: 'fixed',
-            inset: 0,
-            background: 'rgba(0,0,0,0.6)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: tokens.zIndex.modal,
-          }}
-          onClick={() => setShowSaveModal(false)}
-        >
-          <Box
-            onClick={e => e.stopPropagation()}
-            style={{
-              width: 400,
-              maxWidth: '90vw',
-              background: tokens.colors.bg.secondary,
-              borderRadius: tokens.radius.xl,
-              border: `1px solid ${tokens.colors.border.primary}`,
-              padding: tokens.spacing[6],
-            }}
-          >
-            <Text size="lg" weight="bold" style={{ marginBottom: tokens.spacing[4] }}>
-              {t('saveFilterConfig')}
-            </Text>
-
-            <Box style={{ marginBottom: tokens.spacing[3] }}>
-              <Text size="xs" weight="bold" color="tertiary" style={{ marginBottom: tokens.spacing[1] }}>
-                {t('filterName')} *
-              </Text>
-              <input
-                type="text"
-                value={saveName}
-                onChange={(e) => setSaveName(e.target.value)}
-                placeholder={t('filterNamePlaceholder')}
-                maxLength={50}
-                style={{
-                  width: '100%',
-                  padding: tokens.spacing[3],
-                  borderRadius: tokens.radius.md,
-                  border: `1px solid ${tokens.colors.border.primary}`,
-                  background: tokens.colors.bg.primary,
-                  color: tokens.colors.text.primary,
-                  fontSize: tokens.typography.fontSize.sm,
-                  outline: 'none',
-                }}
-              />
-            </Box>
-
-            <Box style={{ marginBottom: tokens.spacing[4] }}>
-              <Text size="xs" weight="bold" color="tertiary" style={{ marginBottom: tokens.spacing[1] }}>
-                {t('filterDescription')}
-              </Text>
-              <textarea
-                value={saveDescription}
-                onChange={(e) => setSaveDescription(e.target.value)}
-                placeholder={t('filterDescPlaceholder')}
-                rows={2}
-                style={{
-                  width: '100%',
-                  padding: tokens.spacing[3],
-                  borderRadius: tokens.radius.md,
-                  border: `1px solid ${tokens.colors.border.primary}`,
-                  background: tokens.colors.bg.primary,
-                  color: tokens.colors.text.primary,
-                  fontSize: tokens.typography.fontSize.sm,
-                  outline: 'none',
-                  resize: 'none',
-                }}
-              />
-            </Box>
-
-            <Box style={{ display: 'flex', justifyContent: 'flex-end', gap: tokens.spacing[2] }}>
-              <Button variant="secondary" onClick={() => setShowSaveModal(false)}>
-                {t('cancel')}
-              </Button>
-              <Button
-                variant="primary"
-                onClick={handleSave}
-                disabled={!saveName.trim() || saving}
-              >
-                {saving ? t('saving') : t('save')}
-              </Button>
-            </Box>
-          </Box>
-        </Box>
-      )}
+      {/* Save filter modal removed - filters are session-only */}
     </Box>
   )
 }
