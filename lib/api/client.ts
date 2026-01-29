@@ -271,6 +271,69 @@ export function getCsrfHeaders(): Record<string, string> {
 }
 
 /**
+ * Low-level fetch result used by authedFetch.
+ */
+export type FetchResult<T> = {
+  ok: boolean
+  status: number
+  data: T | null
+}
+
+/**
+ * Low-level authenticated fetch helper.
+ *
+ * Automatically includes:
+ * - Authorization header (when accessToken is provided)
+ * - CSRF headers (for mutating methods)
+ * - Content-Type: application/json (for mutating methods)
+ * - JSON response parsing
+ *
+ * Returns the raw HTTP status and parsed JSON, making it suitable
+ * for hooks that need status-code-level control (e.g. mapping 401/429
+ * to user-friendly messages) without the full ApiResponse wrapper.
+ */
+export async function authedFetch<T>(
+  url: string,
+  method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH',
+  accessToken: string | null,
+  body?: Record<string, unknown>,
+): Promise<FetchResult<T>> {
+  const headers: Record<string, string> = {}
+
+  if (accessToken) {
+    headers['Authorization'] = `Bearer ${accessToken}`
+  }
+
+  if (method !== 'GET') {
+    headers['Content-Type'] = 'application/json'
+    Object.assign(headers, getCsrfHeaders())
+  }
+
+  const response = await fetch(url, {
+    method,
+    headers,
+    body: body ? JSON.stringify(body) : undefined,
+  })
+
+  const data = await response.json().catch(() => null)
+  return { ok: response.ok, status: response.status, data }
+}
+
+/**
+ * Map HTTP status codes to user-friendly error messages.
+ *
+ * Useful in hooks to convert status codes into localized
+ * error strings without repeating the same switch/if logic.
+ */
+export function getHttpErrorMessage(status: number, fallback: string): string {
+  if (status === 401) return '登录已过期，请重新登录'
+  if (status === 403) return '权限不足'
+  if (status === 429) return '操作太快，稍等一下'
+  if (status >= 500) return '服务异常，请稍后重试'
+  return fallback
+}
+
+/**
  * 初始化 CSRF Token（在应用启动时调用）
  */
 export function initCsrfToken(): void {
