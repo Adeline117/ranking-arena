@@ -3,11 +3,11 @@
 import { useEffect, useRef, type CSSProperties } from 'react'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
-import { ThumbsUpIcon } from '../icons'
+import { ThumbsUpIcon } from '../ui/icons'
 import { renderContentWithLinks, ARENA_PURPLE } from '@/lib/utils/content'
 import { formatTimeAgo } from '@/lib/utils/date'
 import { useLanguage } from '../Providers/LanguageProvider'
-import { CompactErrorBoundary } from '../Utils/ErrorBoundary'
+import { CompactErrorBoundary } from '../utils/ErrorBoundary'
 import type { Comment } from './hooks/usePostComments'
 
 const REPLIES_PREVIEW_COUNT = 2

@@ -122,6 +122,9 @@ main{min-height:100vh;background:var(--bg-primary,#0B0A10)}
 /* 基础动画类 */
 .page-enter{animation:pageEnter 0.3s ease-out forwards}
 
+/* GPU-加速的网格背景 */
+.mesh-gradient-bg{position:fixed;inset:0;opacity:0.5;pointer-events:none;z-index:0;transform:translateZ(0);backface-visibility:hidden;contain:strict layout paint}
+
 /* ============================================
    防止布局偏移 (CLS)
    ============================================ */
