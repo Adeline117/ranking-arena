@@ -24,6 +24,9 @@ export async function GET(request: Request) {
     
     // 验证 URL 是否来自允许的域名
     const allowedDomains = [
+      // Supabase Storage (user uploaded avatars/covers)
+      'supabase.co',
+      'supabase.in',
       // MEXC
       'mocortech.com',
       // Bitget
