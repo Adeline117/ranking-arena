@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback } from 'react'
-import { getCsrfHeaders } from '@/lib/api/client'
+import { authedFetch, getHttpErrorMessage } from '@/lib/api/client'
 import { usePostStore, type CommentData } from '@/lib/stores/postStore'
 
 export type Comment = {
@@ -23,49 +23,6 @@ interface UsePostCommentsOptions {
   showToast: (msg: string, type: 'success' | 'error' | 'warning') => void
   showDangerConfirm: (title: string, message: string) => Promise<boolean>
   onCommentCountChange?: (postId: string, delta: number) => void
-}
-
-type HttpMethod = 'GET' | 'POST' | 'DELETE'
-
-// Helper to build auth headers
-function buildAuthHeaders(accessToken: string | null): Record<string, string> {
-  if (!accessToken) return {}
-  return { Authorization: `Bearer ${accessToken}` }
-}
-
-// Helper for authenticated API calls with consistent error handling
-async function apiRequest<T>(
-  url: string,
-  method: HttpMethod,
-  accessToken: string | null,
-  body?: Record<string, unknown>
-): Promise<{ ok: boolean; status: number; data: T | null }> {
-  const headers: Record<string, string> = {
-    ...buildAuthHeaders(accessToken),
-  }
-
-  if (method !== 'GET') {
-    headers['Content-Type'] = 'application/json'
-    Object.assign(headers, getCsrfHeaders())
-  }
-
-  const response = await fetch(url, {
-    method,
-    headers,
-    body: body ? JSON.stringify(body) : undefined,
-  })
-
-  const data = await response.json().catch(() => null)
-  return { ok: response.ok, status: response.status, data }
-}
-
-// Map HTTP status to user-friendly error messages
-function getErrorMessage(status: number, fallback: string): string {
-  if (status === 401) return '登录已过期，请重新登录'
-  if (status === 403) return '权限不足'
-  if (status === 429) return '操作太快，稍等一下'
-  if (status >= 500) return '服务异常，请稍后重试'
-  return fallback
 }
 
 // Convert Comment to CommentData for store compatibility
@@ -112,7 +69,7 @@ export function usePostComments({
   const loadComments = useCallback(async (postId: string): Promise<void> => {
     setLoadingComments(true)
     try {
-      const { ok, data } = await apiRequest<{ success: boolean; data?: { comments: Comment[] } }>(
+      const { ok, data } = await authedFetch<{ success: boolean; data?: { comments: Comment[] } }>(
         `/api/posts/${postId}/comments`,
         'GET',
         accessToken
@@ -130,7 +87,7 @@ export function usePostComments({
 
     setSubmittingComment(true)
     try {
-      const { ok, status, data } = await apiRequest<{ success: boolean; error?: string; data?: { comment: Comment } }>(
+      const { ok, status, data } = await authedFetch<{ success: boolean; error?: string; data?: { comment: Comment } }>(
         `/api/posts/${postId}/comments`,
         'POST',
         accessToken,
@@ -138,7 +95,7 @@ export function usePostComments({
       )
 
       if (!ok) {
-        showToast(getErrorMessage(status, data?.error || '发表评论失败'), 'error')
+        showToast(getHttpErrorMessage(status, data?.error || '发表评论失败'), 'error')
         return
       }
 
@@ -163,7 +120,7 @@ export function usePostComments({
 
     setCommentLikeLoading(prev => ({ ...prev, [commentId]: true }))
     try {
-      const { ok, status, data } = await apiRequest<{ success: boolean; error?: string; data?: { like_count: number; liked: boolean } }>(
+      const { ok, status, data } = await authedFetch<{ success: boolean; error?: string; data?: { like_count: number; liked: boolean } }>(
         `/api/posts/${postId}/comments/like`,
         'POST',
         accessToken,
@@ -182,7 +139,7 @@ export function usePostComments({
         }
         setComments(prev => prev.map(updateCommentLike))
       } else {
-        showToast(getErrorMessage(status, data?.error || '点赞失败'), status === 429 ? 'warning' : 'error')
+        showToast(getHttpErrorMessage(status, data?.error || '点赞失败'), status === 429 ? 'warning' : 'error')
       }
     } catch {
       showToast('网络错误', 'error')
@@ -196,7 +153,7 @@ export function usePostComments({
 
     setSubmittingReply(true)
     try {
-      const { ok, data } = await apiRequest<{ success: boolean; error?: string; data?: { comment: Comment } }>(
+      const { ok, data } = await authedFetch<{ success: boolean; error?: string; data?: { comment: Comment } }>(
         `/api/posts/${postId}/comments`,
         'POST',
         accessToken,
@@ -231,7 +188,7 @@ export function usePostComments({
 
     setDeletingCommentId(commentId)
     try {
-      const { ok, data } = await apiRequest<{ success: boolean; error?: string }>(
+      const { ok, data } = await authedFetch<{ success: boolean; error?: string }>(
         `/api/posts/${postId}/comments`,
         'DELETE',
         accessToken,

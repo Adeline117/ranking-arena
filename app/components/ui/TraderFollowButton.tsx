@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useToast } from './Toast'
+import { ButtonSpinner } from './LoadingSpinner'
 import { tokens } from '@/lib/design-tokens'
 import { useFollowSync, type FollowChangePayload } from '@/lib/hooks/useBroadcastSync'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
@@ -282,43 +283,9 @@ export default function TraderFollowButton({ traderId, userId, initialFollowing 
         gap: tokens.spacing[2],
       }}
     >
-      {isLoading && <LoadingSpinner size={14} />}
+      {isLoading && <ButtonSpinner size="xs" />}
       {isLoading ? (following ? '取消中' : '关注中') : following ? '取消关注' : '关注'}
     </button>
   )
 }
 
-// 小型加载指示器
-function LoadingSpinner({ size = 16 }: { size?: number }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      style={{ animation: 'spin 1s linear infinite' }}
-    >
-      <circle
-        cx="12"
-        cy="12"
-        r="10"
-        stroke="currentColor"
-        strokeWidth="3"
-        strokeLinecap="round"
-        strokeDasharray="31.4 31.4"
-        strokeDashoffset="31.4"
-        style={{ animation: 'spinner-dash 1.5s ease-in-out infinite' }}
-      />
-      <style>{`
-        @keyframes spin {
-          to { transform: rotate(360deg); }
-        }
-        @keyframes spinner-dash {
-          0% { stroke-dashoffset: 31.4; }
-          50% { stroke-dashoffset: 0; }
-          100% { stroke-dashoffset: -31.4; }
-        }
-      `}</style>
-    </svg>
-  )
-}

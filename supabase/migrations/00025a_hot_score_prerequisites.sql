@@ -1,6 +1,6 @@
 -- ============================================
 -- Hot Score Algorithm Prerequisites
--- Run this BEFORE 00025_hot_score_algorithm_v4.sql
+-- Run this BEFORE 00025b_hot_score_algorithm_v4.sql
 -- ============================================
 
 -- 1. Add follower_count to user_profiles if missing
@@ -63,4 +63,4 @@ CREATE INDEX IF NOT EXISTS idx_post_reactions_post ON post_reactions(post_id);
 CREATE INDEX IF NOT EXISTS idx_post_reactions_user ON post_reactions(user_id);
 CREATE INDEX IF NOT EXISTS idx_post_reactions_created ON post_reactions(created_at);
 
--- Done! Now you can run 00025_hot_score_algorithm_v4.sql
+-- Done! Now you can run 00025b_hot_score_algorithm_v4.sql
