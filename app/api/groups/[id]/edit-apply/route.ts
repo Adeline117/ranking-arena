@@ -79,7 +79,6 @@ export async function POST(
       avatar_url?: string
       rules_json?: unknown
       rules?: string
-      rules_en?: string
       role_names?: unknown
       is_premium_only?: boolean
     }
@@ -96,7 +95,6 @@ export async function POST(
       avatar_url,
       rules_json,
       rules,
-      rules_en,
       role_names,
       is_premium_only
     } = body
@@ -123,7 +121,6 @@ export async function POST(
         avatar_url: avatar_url || null,
         rules_json: rules_json || null,
         rules: rules || null,
-        rules_en: rules_en || null,
         role_names: role_names || null,
         is_premium_only: is_premium_only ?? null,
         status: 'pending'

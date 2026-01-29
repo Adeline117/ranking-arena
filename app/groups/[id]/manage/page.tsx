@@ -50,7 +50,6 @@ type Group = {
   description_en?: string | null
   avatar_url?: string | null
   rules?: string | null
-  rules_en?: string | null
   rules_json?: Array<{ zh: string; en: string }> | null
   role_names?: { admin: { zh: string; en: string }; member: { zh: string; en: string } } | null
   is_premium_only?: boolean | null
@@ -650,7 +649,6 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
           role_names: editRoleNames,
           rules_json: editRules.length > 0 ? editRules : null,
           rules: editRules.map(r => r.zh).filter(Boolean).join('\n') || null,
-          rules_en: editRules.map(r => r.en).filter(Boolean).join('\n') || null,
           is_premium_only: isPro && isPremiumOnly,
         })
       })

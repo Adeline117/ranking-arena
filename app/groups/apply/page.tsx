@@ -211,9 +211,8 @@ export default function ApplyGroupPage() {
           avatar_url: avatarUrl.trim() || null,
           role_names: roleNames,
           rules_json: rules.length > 0 ? rules : null,
-          // 兼容旧版：将规则合并为文本
+          // 兼容旧版：将规则合并为文本（仅中文，英文通过rules_json获取）
           rules: rules.map(r => r.zh).filter(Boolean).join('\n') || null,
-          rules_en: rules.map(r => r.en).filter(Boolean).join('\n') || null,
           // Pro 专属小组选项
           is_premium_only: isPro && isPremiumOnly,
         })
