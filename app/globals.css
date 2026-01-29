@@ -1,7 +1,10 @@
 @import "tailwindcss";
-@import "./styles/responsive.css";
-@import "./styles/animations.css";
-@import "./styles/trader-animations.css";
+/*
+ * Performance Optimization: CSS files moved to async loading
+ * - responsive.css: Critical styles inlined in critical-css.ts, rest loaded async
+ * - animations.css: Loaded async after LCP via layout.tsx
+ * - trader-animations.css: Only loaded on /trader/[handle] pages
+ */
 
 :root {
   --background: #000000;
