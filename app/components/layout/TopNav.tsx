@@ -79,12 +79,14 @@ export default function TopNav({ email }: { email: string | null }) {
         // 获取用户的handle和头像
         if (userId) {
           // 直接使用 user_profiles 表（profiles 表不存在）
-          supabase
-            .from('user_profiles')
-            .select('handle, avatar_url')
-            .eq('id', userId)
-            .maybeSingle()
-            .then(({ data: userProfile, error: profileError }) => {
+          ;(async () => {
+            try {
+              const { data: userProfile, error: profileError } = await supabase
+                .from('user_profiles')
+                .select('handle, avatar_url')
+                .eq('id', userId)
+                .maybeSingle()
+
               if (!alive) return
 
               if (profileError) {
@@ -116,8 +118,7 @@ export default function TopNav({ email }: { email: string | null }) {
                   setMyHandle(defaultHandle)
                 }
               }
-            })
-            .catch((err) => {
+            } catch (err) {
               if (!alive) return
               console.error('Unexpected error fetching user profile:', err)
               // Fallback to email-based handle
@@ -125,7 +126,8 @@ export default function TopNav({ email }: { email: string | null }) {
                 const defaultHandle = data.user.email.split('@')[0]
                 setMyHandle(defaultHandle)
               }
-            })
+            }
+          })()
         }
       })
       .catch((err) => {
