@@ -86,33 +86,18 @@ const TESTIMONIALS = [
 const getComparisonData = (language: string) => [
   {
     feature: language === 'zh' ? '排行榜浏览' : 'Leaderboard Access',
+    free: language === 'zh' ? '前 50 名' : 'Top 50',
+    pro: language === 'zh' ? '完整排行榜' : 'Full Leaderboard',
+  },
+  {
+    feature: language === 'zh' ? '基础筛选' : 'Basic Filters',
     free: true,
     pro: true,
   },
   {
-    feature: language === 'zh' ? '基础交易员详情' : 'Basic Trader Details',
+    feature: language === 'zh' ? '交易员详情' : 'Trader Details',
     free: true,
     pro: true,
-  },
-  {
-    feature: language === 'zh' ? '分类别排行（现货/链上/合约）' : 'Category Ranking (Spot/On-chain/Futures)',
-    free: false,
-    pro: true,
-  },
-  {
-    feature: language === 'zh' ? 'Arena Score 评分' : 'Arena Score',
-    free: language === 'zh' ? '总分' : 'Total Score',
-    pro: language === 'zh' ? '子分数 + 同类分位' : 'Breakdown + Percentile',
-  },
-  {
-    feature: language === 'zh' ? '关注交易员变动提醒' : 'Trader Change Alerts',
-    free: false,
-    pro: language === 'zh' ? '站内私信自动提醒' : 'Auto DM Alerts',
-  },
-  {
-    feature: language === 'zh' ? '交易员对比' : 'Trader Comparison',
-    free: false,
-    pro: language === 'zh' ? '最多5个交易员' : 'Up to 5 traders',
   },
   {
     feature: language === 'zh' ? '高级筛选' : 'Advanced Filters',
@@ -120,19 +105,44 @@ const getComparisonData = (language: string) => [
     pro: language === 'zh' ? '多条件叠加 + 保存复用' : 'Multi-filter + Save & Reuse',
   },
   {
-    feature: language === 'zh' ? 'Pro 徽章' : 'Pro Badge',
+    feature: language === 'zh' ? 'CSV 数据导出' : 'CSV Data Export',
     free: false,
-    pro: language === 'zh' ? '可在隐私设置关闭' : 'Can hide in settings',
+    pro: language === 'zh' ? '无限制' : 'Unlimited',
   },
   {
-    feature: language === 'zh' ? 'Pro 专属群组' : 'Pro-only Groups',
-    free: false,
-    pro: language === 'zh' ? '可创建/加入' : 'Create/Join',
+    feature: language === 'zh' ? '实时数据更新' : 'Real-time Data',
+    free: language === 'zh' ? '每小时刷新' : 'Hourly refresh',
+    pro: language === 'zh' ? '实时推送' : 'Real-time push',
   },
   {
-    feature: language === 'zh' ? 'Pro 会员官方群' : 'Pro Member Official Group',
+    feature: language === 'zh' ? 'Smart Money 信号' : 'Smart Money Signals',
     free: false,
-    pro: language === 'zh' ? '自动加入（500人/群）' : 'Auto-join (500/group)',
+    pro: language === 'zh' ? '异常交易检测' : 'Anomaly detection',
+  },
+  {
+    feature: language === 'zh' ? '交易员对比' : 'Trader Comparison',
+    free: false,
+    pro: language === 'zh' ? '最多 10 个交易员' : 'Up to 10 traders',
+  },
+  {
+    feature: language === 'zh' ? '交易员变动提醒' : 'Trader Change Alerts',
+    free: false,
+    pro: language === 'zh' ? '站内 + 邮件 + 推送' : 'In-app + Email + Push',
+  },
+  {
+    feature: language === 'zh' ? 'Arena Score 评分' : 'Arena Score',
+    free: language === 'zh' ? '总分' : 'Total Score',
+    pro: language === 'zh' ? '子分数 + 同类分位' : 'Breakdown + Percentile',
+  },
+  {
+    feature: language === 'zh' ? '历史数据' : 'Historical Data',
+    free: language === 'zh' ? '7 天' : '7 days',
+    pro: language === 'zh' ? '1 年' : '1 year',
+  },
+  {
+    feature: language === 'zh' ? 'Pro 徽章 & 专属群组' : 'Pro Badge & Groups',
+    free: false,
+    pro: true,
   },
 ]
 

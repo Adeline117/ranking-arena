@@ -24,8 +24,10 @@ import {
 } from './icons'
 import { getPnLTooltip, parseSourceInfo as parseSourceInfoUtil, getMedalGlowClass } from './utils'
 
-// CSS animations (replaces injectStyles)
-import './ranking-table.css'
+// CSS animations loaded async to avoid render-blocking (medal glow, hover effects, pagination)
+// Critical layout styles (grid, responsive columns) are already in critical-css.ts and responsive.css
+// This deferred load saves ~5KB from the render-blocking CSS path
+import { useRankingTableStyles } from './useRankingTableStyles'
 
 // Column customization types
 export type ColumnKey = 'score' | 'roi' | 'winrate' | 'mdd'
