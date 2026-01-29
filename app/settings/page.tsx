@@ -1420,7 +1420,10 @@ function SettingsContent() {
     setLoadingSessions(true)
     try {
       const { data: { session } } = await supabase.auth.getSession()
-      if (!session?.access_token) return
+      if (!session?.access_token) {
+        setLoadingSessions(false)
+        return
+      }
 
       const res = await fetch('/api/settings/sessions', {
         headers: { Authorization: `Bearer ${session.access_token}` },

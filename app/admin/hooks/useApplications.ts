@@ -35,7 +35,6 @@ export interface GroupEditApplication {
   avatar_url?: string | null
   rules_json?: any
   rules?: string | null
-  rules_en?: string | null
   role_names?: any
   status: string
   reject_reason?: string | null

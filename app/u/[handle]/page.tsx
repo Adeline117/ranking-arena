@@ -517,15 +517,15 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
           }
         } else {
           // 如果从 trader_sources 找到了（是trader），确保获取正确的粉丝数和关注数
-          // 但保留 trader 的原始头像（avatar_url 已经由 getTraderByHandle 设置）
-          // 重要：保存 trader 的原始头像，防止被覆盖
-          const traderOriginalAvatarUrl = profileData.avatar_url
-          
+          // getTraderByHandle 已经处理了 avatar_url 和 cover_url 的优先级：
+          // - avatar_url: 优先使用用户设置的头像，否则使用交易所头像
+          // - cover_url: 使用用户设置的背景图
+
           const { count: followersCount } = await supabase
             .from('user_follows')
             .select('*', { count: 'exact', head: true })
             .eq('following_id', profileData.id)
-          
+
           const { count: followingCount } = await supabase
             .from('user_follows')
             .select('*', { count: 'exact', head: true })
@@ -537,9 +537,6 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
           if (followingCount !== null) {
             profileData.following = followingCount
           }
-          // 确保 avatar_url 永远使用 trader 的原始头像，即使 trader 也在平台注册了
-          // 永远不使用 user_profiles 中的 avatar_url 覆盖 trader 的原始头像
-          profileData.avatar_url = traderOriginalAvatarUrl
         }
 
         if (!profileData) {

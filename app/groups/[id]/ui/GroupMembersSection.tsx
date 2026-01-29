@@ -14,7 +14,6 @@ interface Group {
   member_count?: number | null
   created_at?: string | null
   rules?: string | null
-  rules_en?: string | null
   rules_json?: Array<{ zh: string; en: string }> | null
   owner_handle?: string | null
 }
@@ -176,7 +175,10 @@ function RoleBadge({ role, language }: RoleBadgeProps): React.ReactElement {
 
 export function GroupInfoModal({ group, language, onClose, onShowMembers }: GroupInfoModalProps): React.ReactElement {
   const description = (language === 'en' && group.description_en) ? group.description_en : group.description
-  const rules = (language === 'en' && group.rules_en) ? group.rules_en : group.rules
+  // Use rules_json for bilingual rules, fallback to rules
+  const rules = group.rules_json
+    ? group.rules_json.map(r => language === 'en' ? r.en : r.zh).filter(Boolean).join('\n')
+    : group.rules
   const createdDate = group.created_at
     ? new Date(group.created_at).toLocaleDateString(language === 'zh' ? 'zh-CN' : 'en-US', {
         year: 'numeric',

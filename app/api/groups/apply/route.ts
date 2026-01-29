@@ -40,7 +40,6 @@ export async function POST(request: NextRequest) {
       role_names,
       rules_json,
       rules,
-      rules_en,
       is_premium_only
     } = body
 
@@ -120,7 +119,6 @@ export async function POST(request: NextRequest) {
         role_names: finalRoleNames,
         rules_json: rules_json || null,
         rules: rules?.trim() || null,
-        rules_en: rules_en?.trim() || null,
         is_premium_only: is_premium_only || false,
         status: 'pending'
       })

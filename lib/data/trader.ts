@@ -342,11 +342,11 @@ export async function getTraderByHandle(handle: string): Promise<TraderProfile |
             
             const { data } = await supabase
               .from('user_profiles')
-              .select('id, bio')
+              .select('id, bio, avatar_url, cover_url')
               .or(`handle.eq.${profileHandle},handle.eq.${decodedHandle},handle.eq.${handle}`)
               .limit(1)
               .maybeSingle()
-            
+
             return data
           })()
         ])
@@ -357,7 +357,10 @@ export async function getTraderByHandle(handle: string): Promise<TraderProfile |
           bio: profileData?.bio || undefined,
           followers: followersCount,
           copiers: 0,
-          avatar_url: source.profile_url || undefined,
+          // 优先使用用户在平台设置的头像，否则使用交易所头像
+          avatar_url: profileData?.avatar_url || source.profile_url || undefined,
+          // 用户设置的背景图
+          cover_url: profileData?.cover_url || undefined,
           isRegistered: !!profileData,
           source: source.source,
         }
