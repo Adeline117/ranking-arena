@@ -1372,6 +1372,832 @@
 
 ---
 
+## TC-EDGE: Edge Cases & Unusual Scenarios / 边界情况与异常场景
+
+> Real-world edge cases that users might encounter. These tests simulate unusual but realistic situations.
+>
+> 用户可能遇到的真实边界情况。这些测试模拟不寻常但现实的场景。
+
+---
+
+### TC-EDGE-001: Network Disconnection During Post Submit
+| Field | Value |
+|-------|-------|
+| Priority | P1 - High |
+| Category | Network / 网络 |
+
+**Scenario / 场景:**
+User writes a long post, network disconnects right when clicking "Post".
+
+**Test Steps:**
+| Step | Action | Expected Result |
+|------|--------|-----------------|
+| 1 | Write a long post (500+ chars) | Content entered |
+| 2 | Open DevTools → Network | Network tab ready |
+| 3 | Set "Offline" mode | Network blocked |
+| 4 | Click "Post" / "发布" | Loading starts |
+| 5 | Observe behavior | Error message shown, NOT silent fail |
+| 6 | Verify content preserved | Draft NOT lost |
+| 7 | Go back online | Network restored |
+| 8 | Retry submit | Post succeeds |
+| 9 | Check for duplicates | Only ONE post created |
+
+---
+
+### TC-EDGE-002: Rapid Double-Click on Follow Button
+| Field | Value |
+|-------|-------|
+| Priority | P1 - High |
+| Category | Race Condition / 竞态条件 |
+
+**Scenario / 场景:**
+User rapidly clicks follow button multiple times.
+
+**Test Steps:**
+| Step | Action | Expected Result |
+|------|--------|-----------------|
+| 1 | Navigate to trader profile | Page loaded |
+| 2 | Rapidly click follow 5+ times | Clicks registered |
+| 3 | Observe UI | Button disabled during request |
+| 4 | Check final state | Either Following OR Not (not stuck) |
+| 5 | Refresh page | State persists correctly |
+| 6 | Check follower count | Count is accurate (not +5) |
+
+---
+
+### TC-EDGE-003: Same Account Login on Multiple Devices
+| Field | Value |
+|-------|-------|
+| Priority | P1 - High |
+| Category | Session / 会话 |
+
+**Scenario / 场景:**
+User logs in on phone while already logged in on laptop.
+
+**Test Steps:**
+| Step | Action | Expected Result |
+|------|--------|-----------------|
+| 1 | Login on Device A (laptop) | Session active |
+| 2 | Login on Device B (phone) | Second session active |
+| 3 | Make changes on Device A | Changes saved |
+| 4 | Refresh Device B | See Device A's changes |
+| 5 | Logout on Device A | Device A logged out |
+| 6 | Check Device B | Still logged in OR graceful re-auth |
+| 7 | Perform action on Device B | Action succeeds or re-login prompt |
+
+---
+
+### TC-EDGE-004: Browser Back Button After Form Submit
+| Field | Value |
+|-------|-------|
+| Priority | P2 - Medium |
+| Category | Navigation / 导航 |
+
+**Scenario / 场景:**
+User creates a post, then presses browser back button.
+
+**Test Steps:**
+| Step | Action | Expected Result |
+|------|--------|-----------------|
+| 1 | Create and submit a post | Post created, redirected |
+| 2 | Click browser back button | Navigate back |
+| 3 | Check form state | Empty form OR warning |
+| 4 | Click forward button | Navigate forward |
+| 5 | Check post | Post still exists (not duplicated) |
+| 6 | Try to submit empty form | Validation prevents resubmit |
+
+---
+
+### TC-EDGE-005: Copy-Paste Formatted Text from Word/Notes
+| Field | Value |
+|-------|-------|
+| Priority | P2 - Medium |
+| Category | Input / 输入 |
+
+**Scenario / 场景:**
+User copy-pastes formatted text with hidden characters from Microsoft Word.
+
+**Test Steps:**
+| Step | Action | Expected Result |
+|------|--------|-----------------|
+| 1 | In Word, create text with bullets, bold, colors | Formatted text ready |
+| 2 | Copy the text | Text in clipboard |
+| 3 | Paste into post content | Text pasted |
+| 4 | Check display | Plain text, no weird chars |
+| 5 | Submit post | Post created |
+| 6 | View post | Clean text displayed |
+| 7 | Check for invisible characters | No \u200b, \ufeff, etc. |
+
+---
+
+### TC-EDGE-006: Emoji and Special Unicode Characters
+| Field | Value |
+|-------|-------|
+| Priority | P1 - High |
+| Category | Unicode / 字符编码 |
+
+**Scenario / 场景:**
+User uses various emojis and special characters in content.
+
+**Test Data:**
+```
+Standard emoji: 😀🎉🚀💰
+Skin tone: 👋🏻👋🏿
+Compound emoji: 👨‍👩‍👧‍👦 (family)
+Flags: 🇨🇳🇺🇸🇯🇵
+Symbols: ™©®℃№
+Math: ∑∏∫√∞
+RTL text: مرحبا العالم
+Zero-width: test​test (has ZWSP)
+Zalgo: T̵̢̧̨͓̱̦̪͔͔̣̦̼̮͚̹̗̝̮̺͎͉͐̂́̏̋́̂͐̍̅̎̚͘͠ͅͅḛ̷̡̛͎͙̪̫͈̣̳̖̥̥͂͆͑̋͋̅͊̿̋̿̉̓̌̀̕͘͜͝s̷̨̭͔̘̥͙̝̦̳̯̥̳̺͓̳̦̰̬̓̀̏̽t̵̡̞̪̣͔̼͔̺̳̔̀̓̔
+```
+
+**Test Steps:**
+| Step | Action | Expected Result |
+|------|--------|-----------------|
+| 1 | Enter all test data in bio | Field accepts input |
+| 2 | Save bio | Saved successfully |
+| 3 | View profile | All characters display correctly |
+| 4 | Use in post title | Title saved |
+| 5 | Use in comments | Comments saved |
+| 6 | Search for emoji content | Search works |
+| 7 | Check character count | Correct count (👨‍👩‍👧‍👦 = 1 char visually) |
+
+---
+
+### TC-EDGE-007: Extremely Long Continuous Text (No Spaces)
+| Field | Value |
+|-------|-------|
+| Priority | P2 - Medium |
+| Category | Layout / 布局 |
+
+**Scenario / 场景:**
+User posts a very long string without any spaces or line breaks.
+
+**Test Data:**
+```
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+```
+
+**Test Steps:**
+| Step | Action | Expected Result |
+|------|--------|-----------------|
+| 1 | Post 500 char string (no spaces) | Post created |
+| 2 | View on desktop | Text wraps, no horizontal scroll |
+| 3 | View on mobile | Text wraps, no overflow |
+| 4 | Check container boundaries | Text doesn't break layout |
+| 5 | Try in username/handle | Rejected or truncated |
+
+---
+
+### TC-EDGE-008: Session Expires During Long Form Fill
+| Field | Value |
+|-------|-------|
+| Priority | P1 - High |
+| Category | Session / 会话 |
+
+**Scenario / 场景:**
+User spends 2 hours writing a detailed post, session expires before submit.
+
+**Test Steps:**
+| Step | Action | Expected Result |
+|------|--------|-----------------|
+| 1 | Login to app | Session active |
+| 2 | Open post editor | Editor ready |
+| 3 | Wait for session to expire (or manually expire) | Session expired |
+| 4 | Enter long content (1000+ chars) | Content entered |
+| 5 | Click "Post" | Submit attempted |
+| 6 | Observe behavior | Re-login prompt, NOT data loss |
+| 7 | Login again | Session restored |
+| 8 | Check form | Content PRESERVED |
+| 9 | Submit again | Post created successfully |
+
+---
+
+### TC-EDGE-009: Upload Image with Wrong Extension
+| Field | Value |
+|-------|-------|
+| Priority | P2 - Medium |
+| Category | File Upload / 文件上传 |
+
+**Scenario / 场景:**
+User renames a .exe file to .jpg and tries to upload.
+
+**Test Steps:**
+| Step | Action | Expected Result |
+|------|--------|-----------------|
+| 1 | Create fake image (rename .txt to .jpg) | File ready |
+| 2 | Try to upload as avatar | Upload attempted |
+| 3 | Observe result | Error: "Invalid image file" |
+| 4 | Rename .exe to .png | File ready |
+| 5 | Try to upload | Upload rejected |
+| 6 | Check server response | MIME type validated |
+
+---
+
+### TC-EDGE-010: Timezone Change During Session
+| Field | Value |
+|-------|-------|
+| Priority | P3 - Low |
+| Category | Time / 时间 |
+
+**Scenario / 场景:**
+User travels from Beijing to New York while using the app.
+
+**Test Steps:**
+| Step | Action | Expected Result |
+|------|--------|-----------------|
+| 1 | Login in Beijing timezone (UTC+8) | Session active |
+| 2 | Create a post at 10:00 AM Beijing | Post created |
+| 3 | Change system timezone to New York (UTC-5) | Timezone changed |
+| 4 | Refresh page | Page reloads |
+| 5 | Check post timestamp | Shows relative time correctly |
+| 6 | Check "posted X hours ago" | Calculation still correct |
+| 7 | Schedule something (if feature exists) | Uses correct timezone |
+
+---
+
+### TC-EDGE-011: Rapid Tab Switching with Unsaved Changes
+| Field | Value |
+|-------|-------|
+| Priority | P2 - Medium |
+| Category | Navigation / 导航 |
+
+**Scenario / 场景:**
+User has unsaved post draft, rapidly switches between tabs.
+
+**Test Steps:**
+| Step | Action | Expected Result |
+|------|--------|-----------------|
+| 1 | Start writing a post | Content entered |
+| 2 | Cmd/Ctrl + Click another link | New tab opens |
+| 3 | Switch back to original tab | Tab still there |
+| 4 | Check form content | Content preserved |
+| 5 | Click in-page navigation | "Unsaved changes" warning |
+| 6 | Cancel navigation | Stay on page |
+| 7 | Click navigation again | Warning shown |
+| 8 | Confirm leave | Navigate away |
+| 9 | Go back | Form is empty (expected) |
+
+---
+
+### TC-EDGE-012: Payment Page Reload After Stripe Redirect
+| Field | Value |
+|-------|-------|
+| Priority | P0 - Critical |
+| Category | Payment / 支付 |
+
+**Scenario / 场景:**
+User completes Stripe payment but closes browser before redirect completes.
+
+**Test Steps:**
+| Step | Action | Expected Result |
+|------|--------|-----------------|
+| 1 | Initiate Pro subscription | Redirect to Stripe |
+| 2 | Complete payment on Stripe | Payment successful |
+| 3 | IMMEDIATELY close browser | Browser closed |
+| 4 | Reopen browser | New session |
+| 5 | Login to app | Session restored |
+| 6 | Check subscription status | PRO status ACTIVE (webhook processed) |
+| 7 | Check Stripe dashboard | Payment recorded |
+| 8 | No duplicate charges | Only one charge |
+
+---
+
+### TC-EDGE-013: Simultaneous Edit Same Post (Two Tabs)
+| Field | Value |
+|-------|-------|
+| Priority | P2 - Medium |
+| Category | Concurrency / 并发 |
+
+**Scenario / 场景:**
+User opens same post for editing in two browser tabs.
+
+**Test Steps:**
+| Step | Action | Expected Result |
+|------|--------|-----------------|
+| 1 | Open post edit in Tab A | Edit form loaded |
+| 2 | Open same post edit in Tab B | Edit form loaded |
+| 3 | Change title in Tab A | Title changed |
+| 4 | Change content in Tab B | Content changed |
+| 5 | Save in Tab A | Saved successfully |
+| 6 | Save in Tab B | Conflict handled OR overwrites |
+| 7 | View final post | Consistent state |
+| 8 | Check version/history (if exists) | Both edits recorded |
+
+---
+
+### TC-EDGE-014: Follow User Who Blocks You Mid-Request
+| Field | Value |
+|-------|-------|
+| Priority | P3 - Low |
+| Category | Race Condition / 竞态条件 |
+
+**Scenario / 场景:**
+User A clicks follow on User B. At the exact same moment, User B blocks User A.
+
+**Test Steps:**
+| Step | Action | Expected Result |
+|------|--------|-----------------|
+| 1 | User A views User B profile | Profile displayed |
+| 2 | User A clicks Follow | Request sent |
+| 3 | Simultaneously, User B blocks User A | Block processed |
+| 4 | Check User A's result | Error or "User not found" |
+| 5 | User A refreshes | Profile not accessible |
+| 6 | Check User A's following list | User B NOT in list |
+
+---
+
+### TC-EDGE-015: Upload During Low Storage on Mobile
+| Field | Value |
+|-------|-------|
+| Priority | P2 - Medium |
+| Category | Mobile / 移动端 |
+
+**Scenario / 场景:**
+User tries to upload image when phone has <100MB storage left.
+
+**Test Steps:**
+| Step | Action | Expected Result |
+|------|--------|-----------------|
+| 1 | Fill phone storage to near-full | <100MB remaining |
+| 2 | Try to select image for upload | File picker opens |
+| 3 | Select large image (5MB) | Image selected |
+| 4 | Observe behavior | App handles gracefully |
+| 5 | If fails, error message | Clear error message |
+| 6 | App doesn't crash | App remains stable |
+
+---
+
+### TC-EDGE-016: API Key with Special Characters
+| Field | Value |
+|-------|-------|
+| Priority | P1 - High |
+| Category | Exchange / 交易所 |
+
+**Scenario / 场景:**
+User's exchange API secret contains special characters like +, /, =.
+
+**Test Data:**
+```
+API Key: abc123XYZ
+API Secret: aB+cD/eF==gH
+Passphrase: p@ss+word/123=
+```
+
+**Test Steps:**
+| Step | Action | Expected Result |
+|------|--------|-----------------|
+| 1 | Go to exchange connection | Form displayed |
+| 2 | Enter API key with special chars | Field accepts input |
+| 3 | Enter secret with +, /, = | Field accepts input |
+| 4 | Enter passphrase with special chars | Field accepts input |
+| 5 | Submit connection | Validation attempted |
+| 6 | Check encoding | Characters NOT corrupted |
+| 7 | Connection works OR proper error | No garbled response |
+
+---
+
+### TC-EDGE-017: Language Switch Mid-Form
+| Field | Value |
+|-------|-------|
+| Priority | P2 - Medium |
+| Category | i18n / 国际化 |
+
+**Scenario / 场景:**
+User starts filling a form in Chinese, switches to English mid-way.
+
+**Test Steps:**
+| Step | Action | Expected Result |
+|------|--------|-----------------|
+| 1 | Set language to 中文 | Chinese UI |
+| 2 | Start filling post form | Enter Chinese content |
+| 3 | Switch language to English | UI changes |
+| 4 | Check form | Content PRESERVED (not cleared) |
+| 5 | Labels change | All labels now English |
+| 6 | Submit form | Post created |
+| 7 | View post | Chinese content displays correctly |
+
+---
+
+### TC-EDGE-018: Delete Account Then Try to Login
+| Field | Value |
+|-------|-------|
+| Priority | P1 - High |
+| Category | Account / 账户 |
+
+**Scenario / 场景:**
+User requests account deletion, then tries to login during 30-day grace period.
+
+**Test Steps:**
+| Step | Action | Expected Result |
+|------|--------|-----------------|
+| 1 | Request account deletion | Deletion pending |
+| 2 | Logout | Logged out |
+| 3 | Try to login | Login form |
+| 4 | Enter credentials | Attempt login |
+| 5 | Observe result | Login succeeds with warning |
+| 6 | See deletion notice | "Your account is scheduled for deletion" |
+| 7 | Option to cancel | Cancel deletion available |
+| 8 | Cancel deletion | Account restored |
+| 9 | Login again normally | Normal access |
+
+---
+
+### TC-EDGE-019: Max Limit Testing
+| Field | Value |
+|-------|-------|
+| Priority | P1 - High |
+| Category | Limits / 限制 |
+
+**Scenario / 场景:**
+Test behavior at maximum allowed limits.
+
+**Test Steps:**
+| Step | Action | Expected Result |
+|------|--------|-----------------|
+| 1 | Follow maximum traders (if limit) | Limit reached |
+| 2 | Try to follow one more | Clear limit message |
+| 3 | Create maximum posts per day | Limit reached |
+| 4 | Try to create one more | Rate limit message |
+| 5 | Join maximum groups | Limit reached |
+| 6 | Try to join one more | Clear limit message |
+| 7 | Upload maximum images per post | Limit reached |
+| 8 | Try to add one more | Image rejected, others preserved |
+| 9 | Create 100 bookmark folders | Limit behavior |
+
+---
+
+### TC-EDGE-020: Extremely Slow Network (2G Simulation)
+| Field | Value |
+|-------|-------|
+| Priority | P1 - High |
+| Category | Network / 网络 |
+
+**Scenario / 场景:**
+User on very slow network (2G speed).
+
+**Test Steps:**
+| Step | Action | Expected Result |
+|------|--------|-----------------|
+| 1 | DevTools → Network → Slow 3G or custom 2G | Throttled |
+| 2 | Load homepage | Page loads (slowly) |
+| 3 | Check for loading indicators | Skeletons/spinners shown |
+| 4 | Submit a post | Loading state visible |
+| 5 | Wait for completion | Eventually completes OR timeout |
+| 6 | Check timeout message | User-friendly timeout message |
+| 7 | Try image upload | Progress indicator shown |
+| 8 | Cancel slow upload | Cancel works |
+
+---
+
+### TC-EDGE-021: Password Manager Auto-fill Conflicts
+| Field | Value |
+|-------|-------|
+| Priority | P2 - Medium |
+| Category | Browser / 浏览器 |
+
+**Scenario / 场景:**
+Password manager tries to auto-fill wrong fields.
+
+**Test Steps:**
+| Step | Action | Expected Result |
+|------|--------|-----------------|
+| 1 | Enable password manager (1Password, LastPass) | Manager active |
+| 2 | Go to login page | Auto-fill may trigger |
+| 3 | Check if correct fields filled | Email/password correct |
+| 4 | Go to API key form | Form displayed |
+| 5 | Check auto-fill behavior | Should NOT auto-fill API fields |
+| 6 | API secret field | Should NOT show password suggestions |
+| 7 | New user registration | Should NOT fill existing credentials |
+
+---
+
+### TC-EDGE-022: Mobile Keyboard Covers Submit Button
+| Field | Value |
+|-------|-------|
+| Priority | P1 - High |
+| Category | Mobile / 移动端 |
+
+**Scenario / 场景:**
+On mobile, the keyboard covers important buttons.
+
+**Test Steps:**
+| Step | Action | Expected Result |
+|------|--------|-----------------|
+| 1 | Open app on iPhone SE (small screen) | App loaded |
+| 2 | Open post creation | Form displayed |
+| 3 | Tap on content field | Keyboard opens |
+| 4 | Check submit button visibility | Button visible OR scroll works |
+| 5 | Scroll while keyboard open | Can scroll to button |
+| 6 | Tap submit | Button responds |
+| 7 | Open comment form | Form displayed |
+| 8 | Same test | Submit accessible |
+
+---
+
+### TC-EDGE-023: External Link in Bio Causes XSS Attempt
+| Field | Value |
+|-------|-------|
+| Priority | P0 - Critical |
+| Category | Security / 安全 |
+
+**Test Data:**
+```
+javascript:alert('XSS')
+data:text/html,<script>alert('XSS')</script>
+https://evil.com" onclick="alert('XSS')
+https://example.com?q=<script>alert('XSS')</script>
+```
+
+**Test Steps:**
+| Step | Action | Expected Result |
+|------|--------|-----------------|
+| 1 | Try to save javascript: URL as website | Rejected OR sanitized |
+| 2 | Try data: URL | Rejected OR sanitized |
+| 3 | Try URL with onclick | Attribute stripped |
+| 4 | Try URL with query XSS | Query encoded |
+| 5 | View profile | No script execution |
+| 6 | Click any saved links | Safe navigation only |
+
+---
+
+### TC-EDGE-024: Copy Trader with Deactivated Exchange Account
+| Field | Value |
+|-------|-------|
+| Priority | P2 - Medium |
+| Category | Exchange / 交易所 |
+
+**Scenario / 场景:**
+Trader's exchange account gets banned/deactivated.
+
+**Test Steps:**
+| Step | Action | Expected Result |
+|------|--------|-----------------|
+| 1 | View trader who was active | Profile loads |
+| 2 | Trader's exchange account deactivated | Account removed from exchange |
+| 3 | Next data sync | Sync runs |
+| 4 | View trader profile | Appropriate status shown |
+| 5 | Try to copy trade | Link may not work OR warning |
+| 6 | Check leaderboard | Trader removed or flagged |
+
+---
+
+### TC-EDGE-025: Group Owner Deletes Account
+| Field | Value |
+|-------|-------|
+| Priority | P1 - High |
+| Category | Group / 小组 |
+
+**Scenario / 场景:**
+The owner of a group with 1000 members deletes their account.
+
+**Test Steps:**
+| Step | Action | Expected Result |
+|------|--------|-----------------|
+| 1 | As group owner, request account deletion | Deletion pending |
+| 2 | Check group status | Group still exists |
+| 3 | Check group ownership | Transferred OR pending |
+| 4 | After 30 days, deletion completes | Account deleted |
+| 5 | View group | Group has new owner OR admin |
+| 6 | Group members | Can still access group |
+| 7 | Group posts | Still visible |
+
+---
+
+### TC-EDGE-026: Bookmark Post Then Post Gets Deleted
+| Field | Value |
+|-------|-------|
+| Priority | P2 - Medium |
+| Category | Data Integrity / 数据完整性 |
+
+**Scenario / 场景:**
+User bookmarks a post, then the post author deletes it.
+
+**Test Steps:**
+| Step | Action | Expected Result |
+|------|--------|-----------------|
+| 1 | User A creates post | Post created |
+| 2 | User B bookmarks post | Bookmark saved |
+| 3 | User A deletes post | Post deleted |
+| 4 | User B views bookmarks | Bookmark list loads |
+| 5 | Check deleted bookmark | "Post no longer exists" OR removed |
+| 6 | No broken links | Graceful handling |
+| 7 | Bookmark count updated | Accurate count |
+
+---
+
+### TC-EDGE-027: Browser Zoom 200% / 50%
+| Field | Value |
+|-------|-------|
+| Priority | P2 - Medium |
+| Category | Accessibility / 可访问性 |
+
+**Scenario / 场景:**
+User with vision issues uses browser zoom.
+
+**Test Steps:**
+| Step | Action | Expected Result |
+|------|--------|-----------------|
+| 1 | Set browser zoom to 200% | Page zoomed |
+| 2 | Check layout | No horizontal scroll |
+| 3 | Check buttons | All clickable, not overlapping |
+| 4 | Check modals | Fully visible |
+| 5 | Set zoom to 50% | Page zoomed out |
+| 6 | Check readability | Text still readable |
+| 7 | Check click targets | Still clickable |
+
+---
+
+### TC-EDGE-028: Multiple File Upload - One Fails
+| Field | Value |
+|-------|-------|
+| Priority | P2 - Medium |
+| Category | Upload / 上传 |
+
+**Scenario / 场景:**
+User uploads 5 images, the 3rd one fails.
+
+**Test Steps:**
+| Step | Action | Expected Result |
+|------|--------|-----------------|
+| 1 | Select 5 images for upload | 5 files selected |
+| 2 | One image is corrupted/invalid | Mixed valid/invalid |
+| 3 | Start upload | Upload begins |
+| 4 | Observe progress | Individual progress shown |
+| 5 | Invalid image fails | Clear error for that image |
+| 6 | Other 4 succeed | 4 images uploaded |
+| 7 | Post can still be created | With 4 images |
+| 8 | Option to retry failed | Retry available |
+
+---
+
+### TC-EDGE-029: Login With Caps Lock On
+| Field | Value |
+|-------|-------|
+| Priority | P3 - Low |
+| Category | UX / 用户体验 |
+
+**Scenario / 场景:**
+User accidentally has Caps Lock on while typing password.
+
+**Test Steps:**
+| Step | Action | Expected Result |
+|------|--------|-----------------|
+| 1 | Go to login page | Form displayed |
+| 2 | Enter email normally | Email entered |
+| 3 | Turn on Caps Lock | Caps Lock active |
+| 4 | Type password | Password entered (wrong case) |
+| 5 | Check for Caps Lock warning | Warning indicator shown |
+| 6 | Submit | Login fails |
+| 7 | Error message | "Invalid credentials" (not reveal password case issue) |
+
+---
+
+### TC-EDGE-030: Deep Link When Not Logged In
+| Field | Value |
+|-------|-------|
+| Priority | P1 - High |
+| Category | Navigation / 导航 |
+
+**Scenario / 场景:**
+User clicks a shared link to protected content when not logged in.
+
+**Test Steps:**
+| Step | Action | Expected Result |
+|------|--------|-----------------|
+| 1 | Copy a private page URL (e.g., /settings/2fa) | URL copied |
+| 2 | Open in incognito/new browser | Not logged in |
+| 3 | Paste and navigate to URL | Navigation attempted |
+| 4 | Observe behavior | Redirect to login |
+| 5 | Login | Credentials entered |
+| 6 | After login | Redirect BACK to original URL |
+| 7 | Check original page | Page displays correctly |
+
+---
+
+### TC-EDGE-031: Stripe Webhook Delayed
+| Field | Value |
+|-------|-------|
+| Priority | P1 - High |
+| Category | Payment / 支付 |
+
+**Scenario / 场景:**
+Stripe webhook is delayed by 5+ minutes after payment.
+
+**Test Steps:**
+| Step | Action | Expected Result |
+|------|--------|-----------------|
+| 1 | Complete payment on Stripe | Payment successful |
+| 2 | Return to app immediately | Back in app |
+| 3 | Check Pro status | May show "Processing" |
+| 4 | Webhook delayed simulation | Wait or block webhook |
+| 5 | User sees status | "Payment processing" message |
+| 6 | Retry check button available | Manual refresh option |
+| 7 | Webhook eventually arrives | Status updates to Pro |
+| 8 | No duplicate charges | Only one charge in Stripe |
+
+---
+
+### TC-EDGE-032: Paste Image Directly into Text Field
+| Field | Value |
+|-------|-------|
+| Priority | P2 - Medium |
+| Category | Input / 输入 |
+
+**Scenario / 场景:**
+User copies an image and pastes directly into post content.
+
+**Test Steps:**
+| Step | Action | Expected Result |
+|------|--------|-----------------|
+| 1 | Copy an image (screenshot or from web) | Image in clipboard |
+| 2 | Open post editor | Editor displayed |
+| 3 | Focus content field | Field focused |
+| 4 | Cmd/Ctrl + V | Paste attempted |
+| 5 | Observe behavior | Image uploaded OR ignored gracefully |
+| 6 | If supported, image appears | Image shows in preview |
+| 7 | If not supported | No crash, no garbled text |
+
+---
+
+### TC-EDGE-033: Right-to-Left (RTL) Language in Posts
+| Field | Value |
+|-------|-------|
+| Priority | P2 - Medium |
+| Category | i18n / 国际化 |
+
+**Test Data:**
+```
+Arabic: مرحبا بكم في أرينا
+Hebrew: שלום לכולם
+Mixed: Hello مرحبا World عالم
+```
+
+**Test Steps:**
+| Step | Action | Expected Result |
+|------|--------|-----------------|
+| 1 | Create post with Arabic text | Post created |
+| 2 | View post | Text displays RTL |
+| 3 | Mix LTR and RTL | Both directions work |
+| 4 | Check alignment | Proper alignment |
+| 5 | Comment in Hebrew | Comment displays correctly |
+| 6 | Search Arabic text | Search works |
+
+---
+
+### TC-EDGE-034: Trader Handle is Reserved Word
+| Field | Value |
+|-------|-------|
+| Priority | P2 - Medium |
+| Category | Data / 数据 |
+
+**Scenario / 场景:**
+Trader's handle matches a system reserved word or route.
+
+**Test Data:**
+- admin
+- settings
+- api
+- login
+- null
+- undefined
+- groups
+- trader
+
+**Test Steps:**
+| Step | Action | Expected Result |
+|------|--------|-----------------|
+| 1 | Search for trader "admin" | Search executed |
+| 2 | If exists, view profile | Profile at /trader/admin |
+| 3 | No conflict with /admin route | Different routes |
+| 4 | Try to set username to "api" | Rejected (reserved) |
+| 5 | Check error message | Clear "reserved word" message |
+
+---
+
+### TC-EDGE-035: WebSocket Disconnection During Chat
+| Field | Value |
+|-------|-------|
+| Priority | P1 - High |
+| Category | Real-time / 实时 |
+
+**Scenario / 场景:**
+WebSocket connection drops during active chat.
+
+**Test Steps:**
+| Step | Action | Expected Result |
+|------|--------|-----------------|
+| 1 | Open chat with another user | Chat active |
+| 2 | DevTools → Network → Offline | Connection lost |
+| 3 | Other user sends message | Message sent |
+| 4 | Check your chat | Reconnection indicator shown |
+| 5 | Go back online | Connection restored |
+| 6 | Check for missed message | Message appears |
+| 7 | No message loss | All messages received |
+
+---
+
 ## Bug Report Template / 缺陷报告模板
 
 ```markdown
