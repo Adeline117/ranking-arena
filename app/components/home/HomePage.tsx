@@ -1,5 +1,4 @@
-import { Suspense } from 'react'
-import dynamic from 'next/dynamic'
+import { Suspense, lazy } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box } from '../base'
 import TopNav from '../layout/TopNav'
@@ -18,17 +17,8 @@ interface HomePageProps {
   isLoggedIn: boolean
 }
 
-// 动态加载侧边栏组件（非关键路径）- 使用 ssr: false 减少初始负载
-const SidebarSection = dynamic(() => import('./SidebarSection'), {
-  ssr: false,
-  loading: () => (
-    <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
-      {[1, 2].map(i => (
-        <Box key={i} style={{ height: 80, borderRadius: tokens.radius.lg, background: tokens.colors.bg.secondary }} />
-      ))}
-    </Box>
-  ),
-})
+// 懒加载侧边栏组件（非关键路径）- 在客户端延迟加载
+const SidebarSection = lazy(() => import('./SidebarSection'))
 
 /**
  * 首页主容器组件 - Server Component
@@ -74,7 +64,7 @@ export default function HomePage({
       <JsonLd data={combineSchemas(generateWebSiteSchema(), generateOrganizationSchema())} />
 
       {/* 顶部导航 */}
-      <TopNav email={email} />
+      <TopNav email={email ?? null} />
 
       {/* 主体容器 */}
       <Box
@@ -98,7 +88,9 @@ export default function HomePage({
           <Box className="hide-tablet">
             <Suspense fallback={
               <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
-                <Box className="skeleton" style={{ height: 200, borderRadius: 12 }} />
+                {[1, 2].map(i => (
+                  <Box key={i} className="skeleton" style={{ height: 200, borderRadius: 12 }} />
+                ))}
               </Box>
             }>
               <SidebarSection position="left" />
@@ -124,7 +116,9 @@ export default function HomePage({
           <Box className="hide-mobile">
             <Suspense fallback={
               <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
-                <Box className="skeleton" style={{ height: 200, borderRadius: 12 }} />
+                {[1, 2].map(i => (
+                  <Box key={i} className="skeleton" style={{ height: 200, borderRadius: 12 }} />
+                ))}
               </Box>
             }>
               <SidebarSection position="right" />
