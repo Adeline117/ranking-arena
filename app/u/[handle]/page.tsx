@@ -115,21 +115,48 @@ function UserHomeContent(props: { params: { handle: string } | Promise<{ handle:
             }
           }
 
-          // 尝试当前用户
+          // 尝试当前用户（通过 ID 或邮箱前缀匹配）
           if (!userProfile) {
             const { data: { user: currentUser } } = await supabase.auth.getUser()
-            if (currentUser && handle === currentUser.id) {
-              const { data: currentUserProfile } = await supabase
-                .from('user_profiles')
-                .select('*, uid, cover_url')
-                .eq('id', currentUser.id)
-                .maybeSingle()
+            if (currentUser) {
+              const emailHandle = currentUser.email?.split('@')[0]
+              const isOwnProfile = handle === currentUser.id || handle === emailHandle
 
-              if (currentUserProfile) {
-                userProfile = currentUserProfile
-                if (currentUserProfile.handle && currentUserProfile.handle !== handle) {
-                  window.location.href = `/u/${encodeURIComponent(currentUserProfile.handle)}`
-                  return
+              if (isOwnProfile) {
+                // 尝试获取现有 profile
+                const { data: currentUserProfile } = await supabase
+                  .from('user_profiles')
+                  .select('*, uid, cover_url')
+                  .eq('id', currentUser.id)
+                  .maybeSingle()
+
+                if (currentUserProfile) {
+                  userProfile = currentUserProfile
+                  // 如果有 handle 且不匹配当前 URL，重定向
+                  if (currentUserProfile.handle && currentUserProfile.handle !== handle) {
+                    window.location.href = `/u/${encodeURIComponent(currentUserProfile.handle)}`
+                    return
+                  }
+                } else {
+                  // 为当前用户创建 profile
+                  const defaultHandle = emailHandle || currentUser.id.slice(0, 8)
+                  const { data: newProfile, error: createError } = await supabase
+                    .from('user_profiles')
+                    .upsert({
+                      id: currentUser.id,
+                      handle: defaultHandle,
+                    }, { onConflict: 'id' })
+                    .select('*, uid, cover_url')
+                    .single()
+
+                  if (newProfile && !createError) {
+                    userProfile = newProfile
+                    // 重定向到正确的 handle URL
+                    if (newProfile.handle && newProfile.handle !== handle) {
+                      window.location.href = `/u/${encodeURIComponent(newProfile.handle)}`
+                      return
+                    }
+                  }
                 }
               }
             }
