@@ -107,7 +107,7 @@ const styles = {
     border: 'none',
   },
   primaryButton: {
-    background: tokens.colors.accent.brand,
+    background: '#7d6599',
     color: '#FFFFFF',
   },
   secondaryButton: {
