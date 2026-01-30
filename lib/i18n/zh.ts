@@ -1040,6 +1040,11 @@ const zh = {
     beFirstReview: '来发表第一条评价吧',
     sortNewest: '最新',
     sortTop: '最热',
+
+    // Image Cropper
+    cropSuccess: '裁剪成功！点击保存按钮上传',
+    cropFailed: '裁剪失败，请重试',
+    noCropAreaSelected: '请先选择裁剪区域',
 } as const
 
 export default zh
