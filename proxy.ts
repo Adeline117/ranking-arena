@@ -136,6 +136,9 @@ function generateCsp(): string {
       "'unsafe-eval'", // 开发环境需要
       'https://vercel.live',
       'https://*.vercel-scripts.com',
+      'https://static.cloudflareinsights.com',
+      'https://js.stripe.com',
+      'https://challenges.cloudflare.com',
     ],
     'style-src': [
       "'self'",
@@ -167,8 +170,10 @@ function generateCsp(): string {
       'https://*.upstash.io',
       'https://vercel.live',
       'wss://ws-us3.pusher.com',
-      // Sentry
+      // Sentry (wildcard only matches one subdomain level)
       'https://*.ingest.sentry.io',
+      'https://*.ingest.us.sentry.io',
+      'https://*.sentry.io',
     ],
     'frame-src': [
       "'self'",
