@@ -2,15 +2,20 @@ import type { Metadata, Viewport } from "next";
 import { Suspense } from "react";
 import { Inter, Noto_Sans_SC } from "next/font/google";
 import "./globals.css";
-import KeyboardShortcuts from "./components/Providers/KeyboardShortcuts";
+import dynamic from "next/dynamic";
 import Providers from "./components/Providers";
 import CapacitorProvider from "./components/Providers/CapacitorProvider";
-import { GlobalProgress } from "./components/ui/GlobalProgress";
-import { ServiceWorkerRegistration } from "./components/Providers/ServiceWorkerRegistration";
-import CookieConsent from "./components/ui/CookieConsent";
 import { SkipLink } from "./components/Providers/Accessibility";
-import { WebVitals } from "./components/Providers/WebVitals";
-import { SpeedInsights } from "@vercel/speed-insights/next";
+
+// Defer non-critical layout components via dynamic import (code-split)
+// Note: ssr:false not allowed in Server Components; these are 'use client' components
+// and will only hydrate on the client
+const KeyboardShortcuts = dynamic(() => import("./components/Providers/KeyboardShortcuts"));
+const GlobalProgress = dynamic(() => import("./components/ui/GlobalProgress").then(m => ({ default: m.GlobalProgress })));
+const ServiceWorkerRegistration = dynamic(() => import("./components/Providers/ServiceWorkerRegistration").then(m => ({ default: m.ServiceWorkerRegistration })));
+const CookieConsent = dynamic(() => import("./components/ui/CookieConsent"));
+const WebVitals = dynamic(() => import("./components/Providers/WebVitals").then(m => ({ default: m.WebVitals })));
+const SpeedInsights = dynamic(() => import("@vercel/speed-insights/next").then(m => ({ default: m.SpeedInsights })));
 import { getCriticalCss, getResourceHints } from "@/lib/performance/critical-css";
 import { AsyncStylesheets } from "./components/Providers/AsyncStylesheets";
 
@@ -135,11 +140,9 @@ export default function RootLayout({
           <CapacitorProvider>
             {/* Load non-critical CSS after hydration */}
             <AsyncStylesheets />
-            {/* Defer analytics to after LCP */}
-            <Suspense fallback={null}>
-              <WebVitals />
-              <SpeedInsights />
-            </Suspense>
+            {/* Analytics deferred via dynamic import */}
+            <WebVitals />
+            <SpeedInsights />
             <SkipLink targetId="main-content" />
             <ServiceWorkerRegistration />
             <Suspense fallback={null}>

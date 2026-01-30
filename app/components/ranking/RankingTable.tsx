@@ -6,18 +6,24 @@ import { tokens } from '@/lib/design-tokens'
 import { RankingSkeleton } from '../ui/Skeleton'
 import { Box, Text } from '../base'
 import { useLanguage } from '../Providers/LanguageProvider'
+import dynamic from 'next/dynamic'
 import { DynamicScoreRulesModal as ScoreRulesModal } from '../ui/dynamic'
 import CategoryRankingTabs, { CategoryType } from './CategoryRankingTabs'
 import { ProLabel } from '../premium/PremiumGate'
-import ExportButton from '../utils/ExportButton'
 import { VirtualList } from '../ui/VirtualList'
-import Pagination from '../ui/Pagination'
 
-// Extracted components
+// Lazy-load non-LCP components to reduce initial bundle
+const ExportButton = dynamic(() => import('../utils/ExportButton'), { ssr: false })
+const Pagination = dynamic(() => import('../ui/Pagination'), { ssr: false })
+const ScoreBreakdownTooltip = dynamic(
+  () => import('./ScoreBreakdownTooltip').then(m => ({ default: m.ScoreBreakdownTooltip })),
+  { ssr: false }
+)
+const RankingSearch = dynamic(() => import('./RankingSearch'), { ssr: false })
+
+// Extracted components — keep TraderRow/TraderCard static (LCP-critical)
 import { TraderRow } from './TraderRow'
 import { TraderCard } from './TraderCard'
-import { ScoreBreakdownTooltip } from './ScoreBreakdownTooltip'
-import RankingSearch from './RankingSearch'
 import {
   FilterIcon, CompareIcon, SortIndicator, LockIconSmall,
   SearchIcon, TableViewIcon, CardViewIcon, SettingsIcon,
