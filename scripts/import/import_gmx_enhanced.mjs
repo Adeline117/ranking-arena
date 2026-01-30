@@ -57,15 +57,18 @@ function getTargetPeriods() {
   const arg = process.argv[2]?.toUpperCase()
   if (arg === 'ALL') return ['7D', '30D', '90D']
   if (arg && ['7D', '30D', '90D'].includes(arg)) return [arg]
-  return ['30D']
+  return ['7D', '30D', '90D']
 }
 
 /**
  * 获取排行榜数据
+ * 对于 90D，通过 positionChanges 时间过滤来获取时间窗口内的数据
  */
 async function fetchLeaderboard(period) {
   console.log(`\n📊 获取排行榜数据 (${period})...`)
 
+  // accountStats 是累计数据，不区分时间窗口
+  // 但我们仍然获取它用于基础排名
   const query = `{
     accountStats(
       limit: ${TARGET_COUNT * 2},
@@ -132,13 +135,22 @@ async function fetchLeaderboard(period) {
 /**
  * 获取交易员的最大回撤 (通过 positionChanges 历史)
  * @param {string} originalAddress - Must use original case from API
+ * @param {string} period - '7D', '30D', '90D'
  */
-async function fetchMaxDrawdown(originalAddress) {
+async function fetchMaxDrawdown(originalAddress, period) {
   try {
+    // 计算时间窗口
+    const days = WINDOW_DAYS[period] || 90
+    const windowStart = Math.floor((Date.now() - days * 24 * 60 * 60 * 1000) / 1000)
+
     // GMX GraphQL API is case-sensitive, must use exact case
+    // Filter by timestamp for period-specific data
     const query = `{
       positionChanges(
-        where: { account_eq: "${originalAddress}" }
+        where: { 
+          account_eq: "${originalAddress}"
+          timestamp_gte: ${windowStart}
+        }
         orderBy: timestamp_ASC
         limit: 500
       ) {
@@ -155,10 +167,31 @@ async function fetchMaxDrawdown(originalAddress) {
     })
 
     const result = await response.json()
-    const changes = result?.data?.positionChanges
+    let changes = result?.data?.positionChanges
 
     if (!changes || changes.length < 2) {
-      return null
+      // Fallback: try without time filter for broader data
+      if (period !== '90D') return null
+
+      const fallbackQuery = `{
+        positionChanges(
+          where: { account_eq: "${originalAddress}" }
+          orderBy: timestamp_ASC
+          limit: 500
+        ) {
+          timestamp
+          basePnlUsd
+          sizeDeltaUsd
+        }
+      }`
+      const fbResponse = await fetch(SUBSQUID_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: fallbackQuery })
+      })
+      const fbResult = await fbResponse.json()
+      changes = fbResult?.data?.positionChanges
+      if (!changes || changes.length < 2) return null
     }
 
     // 只处理有 basePnlUsd 的 position changes (平仓操作)
@@ -201,8 +234,8 @@ async function fetchMaxDrawdown(originalAddress) {
 /**
  * 批量获取最大回撤数据
  */
-async function enrichTraders(traders) {
-  console.log(`\n📈 获取最大回撤数据...`)
+async function enrichTraders(traders, period) {
+  console.log(`\n📈 获取最大回撤数据 (${period})...`)
   console.log(`  交易员数: ${traders.length}, 并发: ${CONCURRENCY}`)
 
   let processed = 0
@@ -212,7 +245,7 @@ async function enrichTraders(traders) {
 
     await Promise.all(batch.map(async (trader) => {
       // Use originalAddress for case-sensitive API query
-      trader.maxDrawdown = await fetchMaxDrawdown(trader.originalAddress)
+      trader.maxDrawdown = await fetchMaxDrawdown(trader.originalAddress, period)
     }))
 
     processed += batch.length
@@ -312,7 +345,7 @@ async function main() {
         continue
       }
 
-      await enrichTraders(traders)
+      await enrichTraders(traders, period)
 
       console.log(`\n📋 ${period} TOP 5:`)
       traders.slice(0, 5).forEach((t, i) => {

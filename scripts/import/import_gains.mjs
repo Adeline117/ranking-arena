@@ -1,6 +1,10 @@
 /**
  * Gains Network (gTrade) DEX 排行榜数据抓取
- * 使用 The Graph 的 gTrade Stats 子图获取交易数据
+ * 
+ * 数据源策略：
+ * 1. /leaderboard - 获取前25名交易员的完整统计数据 (PnL, wins, losses)
+ * 2. /open-trades - 获取所有活跃交易员地址和仓位信息
+ * 3. 合并计算: ROI, 胜率, PnL
  *
  * 用法: node scripts/import/import_gains.mjs [7D|30D|90D|ALL]
  */
@@ -14,17 +18,6 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
 const SOURCE = 'gains'
 const TARGET_COUNT = 500
-
-// The Graph decentralized network - requires API key (100k free queries/month)
-// Get API key from: https://thegraph.com/studio/apikeys/
-// gTrade Stats Arbitrum v5 subgraph ID: 2DojWYiz95VaenV4aaYnGGHywZuNgHAjsYjVZGPk3gHV
-const GRAPH_API_KEY = process.env.THEGRAPH_API_KEY || ''
-const SUBGRAPH_ID = '2DojWYiz95VaenV4aaYnGGHywZuNgHAjsYjVZGPk3gHV'
-const SUBGRAPH_URL = GRAPH_API_KEY
-  ? `https://gateway-arbitrum.network.thegraph.com/api/${GRAPH_API_KEY}/subgraphs/id/${SUBGRAPH_ID}`
-  : null
-
-// Fallback to REST API for active traders only
 const API_BASE = 'https://backend-arbitrum.gains.trade'
 
 const clip = (v, min, max) => Math.max(min, Math.min(max, v))
@@ -36,7 +29,7 @@ function calculateArenaScore(roi, pnl, maxDrawdown, winRate, period) {
                    '90D': { tanhCoeff: 0.18, roiExponent: 1.6, mddThreshold: 40, winRateCap: 70 } }[period] || { tanhCoeff: 0.18, roiExponent: 1.6, mddThreshold: 40, winRateCap: 70 }
   const days = period === '7D' ? 7 : period === '30D' ? 30 : 90
   const wr = winRate !== null ? (winRate <= 1 ? winRate * 100 : winRate) : null
-  const intensity = (365 / days) * safeLog1p(roi / 100)
+  const intensity = (365 / days) * safeLog1p((roi || 0) / 100)
   const r0 = Math.tanh(params.tanhCoeff * intensity)
   const returnScore = r0 > 0 ? clip(85 * Math.pow(r0, params.roiExponent), 0, 85) : 0
   const drawdownScore = maxDrawdown !== null ? clip(8 * clip(1 - Math.abs(maxDrawdown) / params.mddThreshold, 0, 1), 0, 8) : 4
@@ -44,109 +37,84 @@ function calculateArenaScore(roi, pnl, maxDrawdown, winRate, period) {
   return Math.round((returnScore + drawdownScore + stabilityScore) * 100) / 100
 }
 
-async function fetchFromSubgraph(period) {
-  if (!SUBGRAPH_URL) return null
+const sleep = ms => new Promise(r => setTimeout(r, ms))
 
+/**
+ * 从 /leaderboard 获取TOP交易员完整数据
+ * Returns: [{address, count, count_win, count_loss, avg_win, avg_loss, total_pnl, total_pnl_usd}]
+ */
+async function fetchLeaderboard() {
+  console.log('  📊 获取 /leaderboard 数据...')
   try {
-    // gTrade Stats subgraph 查询
-    const query = `
-      query GetTopTraders {
-        traders(
-          first: ${TARGET_COUNT}
-          orderBy: totalPnl
-          orderDirection: desc
-          where: { totalTrades_gt: 0 }
-        ) {
-          id
-          address
-          totalPnl
-          totalVolume
-          totalTrades
-          winCount
-          lossCount
-        }
+    const response = await fetch(`${API_BASE}/leaderboard`, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+        'Accept': 'application/json',
       }
-    `
-
-    const response = await fetch(SUBGRAPH_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query })
     })
-
-    const json = await response.json()
-
-    if (json.errors) {
-      console.log('  GraphQL 错误:', json.errors[0]?.message)
-      return null
+    if (!response.ok) {
+      console.log(`  ⚠ /leaderboard 响应: ${response.status}`)
+      return []
     }
-
-    const subgraphTraders = json?.data?.traders || []
-    console.log(`  Subgraph 获取到 ${subgraphTraders.length} 个交易员`)
-
-    return subgraphTraders.map(t => {
-      const totalPnl = parseFloat(t.totalPnl || 0)
-      const totalVolume = parseFloat(t.totalVolume || 0)
-      const roi = totalVolume > 0 ? (totalPnl / totalVolume) * 100 : 0
-      const totalTrades = parseInt(t.totalTrades || 0)
-      const winCount = parseInt(t.winCount || 0)
-      const winRate = totalTrades > 0 ? (winCount / totalTrades) * 100 : null
-
-      return {
-        traderId: (t.address || t.id).toLowerCase(),
-        nickname: `${(t.address || t.id).slice(0, 6)}...${(t.address || t.id).slice(-4)}`,
-        roi,
-        pnl: totalPnl,
-        winRate,
-        maxDrawdown: null,
-        followers: 0,
-        tradesCount: totalTrades,
-      }
-    })
+    const data = await response.json()
+    console.log(`  ✓ 排行榜获取到 ${data.length} 个交易员`)
+    return data
   } catch (e) {
-    console.log('  Subgraph 错误:', e.message)
-    return null
+    console.log(`  ✗ 排行榜获取失败: ${e.message}`)
+    return []
   }
 }
 
-async function fetchFromRestApi() {
+/**
+ * 从 /open-trades 获取所有活跃交易员和仓位信息
+ */
+async function fetchOpenTrades() {
+  console.log('  📊 获取 /open-trades 数据...')
   try {
-    // Fallback: 从 REST API 获取活跃交易员
-    const openTradesRes = await fetch(`${API_BASE}/open-trades`, {
-      method: 'GET',
-      headers: { 'Accept': 'application/json' }
-    })
-    const openTrades = await openTradesRes.json() || []
-
-    // 提取唯一交易员地址
-    const positionCounts = {}
-    openTrades.forEach(t => {
-      const addr = t.trade?.user || t.trader
-      if (addr) {
-        const key = addr.toLowerCase()
-        positionCounts[key] = (positionCounts[key] || 0) + 1
+    const response = await fetch(`${API_BASE}/open-trades`, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+        'Accept': 'application/json',
       }
     })
+    if (!response.ok) {
+      console.log(`  ⚠ /open-trades 响应: ${response.status}`)
+      return []
+    }
+    const trades = await response.json()
+    console.log(`  ✓ 获取到 ${trades.length} 个活跃交易`)
 
-    console.log(`  REST API 发现 ${Object.keys(positionCounts).length} 个活跃交易员`)
+    // 按交易员分组
+    const traderMap = new Map()
+    for (const t of trades) {
+      const addr = (t.trade?.user || '').toLowerCase()
+      if (!addr) continue
 
-    // 按持仓数量排序
-    const sortedTraders = Object.entries(positionCounts)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, TARGET_COUNT)
+      if (!traderMap.has(addr)) {
+        traderMap.set(addr, {
+          address: addr,
+          openPositions: 0,
+          totalCollateral: 0,
+          totalLeverage: 0,
+        })
+      }
+      const trader = traderMap.get(addr)
+      trader.openPositions++
 
-    return sortedTraders.map(([address, posCount]) => ({
-      traderId: address,
-      nickname: `${address.slice(0, 6)}...${address.slice(-4)}`,
-      roi: null,
-      pnl: null,
-      winRate: null,
-      maxDrawdown: null,
-      followers: 0,
-      tradesCount: posCount,
-    }))
+      // Parse collateral value
+      const collateral = parseInt(t.trade?.collateralAmount || '0')
+      const collateralIndex = parseInt(t.trade?.collateralIndex || '0')
+      // collateralIndex 0=DAI(18dec), 1=ETH(18dec), 2=USDC(6dec), 3=USDT(6dec)
+      const decimals = [18, 18, 6, 6][collateralIndex] || 6
+      trader.totalCollateral += collateral / Math.pow(10, decimals)
+
+      trader.totalLeverage += parseInt(t.trade?.leverage || '0') / 1000 // leverage is in 1000x
+    }
+
+    console.log(`  ✓ 活跃交易员: ${traderMap.size} 个`)
+    return Array.from(traderMap.values())
   } catch (e) {
-    console.log('  REST API 错误:', e.message)
+    console.log(`  ✗ 活跃交易获取失败: ${e.message}`)
     return []
   }
 }
@@ -154,60 +122,140 @@ async function fetchFromRestApi() {
 async function fetchLeaderboardData(period) {
   console.log(`\n=== 抓取 Gains Network ${period} ===`)
 
-  // 优先使用 Subgraph（有完整数据）
-  let traders = await fetchFromSubgraph(period)
+  // 获取两个数据源
+  const [leaderboardData, openTraders] = await Promise.all([
+    fetchLeaderboard(),
+    fetchOpenTrades(),
+  ])
 
-  if (!traders || traders.length === 0) {
-    if (!GRAPH_API_KEY) {
-      console.log('  ⚠️ 建议设置 THEGRAPH_API_KEY 获取完整数据')
-      console.log('  获取免费 API Key: https://thegraph.com/studio/apikeys/')
-    }
-    console.log('  使用 REST API fallback（仅活跃交易员）...')
-    traders = await fetchFromRestApi()
+  const tradersMap = new Map()
+
+  // 1. 先添加排行榜数据（有完整统计）
+  for (const t of leaderboardData) {
+    const addr = t.address.toLowerCase()
+    const totalTrades = parseInt(t.count || 0)
+    const wins = parseInt(t.count_win || 0)
+    const losses = parseInt(t.count_loss || 0)
+    const totalPnl = parseFloat(t.total_pnl_usd || t.total_pnl || 0)
+    const avgWin = parseFloat(t.avg_win || 0)
+    const avgLoss = Math.abs(parseFloat(t.avg_loss || 0))
+
+    // 估算总投入 = (wins * avgWin_collateral + losses * avgLoss_collateral)
+    // 简化: 用 avg_win 和 avg_loss 的绝对值估算平均仓位大小
+    const avgPositionSize = (avgWin + avgLoss) / 2
+    const estimatedCapital = avgPositionSize > 0 ? avgPositionSize * totalTrades : totalPnl
+
+    const roi = estimatedCapital > 0 ? (totalPnl / estimatedCapital) * 100 : 0
+    const winRate = totalTrades > 0 ? (wins / totalTrades) * 100 : null
+
+    tradersMap.set(addr, {
+      traderId: addr,
+      nickname: `${addr.slice(0, 6)}...${addr.slice(-4)}`,
+      roi,
+      pnl: totalPnl,
+      winRate,
+      maxDrawdown: null, // 不可用
+      followers: 0,
+      tradesCount: totalTrades,
+      hasFullData: true,
+    })
   }
 
-  console.log(`  处理完成 ${traders.length} 个交易员`)
-  return traders.filter(t => t.traderId)
+  // 2. 添加活跃交易员（补充数据）
+  for (const t of openTraders) {
+    if (tradersMap.has(t.address)) {
+      // 更新现有数据的仓位信息
+      const existing = tradersMap.get(t.address)
+      existing.openPositions = t.openPositions
+      existing.totalCollateral = t.totalCollateral
+    } else {
+      // 新增活跃交易员（基础数据）
+      tradersMap.set(t.address, {
+        traderId: t.address,
+        nickname: `${t.address.slice(0, 6)}...${t.address.slice(-4)}`,
+        roi: null,
+        pnl: null,
+        winRate: null,
+        maxDrawdown: null,
+        followers: 0,
+        tradesCount: t.openPositions,
+        hasFullData: false,
+        openPositions: t.openPositions,
+        totalCollateral: t.totalCollateral,
+      })
+    }
+  }
+
+  // 过滤：优先有完整数据的，然后是有仓位的
+  const traders = Array.from(tradersMap.values())
+    .filter(t => t.hasFullData || (t.tradesCount > 0))
+
+  console.log(`  处理完成: ${traders.length} 个交易员 (${traders.filter(t => t.hasFullData).length} 有完整数据)`)
+  return traders
 }
 
 async function saveTraders(traders, period) {
   if (traders.length === 0) return 0
-  // 按 ROI 或交易数量排序
-  traders.sort((a, b) => (b.roi || 0) - (a.roi || 0) || (b.tradesCount || 0) - (a.tradesCount || 0))
+
+  // 先排序：有 ROI 的在前，然后按 ROI 或仓位排序
+  traders.sort((a, b) => {
+    if (a.hasFullData && !b.hasFullData) return -1
+    if (!a.hasFullData && b.hasFullData) return 1
+    return (b.roi || 0) - (a.roi || 0) || (b.tradesCount || 0) - (a.tradesCount || 0)
+  })
+
   const topTraders = traders.slice(0, TARGET_COUNT)
   const capturedAt = new Date().toISOString()
 
-  await supabase.from('trader_sources').upsert(
-    topTraders.map(t => ({
-      source: SOURCE,
-      source_type: 'leaderboard',
-      source_trader_id: t.traderId,
-      handle: t.nickname,
-      profile_url: `https://gains.trade/trader/${t.traderId}`,
-      is_active: true
-    })),
-    { onConflict: 'source,source_trader_id' }
-  )
+  const sourcesData = topTraders.map(t => ({
+    source: SOURCE,
+    source_type: 'defi',
+    source_trader_id: t.traderId,
+    handle: t.nickname,
+    profile_url: `https://gains.trade/trader/${t.traderId}`,
+    is_active: true
+  }))
 
-  const { error } = await supabase.from('trader_snapshots').insert(
-    topTraders.map((t, idx) => ({
-      source: SOURCE,
-      source_trader_id: t.traderId,
-      season_id: period,
-      rank: idx + 1,
-      roi: t.roi,
-      pnl: t.pnl,
-      win_rate: t.winRate,
-      max_drawdown: t.maxDrawdown,
-      followers: t.followers,
-      trades_count: t.tradesCount,
-      arena_score: calculateArenaScore(t.roi || 0, t.pnl || 0, t.maxDrawdown, t.winRate, period),
-      captured_at: capturedAt
-    }))
-  )
+  await supabase.from('trader_sources').upsert(sourcesData, {
+    onConflict: 'source,source_trader_id'
+  })
 
-  console.log(error ? `  保存失败: ${error.message}` : `  保存成功: ${topTraders.length}`)
-  return error ? 0 : topTraders.length
+  const snapshotsData = topTraders.map((t, idx) => ({
+    source: SOURCE,
+    source_trader_id: t.traderId,
+    season_id: period,
+    rank: idx + 1,
+    roi: t.roi,
+    pnl: t.pnl,
+    win_rate: t.winRate,
+    max_drawdown: t.maxDrawdown,
+    followers: t.followers,
+    trades_count: t.tradesCount,
+    arena_score: calculateArenaScore(t.roi || 0, t.pnl || 0, t.maxDrawdown, t.winRate, period),
+    captured_at: capturedAt
+  }))
+
+  const { error } = await supabase.from('trader_snapshots').insert(snapshotsData)
+
+  if (error) {
+    console.log(`  ⚠ 批量保存失败: ${error.message}`)
+    let saved = 0
+    for (const s of snapshotsData) {
+      const { error: e } = await supabase.from('trader_snapshots').insert(s)
+      if (!e) saved++
+    }
+    console.log(`  逐条保存: ${saved}/${snapshotsData.length}`)
+    return saved
+  }
+
+  const withRoi = topTraders.filter(t => t.roi !== null).length
+  const withWr = topTraders.filter(t => t.winRate !== null).length
+  const withPnl = topTraders.filter(t => t.pnl !== null).length
+  console.log(`  ✓ 保存成功: ${topTraders.length} 条`)
+  console.log(`    ROI覆盖: ${withRoi}/${topTraders.length} (${((withRoi/topTraders.length)*100).toFixed(0)}%)`)
+  console.log(`    PNL覆盖: ${withPnl}/${topTraders.length} (${((withPnl/topTraders.length)*100).toFixed(0)}%)`)
+  console.log(`    胜率覆盖: ${withWr}/${topTraders.length} (${((withWr/topTraders.length)*100).toFixed(0)}%)`)
+  return topTraders.length
 }
 
 async function main() {
@@ -215,11 +263,23 @@ async function main() {
   const targetPeriods = arg === 'ALL' ? ['7D', '30D', '90D'] :
     arg && ['7D', '30D', '90D'].includes(arg) ? [arg] : ['7D', '30D', '90D']
 
-  console.log('Gains Network (Arbitrum DEX) 数据抓取开始...')
+  console.log('Gains Network (Arbitrum DEX) 数据抓取')
+  console.log('数据源: /leaderboard (完整统计) + /open-trades (活跃交易员)')
+  console.log('目标周期:', targetPeriods.join(', '))
+
   for (const period of targetPeriods) {
     const traders = await fetchLeaderboardData(period)
-    if (traders.length > 0) await saveTraders(traders, period)
-    await new Promise(r => setTimeout(r, 2000))
+    if (traders.length > 0) {
+      console.log(`\n📋 ${period} TOP 5:`)
+      traders.filter(t => t.hasFullData).slice(0, 5).forEach((t, i) => {
+        const wr = t.winRate !== null ? `${t.winRate.toFixed(1)}%` : 'N/A'
+        console.log(`  ${i + 1}. ${t.nickname}: ROI ${t.roi?.toFixed(2)}%, PnL $${t.pnl?.toFixed(0)}, WR ${wr}, Trades: ${t.tradesCount}`)
+      })
+      await saveTraders(traders, period)
+    } else {
+      console.log(`\n⚠ ${period} 未获取到数据`)
+    }
+    await sleep(2000)
   }
   console.log('\n✅ Gains Network 完成')
 }

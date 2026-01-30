@@ -24,7 +24,13 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
 const SOURCE = 'dydx'
 const CHAIN_API = 'https://dydx-rest.publicnode.com'
-const INDEXER_API = 'https://indexer.dydx.trade/v4'
+// Primary indexer - may be geoblocked in some regions
+// Fallback indexers are tried automatically
+const INDEXER_ENDPOINTS = [
+  'https://indexer.dydx.trade/v4',
+  'https://dydx-mainnet-full-indexer.public.blastapi.io/v4',
+]
+let INDEXER_API = INDEXER_ENDPOINTS[0]
 const TARGET_COUNT = 500
 const CONCURRENCY = 5
 const DELAY_MS = 150
@@ -413,6 +419,28 @@ async function main() {
   console.log('数据源: dYdX Chain + Indexer API')
   console.log('增强功能: 胜率 (perpetualPositions) + 最大回撤 (historical-pnl)')
   console.log('='.repeat(60))
+
+  // 测试 Indexer 可用性
+  let indexerAvailable = false
+  for (const endpoint of INDEXER_ENDPOINTS) {
+    try {
+      const testAddr = 'dydx1000dtq9at9cpsxmtucma52fxp7w07jcglfusq6'
+      const res = await fetch(`${endpoint}/addresses/${testAddr}`, { signal: AbortSignal.timeout(5000) })
+      const data = await res.json()
+      if (!data.errors && !data.error?.includes('GEOBLOCKED')) {
+        INDEXER_API = endpoint
+        indexerAvailable = true
+        console.log(`✓ Indexer 可用: ${endpoint}`)
+        break
+      }
+      console.log(`✗ Indexer ${endpoint}: ${data.errors?.[0]?.code || data.error || 'blocked'}`)
+    } catch (e) {
+      console.log(`✗ Indexer ${endpoint}: ${e.message}`)
+    }
+  }
+  if (!indexerAvailable) {
+    console.log('⚠ 所有 Indexer 端点不可用，将仅使用 Chain API（无胜率/回撤数据）')
+  }
 
   // 获取活跃账户
   const accounts = await fetchActiveSubaccounts(300)
