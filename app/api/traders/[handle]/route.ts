@@ -76,6 +76,8 @@ interface TraderSource {
   source_trader_id: string
   handle: string | null
   profile_url: string | null
+  avatar_url: string | null
+  market_type: string | null
 }
 
 interface SnapshotData {
@@ -170,7 +172,7 @@ async function findTraderSource(
     // 先尝试 handle
     const { data: byHandle } = await supabase
       .from('trader_sources')
-      .select('source_trader_id, handle, profile_url')
+      .select('source_trader_id, handle, profile_url, avatar_url, market_type')
       .eq('source', sourceType)
       .eq('handle', decodedHandle)
       .limit(1)
@@ -183,7 +185,7 @@ async function findTraderSource(
     // 再尝试 source_trader_id
     const { data: byId } = await supabase
       .from('trader_sources')
-      .select('source_trader_id, handle, profile_url')
+      .select('source_trader_id, handle, profile_url, avatar_url, market_type')
       .eq('source', sourceType)
       .eq('source_trader_id', decodedHandle)
       .limit(1)
@@ -460,7 +462,7 @@ async function getTraderDetails(
       const similarIds = similarSnapshots.map(s => s.source_trader_id)
       const { data: similarSources } = await supabase
         .from('trader_sources')
-        .select('source_trader_id, handle, profile_url')
+        .select('source_trader_id, handle, profile_url, avatar_url')
         .eq('source', sourceType)
         .in('source_trader_id', similarIds)
       
@@ -469,7 +471,7 @@ async function getTraderDetails(
           handle: s.handle || s.source_trader_id,
           id: s.source_trader_id,
           followers: 0,
-          avatar_url: s.profile_url || undefined,
+          avatar_url: s.avatar_url || undefined,
           source: sourceType,
         }))
       }
@@ -526,9 +528,12 @@ async function getTraderDetails(
       id: traderId,
       bio: userProfile?.bio || undefined,
       followers: arenaFollowers,
-      avatar_url: source.profile_url || undefined,
+      avatar_url: source.avatar_url || undefined,
+      cover_url: undefined,
+      profile_url: source.profile_url || undefined,
       isRegistered: !!userProfile,
       source: sourceType,
+      market_type: source.market_type || undefined,
     },
     performance: {
       roi_90d: snapshot?.roi || 0,
