@@ -103,7 +103,7 @@ export const ARENA_CONFIG = {
 
   // ROI 合理性上限（超过此值的 ROI 会被 cap）
   // 防止异常高 ROI（如 Hyperliquid 百万级%）垄断排行榜
-  ROI_CAP: 5000,  // 5000% = 50x，超过此值 ROI 按 5000% 计算 score
+  ROI_CAP: 10000,  // 10000% = 100x，超过此值 ROI 按 10000% 计算 score
 
   // 数据完整性惩罚乘数（应用于总分）
   // 'full': 所有字段完整 → 1.0（无惩罚）
