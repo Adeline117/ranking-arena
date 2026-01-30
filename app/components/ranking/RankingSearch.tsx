@@ -334,8 +334,9 @@ function RankingSearchInner({ value, onChange, resultCount, language }: RankingS
             overflowY: 'auto',
           }}
         >
-          {/* Header */}
+          {/* Header - role=presentation so listbox only sees role=option children */}
           <Box
+            role="presentation"
             style={{
               display: 'flex',
               alignItems: 'center',

@@ -34,7 +34,7 @@ main{min-height:100vh;background:var(--bg-primary,#0B0A10)}
   --bg-hover:#252232;
   --text-primary:#EDEDED;
   --text-secondary:#A8A8B3;
-  --text-tertiary:#6B6B7B;
+  --text-tertiary:#8E8E9E;
   --accent-primary:#8b6fa8;
   --border-primary:#2A2836;
   --border-secondary:#3A3848;
