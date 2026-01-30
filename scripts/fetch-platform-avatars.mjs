@@ -121,8 +121,8 @@ async function fetchLBankAvatars(browser) {
       for (const list of lists) {
         if (!Array.isArray(list)) continue
         for (const t of list) {
-          const id = String(t.traderId || t.uid || t.userId || t.id || '')
-          const avatar = t.avatar || t.avatarUrl || t.headUrl || t.photo || t.img || null
+          const id = String(t.traderId || t.uid || t.userId || t.id || t.uuid || '')
+          const avatar = t.avatar || t.avatarUrl || t.headUrl || t.headPhoto || t.photo || t.img || null
           if (id && avatar) avatarMap.set(id, avatar)
         }
         if (list.length) {
