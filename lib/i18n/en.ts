@@ -1040,6 +1040,11 @@ const en = {
     beFirstReview: 'Be the first to review',
     sortNewest: 'Newest',
     sortTop: 'Top',
+
+    // Image Cropper
+    cropSuccess: 'Crop successful! Click Save to upload.',
+    cropFailed: 'Failed to crop image. Please try again.',
+    noCropAreaSelected: 'Please select an area to crop',
 } as const
 
 export default en
