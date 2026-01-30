@@ -33,11 +33,11 @@
   --color-bg-tertiary: #1C1926;
   --color-bg-hover: #252232;
   
-  /* Text colors (WCAG AA on #0B0A10) */
+  /* Text colors (WCAG AA on #0B0A10 — minimum 4.5:1 contrast) */
   --color-text-primary: #EDEDED;
   --color-text-secondary: #A8A8B3;
-  --color-text-tertiary: #858594;
-  --color-text-quaternary: #717185;
+  --color-text-tertiary: #8E8E9E;
+  --color-text-quaternary: #8585A0;
   
   /* Border colors */
   --color-border-primary: #2A2836;
@@ -151,7 +151,13 @@ html {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
-  scroll-behavior: smooth;
+}
+
+/* Smooth scroll only when not navigating (avoids blocking FCP on initial load) */
+@media (prefers-reduced-motion: no-preference) {
+  html:focus-within {
+    scroll-behavior: smooth;
+  }
 }
 
 /* Theme-aware body styles */
@@ -160,7 +166,6 @@ body {
   font-size: 14px;
   line-height: 1.5;
   overflow-x: hidden;
-  transition: background-color 200ms ease, color 200ms ease;
   background: var(--color-bg-primary);
   color: var(--color-text-primary);
 }
@@ -240,9 +245,12 @@ body {
 }
 
 @keyframes ripple {
+  from {
+    transform: scale(0);
+    opacity: 0.5;
+  }
   to {
-    width: 200px;
-    height: 200px;
+    transform: scale(4);
     opacity: 0;
   }
 }

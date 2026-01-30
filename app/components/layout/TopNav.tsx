@@ -650,8 +650,10 @@ export default function TopNav({ email }: { email: string | null }) {
                     zIndex: tokens.zIndex.dropdown,
                   }}
                 >
-                  {/* Account Switcher */}
-                  <AccountSwitcher onClose={() => setShowUserMenu(false)} />
+                  {/* Account Switcher - wrapped in group for ARIA menu compliance */}
+                  <div role="group" aria-label="Account switcher">
+                    <AccountSwitcher onClose={() => setShowUserMenu(false)} />
+                  </div>
                   <Box style={{ height: 1, background: tokens.colors.border.primary, margin: `${tokens.spacing[1]} 0` }} role="separator" />
 
                   <Link

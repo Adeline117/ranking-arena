@@ -243,8 +243,8 @@
 
 /* 进度条填充 */
 @keyframes progressFill {
-  from { width: 0; transform: scaleX(0); transform-origin: left; }
-  to { transform: scaleX(1); }
+  from { transform: scaleX(0); transform-origin: left; }
+  to { transform: scaleX(1); transform-origin: left; }
 }
 
 /* Removed unused keyframe: progressStripe */
@@ -355,19 +355,18 @@
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 0;
-  height: 0;
+  width: 100%;
+  height: 100%;
   background: rgba(255, 255, 255, 0.2);
   border-radius: 50%;
-  transform: translate(-50%, -50%);
-  transition: width 0.5s, height 0.5s, opacity 0.5s;
+  transform: translate(-50%, -50%) scale(0);
+  transition: transform 0.5s, opacity 0.5s;
   pointer-events: none;
   opacity: 0;
 }
 
 .ripple-container:active::after {
-  width: 300%;
-  height: 300%;
+  transform: translate(-50%, -50%) scale(3);
   opacity: 1;
 }
 
