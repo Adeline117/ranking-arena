@@ -19,6 +19,8 @@ import { NextResponse } from 'next/server'
 import { withPublic } from '@/lib/api/middleware'
 import {
   calculateArenaScore,
+  isWithinGracePeriod,
+  debouncedConfidence,
   ARENA_CONFIG,
   type Period,
 } from '@/lib/utils/arena-score'
@@ -173,6 +175,8 @@ interface TraderData {
   return_score?: number
   drawdown_score?: number
   stability_score?: number
+  last_qualified_at?: string | null
+  full_confidence_at?: string | null
 }
 
 export const GET = withPublic(
@@ -210,13 +214,13 @@ export const GET = withPublic(
           limit,
         })
       },
-      { ttl: 60, lockTtl: 10 } // 60 秒缓存，10 秒锁超时
+      { ttl: 120, lockTtl: 10 } // 120 秒缓存，10 秒锁超时
     )
 
     const response = NextResponse.json(cachedData)
 
     // 添加缓存头，提高页面加载速度
-    response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300')
+    response.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-revalidate=300')
     response.headers.set('X-Cache-Key', cacheKey)
 
     return response
@@ -255,52 +259,30 @@ async function fetchTradersData(
       sourcesToQuery = [exchangeFilter as typeof ALL_SOURCES[number]]
     }
 
-    // 并行获取所有交易所数据
+    // 并行获取所有交易所数据（优化：每个 source 减少为 2 次查询）
     const sourcePromises = sourcesToQuery.map(async (source) => {
-      // 所有交易所都使用 season_id 过滤
       const seasonId = timeRange
 
-      // 获取最新 captured_at（必须在时效范围内）
+      // 查询 1: 检查数据新鲜度 — 单次查询获取最新 captured_at
       const { data: latestSnapshot } = await supabase
         .from('trader_snapshots')
         .select('captured_at')
         .eq('source', source)
         .eq('season_id', seasonId)
-        .gte('captured_at', freshnessISO)
         .order('captured_at', { ascending: false })
         .limit(1)
         .maybeSingle()
-        
-      if (!latestSnapshot) {
-        // 如果没有新数据，尝试获取最近的数据（不限时效，但会标记为陈旧）
-        const { data: fallbackSnapshot } = await supabase
-          .from('trader_snapshots')
-          .select('captured_at')
-          .eq('source', source)
-          .eq('season_id', seasonId)
-          .order('captured_at', { ascending: false })
-          .limit(1)
-          .maybeSingle()
 
-        if (!fallbackSnapshot) return { traders: [], isStale: false }
+      if (!latestSnapshot) return { traders: [], isStale: false }
 
-        // 使用陈旧数据但继续处理，标记该交易所数据为陈旧
-        logger.warn(`${source} 数据陈旧，最后更新: ${fallbackSnapshot.captured_at}`)
+      // 判断数据是否陈旧
+      const isFresh = latestSnapshot.captured_at >= freshnessISO
+      if (!isFresh) {
+        logger.warn(`${source} 数据陈旧，最后更新: ${latestSnapshot.captured_at}`)
         staleSources.push(source)
       }
-      
-      const capturedAt = latestSnapshot?.captured_at || (await supabase
-        .from('trader_snapshots')
-        .select('captured_at')
-        .eq('source', source)
-        .eq('season_id', seasonId)
-        .order('captured_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()).data?.captured_at
 
-      if (!capturedAt) return { traders: [], isStale: false }
-
-      // 使用分页查询获取所有数据（Supabase默认限制1000条）
+      // 查询 2: 获取所有快照数据 + trader_sources（一次性分页）
       const allSnapshots = []
       let dbPage = 0
       const pageSize = 1000
@@ -308,7 +290,7 @@ async function fetchTradersData(
       while (true) {
         const { data, error } = await supabase
           .from('trader_snapshots')
-          .select('source_trader_id, roi, pnl, followers, win_rate, max_drawdown, trades_count, arena_score, captured_at')
+          .select('source_trader_id, roi, pnl, followers, win_rate, max_drawdown, trades_count, arena_score, captured_at, last_qualified_at, full_confidence_at')
           .eq('source', source)
           .eq('season_id', seasonId)
           .order('captured_at', { ascending: false })
@@ -325,24 +307,36 @@ async function fetchTradersData(
         if (data.length < pageSize) break
         dbPage++
       }
-      
-      if (!allSnapshots.length) return { traders: [], isStale: false }
-      
+
+      if (!allSnapshots.length) return { traders: [], isStale: !isFresh }
+
       // 去重：每个交易员只保留最新的一条记录
+      // 同时合并 last_qualified_at 和 full_confidence_at（取所有快照中最新的值）
       const traderMap = new Map()
       allSnapshots.forEach(snap => {
         if (!traderMap.has(snap.source_trader_id)) {
           traderMap.set(snap.source_trader_id, snap)
+        } else {
+          // 合并 qualification tracking 字段（保留最新的时间戳）
+          const existing = traderMap.get(snap.source_trader_id)
+          if (snap.last_qualified_at &&
+              (!existing.last_qualified_at || snap.last_qualified_at > existing.last_qualified_at)) {
+            existing.last_qualified_at = snap.last_qualified_at
+          }
+          if (snap.full_confidence_at &&
+              (!existing.full_confidence_at || snap.full_confidence_at > existing.full_confidence_at)) {
+            existing.full_confidence_at = snap.full_confidence_at
+          }
         }
       })
       const snapshots = Array.from(traderMap.values())
 
-      if (!snapshots?.length) {
+      if (!snapshots.length) {
         logger.warn(`${source} 无有效数据`)
-        return { traders: [], isStale: false }
+        return { traders: [], isStale: !isFresh }
       }
 
-      // 批量获取 handles 和头像
+      // 查询 3: 批量获取 handles 和头像
       const traderIds = snapshots.map(s => s.source_trader_id)
       const { data: sources } = await supabase
         .from('trader_sources')
@@ -352,24 +346,19 @@ async function fetchTradersData(
 
       const handleMap = new Map<string, { handle: string | null; avatar_url: string | null }>()
       sources?.forEach((s: { source_trader_id: string; handle: string | null; avatar_url: string | null; profile_url: string | null }) => {
-        // 优先使用 avatar_url (图片URL)，profile_url 存储的是交易员主页URL
         handleMap.set(s.source_trader_id, { handle: s.handle, avatar_url: s.avatar_url || null })
       })
 
-      // 构建交易员数据（不包含数据库 rank，排名将在后面统一计算）
+      // 构建交易员数据
       const traders = snapshots
         .filter(item => {
-          // 数据质量过滤：过滤异常 ROI 值
           const roi = item.roi ?? 0
-          if (Math.abs(roi) > ROI_ANOMALY_THRESHOLD) {
-            return false
-          }
+          if (Math.abs(roi) > ROI_ANOMALY_THRESHOLD) return false
           return true
         })
         .map(item => {
           const info = handleMap.get(item.source_trader_id) || { handle: null, avatar_url: null }
           // 标准化 win_rate 为百分比形式
-          // binance_futures 存储小数(0.85)，bitget/bybit 存储百分比(85)
           const normalizedWinRate = item.win_rate != null
             ? (item.win_rate <= 1 ? item.win_rate * 100 : item.win_rate)
             : null
@@ -379,16 +368,21 @@ async function fetchTradersData(
             handle: info.handle || item.source_trader_id,
             roi: item.roi ?? 0,
             pnl: item.pnl ?? 0,
-            win_rate: normalizedWinRate,  // 统一为百分比形式
+            win_rate: normalizedWinRate,
             max_drawdown: item.max_drawdown,
             trades_count: item.trades_count,
-            followers: item.followers ?? null,  // 保留 null，GMX 无跟单功能
+            followers: item.followers ?? null,
             source,
             source_type: SOURCE_TYPE_MAP[source] || 'futures',
-            avatar_url: info.avatar_url,  // 只使用数据库中的原始头像
+            avatar_url: info.avatar_url,
+            // 使用数据库预计算的 arena_score（如果存在）
+            arena_score: item.arena_score != null ? Number(item.arena_score) : undefined,
+            // 排行榜稳定性字段
+            last_qualified_at: item.last_qualified_at ?? null,
+            full_confidence_at: item.full_confidence_at ?? null,
           }
         })
-      return { traders, isStale: !latestSnapshot }
+      return { traders, isStale: !isFresh }
     })
 
     // 等待所有查询完成并去重
@@ -424,18 +418,46 @@ async function fetchTradersData(
           },
           timeRange
         )
-        
+
+        // 方案 3：置信度防抖 — 如果近期（8h 内）曾有完整数据，继续使用 full 置信度
+        const effectiveConfidence = debouncedConfidence(
+          scoreResult.scoreConfidence,
+          trader.full_confidence_at,
+        )
+        const confidenceMultiplier = ARENA_CONFIG.CONFIDENCE_MULTIPLIER[effectiveConfidence]
+
+        // 方案 2：软 PnL 门槛 — 对需要 PnL 门槛的交易所，应用 qualifier 系数
+        const skipPnlThreshold = SKIP_PNL_THRESHOLD_SOURCES.includes(trader.source)
+        const qualifier = skipPnlThreshold ? 1 : scoreResult.pnlQualifier
+
+        // 计算最终分数：原始子分数之和 × 置信度乘数 × PnL qualifier
+        const rawSubScores = scoreResult.returnScore + scoreResult.pnlScore +
+                             scoreResult.drawdownScore + scoreResult.stabilityScore
+        const finalScore = Math.round(
+          Math.max(0, Math.min(100, rawSubScores * confidenceMultiplier * qualifier)) * 100
+        ) / 100
+
         return {
           ...trader,
-          arena_score: scoreResult.totalScore,
+          arena_score: finalScore,
           return_score: scoreResult.returnScore,
+          pnl_score: scoreResult.pnlScore,
           drawdown_score: scoreResult.drawdownScore,
           stability_score: scoreResult.stabilityScore,
           _meetsThreshold: scoreResult.meetsThreshold,
+          _pnlQualifier: qualifier,
+          _skipPnlThreshold: skipPnlThreshold,
         }
       })
-      // 过滤未达门槛的（某些交易所的 PnL 是跟单者盈亏，特殊处理）
-      .filter(t => SKIP_PNL_THRESHOLD_SOURCES.includes(t.source) || t._meetsThreshold)
+      // 方案 1+2：过滤 — 跳过 PnL 门槛的交易所直接通过，
+      // 否则需要达到软门槛 OR 在 24h 保留窗口内
+      .filter(t => {
+        if (t._skipPnlThreshold) return true
+        if (t._meetsThreshold) return true
+        // 方案 1：Grace period — 24h 内合格过就保留
+        if (isWithinGracePeriod(t.last_qualified_at)) return true
+        return false
+      })
       // 稳定排序：确保相同数据产生相同排名
       .sort((a, b) => {
         // 1. 主排序：Arena Score 降序
@@ -554,7 +576,7 @@ async function fetchTradersData(
     }
 
     // Build final trader objects with all features, removing internal fields
-    const topTraders = paginatedTraders.map(({ _meetsThreshold, ...t }) => {
+    const topTraders = paginatedTraders.map(({ _meetsThreshold, _pnlQualifier, _skipPnlThreshold, last_qualified_at, full_confidence_at, ...t }) => {
       const key = `${t.source}:${t.id}`
       const handle = t.handle || t.id
       const handleLower = handle.toLowerCase()
