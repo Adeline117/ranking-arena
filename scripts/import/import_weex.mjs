@@ -1030,13 +1030,17 @@ async function saveTradersBatch(traders, period) {
     }
   })
 
-  const { error } = await supabase.from('trader_snapshots').insert(snapshotsData)
+  const { error } = await supabase.from('trader_snapshots').upsert(snapshotsData, {
+    onConflict: 'source,source_trader_id,season_id'
+  })
 
   if (error) {
     console.log(`  ⚠ 批量保存失败: ${error.message}`)
     let saved = 0
     for (const s of snapshotsData) {
-      const { error: e } = await supabase.from('trader_snapshots').insert(s)
+      const { error: e } = await supabase.from('trader_snapshots').upsert(s, {
+        onConflict: 'source,source_trader_id,season_id'
+      })
       if (!e) saved++
     }
     return saved
