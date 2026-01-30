@@ -134,20 +134,20 @@ export function generateDefaultAvatarUrl(
 }
 
 /**
- * 获取用户头像URL（优先使用真实头像，否则使用默认头像）
+ * 获取用户头像URL（优先使用真实头像，否则返回null由前端显示首字母）
  */
 export function getUserAvatarUrl(
   userId: string,
   avatarUrl: string | null | undefined,
-  name?: string | null
+  _name?: string | null
 ): string | null {
   // 如果有真实头像URL，直接返回
   if (avatarUrl && avatarUrl.trim() !== '') {
     return avatarUrl
   }
   
-  // 否则生成默认头像URL
-  return generateDefaultAvatarUrl(userId, name, 'dicebear')
+  // 没有头像返回null，前端Avatar组件会显示首字母+渐变背景
+  return null
 }
 
 /**
