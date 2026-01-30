@@ -91,6 +91,10 @@ export async function getInitialTraders(
   const supabase = createClient(supabaseUrl, supabaseKey)
 
   try {
+    // Data quality: cap extreme ROI values in the query
+    // ROI > 10000% (100x) is almost certainly data anomaly (e.g. Hyperliquid reporting lifetime ROI)
+    const ROI_FILTER_CAP = 10000
+
     // Single optimized query: fetch top traders with high arena_score
     // Use Promise.all to parallelize snapshot and timestamp queries
     const [snapshotsResult, timestampResult] = await Promise.all([
@@ -110,6 +114,7 @@ export async function getInitialTraders(
         .eq('season_id', timeRange)
         .not('arena_score', 'is', null)
         .gt('arena_score', 0)
+        .lte('roi', ROI_FILTER_CAP) // Filter out extreme ROI values
         .order('arena_score', { ascending: false, nullsFirst: false })
         .limit(limit * 2), // Fetch extra to account for duplicates
 
@@ -142,13 +147,13 @@ export async function getInitialTraders(
     const traderIds = uniqueSnapshots.map(s => s.source_trader_id)
     const { data: sources } = await supabase
       .from('trader_sources')
-      .select('source_trader_id, source, handle, profile_url')
+      .select('source_trader_id, source, handle, avatar_url')
       .in('source_trader_id', traderIds)
 
     const handleMap = new Map<string, { handle: string | null; avatar_url: string | null }>()
     sources?.forEach(s => {
       const key = `${s.source}:${s.source_trader_id}`
-      handleMap.set(key, { handle: s.handle, avatar_url: s.profile_url })
+      handleMap.set(key, { handle: s.handle, avatar_url: s.avatar_url })
     })
 
     // Build trader objects
