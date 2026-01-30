@@ -23,7 +23,6 @@ main{min-height:100vh;background:var(--bg-primary,#0B0A10)}
 /* 字体变量 */
 :root{
   --font-inter:'Inter',system-ui,sans-serif;
-  --font-noto-sans-sc:'Noto Sans SC','Inter',system-ui,sans-serif;
 }
 
 /* 深色主题颜色 (default) */

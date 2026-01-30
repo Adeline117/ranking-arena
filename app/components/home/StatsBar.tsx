@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo, memo } from 'react'
+import { useState, useEffect, useRef, memo } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
 import { useLanguage } from '../Providers/LanguageProvider'
@@ -139,6 +139,7 @@ const SourceTag = memo(function SourceTag({ source, isDark, language }: { source
 export function StatsBar() {
   const { language } = useLanguage()
   const [isDark, setIsDark] = useState(true)
+  const tickerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const detectTheme = () => {
@@ -152,8 +153,28 @@ export function StatsBar() {
     return () => observer.disconnect()
   }, [])
 
-  // 双份列表实现无缝滚动 - 使用 useMemo 避免重复创建
-  const items = useMemo(() => [...dataSources, ...dataSources], [])
+  // Performance: Clone the rendered items via DOM to create the seamless scroll duplicate.
+  // This halves the React component count (26 instead of 52) while keeping the visual effect.
+  useEffect(() => {
+    const ticker = tickerRef.current
+    if (!ticker) return
+
+    // Find the source items wrapper (first child)
+    const sourceWrapper = ticker.firstElementChild as HTMLElement | null
+    if (!sourceWrapper) return
+
+    // Clone the wrapper to create the seamless scroll duplicate
+    const clone = sourceWrapper.cloneNode(true) as HTMLElement
+    clone.setAttribute('aria-hidden', 'true')
+    ticker.appendChild(clone)
+
+    return () => {
+      // Clean up cloned node on unmount or re-render
+      if (clone.parentNode === ticker) {
+        ticker.removeChild(clone)
+      }
+    }
+  }, [isDark, language]) // Re-clone when theme or language changes (since SourceTag content depends on these)
 
   return (
     <Box
@@ -170,11 +191,12 @@ export function StatsBar() {
         WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)',
       }}
     >
-      <Box
+      <div
+        ref={tickerRef}
         className="scroll-ticker"
         style={{
           display: 'flex',
-          gap: 10,
+          gap: 0, // Gap is handled inside the wrapper divs
           animation: 'scrollTicker 35s linear infinite',
           animationDelay: '3s', // Increased delay to prioritize LCP
           animationPlayState: 'paused',
@@ -190,10 +212,13 @@ export function StatsBar() {
           }, 100)
         }}
       >
-        {items.map((source, index) => (
-          <SourceTag key={`${source.key}-${index}`} source={source} isDark={isDark} language={language} />
-        ))}
-      </Box>
+        {/* Render 26 items once - the duplicate set is created via DOM cloning in useEffect */}
+        <div style={{ display: 'flex', gap: 10, paddingRight: 10 }}>
+          {dataSources.map((source) => (
+            <SourceTag key={source.key} source={source} isDark={isDark} language={language} />
+          ))}
+        </div>
+      </div>
     </Box>
   )
 }

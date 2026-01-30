@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useRef, memo, useCallback, useTransition } from 'react'
+import React, { useState, useEffect, memo, useCallback, useTransition } from 'react'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import { RankingSkeleton } from '../ui/Skeleton'
@@ -10,7 +10,6 @@ import dynamic from 'next/dynamic'
 import { DynamicScoreRulesModal as ScoreRulesModal } from '../ui/dynamic'
 import CategoryRankingTabs, { CategoryType } from './CategoryRankingTabs'
 import { ProLabel } from '../premium/PremiumGate'
-import { VirtualList } from '../ui/VirtualList'
 
 // Lazy-load non-LCP components to reduce initial bundle
 const ExportButton = dynamic(() => import('../utils/ExportButton'), { ssr: false })
@@ -228,7 +227,6 @@ function RankingTableInner(props: {
     return template
   }, [visibleColumns])
 
-  const virtualListRef = useRef<HTMLDivElement>(null)
 
   const handleSort = (col: 'score' | 'roi' | 'winrate' | 'mdd') => {
     const newDir = sortColumn === col ? (sortDir === 'desc' ? 'asc' : 'desc') : 'desc'
@@ -269,14 +267,6 @@ function RankingTableInner(props: {
     })
   }, [traders, sortColumn, sortDir, debouncedSearch])
 
-  const useVirtualScroll = false
-
-  useEffect(() => {
-    if (useVirtualScroll && virtualListRef.current) {
-      const scrollContainer = virtualListRef.current.querySelector('[style*="overflow"]') as HTMLElement
-      if (scrollContainer) scrollContainer.scrollTop = 0
-    }
-  }, [sortColumn, sortDir, useVirtualScroll])
 
   const totalPages = Math.ceil(sortedTraders.length / itemsPerPage)
   const startIndex = (currentPage - 1) * itemsPerPage
@@ -505,16 +495,6 @@ function RankingTableInner(props: {
           </Box>
           <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={handlePaginationChange} />
         </>
-      ) : useVirtualScroll ? (
-        <div ref={virtualListRef}>
-          <VirtualList items={sortedTraders} itemHeight={72} height={600} overscan={5}
-            keyExtractor={(trader, idx) => `${trader.id}-${trader.source || 'unknown'}-${idx}`}
-            renderItem={(trader, idx) => (
-              <TraderRow trader={trader} rank={idx + 1} source={source} language={language}
-                searchQuery={debouncedSearch}
-                getMedalGlowClass={getMedalGlowClass} parseSourceInfo={parseSourceInfoWithT} getPnLTooltipFn={getPnLTooltip} />
-            )} />
-        </div>
       ) : (
         <>
           <Box style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
@@ -537,4 +517,5 @@ function RankingTableInner(props: {
 }
 
 const RankingTable = memo(RankingTableInner)
+export { RankingTable }
 export default RankingTable
