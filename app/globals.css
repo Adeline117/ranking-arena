@@ -453,3 +453,169 @@ body {
 .ranking-table-grid {
   contain: layout style;
 }
+
+/* ============================================
+   Button hover/press styles (replaces JS style mutations)
+   ============================================ */
+
+/* Base button transition */
+.btn-base {
+  transition: all 0.2s ease;
+}
+
+/* Hover lift effect for non-disabled buttons */
+.btn-base:not(:disabled):hover {
+  transform: translateY(-2px);
+}
+
+/* Active press effect for non-disabled buttons */
+.btn-base:not(:disabled):active {
+  transform: scale(0.97);
+}
+
+/* Variant-specific hover shadows */
+.btn-base.btn-primary:not(:disabled):hover {
+  box-shadow: 0 0 20px rgba(139, 111, 168, 0.3);
+  background: linear-gradient(135deg, #9d84b5 0%, #8b6fa8 100%);
+}
+
+.btn-base.btn-secondary:not(:disabled):hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.btn-base.btn-ghost:not(:disabled):hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.btn-base.btn-text:not(:disabled):hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.btn-base.btn-success:not(:disabled):hover {
+  box-shadow: 0 0 20px rgba(47, 229, 125, 0.3);
+}
+
+.btn-base.btn-danger:not(:disabled):hover {
+  box-shadow: 0 0 20px rgba(255, 124, 124, 0.3);
+}
+
+/* Disabled state - override transforms */
+.btn-base:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn-base,
+  .btn-base:hover,
+  .btn-base:active {
+    transition: none;
+    transform: none !important;
+  }
+}
+
+/* ============================================
+   TopNav hover styles (replaces JS style mutations)
+   ============================================ */
+
+/* Logo link hover */
+.top-nav-logo-link {
+  transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.top-nav-logo-link:hover {
+  transform: translateY(-1px);
+  opacity: 0.85;
+}
+
+/* Nav link hover (non-active) */
+.top-nav-link {
+  transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.top-nav-link:not(.top-nav-link-active):hover {
+  color: var(--color-text-primary);
+  background: var(--color-bg-secondary);
+  transform: translateY(-1px);
+}
+
+/* Search input focus */
+.top-nav-search-input {
+  transition: all 300ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.top-nav-search-input:focus {
+  border-color: var(--color-accent-primary) !important;
+  background: var(--glass-bg-medium) !important;
+  box-shadow: 0 0 0 3px rgba(139, 111, 168, 0.125);
+  transform: scale(1.02);
+}
+
+/* Notification button hover */
+.top-nav-notif-btn {
+  transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.top-nav-notif-btn:hover {
+  background: var(--color-bg-secondary);
+  color: var(--color-text-primary);
+}
+
+/* Menu link hover */
+.top-nav-menu-link {
+  transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.top-nav-menu-link:hover {
+  background: var(--color-bg-secondary);
+}
+
+/* Logout link hover */
+.top-nav-logout-link {
+  transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.top-nav-logout-link:hover {
+  background: var(--color-bg-secondary);
+  color: var(--color-text-primary);
+}
+
+/* Login button hover */
+.top-nav-login-link {
+  transition: all 300ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.top-nav-login-link:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 0 20px rgba(139, 111, 168, 0.3);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .top-nav-logo-link:hover,
+  .top-nav-link:hover,
+  .top-nav-search-input:focus,
+  .top-nav-login-link:hover {
+    transform: none;
+  }
+}
+
+/* ============================================
+   CSS Containment for layout performance
+   ============================================ */
+
+/* Sidebar sections - independent layout contexts */
+.home-left-section,
+.home-right-section {
+  contain: layout style;
+}
+
+/* Ranking table container - contains its own layout */
+.ranking-table-container {
+  contain: layout style;
+}
+
+/* Individual trader cards in card view */
+.trader-card-contained {
+  contain: layout style;
+}

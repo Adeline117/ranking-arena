@@ -1,5 +1,8 @@
 import type { NextConfig } from "next";
-import { withSentryConfig } from "@sentry/nextjs";
+// Performance: withSentryConfig 会将 ~700KB Sentry SDK 注入每个页面的关键路径
+// 改为纯客户端动态加载（instrumentation-client.ts），仅保留服务端 instrumentation
+// Source map 上传改用 @sentry/cli 或 CI pipeline 单独处理
+// import { withSentryConfig } from "@sentry/nextjs";
 
 // Bundle Analyzer 条件导入
 /* eslint-disable @typescript-eslint/no-require-imports */
@@ -351,39 +354,12 @@ const nextConfig: NextConfig = {
   // Next.js 16 默认启用 SWC 压缩，无需配置
 };
 
-// Sentry 配置选项
-// 注意：Next.js 16 + Sentry 已移除弃用的 disableLogger 和 automaticVercelMonitors
-const sentryWebpackPluginOptions = {
-  // 组织和项目名称（从环境变量获取）
-  org: process.env.SENTRY_ORG,
-  project: process.env.SENTRY_PROJECT,
-  
-  // Auth token 用于上传 source maps 和创建 release
-  authToken: process.env.SENTRY_AUTH_TOKEN,
-  
-  // 只在生产环境上传 source maps
-  silent: !process.env.CI,
-  
-  // 上传 source maps 到 Sentry
-  widenClientFileUpload: true,
-  
-  // 隐藏 source maps 不暴露给客户端
-  hideSourceMaps: true,
-  
-  // 跳过没有 DSN 配置时的上传
-  sourcemaps: {
-    disable: !process.env.SENTRY_DSN,
-  },
-  
-  // Webpack 相关配置（替代弃用的顶级选项）
-  bundleSizeOptimizations: {
-    // 移除 debug 日志（替代 disableLogger）
-    excludeDebugStatements: true,
-  },
-  
-  // 关闭遥测（可选）
-  telemetry: false,
-};
+// Sentry 配置说明：
+// withSentryConfig 已移除以减少 ~700KB 客户端 JS
+// 服务端错误捕获通过 instrumentation.ts 保留
+// 客户端错误捕获通过 instrumentation-client.ts 动态加载
+// Source map 上传需在 CI 中通过 @sentry/cli 单独处理：
+//   npx sentry-cli sourcemaps upload --org=ORG --project=PROJECT .next/static
 
-// 导出配置（包装 Bundle Analyzer + Sentry）
-export default withBundleAnalyzer(withSentryConfig(nextConfig, sentryWebpackPluginOptions));
+// 导出配置（仅 Bundle Analyzer）
+export default withBundleAnalyzer(nextConfig);
