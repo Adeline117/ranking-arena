@@ -301,7 +301,7 @@ async function saveTradersBatch(traders, period) {
     source_type: 'leaderboard',
     source_trader_id: t.traderId,
     handle: t.nickname,
-    profile_url: t.avatar || null,
+    avatar_url: t.avatar || null,
     is_active: true,
   }))
 

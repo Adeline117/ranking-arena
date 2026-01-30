@@ -104,6 +104,7 @@ async function saveTraders(traders, period) {
       source_type: 'leaderboard',
       source_trader_id: t.traderId,
       handle: t.nickname,
+      avatar_url: t.avatarUrl || null,
       profile_url: `https://www.gate.io/strategybot/trader/${t.traderId}`,
       is_active: true
     })),

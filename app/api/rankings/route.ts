@@ -30,6 +30,9 @@ const VALID_WINDOWS: RankingWindow[] = ['7d', '30d', '90d'];
 const VALID_CATEGORIES: TradingCategory[] = ['futures', 'spot', 'onchain'];
 const VALID_SORT_BY = ['arena_score', 'roi', 'pnl', 'drawdown', 'copiers'] as const;
 
+// Data quality: ROI values above this threshold are considered anomalous
+const ROI_ANOMALY_THRESHOLD = 10000; // 10000% = 100x
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -149,6 +152,7 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery) {
     .select('id, source, source_trader_id, season_id, captured_at, arena_score, roi, pnl, max_drawdown, win_rate, trades_count, followers', { count: 'exact' })
     .eq('season_id', seasonId)
     .not('arena_score', 'is', null)
+    .lte('roi', ROI_ANOMALY_THRESHOLD) // Filter out extreme ROI anomalies
     .order(sortColumn, { ascending: sort_dir === 'asc', nullsFirst: false })
     .range(0, fetchLimit - 1);
 
@@ -182,38 +186,20 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery) {
   const displayNameMap = new Map<string, { display_name: string | null; avatar_url: string | null }>();
 
   if (traderKeys.length > 0) {
-    // Try trader_profiles first
-    const { data: profiles } = await supabase
-      .from('trader_profiles')
-      .select('platform, trader_key, display_name, avatar_url')
-      .in('platform', platforms)
-      .in('trader_key', traderKeys);
-
-    if (profiles) {
-      for (const p of profiles) {
-        displayNameMap.set(`${p.platform}:${p.trader_key}`, {
-          display_name: p.display_name,
-          avatar_url: p.avatar_url,
-        });
-      }
-    }
-
-    // Fallback to trader_sources for missing entries
+    // Fetch display names and avatar URLs from trader_sources
     const { data: sources } = await supabase
       .from('trader_sources')
-      .select('source, source_trader_id, handle, display_name')
+      .select('source, source_trader_id, handle, avatar_url')
       .in('source', platforms)
       .in('source_trader_id', traderKeys);
 
     if (sources) {
       for (const src of sources) {
         const key = `${src.source}:${src.source_trader_id}`;
-        if (!displayNameMap.has(key)) {
-          displayNameMap.set(key, {
-            display_name: src.display_name || src.handle,
-            avatar_url: null,
-          });
-        }
+        displayNameMap.set(key, {
+          display_name: src.handle,
+          avatar_url: src.avatar_url,
+        });
       }
     }
   }
