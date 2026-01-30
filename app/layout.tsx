@@ -22,6 +22,7 @@ import { AsyncStylesheets } from "./components/Providers/AsyncStylesheets";
 // Optimized font loading with next/font
 const inter = Inter({
   subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],  // Only load weights used by design-tokens.ts (saves ~180KB)
   display: "swap",
   variable: "--font-inter",
   preload: true,
