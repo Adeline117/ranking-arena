@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
 import { useLanguage } from '../Providers/LanguageProvider'
@@ -45,36 +45,53 @@ export default function DataFreshnessIndicator({
 }: DataFreshnessIndicatorProps) {
   const { language } = useLanguage()
 
-  // 计算时间差
-  const { ageText, isStale, isCritical } = useMemo(() => {
+  // 计算时间差 - use useState + useEffect to avoid hydration mismatch
+  // Date.now() differs between server and client, so defer to client-only
+  const [freshnessState, setFreshnessState] = useState<{
+    ageText: string | null
+    isStale: boolean
+    isCritical: boolean
+  }>({ ageText: null, isStale: false, isCritical: false })
+
+  useEffect(() => {
     if (!lastUpdated) {
-      return { ageText: null, isStale: false, isCritical: false }
+      setFreshnessState({ ageText: null, isStale: false, isCritical: false })
+      return
     }
 
-    const date = typeof lastUpdated === 'string' ? new Date(lastUpdated) : lastUpdated
-    const now = Date.now()
-    const diffMs = now - date.getTime()
-    const diffMinutes = Math.floor(diffMs / 60000)
-    const diffHours = Math.floor(diffMs / 3600000)
+    const computeFreshness = () => {
+      const date = typeof lastUpdated === 'string' ? new Date(lastUpdated) : lastUpdated
+      const now = Date.now()
+      const diffMs = now - date.getTime()
+      const diffMinutes = Math.floor(diffMs / 60000)
+      const diffHours = Math.floor(diffMs / 3600000)
 
-    let ageText: string
-    if (diffMinutes < 1) {
-      ageText = language === 'zh' ? '刚刚' : 'just now'
-    } else if (diffMinutes < 60) {
-      ageText = language === 'zh' ? `${diffMinutes}分钟前` : `${diffMinutes}m ago`
-    } else if (diffHours < 24) {
-      ageText = language === 'zh' ? `${diffHours}小时前` : `${diffHours}h ago`
-    } else {
-      const diffDays = Math.floor(diffHours / 24)
-      ageText = language === 'zh' ? `${diffDays}天前` : `${diffDays}d ago`
+      let ageText: string
+      if (diffMinutes < 1) {
+        ageText = language === 'zh' ? '刚刚' : 'just now'
+      } else if (diffMinutes < 60) {
+        ageText = language === 'zh' ? `${diffMinutes}分钟前` : `${diffMinutes}m ago`
+      } else if (diffHours < 24) {
+        ageText = language === 'zh' ? `${diffHours}小时前` : `${diffHours}h ago`
+      } else {
+        const diffDays = Math.floor(diffHours / 24)
+        ageText = language === 'zh' ? `${diffDays}天前` : `${diffDays}d ago`
+      }
+
+      // 6小时以上为 stale，24小时以上为 critical
+      const isStale = diffHours >= 6
+      const isCritical = diffHours >= 24
+
+      setFreshnessState({ ageText, isStale, isCritical })
     }
 
-    // 6小时以上为 stale，24小时以上为 critical
-    const isStale = diffHours >= 6
-    const isCritical = diffHours >= 24
-
-    return { ageText, isStale, isCritical }
+    computeFreshness()
+    // Refresh freshness every 60 seconds
+    const interval = setInterval(computeFreshness, 60000)
+    return () => clearInterval(interval)
   }, [lastUpdated, language])
+
+  const { ageText, isStale, isCritical } = freshnessState
 
   // 更新层级对应的描述
   const tierInfo = useMemo(() => {

@@ -83,14 +83,6 @@ export const metadata: Metadata = {
       "Aggregating 90-day ROI rankings from multiple exchanges. Real-time updates, follow traders and share insights.",
     url: process.env.NEXT_PUBLIC_APP_URL || "https://www.arenafi.org",
     siteName: "Arena",
-    images: [
-      {
-        url: "/og.png",
-        width: 1200,
-        height: 630,
-        alt: "Arena",
-      },
-    ],
   },
   robots: {
     index: true,

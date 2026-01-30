@@ -16,6 +16,13 @@ import type { SourceInfo } from './utils'
 import { formatROI, formatDisplayName } from './utils'
 import { HighlightedName } from './RankingSearch'
 
+// Brighter tertiary color for text on ranking card backgrounds
+// where the global tertiary (#898998) does not meet WCAG AA 4.5:1 contrast
+const CARD_TEXT_TERTIARY = '#b0b0be'
+// Brighter error color for negative ROI/MDD on card backgrounds
+// #ff4d4d only achieves 3.36:1 on card bg; #ff8080 achieves ~5.0:1
+const CARD_ACCENT_ERROR = '#ff8080'
+
 export interface TraderCardProps {
   trader: Trader
   rank: number
@@ -69,14 +76,14 @@ export const TraderCard = memo(function TraderCard({
                 <RankingBadge rank={rank as 1 | 2 | 3} size={28} />
               </Box>
             ) : (
-              <Text size="sm" weight="bold" color="tertiary" style={{ fontSize: '14px' }}>
+              <Text size="sm" weight="bold" color="tertiary" style={{ fontSize: '14px', color: CARD_TEXT_TERTIARY }}>
                 #{rank}
               </Text>
             )}
             {trader.is_new ? (
               <span style={{ fontSize: '9px', fontWeight: 700, color: tokens.colors.accent.primary, lineHeight: 1 }}>NEW</span>
             ) : trader.rank_change != null && trader.rank_change !== 0 ? (
-              <span style={{ fontSize: '9px', fontWeight: 700, color: trader.rank_change > 0 ? tokens.colors.accent.success : tokens.colors.accent.error, lineHeight: 1 }}>
+              <span style={{ fontSize: '9px', fontWeight: 700, color: trader.rank_change > 0 ? tokens.colors.accent.success : CARD_ACCENT_ERROR, lineHeight: 1 }}>
                 {trader.rank_change > 0 ? `+${trader.rank_change}` : trader.rank_change}
               </span>
             ) : null}
@@ -137,7 +144,7 @@ export const TraderCard = memo(function TraderCard({
                 </Text>
               </Box>
               {trader.also_on && trader.also_on.length > 0 && (
-                <Text size="xs" style={{ fontSize: '9px', color: tokens.colors.text.tertiary }}>
+                <Text size="xs" style={{ fontSize: '9px', color: CARD_TEXT_TERTIARY }}>
                   +{trader.also_on.length}
                 </Text>
               )}
@@ -152,7 +159,7 @@ export const TraderCard = memo(function TraderCard({
               border: `1px solid ${trader.arena_score >= 60 ? `${tokens.colors.accent.success}50` : trader.arena_score >= 40 ? `${tokens.colors.accent.warning}40` : 'rgba(255, 255, 255, 0.15)'}`,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}>
-              <Text size="sm" weight="black" style={{ color: trader.arena_score >= 60 ? tokens.colors.accent.success : trader.arena_score >= 40 ? tokens.colors.accent.warning : tokens.colors.text.secondary, fontSize: '13px' }}>
+              <Text size="sm" weight="black" style={{ color: trader.arena_score >= 60 ? tokens.colors.accent.success : trader.arena_score >= 40 ? tokens.colors.accent.warning : CARD_TEXT_TERTIARY, fontSize: '13px' }}>
                 {trader.arena_score.toFixed(0)}
               </Text>
             </Box>
@@ -163,24 +170,24 @@ export const TraderCard = memo(function TraderCard({
         <Box style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: tokens.spacing[2] }}>
           {/* ROI */}
           <Box style={{ textAlign: 'center', padding: `${tokens.spacing[2]} 0`, background: tokens.glass.bg.light, borderRadius: tokens.radius.md }}>
-            <Text size="xs" color="tertiary" style={{ marginBottom: 2, display: 'block' }}>ROI</Text>
-            <Text size="md" weight="black" style={{ color: (trader.roi || 0) >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error }}>
+            <Text size="xs" color="tertiary" style={{ marginBottom: 2, display: 'block', color: CARD_TEXT_TERTIARY }}>ROI</Text>
+            <Text size="md" weight="black" style={{ color: (trader.roi || 0) >= 0 ? tokens.colors.accent.success : CARD_ACCENT_ERROR }}>
               {formatROI(trader.roi || 0)}
             </Text>
           </Box>
 
           {/* Win Rate */}
           <Box style={{ textAlign: 'center', padding: `${tokens.spacing[2]} 0`, background: tokens.glass.bg.light, borderRadius: tokens.radius.md }}>
-            <Text size="xs" color="tertiary" style={{ marginBottom: 2, display: 'block' }}>{language === 'zh' ? '胜率' : 'Win%'}</Text>
-            <Text size="md" weight="semibold" style={{ color: trader.win_rate != null && trader.win_rate > 50 ? tokens.colors.accent.success : tokens.colors.text.secondary }}>
+            <Text size="xs" color="tertiary" style={{ marginBottom: 2, display: 'block', color: CARD_TEXT_TERTIARY }}>{language === 'zh' ? '胜率' : 'Win%'}</Text>
+            <Text size="md" weight="semibold" style={{ color: trader.win_rate != null && trader.win_rate > 50 ? tokens.colors.accent.success : CARD_TEXT_TERTIARY }}>
               {trader.win_rate != null ? `${trader.win_rate.toFixed(0)}%` : '—'}
             </Text>
           </Box>
 
           {/* Max Drawdown */}
           <Box style={{ textAlign: 'center', padding: `${tokens.spacing[2]} 0`, background: tokens.glass.bg.light, borderRadius: tokens.radius.md }}>
-            <Text size="xs" color="tertiary" style={{ marginBottom: 2, display: 'block' }}>MDD</Text>
-            <Text size="md" weight="semibold" style={{ color: trader.max_drawdown != null ? tokens.colors.accent.error : tokens.colors.text.tertiary }}>
+            <Text size="xs" color="tertiary" style={{ marginBottom: 2, display: 'block', color: CARD_TEXT_TERTIARY }}>MDD</Text>
+            <Text size="md" weight="semibold" style={{ color: trader.max_drawdown != null ? CARD_ACCENT_ERROR : CARD_TEXT_TERTIARY }}>
               {trader.max_drawdown != null ? `-${Math.abs(trader.max_drawdown).toFixed(0)}%` : '—'}
             </Text>
           </Box>
