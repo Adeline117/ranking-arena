@@ -271,6 +271,11 @@ body {
   100% { transform: translateX(-50%); }
 }
 
+/* Promote scroll ticker to its own compositing layer for smooth animation */
+.scroll-ticker {
+  will-change: transform;
+}
+
 .scroll-ticker:hover {
   animation-play-state: paused;
 }
@@ -291,21 +296,13 @@ body {
   animation: scaleIn 0.2s ease-out forwards;
 }
 
-/* 卡片交错进入动画 - Optimized for LCP */
+/* 卡片交错进入动画 - uses CSS custom property instead of :nth-child selectors */
 @media (prefers-reduced-motion: no-preference) {
   .stagger-enter > * {
     opacity: 0;
-    animation: pageEnter 0.2s ease-out forwards; /* Reduced from 0.3s */
+    animation: pageEnter 0.3s ease-out both;
+    animation-delay: calc(var(--stagger-index, 0) * 20ms);
   }
-
-  /* Reduced delays for faster LCP */
-  .stagger-enter > *:nth-child(1) { animation-delay: 0ms; }
-  .stagger-enter > *:nth-child(2) { animation-delay: 20ms; } /* Reduced from 50ms */
-  .stagger-enter > *:nth-child(3) { animation-delay: 40ms; } /* Reduced from 100ms */
-  .stagger-enter > *:nth-child(4) { animation-delay: 60ms; } /* Reduced from 150ms */
-  .stagger-enter > *:nth-child(5) { animation-delay: 80ms; } /* Reduced from 200ms */
-  .stagger-enter > *:nth-child(6) { animation-delay: 100ms; } /* Reduced from 250ms */
-  .stagger-enter > *:nth-child(n+7) { animation-delay: 120ms; } /* Reduced significantly */
 }
 
 /* No stagger animation for reduced motion */
@@ -434,6 +431,7 @@ body {
 .ranking-row, .post-card, .trader-card {
   content-visibility: auto;
   contain-intrinsic-size: auto 72px; /* Estimated height */
+  contain: layout style;
 }
 
 /* Reduce paint for fixed elements */
@@ -603,6 +601,14 @@ body {
 /* ============================================
    CSS Containment for layout performance
    ============================================ */
+
+/* Disable backdrop-filter for users who prefer reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+}
 
 /* Sidebar sections - independent layout contexts */
 .home-left-section,
