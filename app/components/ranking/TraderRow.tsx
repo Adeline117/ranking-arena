@@ -1,6 +1,7 @@
 import React, { memo } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
+import dynamic from 'next/dynamic'
 import { tokens } from '@/lib/design-tokens'
 import { RankingBadge } from '../ui/icons'
 import { Box, Text } from '../base'
@@ -14,8 +15,15 @@ import {
 import type { Trader } from './RankingTable'
 import type { SourceInfo } from './utils'
 import { formatPnL, formatROI, formatDisplayName } from './utils'
-import { ScoreBreakdownTooltip } from './ScoreBreakdownTooltip'
 import { HighlightedName } from './RankingSearch'
+
+const ScoreBreakdownTooltip = dynamic(
+  () => import('./ScoreBreakdownTooltip').then(m => ({ default: m.ScoreBreakdownTooltip })),
+  {
+    loading: () => <span style={{ width: 14, height: 14, display: 'inline-block' }} />,
+    ssr: false,
+  }
+)
 
 export interface TraderRowProps {
   trader: Trader

@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Suspense } from "react";
-import { Inter, Noto_Sans_SC } from "next/font/google";
+import { Inter } from "next/font/google";
 import "./globals.css";
 import dynamic from "next/dynamic";
 import Providers from "./components/Providers";
@@ -29,17 +29,6 @@ const inter = Inter({
   adjustFontFallback: true,
 });
 
-const notoSansSC = Noto_Sans_SC({
-  subsets: ["latin"],
-  weight: ["400", "700"],
-  display: "swap",
-  variable: "--font-noto-sans-sc",
-  preload: false,  // Defer CJK font subsets — they generate 100+ woff2 files (4.7MB total).
-                   // With preload:true the browser eagerly fetches all subsets, blocking LCP.
-                   // CJK glyphs load on demand via unicode-range when actually needed.
-  adjustFontFallback: true,
-  fallback: ['system-ui', '-apple-system', 'sans-serif'],  // Fallback stack to minimize CLS
-});
 
 export const viewport: Viewport = {
   width: 'device-width',
@@ -97,7 +86,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" data-theme="dark" translate="no" className={`${inter.variable} ${notoSansSC.variable}`}>
+    <html lang="en" data-theme="dark" translate="no" className={inter.variable}>
       <head>
         {/* Inline critical CSS for faster initial render */}
         <style dangerouslySetInnerHTML={{ __html: getCriticalCss() }} />
@@ -127,7 +116,7 @@ export default function RootLayout({
       </head>
       <body
         className="font-sans antialiased"
-        style={{ fontFamily: 'var(--font-inter), var(--font-noto-sans-sc), system-ui, sans-serif' }}
+        style={{ fontFamily: 'var(--font-inter), "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", system-ui, sans-serif' }}
       >
         <Providers>
           <CapacitorProvider>

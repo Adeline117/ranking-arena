@@ -40,6 +40,7 @@ export default function TopNav({ email }: { email: string | null }) {
   const { t } = useLanguage()
   const pathname = usePathname()
   const router = useRouter()
+  const [isReady, setIsReady] = useState(false)
   const [myId, setMyId] = useState<string | null>(null)
   const [myHandle, setMyHandle] = useState<string | null>(null)
   const [myAvatarUrl, setMyAvatarUrl] = useState<string | null>(null)
@@ -54,8 +55,23 @@ export default function TopNav({ email }: { email: string | null }) {
 
   const totalUnread = unreadCount + unreadMessageCount
 
-  // Performance: Fetch user auth and profile/notifications/messages in parallel
+  // Performance: Defer auth initialization to reduce TBT - not LCP-critical
   useEffect(() => {
+    if ('requestIdleCallback' in window) {
+      const idleId = (window as unknown as { requestIdleCallback: (cb: () => void, opts?: { timeout: number }) => number }).requestIdleCallback(() => setIsReady(true), { timeout: 2000 })
+      return () => {
+        (window as unknown as { cancelIdleCallback: (id: number) => void }).cancelIdleCallback(idleId)
+      }
+    } else {
+      const timer = setTimeout(() => setIsReady(true), 1000)
+      return () => clearTimeout(timer)
+    }
+  }, [])
+
+  // Performance: Fetch user auth and profile/notifications/messages in parallel (deferred)
+  useEffect(() => {
+    if (!isReady) return
+
     let alive = true
 
     const initAuth = async () => {
@@ -123,7 +139,7 @@ export default function TopNav({ email }: { email: string | null }) {
     return () => {
       alive = false
     }
-  }, [])
+  }, [isReady])
 
   // Real-time subscriptions deferred to after idle to avoid competing with LCP
   useEffect(() => {
@@ -461,7 +477,33 @@ export default function TopNav({ email }: { email: string | null }) {
             <LanguageSwitcher />
           </Box>
           <ThemeToggle />
-          {myId ? (
+          {!isReady ? (
+            /* Generic Login placeholder while auth is deferred - reduces TBT */
+            <Link
+              href="/login"
+              aria-label={t('login')}
+              tabIndex={0}
+              className="btn-press touch-target top-nav-login-link"
+              style={{
+                padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
+                borderRadius: tokens.radius.lg,
+                background: tokens.gradient.primary,
+                color: tokens.colors.white,
+                textDecoration: 'none',
+                fontWeight: tokens.typography.fontWeight.black,
+                fontSize: tokens.typography.fontSize.sm,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                minWidth: 72,
+                height: 36,
+                border: 'none',
+                boxShadow: `0 4px 12px ${tokens.colors.accent.primary}40`,
+              }}
+            >
+              {t('login')}
+            </Link>
+          ) : myId ? (
             <>
               {/* 通知铃铛图标 - desktop opens panel, mobile navigates to /inbox */}
               <button
