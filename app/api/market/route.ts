@@ -2,7 +2,7 @@ import { NextResponse, NextRequest } from 'next/server'
 import { checkRateLimit, RateLimitPresets } from '@/lib/api'
 import { createLogger } from '@/lib/utils/logger'
 
-export const runtime = 'nodejs'
+export const runtime = 'edge'
 export const dynamic = 'force-dynamic' // 禁用静态渲染
 
 type MarketRow = {
