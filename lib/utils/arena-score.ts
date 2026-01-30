@@ -101,6 +101,20 @@ export const ARENA_CONFIG = {
     MAX_DRAWDOWN: -20,  // 中位最大回撤（%）
   },
 
+  // ROI 合理性上限（超过此值的 ROI 会被 cap）
+  // 防止异常高 ROI（如 Hyperliquid 百万级%）垄断排行榜
+  ROI_CAP: 5000,  // 5000% = 50x，超过此值 ROI 按 5000% 计算 score
+
+  // 数据完整性惩罚乘数（应用于总分）
+  // 'full': 所有字段完整 → 1.0（无惩罚）
+  // 'partial': 缺少 win_rate 或 max_drawdown → 0.92
+  // 'minimal': 两者都缺 → 0.80
+  CONFIDENCE_MULTIPLIER: {
+    full: 1.0,
+    partial: 0.92,
+    minimal: 0.80,
+  },
+
   // 缺失数据惩罚
   MISSING_90D_PENALTY: 0.85,
   ONLY_7D_PENALTY: 0.70,
@@ -162,12 +176,19 @@ export function calculateRoiIntensity(roi: number, period: Period): number {
  * 计算收益分 (0-85)
  * ReturnScore = 85 * tanh(coeff * I)^exponent
  * 
+ * ROI 会被 cap 到 ARENA_CONFIG.ROI_CAP 以防止异常值
+ * （如 Hyperliquid 百万级 ROI）垄断排行榜。
+ * 
  * @param roi ROI 百分比
  * @param period 时间段
  */
 export function calculateReturnScore(roi: number, period: Period): number {
   const params = ARENA_CONFIG.PARAMS[period]
-  const intensity = calculateRoiIntensity(roi, period)
+  
+  // Cap ROI to prevent extreme values from dominating
+  const cappedRoi = Math.min(roi, ARENA_CONFIG.ROI_CAP)
+  
+  const intensity = calculateRoiIntensity(cappedRoi, period)
   
   // R0 = tanh(coeff * I)
   const r0 = Math.tanh(params.tanhCoeff * intensity)
@@ -281,8 +302,13 @@ export function calculateArenaScore(
   const drawdownScore = calculateDrawdownScore(maxDrawdown, period)
   const stabilityScore = calculateStabilityScore(winRate, period)
   
-  // 总分
-  const totalScore = clip(returnScore + drawdownScore + stabilityScore, 0, 100)
+  // 原始总分
+  const rawTotal = returnScore + drawdownScore + stabilityScore
+  
+  // 数据完整性惩罚：缺失 win_rate/max_drawdown 时降低总分
+  // 这确保数据更完整的交易员排名更高
+  const confidenceMultiplier = ARENA_CONFIG.CONFIDENCE_MULTIPLIER[scoreConfidence]
+  const totalScore = clip(rawTotal * confidenceMultiplier, 0, 100)
   
   return {
     totalScore: Math.round(totalScore * 100) / 100,  // 保留2位小数

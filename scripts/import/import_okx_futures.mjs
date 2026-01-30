@@ -258,6 +258,7 @@ async function saveTraders(traders, period) {
     source_type: 'leaderboard',
     source_trader_id: t.traderId,
     handle: t.nickname,
+    avatar_url: t.avatar || null,
     profile_url: `https://www.okx.com/copy-trading/account/${t.traderId}`,
     is_active: true,
   }))

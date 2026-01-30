@@ -113,6 +113,9 @@ const SKIP_PNL_THRESHOLD_SOURCES = [
 // 数据时效性：只取最近 24 小时内的数据
 const DATA_FRESHNESS_HOURS = 24
 
+// 数据质量：ROI 超过此值视为异常数据（如 Hyperliquid 百万级 ROI）
+const ROI_ANOMALY_THRESHOLD = 10000 // 10000% = 100x
+
 // source 类型映射（用于前端显示）
 const SOURCE_TYPE_MAP: Record<string, 'futures' | 'spot' | 'web3'> = {
   // CEX 合约
@@ -354,28 +357,37 @@ async function fetchTradersData(
       })
 
       // 构建交易员数据（不包含数据库 rank，排名将在后面统一计算）
-      const traders = snapshots.map(item => {
-        const info = handleMap.get(item.source_trader_id) || { handle: null, avatar_url: null }
-        // 标准化 win_rate 为百分比形式
-        // binance_futures 存储小数(0.85)，bitget/bybit 存储百分比(85)
-        const normalizedWinRate = item.win_rate != null
-          ? (item.win_rate <= 1 ? item.win_rate * 100 : item.win_rate)
-          : null
+      const traders = snapshots
+        .filter(item => {
+          // 数据质量过滤：过滤异常 ROI 值
+          const roi = item.roi ?? 0
+          if (Math.abs(roi) > ROI_ANOMALY_THRESHOLD) {
+            return false
+          }
+          return true
+        })
+        .map(item => {
+          const info = handleMap.get(item.source_trader_id) || { handle: null, avatar_url: null }
+          // 标准化 win_rate 为百分比形式
+          // binance_futures 存储小数(0.85)，bitget/bybit 存储百分比(85)
+          const normalizedWinRate = item.win_rate != null
+            ? (item.win_rate <= 1 ? item.win_rate * 100 : item.win_rate)
+            : null
 
-        return {
-          id: item.source_trader_id,
-          handle: info.handle || item.source_trader_id,
-          roi: item.roi ?? 0,
-          pnl: item.pnl ?? 0,
-          win_rate: normalizedWinRate,  // 统一为百分比形式
-          max_drawdown: item.max_drawdown,
-          trades_count: item.trades_count,
-          followers: item.followers ?? null,  // 保留 null，GMX 无跟单功能
-          source,
-          source_type: SOURCE_TYPE_MAP[source] || 'futures',
-          avatar_url: info.avatar_url,  // 只使用数据库中的原始头像
-        }
-      })
+          return {
+            id: item.source_trader_id,
+            handle: info.handle || item.source_trader_id,
+            roi: item.roi ?? 0,
+            pnl: item.pnl ?? 0,
+            win_rate: normalizedWinRate,  // 统一为百分比形式
+            max_drawdown: item.max_drawdown,
+            trades_count: item.trades_count,
+            followers: item.followers ?? null,  // 保留 null，GMX 无跟单功能
+            source,
+            source_type: SOURCE_TYPE_MAP[source] || 'futures',
+            avatar_url: info.avatar_url,  // 只使用数据库中的原始头像
+          }
+        })
       return { traders, isStale: !latestSnapshot }
     })
 

@@ -528,7 +528,7 @@ async function saveTraders(traders, period) {
       source_type: 'leaderboard',
       source_trader_id: t.traderId,
       handle: t.nickname,
-      profile_url: avatarUrl,
+      avatar_url: avatarUrl,
       is_active: true,
     }
   })

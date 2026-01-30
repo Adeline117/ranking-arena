@@ -199,6 +199,7 @@ async function saveTraders(traders, period) {
     source_type: 'leaderboard',
     source_trader_id: t.traderId,
     handle: t.nickname,
+    avatar_url: t.avatar || null,
     profile_url: `https://futures.htx.com/en-us/copytrading/futures/detail/${t.traderId}`,
     is_active: true
   }))

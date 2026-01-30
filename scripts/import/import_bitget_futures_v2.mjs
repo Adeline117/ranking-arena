@@ -328,6 +328,8 @@ async function saveTradersBatch(results, period, capturedAt) {
     source_type: 'leaderboard',
     source_trader_id: r.trader.traderId,
     handle: r.trader.nickname,
+    avatar_url: null,
+    profile_url: `https://www.bitget.com/copy-trading/trader/${r.trader.traderId}/futures`,
     is_active: true,
   }))
   

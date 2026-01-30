@@ -222,7 +222,7 @@ async function saveTraders(traders, period) {
         source_type: 'leaderboard',
         source_trader_id: trader.traderId,
         handle: trader.nickname,
-        profile_url: trader.avatar,
+        avatar_url: trader.avatar || null,
         is_active: true,
       }, { onConflict: 'source,source_trader_id' })
 
