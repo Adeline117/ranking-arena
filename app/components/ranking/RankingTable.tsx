@@ -93,6 +93,7 @@ export interface Trader {
   avatar_url?: string | null
   arena_score?: number
   return_score?: number
+  pnl_score?: number
   drawdown_score?: number
   stability_score?: number
   score_confidence?: 'full' | 'partial' | 'minimal' | null
@@ -155,6 +156,9 @@ function RankingTableInner(props: {
   const [justSortedColumn, setJustSortedColumn] = useState<string | null>(null)
   const [sortAnimationKey, setSortAnimationKey] = useState(0)
   const itemsPerPage = 20
+
+  // Mobile card view: load more instead of pagination
+  const [cardVisibleCount, setCardVisibleCount] = useState(20)
 
   const [internalSearchQuery, setInternalSearchQuery] = useState('')
   const searchQuery = controlledSearchQuery ?? internalSearchQuery
@@ -483,17 +487,38 @@ function RankingTableInner(props: {
       ) : viewMode === 'card' ? (
         <>
           <Box style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: tokens.spacing[3], padding: tokens.spacing[4] }}>
-            {paginatedTraders.map((trader, idx) => {
-              const rank = startIndex + idx + 1
+            {sortedTraders.slice(0, cardVisibleCount).map((trader, idx) => {
+              const rank = idx + 1
               return (
-                <TraderCard key={`${trader.id}-${trader.source || 'unknown'}-${startIndex + idx}`}
+                <TraderCard key={`${trader.id}-${trader.source || 'unknown'}-${idx}`}
                   trader={trader} rank={rank} source={source} language={language}
                   searchQuery={debouncedSearch}
                   getMedalGlowClass={getMedalGlowClass} parseSourceInfo={parseSourceInfoWithT} />
               )
             })}
           </Box>
-          <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={handlePaginationChange} />
+          {cardVisibleCount < sortedTraders.length && (
+            <Box style={{ display: 'flex', justifyContent: 'center', padding: tokens.spacing[4] }}>
+              <button
+                onClick={() => setCardVisibleCount(prev => Math.min(prev + 20, sortedTraders.length))}
+                style={{
+                  padding: `${tokens.spacing[2]} ${tokens.spacing[6]}`,
+                  borderRadius: tokens.radius.md,
+                  fontSize: tokens.typography.fontSize.sm,
+                  fontWeight: tokens.typography.fontWeight.semibold,
+                  color: tokens.colors.accent.primary,
+                  background: `${tokens.colors.accent.primary}10`,
+                  border: `1px solid ${tokens.colors.accent.primary}30`,
+                  cursor: 'pointer',
+                  transition: `all ${tokens.transition.fast}`,
+                  width: '100%',
+                  maxWidth: 320,
+                }}
+              >
+                {t('loadMore') || '加载更多'} ({cardVisibleCount}/{sortedTraders.length})
+              </button>
+            </Box>
+          )}
         </>
       ) : (
         <>

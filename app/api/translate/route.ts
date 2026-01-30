@@ -99,8 +99,8 @@ function detectSourceLang(text: string): 'zh' | 'en' {
 }
 
 export async function POST(request: NextRequest) {
-  // 限流：每分钟最多 100 次翻译请求
-  const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.public)
+  // 限流：使用敏感操作级别（15/分钟），防止滥用 OpenAI 额度
+  const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.sensitive)
   if (rateLimitResponse) return rateLimitResponse
 
   try {

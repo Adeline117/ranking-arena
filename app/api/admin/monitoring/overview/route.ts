@@ -295,12 +295,12 @@ export async function GET(req: NextRequest) {
       // Performance metrics
       performance: {
         responseTime: {
-          avg: null, // TODO: Implement with metrics collection
+          avg: null, // Not yet implemented - requires metrics collection service
           p95: null,
           p99: null,
         },
         uptime: {
-          percentage: null, // TODO: Implement with uptime monitoring
+          percentage: null, // Not yet implemented - requires uptime monitoring service
           lastIncident: null,
         },
       },

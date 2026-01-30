@@ -25,6 +25,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { createLogger } from '@/lib/utils/logger'
+import { escapeLikePattern } from '@/lib/sanitize'
 
 const logger = createLogger('search-advanced')
 
@@ -34,7 +35,7 @@ export const runtime = 'nodejs'
 // Initialize Supabase client
 function getSupabaseClient() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const supabaseKey = process.env.SUPABASE_SERVICE_KEY
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
   if (!supabaseUrl || !supabaseKey) {
     throw new Error('Missing Supabase configuration')
@@ -78,7 +79,8 @@ async function searchTraders(
 
     // Full-text search on nickname and trader_id
     if (query) {
-      queryBuilder = queryBuilder.or(`nickname.ilike.%${query}%,trader_id.ilike.%${query}%`)
+      const q = escapeLikePattern(query)
+      queryBuilder = queryBuilder.or(`nickname.ilike.%${q}%,trader_id.ilike.%${q}%`)
     }
 
     // Apply filters
@@ -180,7 +182,8 @@ async function searchPosts(
 
     // Full-text search on title and content
     if (query) {
-      queryBuilder = queryBuilder.or(`title.ilike.%${query}%,content.ilike.%${query}%`)
+      const q = escapeLikePattern(query)
+      queryBuilder = queryBuilder.or(`title.ilike.%${q}%,content.ilike.%${q}%`)
     }
 
     // Time range filter
@@ -259,7 +262,7 @@ async function searchUsers(
     const { data, error } = await supabase
       .from('user_profiles')
       .select('id, username, handle, avatar_url, bio, is_pro, follower_count')
-      .or(`username.ilike.%${query}%,handle.ilike.%${query}%,bio.ilike.%${query}%`)
+      .or(`username.ilike.%${escapeLikePattern(query)}%,handle.ilike.%${escapeLikePattern(query)}%,bio.ilike.%${escapeLikePattern(query)}%`)
       .limit(limit)
 
     if (error) {
