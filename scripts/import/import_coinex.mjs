@@ -236,7 +236,11 @@ async function saveTraders(traders, period) {
         season_id: period,
         rank: trader.rank,
         roi: trader.roi,
-        arena_score: calculateArenaScore(trader.roi, null, null, null, period),
+        pnl: trader.pnl || null,
+        win_rate: trader.winRate || null,
+        max_drawdown: trader.maxDrawdown || null,
+        followers: trader.followers || 0,
+        arena_score: calculateArenaScore(trader.roi, trader.pnl, trader.maxDrawdown, trader.winRate, period),
         captured_at: capturedAt,
       })
       if (error) errors++

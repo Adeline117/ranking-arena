@@ -1,7 +1,8 @@
 /**
  * HTX Futures 增强版导入脚本
  *
- * 从 profitList (每日累计收益率) 计算最大回撤
+ * API: https://futures.htx.com/-/x/hbg/v1/futures/copytrading/rank
+ * 字段: userSign, nickName, imgUrl, copyUserNum, winRate, profitRate90, profit90, mdd, profitList
  *
  * 用法: node scripts/import/import_htx_enhanced.mjs [7D|30D|90D|ALL]
  */
@@ -22,6 +23,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 const SOURCE = 'htx_futures'
 const API_URL = 'https://futures.htx.com/-/x/hbg/v1/futures/copytrading/rank'
 const TARGET_COUNT = 500
+const PAGE_SIZE = 50
 const DELAY_MS = 500
 
 const WINDOW_DAYS = { '7D': 7, '30D': 30, '90D': 90 }
@@ -57,43 +59,47 @@ function getTargetPeriods() {
 }
 
 /**
- * 从 profitList 计算最大回撤
- * profitList 是每日累计收益率数组，从旧到新
- * 例如: [0.01, 0.05, 0.03, 0.08] 表示第1天+1%, 第2天累计+5%, 第3天累计+3%, 第4天累计+8%
+ * 从 profitList 计算特定窗口的 ROI (百分比)
+ * profitList 是每日累计收益率数组（小数形式），从旧到新
+ */
+function calculatePeriodRoi(profitList, period) {
+  if (!Array.isArray(profitList) || profitList.length < 2) return null
+
+  const days = WINDOW_DAYS[period] || 30
+  const last = parseFloat(profitList[profitList.length - 1])
+
+  if (profitList.length >= days) {
+    const startIdx = profitList.length - days
+    const startVal = startIdx > 0 ? parseFloat(profitList[startIdx - 1]) : 0
+    return (last - startVal) * 100
+  } else {
+    const first = parseFloat(profitList[0] || 0)
+    return (last - first) * 100
+  }
+}
+
+/**
+ * 从 profitList 计算最大回撤 (百分比)
  */
 function calculateMaxDrawdown(profitList, period) {
-  if (!Array.isArray(profitList) || profitList.length < 2) {
-    return null
-  }
+  if (!Array.isArray(profitList) || profitList.length < 2) return null
 
-  // 根据周期选择要分析的数据范围
   const days = WINDOW_DAYS[period] || 30
   const relevantData = profitList.slice(-days)
+  if (relevantData.length < 2) return null
 
-  if (relevantData.length < 2) {
-    return null
-  }
-
-  // 将累计收益率转换为模拟权益曲线 (假设初始权益 = 1)
-  // equity = 1 + cumulative_return
   const equityCurve = relevantData.map(r => 1 + parseFloat(r))
-
   let peak = equityCurve[0]
   let maxDrawdown = 0
 
   for (const equity of equityCurve) {
-    if (equity > peak) {
-      peak = equity
-    }
+    if (equity > peak) peak = equity
     if (peak > 0) {
-      const drawdown = ((peak - equity) / peak) * 100
-      if (drawdown > maxDrawdown) {
-        maxDrawdown = drawdown
-      }
+      const dd = ((peak - equity) / peak) * 100
+      if (dd > maxDrawdown) maxDrawdown = dd
     }
   }
 
-  // 返回合理范围内的 MDD
   return maxDrawdown > 0 && maxDrawdown < 100 ? maxDrawdown : null
 }
 
@@ -104,11 +110,11 @@ async function fetchLeaderboard(period) {
   console.log(`\n📊 获取排行榜数据 (${period})...`)
 
   const allTraders = new Map()
+  const maxPages = Math.ceil(TARGET_COUNT / PAGE_SIZE)
 
-  // rankType: 1=收益率排序(ROI)
-  for (let pageNo = 1; pageNo <= 2; pageNo++) {
+  for (let pageNo = 1; pageNo <= maxPages; pageNo++) {
     try {
-      const url = `${API_URL}?rankType=1&pageNo=${pageNo}&pageSize=50`
+      const url = `${API_URL}?rankType=1&pageNo=${pageNo}&pageSize=${PAGE_SIZE}`
       const response = await fetch(url, {
         headers: {
           'Accept': 'application/json',
@@ -120,64 +126,65 @@ async function fetchLeaderboard(period) {
 
       if (data.code !== 200 || !data.data?.itemList) {
         console.log(`  ⚠ API 返回错误: ${data.code}`)
-        continue
+        break
       }
 
       const list = data.data.itemList
       console.log(`  📋 页 ${pageNo}: ${list.length} 条数据`)
 
+      if (list.length === 0) break
+
       for (const item of list) {
-        const uid = String(item.uid || '')
-        const sourceId = item.userSign || uid
+        const sourceId = item.userSign || String(item.uid || '')
         if (!sourceId || allTraders.has(sourceId)) continue
 
-        // 从 profitList 计算各时间段的 ROI 和 MDD
+        // profitRate90 是90天 ROI (百分比), mdd 是最大回撤 (小数)
+        // 对于 7D/30D 周期，从 profitList 计算
         const profitList = item.profitList || []
         let roi = null
         let maxDrawdown = null
 
-        if (profitList.length > 0) {
-          const last = parseFloat(profitList[profitList.length - 1])
-          const days = WINDOW_DAYS[period] || 30
-
-          if (profitList.length >= days) {
-            const startIdx = profitList.length - days
-            const startVal = startIdx > 0 ? parseFloat(profitList[startIdx - 1]) : 0
-            roi = (last - startVal) * 100
-          } else {
-            const first = parseFloat(profitList[0] || 0)
-            roi = (last - first) * 100
-          }
-
-          // 计算最大回撤
+        if (period === '90D') {
+          // API 直接给 90D 数据
+          roi = parseFloat(item.profitRate90 || 0)
+          maxDrawdown = item.mdd != null ? parseFloat(item.mdd) * 100 : null
+        } else {
+          // 从 profitList 计算 7D/30D
+          roi = calculatePeriodRoi(profitList, period)
           maxDrawdown = calculateMaxDrawdown(profitList, period)
+          // fallback: 如果 profitList 不够长，用 90D 数据
+          if (roi === null) {
+            roi = parseFloat(item.profitRate90 || 0)
+          }
+          if (maxDrawdown === null && item.mdd != null) {
+            maxDrawdown = parseFloat(item.mdd) * 100
+          }
         }
 
         const winRate = parseFloat(item.winRate || 0) * 100
 
         allTraders.set(sourceId, {
           traderId: sourceId,
-          uid,
-          nickname: item.nickName || `HTX_${uid}`,
+          nickname: item.nickName || `HTX_${item.uid}`,
           avatar: item.imgUrl || null,
           roi,
-          pnl: parseFloat(item.copyProfit || 0) || 0,
+          pnl: parseFloat(item.profit90 || item.copyProfit || 0),
           winRate,
           maxDrawdown,
-          followers: parseInt(item.copyUserNum || 0) || 0,
-          profitList,
+          followers: parseInt(item.copyUserNum || 0),
         })
       }
 
+      if (list.length < PAGE_SIZE) break // last page
       if (allTraders.size >= TARGET_COUNT) break
       await sleep(DELAY_MS)
     } catch (e) {
-      console.log(`  ⚠ 请求失败: ${e.message}`)
+      console.log(`  ⚠ 页 ${pageNo} 请求失败: ${e.message}`)
     }
   }
 
   const traders = Array.from(allTraders.values())
-    .filter(t => t.roi !== null)
+    .filter(t => t.roi !== null && t.roi !== 0)
     .sort((a, b) => b.roi - a.roi)
     .slice(0, TARGET_COUNT)
 
@@ -186,7 +193,7 @@ async function fetchLeaderboard(period) {
 }
 
 /**
- * 保存数据到数据库
+ * 保存数据到数据库 (UPSERT)
  */
 async function saveTraders(traders, period) {
   console.log(`\n💾 保存 ${traders.length} 个交易员...`)
@@ -204,11 +211,12 @@ async function saveTraders(traders, period) {
     is_active: true
   }))
 
-  await supabase.from('trader_sources').upsert(sourcesData, {
+  const { error: srcErr } = await supabase.from('trader_sources').upsert(sourcesData, {
     onConflict: 'source,source_trader_id'
   })
+  if (srcErr) console.log(`  ⚠ trader_sources upsert error: ${srcErr.message}`)
 
-  // 批量 insert trader_snapshots
+  // 批量 upsert trader_snapshots
   const snapshotsData = traders.map((t, idx) => ({
     source: SOURCE,
     source_trader_id: t.traderId,
@@ -223,19 +231,26 @@ async function saveTraders(traders, period) {
     captured_at: capturedAt
   }))
 
-  const { error } = await supabase.from('trader_snapshots').insert(snapshotsData)
+  // Use upsert with onConflict to avoid duplicates
+  const { error } = await supabase.from('trader_snapshots').upsert(snapshotsData, {
+    onConflict: 'source,source_trader_id,season_id'
+  })
 
   if (error) {
-    console.log('  ⚠ 批量保存失败:', error.message)
+    console.log('  ⚠ 批量 upsert 失败:', error.message)
+    // 逐条尝试
     let saved = 0
     for (const s of snapshotsData) {
-      const { error: e } = await supabase.from('trader_snapshots').insert(s)
+      const { error: e } = await supabase.from('trader_snapshots').upsert(s, {
+        onConflict: 'source,source_trader_id,season_id'
+      })
       if (!e) saved++
     }
+    console.log(`  ✓ 逐条保存: ${saved}/${snapshotsData.length}`)
     return saved
   }
 
-  const withWr = traders.filter(t => t.winRate !== null && t.winRate > 0).length
+  const withWr = traders.filter(t => t.winRate > 0).length
   const withMdd = traders.filter(t => t.maxDrawdown !== null && t.maxDrawdown > 0).length
   console.log(`  ✓ 保存成功: ${traders.length} 条`)
   console.log(`    胜率覆盖: ${withWr}/${traders.length} (${((withWr/traders.length)*100).toFixed(0)}%)`)
@@ -253,7 +268,6 @@ async function main() {
   console.log('='.repeat(60))
   console.log('时间:', new Date().toISOString())
   console.log('目标周期:', periods.join(', '))
-  console.log('增强功能: 从 profitList 计算最大回撤')
   console.log('='.repeat(60))
 
   const results = []
@@ -261,7 +275,6 @@ async function main() {
   for (const period of periods) {
     console.log('\n' + '='.repeat(50))
     console.log(`📊 处理 ${period}...`)
-    console.log('='.repeat(50))
 
     try {
       const traders = await fetchLeaderboard(period)
@@ -273,22 +286,13 @@ async function main() {
 
       console.log(`\n📋 ${period} TOP 5:`)
       traders.slice(0, 5).forEach((t, i) => {
-        const wr = t.winRate !== null ? `${t.winRate.toFixed(1)}%` : 'N/A'
+        const wr = t.winRate > 0 ? `${t.winRate.toFixed(1)}%` : 'N/A'
         const mdd = t.maxDrawdown !== null ? `${t.maxDrawdown.toFixed(1)}%` : 'N/A'
         console.log(`  ${i + 1}. ${t.nickname}: ROI ${t.roi.toFixed(2)}%, WR ${wr}, MDD ${mdd}`)
       })
 
       const saved = await saveTraders(traders, period)
-      results.push({
-        period,
-        count: traders.length,
-        saved,
-        topRoi: traders[0]?.roi || 0,
-        winRateCoverage: traders.filter(t => t.winRate > 0).length,
-        mddCoverage: traders.filter(t => t.maxDrawdown !== null).length
-      })
-
-      console.log(`\n✅ ${period} 完成！`)
+      results.push({ period, count: traders.length, saved })
 
       if (periods.indexOf(period) < periods.length - 1) {
         await sleep(2000)
@@ -302,11 +306,8 @@ async function main() {
 
   console.log('\n' + '='.repeat(60))
   console.log('✅ 全部完成！')
-  console.log('='.repeat(60))
-  console.log('📊 抓取结果:')
   for (const r of results) {
-    console.log(`   ${r.period}: ${r.saved} 条, TOP ROI ${r.topRoi?.toFixed?.(2) || r.topRoi}%`)
-    console.log(`      胜率: ${r.winRateCoverage}/${r.saved}, MDD: ${r.mddCoverage}/${r.saved}`)
+    console.log(`   ${r.period}: ${r.saved} 条`)
   }
   console.log(`   总耗时: ${totalTime}s`)
   console.log('='.repeat(60))

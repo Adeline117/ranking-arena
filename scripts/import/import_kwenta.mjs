@@ -187,6 +187,14 @@ async function main() {
     arg && ['7D', '30D', '90D'].includes(arg) ? [arg] : ['7D', '30D', '90D']
 
   console.log('Kwenta (Optimism DEX) 数据抓取开始...')
+  
+  if (!GRAPH_API_KEY) {
+    console.error('\n❌ 需要设置 THEGRAPH_API_KEY 环境变量')
+    console.error('   1. 访问 https://thegraph.com/studio/apikeys/ 注册并获取免费 API Key')
+    console.error('   2. 将 THEGRAPH_API_KEY=your_key 添加到 .env 文件')
+    console.error('   3. 免费额度: 100,000 queries/month')
+    process.exit(1)
+  }
   for (const period of targetPeriods) {
     const traders = await fetchLeaderboardData(period)
     if (traders.length > 0) await saveTraders(traders, period)

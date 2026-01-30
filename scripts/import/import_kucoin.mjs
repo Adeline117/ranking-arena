@@ -110,6 +110,12 @@ async function fetchLeaderboardData(period) {
                   daysAsLeader: t.daysAsLeader,
                   leadConfigId: t.leadConfigId,
                   avatarUrl: t.avatarUrl,
+                  // Capture additional fields from API
+                  winRate: t.winRatio || t.winRate || null,
+                  maxDrawdown: t.maxDrawdown || t.mdd || null,
+                  totalPnl: t.totalPnl || t.thirtyDayPnl || null,
+                  followers: t.followerCount || t.copierCount || 0,
+                  totalProfit: t.totalProfit || null,
                 })
               }
             })
@@ -195,18 +201,28 @@ async function fetchLeaderboardData(period) {
   const filtered = allTraders.filter(t => t.daysAsLeader >= config.minDays)
   
   // 转换格式
-  return filtered.map((t, idx) => ({
-    traderId: t.leadConfigId,
-    nickname: t.nickName,
-    avatar: t.avatarUrl,
-    roi: t.pnl30d ? t.pnl30d * 100 : 0, // 转换为百分比
-    pnl: null,
-    winRate: null,
-    maxDrawdown: null,
-    followers: null,
-    daysAsLeader: t.daysAsLeader,
-    rank: idx + 1,
-  }))
+  return filtered.map((t, idx) => {
+    // Parse win rate - API may return 0-1 ratio or 0-100 percentage
+    let winRate = t.winRate !== null && t.winRate !== undefined ? parseFloat(t.winRate) : null
+    if (winRate !== null && winRate > 0 && winRate <= 1) winRate = winRate * 100
+
+    // Parse max drawdown
+    let maxDrawdown = t.maxDrawdown !== null && t.maxDrawdown !== undefined ? parseFloat(t.maxDrawdown) : null
+    if (maxDrawdown !== null && maxDrawdown > 0 && maxDrawdown <= 1) maxDrawdown = maxDrawdown * 100
+
+    return {
+      traderId: t.leadConfigId,
+      nickname: t.nickName,
+      avatar: t.avatarUrl,
+      roi: t.pnl30d ? t.pnl30d * 100 : 0, // 转换为百分比
+      pnl: t.totalPnl ? parseFloat(t.totalPnl) : null,
+      winRate,
+      maxDrawdown,
+      followers: t.followers || null,
+      daysAsLeader: t.daysAsLeader,
+      rank: idx + 1,
+    }
+  })
 }
 
 async function saveTraders(traders, period) {
@@ -232,7 +248,11 @@ async function saveTraders(traders, period) {
         season_id: period,
         rank: trader.rank,
         roi: trader.roi,
-        arena_score: calculateArenaScore(trader.roi, null, null, null, period),
+        pnl: trader.pnl || null,
+        win_rate: trader.winRate || null,
+        max_drawdown: trader.maxDrawdown || null,
+        followers: trader.followers || 0,
+        arena_score: calculateArenaScore(trader.roi, trader.pnl, trader.maxDrawdown, trader.winRate, period),
         captured_at: capturedAt,
       })
       if (error) errors++
