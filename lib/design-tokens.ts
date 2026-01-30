@@ -131,8 +131,8 @@ export const tokens = {
       none: 'none',
       xs: 'blur(4px)',
       sm: 'blur(8px)',
-      md: 'blur(12px)',
-      lg: 'blur(20px)',
+      md: 'blur(8px)',
+      lg: 'blur(12px)',
       xl: 'blur(40px)',
     },
     // Border for glass elements - using CSS variables for theme-awareness

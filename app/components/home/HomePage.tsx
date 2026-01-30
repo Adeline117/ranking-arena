@@ -46,7 +46,7 @@ export default function HomePage({
         style={{
           position: 'fixed',
           inset: 0,
-          background: tokens.gradient.mesh,
+          background: 'linear-gradient(135deg, rgba(139, 111, 168, 0.08) 0%, transparent 40%, rgba(124, 58, 237, 0.05) 100%)',
           opacity: 0.5,
           pointerEvents: 'none',
           zIndex: 0,
