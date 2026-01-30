@@ -94,14 +94,38 @@ async function fetchLeaderboard(period) {
         : item.windowPerformances?.[windowKey]
 
       const pnl = windowData?.pnl ? Number(windowData.pnl) : 0
-      const roi = windowData?.roi ? Number(windowData.roi) * 100 : 0
+      const accountValue = Number(item.accountValue) || 0
+      let roi = windowData?.roi ? Number(windowData.roi) * 100 : 0
+
+      // ROI 合理性校验：
+      // Hyperliquid API 有时返回 PNL 金额作为 roi 字段，导致 roi * 100 = PNL 值
+      // 如果 roi 和 pnl 完全相同（或极其接近），说明数据异常
+      const ROI_MAX_CAP = 99999 // 最大 ROI 上限 99999%
+      const roiRaw = roi
+
+      if (pnl !== 0 && Math.abs(roi - pnl) < 0.01) {
+        // roi 字段实际是 PNL 金额，需要重新计算
+        if (accountValue > 0) {
+          roi = (pnl / accountValue) * 100
+          console.log(`  ⚠ ROI异常修正: ${item.ethAddress.slice(0, 10)}... raw_roi=${roiRaw} == pnl=${pnl}, 重算 ROI=${roi.toFixed(2)}% (pnl/accountValue)`)
+        } else {
+          roi = 0
+          console.log(`  ⚠ ROI异常且无accountValue: ${item.ethAddress.slice(0, 10)}... raw_roi=${roiRaw}, 设为0`)
+        }
+      }
+
+      // ROI 上限 cap
+      if (Math.abs(roi) > ROI_MAX_CAP) {
+        console.log(`  ⚠ ROI超限: ${item.ethAddress.slice(0, 10)}... roi=${roi.toFixed(2)}%, capped to ${ROI_MAX_CAP}%`)
+        roi = roi > 0 ? ROI_MAX_CAP : -ROI_MAX_CAP
+      }
 
       return {
         address: item.ethAddress.toLowerCase(),
         displayName: item.displayName || `${item.ethAddress.slice(0, 6)}...${item.ethAddress.slice(-4)}`,
         roi,
         pnl,
-        accountValue: Number(item.accountValue) || 0
+        accountValue
       }
     })
     .filter(t => t.roi > 0) // 只保留正收益的交易员
@@ -292,13 +316,25 @@ async function saveTraders(traders, period) {
     captured_at: capturedAt
   }))
 
-  const { error } = await supabase.from('trader_snapshots').insert(snapshotsData)
+  // Upsert: 按 (source, source_trader_id, season_id) 冲突时更新
+  // 需要数据库有 unique constraint: uq_trader_snapshots_source_trader_season
+  const { error } = await supabase
+    .from('trader_snapshots')
+    .upsert(snapshotsData, {
+      onConflict: 'source,source_trader_id,season_id',
+      ignoreDuplicates: false
+    })
 
   if (error) {
-    console.log('  ⚠ 批量保存失败:', error.message)
+    console.log('  ⚠ 批量 upsert 失败:', error.message)
     let saved = 0
     for (const s of snapshotsData) {
-      const { error: e } = await supabase.from('trader_snapshots').insert(s)
+      const { error: e } = await supabase
+        .from('trader_snapshots')
+        .upsert(s, {
+          onConflict: 'source,source_trader_id,season_id',
+          ignoreDuplicates: false
+        })
       if (!e) saved++
     }
     return saved
