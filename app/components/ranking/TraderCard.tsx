@@ -6,7 +6,6 @@ import { RankingBadge } from '../ui/icons'
 import { Box, Text } from '../base'
 import { getAvatarGradient, getAvatarInitial, getTraderAvatarUrl } from '@/lib/utils/avatar'
 import {
-  getOptimizedImageUrl,
   getImageLoadingStrategy,
   handleImageError,
   IMAGE_PLACEHOLDER,
@@ -113,14 +112,11 @@ export const TraderCard = memo(function TraderCard({
 
               return (
                 <Image
-                  src={getOptimizedImageUrl(proxyAvatarUrl, {
-                    width: 72,
-                    quality: 85,
-                    format: 'webp',
-                  })}
+                  src={proxyAvatarUrl}
                   alt={displayName}
-                  width={36}
-                  height={36}
+                  width={44}
+                  height={44}
+                  quality={85}
                   priority={isPriority}
                   loading={loadingStrategy.loading}
                   placeholder="blur"
