@@ -39,15 +39,28 @@ const ARENA_CONFIG = {
     '30D': { tanhCoeff: 0.15, roiExponent: 1.6, mddThreshold: 30, winRateCap: 68 },
     '90D': { tanhCoeff: 0.18, roiExponent: 1.6, mddThreshold: 40, winRateCap: 70 },
   },
+  PNL_PARAMS: {
+    '7D': { base: 500, coeff: 0.40 },
+    '30D': { base: 2000, coeff: 0.35 },
+    '90D': { base: 5000, coeff: 0.30 },
+  },
   PNL_THRESHOLD: {
     '7D': 200,    // 降低门槛以显示更多交易员
     '30D': 500,   // 从$1000降到$500
     '90D': 1000,  // 从$3000降到$1000
   },
-  MAX_RETURN_SCORE: 85,
+  MAX_RETURN_SCORE: 70,
+  MAX_PNL_SCORE: 15,
   MAX_DRAWDOWN_SCORE: 8,
   MAX_STABILITY_SCORE: 7,
   WIN_RATE_BASELINE: 45,
+  // 排行榜稳定性参数
+  GRACE_PERIOD_HOURS: 24,
+  CONFIDENCE_DEBOUNCE_HOURS: 8,
+  PNL_RAMP: {
+    SOFT_FLOOR_FACTOR: 0.5,
+    FULL_QUALIFY_FACTOR: 1.5,
+  },
 }
 
 export { ARENA_CONFIG }
@@ -77,14 +90,32 @@ export function normalizeWinRate(winRate) {
 }
 
 /**
- * 计算 Arena Score
+ * 计算 PnL Score (0-15)
+ * 使用 log-tanh 压缩：小 PnL 快速增长，大 PnL 趋于饱和
+ *
+ * @param {number|null} pnl 已实现盈亏（USD）
+ * @param {'7D'|'30D'|'90D'} period 时间段
+ * @returns {number}
+ */
+export function calculatePnlScore(pnl, period) {
+  if (pnl === null || pnl === undefined || pnl <= 0) return 0
+  const params = ARENA_CONFIG.PNL_PARAMS[period] || ARENA_CONFIG.PNL_PARAMS['90D']
+  const logArg = 1 + pnl / params.base
+  if (logArg <= 0) return 0
+  const score = ARENA_CONFIG.MAX_PNL_SCORE * Math.tanh(params.coeff * Math.log(logArg))
+  return clip(score, 0, ARENA_CONFIG.MAX_PNL_SCORE)
+}
+
+/**
+ * 计算 Arena Score V2
+ * Return(0-70) + PnL(0-15) + Drawdown(0-8) + Stability(0-7) = 100
  *
  * @param {number} roi ROI 百分比（如 25 表示 25%）
- * @param {number} pnl 已实现盈亏（USD）
+ * @param {number|null} pnl 已实现盈亏（USD）
  * @param {number|null} maxDrawdown 最大回撤百分比
  * @param {number|null} winRate 胜率（百分比或小数）
  * @param {'7D'|'30D'|'90D'} period 时间段
- * @returns {{totalScore: number, returnScore: number, drawdownScore: number, stabilityScore: number}}
+ * @returns {{totalScore: number, returnScore: number, pnlScore: number, drawdownScore: number, stabilityScore: number}}
  */
 export function calculateArenaScore(roi, pnl, maxDrawdown, winRate, period) {
   const params = ARENA_CONFIG.PARAMS[period] || ARENA_CONFIG.PARAMS['90D']
@@ -96,11 +127,14 @@ export function calculateArenaScore(roi, pnl, maxDrawdown, winRate, period) {
   // 计算收益强度
   const intensity = (365 / days) * safeLog1p(roi / 100)
 
-  // 收益分 (0-85)
+  // 收益分 (0-70)
   const r0 = Math.tanh(params.tanhCoeff * intensity)
   const returnScore = r0 > 0
-    ? clip(ARENA_CONFIG.MAX_RETURN_SCORE * Math.pow(r0, params.roiExponent), 0, 85)
+    ? clip(ARENA_CONFIG.MAX_RETURN_SCORE * Math.pow(r0, params.roiExponent), 0, ARENA_CONFIG.MAX_RETURN_SCORE)
     : 0
+
+  // PnL分 (0-15)
+  const pnlScore = calculatePnlScore(pnl, period)
 
   // 回撤分 (0-8)
   const drawdownScore = maxDrawdown !== null && maxDrawdown !== undefined
@@ -112,22 +146,55 @@ export function calculateArenaScore(roi, pnl, maxDrawdown, winRate, period) {
     ? clip(ARENA_CONFIG.MAX_STABILITY_SCORE * clip((wr - ARENA_CONFIG.WIN_RATE_BASELINE) / (params.winRateCap - ARENA_CONFIG.WIN_RATE_BASELINE), 0, 1), 0, 7)
     : 3.5  // 无数据时给中等分
 
-  const totalScore = Math.round((returnScore + drawdownScore + stabilityScore) * 100) / 100
+  const totalScore = Math.round((returnScore + pnlScore + drawdownScore + stabilityScore) * 100) / 100
 
   return {
     totalScore,
     returnScore: Math.round(returnScore * 100) / 100,
+    pnlScore: Math.round(pnlScore * 100) / 100,
     drawdownScore: Math.round(drawdownScore * 100) / 100,
     stabilityScore: Math.round(stabilityScore * 100) / 100,
   }
 }
 
 /**
- * 检查是否达到入榜 PnL 门槛
+ * 计算 PnL 软门槛系数 (0~1)
+ * softFloor → 0, fullQualify → 1, between → linear interpolation
+ */
+export function calculatePnlQualifier(pnl, period) {
+  const threshold = ARENA_CONFIG.PNL_THRESHOLD[period] || 1000
+  const softFloor = threshold * ARENA_CONFIG.PNL_RAMP.SOFT_FLOOR_FACTOR
+  const fullQualify = threshold * ARENA_CONFIG.PNL_RAMP.FULL_QUALIFY_FACTOR
+
+  if (pnl >= fullQualify) return 1.0
+  if (pnl > softFloor) return (pnl - softFloor) / (fullQualify - softFloor)
+  return 0
+}
+
+/**
+ * 检查是否达到入榜 PnL 门槛（软门槛：pnl > softFloor）
  */
 export function meetsThreshold(pnl, period) {
-  const threshold = ARENA_CONFIG.PNL_THRESHOLD[period] || 3000
+  const threshold = ARENA_CONFIG.PNL_THRESHOLD[period] || 1000
+  const softFloor = threshold * ARENA_CONFIG.PNL_RAMP.SOFT_FLOOR_FACTOR
+  return pnl > softFloor
+}
+
+/**
+ * 检查是否达到硬门槛（原始行为）
+ */
+export function meetsHardThreshold(pnl, period) {
+  const threshold = ARENA_CONFIG.PNL_THRESHOLD[period] || 1000
   return pnl > threshold
+}
+
+/**
+ * 检查是否在保留窗口内（Grace Period）
+ */
+export function isWithinGracePeriod(lastQualifiedAt, gracePeriodHours = ARENA_CONFIG.GRACE_PERIOD_HOURS) {
+  if (!lastQualifiedAt) return false
+  const elapsed = Date.now() - new Date(lastQualifiedAt).getTime()
+  return elapsed < gracePeriodHours * 3600 * 1000
 }
 
 // ============================================

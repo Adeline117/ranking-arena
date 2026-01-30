@@ -1,8 +1,11 @@
 /**
- * Arena Score 计算模块
- * 
- * 评分结构：收益分（0-85）+ 稳定/风险分（0-15）= 总分（0-100）
- * 
+ * Arena Score V2 计算模块
+ *
+ * 评分结构：收益分（0-70）+ PnL 分（0-15）+ 回撤分（0-8）+ 稳定分（0-7）= 总分（0-100）
+ *
+ * V2 变更：从 Return Score 中分出 15 分给 PnL Score，
+ * 综合评估交易效率（ROI）与绝对盈利能力（PnL）。
+ *
  * 目标分布：
  * - 大多数普通交易员：30-40 分
  * - 60 分 = 明显优秀交易员
@@ -32,10 +35,12 @@ export interface TraderScoreInput {
 
 export interface ArenaScoreResult {
   totalScore: number      // 总分 (0-100)
-  returnScore: number     // 收益分 (0-85)
+  returnScore: number     // 收益分 (0-70)
+  pnlScore: number        // PnL 分 (0-15)
   drawdownScore: number   // 回撤分 (0-8)
   stabilityScore: number  // 稳定分 (0-7)
-  meetsThreshold: boolean // 是否达到入榜门槛
+  meetsThreshold: boolean // 是否达到入榜门槛（使用 softFloor）
+  pnlQualifier: number   // PnL 软门槛系数 (0~1)
   scoreConfidence: ScoreConfidence  // 数据完整性标记
 }
 
@@ -83,8 +88,16 @@ export const ARENA_CONFIG = {
   // 稳定性计算的基线胜率
   WIN_RATE_BASELINE: 45,
   
+  // PnL 评分参数（base = 归一化基数, coeff = tanh 系数）
+  PNL_PARAMS: {
+    '7D': { base: 500, coeff: 0.40 },
+    '30D': { base: 2000, coeff: 0.35 },
+    '90D': { base: 5000, coeff: 0.30 },
+  },
+
   // 分数权重
-  MAX_RETURN_SCORE: 85,
+  MAX_RETURN_SCORE: 70,
+  MAX_PNL_SCORE: 15,
   MAX_DRAWDOWN_SCORE: 8,
   MAX_STABILITY_SCORE: 7,
   
@@ -122,6 +135,22 @@ export const ARENA_CONFIG = {
   // 动量因子参数
   MOMENTUM_MAX_BONUS: 2.5,    // 最大加分（7D远超30D时）
   MOMENTUM_MAX_PENALTY: 1,    // 最大扣分（7D远低于30D时）
+
+  // === 排行榜稳定性参数 ===
+
+  // 保留窗口：合格过的交易员保留 24 小时不消失
+  GRACE_PERIOD_HOURS: 24,
+
+  // 置信度防抖：数据完整度变化后缓冲 8 小时
+  CONFIDENCE_DEBOUNCE_HOURS: 8,
+
+  // 软 PnL 门槛：门槛附近渐变而非二元开关
+  // softFloor = threshold * SOFT_FLOOR_FACTOR  → 完全不可见
+  // fullQualify = threshold * FULL_QUALIFY_FACTOR → 完全合格（qualifier=1）
+  PNL_RAMP: {
+    SOFT_FLOOR_FACTOR: 0.5,   // softFloor = threshold * 0.5
+    FULL_QUALIFY_FACTOR: 1.5,  // fullQualify = threshold * 1.5
+  },
 } as const
 
 // ============================================
@@ -173,8 +202,8 @@ export function calculateRoiIntensity(roi: number, period: Period): number {
 }
 
 /**
- * 计算收益分 (0-85)
- * ReturnScore = 85 * tanh(coeff * I)^exponent
+ * 计算收益分 (0-70)
+ * ReturnScore = 70 * tanh(coeff * I)^exponent
  * 
  * ROI 会被 cap 到 ARENA_CONFIG.ROI_CAP 以防止异常值
  * （如 Hyperliquid 百万级 ROI）垄断排行榜。
@@ -193,10 +222,10 @@ export function calculateReturnScore(roi: number, period: Period): number {
   // R0 = tanh(coeff * I)
   const r0 = Math.tanh(params.tanhCoeff * intensity)
   
-  // ReturnScore = 85 * R0^exponent
+  // ReturnScore = 70 * R0^exponent
   // 只有正收益才有正分数
   if (r0 <= 0) return 0
-  
+
   const score = ARENA_CONFIG.MAX_RETURN_SCORE * Math.pow(r0, params.roiExponent)
   return clip(score, 0, ARENA_CONFIG.MAX_RETURN_SCORE)
 }
@@ -248,14 +277,119 @@ export function calculateStabilityScore(winRate: number | null, period: Period):
 }
 
 /**
- * 检查是否达到入榜门槛
- * 
+ * 计算 PnL 分 (0-15)
+ * PnlScore = 15 * clip(tanh(coeff * ln(1 + pnl / base)), 0, 1)
+ *
+ * 使用 log-tanh 压缩：
+ * - 小额 PnL（$1K）获得少量分数
+ * - 大额 PnL（$100K+）获得高分但有递减效应
+ * - 负 PnL 或缺失 PnL → 0 分
+ *
+ * @param pnl 已实现盈亏（USD）
+ * @param period 时间段
+ */
+export function calculatePnlScore(pnl: number | null, period: Period): number {
+  if (pnl === null || pnl === undefined || pnl <= 0) return 0
+
+  const params = ARENA_CONFIG.PNL_PARAMS[period]
+  const logArg = 1 + pnl / params.base
+  if (logArg <= 0) return 0
+
+  const score = ARENA_CONFIG.MAX_PNL_SCORE * Math.tanh(params.coeff * Math.log(logArg))
+  return clip(score, 0, ARENA_CONFIG.MAX_PNL_SCORE)
+}
+
+/**
+ * 计算 PnL 软门槛系数 (0~1)
+ *
+ * 门槛附近渐变而非二元开关：
+ * - pnl < softFloor  → 0（不入榜）
+ * - softFloor <= pnl < fullQualify → 线性插值 (0~1)
+ * - pnl >= fullQualify → 1（完全合格）
+ *
+ * | 周期 | softFloor | threshold | fullQualify |
+ * |------|-----------|-----------|-------------|
+ * | 7D   | $100      | $200      | $300        |
+ * | 30D  | $250      | $500      | $750        |
+ * | 90D  | $500      | $1,000    | $1,500      |
+ *
+ * @param pnl 已实现盈亏（USD）
+ * @param period 时间段
+ * @returns 0~1 系数
+ */
+export function calculatePnlQualifier(pnl: number, period: Period): number {
+  const threshold = ARENA_CONFIG.PNL_THRESHOLD[period]
+  const softFloor = threshold * ARENA_CONFIG.PNL_RAMP.SOFT_FLOOR_FACTOR
+  const fullQualify = threshold * ARENA_CONFIG.PNL_RAMP.FULL_QUALIFY_FACTOR
+
+  if (pnl >= fullQualify) return 1.0
+  if (pnl > softFloor) return (pnl - softFloor) / (fullQualify - softFloor)
+  return 0
+}
+
+/**
+ * 检查是否达到入榜门槛（软门槛：pnl > softFloor 即可见）
+ *
+ * 使用 softFloor（threshold * 0.5）而非硬门槛，
+ * 配合 calculatePnlQualifier 实现渐变过渡。
+ *
  * @param pnl 已实现盈亏（USD）
  * @param period 时间段
  */
 export function meetsThreshold(pnl: number, period: Period): boolean {
   const threshold = ARENA_CONFIG.PNL_THRESHOLD[period]
+  const softFloor = threshold * ARENA_CONFIG.PNL_RAMP.SOFT_FLOOR_FACTOR
+  return pnl > softFloor
+}
+
+/**
+ * 检查是否达到硬门槛（原始行为，pnl > threshold）
+ * 用于判断是否设置 last_qualified_at 等。
+ */
+export function meetsHardThreshold(pnl: number, period: Period): boolean {
+  const threshold = ARENA_CONFIG.PNL_THRESHOLD[period]
   return pnl > threshold
+}
+
+/**
+ * 检查是否在保留窗口内（Grace Period）
+ *
+ * 交易员一旦合格上榜，即使下次抓取没抓到或临时跌破门槛，
+ * 保留 GRACE_PERIOD_HOURS 小时可见。
+ *
+ * @param lastQualifiedAt 上次合格时间（ISO string）
+ * @param gracePeriodHours 保留窗口小时数（默认 24）
+ */
+export function isWithinGracePeriod(
+  lastQualifiedAt: string | null | undefined,
+  gracePeriodHours: number = ARENA_CONFIG.GRACE_PERIOD_HOURS
+): boolean {
+  if (!lastQualifiedAt) return false
+  const elapsed = Date.now() - new Date(lastQualifiedAt).getTime()
+  return elapsed < gracePeriodHours * 3600 * 1000
+}
+
+/**
+ * 置信度防抖：数据完整度变化后缓冲一段时间
+ *
+ * 当 MDD/WR 间歇性从有变无时，不立即降低置信度乘数，
+ * 给 CONFIDENCE_DEBOUNCE_HOURS 小时缓冲。
+ *
+ * @param currentConfidence 当前置信度
+ * @param fullConfidenceAt 上次 full 置信度时间（ISO string）
+ * @param debounceHours 缓冲小时数（默认 8）
+ */
+export function debouncedConfidence(
+  currentConfidence: ScoreConfidence,
+  fullConfidenceAt: string | null | undefined,
+  debounceHours: number = ARENA_CONFIG.CONFIDENCE_DEBOUNCE_HOURS
+): ScoreConfidence {
+  if (currentConfidence === 'full') return 'full'
+  if (!fullConfidenceAt) return currentConfidence
+
+  const elapsed = Date.now() - new Date(fullConfidenceAt).getTime()
+  if (elapsed < debounceHours * 3600 * 1000) return 'full'
+  return currentConfidence
 }
 
 // ============================================
@@ -292,32 +426,38 @@ export function calculateArenaScore(
   period: Period
 ): ArenaScoreResult {
   const { roi, pnl, maxDrawdown, winRate } = input
-  
-  // 检查入榜门槛
+
+  // 检查入榜门槛（软门槛：pnl > softFloor）
   const meets = meetsThreshold(pnl, period)
-  
+
+  // 计算 PnL 软门槛系数 (0~1)
+  const pnlQualifier = calculatePnlQualifier(pnl, period)
+
   // 判断数据完整性
   const scoreConfidence = getScoreConfidence(maxDrawdown, winRate)
-  
+
   // 计算各项分数（缺失数据使用默认中位值）
   const returnScore = calculateReturnScore(roi, period)
+  const pnlScore = calculatePnlScore(pnl, period)
   const drawdownScore = calculateDrawdownScore(maxDrawdown, period)
   const stabilityScore = calculateStabilityScore(winRate, period)
-  
+
   // 原始总分
-  const rawTotal = returnScore + drawdownScore + stabilityScore
-  
+  const rawTotal = returnScore + pnlScore + drawdownScore + stabilityScore
+
   // 数据完整性惩罚：缺失 win_rate/max_drawdown 时降低总分
   // 这确保数据更完整的交易员排名更高
   const confidenceMultiplier = ARENA_CONFIG.CONFIDENCE_MULTIPLIER[scoreConfidence]
   const totalScore = clip(rawTotal * confidenceMultiplier, 0, 100)
-  
+
   return {
     totalScore: Math.round(totalScore * 100) / 100,  // 保留2位小数
     returnScore: Math.round(returnScore * 100) / 100,
+    pnlScore: Math.round(pnlScore * 100) / 100,
     drawdownScore: Math.round(drawdownScore * 100) / 100,
     stabilityScore: Math.round(stabilityScore * 100) / 100,
     meetsThreshold: meets,
+    pnlQualifier: Math.round(pnlQualifier * 1000) / 1000,  // 保留3位小数
     scoreConfidence,
   }
 }
