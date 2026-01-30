@@ -22,6 +22,7 @@ export interface InitialTrader {
 }
 
 // Source type mapping - comprehensive list of all active platforms
+// NOTE: Keys must match the `source` column in trader_snapshots exactly
 const SOURCE_TYPE_MAP: Record<string, 'futures' | 'spot' | 'web3'> = {
   // Futures platforms
   'binance_futures': 'futures',
@@ -32,6 +33,7 @@ const SOURCE_TYPE_MAP: Record<string, 'futures' | 'spot' | 'web3'> = {
   'kucoin': 'futures',
   'coinex': 'futures',
   'htx': 'futures',
+  'htx_futures': 'futures',
   'weex': 'futures',
   'phemex': 'futures',
   'bingx': 'futures',
@@ -48,32 +50,42 @@ const SOURCE_TYPE_MAP: Record<string, 'futures' | 'spot' | 'web3'> = {
   'okx_web3': 'web3',
   'hyperliquid': 'web3',
   'dydx': 'web3',
+  'binance_web3': 'web3',
   // Spot platforms
   'bitget_spot': 'spot',
   'binance_spot': 'spot',
 }
 
-// All active sources for initial render (expanded to include all scraped platforms)
+// All active sources for initial render
+// Must match `source` values in trader_snapshots table exactly
 const PRIORITY_SOURCES = [
   // Top CEX futures (highest volume)
   'binance_futures',
   'bybit',
   'bitget_futures',
   'okx_futures',
-  // Secondary CEX
+  // Secondary CEX futures
   'mexc',
   'kucoin',
-  'htx',
+  'htx_futures',    // DB uses 'htx_futures', not 'htx'
   'coinex',
   'bingx',
   'gateio',
   'phemex',
+  'xt',             // 500+ trader_sources entries
+  'weex',
+  'lbank',
+  'blofin',
   // Web3/DEX
   'gmx',
   'hyperliquid',
   'kwenta',
   'gains',
   'okx_web3',
+  'dydx',
+  // Spot
+  'bitget_spot',
+  'binance_spot',
 ]
 
 export async function getInitialTraders(
@@ -116,7 +128,7 @@ export async function getInitialTraders(
         .gt('arena_score', 0)
         .lte('roi', ROI_FILTER_CAP) // Filter out extreme ROI values
         .order('arena_score', { ascending: false, nullsFirst: false })
-        .limit(limit * 2), // Fetch extra to account for duplicates
+        .limit(limit * 4), // Fetch 4x to account for dedup + platform diversity filtering
 
       supabase
         .from('trader_snapshots')
@@ -134,14 +146,14 @@ export async function getInitialTraders(
       return { traders: [], lastUpdated: latestSnapshot?.captured_at || null }
     }
 
-    // Dedupe by source + trader_id
+    // Dedupe by source + trader_id (keep extra for diversity filtering later)
     const seen = new Set<string>()
     const uniqueSnapshots = snapshots.filter(snap => {
       const key = `${snap.source}:${snap.source_trader_id}`
       if (seen.has(key)) return false
       seen.add(key)
       return true
-    }).slice(0, limit)
+    }).slice(0, limit * 3)
 
     // Get handles from trader_sources - parallelize with other work if needed
     const traderIds = uniqueSnapshots.map(s => s.source_trader_id)
@@ -196,8 +208,33 @@ export async function getInitialTraders(
     // Sort by recalculated arena_score descending
     traders.sort((a, b) => b.arena_score - a.arena_score)
 
+    // Platform diversity: prevent any single platform from dominating the list.
+    // Without this, top results are often 40-50% one platform (e.g. hyperliquid or binance_futures).
+    // Rule: no platform takes more than MAX_PLATFORM_SHARE of the final list.
+    const MAX_PLATFORM_SHARE = 0.30 // 30%
+    const maxPerPlatform = Math.max(3, Math.ceil(limit * MAX_PLATFORM_SHARE))
+    const platformCounts = new Map<string, number>()
+    const diverseTraders: InitialTrader[] = []
+    const overflow: InitialTrader[] = []
+
+    for (const trader of traders) {
+      const count = platformCounts.get(trader.source) || 0
+      if (count < maxPerPlatform) {
+        diverseTraders.push(trader)
+        platformCounts.set(trader.source, count + 1)
+      } else {
+        overflow.push(trader)
+      }
+    }
+
+    // If we have fewer than limit after diversity filter, backfill from overflow
+    let finalTraders = diverseTraders.slice(0, limit)
+    if (finalTraders.length < limit && overflow.length > 0) {
+      finalTraders = [...finalTraders, ...overflow.slice(0, limit - finalTraders.length)]
+    }
+
     return {
-      traders: traders.slice(0, limit),
+      traders: finalTraders,
       lastUpdated: latestSnapshot?.captured_at || null,
     }
   } catch (err) {
