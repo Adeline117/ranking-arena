@@ -108,8 +108,9 @@ export async function getInitialTraders(
         `)
         .in('source', PRIORITY_SOURCES)
         .eq('season_id', timeRange)
-        // Removed arena_score >= 60 filter to show all traders with valid data
-        .order('arena_score', { ascending: false })
+        .not('arena_score', 'is', null)
+        .gt('arena_score', 0)
+        .order('arena_score', { ascending: false, nullsFirst: false })
         .limit(limit * 2), // Fetch extra to account for duplicates
 
       supabase
