@@ -956,15 +956,22 @@ function SettingsContent() {
   }
 
   const handleAvatarCropComplete = (croppedBlob: Blob) => {
-    // Create a File from the Blob
-    const croppedFile = new File([croppedBlob], 'avatar.jpg', { type: 'image/jpeg' })
-    setAvatarFile(croppedFile)
-    // Create preview URL
-    const previewUrl = URL.createObjectURL(croppedBlob)
-    setPreviewUrl(previewUrl)
-    // Close cropper
-    setShowAvatarCropper(false)
-    setCropImageSrc(null)
+    try {
+      // Create a File from the Blob
+      const croppedFile = new File([croppedBlob], 'avatar.jpg', { type: 'image/jpeg' })
+      setAvatarFile(croppedFile)
+      // Create preview URL
+      const previewUrl = URL.createObjectURL(croppedBlob)
+      setPreviewUrl(previewUrl)
+      // Close cropper
+      setShowAvatarCropper(false)
+      setCropImageSrc(null)
+      // Show success message
+      showToast(t('cropSuccess') || 'Crop successful! Click Save to upload.', 'success')
+    } catch (error) {
+      console.error('Error in handleAvatarCropComplete:', error)
+      showToast(t('cropFailed') || 'Failed to process cropped image', 'error')
+    }
   }
 
   const handleCoverChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -987,15 +994,22 @@ function SettingsContent() {
   }
 
   const handleCoverCropComplete = (croppedBlob: Blob) => {
-    // Create a File from the Blob
-    const croppedFile = new File([croppedBlob], 'cover.jpg', { type: 'image/jpeg' })
-    setCoverFile(croppedFile)
-    // Create preview URL
-    const coverPreview = URL.createObjectURL(croppedBlob)
-    setCoverPreviewUrl(coverPreview)
-    // Close cropper
-    setShowCoverCropper(false)
-    setCropImageSrc(null)
+    try {
+      // Create a File from the Blob
+      const croppedFile = new File([croppedBlob], 'cover.jpg', { type: 'image/jpeg' })
+      setCoverFile(croppedFile)
+      // Create preview URL
+      const coverPreview = URL.createObjectURL(croppedBlob)
+      setCoverPreviewUrl(coverPreview)
+      // Close cropper
+      setShowCoverCropper(false)
+      setCropImageSrc(null)
+      // Show success message
+      showToast(t('cropSuccess') || 'Crop successful! Click Save to upload.', 'success')
+    } catch (error) {
+      console.error('Error in handleCoverCropComplete:', error)
+      showToast(t('cropFailed') || 'Failed to process cropped image', 'error')
+    }
   }
 
   const uploadFile = async (file: File, bucket: string, userId: string, maxSize: number): Promise<string | null> => {
@@ -2926,6 +2940,9 @@ function SettingsContent() {
             setShowAvatarCropper(false)
             setCropImageSrc(null)
           }}
+          onError={(message) => {
+            showToast(message, 'error')
+          }}
           aspectRatio={1}
           cropShape="round"
           title={t('cropAvatar')}
@@ -2940,6 +2957,9 @@ function SettingsContent() {
           onCancel={() => {
             setShowCoverCropper(false)
             setCropImageSrc(null)
+          }}
+          onError={(message) => {
+            showToast(message, 'error')
           }}
           aspectRatio={3}
           cropShape="rect"

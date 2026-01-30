@@ -408,7 +408,7 @@ function ReviewForm({
     setSubmitting(true)
     try {
       const { ok, status, data } = await authedFetch<{ success: boolean; error?: string }>(
-        `/api/trader/${encodeURIComponent(traderHandle)}/reviews`,
+        `/api/traders/${encodeURIComponent(traderHandle)}/reviews`,
         'POST',
         accessToken,
         { rating, content: content.trim() },
@@ -536,7 +536,7 @@ export default function TraderReviews({ traderId, traderHandle }: TraderReviewsP
         data?: { reviews: Review[]; summary: ReviewSummary }
         meta?: { has_more: boolean }
       }>(
-        `/api/trader/${encodeURIComponent(traderHandle)}/reviews?limit=20&offset=${offset}&sort=${sortMode}`,
+        `/api/traders/${encodeURIComponent(traderHandle)}/reviews?limit=20&offset=${offset}&sort=${sortMode}`,
         'GET',
         accessToken,
       )
@@ -577,7 +577,7 @@ export default function TraderReviews({ traderId, traderHandle }: TraderReviewsP
         success: boolean
         data?: { liked: boolean; like_count: number }
       }>(
-        `/api/trader/${encodeURIComponent(traderHandle)}/reviews/like`,
+        `/api/traders/${encodeURIComponent(traderHandle)}/reviews/like`,
         'POST',
         accessToken,
         { review_id: reviewId },
@@ -604,7 +604,7 @@ export default function TraderReviews({ traderId, traderHandle }: TraderReviewsP
 
     try {
       const { ok } = await authedFetch(
-        `/api/trader/${encodeURIComponent(traderHandle)}/reviews`,
+        `/api/traders/${encodeURIComponent(traderHandle)}/reviews`,
         'DELETE',
         accessToken,
         { review_id: reviewId },

@@ -14,6 +14,7 @@ interface ImageCropperProps {
   aspectRatio?: number
   cropShape?: 'rect' | 'round'
   title?: string
+  onError?: (message: string) => void
 }
 
 // Create image from URL
@@ -92,6 +93,7 @@ export function ImageCropper({
   aspectRatio = 1,
   cropShape = 'round',
   title,
+  onError,
 }: ImageCropperProps) {
   const { t } = useLanguage()
   const [crop, setCrop] = useState<Point>({ x: 0, y: 0 })
@@ -107,7 +109,11 @@ export function ImageCropper({
   )
 
   const handleConfirm = async () => {
-    if (!croppedAreaPixels) return
+    if (!croppedAreaPixels) {
+      console.error('No crop area selected')
+      onError?.(t('noCropAreaSelected') || 'Please select an area to crop')
+      return
+    }
 
     setProcessing(true)
     try {
@@ -115,6 +121,8 @@ export function ImageCropper({
       onCropComplete(croppedBlob)
     } catch (error) {
       console.error('Error cropping image:', error)
+      const errorMessage = error instanceof Error ? error.message : t('cropFailed') || 'Failed to crop image'
+      onError?.(errorMessage)
     } finally {
       setProcessing(false)
     }
