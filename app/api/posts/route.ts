@@ -8,6 +8,8 @@
  * - 并行获取用户反应和投票状态
  */
 
+export const runtime = 'edge'
+
 import { NextRequest } from 'next/server'
 import {
   getSupabaseAdmin,
