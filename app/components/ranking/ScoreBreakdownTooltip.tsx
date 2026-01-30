@@ -30,7 +30,7 @@ export const ScoreBreakdownTooltip = memo(function ScoreBreakdownTooltip({
   const [show, setShow] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
-  if (trader.return_score == null && trader.drawdown_score == null && trader.stability_score == null) {
+  if (trader.return_score == null && trader.pnl_score == null && trader.drawdown_score == null && trader.stability_score == null) {
     return null
   }
 
@@ -72,7 +72,8 @@ export const ScoreBreakdownTooltip = memo(function ScoreBreakdownTooltip({
           <div style={{ fontWeight: 700, marginBottom: 2, color: tokens.colors.text.primary }}>
             {language === 'zh' ? '分数构成' : 'Score Breakdown'}
           </div>
-          <div>{language === 'zh' ? '收益' : 'Return'}: <span style={{ color: tokens.colors.accent.success, fontWeight: 700 }}>{trader.return_score?.toFixed(1) ?? '—'}</span>/85</div>
+          <div>{language === 'zh' ? '收益' : 'Return'}: <span style={{ color: tokens.colors.accent.success, fontWeight: 700 }}>{trader.return_score?.toFixed(1) ?? '—'}</span>/70</div>
+          <div>{language === 'zh' ? '盈亏' : 'PnL'}: <span style={{ color: tokens.colors.accent.success, fontWeight: 700 }}>{trader.pnl_score?.toFixed(1) ?? '—'}</span>/15</div>
           <div>
             {language === 'zh' ? '回撤' : 'Drawdown'}: <span style={{ color: tokens.colors.accent.warning, fontWeight: 700 }}>{trader.drawdown_score?.toFixed(1) ?? '—'}</span>/8
             {trader.max_drawdown == null && <span style={{ opacity: 0.6, fontSize: '10px' }}> *</span>}

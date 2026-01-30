@@ -18,18 +18,40 @@ const clip = (v, min, max) => Math.max(min, Math.min(max, v))
 const safeLog1p = x => x <= -1 ? 0 : Math.log(1 + x)
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)) }
 
+const ARENA_CONFIG = {
+  MAX_RETURN_SCORE: 70,
+  MAX_PNL_SCORE: 15,
+  PARAMS: {
+    '7D': { tanhCoeff: 0.08, roiExponent: 1.8, mddThreshold: 15, winRateCap: 62 },
+    '30D': { tanhCoeff: 0.15, roiExponent: 1.6, mddThreshold: 30, winRateCap: 68 },
+    '90D': { tanhCoeff: 0.18, roiExponent: 1.6, mddThreshold: 40, winRateCap: 70 },
+  },
+  PNL_PARAMS: {
+    '7D': { base: 500, coeff: 0.40 },
+    '30D': { base: 2000, coeff: 0.35 },
+    '90D': { base: 5000, coeff: 0.30 },
+  },
+}
+
 function calculateArenaScore(roi, pnl, maxDrawdown, winRate, period) {
-  const params = { '7D': { tanhCoeff: 0.08, roiExponent: 1.8, mddThreshold: 15, winRateCap: 62 },
-                   '30D': { tanhCoeff: 0.15, roiExponent: 1.6, mddThreshold: 30, winRateCap: 68 },
-                   '90D': { tanhCoeff: 0.18, roiExponent: 1.6, mddThreshold: 40, winRateCap: 70 } }[period] || { tanhCoeff: 0.18, roiExponent: 1.6, mddThreshold: 40, winRateCap: 70 }
+  const params = ARENA_CONFIG.PARAMS[period] || ARENA_CONFIG.PARAMS['90D']
   const days = period === '7D' ? 7 : period === '30D' ? 30 : 90
   const wr = winRate !== null && winRate !== undefined ? (winRate <= 1 ? winRate * 100 : winRate) : null
   const intensity = (365 / days) * safeLog1p((roi || 0) / 100)
   const r0 = Math.tanh(params.tanhCoeff * intensity)
-  const returnScore = r0 > 0 ? clip(85 * Math.pow(r0, params.roiExponent), 0, 85) : 0
+  const returnScore = r0 > 0 ? clip(ARENA_CONFIG.MAX_RETURN_SCORE * Math.pow(r0, params.roiExponent), 0, ARENA_CONFIG.MAX_RETURN_SCORE) : 0
+  // PnL score (0-15)
+  const pnlParams = ARENA_CONFIG.PNL_PARAMS[period] || ARENA_CONFIG.PNL_PARAMS['90D']
+  let pnlScore = 0
+  if (pnl !== null && pnl !== undefined && pnl > 0) {
+    const logArg = 1 + pnl / pnlParams.base
+    if (logArg > 0) {
+      pnlScore = clip(ARENA_CONFIG.MAX_PNL_SCORE * Math.tanh(pnlParams.coeff * Math.log(logArg)), 0, ARENA_CONFIG.MAX_PNL_SCORE)
+    }
+  }
   const drawdownScore = maxDrawdown !== null ? clip(8 * clip(1 - Math.abs(maxDrawdown) / params.mddThreshold, 0, 1), 0, 8) : 4
   const stabilityScore = wr !== null ? clip(7 * clip((wr - 45) / (params.winRateCap - 45), 0, 1), 0, 7) : 3.5
-  return Math.round((returnScore + drawdownScore + stabilityScore) * 100) / 100
+  return Math.round((returnScore + pnlScore + drawdownScore + stabilityScore) * 100) / 100
 }
 
 async function main() {

@@ -73,7 +73,7 @@ export async function GET(request: NextRequest) {
 
     const sortDir = (searchParams.get('sort_dir') || 'desc') as 'asc' | 'desc';
 
-    const limit = Math.min(parseInt(searchParams.get('limit') || '1000', 10) || 1000, 1000);
+    const limit = Math.min(parseInt(searchParams.get('limit') || '100', 10) || 100, 500);
     const offset = parseInt(searchParams.get('offset') || '0', 10) || 0;
     const minPnl = searchParams.get('min_pnl') ? Number(searchParams.get('min_pnl')) : undefined;
     const minTrades = searchParams.get('min_trades') ? Number(searchParams.get('min_trades')) : undefined;

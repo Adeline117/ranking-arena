@@ -73,6 +73,14 @@ export const metadata: Metadata = {
       "Aggregating 90-day ROI rankings from multiple exchanges. Real-time updates, follow traders and share insights.",
     url: process.env.NEXT_PUBLIC_APP_URL || "https://www.arenafi.org",
     siteName: "Arena",
+    images: [
+      {
+        url: `${process.env.NEXT_PUBLIC_APP_URL || "https://www.arenafi.org"}/og-image.png`,
+        width: 1200,
+        height: 630,
+        alt: "Arena - Crypto Trader Leaderboard",
+      },
+    ],
   },
   robots: {
     index: true,
@@ -86,7 +94,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" data-theme="dark" translate="no" className={inter.variable}>
+    <html lang="en" dir="ltr" data-theme="dark" translate="no" className={inter.variable}>
       <head>
         {/* Inline critical CSS for faster initial render */}
         <style dangerouslySetInnerHTML={{ __html: getCriticalCss() }} />

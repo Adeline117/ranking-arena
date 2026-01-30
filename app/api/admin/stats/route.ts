@@ -102,22 +102,33 @@ export async function GET(req: NextRequest) {
       .select('*', { count: 'exact', head: true })
       .eq('status', 'pending')
     
-    // Scraper health summary (reuse existing logic)
+    // Scraper health summary - query directly instead of self-fetch
     let scraperHealth = { fresh: 0, stale: 0, critical: 0 }
     try {
-      const freshnessRes = await fetch(
-        `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/api/cron/check-data-freshness`
-      )
-      const freshnessData = await freshnessRes.json()
-      if (freshnessData.summary) {
-        scraperHealth = {
-          fresh: freshnessData.summary.fresh || 0,
-          stale: freshnessData.summary.stale || 0,
-          critical: freshnessData.summary.critical || 0,
+      const { data: sources } = await supabase
+        .from('trader_sources')
+        .select('source, updated_at')
+        .not('updated_at', 'is', null)
+
+      if (sources) {
+        const now = Date.now()
+        const grouped = new Map<string, Date>()
+        for (const s of sources) {
+          const existing = grouped.get(s.source)
+          const updated = new Date(s.updated_at)
+          if (!existing || updated > existing) {
+            grouped.set(s.source, updated)
+          }
+        }
+        for (const [, lastUpdate] of grouped) {
+          const ageHours = (now - lastUpdate.getTime()) / (1000 * 60 * 60)
+          if (ageHours < 24) scraperHealth.fresh++
+          else if (ageHours < 72) scraperHealth.stale++
+          else scraperHealth.critical++
         }
       }
     } catch (e: unknown) {
-      logger.warn('Error fetching scraper health', { error: e })
+      logger.warn('Error computing scraper health', { error: e })
     }
     
     return NextResponse.json({

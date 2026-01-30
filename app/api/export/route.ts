@@ -6,6 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin, getAuthUser } from '@/lib/api'
+import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
 export const runtime = 'nodejs'
 
@@ -14,6 +15,9 @@ type ExportType = 'traders' | 'snapshots'
 
 export async function GET(request: NextRequest) {
   try {
+    // Rate limiting - stricter for export
+    const rateLimitResponse = await checkRateLimit(request, { window: 60, max: 10 })
+    if (rateLimitResponse) return rateLimitResponse
     const { searchParams } = new URL(request.url)
     const format = (searchParams.get('format') || 'csv') as ExportFormat
     const type = (searchParams.get('type') || 'traders') as ExportType
