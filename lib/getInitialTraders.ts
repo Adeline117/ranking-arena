@@ -156,7 +156,7 @@ export async function getInitialTraders(
       handleMap.set(key, { handle: s.handle, avatar_url: s.avatar_url })
     })
 
-    // Build trader objects
+    // Build trader objects with recalculated arena_score using latest formula
     const traders: InitialTrader[] = uniqueSnapshots.map(snap => {
       const key = `${snap.source}:${snap.source_trader_id}`
       const info = handleMap.get(key) || { handle: null, avatar_url: null }
@@ -165,6 +165,18 @@ export async function getInitialTraders(
       const normalizedWinRate = snap.win_rate != null
         ? (snap.win_rate <= 1 ? snap.win_rate * 100 : snap.win_rate)
         : null
+
+      // Recalculate arena_score with the latest formula (ROI cap + confidence penalty)
+      // This ensures SSR data matches what /api/traders returns
+      const scoreResult = calculateArenaScore(
+        {
+          roi: snap.roi ?? 0,
+          pnl: snap.pnl ?? 0,
+          maxDrawdown: snap.max_drawdown,
+          winRate: normalizedWinRate,
+        },
+        timeRange
+      )
 
       return {
         id: snap.source_trader_id,
@@ -177,11 +189,11 @@ export async function getInitialTraders(
         source: snap.source,
         source_type: SOURCE_TYPE_MAP[snap.source] || 'futures',
         avatar_url: info.avatar_url,
-        arena_score: snap.arena_score ?? 0,
+        arena_score: scoreResult.totalScore,
       }
     })
 
-    // Sort by arena_score descending
+    // Sort by recalculated arena_score descending
     traders.sort((a, b) => b.arena_score - a.arena_score)
 
     return {
