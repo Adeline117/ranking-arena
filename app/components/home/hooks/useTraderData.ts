@@ -108,8 +108,9 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
     const requestPromise = (async (): Promise<CachedData> => {
       try {
         // Feature 1: Include sort params in fetch URL
-        // 加载完整数据以支持筛选和分类功能（API 最大支持 3000 条）
-        let url = `/api/traders?timeRange=${timeRange}&limit=3000`
+        // Load enough data for client-side search/sort. RankingTable caps at 1000 (slice(0,1000)).
+        // SSR already provides 50 traders; 500 here covers filtering while being 83% smaller than 3000.
+        let url = `/api/traders?timeRange=${timeRange}&limit=500`
         if (sortBy && sortBy !== 'arena_score') {
           url += `&sortBy=${sortBy}&order=${sortOrder || 'desc'}`
         }
@@ -196,7 +197,7 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
       // Use initial data immediately - don't block for full fetch
       setLoading(false)
 
-      // Defer full 3000 trader fetch until browser is idle (after LCP)
+      // Defer full 500 trader fetch until browser is idle (after LCP)
       const deferredFetch = () => {
         // Only fetch full data if user hasn't switched time range
         if (activeTimeRange === '90D') {

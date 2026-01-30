@@ -5,7 +5,6 @@
  * 捕获整个应用的未处理错误并上报到 Sentry
  */
 
-import * as Sentry from '@sentry/nextjs'
 import { useEffect, useState } from 'react'
 
 const ARENA_PURPLE = '#8b6fa8'
@@ -20,12 +19,16 @@ export default function GlobalError({
   const [isRetrying, setIsRetrying] = useState(false)
 
   useEffect(() => {
-    // Report error to Sentry
-    Sentry.captureException(error, {
-      tags: {
-        errorType: 'global',
-        digest: error.digest,
-      },
+    // 动态加载 Sentry 上报错误（避免静态 import 增加 bundle）
+    import('@sentry/nextjs').then(Sentry => {
+      Sentry.captureException(error, {
+        tags: {
+          errorType: 'global',
+          digest: error.digest,
+        },
+      })
+    }).catch(() => {
+      // Sentry 加载失败时静默处理
     })
   }, [error])
 

@@ -20,11 +20,10 @@ export default function Button({
   icon,
   iconPosition = 'left',
   style,
+  className,
   children,
   ...props
 }: ButtonProps) {
-  const [isPressed, setIsPressed] = useState(false)
-  const [isHovered, setIsHovered] = useState(false)
   const [ripple, setRipple] = useState<{ x: number; y: number; key: number } | null>(null)
   const rippleTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
@@ -59,11 +58,9 @@ export default function Button({
     borderRadius: tokens.radius.lg,
     fontWeight: tokens.typography.fontWeight.bold,
     cursor: isDisabled ? 'not-allowed' : 'pointer',
-    transition: tokens.transition.all,
     fontFamily: tokens.typography.fontFamily.sans.join(', '),
     position: 'relative',
     overflow: 'hidden',
-    transform: isPressed && !isDisabled ? 'scale(0.97)' : isHovered && !isDisabled ? 'translateY(-2px)' : 'scale(1)',
     ...(fullWidth && { width: '100%' }),
   }
 
@@ -124,76 +121,38 @@ export default function Button({
     },
   }
 
-  const disabledStyle: React.CSSProperties = isDisabled
-    ? {
-        opacity: 0.5,
-        cursor: 'not-allowed',
-        transform: 'none',
-      }
-    : {}
-
   // 自动生成aria-label（如果未提供）
   const ariaLabel = props['aria-label'] || (typeof children === 'string' ? children : undefined) || 'Button'
 
-  const getHoverShadow = () => {
-    switch (variant) {
-      case 'primary': return tokens.shadow.glow
-      case 'success': return tokens.shadow.glowSuccess
-      case 'danger': return tokens.shadow.glowError
-      default: return tokens.shadow.md
-    }
-  }
-  
+  // Build CSS class string: btn-base handles transition, hover, and active via CSS
+  const btnClassName = [
+    'btn-base',
+    `btn-${variant}`,
+    className,
+  ].filter(Boolean).join(' ')
+
   return (
     <button
+      className={btnClassName}
       style={{
         ...baseStyle,
         ...variantStyles[variant],
         ...sizeStyles[size],
-        ...disabledStyle,
         ...style,
-      }}
-      onMouseEnter={(e) => {
-        if (!isDisabled) {
-          setIsHovered(true)
-          e.currentTarget.style.boxShadow = getHoverShadow()
-          if (variant === 'primary') {
-            e.currentTarget.style.background = tokens.gradient.primaryHover
-          }
-        }
-      }}
-      onMouseLeave={(e) => {
-        if (!isDisabled) {
-          setIsHovered(false)
-          e.currentTarget.style.transform = 'translateY(0)'
-          e.currentTarget.style.boxShadow = variantStyles[variant]?.boxShadow?.toString() || tokens.shadow.xs
-          if (variant === 'primary') {
-            e.currentTarget.style.background = tokens.gradient.primary
-          }
-        }
-        setIsPressed(false)
       }}
       onMouseDown={(e) => {
         if (!isDisabled) {
-          setIsPressed(true)
           createRipple(e)
         }
         props.onMouseDown?.(e)
-      }}
-      onMouseUp={() => {
-        setIsPressed(false)
       }}
       onKeyDown={(e) => {
         // 键盘导航支持：Enter和Space触发点击
         if ((e.key === 'Enter' || e.key === ' ') && !isDisabled) {
           e.preventDefault()
-          setIsPressed(true)
           e.currentTarget.click()
         }
         props.onKeyDown?.(e)
-      }}
-      onKeyUp={() => {
-        setIsPressed(false)
       }}
       aria-label={ariaLabel}
       aria-busy={loading}

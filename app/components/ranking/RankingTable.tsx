@@ -305,7 +305,7 @@ function RankingTableInner(props: {
       }
     `}</style>
     <Box
-      className="glass-card"
+      className="glass-card ranking-table-container"
       p={0}
       radius="xl"
       style={{

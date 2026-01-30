@@ -34,15 +34,6 @@ const MENU_LINK_STYLE: React.CSSProperties = {
   textDecoration: 'none',
   fontSize: tokens.typography.fontSize.base,
   fontWeight: tokens.typography.fontWeight.bold,
-  transition: `all ${tokens.transition.base}`,
-}
-
-function applyMenuHoverIn(e: React.MouseEvent<HTMLAnchorElement>): void {
-  e.currentTarget.style.background = tokens.colors.bg.secondary
-}
-
-function applyMenuHoverOut(e: React.MouseEvent<HTMLAnchorElement>): void {
-  e.currentTarget.style.background = 'transparent'
 }
 
 export default function TopNav({ email }: { email: string | null }) {
@@ -261,27 +252,18 @@ export default function TopNav({ email }: { email: string | null }) {
       >
         {/* 左：Logo + Nav */}
         <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3] }}>
-          <Link 
-            href="/" 
-            className="top-nav-logo touch-target"
+          <Link
+            href="/"
+            className="top-nav-logo top-nav-logo-link touch-target"
             aria-label={t('backToHome')}
             tabIndex={0}
-            style={{ 
-              display: 'flex', 
-              alignItems: 'center', 
+            style={{
+              display: 'flex',
+              alignItems: 'center',
               gap: tokens.spacing[2],
               textDecoration: 'none',
-              transition: `all ${tokens.transition.base}`,
               padding: '4px',
               marginLeft: '-4px',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.transform = 'translateY(-1px)'
-              e.currentTarget.style.opacity = '0.85'
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.transform = 'translateY(0)'
-              e.currentTarget.style.opacity = '1'
             }}
             onKeyDown={(e) => {
               if (e.key === 'Enter' || e.key === ' ') {
@@ -353,6 +335,7 @@ export default function TopNav({ email }: { email: string | null }) {
                 <Link
                   key={item.href}
                   href={item.href}
+                  className={`top-nav-link${isActive ? ' top-nav-link-active' : ''}`}
                   onClick={() => {
                     // Trigger feed refresh when clicking groups link while already on groups page
                     if (item.href === '/groups' && isActive) {
@@ -367,21 +350,6 @@ export default function TopNav({ email }: { email: string | null }) {
                     fontWeight: isActive ? 800 : 600,
                     fontSize: tokens.typography.fontSize.sm,
                     background: isActive ? tokens.colors.bg.secondary : 'transparent',
-                    transition: `all ${tokens.transition.base}`,
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!isActive) {
-                      e.currentTarget.style.color = tokens.colors.text.primary
-                      e.currentTarget.style.background = tokens.colors.bg.secondary
-                      e.currentTarget.style.transform = 'translateY(-1px)'
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!isActive) {
-                      e.currentTarget.style.color = tokens.colors.text.secondary
-                      e.currentTarget.style.background = 'transparent'
-                      e.currentTarget.style.transform = 'translateY(0)'
-                    }
                   }}
                 >
                   {label}
@@ -406,6 +374,7 @@ export default function TopNav({ email }: { email: string | null }) {
           <form onSubmit={handleSearch} role="search" style={{ width: '100%', position: 'relative' }}>
             <input
               type="search"
+              className="top-nav-search-input"
               placeholder={t('searchPlaceholder')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -424,15 +393,10 @@ export default function TopNav({ email }: { email: string | null }) {
                 outline: 'none',
                 fontWeight: tokens.typography.fontWeight.bold,
                 fontSize: tokens.typography.fontSize.sm,
-                transition: tokens.transition.all,
                 fontFamily: tokens.typography.fontFamily.sans.join(', '),
               }}
-              onFocus={(e) => {
+              onFocus={() => {
                 setShowSearchDropdown(true)
-                e.currentTarget.style.borderColor = tokens.colors.accent.primary
-                e.currentTarget.style.background = tokens.glass.bg.medium
-                e.currentTarget.style.boxShadow = `0 0 0 3px ${tokens.colors.accent.primary}20`
-                e.currentTarget.style.transform = 'scale(1.02)'
               }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
@@ -442,12 +406,6 @@ export default function TopNav({ email }: { email: string | null }) {
                   setShowSearchDropdown(false)
                   e.currentTarget.blur()
                 }
-              }}
-              onBlur={(e) => {
-                e.currentTarget.style.borderColor = tokens.colors.border.primary
-                e.currentTarget.style.background = tokens.glass.bg.light
-                e.currentTarget.style.boxShadow = 'none'
-                e.currentTarget.style.transform = 'scale(1)'
               }}
             />
             <Box
@@ -508,6 +466,7 @@ export default function TopNav({ email }: { email: string | null }) {
               {/* 通知铃铛图标 - desktop opens panel, mobile navigates to /inbox */}
               <button
                 data-inbox-trigger
+                className="top-nav-notif-btn"
                 aria-label={t('inbox')}
                 onClick={() => {
                   // On mobile, navigate to inbox page; on desktop, toggle panel
@@ -527,17 +486,8 @@ export default function TopNav({ email }: { email: string | null }) {
                   borderRadius: tokens.radius.full,
                   background: 'transparent',
                   color: tokens.colors.text.secondary,
-                  transition: `all ${tokens.transition.base}`,
                   border: 'none',
                   cursor: 'pointer',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = tokens.colors.bg.secondary
-                  e.currentTarget.style.color = tokens.colors.text.primary
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'transparent'
-                  e.currentTarget.style.color = tokens.colors.text.secondary
                 }}
               >
                 <NotificationIcon size={20} />
@@ -659,6 +609,7 @@ export default function TopNav({ email }: { email: string | null }) {
                   <Link
                     href={myHandle ? `/u/${encodeURIComponent(myHandle)}` : '/'}
                     role="menuitem"
+                    className="top-nav-menu-link"
                     onClick={(e) => {
                       if (!myHandle) {
                         e.preventDefault()
@@ -668,8 +619,6 @@ export default function TopNav({ email }: { email: string | null }) {
                       }
                     }}
                     style={{ ...MENU_LINK_STYLE, cursor: 'pointer' }}
-                    onMouseEnter={applyMenuHoverIn}
-                    onMouseLeave={applyMenuHoverOut}
                   >
                     <UserIcon size={16} />
                     <span>{t('myHome')}</span>
@@ -677,9 +626,8 @@ export default function TopNav({ email }: { email: string | null }) {
                   <Link
                     href="/inbox"
                     role="menuitem"
+                    className="top-nav-menu-link"
                     style={{ ...MENU_LINK_STYLE, position: 'relative' }}
-                    onMouseEnter={applyMenuHoverIn}
-                    onMouseLeave={applyMenuHoverOut}
                     onClick={() => setShowUserMenu(false)}
                   >
                     <Box style={{ position: 'relative' }}>
@@ -712,9 +660,8 @@ export default function TopNav({ email }: { email: string | null }) {
                   <Link
                     href="/settings"
                     role="menuitem"
+                    className="top-nav-menu-link"
                     style={MENU_LINK_STYLE}
-                    onMouseEnter={applyMenuHoverIn}
-                    onMouseLeave={applyMenuHoverOut}
                     onClick={() => setShowUserMenu(false)}
                   >
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -734,6 +681,7 @@ export default function TopNav({ email }: { email: string | null }) {
                   <Link
                     href="/logout"
                     role="menuitem"
+                    className="top-nav-logout-link"
                     style={{
                       display: 'block',
                       padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
@@ -742,15 +690,6 @@ export default function TopNav({ email }: { email: string | null }) {
                       textDecoration: 'none',
                       fontSize: tokens.typography.fontSize.base,
                       fontWeight: tokens.typography.fontWeight.bold,
-                      transition: `all ${tokens.transition.base}`,
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.background = tokens.colors.bg.secondary
-                      e.currentTarget.style.color = tokens.colors.text.primary
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = 'transparent'
-                      e.currentTarget.style.color = tokens.colors.text.secondary
                     }}
                     onClick={() => setShowUserMenu(false)}
                   >
@@ -764,7 +703,7 @@ export default function TopNav({ email }: { email: string | null }) {
               href="/login"
               aria-label={t('login')}
               tabIndex={0}
-              className="btn-press touch-target"
+              className="btn-press touch-target top-nav-login-link"
               style={{
                 padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
                 borderRadius: tokens.radius.lg,
@@ -773,7 +712,6 @@ export default function TopNav({ email }: { email: string | null }) {
                 textDecoration: 'none',
                 fontWeight: tokens.typography.fontWeight.black,
                 fontSize: tokens.typography.fontSize.sm,
-                transition: tokens.transition.all,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -781,14 +719,6 @@ export default function TopNav({ email }: { email: string | null }) {
                 height: 36,
                 border: 'none',
                 boxShadow: `0 4px 12px ${tokens.colors.accent.primary}40`,
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = 'translateY(-2px)'
-                e.currentTarget.style.boxShadow = tokens.shadow.glow
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = 'translateY(0)'
-                e.currentTarget.style.boxShadow = `0 4px 12px ${tokens.colors.accent.primary}40`
               }}
             >
               {t('login')}
