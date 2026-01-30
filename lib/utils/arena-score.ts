@@ -209,8 +209,9 @@ export function calculateReturnScore(roi: number, period: Period): number {
  * @param period 时间段
  */
 export function calculateDrawdownScore(maxDrawdown: number | null, period: Period): number {
-  // 缺失时使用默认中位值（-20%）而非给予固定中等分数
-  const effectiveMdd = (maxDrawdown === null || maxDrawdown === undefined)
+  // 缺失或 0 时使用默认中位值（-20%）
+  // DD=0 不代表零回撤，通常是数据缺失被存为 0，不应获得满分
+  const effectiveMdd = (maxDrawdown === null || maxDrawdown === undefined || maxDrawdown === 0)
     ? ARENA_CONFIG.DEFAULTS.MAX_DRAWDOWN
     : maxDrawdown
 
@@ -277,7 +278,8 @@ export function getScoreConfidence(
   maxDrawdown: number | null | undefined,
   winRate: number | null | undefined,
 ): ScoreConfidence {
-  const hasMdd = maxDrawdown !== null && maxDrawdown !== undefined
+  // DD=0 也视为缺失数据（通常是未提供而非真正零回撤）
+  const hasMdd = maxDrawdown !== null && maxDrawdown !== undefined && maxDrawdown !== 0
   const hasWr = winRate !== null && winRate !== undefined
 
   if (hasMdd && hasWr) return 'full'
