@@ -123,7 +123,7 @@ export async function GET(request: NextRequest) {
       const [sourcesResult, snapshotsResult] = await Promise.all([
         supabase
           .from('trader_sources')
-          .select('source_trader_id, handle, source, profile_url, arena_score')
+          .select('source_trader_id, handle, source, avatar_url, arena_score')
           .in('source_trader_id', traderIds),
         supabase
           .from('trader_snapshots')
@@ -139,11 +139,11 @@ export async function GET(request: NextRequest) {
 
       // 构建映射
       const sourcesMap = new Map<string, { handle: string; source: string; avatar_url?: string; arena_score?: number }>()
-      sources.forEach((s) => {
-        sourcesMap.set(s.source_trader_id, { 
-          handle: s.handle || s.source_trader_id, 
+      sources.forEach((s: { source_trader_id: string; handle: string | null; source: string; avatar_url?: string | null; arena_score?: number | null }) => {
+        sourcesMap.set(s.source_trader_id, {
+          handle: s.handle || s.source_trader_id,
           source: s.source,
-          avatar_url: s.profile_url || undefined,
+          avatar_url: s.avatar_url || undefined,
           arena_score: s.arena_score ?? undefined
         })
       })

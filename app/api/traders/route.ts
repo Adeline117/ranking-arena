@@ -342,18 +342,18 @@ async function fetchTradersData(
         return { traders: [], isStale: false }
       }
 
-      // 批量获取 handles
+      // 批量获取 handles 和头像
       const traderIds = snapshots.map(s => s.source_trader_id)
       const { data: sources } = await supabase
         .from('trader_sources')
-        .select('source_trader_id, handle, profile_url')
+        .select('source_trader_id, handle, avatar_url, profile_url')
         .eq('source', source)
         .in('source_trader_id', traderIds)
 
       const handleMap = new Map<string, { handle: string | null; avatar_url: string | null }>()
-      sources?.forEach((s: { source_trader_id: string; handle: string | null; profile_url: string | null }) => {
-        // profile_url 存储的是头像图片 URL（由抓取脚本保存）
-        handleMap.set(s.source_trader_id, { handle: s.handle, avatar_url: s.profile_url })
+      sources?.forEach((s: { source_trader_id: string; handle: string | null; avatar_url: string | null; profile_url: string | null }) => {
+        // 优先使用 avatar_url (图片URL)，profile_url 存储的是交易员主页URL
+        handleMap.set(s.source_trader_id, { handle: s.handle, avatar_url: s.avatar_url || null })
       })
 
       // 构建交易员数据（不包含数据库 rank，排名将在后面统一计算）
