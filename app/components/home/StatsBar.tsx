@@ -198,18 +198,9 @@ export function StatsBar() {
           display: 'flex',
           gap: 0, // Gap is handled inside the wrapper divs
           animation: 'scrollTicker 35s linear infinite',
-          animationDelay: '3s', // Increased delay to prioritize LCP
-          animationPlayState: 'paused',
+          animationDelay: '3s', // Delay to prioritize LCP
           width: 'max-content',
           contain: 'layout style', // Performance: isolate layout calculations
-        }}
-        onAnimationStart={(e) => {
-          // 延迟启动动画，避免阻塞 LCP
-          setTimeout(() => {
-            const el = e.currentTarget as HTMLElement
-            el.style.animationPlayState = 'running'
-            el.style.willChange = 'transform' // Only add will-change when animating
-          }, 100)
         }}
       >
         {/* Render 26 items once - the duplicate set is created via DOM cloning in useEffect */}

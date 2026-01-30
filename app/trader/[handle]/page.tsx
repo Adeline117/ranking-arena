@@ -1,6 +1,8 @@
 'use client'
 
-import { useEffect, useState, Suspense } from 'react'
+import { useEffect, useState, useRef, Suspense } from 'react'
+import useSWR from 'swr'
+import { fetcher } from '@/lib/hooks/useSWR'
 import Link from 'next/link'
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
@@ -28,7 +30,6 @@ import type {
   TraderPerformance,
   TraderStats,
   PortfolioItem,
-  PositionHistoryItem,
   TraderFeedItem,
 } from '@/lib/data/trader'
 import { JsonLd } from '@/app/components/Providers/JsonLd'
@@ -70,6 +71,20 @@ interface ExtendedPositionHistoryItem {
   status: string
 }
 
+// SWR response type for /api/traders/[handle]
+interface TraderPageData {
+  profile: TraderProfile
+  performance: TraderPerformance
+  stats: TraderStats
+  portfolio: PortfolioItem[]
+  positionHistory: ExtendedPositionHistoryItem[]
+  feed: TraderFeedItem[]
+  similarTraders: TraderProfile[]
+  assetBreakdown?: AssetBreakdownData
+  equityCurve?: EquityCurveData
+  trackedSince?: string
+}
+
 function TraderContent(props: { params: { handle: string } | Promise<{ handle: string }> }) {
   const { t, language } = useLanguage()
   const { showToast } = useToast()
@@ -77,23 +92,41 @@ function TraderContent(props: { params: { handle: string } | Promise<{ handle: s
   const router = useRouter()
   const pathname = usePathname()
   const { isPro } = useSubscription()
-  
+
+  // Use refs to avoid unnecessary refetches when language/showToast changes
+  const showToastRef = useRef(showToast)
+  const languageRef = useRef(language)
+  useEffect(() => { showToastRef.current = showToast }, [showToast])
+  useEffect(() => { languageRef.current = language }, [language])
+
   const [handle, setHandle] = useState<string>('')
   const [email, setEmail] = useState<string | null>(null)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
-  const [profile, setProfile] = useState<TraderProfile | null>(null)
-  const [performance, setPerformance] = useState<TraderPerformance | null>(null)
-  const [stats, setStats] = useState<TraderStats | null>(null)
-  const [portfolio, setPortfolio] = useState<PortfolioItem[]>([])
-  const [positionHistory, setPositionHistory] = useState<PositionHistoryItem[]>([])
-  const [extendedPositionHistory, setExtendedPositionHistory] = useState<ExtendedPositionHistoryItem[]>([])
-  const [feed, setFeed] = useState<TraderFeedItem[]>([])
-  const [similarTraders, setSimilarTraders] = useState<TraderProfile[]>([])
-  const [loading, setLoading] = useState(true)
-  
-  // 新数据状态
-  const [assetBreakdown, setAssetBreakdown] = useState<AssetBreakdownData | undefined>(undefined)
-  const [equityCurve, setEquityCurve] = useState<EquityCurveData | undefined>(undefined)
+
+  // SWR: auto-cache, stale-while-revalidate, dedup, error retry
+  const { data: traderData, error: fetchError, isLoading: swrLoading } = useSWR<TraderPageData>(
+    handle ? `/api/traders/${encodeURIComponent(handle)}` : null,
+    fetcher,
+    {
+      revalidateOnFocus: false,
+      refreshInterval: 60_000,
+      dedupingInterval: 5000,
+      errorRetryCount: 2,
+    }
+  )
+
+  // Derive display state from SWR response
+  const profile = traderData?.profile ?? null
+  const performance = traderData?.performance ?? null
+  const stats = traderData?.stats ?? null
+  const portfolio = traderData?.portfolio ?? []
+  const positionHistory = traderData?.positionHistory ?? []
+  const extendedPositionHistory = traderData?.positionHistory ?? []
+  const feed = traderData?.feed ?? []
+  const similarTraders = traderData?.similarTraders ?? []
+  const assetBreakdown = traderData?.assetBreakdown
+  const equityCurve = traderData?.equityCurve
+  const loading = !handle || swrLoading
   
   // Read tab from URL, default to 'overview'
   const urlTab = searchParams.get('tab') as TabKey | null
@@ -151,51 +184,15 @@ function TraderContent(props: { params: { handle: string } | Promise<{ handle: s
     })
   }, [])
 
+  // Show error toast when SWR fetch fails with no cached data
   useEffect(() => {
-    if (!handle) {
-      return
+    if (fetchError && !traderData) {
+      showToastRef.current(
+        languageRef.current === 'zh' ? '加载失败，请稍后重试' : 'Failed to load, please try again',
+        'error'
+      )
     }
-
-    const load = async () => {
-      setLoading(true)
-
-      try {
-        // 通过 API 获取数据（服务端使用正确的 service role key）
-        const response = await fetch(`/api/traders/${encodeURIComponent(handle)}`)
-        
-        if (!response.ok) {
-          console.error('Error loading trader data:', response.status)
-          setProfile(null)
-          showToast(language === 'zh' ? '加载交易员数据失败' : 'Failed to load trader data', 'error')
-          return
-        }
-
-        const data = await response.json()
-        
-        setProfile(data.profile)
-        setPerformance(data.performance)
-        setStats(data.stats)
-        setPortfolio(data.portfolio || [])
-        setPositionHistory(data.positionHistory || [])
-        setExtendedPositionHistory(data.positionHistory || [])
-        setFeed(data.feed || [])
-        setSimilarTraders(data.similarTraders || [])
-        
-        // 设置新数据
-        setAssetBreakdown(data.assetBreakdown)
-        setEquityCurve(data.equityCurve)
-
-      } catch (error: unknown) {
-        console.error('Error loading trader data:', error)
-        setProfile(null)
-        showToast(language === 'zh' ? '加载失败，请稍后重试' : 'Failed to load, please try again', 'error')
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    load()
-  }, [handle, showToast, language])
+  }, [fetchError, traderData])
 
   if (loading) {
     return (

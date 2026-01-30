@@ -1,21 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { getAuthUser } from '@/lib/supabase/server'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 
 export async function POST(request: NextRequest) {
   try {
+    // Authenticate from JWT, not from client-submitted formData
+    const user = await getAuthUser(request)
+    if (!user) {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+    }
+    const userId = user.id
+
     const formData = await request.formData()
     const file = formData.get('file') as File
-    const userId = formData.get('userId') as string
 
     if (!file) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 })
-    }
-
-    if (!userId) {
-      return NextResponse.json({ error: 'No userId provided' }, { status: 401 })
     }
 
     // 验证文件类型

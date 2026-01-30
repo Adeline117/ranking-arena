@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { getAuthUser } from '@/lib/supabase/server'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -18,16 +19,18 @@ const MAX_VIDEO_SIZE = 100 * 1024 * 1024
 
 export async function POST(request: NextRequest) {
   try {
+    // Authenticate from JWT, not from client-submitted formData
+    const user = await getAuthUser(request)
+    if (!user) {
+      return NextResponse.json({ error: '请先登录' }, { status: 401 })
+    }
+    const userId = user.id
+
     const formData = await request.formData()
     const file = formData.get('file') as File
-    const userId = formData.get('userId') as string
 
     if (!file) {
       return NextResponse.json({ error: '未提供视频文件' }, { status: 400 })
-    }
-
-    if (!userId) {
-      return NextResponse.json({ error: '请先登录' }, { status: 401 })
     }
 
     // 验证文件类型

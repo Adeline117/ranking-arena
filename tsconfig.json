@@ -48,6 +48,7 @@
     "dist",
     "build",
     "lib/archive",
-    "docs/archive"
+    "docs/archive",
+    "scripts/test-connectors.ts"
   ]
 }

@@ -29,6 +29,7 @@ import { useSubscription } from './hooks/useSubscription'
 import { useLanguage } from '../Providers/LanguageProvider'
 import type { FilterConfig, SavedFilter } from '../premium/AdvancedFilter'
 import FilterPresets, { type PresetId, PRESETS } from '../ranking/FilterPresets'
+import ExchangeFilter from '../ranking/ExchangeFilter'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { getCsrfHeaders } from '@/lib/api/client'
 
@@ -108,6 +109,7 @@ export default function RankingSection({
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
   const [currentPage, setCurrentPage] = useState(1)
   const [searchQuery, setSearchQuery] = useState('')
+  const [selectedExchange, setSelectedExchange] = useState<string | null>(null)
 
   // 从 URL 恢复筛选状态 + Feature 8: sort/page/search/preset
   useEffect(() => {
@@ -149,6 +151,8 @@ export default function RankingSection({
     if (urlPage) setCurrentPage(Math.max(1, parseInt(urlPage, 10) || 1))
     if (urlQ) setSearchQuery(urlQ)
     if (urlPreset && PRESETS.some(p => p.id === urlPreset)) setActivePreset(urlPreset)
+    const urlEx = searchParams.get('ex')
+    if (urlEx) setSelectedExchange(urlEx)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Saved filters feature removed - filters are session-only
@@ -165,6 +169,7 @@ export default function RankingSection({
     page?: number
     q?: string
     preset?: string | null
+    ex?: string | null
   } = {}) => {
     // Clear pending sync
     if (syncTimeoutRef.current) {
@@ -179,7 +184,7 @@ export default function RankingSection({
       const config = overrides.config ?? filterConfig
 
       // Clear old filter params
-      ;['roi_min', 'roi_max', 'dd_min', 'dd_max', 'min_pnl', 'min_score', 'min_wr', 'exchange', 'fcat', 'sort', 'order', 'page', 'q', 'preset'].forEach(k => params.delete(k))
+      ;['roi_min', 'roi_max', 'dd_min', 'dd_max', 'min_pnl', 'min_score', 'min_wr', 'exchange', 'fcat', 'sort', 'order', 'page', 'q', 'preset', 'ex'].forEach(k => params.delete(k))
 
       // Filter params
       if (config.roi_min != null) params.set('roi_min', String(config.roi_min))
@@ -205,12 +210,16 @@ export default function RankingSection({
       if (q) params.set('q', q)
       if (preset) params.set('preset', preset)
 
+      // Exchange filter
+      const ex = overrides.ex !== undefined ? overrides.ex : selectedExchange
+      if (ex) params.set('ex', ex)
+
         const qs = params.toString()
         const newUrl = qs ? `${window.location.pathname}?${qs}` : window.location.pathname
         window.history.replaceState(null, '', newUrl)
       })
     }, 300) // 300ms debounce (increased for better INP)
-  }, [filterConfig, sortColumn, sortDir, currentPage, searchQuery, activePreset])
+  }, [filterConfig, sortColumn, sortDir, currentPage, searchQuery, activePreset, selectedExchange])
 
   // Keep backward compatibility for syncFilterToUrl
   const syncFilterToUrl = useCallback((config: FilterConfig) => {
@@ -247,6 +256,13 @@ export default function RankingSection({
     setActivePreset(preset)
     setCurrentPage(1)
     syncStateToUrl({ preset, page: 1 })
+  }, [syncStateToUrl])
+
+  // Exchange filter change handler
+  const handleExchangeChange = useCallback((exchange: string | null) => {
+    setSelectedExchange(exchange)
+    setCurrentPage(1)
+    syncStateToUrl({ ex: exchange, page: 1 })
   }, [syncStateToUrl])
 
   // 客户端高级筛选函数
@@ -365,20 +381,25 @@ export default function RankingSection({
     }
   }
 
-  // 根据分类过滤交易员，再应用预设和高级筛选
+  // 根据分类过滤交易员，再应用交易所筛选、预设和高级筛选
   const categoryFiltered = category === 'all'
     ? traders
     : traders.filter(t => t.source && filterByCategory(t.source, category))
+
+  // 交易所筛选（所有用户可用）
+  const exchangeFiltered = selectedExchange
+    ? categoryFiltered.filter(t => t.source === selectedExchange)
+    : categoryFiltered
 
   // Feature 6: Apply preset filter
   const presetFiltered = activePreset
     ? (() => {
         const presetConfig = PRESETS.find(p => p.id === activePreset)
         return presetConfig
-          ? categoryFiltered.filter(t => presetConfig.filter(t))
-          : categoryFiltered
+          ? exchangeFiltered.filter(t => presetConfig.filter(t))
+          : exchangeFiltered
       })()
-    : categoryFiltered
+    : exchangeFiltered
 
   const advancedFiltered = hasActiveFilters
     ? applyAdvancedFilter(presetFiltered, filterConfig)
@@ -465,6 +486,17 @@ export default function RankingSection({
           )}
         </Box>
       </Box>
+
+      {/* 交易所筛选（所有用户可用） */}
+      {!loading && dataSources.length > 1 && (
+        <Box style={{ marginBottom: tokens.spacing[2] }}>
+          <ExchangeFilter
+            availableSources={dataSources}
+            selectedExchange={selectedExchange}
+            onExchangeChange={handleExchangeChange}
+          />
+        </Box>
+      )}
 
       {/* 高级筛选面板 */}
       {showAdvancedFilter && isPro && (

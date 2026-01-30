@@ -83,25 +83,41 @@ const BINANCE_TRADERS = [
   },
 ];
 
-// Arena Score calculation (mirrors lib/utils/arena-score.ts)
+// Arena Score V2 calculation (mirrors lib/utils/arena-score.ts)
 function calculateArenaScore(roi: number, pnl: number, mdd: number, winRate: number, period: '7D' | '30D' | '90D') {
   const PARAMS: Record<string, { tanhCoeff: number; roiExponent: number; mddThreshold: number; winRateCap: number }> = {
     '7D': { tanhCoeff: 0.08, roiExponent: 1.8, mddThreshold: 15, winRateCap: 62 },
     '30D': { tanhCoeff: 0.15, roiExponent: 1.6, mddThreshold: 30, winRateCap: 68 },
     '90D': { tanhCoeff: 0.18, roiExponent: 1.6, mddThreshold: 40, winRateCap: 70 },
   };
+  const PNL_PARAMS: Record<string, { base: number; coeff: number }> = {
+    '7D': { base: 500, coeff: 0.40 },
+    '30D': { base: 2000, coeff: 0.35 },
+    '90D': { base: 5000, coeff: 0.30 },
+  };
   const clip = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
+  const MAX_RETURN = 70;
+  const MAX_PNL = 15;
   const days = period === '7D' ? 7 : period === '30D' ? 30 : 90;
   const params = PARAMS[period];
+  const pnlParams = PNL_PARAMS[period];
   const intensity = (365 / days) * Math.log(1 + roi / 100);
   const r0 = Math.tanh(params.tanhCoeff * intensity);
-  const returnScore = r0 > 0 ? clip(85 * Math.pow(r0, params.roiExponent), 0, 85) : 0;
+  const returnScore = r0 > 0 ? clip(MAX_RETURN * Math.pow(r0, params.roiExponent), 0, MAX_RETURN) : 0;
+  let pnlScore = 0;
+  if (pnl > 0) {
+    const logArg = 1 + pnl / pnlParams.base;
+    if (logArg > 0) {
+      pnlScore = clip(MAX_PNL * Math.tanh(pnlParams.coeff * Math.log(logArg)), 0, MAX_PNL);
+    }
+  }
   const drawdownScore = clip(8 * clip(1 - Math.abs(mdd) / params.mddThreshold, 0, 1), 0, 8);
   const wr = winRate;
   const stabilityScore = clip(7 * clip((wr - 45) / (params.winRateCap - 45), 0, 1), 0, 7);
   return {
-    total: Math.round((returnScore + drawdownScore + stabilityScore) * 100) / 100,
+    total: Math.round((returnScore + pnlScore + drawdownScore + stabilityScore) * 100) / 100,
     returnScore: Math.round(returnScore * 100) / 100,
+    pnlScore: Math.round(pnlScore * 100) / 100,
     drawdownScore: Math.round(drawdownScore * 100) / 100,
     stabilityScore: Math.round(stabilityScore * 100) / 100,
   };

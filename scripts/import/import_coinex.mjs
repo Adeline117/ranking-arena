@@ -36,7 +36,12 @@ const ARENA_CONFIG = {
     '30D': { tanhCoeff: 0.15, roiExponent: 1.6, mddThreshold: 30, winRateCap: 68 },
     '90D': { tanhCoeff: 0.18, roiExponent: 1.6, mddThreshold: 40, winRateCap: 70 },
   },
-  MAX_RETURN_SCORE: 85, MAX_DRAWDOWN_SCORE: 8, MAX_STABILITY_SCORE: 7,
+  MAX_RETURN_SCORE: 70, MAX_PNL_SCORE: 15, MAX_DRAWDOWN_SCORE: 8, MAX_STABILITY_SCORE: 7,
+  PNL_PARAMS: {
+    '7D': { base: 500, coeff: 0.40 },
+    '30D': { base: 2000, coeff: 0.35 },
+    '90D': { base: 5000, coeff: 0.30 },
+  },
 }
 const clip = (v, min, max) => Math.max(min, Math.min(max, v))
 const safeLog1p = x => x <= -1 ? 0 : Math.log(1 + x)
@@ -48,10 +53,19 @@ function calculateArenaScore(roi, pnl, maxDrawdown, winRate, period) {
   const wr = winRate !== null && winRate !== undefined ? (winRate <= 1 ? winRate * 100 : winRate) : null
   const intensity = (365 / days) * safeLog1p(roi / 100)
   const r0 = Math.tanh(params.tanhCoeff * intensity)
-  const returnScore = r0 > 0 ? clip(ARENA_CONFIG.MAX_RETURN_SCORE * Math.pow(r0, params.roiExponent), 0, 85) : 0
+  const returnScore = r0 > 0 ? clip(ARENA_CONFIG.MAX_RETURN_SCORE * Math.pow(r0, params.roiExponent), 0, ARENA_CONFIG.MAX_RETURN_SCORE) : 0
+  // PnL score (0-15)
+  const pnlParams = ARENA_CONFIG.PNL_PARAMS[period] || ARENA_CONFIG.PNL_PARAMS['90D']
+  let pnlScore = 0
+  if (pnl !== null && pnl !== undefined && pnl > 0) {
+    const logArg = 1 + pnl / pnlParams.base
+    if (logArg > 0) {
+      pnlScore = clip(ARENA_CONFIG.MAX_PNL_SCORE * Math.tanh(pnlParams.coeff * Math.log(logArg)), 0, ARENA_CONFIG.MAX_PNL_SCORE)
+    }
+  }
   const drawdownScore = maxDrawdown !== null ? clip(ARENA_CONFIG.MAX_DRAWDOWN_SCORE * clip(1 - Math.abs(maxDrawdown) / params.mddThreshold, 0, 1), 0, 8) : 4
   const stabilityScore = wr !== null ? clip(ARENA_CONFIG.MAX_STABILITY_SCORE * clip((wr - 45) / (params.winRateCap - 45), 0, 1), 0, 7) : 3.5
-  return Math.round((returnScore + drawdownScore + stabilityScore) * 100) / 100
+  return Math.round((returnScore + pnlScore + drawdownScore + stabilityScore) * 100) / 100
 }
 
 function sleep(ms) {
@@ -109,10 +123,14 @@ async function fetchLeaderboardData(period) {
           if (roiMatch) {
             const roi = parseFloat(roiMatch[1].replace(/,/g, ''))
             const lines = chunk.split('\n').map(l => l.trim()).filter(l => l && l.length > 2 && l.length < 25 && !l.includes('%'))
+            // Try to extract PnL: look for dollar amounts like $1,234.56 or +1,234.56 USDT
+            const pnlMatch = chunk.match(/[\+\-]?\$?([\d,]+(?:\.\d+)?)\s*(?:USDT|USD)?/i)
+            const pnl = pnlMatch ? parseFloat(pnlMatch[1].replace(/,/g, '')) : null
             if (lines[0] && roi > 0) {
-              results.push({ 
-                nickName: lines[0], 
+              results.push({
+                nickName: lines[0],
                 roi,
+                pnl,
                 avatar: avatarMap[lines[0]] || null
               })
             }
@@ -205,7 +223,7 @@ async function fetchLeaderboardData(period) {
     nickname: t.nickName,
     avatar: t.avatar || null,
     roi: t.roi,
-    pnl: null,
+    pnl: t.pnl || null,
     winRate: null,
     maxDrawdown: null,
     followers: null,
