@@ -8,7 +8,7 @@ import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
 import ThemeToggle from '../ui/ThemeToggle'
 import LanguageSwitcher from '../ui/LanguageToggle'
-import SearchDropdown from '../search/SearchDropdown'
+const SearchDropdown = dynamic(() => import('../search/SearchDropdown'), { ssr: false })
 import { useLanguage } from '../Providers/LanguageProvider'
 import { SearchIcon, UserIcon, NotificationIcon } from '../ui/icons'
 import { Box } from '../base'
