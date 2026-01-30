@@ -1,5 +1,9 @@
 #!/usr/bin/env node
 /**
+ * ⚠️  DEPRECATED — DiceBear avatars are no longer used.
+ * Use replace-dicebear-avatars.mjs to replace with platform defaults.
+ * Traders without avatars show initials+gradient in the frontend.
+ *
  * fill-avatars.mjs — Batch fill missing avatar_url in trader_sources
  *
  * Strategy:
