@@ -240,7 +240,23 @@ function isLikelyImageUrl(url: string): boolean {
       return false
     }
 
-    // 3. 明显是HTML页面的路径模式
+    // 3a. 已知的非图片域名（交易平台前端、区块浏览器等）
+    const nonImageDomains = [
+      'hyperliquid.xyz',
+      'dydx.exchange',
+      'kwenta.eth.limo',
+      'gains.trade',
+    ]
+    if (nonImageDomains.some(domain => parsed.hostname.includes(domain))) {
+      return false
+    }
+
+    // 3b. 路径以 /@ 开头通常是用户主页（如 /@0x...、/@username）
+    if (pathname.startsWith('/@')) {
+      return false
+    }
+
+    // 3c. 明显是HTML页面的路径模式
     const pagePatterns = [
       '/detail/',
       '/account/',
@@ -251,6 +267,8 @@ function isLikelyImageUrl(url: string): boolean {
       '/user/',
       '/copytrading/',
       '/copy-trading/',
+      '/leaderboard/',
+      '/explorer/',
     ]
     if (pagePatterns.some(pattern => pathname.includes(pattern))) {
       return false
