@@ -254,6 +254,7 @@ export default function MarketPanel() {
             px={2}
             py={1}
             radius="md"
+            suppressHydrationWarning
             style={{
               fontSize: tokens.typography.fontSize.xs,
               color: tokens.colors.text.tertiary,

@@ -159,6 +159,7 @@ export function StatsBar() {
     <Box
       role="region"
       aria-label={language === 'zh' ? '数据来源' : 'Data Sources'}
+      suppressHydrationWarning
       style={{
         marginBottom: 16,
         overflow: 'hidden',
