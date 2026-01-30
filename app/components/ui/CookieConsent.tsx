@@ -101,7 +101,7 @@ const styles = {
     padding: '10px 20px',
     borderRadius: '8px',
     fontSize: '14px',
-    fontWeight: 500,
+    fontWeight: 700,
     cursor: 'pointer',
     transition: 'all 0.2s ease',
     border: 'none',
@@ -361,9 +361,9 @@ export function CookieConsent() {
         
         <div style={{ marginTop: '12px', fontSize: '12px', color: tokens.colors.text.tertiary }}>
           了解更多请查看我们的{' '}
-          <a href="/privacy" style={{ color: tokens.colors.accent.brand }}>隐私政策</a>
+          <a href="/privacy" style={{ color: '#a88bc3' }}>隐私政策</a>
           {' '}和{' '}
-          <a href="/terms" style={{ color: tokens.colors.accent.brand }}>使用条款</a>
+          <a href="/terms" style={{ color: '#a88bc3' }}>使用条款</a>
         </div>
       </div>
     </div>
