@@ -113,13 +113,12 @@ export default function CategoryRankingTabs({
               color: isActive
                 ? '#ffffff'
                 : isLocked
-                  ? 'var(--color-text-quaternary)'
+                  ? '#8a8a9e'
                   : 'var(--color-text-secondary)',
               cursor: isLocked ? 'not-allowed' : 'pointer',
               fontSize: tokens.typography.fontSize.sm,
               fontWeight: isActive ? 700 : 500,
               transition: 'all 0.2s ease',
-              opacity: isLocked ? 0.5 : 1,
               boxShadow: isActive ? '0 2px 8px var(--color-pro-badge-shadow)' : 'none',
               flexShrink: 0,
             }}

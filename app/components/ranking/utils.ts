@@ -76,10 +76,12 @@ export function parseSourceInfo(src: string, t: (key: string) => string): Source
   }
 
   // 类型映射 - 统一颜色，不做颜色区分
+  // Use brighter color (#b0b0be) for WCAG AA contrast on ranking row card backgrounds
+  const sourceTagColor = '#b0b0be'
   const typeMap: Record<string, { label: string; color: string }> = {
-    'futures': { label: t('categoryFutures'), color: tokens.colors.text.secondary },
-    'spot': { label: t('categorySpot'), color: tokens.colors.text.secondary },
-    'web3': { label: t('categoryWeb3'), color: tokens.colors.text.secondary },
+    'futures': { label: t('categoryFutures'), color: sourceTagColor },
+    'spot': { label: t('categorySpot'), color: sourceTagColor },
+    'web3': { label: t('categoryWeb3'), color: sourceTagColor },
   }
 
   // 解析 source 字符串
@@ -93,7 +95,7 @@ export function parseSourceInfo(src: string, t: (key: string) => string): Source
   if (src === 'mexc' || src === 'coinex' || src === 'kucoin' || src === 'htx' || src === 'weex') type = 'futures'
 
   const exchangeName = exchangeMap[exchange] || exchange.charAt(0).toUpperCase() + exchange.slice(1)
-  const typeInfo = typeMap[type] || { label: type, color: tokens.colors.text.tertiary }
+  const typeInfo = typeMap[type] || { label: type, color: sourceTagColor }
 
   return {
     exchange: exchangeName,
