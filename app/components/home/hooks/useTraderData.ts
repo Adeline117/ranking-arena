@@ -3,6 +3,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import type { Trader } from '../../ranking/RankingTable'
 import { useTraderDataSync, type TraderDataPayload } from '@/lib/hooks/useBroadcastSync'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 export type TimeRange = '90D' | '30D' | '7D'
 export type SortBy = 'arena_score' | 'roi' | 'win_rate' | 'max_drawdown'
@@ -42,6 +43,11 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
     initialLastUpdated,
   } = options
 
+  const { t } = useLanguage()
+  // Ref to avoid triggering useCallback re-creation when t changes
+  const tRef = useRef(t)
+  useEffect(() => { tRef.current = t }, [t])
+
   // Use initial data if provided (SSR optimization)
   const hasInitialData = initialTraders && initialTraders.length > 0
 
@@ -52,6 +58,7 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
   const [error, setError] = useState<string | null>(null)
   const [lastUpdated, setLastUpdated] = useState<string | null>(initialLastUpdated || null)
   const [availableSources, setAvailableSources] = useState<string[]>([])
+  const [deferredFetchFailed, setDeferredFetchFailed] = useState(false)
 
   // 多窗口同步
   const { broadcast, on } = useTraderDataSync()
@@ -116,7 +123,7 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
         }
         const response = await fetch(url)
         if (!response.ok) {
-          const errorMsg = `加载排行榜数据失败 (${response.status})`
+          const errorMsg = `${tRef.current('loadFailed')} (${response.status})`
           setError(errorMsg)
           return tradersCache.current.get(timeRange) || { traders: [], lastUpdated: null, fetchedAt: 0 }
         }
@@ -141,7 +148,7 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
 
         return cached
       } catch (err) {
-        const errorMsg = err instanceof Error ? err.message : '网络连接失败，请检查网络'
+        const errorMsg = err instanceof Error ? err.message : tRef.current('errorNetworkFailed')
         setError(errorMsg)
         return tradersCache.current.get(timeRange) || { traders: [], lastUpdated: null, fetchedAt: 0 }
       } finally {
@@ -164,7 +171,7 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
       setLastUpdated(cached.lastUpdated)
       setAvailableSources(cached.availableSources || [])
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : '加载数据失败'
+      const errorMsg = err instanceof Error ? err.message : tRef.current('loadFailed')
       setError(errorMsg)
       setCurrentTraders([])
       setLastUpdated(null)
@@ -201,6 +208,7 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
       const deferredFetch = () => {
         // Only fetch full data if user hasn't switched time range
         if (activeTimeRange === '90D') {
+          setDeferredFetchFailed(false)
           loadTimeRange('90D', false).then(cached => {
             // Only update if we got more data than initial
             if (cached.traders.length > (initialTraders?.length || 0)) {
@@ -209,7 +217,9 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
               setAvailableSources(cached.availableSources || [])
             }
           }).catch(() => {
-            // Silent fail - we still have initial data
+            // Graceful degradation — we still have initial data but flag the failure
+            // so UI can optionally show a retry prompt
+            setDeferredFetchFailed(true)
           })
         }
       }
@@ -317,6 +327,20 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
     tradersCache.current.clear()
   }, [])
 
+  // Retry deferred fetch (called from UI when deferredFetchFailed is true)
+  const retryDeferredFetch = useCallback(() => {
+    setDeferredFetchFailed(false)
+    loadTimeRange(activeTimeRange, false).then(cached => {
+      if (cached.traders.length > currentTraders.length) {
+        setCurrentTraders(cached.traders)
+        setLastUpdated(cached.lastUpdated)
+        setAvailableSources(cached.availableSources || [])
+      }
+    }).catch(() => {
+      setDeferredFetchFailed(true)
+    })
+  }, [activeTimeRange, loadTimeRange, currentTraders.length])
+
   return {
     traders: currentTraders,
     loading,
@@ -327,5 +351,7 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
     changeTimeRange,
     refresh,
     clearCache,
+    deferredFetchFailed,
+    retryDeferredFetch,
   }
 }

@@ -358,9 +358,9 @@ export default function RankingSection({
   const source = traders.length > 0 ? traders[0].source : 'all'
 
   // Get unique data sources - prefer availableSources from API if provided
-  const dataSources = availableSources && availableSources.length > 0
+  const dataSources: string[] = availableSources && availableSources.length > 0
     ? availableSources
-    : [...new Set(traders.map(t => t.source).filter(Boolean))]
+    : [...new Set(traders.map(t => t.source).filter((s): s is string => !!s))]
 
   // Format last updated time
   const formatLastUpdated = (dateStr: string | null | undefined) => {
@@ -536,6 +536,41 @@ export default function RankingSection({
         onPageChange={handlePageChange}
         onSearchChange={handleSearchChange}
       />
+
+      {/* Free user limit prompt */}
+      {!isPro && !loading && advancedFiltered.length > FREE_LEADERBOARD_LIMIT && (
+        <Box
+          style={{
+            marginTop: tokens.spacing[2],
+            padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+            background: `${tokens.colors.accent.primary}08`,
+            border: `1px solid ${tokens.colors.accent.primary}20`,
+            borderRadius: tokens.radius.md,
+            textAlign: 'center',
+            fontSize: tokens.typography.fontSize.xs,
+            color: tokens.colors.text.secondary,
+          }}
+        >
+          {language === 'zh'
+            ? `免费用户显示前 ${FREE_LEADERBOARD_LIMIT} 名（共 ${advancedFiltered.length} 名），`
+            : `Showing top ${FREE_LEADERBOARD_LIMIT} of ${advancedFiltered.length} traders. `}
+          <button
+            onClick={() => router.push('/pricing')}
+            style={{
+              color: tokens.colors.accent.primary,
+              fontWeight: tokens.typography.fontWeight.bold,
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              textDecoration: 'underline',
+              padding: 0,
+              fontSize: 'inherit',
+            }}
+          >
+            {language === 'zh' ? '升级 Pro 查看全部' : 'Upgrade to Pro for full access'}
+          </button>
+        </Box>
+      )}
 
       {/* Data source and update time info */}
       {!loading && traders.length > 0 && (

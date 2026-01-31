@@ -1,4 +1,4 @@
-import React, { useState, useRef, memo } from 'react'
+import React, { useState, useRef, useEffect, useCallback, memo } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import type { Trader } from './RankingTable'
 
@@ -28,7 +28,33 @@ export const ScoreBreakdownTooltip = memo(function ScoreBreakdownTooltip({
   language: string
 }) {
   const [show, setShow] = useState(false)
+  const [flipToBottom, setFlipToBottom] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
+  const tooltipRef = useRef<HTMLDivElement>(null)
+
+  // Click-outside: close tooltip when clicking outside
+  useEffect(() => {
+    if (!show) return
+    const handleClickOutside = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setShow(false)
+      }
+    }
+    document.addEventListener('click', handleClickOutside, true)
+    return () => document.removeEventListener('click', handleClickOutside, true)
+  }, [show])
+
+  // Viewport detection: flip tooltip direction if not enough space above
+  const checkPosition = useCallback(() => {
+    if (!ref.current) return
+    const rect = ref.current.getBoundingClientRect()
+    // Tooltip is ~160px tall; flip to bottom if less than 170px above trigger
+    setFlipToBottom(rect.top < 170)
+  }, [])
+
+  useEffect(() => {
+    if (show) checkPosition()
+  }, [show, checkPosition])
 
   if (trader.return_score == null && trader.pnl_score == null && trader.drawdown_score == null && trader.stability_score == null) {
     return null
@@ -38,6 +64,10 @@ export const ScoreBreakdownTooltip = memo(function ScoreBreakdownTooltip({
   const confidenceInfo = confidence && confidence !== 'full'
     ? CONFIDENCE_LABELS[confidence]
     : null
+
+  const positionStyle: React.CSSProperties = flipToBottom
+    ? { top: '100%', marginTop: 6 }
+    : { bottom: '100%', marginBottom: 6 }
 
   return (
     <div
@@ -50,13 +80,13 @@ export const ScoreBreakdownTooltip = memo(function ScoreBreakdownTooltip({
         <path d="M12 16v-4M12 8h.01" strokeLinecap="round" />
       </svg>
       <div
+        ref={tooltipRef}
         className={`score-tooltip-content${show ? ' score-tooltip-visible' : ''}`}
         style={{
             position: 'absolute',
-            bottom: '100%',
+            ...positionStyle,
             left: '50%',
             transform: 'translateX(-50%)',
-            marginBottom: 6,
             padding: '8px 12px',
             background: tokens.colors.bg.primary,
             border: `1px solid ${tokens.colors.border.primary}`,
