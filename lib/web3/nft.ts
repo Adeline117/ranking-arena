@@ -7,7 +7,7 @@
 
 import { createPublicClient, http, type Address } from 'viem'
 import { base, baseSepolia } from 'viem/chains'
-import { CONTRACT_ADDRESSES, targetChain } from './config'
+import { CONTRACT_ADDRESSES } from './contracts'
 
 // ── ABI fragment for the membership check functions ──
 const MEMBERSHIP_ABI = [
