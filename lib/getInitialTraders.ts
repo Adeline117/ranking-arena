@@ -4,7 +4,15 @@
  */
 
 import { createClient } from '@supabase/supabase-js'
-import { calculateArenaScore, ARENA_CONFIG, type Period } from '@/lib/utils/arena-score'
+import {
+  calculateArenaScore,
+  debouncedConfidence,
+  isWithinGracePeriod,
+  meetsThreshold,
+  ARENA_CONFIG,
+  type Period,
+} from '@/lib/utils/arena-score'
+import { SOURCE_TYPE_MAP, PRIORITY_SOURCES, SKIP_PNL_THRESHOLD_SOURCES } from '@/lib/constants/exchanges'
 
 // Minimal trader type for initial render
 export interface InitialTrader {
@@ -20,73 +28,6 @@ export interface InitialTrader {
   avatar_url: string | null
   arena_score: number
 }
-
-// Source type mapping - comprehensive list of all active platforms
-// NOTE: Keys must match the `source` column in trader_snapshots exactly
-const SOURCE_TYPE_MAP: Record<string, 'futures' | 'spot' | 'web3'> = {
-  // Futures platforms
-  'binance_futures': 'futures',
-  'bybit': 'futures',
-  'bitget_futures': 'futures',
-  'okx_futures': 'futures',
-  'mexc': 'futures',
-  'kucoin': 'futures',
-  'coinex': 'futures',
-  'htx': 'futures',
-  'htx_futures': 'futures',
-  'weex': 'futures',
-  'phemex': 'futures',
-  'bingx': 'futures',
-  'gateio': 'futures',
-  'xt': 'futures',
-  'pionex': 'futures',
-  'lbank': 'futures',
-  'blofin': 'futures',
-  // Web3/DEX platforms
-  'gmx': 'web3',
-  'kwenta': 'web3',
-  'gains': 'web3',
-  'mux': 'web3',
-  'okx_web3': 'web3',
-  'hyperliquid': 'web3',
-  'dydx': 'web3',
-  'binance_web3': 'web3',
-  // Spot platforms
-  'bitget_spot': 'spot',
-  'binance_spot': 'spot',
-}
-
-// All active sources for initial render
-// Must match `source` values in trader_snapshots table exactly
-const PRIORITY_SOURCES = [
-  // Top CEX futures (highest volume)
-  'binance_futures',
-  'bybit',
-  'bitget_futures',
-  'okx_futures',
-  // Secondary CEX futures
-  'mexc',
-  'kucoin',
-  'htx_futures',    // DB uses 'htx_futures', not 'htx'
-  'coinex',
-  'bingx',
-  'gateio',
-  'phemex',
-  'xt',             // 500+ trader_sources entries
-  'weex',
-  'lbank',
-  'blofin',
-  // Web3/DEX
-  'gmx',
-  'hyperliquid',
-  'kwenta',
-  'gains',
-  'okx_web3',
-  'dydx',
-  // Spot
-  'bitget_spot',
-  'binance_spot',
-]
 
 export async function getInitialTraders(
   timeRange: Period = '90D',
@@ -120,7 +61,9 @@ export async function getInitialTraders(
           win_rate,
           max_drawdown,
           followers,
-          arena_score
+          arena_score,
+          last_qualified_at,
+          full_confidence_at
         `)
         .in('source', PRIORITY_SOURCES)
         .eq('season_id', timeRange)
@@ -168,8 +111,10 @@ export async function getInitialTraders(
       handleMap.set(key, { handle: s.handle, avatar_url: s.avatar_url })
     })
 
-    // Build trader objects with recalculated arena_score using latest formula
-    const traders: InitialTrader[] = uniqueSnapshots.map(snap => {
+    // Build trader objects with recalculated arena_score using the SAME logic as /api/traders route.
+    // This prevents ranking jumps when client-side data replaces SSR data.
+    // Key alignment points: debouncedConfidence, pnlQualifier, SKIP_PNL_THRESHOLD_SOURCES
+    const scoredSnapshots = uniqueSnapshots.map(snap => {
       const key = `${snap.source}:${snap.source_trader_id}`
       const info = handleMap.get(key) || { handle: null, avatar_url: null }
 
@@ -178,8 +123,6 @@ export async function getInitialTraders(
         ? (snap.win_rate <= 1 ? snap.win_rate * 100 : snap.win_rate)
         : null
 
-      // Recalculate arena_score with the latest formula (ROI cap + confidence penalty)
-      // This ensures SSR data matches what /api/traders returns
       const scoreResult = calculateArenaScore(
         {
           roi: snap.roi ?? 0,
@@ -190,6 +133,24 @@ export async function getInitialTraders(
         timeRange
       )
 
+      // Debounced confidence — same as API route
+      const effectiveConfidence = debouncedConfidence(
+        scoreResult.scoreConfidence,
+        snap.full_confidence_at,
+      )
+      const confidenceMultiplier = ARENA_CONFIG.CONFIDENCE_MULTIPLIER[effectiveConfidence]
+
+      // Soft PnL qualifier — skip for sources that don't use PnL threshold
+      const skipPnlThreshold = (SKIP_PNL_THRESHOLD_SOURCES as string[]).includes(snap.source)
+      const qualifier = skipPnlThreshold ? 1 : scoreResult.pnlQualifier
+
+      // Final score: raw sub-scores × confidence × qualifier (matches API route exactly)
+      const rawSubScores = scoreResult.returnScore + scoreResult.pnlScore +
+                           scoreResult.drawdownScore + scoreResult.stabilityScore
+      const finalScore = Math.round(
+        Math.max(0, Math.min(100, rawSubScores * confidenceMultiplier * qualifier)) * 100
+      ) / 100
+
       return {
         id: snap.source_trader_id,
         handle: info.handle || snap.source_trader_id,
@@ -199,11 +160,26 @@ export async function getInitialTraders(
         max_drawdown: snap.max_drawdown,
         followers: snap.followers ?? 0,
         source: snap.source,
-        source_type: SOURCE_TYPE_MAP[snap.source] || 'futures',
+        source_type: SOURCE_TYPE_MAP[snap.source] || 'futures' as const,
         avatar_url: info.avatar_url,
-        arena_score: scoreResult.totalScore,
+        arena_score: finalScore,
+        // Internal fields for filtering
+        _meetsThreshold: scoreResult.meetsThreshold,
+        _skipPnlThreshold: skipPnlThreshold,
+        _lastQualifiedAt: snap.last_qualified_at as string | null,
       }
     })
+
+    // Filter using same logic as API route:
+    // skip-PnL sources pass through, otherwise must meet threshold or be in grace period
+    const traders: InitialTrader[] = scoredSnapshots
+      .filter(t => {
+        if (t._skipPnlThreshold) return true
+        if (t._meetsThreshold) return true
+        if (isWithinGracePeriod(t._lastQualifiedAt)) return true
+        return false
+      })
+      .map(({ _meetsThreshold, _skipPnlThreshold, _lastQualifiedAt, ...rest }) => rest)
 
     // Sort by recalculated arena_score descending
     traders.sort((a, b) => b.arena_score - a.arena_score)
