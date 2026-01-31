@@ -252,8 +252,10 @@ export function PremiumProvider({ children, initialSubscription }: PremiumProvid
   const value: PremiumContextValue = {
     subscription,
     isLoading,
-    isPremium: subscription ? premiumService.isPremiumUser() : false,
-    tier: subscription?.tier || 'free',
+    isPremium: (subscription ? premiumService.isPremiumUser() : false) || hasNFT,
+    tier: (subscription?.tier || 'free') === 'free' && hasNFT ? 'pro' : (subscription?.tier || 'free'),
+    source: hasNFT ? 'nft' : (subscription?.paymentMethod === 'stripe' ? 'stripe' : 'free'),
+    hasNFT,
     checkFeature,
     refresh,
   }
