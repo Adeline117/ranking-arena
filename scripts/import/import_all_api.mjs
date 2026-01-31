@@ -243,7 +243,7 @@ async function saveTraders(traders, source, period) {
     captured_at: capturedAt,
   }))
 
-  const { error } = await supabase.from('trader_snapshots').insert(snapshotsData)
+  const { error } = await supabase.from('trader_snapshots').upsert(snapshotsData, { onConflict: 'source,source_trader_id,season_id' })
 
   if (error) {
     if (error.code === '23505') {
