@@ -3,35 +3,10 @@
  */
 
 import { SupabaseClient } from '@supabase/supabase-js'
+import { ALL_SOURCES, type TraderSource } from '@/lib/constants/exchanges'
 
-// 完整的 source 名称，与导入脚本保持一致
-export type TraderSource = 
-  | 'binance_futures' 
-  | 'binance_spot' 
-  | 'binance_web3' 
-  | 'bybit' 
-  | 'bitget_futures' 
-  | 'bitget_spot' 
-  | 'mexc' 
-  | 'coinex' 
-  | 'okx_web3' 
-  | 'kucoin' 
-  | 'gmx'
-
-// 所有支持的 source 列表
-export const ALL_SOURCES: TraderSource[] = [
-  'binance_futures',
-  'binance_spot',
-  'binance_web3',
-  'bybit',
-  'bitget_futures',
-  'bitget_spot',
-  'mexc',
-  'coinex',
-  'okx_web3',
-  'kucoin',
-  'gmx',
-]
+// Re-export from shared constants for backward compatibility
+export { ALL_SOURCES, type TraderSource } from '@/lib/constants/exchanges'
 
 export interface TraderSnapshot {
   source_trader_id: string

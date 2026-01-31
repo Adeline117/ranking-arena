@@ -29,6 +29,9 @@
 
 export type SubscriptionTier = 'free' | 'pro'
 
+/** How the user obtained their subscription */
+export type SubscriptionSource = 'stripe' | 'nft' | 'admin' | 'free'
+
 /** 活跃订阅等级（不包含 free） */
 export type ActiveSubscriptionTier = Exclude<SubscriptionTier, 'free'>
 

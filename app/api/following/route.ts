@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { createLogger } from '@/lib/utils/logger'
 import { getAuthUser } from '@/lib/supabase/server'
+import { ALL_SOURCES } from '@/lib/constants/exchanges'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,8 +17,6 @@ const logger = createLogger('following-api')
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
-
-const ALL_SOURCES = ['binance', 'binance_web3', 'bybit', 'bitget', 'okx', 'kucoin', 'gate', 'mexc', 'coinex']
 
 // 统一的关注项类型
 type FollowItem = {
