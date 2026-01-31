@@ -16,7 +16,7 @@ type ExportType = 'traders' | 'snapshots'
 export async function GET(request: NextRequest) {
   try {
     // Rate limiting - stricter for export
-    const rateLimitResponse = await checkRateLimit(request, { window: 60, max: 10 })
+    const rateLimitResponse = await checkRateLimit(request, { window: 60, requests: 10 })
     if (rateLimitResponse) return rateLimitResponse
     const { searchParams } = new URL(request.url)
     const format = (searchParams.get('format') || 'csv') as ExportFormat
