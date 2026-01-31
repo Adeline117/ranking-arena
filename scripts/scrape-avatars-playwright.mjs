@@ -27,6 +27,7 @@ const REJECT_PATTERNS = [
   'blockie', 'data:image', 'svg+xml', 'gradient', 'identicon',
   'blank.gif', '1x1', 'transparent', 'become-a-lead', 'logo',
   'icon', 'banner', 'favicon', 'loading', 'spinner', 'empty',
+  'zendesk', 'intercom', 'crisp', 'livechat', 'chatbot', 'widget',
 ]
 
 function isValidAvatar(url) {
