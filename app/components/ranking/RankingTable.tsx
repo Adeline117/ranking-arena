@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, memo, useCallback, useTransition } from 'react'
+import React, { useState, useEffect, useRef, memo, useCallback, useTransition } from 'react'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import { RankingSkeleton } from '../ui/Skeleton'
@@ -175,6 +175,7 @@ function RankingTableInner(props: {
 
   const [visibleColumns, setVisibleColumns] = useState<ColumnKey[]>(DEFAULT_VISIBLE_COLUMNS)
   const [showColumnSettings, setShowColumnSettings] = useState(false)
+  const columnSettingsRef = useRef<HTMLDivElement>(null)
   const [viewMode, setViewMode] = useState<ViewMode>('table')
 
   useEffect(() => {
@@ -200,12 +201,34 @@ function RankingTableInner(props: {
     return () => mql.removeEventListener('change', handleResize)
   }, [])
 
+  // Click-outside: close column settings dropdown
+  useEffect(() => {
+    if (!showColumnSettings) return
+    const handleClickOutside = (e: MouseEvent) => {
+      if (columnSettingsRef.current && !columnSettingsRef.current.contains(e.target as Node)) {
+        setShowColumnSettings(false)
+      }
+    }
+    document.addEventListener('click', handleClickOutside, true)
+    return () => document.removeEventListener('click', handleClickOutside, true)
+  }, [showColumnSettings])
+
   const toggleViewMode = (mode: ViewMode) => {
     setViewMode(mode)
     try {
       localStorage.setItem(LS_KEY_VIEW_MODE, mode)
       localStorage.setItem(LS_KEY_VIEW_MANUAL, 'true')
     } catch { /* ignore */ }
+  }
+
+  const resetViewModeToAuto = () => {
+    try {
+      localStorage.removeItem(LS_KEY_VIEW_MANUAL)
+      localStorage.removeItem(LS_KEY_VIEW_MODE)
+    } catch { /* ignore */ }
+    // Re-apply auto logic based on current screen width
+    const isMobile = window.matchMedia('(max-width: 767px)').matches
+    setViewMode(isMobile ? 'card' : 'table')
   }
 
   const toggleColumn = (col: ColumnKey) => {
@@ -344,6 +367,16 @@ function RankingTableInner(props: {
               <button onClick={() => toggleViewMode('card')} title={language === 'en' ? 'Card View' : '卡片视图'} className={`view-toggle-btn touch-target-sm${viewMode === 'card' ? ' view-toggle-active' : ''}`}>
                 <CardViewIcon size={12} />
               </button>
+              {getStoredManualFlag() && (
+                <button
+                  onClick={resetViewModeToAuto}
+                  title={language === 'en' ? 'Reset to auto layout' : '恢复自动布局'}
+                  className="view-toggle-btn touch-target-sm"
+                  style={{ fontSize: '10px', opacity: 0.6 }}
+                >
+                  Auto
+                </button>
+              )}
             </Box>
 
             {/* Filter button */}
@@ -367,7 +400,7 @@ function RankingTableInner(props: {
             </Link>
 
             {/* Column settings */}
-            <Box style={{ position: 'relative' }}>
+            <div ref={columnSettingsRef} style={{ position: 'relative' }}>
               <Box onClick={() => setShowColumnSettings(!showColumnSettings)} title={language === 'en' ? 'Column Settings' : '列设置'} className={`toolbar-btn touch-target-sm${showColumnSettings ? ' toolbar-btn-active' : ''}`}>
                 <SettingsIcon size={11} />
               </Box>
@@ -388,7 +421,7 @@ function RankingTableInner(props: {
                   </button>
                 </Box>
               )}
-            </Box>
+            </div>
 
             {/* Export button */}
             {isPro && traders.length > 0 && (
@@ -476,13 +509,40 @@ function RankingTableInner(props: {
             <button onClick={onRetry}
               className="retry-btn"
               style={{ padding: `${tokens.spacing[2]} ${tokens.spacing[5]}`, background: `${tokens.colors.accent.primary}20`, border: `1px solid ${tokens.colors.accent.primary}40`, borderRadius: tokens.radius.md, color: tokens.colors.accent.primary, cursor: 'pointer', fontSize: tokens.typography.fontSize.sm, fontWeight: tokens.typography.fontWeight.bold, transition: `all ${tokens.transition.base}` }}>
-              {t('retry') || '重试'}
+              {t('retry')}
             </button>
           )}
         </Box>
       ) : sortedTraders.length === 0 ? (
-        <Box style={{ color: tokens.colors.text.tertiary, padding: `${tokens.spacing[10]} ${tokens.spacing[4]}`, textAlign: 'center', fontSize: tokens.typography.fontSize.md }}>
-          {t('noTraderData')}
+        <Box style={{ padding: `${tokens.spacing[10]} ${tokens.spacing[4]}`, textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: tokens.spacing[3] }}>
+          <Text size="md" color="tertiary">
+            {debouncedSearch.trim() || hasActiveFilters
+              ? t('noResults')
+              : t('noTraderData')}
+          </Text>
+          {(debouncedSearch.trim() || hasActiveFilters) && (
+            <button
+              onClick={() => {
+                if (debouncedSearch.trim()) {
+                  if (onSearchChange) onSearchChange('')
+                  else setInternalSearchQuery('')
+                }
+              }}
+              style={{
+                padding: `${tokens.spacing[2]} ${tokens.spacing[5]}`,
+                background: `${tokens.colors.accent.primary}20`,
+                border: `1px solid ${tokens.colors.accent.primary}40`,
+                borderRadius: tokens.radius.md,
+                color: tokens.colors.accent.primary,
+                cursor: 'pointer',
+                fontSize: tokens.typography.fontSize.sm,
+                fontWeight: tokens.typography.fontWeight.bold,
+                transition: `all ${tokens.transition.base}`,
+              }}
+            >
+              {language === 'zh' ? '清除搜索' : 'Clear search'}
+            </button>
+          )}
         </Box>
       ) : viewMode === 'card' ? (
         <>
@@ -490,7 +550,7 @@ function RankingTableInner(props: {
             {sortedTraders.slice(0, cardVisibleCount).map((trader, idx) => {
               const rank = idx + 1
               return (
-                <TraderCard key={`${trader.id}-${trader.source || 'unknown'}-${idx}`}
+                <TraderCard key={`${trader.id}-${trader.source || 'unknown'}`}
                   trader={trader} rank={rank} source={source} language={language}
                   searchQuery={debouncedSearch}
                   getMedalGlowClass={getMedalGlowClass} parseSourceInfo={parseSourceInfoWithT} />
@@ -515,7 +575,7 @@ function RankingTableInner(props: {
                   maxWidth: 320,
                 }}
               >
-                {t('loadMore') || '加载更多'} ({cardVisibleCount}/{sortedTraders.length})
+                {t('loadMore')} ({cardVisibleCount}/{sortedTraders.length})
               </button>
             </Box>
           )}
