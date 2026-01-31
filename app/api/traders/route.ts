@@ -24,6 +24,11 @@ import {
   ARENA_CONFIG,
   type Period,
 } from '@/lib/utils/arena-score'
+import {
+  ALL_SOURCES,
+  SOURCE_TYPE_MAP,
+  SKIP_PNL_THRESHOLD_SOURCES,
+} from '@/lib/constants/exchanges'
 import { createLogger } from '@/lib/utils/logger'
 import { getOrSetWithLock, CacheKey } from '@/lib/cache'
 
@@ -35,129 +40,11 @@ export const preferredRegion = ['iad1', 'sfo1', 'hnd1'] // US East, US West, Tok
 
 export const dynamic = 'force-dynamic'
 
-// 支持的交易所（新的 source 命名）
-const ALL_SOURCES = [
-  // CEX 合约
-  'binance_futures',
-  'bybit',
-  'bitget_futures',
-  'mexc',
-  'coinex',
-  'okx_futures',
-  'kucoin',
-  'bitmart',
-  'phemex',
-  'htx_futures',
-  'weex',
-  'bingx',
-  'gateio',
-  'xt',
-  'pionex',
-  'lbank',
-  'blofin',
-  // CEX 现货
-  'binance_spot',
-  'bitget_spot',
-  // CEX Web3 钱包
-  'binance_web3',
-  'okx_web3',
-  'okx_wallet',
-  // DEX / 链上永续
-  'gmx',
-  'dydx',
-  'hyperliquid',
-  'kwenta',
-  'gains',
-  'mux',
-  // Dune 链上数据
-  'dune_gmx',
-  'dune_hyperliquid',
-  'dune_uniswap',
-  'dune_defi',
-]
-
-// 需要特殊处理 PnL 门槛的交易所
-// 这些交易所的 API 不返回 PnL 数据或 PnL 含义不同
-const SKIP_PNL_THRESHOLD_SOURCES = [
-  // CEX - PnL 是跟单者盈亏或不返回 PnL
-  'bybit',          // PnL 是跟单者盈亏，不是交易员自身盈亏
-  'bitget_futures', // API 不返回 PnL 数据
-  'bitget_spot',    // API 不返回 PnL 数据
-  'kucoin',         // API 不返回 PnL 数据
-  'coinex',         // PnL 数据不完整
-  'mexc',           // API 不返回 PnL 数据
-  'weex',           // API 不返回 PnL 数据
-  'pionex',         // API 不返回 PnL 数据
-  'bitmart',        // API 不返回 PnL 数据
-  'phemex',         // API 不返回 PnL 数据
-  'bingx',          // API 不返回 PnL 数据
-  'gateio',         // API 不返回 PnL 数据
-  'xt',             // API 不返回 PnL 数据
-  'lbank',          // API 不返回 PnL 数据
-  'blofin',         // API 不返回 PnL 数据
-  // 链上数据，PnL 计算方式不同
-  'gmx',
-  'dydx',
-  'hyperliquid',
-  'kwenta',
-  'gains',
-  'mux',
-  'okx_web3',
-  'okx_wallet',
-  'binance_web3',
-  // Dune 链上数据
-  'dune_gmx',
-  'dune_hyperliquid',
-  'dune_uniswap',
-  'dune_defi',
-]
-
 // 数据时效性：只取最近 24 小时内的数据
 const DATA_FRESHNESS_HOURS = 24
 
 // 数据质量：ROI 超过此值视为异常数据（如 Hyperliquid 百万级 ROI）
 const ROI_ANOMALY_THRESHOLD = 10000 // 10000% = 100x
-
-// source 类型映射（用于前端显示）
-const SOURCE_TYPE_MAP: Record<string, 'futures' | 'spot' | 'web3'> = {
-  // CEX 合约
-  'binance_futures': 'futures',
-  'bybit': 'futures',
-  'bitget_futures': 'futures',
-  'mexc': 'futures',
-  'coinex': 'futures',
-  'okx_futures': 'futures',
-  'kucoin': 'futures',
-  'bitmart': 'futures',
-  'phemex': 'futures',
-  'htx_futures': 'futures',
-  'weex': 'futures',
-  'bingx': 'futures',
-  'gateio': 'futures',
-  'xt': 'futures',
-  'pionex': 'futures',
-  'lbank': 'futures',
-  'blofin': 'futures',
-  // CEX 现货
-  'binance_spot': 'spot',
-  'bitget_spot': 'spot',
-  // CEX Web3 钱包 & 链上
-  'binance_web3': 'web3',
-  'okx_web3': 'web3',
-  'okx_wallet': 'web3',
-  // DEX / 链上永续
-  'gmx': 'web3',
-  'dydx': 'web3',
-  'hyperliquid': 'web3',
-  'kwenta': 'web3',
-  'gains': 'web3',
-  'mux': 'web3',
-  // Dune 链上数据
-  'dune_gmx': 'web3',
-  'dune_hyperliquid': 'web3',
-  'dune_uniswap': 'spot',  // Uniswap 是 DEX 现货
-  'dune_defi': 'web3',
-}
 
 interface TraderData {
   id: string
@@ -252,11 +139,11 @@ async function fetchTradersData(
 
     // 某些 DEX 可能没有 90D 数据，但查询会返回空结果，不需要特殊排除
     // 让每个数据源自行处理（如果没有数据会返回空数组）
-    let sourcesToQuery = ALL_SOURCES
-    
+    let sourcesToQuery: string[] = [...ALL_SOURCES]
+
     // 如果指定了 exchange 参数，只查询该交易所
-    if (exchangeFilter && ALL_SOURCES.includes(exchangeFilter as typeof ALL_SOURCES[number])) {
-      sourcesToQuery = [exchangeFilter as typeof ALL_SOURCES[number]]
+    if (exchangeFilter && (ALL_SOURCES as string[]).includes(exchangeFilter)) {
+      sourcesToQuery = [exchangeFilter]
     }
 
     // 并行获取所有交易所数据（优化：每个 source 减少为 2 次查询）
@@ -427,7 +314,7 @@ async function fetchTradersData(
         const confidenceMultiplier = ARENA_CONFIG.CONFIDENCE_MULTIPLIER[effectiveConfidence]
 
         // 方案 2：软 PnL 门槛 — 对需要 PnL 门槛的交易所，应用 qualifier 系数
-        const skipPnlThreshold = SKIP_PNL_THRESHOLD_SOURCES.includes(trader.source)
+        const skipPnlThreshold = (SKIP_PNL_THRESHOLD_SOURCES as string[]).includes(trader.source)
         const qualifier = skipPnlThreshold ? 1 : scoreResult.pnlQualifier
 
         // 计算最终分数：原始子分数之和 × 置信度乘数 × PnL qualifier

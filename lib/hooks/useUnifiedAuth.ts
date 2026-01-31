@@ -28,6 +28,10 @@ export type AuthState = {
   initialized: boolean
   /** Whether user is currently authenticated */
   isAuthenticated: boolean
+  /** Connected wallet address (from user_metadata or profile) */
+  walletAddress: string | null
+  /** Whether the user logged in via wallet (SIWE) */
+  isWalletUser: boolean
 }
 
 export type AuthActions = {
@@ -114,6 +118,8 @@ export function useUnifiedAuth(options?: {
   const accessToken = _session?.access_token ?? null
   const initialized = _initialized
   const isAuthenticated = !!user && !!accessToken
+  const walletAddress = (user?.user_metadata?.wallet_address as string) ?? null
+  const isWalletUser = !!walletAddress || (email?.endsWith('@wallet.arena') ?? false)
 
   const requireAuth = useCallback((): string | null => {
     if (!isAuthenticated || !accessToken) {
@@ -159,9 +165,11 @@ export function useUnifiedAuth(options?: {
     accessToken,
     initialized,
     isAuthenticated,
+    walletAddress,
+    isWalletUser,
     requireAuth,
     getAuthHeaders,
     signOut,
     refreshSession,
-  }), [user, userId, email, accessToken, initialized, isAuthenticated, requireAuth, getAuthHeaders, signOut, refreshSession])
+  }), [user, userId, email, accessToken, initialized, isAuthenticated, walletAddress, isWalletUser, requireAuth, getAuthHeaders, signOut, refreshSession])
 }

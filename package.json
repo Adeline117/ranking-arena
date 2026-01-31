@@ -64,9 +64,11 @@
     "@capacitor/share": "^7.0.1",
     "@capacitor/splash-screen": "^7.0.1",
     "@capacitor/status-bar": "^7.0.1",
+    "@rainbow-me/rainbowkit": "^2.2.10",
     "@sentry/nextjs": "10.35.0",
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.91.0",
+    "@tanstack/react-query": "^5.90.20",
     "@upstash/ratelimit": "^2.0.8",
     "@upstash/redis": "^1.36.1",
     "@vercel/speed-insights": "^1.3.1",
@@ -85,8 +87,11 @@
     "react-dom": "19.2.3",
     "react-easy-crop": "^5.5.6",
     "server-only": "^0.0.1",
+    "siwe": "^3.0.0",
     "stripe": "^20.2.0",
     "swr": "^2.3.8",
+    "viem": "^2.45.1",
+    "wagmi": "^3.4.1",
     "zod": "^4.3.5",
     "zustand": "^5.0.0"
   },
@@ -104,6 +109,7 @@
     "@testing-library/react": "^16.3.2",
     "@types/jest": "^30.0.0",
     "@types/node": "^25",
+    "@types/pg": "^8.16.0",
     "@types/qrcode": "^1.5.6",
     "@types/react": "19.2.9",
     "@types/react-dom": "^19",
@@ -113,12 +119,11 @@
     "jest": "^30.2.0",
     "jest-environment-jsdom": "^30.2.0",
     "prettier": "^3.4.2",
-    "storybook": "^10.2.1",
-    "tailwindcss": "^4",
-    "typescript": "^5",
     "puppeteer": "^24.35.0",
     "puppeteer-extra": "^3.3.6",
     "puppeteer-extra-plugin-stealth": "^2.11.2",
-    "@types/pg": "^8.16.0"
+    "storybook": "^10.2.1",
+    "tailwindcss": "^4",
+    "typescript": "^5"
   }
 }

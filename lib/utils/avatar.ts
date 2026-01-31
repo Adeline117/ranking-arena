@@ -190,15 +190,19 @@ const PROXY_REQUIRED_DOMAINS = [
   // Gate.io
   'gateimg.com',
   'gate.io',
-  // HTX
+  // HTX (multiple CDN domains)
   'htx.com',
   'huobi.com',
+  'hbfile.net',
+  'hbimg.com',
   // BingX
   'bingx.com',
   // CoinEx
   'coinex.com',
-  // Others
+  // LBank
   'lbkrs.com',
+  'lbank.com',
+  // Others
   'weex.com',
   'wexx.one',
   'phemex.com',
@@ -287,7 +291,14 @@ function isLikelyImageUrl(url: string): boolean {
     }
 
     // 6. 如果是已知的图片CDN域名，认为是图片
-    const imageCdnDomains = ['bgstatic.com', 'bnbstatic.com', 'bycsi.com', 'staticimg.com', 'mocortech.com', 'wexx.one']
+    const imageCdnDomains = [
+      'bgstatic.com', 'bnbstatic.com', 'bycsi.com', 'staticimg.com', 'mocortech.com', 'wexx.one',
+      'tylhh.net', 'nftstatic.com', 'bscdnweb.com', 'myqcloud.com',
+      'bybit.com', 'okx.com', 'okcoin.com', 'kucoin.com',
+      'gateimg.com', 'htx.com', 'huobi.com', 'bingx.com',
+      'coinex.com', 'lbkrs.com', 'phemex.com', 'bitmart.com',
+      'xt.com', 'pionex.com', 'blofin.com', 'weex.com',
+    ]
     if (imageCdnDomains.some(domain => parsed.hostname.includes(domain))) {
       return true
     }
@@ -322,17 +333,17 @@ export function getTraderAvatarUrl(avatarUrl: string | null | undefined): string
     return null
   }
 
-  // 检查是否像是有效的图片URL
-  if (!isLikelyImageUrl(avatarUrl)) {
-    return null
-  }
-
-  // 如果是需要代理的域名，使用代理API
+  // 如果是已知交易所域名，信任并直接代理（不需要 isLikelyImageUrl 检查）
   if (needsProxy(avatarUrl)) {
     return `/api/avatar?url=${encodeURIComponent(avatarUrl)}`
   }
 
-  // 其他URL直接返回
+  // 非交易所域名：检查是否像是有效的图片URL
+  if (!isLikelyImageUrl(avatarUrl)) {
+    return null
+  }
+
+  // 其他有效图片URL直接返回
   return avatarUrl
 }
 

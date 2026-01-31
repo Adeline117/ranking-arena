@@ -26,6 +26,10 @@ interface PremiumContextValue {
   isPremium: boolean
   /** 当前等级 */
   tier: SubscriptionTier
+  /** 订阅来源 */
+  source: 'stripe' | 'nft' | 'admin' | 'free'
+  /** 是否持有 NFT 会员 */
+  hasNFT: boolean
   /** 检查功能访问 */
   checkFeature: (featureId: PremiumFeatureId) => FeatureCheckResult
   /** 刷新订阅状态 */
@@ -47,6 +51,8 @@ interface PremiumProviderProps {
 export function PremiumProvider({ children, initialSubscription }: PremiumProviderProps) {
   const [subscription, setSubscription] = useState<UserSubscription | null>(initialSubscription || null)
   const [isLoading, setIsLoading] = useState(!initialSubscription)
+  const [hasNFT, setHasNFT] = useState(false)
+  const [source, setSource] = useState<'stripe' | 'nft' | 'admin' | 'free'>('free')
 
   // 加载订阅状态
   const loadSubscription = useCallback(async () => {
@@ -178,11 +184,62 @@ export function PremiumProvider({ children, initialSubscription }: PremiumProvid
     }
   }, [])
 
+  // Check NFT membership in parallel (non-blocking enhancement)
+  const checkNFTMembership = useCallback(async () => {
+    try {
+      const { supabase } = await import('@/lib/supabase/client')
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) return
+
+      const res = await fetch('/api/membership/nft', {
+        headers: { 'Authorization': `Bearer ${session.access_token}` },
+      })
+      if (res.ok) {
+        const { hasNFT: nft } = await res.json()
+        setHasNFT(nft)
+        if (nft) {
+          setSource('nft')
+          // If NFT holder but no Stripe sub, treat as pro
+          if (!subscription || subscription.tier === 'free') {
+            const nftSub: UserSubscription = {
+              userId: session.user.id,
+              tier: 'pro',
+              status: 'active',
+              startDate: new Date().toISOString(),
+              endDate: null,
+              trialEndDate: null,
+              autoRenew: false,
+              paymentMethod: undefined,
+              usage: {
+                apiCallsToday: 0,
+                comparisonReportsThisMonth: 0,
+                exportsThisMonth: 0,
+                currentFollows: 0,
+                currentCustomRankings: 0,
+              },
+            }
+            setSubscription(nftSub)
+            premiumService.setSubscription(nftSub)
+          }
+        }
+      }
+    } catch {
+      // NFT check is non-critical — fail silently
+    }
+  }, [subscription])
+
   useEffect(() => {
     if (!initialSubscription) {
       loadSubscription()
     }
   }, [initialSubscription, loadSubscription])
+
+  // Run NFT check after subscription loads
+  useEffect(() => {
+    if (!isLoading) {
+      checkNFTMembership()
+    }
+  }, [isLoading, checkNFTMembership])
 
   const checkFeature = useCallback((featureId: PremiumFeatureId): FeatureCheckResult => {
     return premiumService.checkFeatureAccess(featureId)
