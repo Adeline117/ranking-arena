@@ -1,13 +1,20 @@
 /**
- * Web3 Configuration
+ * Web3 Configuration (client-only)
  *
  * Wagmi + RainbowKit config for Base L2 chain.
  * Used by Web3Provider to enable wallet connections.
+ *
+ * WARNING: Do NOT import this file in server routes — it calls
+ * RainbowKit's getDefaultConfig() which is client-only.
+ * Use @/lib/web3/contracts for server-safe constants.
  */
 
-import { http, createConfig } from 'wagmi'
+import { http } from 'wagmi'
 import { base, baseSepolia } from 'wagmi/chains'
 import { getDefaultConfig } from '@rainbow-me/rainbowkit'
+
+// Re-export server-safe constants for backwards compatibility
+export { CONTRACT_ADDRESSES, ARENA_SCORE_SCHEMA_UID } from './contracts'
 
 const isProduction = process.env.NODE_ENV === 'production'
 
@@ -35,16 +42,3 @@ export const wagmiConfig = getDefaultConfig({
   },
   ssr: true,
 })
-
-/**
- * Contract addresses deployed on Base.
- * These are set via environment variables after deployment.
- */
-export const CONTRACT_ADDRESSES = {
-  membershipNFT: process.env.NEXT_PUBLIC_MEMBERSHIP_NFT_ADDRESS as `0x${string}` | undefined,
-  easSchemaRegistry: '0x4200000000000000000000000000000000000020' as const, // Base EAS
-  eas: '0x4200000000000000000000000000000000000021' as const, // Base EAS
-} as const
-
-/** Arena Score EAS Schema UID — set after registering the schema on Base */
-export const ARENA_SCORE_SCHEMA_UID = process.env.NEXT_PUBLIC_ARENA_SCORE_SCHEMA_UID as `0x${string}` | undefined
