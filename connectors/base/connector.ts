@@ -55,6 +55,8 @@ export abstract class BaseConnector implements IConnector {
   ): Promise<Response> {
     await this.enforceRateLimit();
 
+    const proxyUrl = process.env.CLOUDFLARE_PROXY_URL;
+
     for (let attempt = 0; attempt <= retries; attempt++) {
       try {
         const headers: Record<string, string> = {
@@ -68,6 +70,20 @@ export abstract class BaseConnector implements IConnector {
           headers,
           signal: AbortSignal.timeout(30000), // 30s timeout
         });
+
+        // If region-blocked (451) and proxy available, retry via proxy
+        if (response.status === 451 && proxyUrl) {
+          const proxiedUrl = `${proxyUrl}/proxy?url=${encodeURIComponent(url)}`;
+          const proxyResponse = await fetch(proxiedUrl, {
+            ...options,
+            headers,
+            signal: AbortSignal.timeout(30000),
+          });
+          if (proxyResponse.ok) {
+            this.last_request_at = Date.now();
+            return proxyResponse;
+          }
+        }
 
         if (response.ok) {
           this.last_request_at = Date.now();
@@ -89,6 +105,28 @@ export abstract class BaseConnector implements IConnector {
 
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       } catch (error) {
+        // On timeout/network error, try proxy as fallback
+        if (proxyUrl && attempt < retries) {
+          try {
+            const proxiedUrl = `${proxyUrl}/proxy?url=${encodeURIComponent(url)}`;
+            const headers: Record<string, string> = {
+              'User-Agent': this.getRandomUserAgent(),
+              'Accept': 'application/json',
+              ...(options.headers as Record<string, string> || {}),
+            };
+            const proxyResponse = await fetch(proxiedUrl, {
+              ...options,
+              headers,
+              signal: AbortSignal.timeout(30000),
+            });
+            if (proxyResponse.ok) {
+              this.last_request_at = Date.now();
+              return proxyResponse;
+            }
+          } catch {
+            // Proxy also failed, continue retry loop
+          }
+        }
         if (attempt === retries) throw error;
         await this.sleep(backoff * Math.pow(2, attempt));
       }

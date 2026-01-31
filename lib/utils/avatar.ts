@@ -333,6 +333,11 @@ export function getTraderAvatarUrl(avatarUrl: string | null | undefined): string
     return null
   }
 
+  // Local API routes (e.g. /api/avatar/blockie?address=...) - return directly
+  if (avatarUrl.startsWith('/api/')) {
+    return avatarUrl
+  }
+
   // 如果是已知交易所域名，信任并直接代理（不需要 isLikelyImageUrl 检查）
   if (needsProxy(avatarUrl)) {
     return `/api/avatar?url=${encodeURIComponent(avatarUrl)}`

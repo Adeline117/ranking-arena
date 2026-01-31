@@ -11,6 +11,7 @@ import { getAvatarGradient, getAvatarInitial } from '@/lib/utils/avatar'
 import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
 import { ProBadgeOverlay } from '../ui/ProBadge'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { OnChainBadge } from './OnChainBadge'
 
 interface CommunityScore {
   avg_rating: number
@@ -517,6 +518,8 @@ export default function TraderHeader({
                 </svg>
               </Box>
             )}
+
+            <OnChainBadge traderHandle={handle} size="sm" />
 
             {communityScore && communityScore.review_count > 0 && (
               <Badge color="#FFD700" title={`${communityScore.review_count} ${t('userReviews')}`} style={{ gap: tokens.spacing[1] }}>

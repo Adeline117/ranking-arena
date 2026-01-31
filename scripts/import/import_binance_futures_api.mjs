@@ -23,6 +23,29 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
 const SOURCE = 'binance_futures'
 const TARGET_COUNT = 500
+const PROXY_URL = process.env.CLOUDFLARE_PROXY_URL
+
+// Proxy-aware fetch - tries direct first, then CF Worker proxy
+async function proxyFetch(url, options = {}) {
+  try {
+    const res = await fetch(url, { ...options, signal: AbortSignal.timeout(15000) })
+    if (res.ok || !PROXY_URL) return res
+    if (res.status === 451 || res.status === 403) {
+      console.log('  🔄 直连被封，尝试代理...')
+      return await fetch(`${PROXY_URL}/proxy?url=${encodeURIComponent(url)}`, {
+        ...options, signal: AbortSignal.timeout(15000)
+      })
+    }
+    return res
+  } catch (e) {
+    if (PROXY_URL) {
+      return await fetch(`${PROXY_URL}/proxy?url=${encodeURIComponent(url)}`, {
+        ...options, signal: AbortSignal.timeout(15000)
+      })
+    }
+    throw e
+  }
+}
 const PER_PAGE = 20
 
 // ============================================
@@ -128,7 +151,7 @@ async function fetchLeaderboard(period) {
   
   while (traders.size < TARGET_COUNT && pageNum <= 10) {
     try {
-      const response = await fetch(LIST_API, {
+      const response = await proxyFetch(LIST_API, {
         method: 'POST',
         headers: DEFAULT_HEADERS,
         body: JSON.stringify({
