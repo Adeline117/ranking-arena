@@ -549,10 +549,22 @@ async function getTraderDetails(
       max_drawdown_7d: snapshot7d?.max_drawdown ?? undefined,
       max_drawdown_30d: snapshot30d?.max_drawdown ?? undefined,
       // Arena Score
+      arena_score: score90d?.totalScore ?? undefined,
       arena_score_90d: score90d?.totalScore ?? undefined,
       arena_score_30d: score30d?.totalScore ?? undefined,
       arena_score_7d: score7d?.totalScore ?? undefined,
       overall_score: overallScore,
+      // Score breakdown (per period)
+      return_score: score90d ? (score90d.returnScore + score90d.pnlScore) : undefined,
+      return_score_30d: score30d ? (score30d.returnScore + score30d.pnlScore) : undefined,
+      return_score_7d: score7d ? (score7d.returnScore + score7d.pnlScore) : undefined,
+      drawdown_score: score90d?.drawdownScore ?? undefined,
+      drawdown_score_30d: score30d?.drawdownScore ?? undefined,
+      drawdown_score_7d: score7d?.drawdownScore ?? undefined,
+      stability_score: score90d?.stabilityScore ?? undefined,
+      stability_score_30d: score30d?.stabilityScore ?? undefined,
+      stability_score_7d: score7d?.stabilityScore ?? undefined,
+      score_confidence: score90d?.scoreConfidence ?? undefined,
       // 详细统计
       sharpe_ratio: statsDetail90d?.sharpe_ratio ?? undefined,
       sharpe_ratio_30d: statsDetail30d?.sharpe_ratio ?? undefined,
@@ -674,6 +686,7 @@ async function getTraderDetailsFromSnapshots(
     snapshot30dResult,
     arenaFollowersResult,
     trackedSinceResult,
+    avatarResult,
   ] = await Promise.all([
     // 最新快照（90D）
     supabase
@@ -684,7 +697,7 @@ async function getTraderDetailsFromSnapshots(
       .order('captured_at', { ascending: false })
       .limit(1)
       .maybeSingle(),
-    
+
     // 7天快照
     supabase
       .from('trader_snapshots')
@@ -695,7 +708,7 @@ async function getTraderDetailsFromSnapshots(
       .order('captured_at', { ascending: false })
       .limit(1)
       .maybeSingle(),
-    
+
     // 30天快照
     supabase
       .from('trader_snapshots')
@@ -706,13 +719,13 @@ async function getTraderDetailsFromSnapshots(
       .order('captured_at', { ascending: false })
       .limit(1)
       .maybeSingle(),
-    
+
     // Arena 粉丝数
     supabase
       .from('trader_follows')
       .select('*', { count: 'exact', head: true })
       .eq('trader_id', traderId),
-    
+
     // tracked_since
     supabase
       .from('trader_snapshots')
@@ -722,6 +735,15 @@ async function getTraderDetailsFromSnapshots(
       .order('captured_at', { ascending: true })
       .limit(1)
       .maybeSingle(),
+
+    // avatar_url from trader_sources
+    supabase
+      .from('trader_sources')
+      .select('avatar_url')
+      .eq('source', sourceType)
+      .eq('source_trader_id', traderId)
+      .limit(1)
+      .maybeSingle(),
   ])
   
   const snapshot = snapshotResult.data as SnapshotData | null
@@ -729,6 +751,7 @@ async function getTraderDetailsFromSnapshots(
   const snapshot30d = snapshot30dResult.data as SnapshotData | null
   const arenaFollowers = arenaFollowersResult.count || 0
   const trackedSince = trackedSinceResult.data?.captured_at || null
+  const avatarUrl = avatarResult.data?.avatar_url || null
   
   // 辅助函数：标准化 win_rate 为百分比
   // binance_futures 存储小数(0.85)，bitget/bybit 存储百分比(85)
@@ -778,7 +801,7 @@ async function getTraderDetailsFromSnapshots(
       id: traderId,
       bio: undefined,
       followers: arenaFollowers,
-      avatar_url: undefined,
+      avatar_url: avatarUrl,
       isRegistered: false,
       source: sourceType,
     },
@@ -796,15 +819,27 @@ async function getTraderDetailsFromSnapshots(
       max_drawdown_7d: snapshot7d?.max_drawdown ?? undefined,
       max_drawdown_30d: snapshot30d?.max_drawdown ?? undefined,
       // Arena Score
+      arena_score: score90d?.totalScore ?? undefined,
       arena_score_90d: score90d?.totalScore ?? undefined,
       arena_score_30d: score30d?.totalScore ?? undefined,
       arena_score_7d: score7d?.totalScore ?? undefined,
       overall_score: overallScore,
+      // Score breakdown (per period)
+      return_score: score90d ? (score90d.returnScore + score90d.pnlScore) : undefined,
+      return_score_30d: score30d ? (score30d.returnScore + score30d.pnlScore) : undefined,
+      return_score_7d: score7d ? (score7d.returnScore + score7d.pnlScore) : undefined,
+      drawdown_score: score90d?.drawdownScore ?? undefined,
+      drawdown_score_30d: score30d?.drawdownScore ?? undefined,
+      drawdown_score_7d: score7d?.drawdownScore ?? undefined,
+      stability_score: score90d?.stabilityScore ?? undefined,
+      stability_score_30d: score30d?.stabilityScore ?? undefined,
+      stability_score_7d: score7d?.stabilityScore ?? undefined,
+      score_confidence: score90d?.scoreConfidence ?? undefined,
     },
     stats: {
       additionalStats: {
         tradesCount: snapshot?.trades_count ?? undefined,
-        trackedSince: trackedSince 
+        trackedSince: trackedSince
           ? new Date(trackedSince).toLocaleDateString('zh-CN', { year: 'numeric', month: 'short', day: 'numeric' })
           : undefined,
         maxDrawdown: snapshot?.max_drawdown ?? undefined,

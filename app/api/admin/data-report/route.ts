@@ -8,23 +8,23 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { logger } from '@/lib/utils/logger'
+import {
+  ALL_SOURCES as ALL_SOURCE_IDS,
+  SOURCE_TYPE_MAP,
+  EXCHANGE_NAMES,
+} from '@/lib/constants/exchanges'
 
 export const dynamic = 'force-dynamic'
 
-// 所有数据源配置
-const ALL_SOURCES = [
-  { source: 'binance_futures', displayName: 'Binance Futures', type: 'futures', periods: ['7D', '30D', '90D'] },
-  { source: 'binance_spot', displayName: 'Binance Spot', type: 'spot', periods: ['7D', '30D', '90D'] },
-  { source: 'binance_web3', displayName: 'Binance Web3', type: 'web3', periods: ['7D', '30D', '90D'] },
-  { source: 'bybit', displayName: 'Bybit', type: 'futures', periods: ['7D', '30D', '90D'] },
-  { source: 'bitget_futures', displayName: 'Bitget Futures', type: 'futures', periods: ['7D', '30D', '90D'] },
-  { source: 'bitget_spot', displayName: 'Bitget Spot', type: 'spot', periods: ['7D', '30D', '90D'] },
-  { source: 'mexc', displayName: 'MEXC', type: 'futures', periods: ['7D', '30D', '90D'] },
-  { source: 'coinex', displayName: 'CoinEx', type: 'futures', periods: ['7D', '30D', '90D'] },
-  { source: 'okx_web3', displayName: 'OKX Web3', type: 'web3', periods: ['7D', '30D', '90D'] },
-  { source: 'kucoin', displayName: 'KuCoin', type: 'futures', periods: ['7D', '30D', '90D'] },
-  { source: 'gmx', displayName: 'GMX', type: 'web3', periods: ['7D', '30D'] }, // GMX 只有 7D 和 30D
-]
+// Build data-report source configs from shared constants
+const ALL_SOURCES = ALL_SOURCE_IDS
+  .filter(s => EXCHANGE_NAMES[s]) // only sources with display names
+  .map(source => ({
+    source,
+    displayName: EXCHANGE_NAMES[source] || source,
+    type: SOURCE_TYPE_MAP[source] || 'futures',
+    periods: source === 'gmx' ? ['7D', '30D'] : ['7D', '30D', '90D'],
+  }))
 
 // 数据陈旧阈值（小时）
 const STALE_THRESHOLD_HOURS = 24

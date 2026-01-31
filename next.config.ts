@@ -141,6 +141,14 @@ const nextConfig: NextConfig = {
         protocol: 'https',
         hostname: '**.huobi.com',
       },
+      {
+        protocol: 'https',
+        hostname: '**.hbfile.net',
+      },
+      {
+        protocol: 'https',
+        hostname: '**.cloudfront.net',
+      },
       // BingX 头像 CDN
       {
         protocol: 'https',

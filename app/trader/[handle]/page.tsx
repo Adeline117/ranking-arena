@@ -57,7 +57,7 @@ interface EquityCurveData {
 
 interface ExtendedPositionHistoryItem {
   symbol: string
-  direction: string
+  direction: 'long' | 'short'
   positionType: string
   marginMode: string
   openTime: string
@@ -308,10 +308,6 @@ function TraderContent(props: { params: { handle: string } | Promise<{ handle: s
                   <OverviewPerformanceCard
                     performance={performance}
                     equityCurve={equityCurve?.['90D']}
-                    arenaScore={performance.arena_score}
-                    returnScore={performance.return_score}
-                    drawdownScore={performance.drawdown_score}
-                    stabilityScore={performance.stability_score}
                     source={profile?.source}
                   />
                 ) : (

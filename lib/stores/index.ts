@@ -72,12 +72,14 @@ interface UserState {
   handle: string | null
   avatarUrl: string | null
   subscriptionTier: 'free' | 'pro'
-  
+  walletAddress: string | null
+
   // 关注列表（本地缓存）
   followedTraders: string[]
-  
+
   // 操作
-  setUser: (user: { id: string; handle: string; avatarUrl?: string; tier?: 'free' | 'pro' } | null) => void
+  setUser: (user: { id: string; handle: string; avatarUrl?: string; tier?: 'free' | 'pro'; walletAddress?: string } | null) => void
+  setWalletAddress: (address: string | null) => void
   setFollowedTraders: (traders: string[]) => void
   followTrader: (traderId: string) => void
   unfollowTrader: (traderId: string) => void
@@ -93,8 +95,9 @@ export const useUserStore = create<UserState>()(
       handle: null,
       avatarUrl: null,
       subscriptionTier: 'free',
+      walletAddress: null,
       followedTraders: [],
-      
+
       // 操作
       setUser: (user) => set(user ? {
         isLoggedIn: true,
@@ -102,13 +105,17 @@ export const useUserStore = create<UserState>()(
         handle: user.handle,
         avatarUrl: user.avatarUrl || null,
         subscriptionTier: user.tier || 'free',
+        walletAddress: user.walletAddress || null,
       } : {
         isLoggedIn: false,
         userId: null,
         handle: null,
         avatarUrl: null,
         subscriptionTier: 'free',
+        walletAddress: null,
       }),
+
+      setWalletAddress: (address) => set({ walletAddress: address }),
       
       setFollowedTraders: (traders) => set({ followedTraders: traders }),
 
@@ -131,6 +138,7 @@ export const useUserStore = create<UserState>()(
         handle: null,
         avatarUrl: null,
         subscriptionTier: 'free',
+        walletAddress: null,
         followedTraders: [],
       }),
     }),

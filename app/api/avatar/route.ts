@@ -49,15 +49,19 @@ export async function GET(request: Request) {
       // Gate.io
       'gateimg.com',
       'gate.io',
-      // HTX
+      // HTX (multiple CDN domains)
       'htx.com',
       'huobi.com',
+      'hbfile.net',
+      'hbimg.com',
+      'cloudfront.net',
       // BingX
       'bingx.com',
       // CoinEx
       'coinex.com',
       // LBank
       'lbkrs.com',
+      'lbank.com',
       // Phemex
       'phemex.com',
       // Bitmart

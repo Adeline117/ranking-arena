@@ -4,6 +4,9 @@ import { useState, useEffect, useRef } from 'react'
 import { supabase } from "@/lib/supabase/client"
 import { useRouter } from 'next/navigation'
 import { useToast } from '@/app/components/ui/Toast'
+import { ConnectButton } from '@rainbow-me/rainbowkit'
+import { useAccount } from 'wagmi'
+import { useSiweAuth } from '@/lib/web3/useSiweAuth'
 
 type Language = 'zh' | 'en'
 
@@ -43,6 +46,10 @@ const translations = {
     welcomeBack: '欢迎回来',
     createAccount: '创建账号',
     subtitle: '探索顶级交易员的世界',
+    connectWallet: '连接钱包',
+    walletSignIn: '使用钱包登录',
+    walletConnecting: '连接中...',
+    walletSignInSuccess: '钱包登录成功',
   },
   en: {
     title: 'Login / Register',
@@ -79,6 +86,10 @@ const translations = {
     welcomeBack: 'Welcome Back',
     createAccount: 'Create Account',
     subtitle: 'Explore the world of top traders',
+    connectWallet: 'Connect Wallet',
+    walletSignIn: 'Sign in with Wallet',
+    walletConnecting: 'Connecting...',
+    walletSignInSuccess: 'Wallet sign-in successful',
   },
 }
 
@@ -338,6 +349,10 @@ export default function LoginPage() {
   const errorRef = useRef<HTMLDivElement>(null)
   const router = useRouter()
   const { showToast } = useToast()
+
+  // Web3 wallet auth
+  const { address: walletAddress, isConnected: isWalletConnected } = useAccount()
+  const { signIn: siweSignIn, isLoading: siweLoading, error: siweError } = useSiweAuth()
 
   const t = translations[lang]
   const passwordStrength = getPasswordStrength(password)
@@ -1433,15 +1448,99 @@ export default function LoginPage() {
         )}
 
         {/* Divider */}
-        <div style={{ 
-          display: 'flex', 
-          alignItems: 'center', 
-          gap: 16, 
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 16,
           margin: '20px 0',
         }}>
           <div style={{ flex: 1, height: 1, background: 'rgba(255, 255, 255, 0.1)' }} />
           <span style={{ fontSize: 12, color: '#5a5a5a' }}>or</span>
           <div style={{ flex: 1, height: 1, background: 'rgba(255, 255, 255, 0.1)' }} />
+        </div>
+
+        {/* Wallet Connect Section */}
+        <div style={{ marginBottom: 16 }}>
+          {!isWalletConnected ? (
+            <div style={{ display: 'flex', justifyContent: 'center' }}>
+              <ConnectButton.Custom>
+                {({ openConnectModal }) => (
+                  <button
+                    onClick={openConnectModal}
+                    className="login-button"
+                    style={{
+                      width: '100%',
+                      padding: '14px 16px',
+                      borderRadius: 12,
+                      border: '1px solid rgba(139, 111, 168, 0.3)',
+                      background: 'rgba(139, 111, 168, 0.08)',
+                      color: '#c9b8db',
+                      fontWeight: 700,
+                      fontSize: 15,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 10,
+                    }}
+                  >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="2" y="6" width="20" height="12" rx="2" />
+                      <path d="M22 10H18a2 2 0 0 0-2 2 2 2 0 0 0 2 2h4" />
+                    </svg>
+                    {t.connectWallet}
+                  </button>
+                )}
+              </ConnectButton.Custom>
+            </div>
+          ) : (
+            <button
+              onClick={async () => {
+                const result = await siweSignIn()
+                if (result) {
+                  showToast(t.walletSignInSuccess, 'success')
+                  if (result.handle) {
+                    router.push(`/u/${result.handle}`)
+                  } else {
+                    router.push('/')
+                  }
+                } else if (siweError) {
+                  setError(siweError)
+                }
+              }}
+              disabled={siweLoading}
+              className="login-button"
+              style={{
+                width: '100%',
+                padding: '14px 16px',
+                borderRadius: 12,
+                border: 'none',
+                background: siweLoading
+                  ? 'rgba(139, 111, 168, 0.2)'
+                  : 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
+                color: '#fff',
+                fontWeight: 700,
+                fontSize: 15,
+                cursor: siweLoading ? 'not-allowed' : 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 10,
+              }}
+            >
+              {siweLoading && <Spinner />}
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="2" y="6" width="20" height="12" rx="2" />
+                <path d="M22 10H18a2 2 0 0 0-2 2 2 2 0 0 0 2 2h4" />
+              </svg>
+              {siweLoading ? t.walletConnecting : `${t.walletSignIn} (${walletAddress?.slice(0, 6)}...${walletAddress?.slice(-4)})`}
+            </button>
+          )}
+          {siweError && (
+            <div style={{ marginTop: 8, fontSize: 12, color: '#ff7c7c' }}>
+              {siweError}
+            </div>
+          )}
         </div>
 
         {/* Switch login/register */}

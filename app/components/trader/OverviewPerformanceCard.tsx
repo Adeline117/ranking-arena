@@ -21,6 +21,14 @@ interface ExtendedPerformance extends TraderPerformance {
   total_positions?: number
   total_positions_7d?: number
   total_positions_30d?: number
+  // Per-period score breakdowns
+  return_score_7d?: number
+  return_score_30d?: number
+  drawdown_score_7d?: number
+  drawdown_score_30d?: number
+  stability_score_7d?: number
+  stability_score_30d?: number
+  score_confidence?: string
 }
 
 export interface OverviewPerformanceCardProps {
@@ -28,11 +36,6 @@ export interface OverviewPerformanceCardProps {
   profitableWeeksPct?: number
   equityCurve?: Array<{ date: string; roi: number; pnl: number }>
   lastUpdated?: string
-  // Score breakdown props (integrated, free for all users)
-  arenaScore?: number | null
-  returnScore?: number | null
-  drawdownScore?: number | null
-  stabilityScore?: number | null
   // Data source for period mapping notes
   source?: string
 }
@@ -102,10 +105,6 @@ export default function OverviewPerformanceCard({
   profitableWeeksPct,
   equityCurve,
   lastUpdated,
-  arenaScore,
-  returnScore,
-  drawdownScore,
-  stabilityScore,
   source,
 }: OverviewPerformanceCardProps) {
   void profitableWeeksPct
@@ -158,6 +157,9 @@ export default function OverviewPerformanceCard({
           sharpeRatio: performance.sharpe_ratio_7d,
           winningPositions: performance.winning_positions_7d ?? performance.winning_positions,
           totalPositions: performance.total_positions_7d ?? performance.total_positions,
+          returnScore: performance.return_score_7d,
+          drawdownScore: performance.drawdown_score_7d,
+          stabilityScore: performance.stability_score_7d,
         }
       case '30D':
         return {
@@ -169,6 +171,9 @@ export default function OverviewPerformanceCard({
           sharpeRatio: performance.sharpe_ratio_30d,
           winningPositions: performance.winning_positions_30d ?? performance.winning_positions,
           totalPositions: performance.total_positions_30d ?? performance.total_positions,
+          returnScore: performance.return_score_30d,
+          drawdownScore: performance.drawdown_score_30d,
+          stabilityScore: performance.stability_score_30d,
         }
       case '90D':
       default:
@@ -181,12 +186,16 @@ export default function OverviewPerformanceCard({
           sharpeRatio: performance.sharpe_ratio,
           winningPositions: performance.winning_positions,
           totalPositions: performance.total_positions,
+          returnScore: performance.return_score ?? undefined,
+          drawdownScore: performance.drawdown_score ?? undefined,
+          stabilityScore: performance.stability_score ?? undefined,
         }
     }
   }
 
   const data = getData()
-  const { roi, pnl, winRate, maxDrawdown, sharpeRatio, winningPositions, totalPositions } = data
+  const { roi, pnl, winRate, maxDrawdown, sharpeRatio, winningPositions, totalPositions, returnScore: periodReturnScore, drawdownScore: periodDrawdownScore, stabilityScore: periodStabilityScore } = data
+  const periodArenaScore = data.arenaScore
 
   const formatPnl = (value: number | undefined) => {
     if (value === undefined) return '—'
@@ -430,25 +439,29 @@ export default function OverviewPerformanceCard({
               label={language === 'zh' ? '夏普' : 'Sharpe'}
               value={sharpeRatio !== undefined ? sharpeRatio.toFixed(2) : '—'}
               highlight={sharpeRatio !== undefined && sharpeRatio > 1}
+              tooltip={sharpeRatio === undefined ? (language === 'zh' ? '该交易所未提供夏普比率数据' : 'Sharpe ratio not available from this exchange') : undefined}
             />
             <MetricBadge
               label={language === 'zh' ? '最大回撤' : 'MDD'}
               value={maxDrawdown !== undefined ? `${Math.abs(maxDrawdown).toFixed(1)}%` : '—'}
               negative
+              tooltip={maxDrawdown === undefined ? (language === 'zh' ? '该交易所未提供回撤数据' : 'Drawdown data not available from this exchange') : undefined}
             />
             <MetricBadge
               label={language === 'zh' ? '胜率' : 'Win'}
               value={winRate !== undefined ? `${winRate.toFixed(1)}%` : '—'}
               highlight={winRate !== undefined && winRate > 60}
+              tooltip={winRate === undefined ? (language === 'zh' ? '该交易所未提供胜率数据' : 'Win rate not available from this exchange') : undefined}
             />
             <MetricBadge
               label={language === 'zh' ? '盈利单' : 'W/T'}
               value={winningPositions !== undefined && totalPositions !== undefined ? `${winningPositions}/${totalPositions}` : '—'}
+              tooltip={winningPositions === undefined ? (language === 'zh' ? '该交易所未提供持仓统计' : 'Position stats not available from this exchange') : undefined}
             />
           </Box>
 
-          {/* 评分详情 - 免费展示 */}
-          {(arenaScore !== undefined || returnScore !== undefined || drawdownScore !== undefined || stabilityScore !== undefined) && (
+          {/* 评分详情 - 免费展示 (period-specific) */}
+          {(periodArenaScore !== undefined || periodReturnScore !== undefined || periodDrawdownScore !== undefined || periodStabilityScore !== undefined) && (
             <Box
               style={{
                 marginTop: tokens.spacing[5],
@@ -467,7 +480,7 @@ export default function OverviewPerformanceCard({
                   {language === 'zh' ? '评分详情' : 'Score Breakdown'}
                 </Text>
                 {/* Arena Score 总分 */}
-                {arenaScore != null && (
+                {periodArenaScore != null && (
                   <Box
                     style={{
                       marginLeft: 'auto',
@@ -475,9 +488,9 @@ export default function OverviewPerformanceCard({
                       alignItems: 'center',
                       gap: tokens.spacing[2],
                       padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
-                      background: `${getScoreColor(arenaScore, 100)}15`,
+                      background: `${getScoreColor(periodArenaScore, 100)}15`,
                       borderRadius: tokens.radius.full,
-                      border: `1px solid ${getScoreColor(arenaScore, 100)}30`,
+                      border: `1px solid ${getScoreColor(periodArenaScore, 100)}30`,
                     }}
                   >
                     <Text size="xs" color="secondary" weight="bold">Arena Score</Text>
@@ -485,11 +498,11 @@ export default function OverviewPerformanceCard({
                       size="sm"
                       weight="black"
                       style={{
-                        color: getScoreColor(arenaScore, 100),
+                        color: getScoreColor(periodArenaScore, 100),
                         fontFamily: tokens.typography.fontFamily.mono.join(', '),
                       }}
                     >
-                      {arenaScore.toFixed(0)}
+                      {periodArenaScore.toFixed(0)}
                     </Text>
                   </Box>
                 )}
@@ -499,26 +512,61 @@ export default function OverviewPerformanceCard({
               <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
                 <ScoreBar
                   label={language === 'zh' ? '收益分' : 'Return Score'}
-                  score={returnScore ?? null}
+                  score={periodReturnScore ?? null}
                   maxScore={85}
                   isVisible={isVisible}
                   delay={500}
                 />
                 <ScoreBar
                   label={language === 'zh' ? '回撤分' : 'Drawdown Score'}
-                  score={drawdownScore ?? null}
+                  score={periodDrawdownScore ?? null}
                   maxScore={8}
                   isVisible={isVisible}
                   delay={600}
                 />
                 <ScoreBar
                   label={language === 'zh' ? '稳定分' : 'Stability Score'}
-                  score={stabilityScore ?? null}
+                  score={periodStabilityScore ?? null}
                   maxScore={7}
                   isVisible={isVisible}
                   delay={700}
                 />
               </Box>
+
+              {/* 数据置信度提示 */}
+              {performance.score_confidence && performance.score_confidence !== 'full' && (
+                <Box
+                  style={{
+                    marginTop: tokens.spacing[3],
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: tokens.spacing[2],
+                    padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+                    background: performance.score_confidence === 'minimal'
+                      ? `${tokens.colors.accent.error}10`
+                      : `${tokens.colors.accent.warning}10`,
+                    borderRadius: tokens.radius.md,
+                    border: `1px solid ${performance.score_confidence === 'minimal' ? tokens.colors.accent.error : tokens.colors.accent.warning}25`,
+                  }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                    stroke={performance.score_confidence === 'minimal' ? tokens.colors.accent.error : tokens.colors.accent.warning}
+                    strokeWidth="2" strokeLinecap="round">
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="12" y1="8" x2="12" y2="12" />
+                    <line x1="12" y1="16" x2="12.01" y2="16" />
+                  </svg>
+                  <Text size="xs" style={{
+                    color: performance.score_confidence === 'minimal' ? tokens.colors.accent.error : tokens.colors.accent.warning,
+                    fontWeight: 500,
+                  }}>
+                    {performance.score_confidence === 'minimal'
+                      ? (language === 'zh' ? '数据不完整，回撤与胜率使用默认值' : 'Incomplete data — drawdown & win rate are defaults')
+                      : (language === 'zh' ? '部分数据缺失，使用了默认中位值' : 'Partial data — defaults used for some metrics')
+                    }
+                  </Text>
+                </Box>
+              )}
 
               {/* 评分说明 */}
               <Box
@@ -624,17 +672,22 @@ function MetricBadge({
   value,
   highlight = false,
   negative = false,
+  tooltip,
 }: {
   label: string
   value: string
   highlight?: boolean
   negative?: boolean
+  tooltip?: string
 }) {
-  const color = highlight
-    ? tokens.colors.accent.success
-    : negative
-      ? tokens.colors.accent.error
-      : tokens.colors.text.primary
+  const isNA = value === '—'
+  const color = isNA
+    ? tokens.colors.text.tertiary
+    : highlight
+      ? tokens.colors.accent.success
+      : negative
+        ? tokens.colors.accent.error
+        : tokens.colors.text.primary
 
   return (
     <Box
@@ -646,13 +699,15 @@ function MetricBadge({
         background: tokens.colors.bg.tertiary,
         borderRadius: tokens.radius.full,
         border: `1px solid ${highlight ? tokens.colors.accent.success + '30' : tokens.colors.border.primary}`,
+        cursor: tooltip ? 'help' : undefined,
       }}
+      title={tooltip}
     >
       <Text style={{ fontSize: 11, color: tokens.colors.text.tertiary, fontWeight: 500 }}>
         {label}
       </Text>
       <Text style={{ fontSize: 13, color, fontWeight: 700, fontFamily: tokens.typography.fontFamily.mono.join(', ') }}>
-        {value}
+        {isNA ? 'N/A' : value}
       </Text>
     </Box>
   )
