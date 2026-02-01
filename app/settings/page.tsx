@@ -759,7 +759,7 @@ function SettingsContent() {
 
   // Debounced handle uniqueness check
   useEffect(() => {
-    if (!handle || handle.length < 2 || !validateHandle(handle).valid) {
+    if (!handle || handle.length < 2 || !validateHandle(handle, t).valid) {
       setHandleAvailable(null)
       return
     }
@@ -807,10 +807,10 @@ function SettingsContent() {
   }>({ handle: false, newPassword: false, confirmPassword: false, newEmail: false })
 
   // Validation results
-  const handleValidation = validateHandle(handle)
-  const newPasswordValidation = validatePassword(newPassword)
-  const confirmPasswordValidation = validatePasswordMatch(newPassword, confirmNewPassword)
-  const newEmailValidation = validateEmail(newEmail)
+  const handleValidation = validateHandle(handle, t)
+  const newPasswordValidation = validatePassword(newPassword, t)
+  const confirmPasswordValidation = validatePasswordMatch(newPassword, confirmNewPassword, t)
+  const newEmailValidation = validateEmail(newEmail, t)
 
   const markTouched = (field: keyof typeof touchedFields) => {
     setTouchedFields(prev => ({ ...prev, [field]: true }))

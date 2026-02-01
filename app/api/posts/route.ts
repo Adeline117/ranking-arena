@@ -165,8 +165,8 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
 
     // 验证输入
-    const title = validateString(body.title, { required: true, minLength: 1, maxLength: 200, fieldName: '标题' })!
-    const content = validateString(body.content, { required: true, minLength: 1, maxLength: 10000, fieldName: '内容' })!
+    const title = validateString(body.title, { required: true, minLength: 1, maxLength: 200, fieldName: 'title' })!
+    const content = validateString(body.content, { required: true, minLength: 1, maxLength: 10000, fieldName: 'content' })!
     const group_id = validateString(body.group_id) ?? undefined
     const poll_enabled = body.poll_enabled === true
 
