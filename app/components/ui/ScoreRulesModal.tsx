@@ -129,17 +129,19 @@ export function ScoreRulesModal({ isOpen, onClose }: ScoreRulesModalProps) {
           {/* Score Composition */}
           <Section title="Score Composition" accent>
             <FormulaBox>
-              S<sub>total</sub> = S<sub>return</sub> + S<sub>risk</sub>
+              S<sub>total</sub> = S<sub>return</sub> + S<sub>pnl</sub> + S<sub>dd</sub> + S<sub>stab</sub>
             </FormulaBox>
             <div style={{ display: 'flex', gap: 12, marginTop: 12, flexWrap: 'wrap' }}>
-              <ScoreBadge label="Return Score" value="[0, 85]" color={tokens.colors.accent.success} />
-              <ScoreBadge label="Risk Score" value="[0, 15]" color={tokens.colors.accent.primary} />
+              <ScoreBadge label="Return Score" value="[0, 70]" color={tokens.colors.accent.success} />
+              <ScoreBadge label="PnL Score" value="[0, 15]" color={tokens.colors.accent.brand} />
+              <ScoreBadge label="Drawdown" value="[0, 8]" color={tokens.colors.accent.warning} />
+              <ScoreBadge label="Stability" value="[0, 7]" color={tokens.colors.accent.primary} />
               <ScoreBadge label="Total" value="[0, 100]" color={tokens.colors.accent.warning} />
             </div>
           </Section>
 
           {/* Return Score */}
-          <Section title="Return Score (85%)">
+          <Section title="Return Score [0, 70]">
             <div style={{ marginBottom: 12, color: tokens.colors.text.tertiary, fontSize: 12 }}>
               Annualized ROI intensity with hyperbolic tangent compression
             </div>
@@ -148,15 +150,15 @@ export function ScoreRulesModal({ isOpen, onClose }: ScoreRulesModalProps) {
                 I<sub>d</sub> = (365 / d) · ln(1 + ROI<sub>d</sub>)
               </div>
               <div>
-                S<sub>return</sub> = 85 · tanh(α · I<sub>d</sub>)<sup>β</sup>
+                S<sub>return</sub> = 70 · tanh(α · I<sub>d</sub>)<sup>β</sup>
               </div>
             </FormulaBox>
             <div style={{ marginTop: 12 }}>
-              <ParamTable 
+              <ParamTable
                 headers={['Period', 'α (coeff)', 'β (exp)']}
                 rows={[
-                  ['7D', '0.12', '1.8'],
-                  ['30D', '0.22', '1.6'],
+                  ['7D', '0.08', '1.8'],
+                  ['30D', '0.15', '1.6'],
                   ['90D', '0.18', '1.6'],
                 ]}
               />
@@ -166,8 +168,28 @@ export function ScoreRulesModal({ isOpen, onClose }: ScoreRulesModalProps) {
             </div>
           </Section>
 
+          {/* PnL Score */}
+          <Section title="PnL Score [0, 15]">
+            <div style={{ marginBottom: 12, color: tokens.colors.text.tertiary, fontSize: 12 }}>
+              Absolute profit with logarithmic normalization
+            </div>
+            <FormulaBox>
+              S<sub>pnl</sub> = 15 · tanh(γ · ln(1 + PnL / base))
+            </FormulaBox>
+            <div style={{ marginTop: 12 }}>
+              <ParamTable
+                headers={['Period', 'base ($)', 'γ (coeff)']}
+                rows={[
+                  ['7D', '500', '0.40'],
+                  ['30D', '2,000', '0.35'],
+                  ['90D', '5,000', '0.30'],
+                ]}
+              />
+            </div>
+          </Section>
+
           {/* Risk Score */}
-          <Section title="Risk Score (15%)">
+          <Section title="Risk Score [0, 15]">
             <div style={{ marginBottom: 16 }}>
               <Text size="sm" weight="bold" style={{ color: tokens.colors.text.primary, marginBottom: 8, display: 'block' }}>
                 Drawdown Component [0, 8]
@@ -219,9 +241,9 @@ export function ScoreRulesModal({ isOpen, onClose }: ScoreRulesModalProps) {
               gridTemplateColumns: 'repeat(3, 1fr)', 
               gap: 12,
             }}>
-              <ThresholdCard period="7D" value="$300" />
-              <ThresholdCard period="30D" value="$1,000" />
-              <ThresholdCard period="90D" value="$3,000" />
+              <ThresholdCard period="7D" value="$200" />
+              <ThresholdCard period="30D" value="$500" />
+              <ThresholdCard period="90D" value="$1,000" />
             </div>
             <div style={{ marginTop: 12, fontSize: 12, color: tokens.colors.text.tertiary }}>
               Constraint: PnL<sub>realized</sub> &gt; T<sub>d</sub>

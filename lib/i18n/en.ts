@@ -1191,9 +1191,9 @@ const en = {
     rankingRules: 'Ranking Rules',
     arenaScoreRankingRules: 'Arena Score Ranking Rules',
     rankingRule1: 'Ranked by Arena Score (0-100)',
-    rankingRule2: 'Score: Return (85%) + Stability/Risk (15%)',
+    rankingRule2: 'Score: Return (0-70) + PnL (0-15) + Drawdown (0-8) + Stability (0-7)',
     rankingRule3: 'Lower drawdown ranks higher when Score ties',
-    rankingRuleThreshold: '* Entry threshold (PNL): 7D > $300 | 30D > $1,000 | 90D > $3,000',
+    rankingRuleThreshold: '* Entry threshold (PNL): 7D > $200 | 30D > $500 | 90D > $1,000',
     rankingRuleROINote: '* ROI calculation varies by exchange. Use caution when comparing across exchanges.',
     detailButton: 'Details',
     arenaScoreTooltip: 'Arena Score: Overall rating (0-100)',
@@ -1224,6 +1224,21 @@ const en = {
     // LanguageToggle
     switchToEnglish: 'Switch to English',
     switchToChinese: 'Switch to Chinese',
+
+    // Validation (settings)
+    validationHandleMinLength: 'Username must be at least 2 characters',
+    validationHandleMaxLength: 'Username cannot exceed {max} characters',
+    validationHandleInvalidChars: 'Username can only contain letters, numbers, underscores, and Chinese characters',
+    validationInvalidEmail: 'Please enter a valid email address',
+    validationPasswordMinLength: 'Password must be at least 6 characters',
+    validationPasswordMismatch: 'Passwords do not match',
+
+    // API responses
+    avoidVoteSubmitted: 'Avoid list vote submitted',
+    commentDeleted: 'Comment deleted',
+    deleteSuccessful: 'Delete successful',
+    conversationNotFound: 'Conversation not found',
+    noPermissionToAccess: 'No permission to access this conversation',
 } as const
 
 export default en
