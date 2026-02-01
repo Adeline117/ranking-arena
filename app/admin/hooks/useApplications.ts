@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from 'react'
 import { getCsrfHeaders } from '@/lib/api/client'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 type ToastFn = (message: string, type: 'success' | 'error' | 'warning' | 'info') => void
 
@@ -51,6 +52,7 @@ export interface GroupEditApplication {
 }
 
 export function useApplications(accessToken: string | null, showToast?: ToastFn) {
+  const { t } = useLanguage()
   const [applications, setApplications] = useState<GroupApplication[]>([])
   const [editApplications, setEditApplications] = useState<GroupEditApplication[]>([])
   const [applicationsLoading, setApplicationsLoading] = useState(false)
@@ -118,11 +120,11 @@ export function useApplications(accessToken: string | null, showToast?: ToastFn)
         setApplications(prev => prev.filter(a => a.id !== applicationId))
         return true
       } else {
-        showToast?.(data.error || '操作失败', 'error')
+        showToast?.(data.error || t('adminOperationFailed'), 'error')
         return false
       }
     } catch (_err) {
-      showToast?.('网络错误', 'error')
+      showToast?.(t('adminNetworkError'), 'error')
       return false
     } finally {
       setActionLoading(prev => ({ ...prev, [applicationId]: false }))
@@ -150,11 +152,11 @@ export function useApplications(accessToken: string | null, showToast?: ToastFn)
         setApplications(prev => prev.filter(a => a.id !== applicationId))
         return true
       } else {
-        showToast?.(data.error || '操作失败', 'error')
+        showToast?.(data.error || t('adminOperationFailed'), 'error')
         return false
       }
     } catch (_err) {
-      showToast?.('网络错误', 'error')
+      showToast?.(t('adminNetworkError'), 'error')
       return false
     } finally {
       setActionLoading(prev => ({ ...prev, [applicationId]: false }))
@@ -180,11 +182,11 @@ export function useApplications(accessToken: string | null, showToast?: ToastFn)
         setEditApplications(prev => prev.filter(a => a.id !== applicationId))
         return true
       } else {
-        showToast?.(data.error || '操作失败', 'error')
+        showToast?.(data.error || t('adminOperationFailed'), 'error')
         return false
       }
     } catch (_err) {
-      showToast?.('网络错误', 'error')
+      showToast?.(t('adminNetworkError'), 'error')
       return false
     } finally {
       setActionLoading(prev => ({ ...prev, [`edit_${applicationId}`]: false }))
@@ -212,11 +214,11 @@ export function useApplications(accessToken: string | null, showToast?: ToastFn)
         setEditApplications(prev => prev.filter(a => a.id !== applicationId))
         return true
       } else {
-        showToast?.(data.error || '操作失败', 'error')
+        showToast?.(data.error || t('adminOperationFailed'), 'error')
         return false
       }
     } catch (_err) {
-      showToast?.('网络错误', 'error')
+      showToast?.(t('adminNetworkError'), 'error')
       return false
     } finally {
       setActionLoading(prev => ({ ...prev, [`edit_${applicationId}`]: false }))

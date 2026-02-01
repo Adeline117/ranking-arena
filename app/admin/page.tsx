@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/layout/TopNav'
 import { Box, Text, Button } from '@/app/components/base'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 // Hooks
 import { useAdminAuth } from './hooks/useAdminAuth'
@@ -25,6 +26,7 @@ type AdminTab = 'dashboard' | 'scraperStatus' | 'users' | 'reports' | 'applicati
 
 export default function AdminPage() {
   const router = useRouter()
+  const { t } = useLanguage()
   const { email, accessToken, isAdmin, authChecking } = useAdminAuth()
   const { freshnessReport, loadFreshnessReport } = useFreshness()
   const { applications, editApplications, loadApplications, loadEditApplications } = useApplications(accessToken)
@@ -46,7 +48,7 @@ export default function AdminPage() {
       <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
         <TopNav email={email} />
         <Box style={{ maxWidth: 1200, margin: '0 auto', padding: tokens.spacing[6] }}>
-          <Text size="lg">验证权限中...</Text>
+          <Text size="lg">{t('verifyingPermission')}</Text>
         </Box>
       </Box>
     )
@@ -58,13 +60,13 @@ export default function AdminPage() {
         <TopNav email={email} />
         <Box style={{ maxWidth: 1200, margin: '0 auto', padding: tokens.spacing[6], textAlign: 'center' }}>
           <Text size="2xl" weight="black" style={{ marginBottom: tokens.spacing[4] }}>
-            无权限访问
+            {t('noPermissionAccess')}
           </Text>
           <Text color="tertiary" style={{ marginBottom: tokens.spacing[4] }}>
-            您没有管理员权限，无法访问此页面
+            {t('noAdminPermission')}
           </Text>
           <Button variant="primary" onClick={() => router.push('/')}>
-            返回首页
+            {t('backToHome')}
           </Button>
         </Box>
       </Box>
@@ -84,7 +86,7 @@ export default function AdminPage() {
       <Box style={{ maxWidth: 1400, margin: '0 auto', padding: tokens.spacing[6] }}>
         <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: tokens.spacing[6] }}>
           <Text size="2xl" weight="black">
-            管理后台
+            {t('adminDashboard')}
           </Text>
         </Box>
 
@@ -94,13 +96,13 @@ export default function AdminPage() {
             variant={activeTab === 'dashboard' ? 'primary' : 'secondary'}
             onClick={() => setActiveTab('dashboard')}
           >
-            仪表盘
+            {t('dashboard')}
           </Button>
           <Button
             variant={activeTab === 'scraperStatus' ? 'primary' : 'secondary'}
             onClick={() => setActiveTab('scraperStatus')}
           >
-            爬虫状态
+            {t('scraperStatus')}
             {hasScraperAlert && (
               <span style={{ 
                 marginLeft: tokens.spacing[1], 
@@ -114,31 +116,31 @@ export default function AdminPage() {
             variant={activeTab === 'users' ? 'primary' : 'secondary'}
             onClick={() => setActiveTab('users')}
           >
-            用户管理
+            {t('userManagement')}
           </Button>
           <Button
             variant={activeTab === 'reports' ? 'primary' : 'secondary'}
             onClick={() => setActiveTab('reports')}
           >
-            内容举报
+            {t('contentReports')}
           </Button>
           <Button
             variant={activeTab === 'applications' ? 'primary' : 'secondary'}
             onClick={() => setActiveTab('applications')}
           >
-            小组申请 {pendingApplicationsCount > 0 && `(${pendingApplicationsCount})`}
+            {t('groupApplications')} {pendingApplicationsCount > 0 && `(${pendingApplicationsCount})`}
           </Button>
           <Button
             variant={activeTab === 'editApplications' ? 'primary' : 'secondary'}
             onClick={() => setActiveTab('editApplications')}
           >
-            小组修改 {pendingEditApplicationsCount > 0 && `(${pendingEditApplicationsCount})`}
+            {t('groupEdits')} {pendingEditApplicationsCount > 0 && `(${pendingEditApplicationsCount})`}
           </Button>
           <Button
             variant={activeTab === 'alertConfig' ? 'primary' : 'secondary'}
             onClick={() => setActiveTab('alertConfig')}
           >
-            报警配置
+            {t('alertConfig')}
           </Button>
         </Box>
 

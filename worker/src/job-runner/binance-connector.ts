@@ -223,14 +223,6 @@ export class BinanceFuturesConnectorWorker implements ConnectorInterface {
     metrics: SnapshotMetrics,
     window: SnapshotWindow
   ): { total: number; returnScore: number; drawdownScore: number; stabilityScore: number } {
-    // Must match lib/utils/arena-score.ts ARENA_CONFIG.PNL_THRESHOLD
-    const PNL_THRESHOLDS: Record<SnapshotWindow, number> = { '7D': 200, '30D': 500, '90D': 1000 }
-
-    // Check PnL threshold
-    if (Math.abs(metrics.pnl) < PNL_THRESHOLDS[window]) {
-      return { total: 0, returnScore: 0, drawdownScore: 0, stabilityScore: 0 }
-    }
-
     // Return score (0-85): based on ROI percentile
     const roi = metrics.roi
     let returnScore: number

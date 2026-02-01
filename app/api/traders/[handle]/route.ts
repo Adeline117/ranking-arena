@@ -517,9 +517,9 @@ async function getTraderDetails(
 
   // 计算总体分数
   const overallScore = calculateOverallScore({
-    score7d: score7d?.meetsThreshold ? score7d.totalScore : null,
-    score30d: score30d?.meetsThreshold ? score30d.totalScore : null,
-    score90d: score90d?.meetsThreshold ? score90d.totalScore : null,
+    score7d: score7d?.totalScore ?? null,
+    score30d: score30d?.totalScore ?? null,
+    score90d: score90d?.totalScore ?? null,
   })
 
   return {
@@ -790,9 +790,9 @@ async function getTraderDetailsFromSnapshots(
 
   // 计算总体分数
   const overallScore = calculateOverallScore({
-    score7d: score7d?.meetsThreshold ? score7d.totalScore : null,
-    score30d: score30d?.meetsThreshold ? score30d.totalScore : null,
-    score90d: score90d?.meetsThreshold ? score90d.totalScore : null,
+    score7d: score7d?.totalScore ?? null,
+    score30d: score30d?.totalScore ?? null,
+    score90d: score90d?.totalScore ?? null,
   })
 
   return {

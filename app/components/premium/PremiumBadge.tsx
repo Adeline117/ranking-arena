@@ -10,7 +10,7 @@ import { Box } from '../base'
 import { tokens } from '@/lib/design-tokens'
 import { type SubscriptionTier } from '@/lib/premium'
 import { usePremium } from '@/lib/premium/hooks'
-import { t } from '@/lib/i18n'
+import { useLanguage } from '../Providers/LanguageProvider'
 
 // ============================================
 // 类型定义
@@ -35,7 +35,7 @@ interface PremiumBadgeProps {
 // 常量
 // ============================================
 
-const getTierLabel = (tier: SubscriptionTier): string => {
+const getTierLabel = (tier: SubscriptionTier, t: (key: string) => string): string => {
   if (tier === 'free') return t('free')
   return 'Pro'
 }
@@ -103,6 +103,7 @@ export function PremiumBadge({
   className,
   style,
 }: PremiumBadgeProps) {
+  const { t } = useLanguage()
   const { tier: currentTier, isLoading } = usePremium()
   const tier = tierProp || currentTier
 
@@ -118,7 +119,7 @@ export function PremiumBadge({
 
   const config = TIER_CONFIG[tier]
   const sizeConfig = SIZE_CONFIG[size]
-  const tierLabel = getTierLabel(tier)
+  const tierLabel = getTierLabel(tier, t)
   const memberLabel = t('member')
 
   if (iconOnly) {
@@ -206,11 +207,12 @@ interface FeatureTagProps {
  * 用于在功能旁边标记需要的订阅等级
  */
 export function FeatureTag({ tier, size = 'xs', style }: FeatureTagProps) {
+  const { t } = useLanguage()
   if (tier === 'free') return null
 
   const config = TIER_CONFIG[tier]
   const sizeConfig = SIZE_CONFIG[size]
-  const tierLabel = getTierLabel(tier)
+  const tierLabel = getTierLabel(tier, t)
 
   return (
     <Box

@@ -344,8 +344,6 @@ export interface TradersListResponse {
   timeRange: TimeRange
   totalCount: number
   rankingMode?: 'simple' | 'risk_adjusted' | 'arena_score'
-  /** 当前榜单的 PnL 门槛 */
-  pnlThreshold?: number
 }
 
 /** 交易员详情响应 */

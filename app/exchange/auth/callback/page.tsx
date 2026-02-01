@@ -7,10 +7,12 @@ import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/layout/TopNav'
 import { Box, Text } from '@/app/components/base'
 import { getCsrfHeaders } from '@/lib/api/client'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 function ExchangeAuthCallbackContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
+  const { t } = useLanguage()
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading')
   const [message, setMessage] = useState<string>('')
 
@@ -23,30 +25,28 @@ function ExchangeAuthCallbackContent() {
 
       if (error) {
         setStatus('error')
-        setMessage(`授权失败: ${error}`)
+        setMessage(t('authFailedPrefix').replace('{error}', error))
         return
       }
 
       if (!code || !state || !exchange) {
         setStatus('error')
-        setMessage('缺少必要的授权参数')
+        setMessage(t('missingAuthParams'))
         return
       }
 
       try {
-        // 获取当前用户
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) {
           setStatus('error')
-          setMessage('请先登录')
+          setMessage(t('pleaseLogin'))
           router.push('/login')
           return
         }
 
-        // 交换 code 获取 access_token
         const response = await fetch('/api/exchange/oauth/callback', {
           method: 'POST',
-          headers: { 
+          headers: {
             'Content-Type': 'application/json',
             ...getCsrfHeaders()
           },
@@ -61,38 +61,38 @@ function ExchangeAuthCallbackContent() {
         const data = await response.json()
 
         if (!response.ok) {
-          throw new Error(data.error || '授权失败')
+          throw new Error(data.error || t('authorizationFailed'))
         }
 
         setStatus('success')
-        setMessage('授权成功！正在跳转...')
-        
-        // 3秒后跳转到设置页面
+        setMessage(t('authorizationSuccessRedirecting'))
+
         setTimeout(() => {
           router.push('/settings')
         }, 3000)
       } catch (err) {
         setStatus('error')
-        const errorMessage = err instanceof Error ? err.message : '授权失败'
+        const errorMessage = err instanceof Error ? err.message : t('authorizationFailed')
         setMessage(errorMessage)
       }
     }
 
     handleCallback()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, router])
 
   return (
     <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
       <TopNav email={null} />
-      
+
       <Box style={{ maxWidth: 600, margin: '0 auto', padding: tokens.spacing[10], textAlign: 'center' }}>
         {status === 'loading' && (
           <>
             <Text size="lg" style={{ marginBottom: tokens.spacing[4] }}>
-              正在处理授权...
+              {t('processingAuthorization')}
             </Text>
             <Text size="sm" color="secondary">
-              请稍候
+              {t('pleaseWaitShort')}
             </Text>
           </>
         )}
@@ -100,7 +100,7 @@ function ExchangeAuthCallbackContent() {
         {status === 'success' && (
           <>
             <Text size="lg" weight="bold" style={{ marginBottom: tokens.spacing[4], color: '#7CFFB2' }}>
-              ✓ 授权成功
+              ✓ {t('authorizationSuccess')}
             </Text>
             <Text size="sm" color="secondary">
               {message}
@@ -111,7 +111,7 @@ function ExchangeAuthCallbackContent() {
         {status === 'error' && (
           <>
             <Text size="lg" weight="bold" style={{ marginBottom: tokens.spacing[4], color: '#ff7c7c' }}>
-              ✗ 授权失败
+              ✗ {t('authorizationFailed')}
             </Text>
             <Text size="sm" color="secondary" style={{ marginBottom: tokens.spacing[4] }}>
               {message}
@@ -127,7 +127,7 @@ function ExchangeAuthCallbackContent() {
                 cursor: 'pointer',
               }}
             >
-              重试
+              {t('retry')}
             </button>
           </>
         )}
@@ -142,7 +142,7 @@ export default function ExchangeAuthCallbackPage() {
       <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
         <TopNav email={null} />
         <Box style={{ maxWidth: 600, margin: '0 auto', padding: tokens.spacing[10], textAlign: 'center' }}>
-          <Text size="lg">加载中...</Text>
+          <Text size="lg">Loading...</Text>
         </Box>
       </Box>
     }>
@@ -150,4 +150,3 @@ export default function ExchangeAuthCallbackPage() {
     </Suspense>
   )
 }
-

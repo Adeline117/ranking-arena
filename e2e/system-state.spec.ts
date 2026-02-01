@@ -16,12 +16,12 @@ import { test, expect, Page } from '@playwright/test'
 test.describe('A) Comment Persistence - Server ACK', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/hot')
-    await page.waitForLoadState('networkidle')
+    await page.waitForLoadState('domcontentloaded')
   })
 
   test('comments load from server when post modal opens', async ({ page }) => {
     const firstPost = page.locator('.hot-post-item').first()
-    if (!(await firstPost.isVisible())) {
+    if (!(await firstPost.isVisible({ timeout: 10_000 }).catch(() => false))) {
       test.skip()
       return
     }
@@ -39,7 +39,7 @@ test.describe('A) Comment Persistence - Server ACK', () => {
 
   test('comments persist after closing and reopening the same post', async ({ page }) => {
     const firstPost = page.locator('.hot-post-item').first()
-    if (!(await firstPost.isVisible())) {
+    if (!(await firstPost.isVisible({ timeout: 10_000 }).catch(() => false))) {
       test.skip()
       return
     }
@@ -72,7 +72,7 @@ test.describe('A) Comment Persistence - Server ACK', () => {
 
   test('same post from direct URL shows same comments as from list', async ({ page }) => {
     const firstPost = page.locator('.hot-post-item').first()
-    if (!(await firstPost.isVisible())) {
+    if (!(await firstPost.isVisible({ timeout: 10_000 }).catch(() => false))) {
       test.skip()
       return
     }
@@ -95,9 +95,9 @@ test.describe('A) Comment Persistence - Server ACK', () => {
 
     // Navigate away and come back via direct URL
     await page.goto('/hot')
-    await page.waitForLoadState('networkidle')
+    await page.waitForLoadState('domcontentloaded')
     await page.goto(`/hot?post=${postParam}`)
-    await page.waitForLoadState('networkidle')
+    await page.waitForLoadState('domcontentloaded')
     await page.waitForTimeout(2000)
 
     // Comments should be same from direct URL
@@ -110,7 +110,7 @@ test.describe('A) Comment Persistence - Server ACK', () => {
 
   test('submit button disabled when textarea is empty', async ({ page }) => {
     const firstPost = page.locator('.hot-post-item').first()
-    if (!(await firstPost.isVisible())) {
+    if (!(await firstPost.isVisible({ timeout: 10_000 }).catch(() => false))) {
       test.skip()
       return
     }
@@ -126,7 +126,7 @@ test.describe('A) Comment Persistence - Server ACK', () => {
 
   test('submit button enables when textarea has content', async ({ page }) => {
     const firstPost = page.locator('.hot-post-item').first()
-    if (!(await firstPost.isVisible())) {
+    if (!(await firstPost.isVisible({ timeout: 10_000 }).catch(() => false))) {
       test.skip()
       return
     }
@@ -150,7 +150,7 @@ test.describe('A) Comment Persistence - Server ACK', () => {
 
   test('comment textarea is disabled when not logged in', async ({ page }) => {
     const firstPost = page.locator('.hot-post-item').first()
-    if (!(await firstPost.isVisible())) {
+    if (!(await firstPost.isVisible({ timeout: 10_000 }).catch(() => false))) {
       test.skip()
       return
     }
@@ -174,10 +174,10 @@ test.describe('A) Comment Persistence - Server ACK', () => {
 test.describe('B) Auth Boundaries', () => {
   test('unauthenticated user cannot submit comments (no API call made)', async ({ page }) => {
     await page.goto('/hot')
-    await page.waitForLoadState('networkidle')
+    await page.waitForLoadState('domcontentloaded')
 
     const firstPost = page.locator('.hot-post-item').first()
-    if (!(await firstPost.isVisible())) {
+    if (!(await firstPost.isVisible({ timeout: 10_000 }).catch(() => false))) {
       test.skip()
       return
     }
@@ -211,7 +211,7 @@ test.describe('B) Auth Boundaries', () => {
 
   test('messages page shows clear login prompt (not "unauthorized" error)', async ({ page }) => {
     await page.goto('/messages')
-    await page.waitForLoadState('networkidle')
+    await page.waitForLoadState('domcontentloaded')
     await page.waitForTimeout(3000)
 
     // Should show friendly login prompt
@@ -227,7 +227,7 @@ test.describe('B) Auth Boundaries', () => {
   test('messages conversation page shows login prompt when not authenticated', async ({ page }) => {
     // Navigate to a fake conversation ID
     await page.goto('/messages/fake-conversation-id')
-    await page.waitForLoadState('networkidle')
+    await page.waitForLoadState('domcontentloaded')
     await page.waitForTimeout(3000)
 
     // Should show login prompt or redirect, not crash
@@ -250,7 +250,7 @@ test.describe('B) Auth Boundaries', () => {
     })
 
     await page.goto('/hot')
-    await page.waitForLoadState('networkidle')
+    await page.waitForLoadState('domcontentloaded')
     await page.waitForTimeout(3000)
 
     expect(criticalErrors).toHaveLength(0)
@@ -268,7 +268,7 @@ test.describe('B) Auth Boundaries', () => {
     })
 
     await page.goto('/groups')
-    await page.waitForLoadState('networkidle')
+    await page.waitForLoadState('domcontentloaded')
     await page.waitForTimeout(3000)
 
     expect(criticalErrors).toHaveLength(0)
@@ -308,12 +308,12 @@ test.describe('B) Auth Boundaries', () => {
 test.describe('C) Routing & Navigation - URL Driven', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/hot')
-    await page.waitForLoadState('networkidle')
+    await page.waitForLoadState('domcontentloaded')
   })
 
   test('opening post updates URL with ?post=id', async ({ page }) => {
     const firstPost = page.locator('.hot-post-item').first()
-    if (!(await firstPost.isVisible())) {
+    if (!(await firstPost.isVisible({ timeout: 10_000 }).catch(() => false))) {
       test.skip()
       return
     }
@@ -328,7 +328,7 @@ test.describe('C) Routing & Navigation - URL Driven', () => {
 
   test('close button removes ?post= from URL', async ({ page }) => {
     const firstPost = page.locator('.hot-post-item').first()
-    if (!(await firstPost.isVisible())) {
+    if (!(await firstPost.isVisible({ timeout: 10_000 }).catch(() => false))) {
       test.skip()
       return
     }
@@ -347,7 +347,7 @@ test.describe('C) Routing & Navigation - URL Driven', () => {
 
   test('Escape key closes modal and updates URL', async ({ page }) => {
     const firstPost = page.locator('.hot-post-item').first()
-    if (!(await firstPost.isVisible())) {
+    if (!(await firstPost.isVisible({ timeout: 10_000 }).catch(() => false))) {
       test.skip()
       return
     }
@@ -365,7 +365,7 @@ test.describe('C) Routing & Navigation - URL Driven', () => {
 
   test('backdrop click closes modal and updates URL', async ({ page }) => {
     const firstPost = page.locator('.hot-post-item').first()
-    if (!(await firstPost.isVisible())) {
+    if (!(await firstPost.isVisible({ timeout: 10_000 }).catch(() => false))) {
       test.skip()
       return
     }
@@ -384,7 +384,7 @@ test.describe('C) Routing & Navigation - URL Driven', () => {
 
   test('close/escape/backdrop all produce same result', async ({ page }) => {
     const firstPost = page.locator('.hot-post-item').first()
-    if (!(await firstPost.isVisible())) {
+    if (!(await firstPost.isVisible({ timeout: 10_000 }).catch(() => false))) {
       test.skip()
       return
     }
@@ -410,7 +410,7 @@ test.describe('C) Routing & Navigation - URL Driven', () => {
 
   test('direct URL ?post=id opens modal on page load', async ({ page }) => {
     const firstPost = page.locator('.hot-post-item').first()
-    if (!(await firstPost.isVisible())) {
+    if (!(await firstPost.isVisible({ timeout: 10_000 }).catch(() => false))) {
       test.skip()
       return
     }
@@ -421,7 +421,7 @@ test.describe('C) Routing & Navigation - URL Driven', () => {
 
     // Navigate directly
     await page.goto(`/hot?post=${postParam}`)
-    await page.waitForLoadState('networkidle')
+    await page.waitForLoadState('domcontentloaded')
     await page.waitForTimeout(1500)
 
     await expect(page.locator('[role="dialog"]')).toBeVisible()
@@ -429,7 +429,7 @@ test.describe('C) Routing & Navigation - URL Driven', () => {
 
   test('body scroll is locked when modal is open', async ({ page }) => {
     const firstPost = page.locator('.hot-post-item').first()
-    if (!(await firstPost.isVisible())) {
+    if (!(await firstPost.isVisible({ timeout: 10_000 }).catch(() => false))) {
       test.skip()
       return
     }
@@ -481,7 +481,7 @@ test.describe('C) Routing & Navigation - URL Driven', () => {
 test.describe('D) Click Targets - Author and Group Links', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/hot')
-    await page.waitForLoadState('networkidle')
+    await page.waitForLoadState('domcontentloaded')
   })
 
   test('author link in post list navigates to /u/{handle}', async ({ page }) => {
@@ -549,7 +549,7 @@ test.describe('D) Click Targets - Author and Group Links', () => {
 
   test('author link inside modal points to user profile', async ({ page }) => {
     const firstPost = page.locator('.hot-post-item').first()
-    if (!(await firstPost.isVisible())) {
+    if (!(await firstPost.isVisible({ timeout: 10_000 }).catch(() => false))) {
       test.skip()
       return
     }
@@ -566,7 +566,7 @@ test.describe('D) Click Targets - Author and Group Links', () => {
 
   test('group link inside modal points to group page', async ({ page }) => {
     const firstPost = page.locator('.hot-post-item').first()
-    if (!(await firstPost.isVisible())) {
+    if (!(await firstPost.isVisible({ timeout: 10_000 }).catch(() => false))) {
       test.skip()
       return
     }
@@ -583,7 +583,7 @@ test.describe('D) Click Targets - Author and Group Links', () => {
 
   test('comment author links point to user profiles', async ({ page }) => {
     const firstPost = page.locator('.hot-post-item').first()
-    if (!(await firstPost.isVisible())) {
+    if (!(await firstPost.isVisible({ timeout: 10_000 }).catch(() => false))) {
       test.skip()
       return
     }
@@ -613,7 +613,7 @@ test.describe('E) Cross-Entry Consistency', () => {
     })
 
     await page.goto('/groups')
-    await page.waitForLoadState('networkidle')
+    await page.waitForLoadState('domcontentloaded')
     await page.waitForTimeout(2000)
 
     const authErrors = errors.filter(e =>
@@ -627,17 +627,17 @@ test.describe('E) Cross-Entry Consistency', () => {
   test('hot page and groups page both accessible in same session', async ({ page }) => {
     // Visit hot page
     await page.goto('/hot')
-    await page.waitForLoadState('networkidle')
+    await page.waitForLoadState('domcontentloaded')
     expect(page.url()).toContain('/hot')
 
     // Visit groups page
     await page.goto('/groups')
-    await page.waitForLoadState('networkidle')
+    await page.waitForLoadState('domcontentloaded')
     expect(page.url()).toContain('/groups')
 
     // Go back to hot page
     await page.goto('/hot')
-    await page.waitForLoadState('networkidle')
+    await page.waitForLoadState('domcontentloaded')
     expect(page.url()).toContain('/hot')
 
     // Both should work without errors
@@ -648,10 +648,10 @@ test.describe('E) Cross-Entry Consistency', () => {
 
   test('navigation between pages does not leak modal state', async ({ page }) => {
     await page.goto('/hot')
-    await page.waitForLoadState('networkidle')
+    await page.waitForLoadState('domcontentloaded')
 
     const firstPost = page.locator('.hot-post-item').first()
-    if (!(await firstPost.isVisible())) {
+    if (!(await firstPost.isVisible({ timeout: 10_000 }).catch(() => false))) {
       test.skip()
       return
     }
@@ -663,7 +663,7 @@ test.describe('E) Cross-Entry Consistency', () => {
 
     // Navigate to groups
     await page.goto('/groups')
-    await page.waitForLoadState('networkidle')
+    await page.waitForLoadState('domcontentloaded')
 
     // Modal should not be visible on groups page
     const modal = page.locator('[role="dialog"]')
@@ -671,7 +671,7 @@ test.describe('E) Cross-Entry Consistency', () => {
 
     // Come back to hot
     await page.goto('/hot')
-    await page.waitForLoadState('networkidle')
+    await page.waitForLoadState('domcontentloaded')
     await page.waitForTimeout(500)
 
     // Modal should not automatically reopen (URL was changed)

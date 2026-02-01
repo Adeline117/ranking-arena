@@ -13,7 +13,7 @@ import { test, expect } from '@playwright/test'
 test.describe('System State Architecture - Comment Persistence', () => {
   test('post detail modal on /hot uses URL query param', async ({ page }) => {
     await page.goto('/hot')
-    await page.waitForLoadState('networkidle')
+    await page.waitForLoadState('domcontentloaded')
 
     // Find a post item and click it
     const postItem = page.locator('.hot-post-item').first()
@@ -33,7 +33,7 @@ test.describe('System State Architecture - Comment Persistence', () => {
 
   test('post modal can be closed and URL updates', async ({ page }) => {
     await page.goto('/hot')
-    await page.waitForLoadState('networkidle')
+    await page.waitForLoadState('domcontentloaded')
 
     const postItem = page.locator('.hot-post-item').first()
     if (await postItem.isVisible({ timeout: 5000 }).catch(() => false)) {
@@ -56,7 +56,7 @@ test.describe('System State Architecture - Comment Persistence', () => {
 
   test('post modal closes on ESC key', async ({ page }) => {
     await page.goto('/hot')
-    await page.waitForLoadState('networkidle')
+    await page.waitForLoadState('domcontentloaded')
 
     const postItem = page.locator('.hot-post-item').first()
     if (await postItem.isVisible({ timeout: 5000 }).catch(() => false)) {
@@ -74,7 +74,7 @@ test.describe('System State Architecture - Comment Persistence', () => {
   test('post modal can be deep-linked via URL', async ({ page }) => {
     // First, get a post ID from the hot page
     await page.goto('/hot')
-    await page.waitForLoadState('networkidle')
+    await page.waitForLoadState('domcontentloaded')
 
     const postItem = page.locator('.hot-post-item').first()
     if (await postItem.isVisible({ timeout: 5000 }).catch(() => false)) {
@@ -87,7 +87,7 @@ test.describe('System State Architecture - Comment Persistence', () => {
 
       // Now navigate directly to the URL with post param
       await page.goto(`/hot?post=${postId}`)
-      await page.waitForLoadState('networkidle')
+      await page.waitForLoadState('domcontentloaded')
       await page.waitForTimeout(1000)
 
       // Modal should be visible
@@ -98,7 +98,7 @@ test.describe('System State Architecture - Comment Persistence', () => {
 
   test('comment section is visible in post modal', async ({ page }) => {
     await page.goto('/hot')
-    await page.waitForLoadState('networkidle')
+    await page.waitForLoadState('domcontentloaded')
 
     const postItem = page.locator('.hot-post-item').first()
     if (await postItem.isVisible({ timeout: 5000 }).catch(() => false)) {
@@ -115,7 +115,7 @@ test.describe('System State Architecture - Comment Persistence', () => {
 test.describe('System State Architecture - Navigation Consistency', () => {
   test('author name in post list is a clickable link', async ({ page }) => {
     await page.goto('/hot')
-    await page.waitForLoadState('networkidle')
+    await page.waitForLoadState('domcontentloaded')
 
     // Find an author link inside a post item
     const authorLink = page.locator('.hot-post-item a[href^="/u/"]').first()
@@ -127,7 +127,7 @@ test.describe('System State Architecture - Navigation Consistency', () => {
 
   test('group name in post list is a clickable link', async ({ page }) => {
     await page.goto('/hot')
-    await page.waitForLoadState('networkidle')
+    await page.waitForLoadState('domcontentloaded')
 
     // Find a group link inside a post item
     const groupLink = page.locator('.hot-post-item a[href^="/groups/"]').first()
@@ -139,7 +139,7 @@ test.describe('System State Architecture - Navigation Consistency', () => {
 
   test('clicking author link does not open post modal', async ({ page }) => {
     await page.goto('/hot')
-    await page.waitForLoadState('networkidle')
+    await page.waitForLoadState('domcontentloaded')
 
     const authorLink = page.locator('.hot-post-item a[href^="/u/"]').first()
     if (await authorLink.isVisible({ timeout: 5000 }).catch(() => false)) {
@@ -155,7 +155,7 @@ test.describe('System State Architecture - Navigation Consistency', () => {
   test('messages page requires authentication', async ({ page }) => {
     // Visit messages page without auth
     await page.goto('/messages/test-conversation-id')
-    await page.waitForLoadState('networkidle')
+    await page.waitForLoadState('domcontentloaded')
     await page.waitForTimeout(2000)
 
     // Should show login prompt or redirect
@@ -172,7 +172,7 @@ test.describe('System State Architecture - Navigation Consistency', () => {
 
   test('hot page renders without errors', async ({ page }) => {
     await page.goto('/hot')
-    await page.waitForLoadState('networkidle')
+    await page.waitForLoadState('domcontentloaded')
 
     // Should have basic structure
     const mainContent = page.locator('main, [class*="container"]').first()

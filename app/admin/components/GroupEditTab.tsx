@@ -5,6 +5,7 @@ import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
 import Card from '@/app/components/ui/Card'
 import { useApplications } from '../hooks/useApplications'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 interface GroupEditTabProps {
   accessToken: string | null
@@ -19,6 +20,7 @@ export default function GroupEditTab({ accessToken }: GroupEditTabProps) {
     approveEditApplication,
     rejectEditApplication,
   } = useApplications(accessToken)
+  const { t } = useLanguage()
 
   const [showRejectInput, setShowRejectInput] = useState<Record<string, boolean>>({})
   const [rejectReason, setRejectReason] = useState<Record<string, string>>({})
@@ -39,14 +41,14 @@ export default function GroupEditTab({ accessToken }: GroupEditTabProps) {
   }
 
   return (
-    <Card title="小组信息修改申请">
+    <Card title={t('adminGroupEditApplications')}>
       {editApplicationsLoading ? (
         <Box style={{ padding: tokens.spacing[8], textAlign: 'center' }}>
-          <Text color="tertiary">加载中...</Text>
+          <Text color="tertiary">{t('loading')}</Text>
         </Box>
       ) : editApplications.length === 0 ? (
         <Box style={{ padding: tokens.spacing[8], textAlign: 'center' }}>
-          <Text color="tertiary">暂无待审核的修改申请</Text>
+          <Text color="tertiary">{t('adminNoPendingEditApps')}</Text>
         </Box>
       ) : (
         <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}>
@@ -63,60 +65,60 @@ export default function GroupEditTab({ accessToken }: GroupEditTabProps) {
               <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: tokens.spacing[3] }}>
                 <Box>
                   <Text size="lg" weight="bold">
-                    修改申请 - {app.group?.name || '小组'}
+                    {t('adminEditAppTitle').replace('{group}', app.group?.name || t('adminEditGroup'))}
                   </Text>
                   <Text size="sm" color="tertiary">
-                    申请者: @{app.applicant?.handle || app.applicant_id.slice(0, 8)}
+                    {t('adminApplicant').replace('{handle}', app.applicant?.handle || app.applicant_id.slice(0, 8))}
                   </Text>
                 </Box>
                 <Text size="xs" color="tertiary">
-                  {new Date(app.created_at).toLocaleString('zh-CN')}
+                  {new Date(app.created_at).toLocaleString()}
                 </Text>
               </Box>
 
-              {/* 修改内容 */}
-              <Box style={{ 
-                padding: tokens.spacing[3], 
-                background: tokens.colors.bg.primary, 
+              {/* Edit content */}
+              <Box style={{
+                padding: tokens.spacing[3],
+                background: tokens.colors.bg.primary,
                 borderRadius: tokens.radius.lg,
                 marginBottom: tokens.spacing[3],
               }}>
                 <Text size="sm" weight="bold" color="secondary" style={{ marginBottom: tokens.spacing[2] }}>
-                  修改内容:
+                  {t('adminEditContent')}
                 </Text>
                 {app.name && (
                   <Text size="sm" color="secondary">
-                    • 名称: {app.name}
+                    {t('adminEditName').replace('{name}', app.name)}
                   </Text>
                 )}
                 {app.name_en && (
                   <Text size="sm" color="tertiary">
-                    • 英文名称: {app.name_en}
+                    {t('adminEditNameEn').replace('{name}', app.name_en)}
                   </Text>
                 )}
                 {app.description && (
                   <Text size="sm" color="secondary">
-                    • 简介: {app.description.slice(0, 100)}{app.description.length > 100 ? '...' : ''}
+                    {t('adminEditDescription').replace('{text}', app.description.slice(0, 100))}{app.description.length > 100 ? '...' : ''}
                   </Text>
                 )}
                 {app.description_en && (
                   <Text size="sm" color="tertiary">
-                    • 英文简介: {app.description_en.slice(0, 100)}{app.description_en.length > 100 ? '...' : ''}
+                    {t('adminEditDescriptionEn').replace('{text}', app.description_en.slice(0, 100))}{app.description_en.length > 100 ? '...' : ''}
                   </Text>
                 )}
                 {app.rules && (
                   <Text size="sm" color="secondary">
-                    • 规则: {app.rules.slice(0, 100)}{app.rules.length > 100 ? '...' : ''}
+                    {t('adminEditRules').replace('{text}', app.rules.slice(0, 100))}{app.rules.length > 100 ? '...' : ''}
                   </Text>
                 )}
                 {app.avatar_url && (
                   <Text size="sm" color="secondary">
-                    • 头像: 已更新
+                    {t('adminEditAvatar')}
                   </Text>
                 )}
               </Box>
 
-              {/* 操作按钮 */}
+              {/* Action buttons */}
               <Box style={{ display: 'flex', gap: tokens.spacing[2], flexWrap: 'wrap' }}>
                 <Button
                   variant="primary"
@@ -125,14 +127,14 @@ export default function GroupEditTab({ accessToken }: GroupEditTabProps) {
                   disabled={actionLoading[`edit_${app.id}`]}
                   style={{ background: tokens.colors.accent?.success || '#10B981' }}
                 >
-                  {actionLoading[`edit_${app.id}`] ? '处理中...' : '批准'}
+                  {actionLoading[`edit_${app.id}`] ? t('processing') : t('adminApprove')}
                 </Button>
-                
+
                 {showRejectInput[`edit_${app.id}`] ? (
                   <Box style={{ display: 'flex', gap: tokens.spacing[2], alignItems: 'center', flex: 1 }}>
                     <input
                       type="text"
-                      placeholder="拒绝原因（可选）"
+                      placeholder={t('adminRejectReasonPlaceholder')}
                       value={rejectReason[`edit_${app.id}`] || ''}
                       onChange={(e) => setRejectReason(prev => ({ ...prev, [`edit_${app.id}`]: e.target.value }))}
                       style={{
@@ -152,14 +154,14 @@ export default function GroupEditTab({ accessToken }: GroupEditTabProps) {
                       disabled={actionLoading[`edit_${app.id}`]}
                       style={{ background: tokens.colors.accent?.error || '#EF4444', color: '#fff' }}
                     >
-                      确认拒绝
+                      {t('adminConfirmReject')}
                     </Button>
                     <Button
                       variant="text"
                       size="sm"
                       onClick={() => setShowRejectInput(prev => ({ ...prev, [`edit_${app.id}`]: false }))}
                     >
-                      取消
+                      {t('cancel')}
                     </Button>
                   </Box>
                 ) : (
@@ -169,7 +171,7 @@ export default function GroupEditTab({ accessToken }: GroupEditTabProps) {
                     onClick={() => setShowRejectInput(prev => ({ ...prev, [`edit_${app.id}`]: true }))}
                     disabled={actionLoading[`edit_${app.id}`]}
                   >
-                    拒绝
+                    {t('adminReject')}
                   </Button>
                 )}
               </Box>
@@ -177,8 +179,8 @@ export default function GroupEditTab({ accessToken }: GroupEditTabProps) {
           ))}
         </Box>
       )}
-      
-      {/* 刷新按钮 */}
+
+      {/* Refresh button */}
       <Box style={{ marginTop: tokens.spacing[4], textAlign: 'center' }}>
         <Button
           variant="secondary"
@@ -186,7 +188,7 @@ export default function GroupEditTab({ accessToken }: GroupEditTabProps) {
           onClick={loadEditApplications}
           disabled={editApplicationsLoading}
         >
-          {editApplicationsLoading ? '刷新中...' : '刷新列表'}
+          {editApplicationsLoading ? t('adminRefreshing') : t('adminRefreshList')}
         </Button>
       </Box>
     </Card>

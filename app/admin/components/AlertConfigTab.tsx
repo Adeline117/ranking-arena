@@ -5,6 +5,7 @@ import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
 import Card from '@/app/components/ui/Card'
 import { useAlertConfig } from '../hooks/useAlertConfig'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 interface AlertConfigTabProps {
   accessToken: string | null
@@ -18,10 +19,12 @@ interface ConfigItemProps {
   value: string
   enabled: boolean
   saving: boolean
+  savingLabel: string
+  saveLabel: string
   onSave: (key: string, value: string, enabled: boolean) => void
 }
 
-function ConfigItem({ label, description, configKey, placeholder, value: initialValue, enabled: initialEnabled, saving, onSave }: ConfigItemProps) {
+function ConfigItem({ label, description, configKey, placeholder, value: initialValue, enabled: initialEnabled, saving, savingLabel, saveLabel, onSave }: ConfigItemProps) {
   const [value, setValue] = useState(initialValue)
   const [enabled, setEnabled] = useState(initialEnabled)
   const [isDirty, setIsDirty] = useState(false)
@@ -113,7 +116,7 @@ function ConfigItem({ label, description, configKey, placeholder, value: initial
           onClick={handleSave}
           disabled={!isDirty || saving}
         >
-          {saving ? '保存中...' : '保存'}
+          {saving ? savingLabel : saveLabel}
         </Button>
       </Box>
     </Box>
@@ -122,6 +125,7 @@ function ConfigItem({ label, description, configKey, placeholder, value: initial
 
 export default function AlertConfigTab({ accessToken }: AlertConfigTabProps) {
   const { config, loading, saving, loadConfig, updateConfig } = useAlertConfig(accessToken)
+  const { t } = useLanguage()
 
   useEffect(() => {
     if (accessToken) {
@@ -134,49 +138,55 @@ export default function AlertConfigTab({ accessToken }: AlertConfigTabProps) {
   }
 
   return (
-    <Card title="报警配置">
+    <Card title={t('adminAlertConfiguration')}>
       <Box style={{ marginBottom: tokens.spacing[4] }}>
         <Text size="sm" color="secondary">
-          配置爬虫数据过期时的报警通知渠道。当数据超过阈值未更新时，系统会自动发送报警通知。
+          {t('adminAlertConfigDesc')}
         </Text>
       </Box>
 
       {loading ? (
         <Box style={{ padding: tokens.spacing[8], textAlign: 'center' }}>
-          <Text color="tertiary">加载中...</Text>
+          <Text color="tertiary">{t('loading')}</Text>
         </Box>
       ) : (
         <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}>
           <ConfigItem
-            label="Slack Webhook"
-            description="发送报警到 Slack 频道"
+            label={t('adminSlackWebhook')}
+            description={t('adminSlackDesc')}
             configKey="slack_webhook_url"
             placeholder="https://hooks.slack.com/services/..."
             value={config.slack_webhook_url?.value || ''}
             enabled={config.slack_webhook_url?.enabled || false}
             saving={saving}
+            savingLabel={t('adminSaving')}
+            saveLabel={t('adminSaveBtn')}
             onSave={handleSave}
           />
 
           <ConfigItem
-            label="飞书 Webhook"
-            description="发送报警到飞书群"
+            label={t('adminFeishuWebhook')}
+            description={t('adminFeishuDesc')}
             configKey="feishu_webhook_url"
             placeholder="https://open.feishu.cn/open-apis/bot/v2/hook/..."
             value={config.feishu_webhook_url?.value || ''}
             enabled={config.feishu_webhook_url?.enabled || false}
             saving={saving}
+            savingLabel={t('adminSaving')}
+            saveLabel={t('adminSaveBtn')}
             onSave={handleSave}
           />
 
           <ConfigItem
-            label="报警邮箱"
-            description="发送报警邮件（需配置邮件服务）"
+            label={t('adminAlertEmail')}
+            description={t('adminAlertEmailDesc')}
             configKey="alert_email"
             placeholder="admin@example.com"
             value={config.alert_email?.value || ''}
             enabled={config.alert_email?.enabled || false}
             saving={saving}
+            savingLabel={t('adminSaving')}
+            saveLabel={t('adminSaveBtn')}
             onSave={handleSave}
           />
         </Box>
@@ -192,17 +202,17 @@ export default function AlertConfigTab({ accessToken }: AlertConfigTabProps) {
         }}
       >
         <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>
-          报警触发条件
+          {t('adminAlertTriggerTitle')}
         </Text>
         <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[1] }}>
           <Text size="xs" color="secondary">
-            - 陈旧告警: 数据超过 12 小时未更新
+            - {t('adminStaleAlertDesc')}
           </Text>
           <Text size="xs" color="secondary">
-            - 严重告警: 数据超过 24 小时未更新
+            - {t('adminCriticalAlertDesc')}
           </Text>
           <Text size="xs" color="secondary">
-            - 报警通过 /api/cron/check-data-freshness 定时任务触发
+            - {t('adminAlertCronNote')}
           </Text>
         </Box>
       </Box>

@@ -44,23 +44,13 @@ const ARENA_CONFIG = {
     '30D': { base: 2000, coeff: 0.35 },
     '90D': { base: 5000, coeff: 0.30 },
   },
-  PNL_THRESHOLD: {
-    '7D': 200,    // 降低门槛以显示更多交易员
-    '30D': 500,   // 从$1000降到$500
-    '90D': 1000,  // 从$3000降到$1000
-  },
   MAX_RETURN_SCORE: 70,
   MAX_PNL_SCORE: 15,
   MAX_DRAWDOWN_SCORE: 8,
   MAX_STABILITY_SCORE: 7,
   WIN_RATE_BASELINE: 45,
   // 排行榜稳定性参数
-  GRACE_PERIOD_HOURS: 24,
   CONFIDENCE_DEBOUNCE_HOURS: 8,
-  PNL_RAMP: {
-    SOFT_FLOOR_FACTOR: 0.5,
-    FULL_QUALIFY_FACTOR: 1.5,
-  },
 }
 
 export { ARENA_CONFIG }
@@ -155,46 +145,6 @@ export function calculateArenaScore(roi, pnl, maxDrawdown, winRate, period) {
     drawdownScore: Math.round(drawdownScore * 100) / 100,
     stabilityScore: Math.round(stabilityScore * 100) / 100,
   }
-}
-
-/**
- * 计算 PnL 软门槛系数 (0~1)
- * softFloor → 0, fullQualify → 1, between → linear interpolation
- */
-export function calculatePnlQualifier(pnl, period) {
-  const threshold = ARENA_CONFIG.PNL_THRESHOLD[period] || 1000
-  const softFloor = threshold * ARENA_CONFIG.PNL_RAMP.SOFT_FLOOR_FACTOR
-  const fullQualify = threshold * ARENA_CONFIG.PNL_RAMP.FULL_QUALIFY_FACTOR
-
-  if (pnl >= fullQualify) return 1.0
-  if (pnl > softFloor) return (pnl - softFloor) / (fullQualify - softFloor)
-  return 0
-}
-
-/**
- * 检查是否达到入榜 PnL 门槛（软门槛：pnl > softFloor）
- */
-export function meetsThreshold(pnl, period) {
-  const threshold = ARENA_CONFIG.PNL_THRESHOLD[period] || 1000
-  const softFloor = threshold * ARENA_CONFIG.PNL_RAMP.SOFT_FLOOR_FACTOR
-  return pnl > softFloor
-}
-
-/**
- * 检查是否达到硬门槛（原始行为）
- */
-export function meetsHardThreshold(pnl, period) {
-  const threshold = ARENA_CONFIG.PNL_THRESHOLD[period] || 1000
-  return pnl > threshold
-}
-
-/**
- * 检查是否在保留窗口内（Grace Period）
- */
-export function isWithinGracePeriod(lastQualifiedAt, gracePeriodHours = ARENA_CONFIG.GRACE_PERIOD_HOURS) {
-  if (!lastQualifiedAt) return false
-  const elapsed = Date.now() - new Date(lastQualifiedAt).getTime()
-  return elapsed < gracePeriodHours * 3600 * 1000
 }
 
 // ============================================
