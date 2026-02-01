@@ -255,7 +255,8 @@ describe('Smart Scheduler', () => {
 
     it('should calculate next time for hot tier (15 minutes)', () => {
       const lastUpdate = new Date('2024-01-01T00:00:00Z')
-      const next = getNextScheduledTime(lastUpdate, 'hot')
+      const now = lastUpdate
+      const next = getNextScheduledTime(lastUpdate, 'hot', now)
 
       const expected = new Date(lastUpdate.getTime() + 15 * 60 * 1000)
       expect(next.getTime()).toBe(expected.getTime())
@@ -263,7 +264,8 @@ describe('Smart Scheduler', () => {
 
     it('should calculate next time for active tier (1 hour)', () => {
       const lastUpdate = new Date('2024-01-01T00:00:00Z')
-      const next = getNextScheduledTime(lastUpdate, 'active')
+      const now = lastUpdate
+      const next = getNextScheduledTime(lastUpdate, 'active', now)
 
       const expected = new Date(lastUpdate.getTime() + 60 * 60 * 1000)
       expect(next.getTime()).toBe(expected.getTime())
@@ -271,7 +273,8 @@ describe('Smart Scheduler', () => {
 
     it('should calculate next time for normal tier (4 hours)', () => {
       const lastUpdate = new Date('2024-01-01T00:00:00Z')
-      const next = getNextScheduledTime(lastUpdate, 'normal')
+      const now = lastUpdate
+      const next = getNextScheduledTime(lastUpdate, 'normal', now)
 
       const expected = new Date(lastUpdate.getTime() + 4 * 60 * 60 * 1000)
       expect(next.getTime()).toBe(expected.getTime())
@@ -279,7 +282,8 @@ describe('Smart Scheduler', () => {
 
     it('should calculate next time for dormant tier (24 hours)', () => {
       const lastUpdate = new Date('2024-01-01T00:00:00Z')
-      const next = getNextScheduledTime(lastUpdate, 'dormant')
+      const now = lastUpdate
+      const next = getNextScheduledTime(lastUpdate, 'dormant', now)
 
       const expected = new Date(lastUpdate.getTime() + 24 * 60 * 60 * 1000)
       expect(next.getTime()).toBe(expected.getTime())
@@ -409,7 +413,7 @@ describe('Smart Scheduler', () => {
 
       expect(schedules).toHaveLength(1000)
       expect(schedules[0].tier).toBe('hot') // rank 1
-      expect(schedules[schedules.length - 1].tier).toBe('dormant') // rank 1000
+      expect(schedules[schedules.length - 1].tier).toBe('normal') // rank 1000 <= normal threshold (2000)
     })
   })
 })
