@@ -10,23 +10,16 @@
  */
 
 import {
-  createPublicClient,
   createWalletClient,
   http,
+  encodeAbiParameters,
   encodePacked,
   keccak256,
   type Address,
   type Hex,
 } from 'viem'
-import { base, baseSepolia } from 'viem/chains'
 import { privateKeyToAccount } from 'viem/accounts'
-import { CONTRACT_ADDRESSES, ARENA_SCORE_SCHEMA_UID } from './contracts'
-
-const isProduction = process.env.NODE_ENV === 'production'
-const chain = isProduction ? base : baseSepolia
-const rpcUrl = isProduction
-  ? (process.env.BASE_RPC_URL || 'https://mainnet.base.org')
-  : (process.env.BASE_SEPOLIA_RPC_URL || 'https://sepolia.base.org')
+import { CONTRACT_ADDRESSES, ARENA_SCORE_SCHEMA_UID, basePublicClient, baseChain, baseRpcUrl } from './contracts'
 
 // ── EAS contract ABI (minimal) ──
 
@@ -104,13 +97,11 @@ export const ARENA_SCORE_SCHEMA =
 
 // ── Clients ──
 
-const publicClient = createPublicClient({ chain, transport: http(rpcUrl) })
-
 function getWalletClient() {
   const pk = process.env.ARENA_ATTESTER_PRIVATE_KEY
   if (!pk) throw new Error('ARENA_ATTESTER_PRIVATE_KEY not set')
   const account = privateKeyToAccount(pk as `0x${string}`)
-  return createWalletClient({ account, chain, transport: http(rpcUrl) })
+  return createWalletClient({ account, chain: baseChain, transport: http(baseRpcUrl) })
 }
 
 // ── Types ──
@@ -158,28 +149,37 @@ export async function registerSchema(): Promise<Hex> {
     ],
   })
 
-  const receipt = await publicClient.waitForTransactionReceipt({ hash })
+  const receipt = await basePublicClient.waitForTransactionReceipt({ hash })
 
-  // The schema UID is emitted in the event — extract from logs
-  // For now, return the tx hash; the UID should be set in env after deployment
-  console.log('[EAS] Schema registered, tx:', hash)
+  // SchemaRegistry emits Registered(bytes32 uid, address registerer)
+  // The schema UID is the first indexed topic in the first log
+  const schemaUID = receipt.logs[0]?.topics?.[1] as Hex | undefined
+  if (schemaUID) {
+    console.log('[EAS] Schema registered, UID:', schemaUID, 'tx:', hash)
+    return schemaUID
+  }
+
+  console.log('[EAS] Schema registered, tx:', hash, '(extract UID from explorer)')
   return hash
 }
 
 /**
  * Encode Arena Score attestation data.
+ * EAS expects standard ABI encoding (not packed) matching the schema fields.
  */
 export function encodeAttestationData(attestation: ArenaScoreAttestation): Hex {
-  // ABI-encode the attestation data matching the schema
   const { traderHandle, arenaScore, exchange, snapshotTimestamp, dataHash } = attestation
 
-  // Use viem's encodePacked for compact encoding, or ABI encode
-  // EAS expects ABI-encoded data matching the schema
-  const encoded = encodePacked(
-    ['string', 'uint32', 'string', 'uint64', 'bytes32'],
+  return encodeAbiParameters(
+    [
+      { name: 'traderHandle', type: 'string' },
+      { name: 'arenaScore', type: 'uint32' },
+      { name: 'exchange', type: 'string' },
+      { name: 'snapshotTimestamp', type: 'uint64' },
+      { name: 'dataHash', type: 'bytes32' },
+    ],
     [traderHandle, arenaScore, exchange, BigInt(snapshotTimestamp), dataHash]
   )
-  return encoded
 }
 
 /**
@@ -237,7 +237,7 @@ export async function publishAttestation(
     value: BigInt(0),
   })
 
-  const receipt = await publicClient.waitForTransactionReceipt({ hash })
+  const receipt = await basePublicClient.waitForTransactionReceipt({ hash })
 
   // Extract attestation UID from event logs
   const uid = receipt.logs[0]?.topics?.[1] as Hex || hash
@@ -250,7 +250,7 @@ export async function publishAttestation(
  */
 export async function getAttestation(uid: Hex): Promise<AttestationRecord | null> {
   try {
-    const result = await publicClient.readContract({
+    const result = await basePublicClient.readContract({
       address: CONTRACT_ADDRESSES.eas as Address,
       abi: EAS_ABI,
       functionName: 'getAttestation',

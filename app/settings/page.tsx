@@ -13,6 +13,7 @@ import { useDialog } from '@/app/components/ui/Dialog'
 import { uiLogger } from '@/lib/utils/logger'
 import { formatTimeAgo } from '@/lib/utils/date'
 import AdvancedAlerts from '@/app/components/pro/AdvancedAlerts'
+import { WalletSection } from '@/app/components/settings/WalletSection'
 import { ImageCropper } from '@/app/components/ui/ImageCropper'
 import { useSubscription } from '@/app/components/home/hooks/useSubscription'
 import { useMultiAccount } from '@/lib/hooks/useMultiAccount'
@@ -27,7 +28,7 @@ import {
 } from './validation'
 
 // Section IDs for navigation
-type SectionId = 'profile' | 'security' | 'exchanges' | 'alerts' | 'notifications' | 'privacy' | 'account'
+type SectionId = 'profile' | 'security' | 'wallet' | 'exchanges' | 'alerts' | 'notifications' | 'privacy' | 'account'
 
 const SECTION_ICONS: Record<SectionId, React.ReactNode> = {
   profile: (
@@ -40,6 +41,12 @@ const SECTION_ICONS: Record<SectionId, React.ReactNode> = {
     <svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
       <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+    </svg>
+  ),
+  wallet: (
+    <svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="6" width="20" height="12" rx="2" />
+      <path d="M22 10H18a2 2 0 0 0-2 2 2 2 0 0 0 2 2h4" />
     </svg>
   ),
   exchanges: (
@@ -78,6 +85,7 @@ const SECTION_ICONS: Record<SectionId, React.ReactNode> = {
 const SECTION_KEYS: Record<SectionId, string> = {
   profile: 'profileSection',
   security: 'securitySection',
+  wallet: 'walletSection',
   exchanges: 'exchangesSection',
   alerts: 'alertsSection',
   notifications: 'notificationsSection',
@@ -85,7 +93,7 @@ const SECTION_KEYS: Record<SectionId, string> = {
   account: 'accountSection',
 }
 
-const SECTION_IDS: SectionId[] = ['profile', 'security', 'exchanges', 'alerts', 'notifications', 'privacy', 'account']
+const SECTION_IDS: SectionId[] = ['profile', 'security', 'wallet', 'exchanges', 'alerts', 'notifications', 'privacy', 'account']
 
 // Toggle switch component
 function ToggleSwitch({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
@@ -2535,6 +2543,14 @@ function SettingsContent() {
                 </Box>
               )}
             </Box>
+          </SectionCard>
+
+          {/* ===== Wallet Section ===== */}
+          <SectionCard id="wallet" title={t('walletSection')} description={t('walletDescription')}>
+            <WalletSection
+              onToast={(msg, type) => showToast(msg, type)}
+              onConfirm={(title, msg) => showConfirm(title, msg)}
+            />
           </SectionCard>
 
           {/* ===== Exchange Connections Section ===== */}

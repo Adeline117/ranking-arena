@@ -4,10 +4,11 @@
  * ProposalList
  *
  * Fetches and displays Snapshot governance proposals for the Arena space.
- * Can be embedded in the main app or in a dedicated governance page.
+ * Uses SWR for caching and revalidation.
  */
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
+import useSWR from 'swr'
 import { getProposals, getArenaSpaceId, getSpaceUrl, type SnapshotProposal } from '@/lib/web3/snapshot'
 import { ProposalCard } from './ProposalCard'
 
@@ -23,45 +24,21 @@ interface ProposalListProps {
 }
 
 export function ProposalList({ spaceId: spaceIdProp, state, limit = 10, showHeader = true }: ProposalListProps) {
-  const [proposals, setProposals] = useState<SnapshotProposal[]>([])
-  const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<'all' | 'active' | 'closed'>(state as 'active' | 'closed' || 'all')
-
   const spaceId = spaceIdProp || getArenaSpaceId()
 
-  useEffect(() => {
-    if (!spaceId) {
-      setLoading(false)
-      return
-    }
-
-    async function load() {
-      setLoading(true)
-      try {
-        const stateFilter = filter === 'all' ? undefined : filter as 'active' | 'closed' | 'pending'
-        const data = await getProposals(spaceId!, {
-          state: stateFilter,
-          first: limit,
-        })
-        setProposals(data)
-      } catch (err) {
-        console.error('[Governance] Failed to load proposals:', err)
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    load()
-  }, [spaceId, filter, limit])
+  const { data: proposals, isLoading } = useSWR<SnapshotProposal[]>(
+    spaceId ? ['snapshot-proposals', spaceId, filter, limit] : null,
+    () => getProposals(spaceId!, {
+      state: filter === 'all' ? undefined : filter as 'active' | 'closed' | 'pending',
+      first: limit,
+    }),
+    { revalidateOnFocus: false, dedupingInterval: 30_000 }
+  )
 
   if (!spaceId) {
     return (
-      <div style={{
-        padding: 32,
-        textAlign: 'center',
-        color: '#6a6a6a',
-        fontSize: 14,
-      }}>
+      <div className="p-8 text-center text-neutral-600 text-sm">
         Governance is not configured yet. Set NEXT_PUBLIC_SNAPSHOT_SPACE_ID to enable voting.
       </div>
     )
@@ -70,33 +47,22 @@ export function ProposalList({ spaceId: spaceIdProp, state, limit = 10, showHead
   return (
     <div>
       {showHeader && (
-        <div style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: 20,
-        }}>
-          <h2 style={{ fontSize: 20, fontWeight: 700, color: '#eaeaea' }}>
+        <div className="flex justify-between items-center mb-5">
+          <h2 className="text-xl font-bold text-neutral-200">
             Governance
           </h2>
 
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <div className="flex gap-2 items-center">
             {/* Filter tabs */}
             {(['all', 'active', 'closed'] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setFilter(tab)}
-                style={{
-                  padding: '6px 14px',
-                  borderRadius: 8,
-                  border: 'none',
-                  background: filter === tab ? 'rgba(139, 111, 168, 0.15)' : 'transparent',
-                  color: filter === tab ? '#c9b8db' : '#7a7a7a',
-                  fontSize: 13,
-                  fontWeight: filter === tab ? 600 : 500,
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease',
-                }}
+                className={`px-3.5 py-1.5 rounded-lg border-none text-[13px] cursor-pointer transition-all duration-200 ${
+                  filter === tab
+                    ? 'bg-purple-500/15 text-purple-300 font-semibold'
+                    : 'bg-transparent text-neutral-500 font-medium hover:text-neutral-400'
+                }`}
               >
                 {tab === 'all' ? 'All' : tab === 'active' ? 'Active' : 'Closed'}
               </button>
@@ -107,19 +73,7 @@ export function ProposalList({ spaceId: spaceIdProp, state, limit = 10, showHead
               href={getSpaceUrl(spaceId)}
               target="_blank"
               rel="noopener noreferrer"
-              style={{
-                padding: '6px 12px',
-                borderRadius: 8,
-                border: '1px solid rgba(139, 111, 168, 0.3)',
-                background: 'transparent',
-                color: '#8b6fa8',
-                fontSize: 12,
-                fontWeight: 600,
-                textDecoration: 'none',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 4,
-              }}
+              className="px-3 py-1.5 rounded-lg border border-purple-400/30 bg-transparent text-purple-400 text-xs font-semibold no-underline inline-flex items-center gap-1 hover:bg-purple-400/5 transition-colors"
             >
               Snapshot
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -132,30 +86,21 @@ export function ProposalList({ spaceId: spaceIdProp, state, limit = 10, showHead
         </div>
       )}
 
-      {loading ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {isLoading ? (
+        <div className="flex flex-col gap-3">
           {[1, 2, 3].map((i) => (
-            <div key={i} style={{
-              padding: 20,
-              background: 'rgba(15, 15, 20, 0.6)',
-              border: '1px solid rgba(255, 255, 255, 0.06)',
-              borderRadius: 16,
-              height: 140,
-              animation: 'pulse 1.5s ease-in-out infinite',
-            }} />
+            <div
+              key={i}
+              className="p-5 bg-white/[0.03] border border-white/[0.06] rounded-2xl h-[140px] animate-pulse"
+            />
           ))}
         </div>
-      ) : proposals.length === 0 ? (
-        <div style={{
-          padding: 32,
-          textAlign: 'center',
-          color: '#6a6a6a',
-          fontSize: 14,
-        }}>
+      ) : !proposals?.length ? (
+        <div className="p-8 text-center text-neutral-600 text-sm">
           No proposals found.
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div className="flex flex-col gap-3">
           {proposals.map((proposal) => (
             <ProposalCard key={proposal.id} proposal={proposal} />
           ))}

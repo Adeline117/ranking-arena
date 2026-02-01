@@ -90,15 +90,20 @@ export async function POST(request: NextRequest) {
     if (createError || !newUser.user) {
       // User might already exist with this email
       if (createError?.message?.includes('already been registered')) {
-        const { data: existingUser } = await supabase.auth.admin.listUsers()
-        const user = existingUser?.users?.find(u => u.email === walletEmail)
+        // Look up the existing user by their wallet-derived email
+        const { data: profileByEmail } = await supabase
+          .from('user_profiles')
+          .select('id')
+          .eq('email', walletEmail)
+          .maybeSingle()
 
-        if (user) {
+        const userId = profileByEmail?.id
+        if (userId) {
           // Link wallet to existing user
           await supabase
             .from('user_profiles')
             .update({ wallet_address: walletAddress })
-            .eq('id', user.id)
+            .eq('id', userId)
 
           const { data: sessionData } = await supabase.auth.admin.generateLink({
             type: 'magiclink',
@@ -107,7 +112,7 @@ export async function POST(request: NextRequest) {
 
           return NextResponse.json({
             action: 'existing_user',
-            userId: user.id,
+            userId,
             walletAddress,
             verificationToken: sessionData?.properties?.hashed_token,
             email: walletEmail,
