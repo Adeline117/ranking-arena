@@ -7,12 +7,10 @@ import { createClient } from '@supabase/supabase-js'
 import {
   calculateArenaScore,
   debouncedConfidence,
-  isWithinGracePeriod,
-  meetsThreshold,
   ARENA_CONFIG,
   type Period,
 } from '@/lib/utils/arena-score'
-import { SOURCE_TYPE_MAP, PRIORITY_SOURCES, SKIP_PNL_THRESHOLD_SOURCES } from '@/lib/constants/exchanges'
+import { SOURCE_TYPE_MAP, PRIORITY_SOURCES } from '@/lib/constants/exchanges'
 
 // Minimal trader type for initial render
 export interface InitialTrader {
@@ -62,7 +60,6 @@ export async function getInitialTraders(
           max_drawdown,
           followers,
           arena_score,
-          last_qualified_at,
           full_confidence_at
         `)
         .in('source', PRIORITY_SOURCES)
@@ -113,8 +110,8 @@ export async function getInitialTraders(
 
     // Build trader objects with recalculated arena_score using the SAME logic as /api/traders route.
     // This prevents ranking jumps when client-side data replaces SSR data.
-    // Key alignment points: debouncedConfidence, pnlQualifier, SKIP_PNL_THRESHOLD_SOURCES
-    const scoredSnapshots = uniqueSnapshots.map(snap => {
+    // Key alignment points: debouncedConfidence
+    const traders: InitialTrader[] = uniqueSnapshots.map(snap => {
       const key = `${snap.source}:${snap.source_trader_id}`
       const info = handleMap.get(key) || { handle: null, avatar_url: null }
 
@@ -140,15 +137,11 @@ export async function getInitialTraders(
       )
       const confidenceMultiplier = ARENA_CONFIG.CONFIDENCE_MULTIPLIER[effectiveConfidence]
 
-      // Soft PnL qualifier — skip for sources that don't use PnL threshold
-      const skipPnlThreshold = (SKIP_PNL_THRESHOLD_SOURCES as string[]).includes(snap.source)
-      const qualifier = skipPnlThreshold ? 1 : scoreResult.pnlQualifier
-
-      // Final score: raw sub-scores × confidence × qualifier (matches API route exactly)
+      // Final score: raw sub-scores × confidence (matches API route exactly)
       const rawSubScores = scoreResult.returnScore + scoreResult.pnlScore +
                            scoreResult.drawdownScore + scoreResult.stabilityScore
       const finalScore = Math.round(
-        Math.max(0, Math.min(100, rawSubScores * confidenceMultiplier * qualifier)) * 100
+        Math.max(0, Math.min(100, rawSubScores * confidenceMultiplier)) * 100
       ) / 100
 
       return {
@@ -163,23 +156,8 @@ export async function getInitialTraders(
         source_type: SOURCE_TYPE_MAP[snap.source] || 'futures' as const,
         avatar_url: info.avatar_url,
         arena_score: finalScore,
-        // Internal fields for filtering
-        _meetsThreshold: scoreResult.meetsThreshold,
-        _skipPnlThreshold: skipPnlThreshold,
-        _lastQualifiedAt: snap.last_qualified_at as string | null,
       }
     })
-
-    // Filter using same logic as API route:
-    // skip-PnL sources pass through, otherwise must meet threshold or be in grace period
-    const traders: InitialTrader[] = scoredSnapshots
-      .filter(t => {
-        if (t._skipPnlThreshold) return true
-        if (t._meetsThreshold) return true
-        if (isWithinGracePeriod(t._lastQualifiedAt)) return true
-        return false
-      })
-      .map(({ _meetsThreshold, _skipPnlThreshold, _lastQualifiedAt, ...rest }) => rest)
 
     // Sort by recalculated arena_score descending
     traders.sort((a, b) => b.arena_score - a.arena_score)

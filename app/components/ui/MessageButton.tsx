@@ -63,7 +63,7 @@ export default function MessageButton({
         router.push(`/messages/${data.conversation_id}`)
       },
       onError: (error) => {
-        if (error.message === '该用户已关闭私信功能') {
+        if (error.message === '该用户已关闭私信功能' || error.message === 'User has disabled direct messages') {
           showToast(t('userDmDisabled'), 'warning')
         } else if (error.limitReached) {
           showToast(t('msgLimitReached'), 'warning')

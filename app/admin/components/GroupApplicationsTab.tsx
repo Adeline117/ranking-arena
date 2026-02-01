@@ -5,6 +5,7 @@ import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
 import Card from '@/app/components/ui/Card'
 import { useApplications } from '../hooks/useApplications'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 interface GroupApplicationsTabProps {
   accessToken: string | null
@@ -19,6 +20,7 @@ export default function GroupApplicationsTab({ accessToken }: GroupApplicationsT
     approveApplication,
     rejectApplication,
   } = useApplications(accessToken)
+  const { t } = useLanguage()
 
   const [showRejectInput, setShowRejectInput] = useState<Record<string, boolean>>({})
   const [rejectReason, setRejectReason] = useState<Record<string, string>>({})
@@ -39,14 +41,14 @@ export default function GroupApplicationsTab({ accessToken }: GroupApplicationsT
   }
 
   return (
-    <Card title="待审核的小组申请">
+    <Card title={t('adminPendingGroupApplications')}>
       {applicationsLoading ? (
         <Box style={{ padding: tokens.spacing[4], textAlign: 'center' }}>
-          <Text color="tertiary">加载中...</Text>
+          <Text color="tertiary">{t('loading')}</Text>
         </Box>
       ) : applications.length === 0 ? (
         <Box style={{ padding: tokens.spacing[8], textAlign: 'center' }}>
-          <Text color="tertiary">暂无待审核的申请</Text>
+          <Text color="tertiary">{t('adminNoPendingApplications')}</Text>
         </Box>
       ) : (
         <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}>
@@ -61,7 +63,7 @@ export default function GroupApplicationsTab({ accessToken }: GroupApplicationsT
               }}
             >
               <Box style={{ display: 'flex', gap: tokens.spacing[4] }}>
-                {/* 头像 */}
+                {/* Avatar */}
                 <Box
                   style={{
                     width: 60,
@@ -89,7 +91,7 @@ export default function GroupApplicationsTab({ accessToken }: GroupApplicationsT
                   )}
                 </Box>
 
-                {/* 信息 */}
+                {/* Info */}
                 <Box style={{ flex: 1 }}>
                   <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                     <Box>
@@ -99,19 +101,19 @@ export default function GroupApplicationsTab({ accessToken }: GroupApplicationsT
                       )}
                     </Box>
                     <Text size="xs" color="tertiary">
-                      {new Date(app.created_at).toLocaleString('zh-CN')}
+                      {new Date(app.created_at).toLocaleString()}
                     </Text>
                   </Box>
 
-                  {/* 申请者 */}
+                  {/* Applicant */}
                   <Text size="sm" color="secondary" style={{ marginTop: tokens.spacing[1] }}>
-                    申请者: @{app.applicant?.handle || app.applicant_id.slice(0, 8)}
+                    {t('adminApplicant').replace('{handle}', app.applicant?.handle || app.applicant_id.slice(0, 8))}
                   </Text>
 
-                  {/* 简介 */}
+                  {/* Description */}
                   {app.description && (
                     <Text size="sm" color="secondary" style={{ marginTop: tokens.spacing[2] }}>
-                      简介: {app.description}
+                      {t('adminDescriptionLabel').replace('{text}', app.description)}
                     </Text>
                   )}
                   {app.description_en && (
@@ -120,17 +122,18 @@ export default function GroupApplicationsTab({ accessToken }: GroupApplicationsT
                     </Text>
                   )}
 
-                  {/* 角色称呼 */}
+                  {/* Role names */}
                   {app.role_names && (
                     <Box style={{ marginTop: tokens.spacing[2] }}>
                       <Text size="xs" color="tertiary">
-                        角色称呼: 管理员={app.role_names.admin?.zh || app.role_names.admin?.en || '默认'}, 
-                        成员={app.role_names.member?.zh || app.role_names.member?.en || '默认'}
+                        {t('adminRoleNames')
+                          .replace('{admin}', app.role_names.admin?.zh || app.role_names.admin?.en || t('adminRoleDefault'))
+                          .replace('{member}', app.role_names.member?.zh || app.role_names.member?.en || t('adminRoleDefault'))}
                       </Text>
                     </Box>
                   )}
 
-                  {/* 操作按钮 */}
+                  {/* Action buttons */}
                   <Box style={{ marginTop: tokens.spacing[4], display: 'flex', gap: tokens.spacing[2], flexWrap: 'wrap' }}>
                     <Button
                       variant="primary"
@@ -139,14 +142,14 @@ export default function GroupApplicationsTab({ accessToken }: GroupApplicationsT
                       disabled={actionLoading[app.id]}
                       style={{ background: tokens.colors.accent?.success || '#10B981' }}
                     >
-                      {actionLoading[app.id] ? '处理中...' : '批准'}
+                      {actionLoading[app.id] ? t('processing') : t('adminApprove')}
                     </Button>
-                    
+
                     {showRejectInput[app.id] ? (
                       <Box style={{ display: 'flex', gap: tokens.spacing[2], alignItems: 'center', flex: 1 }}>
                         <input
                           type="text"
-                          placeholder="拒绝原因（可选）"
+                          placeholder={t('adminRejectReasonPlaceholder')}
                           value={rejectReason[app.id] || ''}
                           onChange={(e) => setRejectReason(prev => ({ ...prev, [app.id]: e.target.value }))}
                           style={{
@@ -166,14 +169,14 @@ export default function GroupApplicationsTab({ accessToken }: GroupApplicationsT
                           disabled={actionLoading[app.id]}
                           style={{ background: tokens.colors.accent?.error || '#EF4444', color: '#fff' }}
                         >
-                          确认拒绝
+                          {t('adminConfirmReject')}
                         </Button>
                         <Button
                           variant="text"
                           size="sm"
                           onClick={() => setShowRejectInput(prev => ({ ...prev, [app.id]: false }))}
                         >
-                          取消
+                          {t('cancel')}
                         </Button>
                       </Box>
                     ) : (
@@ -183,7 +186,7 @@ export default function GroupApplicationsTab({ accessToken }: GroupApplicationsT
                         onClick={() => setShowRejectInput(prev => ({ ...prev, [app.id]: true }))}
                         disabled={actionLoading[app.id]}
                       >
-                        拒绝
+                        {t('adminReject')}
                       </Button>
                     )}
                   </Box>
@@ -193,8 +196,8 @@ export default function GroupApplicationsTab({ accessToken }: GroupApplicationsT
           ))}
         </Box>
       )}
-      
-      {/* 刷新按钮 */}
+
+      {/* Refresh button */}
       <Box style={{ marginTop: tokens.spacing[4], textAlign: 'center' }}>
         <Button
           variant="secondary"
@@ -202,7 +205,7 @@ export default function GroupApplicationsTab({ accessToken }: GroupApplicationsT
           onClick={loadApplications}
           disabled={applicationsLoading}
         >
-          {applicationsLoading ? '刷新中...' : '刷新列表'}
+          {applicationsLoading ? t('adminRefreshing') : t('adminRefreshList')}
         </Button>
       </Box>
     </Card>

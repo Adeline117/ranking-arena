@@ -231,25 +231,6 @@ export function ScoreRulesModal({ isOpen, onClose }: ScoreRulesModalProps) {
             </div>
           </Section>
 
-          {/* Entry Threshold */}
-          <Section title="Entry Threshold">
-            <div style={{ marginBottom: 8, color: tokens.colors.text.tertiary, fontSize: 12 }}>
-              Minimum realized PnL required for ranking eligibility
-            </div>
-            <div style={{ 
-              display: 'grid', 
-              gridTemplateColumns: 'repeat(3, 1fr)', 
-              gap: 12,
-            }}>
-              <ThresholdCard period="7D" value="$200" />
-              <ThresholdCard period="30D" value="$500" />
-              <ThresholdCard period="90D" value="$1,000" />
-            </div>
-            <div style={{ marginTop: 12, fontSize: 12, color: tokens.colors.text.tertiary }}>
-              Constraint: PnL<sub>realized</sub> &gt; T<sub>d</sub>
-            </div>
-          </Section>
-
           {/* Ranking Logic */}
           <Section title="Ranking Logic">
             <FormulaBox small>
@@ -409,35 +390,6 @@ function ParamTable({
           ))}
         </div>
       ))}
-    </div>
-  )
-}
-
-function ThresholdCard({ period, value }: { period: string; value: string }) {
-  return (
-    <div style={{
-      background: tokens.glass.bg.light,
-      border: `1px solid ${tokens.colors.border.primary}`,
-      borderRadius: tokens.radius.lg,
-      padding: '12px 8px',
-      textAlign: 'center',
-    }}>
-      <div style={{ 
-        fontSize: 11, 
-        color: tokens.colors.text.tertiary,
-        marginBottom: 4,
-        fontFamily: 'monospace',
-      }}>
-        T<sub>{period}</sub>
-      </div>
-      <div style={{ 
-        fontSize: 16, 
-        fontWeight: 700,
-        color: tokens.colors.accent.success,
-        fontFamily: 'monospace',
-      }}>
-        &gt; {value}
-      </div>
     </div>
   )
 }

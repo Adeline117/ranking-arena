@@ -396,12 +396,6 @@ export class BybitFuturesConnector {
     metrics: SnapshotMetrics,
     window: SnapshotWindow
   ): { total: number; returnScore: number; drawdownScore: number; stabilityScore: number } {
-    const PNL_THRESHOLDS = ARENA_CONFIG.PNL_THRESHOLD
-
-    if (Math.abs(metrics.pnl) < PNL_THRESHOLDS[window]) {
-      return { total: 0, returnScore: 0, drawdownScore: 0, stabilityScore: 0 }
-    }
-
     const roi = metrics.roi
     let returnScore: number
     if (roi <= 0) returnScore = 0

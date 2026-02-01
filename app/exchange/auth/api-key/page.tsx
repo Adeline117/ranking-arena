@@ -160,21 +160,21 @@ function ApiKeyAuthContent() {
       if (field === 'apiKey') setApiKey(text.trim())
       else if (field === 'apiSecret') setApiSecret(text.trim())
       else setPassphrase(text.trim())
-      showToast(language === 'zh' ? '已粘贴' : 'Pasted', 'success')
+      showToast(t('pasted'), 'success')
     } catch {
-      showToast(language === 'zh' ? '无法访问剪贴板' : 'Cannot access clipboard', 'error')
+      showToast(t('cannotAccessClipboard'), 'error')
     }
   }
 
   const handleSubmit = async () => {
     if (!selectedExchange || !apiKey || !apiSecret) {
-      setError(language === 'zh' ? '请填写所有必填项' : 'Please fill in all required fields')
+      setError(t('fillAllRequired'))
       return
     }
 
     const config = EXCHANGE_CONFIGS[selectedExchange]
     if (config.needsPassphrase && !passphrase) {
-      setError(language === 'zh' ? '请填写 Passphrase' : 'Please enter Passphrase')
+      setError(t('fillPassphrase'))
       return
     }
 
@@ -207,14 +207,14 @@ function ApiKeyAuthContent() {
       const result = await response.json()
 
       if (!response.ok) {
-        setError(result.error || (language === 'zh' ? '绑定失败' : 'Binding failed'))
+        setError(result.error || t('bindFailed'))
         return
       }
 
       showToast(t('bindSuccess'), 'success')
       router.push('/settings')
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : (language === 'zh' ? '绑定失败' : 'Binding failed')
+      const errorMessage = err instanceof Error ? err.message : t('bindFailed')
       setError(errorMessage)
     } finally {
       setLoading(false)
@@ -243,12 +243,10 @@ function ApiKeyAuthContent() {
         {/* 标题 */}
         <Box style={{ marginBottom: tokens.spacing[6] }}>
           <Text size="2xl" weight="black" style={{ marginBottom: tokens.spacing[2] }}>
-            {language === 'zh' ? '使用 API Key 绑定交易所' : 'Bind Exchange with API Key'}
+            {t('apiKeyBindTitle')}
           </Text>
           <Text size="sm" color="secondary">
-            {language === 'zh' 
-              ? '按照以下步骤创建只读 API Key，安全地同步您的交易数据' 
-              : 'Follow the steps below to create a read-only API Key and sync your trading data securely'}
+            {t('apiKeyBindDesc')}
           </Text>
         </Box>
 
@@ -262,7 +260,7 @@ function ApiKeyAuthContent() {
             style={{ marginBottom: tokens.spacing[6] }}
           >
             <Text size="lg" weight="bold" style={{ marginBottom: tokens.spacing[4] }}>
-              {language === 'zh' ? '选择交易所' : 'Select Exchange'}
+              {t('selectExchange')}
             </Text>
             <Box style={{ display: 'flex', flexWrap: 'wrap', gap: tokens.spacing[3] }}>
               {(Object.keys(EXCHANGE_CONFIGS) as ExchangeId[]).map((id) => (
@@ -319,7 +317,7 @@ function ApiKeyAuthContent() {
                     }}
                     style={{ marginLeft: 'auto' }}
                   >
-                    {language === 'zh' ? '更换' : 'Change'}
+                    {t('changeExchange')}
                   </Button>
                 </Box>
 
@@ -333,10 +331,10 @@ function ApiKeyAuthContent() {
                 >
                   <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: tokens.spacing[4] }}>
                     <Text size="lg" weight="bold">
-                      {language === 'zh' ? '操作步骤' : 'Steps'}
+                      {t('operationStepsLabel')}
                     </Text>
                     <Text size="xs" color="tertiary">
-                      {language === 'zh' ? '约 2 分钟' : '~2 minutes'}
+                      {t('estimatedTime')}
                     </Text>
                   </Box>
 
@@ -381,7 +379,7 @@ function ApiKeyAuthContent() {
                     onClick={() => window.open(config.apiManagementUrl, '_blank')}
                     style={{ marginTop: tokens.spacing[4] }}
                   >
-                    {language === 'zh' ? `打开 ${config.name} API 管理页面` : `Open ${config.name} API Management`}
+                    {t('openApiManagement').replace('{exchange}', config.name)}
                   </Button>
                 </Box>
 
@@ -395,7 +393,7 @@ function ApiKeyAuthContent() {
                   }}
                 >
                   <Text size="sm" color="secondary">
-                    {language === 'zh' ? '视频教程即将上线' : 'Video tutorial coming soon'}
+                    {t('videoComingSoon')}
                   </Text>
                 </Box>
               </Box>
@@ -429,18 +427,12 @@ function ApiKeyAuthContent() {
                     </Box>
                     <Box>
                       <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[2], color: tokens.colors.accent.success }}>
-                        {language === 'zh' ? '安全提示' : 'Security Notice'}
+                        {t('securityNoticeTitle')}
                       </Text>
                       <Text size="xs" color="secondary" style={{ lineHeight: 1.6 }}>
-                        {language === 'zh' ? (
-                          <>• 只需勾选「只读/读取」权限，无法进行任何交易操作<br />
-                          • API Key 不能提币、不能下单<br />
-                          • 您可以随时在交易所撤销授权</>
-                        ) : (
-                          <>• Only &ldquo;Read-Only&rdquo; permission is needed, no trading operations possible<br />
-                          • API Key cannot withdraw or place orders<br />
-                          • You can revoke access anytime from the exchange</>
-                        )}
+                        {`• ${t('securityTip1')}`}<br />
+                        {`• ${t('securityTip2')}`}<br />
+                        {`• ${t('securityTip3')}`}
                       </Text>
                     </Box>
                   </Box>
@@ -454,7 +446,7 @@ function ApiKeyAuthContent() {
                   border="primary"
                 >
                   <Text size="lg" weight="bold" style={{ marginBottom: tokens.spacing[4] }}>
-                    {language === 'zh' ? '填写 API 信息' : 'Enter API Information'}
+                    {t('enterApiInfo')}
                   </Text>
 
                   {error && (
@@ -483,7 +475,7 @@ function ApiKeyAuthContent() {
                         type="text"
                         value={apiKey}
                         onChange={(e) => setApiKey(e.target.value)}
-                        placeholder={language === 'zh' ? '粘贴您的 API Key' : 'Paste your API Key'}
+                        placeholder={t('pasteYourApiKey')}
                         style={{
                           flex: 1,
                           padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
@@ -501,7 +493,7 @@ function ApiKeyAuthContent() {
                         onClick={() => handlePaste('apiKey')}
                         style={{ whiteSpace: 'nowrap' }}
                       >
-                        {language === 'zh' ? '粘贴' : 'Paste'}
+                        {t('paste')}
                       </Button>
                     </Box>
                   </Box>
@@ -516,7 +508,7 @@ function ApiKeyAuthContent() {
                         type="password"
                         value={apiSecret}
                         onChange={(e) => setApiSecret(e.target.value)}
-                        placeholder={language === 'zh' ? '粘贴您的 API Secret' : 'Paste your API Secret'}
+                        placeholder={t('pasteYourApiSecret')}
                         style={{
                           flex: 1,
                           padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
@@ -534,7 +526,7 @@ function ApiKeyAuthContent() {
                         onClick={() => handlePaste('apiSecret')}
                         style={{ whiteSpace: 'nowrap' }}
                       >
-                        {language === 'zh' ? '粘贴' : 'Paste'}
+                        {t('paste')}
                       </Button>
                     </Box>
                   </Box>
@@ -550,7 +542,7 @@ function ApiKeyAuthContent() {
                           type="password"
                           value={passphrase}
                           onChange={(e) => setPassphrase(e.target.value)}
-                          placeholder={language === 'zh' ? '粘贴您的 Passphrase' : 'Paste your Passphrase'}
+                          placeholder={t('pasteYourPassphrase')}
                           style={{
                             flex: 1,
                             padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
@@ -568,13 +560,11 @@ function ApiKeyAuthContent() {
                           onClick={() => handlePaste('passphrase')}
                           style={{ whiteSpace: 'nowrap' }}
                         >
-                          {language === 'zh' ? '粘贴' : 'Paste'}
+                          {t('paste')}
                         </Button>
                       </Box>
                       <Text size="xs" color="tertiary" style={{ marginTop: tokens.spacing[2] }}>
-                        {language === 'zh' 
-                          ? 'Bitget 需要您在创建 API 时设置的密码短语' 
-                          : 'Bitget requires the passphrase you set when creating the API'}
+                        {t('passphraseHint')}
                       </Text>
                     </Box>
                   )}
@@ -587,9 +577,9 @@ function ApiKeyAuthContent() {
                     disabled={loading || !apiKey || !apiSecret || (config.needsPassphrase && !passphrase)}
                     style={{ marginTop: tokens.spacing[2] }}
                   >
-                    {loading 
-                      ? (language === 'zh' ? '验证中...' : 'Verifying...') 
-                      : (language === 'zh' ? `绑定 ${config.name}` : `Bind ${config.name}`)}
+                    {loading
+                      ? t('verifying')
+                      : t('bindExchangeName').replace('{exchange}', config.name)}
                   </Button>
                 </Box>
               </Box>
@@ -617,7 +607,7 @@ export default function ApiKeyAuthPage() {
       <Box style={{ minHeight: '100vh', background: 'var(--bg-primary)', color: 'var(--text-primary)' }}>
         <TopNav email={null} />
         <Box style={{ maxWidth: 900, margin: '0 auto', padding: '24px' }}>
-          <Text size="lg">加载中...</Text>
+          <Text size="lg">Loading...</Text>
         </Box>
       </Box>
     }>

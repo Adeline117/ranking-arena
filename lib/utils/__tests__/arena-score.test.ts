@@ -10,10 +10,6 @@ import {
   calculatePnlScore,
   calculateDrawdownScore,
   calculateStabilityScore,
-  meetsThreshold,
-  meetsHardThreshold,
-  calculatePnlQualifier,
-  isWithinGracePeriod,
   debouncedConfidence,
   calculateArenaScore,
   calculateOverallScore,
@@ -264,153 +260,6 @@ describe('calculatePnlScore', () => {
 })
 
 // ============================================
-// 入榜门槛测试
-// ============================================
-
-describe('meetsThreshold (soft)', () => {
-  // meetsThreshold now uses softFloor = threshold * 0.5
-  // 7D: softFloor = 100, 30D: softFloor = 250, 90D: softFloor = 500
-
-  test('7D 软门槛检查 (softFloor = $100)', () => {
-    expect(meetsThreshold(50, '7D')).toBe(false)   // below softFloor
-    expect(meetsThreshold(100, '7D')).toBe(false)   // at softFloor boundary (not >)
-    expect(meetsThreshold(101, '7D')).toBe(true)    // above softFloor
-    expect(meetsThreshold(200, '7D')).toBe(true)    // at old threshold
-    expect(meetsThreshold(500, '7D')).toBe(true)    // well above
-  })
-
-  test('30D 软门槛检查 (softFloor = $250)', () => {
-    expect(meetsThreshold(200, '30D')).toBe(false)  // below softFloor
-    expect(meetsThreshold(250, '30D')).toBe(false)  // at softFloor boundary
-    expect(meetsThreshold(251, '30D')).toBe(true)   // above softFloor
-    expect(meetsThreshold(500, '30D')).toBe(true)   // at old threshold
-  })
-
-  test('90D 软门槛检查 (softFloor = $500)', () => {
-    expect(meetsThreshold(400, '90D')).toBe(false)  // below softFloor
-    expect(meetsThreshold(500, '90D')).toBe(false)  // at softFloor boundary
-    expect(meetsThreshold(501, '90D')).toBe(true)   // above softFloor
-    expect(meetsThreshold(1000, '90D')).toBe(true)  // at old threshold
-  })
-})
-
-describe('meetsHardThreshold', () => {
-  test('7D 硬门槛检查 (原始行为)', () => {
-    expect(meetsHardThreshold(100, '7D')).toBe(false)
-    expect(meetsHardThreshold(200, '7D')).toBe(false) // 边界，不满足 >
-    expect(meetsHardThreshold(201, '7D')).toBe(true)
-    expect(meetsHardThreshold(500, '7D')).toBe(true)
-  })
-
-  test('30D 硬门槛检查', () => {
-    expect(meetsHardThreshold(500, '30D')).toBe(false)
-    expect(meetsHardThreshold(501, '30D')).toBe(true)
-  })
-
-  test('90D 硬门槛检查', () => {
-    expect(meetsHardThreshold(1000, '90D')).toBe(false)
-    expect(meetsHardThreshold(1001, '90D')).toBe(true)
-  })
-})
-
-// ============================================
-// PnL Qualifier 测试（软门槛）
-// ============================================
-
-describe('calculatePnlQualifier', () => {
-  // 7D: softFloor=100, threshold=200, fullQualify=300
-  test('7D: below softFloor returns 0', () => {
-    expect(calculatePnlQualifier(50, '7D')).toBe(0)
-    expect(calculatePnlQualifier(100, '7D')).toBe(0) // at boundary, not >
-  })
-
-  test('7D: in ramp zone returns 0~1', () => {
-    // midpoint: (200 - 100) / (300 - 100) = 0.5
-    expect(calculatePnlQualifier(200, '7D')).toBeCloseTo(0.5, 2)
-    // quarter: (150 - 100) / (300 - 100) = 0.25
-    expect(calculatePnlQualifier(150, '7D')).toBeCloseTo(0.25, 2)
-  })
-
-  test('7D: at or above fullQualify returns 1', () => {
-    expect(calculatePnlQualifier(300, '7D')).toBe(1)
-    expect(calculatePnlQualifier(1000, '7D')).toBe(1)
-  })
-
-  // 30D: softFloor=250, threshold=500, fullQualify=750
-  test('30D: below softFloor returns 0', () => {
-    expect(calculatePnlQualifier(200, '30D')).toBe(0)
-    expect(calculatePnlQualifier(250, '30D')).toBe(0)
-  })
-
-  test('30D: in ramp zone returns 0~1', () => {
-    // (500 - 250) / (750 - 250) = 0.5
-    expect(calculatePnlQualifier(500, '30D')).toBeCloseTo(0.5, 2)
-  })
-
-  test('30D: above fullQualify returns 1', () => {
-    expect(calculatePnlQualifier(750, '30D')).toBe(1)
-    expect(calculatePnlQualifier(5000, '30D')).toBe(1)
-  })
-
-  // 90D: softFloor=500, threshold=1000, fullQualify=1500
-  test('90D: below softFloor returns 0', () => {
-    expect(calculatePnlQualifier(400, '90D')).toBe(0)
-    expect(calculatePnlQualifier(500, '90D')).toBe(0)
-  })
-
-  test('90D: in ramp zone linear interpolation', () => {
-    // (800 - 500) / (1500 - 500) = 0.3
-    expect(calculatePnlQualifier(800, '90D')).toBeCloseTo(0.3, 2)
-    // (1000 - 500) / (1500 - 500) = 0.5
-    expect(calculatePnlQualifier(1000, '90D')).toBeCloseTo(0.5, 2)
-    // (1200 - 500) / (1500 - 500) = 0.7
-    expect(calculatePnlQualifier(1200, '90D')).toBeCloseTo(0.7, 2)
-  })
-
-  test('90D: above fullQualify returns 1', () => {
-    expect(calculatePnlQualifier(1500, '90D')).toBe(1)
-    expect(calculatePnlQualifier(100000, '90D')).toBe(1)
-  })
-
-  test('negative PnL returns 0', () => {
-    expect(calculatePnlQualifier(-1000, '30D')).toBe(0)
-    expect(calculatePnlQualifier(-1, '7D')).toBe(0)
-  })
-})
-
-// ============================================
-// Grace Period 测试
-// ============================================
-
-describe('isWithinGracePeriod', () => {
-  test('null lastQualifiedAt returns false', () => {
-    expect(isWithinGracePeriod(null)).toBe(false)
-    expect(isWithinGracePeriod(undefined)).toBe(false)
-  })
-
-  test('recent timestamp within grace period returns true', () => {
-    const oneHourAgo = new Date(Date.now() - 1 * 3600 * 1000).toISOString()
-    expect(isWithinGracePeriod(oneHourAgo)).toBe(true)
-  })
-
-  test('timestamp at 23 hours within default 24h grace period', () => {
-    const twentyThreeHoursAgo = new Date(Date.now() - 23 * 3600 * 1000).toISOString()
-    expect(isWithinGracePeriod(twentyThreeHoursAgo)).toBe(true)
-  })
-
-  test('timestamp beyond grace period returns false', () => {
-    const twoDaysAgo = new Date(Date.now() - 48 * 3600 * 1000).toISOString()
-    expect(isWithinGracePeriod(twoDaysAgo)).toBe(false)
-  })
-
-  test('custom grace period hours', () => {
-    const fiveHoursAgo = new Date(Date.now() - 5 * 3600 * 1000).toISOString()
-    expect(isWithinGracePeriod(fiveHoursAgo, 4)).toBe(false) // 5h > 4h
-    expect(isWithinGracePeriod(fiveHoursAgo, 6)).toBe(true)  // 5h < 6h
-  })
-})
-
-// ============================================
 // Confidence Debounce 测试
 // ============================================
 
@@ -473,13 +322,11 @@ describe('calculateArenaScore', () => {
   test('优秀交易员得高分', () => {
     const result = calculateArenaScore(goodTrader, '30D')
     expect(result.totalScore).toBeGreaterThan(50)
-    expect(result.meetsThreshold).toBe(true)
   })
 
   test('差劲交易员得低分', () => {
     const result = calculateArenaScore(poorTrader, '30D')
     expect(result.totalScore).toBeLessThan(20)
-    expect(result.meetsThreshold).toBe(false)
   })
 
   test('返回所有分数组成', () => {
@@ -489,27 +336,7 @@ describe('calculateArenaScore', () => {
     expect(result).toHaveProperty('pnlScore')
     expect(result).toHaveProperty('drawdownScore')
     expect(result).toHaveProperty('stabilityScore')
-    expect(result).toHaveProperty('meetsThreshold')
-    expect(result).toHaveProperty('pnlQualifier')
-  })
-
-  test('pnlQualifier 反映软门槛位置', () => {
-    // goodTrader: pnl=5000, 30D fullQualify=750 → qualifier=1
-    const result = calculateArenaScore(goodTrader, '30D')
-    expect(result.pnlQualifier).toBe(1)
-
-    // poorTrader: pnl=-500 → qualifier=0
-    const poorResult = calculateArenaScore(poorTrader, '30D')
-    expect(poorResult.pnlQualifier).toBe(0)
-
-    // Border trader: pnl=500, 30D softFloor=250, fullQualify=750
-    // qualifier = (500-250)/(750-250) = 0.5
-    const borderResult = calculateArenaScore(
-      { roi: 30, pnl: 500, maxDrawdown: 10, winRate: 55 },
-      '30D'
-    )
-    expect(borderResult.pnlQualifier).toBeCloseTo(0.5, 2)
-    expect(borderResult.meetsThreshold).toBe(true) // pnl=500 > softFloor=250
+    expect(result).toHaveProperty('scoreConfidence')
   })
 
   test('总分 = 收益分 + PnL 分 + 回撤分 + 稳定分', () => {
@@ -600,8 +427,6 @@ describe('Edge cases', () => {
     expect(result.drawdownScore).toBeCloseTo(4, 1)
     expect(result.stabilityScore).toBeCloseTo(4.57, 1)
     expect(result.totalScore).toBeCloseTo(48.1, 1)
-    expect(result.meetsThreshold).toBe(true)
-    expect(result.pnlQualifier).toBe(1)
     expect(result.scoreConfidence).toBe('full')
   })
 })
@@ -722,20 +547,20 @@ describe('rankByArenaScore', () => {
   const traders = [
     { id: '1', roi: 30, pnl: 2000, maxDrawdown: 15, winRate: 55 },
     { id: '2', roi: 50, pnl: 5000, maxDrawdown: 10, winRate: 65 },
-    { id: '3', roi: 10, pnl: 500, maxDrawdown: 5, winRate: 70 },  // 30D softFloor=250, passes
-    { id: '4', roi: 5, pnl: 100, maxDrawdown: 3, winRate: 80 },   // 30D softFloor=250, fails
+    { id: '3', roi: 10, pnl: 500, maxDrawdown: 5, winRate: 70 },
+    { id: '4', roi: 5, pnl: 100, maxDrawdown: 3, winRate: 80 },
   ]
 
   test('按分数降序排列', () => {
     const ranked = rankByArenaScore(traders, '30D')
-    expect(ranked.length).toBe(3) // id:4 被过滤（pnl=100 < softFloor=250）
+    expect(ranked.length).toBe(4) // all traders included (no PnL threshold)
     expect(ranked[0].id).toBe('2') // 高分在前
   })
 
-  test('过滤未达软门槛的交易员', () => {
+  test('所有交易员都通过（无 PnL 门槛过滤）', () => {
     const ranked = rankByArenaScore(traders, '30D')
-    expect(ranked.find(t => t.id === '4')).toBeUndefined() // pnl=100 < softFloor=250
-    expect(ranked.find(t => t.id === '3')).toBeDefined()   // pnl=500 > softFloor=250
+    expect(ranked.find(t => t.id === '4')).toBeDefined()
+    expect(ranked.find(t => t.id === '3')).toBeDefined()
   })
 
   test('结果包含 arena_score 和 score_details', () => {
@@ -823,25 +648,14 @@ describe('calculateArenaScore scoreConfidence', () => {
 // ============================================
 
 describe('ARENA_CONFIG', () => {
-  test('PnL 门槛配置正确', () => {
-    expect(ARENA_CONFIG.PNL_THRESHOLD['7D']).toBe(200)
-    expect(ARENA_CONFIG.PNL_THRESHOLD['30D']).toBe(500)
-    expect(ARENA_CONFIG.PNL_THRESHOLD['90D']).toBe(1000)
-  })
-
   test('parity: scripts/lib/shared.mjs matches canonical config', () => {
     // This test reads the shared.mjs file and verifies that its ARENA_CONFIG
-    // PNL_THRESHOLD, PARAMS, and PNL_PARAMS match the canonical TypeScript source.
+    // PARAMS and PNL_PARAMS match the canonical TypeScript source.
     // If this test fails, shared.mjs has drifted from lib/utils/arena-score.ts.
     const fs = require('fs')
     const path = require('path')
     const sharedPath = path.resolve(__dirname, '../../../scripts/lib/shared.mjs')
     const content = fs.readFileSync(sharedPath, 'utf-8')
-
-    // Verify PNL_THRESHOLD values
-    expect(content).toContain("'7D': 200")
-    expect(content).toContain("'30D': 500")
-    expect(content).toContain("'90D': 1000")
 
     // Verify PARAMS match canonical
     for (const [period, params] of Object.entries(ARENA_CONFIG.PARAMS)) {
@@ -878,22 +692,7 @@ describe('ARENA_CONFIG', () => {
     expect(total).toBe(100)
   })
 
-  test('排行榜稳定性配置正确', () => {
-    expect(ARENA_CONFIG.GRACE_PERIOD_HOURS).toBe(24)
+  test('置信度防抖配置正确', () => {
     expect(ARENA_CONFIG.CONFIDENCE_DEBOUNCE_HOURS).toBe(8)
-    expect(ARENA_CONFIG.PNL_RAMP.SOFT_FLOOR_FACTOR).toBe(0.5)
-    expect(ARENA_CONFIG.PNL_RAMP.FULL_QUALIFY_FACTOR).toBe(1.5)
-  })
-
-  test('软门槛区间合理', () => {
-    // 验证每个周期的软门槛区间
-    const periods: Array<'7D' | '30D' | '90D'> = ['7D', '30D', '90D']
-    for (const period of periods) {
-      const threshold = ARENA_CONFIG.PNL_THRESHOLD[period]
-      const softFloor = threshold * ARENA_CONFIG.PNL_RAMP.SOFT_FLOOR_FACTOR
-      const fullQualify = threshold * ARENA_CONFIG.PNL_RAMP.FULL_QUALIFY_FACTOR
-      expect(softFloor).toBeLessThan(threshold)
-      expect(threshold).toBeLessThan(fullQualify)
-    }
   })
 })

@@ -26,7 +26,7 @@ interface PostData {
 export default function PostDetailPage(props: { params: Promise<{ id: string }> }) {
   const router = useRouter()
   const { email } = useAuthSession()
-  const { language } = useLanguage()
+  const { language, t } = useLanguage()
   const [postId, setPostId] = useState<string | null>(null)
   const [postData, setPostData] = useState<PostData | null>(null)
 
@@ -67,7 +67,7 @@ export default function PostDetailPage(props: { params: Promise<{ id: string }> 
           padding: tokens.spacing[6],
           textAlign: 'center',
         }}>
-          {language === 'zh' ? '加载中...' : 'Loading...'}
+          {t('loading')}
         </div>
       </div>
     )
@@ -87,8 +87,8 @@ export default function PostDetailPage(props: { params: Promise<{ id: string }> 
       viewCount: postData.view_count,
     }),
     generateBreadcrumbSchema([
-      { name: '首页', url: process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org' },
-      { name: '帖子' },
+      { name: t('home'), url: process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org' },
+      { name: t('posts') },
       { name: postData.title.slice(0, 30) },
     ])
   ) : null
@@ -124,7 +124,7 @@ export default function PostDetailPage(props: { params: Promise<{ id: string }> 
             fontSize: 14,
           }}
         >
-          ← 返回
+          {'\u2190'} {t('goBack')}
         </button>
         
         {/* 帖子内容 - 使用 PostFeed 并设置 initialPostId 自动打开帖子详情 */}

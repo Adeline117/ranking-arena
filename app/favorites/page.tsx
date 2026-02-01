@@ -10,6 +10,7 @@ import EmptyState from '@/app/components/ui/EmptyState'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { useToast } from '@/app/components/ui/Toast'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 interface BookmarkFolder {
   id: string
@@ -34,6 +35,7 @@ interface SubscribedFolder {
 }
 
 export default function FavoritesPage() {
+  const { t } = useLanguage()
   const { showToast } = useToast()
   const { accessToken, authChecked, email } = useAuthSession()
   const [folders, setFolders] = useState<BookmarkFolder[]>([])
@@ -77,7 +79,7 @@ export default function FavoritesPage() {
         } else {
           console.error('Error fetching folders:', foldersData.error)
           setFolders([])
-          showToast('加载收藏夹失败', 'error')
+          showToast(t('loadFoldersFailed'), 'error')
         }
         
         if (subscribedResponse.ok) {
@@ -93,7 +95,7 @@ export default function FavoritesPage() {
         console.error('Error loading folders:', error)
         setFolders([])
         setSubscribedFolders([])
-        showToast('加载收藏夹失败，请稍后重试', 'error')
+        showToast(t('loadFoldersFailedRetry'), 'error')
       } finally {
         setLoading(false)
       }
@@ -127,13 +129,13 @@ export default function FavoritesPage() {
         setNewFolderName('')
         setNewFolderPublic(false)
         setShowCreateForm(false)
-        showToast('收藏夹创建成功', 'success')
+        showToast(t('folderCreated'), 'success')
       } else {
-        showToast(data.error || '创建失败', 'error')
+        showToast(data.error || t('createFailed'), 'error')
       }
     } catch (error) {
-      console.error('创建收藏夹失败:', error)
-      showToast('创建失败', 'error')
+      console.error('Error creating folder:', error)
+      showToast(t('createFailed'), 'error')
     } finally {
       setCreating(false)
     }
@@ -152,7 +154,7 @@ export default function FavoritesPage() {
         <TopNav email={email} />
         <Box style={{ maxWidth: 900, margin: '0 auto', padding: tokens.spacing[6] }}>
           <Text size="2xl" weight="black" style={{ marginBottom: tokens.spacing[4] }}>
-            我的收藏
+            {t('myFavorites')}
           </Text>
           <ListSkeleton count={5} gap={12} />
         </Box>
@@ -166,11 +168,11 @@ export default function FavoritesPage() {
         <TopNav email={email} />
         <Box style={{ maxWidth: 900, margin: '0 auto', padding: tokens.spacing[6] }}>
           <Text size="2xl" weight="black" style={{ marginBottom: tokens.spacing[4] }}>
-            我的收藏
+            {t('myFavorites')}
           </Text>
           <EmptyState
-            title="请先登录"
-            description="登录后可以查看和管理您的收藏夹"
+            title={t('pleaseLoginFirst')}
+            description={t('loginToViewFavorites')}
             action={
               <Link
                 href="/login?returnUrl=/favorites"
@@ -184,7 +186,7 @@ export default function FavoritesPage() {
                   fontSize: '14px',
                 }}
               >
-                前往登录
+                {t('goToLogin')}
               </Link>
             }
           />
@@ -200,7 +202,7 @@ export default function FavoritesPage() {
         {/* 页面头部 */}
         <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: tokens.spacing[4] }}>
           <Text size="2xl" weight="black">
-            我的收藏
+            {t('myFavorites')}
           </Text>
           {activeTab === 'my' && (
             <Button
@@ -208,7 +210,7 @@ export default function FavoritesPage() {
               size="sm"
               onClick={() => setShowCreateForm(!showCreateForm)}
             >
-              + 新建收藏夹
+              + {t('newFolder')}
             </Button>
           )}
         </Box>
@@ -235,7 +237,7 @@ export default function FavoritesPage() {
               transition: `all ${tokens.transition.base}`,
             }}
           >
-            我的收藏夹 ({folders.length})
+            {t('myFoldersTab')} ({folders.length})
           </button>
           <button
             onClick={() => setActiveTab('subscribed')}
@@ -252,7 +254,7 @@ export default function FavoritesPage() {
               transition: `all ${tokens.transition.base}`,
             }}
           >
-            收藏的收藏夹 ({subscribedFolders.length})
+            {t('subscribedFoldersTab')} ({subscribedFolders.length})
           </button>
         </Box>
 
@@ -268,11 +270,11 @@ export default function FavoritesPage() {
             }}
           >
             <Text size="base" weight="bold" style={{ marginBottom: tokens.spacing[3] }}>
-              新建收藏夹
+              {t('newFolder')}
             </Text>
             <input
               type="text"
-              placeholder="收藏夹名称"
+              placeholder={t('bookmarkFolderName')}
               value={newFolderName}
               onChange={(e) => setNewFolderName(e.target.value)}
               style={{
@@ -294,7 +296,7 @@ export default function FavoritesPage() {
                   onChange={(e) => setNewFolderPublic(e.target.checked)}
                   style={{ width: 16, height: 16 }}
                 />
-                <Text size="sm">公开（在主页展示）</Text>
+                <Text size="sm">{t('publicShowOnProfile')}</Text>
               </label>
             </Box>
             <Box style={{ display: 'flex', gap: tokens.spacing[2] }}>
@@ -304,7 +306,7 @@ export default function FavoritesPage() {
                 onClick={createFolder}
                 disabled={creating || !newFolderName.trim()}
               >
-                {creating ? '创建中...' : '创建'}
+                {creating ? t('creating') : t('create')}
               </Button>
               <Button
                 variant="text"
@@ -315,7 +317,7 @@ export default function FavoritesPage() {
                   setNewFolderPublic(false)
                 }}
               >
-                取消
+                {t('cancel')}
               </Button>
             </Box>
           </Box>
@@ -328,8 +330,8 @@ export default function FavoritesPage() {
           // 我的收藏夹
           folders.length === 0 ? (
             <EmptyState
-              title="暂无收藏夹"
-              description="创建收藏夹来整理您收藏的帖子"
+              title={t('noFolders')}
+              description={t('noFoldersDesc')}
             />
           ) : (
             <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
@@ -399,7 +401,7 @@ export default function FavoritesPage() {
                             borderRadius: tokens.radius.sm,
                           }}
                         >
-                          默认
+                          {t('defaultLabel')}
                         </span>
                       )}
                       {folder.is_public ? (
@@ -412,7 +414,7 @@ export default function FavoritesPage() {
                             borderRadius: tokens.radius.sm,
                           }}
                         >
-                          公开
+                          {t('publicFolder')}
                         </span>
                       ) : (
                         <span
@@ -424,7 +426,7 @@ export default function FavoritesPage() {
                             borderRadius: tokens.radius.sm,
                           }}
                         >
-                          私密
+                          {t('privateFolder')}
                         </span>
                       )}
                     </Box>
@@ -434,7 +436,7 @@ export default function FavoritesPage() {
                       </Text>
                     )}
                     <Text size="xs" color="tertiary">
-                      {folder.post_count} 个收藏
+                      {t('itemCount').replace('{n}', String(folder.post_count))}
                     </Text>
                   </Box>
 
@@ -450,8 +452,8 @@ export default function FavoritesPage() {
           // 收藏的收藏夹
           subscribedFolders.length === 0 ? (
             <EmptyState
-              title="暂无收藏的收藏夹"
-              description="浏览其他用户的公开收藏夹并收藏感兴趣的内容"
+              title={t('noSubscribedFolders')}
+              description={t('noSubscribedFoldersDesc')}
             />
           ) : (
             <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
@@ -520,7 +522,7 @@ export default function FavoritesPage() {
                           borderRadius: tokens.radius.sm,
                         }}
                       >
-                        ★ 已收藏
+                        ★ {t('bookmarked')}
                       </span>
                     </Box>
                     {folder.description && (
@@ -529,8 +531,8 @@ export default function FavoritesPage() {
                       </Text>
                     )}
                     <Text size="xs" color="tertiary">
-                      {folder.post_count} 个收藏
-                      {folder.subscriber_count > 0 && ` · ${folder.subscriber_count} 人收藏`}
+                      {t('itemCount').replace('{n}', String(folder.post_count))}
+                      {folder.subscriber_count > 0 && ` · ${t('subscriberCount').replace('{n}', String(folder.subscriber_count))}`}
                       {folder.owner_handle && ` · @${folder.owner_handle}`}
                     </Text>
                   </Box>

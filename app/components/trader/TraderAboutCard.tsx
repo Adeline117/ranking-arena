@@ -312,7 +312,7 @@ export default function TraderAboutCard({
             fontStyle: 'italic',
           }}
         >
-          点击下方按钮添加个人简介
+          {t('addBioHint')}
         </Text>
       ) : null}
 

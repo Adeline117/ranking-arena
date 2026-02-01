@@ -21,6 +21,7 @@ import {
 import { useRealtime } from '@/lib/hooks/useRealtime'
 import ChatSettingsDrawer from '@/app/components/features/ChatSettingsDrawer'
 import ChatSearchOverlay from '@/app/components/features/ChatSearchOverlay'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 type MessageStatus = 'sending' | 'sent' | 'failed'
 
@@ -56,12 +57,12 @@ type OtherUser = {
   bio?: string | null
 }
 
-// Helper to get media type label in Chinese
-function getMediaTypeLabel(type: 'image' | 'video' | 'file'): string {
+// Helper to get media type label
+function getMediaTypeLabel(type: 'image' | 'video' | 'file', t: (key: string) => string): string {
   switch (type) {
-    case 'image': return '图片'
-    case 'video': return '视频'
-    case 'file': return '文件'
+    case 'image': return t('image')
+    case 'video': return t('video')
+    case 'file': return t('file')
   }
 }
 
@@ -103,6 +104,7 @@ function updateMessageStatus(
 export default function ConversationPage({ params }: { params: { conversationId: string } | Promise<{ conversationId: string }> }) {
   const router = useRouter()
   const { showToast } = useToast()
+  const { t, language } = useLanguage()
   const [conversationId, setConversationId] = useState<string>('')
   const [email, setEmail] = useState<string | null>(null)
   const [userId, setUserId] = useState<string | null>(null)
@@ -236,7 +238,7 @@ export default function ConversationPage({ params }: { params: { conversationId:
       if (!authToken) {
         const auth = await getAuthSession()
         if (!auth) {
-          showToast('请先登录', 'error')
+          showToast(t('pleaseLogin'), 'error')
           router.push('/login')
           return
         }
@@ -262,7 +264,7 @@ export default function ConversationPage({ params }: { params: { conversationId:
             return
           }
         }
-        showToast('登录已过期，请重新登录', 'error')
+        showToast(t('loginExpiredPleaseRelogin'), 'error')
         router.push('/login')
         return
       }
@@ -270,7 +272,7 @@ export default function ConversationPage({ params }: { params: { conversationId:
       const data = await res.json()
 
       if (!res.ok) {
-        showToast(data.error || '加载消息失败', 'error')
+        showToast(data.error || t('loadMessagesFailed'), 'error')
         router.push('/messages')
         return
       }
@@ -282,11 +284,11 @@ export default function ConversationPage({ params }: { params: { conversationId:
         }
       }
     } catch {
-      showToast('网络异常，加载消息失败', 'error')
+      showToast(t('networkErrorLoadMessages'), 'error')
     } finally {
       setLoading(false)
     }
-  }, [showToast, router])
+  }, [showToast, router, t])
 
   const loadOlderMessages = useCallback(async () => {
     if (!conversationId || !accessToken || loadingMore || !hasMore) return
@@ -308,7 +310,7 @@ export default function ConversationPage({ params }: { params: { conversationId:
         setHasMore(false)
       }
     } catch {
-      showToast('加载历史消息失败', 'error')
+      showToast(t('loadOlderMessagesFailed'), 'error')
     } finally {
       setLoadingMore(false)
     }
@@ -376,14 +378,14 @@ export default function ConversationPage({ params }: { params: { conversationId:
 
     const content = newMessage.trim()
     if (content.length > 2000) {
-      showToast('消息内容过长，最多2000字符', 'warning')
+      showToast(t('messageTooLong'), 'warning')
       return
     }
 
     // 先确保有有效的 auth token
     const auth = await getAuthSession()
     if (!auth) {
-      showToast('请先登录', 'error')
+      showToast(t('pleaseLogin'), 'error')
       router.push('/login')
       return
     }
@@ -393,7 +395,7 @@ export default function ConversationPage({ params }: { params: { conversationId:
       id: tempId,
       sender_id: userId,
       receiver_id: otherUser.id,
-      content: content || (pendingAttachment ? `[${getMediaTypeLabel(pendingAttachment.type)}]` : ''),
+      content: content || (pendingAttachment ? `[${getMediaTypeLabel(pendingAttachment.type, t)}]` : ''),
       read: false,
       created_at: new Date().toISOString(),
       _status: 'sending',
@@ -414,7 +416,7 @@ export default function ConversationPage({ params }: { params: { conversationId:
     try {
       let result = await sendMessageRequest(
         otherUser.id,
-        content || (pendingAttachment ? `[${getMediaTypeLabel(pendingAttachment.type)}]` : ''),
+        content || (pendingAttachment ? `[${getMediaTypeLabel(pendingAttachment.type, t)}]` : ''),
         auth.accessToken,
         pendingAttachment
       )
@@ -425,14 +427,14 @@ export default function ConversationPage({ params }: { params: { conversationId:
         if (refreshed) {
           result = await sendMessageRequest(
             otherUser.id,
-            content || (optimisticMessage._attachment ? `[${getMediaTypeLabel(optimisticMessage._attachment.type)}]` : ''),
+            content || (optimisticMessage._attachment ? `[${getMediaTypeLabel(optimisticMessage._attachment.type, t)}]` : ''),
             refreshed.accessToken,
             optimisticMessage._attachment
           )
         } else {
           const errorCode = MessageErrorCode.NOT_AUTHENTICATED
           setMessages(prev => updateMessageStatus(prev, tempId, true, 'failed', errorCode, getErrorMessage(errorCode)))
-          showToast('登录已过期，请重新登录', 'error')
+          showToast(t('loginExpiredPleaseRelogin'), 'error')
           return
         }
       }
@@ -471,7 +473,7 @@ export default function ConversationPage({ params }: { params: { conversationId:
       // 尝试刷新 token
       const refreshed = await refreshAuthToken()
       if (!refreshed) {
-        showToast('登录已过期，请重新登录', 'error')
+        showToast(t('loginExpiredPleaseRelogin'), 'error')
         router.push('/login')
         return
       }
@@ -480,7 +482,7 @@ export default function ConversationPage({ params }: { params: { conversationId:
 
     const currentAuth = auth || (await getAuthSession())
     if (!currentAuth) {
-      showToast('请先登录', 'error')
+      showToast(t('pleaseLogin'), 'error')
       router.push('/login')
       return
     }
@@ -497,7 +499,7 @@ export default function ConversationPage({ params }: { params: { conversationId:
         } else {
           const errorCode = MessageErrorCode.NOT_AUTHENTICATED
           setMessages(prev => updateMessageStatus(prev, failedMsg.id, false, 'failed', errorCode, getErrorMessage(errorCode)))
-          showToast('登录已过期，请重新登录', 'error')
+          showToast(t('loginExpiredPleaseRelogin'), 'error')
           return
         }
       }
@@ -557,7 +559,7 @@ export default function ConversationPage({ params }: { params: { conversationId:
       const data = await res.json()
 
       if (!res.ok) {
-        showToast(data.error || '上传失败', 'error')
+        showToast(data.error || t('uploadFailed'), 'error')
         return
       }
 
@@ -569,7 +571,7 @@ export default function ConversationPage({ params }: { params: { conversationId:
         fileSize: data.fileSize,
       })
     } catch {
-      showToast('上传失败，请重试', 'error')
+      showToast(t('uploadFailedRetry'), 'error')
     } finally {
       setUploading(false)
     }
@@ -587,9 +589,9 @@ export default function ConversationPage({ params }: { params: { conversationId:
 
   const formatTime = (dateString: string) => {
     const date = new Date(dateString)
-    return date.toLocaleTimeString('zh-CN', { 
-      hour: '2-digit', 
-      minute: '2-digit' 
+    return date.toLocaleTimeString(language === 'zh' ? 'zh-CN' : 'en-US', {
+      hour: '2-digit',
+      minute: '2-digit'
     })
   }
 
@@ -598,15 +600,15 @@ export default function ConversationPage({ params }: { params: { conversationId:
     const today = new Date()
     const yesterday = new Date(today)
     yesterday.setDate(yesterday.getDate() - 1)
-    
+
     if (date.toDateString() === today.toDateString()) {
-      return '今天'
+      return t('today')
     } else if (date.toDateString() === yesterday.toDateString()) {
-      return '昨天'
+      return t('yesterday')
     } else {
-      return date.toLocaleDateString('zh-CN', { 
-        month: 'long', 
-        day: 'numeric' 
+      return date.toLocaleDateString(language === 'zh' ? 'zh-CN' : 'en-US', {
+        month: 'long',
+        day: 'numeric'
       })
     }
   }
@@ -635,7 +637,7 @@ export default function ConversationPage({ params }: { params: { conversationId:
       <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
         <TopNav email={email} />
         <Box style={{ maxWidth: 800, margin: '0 auto', padding: tokens.spacing[6] }}>
-          <Text size="lg">加载中...</Text>
+          <Text size="lg">{t('loading')}</Text>
         </Box>
       </Box>
     )
@@ -672,10 +674,10 @@ export default function ConversationPage({ params }: { params: { conversationId:
               </svg>
             </Box>
             <Text size="lg" weight="bold" style={{ marginBottom: tokens.spacing[2], color: tokens.colors.text.primary }}>
-              请先登录
+              {t('pleaseLogin')}
             </Text>
             <Text size="sm" color="tertiary" style={{ maxWidth: 280, margin: '0 auto', lineHeight: 1.6, marginBottom: tokens.spacing[4] }}>
-              登录后可以查看和发送私信
+              {t('loginToViewMessages')}
             </Text>
             <a
               href="/login"
@@ -690,7 +692,7 @@ export default function ConversationPage({ params }: { params: { conversationId:
                 fontSize: '14px',
               }}
             >
-              前往登录
+              {t('goToLogin')}
             </a>
           </Box>
         </Box>
@@ -703,7 +705,7 @@ export default function ConversationPage({ params }: { params: { conversationId:
       <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
         <TopNav email={email} />
         <Box style={{ maxWidth: 800, margin: '0 auto', padding: tokens.spacing[6] }}>
-          <Text size="lg">加载中...</Text>
+          <Text size="lg">{t('loading')}</Text>
         </Box>
       </Box>
     )
@@ -881,7 +883,7 @@ export default function ConversationPage({ params }: { params: { conversationId:
               e.currentTarget.style.background = 'transparent'
               e.currentTarget.style.color = tokens.colors.text.secondary
             }}
-            title="搜索聊天记录"
+            title={t('searchChatHistory')}
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="11" cy="11" r="8" />
@@ -916,7 +918,7 @@ export default function ConversationPage({ params }: { params: { conversationId:
               e.currentTarget.style.background = 'transparent'
               e.currentTarget.style.color = tokens.colors.text.secondary
             }}
-            title="聊天设置"
+            title={t('chatSettings')}
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="1" />
@@ -946,7 +948,7 @@ export default function ConversationPage({ params }: { params: { conversationId:
             <line x1="12" y1="8" x2="12" y2="12"/>
             <line x1="12" y1="16" x2="12.01" y2="16"/>
           </svg>
-          {connectionStatus === 'reconnecting' ? '正在重新连接...' : '连接已断开，新消息可能延迟'}
+          {connectionStatus === 'reconnecting' ? t('reconnectingMessage') : t('connectionLostMessage')}
         </Box>
       )}
 
@@ -977,7 +979,7 @@ export default function ConversationPage({ params }: { params: { conversationId:
                 transition: 'opacity 0.2s',
               }}
             >
-              {loadingMore ? '加载中...' : '加载更早的消息'}
+              {loadingMore ? t('loading') : t('loadOlderMessages')}
             </button>
           </Box>
         )}
@@ -1201,10 +1203,10 @@ export default function ConversationPage({ params }: { params: { conversationId:
                             textOverflow: 'ellipsis',
                             whiteSpace: 'nowrap',
                           }}>
-                            {msg.media_name || '文件'}
+                            {msg.media_name || t('file')}
                           </Text>
                           <Text size="xs" style={{ opacity: 0.7 }}>
-                            点击下载
+                            {t('clickToDownload')}
                           </Text>
                         </Box>
                       </a>
@@ -1245,7 +1247,7 @@ export default function ConversationPage({ params }: { params: { conversationId:
                     <Box style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2, marginTop: 4 }}>
                       {/* 显示具体错误原因 */}
                       <Text size="xs" style={{ color: '#f44336', fontSize: 11, fontWeight: 500 }}>
-                        {msg._errorMessage || '发送失败'}
+                        {msg._errorMessage || t('sendFailed')}
                       </Text>
                       {/* 重试按钮 - 对于权限错误不显示重试 */}
                       {msg._errorCode !== MessageErrorCode.PERMISSION_DENIED && (
@@ -1269,7 +1271,7 @@ export default function ConversationPage({ params }: { params: { conversationId:
                             <path d="M1 4v6h6M23 20v-6h-6"/>
                             <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/>
                           </svg>
-                          {msg._errorCode === MessageErrorCode.NOT_AUTHENTICATED ? '重新登录' : '点击重试'}
+                          {msg._errorCode === MessageErrorCode.NOT_AUTHENTICATED ? t('relogin') : t('clickToRetry')}
                         </button>
                       )}
                     </Box>
@@ -1291,7 +1293,7 @@ export default function ConversationPage({ params }: { params: { conversationId:
                       }}
                     >
                       {msg._status === 'sending' ? (
-                        <span style={{ opacity: 0.6 }}>发送中...</span>
+                        <span style={{ opacity: 0.6 }}>{t('sending')}</span>
                       ) : (
                         <>
                           {formatTime(msg.created_at)}
@@ -1334,10 +1336,10 @@ export default function ConversationPage({ params }: { params: { conversationId:
             </Box>
             <Box>
               <Text size="base" weight="bold" style={{ marginBottom: 4, color: tokens.colors.text.primary }}>
-                开始对话
+                {t('startConversation')}
               </Text>
               <Text size="sm" color="tertiary">
-                向 @{otherUser?.handle || `User ${otherUser?.id.slice(0, 8)}`} 发送第一条消息
+                {t('sendFirstMessage').replace('{handle}', otherUser?.handle || `User ${otherUser?.id.slice(0, 8)}`)}
               </Text>
             </Box>
           </Box>
@@ -1534,7 +1536,7 @@ export default function ConversationPage({ params }: { params: { conversationId:
                 {pendingAttachment.originalName}
               </Text>
               <Text size="xs" color="tertiary">
-                {pendingAttachment.fileSize ? formatFileSize(pendingAttachment.fileSize) : ''} • {getMediaTypeLabel(pendingAttachment.type)}
+                {pendingAttachment.fileSize ? formatFileSize(pendingAttachment.fileSize) : ''} • {getMediaTypeLabel(pendingAttachment.type, t)}
               </Text>
             </Box>
             <button
@@ -1609,7 +1611,7 @@ export default function ConversationPage({ params }: { params: { conversationId:
               opacity: uploading ? 0.5 : 1,
               transition: 'all 0.2s',
             }}
-            title="发送图片/视频/文件"
+            title={t('sendMediaFile')}
           >
             {uploading ? (
               <Box style={{
@@ -1631,7 +1633,7 @@ export default function ConversationPage({ params }: { params: { conversationId:
             value={newMessage}
             onChange={(e) => setNewMessage(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="输入消息..."
+            placeholder={t('enterMessage')}
             rows={1}
             style={{
               flex: 1,

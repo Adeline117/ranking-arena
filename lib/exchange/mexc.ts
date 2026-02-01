@@ -73,13 +73,13 @@ export async function getMexcAccount(config: MexcConfig): Promise<MexcAccount[]>
 
   if (!response.ok) {
     const error = await response.text()
-    throw new Error(`MEXC API错误: ${response.status} - ${error}`)
+    throw new Error(`MEXC API error: ${response.status} - ${error}`)
   }
 
   const data = await response.json()
   
   if (data.code && data.code !== 0) {
-    throw new Error(`MEXC API错误: ${data.code} - ${data.msg}`)
+    throw new Error(`MEXC API error: ${data.code} - ${data.msg}`)
   }
 
   return data.balances || []
@@ -116,13 +116,13 @@ export async function getMexcTrades(
 
   if (!response.ok) {
     const error = await response.text()
-    throw new Error(`MEXC API错误: ${response.status} - ${error}`)
+    throw new Error(`MEXC API error: ${response.status} - ${error}`)
   }
 
   const data = await response.json()
   
   if (data.code && data.code !== 0) {
-    throw new Error(`MEXC API错误: ${data.code} - ${data.msg}`)
+    throw new Error(`MEXC API error: ${data.code} - ${data.msg}`)
   }
 
   return data || []
@@ -172,13 +172,13 @@ export async function getMexcFuturesAccount(config: MexcConfig): Promise<{
 
   if (!response.ok) {
     const error = await response.text()
-    throw new Error(`MEXC Futures API错误: ${response.status} - ${error}`)
+    throw new Error(`MEXC Futures API error: ${response.status} - ${error}`)
   }
 
   const data = await response.json()
   
   if (!data.success) {
-    throw new Error(`MEXC Futures API错误: ${data.code} - ${data.message}`)
+    throw new Error(`MEXC Futures API error: ${data.code} - ${data.message}`)
   }
 
   return data.data

@@ -5,6 +5,7 @@ import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
 import Card from '@/app/components/ui/Card'
 import { useUsers } from '../hooks/useUsers'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 interface UserManagementTabProps {
   accessToken: string | null
@@ -21,6 +22,7 @@ export default function UserManagementTab({ accessToken }: UserManagementTabProp
     banUser,
     unbanUser,
   } = useUsers(accessToken)
+  const { t } = useLanguage()
 
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<'all' | 'banned' | 'active'>('all')
@@ -52,13 +54,13 @@ export default function UserManagementTab({ accessToken }: UserManagementTabProp
   }
 
   return (
-    <Card title="用户管理">
+    <Card title={t('adminUserMgmt')}>
       {/* Search and Filter */}
       <Box style={{ marginBottom: tokens.spacing[4], display: 'flex', gap: tokens.spacing[3], flexWrap: 'wrap' }}>
         <Box style={{ display: 'flex', gap: tokens.spacing[2], flex: 1, minWidth: 200 }}>
           <input
             type="text"
-            placeholder="搜索用户名或邮箱..."
+            placeholder={t('adminSearchUserPlaceholder')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
@@ -73,10 +75,10 @@ export default function UserManagementTab({ accessToken }: UserManagementTabProp
             }}
           />
           <Button variant="secondary" size="sm" onClick={handleSearch}>
-            搜索
+            {t('search')}
           </Button>
         </Box>
-        
+
         <Box style={{ display: 'flex', gap: tokens.spacing[2] }}>
           {(['all', 'active', 'banned'] as const).map((f) => (
             <Button
@@ -85,7 +87,7 @@ export default function UserManagementTab({ accessToken }: UserManagementTabProp
               size="sm"
               onClick={() => setFilter(f)}
             >
-              {f === 'all' ? '全部' : f === 'active' ? '正常' : '已封禁'}
+              {f === 'all' ? t('adminFilterAll') : f === 'active' ? t('adminFilterActive') : t('adminFilterBanned')}
             </Button>
           ))}
         </Box>
@@ -94,18 +96,18 @@ export default function UserManagementTab({ accessToken }: UserManagementTabProp
       {/* User List */}
       {loading ? (
         <Box style={{ padding: tokens.spacing[8], textAlign: 'center' }}>
-          <Text color="tertiary">加载中...</Text>
+          <Text color="tertiary">{t('loading')}</Text>
         </Box>
       ) : error ? (
         <Box style={{ padding: tokens.spacing[8], textAlign: 'center' }}>
           <Text style={{ color: tokens.colors.accent.error }}>{error}</Text>
           <Button variant="secondary" size="sm" onClick={() => loadUsers(1, search, filter)} style={{ marginTop: tokens.spacing[3] }}>
-            重试
+            {t('retry')}
           </Button>
         </Box>
       ) : users.length === 0 ? (
         <Box style={{ padding: tokens.spacing[8], textAlign: 'center' }}>
-          <Text color="tertiary">暂无用户</Text>
+          <Text color="tertiary">{t('adminNoUsers')}</Text>
         </Box>
       ) : (
         <>
@@ -113,12 +115,12 @@ export default function UserManagementTab({ accessToken }: UserManagementTabProp
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: tokens.typography.fontSize.sm }}>
               <thead>
                 <tr style={{ borderBottom: `1px solid ${tokens.colors.border.primary}` }}>
-                  <th style={{ padding: tokens.spacing[3], textAlign: 'left', color: tokens.colors.text.tertiary }}>用户</th>
-                  <th style={{ padding: tokens.spacing[3], textAlign: 'left', color: tokens.colors.text.tertiary }}>邮箱</th>
-                  <th style={{ padding: tokens.spacing[3], textAlign: 'center', color: tokens.colors.text.tertiary }}>粉丝/关注</th>
-                  <th style={{ padding: tokens.spacing[3], textAlign: 'center', color: tokens.colors.text.tertiary }}>状态</th>
-                  <th style={{ padding: tokens.spacing[3], textAlign: 'left', color: tokens.colors.text.tertiary }}>注册时间</th>
-                  <th style={{ padding: tokens.spacing[3], textAlign: 'right', color: tokens.colors.text.tertiary }}>操作</th>
+                  <th style={{ padding: tokens.spacing[3], textAlign: 'left', color: tokens.colors.text.tertiary }}>{t('adminTableUser')}</th>
+                  <th style={{ padding: tokens.spacing[3], textAlign: 'left', color: tokens.colors.text.tertiary }}>{t('adminTableEmail')}</th>
+                  <th style={{ padding: tokens.spacing[3], textAlign: 'center', color: tokens.colors.text.tertiary }}>{t('adminTableFollowers')}</th>
+                  <th style={{ padding: tokens.spacing[3], textAlign: 'center', color: tokens.colors.text.tertiary }}>{t('adminTableStatus')}</th>
+                  <th style={{ padding: tokens.spacing[3], textAlign: 'left', color: tokens.colors.text.tertiary }}>{t('adminTableRegistered')}</th>
+                  <th style={{ padding: tokens.spacing[3], textAlign: 'right', color: tokens.colors.text.tertiary }}>{t('adminTableActions')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -170,7 +172,7 @@ export default function UserManagementTab({ accessToken }: UserManagementTabProp
                           </Text>
                           {user.role === 'admin' && (
                             <Text size="xs" style={{ color: tokens.colors.accent.primary }}>
-                              管理员
+                              {t('adminRoleAdmin')}
                             </Text>
                           )}
                         </Box>
@@ -196,7 +198,7 @@ export default function UserManagementTab({ accessToken }: UserManagementTabProp
                             fontSize: tokens.typography.fontSize.xs,
                           }}
                         >
-                          已封禁
+                          {t('adminStatusBanned')}
                         </Box>
                       ) : (
                         <Box
@@ -209,13 +211,13 @@ export default function UserManagementTab({ accessToken }: UserManagementTabProp
                             fontSize: tokens.typography.fontSize.xs,
                           }}
                         >
-                          正常
+                          {t('adminStatusNormal')}
                         </Box>
                       )}
                     </td>
                     <td style={{ padding: tokens.spacing[3] }}>
                       <Text size="xs" color="tertiary">
-                        {new Date(user.created_at).toLocaleDateString('zh-CN')}
+                        {new Date(user.created_at).toLocaleDateString()}
                       </Text>
                     </td>
                     <td style={{ padding: tokens.spacing[3], textAlign: 'right' }}>
@@ -226,13 +228,13 @@ export default function UserManagementTab({ accessToken }: UserManagementTabProp
                           onClick={() => unbanUser(user.id)}
                           disabled={actionLoading[user.id]}
                         >
-                          {actionLoading[user.id] ? '处理中...' : '解封'}
+                          {actionLoading[user.id] ? t('processing') : t('adminUnban')}
                         </Button>
                       ) : showBanInput[user.id] ? (
                         <Box style={{ display: 'flex', gap: tokens.spacing[2], justifyContent: 'flex-end' }}>
                           <input
                             type="text"
-                            placeholder="封禁原因（可选）"
+                            placeholder={t('adminBanReasonPlaceholder')}
                             value={banReason[user.id] || ''}
                             onChange={(e) => setBanReason(prev => ({ ...prev, [user.id]: e.target.value }))}
                             style={{
@@ -252,14 +254,14 @@ export default function UserManagementTab({ accessToken }: UserManagementTabProp
                             disabled={actionLoading[user.id]}
                             style={{ background: tokens.colors.accent.error, color: '#fff' }}
                           >
-                            确认
+                            {t('adminConfirmAction')}
                           </Button>
                           <Button
                             variant="text"
                             size="sm"
                             onClick={() => setShowBanInput(prev => ({ ...prev, [user.id]: false }))}
                           >
-                            取消
+                            {t('cancel')}
                           </Button>
                         </Box>
                       ) : (
@@ -269,7 +271,7 @@ export default function UserManagementTab({ accessToken }: UserManagementTabProp
                           onClick={() => setShowBanInput(prev => ({ ...prev, [user.id]: true }))}
                           disabled={user.role === 'admin'}
                         >
-                          封禁
+                          {t('adminBan')}
                         </Button>
                       )}
                     </td>
@@ -288,7 +290,7 @@ export default function UserManagementTab({ accessToken }: UserManagementTabProp
                 onClick={() => handlePageChange(pagination.page - 1)}
                 disabled={pagination.page <= 1}
               >
-                上一页
+                {t('prevPage')}
               </Button>
               <Text size="sm" color="secondary" style={{ display: 'flex', alignItems: 'center' }}>
                 {pagination.page} / {pagination.totalPages}
@@ -299,7 +301,7 @@ export default function UserManagementTab({ accessToken }: UserManagementTabProp
                 onClick={() => handlePageChange(pagination.page + 1)}
                 disabled={pagination.page >= pagination.totalPages}
               >
-                下一页
+                {t('nextPage')}
               </Button>
             </Box>
           )}

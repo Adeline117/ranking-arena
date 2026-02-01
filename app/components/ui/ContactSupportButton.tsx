@@ -104,7 +104,7 @@ export default function ContactSupportButton({
       if (response.ok) {
         router.push(`/messages/${data.conversation_id}`)
       } else {
-        if (data.error === '该用户已关闭私信功能') {
+        if (data.error === '该用户已关闭私信功能' || data.error === 'User has disabled direct messages') {
           showToast(t('supportCannotReceiveMessages'), 'warning')
         } else {
           showToast(data.error || t('cannotContactSupport'), 'error')

@@ -14,6 +14,7 @@ import { getCsrfHeaders } from '@/lib/api/client'
 import { useToast } from '@/app/components/ui/Toast'
 import { useDialog } from '@/app/components/ui/Dialog'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 interface BookmarkFolder {
   id: string
@@ -46,6 +47,7 @@ interface BookmarkedPost {
 }
 
 export default function FolderDetailPage({ params }: { params: Promise<{ folderId: string }> }) {
+  const { t } = useLanguage()
   const resolvedParams = use(params)
   const folderId = resolvedParams.folderId
   const router = useRouter()
@@ -102,7 +104,7 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
           // data.error 可能是字符串或对象 {code, message}
           const errorMsg = typeof data.error === 'string' 
             ? data.error 
-            : data.error?.message || '加载失败'
+            : data.error?.message || t('failedToLoad')
           setError(errorMsg)
           setLoading(false)
           return
@@ -122,7 +124,7 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
         }
       } catch (err) {
         console.error('Error loading folder:', err)
-        setError('网络错误')
+        setError(t('networkError'))
       } finally {
         setLoading(false)
       }
@@ -155,13 +157,13 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
       if (response.ok) {
         setFolder(data.data?.folder || folder)
         setIsEditing(false)
-        showToast('保存成功', 'success')
+        showToast(t('saved'), 'success')
       } else {
-        showToast(data.error || '保存失败', 'error')
+        showToast(data.error || t('saveFailed2'), 'error')
       }
     } catch (err) {
-      console.error('保存失败:', err)
-      showToast('网络错误', 'error')
+      console.error('Error saving folder:', err)
+      showToast(t('networkError'), 'error')
     } finally {
       setSaving(false)
     }
@@ -171,8 +173,8 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
     if (!accessToken || !folder) return
 
     const confirmed = await showDangerConfirm(
-      '删除收藏夹',
-      '确定要删除此收藏夹吗？收藏夹中的所有帖子将被移除。'
+      t('deleteFolder'),
+      t('deleteFolderConfirm')
     )
     if (!confirmed) {
       return
@@ -190,14 +192,14 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
       const data = await response.json()
 
       if (response.ok) {
-        showToast('收藏夹已删除', 'success')
+        showToast(t('folderDeleted'), 'success')
         router.push('/favorites')
       } else {
-        showToast(data.error || '删除失败', 'error')
+        showToast(data.error || t('deleteFailed'), 'error')
       }
     } catch (err) {
-      console.error('删除失败:', err)
-      showToast('网络错误', 'error')
+      console.error('Error deleting folder:', err)
+      showToast(t('networkError'), 'error')
     }
   }
 
@@ -224,13 +226,13 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
       if (response.ok) {
         setIsSubscribed(data.data?.is_subscribed ?? !isSubscribed)
         setSubscriberCount(data.data?.subscriber_count ?? subscriberCount)
-        showToast(data.data?.is_subscribed ? '已收藏' : '已取消收藏', 'success')
+        showToast(data.data?.is_subscribed ? t('bookmarked') : t('unbookmarked'), 'success')
       } else {
-        showToast(data.error || (isSubscribed ? '取消收藏失败' : '收藏失败'), 'error')
+        showToast(data.error || (isSubscribed ? t('unbookmarkFailed') : t('bookmarkFailed')), 'error')
       }
     } catch (err) {
-      console.error('收藏操作失败:', err)
-      showToast('网络错误', 'error')
+      console.error('Error subscribing to folder:', err)
+      showToast(t('networkError'), 'error')
     } finally {
       setSubscribing(false)
     }
@@ -294,7 +296,7 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
         if (folder) {
           setFolder({ ...folder, post_count: Math.max(0, folder.post_count - 1) })
         }
-        showToast('已移除收藏', 'success')
+        showToast(t('removedFromFavorites'), 'success')
       } else {
         const data = await response.json()
         // 如果帖子不存在，也从列表中移除
@@ -304,12 +306,12 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
             setFolder({ ...folder, post_count: Math.max(0, folder.post_count - 1) })
           }
         } else {
-          showToast(data.error || '移除失败', 'error')
+          showToast(data.error || t('removeFailed'), 'error')
         }
       }
     } catch (err) {
       console.error('Error removing bookmark:', err)
-      showToast('网络错误', 'error')
+      showToast(t('networkError'), 'error')
     } finally {
       setRemovingBookmark(prev => ({ ...prev, [postId]: false }))
     }
@@ -351,7 +353,7 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
             <button
               onClick={handleClosePost}
-              aria-label="关闭"
+              aria-label={t('close')}
               style={{
                 border: 'none',
                 background: 'transparent',
@@ -392,7 +394,7 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
           
           {/* 帖子内容 */}
           {postDetailLoading ? (
-            <Text size="sm" color="tertiary">加载中...</Text>
+            <Text size="sm" color="tertiary">{t('loading')}</Text>
           ) : (
             <Text 
               size="base" 
@@ -409,13 +411,13 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
           {/* 互动数据 */}
           <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[4], marginTop: tokens.spacing[6], paddingTop: tokens.spacing[4], borderTop: `1px solid ${tokens.colors.border.primary}` }}>
             <Text size="sm" color="tertiary">
-              {selectedPost.like_count || 0} 赞
+              {t('likesCount').replace('{n}', String(selectedPost.like_count || 0))}
             </Text>
             <Text size="sm" color="tertiary">
-              {selectedPost.comment_count || 0} 评论
+              {t('commentsCount').replace('{n}', String(selectedPost.comment_count || 0))}
             </Text>
             <Text size="sm" color="tertiary">
-              {selectedPost.bookmark_count || 0} 收藏
+              {t('bookmarksCount').replace('{n}', String(selectedPost.bookmark_count || 0))}
             </Text>
           </Box>
           
@@ -429,7 +431,7 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
                 fontSize: 14,
               }}
             >
-              查看完整帖子和评论 →
+              {t('viewFullPost')} →
             </Link>
           </Box>
         </div>
@@ -456,8 +458,8 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
         <TopNav email={email} />
         <Box style={{ maxWidth: 900, margin: '0 auto', padding: tokens.spacing[6] }}>
           <EmptyState
-            title={error || '收藏夹不存在'}
-            description="该收藏夹可能已被删除或您无权访问"
+            title={error || t('folderNotFound')}
+            description={t('folderNotFoundDesc')}
             action={
               <Link
                 href="/favorites"
@@ -471,7 +473,7 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
                   fontSize: '14px',
                 }}
               >
-                返回我的收藏
+                {t('backToFavorites')}
               </Link>
             }
           />
@@ -497,7 +499,7 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
             marginBottom: tokens.spacing[4],
           }}
         >
-          ← 返回收藏夹列表
+          ← {t('backToFolderList')}
         </Link>
 
         {/* 收藏夹头部 */}
@@ -545,7 +547,7 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
                   value={editName}
                   onChange={(e) => setEditName(e.target.value)}
                   disabled={folder.is_default}
-                  placeholder="收藏夹名称"
+                  placeholder={t('bookmarkFolderName')}
                   style={{
                     padding: tokens.spacing[2],
                     borderRadius: tokens.radius.md,
@@ -559,7 +561,7 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
                 <textarea
                   value={editDescription}
                   onChange={(e) => setEditDescription(e.target.value)}
-                  placeholder="添加描述..."
+                  placeholder={t('addDescription')}
                   style={{
                     padding: tokens.spacing[2],
                     borderRadius: tokens.radius.md,
@@ -578,14 +580,14 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
                     onChange={(e) => setEditIsPublic(e.target.checked)}
                     style={{ width: 16, height: 16 }}
                   />
-                  <Text size="sm">公开收藏夹（在主页展示）</Text>
+                  <Text size="sm">{t('publicFolderShowOnProfile')}</Text>
                 </label>
                 <Box style={{ display: 'flex', gap: tokens.spacing[2] }}>
                   <Button variant="primary" size="sm" onClick={handleSave} disabled={saving}>
-                    {saving ? '保存中...' : '保存'}
+                    {saving ? t('saving') : t('save')}
                   </Button>
                   <Button variant="text" size="sm" onClick={() => setIsEditing(false)}>
-                    取消
+                    {t('cancel')}
                   </Button>
                 </Box>
               </Box>
@@ -603,7 +605,7 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
                         borderRadius: tokens.radius.sm,
                       }}
                     >
-                      默认
+                      {t('defaultLabel')}
                     </span>
                   )}
                   {folder.is_public ? (
@@ -616,7 +618,7 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
                         borderRadius: tokens.radius.sm,
                       }}
                     >
-                      公开
+                      {t('publicFolder')}
                     </span>
                   ) : (
                     <span
@@ -628,7 +630,7 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
                         borderRadius: tokens.radius.sm,
                       }}
                     >
-                      私密
+                      {t('privateFolder')}
                     </span>
                   )}
                 </Box>
@@ -638,8 +640,8 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
                   </Text>
                 )}
                 <Text size="xs" color="tertiary">
-                  {folder.post_count} 个收藏
-                  {subscriberCount > 0 && ` · ${subscriberCount} 人收藏`}
+                  {t('itemCount').replace('{n}', String(folder.post_count))}
+                  {subscriberCount > 0 && ` · ${t('subscriberCount').replace('{n}', String(subscriberCount))}`}
                   {folder.owner_handle && (
                     <>
                       {' · '}
@@ -660,7 +662,7 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
           {isOwner && !isEditing && (
             <Box style={{ display: 'flex', gap: tokens.spacing[2] }}>
               <Button variant="text" size="sm" onClick={() => setIsEditing(true)}>
-                编辑
+                {t('edit')}
               </Button>
               {!folder.is_default && (
                 <Button 
@@ -669,7 +671,7 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
                   onClick={handleDelete}
                   style={{ color: tokens.colors.accent?.error || '#FF6B6B' }}
                 >
-                  删除
+                  {t('delete')}
                 </Button>
               )}
             </Box>
@@ -690,16 +692,16 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
               }}
             >
               {subscribing ? (
-                '处理中...'
+                t('processing')
               ) : isSubscribed ? (
                 <>
                   <span style={{ fontSize: 14 }}>✓</span>
-                  已收藏
+                  {t('bookmarked')}
                 </>
               ) : (
                 <>
                   <span style={{ fontSize: 14 }}>★</span>
-                  收藏
+                  {t('bookmark')}
                 </>
               )}
             </Button>
@@ -709,8 +711,8 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
         {/* 帖子列表 */}
         {posts.length === 0 ? (
           <EmptyState
-            title="暂无收藏"
-            description="收藏一些感兴趣的帖子后，它们会显示在这里"
+            title={t('noBookmarks')}
+            description={t('noBookmarksDesc')}
           />
         ) : (
           <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
@@ -771,10 +773,10 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
                     </Text>
                     <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3] }}>
                       <Text size="xs" color="tertiary">
-                        {post.like_count || 0} 赞
+                        {t('likesCount').replace('{n}', String(post.like_count || 0))}
                       </Text>
                       <Text size="xs" color="tertiary">
-                        {post.comment_count || 0} 评论
+                        {t('commentsCount').replace('{n}', String(post.comment_count || 0))}
                       </Text>
                     </Box>
                   </Box>
@@ -803,7 +805,7 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
                         e.currentTarget.style.background = 'transparent'
                       }}
                     >
-                      {removingBookmark[post.id] ? '移除中...' : '移除'}
+                      {removingBookmark[post.id] ? t('removing') : t('remove')}
                     </button>
                   )}
                 </Box>

@@ -5,9 +5,11 @@ import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
 import Card from '@/app/components/ui/Card'
 import { useFreshness } from '../hooks/useFreshness'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 export default function ScraperStatusTab() {
   const { freshnessReport, loading, loadFreshnessReport } = useFreshness()
+  const { t } = useLanguage()
 
   useEffect(() => {
     loadFreshnessReport()
@@ -19,58 +21,60 @@ export default function ScraperStatusTab() {
     critical: tokens.colors.accent.error,
     unknown: tokens.colors.text.tertiary,
   }
-  
-  const statusLabels: Record<string, string> = {
-    fresh: '正常',
-    stale: '陈旧',
-    critical: '严重',
-    unknown: '未知',
+
+  const getStatusLabel = (status: string): string => {
+    const labels: Record<string, string> = {
+      fresh: t('adminStatusFresh'),
+      stale: t('adminStatusStale'),
+      critical: t('adminStatusCritical'),
+      unknown: t('adminStatusUnknown'),
+    }
+    return labels[status] || status
   }
 
-  // 安全格式化日期
   const formatDate = (dateStr: string | null | undefined): string => {
-    if (!dateStr) return '无数据'
+    if (!dateStr) return t('adminNoDataLabel')
     const date = new Date(dateStr)
-    if (isNaN(date.getTime())) return '无数据'
-    return date.toLocaleString('zh-CN')
+    if (isNaN(date.getTime())) return t('adminNoDataLabel')
+    return date.toLocaleString()
   }
 
   return (
-    <Card title="爬虫状态监控">
+    <Card title={t('adminScraperMonitor')}>
       <Box style={{ marginBottom: tokens.spacing[4], display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: tokens.spacing[3] }}>
         <Box>
           {freshnessReport?.summary && freshnessReport?.thresholds && (
             <Box style={{ display: 'flex', gap: tokens.spacing[4], flexWrap: 'wrap' }}>
               <Text size="sm" color="secondary">
-                总计: {freshnessReport.summary.total} 个平台
+                {t('adminTotalPlatforms').replace('{count}', String(freshnessReport.summary.total))}
               </Text>
               <Text size="sm" style={{ color: tokens.colors.accent.success }}>
-                正常: {freshnessReport.summary.fresh}
+                {t('adminFreshCount').replace('{count}', String(freshnessReport.summary.fresh))}
               </Text>
               <Text size="sm" style={{ color: tokens.colors.accent.warning }}>
-                陈旧 (&gt;{freshnessReport.thresholds.stale}): {freshnessReport.summary.stale}
+                {t('adminStaleCount').replace('{threshold}', freshnessReport.thresholds.stale).replace('{count}', String(freshnessReport.summary.stale))}
               </Text>
               <Text size="sm" style={{ color: tokens.colors.accent.error }}>
-                严重 (&gt;{freshnessReport.thresholds.critical}): {freshnessReport.summary.critical}
+                {t('adminCriticalCount').replace('{threshold}', freshnessReport.thresholds.critical).replace('{count}', String(freshnessReport.summary.critical))}
               </Text>
             </Box>
           )}
         </Box>
         <Button variant="secondary" size="sm" onClick={loadFreshnessReport} disabled={loading}>
-          {loading ? '刷新中...' : '刷新状态'}
+          {loading ? t('adminRefreshing') : t('adminRefreshStatus')}
         </Button>
       </Box>
 
       {loading && !freshnessReport ? (
         <Box style={{ padding: tokens.spacing[8], textAlign: 'center' }}>
-          <Text color="tertiary">加载中...</Text>
+          <Text color="tertiary">{t('loading')}</Text>
         </Box>
       ) : freshnessReport ? (
         <Box>
-          {/* 状态概览卡片 */}
-          <Box style={{ 
-            display: 'grid', 
-            gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', 
+          {/* Status overview cards */}
+          <Box style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
             gap: tokens.spacing[4],
             marginBottom: tokens.spacing[4],
           }}>
@@ -97,57 +101,57 @@ export default function ScraperStatusTab() {
                       fontWeight: tokens.typography.fontWeight.bold,
                     }}
                   >
-                    {statusLabels[platform.status]}
+                    {getStatusLabel(platform.status)}
                   </Box>
                 </Box>
-                
+
                 <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[1] }}>
                   <Text size="sm" color="secondary">
-                    最后更新: {formatDate(platform.lastUpdate)}
+                    {t('adminLastUpdate').replace('{time}', formatDate(platform.lastUpdate))}
                   </Text>
                   {platform.ageHours !== null && (
                     <Text size="sm" color={platform.status === 'fresh' ? 'secondary' : 'tertiary'}>
-                      距今: {platform.ageHours.toFixed(1)} 小时
+                      {t('adminAgeHours').replace('{hours}', platform.ageHours.toFixed(1))}
                     </Text>
                   )}
                   <Text size="xs" color="tertiary">
-                    记录数: {platform.recordCount.toLocaleString()}
+                    {t('adminRecordCount').replace('{count}', platform.recordCount.toLocaleString())}
                   </Text>
                 </Box>
               </Box>
             ))}
           </Box>
 
-          {/* 检查时间 */}
+          {/* Check time */}
           <Box style={{ textAlign: 'center', marginTop: tokens.spacing[4] }}>
             <Text size="xs" color="tertiary">
-              检查时间: {formatDate(freshnessReport.checked_at)}
+              {t('adminCheckedAt').replace('{time}', formatDate(freshnessReport.checked_at))}
             </Text>
           </Box>
         </Box>
       ) : (
         <Box style={{ padding: tokens.spacing[8], textAlign: 'center' }}>
-          <Text color="tertiary">暂无数据</Text>
+          <Text color="tertiary">{t('noData')}</Text>
         </Box>
       )}
 
-      {/* 说明 */}
-      <Box style={{ 
-        marginTop: tokens.spacing[6], 
-        padding: tokens.spacing[4], 
-        background: tokens.colors.bg.tertiary, 
+      {/* Explanation */}
+      <Box style={{
+        marginTop: tokens.spacing[6],
+        padding: tokens.spacing[4],
+        background: tokens.colors.bg.tertiary,
         borderRadius: tokens.radius.lg,
       }}>
-        <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>状态说明</Text>
+        <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>{t('adminStatusExplanation')}</Text>
         <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[1] }}>
           <Text size="xs" color="secondary">
-            <span style={{ color: tokens.colors.accent.success, fontWeight: 'bold' }}>● 正常</span>: 数据在 12 小时内更新
+            <span style={{ color: tokens.colors.accent.success, fontWeight: 'bold' }}>● {t('adminStatusFresh')}</span>: {t('adminFreshDesc')}
           </Text>
           <Text size="xs" color="secondary">
-            <span style={{ color: tokens.colors.accent.warning, fontWeight: 'bold' }}>● 陈旧</span>: 数据超过 12 小时未更新
+            <span style={{ color: tokens.colors.accent.warning, fontWeight: 'bold' }}>● {t('adminStatusStale')}</span>: {t('adminStaleDesc')}
           </Text>
           <Text size="xs" color="secondary">
-            <span style={{ color: tokens.colors.accent.error, fontWeight: 'bold' }}>● 严重</span>: 数据超过 24 小时未更新，需要立即处理
+            <span style={{ color: tokens.colors.accent.error, fontWeight: 'bold' }}>● {t('adminStatusCritical')}</span>: {t('adminCriticalDesc')}
           </Text>
         </Box>
       </Box>

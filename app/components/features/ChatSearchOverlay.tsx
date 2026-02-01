@@ -3,6 +3,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 type SearchMatch = {
   message_id: string
@@ -26,6 +27,7 @@ export default function ChatSearchOverlay({
   accessToken,
   onNavigateToMessage,
 }: ChatSearchOverlayProps) {
+  const { t, language } = useLanguage()
   const [query, setQuery] = useState('')
   const [matches, setMatches] = useState<SearchMatch[]>([])
   const [loading, setLoading] = useState(false)
@@ -132,9 +134,11 @@ export default function ChatSearchOverlay({
     const now = new Date()
     const isToday = date.toDateString() === now.toDateString()
     if (isToday) {
-      return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+      const locale = language === 'zh' ? 'zh-CN' : 'en-US'
+      return date.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })
     }
-    return date.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+    const locale = language === 'zh' ? 'zh-CN' : 'en-US'
+    return date.toLocaleDateString(locale, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
   }
 
   // Highlight matched text in snippet
@@ -224,7 +228,7 @@ export default function ChatSearchOverlay({
             value={query}
             onChange={(e) => handleInputChange(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="搜索聊天记录..."
+            placeholder={t('searchChatRecords')}
             style={{
               flex: 1,
               border: 'none',
@@ -311,19 +315,19 @@ export default function ChatSearchOverlay({
       <Box style={{ flex: 1, overflow: 'auto', padding: tokens.spacing[2] }}>
         {loading && matches.length === 0 && (
           <Box style={{ padding: tokens.spacing[6], textAlign: 'center' }}>
-            <Text size="sm" color="tertiary">搜索中...</Text>
+            <Text size="sm" color="tertiary">{t('searching')}</Text>
           </Box>
         )}
 
         {!loading && hasSearched && matches.length === 0 && (
           <Box style={{ padding: tokens.spacing[6], textAlign: 'center' }}>
-            <Text size="sm" color="tertiary">没有找到相关消息</Text>
+            <Text size="sm" color="tertiary">{t('noMessagesFound')}</Text>
           </Box>
         )}
 
         {!hasSearched && !loading && (
           <Box style={{ padding: tokens.spacing[6], textAlign: 'center' }}>
-            <Text size="sm" color="tertiary">输入关键词搜索聊天记录</Text>
+            <Text size="sm" color="tertiary">{t('enterKeywordToSearch')}</Text>
           </Box>
         )}
 
@@ -363,7 +367,7 @@ export default function ChatSearchOverlay({
 
         {loading && matches.length > 0 && (
           <Box style={{ padding: tokens.spacing[3], textAlign: 'center' }}>
-            <Text size="xs" color="tertiary">加载更多...</Text>
+            <Text size="xs" color="tertiary">{t('loadingMore')}</Text>
           </Box>
         )}
       </Box>

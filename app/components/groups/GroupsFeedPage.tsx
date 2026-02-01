@@ -24,7 +24,7 @@ type Group = {
 type TabKey = 'feed' | 'discover'
 
 export default function GroupsFeedPage() {
-  const { language } = useLanguage()
+  const { language, t } = useLanguage()
   const [email, setEmail] = useState<string | null>(null)
   const [myGroups, setMyGroups] = useState<Group[]>([])
   const [allGroups, setAllGroups] = useState<Group[]>([])
@@ -156,8 +156,8 @@ export default function GroupsFeedPage() {
           }}
         >
           {([
-            { key: 'feed' as TabKey, label: language === 'zh' ? '小组动态' : 'Feed' },
-            { key: 'discover' as TabKey, label: language === 'zh' ? '发现小组' : 'Discover' },
+            { key: 'feed' as TabKey, label: t('groupFeed') },
+            { key: 'discover' as TabKey, label: t('discoverGroups') },
           ]).map((tab) => (
             <button
               key={tab.key}
@@ -196,7 +196,7 @@ export default function GroupsFeedPage() {
             {/* My Groups - Horizontal scrollable */}
             <Box style={{ marginBottom: tokens.spacing[4] }}>
               <Text size="sm" weight="bold" color="tertiary" style={{ marginBottom: tokens.spacing[2], textTransform: 'uppercase' }}>
-                {language === 'zh' ? '我的小组' : 'My Groups'}
+                {t('myGroups')}
               </Text>
 
               {loadingGroups ? (
@@ -212,10 +212,10 @@ export default function GroupsFeedPage() {
               ) : myGroups.length === 0 ? (
                 <Box style={{ padding: tokens.spacing[4], textAlign: 'center', background: tokens.colors.bg.secondary, borderRadius: tokens.radius.lg, border: `1px solid ${tokens.colors.border.primary}` }}>
                   <Text size="sm" color="tertiary" style={{ marginBottom: tokens.spacing[3] }}>
-                    {language === 'zh' ? '还未加入任何小组' : 'Not joined any groups yet'}
+                    {t('noGroupsJoined')}
                   </Text>
                   <Button variant="primary" size="sm" onClick={() => setActiveTab('discover')}>
-                    {language === 'zh' ? '发现小组' : 'Discover Groups'}
+                    {t('discoverGroupsAction')}
                   </Button>
                 </Box>
               ) : (
@@ -246,7 +246,7 @@ export default function GroupsFeedPage() {
                       </Text>
                       {group.member_count != null && (
                         <Text size="xs" color="tertiary">
-                          {group.member_count} {language === 'zh' ? '人' : 'members'}
+                          {group.member_count} {t('members')}
                         </Text>
                       )}
                     </Link>
@@ -264,7 +264,7 @@ export default function GroupsFeedPage() {
             ) : (
               <Box style={{ padding: tokens.spacing[6], textAlign: 'center', background: tokens.colors.bg.secondary, borderRadius: tokens.radius.lg, border: `1px solid ${tokens.colors.border.primary}` }}>
                 <Text size="sm" color="tertiary">
-                  {language === 'zh' ? '加入小组后，这里会显示小组内的帖子' : 'Join groups to see their posts here'}
+                  {t('joinGroupsToSeePosts')}
                 </Text>
               </Box>
             )}
@@ -278,7 +278,7 @@ export default function GroupsFeedPage() {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder={language === 'zh' ? '搜索小组...' : 'Search groups...'}
+                placeholder={t('searchGroupsPlaceholder')}
                 style={{
                   width: '100%',
                   padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
@@ -310,7 +310,7 @@ export default function GroupsFeedPage() {
             ) : allGroups.length === 0 ? (
               <Box style={{ padding: tokens.spacing[6], textAlign: 'center' }}>
                 <Text size="sm" color="tertiary">
-                  {language === 'zh' ? '暂无更多小组' : 'No groups found'}
+                  {t('noGroupsFound')}
                 </Text>
               </Box>
             ) : (
@@ -352,12 +352,12 @@ export default function GroupsFeedPage() {
                           {language === 'zh' ? group.name : (group.name_en || group.name)}
                         </Text>
                         <Text size="xs" color="tertiary">
-                          {group.member_count || 0} {language === 'zh' ? '位成员' : 'members'}
+                          {group.member_count || 0} {t('members')}
                         </Text>
                       </Box>
                       {isJoined && (
                         <Text size="xs" color="tertiary" style={{ flexShrink: 0, padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`, borderRadius: tokens.radius.md, background: tokens.colors.bg.tertiary }}>
-                          {language === 'zh' ? '已加入' : 'Joined'}
+                          {t('joined')}
                         </Text>
                       )}
                     </Link>
