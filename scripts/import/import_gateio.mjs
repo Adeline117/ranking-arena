@@ -6,70 +6,19 @@
  *
  * 用法: node scripts/import/import_gateio.mjs [7D|30D|90D|ALL]
  */
-import 'dotenv/config'
 import { chromium } from 'playwright'
-import { createClient } from '@supabase/supabase-js'
+import {
+  getSupabaseClient,
+  calculateArenaScore,
+  sleep,
+  getTargetPeriods,
+} from '../lib/shared.mjs'
 
-const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
-if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) { console.error('Missing env'); process.exit(1) }
-const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+const supabase = getSupabaseClient()
 
 const SOURCE = 'gateio'
 const BASE_URL = 'https://www.gate.io/copy_trading'
 const TARGET_COUNT = 500
-
-const clip = (v, min, max) => Math.max(min, Math.min(max, v))
-const safeLog1p = x => x <= -1 ? 0 : Math.log(1 + x)
-
-const ARENA_CONFIG = {
-  MAX_RETURN_SCORE: 70,
-  MAX_PNL_SCORE: 15,
-  MAX_DRAWDOWN_SCORE: 8,
-  MAX_STABILITY_SCORE: 7,
-  PARAMS: {
-    '7D': { tanhCoeff: 0.08, roiExponent: 1.8, mddThreshold: 15, winRateCap: 62 },
-    '30D': { tanhCoeff: 0.15, roiExponent: 1.6, mddThreshold: 30, winRateCap: 68 },
-    '90D': { tanhCoeff: 0.18, roiExponent: 1.6, mddThreshold: 40, winRateCap: 70 },
-  },
-  PNL_PARAMS: {
-    '7D': { base: 500, coeff: 0.40 },
-    '30D': { base: 2000, coeff: 0.35 },
-    '90D': { base: 5000, coeff: 0.30 },
-  },
-}
-
-function calculateArenaScore(roi, pnl, maxDrawdown, winRate, period) {
-  const params = ARENA_CONFIG.PARAMS[period] || ARENA_CONFIG.PARAMS['90D']
-  const days = period === '7D' ? 7 : period === '30D' ? 30 : 90
-  const wr = winRate !== null && winRate !== undefined ? (winRate <= 1 ? winRate * 100 : winRate) : null
-  const intensity = (365 / days) * safeLog1p((roi || 0) / 100)
-  const r0 = Math.tanh(params.tanhCoeff * intensity)
-  const returnScore = r0 > 0 ? clip(ARENA_CONFIG.MAX_RETURN_SCORE * Math.pow(r0, params.roiExponent), 0, ARENA_CONFIG.MAX_RETURN_SCORE) : 0
-
-  // PnL score (0-15)
-  const pnlParams = ARENA_CONFIG.PNL_PARAMS[period] || ARENA_CONFIG.PNL_PARAMS['90D']
-  let pnlScore = 0
-  if (pnl !== null && pnl !== undefined && pnl > 0) {
-    const logArg = 1 + pnl / pnlParams.base
-    if (logArg > 0) {
-      pnlScore = clip(ARENA_CONFIG.MAX_PNL_SCORE * Math.tanh(pnlParams.coeff * Math.log(logArg)), 0, ARENA_CONFIG.MAX_PNL_SCORE)
-    }
-  }
-
-  const drawdownScore = maxDrawdown !== null ? clip(8 * clip(1 - Math.abs(maxDrawdown) / params.mddThreshold, 0, 1), 0, 8) : 4
-  const stabilityScore = wr !== null ? clip(7 * clip((wr - 45) / (params.winRateCap - 45), 0, 1), 0, 7) : 3.5
-  return Math.round((returnScore + pnlScore + drawdownScore + stabilityScore) * 100) / 100
-}
-
-function sleep(ms) { return new Promise(r => setTimeout(r, ms)) }
-
-function getTargetPeriods() {
-  const arg = process.argv[2]?.toUpperCase()
-  if (arg === 'ALL') return ['7D', '30D', '90D']
-  if (arg && ['7D', '30D', '90D'].includes(arg)) return [arg]
-  return ['30D']
-}
 
 const PERIOD_CONFIG = {
   '7D':  { tabTexts: ['7D', '7 Days', '7天', 'Last 7 Days', '7 days'], actualDays: 7 },
@@ -307,7 +256,7 @@ async function saveTraders(traders, period) {
       win_rate: t.winRate,
       max_drawdown: t.maxDrawdown,
       followers: t.followers || null,
-      arena_score: calculateArenaScore(t.roi, t.pnl, t.maxDrawdown, t.winRate, period),
+      arena_score: calculateArenaScore(t.roi, t.pnl, t.maxDrawdown, t.winRate, period).totalScore,
       captured_at: capturedAt,
     })),
     { onConflict: 'source,source_trader_id,season_id' }
@@ -322,7 +271,7 @@ async function saveTraders(traders, period) {
 }
 
 async function main() {
-  const periods = getTargetPeriods()
+  const periods = getTargetPeriods(['30D'])
   console.log('Gate.io 数据抓取开始 (Playwright 浏览器模式)...')
   console.log(`周期: ${periods.join(', ')}`)
 

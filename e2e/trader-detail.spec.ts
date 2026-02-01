@@ -98,6 +98,26 @@ test.describe('交易员详情页测试', () => {
   })
 })
 
+test.describe('交易员详情页错误状态', () => {
+  test('不存在的交易员显示错误或未找到页面', async ({ page }) => {
+    await page.goto('/trader/nonexistent-handle-xyz-12345')
+    await page.waitForLoadState('domcontentloaded')
+
+    // Should show some error/not-found content, not a blank page
+    const body = page.locator('body')
+    const bodyText = await body.textContent()
+    expect(bodyText?.trim().length).toBeGreaterThan(0)
+
+    // Should contain error indicators or navigation (not blank)
+    const hasErrorContent = await page.locator(
+      'text=/not found|不存在|error|出错|错误|返回|back|retry|重试/i'
+    ).count()
+    const hasNavigation = await page.locator('nav, a[href="/"]').count()
+
+    expect(hasErrorContent + hasNavigation).toBeGreaterThan(0)
+  })
+})
+
 test.describe('交易员详情页性能', () => {
   test('详情页加载时间', async ({ page }) => {
     await page.goto('/')

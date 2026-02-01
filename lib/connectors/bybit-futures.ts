@@ -22,6 +22,7 @@ import type {
   SnapshotMetrics,
   EquityCurvePoint,
 } from '@/lib/types/trading-platform'
+import { ARENA_CONFIG } from '@/lib/utils/arena-score'
 import { DelayRateLimiter } from './rate-limiter'
 import { SimpleCircuitBreaker } from './circuit-breaker'
 
@@ -395,7 +396,7 @@ export class BybitFuturesConnector {
     metrics: SnapshotMetrics,
     window: SnapshotWindow
   ): { total: number; returnScore: number; drawdownScore: number; stabilityScore: number } {
-    const PNL_THRESHOLDS: Record<SnapshotWindow, number> = { '7D': 50, '30D': 200, '90D': 500 }
+    const PNL_THRESHOLDS = ARENA_CONFIG.PNL_THRESHOLD
 
     if (Math.abs(metrics.pnl) < PNL_THRESHOLDS[window]) {
       return { total: 0, returnScore: 0, drawdownScore: 0, stabilityScore: 0 }

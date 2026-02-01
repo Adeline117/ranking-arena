@@ -33,7 +33,7 @@ This directory contains technical documentation for the Ranking Arena project.
 | Document | Description |
 |----------|-------------|
 | [RLS_POLICIES.md](./RLS_POLICIES.md) | Row Level Security policies documentation |
-| [SUPABASE_SCHEMA_AUDIT.md](./SUPABASE_SCHEMA_AUDIT.md) | Database schema analysis |
+| [SECURITY_BEST_PRACTICES.md](./SECURITY_BEST_PRACTICES.md) | Security best practices guide |
 
 ### Feature Documentation
 
@@ -82,6 +82,18 @@ This directory contains technical documentation for the Ranking Arena project.
 | [CHAT_SETTINGS_DESIGN.md](./CHAT_SETTINGS_DESIGN.md) | Chat feature design |
 | [PRO_GROUPS_DM_DESIGN.md](./PRO_GROUPS_DM_DESIGN.md) | Pro groups and DM feature design |
 | [UI_DEAI_IMPROVEMENTS.md](./UI_DEAI_IMPROVEMENTS.md) | UI/UX improvement proposals |
+| [MOBILE_APP_SETUP.md](./MOBILE_APP_SETUP.md) | Mobile app (Capacitor) setup guide |
+| [ACCESSIBILITY.md](./ACCESSIBILITY.md) | Accessibility guidelines |
+
+---
+
+## Operations & Monitoring
+
+| Document | Description |
+|----------|-------------|
+| [MONITORING_DASHBOARD.md](./MONITORING_DASHBOARD.md) | Monitoring dashboard setup |
+| [PERFORMANCE_GUIDE.md](./PERFORMANCE_GUIDE.md) | Performance optimization guide |
+| [system-principles.md](./system-principles.md) | System design principles |
 
 ---
 
@@ -90,6 +102,9 @@ This directory contains technical documentation for the Ranking Arena project.
 | Document | Description |
 |----------|-------------|
 | [EXCHANGE_FIELD_MAPPING.md](./EXCHANGE_FIELD_MAPPING.md) | Exchange API field mapping |
+| [DATA_COVERAGE_ANALYSIS.md](./DATA_COVERAGE_ANALYSIS.md) | Data coverage analysis across exchanges |
+| [ANOMALY_DETECTION.md](./ANOMALY_DETECTION.md) | Anomaly detection system documentation |
+| [PUPPETEER_WORKER_PLAN.md](./PUPPETEER_WORKER_PLAN.md) | Puppeteer worker architecture plan |
 | [SCRIPTS_CLEANUP_ANALYSIS.md](./SCRIPTS_CLEANUP_ANALYSIS.md) | Data scraping scripts analysis |
 
 ---
@@ -106,11 +121,14 @@ This directory contains technical documentation for the Ranking Arena project.
 
 ---
 
-## Test Documentation
+## Test & QA Documentation
 
 | Document | Description |
 |----------|-------------|
+| [QA_TEST_CASES.md](./QA_TEST_CASES.md) | Comprehensive QA test cases |
 | [QA_PAYMENT_FLOW_TESTS.md](./QA_PAYMENT_FLOW_TESTS.md) | Payment flow test cases |
+| [STAGING_TEST_GUIDE.md](./STAGING_TEST_GUIDE.md) | Staging environment test guide |
+| [USER_OPERATIONS.md](./USER_OPERATIONS.md) | User operations flow documentation |
 | [reference/BUTTON_TEST_CHECKLIST.md](./reference/BUTTON_TEST_CHECKLIST.md) | UI interaction test checklist |
 | [reference/TEST_OPTIMIZATION.md](./reference/TEST_OPTIMIZATION.md) | Test optimization strategies |
 
