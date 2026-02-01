@@ -618,7 +618,7 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
               href={`/groups/${groupId}/new`}
               style={{
                 position: 'fixed',
-                bottom: tokens.spacing[6],
+                bottom: `calc(${tokens.spacing[20]} + env(safe-area-inset-bottom, 0px))`,
                 right: tokens.spacing[6],
                 width: 56,
                 height: 56,
