@@ -1191,9 +1191,9 @@ const zh = {
     rankingRules: '排名规则',
     arenaScoreRankingRules: 'Arena Score 排名规则',
     rankingRule1: '① 按 Arena Score 从高到低排序（0-100 分）',
-    rankingRule2: '② 分数构成：收益分（85%）+ 稳定/风险分（15%）',
+    rankingRule2: '② 分数构成：收益分 (0-70) + 盈亏分 (0-15) + 回撤分 (0-8) + 稳定分 (0-7)',
     rankingRule3: '③ Score 相同时，回撤更小的靠前',
-    rankingRuleThreshold: '* 入榜门槛（PNL 收益）：7D > $300 | 30D > $1,000 | 90D > $3,000',
+    rankingRuleThreshold: '* 入榜门槛（PNL 收益）：7D > $200 | 30D > $500 | 90D > $1,000',
     rankingRuleROINote: '* ROI 计算方式因交易所而异，跨所对比时请注意差异',
     detailButton: '详细',
     arenaScoreTooltip: 'Arena Score: 综合评分 (0-100)',
@@ -1224,6 +1224,21 @@ const zh = {
     // LanguageToggle
     switchToEnglish: 'Switch to English',
     switchToChinese: '切换到中文',
+
+    // Validation (settings)
+    validationHandleMinLength: '用户名至少需要2个字符',
+    validationHandleMaxLength: '用户名不能超过{max}个字符',
+    validationHandleInvalidChars: '用户名只能包含字母、数字、下划线和中文',
+    validationInvalidEmail: '请输入有效的邮箱地址',
+    validationPasswordMinLength: '密码至少需要6个字符',
+    validationPasswordMismatch: '两次输入的密码不一致',
+
+    // API responses
+    avoidVoteSubmitted: '避雷投票已提交',
+    commentDeleted: '评论已删除',
+    deleteSuccessful: '删除成功',
+    conversationNotFound: '会话不存在',
+    noPermissionToAccess: '无权访问此会话',
 } as const
 
 export default zh
