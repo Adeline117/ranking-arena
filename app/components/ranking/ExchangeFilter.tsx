@@ -16,7 +16,7 @@ interface ExchangeFilterProps {
 }
 
 export default function ExchangeFilter({ availableSources, selectedExchange, onExchangeChange }: ExchangeFilterProps) {
-  const { language } = useLanguage()
+  const { t } = useLanguage()
   const [expanded, setExpanded] = useState(false)
 
   if (!availableSources.length) return null
@@ -46,7 +46,7 @@ export default function ExchangeFilter({ availableSources, selectedExchange, onE
         onClick={() => onExchangeChange(null)}
         style={btnStyle(!selectedExchange)}
       >
-        {language === 'zh' ? '全部' : 'All'}
+        {t('allExchanges')}
       </button>
       {visibleSources.map((source) => {
         const isActive = selectedExchange === source
@@ -71,8 +71,8 @@ export default function ExchangeFilter({ availableSources, selectedExchange, onE
           }}
         >
           {expanded
-            ? (language === 'zh' ? '收起' : 'Less')
-            : (language === 'zh' ? `+${availableSources.length - VISIBLE_THRESHOLD} 更多` : `+${availableSources.length - VISIBLE_THRESHOLD} More`)}
+            ? t('lessExchanges')
+            : t('moreExchanges').replace('{count}', String(availableSources.length - VISIBLE_THRESHOLD))}
         </button>
       )}
     </Box>

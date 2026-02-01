@@ -2,6 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect, type ReactNode } from 'react'
 import { tokens } from '@/lib/design-tokens'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 interface PullToRefreshProps {
   onRefresh: () => Promise<void>
@@ -22,10 +23,14 @@ export default function PullToRefresh({
   children,
   disabled = false,
   threshold = 80,
-  refreshingText = '刷新中...',
-  pullText = '下拉刷新',
-  releaseText = '释放刷新',
+  refreshingText: refreshingTextProp,
+  pullText: pullTextProp,
+  releaseText: releaseTextProp,
 }: PullToRefreshProps) {
+  const { t } = useLanguage()
+  const refreshingText = refreshingTextProp || t('refreshingText')
+  const pullText = pullTextProp || t('pullToRefreshText')
+  const releaseText = releaseTextProp || t('releaseToRefreshText')
   const [pullDistance, setPullDistance] = useState(0)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [isPulling, setIsPulling] = useState(false)

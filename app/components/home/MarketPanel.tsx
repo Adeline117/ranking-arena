@@ -92,7 +92,7 @@ export default function MarketPanel() {
         setShowCustomize(false)
         return
       } catch {}
-      showToast(t('saveFailed') || '保存失败', 'error')
+      showToast(t('saveFailed'), 'error')
     }
   }
 
@@ -128,12 +128,12 @@ export default function MarketPanel() {
         } catch (fetchError: unknown) {
           const err = fetchError instanceof Error ? fetchError : new Error(String(fetchError))
           if (err.name === 'AbortError' || err.name === 'TimeoutError') {
-            setError('请求超时，请稍后重试')
+            setError(t('requestTimeoutShort'))
             setLoading(false)
             return
           }
           if (err.message?.includes('Failed to fetch') || err.message?.includes('fetch failed')) {
-            setError('网络连接失败，请检查网络设置')
+            setError(t('networkConnectionFailed'))
             setLoading(false)
             return
           }
@@ -142,7 +142,7 @@ export default function MarketPanel() {
         
         if (!res.ok) {
           // 不抛出异常，而是设置错误状态
-          setError(`无法获取市场数据 (${res.status})`)
+          setError(`${t('cannotGetMarketData')} (${res.status})`)
           setMarket([])
           setLoading(false)
           return
@@ -456,7 +456,7 @@ function MarketCustomizePanel({
       }}
     >
       <Text size="sm" weight="bold">
-        Select coins to display (max 6)
+        {t('selectCoinsToDisplay')}
       </Text>
       <Box
         style={{
@@ -497,7 +497,7 @@ function MarketCustomizePanel({
           onClick={() => onSave(selectedPairs)}
           disabled={selectedPairs.length === 0}
         >
-          保存
+          {t('save')}
         </Button>
         <Button variant="ghost" size="sm" onClick={onCancel}>
           {t('cancel')}

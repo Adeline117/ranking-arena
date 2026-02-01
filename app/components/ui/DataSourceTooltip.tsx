@@ -56,7 +56,7 @@ export default function DataSourceTooltip({
   mode = 'inline',
   showIcon = true,
 }: DataSourceTooltipProps) {
-  const { language } = useLanguage()
+  const { language, t } = useLanguage()
   const [isOpen, setIsOpen] = useState(false)
   const [position, setPosition] = useState({ top: 0, left: 0 })
   const triggerRef = useRef<HTMLDivElement>(null)
@@ -69,43 +69,43 @@ export default function DataSourceTooltip({
         return {
           icon: <CheckIcon size={10} color={tokens.colors.accent.success} />,
           color: tokens.colors.accent.success,
-          label: language === 'zh' ? '数据可用' : 'Available',
+          label: t('dataAvailable'),
         }
       case 'delayed':
         return {
           icon: <WarningIcon size={10} color={tokens.colors.accent.warning} />,
           color: tokens.colors.accent.warning,
-          label: language === 'zh' ? '数据延迟' : 'Delayed',
+          label: t('dataDelayed'),
         }
       case 'partial':
         return {
           icon: <WarningIcon size={10} color={tokens.colors.accent.warning} />,
           color: tokens.colors.accent.warning,
-          label: language === 'zh' ? '部分可用' : 'Partial',
+          label: t('dataPartial'),
         }
       case 'stale':
         return {
           icon: <WarningIcon size={10} color={tokens.colors.accent.error} />,
           color: tokens.colors.accent.error,
-          label: language === 'zh' ? '数据过期' : 'Stale',
+          label: t('dataStale'),
         }
       case 'unavailable':
         return {
           icon: <XIcon size={10} color={tokens.colors.text.tertiary} />,
           color: tokens.colors.text.tertiary,
-          label: language === 'zh' ? '暂不支持' : 'Unavailable',
+          label: t('dataUnavailable'),
         }
       case 'calculating':
         return {
           icon: <InfoIcon size={10} color={tokens.colors.accent.primary} />,
           color: tokens.colors.accent.primary,
-          label: language === 'zh' ? '计算中' : 'Calculating',
+          label: t('dataCalculating'),
         }
       default:
         return {
           icon: <InfoIcon size={10} color={tokens.colors.text.tertiary} />,
           color: tokens.colors.text.tertiary,
-          label: language === 'zh' ? '未知' : 'Unknown',
+          label: t('dataUnknown'),
         }
     }
   }
@@ -278,7 +278,7 @@ export default function DataSourceTooltip({
                 color="tertiary"
                 style={{ minWidth: 60, flexShrink: 0 }}
               >
-                {language === 'zh' ? '数据来源' : 'Source'}
+                {t('sourceLabel')}
               </Text>
               <Text size="xs" style={{ color: tokens.colors.text.secondary }}>
                 {provenance.sourceDescription[language]}
@@ -293,7 +293,7 @@ export default function DataSourceTooltip({
                   color="tertiary"
                   style={{ minWidth: 60, flexShrink: 0 }}
                 >
-                  {language === 'zh' ? '更新时间' : 'Updated'}
+                  {t('updatedLabel')}
                 </Text>
                 <Text size="xs" style={{ color: tokens.colors.text.secondary }}>
                   {formatLastUpdated(provenance.lastUpdated, language)}
@@ -309,7 +309,7 @@ export default function DataSourceTooltip({
                   color="tertiary"
                   style={{ minWidth: 60, flexShrink: 0 }}
                 >
-                  {language === 'zh' ? '时间窗口' : 'Window'}
+                  {t('windowLabel')}
                 </Text>
                 <Text size="xs" style={{ color: tokens.colors.text.secondary }}>
                   {provenance.windowDefinition[language]}
@@ -325,7 +325,7 @@ export default function DataSourceTooltip({
                   color="tertiary"
                   style={{ minWidth: 60, flexShrink: 0 }}
                 >
-                  {language === 'zh' ? '计算方式' : 'Method'}
+                  {t('methodLabel')}
                 </Text>
                 <Text size="xs" style={{ color: tokens.colors.text.secondary }}>
                   {provenance.calculationMethod[language]}
@@ -341,7 +341,7 @@ export default function DataSourceTooltip({
                   color="tertiary"
                   style={{ minWidth: 60, flexShrink: 0 }}
                 >
-                  {language === 'zh' ? '延迟说明' : 'Delay'}
+                  {t('delayLabel')}
                 </Text>
                 <Text size="xs" style={{ color: tokens.colors.accent.warning }}>
                   {provenance.delayInfo[language]}
@@ -380,7 +380,7 @@ export default function DataSourceTooltip({
                   color="tertiary"
                   style={{ minWidth: 60, flexShrink: 0 }}
                 >
-                  {language === 'zh' ? '可信度' : 'Confidence'}
+                  {t('confidenceLabel')}
                 </Text>
                 <Box
                   style={{
@@ -429,7 +429,7 @@ export default function DataSourceTooltip({
                     textDecoration: 'none',
                   }}
                 >
-                  {language === 'zh' ? '查看原始数据' : 'View source'}
+                  {t('viewSourceData')}
                   <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3" />
                   </svg>
@@ -458,7 +458,7 @@ export function DataSourceBadge({
   lastUpdated?: string
   compact?: boolean
 }) {
-  const { language } = useLanguage()
+  const { language, t } = useLanguage()
 
   const getStatusColor = (status: DataAvailability) => {
     switch (status) {
@@ -488,12 +488,8 @@ export function DataSourceBadge({
         }}
         title={
           availability === 'available'
-            ? language === 'zh'
-              ? '数据可用'
-              : 'Data available'
-            : language === 'zh'
-            ? '数据不可用'
-            : 'Data unavailable'
+            ? t('dataAvailableTooltip')
+            : t('dataUnavailableTooltip')
         }
       />
     )

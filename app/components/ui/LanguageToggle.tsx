@@ -5,7 +5,7 @@ import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 export default function LanguageToggle() {
-  const { language, setLanguage } = useLanguage()
+  const { language, setLanguage, t } = useLanguage()
   const [isChanging, setIsChanging] = useState(false)
 
   const toggleLanguage = () => {
@@ -20,8 +20,8 @@ export default function LanguageToggle() {
   return (
     <button
       onClick={toggleLanguage}
-      aria-label={language === 'zh' ? 'Switch to English' : '切换到中文'}
-      title={language === 'zh' ? 'Switch to English' : '切换到中文'}
+      aria-label={language === 'zh' ? t('switchToEnglish') : t('switchToChinese')}
+      title={language === 'zh' ? t('switchToEnglish') : t('switchToChinese')}
       style={{
         display: 'flex',
         alignItems: 'center',

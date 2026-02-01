@@ -350,7 +350,7 @@ function RankingTableInner(props: {
           <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], flex: 1, minWidth: 0, flexWrap: 'wrap' }}>
             <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1], flexShrink: 0 }}>
               <Text size="xs" weight="bold" color="secondary">
-                {language === 'en' ? 'Category' : '分类'}
+                {t('categoryType')}
               </Text>
               <ProLabel size="xs" />
             </Box>
@@ -361,16 +361,16 @@ function RankingTableInner(props: {
           <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1], flexShrink: 0 }}>
             {/* View toggle */}
             <Box className="view-toggle-group">
-              <button onClick={() => toggleViewMode('table')} title={language === 'en' ? 'Table View' : '表格视图'} className={`view-toggle-btn touch-target-sm${viewMode === 'table' ? ' view-toggle-active' : ''}`}>
+              <button onClick={() => toggleViewMode('table')} title={t('tableView')} className={`view-toggle-btn touch-target-sm${viewMode === 'table' ? ' view-toggle-active' : ''}`}>
                 <TableViewIcon size={12} />
               </button>
-              <button onClick={() => toggleViewMode('card')} title={language === 'en' ? 'Card View' : '卡片视图'} className={`view-toggle-btn touch-target-sm${viewMode === 'card' ? ' view-toggle-active' : ''}`}>
+              <button onClick={() => toggleViewMode('card')} title={t('cardView')} className={`view-toggle-btn touch-target-sm${viewMode === 'card' ? ' view-toggle-active' : ''}`}>
                 <CardViewIcon size={12} />
               </button>
               {getStoredManualFlag() && (
                 <button
                   onClick={resetViewModeToAuto}
-                  title={language === 'en' ? 'Reset to auto layout' : '恢复自动布局'}
+                  title={t('resetAutoLayout')}
                   className="view-toggle-btn touch-target-sm"
                   style={{ fontSize: '10px', opacity: 0.6 }}
                 >
@@ -380,11 +380,11 @@ function RankingTableInner(props: {
             </Box>
 
             {/* Filter button */}
-            <Box onClick={onFilterToggle} title={language === 'en' ? 'Advanced Filter' : '高级筛选'} className={`toolbar-btn touch-target-sm${hasActiveFilters ? ' toolbar-btn-active' : ''}`}
+            <Box onClick={onFilterToggle} title={t('advancedFilter')} className={`toolbar-btn touch-target-sm${hasActiveFilters ? ' toolbar-btn-active' : ''}`}
               style={{ position: 'relative' }}
             >
               <FilterIcon size={11} />
-              <span>{language === 'zh' ? '筛选' : 'Filter'}</span>
+              <span>{t('filter')}</span>
               {!isPro && <LockIconSmall size={7} />}
               {hasActiveFilters && (
                 <Box style={{ position: 'absolute', top: 2, right: 2, width: 4, height: 4, borderRadius: '50%', background: tokens.colors.accent.primary }} />
@@ -392,22 +392,22 @@ function RankingTableInner(props: {
             </Box>
 
             {/* Compare button */}
-            <Link href="/compare" title={language === 'en' ? 'Compare Traders' : '交易员对比'} className="toolbar-btn touch-target-sm"
+            <Link href="/compare" title={t('compareTraders')} className="toolbar-btn touch-target-sm"
             >
               <CompareIcon size={11} />
-              <span>{language === 'zh' ? '对比' : 'Compare'}</span>
+              <span>{t('compare')}</span>
               {!isPro && <LockIconSmall size={7} />}
             </Link>
 
             {/* Column settings */}
             <div ref={columnSettingsRef} style={{ position: 'relative' }}>
-              <Box onClick={() => setShowColumnSettings(!showColumnSettings)} title={language === 'en' ? 'Column Settings' : '列设置'} className={`toolbar-btn touch-target-sm${showColumnSettings ? ' toolbar-btn-active' : ''}`}>
+              <Box onClick={() => setShowColumnSettings(!showColumnSettings)} title={t('columnSettingsTitle')} className={`toolbar-btn touch-target-sm${showColumnSettings ? ' toolbar-btn-active' : ''}`}>
                 <SettingsIcon size={11} />
               </Box>
               {showColumnSettings && (
                 <Box style={{ position: 'absolute', top: '100%', right: 0, marginTop: tokens.spacing[1], padding: tokens.spacing[3], background: tokens.colors.bg.primary, border: `1px solid ${tokens.colors.border.primary}`, borderRadius: tokens.radius.lg, boxShadow: tokens.shadow.lg, zIndex: 9999, minWidth: 160 }} onClick={(e) => e.stopPropagation()}>
                   <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>
-                    {language === 'zh' ? '列设置' : 'Column Settings'}
+                    {t('columnSettingsTitle')}
                   </Text>
                   {ALL_TOGGLEABLE_COLUMNS.map(col => (
                     <label key={col} style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], padding: `${tokens.spacing[1]} 0`, cursor: 'pointer', fontSize: tokens.typography.fontSize.sm, color: tokens.colors.text.primary }}>
@@ -417,7 +417,7 @@ function RankingTableInner(props: {
                   ))}
                   <button onClick={resetColumns}
                     style={{ marginTop: tokens.spacing[2], padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`, fontSize: tokens.typography.fontSize.xs, color: tokens.colors.accent.primary, background: 'transparent', border: `1px solid ${tokens.colors.accent.primary}40`, borderRadius: tokens.radius.sm, cursor: 'pointer', width: '100%' }}>
-                    {language === 'zh' ? '恢复默认' : 'Reset to Default'}
+                    {t('resetToDefault')}
                   </button>
                 </Box>
               )}
@@ -456,19 +456,19 @@ function RankingTableInner(props: {
           <Text size="sm" weight="bold" color="tertiary" style={{ textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap', fontSize: '12px' }}>{t('trader')}</Text>
           <button onClick={() => setShowRules(!showRules)}
             className="info-btn-circle"
-            title="排名规则"
+            title={t('rankingRules')}
           >?</button>
         </Box>
-        <Box className={`col-score sort-header sort-header-center${sortColumn === 'score' ? ' sort-header-active' : ''} ${justSortedColumn === 'score' ? 'just-sorted' : ''}`} as="button" onClick={() => handleSort('score')} title={language === 'zh' ? 'Arena Score: 综合评分 (0-100)' : 'Arena Score: Overall rating (0-100)'} data-sortable>
+        <Box className={`col-score sort-header sort-header-center${sortColumn === 'score' ? ' sort-header-active' : ''} ${justSortedColumn === 'score' ? 'just-sorted' : ''}`} as="button" onClick={() => handleSort('score')} title={t('arenaScoreTooltip')} data-sortable>
           Score <SortIndicator active={sortColumn === 'score'} dir={sortDir} />
         </Box>
-        <Box className={`roi-cell sort-header sort-header-end${sortColumn === 'roi' ? ' sort-header-active' : ''} ${justSortedColumn === 'roi' ? 'just-sorted' : ''}`} as="button" onClick={() => handleSort('roi')} title={language === 'zh' ? `ROI: 投资回报率 (${timeRange})` : `ROI: Return on Investment (${timeRange})`} data-sortable>
+        <Box className={`roi-cell sort-header sort-header-end${sortColumn === 'roi' ? ' sort-header-active' : ''} ${justSortedColumn === 'roi' ? 'just-sorted' : ''}`} as="button" onClick={() => handleSort('roi')} title={t('roiTooltip').replace('{range}', timeRange)} data-sortable>
           ROI <SortIndicator active={sortColumn === 'roi'} dir={sortDir} />
         </Box>
-        <Box className={`col-winrate sort-header sort-header-end${sortColumn === 'winrate' ? ' sort-header-active' : ''} ${justSortedColumn === 'winrate' ? 'just-sorted' : ''}`} as="button" onClick={() => handleSort('winrate')} title={language === 'zh' ? 'Win%: 胜率' : 'Win%: Win Rate'} data-sortable>
+        <Box className={`col-winrate sort-header sort-header-end${sortColumn === 'winrate' ? ' sort-header-active' : ''} ${justSortedColumn === 'winrate' ? 'just-sorted' : ''}`} as="button" onClick={() => handleSort('winrate')} title={t('winRateTooltip')} data-sortable>
           Win% <SortIndicator active={sortColumn === 'winrate'} dir={sortDir} />
         </Box>
-        <Box className={`col-mdd sort-header sort-header-end${sortColumn === 'mdd' ? ' sort-header-active' : ''} ${justSortedColumn === 'mdd' ? 'just-sorted' : ''}`} as="button" onClick={() => handleSort('mdd')} title={language === 'zh' ? 'MDD: 最大回撤' : 'MDD: Max Drawdown'} data-sortable>
+        <Box className={`col-mdd sort-header sort-header-end${sortColumn === 'mdd' ? ' sort-header-active' : ''} ${justSortedColumn === 'mdd' ? 'just-sorted' : ''}`} as="button" onClick={() => handleSort('mdd')} title={t('mddTooltip')} data-sortable>
           MDD <SortIndicator active={sortColumn === 'mdd'} dir={sortDir} />
         </Box>
       </Box>
@@ -478,22 +478,22 @@ function RankingTableInner(props: {
       {showRules && (
         <Box style={{ padding: `${tokens.spacing[4]} ${tokens.spacing[5]}`, background: `${tokens.colors.accent.primary}10`, borderBottom: `1px solid ${tokens.colors.border.primary}`, fontSize: tokens.typography.fontSize.sm, color: tokens.colors.text.secondary, lineHeight: 1.7 }}>
           <Text size="sm" weight="bold" style={{ color: tokens.colors.accent.primary, marginBottom: 8, display: 'block' }}>
-            {language === 'zh' ? 'Arena Score 排名规则' : 'Arena Score Ranking Rules'}
+            {t('arenaScoreRankingRules')}
           </Text>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <span>{language === 'zh' ? '① 按 Arena Score 从高到低排序（0-100 分）' : '① Ranked by Arena Score (0-100)'}</span>
-            <span>{language === 'zh' ? '② 分数构成：收益分（85%）+ 稳定/风险分（15%）' : '② Score: Return (85%) + Stability/Risk (15%)'}</span>
-            <span>{language === 'zh' ? '③ Score 相同时，回撤更小的靠前' : '③ Lower drawdown ranks higher when Score ties'}</span>
+            <span>{t('rankingRule1')}</span>
+            <span>{t('rankingRule2')}</span>
+            <span>{t('rankingRule3')}</span>
             <span style={{ color: tokens.colors.text.tertiary, marginTop: 6 }}>
-              {language === 'zh' ? '* 入榜门槛（PNL 收益）：7D > $300 | 30D > $1,000 | 90D > $3,000' : '* Entry threshold (PNL): 7D > $300 | 30D > $1,000 | 90D > $3,000'}
+              {t('rankingRuleThreshold')}
             </span>
             <span style={{ color: tokens.colors.text.tertiary, marginTop: 4 }}>
-              {language === 'zh' ? '* ROI 计算方式因交易所而异，跨所对比时请注意差异' : '* ROI calculation varies by exchange. Use caution when comparing across exchanges.'}
+              {t('rankingRuleROINote')}
             </span>
           </div>
           <button onClick={() => setShowScoreRulesModal(true)}
             className="detail-btn">
-            详细
+            {t('detailButton')}
           </button>
         </Box>
       )}
@@ -540,7 +540,7 @@ function RankingTableInner(props: {
                 transition: `all ${tokens.transition.base}`,
               }}
             >
-              {language === 'zh' ? '清除搜索' : 'Clear search'}
+              {t('clearSearch')}
             </button>
           )}
         </Box>

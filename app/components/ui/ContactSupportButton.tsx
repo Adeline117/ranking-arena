@@ -6,8 +6,8 @@ import { supabase } from '@/lib/supabase/client'
 import { useToast } from './Toast'
 import { tokens } from '@/lib/design-tokens'
 import { getCsrfHeaders } from '@/lib/api/client'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
-// 客服账号信息 - 用于查找客服用户 ID
 const SUPPORT_HANDLE = 'adeline'
 const SUPPORT_EMAIL = 'adelinewen1107@outlook.com'
 
@@ -19,7 +19,7 @@ type ContactSupportButtonProps = {
   className?: string
 }
 
-export default function ContactSupportButton({ 
+export default function ContactSupportButton({
   size = 'md',
   fullWidth = false,
   variant = 'default',
@@ -28,19 +28,17 @@ export default function ContactSupportButton({
 }: ContactSupportButtonProps) {
   const router = useRouter()
   const { showToast } = useToast()
+  const { t } = useLanguage()
   const [loading, setLoading] = useState(false)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [supportUserId, setSupportUserId] = useState<string | null>(null)
   const pendingRef = useRef(false)
 
-  // 获取当前用户和客服用户 ID
   useEffect(() => {
     const init = async () => {
-      // 获取当前用户
       const { data: { user } } = await supabase.auth.getUser()
       setCurrentUserId(user?.id || null)
 
-      // 获取客服用户 ID - 优先通过 handle 查找
       const { data: supportUser } = await supabase
         .from('user_profiles')
         .select('id')
@@ -50,7 +48,6 @@ export default function ContactSupportButton({
       if (supportUser) {
         setSupportUserId(supportUser.id)
       } else {
-        // 备用：通过邮箱查找
         const { data: profile } = await supabase
           .from('user_profiles')
           .select('id')
@@ -68,31 +65,30 @@ export default function ContactSupportButton({
 
   const handleClick = async () => {
     if (!currentUserId) {
-      showToast('请先登录后再联系客服', 'warning')
+      showToast(t('pleaseLoginToContactSupport'), 'warning')
       router.push('/login?redirect=/help')
       return
     }
 
     if (!supportUserId) {
-      showToast('客服暂不可用，请稍后再试', 'error')
+      showToast(t('supportUnavailable'), 'error')
       return
     }
 
     if (currentUserId === supportUserId) {
-      showToast('你就是客服啊~', 'info')
+      showToast(t('youAreSupport'), 'info')
       return
     }
 
-    // Prevent double-click
     if (pendingRef.current) return
     pendingRef.current = true
     setLoading(true)
     try {
       const { data: { session } } = await supabase.auth.getSession()
-      
+
       const response = await fetch('/api/messages/start', {
         method: 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
           'Authorization': session?.access_token ? `Bearer ${session.access_token}` : '',
           ...getCsrfHeaders(),
@@ -104,34 +100,33 @@ export default function ContactSupportButton({
       })
 
       const data = await response.json()
-      
+
       if (response.ok) {
         router.push(`/messages/${data.conversation_id}`)
       } else {
         if (data.error === '该用户已关闭私信功能') {
-          showToast('客服暂时无法接收消息', 'warning')
+          showToast(t('supportCannotReceiveMessages'), 'warning')
         } else {
-          showToast(data.error || '无法联系客服', 'error')
+          showToast(data.error || t('cannotContactSupport'), 'error')
         }
       }
     } catch (error) {
       console.error('Contact support error:', error)
-      showToast('操作失败，请重试', 'error')
+      showToast(t('operationFailedRetry'), 'error')
     } finally {
       setLoading(false)
       pendingRef.current = false
     }
   }
 
-  const defaultLabel = label || '联系客服'
-  
+  const defaultLabel = label || t('contactSupport')
+
   const sizeStyles = {
     sm: { padding: '10px 16px', fontSize: '13px', borderRadius: '8px', minHeight: '44px' },
     md: { padding: '12px 20px', fontSize: '14px', borderRadius: '10px', minHeight: '44px' },
     lg: { padding: '14px 24px', fontSize: '15px', borderRadius: '12px', minHeight: '48px' },
   }
 
-  // 链接样式
   if (variant === 'link') {
     return (
       <button
@@ -150,12 +145,11 @@ export default function ContactSupportButton({
           opacity: loading ? 0.6 : 1,
         }}
       >
-        {loading ? '跳转中...' : defaultLabel}
+        {loading ? t('redirecting') : defaultLabel}
       </button>
     )
   }
 
-  // 卡片样式（用于帮助页面）
   if (variant === 'card') {
     return (
       <button
@@ -192,26 +186,25 @@ export default function ContactSupportButton({
           <MessageIcon size={22} />
         </div>
         <div>
-          <div style={{ 
-            fontSize: tokens.typography.fontSize.sm, 
+          <div style={{
+            fontSize: tokens.typography.fontSize.sm,
             fontWeight: 700,
             color: 'var(--color-text-secondary)',
           }}>
-            {loading ? '跳转中...' : defaultLabel}
+            {loading ? t('redirecting') : defaultLabel}
           </div>
-          <div style={{ 
-            fontSize: tokens.typography.fontSize.xs, 
+          <div style={{
+            fontSize: tokens.typography.fontSize.xs,
             color: 'var(--color-text-tertiary)',
             marginTop: 2,
           }}>
-            发送私信联系我们
+            {t('sendMessageToContactUs')}
           </div>
         </div>
       </button>
     )
   }
 
-  // 默认按钮样式
   return (
     <button
       onClick={handleClick}
@@ -239,7 +232,6 @@ export default function ContactSupportButton({
   )
 }
 
-// 消息图标
 function MessageIcon({ size = 16 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">

@@ -8,6 +8,7 @@ import { tokens } from '@/lib/design-tokens'
 import { useFollowSync, type FollowChangePayload } from '@/lib/hooks/useBroadcastSync'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { getCsrfHeaders } from '@/lib/api/client'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 type TraderFollowButtonProps = {
   traderId: string
@@ -32,6 +33,7 @@ type FollowResponse = {
 export default function TraderFollowButton({ traderId, userId, initialFollowing = false, onFollowChange }: TraderFollowButtonProps) {
   const router = useRouter()
   const { showToast } = useToast()
+  const { t } = useLanguage()
   const { getAuthHeadersAsync } = useAuthSession()
   const [following, setFollowing] = useState(initialFollowing)
   const [featureDisabled, setFeatureDisabled] = useState(false)
@@ -103,7 +105,7 @@ export default function TraderFollowButton({ traderId, userId, initialFollowing 
 
       if (data.tableNotFound) {
         setFeatureDisabled(true)
-        showToast('Follow feature coming soon', 'info')
+        showToast(t('followFeatureComingSoon'), 'info')
         return
       }
 
@@ -134,10 +136,10 @@ export default function TraderFollowButton({ traderId, userId, initialFollowing 
         setFollowing(!expectedStateRef.current)
         expectedStateRef.current = null
       }
-      const errorMsg = error instanceof Error ? error.message : '操作失败'
+      const errorMsg = error instanceof Error ? error.message : t('operationFailed')
       if (errorMsg.includes('table') || errorMsg.includes('503')) {
         setFeatureDisabled(true)
-        showToast('Follow feature coming soon', 'info')
+        showToast(t('followFeatureComingSoon'), 'info')
       } else {
         showToast(errorMsg, 'error')
       }
@@ -182,7 +184,7 @@ export default function TraderFollowButton({ traderId, userId, initialFollowing 
 
   const handleToggle = useCallback(() => {
     if (!userId) {
-      showToast('请先登录', 'warning')
+      showToast(t('pleaseLogin'), 'warning')
       return
     }
 
@@ -207,7 +209,7 @@ export default function TraderFollowButton({ traderId, userId, initialFollowing 
           setFollowing(!expectedStateRef.current)
           expectedStateRef.current = null
         }
-        showToast('超时了，请重试', 'warning')
+        showToast(t('timeoutRetry'), 'warning')
       }
     }, 10000)
 
@@ -222,7 +224,7 @@ export default function TraderFollowButton({ traderId, userId, initialFollowing 
     return (
       <button
         disabled
-        title="Follow feature coming soon"
+        title={t('followFeatureComingSoon')}
         style={{
           width: '100%',
           padding: '12px 16px',
@@ -236,7 +238,7 @@ export default function TraderFollowButton({ traderId, userId, initialFollowing 
           opacity: 0.5,
         }}
       >
-        Coming Soon
+        {t('followFeatureComingSoon')}
       </button>
     )
   }
@@ -256,7 +258,7 @@ export default function TraderFollowButton({ traderId, userId, initialFollowing 
           cursor: 'pointer',
         }}
       >
-        关注
+        {t('follow')}
       </button>
     )
   }
@@ -284,7 +286,7 @@ export default function TraderFollowButton({ traderId, userId, initialFollowing 
       }}
     >
       {isLoading && <ButtonSpinner size="xs" />}
-      {isLoading ? (following ? '取消中' : '关注中') : following ? '取消关注' : '关注'}
+      {isLoading ? (following ? t('unfollowingAction') : t('followingAction')) : following ? t('unfollow') : t('follow')}
     </button>
   )
 }

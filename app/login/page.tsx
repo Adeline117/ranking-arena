@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from "@/lib/supabase/client"
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useToast } from '@/app/components/ui/Toast'
 import { ConnectButton } from '@rainbow-me/rainbowkit'
 import { useAccount } from 'wagmi'
@@ -348,7 +348,19 @@ export default function LoginPage() {
   
   const errorRef = useRef<HTMLDivElement>(null)
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { showToast } = useToast()
+
+  // Get returnUrl from query params for post-login redirect
+  const getRedirectUrl = (userHandle?: string | null, userEmail?: string | null): string => {
+    const returnUrl = searchParams.get('returnUrl')
+    if (returnUrl && returnUrl.startsWith('/')) {
+      return returnUrl
+    }
+    if (userHandle) return `/u/${userHandle}`
+    if (userEmail) return `/u/${userEmail.split('@')[0]}`
+    return '/'
+  }
 
   // Web3 wallet auth
   const { address: walletAddress, isConnected: isWalletConnected } = useAccount()
@@ -405,16 +417,10 @@ export default function LoginPage() {
               .eq('id', user.id)
               .maybeSingle()
               .then(({ data: userProfile }) => {
-                if (userProfile?.handle) {
-                  router.push(`/u/${userProfile.handle}`)
-                } else if (user.email) {
-                  router.push(`/u/${user.email.split('@')[0]}`)
-                } else {
-                  router.push('/')
-                }
+                router.push(getRedirectUrl(userProfile?.handle, user.email))
               })
           } else {
-            router.push('/')
+            router.push(getRedirectUrl())
           }
         })
       }
@@ -557,13 +563,7 @@ export default function LoginPage() {
             .eq('id', data.user.id)
             .maybeSingle()
 
-          if (userProfile?.handle) {
-            router.push(`/u/${userProfile.handle}`)
-          } else if (data.user.email) {
-            router.push(`/u/${data.user.email.split('@')[0]}`)
-          } else {
-            router.push('/')
-          }
+          router.push(getRedirectUrl(userProfile?.handle, data.user.email))
         }
       }
     } catch (err: unknown) {
@@ -693,15 +693,9 @@ export default function LoginPage() {
           .eq('id', user.id)
           .maybeSingle()
 
-        if (userProfile?.handle) {
-          router.push(`/u/${userProfile.handle}`)
-        } else if (user.email) {
-          router.push(`/u/${user.email.split('@')[0]}`)
-        } else {
-          router.push('/')
-        }
+        router.push(getRedirectUrl(userProfile?.handle, user.email))
       } else {
-        router.push('/')
+        router.push(getRedirectUrl())
       }
     } catch (err: unknown) {
       setError((err instanceof Error ? err.message : undefined) || (lang === 'zh' ? '登录失败' : 'Login failed'))
@@ -1500,11 +1494,7 @@ export default function LoginPage() {
                 const result = await siweSignIn()
                 if (result) {
                   showToast(t.walletSignInSuccess, 'success')
-                  if (result.handle) {
-                    router.push(`/u/${result.handle}`)
-                  } else {
-                    router.push('/')
-                  }
+                  router.push(getRedirectUrl(result.handle))
                 }
                 // Error is shown via siweError state from the hook
               }}

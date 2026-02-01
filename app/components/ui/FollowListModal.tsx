@@ -24,7 +24,7 @@ interface FollowListModalProps {
   handle: string
   currentUserId?: string | null
   isOwnProfile?: boolean
-  isPublic?: boolean // 该列表是否公开
+  isPublic?: boolean
 }
 
 export default function FollowListModal({
@@ -49,7 +49,6 @@ export default function FollowListModal({
       loadUsers()
     }
 
-    // 清理：组件卸载或关闭时取消请求
     return () => {
       if (abortControllerRef.current) {
         abortControllerRef.current.abort()
@@ -59,7 +58,6 @@ export default function FollowListModal({
   }, [isOpen, handle, type])
 
   const loadUsers = async () => {
-    // 取消之前的请求
     if (abortControllerRef.current) {
       abortControllerRef.current.abort()
     }
@@ -83,19 +81,19 @@ export default function FollowListModal({
       if (response.ok) {
         if (data.hidden) {
           setHidden(true)
-          setHiddenMessage(data.message || '该用户已关闭列表展示')
+          setHiddenMessage(data.message || t('userHiddenList'))
           setUsers([])
         } else {
           setHidden(false)
           setUsers(data.followers || data.following || [])
         }
       } else {
-        console.error('加载失败:', data.error)
+        console.error('Load failed:', data.error)
         setUsers([])
       }
     } catch (error) {
       if ((error as Error).name !== 'AbortError') {
-        console.error('加载失败:', error)
+        console.error('Load failed:', error)
         setUsers([])
       }
     } finally {
@@ -142,28 +140,27 @@ export default function FollowListModal({
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* 头部 */}
-        <Box style={{ 
-          display: 'flex', 
-          justifyContent: 'space-between', 
-          alignItems: 'center', 
+        {/* Header */}
+        <Box style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
           marginBottom: tokens.spacing[4],
           paddingBottom: tokens.spacing[3],
           borderBottom: `1px solid ${tokens.colors.border.primary}`,
         }}>
           <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[1] }}>
             <Text size="lg" weight="bold">{title}</Text>
-            {/* 隐私状态说明 - 仅自己可见 */}
             {isOwnProfile && (
               <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1] }}>
-                <span style={{ 
-                  fontSize: 10, 
+                <span style={{
+                  fontSize: 10,
                   color: isPublic ? tokens.colors.accent.success : tokens.colors.accent.warning,
                 }}>
-                  {isPublic ? '○' : '●'}
+                  {isPublic ? '\u25CB' : '\u25CF'}
                 </span>
                 <Text size="xs" color="tertiary">
-                  {isPublic ? '公开 - 其他人可以查看' : '私密 - 仅自己可见'}
+                  {isPublic ? t('publicListVisible') : t('privateListHidden')}
                 </Text>
               </Box>
             )}
@@ -180,19 +177,19 @@ export default function FollowListModal({
               padding: 4,
             }}
           >
-            ×
+            &times;
           </button>
         </Box>
 
-        {/* 用户列表 */}
+        {/* User list */}
         <Box style={{ overflowY: 'auto', flex: 1 }}>
           {loading ? (
             <Box style={{ textAlign: 'center', padding: tokens.spacing[6] }}>
-              <Text size="sm" color="tertiary">加载中...</Text>
+              <Text size="sm" color="tertiary">{t('loading')}</Text>
             </Box>
           ) : hidden ? (
             <Box style={{ textAlign: 'center', padding: tokens.spacing[6] }}>
-              <Box style={{ 
+              <Box style={{
                 width: 40,
                 height: 40,
                 borderRadius: '50%',
@@ -214,7 +211,7 @@ export default function FollowListModal({
           ) : users.length === 0 ? (
             <Box style={{ textAlign: 'center', padding: tokens.spacing[6] }}>
               <Text size="sm" color="tertiary">
-                {type === 'followers' ? '暂无人关注 TA' : '暂未关注任何人'}
+                {type === 'followers' ? t('noFollowersYet') : t('notFollowingAnyone')}
               </Text>
             </Box>
           ) : (
@@ -239,7 +236,6 @@ export default function FollowListModal({
                   }}
                   onClick={() => handleUserClick(user.handle)}
                 >
-                  {/* 头像 */}
                   <Avatar
                     userId={user.id}
                     name={user.handle}
@@ -248,9 +244,8 @@ export default function FollowListModal({
                     style={{ flexShrink: 0 }}
                   />
 
-                  {/* 用户信息 */}
                   <Box style={{ flex: 1, minWidth: 0 }}>
-                    <Text size="sm" weight="semibold" style={{ 
+                    <Text size="sm" weight="semibold" style={{
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
                       whiteSpace: 'nowrap',
@@ -269,7 +264,6 @@ export default function FollowListModal({
                     )}
                   </Box>
 
-                  {/* 关注按钮 - 不显示自己的关注按钮 */}
                   {currentUserId && user.id !== currentUserId && (
                     <Box onClick={(e) => e.stopPropagation()}>
                       <UserFollowButton

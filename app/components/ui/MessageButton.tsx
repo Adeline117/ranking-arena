@@ -6,6 +6,7 @@ import { ButtonSpinner } from './LoadingSpinner'
 import { useApiMutation } from '@/lib/hooks/useApiMutation'
 import { apiRequest } from '@/lib/api/client'
 import { supabase } from '@/lib/supabase/client'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 type MessageButtonProps = {
   targetUserId: string
@@ -25,14 +26,15 @@ type StartMessageResponse = {
   limit_reached?: boolean
 }
 
-export default function MessageButton({ 
-  targetUserId, 
-  currentUserId, 
+export default function MessageButton({
+  targetUserId,
+  currentUserId,
   size = 'md',
   fullWidth = false
 }: MessageButtonProps) {
   const router = useRouter()
   const { showToast } = useToast()
+  const { t } = useLanguage()
 
   const { mutate, isLoading } = useApiMutation<StartMessageResponse, void>(
     async () => {
@@ -52,37 +54,35 @@ export default function MessageButton({
     },
     {
       onSuccess: (data) => {
-        // 显示消息限制提示
         if (data.message_limit && !data.is_mutual_follow) {
           const remaining = data.message_limit.max - data.message_limit.sent
           if (remaining > 0 && remaining < 3) {
-            showToast(`你们还不是互相关注，你还可以发送 ${remaining} 条消息`, 'info')
+            showToast(t('msgLimitWarning').replace('{remaining}', String(remaining)), 'info')
           }
         }
-        // 跳转到会话页面
         router.push(`/messages/${data.conversation_id}`)
       },
       onError: (error) => {
         if (error.message === '该用户已关闭私信功能') {
-          showToast('该用户已关闭私信功能', 'warning')
+          showToast(t('userDmDisabled'), 'warning')
         } else if (error.limitReached) {
-          showToast('在对方回复前，你最多只能发送3条消息', 'warning')
+          showToast(t('msgLimitReached'), 'warning')
         }
       },
-      showToast: false, // 使用自定义错误处理
+      showToast: false,
       retryCount: 1,
     }
   )
 
   const handleClick = () => {
     if (!currentUserId) {
-      showToast('请先登录', 'warning')
+      showToast(t('pleaseLogin'), 'warning')
       router.push('/login')
       return
     }
 
     if (currentUserId === targetUserId) {
-      showToast('不能给自己发私信', 'warning')
+      showToast(t('cannotMessageSelf'), 'warning')
       return
     }
 
@@ -114,12 +114,11 @@ export default function MessageButton({
         }}
       >
         <MessageIcon size={size === 'sm' ? 14 : 16} />
-        私信
+        {t('directMessage')}
       </button>
     )
   }
 
-  // 如果是自己的资料，不显示私信按钮
   if (currentUserId === targetUserId) {
     return null
   }
@@ -149,12 +148,11 @@ export default function MessageButton({
       ) : (
         <MessageIcon size={size === 'sm' ? 14 : 16} />
       )}
-      {isLoading ? '...' : '私信'}
+      {isLoading ? '...' : t('directMessage')}
     </button>
   )
 }
 
-// 简单的消息图标
 function MessageIcon({ size = 16 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
@@ -162,4 +160,3 @@ function MessageIcon({ size = 16 }: { size?: number }) {
     </svg>
   )
 }
-

@@ -157,7 +157,7 @@ const en = {
     livePositions: 'Live Positions',
     // Leaderboard
     source: 'Source',
-    allExchanges: 'All Exchanges',
+    allExchanges: 'All',
     // Trader profile
     similarTraders: 'Similar Traders',
     traderNotRegistered: 'Trader Not Registered',
@@ -499,9 +499,16 @@ const en = {
     followingAction: 'Following',
     unfollowingAction: 'Unfollowing',
     operationFailed: 'Failed',
+    operationFailedRetry: 'Failed, please retry',
     timeout: 'Timed out',
+    timeoutRetry: 'Timed out, please retry',
+    followSuccess: 'Followed successfully',
+    unfollowSuccess: 'Unfollowed',
+    followFeatureComingSoon: 'Follow feature coming soon',
+    cannotFollowSelf: 'Cannot follow yourself',
     saved: 'Saved',
     deleted: 'Deleted',
+    deleteFailed: 'Delete failed',
     replied: 'Replied',
     voted: 'Voted',
     unbookmarked: 'Unbookmarked',
@@ -981,6 +988,7 @@ const en = {
     alertSeverityWarning: 'Warning',
     alertSeverityInfo: 'Info',
     // Phase 3 - Compare Enhancements
+    compare: 'Compare',
     compareTraders: 'Trader Comparison',
     compareDesc: 'Compare up to 5 traders side by side',
     compareAddTrader: 'Add Trader',
@@ -1054,6 +1062,168 @@ const en = {
     cropSuccess: 'Crop successful! Click Save to upload.',
     cropFailed: 'Failed to crop image. Please try again.',
     noCropAreaSelected: 'Please select an area to crop',
+
+    // MessageButton
+    directMessage: 'Message',
+    cannotMessageSelf: 'Cannot message yourself',
+    userDmDisabled: 'This user has disabled messages',
+    msgLimitReached: 'You can send up to 3 messages before they reply',
+    msgLimitWarning: 'Not mutual follows yet. You can send {remaining} more messages',
+
+    // ContactSupportButton
+    contactSupport: 'Contact Support',
+    pleaseLoginToContactSupport: 'Please login to contact support',
+    supportUnavailable: 'Support unavailable, please try again later',
+    youAreSupport: 'You are the support agent!',
+    supportCannotReceiveMessages: 'Support cannot receive messages at this time',
+    cannotContactSupport: 'Cannot contact support',
+    redirecting: 'Redirecting...',
+    sendMessageToContactUs: 'Send us a message',
+
+    // BookmarkModal
+    loadBookmarksFailed: 'Failed to load bookmarks',
+    bookmarkTo: 'Bookmark to',
+    newBookmarkFolder: '+ New Folder',
+    bookmarkFolderName: 'Folder name',
+    publicUncheckForPrivate: 'Public (uncheck for private)',
+    creating: 'Creating...',
+    create: 'Create',
+    noBookmarkFolders: 'No bookmark folders',
+    defaultLabel: 'Default',
+    publicLabel: 'Public',
+    bookmarkItems: '{count} items',
+    bookmarkFolderCreated: 'Folder created',
+    createFailed: 'Creation failed',
+
+    // CookieConsent
+    cookieSettings: 'Cookie Settings',
+    cookieDescription: 'We use cookies to improve your browsing experience, analyze traffic and provide personalized content. You can accept all cookies or customize your preferences.',
+    cookieNecessary: 'Necessary Cookies',
+    cookieNecessaryDesc: 'Essential for the website to function properly. Cannot be disabled. Used to maintain login status and security settings.',
+    cookieAnalytics: 'Analytics Cookies',
+    cookieAnalyticsDesc: 'Help us understand how users interact with the website to improve the experience. Data is collected anonymously.',
+    cookiePreferences: 'Preference Cookies',
+    cookiePreferencesDesc: 'Remember your preferences such as language and theme for a personalized experience.',
+    cookieMarketing: 'Marketing Cookies',
+    cookieMarketingDesc: 'Used to show relevant ads and content. Disabling means ads may be less relevant.',
+    acceptAll: 'Accept All',
+    necessaryOnly: 'Necessary Only',
+    customizeSettings: 'Customize',
+    saveSettings: 'Save Settings',
+    learnMorePrivacy: 'Learn more in our',
+    privacyPolicy: 'Privacy Policy',
+    termsOfService: 'Terms of Service',
+    andWord: 'and',
+
+    // FollowListModal
+    userHiddenList: 'This user has hidden their list',
+    noFollowersYet: 'No followers yet',
+    notFollowingAnyone: 'Not following anyone yet',
+    publicListVisible: 'Public - visible to others',
+    privateListHidden: 'Private - only you can see',
+
+    // ErrorMessage
+    somethingWentWrong: 'Something went wrong',
+
+    // PullToRefresh
+    refreshingText: 'Refreshing...',
+    pullToRefreshText: 'Pull to refresh',
+    releaseToRefreshText: 'Release to refresh',
+
+    // ReportModal
+    reportContentPost: 'Post',
+    reportContentComment: 'Comment',
+    reportContentMessage: 'Message/Conversation',
+    reportContentUser: 'User',
+    reportReasonSpam: 'Spam/Advertising',
+    reportReasonHarassment: 'Harassment/Abuse',
+    reportReasonInappropriate: 'Inappropriate Content',
+    reportReasonMisinformation: 'Misinformation',
+    reportReasonFraud: 'Fraud/Scam',
+    reportReasonOther: 'Other',
+    selectReportReason: 'Please select a reason',
+    describeOtherReason: 'Please describe the reason when selecting "Other"',
+    reportTitle: 'Report {type}',
+    reportTarget: 'Reporting: ',
+    reportReasonLabel: 'Reason *',
+    reportDetailsLabel: 'Details',
+    reportDetailsPlaceholder: 'Please describe the situation...',
+    reportNotice: 'Reports will be reviewed by admins. Malicious reports may result in account restrictions.',
+    reportSubmitting: 'Submitting...',
+    reportSubmit: 'Submit Report',
+    reportSubmitted: 'Report submitted, we will review it soon',
+    reportFailed: 'Report failed',
+
+    // MarketPanel
+    requestTimeoutShort: 'Request timed out, please try later',
+    networkConnectionFailed: 'Network connection failed, check your settings',
+    cannotGetMarketData: 'Cannot get market data',
+    selectCoinsToDisplay: 'Select coins to display (max 6)',
+
+    // DataFreshnessIndicator
+    justNow: 'just now',
+    minutesAgoShort: '{n}m ago',
+    hoursAgoShort: '{n}h ago',
+    daysAgoShort: '{n}d ago',
+    realtime: 'Real-time',
+    interval15min: '15min',
+    delayed: 'Delayed',
+    interval4hPlus: '4h+',
+    standard: 'Standard',
+    interval4h: '4h',
+    updatedAgo: 'Updated ',
+    dataMayBeStale: 'Data may be stale',
+    live: 'Live',
+
+    // DataSourceTooltip
+    dataUnknown: 'Unknown',
+    dataAvailableTooltip: 'Data available',
+    dataUnavailableTooltip: 'Data unavailable',
+    sourceLabel: 'Source',
+    updatedLabel: 'Updated',
+    windowLabel: 'Window',
+    methodLabel: 'Method',
+    delayLabel: 'Delay',
+    confidenceLabel: 'Confidence',
+    viewSourceData: 'View source',
+
+    // RankingTable
+    rankingRules: 'Ranking Rules',
+    arenaScoreRankingRules: 'Arena Score Ranking Rules',
+    rankingRule1: 'Ranked by Arena Score (0-100)',
+    rankingRule2: 'Score: Return (85%) + Stability/Risk (15%)',
+    rankingRule3: 'Lower drawdown ranks higher when Score ties',
+    rankingRuleThreshold: '* Entry threshold (PNL): 7D > $300 | 30D > $1,000 | 90D > $3,000',
+    rankingRuleROINote: '* ROI calculation varies by exchange. Use caution when comparing across exchanges.',
+    detailButton: 'Details',
+    arenaScoreTooltip: 'Arena Score: Overall rating (0-100)',
+    roiTooltip: 'ROI: Return on Investment ({range})',
+    winRateTooltip: 'Win%: Win Rate',
+    mddTooltip: 'MDD: Max Drawdown',
+    filter: 'Filter',
+    columnSettingsTitle: 'Column Settings',
+    resetToDefault: 'Reset to Default',
+    clearSearch: 'Clear search',
+    tableView: 'Table View',
+    cardView: 'Card View',
+    resetAutoLayout: 'Reset to auto layout',
+
+    // RankingSection
+    justUpdated: 'Just now',
+    freeUserLimit: 'Showing top {limit} of {total} traders. ',
+    upgradeProFull: 'Upgrade to Pro for full access',
+    sourcesLabel: 'Sources:',
+
+    // ExchangeFilter
+    lessExchanges: 'Less',
+    moreExchanges: '+{count} More',
+
+    // StatsBar
+    dataSourcesLabel: 'Data Sources',
+
+    // LanguageToggle
+    switchToEnglish: 'Switch to English',
+    switchToChinese: 'Switch to Chinese',
 } as const
 
 export default en

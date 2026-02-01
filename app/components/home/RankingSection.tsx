@@ -293,7 +293,7 @@ export default function RankingSection({
   const handleSaveFilter = async (name: string, description?: string) => {
     const authHeaders = getAuthHeaders()
     if (!authHeaders) {
-      showToast(language === 'zh' ? '请先登录' : 'Please login first', 'error')
+      showToast(t('pleaseLogin'), 'error')
       return
     }
     try {
@@ -309,13 +309,13 @@ export default function RankingSection({
       if (res.ok) {
         const data = await res.json()
         setSavedFilters(prev => [...prev, data.filter])
-        showToast(language === 'zh' ? '筛选已保存' : 'Filter saved', 'success')
+        showToast(t('filterSaved'), 'success')
       } else {
         const errorData = await res.json().catch(() => ({}))
-        showToast(errorData.error || (language === 'zh' ? '保存失败' : 'Save failed'), 'error')
+        showToast(errorData.error || t('saveFailed'), 'error')
       }
     } catch {
-      showToast(language === 'zh' ? '保存失败' : 'Save failed', 'error')
+      showToast(t('saveFailed'), 'error')
     }
   }
 
@@ -326,7 +326,7 @@ export default function RankingSection({
   const handleDeleteFilter = async (filterId: string) => {
     const authHeaders = getAuthHeaders()
     if (!authHeaders) {
-      showToast(language === 'zh' ? '请先登录' : 'Please login first', 'error')
+      showToast(t('pleaseLogin'), 'error')
       return
     }
     try {
@@ -339,12 +339,12 @@ export default function RankingSection({
       })
       if (res.ok) {
         setSavedFilters(prev => prev.filter(f => f.id !== filterId))
-        showToast(language === 'zh' ? '已删除' : 'Deleted', 'success')
+        showToast(t('deleted'), 'success')
       } else {
-        showToast(language === 'zh' ? '删除失败' : 'Delete failed', 'error')
+        showToast(t('deleteFailed'), 'error')
       }
     } catch {
-      showToast(language === 'zh' ? '删除失败' : 'Delete failed', 'error')
+      showToast(t('deleteFailed'), 'error')
     }
   }
 
@@ -371,11 +371,11 @@ export default function RankingSection({
       const diffMs = now.getTime() - date.getTime()
       const diffMins = Math.floor(diffMs / 60000)
 
-      if (diffMins < 1) return language === 'zh' ? '刚刚更新' : 'Just now'
-      if (diffMins < 60) return language === 'zh' ? `${diffMins} 分钟前` : `${diffMins}m ago`
+      if (diffMins < 1) return t('justUpdated')
+      if (diffMins < 60) return t('minutesAgoShort').replace('{n}', String(diffMins))
       const diffHours = Math.floor(diffMins / 60)
-      if (diffHours < 24) return language === 'zh' ? `${diffHours} 小时前` : `${diffHours}h ago`
-      return language === 'zh' ? `${Math.floor(diffHours / 24)} 天前` : `${Math.floor(diffHours / 24)}d ago`
+      if (diffHours < 24) return t('hoursAgoShort').replace('{n}', String(diffHours))
+      return t('daysAgoShort').replace('{n}', String(Math.floor(diffHours / 24)))
     } catch {
       return null
     }
@@ -413,7 +413,7 @@ export default function RankingSection({
 
   // Pro 功能提示
   const handleProRequired = () => {
-    showToast(language === 'zh' ? '此功能需要 Pro 会员' : 'Pro membership required', 'info')
+    showToast(t('proRequired'), 'info')
     router.push('/pricing')
   }
 
@@ -455,7 +455,7 @@ export default function RankingSection({
           {!loading && onRefresh && (
             <button
               onClick={onRefresh}
-              title={language === 'zh' ? '刷新数据' : 'Refresh data'}
+              title={t('refreshData')}
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -551,9 +551,7 @@ export default function RankingSection({
             color: tokens.colors.text.secondary,
           }}
         >
-          {language === 'zh'
-            ? `免费用户显示前 ${FREE_LEADERBOARD_LIMIT} 名（共 ${advancedFiltered.length} 名），`
-            : `Showing top ${FREE_LEADERBOARD_LIMIT} of ${advancedFiltered.length} traders. `}
+          {t('freeUserLimit').replace('{limit}', String(FREE_LEADERBOARD_LIMIT)).replace('{total}', String(advancedFiltered.length))}
           <button
             onClick={() => router.push('/pricing')}
             style={{
@@ -567,7 +565,7 @@ export default function RankingSection({
               fontSize: 'inherit',
             }}
           >
-            {language === 'zh' ? '升级 Pro 查看全部' : 'Upgrade to Pro for full access'}
+            {t('upgradeProFull')}
           </button>
         </Box>
       )}
@@ -591,7 +589,7 @@ export default function RankingSection({
           }}
         >
           <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], flexWrap: 'wrap' }}>
-            <span>{language === 'zh' ? '数据来源:' : 'Sources:'}</span>
+            <span>{t('sourcesLabel')}</span>
             {dataSources.slice(0, 5).map((src) => (
               <span
                 key={src}

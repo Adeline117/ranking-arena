@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useToast } from './Toast'
 import { tokens } from '@/lib/design-tokens'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 type UserFollowButtonProps = {
   targetUserId: string
@@ -31,6 +32,7 @@ export default function UserFollowButton({
 }: UserFollowButtonProps) {
   const router = useRouter()
   const { showToast } = useToast()
+  const { t } = useLanguage()
   const { getAuthHeadersAsync } = useAuthSession()
   const [following, setFollowing] = useState(initialFollowing)
   const [followedBy, setFollowedBy] = useState(false)
@@ -77,13 +79,13 @@ export default function UserFollowButton({
 
   const handleToggle = async () => {
     if (!currentUserId) {
-      showToast('请先登录', 'warning')
+      showToast(t('pleaseLogin'), 'warning')
       router.push('/login')
       return
     }
 
     if (currentUserId === targetUserId) {
-      showToast('不能关注自己', 'warning')
+      showToast(t('cannotFollowSelf'), 'warning')
       return
     }
 
@@ -114,17 +116,17 @@ export default function UserFollowButton({
           setFollowedBy(result.mutual)
         }
         onFollowChange?.(result.following, result.mutual ?? false)
-        showToast(result.following ? '关注成功' : '已取消关注', 'success')
+        showToast(result.following ? t('followSuccess') : t('unfollowSuccess'), 'success')
       } else if (result.tableNotFound) {
-        showToast('关注功能暂未开放', 'warning')
+        showToast(t('followFeatureComingSoon'), 'warning')
       } else {
-        const errorMsg = result.error || '操作失败，请重试'
+        const errorMsg = result.error || t('operationFailedRetry')
         console.error('Toggle follow error:', errorMsg)
         showToast(errorMsg, 'error')
       }
     } catch (error) {
       console.error('Toggle follow error:', error)
-      showToast('操作失败，请重试', 'error')
+      showToast(t('operationFailedRetry'), 'error')
     } finally {
       setLoading(false)
       pendingRef.current = false
@@ -153,7 +155,7 @@ export default function UserFollowButton({
           cursor: 'pointer',
         }}
       >
-        关注
+        {t('follow')}
       </button>
     )
   }
@@ -206,7 +208,7 @@ export default function UserFollowButton({
     >
       {loading ? '...' : (
         <>
-          {following ? (isMutual ? '互相关注' : '取消关注') : (followedBy ? '回关' : '关注')}
+          {following ? (isMutual ? t('mutualFollow') : t('unfollow')) : (followedBy ? t('followBack') : t('follow'))}
         </>
       )}
     </button>

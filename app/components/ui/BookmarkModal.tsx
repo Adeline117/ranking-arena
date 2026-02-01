@@ -7,6 +7,7 @@ import { Box, Text, Button } from '../base'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { useToast } from './Toast'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 type BookmarkFolder = {
   id: string
@@ -28,6 +29,7 @@ interface BookmarkModalProps {
 export default function BookmarkModal({ isOpen, onClose, onSelect, postId: _postId }: BookmarkModalProps) {
   const { showToast } = useToast()
   const { accessToken, authChecked } = useAuthSession()
+  const { t } = useLanguage()
   const [folders, setFolders] = useState<BookmarkFolder[]>([])
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
@@ -39,7 +41,6 @@ export default function BookmarkModal({ isOpen, onClose, onSelect, postId: _post
     if (isOpen && authChecked && accessToken) {
       loadFolders()
     }
-    // 关闭时重置状态
     if (!isOpen) {
       setShowCreateForm(false)
       setNewFolderName('')
@@ -48,20 +49,19 @@ export default function BookmarkModal({ isOpen, onClose, onSelect, postId: _post
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, authChecked, accessToken])
 
-  // 打开弹窗时禁止背景滚动，ESC 键关闭
   useEffect(() => {
     if (!isOpen) return
-    
+
     const originalOverflow = document.body.style.overflow
     document.body.style.overflow = 'hidden'
-    
+
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         onClose()
       }
     }
     document.addEventListener('keydown', handleKeyDown)
-    
+
     return () => {
       document.body.style.overflow = originalOverflow
       document.removeEventListener('keydown', handleKeyDown)
@@ -83,24 +83,22 @@ export default function BookmarkModal({ isOpen, onClose, onSelect, postId: _post
         }
       })
 
-      // 如果返回 401，不做重定向，只是清空收藏夹
       if (response.status === 401) {
         setFolders([])
         return
       }
 
       if (!response.ok) {
-        showToast('加载收藏夹失败', 'error')
+        showToast(t('loadBookmarksFailed'), 'error')
         setFolders([])
         return
       }
 
       const data = await response.json()
-      // API 返回格式: { success: true, data: { folders: [...] } }
       setFolders(data.data?.folders || data.folders || [])
     } catch (error) {
-      console.error('加载收藏夹失败:', error)
-      showToast('加载收藏夹失败', 'error')
+      console.error('Load bookmarks failed:', error)
+      showToast(t('loadBookmarksFailed'), 'error')
       setFolders([])
     } finally {
       setLoading(false)
@@ -126,24 +124,23 @@ export default function BookmarkModal({ isOpen, onClose, onSelect, postId: _post
       })
 
       if (!response.ok) {
-        const data = await response.json().catch(() => ({ error: '创建失败' }))
-        showToast(data.error?.message || data.error || '创建失败', 'error')
+        const data = await response.json().catch(() => ({ error: t('createFailed') }))
+        showToast(data.error?.message || data.error || t('createFailed'), 'error')
         return
       }
 
       const data = await response.json()
-      // API 返回格式: { success: true, data: { folder: {...} } }
       const newFolder = data.data?.folder || data.folder
       if (newFolder) {
         setFolders(prev => [...prev, newFolder])
       }
       setNewFolderName('')
-      setNewFolderPublic(true)  // 重置为默认公开
+      setNewFolderPublic(true)
       setShowCreateForm(false)
-      showToast('收藏夹创建成功', 'success')
+      showToast(t('bookmarkFolderCreated'), 'success')
     } catch (error) {
-      console.error('创建收藏夹失败:', error)
-      showToast('创建失败', 'error')
+      console.error('Create bookmark folder failed:', error)
+      showToast(t('createFailed'), 'error')
     } finally {
       setCreating(false)
     }
@@ -160,7 +157,6 @@ export default function BookmarkModal({ isOpen, onClose, onSelect, postId: _post
     return colors[index]
   }
 
-  // 使用 Portal 渲染到 document.body，确保弹窗显示在所有元素之上
   if (!isOpen || typeof document === 'undefined') return null
 
   const modalContent = (
@@ -192,9 +188,8 @@ export default function BookmarkModal({ isOpen, onClose, onSelect, postId: _post
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* 头部 */}
         <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: tokens.spacing[4] }}>
-          <Text size="lg" weight="bold">收藏到</Text>
+          <Text size="lg" weight="bold">{t('bookmarkTo')}</Text>
           <Box style={{ display: 'flex', gap: tokens.spacing[2] }}>
             <Button
               variant="text"
@@ -202,7 +197,7 @@ export default function BookmarkModal({ isOpen, onClose, onSelect, postId: _post
               onClick={() => setShowCreateForm(!showCreateForm)}
               style={{ color: tokens.colors.accent?.primary }}
             >
-              + 新建收藏夹
+              {t('newBookmarkFolder')}
             </Button>
             <button
               onClick={onClose}
@@ -214,22 +209,21 @@ export default function BookmarkModal({ isOpen, onClose, onSelect, postId: _post
                 color: tokens.colors.text.tertiary,
               }}
             >
-              ×
+              &times;
             </button>
           </Box>
         </Box>
 
-        {/* 创建新收藏夹表单 */}
         {showCreateForm && (
-          <Box style={{ 
-            marginBottom: tokens.spacing[4], 
+          <Box style={{
+            marginBottom: tokens.spacing[4],
             padding: tokens.spacing[3],
             background: tokens.colors.bg.secondary,
             borderRadius: tokens.radius.md,
           }}>
             <input
               type="text"
-              placeholder="收藏夹名称"
+              placeholder={t('bookmarkFolderName')}
               value={newFolderName}
               onChange={(e) => setNewFolderName(e.target.value)}
               style={{
@@ -250,7 +244,7 @@ export default function BookmarkModal({ isOpen, onClose, onSelect, postId: _post
                   onChange={(e) => setNewFolderPublic(e.target.checked)}
                   style={{ width: 16, height: 16 }}
                 />
-                <Text size="sm">公开（取消勾选则为私密）</Text>
+                <Text size="sm">{t('publicUncheckForPrivate')}</Text>
               </label>
             </Box>
             <Button
@@ -260,19 +254,18 @@ export default function BookmarkModal({ isOpen, onClose, onSelect, postId: _post
               disabled={creating || !newFolderName.trim()}
               style={{ width: '100%' }}
             >
-              {creating ? '创建中...' : '创建'}
+              {creating ? t('creating') : t('create')}
             </Button>
           </Box>
         )}
 
-        {/* 收藏夹列表 */}
         {loading ? (
           <Text size="sm" color="tertiary" style={{ textAlign: 'center', padding: tokens.spacing[4] }}>
-            加载中...
+            {t('loading')}
           </Text>
         ) : folders.length === 0 ? (
           <Text size="sm" color="tertiary" style={{ textAlign: 'center', padding: tokens.spacing[4] }}>
-            暂无收藏夹
+            {t('noBookmarkFolders')}
           </Text>
         ) : (
           <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
@@ -297,7 +290,6 @@ export default function BookmarkModal({ isOpen, onClose, onSelect, postId: _post
                   e.currentTarget.style.background = 'transparent'
                 }}
               >
-                {/* 收藏夹头像 */}
                 <Box
                   style={{
                     width: 40,
@@ -320,7 +312,6 @@ export default function BookmarkModal({ isOpen, onClose, onSelect, postId: _post
                   )}
                 </Box>
 
-                {/* 收藏夹信息 */}
                 <Box style={{ flex: 1 }}>
                   <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
                     <Text size="sm" weight="semibold">{folder.name}</Text>
@@ -332,7 +323,7 @@ export default function BookmarkModal({ isOpen, onClose, onSelect, postId: _post
                         color: tokens.colors.accent?.primary,
                         borderRadius: tokens.radius.sm,
                       }}>
-                        默认
+                        {t('defaultLabel')}
                       </span>
                     )}
                     {folder.is_public && (
@@ -343,11 +334,11 @@ export default function BookmarkModal({ isOpen, onClose, onSelect, postId: _post
                         color: '#4ECDC4',
                         borderRadius: tokens.radius.sm,
                       }}>
-                        公开
+                        {t('publicLabel')}
                       </span>
                     )}
                   </Box>
-                  <Text size="xs" color="tertiary">{folder.post_count || 0} 个收藏</Text>
+                  <Text size="xs" color="tertiary">{t('bookmarkItems').replace('{count}', String(folder.post_count || 0))}</Text>
                 </Box>
               </Box>
             ))}
@@ -359,5 +350,3 @@ export default function BookmarkModal({ isOpen, onClose, onSelect, postId: _post
 
   return createPortal(modalContent, document.body)
 }
-
-

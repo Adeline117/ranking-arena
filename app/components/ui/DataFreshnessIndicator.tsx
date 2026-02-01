@@ -43,7 +43,7 @@ export default function DataFreshnessIndicator({
   showDetails = true,
   size = 'sm',
 }: DataFreshnessIndicatorProps) {
-  const { language } = useLanguage()
+  const { language, t } = useLanguage()
 
   // 计算时间差 - use useState + useEffect to avoid hydration mismatch
   // Date.now() differs between server and client, so defer to client-only
@@ -68,14 +68,14 @@ export default function DataFreshnessIndicator({
 
       let ageText: string
       if (diffMinutes < 1) {
-        ageText = language === 'zh' ? '刚刚' : 'just now'
+        ageText = t('justNow')
       } else if (diffMinutes < 60) {
-        ageText = language === 'zh' ? `${diffMinutes}分钟前` : `${diffMinutes}m ago`
+        ageText = t('minutesAgoShort').replace('{n}', String(diffMinutes))
       } else if (diffHours < 24) {
-        ageText = language === 'zh' ? `${diffHours}小时前` : `${diffHours}h ago`
+        ageText = t('hoursAgoShort').replace('{n}', String(diffHours))
       } else {
         const diffDays = Math.floor(diffHours / 24)
-        ageText = language === 'zh' ? `${diffDays}天前` : `${diffDays}d ago`
+        ageText = t('daysAgoShort').replace('{n}', String(diffDays))
       }
 
       // 6小时以上为 stale，24小时以上为 critical
@@ -98,22 +98,22 @@ export default function DataFreshnessIndicator({
     switch (updateTier) {
       case 'realtime':
         return {
-          label: language === 'zh' ? '实时' : 'Real-time',
-          interval: language === 'zh' ? '15分钟' : '15min',
+          label: t('realtime'),
+          interval: t('interval15min'),
           color: tokens.colors.accent.success,
           icon: <RealtimeIcon size={size === 'sm' ? 10 : 12} />,
         }
       case 'delayed':
         return {
-          label: language === 'zh' ? '延迟' : 'Delayed',
-          interval: language === 'zh' ? '4小时+' : '4h+',
+          label: t('delayed'),
+          interval: t('interval4hPlus'),
           color: tokens.colors.accent.warning,
           icon: <ClockIcon size={size === 'sm' ? 10 : 12} />,
         }
       default:
         return {
-          label: language === 'zh' ? '标准' : 'Standard',
-          interval: language === 'zh' ? '4小时' : '4h',
+          label: t('standard'),
+          interval: t('interval4h'),
           color: tokens.colors.text.tertiary,
           icon: <ClockIcon size={size === 'sm' ? 10 : 12} />,
         }
@@ -173,7 +173,7 @@ export default function DataFreshnessIndicator({
             fontSize: size === 'sm' ? '10px' : '11px',
           }}
         >
-          {language === 'zh' ? '更新于 ' : 'Updated '}{ageText}
+          {t('updatedAgo')}{ageText}
         </Text>
       )}
 
@@ -187,7 +187,7 @@ export default function DataFreshnessIndicator({
             fontSize: size === 'sm' ? '10px' : '11px',
           }}
         >
-          {language === 'zh' ? '数据可能过时' : 'Data may be stale'}
+          {t('dataMayBeStale')}
         </Text>
       )}
     </Box>
@@ -205,19 +205,19 @@ export function UpdateTierBadge({
   tier: UpdateTier
   size?: 'xs' | 'sm'
 }) {
-  const { language } = useLanguage()
+  const { t } = useLanguage()
 
   const config = {
     realtime: {
-      label: language === 'zh' ? '实时' : 'Live',
+      label: t('live'),
       color: tokens.colors.accent.success,
     },
     standard: {
-      label: language === 'zh' ? '4h' : '4h',
+      label: '4h',
       color: tokens.colors.text.tertiary,
     },
     delayed: {
-      label: language === 'zh' ? '延迟' : 'Delayed',
+      label: t('delayed'),
       color: tokens.colors.accent.warning,
     },
   }
