@@ -12,17 +12,10 @@
 import { http } from 'wagmi'
 import { base, baseSepolia } from 'wagmi/chains'
 import { getDefaultConfig } from '@rainbow-me/rainbowkit'
+import { baseChain } from './contracts'
 
-// Re-export server-safe constants for backwards compatibility
-export { CONTRACT_ADDRESSES, ARENA_SCORE_SCHEMA_UID } from './contracts'
-
-const isProduction = process.env.NODE_ENV === 'production'
-
-/**
- * Target chain based on environment.
- * Production uses Base mainnet, development uses Base Sepolia testnet.
- */
-export const targetChain = isProduction ? base : baseSepolia
+/** Re-export for convenience; canonical source is contracts.ts */
+export const targetChain = baseChain
 
 /**
  * Wagmi + RainbowKit unified config.
@@ -30,7 +23,7 @@ export const targetChain = isProduction ? base : baseSepolia
  */
 export const wagmiConfig = getDefaultConfig({
   appName: 'Arena',
-  projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || 'ranking-arena-dev',
+  projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || '',
   chains: [targetChain],
   transports: {
     [base.id]: http(

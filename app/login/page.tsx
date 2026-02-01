@@ -352,7 +352,7 @@ export default function LoginPage() {
 
   // Web3 wallet auth
   const { address: walletAddress, isConnected: isWalletConnected } = useAccount()
-  const { signIn: siweSignIn, isLoading: siweLoading, error: siweError } = useSiweAuth()
+  const { signIn: siweSignIn, isLoading: siweLoading, error: siweError, clearError: clearSiweError } = useSiweAuth()
 
   const t = translations[lang]
   const passwordStrength = getPasswordStrength(password)
@@ -1496,6 +1496,7 @@ export default function LoginPage() {
           ) : (
             <button
               onClick={async () => {
+                clearSiweError()
                 const result = await siweSignIn()
                 if (result) {
                   showToast(t.walletSignInSuccess, 'success')
@@ -1504,9 +1505,8 @@ export default function LoginPage() {
                   } else {
                     router.push('/')
                   }
-                } else if (siweError) {
-                  setError(siweError)
                 }
+                // Error is shown via siweError state from the hook
               }}
               disabled={siweLoading}
               className="login-button"

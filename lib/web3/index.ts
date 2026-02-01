@@ -8,12 +8,14 @@
  * directly from '@/lib/web3/contracts'.
  */
 
-// Server-safe constants
-export { CONTRACT_ADDRESSES, ARENA_SCORE_SCHEMA_UID } from './contracts'
+// Server-safe constants and shared client
+export { CONTRACT_ADDRESSES, ARENA_SCORE_SCHEMA_UID, basePublicClient, baseChain, baseRpcUrl } from './contracts'
 
 // Client-only (wagmi/RainbowKit) — tree-shaken if not imported
 export { wagmiConfig, targetChain } from './config'
 export { Web3Provider } from './provider'
+export { useSiweAuth } from './useSiweAuth'
+export { useWallet } from './useWallet'
 
 // Server-safe utilities
 export { checkNFTMembership, getNFTBalance, getTokenExpiry } from './nft'
