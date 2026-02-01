@@ -96,6 +96,12 @@ describe('Z-Score Detection', () => {
     { id: '2', handle: 't2', roi: 12, pnl: 1200, win_rate: 62, max_drawdown: -6, trades_count: 110, followers: 55, source: 'binance' },
     { id: '3', handle: 't3', roi: 11, pnl: 1100, win_rate: 61, max_drawdown: -5.5, trades_count: 105, followers: 52, source: 'binance' },
     { id: '4', handle: 't4', roi: 10.5, pnl: 1050, win_rate: 59, max_drawdown: -5.2, trades_count: 102, followers: 51, source: 'binance' },
+    { id: '6', handle: 't6', roi: 11.5, pnl: 1150, win_rate: 61, max_drawdown: -5.8, trades_count: 108, followers: 53, source: 'binance' },
+    { id: '7', handle: 't7', roi: 9.5, pnl: 950, win_rate: 58, max_drawdown: -4.8, trades_count: 98, followers: 48, source: 'binance' },
+    { id: '8', handle: 't8', roi: 10.2, pnl: 1020, win_rate: 60, max_drawdown: -5.1, trades_count: 101, followers: 50, source: 'binance' },
+    { id: '9', handle: 't9', roi: 11.8, pnl: 1180, win_rate: 63, max_drawdown: -6.2, trades_count: 112, followers: 54, source: 'binance' },
+    { id: '10', handle: 't10', roi: 10.8, pnl: 1080, win_rate: 59, max_drawdown: -5.3, trades_count: 103, followers: 51, source: 'binance' },
+    { id: '11', handle: 't11', roi: 9.8, pnl: 980, win_rate: 57, max_drawdown: -4.9, trades_count: 97, followers: 49, source: 'binance' },
     { id: '5', handle: 't5', roi: 50, pnl: 5000, win_rate: 95, max_drawdown: -1, trades_count: 500, followers: 200, source: 'binance' }, // Outlier
   ]
 
@@ -119,11 +125,10 @@ describe('Z-Score Detection', () => {
     })
 
     it('should return empty map for insufficient sample size', () => {
-      const traders = createMockTraders().slice(0, 5) // Less than MIN_SAMPLE_SIZE
+      const traders = createMockTraders().slice(0, 5) // Less than MIN_SAMPLE_SIZE (10)
       const results = detectByZScore(traders, 'roi')
 
-      // With 5 traders, should still work
-      expect(results.size).toBeGreaterThan(0)
+      expect(results.size).toBe(0)
     })
 
     it('should handle null values gracefully', () => {
@@ -133,7 +138,8 @@ describe('Z-Score Detection', () => {
       ]
 
       const results = detectByZScore(traders, 'win_rate')
-      expect(results.size).toBe(1) // Only trader 2 has win_rate
+      // Only 1 valid value, below MIN_SAMPLE_SIZE
+      expect(results.size).toBe(0)
     })
   })
 })
@@ -144,6 +150,12 @@ describe('IQR Detection', () => {
     { id: '2', handle: 't2', roi: 12, pnl: 1200, win_rate: 62, max_drawdown: -6, trades_count: 110, followers: 55, source: 'binance' },
     { id: '3', handle: 't3', roi: 11, pnl: 1100, win_rate: 61, max_drawdown: -5.5, trades_count: 105, followers: 52, source: 'binance' },
     { id: '4', handle: 't4', roi: 10.5, pnl: 1050, win_rate: 59, max_drawdown: -5.2, trades_count: 102, followers: 51, source: 'binance' },
+    { id: '7', handle: 't7', roi: 11.5, pnl: 1150, win_rate: 61, max_drawdown: -5.8, trades_count: 108, followers: 53, source: 'binance' },
+    { id: '8', handle: 't8', roi: 9.5, pnl: 950, win_rate: 58, max_drawdown: -4.8, trades_count: 98, followers: 48, source: 'binance' },
+    { id: '9', handle: 't9', roi: 10.2, pnl: 1020, win_rate: 60, max_drawdown: -5.1, trades_count: 101, followers: 50, source: 'binance' },
+    { id: '10', handle: 't10', roi: 11.8, pnl: 1180, win_rate: 63, max_drawdown: -6.2, trades_count: 112, followers: 54, source: 'binance' },
+    { id: '11', handle: 't11', roi: 10.8, pnl: 1080, win_rate: 59, max_drawdown: -5.3, trades_count: 103, followers: 51, source: 'binance' },
+    { id: '12', handle: 't12', roi: 9.8, pnl: 980, win_rate: 57, max_drawdown: -4.9, trades_count: 97, followers: 49, source: 'binance' },
     { id: '5', handle: 't5', roi: 100, pnl: 10000, win_rate: 95, max_drawdown: -1, trades_count: 1000, followers: 500, source: 'binance' }, // High outlier
     { id: '6', handle: 't6', roi: -50, pnl: -5000, win_rate: 20, max_drawdown: -80, trades_count: 50, followers: 10, source: 'binance' }, // Low outlier
   ]
@@ -184,10 +196,18 @@ describe('Multi-Dimensional Detection', () => {
       const traders: TraderRankingData[] = [
         { id: '1', handle: 't1', roi: 10, pnl: 1000, win_rate: 60, max_drawdown: -5, trades_count: 100, followers: 50, source: 'binance' },
         { id: '2', handle: 't2', roi: 12, pnl: 1200, win_rate: 62, max_drawdown: -6, trades_count: 110, followers: 55, source: 'binance' },
+        { id: '4', handle: 't4', roi: 11, pnl: 1100, win_rate: 61, max_drawdown: -5.5, trades_count: 105, followers: 52, source: 'binance' },
+        { id: '5', handle: 't5', roi: 10.5, pnl: 1050, win_rate: 59, max_drawdown: -5.2, trades_count: 102, followers: 51, source: 'binance' },
+        { id: '6', handle: 't6', roi: 11.5, pnl: 1150, win_rate: 61, max_drawdown: -5.8, trades_count: 108, followers: 53, source: 'binance' },
+        { id: '7', handle: 't7', roi: 9.5, pnl: 950, win_rate: 58, max_drawdown: -4.8, trades_count: 98, followers: 48, source: 'binance' },
+        { id: '8', handle: 't8', roi: 10.2, pnl: 1020, win_rate: 60, max_drawdown: -5.1, trades_count: 101, followers: 50, source: 'binance' },
+        { id: '9', handle: 't9', roi: 11.8, pnl: 1180, win_rate: 63, max_drawdown: -6.2, trades_count: 112, followers: 54, source: 'binance' },
+        { id: '10', handle: 't10', roi: 10.8, pnl: 1080, win_rate: 59, max_drawdown: -5.3, trades_count: 103, followers: 51, source: 'binance' },
+        { id: '11', handle: 't11', roi: 9.8, pnl: 980, win_rate: 57, max_drawdown: -4.9, trades_count: 97, followers: 49, source: 'binance' },
         { id: '3', handle: 't3', roi: 500, pnl: 50000, win_rate: 98, max_drawdown: -0.5, trades_count: 1000, followers: 500, source: 'binance' }, // Multiple outliers
       ]
 
-      const result = detectMultiDimensional(traders[2], traders)
+      const result = detectMultiDimensional(traders[10], traders)
 
       expect(result.isAnomaly).toBe(true)
       expect(result.anomalyType).toContain('statistical_outlier')
@@ -260,7 +280,7 @@ describe('Severity Classification', () => {
     })
 
     it('should classify as medium for multiple types', () => {
-      const severity = classifySeverity(2.0, ['suspicious_pattern', 'data_inconsistency'], [])
+      const severity = classifySeverity(2.0, ['suspicious_pattern', 'time_series_anomaly'], [])
       expect(severity).toBe('medium')
     })
 
