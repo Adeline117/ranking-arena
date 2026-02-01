@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 const ARENA_PURPLE = '#8b6fa8'
 
@@ -164,6 +165,7 @@ export default function Error({
   error: Error & { digest?: string }
   reset: () => void 
 }) {
+  const { t } = useLanguage()
   const [mounted, setMounted] = useState(false)
   const [isRetrying, setIsRetrying] = useState(false)
 
@@ -280,7 +282,7 @@ export default function Error({
             animationDelay: '0.1s',
           }}
         >
-          出错了
+          {t('errorTitle')}
         </h1>
         
         {/* Description */}
@@ -294,7 +296,7 @@ export default function Error({
             animationDelay: '0.2s',
           }}
         >
-          抱歉，页面遇到了一些问题
+          {t('errorMessage')}
         </p>
         <p
           className="content-section"
@@ -305,7 +307,7 @@ export default function Error({
             animationDelay: '0.25s',
           }}
         >
-          请尝试刷新页面或稍后再试
+          {t('errorRefresh')}
         </p>
         
         {/* Error digest */}
@@ -324,7 +326,7 @@ export default function Error({
                 color: 'rgba(255, 124, 124, 0.8)',
               }}
             >
-              错误代码: {error.digest}
+              {t('errorCode')}: {error.digest}
             </span>
           </div>
         )}
@@ -378,7 +380,7 @@ export default function Error({
                   borderRadius: '50%',
                   animation: 'spin 1s linear infinite',
                 }} />
-                重试中...
+                {t('retry')}...
               </>
             ) : (
               <>
@@ -386,7 +388,7 @@ export default function Error({
                   <polyline points="23 4 23 10 17 10"></polyline>
                   <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
                 </svg>
-                重试
+                {t('retry')}
               </>
             )}
           </button>
@@ -412,7 +414,7 @@ export default function Error({
               <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
               <polyline points="9 22 9 12 15 12 15 22"></polyline>
             </svg>
-            返回首页
+            {t('backToHome')}
           </Link>
         </div>
 
@@ -425,7 +427,7 @@ export default function Error({
             color: '#5a5a5a',
           }}
         >
-          如果问题持续存在，请稍后再试
+          {t('errorPersist')}
         </p>
       </div>
       

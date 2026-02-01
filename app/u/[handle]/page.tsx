@@ -26,6 +26,7 @@ interface UserProfileData {
     website?: string
   }
   proBadgeTier: 'pro' | null
+  walletAddress?: string
 }
 
 async function fetchUserProfile(handle: string): Promise<UserProfileData | null> {
@@ -57,16 +58,27 @@ async function fetchUserProfile(handle: string): Promise<UserProfileData | null>
   if (!userProfile) return null
 
   // Parallel: fetch counts + pro badge
-  const [{ count: followers }, { count: following }, { count: tradersCount }, subscriptionData] = await Promise.all([
-    supabase.from('user_follows').select('*', { count: 'exact', head: true }).eq('following_id', userProfile.id),
-    supabase.from('user_follows').select('*', { count: 'exact', head: true }).eq('follower_id', userProfile.id),
-    supabase.from('trader_follows').select('*', { count: 'exact', head: true }).eq('user_id', userProfile.id),
-    userProfile.show_pro_badge !== false
-      ? supabase.from('subscriptions').select('tier, status').eq('user_id', userProfile.id).in('status', ['active', 'trialing']).order('created_at', { ascending: false }).limit(1).maybeSingle()
-      : Promise.resolve({ data: null }),
-  ])
+  let followers = 0
+  let following = 0
+  let tradersCount = 0
+  let hasPro = userProfile.subscription_tier === 'pro'
 
-  const hasPro = subscriptionData?.data?.tier === 'pro' || userProfile.subscription_tier === 'pro'
+  try {
+    const [followersRes, followingRes, tradersRes, subscriptionData] = await Promise.all([
+      supabase.from('user_follows').select('*', { count: 'exact', head: true }).eq('following_id', userProfile.id),
+      supabase.from('user_follows').select('*', { count: 'exact', head: true }).eq('follower_id', userProfile.id),
+      supabase.from('trader_follows').select('*', { count: 'exact', head: true }).eq('user_id', userProfile.id),
+      userProfile.show_pro_badge !== false
+        ? supabase.from('subscriptions').select('tier, status').eq('user_id', userProfile.id).in('status', ['active', 'trialing']).order('created_at', { ascending: false }).limit(1).maybeSingle()
+        : Promise.resolve({ data: null }),
+    ])
+    followers = followersRes.count || 0
+    following = followingRes.count || 0
+    tradersCount = tradersRes.count || 0
+    hasPro = hasPro || subscriptionData?.data?.tier === 'pro'
+  } catch (err) {
+    console.error('[UserProfile] Failed to fetch counts:', err)
+  }
 
   return {
     id: userProfile.id,
@@ -77,9 +89,9 @@ async function fetchUserProfile(handle: string): Promise<UserProfileData | null>
     cover_url: userProfile.cover_url || undefined,
     show_followers: userProfile.show_followers,
     show_following: userProfile.show_following,
-    followers: followers || 0,
-    following: following || 0,
-    followingTraders: tradersCount || 0,
+    followers,
+    following,
+    followingTraders: tradersCount,
     isRegistered: true,
     socialLinks: {
       twitter: userProfile.social_twitter || undefined,
@@ -89,6 +101,7 @@ async function fetchUserProfile(handle: string): Promise<UserProfileData | null>
       website: userProfile.social_website || undefined,
     },
     proBadgeTier: hasPro ? 'pro' : null,
+    walletAddress: userProfile.wallet_address || undefined,
   }
 }
 

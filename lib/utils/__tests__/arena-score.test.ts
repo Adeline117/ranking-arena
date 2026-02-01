@@ -530,6 +530,83 @@ describe('calculateArenaScore', () => {
 })
 
 // ============================================
+// Edge Cases: ROI_CAP, boundary values, confidence multiplier
+// ============================================
+
+describe('Edge cases', () => {
+  test('ROI at ROI_CAP (10000%) scores same as above cap', () => {
+    const atCap = calculateArenaScore(
+      { roi: 10000, pnl: 50000, maxDrawdown: 10, winRate: 60 },
+      '30D'
+    )
+    const aboveCap = calculateArenaScore(
+      { roi: 50000, pnl: 50000, maxDrawdown: 10, winRate: 60 },
+      '30D'
+    )
+    // Both should produce the same returnScore because ROI is capped
+    expect(atCap.returnScore).toBeCloseTo(aboveCap.returnScore, 5)
+    expect(atCap.totalScore).toBeCloseTo(aboveCap.totalScore, 5)
+  })
+
+  test('moderate ROI below cap scores lower than at cap', () => {
+    const moderate = calculateArenaScore(
+      { roi: 500, pnl: 50000, maxDrawdown: 10, winRate: 60 },
+      '30D'
+    )
+    const atCap = calculateArenaScore(
+      { roi: 10000, pnl: 50000, maxDrawdown: 10, winRate: 60 },
+      '30D'
+    )
+    // 500% ROI should score less than 10000% (cap) ROI
+    expect(moderate.returnScore).toBeLessThan(atCap.returnScore)
+  })
+
+  test('confidence multiplier affects total score correctly', () => {
+    const fullData = calculateArenaScore(
+      { roi: 50, pnl: 5000, maxDrawdown: -10, winRate: 60 },
+      '30D'
+    )
+    const partialData = calculateArenaScore(
+      { roi: 50, pnl: 5000, maxDrawdown: -10, winRate: null },
+      '30D'
+    )
+    const minimalData = calculateArenaScore(
+      { roi: 50, pnl: 5000, maxDrawdown: null, winRate: null },
+      '30D'
+    )
+
+    expect(fullData.scoreConfidence).toBe('full')
+    expect(partialData.scoreConfidence).toBe('partial')
+    expect(minimalData.scoreConfidence).toBe('minimal')
+
+    // Full > partial > minimal (due to multiplier)
+    expect(fullData.totalScore).toBeGreaterThan(partialData.totalScore)
+    expect(partialData.totalScore).toBeGreaterThan(minimalData.totalScore)
+
+    // Verify multiplier ratios: partial/full ~0.92, minimal/full ~0.80
+    // Note: scores differ slightly because null values use defaults for component scores,
+    // so we only check that the ordering is correct
+  })
+
+  test('snapshot: pinned known input produces expected output', () => {
+    // Pin a specific input/output pair to detect accidental scoring changes
+    const result = calculateArenaScore(
+      { roi: 50, pnl: 5000, maxDrawdown: 15, winRate: 60 },
+      '30D'
+    )
+    // Pin component scores (update these if the algorithm intentionally changes)
+    expect(result.returnScore).toBeCloseTo(33.35, 1)
+    expect(result.pnlScore).toBeCloseTo(6.19, 1)
+    expect(result.drawdownScore).toBeCloseTo(4, 1)
+    expect(result.stabilityScore).toBeCloseTo(4.57, 1)
+    expect(result.totalScore).toBeCloseTo(48.1, 1)
+    expect(result.meetsThreshold).toBe(true)
+    expect(result.pnlQualifier).toBe(1)
+    expect(result.scoreConfidence).toBe('full')
+  })
+})
+
+// ============================================
 // 动量加分计算测试
 // ============================================
 
@@ -750,6 +827,41 @@ describe('ARENA_CONFIG', () => {
     expect(ARENA_CONFIG.PNL_THRESHOLD['7D']).toBe(200)
     expect(ARENA_CONFIG.PNL_THRESHOLD['30D']).toBe(500)
     expect(ARENA_CONFIG.PNL_THRESHOLD['90D']).toBe(1000)
+  })
+
+  test('parity: scripts/lib/shared.mjs matches canonical config', () => {
+    // This test reads the shared.mjs file and verifies that its ARENA_CONFIG
+    // PNL_THRESHOLD, PARAMS, and PNL_PARAMS match the canonical TypeScript source.
+    // If this test fails, shared.mjs has drifted from lib/utils/arena-score.ts.
+    const fs = require('fs')
+    const path = require('path')
+    const sharedPath = path.resolve(__dirname, '../../../scripts/lib/shared.mjs')
+    const content = fs.readFileSync(sharedPath, 'utf-8')
+
+    // Verify PNL_THRESHOLD values
+    expect(content).toContain("'7D': 200")
+    expect(content).toContain("'30D': 500")
+    expect(content).toContain("'90D': 1000")
+
+    // Verify PARAMS match canonical
+    for (const [period, params] of Object.entries(ARENA_CONFIG.PARAMS)) {
+      const p = params as { tanhCoeff: number; roiExponent: number; mddThreshold: number; winRateCap: number }
+      expect(content).toContain(`tanhCoeff: ${p.tanhCoeff}`)
+      expect(content).toContain(`roiExponent: ${p.roiExponent}`)
+    }
+
+    // Verify PNL_PARAMS match canonical
+    for (const [period, params] of Object.entries(ARENA_CONFIG.PNL_PARAMS)) {
+      const p = params as { base: number; coeff: number }
+      expect(content).toContain(`base: ${p.base}`)
+      expect(content).toContain(`coeff: ${p.coeff}`)
+    }
+
+    // Verify score component maxes
+    expect(content).toContain(`MAX_RETURN_SCORE: ${ARENA_CONFIG.MAX_RETURN_SCORE}`)
+    expect(content).toContain(`MAX_PNL_SCORE: ${ARENA_CONFIG.MAX_PNL_SCORE}`)
+    expect(content).toContain(`MAX_DRAWDOWN_SCORE: ${ARENA_CONFIG.MAX_DRAWDOWN_SCORE}`)
+    expect(content).toContain(`MAX_STABILITY_SCORE: ${ARENA_CONFIG.MAX_STABILITY_SCORE}`)
   })
 
   test('总体权重之和为 1', () => {
