@@ -513,7 +513,7 @@ export default function OverviewPerformanceCard({
                 <ScoreBar
                   label={language === 'zh' ? '收益分' : 'Return Score'}
                   score={periodReturnScore ?? null}
-                  maxScore={85}
+                  maxScore={70}
                   isVisible={isVisible}
                   delay={500}
                 />
@@ -583,8 +583,8 @@ export default function OverviewPerformanceCard({
                     {language === 'zh' ? '评分说明' : 'Score Guide'}
                   </strong><br />
                   {language === 'zh'
-                    ? <>收益分 (0-85)：基于 ROI 强度计算 | 回撤分 (0-8)：回撤越小分数越高 | 稳定分 (0-7)：基于胜率计算</>
-                    : <>Return (0-85): Based on ROI | Drawdown (0-8): Lower = higher | Stability (0-7): Based on win rate</>
+                    ? <>收益分 (0-70)：基于 ROI 强度计算 | 盈亏分 (0-15)：基于绝对盈利 | 回撤分 (0-8)：回撤越小分数越高 | 稳定分 (0-7)：基于胜率计算</>
+                    : <>Return (0-70): Based on ROI | PnL (0-15): Based on absolute profit | Drawdown (0-8): Lower = higher | Stability (0-7): Based on win rate</>
                   }
                 </Text>
               </Box>
