@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import { useToast } from './Toast'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 type FavoriteButtonProps = {
   traderId: string
@@ -12,9 +13,9 @@ type FavoriteButtonProps = {
 
 export default function FavoriteButton({ traderId, userId, initialFavorited = false }: FavoriteButtonProps) {
   const { showToast } = useToast()
+  const { t } = useLanguage()
   const [favorited, setFavorited] = useState(initialFavorited)
   const [loading, setLoading] = useState(false)
-  // 使用 ref 防止重复点击（比 loading state 更可靠）
   const pendingRef = useRef(false)
 
   useEffect(() => {
@@ -45,47 +46,41 @@ export default function FavoriteButton({ traderId, userId, initialFavorited = fa
 
   const handleToggle = async () => {
     if (!userId) {
-      showToast('请先登录', 'warning')
+      showToast(t('pleaseLogin'), 'warning')
       return
     }
 
-    // 防止重复点击
     if (pendingRef.current) {
       return
     }
     pendingRef.current = true
     setLoading(true)
 
-    // 保存当前状态用于回滚
     const previousState = favorited
     const newState = !favorited
 
-    // 乐观更新 UI
     setFavorited(newState)
 
     try {
       if (previousState) {
-        // 取消收藏
         const { error } = await supabase
           .from('favorites')
           .delete()
           .eq('user_id', userId)
           .eq('trader_id', traderId)
         if (error) throw error
-        showToast('已取消收藏', 'success')
+        showToast(t('unbookmarked'), 'success')
       } else {
-        // 添加收藏
         const { error } = await supabase
           .from('favorites')
           .insert({ user_id: userId, trader_id: traderId })
         if (error) throw error
-        showToast('已收藏', 'success')
+        showToast(t('bookmarked'), 'success')
       }
     } catch (error) {
       console.error('Toggle favorite error:', error)
-      // 回滚乐观更新
       setFavorited(previousState)
-      showToast('操作失败，请重试', 'error')
+      showToast(t('operationFailedRetry'), 'error')
     } finally {
       setLoading(false)
       pendingRef.current = false
@@ -96,7 +91,7 @@ export default function FavoriteButton({ traderId, userId, initialFavorited = fa
     <button
       onClick={handleToggle}
       disabled={!userId || loading}
-      aria-label={favorited ? '取消收藏' : '收藏'}
+      aria-label={favorited ? t('removeBookmark') : t('bookmark')}
       aria-pressed={favorited}
       style={{
         padding: '10px 14px',
@@ -113,10 +108,9 @@ export default function FavoriteButton({ traderId, userId, initialFavorited = fa
         justifyContent: 'center',
         transition: 'all 200ms ease',
       }}
-      title={favorited ? '取消收藏' : '收藏'}
+      title={favorited ? t('removeBookmark') : t('bookmark')}
     >
-      <span aria-hidden="true">{favorited ? '★' : '☆'}</span>
+      <span aria-hidden="true">{favorited ? '\u2605' : '\u2606'}</span>
     </button>
   )
 }
-

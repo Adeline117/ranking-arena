@@ -51,9 +51,9 @@ const dataSources: DataSource[] = [
   { exchange: 'MUX', market: 'on-chain', key: 'mux' },
 ]
 
-const getMarketConfig = (language: string): Record<string, { label: string; color: string; icon: React.ReactNode }> => ({
+const getMarketConfig = (t: (key: string) => string): Record<string, { label: string; color: string; icon: React.ReactNode }> => ({
   futures: {
-    label: language === 'zh' ? '合约' : 'Futures',
+    label: t('futures'),
     color: '#3b82f6',
     icon: (
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -63,7 +63,7 @@ const getMarketConfig = (language: string): Record<string, { label: string; colo
     ),
   },
   spot: {
-    label: language === 'zh' ? '现货' : 'Spot',
+    label: t('spot'),
     color: '#22c55e',
     icon: (
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -73,7 +73,7 @@ const getMarketConfig = (language: string): Record<string, { label: string; colo
     ),
   },
   'on-chain': {
-    label: language === 'zh' ? '链上' : 'On-chain',
+    label: t('onChain'),
     color: '#a855f7',
     icon: (
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -84,8 +84,8 @@ const getMarketConfig = (language: string): Record<string, { label: string; colo
   },
 })
 
-const SourceTag = memo(function SourceTag({ source, isDark, language }: { source: DataSource; isDark: boolean; language: string }) {
-  const marketConfig = getMarketConfig(language)
+const SourceTag = memo(function SourceTag({ source, isDark, t }: { source: DataSource; isDark: boolean; t: (key: string) => string }) {
+  const marketConfig = getMarketConfig(t)
   const market = marketConfig[source.market]
   const tagBg = hexToRgba(market.color, isDark ? 0.03 : 0.08)
   const tagBorder = hexToRgba(market.color, isDark ? 0.14 : 0.25)
@@ -137,7 +137,7 @@ const SourceTag = memo(function SourceTag({ source, isDark, language }: { source
 })
 
 export function StatsBar() {
-  const { language } = useLanguage()
+  const { language, t } = useLanguage()
   const [isDark, setIsDark] = useState(true)
   const tickerRef = useRef<HTMLDivElement>(null)
 
@@ -179,7 +179,7 @@ export function StatsBar() {
   return (
     <Box
       role="region"
-      aria-label={language === 'zh' ? '数据来源' : 'Data Sources'}
+      aria-label={t('dataSourcesLabel')}
       suppressHydrationWarning
       style={{
         marginBottom: 16,
@@ -206,7 +206,7 @@ export function StatsBar() {
         {/* Render 26 items once - the duplicate set is created via DOM cloning in useEffect */}
         <div style={{ display: 'flex', gap: 10, paddingRight: 10 }}>
           {dataSources.map((source) => (
-            <SourceTag key={source.key} source={source} isDark={isDark} language={language} />
+            <SourceTag key={source.key} source={source} isDark={isDark} t={t} />
           ))}
         </div>
       </div>

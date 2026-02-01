@@ -157,7 +157,7 @@ const zh = {
     livePositions: '实时持仓',
     // 排行榜
     source: '来源',
-    allExchanges: '全部交易所',
+    allExchanges: '全部',
     // 交易员主页
     similarTraders: '相似交易员',
     traderNotRegistered: '交易员未入驻',
@@ -499,9 +499,16 @@ const zh = {
     followingAction: '关注中',
     unfollowingAction: '取消中',
     operationFailed: '操作失败',
+    operationFailedRetry: '操作失败，请重试',
     timeout: '超时了',
+    timeoutRetry: '超时了，请重试',
+    followSuccess: '关注成功',
+    unfollowSuccess: '已取消关注',
+    followFeatureComingSoon: '关注功能暂未开放',
+    cannotFollowSelf: '不能关注自己',
     saved: '已保存',
     deleted: '已删除',
+    deleteFailed: '删除失败',
     replied: '已回复',
     voted: '已投票',
     unbookmarked: '已取消收藏',
@@ -981,6 +988,7 @@ const zh = {
     alertSeverityWarning: '警告',
     alertSeverityInfo: '提示',
     // Phase 3 - Compare Enhancements
+    compare: '对比',
     compareTraders: '交易员对比',
     compareDesc: '最多可对比 5 位交易员，快速比较各项指标',
     compareAddTrader: '添加交易员',
@@ -1054,6 +1062,168 @@ const zh = {
     cropSuccess: '裁剪成功！点击保存按钮上传',
     cropFailed: '裁剪失败，请重试',
     noCropAreaSelected: '请先选择裁剪区域',
+
+    // MessageButton
+    directMessage: '私信',
+    cannotMessageSelf: '不能给自己发私信',
+    userDmDisabled: '该用户已关闭私信功能',
+    msgLimitReached: '在对方回复前，你最多只能发送3条消息',
+    msgLimitWarning: '你们还不是互相关注，你还可以发送 {remaining} 条消息',
+
+    // ContactSupportButton
+    contactSupport: '联系客服',
+    pleaseLoginToContactSupport: '请先登录后再联系客服',
+    supportUnavailable: '客服暂不可用，请稍后再试',
+    youAreSupport: '你就是客服啊~',
+    supportCannotReceiveMessages: '客服暂时无法接收消息',
+    cannotContactSupport: '无法联系客服',
+    redirecting: '跳转中...',
+    sendMessageToContactUs: '发送私信联系我们',
+
+    // BookmarkModal
+    loadBookmarksFailed: '加载收藏夹失败',
+    bookmarkTo: '收藏到',
+    newBookmarkFolder: '+ 新建收藏夹',
+    bookmarkFolderName: '收藏夹名称',
+    publicUncheckForPrivate: '公开（取消勾选则为私密）',
+    creating: '创建中...',
+    create: '创建',
+    noBookmarkFolders: '暂无收藏夹',
+    defaultLabel: '默认',
+    publicLabel: '公开',
+    bookmarkItems: '{count} 个收藏',
+    bookmarkFolderCreated: '收藏夹创建成功',
+    createFailed: '创建失败',
+
+    // CookieConsent
+    cookieSettings: 'Cookie 设置',
+    cookieDescription: '我们使用 Cookie 来改善您的浏览体验、分析网站流量并提供个性化内容。您可以选择接受所有 Cookie，或自定义您的偏好设置。',
+    cookieNecessary: '必要 Cookie',
+    cookieNecessaryDesc: '这些 Cookie 是网站正常运行所必需的，无法关闭。它们用于保存您的登录状态和安全设置。',
+    cookieAnalytics: '分析 Cookie',
+    cookieAnalyticsDesc: '帮助我们了解用户如何使用网站，以便改进用户体验。这些数据是匿名收集的。',
+    cookiePreferences: '偏好设置 Cookie',
+    cookiePreferencesDesc: '记住您的偏好设置，如语言、主题等，为您提供个性化体验。',
+    cookieMarketing: '营销 Cookie',
+    cookieMarketingDesc: '用于向您展示相关广告和内容推荐。禁用后仍会显示广告，但可能与您不太相关。',
+    acceptAll: '接受全部',
+    necessaryOnly: '仅必要',
+    customizeSettings: '自定义设置',
+    saveSettings: '保存设置',
+    learnMorePrivacy: '了解更多请查看我们的',
+    privacyPolicy: '隐私政策',
+    termsOfService: '使用条款',
+    andWord: '和',
+
+    // FollowListModal
+    userHiddenList: '该用户已关闭列表展示',
+    noFollowersYet: '暂无人关注 TA',
+    notFollowingAnyone: '暂未关注任何人',
+    publicListVisible: '公开 - 其他人可以查看',
+    privateListHidden: '私密 - 仅自己可见',
+
+    // ErrorMessage
+    somethingWentWrong: '出错了',
+
+    // PullToRefresh
+    refreshingText: '刷新中...',
+    pullToRefreshText: '下拉刷新',
+    releaseToRefreshText: '释放刷新',
+
+    // ReportModal
+    reportContentPost: '帖子',
+    reportContentComment: '评论',
+    reportContentMessage: '私信/对话',
+    reportContentUser: '用户',
+    reportReasonSpam: '垃圾信息/广告',
+    reportReasonHarassment: '骚扰/辱骂',
+    reportReasonInappropriate: '不当内容',
+    reportReasonMisinformation: '虚假信息',
+    reportReasonFraud: '诈骗/欺诈',
+    reportReasonOther: '其他',
+    selectReportReason: '请选择举报原因',
+    describeOtherReason: '选择"其他"时请填写具体原因',
+    reportTitle: '举报{type}',
+    reportTarget: '举报对象: ',
+    reportReasonLabel: '举报原因 *',
+    reportDetailsLabel: '详细说明',
+    reportDetailsPlaceholder: '请描述具体情况，帮助我们更好地处理...',
+    reportNotice: '举报将由管理员审核。恶意举报可能导致账号受限。',
+    reportSubmitting: '提交中...',
+    reportSubmit: '提交举报',
+    reportSubmitted: '举报已提交，我们会尽快处理',
+    reportFailed: '举报失败',
+
+    // MarketPanel
+    requestTimeoutShort: '请求超时，请稍后重试',
+    networkConnectionFailed: '网络连接失败，请检查网络设置',
+    cannotGetMarketData: '无法获取市场数据',
+    selectCoinsToDisplay: '选择要显示的币种（最多6个）',
+
+    // DataFreshnessIndicator
+    justNow: '刚刚',
+    minutesAgoShort: '{n}分钟前',
+    hoursAgoShort: '{n}小时前',
+    daysAgoShort: '{n}天前',
+    realtime: '实时',
+    interval15min: '15分钟',
+    delayed: '延迟',
+    interval4hPlus: '4小时+',
+    standard: '标准',
+    interval4h: '4小时',
+    updatedAgo: '更新于 ',
+    dataMayBeStale: '数据可能过时',
+    live: '实时',
+
+    // DataSourceTooltip
+    dataUnknown: '未知',
+    dataAvailableTooltip: '数据可用',
+    dataUnavailableTooltip: '数据不可用',
+    sourceLabel: '数据来源',
+    updatedLabel: '更新时间',
+    windowLabel: '时间窗口',
+    methodLabel: '计算方式',
+    delayLabel: '延迟说明',
+    confidenceLabel: '可信度',
+    viewSourceData: '查看原始数据',
+
+    // RankingTable
+    rankingRules: '排名规则',
+    arenaScoreRankingRules: 'Arena Score 排名规则',
+    rankingRule1: '① 按 Arena Score 从高到低排序（0-100 分）',
+    rankingRule2: '② 分数构成：收益分（85%）+ 稳定/风险分（15%）',
+    rankingRule3: '③ Score 相同时，回撤更小的靠前',
+    rankingRuleThreshold: '* 入榜门槛（PNL 收益）：7D > $300 | 30D > $1,000 | 90D > $3,000',
+    rankingRuleROINote: '* ROI 计算方式因交易所而异，跨所对比时请注意差异',
+    detailButton: '详细',
+    arenaScoreTooltip: 'Arena Score: 综合评分 (0-100)',
+    roiTooltip: 'ROI: 投资回报率 ({range})',
+    winRateTooltip: 'Win%: 胜率',
+    mddTooltip: 'MDD: 最大回撤',
+    filter: '筛选',
+    columnSettingsTitle: '列设置',
+    resetToDefault: '恢复默认',
+    clearSearch: '清除搜索',
+    tableView: '表格视图',
+    cardView: '卡片视图',
+    resetAutoLayout: '恢复自动布局',
+
+    // RankingSection
+    justUpdated: '刚刚更新',
+    freeUserLimit: '免费用户显示前 {limit} 名（共 {total} 名），',
+    upgradeProFull: '升级 Pro 查看全部',
+    sourcesLabel: '数据来源:',
+
+    // ExchangeFilter
+    lessExchanges: '收起',
+    moreExchanges: '+{count} 更多',
+
+    // StatsBar
+    dataSourcesLabel: '数据来源',
+
+    // LanguageToggle
+    switchToEnglish: 'Switch to English',
+    switchToChinese: '切换到中文',
 } as const
 
 export default zh

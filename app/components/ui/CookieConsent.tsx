@@ -11,47 +11,10 @@ import {
   type ConsentState,
   type ConsentCategory,
 } from '@/lib/compliance/consent'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 // ============================================
-// Cookie 类别信息
-// ============================================
-
-interface CookieCategoryInfo {
-  id: ConsentCategory
-  name: string
-  description: string
-  required: boolean
-}
-
-const COOKIE_CATEGORIES: CookieCategoryInfo[] = [
-  {
-    id: 'necessary',
-    name: '必要 Cookie',
-    description: '这些 Cookie 是网站正常运行所必需的，无法关闭。它们用于保存您的登录状态和安全设置。',
-    required: true,
-  },
-  {
-    id: 'analytics',
-    name: '分析 Cookie',
-    description: '帮助我们了解用户如何使用网站，以便改进用户体验。这些数据是匿名收集的。',
-    required: false,
-  },
-  {
-    id: 'preferences',
-    name: '偏好设置 Cookie',
-    description: '记住您的偏好设置，如语言、主题等，为您提供个性化体验。',
-    required: false,
-  },
-  {
-    id: 'marketing',
-    name: '营销 Cookie',
-    description: '用于向您展示相关广告和内容推荐。禁用后仍会显示广告，但可能与您不太相关。',
-    required: false,
-  },
-]
-
-// ============================================
-// 样式
+// Styles
 // ============================================
 
 const styles = {
@@ -60,7 +23,7 @@ const styles = {
     bottom: 0,
     left: 0,
     right: 0,
-    zIndex: tokens.zIndex.toast, // 使用 design tokens (700)，低于 max(9999) 但高于 modal(400)
+    zIndex: tokens.zIndex.toast,
     padding: '16px',
     background: 'rgba(0, 0, 0, 0.8)',
     backdropFilter: 'blur(10px)',
@@ -121,7 +84,6 @@ const styles = {
     padding: '10px 12px',
     textDecoration: 'underline',
   },
-  // 详细设置样式
   settingsContainer: {
     marginTop: '16px',
     paddingTop: '16px',
@@ -182,7 +144,7 @@ const styles = {
 }
 
 // ============================================
-// Toggle 组件
+// Toggle Component
 // ============================================
 
 function Toggle({
@@ -226,10 +188,11 @@ function Toggle({
 }
 
 // ============================================
-// Cookie Consent 组件
+// Cookie Consent Component
 // ============================================
 
 export function CookieConsent() {
+  const { t } = useLanguage()
   const [visible, setVisible] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [preferences, setPreferences] = useState<Partial<ConsentState>>({
@@ -238,12 +201,17 @@ export function CookieConsent() {
     marketing: false,
   })
 
+  const cookieCategories = [
+    { id: 'necessary' as ConsentCategory, name: t('cookieNecessary'), description: t('cookieNecessaryDesc'), required: true },
+    { id: 'analytics' as ConsentCategory, name: t('cookieAnalytics'), description: t('cookieAnalyticsDesc'), required: false },
+    { id: 'preferences' as ConsentCategory, name: t('cookiePreferences'), description: t('cookiePreferencesDesc'), required: false },
+    { id: 'marketing' as ConsentCategory, name: t('cookieMarketing'), description: t('cookieMarketingDesc'), required: false },
+  ]
+
   useEffect(() => {
-    // 检查是否已同意
     const consented = hasConsented()
     setVisible(!consented)
-    
-    // 如果已同意，加载当前偏好
+
     if (consented) {
       const state = getConsentManager().getState()
       setPreferences({
@@ -274,8 +242,8 @@ export function CookieConsent() {
   }
 
   const handleToggleCategory = (category: ConsentCategory) => {
-    if (category === 'necessary') return // 必要 Cookie 不可切换
-    
+    if (category === 'necessary') return
+
     setPreferences(prev => ({
       ...prev,
       [category]: !prev[category],
@@ -289,32 +257,31 @@ export function CookieConsent() {
       <div style={styles.container}>
         <div style={styles.header}>
           <div>
-            <h3 style={styles.title}>🍪 Cookie 设置</h3>
+            <h3 style={styles.title}>{t('cookieSettings')}</h3>
             <p style={styles.description}>
-              我们使用 Cookie 来改善您的浏览体验、分析网站流量并提供个性化内容。
-              您可以选择接受所有 Cookie，或自定义您的偏好设置。
+              {t('cookieDescription')}
             </p>
           </div>
-          
+
           {!showSettings && (
             <div style={styles.buttonGroup}>
               <button
                 style={{ ...styles.button, ...styles.primaryButton }}
                 onClick={handleAcceptAll}
               >
-                接受全部
+                {t('acceptAll')}
               </button>
               <button
                 style={{ ...styles.button, ...styles.secondaryButton }}
                 onClick={handleAcceptNecessary}
               >
-                仅必要
+                {t('necessaryOnly')}
               </button>
               <button
                 style={{ ...styles.button, ...styles.linkButton }}
                 onClick={() => setShowSettings(true)}
               >
-                自定义设置
+                {t('customizeSettings')}
               </button>
             </div>
           )}
@@ -322,7 +289,7 @@ export function CookieConsent() {
 
         {showSettings && (
           <div style={styles.settingsContainer}>
-            {COOKIE_CATEGORIES.map((category) => (
+            {cookieCategories.map((category) => (
               <div key={category.id} style={styles.categoryItem}>
                 <div style={styles.categoryInfo}>
                   <div style={styles.categoryName}>{category.name}</div>
@@ -335,35 +302,35 @@ export function CookieConsent() {
                 />
               </div>
             ))}
-            
+
             <div style={{ ...styles.buttonGroup, marginTop: '16px' }}>
               <button
                 style={{ ...styles.button, ...styles.primaryButton }}
                 onClick={handleSavePreferences}
               >
-                保存设置
+                {t('saveSettings')}
               </button>
               <button
                 style={{ ...styles.button, ...styles.secondaryButton }}
                 onClick={handleAcceptAll}
               >
-                接受全部
+                {t('acceptAll')}
               </button>
               <button
                 style={{ ...styles.button, ...styles.linkButton }}
                 onClick={() => setShowSettings(false)}
               >
-                返回
+                {t('back')}
               </button>
             </div>
           </div>
         )}
-        
+
         <div style={{ marginTop: '12px', fontSize: '12px', color: tokens.colors.text.tertiary }}>
-          了解更多请查看我们的{' '}
-          <a href="/privacy" style={{ color: '#a88bc3' }}>隐私政策</a>
-          {' '}和{' '}
-          <a href="/terms" style={{ color: '#a88bc3' }}>使用条款</a>
+          {t('learnMorePrivacy')}{' '}
+          <a href="/privacy" style={{ color: '#a88bc3' }}>{t('privacyPolicy')}</a>
+          {' '}{t('andWord')}{' '}
+          <a href="/terms" style={{ color: '#a88bc3' }}>{t('termsOfService')}</a>
         </div>
       </div>
     </div>
