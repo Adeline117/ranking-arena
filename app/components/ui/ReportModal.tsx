@@ -20,20 +20,21 @@ interface ReportModalProps {
   targetName?: string
 }
 
-const REASON_OPTIONS: { value: ReportReason; labelZh: string; labelEn: string }[] = [
-  { value: 'spam', labelZh: '垃圾信息/广告', labelEn: 'Spam/Advertising' },
-  { value: 'harassment', labelZh: '骚扰/辱骂', labelEn: 'Harassment/Abuse' },
-  { value: 'inappropriate', labelZh: '不当内容', labelEn: 'Inappropriate Content' },
-  { value: 'misinformation', labelZh: '虚假信息', labelEn: 'Misinformation' },
-  { value: 'fraud', labelZh: '诈骗/欺诈', labelEn: 'Fraud/Scam' },
-  { value: 'other', labelZh: '其他', labelEn: 'Other' },
+type ReasonOption = { value: ReportReason; key: string }
+const REASON_OPTIONS: ReasonOption[] = [
+  { value: 'spam', key: 'reportReasonSpam' },
+  { value: 'harassment', key: 'reportReasonHarassment' },
+  { value: 'inappropriate', key: 'reportReasonInappropriate' },
+  { value: 'misinformation', key: 'reportReasonMisinformation' },
+  { value: 'fraud', key: 'reportReasonFraud' },
+  { value: 'other', key: 'reportReasonOther' },
 ]
 
-const CONTENT_TYPE_LABELS: Record<ReportContentType, { zh: string; en: string }> = {
-  post: { zh: '帖子', en: 'Post' },
-  comment: { zh: '评论', en: 'Comment' },
-  message: { zh: '私信/对话', en: 'Message/Conversation' },
-  user: { zh: '用户', en: 'User' },
+const CONTENT_TYPE_KEYS: Record<ReportContentType, string> = {
+  post: 'reportContentPost',
+  comment: 'reportContentComment',
+  message: 'reportContentMessage',
+  user: 'reportContentUser',
 }
 
 export default function ReportModal({
@@ -44,25 +45,22 @@ export default function ReportModal({
   accessToken,
   targetName,
 }: ReportModalProps) {
-  const { language } = useLanguage()
+  const { t } = useLanguage()
   const { showToast } = useToast()
   const [reason, setReason] = useState<ReportReason | null>(null)
   const [description, setDescription] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
-  const isZh = language === 'zh'
-  const contentTypeLabel = isZh
-    ? CONTENT_TYPE_LABELS[contentType].zh
-    : CONTENT_TYPE_LABELS[contentType].en
+  const contentTypeLabel = t(CONTENT_TYPE_KEYS[contentType] as keyof typeof import('@/lib/i18n/en').default)
 
   const handleSubmit = async () => {
     if (!reason) {
-      showToast(isZh ? '请选择举报原因' : 'Please select a reason', 'warning')
+      showToast(t('selectReportReason'), 'warning')
       return
     }
 
     if (reason === 'other' && !description.trim()) {
-      showToast(isZh ? '选择"其他"时请填写具体原因' : 'Please describe the reason when selecting "Other"', 'warning')
+      showToast(t('describeOtherReason'), 'warning')
       return
     }
 
@@ -86,18 +84,18 @@ export default function ReportModal({
       const data = await res.json()
 
       if (!res.ok) {
-        showToast(data.error || (isZh ? '举报失败' : 'Report failed'), 'error')
+        showToast(data.error || t('reportFailed'), 'error')
         return
       }
 
-      showToast(isZh ? '举报已提交，我们会尽快处理' : 'Report submitted, we will review it soon', 'success')
+      showToast(t('reportSubmitted'), 'success')
       onClose()
       // Reset form
       setReason(null)
       setDescription('')
     } catch (error) {
       console.error('Report error:', error)
-      showToast(isZh ? '网络错误，请重试' : 'Network error, please try again', 'error')
+      showToast(t('networkError'), 'error')
     } finally {
       setSubmitting(false)
     }
@@ -151,7 +149,7 @@ export default function ReportModal({
                 </svg>
               </Box>
               <Text size="lg" weight="bold">
-                {isZh ? `举报${contentTypeLabel}` : `Report ${contentTypeLabel}`}
+                {t('reportTitle').replace('{type}', contentTypeLabel)}
               </Text>
             </Box>
             <button
@@ -189,7 +187,7 @@ export default function ReportModal({
                 }}
               >
                 <Text size="sm" color="secondary">
-                  {isZh ? '举报对象: ' : 'Reporting: '}
+                  {t('reportTarget')}
                   <span style={{ color: tokens.colors.text.primary, fontWeight: 600 }}>{targetName}</span>
                 </Text>
               </Box>
@@ -198,7 +196,7 @@ export default function ReportModal({
             {/* Reason selection */}
             <Box style={{ marginBottom: tokens.spacing[4] }}>
               <Text size="sm" weight="semibold" style={{ marginBottom: tokens.spacing[2] }}>
-                {isZh ? '举报原因 *' : 'Reason *'}
+                {t('reportReasonLabel')}
               </Text>
               <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
                 {REASON_OPTIONS.map((option) => (
@@ -248,7 +246,7 @@ export default function ReportModal({
                         />
                       )}
                     </Box>
-                    <Text size="sm">{isZh ? option.labelZh : option.labelEn}</Text>
+                    <Text size="sm">{t(option.key as keyof typeof import('@/lib/i18n/en').default)}</Text>
                   </button>
                 ))}
               </Box>
@@ -257,13 +255,13 @@ export default function ReportModal({
             {/* Description */}
             <Box style={{ marginBottom: tokens.spacing[4] }}>
               <Text size="sm" weight="semibold" style={{ marginBottom: tokens.spacing[2] }}>
-                {isZh ? '详细说明' : 'Details'}
+                {t('reportDetailsLabel')}
                 {reason === 'other' && <span style={{ color: '#f44336' }}> *</span>}
               </Text>
               <textarea
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder={isZh ? '请描述具体情况，帮助我们更好地处理...' : 'Please describe the situation...'}
+                placeholder={t('reportDetailsPlaceholder')}
                 maxLength={1000}
                 rows={4}
                 style={{
@@ -301,9 +299,7 @@ export default function ReportModal({
               }}
             >
               <Text size="xs" color="secondary" style={{ lineHeight: 1.5 }}>
-                {isZh
-                  ? '举报将由管理员审核。恶意举报可能导致账号受限。'
-                  : 'Reports will be reviewed by admins. Malicious reports may result in account restrictions.'}
+                {t('reportNotice')}
               </Text>
             </Box>
 
@@ -324,7 +320,7 @@ export default function ReportModal({
                   transition: 'all 0.2s',
                 }}
               >
-                {isZh ? '取消' : 'Cancel'}
+                {t('cancel')}
               </button>
               <button
                 onClick={handleSubmit}
@@ -343,9 +339,7 @@ export default function ReportModal({
                   transition: 'all 0.2s',
                 }}
               >
-                {submitting
-                  ? (isZh ? '提交中...' : 'Submitting...')
-                  : (isZh ? '提交举报' : 'Submit Report')}
+                {submitting ? t('reportSubmitting') : t('reportSubmit')}
               </button>
             </Box>
           </Box>
