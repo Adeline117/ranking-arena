@@ -9,7 +9,7 @@
  * Use @/lib/web3/contracts for server-safe constants.
  */
 
-import { http, createConfig } from 'wagmi'
+import { http } from 'wagmi'
 import { base, baseSepolia } from 'wagmi/chains'
 import { getDefaultConfig } from '@rainbow-me/rainbowkit'
 import { baseChain } from './contracts'
@@ -17,33 +17,24 @@ import { baseChain } from './contracts'
 /** Re-export for convenience; canonical source is contracts.ts */
 export const targetChain = baseChain
 
-const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID
-
 /**
  * Wagmi + RainbowKit unified config.
- * Falls back to a minimal wagmi config when projectId is missing
- * (e.g. during static page generation or in envs without web3).
+ *
+ * Uses a placeholder projectId when NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID
+ * is not set (e.g. during static page generation). WalletConnect won't
+ * work without a real ID, but injected wallets (MetaMask etc.) are fine.
  */
-export const wagmiConfig = projectId
-  ? getDefaultConfig({
-      appName: 'Arena',
-      projectId,
-      chains: [targetChain],
-      transports: {
-        [base.id]: http(
-          process.env.NEXT_PUBLIC_BASE_RPC_URL || 'https://mainnet.base.org'
-        ),
-        [baseSepolia.id]: http(
-          process.env.NEXT_PUBLIC_BASE_SEPOLIA_RPC_URL || 'https://sepolia.base.org'
-        ),
-      },
-      ssr: true,
-    })
-  : createConfig({
-      chains: [targetChain],
-      transports: {
-        [base.id]: http('https://mainnet.base.org'),
-        [baseSepolia.id]: http('https://sepolia.base.org'),
-      },
-      ssr: true,
-    })
+export const wagmiConfig = getDefaultConfig({
+  appName: 'Arena',
+  projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || 'placeholder',
+  chains: [targetChain],
+  transports: {
+    [base.id]: http(
+      process.env.NEXT_PUBLIC_BASE_RPC_URL || 'https://mainnet.base.org'
+    ),
+    [baseSepolia.id]: http(
+      process.env.NEXT_PUBLIC_BASE_SEPOLIA_RPC_URL || 'https://sepolia.base.org'
+    ),
+  },
+  ssr: true,
+})
