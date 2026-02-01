@@ -65,9 +65,24 @@ export async function POST(request: NextRequest) {
       if (p.wallet_address) walletMap.set(p.handle, p.wallet_address)
     }
 
+    // Fetch recent attestations to skip traders already attested in the last 24h
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+    const { data: recentAttestations } = await supabase
+      .from('trader_attestations')
+      .select('trader_handle')
+      .gte('published_at', oneDayAgo)
+
+    const recentlyAttested = new Set(recentAttestations?.map(a => a.trader_handle) || [])
+
     const now = Math.floor(Date.now() / 1000)
+    let skipped = 0
 
     for (const trader of traders) {
+      // Skip if already attested within the last 24 hours
+      if (recentlyAttested.has(trader.handle)) {
+        skipped++
+        continue
+      }
       const walletAddress = walletMap.get(trader.handle)
       // Use zero address for traders without a linked wallet
       const recipient = (walletAddress || '0x0000000000000000000000000000000000000000') as Address
@@ -114,6 +129,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       total: traders.length,
+      skipped,
       published: successful,
       failed,
       results,

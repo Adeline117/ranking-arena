@@ -5,9 +5,8 @@
  * Uses viem for on-chain reads, with Redis caching to avoid repeated RPC calls.
  */
 
-import { createPublicClient, http, type Address } from 'viem'
-import { base, baseSepolia } from 'viem/chains'
-import { CONTRACT_ADDRESSES } from './contracts'
+import { type Address } from 'viem'
+import { CONTRACT_ADDRESSES, basePublicClient } from './contracts'
 
 // ── ABI fragment for the membership check functions ──
 const MEMBERSHIP_ABI = [
@@ -41,16 +40,6 @@ const MEMBERSHIP_ABI = [
   },
 ] as const
 
-const isProduction = process.env.NODE_ENV === 'production'
-
-const publicClient = createPublicClient({
-  chain: isProduction ? base : baseSepolia,
-  transport: http(
-    isProduction
-      ? (process.env.NEXT_PUBLIC_BASE_RPC_URL || 'https://mainnet.base.org')
-      : (process.env.NEXT_PUBLIC_BASE_SEPOLIA_RPC_URL || 'https://sepolia.base.org')
-  ),
-})
 
 /**
  * Check if a wallet address holds a valid (non-expired) Arena Pro NFT.
@@ -64,7 +53,7 @@ export async function checkNFTMembership(walletAddress: string): Promise<boolean
   }
 
   try {
-    const result = await publicClient.readContract({
+    const result = await basePublicClient.readContract({
       address: contractAddress,
       abi: MEMBERSHIP_ABI,
       functionName: 'hasValidMembership',
@@ -85,7 +74,7 @@ export async function getNFTBalance(walletAddress: string): Promise<number> {
   if (!contractAddress) return 0
 
   try {
-    const result = await publicClient.readContract({
+    const result = await basePublicClient.readContract({
       address: contractAddress,
       abi: MEMBERSHIP_ABI,
       functionName: 'balanceOf',
@@ -105,7 +94,7 @@ export async function getTokenExpiry(tokenId: bigint): Promise<Date | null> {
   if (!contractAddress) return null
 
   try {
-    const result = await publicClient.readContract({
+    const result = await basePublicClient.readContract({
       address: contractAddress,
       abi: MEMBERSHIP_ABI,
       functionName: 'expiresAt',
