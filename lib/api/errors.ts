@@ -107,7 +107,7 @@ export const ErrorCodeToHttpStatus: Record<ErrorCodeType, number> = {
 
 export const ErrorMessages: Record<ErrorCodeType, { zh: string; en: string }> = {
   // 通用错误
-  [ErrorCode.UNKNOWN_ERROR]: { zh: '未知错误', en: 'Unknown error' },
+  [ErrorCode.UNKNOWN_ERROR]: { zh: 'Unknown error', en: 'Unknown error' },
   [ErrorCode.INTERNAL_ERROR]: { zh: '服务器内部错误', en: 'Internal server error' },
   [ErrorCode.SERVICE_UNAVAILABLE]: { zh: '服务暂时不可用', en: 'Service unavailable' },
   
@@ -209,7 +209,7 @@ export class ApiError extends Error {
    * 静态工厂方法：未授权错误
    */
   static unauthorized(message?: string): ApiError {
-    return new ApiError(message || ErrorMessages[ErrorCode.UNAUTHORIZED].zh, {
+    return new ApiError(message || ErrorMessages[ErrorCode.UNAUTHORIZED].en, {
       code: ErrorCode.UNAUTHORIZED,
     })
   }
@@ -218,7 +218,7 @@ export class ApiError extends Error {
    * 静态工厂方法：禁止访问错误
    */
   static forbidden(message?: string): ApiError {
-    return new ApiError(message || ErrorMessages[ErrorCode.FORBIDDEN].zh, {
+    return new ApiError(message || ErrorMessages[ErrorCode.FORBIDDEN].en, {
       code: ErrorCode.FORBIDDEN,
     })
   }
@@ -227,7 +227,7 @@ export class ApiError extends Error {
    * 静态工厂方法：未找到错误
    */
   static notFound(message?: string): ApiError {
-    return new ApiError(message || ErrorMessages[ErrorCode.NOT_FOUND].zh, {
+    return new ApiError(message || ErrorMessages[ErrorCode.NOT_FOUND].en, {
       code: ErrorCode.NOT_FOUND,
     })
   }
@@ -246,7 +246,7 @@ export class ApiError extends Error {
    * 静态工厂方法：限流错误
    */
   static rateLimitExceeded(retryAfter?: number): ApiError {
-    return new ApiError(ErrorMessages[ErrorCode.RATE_LIMIT_EXCEEDED].zh, {
+    return new ApiError(ErrorMessages[ErrorCode.RATE_LIMIT_EXCEEDED].en, {
       code: ErrorCode.RATE_LIMIT_EXCEEDED,
       details: retryAfter ? { retryAfter } : undefined,
     })
@@ -256,7 +256,7 @@ export class ApiError extends Error {
    * 静态工厂方法：数据库错误
    */
   static database(message?: string, cause?: Error): ApiError {
-    return new ApiError(message || ErrorMessages[ErrorCode.DATABASE_ERROR].zh, {
+    return new ApiError(message || ErrorMessages[ErrorCode.DATABASE_ERROR].en, {
       code: ErrorCode.DATABASE_ERROR,
       cause,
     })
@@ -266,7 +266,7 @@ export class ApiError extends Error {
    * 静态工厂方法：内部错误
    */
   static internal(message?: string, cause?: Error): ApiError {
-    return new ApiError(message || ErrorMessages[ErrorCode.INTERNAL_ERROR].zh, {
+    return new ApiError(message || ErrorMessages[ErrorCode.INTERNAL_ERROR].en, {
       code: ErrorCode.INTERNAL_ERROR,
       cause,
     })
@@ -277,8 +277,8 @@ export class ApiError extends Error {
    */
   static providerRateLimit(retryAfter?: number, providerName?: string): ApiError {
     const message = providerName
-      ? `${providerName} 服务请求频率超限，请稍后再试`
-      : ErrorMessages[ErrorCode.PROVIDER_RATE_LIMIT].zh
+      ? `${providerName} rate limit exceeded, please try again later`
+      : ErrorMessages[ErrorCode.PROVIDER_RATE_LIMIT].en
     return new ApiError(message, {
       code: ErrorCode.PROVIDER_RATE_LIMIT,
       details: {
@@ -293,7 +293,7 @@ export class ApiError extends Error {
    * 静态工厂方法：提供商错误
    */
   static providerError(message?: string, cause?: Error, retryable = false): ApiError {
-    return new ApiError(message || ErrorMessages[ErrorCode.PROVIDER_ERROR].zh, {
+    return new ApiError(message || ErrorMessages[ErrorCode.PROVIDER_ERROR].en, {
       code: ErrorCode.PROVIDER_ERROR,
       cause,
       details: { retryable },
@@ -327,7 +327,7 @@ export class ApiError extends Error {
     // 如果是对象
     if (typeof error === 'object' && error !== null) {
       const errorObj = error as Record<string, unknown>
-      const message = String(errorObj.message || errorObj.error || '未知错误')
+      const message = String(errorObj.message || errorObj.error || 'Unknown error')
       const statusCode = typeof errorObj.statusCode === 'number' ? errorObj.statusCode : 500
       const code = (errorObj.code as ErrorCodeType) || ErrorCode.UNKNOWN_ERROR
 
@@ -338,7 +338,7 @@ export class ApiError extends Error {
     }
 
     // 其他情况
-    const message = typeof error === 'string' ? error : '未知错误'
+    const message = typeof error === 'string' ? error : 'Unknown error'
     // 注意：这里不直接使用 logger，因为 errors.ts 可能被 logger 本身使用
     // 如果需要日志，应该在调用 ApiError.from 的地方记录
 
