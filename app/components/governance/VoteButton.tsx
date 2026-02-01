@@ -24,7 +24,7 @@ interface VoteButtonProps {
   onVoted?: () => void
 }
 
-const SNAPSHOT_HUB = 'https://hub.snapshot.org'
+const SNAPSHOT_SEQ = 'https://seq.snapshot.org'
 
 // EIP-712 types for Snapshot vote
 const SNAPSHOT_VOTE_TYPES = {
@@ -89,8 +89,8 @@ export function VoteButton({
         message,
       })
 
-      // Submit to Snapshot Hub
-      const res = await fetch(`${SNAPSHOT_HUB}/api/msg`, {
+      // Submit to Snapshot sequencer
+      const res = await fetch(SNAPSHOT_SEQ, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
