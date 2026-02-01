@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
     // 验证输入
     const exchange = validateEnum(body.exchange, SUPPORTED_EXCHANGES, {
       required: true,
-      fieldName: '交易所',
+      fieldName: 'exchange',
     })!
     const apiKey = validateString(body.apiKey, {
       required: true,

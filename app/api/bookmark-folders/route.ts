@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
       required: true,
       minLength: 1,
       maxLength: 50,
-      fieldName: '收藏夹名称',
+      fieldName: 'folder name',
     })!
     const description = validateString(body.description, { maxLength: 200 })
     const avatar_url = validateString(body.avatar_url, { maxLength: 500 })

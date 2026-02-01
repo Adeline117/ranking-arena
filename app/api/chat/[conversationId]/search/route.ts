@@ -46,11 +46,11 @@ export async function GET(
       .maybeSingle()
 
     if (convError || !conversation) {
-      return NextResponse.json({ error: '会话不存在' }, { status: 404 })
+      return NextResponse.json({ error: 'Conversation not found' }, { status: 404 })
     }
 
     if (conversation.user1_id !== user.id && conversation.user2_id !== user.id) {
-      return NextResponse.json({ error: '无权访问此会话' }, { status: 403 })
+      return NextResponse.json({ error: 'No permission to access this conversation' }, { status: 403 })
     }
 
     // Check if user has cleared history - only show messages after cleared_before

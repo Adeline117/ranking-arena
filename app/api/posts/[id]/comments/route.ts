@@ -83,7 +83,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       required: true,
       minLength: 1,
       maxLength: 2000,
-      fieldName: '评论内容',
+      fieldName: 'comment content',
     })!
     const parent_id = validateString(body.parent_id) ?? undefined
 
@@ -107,12 +107,12 @@ export async function DELETE(request: NextRequest, _context: RouteContext) {
     const body = await request.json()
     const commentId = validateString(body.comment_id, {
       required: true,
-      fieldName: '评论ID',
+      fieldName: 'comment ID',
     })!
 
     await deleteComment(supabase, commentId, user.id)
 
-    return success({ message: '评论已删除' })
+    return success({ message: 'Comment deleted' })
   } catch (error: unknown) {
     return handleError(error, 'posts/[id]/comments DELETE')
   }
