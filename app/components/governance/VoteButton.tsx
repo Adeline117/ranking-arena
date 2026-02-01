@@ -43,6 +43,7 @@ const SNAPSHOT_VOTE_TYPES = {
 const SNAPSHOT_DOMAIN = {
   name: 'snapshot',
   version: '0.1.4',
+  chainId: 1,
 } as const
 
 export function VoteButton({
@@ -63,6 +64,12 @@ export function VoteButton({
 
   const handleVote = useCallback(async () => {
     if (!address || !spaceId) return
+
+    // Validate proposalId is a valid bytes32 hex string
+    if (!/^0x[0-9a-fA-F]{64}$/.test(proposalId)) {
+      setError('Invalid proposal ID')
+      return
+    }
 
     setIsVoting(true)
     setError(null)

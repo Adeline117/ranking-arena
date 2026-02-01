@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { getAuthUser } from '@/lib/supabase/server'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -22,6 +23,15 @@ export async function POST(request: NextRequest) {
 
     if (!userId) {
       return NextResponse.json({ error: 'No userId provided' }, { status: 401 })
+    }
+
+    // Authenticate the request and verify the userId matches the session user
+    const authUser = await getAuthUser(request)
+    if (!authUser) {
+      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+    }
+    if (authUser.id !== userId) {
+      return NextResponse.json({ error: 'Cannot upload images for another user' }, { status: 403 })
     }
 
     if (!bucket || !['avatars', 'covers'].includes(bucket)) {
