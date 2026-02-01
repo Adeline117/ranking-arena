@@ -89,12 +89,12 @@ export async function getBybitAccount(config: BybitConfig): Promise<BybitAccount
   const data = await response.json()
 
   if (data.retCode !== 0) {
-    throw new Error(`Bybit API错误: ${data.retCode} - ${data.retMsg}`)
+    throw new Error(`Bybit API error: ${data.retCode} - ${data.retMsg}`)
   }
 
   const account = data.result?.list?.[0]
   if (!account) {
-    throw new Error('无法获取账户信息')
+    throw new Error('Failed to get account info')
   }
 
   return {
@@ -147,7 +147,7 @@ export async function getBybitTrades(
   const data = await response.json()
 
   if (data.retCode !== 0) {
-    throw new Error(`Bybit API错误: ${data.retCode} - ${data.retMsg}`)
+    throw new Error(`Bybit API error: ${data.retCode} - ${data.retMsg}`)
   }
 
   return data.result?.list || []
@@ -197,7 +197,7 @@ export async function getBybitPositions(
   const data = await response.json()
 
   if (data.retCode !== 0) {
-    throw new Error(`Bybit API错误: ${data.retCode} - ${data.retMsg}`)
+    throw new Error(`Bybit API error: ${data.retCode} - ${data.retMsg}`)
   }
 
   return data.result?.list || []

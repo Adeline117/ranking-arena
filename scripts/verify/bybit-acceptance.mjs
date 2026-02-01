@@ -85,9 +85,6 @@ function normalizeMdd(v) {
 }
 
 function calcArenaScore(roi, pnl, winRate, mdd, window) {
-  const PNL_THRESHOLDS = { '7D': 50, '30D': 200, '90D': 500 };
-  if (Math.abs(pnl) < PNL_THRESHOLDS[window]) return { total: 0, returnScore: 0, drawdownScore: 0, stabilityScore: 0 };
-
   let returnScore;
   if (roi <= 0) returnScore = 0;
   else if (roi < 50) returnScore = (roi / 50) * 30;

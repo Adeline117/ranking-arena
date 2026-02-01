@@ -8,11 +8,13 @@ import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/layout/TopNav'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { useToast } from '@/app/components/ui/Toast'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 function ExchangeCallbackPageContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const { showToast } = useToast()
+  const { t } = useLanguage()
   const [exchange, setExchange] = useState<string | null>(null)
   const [email, setEmail] = useState<string | null>(null)
   const [apiKey, setApiKey] = useState('')
@@ -39,12 +41,12 @@ function ExchangeCallbackPageContent() {
 
   const handleConnect = async () => {
     if (!apiKey || !apiSecret) {
-      setError('请输入API Key和Secret')
+      setError(t('enterApiKeyAndSecret'))
       return
     }
 
     if (!exchange) {
-      setError('缺少交易所信息')
+      setError(t('missingExchangeInfo'))
       return
     }
 
@@ -54,7 +56,7 @@ function ExchangeCallbackPageContent() {
     try {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) {
-        setError('请先登录')
+        setError(t('pleaseLogin'))
         return
       }
 
@@ -75,33 +77,32 @@ function ExchangeCallbackPageContent() {
       const result = await response.json()
 
       if (!response.ok) {
-        setError(result.error || '连接失败')
+        setError(result.error || t('connectFailed'))
         return
       }
 
-      // 连接成功，跳转到设置页面
-      showToast('绑定成功！正在同步数据...', 'success')
+      showToast(t('bindSuccessSyncing'), 'success')
       router.push('/settings')
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : '连接失败'
+      const errorMessage = err instanceof Error ? err.message : t('connectFailed')
       setError(errorMessage)
     } finally {
       setConnecting(false)
     }
   }
 
-  const exchangeName = exchange?.toUpperCase() || '交易所'
+  const exchangeName = exchange?.toUpperCase() || 'Exchange'
 
   return (
     <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
       <TopNav email={email} />
-      
+
       <Box style={{ maxWidth: 600, margin: '0 auto', padding: tokens.spacing[6] }}>
         <Text size="2xl" weight="black" style={{ marginBottom: tokens.spacing[2] }}>
-          完成 {exchangeName} 绑定
+          {t('completeBindTitle').replace('{exchange}', exchangeName)}
         </Text>
         <Text size="sm" color="tertiary" style={{ marginBottom: tokens.spacing[6] }}>
-          请在下方输入您刚才创建的API Key和Secret
+          {t('enterApiKeyAndSecretDesc')}
         </Text>
 
         <Box
@@ -133,7 +134,7 @@ function ExchangeCallbackPageContent() {
                 type="text"
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
-                placeholder="粘贴您的 API Key"
+                placeholder={t('pasteYourApiKey')}
                 style={{
                   width: '100%',
                   padding: tokens.spacing[3],
@@ -157,7 +158,7 @@ function ExchangeCallbackPageContent() {
                 type="password"
                 value={apiSecret}
                 onChange={(e) => setApiSecret(e.target.value)}
-                placeholder="粘贴您的 API Secret"
+                placeholder={t('pasteYourApiSecret')}
                 style={{
                   width: '100%',
                   padding: tokens.spacing[3],
@@ -179,14 +180,14 @@ function ExchangeCallbackPageContent() {
                 disabled={connecting || !apiKey || !apiSecret}
                 style={{ flex: 1 }}
               >
-                {connecting ? '绑定中...' : '完成绑定'}
+                {connecting ? t('binding') : t('completeBind2')}
               </Button>
               <Button
                 variant="secondary"
                 onClick={() => router.push('/settings')}
                 disabled={connecting}
               >
-                稍后绑定
+                {t('bindLater')}
               </Button>
             </Box>
           </Box>
@@ -202,7 +203,7 @@ function ExchangeCallbackPageContent() {
           }}
         >
           <Text size="xs" color="tertiary">
-            提示：如果还没有创建API Key，请返回 {exchangeName} 页面创建后再来绑定。
+            {t('bindTip').replace('{exchange}', exchangeName)}
           </Text>
         </Box>
       </Box>
@@ -216,7 +217,7 @@ export default function ExchangeCallbackPage() {
       <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
         <TopNav email={null} />
         <Box style={{ maxWidth: 600, margin: '0 auto', padding: tokens.spacing[6] }}>
-          <Text size="lg">加载中...</Text>
+          <Text size="lg">Loading...</Text>
         </Box>
       </Box>
     }>
@@ -224,4 +225,3 @@ export default function ExchangeCallbackPage() {
     </Suspense>
   )
 }
-

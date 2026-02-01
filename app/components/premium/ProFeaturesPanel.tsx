@@ -58,7 +58,7 @@ const UsersIcon = ({ size = 16 }: { size?: number }) => (
 )
 
 // Pro 功能配置
-const getProFeatures = (t: (key: string) => string, _language: string) => [
+const getProFeatures = (t: (key: string) => string) => [
   {
     key: 'category_ranking',
     icon: ChartIcon,
@@ -105,10 +105,10 @@ interface ProFeaturesPanelProps {
 
 export default function ProFeaturesPanel({ compact = false, showTitle = true }: ProFeaturesPanelProps) {
   const router = useRouter()
-  const { language, t } = useLanguage()
+  const { t } = useLanguage()
   const { isPro, isLoading: _isLoading } = useSubscription()
 
-  const features = getProFeatures(t, language)
+  const features = getProFeatures(t)
 
   const handleFeatureClick = (feature: typeof features[0]) => {
     if (!isPro) {
@@ -144,7 +144,7 @@ export default function ProFeaturesPanel({ compact = false, showTitle = true }: 
               <StarIcon size={16} />
             </Box>
             <Text size="sm" weight="bold">
-              {language === 'zh' ? 'Pro 功能' : 'Pro Features'}
+              {t('proFeaturesTitle')}
             </Text>
           </Box>
           {!isPro && (
@@ -270,7 +270,7 @@ export default function ProFeaturesPanel({ compact = false, showTitle = true }: 
             </Button>
           </Link>
           <Text size="xs" color="tertiary" style={{ marginTop: tokens.spacing[2] }}>
-            {language === 'zh' ? '解锁全部高级功能' : 'Unlock all premium features'}
+            {t('unlockAllPremiumFeatures')}
           </Text>
         </Box>
       )}
@@ -284,7 +284,7 @@ export default function ProFeaturesPanel({ compact = false, showTitle = true }: 
  */
 export function ProFeaturesMini() {
   const router = useRouter()
-  const { language, t: _t } = useLanguage()
+  const { t } = useLanguage()
   const { isPro } = useSubscription()
 
   if (isPro) return null
@@ -316,7 +316,7 @@ export function ProFeaturesMini() {
         <StarIcon size={14} />
       </Box>
       <Text size="xs" weight="bold" style={{ color: 'var(--color-pro-gradient-start)' }}>
-        {language === 'zh' ? '解锁 Pro 功能' : 'Unlock Pro'}
+        {t('unlockProLabel')}
       </Text>
       <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="var(--color-pro-gradient-start)" strokeWidth="2">
         <path d="M9 18l6-6-6-6" />

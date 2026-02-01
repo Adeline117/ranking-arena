@@ -58,7 +58,7 @@ export async function getBinanceAccount(config: BinanceConfig): Promise<BinanceA
 
   if (!response.ok) {
     const error = await response.text()
-    throw new Error(`Binance API错误: ${response.status} - ${error}`)
+    throw new Error(`Binance API error: ${response.status} - ${error}`)
   }
 
   return await response.json()
@@ -100,7 +100,7 @@ export async function getBinanceTrades(
 
   if (!response.ok) {
     const error = await response.text()
-    throw new Error(`Binance API错误: ${response.status} - ${error}`)
+    throw new Error(`Binance API error: ${response.status} - ${error}`)
   }
 
   return await response.json()

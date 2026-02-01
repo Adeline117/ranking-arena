@@ -26,8 +26,7 @@ export default function DataStateWrapper({
   emptyMessage,
   onRetry,
 }: DataStateWrapperProps) {
-  const { language } = useLanguage()
-  const isZh = language === 'zh'
+  const { t } = useLanguage()
 
   if (isLoading) {
     if (loadingComponent) return <>{loadingComponent}</>
@@ -39,7 +38,7 @@ export default function DataStateWrapper({
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
           </svg>
           <span className="text-sm" style={{ color: tokens.colors.text.tertiary }}>
-            {isZh ? '加载中...' : 'Loading...'}
+            {t('loading')}
           </span>
         </div>
       </div>
@@ -62,7 +61,7 @@ export default function DataStateWrapper({
             </svg>
           </div>
           <p className="text-sm" style={{ color: tokens.colors.text.secondary }}>
-            {errorMsg || (isZh ? '加载失败' : 'Failed to load')}
+            {errorMsg || t('failedToLoad')}
           </p>
           {onRetry && (
             <button
@@ -73,7 +72,7 @@ export default function DataStateWrapper({
                 color: tokens.colors.accent.brand,
               }}
             >
-              {isZh ? '重试' : 'Retry'}
+              {t('retry')}
             </button>
           )}
         </div>
@@ -94,7 +93,7 @@ export default function DataStateWrapper({
             </svg>
           </div>
           <p className="text-sm" style={{ color: tokens.colors.text.secondary }}>
-            {emptyMessage || (isZh ? '暂无数据' : 'No data available')}
+            {emptyMessage || t('noDataAvailable')}
           </p>
         </div>
       </div>

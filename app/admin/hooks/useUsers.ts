@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from 'react'
 import { getCsrfHeaders } from '@/lib/api/client'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 type ToastFn = (message: string, type: 'success' | 'error' | 'warning' | 'info') => void
 
@@ -29,6 +30,7 @@ export interface UsersPagination {
 }
 
 export function useUsers(accessToken: string | null, showToast?: ToastFn) {
+  const { t } = useLanguage()
   const [users, setUsers] = useState<AdminUser[]>([])
   const [pagination, setPagination] = useState<UsersPagination>({
     page: 1,
@@ -46,7 +48,7 @@ export function useUsers(accessToken: string | null, showToast?: ToastFn) {
     filter: 'all' | 'banned' | 'active' = 'all'
   ) => {
     if (!accessToken) {
-      setError('未登录或无权限')
+      setError(t('adminNotLoggedIn'))
       return
     }
     
@@ -70,12 +72,12 @@ export function useUsers(accessToken: string | null, showToast?: ToastFn) {
         setUsers(data.users || [])
         setPagination(data.pagination)
       } else {
-        setError(data.error || '加载失败')
+        setError(data.error || t('adminLoadFailed'))
         setUsers([])
       }
     } catch (err) {
       console.error('Error loading users:', err)
-      setError('网络错误，请稍后重试')
+      setError(t('adminNetworkErrorRetry'))
       setUsers([])
     } finally {
       setLoading(false)
@@ -108,11 +110,11 @@ export function useUsers(accessToken: string | null, showToast?: ToastFn) {
         ))
         return true
       } else {
-        showToast?.(data.error || '操作失败', 'error')
+        showToast?.(data.error || t('adminOperationFailed'), 'error')
         return false
       }
     } catch (_err) {
-      showToast?.('网络错误', 'error')
+      showToast?.(t('adminNetworkError'), 'error')
       return false
     } finally {
       setActionLoading(prev => ({ ...prev, [userId]: false }))
@@ -143,11 +145,11 @@ export function useUsers(accessToken: string | null, showToast?: ToastFn) {
         ))
         return true
       } else {
-        showToast?.(data.error || '操作失败', 'error')
+        showToast?.(data.error || t('adminOperationFailed'), 'error')
         return false
       }
     } catch (_err) {
-      showToast?.('网络错误', 'error')
+      showToast?.(t('adminNetworkError'), 'error')
       return false
     } finally {
       setActionLoading(prev => ({ ...prev, [userId]: false }))

@@ -22,7 +22,7 @@ test.describe('System State Consistency - Route & Navigation', () => {
 
   test('Hot page modal: Escape key closes modal and updates URL', async ({ page }) => {
     await page.goto('/hot')
-    await page.waitForLoadState('networkidle')
+    await page.waitForLoadState('domcontentloaded')
 
     const firstPost = page.locator('.hot-post-item').first()
     if (!(await firstPost.isVisible({ timeout: 5000 }).catch(() => false))) {
@@ -52,7 +52,7 @@ test.describe('System State Consistency - Route & Navigation', () => {
 
   test('Hot page modal: close button removes URL param', async ({ page }) => {
     await page.goto('/hot')
-    await page.waitForLoadState('networkidle')
+    await page.waitForLoadState('domcontentloaded')
 
     const firstPost = page.locator('.hot-post-item').first()
     if (!(await firstPost.isVisible({ timeout: 5000 }).catch(() => false))) {
@@ -75,7 +75,7 @@ test.describe('System State Consistency - Route & Navigation', () => {
   test('Hot page modal: direct URL with ?post= opens modal on load', async ({ page }) => {
     // First, get a valid post ID
     await page.goto('/hot')
-    await page.waitForLoadState('networkidle')
+    await page.waitForLoadState('domcontentloaded')
 
     const firstPost = page.locator('.hot-post-item').first()
     if (!(await firstPost.isVisible({ timeout: 5000 }).catch(() => false))) {
@@ -96,7 +96,7 @@ test.describe('System State Consistency - Route & Navigation', () => {
 
     // Navigate directly to URL with ?post= param
     await page.goto(`/hot?post=${postId}`)
-    await page.waitForLoadState('networkidle')
+    await page.waitForLoadState('domcontentloaded')
     await page.waitForTimeout(500)
 
     // Modal should be visible
@@ -108,7 +108,7 @@ test.describe('System State Consistency - Route & Navigation', () => {
 test.describe('System State Consistency - Author Navigation', () => {
   test('Hot page: author name in post list is a clickable link to profile', async ({ page }) => {
     await page.goto('/hot')
-    await page.waitForLoadState('networkidle')
+    await page.waitForLoadState('domcontentloaded')
 
     // Find an author link (@ prefixed) in the hot post list
     const authorLink = page.locator('.hot-post-item a[href*="/u/"]').first()
@@ -119,7 +119,7 @@ test.describe('System State Consistency - Author Navigation', () => {
 
       // Click should navigate to user profile
       await authorLink.click()
-      await page.waitForLoadState('networkidle')
+      await page.waitForLoadState('domcontentloaded')
       expect(page.url()).toMatch(/\/u\//)
     } else {
       // Posts exist but author might be anonymous
@@ -134,7 +134,7 @@ test.describe('System State Consistency - Author Navigation', () => {
 
   test('Hot page: clicking author name does NOT open post modal', async ({ page }) => {
     await page.goto('/hot')
-    await page.waitForLoadState('networkidle')
+    await page.waitForLoadState('domcontentloaded')
 
     // Mock comments
     await page.route('**/api/posts/*/comments*', async (route) => {
@@ -165,7 +165,7 @@ test.describe('System State Consistency - Author Navigation', () => {
 
   test('Groups page: author links in posts navigate to user profiles', async ({ page }) => {
     await page.goto('/groups')
-    await page.waitForLoadState('networkidle')
+    await page.waitForLoadState('domcontentloaded')
 
     // Find a group link and navigate to it
     const groupLink = page.locator('a[href*="/groups/"]').first()
@@ -175,7 +175,7 @@ test.describe('System State Consistency - Author Navigation', () => {
     }
 
     await groupLink.click()
-    await page.waitForLoadState('networkidle')
+    await page.waitForLoadState('domcontentloaded')
 
     // Find author links in posts
     const authorLink = page.locator('a[href*="/u/"]').first()

@@ -84,7 +84,7 @@ export async function getCoinexAccount(config: CoinexConfig): Promise<Record<str
   const data = await response.json()
 
   if (data.code !== 0) {
-    throw new Error(`CoinEx API错误: ${data.code} - ${data.message}`)
+    throw new Error(`CoinEx API error: ${data.code} - ${data.message}`)
   }
 
   return data.data || {}
@@ -125,7 +125,7 @@ export async function getCoinexTrades(
   const data = await response.json()
 
   if (data.code !== 0) {
-    throw new Error(`CoinEx API错误: ${data.code} - ${data.message}`)
+    throw new Error(`CoinEx API error: ${data.code} - ${data.message}`)
   }
 
   return data.data?.data || []
@@ -169,7 +169,7 @@ export async function getCoinexFuturesAccount(config: CoinexConfig): Promise<{
   const data = await response.json()
 
   if (data.code !== 0) {
-    throw new Error(`CoinEx Futures API错误: ${data.code} - ${data.message}`)
+    throw new Error(`CoinEx Futures API error: ${data.code} - ${data.message}`)
   }
 
   return data.data || {}
@@ -199,7 +199,7 @@ export async function getCoinexFuturesPositions(config: CoinexConfig): Promise<A
   const data = await response.json()
 
   if (data.code !== 0) {
-    throw new Error(`CoinEx Futures API错误: ${data.code} - ${data.message}`)
+    throw new Error(`CoinEx Futures API error: ${data.code} - ${data.message}`)
   }
 
   return data.data || []

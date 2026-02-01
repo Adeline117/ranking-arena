@@ -27,10 +27,10 @@ type Post = PostWithUserState
 
 
 // Sort buttons component to avoid duplication
-function SortButtons({ sortType, setSortType, language }: {
+function SortButtons({ sortType, setSortType, t }: {
   sortType: SortType
   setSortType: (type: SortType) => void
-  language: string
+  t: (key: string) => string
 }): React.ReactNode {
   const getSortButtonStyle = (isActive: boolean) => ({
     padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
@@ -46,16 +46,17 @@ function SortButtons({ sortType, setSortType, language }: {
   return (
     <div style={{ display: 'flex', gap: tokens.spacing[2], marginBottom: tokens.spacing[3] }}>
       <button onClick={() => setSortType('time')} style={getSortButtonStyle(sortType === 'time')}>
-        {language === 'zh' ? '最新' : 'Latest'}
+        {t('latest')}
       </button>
       <button onClick={() => setSortType('likes')} style={getSortButtonStyle(sortType === 'likes')}>
-        {language === 'zh' ? '最热' : 'Hot'}
+        {t('hot')}
       </button>
     </div>
   )
 }
 
 function AvatarLink({ handle, avatarUrl, isPro, showProBadge = true }: { handle?: string | null; avatarUrl?: string | null; isPro?: boolean; showProBadge?: boolean }) {
+  const { t } = useLanguage()
   if (!handle) return null
   const href = `/u/${encodeURIComponent(handle)}`
   const shouldShowBadge = isPro && showProBadge
@@ -72,7 +73,7 @@ function AvatarLink({ handle, avatarUrl, isPro, showProBadge = true }: { handle?
         flexShrink: 0,
         maxWidth: 120,
       }}
-      title="进入交易者主页"
+      title={t('goToTraderPage')}
     >
       <span
         style={{
@@ -160,7 +161,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
   const feedRefreshTrigger = usePostStore(s => s.feedRefreshTrigger)
   // Unified auth - single source of truth
   const auth = useUnifiedAuth({
-    onUnauthenticated: () => showToast('请先登录', 'warning'),
+    onUnauthenticated: () => showToast(t('pleaseLogin'), 'warning'),
   })
   const accessToken = auth.accessToken
   const currentUserId = auth.userId
@@ -297,7 +298,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
       if (!response.ok) {
         const errorMsg = typeof data.error === 'string'
           ? data.error
-          : (data.error?.message || '获取帖子失败')
+          : (data.error?.message || t('fetchPostsFailed'))
         throw new Error(errorMsg)
       }
 
@@ -312,7 +313,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
         id: p.id,
         title: p.title || '',
         content: p.content || '',
-        author_handle: p.author_handle || '匿名',
+        author_handle: p.author_handle || t('anonymous'),
         group_id: p.group_id,
         group_name: p.group_name,
         created_at: p.created_at,
@@ -340,7 +341,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
       if (err instanceof Error && (err.name === 'AbortError' || controller.signal.aborted)) {
         return
       }
-      const errorMessage = err instanceof Error ? err.message : '加载失败'
+      const errorMessage = err instanceof Error ? err.message : t('loadFailed')
       setError(errorMessage)
     } finally {
       // 只有在当前请求完成时才更新loading状态
@@ -396,7 +397,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
       const data = await response.json()
 
       if (!response.ok) {
-        throw new Error(data.error || '加载更多失败')
+        throw new Error(data.error || t('loadMoreFailed'))
       }
 
       const morePosts = data.data?.posts || []
@@ -440,7 +441,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
     setRefreshing(true)
     await loadPosts()
     setRefreshing(false)
-    showToast(language === 'zh' ? '已刷新' : 'Refreshed', 'success')
+    showToast(t('refreshed'), 'success')
   }, [loadPosts, showToast, language])
 
   // 加载用户收藏状态 - 必须在使用它的 useEffect 之前定义
@@ -549,10 +550,10 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
               const post = data.data.post
               setOpenPost({
                 id: post.id,
-                title: post.title || '无标题',
+                title: post.title || t('noTitle'),
                 content: post.content || '',
                 author_id: post.author_id,
-                author_handle: post.author_handle || '匿名',
+                author_handle: post.author_handle || t('anonymous'),
                 author_avatar_url: post.author_avatar_url,
                 group_id: post.group_id,
                 group_name: post.group_name,
@@ -591,7 +592,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
   // 点赞/踩 - per-postId lock (waits for API response before allowing next action)
   const toggleReaction = useCallback(async (postId: string, reactionType: 'up' | 'down') => {
     if (!accessToken) {
-      showToast('请先登录', 'warning')
+      showToast(t('pleaseLogin'), 'warning')
       return
     }
 
@@ -645,13 +646,13 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
         }
       } else {
         // FIX: Show error toast when API returns error
-        const errorMsg = json.error || json.message || '操作失败'
+        const errorMsg = json.error || json.message || t('operationFailed')
         showToast(errorMsg, 'error')
       }
     } catch (err) {
       // FIX: Show error toast for network/unexpected errors
       console.error('[PostFeed] toggleReaction error:', err)
-      showToast('网络错误，请重试', 'error')
+      showToast(t('networkError'), 'error')
     } finally {
       lockRef.current.delete(key)
     }
@@ -661,7 +662,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
    
   const _toggleVote = useCallback(async (postId: string, choice: PollChoice) => {
     if (!accessToken) {
-      showToast('请先登录', 'warning')
+      showToast(t('pleaseLogin'), 'warning')
       return
     }
 
@@ -710,13 +711,13 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
         }
       } else {
         // FIX: Show error toast when API returns error
-        const errorMsg = json.error || json.message || '投票失败'
+        const errorMsg = json.error || json.message || t('voteFailed')
         showToast(errorMsg, 'error')
       }
     } catch (err) {
       // FIX: Show error toast for network/unexpected errors
       console.error('[PostFeed] toggleVote error:', err)
-      showToast('网络错误，请重试', 'error')
+      showToast(t('networkError'), 'error')
     } finally {
       lockRef.current.delete(key)
     }
@@ -750,11 +751,11 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
   // 提交自定义投票
   const submitCustomPollVote = useCallback(async (postId: string) => {
     if (!accessToken) {
-      showToast('请先登录', 'warning')
+      showToast(t('pleaseLogin'), 'warning')
       return
     }
     if (selectedPollOptions.length === 0) {
-      showToast('请选择至少一个选项', 'warning')
+      showToast(t('selectAtLeastOneOption'), 'warning')
       return
     }
     setVotingCustomPoll(true)
@@ -778,13 +779,13 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
           totalVotes: data.data.poll.totalVotes,
         } : null)
         setCustomPollUserVotes(data.data.userVotes)
-        showToast('已投票', 'success')
+        showToast(t('voted'), 'success')
       } else {
-        showToast(data.error || '投票失败', 'error')
+        showToast(data.error || t('voteFailed'), 'error')
       }
     } catch (err) {
-      console.error('[PostFeed] 自定义投票失败:', err)
-      showToast('投票失败', 'error')
+      console.error('[PostFeed] custom poll vote failed:', err)
+      showToast(t('voteFailed'), 'error')
     } finally {
       setVotingCustomPoll(false)
     }
@@ -794,7 +795,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
   // 收藏帖子 - 点击收藏到默认收藏夹，已收藏则取消收藏
   const handleBookmark = useCallback(async (postId: string) => {
     if (!accessToken) {
-      showToast('请先登录', 'warning')
+      showToast(t('pleaseLogin'), 'warning')
       return
     }
 
@@ -815,22 +816,21 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
       if (response.ok) {
         setUserBookmarks(prev => ({ ...prev, [postId]: result.bookmarked }))
         setBookmarkCounts(prev => ({ ...prev, [postId]: result.bookmark_count }))
-        showToast(result.bookmarked ? '已收藏' : '已取消收藏', 'success')
+        showToast(result.bookmarked ? t('bookmarked') : t('unbookmarked'), 'success')
       } else {
-        showToast(result.error || '操作失败', 'error')
+        showToast(result.error || t('operationFailed'), 'error')
       }
     } catch (_err) {
-      // 错误已在 showToast 中处理
-      showToast('网络错误', 'error')
+      showToast(t('networkError'), 'error')
     } finally {
       setBookmarkLoading(prev => ({ ...prev, [postId]: false }))
     }
-  }, [accessToken, showToast])
+  }, [accessToken, showToast, t])
 
   // 打开收藏夹选择弹窗
   const openBookmarkFolderModal = useCallback((postId: string) => {
     if (!accessToken) {
-      showToast('请先登录', 'warning')
+      showToast(t('pleaseLogin'), 'warning')
       return
     }
     setBookmarkingPostId(postId)
@@ -859,13 +859,12 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
       if (response.ok) {
         setUserBookmarks(prev => ({ ...prev, [bookmarkingPostId]: result.bookmarked }))
         setBookmarkCounts(prev => ({ ...prev, [bookmarkingPostId]: result.bookmark_count }))
-        showToast('已收藏', 'success')
+        showToast(t('bookmarked'), 'success')
       } else {
-        showToast(result.error || '操作失败', 'error')
+        showToast(result.error || t('operationFailed'), 'error')
       }
     } catch (_err) {
-      // 错误已在 showToast 中处理
-      showToast('网络错误', 'error')
+      showToast(t('networkError'), 'error')
     } finally {
       setBookmarkLoading(prev => ({ ...prev, [bookmarkingPostId]: false }))
       setShowBookmarkModal(false)
@@ -876,14 +875,13 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
   // 转发帖子
   const handleRepost = useCallback(async (postId: string, comment?: string) => {
     if (!accessToken) {
-      showToast('请先登录', 'warning')
+      showToast(t('pleaseLogin'), 'warning')
       return
     }
 
-    // 检查是否是自己的帖子
     const post = posts.find(p => p.id === postId) || openPost
     if (post?.author_id === currentUserId) {
-      showToast('不能转发自己的帖子', 'warning')
+      showToast(t('cannotRepostOwn'), 'warning')
       return
     }
 
@@ -905,13 +903,13 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
       if (response.ok) {
         setShowRepostModal(null)
         setRepostComment('')
-        showToast('已转发', 'success')
+        showToast(t('reposted'), 'success')
       } else {
-        showToast(result.error || '转发失败', 'error')
+        showToast(result.error || t('repostFailed'), 'error')
       }
     } catch (err) {
-      console.error('[PostFeed] 转发失败:', err)
-      showToast('网络错误', 'error')
+      console.error('[PostFeed] repost failed:', err)
+      showToast(t('networkError'), 'error')
     } finally {
       setRepostLoading(prev => ({ ...prev, [postId]: false }))
     }
@@ -930,7 +928,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
   const handleSaveEdit = useCallback(async () => {
     if (!editingPost || !accessToken) return
     if (!editTitle.trim()) {
-      showToast('标题不能为空', 'warning')
+      showToast(t('titleRequired'), 'warning')
       return
     }
 
@@ -965,13 +963,13 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
         }
         
         setEditingPost(null)
-        showToast('已保存', 'success')
+        showToast(t('editSaved'), 'success')
       } else {
-        showToast(data.error || '编辑失败', 'error')
+        showToast(data.error || t('editFailed'), 'error')
       }
     } catch (err) {
-      console.error('[PostFeed] 编辑失败:', err)
-      showToast('编辑失败', 'error')
+      console.error('[PostFeed] edit failed:', err)
+      showToast(t('editFailed'), 'error')
     } finally {
       setSavingEdit(false)
     }
@@ -982,11 +980,11 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
     e.stopPropagation()
     
     if (!accessToken) {
-      showToast('请先登录', 'warning')
+      showToast(t('pleaseLogin'), 'warning')
       return
     }
 
-    const confirmed = await showDangerConfirm('删除帖子', '确定要删除这篇帖子吗？删除后无法恢复。')
+    const confirmed = await showDangerConfirm(t('deletePost'), t('deletePostConfirm'))
     if (!confirmed) return
 
     try {
@@ -1009,13 +1007,12 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
           setOpenPost(null)
         }
         
-        showToast('已删除', 'success')
+        showToast(t('deleted'), 'success')
       } else {
-        showToast(data.error || '删除失败', 'error')
+        showToast(data.error || t('deleteFailed'), 'error')
       }
     } catch (_err) {
-      // 错误已在 showToast 中处理
-      showToast('删除失败', 'error')
+      showToast(t('deleteFailed'), 'error')
     }
   }, [accessToken, openPost?.id, showDangerConfirm, showToast])
 
@@ -1024,7 +1021,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
     e.stopPropagation()
     
     if (!accessToken) {
-      showToast('请先登录', 'warning')
+      showToast(t('pleaseLogin'), 'warning')
       return
     }
 
@@ -1054,12 +1051,12 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
         
         showToast(data.data.message, 'success')
       } else {
-        showToast(data.error || '操作失败', 'error')
+        showToast(data.error || t('operationFailed'), 'error')
       }
     } catch {
-      showToast('操作失败', 'error')
+      showToast(t('operationFailed'), 'error')
     }
-  }, [accessToken, showToast])
+  }, [accessToken, showToast, t])
 
   // 检测文本是否是中文
   const isChineseText = useCallback((text: string) => {
@@ -1140,10 +1137,10 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
         // 本地缓存（不含图片，图片会在读取时动态添加）
         setTranslationCache(prev => ({ ...prev, [cacheKey]: data.data.translatedText }))
       } else {
-        showToast(data.error || '翻译失败', 'error')
+        showToast(data.error || t('translationFailed'), 'error')
       }
     } catch {
-      showToast('翻译服务出错', 'error')
+      showToast(t('translationServiceError'), 'error')
     } finally {
       setTranslating(false)
     }
@@ -1397,7 +1394,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
           fontSize: tokens.typography.fontSize.sm,
           fontWeight: tokens.typography.fontWeight.bold,
         }}>
-          {language === 'zh' ? '加载失败' : 'Failed to load'}
+          {t('failedToLoad')}
         </div>
         <div style={{
           color: tokens.colors.text.tertiary,
@@ -1430,7 +1427,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
   if (posts.length === 0) {
     return (
       <div>
-        {props.showSortButtons && <SortButtons sortType={sortType} setSortType={setSortType} language={language} />}
+        {props.showSortButtons && <SortButtons sortType={sortType} setSortType={setSortType} t={t} />}
         <div style={{
           padding: tokens.spacing[6],
           textAlign: 'center',
@@ -1440,9 +1437,9 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
           alignItems: 'center',
           gap: tokens.spacing[2],
         }}>
-          <span>{language === 'zh' ? '暂无帖子' : 'No posts yet'}</span>
+          <span>{t('noPostsYet')}</span>
           <span style={{ fontSize: tokens.typography.fontSize.xs }}>
-            {language === 'zh' ? '成为第一个发帖的人吧！' : 'Be the first to post!'}
+            {t('beFirstToPost')}
           </span>
         </div>
       </div>
@@ -1492,11 +1489,11 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
               <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
               <path d="M16 21h5v-5" />
             </svg>
-            {refreshing ? (language === 'zh' ? '刷新中...' : 'Refreshing...') : (language === 'zh' ? '刷新' : 'Refresh')}
+            {refreshing ? t('refreshing') : t('refresh')}
           </button>
         </div>
       )}
-      {props.showSortButtons && <SortButtons sortType={sortType} setSortType={setSortType} language={language} />}
+      {props.showSortButtons && <SortButtons sortType={sortType} setSortType={setSortType} t={t} />}
       <div style={props.layout === 'masonry' ? { columnGap: 12 } : undefined} className={`stagger-children${props.layout === 'masonry' ? ' post-feed-masonry' : ''}`}>
         {/* 只在个人主页（有 authorHandle）时才将置顶帖子排在最上面 */}
         {(props.authorHandle ? [...posts].sort((a, b) => {
@@ -1570,7 +1567,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
                       minWidth: 0,
                     }}
                   >
-                    {language === 'zh' ? (p.group_name || '小组') : (p.group_name_en || p.group_name || 'Group')}
+                    {language === 'zh' ? (p.group_name || t('group')) : (p.group_name_en || p.group_name || t('group'))}
                   </Link>
                 ) : null}
                 <AvatarLink handle={p.author_handle} avatarUrl={p.author_avatar_url} isPro={p.author_is_pro} showProBadge={p.author_show_pro_badge} />
@@ -1593,7 +1590,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
                       background: 'rgba(139,111,168,0.1)',
                     }}
                   >
-                    {language === 'zh' ? '投票' : 'Poll'}
+                    {t('poll')}
                   </span>
                 )}
                 {/* 图片标识 */}
@@ -1605,7 +1602,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
                       fontWeight: 600,
                     }}
                   >
-                    {p.images.length} {language === 'zh' ? '图' : 'img'}
+                    {p.images.length} {t('img')}
                   </span>
                 )}
               </div>
@@ -1789,7 +1786,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
                     background: 'rgba(139,111,168,0.1)',
                     borderRadius: 4,
                   }}>
-                    {language === 'zh' ? '置顶' : 'Pinned'}
+                    {t('pinned')}
                   </span>
                 )}
                 
@@ -1816,7 +1813,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
                         e.currentTarget.style.background = p.is_pinned ? 'rgba(139,111,168,0.1)' : 'transparent'
                       }}
                     >
-                      {p.is_pinned ? (language === 'zh' ? '取消置顶' : 'Unpin') : (language === 'zh' ? '置顶' : 'Pin')}
+                      {p.is_pinned ? t('unpin') : t('pin')}
                     </button>
                     <button
                       onClick={(e) => handleStartEdit(p, e)}
@@ -1838,7 +1835,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
                         e.currentTarget.style.background = 'transparent'
                       }}
                     >
-                      {language === 'zh' ? '编辑' : 'Edit'}
+                      {t('edit')}
                     </button>
                     <button
                       onClick={(e) => handleDeletePost(p, e)}
@@ -1860,7 +1857,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
                         e.currentTarget.style.background = 'transparent'
                       }}
                     >
-                      {language === 'zh' ? '删除' : 'Delete'}
+                      {t('delete')}
                     </button>
                   </span>
                 )}
@@ -1899,7 +1896,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
                 <path d="M3 3v5h5" />
               </svg>
               <span style={{ fontSize: tokens.typography.fontSize.sm, color: tokens.colors.text.tertiary }}>
-                {language === 'zh' ? '加载更多...' : 'Loading more...'}
+                {t('loadingMore')}
               </span>
             </div>
           )}
@@ -1916,7 +1913,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
             fontSize: tokens.typography.fontSize.sm,
           }}
         >
-          {language === 'zh' ? '已经到底啦' : 'No more posts'}
+          {t('noMorePosts')}
         </div>
       )}
 
@@ -1942,6 +1939,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
             ) : (
               <div style={{ fontSize: 12, color: ARENA_PURPLE }}>
                 {language === 'zh' ? openPost.group_name : (openPost.group_name_en || openPost.group_name)}
+
               </div>
             )
           )}
@@ -1976,7 +1974,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
                 @{openPost.author_handle}
               </Link>
             ) : (
-              <span>{language === 'zh' ? '匿名' : 'Anonymous'}</span>
+              <span>{t('anonymous')}</span>
             )}
             <span>·</span>
             <span>{formatTimeAgo(openPost.created_at, language)}</span>
@@ -2012,7 +2010,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                <span style={{ fontSize: 11, color: tokens.colors.text.tertiary }}>{language === 'zh' ? '转发自' : 'Reposted from'}</span>
+                <span style={{ fontSize: 11, color: tokens.colors.text.tertiary }}>{t('repostedFrom')}</span>
                 <AvatarLink handle={openPost.original_post.author_handle} avatarUrl={openPost.original_post.author_avatar_url} isPro={openPost.original_post.author_is_pro} showProBadge={openPost.original_post.author_show_pro_badge} />
               </div>
               {openPost.original_post.title && (
@@ -2094,16 +2092,16 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
                 }}
               >
                 {translating ? (
-                  <>{language === 'zh' ? '翻译中...' : 'Translating...'}</>
+                  <>{t('translating')}</>
                 ) : showingOriginal ? (
-                  <>{language === 'zh' ? '查看翻译' : 'View Translation'}</>
+                  <>{t('viewTranslation')}</>
                 ) : (
-                  <>{language === 'zh' ? '查看原文' : 'View Original'}</>
+                  <>{t('viewOriginal')}</>
                 )}
               </button>
               {!showingOriginal && (
                 <span style={{ fontSize: 11, color: tokens.colors.text.tertiary }}>
-                  {language === 'zh' ? '由 AI 翻译' : 'Translated by AI'}
+                  {t('translatedByAI')}
                 </span>
               )}
             </div>
@@ -2119,25 +2117,25 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
               border: `1px solid ${tokens.colors.border.primary}`,
             }}>
               {loadingCustomPoll ? (
-                <div style={{ color: tokens.colors.text.tertiary, fontSize: 13 }}>加载投票中...</div>
+                <div style={{ color: tokens.colors.text.tertiary, fontSize: 13 }}>{t('loadingPoll')}</div>
               ) : customPoll ? (
                 <>
                   <div style={{ fontWeight: 700, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
-                    {customPoll.question || '投票'}
+                    {customPoll.question || t('poll')}
                     {customPoll.endAt && (
                       <span style={{ 
                         fontSize: 11, 
                         color: customPoll.isExpired ? '#ff6b6b' : tokens.colors.text.tertiary,
                         fontWeight: 400,
                       }}>
-                        {customPoll.isExpired 
-                          ? '（已结束）' 
-                          : `（截止：${new Date(customPoll.endAt).toLocaleString('zh-CN')}）`
+                        {customPoll.isExpired
+                          ? t('pollEnded')
+                          : t('pollDeadline').replace('{date}', new Date(customPoll.endAt).toLocaleString(language === 'zh' ? 'zh-CN' : 'en-US'))
                         }
                       </span>
                     )}
                     {!customPoll.endAt && (
-                      <span style={{ fontSize: 11, color: ARENA_PURPLE, fontWeight: 400 }}>（永久）</span>
+                      <span style={{ fontSize: 11, color: ARENA_PURPLE, fontWeight: 400 }}>{t('pollPermanent')}</span>
                     )}
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -2206,7 +2204,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
                             </span>
                             {customPoll.showResults && option.votes !== null && (
                               <span style={{ fontSize: 12, color: tokens.colors.text.secondary }}>
-                                {option.votes} 票 ({votePercentage}%)
+                                {t('votes').replace('{n}', String(option.votes)).replace('{pct}', String(votePercentage))}
                               </span>
                             )}
                           </div>
@@ -2233,24 +2231,24 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
                         fontSize: 13,
                       }}
                     >
-                      {votingCustomPoll ? '投票中...' : '提交投票'}
+                      {votingCustomPoll ? t('submittingVote') : t('submitVote')}
                     </button>
                   )}
                   {/* 总票数 */}
                   {customPoll.showResults && customPoll.totalVotes !== null && (
                     <div style={{ marginTop: 10, fontSize: 12, color: tokens.colors.text.tertiary }}>
-                      共 {customPoll.totalVotes} 人参与投票
+                      {t('totalVoters').replace('{n}', String(customPoll.totalVotes))}
                     </div>
                   )}
                   {/* 未投票提示 */}
                   {!customPoll.showResults && !customPoll.isExpired && (
                     <div style={{ marginTop: 10, fontSize: 12, color: tokens.colors.text.tertiary }}>
-                      投票后可查看结果
+                      {t('voteToSeeResults')}
                     </div>
                   )}
                 </>
               ) : (
-                <div style={{ color: tokens.colors.text.tertiary, fontSize: 13 }}>暂无投票</div>
+                <div style={{ color: tokens.colors.text.tertiary, fontSize: 13 }}>{t('noPoll')}</div>
               )}
             </div>
           )}
@@ -2287,7 +2285,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
             {/* 收藏 */}
             <Action
               icon={<span style={{ fontSize: 14 }}>{userBookmarks[openPost.id] ? '★' : '☆'}</span>}
-              text={userBookmarks[openPost.id] ? (language === 'zh' ? '已收藏' : 'Saved') : (language === 'zh' ? '收藏' : 'Save')}
+              text={userBookmarks[openPost.id] ? t('bookmarked') : t('save')}
               onClick={(e) => {
                 if (e) {
                   e.preventDefault()
@@ -2325,7 +2323,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
                   e.currentTarget.style.background = 'transparent'
                   e.currentTarget.style.color = tokens.colors.text.tertiary
                 }}
-                title={language === 'zh' ? '选择收藏夹' : 'Select folder'}
+                title={t('selectFolder')}
               >
                 ▼
               </button>
@@ -2333,14 +2331,14 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
             {/* 转发 */}
             <Action
               icon={<span style={{ fontSize: 14 }}>↗</span>}
-              text={language === 'zh' ? '转发' : 'Repost'}
+              text={t('repost')}
               onClick={(e) => {
                 if (e) {
                   e.preventDefault()
                   e.stopPropagation()
                 }
                 if (openPost.author_id === currentUserId) {
-                  showToast('不能转发自己的帖子', 'warning')
+                  showToast(t('cannotRepostOwn'), 'warning')
                   return
                 }
                 setShowRepostModal(openPost.id)
@@ -2406,11 +2404,11 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
               padding: 24,
             }}
           >
-            <h2 style={{ fontSize: 18, fontWeight: 900, marginBottom: 20, color: tokens.colors.text.primary }}>{language === 'zh' ? '编辑帖子' : 'Edit Post'}</h2>
+            <h2 style={{ fontSize: 18, fontWeight: 900, marginBottom: 20, color: tokens.colors.text.primary }}>{t('editPost')}</h2>
             
             <div style={{ marginBottom: 16 }}>
               <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 800, color: tokens.colors.text.primary }}>
-                {language === 'zh' ? '标题' : 'Title'}
+                {t('title')}
               </label>
               <input
                 type="text"
@@ -2431,7 +2429,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
 
             <div style={{ marginBottom: 20 }}>
               <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 800, color: tokens.colors.text.primary }}>
-                {language === 'zh' ? '内容' : 'Content'}
+                {t('content')}
               </label>
               <textarea
                 value={editContent}
@@ -2467,7 +2465,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
                   cursor: savingEdit ? 'not-allowed' : 'pointer',
                 }}
               >
-                {language === 'zh' ? '取消' : 'Cancel'}
+                {t('cancel')}
               </button>
               <button
                 onClick={handleSaveEdit}
@@ -2483,7 +2481,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
                   cursor: savingEdit || !editTitle.trim() ? 'not-allowed' : 'pointer',
                 }}
               >
-                {savingEdit ? (language === 'zh' ? '保存中...' : 'Saving...') : (language === 'zh' ? '保存' : 'Save')}
+                {savingEdit ? t('saving') : t('save')}
               </button>
             </div>
           </div>
@@ -2521,13 +2519,13 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
             }}
           >
             <h2 style={{ fontSize: 18, fontWeight: 900, marginBottom: 16, color: tokens.colors.text.primary }}>
-              {language === 'zh' ? '转发到主页' : 'Repost to Feed'}
+              {t('repostToFeed')}
             </h2>
 
             <textarea
               value={repostComment}
               onChange={(e) => setRepostComment(e.target.value)}
-              placeholder={language === 'zh' ? '添加评论（可选）...' : 'Add comment (optional)...'}
+              placeholder={t('addCommentOptional')}
               style={{
                 width: '100%',
                 minHeight: 80,
@@ -2561,7 +2559,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
                   cursor: 'pointer',
                 }}
               >
-                {language === 'zh' ? '取消' : 'Cancel'}
+                {t('cancel')}
               </button>
               <button
                 onClick={() => handleRepost(showRepostModal, repostComment)}
@@ -2577,7 +2575,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
                   cursor: repostLoading[showRepostModal] ? 'not-allowed' : 'pointer',
                 }}
               >
-                {repostLoading[showRepostModal] ? (language === 'zh' ? '转发中...' : 'Reposting...') : (language === 'zh' ? '转发' : 'Repost')}
+                {repostLoading[showRepostModal] ? t('reposting') : t('repost')}
               </button>
             </div>
           </div>

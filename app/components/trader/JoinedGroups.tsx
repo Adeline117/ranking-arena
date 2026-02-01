@@ -22,8 +22,7 @@ type JoinedGroupsProps = {
 }
 
 export default function JoinedGroups({ userId }: JoinedGroupsProps) {
-  const { language } = useLanguage()
-  const isZh = language === 'zh'
+  const { language, t } = useLanguage()
   const [groups, setGroups] = useState<Group[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -95,14 +94,14 @@ export default function JoinedGroups({ userId }: JoinedGroupsProps) {
   const getRoleBadge = (role: string) => {
     if (role === 'owner') {
       return {
-        label: isZh ? '组长' : 'Owner',
+        label: t('owner'),
         bg: tokens.colors.accent?.warning || '#FFB020',
         color: '#000'
       }
     }
     if (role === 'admin') {
       return {
-        label: isZh ? '管理员' : 'Admin',
+        label: t('admin'),
         bg: tokens.colors.accent?.primary || '#8B6FA8',
         color: '#fff'
       }
@@ -111,7 +110,7 @@ export default function JoinedGroups({ userId }: JoinedGroupsProps) {
   }
 
   return (
-    <Card title={isZh ? '加入的小组' : 'Joined Groups'}>
+    <Card title={t('joinedGroups')}>
       <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
         {groups.map((group) => {
           const badge = getRoleBadge(group.role || 'member')
@@ -171,7 +170,7 @@ export default function JoinedGroups({ userId }: JoinedGroupsProps) {
                 </Text>
                 {group.member_count != null && (
                   <Text size="xs" color="tertiary">
-                    {group.member_count} {isZh ? '成员' : 'members'}
+                    {group.member_count} {t('members')}
                   </Text>
                 )}
               </Box>

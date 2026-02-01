@@ -7,11 +7,13 @@ import { Box, Text, Button } from '@/app/components/base'
 import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/layout/TopNav'
 import { useToast } from '@/app/components/ui/Toast'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 function ExchangeAuthorizePageContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const { showToast } = useToast()
+  const { t } = useLanguage()
   const [exchange, setExchange] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [authUrl, setAuthUrl] = useState<string | null>(null)
@@ -47,7 +49,7 @@ function ExchangeAuthorizePageContent() {
       const result = await response.json()
 
       if (!response.ok) {
-        showToast(result.error || '加载授权页面失败', 'error')
+        showToast(result.error || t('loadAuthPageFailed'), 'error')
         router.push('/settings')
         return
       }
@@ -55,8 +57,8 @@ function ExchangeAuthorizePageContent() {
       setAuthUrl(result.authUrl)
       setInstructions(result.instructions || [])
     } catch (error: unknown) {
-      console.error('[ExchangeAuthorize] 加载失败:', error)
-      showToast('加载失败，请重试', 'error')
+      console.error('[ExchangeAuthorize] Load failed:', error)
+      showToast(t('loadFailedRetryShort'), 'error')
       router.push('/settings')
     } finally {
       setLoading(false)
@@ -65,8 +67,7 @@ function ExchangeAuthorizePageContent() {
 
   const handleOpenAuth = () => {
     if (!authUrl) return
-    
-    // 在新窗口中打开授权页面
+
     window.open(authUrl, '_blank', 'width=800,height=600')
   }
 
@@ -79,21 +80,21 @@ function ExchangeAuthorizePageContent() {
       <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
         <TopNav email={email} />
         <Box style={{ maxWidth: 800, margin: '0 auto', padding: tokens.spacing[6] }}>
-          <Text size="lg">加载中...</Text>
+          <Text size="lg">{t('loading')}</Text>
         </Box>
       </Box>
     )
   }
 
-  const exchangeName = exchange?.toUpperCase() || '交易所'
+  const exchangeName = exchange?.toUpperCase() || 'Exchange'
 
   return (
     <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
       <TopNav email={email} />
-      
+
       <Box style={{ maxWidth: 800, margin: '0 auto', padding: tokens.spacing[6] }}>
         <Text size="2xl" weight="black" style={{ marginBottom: tokens.spacing[6] }}>
-          绑定 {exchangeName} 账号
+          {t('bindExchangeAccountTitle').replace('{exchange}', exchangeName)}
         </Text>
 
         <Box
@@ -104,7 +105,7 @@ function ExchangeAuthorizePageContent() {
           style={{ marginBottom: tokens.spacing[6] }}
         >
           <Text size="lg" weight="bold" style={{ marginBottom: tokens.spacing[4] }}>
-            授权步骤
+            {t('authSteps')}
           </Text>
 
           <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3], marginBottom: tokens.spacing[6] }}>
@@ -135,13 +136,13 @@ function ExchangeAuthorizePageContent() {
               variant="primary"
               onClick={handleOpenAuth}
             >
-              打开 {exchangeName} 授权页面
+              {t('openAuthPage').replace('{exchange}', exchangeName)}
             </Button>
             <Button
               variant="secondary"
               onClick={handleBack}
             >
-              返回设置
+              {t('returnToSettings')}
             </Button>
           </Box>
         </Box>
@@ -153,17 +154,17 @@ function ExchangeAuthorizePageContent() {
           border="primary"
         >
           <Text size="lg" weight="bold" style={{ marginBottom: tokens.spacing[4] }}>
-            重要提示
+            {t('importantNotice')}
           </Text>
           <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
             <Text size="sm" color="tertiary">
-              • 请确保只授予&ldquo;读取&rdquo;权限，不要授予&ldquo;交易&rdquo;或&ldquo;提现&rdquo;权限
+              {`\u2022 ${t('authReadOnlyTip')}`}
             </Text>
             <Text size="sm" color="tertiary">
-              • 您的API Key和Secret将被加密存储，仅用于获取您的交易数据
+              {`\u2022 ${t('authEncryptedTip')}`}
             </Text>
             <Text size="sm" color="tertiary">
-              • 如果您已经创建了API Key，可以直接在设置页面输入
+              {`\u2022 ${t('authExistingKeyTip')}`}
             </Text>
           </Box>
         </Box>
@@ -178,7 +179,7 @@ export default function ExchangeAuthorizePage() {
       <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
         <TopNav email={null} />
         <Box style={{ maxWidth: 800, margin: '0 auto', padding: tokens.spacing[6] }}>
-          <Text size="lg">加载中...</Text>
+          <Text size="lg">Loading...</Text>
         </Box>
       </Box>
     }>
@@ -186,4 +187,3 @@ export default function ExchangeAuthorizePage() {
     </Suspense>
   )
 }
-

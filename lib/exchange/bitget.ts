@@ -99,7 +99,7 @@ export async function getBitgetAccount(config: BitgetConfig): Promise<BitgetAcco
   const data = await response.json()
 
   if (data.code !== '00000') {
-    throw new Error(`Bitget API错误: ${data.code} - ${data.msg}`)
+    throw new Error(`Bitget API error: ${data.code} - ${data.msg}`)
   }
 
   return data.data || []
@@ -146,7 +146,7 @@ export async function getBitgetTrades(
   const data = await response.json()
 
   if (data.code !== '00000') {
-    throw new Error(`Bitget API错误: ${data.code} - ${data.msg}`)
+    throw new Error(`Bitget API error: ${data.code} - ${data.msg}`)
   }
 
   return data.data?.fillList || []
@@ -198,7 +198,7 @@ export async function getBitgetPositions(
   const data = await response.json()
 
   if (data.code !== '00000') {
-    throw new Error(`Bitget API错误: ${data.code} - ${data.msg}`)
+    throw new Error(`Bitget API error: ${data.code} - ${data.msg}`)
   }
 
   return data.data || []

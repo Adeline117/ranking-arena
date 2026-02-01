@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from 'react'
 import { getCsrfHeaders } from '@/lib/api/client'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 type ToastFn = (message: string, type: 'success' | 'error' | 'warning' | 'info') => void
 
@@ -40,6 +41,7 @@ export interface ReportsPagination {
 }
 
 export function useReports(accessToken: string | null, showToast?: ToastFn) {
+  const { t } = useLanguage()
   const [reports, setReports] = useState<ContentReport[]>([])
   const [pagination, setPagination] = useState<ReportsPagination>({
     page: 1,
@@ -109,11 +111,11 @@ export function useReports(accessToken: string | null, showToast?: ToastFn) {
         setReports(prev => prev.filter(r => r.id !== reportId))
         return true
       } else {
-        showToast?.(data.error || '操作失败', 'error')
+        showToast?.(data.error || t('adminOperationFailed'), 'error')
         return false
       }
     } catch (_err) {
-      showToast?.('网络错误', 'error')
+      showToast?.(t('adminNetworkError'), 'error')
       return false
     } finally {
       setActionLoading(prev => ({ ...prev, [reportId]: false }))

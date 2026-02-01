@@ -39,8 +39,6 @@ export interface ArenaScoreResult {
   pnlScore: number        // PnL 分 (0-15)
   drawdownScore: number   // 回撤分 (0-8)
   stabilityScore: number  // 稳定分 (0-7)
-  meetsThreshold: boolean // 是否达到入榜门槛（使用 softFloor）
-  pnlQualifier: number   // PnL 软门槛系数 (0~1)
   scoreConfidence: ScoreConfidence  // 数据完整性标记
 }
 
@@ -55,13 +53,6 @@ export interface OverallScoreInput {
 // ============================================
 
 export const ARENA_CONFIG = {
-  // 入榜 PnL 门槛（唯一硬条件）
-  PNL_THRESHOLD: {
-    '7D': 200,    // 降低门槛以显示更多交易员
-    '30D': 500,   // 从$1000降到$500
-    '90D': 1000,  // 从$3000降到$1000
-  },
-  
   // 评分参数
   // 注：tanh 系数越小，曲线越平缓，高收益者分数压缩更明显
   PARAMS: {
@@ -138,19 +129,8 @@ export const ARENA_CONFIG = {
 
   // === 排行榜稳定性参数 ===
 
-  // 保留窗口：合格过的交易员保留 24 小时不消失
-  GRACE_PERIOD_HOURS: 24,
-
   // 置信度防抖：数据完整度变化后缓冲 8 小时
   CONFIDENCE_DEBOUNCE_HOURS: 8,
-
-  // 软 PnL 门槛：门槛附近渐变而非二元开关
-  // softFloor = threshold * SOFT_FLOOR_FACTOR  → 完全不可见
-  // fullQualify = threshold * FULL_QUALIFY_FACTOR → 完全合格（qualifier=1）
-  PNL_RAMP: {
-    SOFT_FLOOR_FACTOR: 0.5,   // softFloor = threshold * 0.5
-    FULL_QUALIFY_FACTOR: 1.5,  // fullQualify = threshold * 1.5
-  },
 } as const
 
 // ============================================
@@ -300,76 +280,6 @@ export function calculatePnlScore(pnl: number | null, period: Period): number {
 }
 
 /**
- * 计算 PnL 软门槛系数 (0~1)
- *
- * 门槛附近渐变而非二元开关：
- * - pnl < softFloor  → 0（不入榜）
- * - softFloor <= pnl < fullQualify → 线性插值 (0~1)
- * - pnl >= fullQualify → 1（完全合格）
- *
- * | 周期 | softFloor | threshold | fullQualify |
- * |------|-----------|-----------|-------------|
- * | 7D   | $100      | $200      | $300        |
- * | 30D  | $250      | $500      | $750        |
- * | 90D  | $500      | $1,000    | $1,500      |
- *
- * @param pnl 已实现盈亏（USD）
- * @param period 时间段
- * @returns 0~1 系数
- */
-export function calculatePnlQualifier(pnl: number, period: Period): number {
-  const threshold = ARENA_CONFIG.PNL_THRESHOLD[period]
-  const softFloor = threshold * ARENA_CONFIG.PNL_RAMP.SOFT_FLOOR_FACTOR
-  const fullQualify = threshold * ARENA_CONFIG.PNL_RAMP.FULL_QUALIFY_FACTOR
-
-  if (pnl >= fullQualify) return 1.0
-  if (pnl > softFloor) return (pnl - softFloor) / (fullQualify - softFloor)
-  return 0
-}
-
-/**
- * 检查是否达到入榜门槛（软门槛：pnl > softFloor 即可见）
- *
- * 使用 softFloor（threshold * 0.5）而非硬门槛，
- * 配合 calculatePnlQualifier 实现渐变过渡。
- *
- * @param pnl 已实现盈亏（USD）
- * @param period 时间段
- */
-export function meetsThreshold(pnl: number, period: Period): boolean {
-  const threshold = ARENA_CONFIG.PNL_THRESHOLD[period]
-  const softFloor = threshold * ARENA_CONFIG.PNL_RAMP.SOFT_FLOOR_FACTOR
-  return pnl > softFloor
-}
-
-/**
- * 检查是否达到硬门槛（原始行为，pnl > threshold）
- * 用于判断是否设置 last_qualified_at 等。
- */
-export function meetsHardThreshold(pnl: number, period: Period): boolean {
-  const threshold = ARENA_CONFIG.PNL_THRESHOLD[period]
-  return pnl > threshold
-}
-
-/**
- * 检查是否在保留窗口内（Grace Period）
- *
- * 交易员一旦合格上榜，即使下次抓取没抓到或临时跌破门槛，
- * 保留 GRACE_PERIOD_HOURS 小时可见。
- *
- * @param lastQualifiedAt 上次合格时间（ISO string）
- * @param gracePeriodHours 保留窗口小时数（默认 24）
- */
-export function isWithinGracePeriod(
-  lastQualifiedAt: string | null | undefined,
-  gracePeriodHours: number = ARENA_CONFIG.GRACE_PERIOD_HOURS
-): boolean {
-  if (!lastQualifiedAt) return false
-  const elapsed = Date.now() - new Date(lastQualifiedAt).getTime()
-  return elapsed < gracePeriodHours * 3600 * 1000
-}
-
-/**
  * 置信度防抖：数据完整度变化后缓冲一段时间
  *
  * 当 MDD/WR 间歇性从有变无时，不立即降低置信度乘数，
@@ -427,12 +337,6 @@ export function calculateArenaScore(
 ): ArenaScoreResult {
   const { roi, pnl, maxDrawdown, winRate } = input
 
-  // 检查入榜门槛（软门槛：pnl > softFloor）
-  const meets = meetsThreshold(pnl, period)
-
-  // 计算 PnL 软门槛系数 (0~1)
-  const pnlQualifier = calculatePnlQualifier(pnl, period)
-
   // 判断数据完整性
   const scoreConfidence = getScoreConfidence(maxDrawdown, winRate)
 
@@ -456,8 +360,6 @@ export function calculateArenaScore(
     pnlScore: Math.round(pnlScore * 100) / 100,
     drawdownScore: Math.round(drawdownScore * 100) / 100,
     stabilityScore: Math.round(stabilityScore * 100) / 100,
-    meetsThreshold: meets,
-    pnlQualifier: Math.round(pnlQualifier * 1000) / 1000,  // 保留3位小数
     scoreConfidence,
   }
 }
@@ -558,7 +460,7 @@ export function rankByArenaScore<T extends TraderScoreInput & { id: string }>(
   traders: T[],
   period: Period
 ): (T & { arena_score: number; score_details: ArenaScoreResult })[] {
-  // 计算分数并过滤
+  // 计算分数
   const scored = traders
     .map(trader => {
       const result = calculateArenaScore(trader, period)
@@ -568,8 +470,7 @@ export function rankByArenaScore<T extends TraderScoreInput & { id: string }>(
         score_details: result,
       }
     })
-    .filter(t => t.score_details.meetsThreshold) // 过滤未达门槛的
-  
+
   // 按分数降序排序
   scored.sort((a, b) => {
     // 主排序：Arena Score 降序
@@ -581,6 +482,6 @@ export function rankByArenaScore<T extends TraderScoreInput & { id: string }>(
     const mddB = Math.abs(b.maxDrawdown ?? Infinity)
     return mddA - mddB
   })
-  
+
   return scored
 }

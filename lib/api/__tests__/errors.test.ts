@@ -207,8 +207,8 @@ describe('API errors', () => {
       })
 
       it('应该处理 null 和 undefined', () => {
-        expect(ApiError.from(null).message).toBe('未知错误')
-        expect(ApiError.from(undefined).message).toBe('未知错误')
+        expect(ApiError.from(null).message).toBe('Unknown error')
+        expect(ApiError.from(undefined).message).toBe('Unknown error')
       })
     })
   })

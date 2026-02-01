@@ -67,7 +67,7 @@ export default function ShareCompareButton({ traderIds, comparisonRef }: ShareCo
         a.download = `ranking-arena-compare-${Date.now()}.png`
         a.click()
         URL.revokeObjectURL(url)
-        showToast('Image downloaded!', 'success')
+        showToast(t('imageDownloaded'), 'success')
       }, 'image/png')
     } catch (err) {
       console.error('Failed to generate image:', err)

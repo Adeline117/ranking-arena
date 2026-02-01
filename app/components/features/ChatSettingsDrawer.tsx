@@ -8,6 +8,7 @@ import { useToast } from '@/app/components/ui/Toast'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { getProfileUrl } from '@/lib/utils/profile-navigation'
 import ReportModal from '@/app/components/ui/ReportModal'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 type ChatSettings = {
   remark: string | null
@@ -46,6 +47,7 @@ export default function ChatSettingsDrawer({
   onClearHistory,
 }: ChatSettingsDrawerProps) {
   const { showToast } = useToast()
+  const { t } = useLanguage()
   const [settings, setSettings] = useState<ChatSettings>({
     remark: null,
     is_muted: false,
@@ -98,7 +100,7 @@ export default function ChatSettingsDrawer({
 
       if (!res.ok) {
         const data = await res.json()
-        showToast(data.error || '更新失败', 'error')
+        showToast(data.error || t('updateFailed'), 'error')
         return
       }
 
@@ -107,17 +109,17 @@ export default function ChatSettingsDrawer({
       onSettingsChange(data.settings)
 
       if ('is_muted' in updates) {
-        showToast(updates.is_muted ? '已静音' : '已取消静音', 'success')
+        showToast(updates.is_muted ? t('muted') : t('unmuted'), 'success')
       } else if ('is_pinned' in updates) {
-        showToast(updates.is_pinned ? '已置顶' : '已取消置顶', 'success')
+        showToast(updates.is_pinned ? t('pinnedChat') : t('unpinnedChat'), 'success')
       } else if ('is_blocked' in updates) {
-        showToast(updates.is_blocked ? '已屏蔽' : '已取消屏蔽', 'success')
+        showToast(updates.is_blocked ? t('blocked') : t('unblocked'), 'success')
       } else if ('remark' in updates) {
-        showToast('备注已更新', 'success')
+        showToast(t('remarkUpdated'), 'success')
       }
     } catch (error) {
       console.error('Failed to update setting:', error)
-      showToast('更新失败', 'error')
+      showToast(t('updateFailed'), 'error')
     } finally {
       setSaving(false)
     }
@@ -126,7 +128,7 @@ export default function ChatSettingsDrawer({
   const handleRemarkSave = () => {
     const trimmed = remarkInput.trim()
     if (trimmed.length > 50) {
-      showToast('备注名最多50个字符', 'warning')
+      showToast(t('remarkMaxLength'), 'warning')
       return
     }
     updateSetting({ remark: trimmed || null })
@@ -134,20 +136,20 @@ export default function ChatSettingsDrawer({
   }
 
   const handleClearHistory = async () => {
-    if (!confirm('确定要清空聊天记录吗？此操作仅清空你的视图，不影响对方。')) {
+    if (!confirm(t('confirmClearChat'))) {
       return
     }
 
     await updateSetting({ cleared_before: new Date().toISOString() })
     onClearHistory()
-    showToast('聊天记录已清空', 'success')
+    showToast(t('chatHistoryCleared'), 'success')
   }
 
   const handleBlock = async () => {
     if (settings.is_blocked) {
       await updateSetting({ is_blocked: false })
     } else {
-      if (!confirm('确定要屏蔽该用户吗？屏蔽后将无法收到对方消息。')) {
+      if (!confirm(t('confirmBlockMessage'))) {
         return
       }
       await updateSetting({ is_blocked: true })
@@ -199,7 +201,7 @@ export default function ChatSettingsDrawer({
             borderBottom: `1px solid ${tokens.colors.border.primary}`,
           }}
         >
-          <Text size="lg" weight="bold">聊天设置</Text>
+          <Text size="lg" weight="bold">{t('chatSettings')}</Text>
           <button
             onClick={onClose}
             style={{
@@ -225,7 +227,7 @@ export default function ChatSettingsDrawer({
 
         {loading ? (
           <Box style={{ padding: tokens.spacing[6], textAlign: 'center' }}>
-            <Text size="sm" color="tertiary">加载中...</Text>
+            <Text size="sm" color="tertiary">{t('loading')}</Text>
           </Box>
         ) : (
           <Box style={{ flex: 1, overflow: 'auto' }}>
@@ -271,7 +273,7 @@ export default function ChatSettingsDrawer({
               }}
             >
               <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: tokens.spacing[2] }}>
-                <Text size="sm" weight="semibold" color="secondary">备注名</Text>
+                <Text size="sm" weight="semibold" color="secondary">{t('remarkName')}</Text>
                 {!editingRemark && (
                   <button
                     onClick={() => {
@@ -289,7 +291,7 @@ export default function ChatSettingsDrawer({
                       transition: 'all 0.2s',
                     }}
                   >
-                    {settings.remark ? '修改' : '设置'}
+                    {settings.remark ? t('modify') : t('setRemark')}
                   </button>
                 )}
               </Box>
@@ -299,7 +301,7 @@ export default function ChatSettingsDrawer({
                     value={remarkInput}
                     onChange={(e) => setRemarkInput(e.target.value)}
                     maxLength={50}
-                    placeholder="输入备注名"
+                    placeholder={t('enterRemarkName')}
                     autoFocus
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') handleRemarkSave()
@@ -331,7 +333,7 @@ export default function ChatSettingsDrawer({
                       opacity: saving ? 0.6 : 1,
                     }}
                   >
-                    保存
+                    {t('save')}
                   </button>
                   <button
                     onClick={() => setEditingRemark(false)}
@@ -345,12 +347,12 @@ export default function ChatSettingsDrawer({
                       cursor: 'pointer',
                     }}
                   >
-                    取消
+                    {t('cancel')}
                   </button>
                 </Box>
               ) : (
                 <Text size="sm" color={settings.remark ? 'primary' : 'tertiary'}>
-                  {settings.remark || '未设置'}
+                  {settings.remark || t('notSet')}
                 </Text>
               )}
             </Box>
@@ -365,7 +367,7 @@ export default function ChatSettingsDrawer({
                     <line x1="21" y1="21" x2="16.65" y2="16.65" />
                   </svg>
                 }
-                label="搜索聊天记录"
+                label={t('searchChatHistory')}
                 onClick={() => { onSearchOpen(); onClose() }}
               />
 
@@ -387,7 +389,7 @@ export default function ChatSettingsDrawer({
                     )}
                   </svg>
                 }
-                label="消息免打扰"
+                label={t('doNotDisturb')}
                 checked={settings.is_muted}
                 onChange={(checked) => updateSetting({ is_muted: checked })}
                 disabled={saving}
@@ -401,7 +403,7 @@ export default function ChatSettingsDrawer({
                     <path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V17z" />
                   </svg>
                 }
-                label="置顶聊天"
+                label={t('pinChat')}
                 checked={settings.is_pinned}
                 onChange={(checked) => updateSetting({ is_pinned: checked })}
                 disabled={saving}
@@ -415,7 +417,7 @@ export default function ChatSettingsDrawer({
                       <circle cx="12" cy="7" r="4" />
                     </svg>
                   }
-                  label="查看主页"
+                  label={t('viewProfile')}
                   onClick={() => { window.location.href = profileUrl }}
                 />
               )}
@@ -430,7 +432,7 @@ export default function ChatSettingsDrawer({
                     <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
                   </svg>
                 }
-                label="清空聊天记录"
+                label={t('clearChatHistory')}
                 onClick={handleClearHistory}
                 danger
               />
@@ -443,7 +445,7 @@ export default function ChatSettingsDrawer({
                     <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
                   </svg>
                 }
-                label={settings.is_blocked ? '取消屏蔽' : '屏蔽用户'}
+                label={settings.is_blocked ? t('unblockUser') : t('blockUser')}
                 onClick={handleBlock}
                 danger={!settings.is_blocked}
               />
@@ -456,7 +458,7 @@ export default function ChatSettingsDrawer({
                     <line x1="4" y1="22" x2="4" y2="15" />
                   </svg>
                 }
-                label="举报"
+                label={t('report')}
                 onClick={() => setReportModalOpen(true)}
                 danger
               />

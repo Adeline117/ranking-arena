@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from 'react'
 import { getCsrfHeaders } from '@/lib/api/client'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 type ToastFn = (message: string, type: 'success' | 'error' | 'warning' | 'info') => void
 
@@ -17,6 +18,7 @@ export interface AlertConfig {
 }
 
 export function useAlertConfig(accessToken: string | null, showToast?: ToastFn) {
+  const { t } = useLanguage()
   const [config, setConfig] = useState<AlertConfig>({})
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -70,11 +72,11 @@ export function useAlertConfig(accessToken: string | null, showToast?: ToastFn) 
         }))
         return true
       } else {
-        showToast?.(data.error || '保存失败', 'error')
+        showToast?.(data.error || t('adminSaveFailed'), 'error')
         return false
       }
     } catch (_err) {
-      showToast?.('网络错误', 'error')
+      showToast?.(t('adminNetworkError'), 'error')
       return false
     } finally {
       setSaving(false)

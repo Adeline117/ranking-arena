@@ -5,25 +5,10 @@ import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
 import Card from '@/app/components/ui/Card'
 import { useReports } from '../hooks/useReports'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 interface ReportsTabProps {
   accessToken: string | null
-}
-
-const REASON_LABELS: Record<string, string> = {
-  spam: '垃圾内容',
-  harassment: '骚扰',
-  inappropriate: '不当内容',
-  misinformation: '虚假信息',
-  fraud: '诈骗/欺诈',
-  other: '其他',
-}
-
-const CONTENT_TYPE_LABELS: Record<string, string> = {
-  post: '帖子',
-  comment: '评论',
-  message: '私信',
-  user: '用户',
 }
 
 export default function ReportsTab({ accessToken }: ReportsTabProps) {
@@ -35,6 +20,23 @@ export default function ReportsTab({ accessToken }: ReportsTabProps) {
     loadReports,
     resolveReport,
   } = useReports(accessToken)
+  const { t } = useLanguage()
+
+  const REASON_LABELS: Record<string, string> = {
+    spam: t('adminReasonSpam'),
+    harassment: t('adminReasonHarassment'),
+    inappropriate: t('adminReasonInappropriate'),
+    misinformation: t('adminReasonMisinformation'),
+    fraud: t('adminReasonFraud'),
+    other: t('adminReasonOther'),
+  }
+
+  const CONTENT_TYPE_LABELS: Record<string, string> = {
+    post: t('adminContentPost'),
+    comment: t('adminContentComment'),
+    message: t('adminContentMessage'),
+    user: t('adminContentUser'),
+  }
 
   const [status, setStatus] = useState<'pending' | 'resolved' | 'dismissed' | 'all'>('pending')
   const [contentType, setContentType] = useState<'post' | 'comment' | 'message' | 'user' | 'all'>('all')
@@ -50,11 +52,11 @@ export default function ReportsTab({ accessToken }: ReportsTabProps) {
   }
 
   return (
-    <Card title="内容举报处理">
+    <Card title={t('adminReportHandling')}>
       {/* Filters */}
       <Box style={{ marginBottom: tokens.spacing[4], display: 'flex', gap: tokens.spacing[4], flexWrap: 'wrap' }}>
         <Box style={{ display: 'flex', gap: tokens.spacing[2], alignItems: 'center' }}>
-          <Text size="sm" color="secondary">状态:</Text>
+          <Text size="sm" color="secondary">{t('adminStatusFilter')}</Text>
           {(['pending', 'resolved', 'dismissed', 'all'] as const).map((s) => (
             <Button
               key={s}
@@ -62,21 +64,21 @@ export default function ReportsTab({ accessToken }: ReportsTabProps) {
               size="sm"
               onClick={() => setStatus(s)}
             >
-              {s === 'pending' ? '待处理' : s === 'resolved' ? '已处理' : s === 'dismissed' ? '已驳回' : '全部'}
+              {s === 'pending' ? t('adminPending') : s === 'resolved' ? t('adminResolved') : s === 'dismissed' ? t('adminDismissed') : t('adminFilterAll')}
             </Button>
           ))}
         </Box>
-        
+
         <Box style={{ display: 'flex', gap: tokens.spacing[2], alignItems: 'center', flexWrap: 'wrap' }}>
-          <Text size="sm" color="secondary">类型:</Text>
-          {(['all', 'post', 'comment', 'message', 'user'] as const).map((t) => (
+          <Text size="sm" color="secondary">{t('adminTypeFilter')}</Text>
+          {(['all', 'post', 'comment', 'message', 'user'] as const).map((ct) => (
             <Button
-              key={t}
-              variant={contentType === t ? 'primary' : 'secondary'}
+              key={ct}
+              variant={contentType === ct ? 'primary' : 'secondary'}
               size="sm"
-              onClick={() => setContentType(t)}
+              onClick={() => setContentType(ct)}
             >
-              {t === 'all' ? '全部' : CONTENT_TYPE_LABELS[t] || t}
+              {ct === 'all' ? t('adminFilterAll') : CONTENT_TYPE_LABELS[ct] || ct}
             </Button>
           ))}
         </Box>
@@ -85,11 +87,11 @@ export default function ReportsTab({ accessToken }: ReportsTabProps) {
       {/* Reports List */}
       {loading ? (
         <Box style={{ padding: tokens.spacing[8], textAlign: 'center' }}>
-          <Text color="tertiary">加载中...</Text>
+          <Text color="tertiary">{t('loading')}</Text>
         </Box>
       ) : reports.length === 0 ? (
         <Box style={{ padding: tokens.spacing[8], textAlign: 'center' }}>
-          <Text color="tertiary">暂无举报</Text>
+          <Text color="tertiary">{t('adminNoReports')}</Text>
         </Box>
       ) : (
         <>
@@ -136,14 +138,14 @@ export default function ReportsTab({ accessToken }: ReportsTabProps) {
                     </Box>
                   </Box>
                   <Text size="xs" color="tertiary">
-                    {new Date(report.created_at).toLocaleString('zh-CN')}
+                    {new Date(report.created_at).toLocaleString()}
                   </Text>
                 </Box>
 
                 {/* Reporter */}
                 <Box style={{ marginBottom: tokens.spacing[2] }}>
                   <Text size="sm" color="secondary">
-                    举报人: @{report.reporter?.handle || '未知'}
+                    {t('adminReporter').replace('{handle}', report.reporter?.handle || t('unknown'))}
                   </Text>
                 </Box>
 
@@ -163,11 +165,11 @@ export default function ReportsTab({ accessToken }: ReportsTabProps) {
                       </Text>
                     )}
                     <Text size="sm" color="secondary">
-                      {report.contentPreview.content || '(无内容)'}
+                      {report.contentPreview.content || t('adminNoContent')}
                     </Text>
                     {report.contentAuthor && (
                       <Text size="xs" color="tertiary" style={{ marginTop: tokens.spacing[2] }}>
-                        作者: @{report.contentAuthor.handle || '未知'}
+                        {t('adminAuthor').replace('{handle}', report.contentAuthor.handle || t('unknown'))}
                       </Text>
                     )}
                   </Box>
@@ -176,7 +178,7 @@ export default function ReportsTab({ accessToken }: ReportsTabProps) {
                 {/* Description */}
                 {report.description && (
                   <Box style={{ marginBottom: tokens.spacing[3] }}>
-                    <Text size="xs" color="tertiary">举报说明:</Text>
+                    <Text size="xs" color="tertiary">{t('adminReportDesc')}</Text>
                     <Text size="sm" color="secondary">{report.description}</Text>
                   </Box>
                 )}
@@ -191,7 +193,7 @@ export default function ReportsTab({ accessToken }: ReportsTabProps) {
                       disabled={actionLoading[report.id]}
                       style={{ background: tokens.colors.accent.error }}
                     >
-                      {actionLoading[report.id] ? '处理中...' : '删除内容'}
+                      {actionLoading[report.id] ? t('processing') : t('adminDeleteContent')}
                     </Button>
                     <Button
                       variant="secondary"
@@ -199,7 +201,7 @@ export default function ReportsTab({ accessToken }: ReportsTabProps) {
                       onClick={() => resolveReport(report.id, 'dismiss')}
                       disabled={actionLoading[report.id]}
                     >
-                      驳回举报
+                      {t('adminDismissReport')}
                     </Button>
                   </Box>
                 )}
@@ -214,7 +216,7 @@ export default function ReportsTab({ accessToken }: ReportsTabProps) {
                     }}
                   >
                     <Text size="xs" color="tertiary">
-                      {report.status === 'resolved' ? '已处理: 内容已删除' : '已驳回'}
+                      {report.status === 'resolved' ? t('adminResolvedDeleted') : t('adminDismissedStatus')}
                       {report.action_taken && ` - ${report.action_taken}`}
                     </Text>
                   </Box>
@@ -232,7 +234,7 @@ export default function ReportsTab({ accessToken }: ReportsTabProps) {
                 onClick={() => handlePageChange(pagination.page - 1)}
                 disabled={pagination.page <= 1}
               >
-                上一页
+                {t('prevPage')}
               </Button>
               <Text size="sm" color="secondary" style={{ display: 'flex', alignItems: 'center' }}>
                 {pagination.page} / {pagination.totalPages}
@@ -243,7 +245,7 @@ export default function ReportsTab({ accessToken }: ReportsTabProps) {
                 onClick={() => handlePageChange(pagination.page + 1)}
                 disabled={pagination.page >= pagination.totalPages}
               >
-                下一页
+                {t('nextPage')}
               </Button>
             </Box>
           )}

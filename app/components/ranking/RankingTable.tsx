@@ -485,9 +485,6 @@ function RankingTableInner(props: {
             <span>{t('rankingRule2')}</span>
             <span>{t('rankingRule3')}</span>
             <span style={{ color: tokens.colors.text.tertiary, marginTop: 6 }}>
-              {t('rankingRuleThreshold')}
-            </span>
-            <span style={{ color: tokens.colors.text.tertiary, marginTop: 4 }}>
               {t('rankingRuleROINote')}
             </span>
           </div>

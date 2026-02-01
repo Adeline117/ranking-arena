@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test'
 test.describe('热榜评论系统 - 评论持久化', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/hot')
-    await page.waitForLoadState('networkidle')
+    await page.waitForLoadState('domcontentloaded')
   })
 
   test('评论API响应格式正确解析 - 打开帖子后评论正确加载', async ({ page }) => {
@@ -328,7 +328,7 @@ test.describe('小组名导航 - 热榜帖子卡片', () => {
     })
 
     await page.goto('/hot')
-    await page.waitForLoadState('networkidle')
+    await page.waitForLoadState('domcontentloaded')
 
     // Find a group name link in the hot post list
     const groupLink = page.locator('.hot-post-item a[href*="/groups/"]').first()
@@ -339,7 +339,7 @@ test.describe('小组名导航 - 热榜帖子卡片', () => {
 
       // Click the group name - should NOT open the post modal
       await groupLink.click()
-      await page.waitForLoadState('networkidle')
+      await page.waitForLoadState('domcontentloaded')
 
       // Should navigate to the group page
       expect(page.url()).toMatch(/\/groups\//)
@@ -358,7 +358,7 @@ test.describe('小组名导航 - 热榜帖子卡片', () => {
 
   test('热榜帖子详情弹窗中小组名是可点击链接', async ({ page }) => {
     await page.goto('/hot')
-    await page.waitForLoadState('networkidle')
+    await page.waitForLoadState('domcontentloaded')
 
     // Mock comments API
     await page.route('**/api/posts/*/comments*', async (route) => {
@@ -396,7 +396,7 @@ test.describe('小组名导航 - 热榜帖子卡片', () => {
 
       // Click should navigate to the group page
       await modalGroupLink.click()
-      await page.waitForLoadState('networkidle')
+      await page.waitForLoadState('domcontentloaded')
       expect(page.url()).toMatch(/\/groups\//)
     } else {
       // Post may not belong to a group - valid scenario
@@ -406,7 +406,7 @@ test.describe('小组名导航 - 热榜帖子卡片', () => {
 
   test('点击小组名不会触发帖子详情打开', async ({ page }) => {
     await page.goto('/hot')
-    await page.waitForLoadState('networkidle')
+    await page.waitForLoadState('domcontentloaded')
 
     // Find a group link in the post list
     const groupLink = page.locator('.hot-post-item a[href*="/groups/"]').first()
@@ -429,7 +429,7 @@ test.describe('小组名导航 - 热榜帖子卡片', () => {
 test.describe('PostFeed 小组名导航', () => {
   test('PostFeed 列表中小组名链接可正确跳转', async ({ page }) => {
     await page.goto('/')
-    await page.waitForLoadState('networkidle')
+    await page.waitForLoadState('domcontentloaded')
 
     // Find group name links in post feed
     const groupLink = page.locator('a[href*="/groups/"]').first()

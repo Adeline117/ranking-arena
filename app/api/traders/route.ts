@@ -19,7 +19,6 @@ import { NextResponse } from 'next/server'
 import { withPublic } from '@/lib/api/middleware'
 import {
   calculateArenaScore,
-  isWithinGracePeriod,
   debouncedConfidence,
   ARENA_CONFIG,
   type Period,
@@ -27,7 +26,6 @@ import {
 import {
   ALL_SOURCES,
   SOURCE_TYPE_MAP,
-  SKIP_PNL_THRESHOLD_SOURCES,
 } from '@/lib/constants/exchanges'
 import { createLogger } from '@/lib/utils/logger'
 import { getOrSetWithLock, CacheKey } from '@/lib/cache'
@@ -62,7 +60,6 @@ interface TraderData {
   return_score?: number
   drawdown_score?: number
   stability_score?: number
-  last_qualified_at?: string | null
   full_confidence_at?: string | null
 }
 
@@ -177,7 +174,7 @@ async function fetchTradersData(
       while (true) {
         const { data, error } = await supabase
           .from('trader_snapshots')
-          .select('source_trader_id, roi, pnl, followers, win_rate, max_drawdown, trades_count, arena_score, captured_at, last_qualified_at, full_confidence_at')
+          .select('source_trader_id, roi, pnl, followers, win_rate, max_drawdown, trades_count, arena_score, captured_at, full_confidence_at')
           .eq('source', source)
           .eq('season_id', seasonId)
           .order('captured_at', { ascending: false })
@@ -198,18 +195,14 @@ async function fetchTradersData(
       if (!allSnapshots.length) return { traders: [], isStale: !isFresh }
 
       // 去重：每个交易员只保留最新的一条记录
-      // 同时合并 last_qualified_at 和 full_confidence_at（取所有快照中最新的值）
+      // 同时合并 full_confidence_at（取所有快照中最新的值）
       const traderMap = new Map()
       allSnapshots.forEach(snap => {
         if (!traderMap.has(snap.source_trader_id)) {
           traderMap.set(snap.source_trader_id, snap)
         } else {
-          // 合并 qualification tracking 字段（保留最新的时间戳）
+          // 合并 confidence tracking 字段（保留最新的时间戳）
           const existing = traderMap.get(snap.source_trader_id)
-          if (snap.last_qualified_at &&
-              (!existing.last_qualified_at || snap.last_qualified_at > existing.last_qualified_at)) {
-            existing.last_qualified_at = snap.last_qualified_at
-          }
           if (snap.full_confidence_at &&
               (!existing.full_confidence_at || snap.full_confidence_at > existing.full_confidence_at)) {
             existing.full_confidence_at = snap.full_confidence_at
@@ -264,8 +257,7 @@ async function fetchTradersData(
             avatar_url: info.avatar_url,
             // 使用数据库预计算的 arena_score（如果存在）
             arena_score: item.arena_score != null ? Number(item.arena_score) : undefined,
-            // 排行榜稳定性字段
-            last_qualified_at: item.last_qualified_at ?? null,
+            // 置信度防抖字段
             full_confidence_at: item.full_confidence_at ?? null,
           }
         })
@@ -289,11 +281,8 @@ async function fetchTradersData(
 
     // 统一排名计算逻辑：
     // 1. 计算每个交易员的 Arena Score
-    // 2. 过滤未达 PnL 门槛的交易员
-    // 3. 按稳定的多级排序规则排序（避免同分时排名跳动）
-    
-    const pnlThreshold = ARENA_CONFIG.PNL_THRESHOLD[timeRange]
-    
+    // 2. 按稳定的多级排序规则排序（避免同分时排名跳动）
+
     const scoredTraders = allTraders
       .map(trader => {
         const scoreResult = calculateArenaScore(
@@ -306,22 +295,18 @@ async function fetchTradersData(
           timeRange
         )
 
-        // 方案 3：置信度防抖 — 如果近期（8h 内）曾有完整数据，继续使用 full 置信度
+        // 置信度防抖 — 如果近期（8h 内）曾有完整数据，继续使用 full 置信度
         const effectiveConfidence = debouncedConfidence(
           scoreResult.scoreConfidence,
           trader.full_confidence_at,
         )
         const confidenceMultiplier = ARENA_CONFIG.CONFIDENCE_MULTIPLIER[effectiveConfidence]
 
-        // 方案 2：软 PnL 门槛 — 对需要 PnL 门槛的交易所，应用 qualifier 系数
-        const skipPnlThreshold = (SKIP_PNL_THRESHOLD_SOURCES as string[]).includes(trader.source)
-        const qualifier = skipPnlThreshold ? 1 : scoreResult.pnlQualifier
-
-        // 计算最终分数：原始子分数之和 × 置信度乘数 × PnL qualifier
+        // 计算最终分数：原始子分数之和 × 置信度乘数
         const rawSubScores = scoreResult.returnScore + scoreResult.pnlScore +
                              scoreResult.drawdownScore + scoreResult.stabilityScore
         const finalScore = Math.round(
-          Math.max(0, Math.min(100, rawSubScores * confidenceMultiplier * qualifier)) * 100
+          Math.max(0, Math.min(100, rawSubScores * confidenceMultiplier)) * 100
         ) / 100
 
         return {
@@ -331,19 +316,7 @@ async function fetchTradersData(
           pnl_score: scoreResult.pnlScore,
           drawdown_score: scoreResult.drawdownScore,
           stability_score: scoreResult.stabilityScore,
-          _meetsThreshold: scoreResult.meetsThreshold,
-          _pnlQualifier: qualifier,
-          _skipPnlThreshold: skipPnlThreshold,
         }
-      })
-      // 方案 1+2：过滤 — 跳过 PnL 门槛的交易所直接通过，
-      // 否则需要达到软门槛 OR 在 24h 保留窗口内
-      .filter(t => {
-        if (t._skipPnlThreshold) return true
-        if (t._meetsThreshold) return true
-        // 方案 1：Grace period — 24h 内合格过就保留
-        if (isWithinGracePeriod(t.last_qualified_at)) return true
-        return false
       })
       // 稳定排序：确保相同数据产生相同排名
       .sort((a, b) => {
@@ -463,7 +436,7 @@ async function fetchTradersData(
     }
 
     // Build final trader objects with all features, removing internal fields
-    const topTraders = paginatedTraders.map(({ _meetsThreshold, _pnlQualifier, _skipPnlThreshold, last_qualified_at, full_confidence_at, ...t }) => {
+    const topTraders = paginatedTraders.map(({ full_confidence_at, ...t }) => {
       const key = `${t.source}:${t.id}`
       const handle = t.handle || t.id
       const handleLower = handle.toLowerCase()
@@ -502,7 +475,6 @@ async function fetchTradersData(
       timeRange,
       totalCount: allTraders.length,
       rankingMode: 'arena_score',
-      pnlThreshold,
       lastUpdated: latestData?.captured_at || new Date().toISOString(),
       // 数据新鲜度标识
       isStale,

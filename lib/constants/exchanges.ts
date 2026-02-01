@@ -181,45 +181,6 @@ export const PRIORITY_SOURCES: TraderSource[] = [
 ]
 
 // ---------------------------------------------------------------------------
-// SKIP_PNL_THRESHOLD_SOURCES – sources whose PnL data is absent or
-// semantically different (e.g. copier PnL instead of trader PnL)
-// ---------------------------------------------------------------------------
-
-export const SKIP_PNL_THRESHOLD_SOURCES: TraderSource[] = [
-  // CEX – PnL is copier PnL or not returned
-  'bybit',
-  'bitget_futures',
-  'bitget_spot',
-  'kucoin',
-  'coinex',
-  'mexc',
-  'weex',
-  'pionex',
-  'bitmart',
-  'phemex',
-  'bingx',
-  'gateio',
-  'xt',
-  'lbank',
-  'blofin',
-  // On-chain – PnL calculation differs
-  'gmx',
-  'dydx',
-  'hyperliquid',
-  'kwenta',
-  'gains',
-  'mux',
-  'okx_web3',
-  'okx_wallet',
-  'binance_web3',
-  // Dune on-chain data
-  'dune_gmx',
-  'dune_hyperliquid',
-  'dune_uniswap',
-  'dune_defi',
-]
-
-// ---------------------------------------------------------------------------
 // EXCHANGE_NAMES – human-readable display names for UI badges
 // ---------------------------------------------------------------------------
 

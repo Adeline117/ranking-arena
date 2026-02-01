@@ -107,7 +107,7 @@ export default function AdvancedAlerts({
   existingConditions = [],
   onConditionsChange,
 }: AdvancedAlertsProps) {
-  const { t, language } = useLanguage()
+  const { t } = useLanguage()
 
   // Demo conditions if none provided
   const [conditions, setConditions] = useState<AlertCondition[]>(
@@ -148,21 +148,21 @@ export default function AdvancedAlerts({
   const alertTypes: { type: AlertType; label: string; icon: React.ReactNode; description: string }[] = [
     {
       type: 'roi_change',
-      label: language === 'zh' ? 'ROI 变化' : 'ROI Change',
+      label: t('alertRoiChangeLabel'),
       icon: <TrendUpIcon size={16} />,
-      description: language === 'zh' ? '当 ROI 变化超过阈值时提醒' : 'Alert when ROI changes by threshold',
+      description: t('alertRoiChangeDesc'),
     },
     {
       type: 'drawdown',
-      label: language === 'zh' ? '回撤警告' : 'Drawdown Alert',
+      label: t('alertDrawdownLabel'),
       icon: <TrendDownIcon size={16} />,
-      description: language === 'zh' ? '当回撤超过阈值时提醒' : 'Alert when drawdown exceeds threshold',
+      description: t('alertDrawdownDesc'),
     },
     {
       type: 'rank_change',
-      label: language === 'zh' ? '排名变化' : 'Rank Change',
+      label: t('alertRankChangeLabel'),
       icon: <HashIcon size={16} />,
-      description: language === 'zh' ? '当排名变化超过阈值时提醒' : 'Alert when rank changes by threshold',
+      description: t('alertRankChangeDesc'),
     },
   ]
 
@@ -171,7 +171,7 @@ export default function AdvancedAlerts({
     { value: '<', label: '<' },
     { value: '>=', label: '>=' },
     { value: '<=', label: '<=' },
-    { value: 'change_by', label: language === 'zh' ? '变化' : 'changes by' },
+    { value: 'change_by', label: t('alertChangesBy') },
   ]
 
   const handleToggleCondition = (id: string) => {
@@ -237,7 +237,7 @@ export default function AdvancedAlerts({
         </Box>
         {traderHandle && (
           <Text size="sm" color="secondary">
-            {language === 'zh' ? `监控: ${traderHandle}` : `Monitoring: ${traderHandle}`}
+            {t('alertMonitoring').replace('{handle}', traderHandle)}
           </Text>
         )}
       </Box>
@@ -294,7 +294,7 @@ export default function AdvancedAlerts({
                     </Text>
                     <Text size="xs" color="tertiary">
                       {condition.operator === 'change_by'
-                        ? `${language === 'zh' ? '变化' : 'Changes by'} ${condition.threshold}${condition.isPercent ? '%' : ''}`
+                        ? `${t('alertChangesByDisplay')} ${condition.threshold}${condition.isPercent ? '%' : ''}`
                         : `${condition.operator} ${condition.threshold}${condition.isPercent ? '%' : ''}`}
                     </Text>
                   </Box>
@@ -305,7 +305,7 @@ export default function AdvancedAlerts({
                   <Box style={{ display: 'flex', gap: 4 }}>
                     {condition.channels.includes('email') && (
                       <Box
-                        title={language === 'zh' ? '邮件通知' : 'Email notification'}
+                        title={t('alertEmailNotification')}
                         style={{
                           width: 24,
                           height: 24,
@@ -322,7 +322,7 @@ export default function AdvancedAlerts({
                     )}
                     {condition.channels.includes('push') && (
                       <Box
-                        title={language === 'zh' ? '推送通知' : 'Push notification'}
+                        title={t('alertPushNotification')}
                         style={{
                           width: 24,
                           height: 24,
@@ -413,7 +413,7 @@ export default function AdvancedAlerts({
           >
             <BellOffIcon size={32} />
             <Text size="sm" color="tertiary" style={{ marginTop: tokens.spacing[2] }}>
-              {language === 'zh' ? '暂无告警条件' : 'No alert conditions'}
+              {t('alertNoConditions')}
             </Text>
           </Box>
         )}
@@ -430,13 +430,13 @@ export default function AdvancedAlerts({
           }}
         >
           <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[3] }}>
-            {language === 'zh' ? '添加新条件' : 'Add New Condition'}
+            {t('alertAddNewCondition')}
           </Text>
 
           {/* Alert Type */}
           <Box style={{ marginBottom: tokens.spacing[3] }}>
             <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[1] }}>
-              {language === 'zh' ? '告警类型' : 'Alert Type'}
+              {t('alertTypeLabel')}
             </Text>
             <Box style={{ display: 'flex', gap: tokens.spacing[2], flexWrap: 'wrap' }}>
               {alertTypes.map((type) => (
@@ -476,7 +476,7 @@ export default function AdvancedAlerts({
           {/* Threshold */}
           <Box style={{ marginBottom: tokens.spacing[3] }}>
             <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[1] }}>
-              {language === 'zh' ? '阈值' : 'Threshold'}
+              {t('alertThresholdLabel')}
             </Text>
             <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
               <select
@@ -520,7 +520,7 @@ export default function AdvancedAlerts({
           {/* Channels */}
           <Box style={{ marginBottom: tokens.spacing[4] }}>
             <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[1] }}>
-              {language === 'zh' ? '通知渠道' : 'Notification Channels'}
+              {t('alertNotificationChannels')}
             </Text>
             <Box style={{ display: 'flex', gap: tokens.spacing[2] }}>
               {(['push', 'email'] as AlertChannel[]).map((channel) => {
@@ -551,13 +551,7 @@ export default function AdvancedAlerts({
                     }}
                   >
                     {channel === 'email' ? <MailIcon size={14} /> : <SmartphoneIcon size={14} />}
-                    {channel === 'email'
-                      ? language === 'zh'
-                        ? '邮件'
-                        : 'Email'
-                      : language === 'zh'
-                      ? '推送'
-                      : 'Push'}
+                    {channel === 'email' ? t('alertEmailChannel') : t('alertPushChannel')}
                   </button>
                 )
               })}
@@ -631,7 +625,7 @@ export default function AdvancedAlerts({
           }}
         >
           <PlusIcon size={16} />
-          {language === 'zh' ? '添加告警条件' : 'Add Alert Condition'}
+          {t('alertAddCondition')}
         </button>
       )}
     </Box>

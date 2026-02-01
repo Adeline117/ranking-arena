@@ -32,7 +32,7 @@ export default function MyPostsPage() {
   const router = useRouter()
   const { showToast } = useToast()
   const { showDangerConfirm } = useDialog()
-  const { language } = useLanguage()
+  const { language, t } = useLanguage()
   const [email, setEmail] = useState<string | null>(null)
   const [userId, setUserId] = useState<string | null>(null)
   const [userHandle, setUserHandle] = useState<string | null>(null)
@@ -98,7 +98,7 @@ export default function MyPostsPage() {
           console.error('Error fetching posts:', postsError)
           setPosts([])
           setLoading(false)
-          showToast('加载帖子失败', 'error')
+          showToast(t('loadPostsFailed'), 'error')
           return
         }
 
@@ -106,7 +106,7 @@ export default function MyPostsPage() {
       } catch (error) {
         console.error('Error loading posts:', error)
         setPosts([])
-        showToast('加载帖子失败，请稍后重试', 'error')
+        showToast(t('loadPostsFailed'), 'error')
       } finally {
         setLoading(false)
       }
@@ -117,8 +117,8 @@ export default function MyPostsPage() {
 
   const handleDelete = async (postId: string) => {
     const confirmed = await showDangerConfirm(
-      '删除帖子',
-      '确定要删除这篇帖子吗？此操作不可撤销。'
+      t('deletePostTitle'),
+      t('deletePostMessage')
     )
     
     if (!confirmed) return
@@ -132,15 +132,15 @@ export default function MyPostsPage() {
         .eq('author_id', userId)
 
       if (error) {
-        showToast('删除失败，请重试', 'error')
+        showToast(t('deleteFailedRetry'), 'error')
         return
       }
 
       setPosts(prev => prev.filter(p => p.id !== postId))
-      showToast('帖子已删除', 'success')
+      showToast(t('postDeleted'), 'success')
     } catch (error) {
       console.error('Error deleting post:', error)
-      showToast('删除失败，请重试', 'error')
+      showToast(t('deleteFailedRetry'), 'error')
     } finally {
       setDeleting(null)
     }
@@ -152,11 +152,11 @@ export default function MyPostsPage() {
         <TopNav email={email} />
         <Box style={{ maxWidth: 900, margin: '0 auto', padding: tokens.spacing[6] }}>
           <Text size="2xl" weight="black" style={{ marginBottom: tokens.spacing[4] }}>
-            我的帖子
+            {t('myPosts')}
           </Text>
           <EmptyState
-            title="请先登录"
-            description="登录后可以查看和管理您发布的帖子"
+            title={t('pleaseLoginFirst')}
+            description={t('loginToManagePosts')}
             action={
               <Link
                 href="/login"
@@ -170,7 +170,7 @@ export default function MyPostsPage() {
                   fontSize: '14px',
                 }}
               >
-                前往登录
+                {t('goToLogin')}
               </Link>
             }
           />
@@ -185,7 +185,7 @@ export default function MyPostsPage() {
       <Box style={{ maxWidth: 900, margin: '0 auto', padding: tokens.spacing[6] }}>
         <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: tokens.spacing[6] }}>
           <Text size="2xl" weight="black">
-            我的帖子
+            {t('myPosts')}
           </Text>
           {userHandle && (
             <Button
@@ -193,7 +193,7 @@ export default function MyPostsPage() {
               size="sm"
               onClick={() => router.push(`/u/${userHandle}/new`)}
             >
-              发布新帖子
+              {t('publishNewPost')}
             </Button>
           )}
         </Box>
@@ -206,14 +206,14 @@ export default function MyPostsPage() {
           </>
         ) : posts.length === 0 ? (
           <EmptyState
-            title="暂无帖子"
-            description="发布您的第一篇帖子，分享交易见解"
+            title={t('noPosts')}
+            description={t('noPostsDescription')}
             action={userHandle ? (
               <Button
                 variant="primary"
                 onClick={() => router.push(`/u/${userHandle}/new`)}
               >
-                发布帖子
+                {t('publishPost')}
               </Button>
             ) : undefined}
           />
@@ -270,10 +270,10 @@ export default function MyPostsPage() {
                       </Text>
                       <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3] }}>
                         <Text size="xs" color="tertiary">
-                          {post.like_count || 0} 赞
+                          {post.like_count || 0} {t('likes')}
                         </Text>
                         <Text size="xs" color="tertiary">
-                          {post.comment_count || 0} 评论
+                          {post.comment_count || 0} {t('comment')}
                         </Text>
                       </Box>
                     </Box>
@@ -285,7 +285,7 @@ export default function MyPostsPage() {
                       size="sm"
                       onClick={() => router.push(`/post/${post.id}/edit`)}
                     >
-                      编辑
+                      {t('edit')}
                     </Button>
                     <Button
                       variant="ghost"
@@ -294,7 +294,7 @@ export default function MyPostsPage() {
                       disabled={deleting === post.id}
                       style={{ color: tokens.colors.accent.error }}
                     >
-                      {deleting === post.id ? '删除中...' : '删除'}
+                      {deleting === post.id ? t('deleting') : t('delete')}
                     </Button>
                   </Box>
                 </Box>
