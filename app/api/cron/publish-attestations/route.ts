@@ -17,7 +17,7 @@ const CRON_SECRET = process.env.CRON_SECRET
 export async function POST(request: NextRequest) {
   // Verify cron secret
   const authHeader = request.headers.get('authorization')
-  if (CRON_SECRET && authHeader !== `Bearer ${CRON_SECRET}`) {
+  if (!CRON_SECRET || authHeader !== `Bearer ${CRON_SECRET}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
@@ -84,8 +84,12 @@ export async function POST(request: NextRequest) {
         continue
       }
       const walletAddress = walletMap.get(trader.handle)
-      // Use zero address for traders without a linked wallet
-      const recipient = (walletAddress || '0x0000000000000000000000000000000000000000') as Address
+      // Skip traders without a linked wallet
+      if (!walletAddress) {
+        skipped++
+        continue
+      }
+      const recipient = walletAddress as Address
 
       try {
         const dataHash = createDataHash({
