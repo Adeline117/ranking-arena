@@ -17,6 +17,8 @@ import UserFollowButton from '@/app/components/ui/UserFollowButton'
 import MessageButton from '@/app/components/ui/MessageButton'
 import { getAvatarGradient, getAvatarInitial } from '@/lib/utils/avatar'
 import { ProBadgeOverlay } from '@/app/components/ui/ProBadge'
+import { WalletAddress } from '@/app/components/web3/WalletAddress'
+import { NFTBadge } from '@/app/components/web3/NFTBadge'
 
 const PostFeed = dynamic(() => import('@/app/components/post/PostFeed'), {
   ssr: false,
@@ -50,6 +52,7 @@ interface ServerProfile {
     website?: string
   }
   proBadgeTier: 'pro' | null
+  walletAddress?: string
 }
 
 interface UserProfileClientProps {
@@ -83,6 +86,8 @@ export default function UserProfileClient({ handle, serverProfile }: UserProfile
           handleOwnProfileCreation(data.user.id, emailHandle)
         }
       }
+    }).catch((err) => {
+      console.error('[UserProfile] Auth check failed:', err)
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -487,6 +492,24 @@ export default function UserProfileClient({ handle, serverProfile }: UserProfile
                       TG @{profile.socialLinks.telegram}
                     </a>
                   )}
+                </Box>
+              )}
+
+              {/* Wallet address + NFT badge */}
+              {profile.walletAddress && (
+                <Box style={{ display: 'flex', gap: tokens.spacing[2], marginTop: tokens.spacing[2], flexWrap: 'wrap', alignItems: 'center' }}>
+                  <Box
+                    style={{
+                      padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
+                      borderRadius: tokens.radius.md,
+                      background: `${tokens.colors.bg.tertiary}80`,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                    }}
+                  >
+                    <WalletAddress address={profile.walletAddress} showCopy={false} />
+                  </Box>
+                  {profile.proBadgeTier === 'pro' && <NFTBadge size="sm" />}
                 </Box>
               )}
             </Box>

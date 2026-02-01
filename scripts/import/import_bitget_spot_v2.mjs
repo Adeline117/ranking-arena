@@ -9,86 +9,29 @@
  * 用法: node scripts/import_bitget_spot_v2.mjs [7D|30D|90D]
  */
 
-import 'dotenv/config'
 import puppeteer from 'puppeteer-extra'
 import StealthPlugin from 'puppeteer-extra-plugin-stealth'
-import { createClient } from '@supabase/supabase-js'
 import pLimit from 'p-limit'
+import {
+  getSupabaseClient,
+  calculateArenaScore,
+  sleep,
+  getTargetPeriods,
+} from '../lib/shared.mjs'
 
 puppeteer.use(StealthPlugin())
 
-const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
-
-if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-  console.error('Error: SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set')
-  process.exit(1)
-}
-
-const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+const supabase = getSupabaseClient()
 
 const SOURCE = 'bitget_spot'
 const TARGET_COUNT = 500
 const CONCURRENCY = 5
-
-// Arena Score 计算逻辑
-const ARENA_CONFIG = {
-  PARAMS: {
-    '7D': { tanhCoeff: 0.08, roiExponent: 1.8, mddThreshold: 15, winRateCap: 62 },
-    '30D': { tanhCoeff: 0.15, roiExponent: 1.6, mddThreshold: 30, winRateCap: 68 },
-    '90D': { tanhCoeff: 0.18, roiExponent: 1.6, mddThreshold: 40, winRateCap: 70 },
-  },
-  MAX_RETURN_SCORE: 70,
-  MAX_PNL_SCORE: 15,
-  MAX_DRAWDOWN_SCORE: 8,
-  MAX_STABILITY_SCORE: 7,
-  PNL_PARAMS: {
-    '7D': { base: 500, coeff: 0.40 },
-    '30D': { base: 2000, coeff: 0.35 },
-    '90D': { base: 5000, coeff: 0.30 },
-  },
-}
-const clip = (v, min, max) => Math.max(min, Math.min(max, v))
-const safeLog1p = x => x <= -1 ? 0 : Math.log(1 + x)
-const getPeriodDays = p => p === '7D' ? 7 : p === '30D' ? 30 : 90
-
-function calculateArenaScore(roi, pnl, maxDrawdown, winRate, period) {
-  const params = ARENA_CONFIG.PARAMS[period] || ARENA_CONFIG.PARAMS['90D']
-  const days = getPeriodDays(period)
-  const wr = winRate !== null && winRate !== undefined ? (winRate <= 1 ? winRate * 100 : winRate) : null
-  const intensity = (365 / days) * safeLog1p(roi / 100)
-  const r0 = Math.tanh(params.tanhCoeff * intensity)
-  const returnScore = r0 > 0 ? clip(ARENA_CONFIG.MAX_RETURN_SCORE * Math.pow(r0, params.roiExponent), 0, ARENA_CONFIG.MAX_RETURN_SCORE) : 0
-  // PnL score (0-15)
-  const pnlParams = ARENA_CONFIG.PNL_PARAMS[period] || ARENA_CONFIG.PNL_PARAMS['90D']
-  let pnlScore = 0
-  if (pnl !== null && pnl !== undefined && pnl > 0) {
-    const logArg = 1 + pnl / pnlParams.base
-    if (logArg > 0) {
-      pnlScore = clip(ARENA_CONFIG.MAX_PNL_SCORE * Math.tanh(pnlParams.coeff * Math.log(logArg)), 0, ARENA_CONFIG.MAX_PNL_SCORE)
-    }
-  }
-  const drawdownScore = maxDrawdown !== null ? clip(ARENA_CONFIG.MAX_DRAWDOWN_SCORE * clip(1 - Math.abs(maxDrawdown) / params.mddThreshold, 0, 1), 0, 8) : 4
-  const stabilityScore = wr !== null ? clip(ARENA_CONFIG.MAX_STABILITY_SCORE * clip((wr - 45) / (params.winRateCap - 45), 0, 1), 0, 7) : 3.5
-  return Math.round((returnScore + pnlScore + drawdownScore + stabilityScore) * 100) / 100
-}
 
 // Spot URL - 使用用户提供的 URL
 const PERIOD_CONFIG = {
   '7D': { url: 'https://www.bitget.com/asia/copy-trading/spot?rule=2&sort=0' },
   '30D': { url: 'https://www.bitget.com/asia/copy-trading/spot?rule=2&sort=0' },
   '90D': { url: 'https://www.bitget.com/asia/copy-trading/spot?rule=2&sort=0' },
-}
-
-function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms))
-}
-
-function getTargetPeriods() {
-  const arg = process.argv[2]?.toUpperCase()
-  if (arg === 'ALL') return ['7D', '30D', '90D']
-  if (arg && ['7D', '30D', '90D'].includes(arg)) return [arg]
-  return ['7D', '30D', '90D'] // 默认抓取所有时间段
 }
 
 async function fetchLeaderboard(browser, period) {
@@ -636,7 +579,7 @@ async function saveTradersBatch(traders, period) {
       win_rate: normalizedWr,
       max_drawdown: t.maxDrawdown || null,
       followers: t.followers || null,
-      arena_score: calculateArenaScore(t.roi || 0, t.pnl, t.maxDrawdown, normalizedWr, period),
+      arena_score: calculateArenaScore(t.roi || 0, t.pnl, t.maxDrawdown, normalizedWr, period).totalScore,
       captured_at: capturedAt,
     }
   })

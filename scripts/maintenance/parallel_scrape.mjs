@@ -36,7 +36,7 @@ const ALL_SCRAPERS = {
   // API 版本（超快）
   binance_futures_api: 'import_binance_futures_api.mjs',
   // Binance
-  binance_futures: 'import_binance_futures.mjs',
+  binance_futures: 'import_binance_futures_api.mjs',
   binance_spot: 'import_binance_spot.mjs',
   binance_web3: 'import_binance_web3.mjs',
   // Bitget

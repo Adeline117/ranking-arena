@@ -4,88 +4,24 @@
  * 为所有 trader_snapshots 计算并更新 arena_score
  */
 
-import 'dotenv/config'
-import { createClient } from '@supabase/supabase-js'
+import {
+  getSupabaseClient,
+  calculateArenaScore as _calcScore,
+  normalizeWinRate,
+} from '../lib/shared.mjs'
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
+const supabase = getSupabaseClient()
 
-if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-  console.error('❌ 缺少环境变量')
-  process.exit(1)
-}
-
-const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
-
-// ============================================
-// Arena Score 计算逻辑
-// ============================================
-
-const ARENA_CONFIG = {
-  PNL_THRESHOLD: { '7D': 300, '30D': 1000, '90D': 3000 },
-  PARAMS: {
-    '7D': { tanhCoeff: 0.08, roiExponent: 1.8, mddThreshold: 15, winRateCap: 62 },
-    '30D': { tanhCoeff: 0.15, roiExponent: 1.6, mddThreshold: 30, winRateCap: 68 },
-    '90D': { tanhCoeff: 0.18, roiExponent: 1.6, mddThreshold: 40, winRateCap: 70 },
-  },
-  PNL_PARAMS: {
-    '7D': { base: 500, coeff: 0.40 },
-    '30D': { base: 2000, coeff: 0.35 },
-    '90D': { base: 5000, coeff: 0.30 },
-  },
-  WIN_RATE_BASELINE: 45,
-  MAX_RETURN_SCORE: 70,
-  MAX_PNL_SCORE: 15,
-  MAX_DRAWDOWN_SCORE: 8,
-  MAX_STABILITY_SCORE: 7,
-}
-
-const clip = (v, min, max) => Math.max(min, Math.min(max, v))
-const safeLog1p = x => x <= -1 ? 0 : Math.log(1 + x)
-const getPeriodDays = p => p === '7D' ? 7 : p === '30D' ? 30 : 90
-
-function calculatePnlScore(pnl, period) {
-  if (pnl === null || pnl === undefined || pnl <= 0) return 0
-  const params = ARENA_CONFIG.PNL_PARAMS[period] || ARENA_CONFIG.PNL_PARAMS['90D']
-  const logArg = 1 + pnl / params.base
-  if (logArg <= 0) return 0
-  const score = ARENA_CONFIG.MAX_PNL_SCORE * Math.tanh(params.coeff * Math.log(logArg))
-  return clip(score, 0, ARENA_CONFIG.MAX_PNL_SCORE)
-}
-
+/**
+ * Wrapper: shared.mjs calculateArenaScore expects (roi, pnl, mdd, winRate, period),
+ * but this script feeds snapshot rows from the database.
+ */
 function calculateArenaScore(snap, period) {
   const roi = parseFloat(snap.roi) || 0
   const pnl = parseFloat(snap.pnl) || 0
   const mdd = snap.max_drawdown !== null ? parseFloat(snap.max_drawdown) : null
-  let wr = snap.win_rate !== null ? parseFloat(snap.win_rate) : null
-
-  // 标准化 win_rate：如果 <= 1 则认为是小数，需要乘以 100
-  if (wr !== null && wr <= 1) {
-    wr = wr * 100
-  }
-
-  const params = ARENA_CONFIG.PARAMS[period] || ARENA_CONFIG.PARAMS['90D']
-  const days = getPeriodDays(period)
-
-  // Return score (0-70)
-  const intensity = (365 / days) * safeLog1p(roi / 100)
-  const r0 = Math.tanh(params.tanhCoeff * intensity)
-  const returnScore = r0 > 0 ? clip(ARENA_CONFIG.MAX_RETURN_SCORE * Math.pow(r0, params.roiExponent), 0, ARENA_CONFIG.MAX_RETURN_SCORE) : 0
-
-  // PnL score (0-15)
-  const pnlScore = calculatePnlScore(pnl, period)
-
-  // Drawdown score (0-8)
-  const drawdownScore = mdd !== null
-    ? clip(ARENA_CONFIG.MAX_DRAWDOWN_SCORE * clip(1 - Math.abs(mdd) / params.mddThreshold, 0, 1), 0, 8)
-    : 4
-
-  // Stability score (0-7)
-  const stabilityScore = wr !== null
-    ? clip(ARENA_CONFIG.MAX_STABILITY_SCORE * clip((wr - 45) / (params.winRateCap - 45), 0, 1), 0, 7)
-    : 3.5
-
-  return Math.round((returnScore + pnlScore + drawdownScore + stabilityScore) * 100) / 100
+  const wr = snap.win_rate !== null ? normalizeWinRate(parseFloat(snap.win_rate)) : null
+  return _calcScore(roi, pnl, mdd, wr, period)
 }
 
 // ============================================
