@@ -30,7 +30,7 @@ export async function POST(request: NextRequest, _context: RouteContext) {
     const body = await request.json()
     const reviewId = validateString(body.review_id, {
       required: true,
-      fieldName: '评价ID',
+      fieldName: 'review ID',
     })!
 
     // 检查是否已经点赞

@@ -55,11 +55,11 @@ export async function GET(request: NextRequest) {
       .maybeSingle()
 
     if (convError || !conversation) {
-      return NextResponse.json({ error: '会话不存在' }, { status: 404 })
+      return NextResponse.json({ error: 'Conversation not found' }, { status: 404 })
     }
 
     if (conversation.user1_id !== userId && conversation.user2_id !== userId) {
-      return NextResponse.json({ error: '无权访问此会话' }, { status: 403 })
+      return NextResponse.json({ error: 'No permission to access this conversation' }, { status: 403 })
     }
 
     // 构建查询（支持 cursor 分页）

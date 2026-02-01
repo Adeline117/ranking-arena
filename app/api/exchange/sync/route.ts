@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const exchange = validateEnum(body.exchange, SUPPORTED_EXCHANGES, {
       required: true,
-      fieldName: '交易所',
+      fieldName: 'exchange',
     })!
 
     // 获取用户连接信息

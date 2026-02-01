@@ -28,11 +28,11 @@ async function verifyMembership(supabase: ReturnType<typeof getSupabaseAdmin>, c
     .maybeSingle()
 
   if (error || !conversation) {
-    return { valid: false, status: 404, message: '会话不存在' }
+    return { valid: false, status: 404, message: 'Conversation not found' }
   }
 
   if (conversation.user1_id !== userId && conversation.user2_id !== userId) {
-    return { valid: false, status: 403, message: '无权访问此会话' }
+    return { valid: false, status: 403, message: 'No permission to access this conversation' }
   }
 
   return { valid: true, conversation }

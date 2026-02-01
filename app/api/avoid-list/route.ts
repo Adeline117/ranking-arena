@@ -125,7 +125,7 @@ export async function POST(request: NextRequest) {
       screenshot_url: screenshot_url ?? undefined,
     })
 
-    return success({ vote, message: '避雷投票已提交' })
+    return success({ vote, message: 'Avoid list vote submitted' })
   } catch (error: unknown) {
     return handleError(error, 'avoid-list POST')
   }

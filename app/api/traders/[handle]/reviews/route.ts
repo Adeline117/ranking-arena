@@ -131,7 +131,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       required: true,
       minLength: 1,
       maxLength: 2000,
-      fieldName: '评价内容',
+      fieldName: 'review content',
     })!
 
     const review = await createReview(supabase, user.id, {
@@ -144,7 +144,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
   } catch (error: unknown) {
     if (error instanceof Error && error.message === 'ALREADY_REVIEWED') {
       return new Response(
-        JSON.stringify({ success: false, error: '您已经评价过该交易员' }),
+        JSON.stringify({ success: false, error: 'You have already reviewed this trader' }),
         { status: 409, headers: { 'Content-Type': 'application/json' } }
       )
     }
@@ -160,12 +160,12 @@ export async function DELETE(request: NextRequest, _context: RouteContext) {
     const body = await request.json()
     const reviewId = validateString(body.review_id, {
       required: true,
-      fieldName: '评价ID',
+      fieldName: 'review ID',
     })!
 
     await deleteReview(supabase, reviewId, user.id)
 
-    return success({ message: '评价已删除' })
+    return success({ message: 'Review deleted' })
   } catch (error: unknown) {
     return handleError(error, 'trader/[handle]/reviews DELETE')
   }

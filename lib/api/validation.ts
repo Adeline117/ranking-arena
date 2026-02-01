@@ -1,6 +1,5 @@
 /**
- * API 输入验证工具
- * 提供统一的验证函数和 Zod Schema 集成
+ * API Input Validation Utilities
  */
 
 import { z } from 'zod'
@@ -8,11 +7,11 @@ import { NextRequest } from 'next/server'
 import { ApiError, ErrorCode } from './errors'
 
 // ============================================
-// 基础验证函数
+// Basic validation functions
 // ============================================
 
 /**
- * 验证字符串
+ * Validate string
  */
 export function validateString(
   value: unknown,
@@ -24,11 +23,11 @@ export function validateString(
     fieldName?: string
   } = {}
 ): string | null {
-  const { required = false, minLength, maxLength, pattern, fieldName = '字段' } = options
+  const { required = false, minLength, maxLength, pattern, fieldName = 'field' } = options
 
   if (value === null || value === undefined || value === '') {
     if (required) {
-      throw new ApiError(`${fieldName}不能为空`, { code: ErrorCode.MISSING_FIELD })
+      throw new ApiError(`${fieldName} is required`, { code: ErrorCode.MISSING_FIELD })
     }
     return null
   }
@@ -36,26 +35,26 @@ export function validateString(
   const str = String(value).trim()
 
   if (minLength !== undefined && str.length < minLength) {
-    throw new ApiError(`${fieldName}长度不能少于 ${minLength} 个字符`, {
+    throw new ApiError(`${fieldName} must be at least ${minLength} characters`, {
       code: ErrorCode.VALUE_TOO_SHORT,
     })
   }
 
   if (maxLength !== undefined && str.length > maxLength) {
-    throw new ApiError(`${fieldName}长度不能超过 ${maxLength} 个字符`, {
+    throw new ApiError(`${fieldName} must not exceed ${maxLength} characters`, {
       code: ErrorCode.VALUE_TOO_LONG,
     })
   }
 
   if (pattern && !pattern.test(str)) {
-    throw new ApiError(`${fieldName}格式不正确`, { code: ErrorCode.INVALID_FORMAT })
+    throw new ApiError(`${fieldName} format is invalid`, { code: ErrorCode.INVALID_FORMAT })
   }
 
   return str
 }
 
 /**
- * 验证数字
+ * Validate number
  */
 export function validateNumber(
   value: unknown,
@@ -67,11 +66,11 @@ export function validateNumber(
     fieldName?: string
   } = {}
 ): number | null {
-  const { required = false, min, max, integer = false, fieldName = '字段' } = options
+  const { required = false, min, max, integer = false, fieldName = 'field' } = options
 
   if (value === null || value === undefined || value === '') {
     if (required) {
-      throw new ApiError(`${fieldName}不能为空`, { code: ErrorCode.MISSING_FIELD })
+      throw new ApiError(`${fieldName} is required`, { code: ErrorCode.MISSING_FIELD })
     }
     return null
   }
@@ -79,26 +78,26 @@ export function validateNumber(
   const num = Number(value)
 
   if (isNaN(num)) {
-    throw new ApiError(`${fieldName}必须是有效的数字`, { code: ErrorCode.INVALID_FORMAT })
+    throw new ApiError(`${fieldName} must be a valid number`, { code: ErrorCode.INVALID_FORMAT })
   }
 
   if (integer && !Number.isInteger(num)) {
-    throw new ApiError(`${fieldName}必须是整数`, { code: ErrorCode.INVALID_FORMAT })
+    throw new ApiError(`${fieldName} must be an integer`, { code: ErrorCode.INVALID_FORMAT })
   }
 
   if (min !== undefined && num < min) {
-    throw new ApiError(`${fieldName}不能小于 ${min}`, { code: ErrorCode.VALUE_OUT_OF_RANGE })
+    throw new ApiError(`${fieldName} must be at least ${min}`, { code: ErrorCode.VALUE_OUT_OF_RANGE })
   }
 
   if (max !== undefined && num > max) {
-    throw new ApiError(`${fieldName}不能大于 ${max}`, { code: ErrorCode.VALUE_OUT_OF_RANGE })
+    throw new ApiError(`${fieldName} must not exceed ${max}`, { code: ErrorCode.VALUE_OUT_OF_RANGE })
   }
 
   return num
 }
 
 /**
- * 验证枚举值
+ * Validate enum value
  */
 export function validateEnum<T extends readonly string[]>(
   value: unknown,
@@ -108,11 +107,11 @@ export function validateEnum<T extends readonly string[]>(
     fieldName?: string
   } = {}
 ): T[number] | null {
-  const { required = false, fieldName = '字段' } = options
+  const { required = false, fieldName = 'field' } = options
 
   if (value === null || value === undefined || value === '') {
     if (required) {
-      throw new ApiError(`${fieldName}不能为空`, { code: ErrorCode.MISSING_FIELD })
+      throw new ApiError(`${fieldName} is required`, { code: ErrorCode.MISSING_FIELD })
     }
     return null
   }
@@ -120,7 +119,7 @@ export function validateEnum<T extends readonly string[]>(
   const str = String(value)
 
   if (!allowedValues.includes(str as T[number])) {
-    throw new ApiError(`${fieldName}必须是以下值之一: ${allowedValues.join(', ')}`, {
+    throw new ApiError(`${fieldName} must be one of: ${allowedValues.join(', ')}`, {
       code: ErrorCode.INVALID_INPUT,
     })
   }
@@ -129,7 +128,7 @@ export function validateEnum<T extends readonly string[]>(
 }
 
 /**
- * 验证 UUID
+ * Validate UUID
  */
 export function validateUUID(
   value: unknown,
@@ -142,7 +141,7 @@ export function validateUUID(
 
   if (value === null || value === undefined || value === '') {
     if (required) {
-      throw new ApiError(`${fieldName}不能为空`, { code: ErrorCode.MISSING_FIELD })
+      throw new ApiError(`${fieldName} is required`, { code: ErrorCode.MISSING_FIELD })
     }
     return null
   }
@@ -151,14 +150,14 @@ export function validateUUID(
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
   if (!uuidRegex.test(str)) {
-    throw new ApiError(`${fieldName}格式无效`, { code: ErrorCode.INVALID_FORMAT })
+    throw new ApiError(`${fieldName} format is invalid`, { code: ErrorCode.INVALID_FORMAT })
   }
 
   return str
 }
 
 /**
- * 验证布尔值
+ * Validate boolean
  */
 export function validateBoolean(
   value: unknown,
@@ -167,11 +166,11 @@ export function validateBoolean(
     fieldName?: string
   } = {}
 ): boolean | null {
-  const { required = false, fieldName = '字段' } = options
+  const { required = false, fieldName = 'field' } = options
 
   if (value === null || value === undefined || value === '') {
     if (required) {
-      throw new ApiError(`${fieldName}不能为空`, { code: ErrorCode.MISSING_FIELD })
+      throw new ApiError(`${fieldName} is required`, { code: ErrorCode.MISSING_FIELD })
     }
     return null
   }
@@ -183,11 +182,11 @@ export function validateBoolean(
   if (value === 'true' || value === '1') return true
   if (value === 'false' || value === '0') return false
 
-  throw new ApiError(`${fieldName}必须是布尔值`, { code: ErrorCode.INVALID_FORMAT })
+  throw new ApiError(`${fieldName} must be a boolean`, { code: ErrorCode.INVALID_FORMAT })
 }
 
 /**
- * 验证数组
+ * Validate array
  */
 export function validateArray<T>(
   value: unknown,
@@ -199,27 +198,27 @@ export function validateArray<T>(
     fieldName?: string
   } = {}
 ): T[] | null {
-  const { required = false, minLength, maxLength, fieldName = '数组' } = options
+  const { required = false, minLength, maxLength, fieldName = 'array' } = options
 
   if (value === null || value === undefined) {
     if (required) {
-      throw new ApiError(`${fieldName}不能为空`, { code: ErrorCode.MISSING_FIELD })
+      throw new ApiError(`${fieldName} is required`, { code: ErrorCode.MISSING_FIELD })
     }
     return null
   }
 
   if (!Array.isArray(value)) {
-    throw new ApiError(`${fieldName}必须是数组`, { code: ErrorCode.INVALID_FORMAT })
+    throw new ApiError(`${fieldName} must be an array`, { code: ErrorCode.INVALID_FORMAT })
   }
 
   if (minLength !== undefined && value.length < minLength) {
-    throw new ApiError(`${fieldName}至少需要 ${minLength} 项`, {
+    throw new ApiError(`${fieldName} must have at least ${minLength} items`, {
       code: ErrorCode.VALUE_TOO_SHORT,
     })
   }
 
   if (maxLength !== undefined && value.length > maxLength) {
-    throw new ApiError(`${fieldName}最多 ${maxLength} 项`, {
+    throw new ApiError(`${fieldName} must have at most ${maxLength} items`, {
       code: ErrorCode.VALUE_TOO_LONG,
     })
   }
@@ -228,11 +227,11 @@ export function validateArray<T>(
 }
 
 // ============================================
-// Zod Schema 验证
+// Zod Schema validation
 // ============================================
 
 /**
- * 使用 Zod Schema 验证数据
+ * Validate data with Zod Schema
  */
 export function validateWithSchema<T extends z.ZodTypeAny>(
   schema: T,
@@ -244,14 +243,13 @@ export function validateWithSchema<T extends z.ZodTypeAny>(
   const result = schema.safeParse(data)
 
   if (!result.success) {
-    // Zod v4 使用 issues，v3 使用 errors
     const issues = (result.error as { issues?: Array<{ path: (string | number)[]; message: string }> }).issues ?? []
     const errors = issues
       .map((e) => `${e.path.join('.')}: ${e.message}`)
       .join('; ')
 
     throw new ApiError(
-      options.context ? `[${options.context}] 验证失败: ${errors}` : `验证失败: ${errors}`,
+      options.context ? `[${options.context}] Validation failed: ${errors}` : `Validation failed: ${errors}`,
       {
         code: ErrorCode.VALIDATION_ERROR,
         details: {
@@ -268,7 +266,7 @@ export function validateWithSchema<T extends z.ZodTypeAny>(
 }
 
 /**
- * 验证请求体
+ * Validate request body
  */
 export async function validateRequestBody<T extends z.ZodTypeAny>(
   request: NextRequest,
@@ -279,7 +277,7 @@ export async function validateRequestBody<T extends z.ZodTypeAny>(
   try {
     body = await request.json()
   } catch {
-    throw new ApiError('请求体格式错误，必须是有效的 JSON', {
+    throw new ApiError('Request body must be valid JSON', {
       code: ErrorCode.INVALID_FORMAT,
     })
   }
@@ -288,7 +286,7 @@ export async function validateRequestBody<T extends z.ZodTypeAny>(
 }
 
 /**
- * 验证查询参数
+ * Validate search params
  */
 export function validateSearchParams<T extends z.ZodTypeAny>(
   searchParams: URLSearchParams,
@@ -298,7 +296,6 @@ export function validateSearchParams<T extends z.ZodTypeAny>(
 
   searchParams.forEach((value, key) => {
     if (params[key]) {
-      // 同名参数转为数组
       if (Array.isArray(params[key])) {
         (params[key] as string[]).push(value)
       } else {
@@ -313,10 +310,10 @@ export function validateSearchParams<T extends z.ZodTypeAny>(
 }
 
 // ============================================
-// 常用 Schema
+// Common Schemas
 // ============================================
 
-/** 分页参数 Schema */
+/** Pagination params Schema */
 export const PaginationSchema = z.object({
   limit: z
     .string()
@@ -330,24 +327,24 @@ export const PaginationSchema = z.object({
     .pipe(z.number().int().min(0)),
 })
 
-/** ID 参数 Schema */
+/** ID param Schema */
 export const IdParamSchema = z.object({
-  id: z.string().uuid('ID 格式无效'),
+  id: z.string().uuid('Invalid ID format'),
 })
 
-/** Handle 参数 Schema */
+/** Handle param Schema */
 export const HandleParamSchema = z.object({
-  handle: z.string().min(1, 'handle 不能为空'),
+  handle: z.string().min(1, 'handle is required'),
 })
 
-/** 排序参数 Schema */
+/** Sort params Schema */
 export const SortSchema = z.object({
   sort_by: z.string().optional(),
   sort_order: z.enum(['asc', 'desc']).optional().default('desc'),
 })
 
 // ============================================
-// 导出类型
+// Exported types
 // ============================================
 
 export type Pagination = z.infer<typeof PaginationSchema>

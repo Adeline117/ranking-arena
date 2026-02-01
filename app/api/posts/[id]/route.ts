@@ -81,8 +81,8 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     const supabase = getSupabaseAdmin()
 
     const body = await request.json()
-    const title = validateString(body.title, { maxLength: 200, fieldName: '标题' })
-    const content = validateString(body.content, { maxLength: 10000, fieldName: '内容' })
+    const title = validateString(body.title, { maxLength: 200, fieldName: 'title' })
+    const content = validateString(body.content, { maxLength: 10000, fieldName: 'content' })
     const poll_enabled = typeof body.poll_enabled === 'boolean' ? body.poll_enabled : undefined
 
     const post = await updatePost(supabase, id, user.id, {
@@ -105,7 +105,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
 
     await deletePost(supabase, id, user.id)
 
-    return success({ message: '删除成功' })
+    return success({ message: 'Delete successful' })
   } catch (error: unknown) {
     return handleError(error, 'posts/[id] DELETE')
   }
