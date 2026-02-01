@@ -9,7 +9,7 @@ import { cookies } from 'next/headers'
  * Stores the nonce in an httpOnly cookie for server-side verification.
  */
 export async function GET() {
-  const nonce = randomBytes(16).toString('hex')
+  const nonce = randomBytes(32).toString('hex')
 
   const cookieStore = await cookies()
   cookieStore.set('siwe-nonce', nonce, {

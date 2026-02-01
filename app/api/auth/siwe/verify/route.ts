@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { SiweMessage } from 'siwe'
 import { cookies } from 'next/headers'
+import { isAddress } from 'viem'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+
+const EXPECTED_CHAIN_ID = 1 // Ethereum mainnet
 
 /**
  * POST /api/auth/siwe/verify
@@ -37,10 +40,23 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid signature' }, { status: 401 })
     }
 
+    // Validate domain, URI, and chainId to prevent cross-site signature relay
+    const requestHost = request.headers.get('host')
+    const requestOrigin = request.headers.get('origin')
+    if (
+      (requestHost && fields.domain !== requestHost) ||
+      (requestOrigin && fields.uri !== requestOrigin) ||
+      (fields.chainId && fields.chainId !== EXPECTED_CHAIN_ID)
+    ) {
+      return NextResponse.json({ error: 'Domain or chain mismatch' }, { status: 400 })
+    }
+
     const walletAddress = fields.address.toLowerCase()
 
-    // Clear the nonce cookie after successful verification
-    cookieStore.delete('siwe-nonce')
+    // Validate wallet address format
+    if (!isAddress(fields.address)) {
+      return NextResponse.json({ error: 'Invalid wallet address' }, { status: 400 })
+    }
 
     const supabase = getSupabaseAdmin()
 
@@ -62,6 +78,9 @@ export async function POST(request: NextRequest) {
       if (sessionError || !sessionData) {
         return NextResponse.json({ error: 'Failed to create session' }, { status: 500 })
       }
+
+      // Clear nonce only after successful DB operations
+      cookieStore.delete('siwe-nonce')
 
       return NextResponse.json({
         action: 'existing_user',
@@ -110,6 +129,8 @@ export async function POST(request: NextRequest) {
             email: walletEmail,
           })
 
+          cookieStore.delete('siwe-nonce')
+
           return NextResponse.json({
             action: 'existing_user',
             userId,
@@ -137,6 +158,9 @@ export async function POST(request: NextRequest) {
       type: 'magiclink',
       email: walletEmail,
     })
+
+    // Clear nonce only after successful user creation
+    cookieStore.delete('siwe-nonce')
 
     return NextResponse.json({
       action: 'new_user',

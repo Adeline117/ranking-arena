@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { SiweMessage } from 'siwe'
 import { cookies } from 'next/headers'
+import { isAddress } from 'viem'
 import { getSupabaseAdmin, getAuthUser } from '@/lib/supabase/server'
 
 /**
@@ -40,6 +41,11 @@ export async function POST(request: NextRequest) {
     }
 
     const walletAddress = fields.address.toLowerCase()
+
+    // Validate wallet address format
+    if (!isAddress(fields.address)) {
+      return NextResponse.json({ error: 'Invalid wallet address' }, { status: 400 })
+    }
 
     cookieStore.delete('siwe-nonce')
 
