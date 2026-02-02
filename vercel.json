@@ -36,6 +36,7 @@
       "path": "/api/cron/calculate-tiers",
       "schedule": "*/15 * * * *"
     },
+    { "path": "/api/cron/fetch-traders/bybit_spot",     "schedule": "57 */4 * * *" },
     { "path": "/api/cron/fetch-traders/bitget_spot",   "schedule": "0 */4 * * *" },
     { "path": "/api/cron/fetch-traders/okx_futures",    "schedule": "3 */4 * * *" },
     { "path": "/api/cron/fetch-traders/okx_web3",       "schedule": "6 */4 * * *" },
