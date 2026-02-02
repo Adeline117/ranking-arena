@@ -35,6 +35,11 @@ import { fetchGmx } from './gmx'
 import { fetchKwenta } from './kwenta'
 import { fetchMux } from './mux'
 import { fetchGains } from './gains'
+import { fetchVertex } from './vertex'
+import { fetchDrift } from './drift'
+import { fetchJupiterPerps } from './jupiter-perps'
+import { fetchAevo } from './aevo'
+import { fetchSynthetix } from './synthetix'
 
 export const INLINE_FETCHERS: Record<string, PlatformFetcher> = {
   // CEX Futures
@@ -67,6 +72,11 @@ export const INLINE_FETCHERS: Record<string, PlatformFetcher> = {
   kwenta: fetchKwenta,
   mux: fetchMux,
   gains: fetchGains,
+  vertex: fetchVertex,
+  drift: fetchDrift,
+  jupiter_perps: fetchJupiterPerps,
+  aevo: fetchAevo,
+  synthetix: fetchSynthetix,
 }
 
 export function getInlineFetcher(platform: string): PlatformFetcher | undefined {

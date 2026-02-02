@@ -62,6 +62,11 @@
     { "path": "/api/cron/fetch-traders/mux",            "schedule": "48 */4 * * *" },
     { "path": "/api/cron/fetch-traders/lbank",          "schedule": "51 */4 * * *" },
     { "path": "/api/cron/fetch-traders/blofin",         "schedule": "54 */4 * * *" },
+    { "path": "/api/cron/fetch-traders/vertex",         "schedule": "4 1,5,9,13,17,21 * * *" },
+    { "path": "/api/cron/fetch-traders/drift",          "schedule": "7 1,5,9,13,17,21 * * *" },
+    { "path": "/api/cron/fetch-traders/jupiter_perps",  "schedule": "10 1,5,9,13,17,21 * * *" },
+    { "path": "/api/cron/fetch-traders/aevo",           "schedule": "13 1,5,9,13,17,21 * * *" },
+    { "path": "/api/cron/fetch-traders/synthetix",      "schedule": "16 1,5,9,13,17,21 * * *" },
     { "path": "/api/cron/discover-traders",    "schedule": "56 */4 * * *" },
     { "path": "/api/cron/discover-rankings",   "schedule": "58 */4 * * *" },
     { "path": "/api/scrape/proxy?period=all",  "schedule": "0 2,6,10,14,18,22 * * *" }

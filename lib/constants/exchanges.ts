@@ -53,6 +53,11 @@ export type TraderSource =
   | 'kwenta'
   | 'gains'
   | 'mux'
+  | 'vertex'
+  | 'drift'
+  | 'jupiter_perps'
+  | 'aevo'
+  | 'synthetix'
   // Dune on-chain data
   | 'dune_gmx'
   | 'dune_hyperliquid'
@@ -97,6 +102,11 @@ export const ALL_SOURCES: TraderSource[] = [
   'kwenta',
   'gains',
   'mux',
+  'vertex',
+  'drift',
+  'jupiter_perps',
+  'aevo',
+  'synthetix',
   // Dune on-chain data
   'dune_gmx',
   'dune_hyperliquid',
@@ -142,6 +152,11 @@ export const SOURCE_TYPE_MAP: Record<string, SourceType> = {
   kwenta: 'web3',
   gains: 'web3',
   mux: 'web3',
+  vertex: 'web3',
+  drift: 'web3',
+  jupiter_perps: 'web3',
+  aevo: 'web3',
+  synthetix: 'web3',
   // Dune on-chain data
   dune_gmx: 'web3',
   dune_hyperliquid: 'web3',
@@ -218,6 +233,11 @@ export const EXCHANGE_NAMES: Record<string, string> = {
   kwenta: 'Kwenta',
   gains: 'Gains Network',
   mux: 'MUX',
+  vertex: 'Vertex',
+  drift: 'Drift',
+  jupiter_perps: 'Jupiter Perps',
+  aevo: 'Aevo',
+  synthetix: 'Synthetix',
   dune_gmx: 'GMX (Dune)',
   dune_hyperliquid: 'Hyperliquid (Dune)',
   dune_uniswap: 'Uniswap (Dune)',
