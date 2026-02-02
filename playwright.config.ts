@@ -63,8 +63,9 @@ export default defineConfig({
   ],
 
   /* Run production server for faster page loads */
+  /* In CI the build is done in a prior step, so just `npm start` */
   webServer: {
-    command: 'npm run build && npm start',
+    command: process.env.CI ? 'npm start' : 'npm run build && npm start',
     url: 'http://localhost:3000',
     reuseExistingServer: !process.env.CI,
     timeout: 300_000,
