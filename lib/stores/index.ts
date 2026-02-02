@@ -14,8 +14,24 @@
  */
 
 import { create } from 'zustand'
-import { persist, createJSONStorage } from 'zustand/middleware'
+import { persist, createJSONStorage, type StateStorage } from 'zustand/middleware'
 import type { TimeRange, Exchange, RankedTrader } from '../types/trader'
+
+// SSR-safe localStorage wrapper
+const safeStorage: StateStorage = {
+  getItem: (name) => {
+    if (typeof window === 'undefined') return null
+    try { return localStorage.getItem(name) } catch { return null }
+  },
+  setItem: (name, value) => {
+    if (typeof window === 'undefined') return
+    try { localStorage.setItem(name, value) } catch { /* ignore */ }
+  },
+  removeItem: (name) => {
+    if (typeof window === 'undefined') return
+    try { localStorage.removeItem(name) } catch { /* ignore */ }
+  },
+}
 
 // ============================================
 // 排行榜状态
@@ -144,7 +160,7 @@ export const useUserStore = create<UserState>()(
     }),
     {
       name: 'ranking-arena-user',
-      storage: createJSONStorage(() => localStorage),
+      storage: createJSONStorage(() => safeStorage),
       partialize: (state) => ({
         followedTraders: state.followedTraders,
       }),
@@ -210,7 +226,7 @@ export const useUIStore = create<UIState>()(
     }),
     {
       name: 'ranking-arena-ui',
-      storage: createJSONStorage(() => localStorage),
+      storage: createJSONStorage(() => safeStorage),
       partialize: (state) => ({
         theme: state.theme,
         language: state.language,
