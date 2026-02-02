@@ -1,15 +1,9 @@
 import React, { memo } from 'react'
 import Link from 'next/link'
-import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
 import { RankingBadge } from '../ui/icons'
 import { Box, Text } from '../base'
 import { getAvatarGradient, getAvatarInitial, getTraderAvatarUrl } from '@/lib/utils/avatar'
-import {
-  getImageLoadingStrategy,
-  handleImageError,
-  IMAGE_PLACEHOLDER,
-} from '@/lib/performance/image-optimization'
 import type { Trader } from './RankingTable'
 import type { SourceInfo } from './utils'
 import { formatROI, formatDisplayName } from './utils'
@@ -106,23 +100,14 @@ export const TraderCard = memo(function TraderCard({
               const proxyAvatarUrl = getTraderAvatarUrl(trader.avatar_url)
               if (!proxyAvatarUrl) return null
 
-              const rowIndex = rank - 1
-              const loadingStrategy = getImageLoadingStrategy(rowIndex, 'above')
-              const isPriority = rowIndex < 3
-
               return (
-                <Image
+                <img
                   src={proxyAvatarUrl}
                   alt={displayName}
-                  width={44}
-                  height={44}
-                  quality={85}
-                  priority={isPriority}
-                  loading={loadingStrategy.loading}
-                  placeholder="blur"
-                  blurDataURL={IMAGE_PLACEHOLDER.avatar}
+                  loading={rank <= 3 ? 'eager' : 'lazy'}
+                  decoding="async"
                   style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', inset: 0, zIndex: 1 }}
-                  onError={handleImageError}
+                  onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
                 />
               )
             })()}

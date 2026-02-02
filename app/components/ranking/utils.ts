@@ -1,4 +1,5 @@
 import { tokens } from '@/lib/design-tokens'
+import { SOURCE_TYPE_MAP, EXCHANGE_NAMES } from '@/lib/constants/exchanges'
 
 /**
  * 格式化 PnL 显示
@@ -61,22 +62,7 @@ export type SourceInfo = { exchange: string; type: string; typeColor: string }
  * 解析 source 为交易所名称和类型
  */
 export function parseSourceInfo(src: string, t: (key: string) => string): SourceInfo {
-  // 交易所名称映射
-  const exchangeMap: Record<string, string> = {
-    'binance': 'Binance',
-    'bybit': 'Bybit',
-    'bitget': 'Bitget',
-    'mexc': 'MEXC',
-    'htx': 'HTX',
-    'weex': 'Weex',
-    'coinex': 'CoinEx',
-    'okx': 'OKX',
-    'kucoin': 'KuCoin',
-    'gmx': 'GMX',
-  }
-
-  // 类型映射 - 统一颜色，不做颜色区分
-  // Use brighter color (#b0b0be) for WCAG AA contrast on ranking row card backgrounds
+  // Use central SOURCE_TYPE_MAP as single source of truth
   const sourceTagColor = '#b0b0be'
   const typeMap: Record<string, { label: string; color: string }> = {
     'futures': { label: t('categoryFutures'), color: sourceTagColor },
@@ -84,17 +70,9 @@ export function parseSourceInfo(src: string, t: (key: string) => string): Source
     'web3': { label: t('categoryWeb3'), color: sourceTagColor },
   }
 
-  // 解析 source 字符串
-  const parts = src.toLowerCase().split('_')
-  const exchange = parts[0]
-  let type = parts[1] || 'futures' // 默认合约
-
-  // 特殊处理
-  if (src === 'bybit') type = 'futures'
-  if (src === 'gmx') type = 'web3'
-  if (src === 'mexc' || src === 'coinex' || src === 'kucoin' || src === 'htx' || src === 'weex') type = 'futures'
-
-  const exchangeName = exchangeMap[exchange] || exchange.charAt(0).toUpperCase() + exchange.slice(1)
+  const sourceLower = src.toLowerCase()
+  const type = SOURCE_TYPE_MAP[sourceLower] || 'futures'
+  const exchangeName = EXCHANGE_NAMES[sourceLower] || src.split('_')[0].replace(/^\w/, c => c.toUpperCase())
   const typeInfo = typeMap[type] || { label: type, color: sourceTagColor }
 
   return {

@@ -45,6 +45,9 @@ const nextConfig: NextConfig = {
         pathname: '/api/avatar',
         // search 省略以允许 ?url=* 等查询参数
       },
+      {
+        pathname: '/api/avatar/**',
+      },
     ],
 
     // 远程图片域名白名单
