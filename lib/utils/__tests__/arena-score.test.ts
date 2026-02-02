@@ -2,6 +2,8 @@
  * Arena Score 计算模块单元测试
  */
 
+import fs from 'fs'
+import path from 'path'
 import {
   clip,
   safeLog1p,
@@ -652,8 +654,7 @@ describe('ARENA_CONFIG', () => {
     // This test reads the shared.mjs file and verifies that its ARENA_CONFIG
     // PARAMS and PNL_PARAMS match the canonical TypeScript source.
     // If this test fails, shared.mjs has drifted from lib/utils/arena-score.ts.
-    const fs = require('fs')
-    const path = require('path')
+    // fs and path imported at top of file
     const sharedPath = path.resolve(__dirname, '../../../scripts/lib/shared.mjs')
     const content = fs.readFileSync(sharedPath, 'utf-8')
 
