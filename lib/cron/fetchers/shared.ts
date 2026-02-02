@@ -142,7 +142,6 @@ export async function upsertTraders(
       handle: t.handle,
       profile_url: t.profile_url || null,
       is_active: true,
-      updated_at: new Date().toISOString(),
     }))
 
     const { error: srcErr } = await supabase
