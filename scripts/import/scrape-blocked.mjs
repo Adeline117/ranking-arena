@@ -158,7 +158,7 @@ async function scrapeBinanceFutures() {
   // Deduplicate
   const unique = [...new Map(traders.map(t => [t.id, t])).values()]
   if (unique.length) {
-    const saved = await save('binance_futures', unique, 'current_30d')
+    const saved = await save('binance_futures', unique, '30D')
     console.log(`  ✅ ${saved} 条保存`)
   } else console.log('  ❌ 0 条')
 }
@@ -187,7 +187,7 @@ async function scrapeBitgetFutures() {
   })
   const unique = [...new Map(traders.map(t => [t.id, t])).values()]
   if (unique.length) {
-    const saved = await save('bitget_futures', unique, 'current_30d')
+    const saved = await save('bitget_futures', unique, '30D')
     console.log(`  ✅ ${saved} 条保存`)
   } else console.log('  ❌ 0 条')
 }
@@ -215,7 +215,7 @@ async function scrapeMEXC() {
   })
   const unique = [...new Map(traders.filter(t => t.id).map(t => [t.id, t])).values()]
   if (unique.length) {
-    const saved = await save('mexc', unique, 'current_30d')
+    const saved = await save('mexc', unique, '30D')
     console.log(`  ✅ ${saved} 条保存`)
   } else console.log('  ❌ 0 条')
 }
@@ -244,7 +244,7 @@ async function scrapeKuCoin() {
   })
   const unique = [...new Map(traders.filter(t => t.id).map(t => [t.id, t])).values()]
   if (unique.length) {
-    const saved = await save('kucoin', unique, 'current_30d')
+    const saved = await save('kucoin', unique, '30D')
     console.log(`  ✅ ${saved} 条保存`)
   } else console.log('  ❌ 0 条')
 }
@@ -270,7 +270,7 @@ async function scrapeCoinEx() {
   })
   const unique = [...new Map(traders.filter(t => t.id).map(t => [t.id, t])).values()]
   if (unique.length) {
-    const saved = await save('coinex', unique, 'current_30d')
+    const saved = await save('coinex', unique, '30D')
     console.log(`  ✅ ${saved} 条保存`)
   } else console.log('  ❌ 0 条')
 }

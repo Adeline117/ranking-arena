@@ -238,7 +238,7 @@ async function scrape(platformKey) {
   console.log(`\n  总计: ${unique.length} 条`)
   
   if (unique.length) {
-    const saved = await save(config.source, unique, 'current_30d')
+    const saved = await save(config.source, unique, '30D')
     console.log(`  ✅ ${saved} 条已保存`)
   } else {
     console.log('  ❌ 无数据')

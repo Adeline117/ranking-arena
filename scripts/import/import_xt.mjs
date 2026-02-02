@@ -1,325 +1,253 @@
+#!/usr/bin/env node
 /**
- * XT.com Copy Trading 排行榜数据抓取
- *
- * URL: https://www.xt.com/en/copy-trading/futures
- *
- * XT.com 需要使用 Playwright 抓取页面数据并拦截内部 API
- *
- * 用法: node scripts/import/import_xt.mjs [7D|30D|90D|ALL]
+ * XT 专用导入 — 通过浏览器过 CF，然后在页面内 fetch API 翻页
+ * API: /fapi/user/v1/public/copy-trade/elite-leader-list-v2
+ * 字段映射: accountId→id, incomeRate→roi, income→pnl, winRate→wr, maxRetraction→dd
  */
+import { readFileSync } from 'fs'
+import { createClient } from '@supabase/supabase-js'
+import { execSync, spawn } from 'child_process'
 import { chromium } from 'playwright'
-import {
-  getSupabaseClient,
-  calculateArenaScore,
-  sleep,
-  getTargetPeriods,
-} from '../lib/shared.mjs'
 
-const supabase = getSupabaseClient()
+try { for (const l of readFileSync('.env.local','utf8').split('\n')) {
+  const m=l.match(/^([^#=]+)=["']?(.+?)["']?$/); if(m&&!process.env[m[1]]) process.env[m[1]]=m[2]
+}} catch{}
+const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
+const sleep = ms => new Promise(r => setTimeout(r, ms))
+const clip = (v,lo,hi) => Math.max(lo,Math.min(hi,v))
+function cs(roi,p,d,w){if(roi==null)return null;return clip(Math.round((Math.min(70,roi>0?Math.log(1+roi/100)*25:Math.max(-70,roi/100*50))+(d!=null?Math.max(0,15*(1-d/100)):7.5)+(w!=null?Math.min(15,w/100*15):7.5))*10)/10,0,100)}
 
-const SOURCE = 'xt'
-const BASE_URL = 'https://www.xt.com/en/copy-trading/futures'
-const TARGET_COUNT = 500
+const PORT = 9337
 
-async function fetchLeaderboard(browser, period) {
-  console.log(`\n📋 抓取 XT.com ${period} 排行榜...`)
-
-  const context = await browser.newContext({
-    userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    viewport: { width: 1920, height: 1080 },
-    locale: 'en-US',
-  })
-
-  const page = await context.newPage()
-  const traders = new Map()
-
-  // 拦截 API 响应 - XT uses elite-leader-list-v2
-  page.on('response', async (response) => {
-    const url = response.url()
-    // Only match copy-trade leader endpoints, skip symbol lists
-    if (url.includes('symbol')) return
-    if (!url.includes('leader') && !url.includes('elite') && !url.includes('trader-list')) return
-
-    try {
-      const ct = response.headers()['content-type'] || ''
-      if (!ct.includes('json')) return
-      const json = await response.json().catch(() => null)
-      if (!json) return
-
-      let list = []
-
-      // XT.com elite-leader-list-v2: result is array of { sotType, hasMore, items: [...traders] }
-      if (Array.isArray(json?.result)) {
-        for (const category of json.result) {
-          if (category.items && Array.isArray(category.items) && category.items.length > 0) {
-            console.log(`  📡 API 拦截 (${category.sotType || 'unknown'}): ${category.items.length} 条`)
-            if (category.items[0]) {
-              console.log(`    样本字段: ${Object.keys(category.items[0]).slice(0, 12).join(', ')}`)
-            }
-            list.push(...category.items)
-          }
-        }
-      }
-      // Fallback patterns
-      else if (json?.result?.items && Array.isArray(json.result.items)) list = json.result.items
-      else if (json?.data?.list && Array.isArray(json.data.list)) list = json.data.list
-
-      if (list.length > 0) {
-        for (const t of list) {
-          const traderId = String(t.accountId || t.uid || t.userId || t.traderId || t.id || '')
-          if (!traderId || traderId === 'undefined' || traders.has(traderId)) continue
-
-          // XT incomeRate is decimal: 1.0099 = 100.99%
-          let roi = parseFloat(String(t.incomeRate || t.roi || t.returnRate || 0))
-          if (Math.abs(roi) > 0 && Math.abs(roi) < 50) roi *= 100
-
-          // XT winRate is decimal: "1" = 100%, "0.6" = 60%
-          let winRate = t.winRate !== undefined ? parseFloat(String(t.winRate)) : null
-          if (winRate !== null && winRate <= 1) winRate *= 100
-
-          // XT maxRetraction is decimal: 0.5355 = 53.55%
-          let maxDrawdown = t.maxRetraction !== undefined ? parseFloat(String(t.maxRetraction)) : null
-          if (maxDrawdown !== null && maxDrawdown <= 1) maxDrawdown *= 100
-
-          traders.set(traderId, {
-            traderId,
-            nickname: t.nickName || t.nickname || t.name || `Trader_${traderId.slice(0, 8)}`,
-            avatarUrl: t.avatar || null,
-            roi,
-            pnl: parseFloat(String(t.income || t.pnl || t.profit || 0)),
-            winRate,
-            maxDrawdown,
-            followers: parseInt(String(t.followerCount || t.followNumber || 0)),
-          })
-        }
-        console.log(`    累计: ${traders.size} 个`)
-      }
-    } catch (e) { /* ignore non-JSON */ }
-  })
-
-  try {
-    console.log(`  导航到 ${BASE_URL}...`)
-    await page.goto(BASE_URL, { waitUntil: 'networkidle', timeout: 90000 }).catch(() => {
-      console.log('  ⚠ 页面加载超时，继续...')
-    })
-    await sleep(5000)
-
-    const title = await page.title()
-    console.log(`  页面标题: ${title}`)
-
-    // 关闭弹窗
-    for (const text of ['OK', 'Got it', 'Accept', 'Close', 'I understand', 'Confirm', 'I am not', 'Start']) {
-      const btn = page.getByRole('button', { name: text })
-      if (await btn.count() > 0) {
-        await btn.first().click().catch(() => {})
-        await sleep(500)
-      }
-    }
-    await sleep(2000)
-
-    // 切换到 Futures 标签（如果有）
-    for (const tab of ['Futures', 'USDT-M', 'Contract']) {
-      const el = page.getByText(tab, { exact: true })
-      if (await el.count() > 0) {
-        await el.first().click().catch(() => {})
-        console.log(`  ✓ 点击了 "${tab}" 标签`)
-        await sleep(2000)
-        break
-      }
-    }
-
-    // 切换周期
-    console.log(`  切换到 ${period} 周期...`)
-    const periodTexts = {
-      '7D': ['7 Days', '7D', '7 Day', 'Weekly'],
-      '30D': ['30 Days', '30D', '30 Day', 'Monthly'],
-      '90D': ['90 Days', '90D', '90 Day', 'Quarterly'],
-    }
-    for (const txt of periodTexts[period] || []) {
-      const el = page.getByText(txt, { exact: true })
-      if (await el.count() > 0) {
-        await el.first().click().catch(() => {})
-        console.log(`  ✓ 点击了 "${txt}"`)
-        await sleep(3000)
-        break
-      }
-    }
-
-    console.log(`  API 拦截到: ${traders.size} 个`)
-
-    // DOM 提取
-    if (traders.size < 10) {
-      console.log(`  从 DOM 提取数据...`)
-      const pageData = await page.evaluate(() => {
-        const results = []
-        const seen = new Set()
-
-        // XT.com 使用卡片式布局
-        document.querySelectorAll('[class*="trader"], [class*="card"], [class*="item"], [class*="expert"]').forEach(card => {
-          const text = card.innerText || ''
-          if (!text.includes('%') || text.length > 2000 || text.length < 30) return
-
-          const roiMatch = text.match(/([+-]?\d{1,5}(?:\.\d{1,2})?)\s*%/)
-          if (!roiMatch) return
-          const roi = parseFloat(roiMatch[1])
-          if (roi === 0 || isNaN(roi)) return
-
-          const lines = text.split('\n').filter(l => {
-            const t = l.trim()
-            return t && t.length > 1 && t.length < 30 &&
-                   !t.includes('%') && !t.match(/^\d/) &&
-                   !t.includes('Copy') && !t.includes('Follow') &&
-                   !t.includes('ROI') && !t.includes('PnL')
-          })
-          const nickname = lines[0]?.trim() || ''
-          if (!nickname) return
-
-          const traderId = 'xt_' + nickname.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 20)
-          if (!traderId || traderId === 'xt_' || seen.has(traderId)) return
-          seen.add(traderId)
-
-          let winRate = null
-          const wrMatch = text.match(/Win\s*Rate[:\s]*(\d{1,3}(?:\.\d{1,2})?)\s*%/i)
-          if (wrMatch) winRate = parseFloat(wrMatch[1])
-
-          let maxDrawdown = null
-          const mddMatch = text.match(/(?:MDD|Drawdown|Max\s*DD)[:\s]*(\d{1,3}(?:\.\d{1,2})?)\s*%/i)
-          if (mddMatch) maxDrawdown = parseFloat(mddMatch[1])
-
-          results.push({ traderId, nickname, roi, winRate, maxDrawdown })
-        })
-
-        return results
-      })
-
-      for (const item of pageData) {
-        if (!traders.has(item.traderId)) traders.set(item.traderId, item)
-      }
-      console.log(`  DOM 提取后: ${traders.size} 个`)
-    }
-
-    // 滚动加载
-    for (let i = 0; i < 10 && traders.size < TARGET_COUNT; i++) {
-      await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight))
-      await sleep(2000)
-      const moreBtn = page.getByText(/load more|more|加载更多|查看更多/i)
-      if (await moreBtn.count() > 0) await moreBtn.first().click().catch(() => {})
-      console.log(`    滚动 ${i + 1}: ${traders.size} 个`)
-    }
-
-    await page.screenshot({ path: `/tmp/xt_${period}_${Date.now()}.png`, fullPage: true }).catch(() => {})
-  } finally {
-    await context.close()
+async function launchChrome() {
+  try { execSync('pkill -f "remote-debugging-port=9337"', { stdio: 'ignore' }) } catch {}
+  await sleep(1000)
+  spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', [
+    `--remote-debugging-port=${PORT}`, '--user-data-dir=/tmp/chrome-xt-profile',
+    '--no-first-run','--disable-extensions','--disable-sync','--disable-gpu',
+    '--window-size=400,300','--window-position=9999,9999',
+    '--proxy-server=http://127.0.0.1:7890','about:blank',
+  ], { stdio: 'ignore', detached: true }).unref()
+  for (let i = 0; i < 20; i++) {
+    await sleep(500)
+    try { const r = await fetch(`http://127.0.0.1:${PORT}/json/version`); if (r.ok) return } catch {}
   }
-
-  return Array.from(traders.values()).slice(0, TARGET_COUNT)
+  throw new Error('Chrome timeout')
 }
 
-async function saveTraders(traders, period) {
-  if (traders.length === 0) { console.log('  ⚠ 无数据可保存'); return 0 }
-  traders.sort((a, b) => (b.roi || 0) - (a.roi || 0))
-  const topTraders = traders.slice(0, TARGET_COUNT)
-  const capturedAt = new Date().toISOString()
-
-  console.log(`\n💾 保存 ${topTraders.length} 条 ${period} 数据...`)
-
-  await supabase.from('trader_sources').upsert(
-    topTraders.map(t => ({
-      source: SOURCE,
-      source_type: 'leaderboard',
-      source_trader_id: t.traderId,
-      handle: t.nickname,
-      avatar_url: t.avatarUrl || null,
-      is_active: true
-    })),
-    { onConflict: 'source,source_trader_id' }
-  )
-
-  const snapshotsData = topTraders.map((t, idx) => {
-    const normalizedWr = t.winRate != null ? (t.winRate <= 1 ? t.winRate * 100 : t.winRate) : null
-    return {
-      source: SOURCE,
-      source_trader_id: t.traderId,
-      season_id: period,
-      rank: idx + 1,
-      roi: t.roi,
-      pnl: t.pnl || null,
-      win_rate: normalizedWr,
-      max_drawdown: t.maxDrawdown || null,
-      followers: t.followers || null,
-      arena_score: calculateArenaScore(t.roi, t.pnl, t.maxDrawdown, normalizedWr, period).totalScore,
-      captured_at: capturedAt
-    }
-  })
-
-  snapshotsData.slice(0, 5).forEach((s, i) => {
-    console.log(`    ${i + 1}. ${topTraders[i].nickname?.slice(0, 15)}: ROI ${s.roi?.toFixed(2)}% → Score ${s.arena_score}`)
-  })
-
-  const { error } = await supabase.from('trader_snapshots').upsert(snapshotsData, {
-    onConflict: 'source,source_trader_id,season_id'
-  })
-
-  if (error) {
-    console.log(`  ⚠ 批量保存失败: ${error.message}`)
-    let saved = 0
-    for (const s of snapshotsData) {
-      const { error: e } = await supabase.from('trader_snapshots').upsert(s, {
-        onConflict: 'source,source_trader_id,season_id'
-      })
-      if (!e) saved++
-    }
-    return saved
+function parseTrader(it) {
+  const id = String(it.accountId || '')
+  if (!id) return null
+  
+  // incomeRate is decimal: 1.0852 = 108.52%
+  let roi = null
+  if (it.incomeRate != null) {
+    roi = parseFloat(it.incomeRate) * 100
   }
-
-  console.log(`  ✓ 保存成功: ${topTraders.length} 条`)
-  return topTraders.length
+  
+  let pnl = null
+  if (it.income != null) pnl = parseFloat(it.income)
+  
+  let wr = null
+  if (it.winRate != null) {
+    wr = parseFloat(it.winRate)
+    if (wr <= 1) wr *= 100
+  }
+  
+  let dd = null
+  if (it.maxRetraction != null) {
+    dd = Math.abs(parseFloat(it.maxRetraction))
+    if (dd <= 1 && dd > 0) dd *= 100
+  }
+  
+  return {
+    id,
+    name: it.nickName || '',
+    avatar: it.avatar || null,
+    roi, pnl, wr, dd,
+    trades: null,
+    followers: parseInt(it.followerCount || 0) || null,
+    tradeDays: it.tradeDays || null,
+  }
 }
 
 async function main() {
-  const periods = getTargetPeriods(['30D'])
-  console.log(`\n${'='.repeat(50)}`)
-  console.log(`XT.com Copy Trading 数据抓取 (Playwright)`)
-  console.log(`${'='.repeat(50)}`)
-  console.log(`时间: ${new Date().toISOString()}`)
-  console.log(`URL: ${BASE_URL}`)
-  console.log(`目标周期: ${periods.join(', ')}`)
-
-  const browser = await chromium.launch({
-    headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox'],
-  })
-
-  const results = []
-  try {
-    for (const period of periods) {
-      console.log(`\n${'='.repeat(50)}`)
-      console.log(`📊 ${period} 排行榜`)
-      console.log(`${'='.repeat(50)}`)
-
-      const traders = await fetchLeaderboard(browser, period)
-      if (traders.length === 0) {
-        console.log(`  ⚠ ${period} 无数据`)
-        results.push({ period, count: 0, saved: 0 })
-        continue
-      }
-
-      const saved = await saveTraders(traders, period)
-      results.push({ period, count: traders.length, saved, topRoi: traders[0]?.roi || 0 })
-      console.log(`  ✅ ${period} 完成: ${saved} 条`)
-
-      if (periods.indexOf(period) < periods.length - 1) await sleep(3000)
-    }
-
-    console.log(`\n${'='.repeat(50)}`)
-    console.log(`✅ XT.com 完成`)
-    for (const r of results) {
-      console.log(`   ${r.period}: ${r.saved}/${r.count} 条${r.topRoi ? `, TOP ROI ${r.topRoi.toFixed(2)}%` : ''}`)
-    }
-    console.log(`${'='.repeat(50)}`)
-  } finally {
-    await browser.close()
+  await fetch('http://127.0.0.1:9090/configs', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'global' }) }).catch(()=>{})
+  await sleep(1000)
+  
+  await launchChrome()
+  const browser = await chromium.connectOverCDP(`http://127.0.0.1:${PORT}`)
+  const ctx = browser.contexts()[0] || await browser.newContext()
+  const page = await ctx.newPage()
+  
+  // Load page to establish cookies/session
+  await page.goto('https://www.xt.com/en/copy-trading/futures', { timeout: 45000, waitUntil: 'load' }).catch(()=>{})
+  
+  // CF wait
+  let cfOk = false
+  for (let i = 0; i < 30; i++) {
+    const t = await page.title().catch(() => '')
+    if (t && !t.includes('moment') && !t.includes('Check') && !t.includes('Verify') && t.length > 3) { cfOk = true; break }
+    await sleep(1500)
   }
+  if (!cfOk) { console.log('❌ CF'); process.exit(1) }
+  console.log('CF ✅')
+  
+  await sleep(5000)
+  
+  const traders = new Map()
+  
+  // Fetch all sort types with pagination
+  // sortTypes discovered: INCOME_RATE, FOLLOWER_COUNT, etc.
+  // Use different sort params to get different traders
+  const sortTypes = ['INCOME_RATE', 'FOLLOWER_COUNT', 'INCOME', 'FOLLOWER_PROFIT']
+  const periods = [7, 30, 90] // days
+  
+  for (const days of periods) {
+    for (const sortType of sortTypes) {
+      let page_num = 1
+      let hasMore = true
+      let emptyStreak = 0
+      
+      while (hasMore && page_num <= 50 && emptyStreak < 2) {
+        const result = await page.evaluate(async ({ days, sortType, size, pageNum }) => {
+          try {
+            // Build URL with pagination
+            const url = `https://www.xt.com/fapi/user/v1/public/copy-trade/elite-leader-list-v2?size=${size}&days=${days}&sotType=${sortType}&pageNo=${pageNum}`
+            const r = await fetch(url, { credentials: 'include' })
+            return await r.json()
+          } catch(e) { return { _err: e.message } }
+        }, { days, sortType, size: 50, pageNum: page_num }).catch(() => null)
+        
+        if (!result || result._err || result.returnCode !== 0) {
+          // Try alternative: the API might return the result grouped
+          if (page_num === 1) {
+            // First page - check if data is in result array
+            const grouped = result?.result
+            if (Array.isArray(grouped)) {
+              for (const group of grouped) {
+                if (group.items && group.items.length > 0) {
+                  let newCount = 0
+                  for (const it of group.items) {
+                    const t = parseTrader(it)
+                    if (t && !traders.has(t.id)) { traders.set(t.id, t); newCount++ }
+                  }
+                  hasMore = group.hasMore === true
+                  if (newCount === 0) emptyStreak++
+                  else emptyStreak = 0
+                  process.stdout.write(`\r  ${days}d ${sortType}: p${page_num} +${newCount} → ${traders.size}`)
+                }
+              }
+            }
+          }
+          break
+        }
+        
+        // Parse result - could be direct array or grouped
+        let items = []
+        if (Array.isArray(result.result)) {
+          // Grouped format: [{sotType, hasMore, items}]
+          for (const group of result.result) {
+            if (group.items) items.push(...group.items)
+            if (group.hasMore === false) hasMore = false
+          }
+        } else if (result.result?.items) {
+          items = result.result.items
+          hasMore = result.result.hasMore !== false
+        } else if (result.result?.list) {
+          items = result.result.list
+          hasMore = items.length >= 50
+        }
+        
+        if (items.length === 0) { emptyStreak++; break }
+        
+        let newCount = 0
+        for (const it of items) {
+          const t = parseTrader(it)
+          if (t && !traders.has(t.id)) { traders.set(t.id, t); newCount++ }
+        }
+        
+        if (newCount === 0) emptyStreak++
+        else emptyStreak = 0
+        
+        process.stdout.write(`\r  ${days}d ${sortType}: p${page_num} +${newCount} → ${traders.size}`)
+        page_num++
+        await new Promise(r => setTimeout(r, 300 + Math.random() * 500))
+      }
+    }
+    console.log()
+  }
+  
+  // Also try the main list endpoint that shows all traders
+  console.log('Trying all-traders endpoint...')
+  for (let pg = 1; pg <= 100; pg++) {
+    const result = await page.evaluate(async ({ pg }) => {
+      try {
+        // Try various endpoint patterns
+        for (const url of [
+          `https://www.xt.com/fapi/user/v1/public/copy-trade/leader-list?pageNo=${pg}&pageSize=50`,
+          `https://www.xt.com/fapi/user/v1/public/copy-trade/elite-leader-list?pageNo=${pg}&pageSize=50`,
+        ]) {
+          const r = await fetch(url, { credentials: 'include' })
+          const d = await r.json()
+          if (d.returnCode === 0 && d.result) return d
+        }
+        return null
+      } catch { return null }
+    }, { pg }).catch(() => null)
+    
+    if (!result) break
+    
+    let items = []
+    if (Array.isArray(result.result)) {
+      for (const g of result.result) if (g.items) items.push(...g.items)
+    } else if (result.result?.list) items = result.result.list
+    else if (result.result?.items) items = result.result.items
+    
+    if (items.length === 0) break
+    
+    let newCount = 0
+    for (const it of items) {
+      const t = parseTrader(it)
+      if (t && !traders.has(t.id)) { traders.set(t.id, t); newCount++ }
+    }
+    process.stdout.write(`\r  all p${pg}: +${newCount} → ${traders.size}`)
+    if (newCount === 0) break
+    await new Promise(r => setTimeout(r, 300))
+  }
+  console.log()
+  
+  // Save
+  if (traders.size > 0) {
+    const all = [...traders.values()]
+    const now = new Date().toISOString()
+    let saved = 0
+    
+    for (let i=0;i<all.length;i+=50)
+      try{await sb.from('trader_sources').upsert(all.slice(i,i+50).map(t=>({
+        source:'xt', source_trader_id:t.id, handle:t.name||t.id,
+        avatar_url:t.avatar, market_type:'futures', is_active:true,
+        profile_url: `https://www.xt.com/en/copy-trading/futures/detail/${t.id}`,
+      })),{onConflict:'source,source_trader_id'})}catch(e){console.log('src err:',e.message)}
+    
+    for (let i=0;i<all.length;i+=30){
+      const{error}=await sb.from('trader_snapshots').upsert(all.slice(i,i+30).map((t,j)=>({
+        source:'xt', source_trader_id:t.id, season_id:'30D',
+        rank:i+j+1, roi:t.roi, pnl:t.pnl, win_rate:t.wr,
+        max_drawdown:t.dd, trades_count:t.trades,
+        arena_score:cs(t.roi,t.pnl,t.dd,t.wr), captured_at:now
+      })),{onConflict:'source,source_trader_id,season_id'})
+      if(!error)saved+=Math.min(30,all.length-i)}
+    
+    console.log(`✅ ${saved} saved (${traders.size} unique)`)
+  } else {
+    console.log('❌ 0')
+  }
+  
+  await page.close().catch(()=>{})
+  browser.close().catch(()=>{})
+  try { execSync('pkill -f "remote-debugging-port=9337"', { stdio: 'ignore' }) } catch {}
+  await fetch('http://127.0.0.1:9090/configs', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'direct' }) }).catch(()=>{})
 }
 
-main().catch(e => { console.error('Fatal:', e); process.exit(1) })
+main().then(() => process.exit(0)).catch(e => { console.log('❌', e.message?.substring(0,80)); process.exit(1) })

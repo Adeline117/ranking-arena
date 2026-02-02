@@ -7,148 +7,52 @@ import { useToast } from '@/app/components/ui/Toast'
 import { ConnectButton } from '@rainbow-me/rainbowkit'
 import { useAccount } from 'wagmi'
 import { useSiweAuth } from '@/lib/web3/useSiweAuth'
-
-type Language = 'zh' | 'en'
-
-const translations = {
-  zh: {
-    title: '登录 / 注册',
-    email: '邮箱',
-    password: '密码',
-    code: '验证码',
-    handle: '用户名',
-    login: '登录',
-    register: '注册',
-    sendCode: '发送验证码',
-    resendCode: '重新发送',
-    verifyCode: '验证验证码',
-    loggingIn: '登录中...',
-    registering: '注册中...',
-    sendingCode: '发送中...',
-    verifying: '验证中...',
-    switchToRegister: '还没有账号？使用验证码注册',
-    switchToLogin: '已有账号？使用密码或验证码登录',
-    language: '语言',
-    loginSuccess: '登录成功',
-    registerSuccess: '注册成功，请登录',
-    codeSent: '验证码已发送，请查收邮箱（10分钟内有效）',
-    codeVerified: '验证成功，请设置密码和用户名',
-    setPassword: '完成注册',
-    codeExpired: '验证码已过期，请重新获取',
-    codeValidFor: '验证码10分钟内有效',
-    passwordRequired: '请设置密码',
-    passwordMinLength: '密码至少6位',
-    handleRequired: '请输入用户名',
-    handleMinLength: '用户名至少1个字符',
-    countdown: '秒后重发',
-    loginWithCode: '或使用验证码登录',
-    forgotPassword: '忘记密码？',
-    welcomeBack: '欢迎回来',
-    createAccount: '创建账号',
-    subtitle: '探索顶级交易员的世界',
-    connectWallet: '连接钱包',
-    walletSignIn: '使用钱包登录',
-    walletConnecting: '连接中...',
-    walletSignInSuccess: '钱包登录成功',
-  },
-  en: {
-    title: 'Login / Register',
-    email: 'Email',
-    password: 'Password',
-    code: 'Verification Code',
-    handle: 'Username',
-    login: 'Login',
-    register: 'Register',
-    sendCode: 'Send Code',
-    resendCode: 'Resend',
-    verifyCode: 'Verify Code',
-    loggingIn: 'Logging in...',
-    registering: 'Registering...',
-    sendingCode: 'Sending...',
-    verifying: 'Verifying...',
-    switchToRegister: 'No account? Register with code',
-    switchToLogin: 'Have an account? Login with password or code',
-    language: 'Language',
-    loginSuccess: 'Login successful',
-    registerSuccess: 'Registration successful, please login',
-    codeSent: 'Code sent, please check your email (valid for 10 minutes)',
-    codeVerified: 'Verification successful, please set password and username',
-    setPassword: 'Complete Registration',
-    codeExpired: 'Code expired, please request a new one',
-    codeValidFor: 'Code is valid for 10 minutes',
-    passwordRequired: 'Please set password',
-    passwordMinLength: 'Password must be at least 6 characters',
-    handleRequired: 'Please enter username',
-    handleMinLength: 'Username must be at least 1 character',
-    countdown: 's to resend',
-    loginWithCode: 'Or login with verification code',
-    forgotPassword: 'Forgot password?',
-    welcomeBack: 'Welcome Back',
-    createAccount: 'Create Account',
-    subtitle: 'Explore the world of top traders',
-    connectWallet: 'Connect Wallet',
-    walletSignIn: 'Sign in with Wallet',
-    walletConnecting: 'Connecting...',
-    walletSignInSuccess: 'Wallet sign-in successful',
-  },
-}
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 // 密码强度计算函数
-function getPasswordStrength(password: string): { level: 0 | 1 | 2 | 3 | 4; label: string; labelEn: string; color: string } {
-  if (!password) return { level: 0, label: '', labelEn: '', color: '' }
-  
+function getPasswordStrength(password: string): { level: 0 | 1 | 2 | 3 | 4; labelKey: string; color: string } {
+  if (!password) return { level: 0, labelKey: '', color: '' }
+
   let score = 0
   if (password.length >= 6) score++
   if (password.length >= 8) score++
   if (/[a-z]/.test(password) && /[A-Z]/.test(password)) score++
   if (/\d/.test(password)) score++
   if (/[^a-zA-Z0-9]/.test(password)) score++
-  
-  if (score <= 1) return { level: 1, label: '弱', labelEn: 'Weak', color: '#ff4d4d' }
-  if (score === 2) return { level: 2, label: '一般', labelEn: 'Fair', color: '#ffa500' }
-  if (score === 3) return { level: 3, label: '中等', labelEn: 'Good', color: '#ffc107' }
-  return { level: 4, label: '强', labelEn: 'Strong', color: '#2fe57d' }
+
+  if (score <= 1) return { level: 1, labelKey: 'loginPasswordWeak', color: '#ff4d4d' }
+  if (score === 2) return { level: 2, labelKey: 'loginPasswordFair', color: '#ffa500' }
+  if (score === 3) return { level: 3, labelKey: 'loginPasswordGood', color: '#ffc107' }
+  return { level: 4, labelKey: 'loginPasswordStrong', color: '#2fe57d' }
 }
 
 // 实时验证函数
-function validateEmail(email: string): { valid: boolean; message: string; messageEn: string } {
-  if (!email) return { valid: true, message: '', messageEn: '' }
+function validateEmail(email: string): { valid: boolean; messageKey: string } {
+  if (!email) return { valid: true, messageKey: '' }
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
   if (!emailRegex.test(email)) {
-    return { valid: false, message: '请输入有效的邮箱地址', messageEn: 'Please enter a valid email' }
+    return { valid: false, messageKey: 'loginInvalidEmail' }
   }
-  return { valid: true, message: '', messageEn: '' }
+  return { valid: true, messageKey: '' }
 }
 
-function validatePassword(password: string): { valid: boolean; message: string; messageEn: string } {
-  if (!password) return { valid: true, message: '', messageEn: '' }
+function validatePassword(password: string): { valid: boolean; messageKey: string } {
+  if (!password) return { valid: true, messageKey: '' }
   if (password.length < 6) {
-    return { 
-      valid: false, 
-      message: '密码至少需要6个字符',
-      messageEn: 'Password must be at least 6 characters',
-    }
+    return { valid: false, messageKey: 'loginPasswordTooShort' }
   }
-  return { valid: true, message: '', messageEn: '' }
+  return { valid: true, messageKey: '' }
 }
 
-function validateHandle(handle: string): { valid: boolean; message: string; messageEn: string } {
-  if (!handle) return { valid: true, message: '', messageEn: '' }
+function validateHandle(handle: string): { valid: boolean; messageKey: string } {
+  if (!handle) return { valid: true, messageKey: '' }
   if (handle.length < 1) {
-    return { 
-      valid: false, 
-      message: '用户名至少需要1个字符',
-      messageEn: 'Username must be at least 1 character',
-    }
+    return { valid: false, messageKey: 'loginHandleTooShort' }
   }
   if (!/^[a-zA-Z0-9_\u4e00-\u9fa5]+$/.test(handle)) {
-    return { 
-      valid: false, 
-      message: '用户名只能包含字母、数字、下划线和中文',
-      messageEn: 'Only letters, numbers, underscores and Chinese',
-    }
+    return { valid: false, messageKey: 'loginHandleInvalidChars' }
   }
-  return { valid: true, message: '', messageEn: '' }
+  return { valid: true, messageKey: '' }
 }
 
 // CSS keyframe animations
@@ -318,13 +222,7 @@ const injectStyles = () => {
 }
 
 export default function LoginPage() {
-  const [lang, setLang] = useState<Language>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('preferredLanguage')
-      if (saved === 'en' || saved === 'zh') return saved
-    }
-    return 'zh'
-  })
+  const { language: lang, setLanguage: setLang, t } = useLanguage()
   const [isRegister, setIsRegister] = useState(false)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -366,7 +264,6 @@ export default function LoginPage() {
   const { address: walletAddress, isConnected: isWalletConnected } = useAccount()
   const { signIn: siweSignIn, isLoading: siweLoading, error: siweError, clearError: clearSiweError } = useSiweAuth()
 
-  const t = translations[lang]
   const passwordStrength = getPasswordStrength(password)
   
   const emailValidation = validateEmail(email)
@@ -389,11 +286,7 @@ export default function LoginPage() {
     }
   }, [router])
 
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('preferredLanguage', lang)
-    }
-  }, [lang])
+  // Language persistence is handled by LanguageProvider
 
   // Shake error box when error changes
   useEffect(() => {
@@ -442,7 +335,7 @@ export default function LoginPage() {
 
   const handleSendCode = async () => {
     if (!email) {
-      setError(lang === 'zh' ? '请输入邮箱' : 'Please enter email')
+      setError(t('loginPleaseEnterEmail'))
       return
     }
 
@@ -459,11 +352,9 @@ export default function LoginPage() {
 
       if (otpError) {
         if (otpError.message.includes('redirect') || otpError.message.includes('link')) {
-          setError(lang === 'zh' 
-            ? '配置错误：请检查 Supabase 设置' 
-            : 'Configuration error: Please check Supabase settings')
+          setError(t('loginConfigError'))
         } else {
-          setError(otpError.message || (lang === 'zh' ? '发送失败，请重试' : 'Failed to send, please retry'))
+          setError(otpError.message || t('loginSendFailed'))
         }
         setSendingCode(false)
         return
@@ -472,12 +363,12 @@ export default function LoginPage() {
       if (data) {
         setCodeSent(true)
         setCountdown(60)
-        showToast(t.codeSent, 'success')
+        showToast(t('loginCodeSent'), 'success')
       } else {
-        setError(lang === 'zh' ? '发送失败，请重试' : 'Failed to send, please retry')
+        setError(t('loginSendFailed'))
       }
     } catch (err: unknown) {
-      setError((err instanceof Error ? err.message : undefined) || (lang === 'zh' ? '发送失败，请检查网络连接' : 'Failed, please check network'))
+      setError((err instanceof Error ? err.message : undefined) || t('loginSendFailedNetwork'))
     } finally {
       setSendingCode(false)
     }
@@ -490,7 +381,7 @@ export default function LoginPage() {
 
   const handleSendLoginCode = async () => {
     if (!email) {
-      setError(lang === 'zh' ? '请输入邮箱' : 'Please enter email')
+      setError(t('loginPleaseEnterEmail'))
       return
     }
 
@@ -506,7 +397,7 @@ export default function LoginPage() {
       })
 
       if (otpError) {
-        setError(otpError.message || (lang === 'zh' ? '发送失败，请重试' : 'Failed to send'))
+        setError(otpError.message || t('loginSendFailedShort'))
         setSendingCode(false)
         return
       }
@@ -514,12 +405,12 @@ export default function LoginPage() {
       if (data) {
         setCodeSent(true)
         setCountdown(60)
-        showToast(t.codeSent, 'success')
+        showToast(t('loginCodeSent'), 'success')
       } else {
-        setError(lang === 'zh' ? '发送失败，请重试' : 'Failed to send')
+        setError(t('loginSendFailedShort'))
       }
     } catch (err: unknown) {
-      setError((err instanceof Error ? err.message : undefined) || (lang === 'zh' ? '发送失败' : 'Failed'))
+      setError((err instanceof Error ? err.message : undefined) || t('loginSendFailedSimple'))
     } finally {
       setSendingCode(false)
     }
@@ -527,7 +418,7 @@ export default function LoginPage() {
 
   const handleVerifyCode = async () => {
     if (!code) {
-      setError(lang === 'zh' ? '请输入验证码' : 'Please enter code')
+      setError(t('loginPleaseEnterCode'))
       return
     }
 
@@ -543,7 +434,7 @@ export default function LoginPage() {
 
       if (verifyError) {
         if (verifyError.message.includes('expired') || verifyError.message.includes('过期')) {
-          setError(t.codeExpired)
+          setError(t('loginCodeExpired'))
         } else {
           setError(verifyError.message)
         }
@@ -555,7 +446,7 @@ export default function LoginPage() {
         if (isRegister) {
           setCodeVerified(true)
           await createUserProfile(data.user.id, email)
-          showToast(t.codeVerified, 'success')
+          showToast(t('loginCodeVerified'), 'success')
         } else {
           const { data: userProfile } = await supabase
             .from('user_profiles')
@@ -569,9 +460,9 @@ export default function LoginPage() {
     } catch (err: unknown) {
       const errMsg = err instanceof Error ? err.message : undefined
       if (errMsg?.includes('expired') || errMsg?.includes('过期')) {
-        setError(t.codeExpired)
+        setError(t('loginCodeExpired'))
       } else {
-        setError(errMsg || (lang === 'zh' ? '验证失败' : 'Verification failed'))
+        setError(errMsg || t('loginVerificationFailed'))
       }
     } finally {
       setLoading(false)
@@ -614,12 +505,12 @@ export default function LoginPage() {
 
   const handleSetPassword = async () => {
     if (!password || password.length < 6) {
-      setError(t.passwordMinLength)
+      setError(t('loginPasswordMinLength'))
       return
     }
 
     if (!handle || handle.length < 1) {
-      setError(t.handleMinLength)
+      setError(t('loginHandleMinLength'))
       return
     }
 
@@ -663,7 +554,7 @@ export default function LoginPage() {
         router.push('/')
       }
     } catch (err: unknown) {
-      setError((err instanceof Error ? err.message : undefined) || (lang === 'zh' ? '设置失败' : 'Setup failed'))
+      setError((err instanceof Error ? err.message : undefined) || t('loginSetupFailed'))
     } finally {
       setLoading(false)
     }
@@ -698,7 +589,7 @@ export default function LoginPage() {
         router.push(getRedirectUrl())
       }
     } catch (err: unknown) {
-      setError((err instanceof Error ? err.message : undefined) || (lang === 'zh' ? '登录失败' : 'Login failed'))
+      setError((err instanceof Error ? err.message : undefined) || t('loginFailed'))
     } finally {
       setLoading(false)
     }
@@ -836,7 +727,7 @@ export default function LoginPage() {
               fontSize: 13,
             }}
           >
-            中文
+            {t('chinese')}
           </button>
           <button
             className="lang-btn"
@@ -867,14 +758,14 @@ export default function LoginPage() {
             WebkitBackgroundClip: 'text',
             WebkitTextFillColor: 'transparent',
           }}>
-            {isRegister ? t.createAccount : t.welcomeBack}
+            {isRegister ? t('loginCreateAccount') : t('loginWelcomeBack')}
           </h1>
-          <p style={{ 
-            fontSize: 14, 
+          <p style={{
+            fontSize: 14,
             color: '#7a7a7a',
             fontWeight: 500,
           }}>
-            {t.subtitle}
+            {t('loginSubtitle')}
           </p>
         </div>
 
@@ -887,7 +778,7 @@ export default function LoginPage() {
             fontWeight: 600,
             color: '#b0b0b0',
           }}>
-            {t.email}
+            {t('loginEmail')}
           </label>
           <input
             type="email"
@@ -913,7 +804,7 @@ export default function LoginPage() {
           />
           {touchedFields.email && email && !emailValidation.valid && (
             <div style={{ marginTop: 6, fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
-              <span style={{ color: '#ff7c7c' }}>✕ {lang === 'zh' ? emailValidation.message : emailValidation.messageEn}</span>
+              <span style={{ color: '#ff7c7c' }}>✕ {t(emailValidation.messageKey)}</span>
             </div>
           )}
         </div>
@@ -946,13 +837,13 @@ export default function LoginPage() {
                 }}
               >
                 {sendingCode && <Spinner />}
-                {sendingCode ? t.sendingCode : t.sendCode}
+                {sendingCode ? t('loginSendingCode') : t('loginSendCode')}
               </button>
             ) : !codeVerified ? (
               <>
                 <div style={{ marginBottom: 20 }}>
                   <label style={{ display: 'block', marginBottom: 8, fontSize: 13, fontWeight: 600, color: '#b0b0b0' }}>
-                    {t.code}
+                    {t('loginVerificationCode')}
                   </label>
                   <input
                     type="text"
@@ -980,7 +871,7 @@ export default function LoginPage() {
                     maxLength={6}
                   />
                   <div style={{ marginTop: 6, fontSize: 11, color: '#6a6a6a' }}>
-                    {t.codeValidFor}
+                    {t('loginCodeValidFor')}
                   </div>
                 </div>
                 <button
@@ -1007,12 +898,12 @@ export default function LoginPage() {
                   }}
                 >
                   {loading && <Spinner />}
-                  {loading ? t.verifying : t.verifyCode}
+                  {loading ? t('loginVerifying') : t('loginVerifyCode')}
                 </button>
                 <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginBottom: 16 }}>
                   {countdown > 0 ? (
                     <span style={{ fontSize: 13, color: '#6a6a6a' }}>
-                      {countdown} {t.countdown}
+                      {countdown} {t('loginCountdown')}
                     </span>
                   ) : (
                     <button
@@ -1029,7 +920,7 @@ export default function LoginPage() {
                         padding: 0,
                       }}
                     >
-                      {t.resendCode}
+                      {t('loginResendCode')}
                     </button>
                   )}
                 </div>
@@ -1039,7 +930,7 @@ export default function LoginPage() {
                 {/* Username input */}
                 <div style={{ marginBottom: 20 }}>
                   <label style={{ display: 'block', marginBottom: 8, fontSize: 13, fontWeight: 600, color: '#b0b0b0' }}>
-                    {t.handle}
+                    {t('loginHandle')}
                   </label>
                   <input
                     type="text"
@@ -1054,14 +945,14 @@ export default function LoginPage() {
                       fontSize: 15,
                       outline: 'none',
                     }}
-                    placeholder={lang === 'zh' ? '用户名' : 'Username'}
+                    placeholder={t('loginUsernamePlaceholder')}
                     value={handle}
                     onChange={(e) => setHandle(e.target.value)}
                     onBlur={() => markTouched('handle')}
                   />
                   {touchedFields.handle && handle && !handleValidation.valid && (
                     <div style={{ marginTop: 6, fontSize: 12 }}>
-                      <span style={{ color: '#ff7c7c' }}>✕ {lang === 'zh' ? handleValidation.message : handleValidation.messageEn}</span>
+                      <span style={{ color: '#ff7c7c' }}>✕ {t(handleValidation.messageKey)}</span>
                     </div>
                   )}
                 </div>
@@ -1069,7 +960,7 @@ export default function LoginPage() {
                 {/* Password input */}
                 <div style={{ marginBottom: 20 }}>
                   <label style={{ display: 'block', marginBottom: 8, fontSize: 13, fontWeight: 600, color: '#b0b0b0' }}>
-                    {t.password}
+                    {t('loginPassword')}
                   </label>
                   <div style={{ position: 'relative' }}>
                     <input
@@ -1086,7 +977,7 @@ export default function LoginPage() {
                         fontSize: 15,
                         outline: 'none',
                       }}
-                      placeholder={lang === 'zh' ? '设置密码（至少6位）' : 'Set password (min 6 chars)'}
+                      placeholder={t('loginSetPasswordPlaceholder')}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       onBlur={() => markTouched('password')}
@@ -1109,7 +1000,7 @@ export default function LoginPage() {
                       }}
                       tabIndex={-1}
                     >
-                      {showPassword ? (lang === 'zh' ? '隐藏' : 'Hide') : (lang === 'zh' ? '显示' : 'Show')}
+                      {showPassword ? t('loginHide') : t('loginShow')}
                     </button>
                   </div>
                   
@@ -1132,7 +1023,7 @@ export default function LoginPage() {
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <span style={{ fontSize: 11, color: passwordStrength.color, fontWeight: 500 }}>
-                          {lang === 'zh' ? `密码强度: ${passwordStrength.label}` : `Strength: ${passwordStrength.labelEn}`}
+                          {t('loginPasswordStrength').replace('{label}', t(passwordStrength.labelKey))}
                         </span>
                         <span style={{ fontSize: 11, color: password.length >= 6 ? '#6a6a6a' : '#ff7c7c' }}>
                           {password.length}/6
@@ -1166,7 +1057,7 @@ export default function LoginPage() {
                   }}
                 >
                   {loading && <Spinner />}
-                  {loading ? t.registering : t.setPassword}
+                  {loading ? t('loginRegistering') : t('loginSetPassword')}
                 </button>
               </>
             )}
@@ -1181,7 +1072,7 @@ export default function LoginPage() {
                 {/* Password login */}
                 <div style={{ marginBottom: 20 }}>
                   <label style={{ display: 'block', marginBottom: 8, fontSize: 13, fontWeight: 600, color: '#b0b0b0' }}>
-                    {t.password}
+                    {t('loginPassword')}
                   </label>
                   <div style={{ position: 'relative' }}>
                     <input
@@ -1198,7 +1089,7 @@ export default function LoginPage() {
                         fontSize: 15,
                         outline: 'none',
                       }}
-                      placeholder={lang === 'zh' ? '密码' : 'Password'}
+                      placeholder={t('loginPasswordPlaceholder')}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       onBlur={() => markTouched('password')}
@@ -1226,7 +1117,7 @@ export default function LoginPage() {
                       }}
                       tabIndex={-1}
                     >
-                      {showPassword ? (lang === 'zh' ? '隐藏' : 'Hide') : (lang === 'zh' ? '显示' : 'Show')}
+                      {showPassword ? t('loginHide') : t('loginShow')}
                     </button>
                   </div>
                 </div>
@@ -1255,7 +1146,7 @@ export default function LoginPage() {
                   }}
                 >
                   {loading && <Spinner />}
-                  {loading ? t.loggingIn : t.login}
+                  {loading ? t('loginLoggingIn') : t('loginButton')}
                 </button>
                 
                 {/* Forgot password */}
@@ -1269,7 +1160,7 @@ export default function LoginPage() {
                       textDecoration: 'none',
                     }}
                   >
-                    {t.forgotPassword}
+                    {t('loginForgotPassword')}
                   </a>
                 </div>
                 
@@ -1294,7 +1185,7 @@ export default function LoginPage() {
                     marginBottom: 12,
                   }}
                 >
-                  {t.loginWithCode}
+                  {t('loginWithCode')}
                 </button>
               </>
             ) : (
@@ -1325,13 +1216,13 @@ export default function LoginPage() {
                     }}
                   >
                     {sendingCode && <Spinner />}
-                    {sendingCode ? t.sendingCode : t.sendCode}
+                    {sendingCode ? t('loginSendingCode') : t('loginSendCode')}
                   </button>
                 ) : (
                   <>
                     <div style={{ marginBottom: 20 }}>
                       <label style={{ display: 'block', marginBottom: 8, fontSize: 13, fontWeight: 600, color: '#b0b0b0' }}>
-                        {t.code}
+                        {t('loginVerificationCode')}
                       </label>
                       <input
                         type="text"
@@ -1359,7 +1250,7 @@ export default function LoginPage() {
                         maxLength={6}
                       />
                       <div style={{ marginTop: 6, fontSize: 11, color: '#6a6a6a' }}>
-                        {t.codeValidFor}
+                        {t('loginCodeValidFor')}
                       </div>
                     </div>
                     <button
@@ -1386,12 +1277,12 @@ export default function LoginPage() {
                       }}
                     >
                       {loading && <Spinner />}
-                      {loading ? t.verifying : t.verifyCode}
+                      {loading ? t('loginVerifying') : t('loginVerifyCode')}
                     </button>
                     <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginBottom: 12 }}>
                       {countdown > 0 ? (
                         <span style={{ fontSize: 13, color: '#6a6a6a' }}>
-                          {countdown} {t.countdown}
+                          {countdown} {t('loginCountdown')}
                         </span>
                       ) : (
                         <button
@@ -1408,7 +1299,7 @@ export default function LoginPage() {
                             padding: 0,
                           }}
                         >
-                          {t.resendCode}
+                          {t('loginResendCode')}
                         </button>
                       )}
                     </div>
@@ -1432,7 +1323,7 @@ export default function LoginPage() {
                         marginBottom: 12,
                       }}
                     >
-                      {lang === 'zh' ? '使用密码登录' : 'Login with password'}
+                      {t('loginWithPassword')}
                     </button>
                   </>
                 )}
@@ -1482,7 +1373,7 @@ export default function LoginPage() {
                       <rect x="2" y="6" width="20" height="12" rx="2" />
                       <path d="M22 10H18a2 2 0 0 0-2 2 2 2 0 0 0 2 2h4" />
                     </svg>
-                    {t.connectWallet}
+                    {t('loginConnectWallet')}
                   </button>
                 )}
               </ConnectButton.Custom>
@@ -1493,7 +1384,7 @@ export default function LoginPage() {
                 clearSiweError()
                 const result = await siweSignIn()
                 if (result) {
-                  showToast(t.walletSignInSuccess, 'success')
+                  showToast(t('loginWalletSignInSuccess'), 'success')
                   router.push(getRedirectUrl(result.handle))
                 }
                 // Error is shown via siweError state from the hook
@@ -1523,7 +1414,7 @@ export default function LoginPage() {
                 <rect x="2" y="6" width="20" height="12" rx="2" />
                 <path d="M22 10H18a2 2 0 0 0-2 2 2 2 0 0 0 2 2h4" />
               </svg>
-              {siweLoading ? t.walletConnecting : `${t.walletSignIn} (${walletAddress?.slice(0, 6)}...${walletAddress?.slice(-4)})`}
+              {siweLoading ? t('loginWalletConnecting') : `${t('loginWalletSignIn')} (${walletAddress?.slice(0, 6)}...${walletAddress?.slice(-4)})`}
             </button>
           )}
           {siweError && (
@@ -1560,7 +1451,7 @@ export default function LoginPage() {
             e.currentTarget.style.color = '#b0b0b0'
           }}
         >
-          {isRegister ? t.switchToLogin : t.switchToRegister}
+          {isRegister ? t('loginSwitchToLogin') : t('loginSwitchToRegister')}
         </button>
 
         {/* Error message */}

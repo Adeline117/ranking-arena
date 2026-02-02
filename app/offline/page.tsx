@@ -1,5 +1,7 @@
 'use client'
 
+import { t } from '@/lib/i18n'
+
 /**
  * 离线页面
  * 当用户离线且没有缓存时显示
@@ -39,7 +41,7 @@ export default function OfflinePage() {
         >
           📡
         </div>
-        
+
         <h1
           style={{
             fontSize: '1.5rem',
@@ -47,9 +49,9 @@ export default function OfflinePage() {
             marginBottom: '1rem',
           }}
         >
-          您已离线
+          {t('youAreOffline')}
         </h1>
-        
+
         <p
           style={{
             fontSize: '0.875rem',
@@ -58,9 +60,9 @@ export default function OfflinePage() {
             lineHeight: 1.6,
           }}
         >
-          请检查您的网络连接后重试。部分已缓存的内容可能仍可访问。
+          {t('checkNetworkAndRetryOffline')}
         </p>
-        
+
         <button
           onClick={handleRetry}
           style={{
@@ -81,9 +83,9 @@ export default function OfflinePage() {
             e.currentTarget.style.backgroundColor = '#8b6fa8'
           }}
         >
-          重试连接
+          {t('retryConnection')}
         </button>
-        
+
         <p
           style={{
             fontSize: '0.75rem',
@@ -91,7 +93,7 @@ export default function OfflinePage() {
             marginTop: '2rem',
           }}
         >
-          Arena - 加密货币交易员排行榜
+          {t('arenaTagline')}
         </p>
       </div>
     </div>

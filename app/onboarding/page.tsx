@@ -3,35 +3,9 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Box, Text } from '@/app/components/base'
-import { setLanguage } from '@/lib/i18n'
+import { setLanguage, translations, type Language } from '@/lib/i18n'
 
-type Language = 'zh' | 'en'
 type Theme = 'dark' | 'light'
-
-const translations = {
-  zh: {
-    title: '欢迎来到 Arena',
-    subtitle: '加密交易员排行榜与社区',
-    selectLanguage: '选择语言',
-    selectTheme: '选择主题',
-    darkMode: '深色模式',
-    lightMode: '浅色模式',
-    continue: '继续',
-    chinese: '中文',
-    english: 'English',
-  },
-  en: {
-    title: 'Welcome to Arena',
-    subtitle: 'Crypto Trader Leaderboard & Community',
-    selectLanguage: 'Select Language',
-    selectTheme: 'Select Theme',
-    darkMode: 'Dark Mode',
-    lightMode: 'Light Mode',
-    continue: 'Continue',
-    chinese: '中文',
-    english: 'English',
-  },
-}
 
 // CSS 注入
 const injectStyles = () => {
@@ -134,7 +108,7 @@ export default function OnboardingPage() {
   const [theme, setTheme] = useState<Theme>('dark')
   const [mounted, setMounted] = useState(false)
 
-  const t = translations[language]
+  const tr = (key: string) => translations[language][key] || translations.zh[key] || key
 
   useEffect(() => {
     injectStyles()
@@ -282,10 +256,10 @@ export default function OnboardingPage() {
               color: textPrimary,
             }}
           >
-            {t.title}
+            {tr('onboardingTitle')}
           </Text>
           <Text style={{ color: textSecondary }}>
-            {t.subtitle}
+            {tr('onboardingSubtitle')}
           </Text>
         </Box>
 
@@ -300,7 +274,7 @@ export default function OnboardingPage() {
               color: textSecondary,
             }}
           >
-            {t.selectLanguage}
+            {tr('selectLanguage')}
           </Text>
           <Box style={{ display: 'flex', gap: 12 }}>
             <Box
@@ -320,7 +294,7 @@ export default function OnboardingPage() {
                 weight={language === 'zh' ? 'bold' : 'medium'}
                 style={{ color: language === 'zh' ? '#c9b8db' : textSecondary }}
               >
-                {t.chinese}
+                {tr('chineseLabel')}
               </Text>
             </Box>
             <Box
@@ -340,7 +314,7 @@ export default function OnboardingPage() {
                 weight={language === 'en' ? 'bold' : 'medium'}
                 style={{ color: language === 'en' ? '#c9b8db' : textSecondary }}
               >
-                {t.english}
+                {tr('englishLabel')}
               </Text>
             </Box>
           </Box>
@@ -357,7 +331,7 @@ export default function OnboardingPage() {
               color: textSecondary,
             }}
           >
-            {t.selectTheme}
+            {tr('selectTheme')}
           </Text>
           <Box style={{ display: 'flex', gap: 12 }}>
             <Box
@@ -393,7 +367,7 @@ export default function OnboardingPage() {
                 weight={theme === 'dark' ? 'bold' : 'medium'}
                 style={{ color: theme === 'dark' ? '#c9b8db' : textSecondary }}
               >
-                {t.darkMode}
+                {tr('darkMode')}
               </Text>
             </Box>
             <Box
@@ -437,7 +411,7 @@ export default function OnboardingPage() {
                 weight={theme === 'light' ? 'bold' : 'medium'}
                 style={{ color: theme === 'light' ? '#8b6fa8' : textSecondary }}
               >
-                {t.lightMode}
+                {tr('lightMode')}
               </Text>
             </Box>
           </Box>
@@ -459,7 +433,7 @@ export default function OnboardingPage() {
             cursor: 'pointer',
           }}
         >
-          {t.continue}
+          {tr('continueButton')}
         </button>
       </Box>
     </Box>

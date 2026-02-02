@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
 import { ThumbsUpIcon, CommentIcon } from '@/app/components/ui/icons'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 interface MasonryPostCardProps {
   post: {
@@ -23,6 +24,7 @@ interface MasonryPostCardProps {
 }
 
 export default function MasonryPostCard({ post, language = 'zh', onLike, onComment }: MasonryPostCardProps) {
+  const { t } = useLanguage()
   const isDeletedUser = !post.author_handle || post.author_handle.startsWith('deleted_')
 
   return (
@@ -97,7 +99,7 @@ export default function MasonryPostCard({ post, language = 'zh', onLike, onComme
           }}>
             {isDeletedUser ? (
               <Text size="xs" color="tertiary">
-                {language === 'zh' ? '已注销用户' : 'Deleted user'}
+                {t('deletedUser')}
               </Text>
             ) : (
               <Text size="xs" style={{ color: '#8b6fa8' }}>

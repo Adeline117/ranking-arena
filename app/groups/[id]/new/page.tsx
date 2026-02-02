@@ -196,18 +196,18 @@ export default function NewGroupPostPage(): React.ReactElement {
 
       if (membershipError) {
         console.error('Membership check error:', membershipError)
-        showToast(language === 'zh' ? '检查会员状态失败' : 'Failed to check membership', 'error')
+        showToast(t('checkMembershipFailed'), 'error')
         return
       }
 
       if (!membership) {
-        showToast(language === 'zh' ? '需要加入小组才能发帖' : 'You must be a member to post', 'warning')
+        showToast(t('mustJoinToPost'), 'warning')
         router.push(`/groups/${groupId}`)
         return
       }
 
       if (membership.muted_until && new Date(membership.muted_until) > new Date()) {
-        showToast(language === 'zh' ? '您已被禁言' : 'You are muted in this group', 'warning')
+        showToast(t('youAreMuted'), 'warning')
         router.push(`/groups/${groupId}`)
         return
       }
@@ -340,21 +340,21 @@ export default function NewGroupPostPage(): React.ReactElement {
 
         if (!response.ok) {
           const data = await response.json().catch(() => ({}))
-          showToast(`${file.name}: ${data.error || `上传失败 (${response.status})`}`, 'error')
+          showToast(`${file.name}: ${data.error || `${t('uploadFailed')} (${response.status})`}`, 'error')
           continue
         }
 
         const data = await response.json()
         newImages.push({ url: data.url, fileName: data.fileName })
       } catch (error) {
-        const errorMsg = error instanceof Error ? error.message : '网络错误，请稍后重试'
+        const errorMsg = error instanceof Error ? error.message : t('networkError')
         showToast(`${file.name}: ${errorMsg}`, 'error')
       }
     }
 
     if (newImages.length > 0) {
       setImages(prev => [...prev, ...newImages])
-      showToast(`成功上传 ${newImages.length} 张图片`, 'success')
+      showToast(t('uploadSuccess').replace('{count}', String(newImages.length)), 'success')
     }
 
     setUploading(false)
@@ -381,19 +381,19 @@ export default function NewGroupPostPage(): React.ReactElement {
     }
 
     if (videos.length >= 1) {
-      showToast('每篇帖子最多上传1个视频', 'warning')
+      showToast(t('maxOneVideo'), 'warning')
       return
     }
 
     const file = files[0]
 
     if (!ALLOWED_VIDEO_TYPES.includes(file.type)) {
-      showToast('不支持的视频格式。支持: MP4, WebM, MOV, AVI, MKV', 'error')
+      showToast(t('videoFormatNotSupported'), 'error')
       return
     }
 
     if (file.size > MAX_VIDEO_SIZE_MB * 1024 * 1024) {
-      showToast(`视频文件过大，最大允许${MAX_VIDEO_SIZE_MB}MB`, 'error')
+      showToast(t('videoTooLarge'), 'error')
       return
     }
 
@@ -419,15 +419,15 @@ export default function NewGroupPostPage(): React.ReactElement {
             try {
               resolve(JSON.parse(xhr.responseText))
             } catch {
-              reject(new Error('解析响应失败'))
+              reject(new Error(t('parseResponseFailed')))
             }
           } else {
-            const error = JSON.parse(xhr.responseText).error || `上传失败 (${xhr.status})`
+            const error = JSON.parse(xhr.responseText).error || `${t('uploadFailed')} (${xhr.status})`
             reject(new Error(error))
           }
         })
 
-        xhr.addEventListener('error', () => reject(new Error('网络错误，请稍后重试')))
+        xhr.addEventListener('error', () => reject(new Error(t('networkError'))))
 
         xhr.open('POST', '/api/posts/upload-video')
         Object.entries(getCsrfHeaders()).forEach(([key, value]) => {
@@ -437,11 +437,11 @@ export default function NewGroupPostPage(): React.ReactElement {
       })
 
       setVideos([{ url: data.url, fileName: data.fileName, fileSize: data.fileSize }])
-      setContent(prev => prev + `\n[视频](${data.url})\n`)
-      showToast('视频上传成功', 'success')
+      setContent(prev => prev + `\n[video](${data.url})\n`)
+      showToast(t('videoUploadSuccess'), 'success')
     } catch (error) {
       console.error('Video upload error:', error)
-      showToast(error instanceof Error ? error.message : '视频上传失败', 'error')
+      showToast(error instanceof Error ? error.message : t('videoUploadFailed'), 'error')
     } finally {
       setVideoUploading(false)
       setVideoUploadProgress(0)
@@ -451,8 +451,8 @@ export default function NewGroupPostPage(): React.ReactElement {
 
   const removeVideo = useCallback(() => {
     setVideos([])
-    setContent(prev => prev.replace(/\n?\[视频\]\([^)]+\)\n?/g, ''))
-    showToast('视频已移除', 'info')
+    setContent(prev => prev.replace(/\n?\[(?:视频|video)\]\([^)]+\)\n?/g, ''))
+    showToast(t('videoRemoved'), 'info')
   }, [showToast])
 
   const handleSubmit = async () => {
@@ -487,7 +487,7 @@ export default function NewGroupPostPage(): React.ReactElement {
       if (pollEnabled) {
         const validOptions = pollOptions.filter(opt => opt.text.trim())
         if (validOptions.length < 2) {
-          showToast('请至少填写2个投票选项', 'warning')
+          showToast(t('pollMinOptions'), 'warning')
           setLoading(false)
           submitRef.current = false
           return
@@ -511,7 +511,7 @@ export default function NewGroupPostPage(): React.ReactElement {
           .single()
 
         if (pollError) {
-          const errorMsg = pollError.message || '创建投票失败，请稍后重试'
+          const errorMsg = pollError.message || t('createPollFailed')
           showToast(errorMsg, 'error')
           setLoading(false)
           submitRef.current = false
@@ -534,8 +534,8 @@ export default function NewGroupPostPage(): React.ReactElement {
       if (error) {
         console.error('Post creation error:', error)
         const errorMsg = error.code === '42501'
-          ? (language === 'zh' ? '权限不足，请确认已加入小组' : 'Permission denied, please make sure you joined the group')
-          : (error.message || (language === 'zh' ? '创建失败，请稍后重试' : 'Failed to create post'))
+          ? t('permissionDeniedJoinGroup')
+          : (error.message || t('createPostFailed'))
         showToast(errorMsg, 'error')
         setLoading(false)
         submitRef.current = false
@@ -548,7 +548,7 @@ export default function NewGroupPostPage(): React.ReactElement {
       showToast(t('publishSuccess'), 'success')
       router.push(`/groups/${groupId}`)
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : '发布失败'
+      const errorMessage = error instanceof Error ? error.message : t('publishFailed')
       showToast(errorMessage, 'error')
     } finally {
       setLoading(false)
@@ -564,7 +564,7 @@ export default function NewGroupPostPage(): React.ReactElement {
           {t('newPost')}
         </Text>
         <Text size="sm" color="secondary" style={{ marginBottom: tokens.spacing[6] }}>
-          {groupName ? `发布到「${groupName}」` : t('shareIdeas')}
+          {groupName ? t('postToGroupName').replace('{name}', groupName) : t('shareIdeas')}
         </Text>
 
         <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}>
@@ -698,14 +698,14 @@ export default function NewGroupPostPage(): React.ReactElement {
             <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
               <Box>
                 <Text size="xs" weight="bold" style={{ marginBottom: tokens.spacing[2], display: 'block' }}>
-                  投票选项（至少2个，最多6个）
+                  {t('pollOptionsLabel')}
                 </Text>
                 {pollOptions.map((option, index) => (
                   <Box key={index} style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], marginBottom: tokens.spacing[2] }}>
                     <Text size="xs" color="tertiary" style={{ width: 20 }}>{index + 1}.</Text>
                     <input
                       type="text"
-                      placeholder={`选项 ${index + 1}`}
+                      placeholder={`${t('pollOptionPlaceholder')} ${index + 1}`}
                       value={option.text}
                       onChange={(e) => {
                         const newOptions = [...pollOptions]
@@ -756,7 +756,7 @@ export default function NewGroupPostPage(): React.ReactElement {
                       width: '100%',
                     }}
                   >
-                    + 添加选项
+                    + {t('addOption')}
                   </button>
                 )}
               </Box>
@@ -764,7 +764,7 @@ export default function NewGroupPostPage(): React.ReactElement {
               <Box style={{ display: 'flex', gap: tokens.spacing[4], flexWrap: 'wrap' }}>
                 <Box style={{ flex: 1, minWidth: 150 }}>
                   <Text size="xs" weight="bold" style={{ marginBottom: tokens.spacing[2], display: 'block' }}>
-                    投票类型
+                    {t('pollTypeLabel')}
                   </Text>
                   <Box style={{ display: 'flex', gap: tokens.spacing[2] }}>
                     <button
@@ -781,7 +781,7 @@ export default function NewGroupPostPage(): React.ReactElement {
                         fontWeight: 600,
                       }}
                     >
-                      单选
+                      {t('singleChoice')}
                     </button>
                     <button
                       onClick={() => setPollType('multiple')}
@@ -797,14 +797,14 @@ export default function NewGroupPostPage(): React.ReactElement {
                         fontWeight: 600,
                       }}
                     >
-                      多选
+                      {t('multipleChoice')}
                     </button>
                   </Box>
                 </Box>
 
                 <Box style={{ flex: 1, minWidth: 150 }}>
                   <Text size="xs" weight="bold" style={{ marginBottom: tokens.spacing[2], display: 'block' }}>
-                    投票持续时间
+                    {t('pollDurationLabel')}
                   </Text>
                   <select
                     value={pollDuration}
@@ -962,7 +962,7 @@ export default function NewGroupPostPage(): React.ReactElement {
           {/* 视频上传区域 */}
           <Box>
             <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[2], display: 'block' }}>
-              视频（可选，最多1个，100MB以内）
+              {t('videoOptional')}
             </Text>
 
             <input
@@ -1043,7 +1043,7 @@ export default function NewGroupPostPage(): React.ReactElement {
                   {/* 删除按钮 */}
                   <button
                     onClick={removeVideo}
-                    title="删除视频"
+                    title={t('deleteVideo')}
                     style={{
                       position: 'absolute',
                       top: 4,
@@ -1087,7 +1087,7 @@ export default function NewGroupPostPage(): React.ReactElement {
                 >
                   {videoUploading ? (
                     <Box style={{ textAlign: 'center' }}>
-                      <Text size="xs" color="secondary">上传中 {videoUploadProgress}%</Text>
+                      <Text size="xs" color="secondary">{t('uploadingProgress').replace('{percent}', String(videoUploadProgress))}</Text>
                       {/* 进度条 */}
                       <Box
                         style={{
@@ -1112,7 +1112,7 @@ export default function NewGroupPostPage(): React.ReactElement {
                   ) : (
                     <>
                       <Text size="2xl" color="secondary" style={{ lineHeight: 1 }}>🎬</Text>
-                      <Text size="xs" color="secondary" style={{ marginTop: 4 }}>添加视频</Text>
+                      <Text size="xs" color="secondary" style={{ marginTop: 4 }}>{t('addVideo')}</Text>
                       <Text size="xs" color="tertiary" style={{ marginTop: 2 }}>MP4, WebM, MOV</Text>
                     </>
                   )}
@@ -1121,7 +1121,7 @@ export default function NewGroupPostPage(): React.ReactElement {
             </Box>
 
             <Text size="xs" color="tertiary">
-              支持 MP4、WebM、MOV、AVI、MKV 格式，最大 100MB
+              {t('videoFormatSupport')}
             </Text>
           </Box>
 

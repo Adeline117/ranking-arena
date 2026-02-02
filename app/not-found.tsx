@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { useEffect, useState } from "react"
+import { t } from '@/lib/i18n'
 
 const ARENA_PURPLE = '#8b6fa8'
 
@@ -291,7 +292,7 @@ export default function NotFoundPage() {
             animationDelay: '0.2s',
           }}
         >
-          页面不存在
+          {t('notFoundTitle')}
         </h1>
         
         {/* Description */}
@@ -305,7 +306,7 @@ export default function NotFoundPage() {
             animationDelay: '0.3s',
           }}
         >
-          您访问的页面可能已被移动、删除，或者链接有误
+          {t('notFoundDesc')}
         </p>
         
         {/* Decorative line */}
@@ -342,7 +343,7 @@ export default function NotFoundPage() {
               fontWeight: 600,
             }}
           >
-            返回首页
+            {t('backToHome')}
           </Link>
           
           <Link 
@@ -359,7 +360,7 @@ export default function NotFoundPage() {
               fontWeight: 500,
             }}
           >
-            查看热榜
+            {t('notFoundViewHot')}
           </Link>
         </div>
 
@@ -376,7 +377,7 @@ export default function NotFoundPage() {
             marginBottom: 16,
             fontWeight: 500,
           }}>
-            或者探索这些内容
+            {t('notFoundExplore')}
           </p>
           
           <div style={{ 
@@ -386,9 +387,9 @@ export default function NotFoundPage() {
             flexWrap: 'wrap',
           }}>
             {[
-              { href: '/groups', label: '浏览小组', icon: '◈' },
-              { href: '/search', label: '搜索', icon: '⌕' },
-              { href: '/login', label: '登录', icon: '→' },
+              { href: '/groups', label: t('notFoundBrowseGroups'), icon: '◈' },
+              { href: '/search', label: t('search'), icon: '⌕' },
+              { href: '/login', label: t('login'), icon: '→' },
             ].map((item) => (
               <Link
                 key={item.href}

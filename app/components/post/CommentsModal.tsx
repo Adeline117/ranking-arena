@@ -128,14 +128,14 @@ function CommentSkeleton(): React.ReactNode {
   )
 }
 
-function EmptyComments(): React.ReactNode {
+function EmptyComments({ t }: { t: (key: string) => string }): React.ReactNode {
   return (
     <div style={{ textAlign: 'center', padding: '32px 16px', color: tokens.colors.text.tertiary }}>
       <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ margin: '0 auto 8px' }}>
         <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
       </svg>
-      <div style={{ fontSize: 14, fontWeight: 600 }}>暂无评论</div>
-      <div style={{ fontSize: 12, marginTop: 4 }}>来发表第一条评论吧</div>
+      <div style={{ fontSize: 14, fontWeight: 600 }}>{t('noCommentsYet')}</div>
+      <div style={{ fontSize: 12, marginTop: 4 }}>{t('beFirstToComment')}</div>
     </div>
   )
 }
@@ -204,7 +204,7 @@ export default function CommentsModal({
   setExpandedReplies,
   translatedComments = {},
 }: CommentsModalProps) {
-  const { language } = useLanguage()
+  const { language, t } = useLanguage()
   const commentInputRef = useRef<HTMLTextAreaElement>(null)
 
   // Auto-focus reply input
@@ -256,7 +256,7 @@ export default function CommentsModal({
                 onClick={(e) => e.stopPropagation()}
                 style={{ fontSize: 13, fontWeight: 700, color: tokens.colors.text.primary, textDecoration: 'none' }}
               >
-                {comment.author_handle || '匿名'}
+                {comment.author_handle || t('anonymous')}
               </Link>
               {showProBadge && <ProBadge />}
               <span style={{ fontSize: 11, color: tokens.colors.text.tertiary }}>
@@ -291,11 +291,11 @@ export default function CommentsModal({
                 <button
                   onClick={(e) => {
                     e.stopPropagation()
-                    setReplyingTo(replyingTo?.commentId === comment.id ? null : { commentId: comment.id, handle: comment.author_handle || '匿名' })
+                    setReplyingTo(replyingTo?.commentId === comment.id ? null : { commentId: comment.id, handle: comment.author_handle || t('anonymous') })
                   }}
                   style={styles.actionButton}
                 >
-                  回复
+                  {t('reply')}
                 </button>
               )}
 
@@ -305,7 +305,7 @@ export default function CommentsModal({
                   disabled={isDeleting}
                   style={styles.actionButton}
                 >
-                  删除
+                  {t('delete')}
                 </button>
               )}
             </div>
@@ -317,7 +317,7 @@ export default function CommentsModal({
                   type="text"
                   value={replyContent}
                   onChange={(e) => setReplyContent(e.target.value)}
-                  placeholder={`回复 @${replyingTo.handle}`}
+                  placeholder={`${t('reply')} @${replyingTo.handle}`}
                   onKeyDown={handleKeyDown}
                   style={styles.input}
                 />
@@ -326,7 +326,7 @@ export default function CommentsModal({
                   disabled={submittingReply || !replyContent.trim()}
                   style={styles.submitButton(submittingReply || !replyContent.trim())}
                 >
-                  {submittingReply ? '...' : '发送'}
+                  {submittingReply ? '...' : t('send')}
                 </button>
               </div>
             )}
@@ -340,7 +340,7 @@ export default function CommentsModal({
                     onClick={(e) => { e.stopPropagation(); setExpandedReplies(prev => ({ ...prev, [comment.id]: true })) }}
                     style={{ ...styles.actionButton, color: ARENA_PURPLE, padding: '4px 0', marginTop: 4 }}
                   >
-                    展开 {hiddenReplyCount} 条回复
+                    {t('expandReplies').replace('{count}', String(hiddenReplyCount))}
                   </button>
                 )}
               </div>
@@ -359,7 +359,7 @@ export default function CommentsModal({
           ref={commentInputRef}
           value={newComment}
           onChange={(e) => setNewComment(e.target.value)}
-          placeholder="写评论..."
+          placeholder={t('writeComment')}
           rows={1}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
@@ -397,7 +397,7 @@ export default function CommentsModal({
             alignSelf: 'flex-end',
           }}
         >
-          {submittingComment ? '...' : '发送'}
+          {submittingComment ? '...' : t('send')}
         </button>
       </div>
 
@@ -406,7 +406,7 @@ export default function CommentsModal({
         {loadingComments ? (
           <CommentSkeleton />
         ) : comments.length === 0 ? (
-          <EmptyComments />
+          <EmptyComments t={t} />
         ) : (
           <div>
             {comments.map(comment => renderComment(comment))}

@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
+import { useLanguage } from '../Providers/LanguageProvider'
 import type { TraderFeedItem } from '@/lib/data/trader'
 
 interface PinnedPostProps {
@@ -38,6 +39,7 @@ function extractImages(text: string): string[] {
 }
 
 export default function PinnedPost({ item }: PinnedPostProps) {
+  const { t } = useLanguage()
   const images = item.content ? extractImages(item.content) : []
   const textContent = item.content ? renderContent(item.content) : null
   
@@ -53,7 +55,7 @@ export default function PinnedPost({ item }: PinnedPostProps) {
     >
       <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], marginBottom: tokens.spacing[2] }}>
         <Text size="xs" style={{ color: tokens.colors.accent.primary, fontWeight: tokens.typography.fontWeight.black }}>
-          置顶
+          {t('pinnedLabel')}
         </Text>
       </Box>
       <Link
@@ -90,7 +92,7 @@ export default function PinnedPost({ item }: PinnedPostProps) {
               >
                 <img 
                   src={url} 
-                  alt={`图片 ${idx + 1}`}
+                  alt={`${t('imageAlt')} ${idx + 1}`}
                   style={{
                     width: '100%',
                     height: '100%',
@@ -101,7 +103,7 @@ export default function PinnedPost({ item }: PinnedPostProps) {
             ))}
             {images.length > 3 && (
               <Text size="xs" color="tertiary">
-                +{images.length - 3} 张图片
+                {t('moreImages').replace('{n}', String(images.length - 3))}
               </Text>
             )}
           </Box>

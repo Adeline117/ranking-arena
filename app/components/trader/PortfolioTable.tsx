@@ -128,12 +128,10 @@ export default function PortfolioTable({ items, history = [], isPro = true, onUn
                 </svg>
               </Box>
               <Text size="lg" weight="bold" style={{ color: tokens.colors.text.primary, marginBottom: tokens.spacing[2] }}>
-                {language === 'zh' ? '解锁完整持仓数据' : 'Unlock Full Portfolio'}
+                {t('unlockFullPortfolio')}
               </Text>
               <Text size="sm" color="secondary" style={{ marginBottom: tokens.spacing[4] }}>
-                {language === 'zh'
-                  ? '升级 Pro 会员查看详细的持仓信息和历史交易记录'
-                  : 'Upgrade to Pro to view detailed positions and trading history'}
+                {t('unlockFullPortfolioDesc')}
               </Text>
               {onUnlock && (
                 <button
@@ -151,7 +149,7 @@ export default function PortfolioTable({ items, history = [], isPro = true, onUn
                     fontFamily: tokens.typography.fontFamily.sans.join(', '),
                   }}
                 >
-                  {language === 'zh' ? '升级 Pro' : 'Upgrade to Pro'}
+                  {t('upgradeToProBtn')}
                 </button>
               )}
             </Box>

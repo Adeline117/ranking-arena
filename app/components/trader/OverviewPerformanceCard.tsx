@@ -87,15 +87,14 @@ function MiniSparkline({ data, color, width = 80, height = 28 }: { data: number[
  * Performance卡片 - 交易员主页核心指标
  * 优化版：信息层级分明，主指标突出，次指标用徽章展示
  */
-// 数据来源周期映射说明
-const DATA_SOURCE_NOTES: Record<string, { zh: string; en: string; periods: Record<string, string> }> = {
+// Data source period mapping notes
+const DATA_SOURCE_NOTES: Record<string, { titleKey: string; periods: Record<string, string> }> = {
   weex: {
-    zh: 'Weex 数据说明',
-    en: 'Weex Data Note',
+    titleKey: 'weexDataNote',
     periods: {
-      '7D': '--',        // Weex 无 7D 数据
-      '30D': '3周',      // 30D 实际是 Weex 3周数据
-      '90D': '全时间',   // 90D 实际是 Weex 全时间数据
+      '7D': '--',
+      '30D': 'weexPeriod30d',
+      '90D': 'weexPeriod90d',
     },
   },
 }
@@ -243,8 +242,7 @@ export default function OverviewPerformanceCard({
             </Text>
             {lastUpdated && (
               <Text size="xs" color="tertiary" style={{ opacity: 0.6 }}>
-                {language === 'zh' ? '更新于 ' : 'Updated '}
-                {new Date(lastUpdated).toLocaleTimeString(language === 'zh' ? 'zh-CN' : 'en-US', { hour: '2-digit', minute: '2-digit' })}
+                {t('updatedAt')} {new Date(lastUpdated).toLocaleTimeString(language === 'zh' ? 'zh-CN' : 'en-US', { hour: '2-digit', minute: '2-digit' })}
               </Text>
             )}
           </Box>
@@ -263,10 +261,12 @@ export default function OverviewPerformanceCard({
                   borderRadius: tokens.radius.md,
                   border: `1px solid ${tokens.colors.accent.warning}30`,
                 }}
-                title={language === 'zh'
-                  ? `${DATA_SOURCE_NOTES[source.toLowerCase()].zh}: 30D=${DATA_SOURCE_NOTES[source.toLowerCase()].periods['30D']}, 90D=${DATA_SOURCE_NOTES[source.toLowerCase()].periods['90D']}`
-                  : `${DATA_SOURCE_NOTES[source.toLowerCase()].en}: 30D=${DATA_SOURCE_NOTES[source.toLowerCase()].periods['30D']}, 90D=${DATA_SOURCE_NOTES[source.toLowerCase()].periods['90D']}`
-                }
+                title={(() => {
+                  const note = DATA_SOURCE_NOTES[source.toLowerCase()]
+                  const p30 = note.periods['30D'] === '--' ? '--' : t(note.periods['30D'])
+                  const p90 = note.periods['90D'] === '--' ? '--' : t(note.periods['90D'])
+                  return `${t(note.titleKey)}: 30D=${p30}, 90D=${p90}`
+                })()}
               >
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={tokens.colors.accent.warning} strokeWidth="2">
                   <circle cx="12" cy="12" r="10" />
@@ -274,7 +274,10 @@ export default function OverviewPerformanceCard({
                   <line x1="12" y1="8" x2="12.01" y2="8" />
                 </svg>
                 <Text size="xs" style={{ color: tokens.colors.accent.warning, fontWeight: 500 }}>
-                  {DATA_SOURCE_NOTES[source.toLowerCase()].periods[period] || period}
+                  {(() => {
+                    const pKey = DATA_SOURCE_NOTES[source.toLowerCase()].periods[period]
+                    return pKey ? (pKey === '--' ? '--' : t(pKey)) : period
+                  })()}
                 </Text>
               </Box>
             )}
@@ -317,7 +320,7 @@ export default function OverviewPerformanceCard({
                       boxShadow: period === p ? '0 2px 8px rgba(0,0,0,0.1)' : 'none',
                       opacity: isDisabled ? 0.5 : 1,
                     }}
-                    title={isDisabled ? (language === 'zh' ? '此数据源无此周期数据' : 'No data for this period') : undefined}
+                    title={isDisabled ? t('noDataForPeriod') : undefined}
                   >
                     {label}
                   </button>
@@ -436,27 +439,27 @@ export default function OverviewPerformanceCard({
             }}
           >
             <MetricBadge
-              label={language === 'zh' ? '夏普' : 'Sharpe'}
+              label={t('sharpe')}
               value={sharpeRatio !== undefined ? sharpeRatio.toFixed(2) : '—'}
               highlight={sharpeRatio !== undefined && sharpeRatio > 1}
-              tooltip={sharpeRatio === undefined ? (language === 'zh' ? '该交易所未提供夏普比率数据' : 'Sharpe ratio not available from this exchange') : undefined}
+              tooltip={sharpeRatio === undefined ? t('sharpeNotAvailable') : undefined}
             />
             <MetricBadge
-              label={language === 'zh' ? '最大回撤' : 'MDD'}
+              label={t('maxDrawdownShort')}
               value={maxDrawdown !== undefined ? `${Math.abs(maxDrawdown).toFixed(1)}%` : '—'}
               negative
-              tooltip={maxDrawdown === undefined ? (language === 'zh' ? '该交易所未提供回撤数据' : 'Drawdown data not available from this exchange') : undefined}
+              tooltip={maxDrawdown === undefined ? t('drawdownNotAvailable') : undefined}
             />
             <MetricBadge
-              label={language === 'zh' ? '胜率' : 'Win'}
+              label={t('winRateShort')}
               value={winRate !== undefined ? `${winRate.toFixed(1)}%` : '—'}
               highlight={winRate !== undefined && winRate > 60}
-              tooltip={winRate === undefined ? (language === 'zh' ? '该交易所未提供胜率数据' : 'Win rate not available from this exchange') : undefined}
+              tooltip={winRate === undefined ? t('winRateNotAvailable') : undefined}
             />
             <MetricBadge
-              label={language === 'zh' ? '盈利单' : 'W/T'}
+              label={t('winningPositions')}
               value={winningPositions !== undefined && totalPositions !== undefined ? `${winningPositions}/${totalPositions}` : '—'}
-              tooltip={winningPositions === undefined ? (language === 'zh' ? '该交易所未提供持仓统计' : 'Position stats not available from this exchange') : undefined}
+              tooltip={winningPositions === undefined ? t('positionStatsNotAvailable') : undefined}
             />
           </Box>
 
@@ -477,7 +480,7 @@ export default function OverviewPerformanceCard({
                   <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
                 </svg>
                 <Text size="md" weight="bold" style={{ color: tokens.colors.text.primary }}>
-                  {language === 'zh' ? '评分详情' : 'Score Breakdown'}
+                  {t('scoreBreakdown')}
                 </Text>
                 {/* Arena Score 总分 */}
                 {periodArenaScore != null && (
@@ -511,21 +514,21 @@ export default function OverviewPerformanceCard({
               {/* 分数条 */}
               <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
                 <ScoreBar
-                  label={language === 'zh' ? '收益分' : 'Return Score'}
+                  label={t('returnScore')}
                   score={periodReturnScore ?? null}
                   maxScore={70}
                   isVisible={isVisible}
                   delay={500}
                 />
                 <ScoreBar
-                  label={language === 'zh' ? '回撤分' : 'Drawdown Score'}
+                  label={t('drawdownScore')}
                   score={periodDrawdownScore ?? null}
                   maxScore={8}
                   isVisible={isVisible}
                   delay={600}
                 />
                 <ScoreBar
-                  label={language === 'zh' ? '稳定分' : 'Stability Score'}
+                  label={t('stabilityScore')}
                   score={periodStabilityScore ?? null}
                   maxScore={7}
                   isVisible={isVisible}
@@ -561,8 +564,8 @@ export default function OverviewPerformanceCard({
                     fontWeight: 500,
                   }}>
                     {performance.score_confidence === 'minimal'
-                      ? (language === 'zh' ? '数据不完整，回撤与胜率使用默认值' : 'Incomplete data — drawdown & win rate are defaults')
-                      : (language === 'zh' ? '部分数据缺失，使用了默认中位值' : 'Partial data — defaults used for some metrics')
+                      ? t('confidenceMinimal')
+                      : t('confidencePartial')
                     }
                   </Text>
                 </Box>
@@ -580,12 +583,9 @@ export default function OverviewPerformanceCard({
               >
                 <Text size="xs" color="tertiary" style={{ lineHeight: 1.6 }}>
                   <strong style={{ color: tokens.colors.text.secondary }}>
-                    {language === 'zh' ? '评分说明' : 'Score Guide'}
+                    {t('scoreGuide')}
                   </strong><br />
-                  {language === 'zh'
-                    ? <>收益分 (0-70)：基于 ROI 强度计算 | 盈亏分 (0-15)：基于绝对盈利 | 回撤分 (0-8)：回撤越小分数越高 | 稳定分 (0-7)：基于胜率计算</>
-                    : <>Return (0-70): Based on ROI | PnL (0-15): Based on absolute profit | Drawdown (0-8): Lower = higher | Stability (0-7): Based on win rate</>
-                  }
+                  {t('scoreGuideDetail')}
                 </Text>
               </Box>
             </Box>

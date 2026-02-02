@@ -85,7 +85,7 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
     }
   }, [params])
 
-  const { language } = useLanguage()
+  const { language, t } = useLanguage()
   const { showToast } = useToast()
   const { showDangerConfirm } = useDialog()
   const { isPro } = useSubscription()
@@ -121,6 +121,7 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
     accessToken,
     isMember,
     language,
+    t,
     showToast,
     showDangerConfirm,
   })
@@ -326,7 +327,7 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
         }
       } catch (err) {
         if (controller.signal.aborted) return
-        const errorMsg = err instanceof Error ? err.message : (language === 'zh' ? '加载失败' : 'Failed to load')
+        const errorMsg = err instanceof Error ? err.message : t('loadFailed')
         setError(errorMsg)
         showToast(errorMsg, 'error')
       } finally {
@@ -362,7 +363,7 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
         if (res.ok) {
           await handleJoin(true)
         } else {
-          showToast(language === 'zh' ? '邀请链接无效或已过期' : 'Invite link is invalid or expired', 'error')
+          showToast(t('inviteInvalidOrExpired'), 'error')
         }
       } catch {
         // Invite verification failed
@@ -375,11 +376,11 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
   // Join group
   const handleJoin = useCallback(async (bypassPro = false) => {
     if (!userId) {
-      showToast(bilingualText('请先登录', 'Please login first', language), 'warning')
+      showToast(t('pleaseLogin'), 'warning')
       return
     }
     if (!bypassPro && group?.is_premium_only && !isPro) {
-      showToast(bilingualText('此小组仅限 Pro 会员加入', 'This group is Pro members only', language), 'warning')
+      showToast(t('proMembersOnly'), 'warning')
       return
     }
 
@@ -392,15 +393,15 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
       setGroup(prev => prev ? { ...prev, member_count: (prev.member_count || 0) + 1 } : prev)
       setIsMember(true)
       setUserRole('member')
-      showToast(bilingualText('加入成功', 'Joined successfully', language), 'success')
+      showToast(t('joinSuccess'), 'success')
 
       // Notify group owner
       if (group?.created_by && group.created_by !== userId) {
         await supabase.from('notifications').insert({
           user_id: group.created_by,
           type: 'system' as const,
-          title: bilingualText('新成员加入', 'New Member Joined', language),
-          message: bilingualText('有新成员加入了您的小组', 'A new member joined your group', language),
+          title: t('newMemberJoined'),
+          message: t('newMemberJoinedMsg'),
           link: `/groups/${groupId}`,
           actor_id: userId,
           reference_id: groupId,
@@ -408,7 +409,7 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
       }
     } catch (err) {
       console.error('Join error:', err)
-      showToast(err instanceof Error ? err.message : bilingualText('加入失败', 'Failed to join', language), 'error')
+      showToast(err instanceof Error ? err.message : t('joinFailed'), 'error')
     } finally {
       setJoining(false)
     }
@@ -426,10 +427,10 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
       setGroup(prev => prev ? { ...prev, member_count: Math.max(0, (prev.member_count || 1) - 1) } : prev)
       setIsMember(false)
       setUserRole(null)
-      showToast(bilingualText('已退出小组', 'Left group successfully', language), 'success')
+      showToast(t('leftGroup'), 'success')
     } catch (err) {
       console.error('Leave error:', err)
-      showToast(err instanceof Error ? err.message : bilingualText('退出失败', 'Failed to leave', language), 'error')
+      showToast(err instanceof Error ? err.message : t('leaveFailed'), 'error')
     } finally {
       setJoining(false)
     }
@@ -474,7 +475,7 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
       }
     } catch (err) {
       console.error('Load members error:', err)
-      showToast(language === 'zh' ? '加载成员列表失败' : 'Failed to load members', 'error')
+      showToast(t('loadMembersFailed'), 'error')
     } finally {
       setLoadingMembers(false)
     }
@@ -509,10 +510,10 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
       <PageWrapper email={email}>
         <Box as="main" style={{ maxWidth: 900, margin: '0 auto', padding: tokens.spacing[10] }}>
           <Text size="lg" weight="bold" style={{ marginBottom: tokens.spacing[2], color: '#ff7c7c' }}>
-            {bilingualText('错误', 'Error', language)}: {error || bilingualText('小组不存在', 'Group not found', language)}
+            {t('error')}: {error || t('groupNotFound')}
           </Text>
           <Link href="/groups" style={{ color: tokens.colors.accent?.primary || tokens.colors.text.secondary, textDecoration: 'none', marginTop: tokens.spacing[3], display: 'inline-block' }}>
-            ← {bilingualText('返回小组列表', 'Back to Groups', language)}
+            ← {t('backToGroups')}
           </Link>
         </Box>
       </PageWrapper>
@@ -552,7 +553,7 @@ export default function GroupDetailPage({ params }: { params: { id: string } | P
             onShowMembers={() => { setShowMembersList(true); loadMembers() }}
           />
 
-          <SectionErrorBoundary fallbackMessage={language === 'zh' ? '帖子区域加载失败' : 'Failed to load posts section'}>
+          <SectionErrorBoundary fallbackMessage={t('postsSectionFailed')}>
           <GroupPostList
             groupId={groupId}
             language={language}
@@ -688,6 +689,7 @@ function RelatedGroupsSidebar({ groups, loading, language }: {
   loading: boolean
   language: string
 }) {
+  const { t } = useLanguage()
   return (
     <Box
       style={{
@@ -700,7 +702,7 @@ function RelatedGroupsSidebar({ groups, loading, language }: {
       }}
     >
       <Text size="md" weight="bold" style={{ marginBottom: tokens.spacing[4] }}>
-        {language === 'zh' ? '常来这里的人也爱去' : 'People Here Also Visit'}
+        {t('peopleHereAlsoVisit')}
       </Text>
 
       {loading ? (
@@ -709,7 +711,7 @@ function RelatedGroupsSidebar({ groups, loading, language }: {
         </Box>
       ) : groups.length === 0 ? (
         <Text size="sm" color="tertiary" style={{ textAlign: 'center', padding: tokens.spacing[4] }}>
-          {language === 'zh' ? '暂无推荐' : 'No recommendations'}
+          {t('noRecommendations')}
         </Text>
       ) : (
         <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
@@ -777,7 +779,7 @@ function RelatedGroupsSidebar({ groups, loading, language }: {
                 </Text>
                 {relGroup.member_count != null && (
                   <Text size="xs" color="tertiary">
-                    {relGroup.member_count} {language === 'zh' ? '位成员' : 'members'}
+                    {relGroup.member_count} {t('membersUnit')}
                   </Text>
                 )}
               </Box>

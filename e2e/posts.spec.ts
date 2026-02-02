@@ -72,18 +72,22 @@ test.describe('帖子搜索', () => {
   test('搜索页面可以访问', async ({ page }) => {
     await page.goto('/search')
     await page.waitForLoadState('domcontentloaded')
+    await page.waitForTimeout(2000) // Wait for hydration
 
     await expect(page).toHaveURL(/\/search/)
 
-    const searchInput = page.getByPlaceholder(/搜索|search/i).or(page.locator('input[type="search"]'))
-    await expect(searchInput).toBeVisible()
+    // Multiple search inputs may exist (header + mobile + page) - use .first()
+    const searchInput = page.getByPlaceholder(/搜索|search/i).first()
+    await expect(searchInput).toBeVisible({ timeout: 10_000 })
   })
 
   test('可以执行搜索', async ({ page }) => {
     await page.goto('/search')
     await page.waitForLoadState('domcontentloaded')
+    await page.waitForTimeout(2000) // Wait for hydration
 
-    const searchInput = page.getByPlaceholder(/搜索|search/i).or(page.locator('input[type="search"]'))
+    // Multiple search inputs may exist - use .first() visible one
+    const searchInput = page.getByPlaceholder(/搜索|search/i).first()
 
     await searchInput.fill('bitcoin')
     await searchInput.press('Enter')

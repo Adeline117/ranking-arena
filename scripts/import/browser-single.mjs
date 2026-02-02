@@ -100,7 +100,7 @@ async function main() {
         const batch = [...traders.values()].slice(savedTotal)
         const now = new Date().toISOString()
         for (let i=0;i<batch.length;i+=50) try{await sb.from('trader_sources').upsert(batch.slice(i,i+50).map(t=>({source:cfg.source,source_trader_id:t.id,handle:t.name||t.id,avatar_url:t.avatar,market_type:'futures',is_active:true})),{onConflict:'source,source_trader_id'})}catch{}
-        for (let i=0;i<batch.length;i+=30) try{await sb.from('trader_snapshots').upsert(batch.slice(i,i+30).map((t,j)=>({source:cfg.source,source_trader_id:t.id,season_id:'current_30d',rank:savedTotal+i+j+1,roi:t.roi,pnl:t.pnl,win_rate:t.wr,max_drawdown:t.dd,trades_count:t.trades,arena_score:cs(t.roi,t.pnl,t.dd,t.wr),captured_at:now})),{onConflict:'source,source_trader_id,season_id'})}catch{}
+        for (let i=0;i<batch.length;i+=30) try{await sb.from('trader_snapshots').upsert(batch.slice(i,i+30).map((t,j)=>({source:cfg.source,source_trader_id:t.id,season_id:'30D',rank:savedTotal+i+j+1,roi:t.roi,pnl:t.pnl,win_rate:t.wr,max_drawdown:t.dd,trades_count:t.trades,arena_score:cs(t.roi,t.pnl,t.dd,t.wr),captured_at:now})),{onConflict:'source,source_trader_id,season_id'})}catch{}
         savedTotal = traders.size
       }
     } catch {}
@@ -132,7 +132,7 @@ async function main() {
       const batch = [...traders.values()].slice(savedTotal)
       const now = new Date().toISOString()
       for (let i=0;i<batch.length;i+=50) try{await sb.from('trader_sources').upsert(batch.slice(i,i+50).map(t=>({source:cfg.source,source_trader_id:t.id,handle:t.name||t.id,avatar_url:t.avatar,market_type:'futures',is_active:true})),{onConflict:'source,source_trader_id'})}catch{}
-      for (let i=0;i<batch.length;i+=30) try{await sb.from('trader_snapshots').upsert(batch.slice(i,i+30).map((t,j)=>({source:cfg.source,source_trader_id:t.id,season_id:'current_30d',rank:savedTotal+i+j+1,roi:t.roi,pnl:t.pnl,win_rate:t.wr,max_drawdown:t.dd,trades_count:t.trades,arena_score:cs(t.roi,t.pnl,t.dd,t.wr),captured_at:now})),{onConflict:'source,source_trader_id,season_id'})}catch{}
+      for (let i=0;i<batch.length;i+=30) try{await sb.from('trader_snapshots').upsert(batch.slice(i,i+30).map((t,j)=>({source:cfg.source,source_trader_id:t.id,season_id:'30D',rank:savedTotal+i+j+1,roi:t.roi,pnl:t.pnl,win_rate:t.wr,max_drawdown:t.dd,trades_count:t.trades,arena_score:cs(t.roi,t.pnl,t.dd,t.wr),captured_at:now})),{onConflict:'source,source_trader_id,season_id'})}catch{}
       savedTotal = traders.size
     }
 

@@ -211,8 +211,8 @@ function HotContent() {
           else if (diffHours > 0) timeStr = `${diffHours}h`
           else timeStr = `${Math.floor(diffMs / 60000)}m`
 
-          const groupName = (post.group_name as string) || '综合讨论'
-          const groupNameEn = (post.group_name_en as string) || 'General'
+          const groupName = (post.group_name as string) || t('generalDiscussion')
+          const groupNameEn = (post.group_name_en as string) || t('generalDiscussionEn')
 
           const hotScore = (post.hot_score as number) || (() => {
             const hours = diffMs / 3600000
@@ -227,8 +227,8 @@ function HotContent() {
             group: groupName,
             group_en: groupNameEn,
             group_id: (post.group_id as string) || undefined,
-            title: (post.title as string) || '无标题',
-            author: (post.author_handle as string) || '匿名',
+            title: (post.title as string) || t('noTitle'),
+            author: (post.author_handle as string) || t('anonymous'),
             author_handle: post.author_handle as string,
             time: timeStr,
             body: (post.content as string) || '',
@@ -251,7 +251,7 @@ function HotContent() {
     } catch (e) {
       console.error('Failed to load posts:', e)
       setPosts([])
-      showToast(language === 'zh' ? '加载热榜失败' : 'Failed to load hot posts', 'error')
+      showToast(t('loadHotPostsFailed'), 'error')
     } finally {
       setLoadingPosts(false)
     }
@@ -336,11 +336,11 @@ function HotContent() {
       console.error('[HotPage] 加载评论失败:', err)
       setComments([])
       setHasMoreComments(false)
-      showToast(language === 'zh' ? '加载评论失败' : 'Failed to load comments', 'error')
+      showToast(t('loadCommentsFailed'), 'error')
     } finally {
       setLoadingComments(false)
     }
-  }, [showToast, language])
+  }, [showToast, t])
 
   // 加载更多评论
   const loadMoreComments = useCallback(async () => {
@@ -495,10 +495,10 @@ function HotContent() {
         setShowingOriginal(false)
         setTranslationCache(prev => ({ ...prev, [cacheKey]: translated }))
       } else {
-        showToast(data.error || '翻译失败', 'error')
+        showToast(data.error || t('translationFailed'), 'error')
       }
     } catch {
-      showToast('翻译服务出错', 'error')
+      showToast(t('translationServiceError'), 'error')
     } finally {
       setTranslating(false)
     }
@@ -612,7 +612,7 @@ function HotContent() {
   // 提交评论
   const submitComment = useCallback(async (postId: string) => {
     if (!accessToken) {
-      showToast(language === 'zh' ? '请先登录' : 'Please log in first', 'warning')
+      showToast(t('pleaseLoginFirst'), 'warning')
       return
     }
     if (!newComment.trim()) return
@@ -632,14 +632,14 @@ function HotContent() {
       if (!response.ok) {
         // Differentiate error types
         if (response.status === 401) {
-          showToast(language === 'zh' ? '登录已过期，请重新登录' : 'Session expired, please log in again', 'error')
+          showToast(t('sessionExpired'), 'error')
         } else if (response.status === 403) {
-          showToast(language === 'zh' ? '权限不足' : 'Permission denied', 'error')
+          showToast(t('permissionDenied'), 'error')
         } else if (response.status >= 500) {
-          showToast(language === 'zh' ? '服务异常，请稍后重试' : 'Server error, please try again', 'error')
+          showToast(t('serverErrorRetry'), 'error')
         } else {
           const json = await response.json().catch(() => null)
-          showToast(json?.error?.message || (language === 'zh' ? '发表评论失败' : 'Failed to post comment'), 'error')
+          showToast(json?.error?.message || t('postCommentFailed'), 'error')
         }
         return
       }
@@ -659,20 +659,20 @@ function HotContent() {
           setOpenPost(prev => prev ? { ...prev, comments: prev.comments + 1 } : null)
         }
       } else {
-        showToast(json.error?.message || (language === 'zh' ? '发表评论失败' : 'Failed to post comment'), 'error')
+        showToast(json.error?.message || t('postCommentFailed'), 'error')
       }
     } catch (err) {
       console.error('[HotPage] 提交评论失败:', err)
-      showToast(language === 'zh' ? '网络异常，请重试' : 'Network error, please retry', 'error')
+      showToast(t('networkErrorRetry'), 'error')
     } finally {
       setSubmittingComment(false)
     }
-  }, [accessToken, newComment, openPost?.id, showToast, language])
+  }, [accessToken, newComment, openPost?.id, showToast, t])
 
   // 点赞/踩
   const toggleReaction = useCallback(async (postId: string, reactionType: 'up' | 'down') => {
     if (!accessToken) {
-      showToast('请先登录', 'warning')
+      showToast(t('pleaseLoginFirst'), 'warning')
       return
     }
 
@@ -712,9 +712,9 @@ function HotContent() {
       }
     } catch (err) {
       console.error('[HotPage] 点赞失败:', err)
-      showToast(language === 'zh' ? '操作失败，请重试' : 'Action failed, please retry', 'error')
+      showToast(t('actionFailedRetry'), 'error')
     }
-  }, [accessToken, openPost?.id, showToast, language])
+  }, [accessToken, openPost?.id, showToast, t])
 
   return (
     <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
@@ -739,8 +739,8 @@ function HotContent() {
               {/* Tabbed Sections */}
               <Box style={{ display: 'flex', gap: '8px', marginBottom: tokens.spacing[3], flexWrap: 'wrap' }}>
                 {([
-                  { value: 'posts' as const, label: language === 'zh' ? '热门帖子' : 'Hot Posts' },
-                  { value: 'groups' as const, label: language === 'zh' ? '热门小组' : 'Hot Groups' },
+                  { value: 'posts' as const, label: t('hotPosts') },
+                  { value: 'groups' as const, label: t('hotGroups') },
                 ]).map((tab) => (
                   <button
                     key={tab.value}
@@ -810,7 +810,7 @@ function HotContent() {
                             fontSize: '13px',
                           }}
                         >
-                          {language === 'zh' ? `${newPostCount} 条新帖子` : `${newPostCount} new posts`}
+                          {t('newPostsCount').replace('{count}', String(newPostCount))}
                         </Box>
                       )}
 
@@ -894,9 +894,7 @@ function HotContent() {
                                         padding: 0,
                                       }}
                                     >
-                                      {isExpanded
-                                        ? (language === 'zh' ? '收起' : 'Show less')
-                                        : (language === 'zh' ? '展开查看' : 'Show more')}
+                                      {isExpanded ? t('showLess') : t('showMore')}
                                     </button>
                                   )}
                                 </>
@@ -978,10 +976,10 @@ function HotContent() {
                             textAlign: 'center',
                           }}>
                             <Text size="lg" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>
-                              {language === 'zh' ? '登录查看完整热榜' : 'Log in to view full hot list'}
+                              {t('loginToViewFullHotList')}
                             </Text>
                             <Text size="sm" color="secondary" style={{ marginBottom: tokens.spacing[4] }}>
-                              {language === 'zh' ? '登录后解锁所有热门帖子和交互功能' : 'Unlock all hot posts and interactions after logging in'}
+                              {t('unlockAllHotPosts')}
                             </Text>
                             <Link
                               href="/login"
@@ -996,7 +994,7 @@ function HotContent() {
                                 fontSize: '14px',
                               }}
                             >
-                              {language === 'zh' ? '立即登录' : 'Log in now'}
+                              {t('loginNow')}
                             </Link>
                           </Box>
                         </>
@@ -1045,7 +1043,7 @@ function HotContent() {
                               </Text>
                             </Box>
                             <Text size="xs" color="tertiary">
-                              {group.member_count.toLocaleString()} {language === 'zh' ? '成员' : 'members'}
+                              {group.member_count.toLocaleString()} {t('membersUnit')}
                             </Text>
                           </Box>
                         </Box>
@@ -1194,16 +1192,16 @@ function HotContent() {
                   }}
                 >
                   {translating ? (
-                    <>{language === 'zh' ? '翻译中...' : 'Translating...'}</>
+                    <>{t('translating')}</>
                   ) : showingOriginal ? (
-                    <>{language === 'zh' ? '查看翻译' : 'View Translation'}</>
+                    <>{t('viewTranslation')}</>
                   ) : (
-                    <>{language === 'zh' ? '查看原文' : 'View Original'}</>
+                    <>{t('viewOriginal')}</>
                   )}
                 </button>
                 {!showingOriginal && (
                   <span style={{ fontSize: 11, color: tokens.colors.text.tertiary }}>
-                    {language === 'zh' ? '由 AI 翻译' : 'Translated by AI'}
+                    {t('translatedByAI')}
                   </span>
                 )}
               </div>
@@ -1259,7 +1257,7 @@ function HotContent() {
                 <textarea
                   value={newComment}
                   onChange={(e) => setNewComment(e.target.value)}
-                  placeholder={accessToken ? t('writeComment') : (language === 'zh' ? '请先登录后发表评论' : 'Please log in to comment')}
+                  placeholder={accessToken ? t('writeComment') : t('loginToComment')}
                   disabled={!accessToken || submittingComment}
                   style={{
                     width: '100%',
@@ -1290,16 +1288,16 @@ function HotContent() {
                       cursor: newComment.trim() && !submittingComment ? 'pointer' : 'not-allowed',
                     }}
                   >
-                    {submittingComment ? (language === 'zh' ? '发送中...' : 'Sending...') : (language === 'zh' ? '发表评论' : 'Post comment')}
+                    {submittingComment ? t('sending') : t('postComment')}
                   </button>
                 )}
               </div>
 
               {/* 评论列表 */}
               {loadingComments ? (
-                <div style={{ color: tokens.colors.text.tertiary, fontSize: 13 }}>{language === 'zh' ? '加载评论中...' : 'Loading comments...'}</div>
+                <div style={{ color: tokens.colors.text.tertiary, fontSize: 13 }}>{t('loadingComments')}</div>
               ) : comments.length === 0 ? (
-                <div style={{ color: tokens.colors.text.tertiary, fontSize: 13 }}>{language === 'zh' ? '暂无评论，来发表第一条评论吧' : 'No comments yet. Be the first to comment!'}</div>
+                <div style={{ color: tokens.colors.text.tertiary, fontSize: 13 }}>{t('noCommentsYet')}</div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                   {comments.filter(Boolean).map((comment) => (
@@ -1327,7 +1325,7 @@ function HotContent() {
                           </Link>
                         ) : (
                           <span style={{ fontSize: 12, fontWeight: 700, color: tokens.colors.text.secondary }}>
-                            {language === 'zh' ? '匿名' : 'Anonymous'}
+                            {t('anonymous')}
                           </span>
                         )}
                         <span style={{ fontSize: 11, color: tokens.colors.text.tertiary }}>
@@ -1370,7 +1368,7 @@ function HotContent() {
                         e.currentTarget.style.color = tokens.colors.text.secondary
                       }}
                     >
-                      {loadingMoreComments ? (language === 'zh' ? '加载中...' : 'Loading...') : (language === 'zh' ? '加载更多评论' : 'Load more comments')}
+                      {loadingMoreComments ? t('loading') : t('loadMoreComments')}
                     </button>
                   )}
                 </div>

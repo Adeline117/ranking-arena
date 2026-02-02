@@ -43,17 +43,13 @@ interface UseGroupPostsOptions {
   accessToken: string | null
   isMember: boolean
   language: string
+  t: (key: string) => string
   showToast: (msg: string, type: 'success' | 'error' | 'warning') => void
   showDangerConfirm: (title: string, message: string) => Promise<boolean>
 }
 
 const POST_PAGE_SIZE = 20
 const POST_SELECT_FIELDS = 'id, group_id, title, content, created_at, author_handle, author_id, like_count, comment_count, bookmark_count, repost_count, is_pinned'
-
-// Helper to create bilingual messages
-function msg(zh: string, en: string, language: string): string {
-  return language === 'zh' ? zh : en
-}
 
 // Generic fetch for user interactions (likes, bookmarks, reposts)
 async function fetchUserInteractions(
@@ -111,6 +107,7 @@ export function useGroupPosts({
   accessToken,
   isMember,
   language,
+  t,
   showToast,
   showDangerConfirm,
 }: UseGroupPostsOptions) {
@@ -310,14 +307,14 @@ export function useGroupPosts({
       const data = await response.json().catch(() => ({}))
       return { ok: response.ok, data, error: data.error }
     } catch {
-      return { ok: false, error: msg('网络错误', 'Network error', language) }
+      return { ok: false, error: t('networkError') }
     }
-  }, [accessToken, language])
+  }, [accessToken, t])
 
   // Like handler
   const handleLike = useCallback(async (postId: string) => {
     if (!accessToken) {
-      showToast(msg('请先登录', 'Please login first', language), 'warning')
+      showToast(t('pleaseLoginFirst'), 'warning')
       return
     }
     setPostLoading(setLikeLoading, postId, true)
@@ -333,15 +330,15 @@ export function useGroupPosts({
         }
       }))
     } else {
-      showToast(result.error || msg('操作失败', 'Operation failed', language), 'error')
+      showToast(result.error || t('operationFailed'), 'error')
     }
     setPostLoading(setLikeLoading, postId, false)
-  }, [accessToken, language, showToast, apiCall, setPostLoading])
+  }, [accessToken, t, showToast, apiCall, setPostLoading])
 
   // Bookmark handler
   const handleBookmark = useCallback(async (postId: string) => {
     if (!accessToken) {
-      showToast(msg('请先登录', 'Please login first', language), 'warning')
+      showToast(t('pleaseLoginFirst'), 'warning')
       return
     }
     setPostLoading(setBookmarkLoading, postId, true)
@@ -352,24 +349,24 @@ export function useGroupPosts({
         p.id === postId ? { ...p, user_bookmarked: data.bookmarked, bookmark_count: data.bookmark_count } : p
       ))
     } else {
-      showToast(result.error || msg('操作失败', 'Operation failed', language), 'error')
+      showToast(result.error || t('operationFailed'), 'error')
     }
     setPostLoading(setBookmarkLoading, postId, false)
-  }, [accessToken, language, showToast, apiCall, setPostLoading])
+  }, [accessToken, t, showToast, apiCall, setPostLoading])
 
   // Repost handler
   const handleRepost = useCallback(async (postId: string, comment?: string) => {
     if (!accessToken) {
-      showToast(msg('请先登录', 'Please login first', language), 'warning')
+      showToast(t('pleaseLoginFirst'), 'warning')
       return
     }
     const post = posts.find(p => p.id === postId)
     if (post?.author_id === userId) {
-      showToast(msg('不能转发自己的帖子', 'Cannot repost your own post', language), 'warning')
+      showToast(t('cannotRepostOwn'), 'warning')
       return
     }
     if (post?.user_reposted) {
-      showToast(msg('已经转发过此帖子', 'Already reposted', language), 'warning')
+      showToast(t('alreadyReposted'), 'warning')
       return
     }
     setPostLoading(setRepostLoading, postId, true)
@@ -381,18 +378,18 @@ export function useGroupPosts({
       ))
       setShowRepostModal(null)
       setRepostComment('')
-      showToast(msg('转发成功！', 'Reposted successfully!', language), 'success')
+      showToast(t('repostSuccess'), 'success')
     } else {
-      showToast(result.error || msg('转发失败', 'Repost failed', language), 'error')
+      showToast(result.error || t('repostFailed'), 'error')
     }
     setPostLoading(setRepostLoading, postId, false)
-  }, [accessToken, language, showToast, posts, userId, apiCall, setPostLoading])
+  }, [accessToken, t, showToast, posts, userId, apiCall, setPostLoading])
 
   // Delete post
   const handleDeletePost = useCallback(async (postId: string) => {
     const confirmed = await showDangerConfirm(
-      msg('删除帖子', 'Delete Post', language),
-      msg('确定删除此帖子吗？此操作不可撤销。', 'Are you sure you want to delete this post? This cannot be undone.', language)
+      t('deletePost'),
+      t('deletePostConfirm')
     )
     if (!confirmed) return
 
@@ -400,17 +397,17 @@ export function useGroupPosts({
     const result = await apiCall(`/api/posts/${postId}/delete`, { method: 'DELETE' })
     if (result.ok) {
       setPosts(prev => prev.filter(p => p.id !== postId))
-      showToast(msg('帖子已删除', 'Post deleted', language), 'success')
+      showToast(t('postDeleted'), 'success')
     } else {
-      showToast(result.error || msg('删除失败', 'Delete failed', language), 'error')
+      showToast(result.error || t('deleteFailed'), 'error')
     }
     setDeletingPost(null)
-  }, [language, showToast, showDangerConfirm, apiCall])
+  }, [t, showToast, showDangerConfirm, apiCall])
 
   // Save edit
   const handleSaveEdit = useCallback(async (postId: string) => {
     if (!editTitle.trim()) {
-      showToast(msg('标题不能为空', 'Title cannot be empty', language), 'warning')
+      showToast(t('titleRequired'), 'warning')
       return
     }
     setSavingEdit(true)
@@ -423,12 +420,12 @@ export function useGroupPosts({
         p.id === postId ? { ...p, title: editTitle.trim(), content: editContent.trim() } : p
       ))
       setEditingPost(null)
-      showToast(msg('修改成功', 'Updated successfully', language), 'success')
+      showToast(t('editSaved'), 'success')
     } else {
-      showToast(result.error || msg('修改失败', 'Update failed', language), 'error')
+      showToast(result.error || t('editFailed'), 'error')
     }
     setSavingEdit(false)
-  }, [language, showToast, editTitle, editContent, apiCall])
+  }, [t, showToast, editTitle, editContent, apiCall])
 
   // Pin/unpin
   const handlePinPost = useCallback(async (postId: string) => {
@@ -441,11 +438,11 @@ export function useGroupPosts({
         if (newPinned) return { ...p, is_pinned: false }
         return p
       }))
-      showToast(msg(newPinned ? '已置顶' : '已取消置顶', newPinned ? 'Pinned' : 'Unpinned', language), 'success')
+      showToast(newPinned ? t('pinned') : t('unpinned'), 'success')
     } else {
-      showToast(result.error || msg('操作失败', 'Operation failed', language), 'error')
+      showToast(result.error || t('operationFailed'), 'error')
     }
-  }, [language, showToast, apiCall])
+  }, [t, showToast, apiCall])
 
   // Load comments for a post
   const loadComments = useCallback(async (postId: string) => {
@@ -456,14 +453,14 @@ export function useGroupPosts({
       if (response.ok && json.success) {
         setComments(prev => ({ ...prev, [postId]: json.data?.comments || [] }))
       } else {
-        showToast(msg('加载评论失败', 'Failed to load comments', language), 'error')
+        showToast(t('loadCommentsFailed'), 'error')
       }
     } catch {
-      showToast(msg('网络错误', 'Network error', language), 'error')
+      showToast(t('networkError'), 'error')
     } finally {
       setPostLoading(setCommentLoading, postId, false)
     }
-  }, [language, showToast, setPostLoading])
+  }, [t, showToast, setPostLoading])
 
   const toggleComments = useCallback((postId: string) => {
     const isExpanded = expandedComments[postId]
@@ -475,7 +472,7 @@ export function useGroupPosts({
 
   const submitComment = useCallback(async (postId: string) => {
     if (!accessToken) {
-      showToast(msg('请先登录', 'Please login first', language), 'warning')
+      showToast(t('pleaseLoginFirst'), 'warning')
       return
     }
     const content = newComment[postId]?.trim()
@@ -485,7 +482,7 @@ export function useGroupPosts({
     const result = await apiCall(`/api/posts/${postId}/comments`, { body: { content } })
 
     if (!result.ok) {
-      const errorMsg = result.error || msg('评论发布失败', 'Failed to post comment', language)
+      const errorMsg = result.error || t('postCommentFailed')
       showToast(errorMsg, 'error')
       setPostLoading(setCommentLoading, postId, false)
       return
@@ -500,10 +497,10 @@ export function useGroupPosts({
         p.id === postId ? { ...p, comment_count: (p.comment_count || 0) + 1 } : p
       ))
     } else {
-      showToast(data.error || msg('评论发布失败', 'Failed to post comment', language), 'error')
+      showToast(data.error || t('postCommentFailed'), 'error')
     }
     setPostLoading(setCommentLoading, postId, false)
-  }, [accessToken, language, showToast, newComment, apiCall, setPostLoading])
+  }, [accessToken, t, showToast, newComment, apiCall, setPostLoading])
 
   const submitReply = useCallback(async (postId: string, commentId: string) => {
     if (!accessToken || !replyContent[commentId]?.trim()) return

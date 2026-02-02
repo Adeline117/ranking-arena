@@ -173,7 +173,7 @@ async function scrapeBinance() {
     console.log(`\n  总计: ${traders.length}`)
     const unique = [...new Map(traders.map(t => [t.id, t])).values()]
     if (unique.length) {
-      const saved = await save('binance_futures', unique, 'current_30d')
+      const saved = await save('binance_futures', unique, '30D')
       console.log(`  ✅ ${saved} 条保存`)
     } else console.log('  ❌ 0 条')
     
@@ -267,7 +267,7 @@ async function scrapeBitget() {
     console.log(`\n  总计: ${traders.length}`)
     const unique = [...new Map(traders.filter(t => t.id).map(t => [t.id, t])).values()]
     if (unique.length) {
-      const saved = await save('bitget_futures', unique, 'current_30d')
+      const saved = await save('bitget_futures', unique, '30D')
       console.log(`  ✅ ${saved} 条保存`)
     } else console.log('  ❌ 0 条')
     
@@ -324,7 +324,7 @@ async function scrapeMEXC() {
     console.log(`\n  总计: ${traders.length}`)
     const unique = [...new Map(traders.filter(t => t.id).map(t => [t.id, t])).values()]
     if (unique.length) {
-      const saved = await save('mexc', unique, 'current_30d')
+      const saved = await save('mexc', unique, '30D')
       console.log(`  ✅ ${saved} 条保存`)
     } else console.log('  ❌ 0 条')
     
@@ -386,7 +386,7 @@ async function scrapeKuCoin() {
     console.log(`\n  总计: ${traders.length}`)
     const unique = [...new Map(traders.filter(t => t.id).map(t => [t.id, t])).values()]
     if (unique.length) {
-      const saved = await save('kucoin', unique, 'current_30d')
+      const saved = await save('kucoin', unique, '30D')
       console.log(`  ✅ ${saved} 条保存`)
     } else console.log('  ❌ 0 条')
     
@@ -442,7 +442,7 @@ async function scrapeCoinEx() {
     console.log(`\n  总计: ${traders.length}`)
     const unique = [...new Map(traders.filter(t => t.id).map(t => [t.id, t])).values()]
     if (unique.length) {
-      const saved = await save('coinex', unique, 'current_30d')
+      const saved = await save('coinex', unique, '30D')
       console.log(`  ✅ ${saved} 条保存`)
     } else console.log('  ❌ 0 条')
     
@@ -498,7 +498,7 @@ async function scrapeBingX() {
     console.log(`\n  总计: ${traders.length}`)
     const unique = [...new Map(traders.filter(t => t.id).map(t => [t.id, t])).values()]
     if (unique.length) {
-      const saved = await save('bingx', unique, 'current_30d')
+      const saved = await save('bingx', unique, '30D')
       console.log(`  ✅ ${saved} 条保存`)
     } else console.log('  ❌ 0 条')
     
@@ -554,7 +554,7 @@ async function scrapePhemex() {
     console.log(`\n  总计: ${traders.length}`)
     const unique = [...new Map(traders.filter(t => t.id).map(t => [t.id, t])).values()]
     if (unique.length) {
-      const saved = await save('phemex', unique, 'current_30d')
+      const saved = await save('phemex', unique, '30D')
       console.log(`  ✅ ${saved} 条保存`)
     } else console.log('  ❌ 0 条')
     
