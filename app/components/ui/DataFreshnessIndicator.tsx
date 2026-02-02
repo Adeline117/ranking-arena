@@ -89,7 +89,7 @@ export default function DataFreshnessIndicator({
     // Refresh freshness every 60 seconds
     const interval = setInterval(computeFreshness, 60000)
     return () => clearInterval(interval)
-  }, [lastUpdated, language])
+  }, [lastUpdated, language, t])
 
   const { ageText, isStale, isCritical } = freshnessState
 
@@ -118,7 +118,7 @@ export default function DataFreshnessIndicator({
           icon: <ClockIcon size={size === 'sm' ? 10 : 12} />,
         }
     }
-  }, [updateTier, language, size])
+  }, [updateTier, language, size, t])
 
   // 确定显示颜色
   const displayColor = isCritical
