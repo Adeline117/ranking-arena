@@ -1212,6 +1212,7 @@ const en = {
     freeUserLimit: 'Showing top {limit} of {total} traders. ',
     upgradeProFull: 'Upgrade to Pro for full access',
     sourcesLabel: 'Sources:',
+    notInvestmentAdvice: 'Data is for reference only. Not financial advice. DYOR.',
 
     // ExchangeFilter
     lessExchanges: 'Less',
