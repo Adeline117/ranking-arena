@@ -367,6 +367,7 @@ const zh = {
     scoreBreakdownDesc: '查看 Arena Score 子分数和同类分位',
     overallScore: '总评分',
     returnScore: '收益评分',
+    pnlScore: '盈亏分',
     drawdownScore: '回撤评分',
     stabilityScore: '稳定性评分',
     percentile: '分位',
@@ -467,6 +468,10 @@ const zh = {
     markAllAsRead: '全部已读',
     noNotifications: '暂无通知',
     noMessages: '暂无私信',
+    authenticationFailed: '认证失败，请重新登录',
+    failedToLoadConversations: '加载会话失败',
+    failedToLoadNotifications: '加载通知失败',
+    unexpectedError: '发生了意外错误',
     startChat: '开始聊天',
     yesterday: '昨天',
     daysAgo: '{days}天前',
@@ -1967,6 +1972,9 @@ const zh = {
     // useGroupPosts hook
     unpinned: '已取消置顶',
     loadCommentsFailed: '加载评论失败',
+    loadingComments: '正在加载评论...',
+    loadMoreComments: '加载更多评论',
+    postComment: '发表评论',
     postCommentFailed: '评论发布失败',
 
     // ErrorBoundary
