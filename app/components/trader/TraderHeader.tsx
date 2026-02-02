@@ -343,8 +343,7 @@ export default function TraderHeader({
         position: 'relative',
         overflow: 'visible',
         opacity: mounted ? 1 : 0,
-        transform: mounted ? 'translateY(0)' : 'translateY(-20px)',
-        transition: 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
+        transition: 'opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
       }}
     >
       {!hasCover && (
@@ -419,7 +418,9 @@ export default function TraderHeader({
               <img
                 src={`/api/avatar?url=${encodeURIComponent(avatarUrl)}`}
                 alt={handle}
-                loading="lazy"
+                width={72}
+                height={72}
+                loading="eager"
                 style={{
                   width: '100%',
                   height: '100%',

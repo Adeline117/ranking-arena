@@ -3,9 +3,8 @@ import { HomePage } from './components/home'
 import { getInitialTraders } from '@/lib/getInitialTraders'
 import RankingTableSkeleton from './components/home/RankingTableSkeleton'
 
-// ISR: Revalidate every 30 seconds for fresh data with static benefits
-// Reduced from 60s to 30s for better data freshness while maintaining cache benefits
-export const revalidate = 30
+// ISR: Revalidate every 60 seconds — data updates via cron every 4h, 60s is plenty fresh
+export const revalidate = 60
 
 /**
  * 首页入口 - Server Component with Streaming

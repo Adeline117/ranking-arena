@@ -6,23 +6,10 @@ import dynamic from 'next/dynamic'
 import { tokens } from '@/lib/design-tokens'
 import { Box } from '../base'
 import { useToast } from '../ui/Toast'
-import { type Trader } from '../ranking/RankingTable'
+import { RankingTable, type Trader } from '../ranking/RankingTable'
 import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
 
-const RankingTable = dynamic(
-  () => import('@/app/components/ranking/RankingTable').then(m => ({ default: m.RankingTable })),
-  {
-    loading: () => (
-      <div style={{ minHeight: 600 }} className="ranking-table-container">
-        {/* Simple skeleton - 20 placeholder rows */}
-        {Array.from({ length: 20 }, (_, i) => (
-          <div key={i} style={{ height: 52, background: 'rgba(255,255,255,0.03)', marginBottom: 2, borderRadius: 8 }} />
-        ))}
-      </div>
-    ),
-    ssr: false
-  }
-)
+
 import TimeRangeSelector from './TimeRangeSelector'
 import type { TimeRange } from './hooks/useTraderData'
 import { CategoryType, filterByCategory } from '../ranking/CategoryRankingTabs'
