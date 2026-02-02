@@ -41,6 +41,7 @@ export type TraderSource =
   // CEX spot
   | 'binance_spot'
   | 'bitget_spot'
+  | 'bybit_spot'
   // CEX web3 / wallets
   | 'binance_web3'
   | 'okx_web3'
@@ -84,6 +85,7 @@ export const ALL_SOURCES: TraderSource[] = [
   // CEX spot
   'binance_spot',
   'bitget_spot',
+  'bybit_spot',
   // CEX web3 / wallets
   'binance_web3',
   'okx_web3',
@@ -128,6 +130,7 @@ export const SOURCE_TYPE_MAP: Record<string, SourceType> = {
   // CEX spot
   binance_spot: 'spot',
   bitget_spot: 'spot',
+  bybit_spot: 'spot',
   // CEX web3 / wallets & on-chain
   binance_web3: 'web3',
   okx_web3: 'web3',
@@ -178,6 +181,7 @@ export const PRIORITY_SOURCES: TraderSource[] = [
   // Spot
   'bitget_spot',
   'binance_spot',
+  'bybit_spot',
 ]
 
 // ---------------------------------------------------------------------------
@@ -189,6 +193,7 @@ export const EXCHANGE_NAMES: Record<string, string> = {
   binance_spot: 'Binance Spot',
   binance_web3: 'Binance Web3',
   bybit: 'Bybit',
+  bybit_spot: 'Bybit Spot',
   bitget_futures: 'Bitget',
   bitget_spot: 'Bitget Spot',
   okx_futures: 'OKX',
