@@ -4,8 +4,10 @@
  *
  * BloFin copy trading page: https://blofin.com/en/copy-trade
  *
- * Confirmed API: openapi.blofin.com/api/v1/copytrading/current-traders (returns 401 Unauthorized)
- * Website API: www.blofin.com/api/v1/copytrading/current-traders (behind Cloudflare)
+ * ⚠️  AUTH REQUIRED: openapi.blofin.com returns 401 Unauthorized.
+ * Website API (www.blofin.com) is behind Cloudflare.
+ * Original script uses Puppeteer to browse the page and intercept internal API calls.
+ * Needs browser/proxy infrastructure or API authentication to work.
  *
  * BloFin period mapping: '7D' → range '1', '30D' → range '2', '90D' → range '3'
  *

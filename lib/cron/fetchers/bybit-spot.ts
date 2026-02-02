@@ -4,6 +4,10 @@
  *
  * Same beehive API as Bybit futures, labelled as bybit_spot.
  * metricValues: [ROI, Drawdown, followerProfit, WinRate, PLRatio, SharpeRatio]
+ *
+ * ⚠️  WAF-BLOCKED from US residential IPs (Akamai "Access Denied").
+ * Verified correct endpoint from scripts/import/import_bybit_spot.mjs.
+ * Should work from Vercel Japan/Singapore datacenters.
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -95,7 +99,11 @@ async function fetchPeriod(
 
       if (details.length < PAGE_SIZE || allTraders.size >= TARGET) break
       await sleep(500)
-    } catch {
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      if (msg.includes('403') || msg.includes('Access Denied')) {
+        return { total: 0, saved: 0, error: 'WAF-blocked from this IP (deploy to Vercel Japan/SG)' }
+      }
       break
     }
   }

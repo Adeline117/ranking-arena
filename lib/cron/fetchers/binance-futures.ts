@@ -4,6 +4,10 @@
  *
  * Converted from app/api/cron/fetch-traders/binance-inline/route.ts
  * ROI from API is a decimal (e.g. 0.5 = 50%), converted to percentage.
+ *
+ * ⚠️  GEO-BLOCKED from US IPs (HTTP 451).
+ * Works correctly from Vercel Japan/Singapore datacenters.
+ * Verified against working app/api/cron/fetch-traders/binance-inline/route.ts
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -53,9 +57,12 @@ interface BinanceTrader {
 
 interface BinanceApiResponse {
   code?: string
+  msg?: string
+  message?: string
   data?: {
     list?: BinanceTrader[]
   }
+  success?: boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -84,11 +91,21 @@ async function fetchPeriod(
         order: 'DESC',
       }
 
-      const data = await fetchJson<BinanceApiResponse>(API_URL, {
-        method: 'POST',
-        headers: HEADERS,
-        body,
-      })
+      let data: BinanceApiResponse
+      try {
+        data = await fetchJson<BinanceApiResponse>(API_URL, {
+          method: 'POST',
+          headers: HEADERS,
+          body,
+        })
+      } catch (err) {
+        // Binance returns HTTP 451 for geo-blocked requests
+        const msg = err instanceof Error ? err.message : ''
+        if (msg.includes('451')) {
+          return { total: 0, saved: 0, error: 'Geo-blocked (HTTP 451) — deploy to Vercel Japan/SG' }
+        }
+        throw err
+      }
 
       const list = data?.data?.list || []
       if (list.length === 0) break

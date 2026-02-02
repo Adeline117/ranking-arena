@@ -1,6 +1,12 @@
 /**
  * Bitget Spot — Inline fetcher for Vercel serverless
- * API: https://api.bitget.com/api/v2/copy/spot-trader/trader-profit-ranking
+ *
+ * Same authentication strategy as bitget-futures.ts.
+ * See that file for detailed notes on API status.
+ *
+ * ⚠️  Public endpoints return 404 as of 2025.
+ * Requires BITGET_API_KEY, BITGET_API_SECRET, BITGET_API_PASSPHRASE for broker API.
+ *
  * Original: scripts/import/import_bitget_spot_v2.mjs (Puppeteer-based)
  */
 
@@ -15,30 +21,44 @@ import {
   parseNum,
   normalizeWinRate,
 } from './shared'
+import { createHmac } from 'crypto'
 
 const SOURCE = 'bitget_spot'
 const TARGET = 500
 const PAGE_SIZE = 50
 
-/** Bitget API period values */
 const PERIOD_MAP: Record<string, string> = {
   '7D': 'SEVEN_DAYS',
   '30D': 'THIRTY_DAYS',
   '90D': 'NINETY_DAYS',
 }
 
-/** Bitget spot API URLs — try multiple in case one is blocked */
-const API_URLS = [
-  'https://api.bitget.com/api/v2/copy/spot-trader/trader-profit-ranking',
-  'https://api.bitget.com/api/v2/copy/spot-trader/query-trader-list',
-]
+// ---------------------------------------------------------------------------
+// Authentication
+// ---------------------------------------------------------------------------
 
-const HEADERS: Record<string, string> = {
-  Referer: 'https://www.bitget.com/',
-  Origin: 'https://www.bitget.com',
-  Accept: 'application/json',
-  'Accept-Language': 'en-US,en;q=0.9',
+function getBitgetCredentials(): { apiKey: string; secret: string; passphrase: string } | null {
+  const apiKey = process.env.BITGET_API_KEY || ''
+  const secret = process.env.BITGET_API_SECRET || ''
+  const passphrase = process.env.BITGET_API_PASSPHRASE || ''
+  if (!apiKey || !secret || !passphrase) return null
+  return { apiKey, secret, passphrase }
 }
+
+function signBitgetRequest(
+  timestamp: string,
+  method: string,
+  path: string,
+  body: string,
+  secret: string
+): string {
+  const message = timestamp + method.toUpperCase() + path + body
+  return createHmac('sha256', secret).update(message).digest('base64')
+}
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
 
 interface BitgetSpotTrader {
   traderId?: string
@@ -70,6 +90,10 @@ interface BitgetResponse {
     total?: number
   }
 }
+
+// ---------------------------------------------------------------------------
+// Parser
+// ---------------------------------------------------------------------------
 
 function parseTrader(item: BitgetSpotTrader, period: string, rank: number): TraderData | null {
   const id = item.traderId || item.traderUid || String(item.uid || '')
@@ -109,63 +133,126 @@ function parseTrader(item: BitgetSpotTrader, period: string, rank: number): Trad
   }
 }
 
-async function tryFetchTraders(
-  apiUrl: string,
-  period: string
-): Promise<BitgetSpotTrader[]> {
+// ---------------------------------------------------------------------------
+// Fetching
+// ---------------------------------------------------------------------------
+
+async function fetchWithAuth(period: string): Promise<BitgetSpotTrader[]> {
+  const creds = getBitgetCredentials()
+  if (!creds) return []
+
   const allTraders: BitgetSpotTrader[] = []
   const maxPages = Math.ceil(TARGET / PAGE_SIZE)
   const periodParam = PERIOD_MAP[period] || period
 
-  for (let page = 1; page <= maxPages; page++) {
-    try {
-      const url = `${apiUrl}?period=${periodParam}&pageNo=${page}&pageSize=${PAGE_SIZE}`
-      const data = await fetchJson<BitgetResponse>(url, { headers: HEADERS })
+  // Try broker spot endpoint, fall back to mix broker endpoint
+  const brokerPaths = [
+    '/api/v2/copy/spot-broker/query-traders',
+    '/api/v2/copy/mix-broker/query-traders',
+  ]
 
-      if (data.code !== '00000' && data.code !== 0 && data.code !== '0') {
-        if (page === 1) {
-          const altUrl = `${apiUrl}?period=${period}&pageNo=${page}&pageSize=${PAGE_SIZE}`
-          const altData = await fetchJson<BitgetResponse>(altUrl, { headers: HEADERS })
-          const altList = altData.data?.traderList || altData.data?.list || []
-          if (altList.length > 0) {
-            allTraders.push(...altList)
-            continue
-          }
-        }
+  for (const basePath of brokerPaths) {
+    if (allTraders.length > 0) break
+
+    for (let page = 1; page <= maxPages; page++) {
+      try {
+        const queryString = `pageNo=${page}&pageSize=${PAGE_SIZE}&period=${periodParam}`
+        const path = `${basePath}?${queryString}`
+        const timestamp = Date.now().toString()
+        const sign = signBitgetRequest(timestamp, 'GET', path, '', creds.secret)
+
+        const url = `https://api.bitget.com${path}`
+        const data = await fetchJson<BitgetResponse>(url, {
+          headers: {
+            'ACCESS-KEY': creds.apiKey,
+            'ACCESS-SIGN': sign,
+            'ACCESS-TIMESTAMP': timestamp,
+            'ACCESS-PASSPHRASE': creds.passphrase,
+            'Content-Type': 'application/json',
+            locale: 'en-US',
+          },
+        })
+
+        if (data.code !== '00000' && data.code !== 0 && data.code !== '0') break
+
+        const list = data.data?.traderList || data.data?.list || []
+        if (list.length === 0) break
+
+        allTraders.push(...list)
+        if (list.length < PAGE_SIZE || allTraders.length >= TARGET) break
+        await sleep(300)
+      } catch {
         break
       }
-
-      const list = data.data?.traderList || data.data?.list || []
-      if (list.length === 0) break
-
-      allTraders.push(...list)
-      if (list.length < PAGE_SIZE || allTraders.length >= TARGET) break
-      await sleep(300)
-    } catch {
-      break
     }
   }
 
   return allTraders
 }
 
+async function fetchPublic(period: string): Promise<BitgetSpotTrader[]> {
+  const allTraders: BitgetSpotTrader[] = []
+  const periodParam = PERIOD_MAP[period] || period
+  const maxPages = Math.ceil(TARGET / PAGE_SIZE)
+
+  const urls = [
+    'https://api.bitget.com/api/v2/copy/spot-trader/trader-profit-ranking',
+    'https://api.bitget.com/api/v2/copy/spot-trader/query-trader-list',
+  ]
+
+  for (const apiUrl of urls) {
+    if (allTraders.length > 0) break
+
+    for (let page = 1; page <= maxPages; page++) {
+      try {
+        const url = `${apiUrl}?period=${periodParam}&pageNo=${page}&pageSize=${PAGE_SIZE}`
+        const data = await fetchJson<BitgetResponse>(url, {
+          headers: {
+            Referer: 'https://www.bitget.com/',
+            Origin: 'https://www.bitget.com',
+            Accept: 'application/json',
+          },
+        })
+
+        if (data.code !== '00000' && data.code !== 0 && data.code !== '0') break
+
+        const list = data.data?.traderList || data.data?.list || []
+        if (list.length === 0) break
+
+        allTraders.push(...list)
+        if (list.length < PAGE_SIZE || allTraders.length >= TARGET) break
+        await sleep(300)
+      } catch {
+        break
+      }
+    }
+  }
+
+  return allTraders
+}
+
+// ---------------------------------------------------------------------------
+// Period fetcher
+// ---------------------------------------------------------------------------
+
 async function fetchPeriod(
   supabase: SupabaseClient,
   period: string
 ): Promise<{ total: number; saved: number; error?: string }> {
-  let rawTraders: BitgetSpotTrader[] = []
-
-  for (const apiUrl of API_URLS) {
-    try {
-      rawTraders = await tryFetchTraders(apiUrl, period)
-      if (rawTraders.length > 0) break
-    } catch {
-      continue
-    }
+  let rawTraders = await fetchWithAuth(period)
+  if (rawTraders.length === 0) {
+    rawTraders = await fetchPublic(period)
   }
 
   if (rawTraders.length === 0) {
-    return { total: 0, saved: 0, error: 'No data from any Bitget Spot API endpoint' }
+    const hasCreds = !!getBitgetCredentials()
+    return {
+      total: 0,
+      saved: 0,
+      error: hasCreds
+        ? 'Bitget spot broker API returned no data'
+        : 'No data — set BITGET_API_KEY/SECRET/PASSPHRASE for broker API, or public endpoints are 404',
+    }
   }
 
   const seen = new Set<string>()
@@ -177,7 +264,6 @@ async function fetchPeriod(
     if (!id || seen.has(id)) continue
     seen.add(id)
     rank++
-
     const trader = parseTrader(item, period, rank)
     if (trader && trader.roi !== null && trader.roi !== 0) {
       traders.push(trader)
@@ -189,6 +275,10 @@ async function fetchPeriod(
   const { saved, error } = await upsertTraders(supabase, top)
   return { total: top.length, saved, error }
 }
+
+// ---------------------------------------------------------------------------
+// Export
+// ---------------------------------------------------------------------------
 
 export async function fetchBitgetSpot(
   supabase: SupabaseClient,

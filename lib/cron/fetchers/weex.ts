@@ -4,18 +4,15 @@
  *
  * Weex copy trading page: https://www.weex.com/zh-CN/copy-trading
  *
+ * ⚠️  BROWSER-ONLY: All API endpoints return "Page is Not Found" as of 2025.
+ * The original script uses Puppeteer to browse the page and intercept internal API calls.
+ * POST endpoints (/api/copyTrade/topTraderListView etc.) require browser session cookies.
+ * Needs browser/proxy infrastructure to work.
+ *
  * Weex period mapping (limited data windows):
  * - 30D ← Weex "3week" (21 days)
  * - 90D ← Weex "all" (full time)
  * - 7D  ← NOT supported by Weex
- *
- * API endpoints tried in original script (from page.evaluate):
- * - /api/copyTrade/topTraderListView (POST)
- * - /api/copyTrade/traderList (POST)
- * - /api/copy/traders (POST)
- *
- * The browser intercepted responses with 'trader', 'copy', 'expert', 'Trader' in URL.
- * topTraderListView response: { data: [{ tab, desc, sortRule, list: [...traders] }] }
  *
  * Key fields: traderUserId, traderNickName, totalReturnRate (already percentage),
  *   threeWeeksPNL, headPic, followCount, ndaysReturnRates, threeWeekRoi

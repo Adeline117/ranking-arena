@@ -5,6 +5,9 @@
  * ROI from API is already in percentage form (e.g. 50 = 50%).
  * winRate is 0-100, normalised at save time.
  * timeRange is a string: '7D', '30D', '90D'.
+ *
+ * ⚠️  GEO-BLOCKED from US IPs (HTTP 451).
+ * Works correctly from Vercel Japan/Singapore datacenters.
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -59,6 +62,8 @@ interface BinanceSpotTrader {
 
 interface ApiResponse {
   code?: string
+  msg?: string
+  message?: string
   data?: {
     list?: BinanceSpotTrader[]
     data?: BinanceSpotTrader[]
@@ -90,11 +95,20 @@ async function fetchPeriod(
         hideFull: false,
       }
 
-      const data = await fetchJson<ApiResponse>(API_URL, {
-        method: 'POST',
-        headers: HEADERS,
-        body,
-      })
+      let data: ApiResponse
+      try {
+        data = await fetchJson<ApiResponse>(API_URL, {
+          method: 'POST',
+          headers: HEADERS,
+          body,
+        })
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : ''
+        if (msg.includes('451')) {
+          return { total: 0, saved: 0, error: 'Geo-blocked (HTTP 451) — deploy to Vercel Japan/SG' }
+        }
+        throw err
+      }
 
       const list = data?.data?.list || data?.data?.data || []
       if (!Array.isArray(list) || list.length === 0) break

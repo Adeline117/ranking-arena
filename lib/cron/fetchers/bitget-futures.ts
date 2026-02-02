@@ -1,6 +1,19 @@
 /**
  * Bitget Futures — Inline fetcher for Vercel serverless
- * API: https://api.bitget.com/api/v2/copy/mix-trader/trader-profit-ranking
+ *
+ * Bitget copy trading public API endpoints (v2/copy/mix-trader/*) have been
+ * removed/return 404 as of 2025. The authenticated broker API
+ * (v2/copy/mix-broker/query-traders) exists but requires BITGET_API_KEY,
+ * BITGET_API_SECRET, and BITGET_API_PASSPHRASE.
+ *
+ * The website uses /v1/trigger/trace/public/traderViewV3 but it's behind
+ * Cloudflare protection (requires browser session).
+ *
+ * Strategy:
+ * 1. Try authenticated broker API if env vars available
+ * 2. Try known public endpoints as fallback (in case they come back)
+ * 3. Return graceful error if nothing works
+ *
  * Original: scripts/import/import_bitget_futures_v2.mjs (Puppeteer-based)
  */
 
@@ -15,6 +28,7 @@ import {
   parseNum,
   normalizeWinRate,
 } from './shared'
+import { createHmac } from 'crypto'
 
 const SOURCE = 'bitget_futures'
 const TARGET = 500
@@ -27,18 +41,32 @@ const PERIOD_MAP: Record<string, string> = {
   '90D': 'NINETY_DAYS',
 }
 
-/** Bitget uses these base URLs — try multiple in case one is blocked */
-const API_URLS = [
-  'https://api.bitget.com/api/v2/copy/mix-trader/trader-profit-ranking',
-  'https://api.bitget.com/api/v2/copy/mix-trader/query-trader-list',
-]
+// ---------------------------------------------------------------------------
+// Authentication helpers (for Bitget API v2 broker endpoints)
+// ---------------------------------------------------------------------------
 
-const HEADERS: Record<string, string> = {
-  Referer: 'https://www.bitget.com/',
-  Origin: 'https://www.bitget.com',
-  Accept: 'application/json',
-  'Accept-Language': 'en-US,en;q=0.9',
+function getBitgetCredentials(): { apiKey: string; secret: string; passphrase: string } | null {
+  const apiKey = process.env.BITGET_API_KEY || ''
+  const secret = process.env.BITGET_API_SECRET || ''
+  const passphrase = process.env.BITGET_API_PASSPHRASE || ''
+  if (!apiKey || !secret || !passphrase) return null
+  return { apiKey, secret, passphrase }
 }
+
+function signBitgetRequest(
+  timestamp: string,
+  method: string,
+  path: string,
+  body: string,
+  secret: string
+): string {
+  const message = timestamp + method.toUpperCase() + path + body
+  return createHmac('sha256', secret).update(message).digest('base64')
+}
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
 
 interface BitgetTrader {
   traderId?: string
@@ -72,31 +100,32 @@ interface BitgetResponse {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Parser
+// ---------------------------------------------------------------------------
+
 function parseTrader(item: BitgetTrader, period: string, rank: number): TraderData | null {
   const id = item.traderId || item.traderUid || String(item.uid || '')
   if (!id) return null
 
-  // ROI: Bitget may return as decimal (0.1234 = 12.34%) or percentage
+  // ROI: Bitget returns as decimal (0.1234 = 12.34%) or percentage
   let roi = parseNum(item.profitRate ?? item.roi ?? item.yieldRate)
   if (roi === null) return null
-  if (Math.abs(roi) > 0 && Math.abs(roi) < 10) roi *= 100 // decimal → percentage
+  if (Math.abs(roi) > 0 && Math.abs(roi) < 10) roi *= 100
 
-  // PnL
   const pnl = parseNum(item.totalProfit ?? item.profit)
 
-  // Win rate: decimal → percentage
   let winRate = parseNum(item.winRate)
   winRate = normalizeWinRate(winRate)
 
-  // Max drawdown: decimal → percentage
   let maxDrawdown = parseNum(item.maxDrawdown ?? item.mdd)
   if (maxDrawdown !== null && Math.abs(maxDrawdown) > 0 && Math.abs(maxDrawdown) <= 1) {
     maxDrawdown *= 100
   }
 
-  // Followers
-  const followers = parseNum(item.followerCount ?? item.copyTraderCount ?? item.currentCopiers ?? item.copyUserNum)
-
+  const followers = parseNum(
+    item.followerCount ?? item.copyTraderCount ?? item.currentCopiers ?? item.copyUserNum
+  )
   const handle = item.nickName || item.traderName || `Bitget_${id.slice(0, 8)}`
 
   return {
@@ -116,30 +145,39 @@ function parseTrader(item: BitgetTrader, period: string, rank: number): TraderDa
   }
 }
 
-async function tryFetchTraders(
-  apiUrl: string,
-  period: string
-): Promise<BitgetTrader[]> {
+// ---------------------------------------------------------------------------
+// Authenticated broker API fetch
+// ---------------------------------------------------------------------------
+
+async function fetchWithAuth(period: string): Promise<BitgetTrader[]> {
+  const creds = getBitgetCredentials()
+  if (!creds) return []
+
   const allTraders: BitgetTrader[] = []
   const maxPages = Math.ceil(TARGET / PAGE_SIZE)
   const periodParam = PERIOD_MAP[period] || period
 
   for (let page = 1; page <= maxPages; page++) {
     try {
-      const url = `${apiUrl}?period=${periodParam}&pageNo=${page}&pageSize=${PAGE_SIZE}`
-      const data = await fetchJson<BitgetResponse>(url, { headers: HEADERS })
+      const queryString = `pageNo=${page}&pageSize=${PAGE_SIZE}&period=${periodParam}`
+      const path = `/api/v2/copy/mix-broker/query-traders?${queryString}`
+      const timestamp = Date.now().toString()
+      const sign = signBitgetRequest(timestamp, 'GET', path, '', creds.secret)
+
+      const url = `https://api.bitget.com${path}`
+      const data = await fetchJson<BitgetResponse>(url, {
+        headers: {
+          'ACCESS-KEY': creds.apiKey,
+          'ACCESS-SIGN': sign,
+          'ACCESS-TIMESTAMP': timestamp,
+          'ACCESS-PASSPHRASE': creds.passphrase,
+          'Content-Type': 'application/json',
+          locale: 'en-US',
+        },
+      })
 
       if (data.code !== '00000' && data.code !== 0 && data.code !== '0') {
-        // Also try with the period as-is (7D, 30D, 90D)
-        if (page === 1) {
-          const altUrl = `${apiUrl}?period=${period}&pageNo=${page}&pageSize=${PAGE_SIZE}`
-          const altData = await fetchJson<BitgetResponse>(altUrl, { headers: HEADERS })
-          const altList = altData.data?.traderList || altData.data?.list || []
-          if (altList.length > 0) {
-            allTraders.push(...altList)
-            continue
-          }
-        }
+        console.warn(`[bitget-futures] Authenticated API error: ${data.code} ${data.msg}`)
         break
       }
 
@@ -149,7 +187,8 @@ async function tryFetchTraders(
       allTraders.push(...list)
       if (list.length < PAGE_SIZE || allTraders.length >= TARGET) break
       await sleep(300)
-    } catch {
+    } catch (err) {
+      console.warn(`[bitget-futures] Auth fetch error: ${err}`)
       break
     }
   }
@@ -157,27 +196,79 @@ async function tryFetchTraders(
   return allTraders
 }
 
+// ---------------------------------------------------------------------------
+// Public fallback endpoints (may return 404 but kept for future recovery)
+// ---------------------------------------------------------------------------
+
+const PUBLIC_API_URLS = [
+  'https://api.bitget.com/api/v2/copy/mix-trader/trader-profit-ranking',
+  'https://api.bitget.com/api/v2/copy/mix-trader/query-trader-list',
+]
+
+async function fetchPublic(period: string): Promise<BitgetTrader[]> {
+  const allTraders: BitgetTrader[] = []
+  const maxPages = Math.ceil(TARGET / PAGE_SIZE)
+  const periodParam = PERIOD_MAP[period] || period
+
+  for (const apiUrl of PUBLIC_API_URLS) {
+    if (allTraders.length > 0) break
+
+    for (let page = 1; page <= maxPages; page++) {
+      try {
+        const url = `${apiUrl}?period=${periodParam}&pageNo=${page}&pageSize=${PAGE_SIZE}`
+        const data = await fetchJson<BitgetResponse>(url, {
+          headers: {
+            Referer: 'https://www.bitget.com/',
+            Origin: 'https://www.bitget.com',
+            Accept: 'application/json',
+          },
+        })
+
+        if (data.code !== '00000' && data.code !== 0 && data.code !== '0') break
+
+        const list = data.data?.traderList || data.data?.list || []
+        if (list.length === 0) break
+
+        allTraders.push(...list)
+        if (list.length < PAGE_SIZE || allTraders.length >= TARGET) break
+        await sleep(300)
+      } catch {
+        break
+      }
+    }
+  }
+
+  return allTraders
+}
+
+// ---------------------------------------------------------------------------
+// Period fetcher
+// ---------------------------------------------------------------------------
+
 async function fetchPeriod(
   supabase: SupabaseClient,
   period: string
 ): Promise<{ total: number; saved: number; error?: string }> {
-  let rawTraders: BitgetTrader[] = []
+  // 1. Try authenticated broker API first
+  let rawTraders = await fetchWithAuth(period)
 
-  // Try each API URL until one works
-  for (const apiUrl of API_URLS) {
-    try {
-      rawTraders = await tryFetchTraders(apiUrl, period)
-      if (rawTraders.length > 0) break
-    } catch {
-      continue
-    }
+  // 2. Fall back to public endpoints
+  if (rawTraders.length === 0) {
+    rawTraders = await fetchPublic(period)
   }
 
   if (rawTraders.length === 0) {
-    return { total: 0, saved: 0, error: 'No data from any Bitget API endpoint' }
+    const hasCreds = !!getBitgetCredentials()
+    return {
+      total: 0,
+      saved: 0,
+      error: hasCreds
+        ? 'Bitget broker API returned no data'
+        : 'No data — set BITGET_API_KEY/SECRET/PASSPHRASE for broker API, or public endpoints are 404',
+    }
   }
 
-  // Deduplicate by trader ID
+  // Deduplicate
   const seen = new Set<string>()
   const traders: TraderData[] = []
   let rank = 0
@@ -187,7 +278,6 @@ async function fetchPeriod(
     if (!id || seen.has(id)) continue
     seen.add(id)
     rank++
-
     const trader = parseTrader(item, period, rank)
     if (trader && trader.roi !== null && trader.roi !== 0) {
       traders.push(trader)
@@ -199,6 +289,10 @@ async function fetchPeriod(
   const { saved, error } = await upsertTraders(supabase, top)
   return { total: top.length, saved, error }
 }
+
+// ---------------------------------------------------------------------------
+// Export
+// ---------------------------------------------------------------------------
 
 export async function fetchBitgetFutures(
   supabase: SupabaseClient,

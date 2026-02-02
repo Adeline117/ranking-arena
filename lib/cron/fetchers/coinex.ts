@@ -3,13 +3,11 @@
  * Original: scripts/import/import_coinex.mjs (276 lines, puppeteer + DOM scraping)
  *
  * CoinEx copy trading page: https://www.coinex.com/en/copy-trading/futures
- * The original script used pure DOM scraping (no specific API endpoint).
  *
- * CoinEx perpetual API: api.coinex.com/perpetual/v1/ (responds to requests)
- * CoinEx v2 API: api.coinex.com/v2/
- * Website internal: www.coinex.com/res/
- *
- * Multiple endpoint candidates — CoinEx may expose a copy-trading API.
+ * ⚠️  BROWSER-ONLY: The original script uses pure DOM scraping (no API endpoint).
+ * CoinEx perpetual API returns "unknown method" (code 4009) for all copy-trading paths.
+ * The website internal API (www.coinex.com/res/) returns 404.
+ * Needs browser/proxy infrastructure to work.
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'

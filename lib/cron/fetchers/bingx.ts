@@ -2,9 +2,9 @@
  * BingX — Inline fetcher for Vercel serverless
  * Original: scripts/import/import_bingx.mjs (Playwright-based with API interception)
  *
- * BingX's copy trading API endpoints are CF-protected.
- * We try multiple known/discovered endpoints with proper headers.
- * The original script intercepts XHR matching: copyTrad, copy_trad, trader, leaderBoard, getTop, ranking
+ * ⚠️  CF-PROTECTED: All API endpoints are behind Cloudflare challenge.
+ * The original script uses Playwright to bypass CF and intercept internal API calls.
+ * Needs browser/proxy infrastructure to work.
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'

@@ -8,6 +8,9 @@
  * Binance bapi patterns. If none work, we return gracefully with zero results
  * (the cron scheduler will retry on the next run).
  *
+ * ⚠️  GEO-BLOCKED from US IPs (HTTP 451).
+ * Works correctly from Vercel Japan/Singapore datacenters.
+ *
  * Known API patterns tried:
  *  1. /bapi/composite/v1/public/future/leaderboard/getLeaderboardRank
  *  2. /bapi/futures/v1/public/future/leaderboard/getOtherLeaderboardBaseInfo (single)
@@ -35,8 +38,9 @@ const SOURCE = 'binance_web3'
 const TARGET = 500
 
 // Binance community leaderboard API (works for on-chain/web3 traders)
+// Note: /bapi/composite/ returns 404, /bapi/futures/ is the correct prefix (returns 451 geo-block)
 const LEADERBOARD_URL =
-  'https://www.binance.com/bapi/composite/v1/public/future/leaderboard/getLeaderboardRank'
+  'https://www.binance.com/bapi/futures/v1/public/future/leaderboard/getLeaderboardRank'
 
 const HEADERS: Record<string, string> = {
   'Content-Type': 'application/json',
@@ -92,6 +96,7 @@ async function tryLeaderboardApi(
     const data = await fetchJson<{
       data?: LeaderboardEntry[]
       code?: string
+      msg?: string
     }>(LEADERBOARD_URL, {
       method: 'POST',
       headers: HEADERS,
@@ -109,7 +114,13 @@ async function tryLeaderboardApi(
       return data.data
     }
   } catch (err) {
-    console.warn(`[binance-web3] leaderboard API failed: ${err}`)
+    const msg = err instanceof Error ? err.message : String(err)
+    // Binance returns HTTP 451 for geo-blocked requests
+    if (msg.includes('451')) {
+      console.warn(`[binance-web3] Geo-blocked (HTTP 451) from this IP`)
+    } else {
+      console.warn(`[binance-web3] leaderboard API failed: ${msg}`)
+    }
   }
   return []
 }
@@ -126,7 +137,7 @@ async function fetchPeriod(
 
   if (entries.length === 0) {
     console.warn(`[binance-web3] No data for ${period}`)
-    return { total: 0, saved: 0, error: 'no data from API' }
+    return { total: 0, saved: 0, error: 'No data — likely geo-blocked (HTTP 451). Deploy to Vercel Japan/SG.' }
   }
 
   const capturedAt = new Date().toISOString()
