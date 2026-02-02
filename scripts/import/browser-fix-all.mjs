@@ -24,6 +24,29 @@ const log = (...a) => DEBUG && console.log('  [DBG]', ...a)
 // ========================
 
 function parseGeneric(item) {
+  // First: flatten Bitget-style itemVoList into top-level fields
+  if (Array.isArray(item.itemVoList)) {
+    for (const vo of item.itemVoList) {
+      const code = vo.showColumnCode || vo.code || ''
+      const val = vo.comparedValue ?? vo.value
+      if (val == null || val === '') continue
+      if (/profit_rate|roi/i.test(code)) item._roi = parseFloat(val)
+      else if (/total_income|profit(?!.*rate)/i.test(code) && !item._pnl) item._pnl = parseFloat(val)
+      else if (/winning_rate|win_rate/i.test(code)) item._wr = parseFloat(val)
+      else if (/retracement|drawdown|retraction/i.test(code)) item._dd = Math.abs(parseFloat(val))
+      else if (/follow_profit|copier.*profit/i.test(code) && !item._pnl) {} // skip copier pnl
+    }
+  }
+  
+  // Flatten nested statistics/viewDataVO/data objects  
+  for (const nest of ['statistics','viewDataVO','data','traderInfo','info','detail','performanceInfo']) {
+    if (item[nest] && typeof item[nest] === 'object' && !Array.isArray(item[nest])) {
+      for (const [k,v] of Object.entries(item[nest])) {
+        if (item[k] == null) item[k] = v
+      }
+    }
+  }
+
   // Extended generic parser with more field names
   let id = ''
   for (const k of ['traderId','traderUid','uid','leaderId','encryptedUid','leadPortfolioId',
@@ -33,62 +56,70 @@ function parseGeneric(item) {
   }
   if (!id) return null
 
-  let roi = null
-  for (const k of ['yieldRate','roi','roiRate','totalRoi','pnlRate','returnRate','periodRoi',
-    'copyTradeRoi','incomeRate','profitRate','roiValue','yield_rate','total_roi',
-    'returnRatio','rate','earningRate']) {
-    if (item[k] != null && item[k] !== '') {
-      roi = parseFloat(item[k])
-      // Detect if it's a decimal ratio (0.xxxx) vs percentage (xx.xx)
-      if (k === 'incomeRate' || k === 'returnRatio' || k === 'rate' || k === 'earningRate') {
-        if (Math.abs(roi) < 10) roi *= 100 // likely decimal
-      } else if (Math.abs(roi) < 1 && roi !== 0 && k !== 'roi') {
-        roi *= 100
+  let roi = item._roi ?? null
+  if (roi == null) {
+    for (const k of ['yieldRate','roi','roiRate','totalRoi','pnlRate','returnRate','periodRoi',
+      'copyTradeRoi','incomeRate','profitRate','roiValue','yield_rate','total_roi',
+      'returnRatio','rate','earningRate','profitRatio','pnlRatio','monthlyRoi']) {
+      if (item[k] != null && item[k] !== '') {
+        roi = parseFloat(item[k])
+        // Detect if it's a decimal ratio (0.xxxx) vs percentage (xx.xx)
+        if (k === 'incomeRate' || k === 'returnRatio' || k === 'rate' || k === 'earningRate' || k === 'pnlRatio' || k === 'profitRatio') {
+          if (Math.abs(roi) < 10) roi *= 100 // likely decimal
+        } else if (Math.abs(roi) < 1 && roi !== 0 && k !== 'roi') {
+          roi *= 100
+        }
+        break
       }
-      break
     }
   }
 
-  let pnl = null
-  for (const k of ['totalProfit','profit','pnl','totalPnl','total_profit','income',
-    'realizedPnl','realisedPnl','earnUsdt','totalEarnUsdt','profitAmount',
-    'totalIncome','cumulativeProfit','cumulativeReturn']) {
-    if (item[k] != null && item[k] !== '') { pnl = parseFloat(item[k]); break }
-  }
-
-  let wr = null
-  for (const k of ['winRate','win_rate','winRatio','winPercent','winCount','profitOrderRate']) {
-    if (item[k] != null && item[k] !== '') {
-      wr = parseFloat(item[k])
-      if (wr > 0 && wr <= 1) wr *= 100
-      break
+  let pnl = item._pnl ?? null
+  if (pnl == null) {
+    for (const k of ['totalProfit','profit','pnl','totalPnl','total_profit','income',
+      'realizedPnl','realisedPnl','earnUsdt','totalEarnUsdt','profitAmount',
+      'totalIncome','cumulativeProfit','cumulativeReturn','totalEarnings']) {
+      if (item[k] != null && item[k] !== '') { pnl = parseFloat(item[k]); break }
     }
   }
 
-  let dd = null
-  for (const k of ['maxDrawDown','maxDrawdown','mdd','max_drawdown','drawDown','drawdown',
-    'maxRetraction','maxRetracement','maxLoss']) {
-    if (item[k] != null && item[k] !== '') {
-      dd = Math.abs(parseFloat(item[k]))
-      if (dd > 0 && dd <= 1) dd *= 100
-      break
+  let wr = item._wr ?? null
+  if (wr == null) {
+    for (const k of ['winRate','win_rate','winRatio','winPercent','winCount','profitOrderRate','totalWinningRate']) {
+      if (item[k] != null && item[k] !== '') {
+        wr = parseFloat(item[k])
+        if (wr > 0 && wr <= 1) wr *= 100
+        break
+      }
+    }
+  }
+
+  let dd = item._dd ?? null
+  if (dd == null) {
+    for (const k of ['maxDrawDown','maxDrawdown','mdd','max_drawdown','drawDown','drawdown',
+      'maxRetraction','maxRetracement','maxLoss','max_retracement']) {
+      if (item[k] != null && item[k] !== '') {
+        dd = Math.abs(parseFloat(item[k]))
+        if (dd > 0 && dd <= 1) dd *= 100
+        break
+      }
     }
   }
 
   let trades = null
   for (const k of ['totalOrderNum','closedCount','tradeCount','orderCount','tradeTotalCount',
-    'totalTradeNum','tradeNum','tradesCount','totalTrades']) {
+    'totalTradeNum','tradeNum','tradesCount','totalTrades','totalOrder','tradeTotal']) {
     if (item[k] != null) { trades = parseInt(item[k]) || null; break }
   }
 
   let name = item.nickName || item.nickname || item.leaderName || item.name || item.displayName ||
-    item.userName || item.user_name || item.traderName || ''
+    item.userName || item.user_name || item.traderName || item.traderNickName || ''
 
   let avatar = item.headUrl || item.avatarUrl || item.avatar || item.userPhoto || 
-    item.portraitUrl || item.photoUrl || item.userAvatar || item.headImg || null
+    item.portraitUrl || item.photoUrl || item.userAvatar || item.headImg || item.headPic || null
 
   let followers = null
-  for (const k of ['followerCount','followers','copierCount','copyCount','followCount','followerNum']) {
+  for (const k of ['followerCount','followers','copierCount','copyCount','followCount','followerNum','currentTraceNum']) {
     if (item[k] != null) { followers = parseInt(item[k]) || null; break }
   }
 
@@ -109,7 +140,7 @@ function findTraderArrays(obj, depth=0) {
     const traders = []
     for (const item of obj) {
       if (item && typeof item === 'object' && !Array.isArray(item)) {
-        const parsed = parseGeneric(item)
+        const parsed = parseGeneric({...item}) // clone to avoid mutation
         if (parsed) traders.push(parsed)
       }
     }
@@ -196,10 +227,29 @@ const PLATFORMS = {
     source: 'bitget_futures', market_type: 'futures',
     url: 'https://www.bitget.com/copy-trading/futures/all?rule=2&sort=0',
     apiReplay: async (page, traders) => {
-      // Bitget uses traderViewV3 POST API with pagination
-      // Discover the API from intercepted calls, then replay
-      for (const sort of [0, 1, 2]) { // ROI, PnL, Followers
-        for (let pg = 1; pg <= 20; pg++) {
+      // Bitget traderViewV3 API is CF protected, but the page calls it when we change sort tabs
+      // Click through sort tabs to get different data sets
+      const sortTabs = ['ROI', 'Profit', 'AUM', 'Copiers']
+      for (const tab of sortTabs) {
+        const clicked = await page.evaluate((tabName) => {
+          const links = [...document.querySelectorAll('a, button, div[role="button"], span')]
+          const el = links.find(l => l.textContent?.trim() === tabName || l.textContent?.includes(tabName))
+          if (el) { el.click(); return true }
+          return false
+        }, tab).catch(() => false)
+        if (clicked) {
+          await sleep(5000)
+          // Scroll down to load more
+          for (let i = 0; i < 10; i++) {
+            await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight)).catch(()=>{})
+            await sleep(1500)
+          }
+          process.stdout.write(`\r  Bitget-F ${tab}: ${traders.size}`)
+        }
+      }
+      // Also try page.evaluate fetch (may work if CF cookie is set)
+      for (const sort of [0, 1, 2]) {
+        for (let pg = 2; pg <= 12 && traders.size < 500; pg++) {
           const result = await page.evaluate(async ({ pg, sort }) => {
             try {
               const r = await fetch('/v1/trigger/trace/public/traderViewV3', {
@@ -207,11 +257,12 @@ const PLATFORMS = {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ pageNo: pg, pageSize: 30, languageType: 7, sortType: sort, followType: 2 })
               })
-              return await r.json()
+              const text = await r.text()
+              try { return JSON.parse(text) } catch { return { _html: text.substring(0,100) } }
             } catch(e) { return { _err: e.message } }
           }, { pg, sort }).catch(() => null)
           
-          if (!result || result._err) break
+          if (!result || result._err || result._html) break
           const arrays = findTraderArrays(result)
           let newCount = 0
           for (const arr of arrays) {
@@ -219,9 +270,9 @@ const PLATFORMS = {
               if (!traders.has(t.id)) { traders.set(t.id, t); newCount++ }
             }
           }
-          if (newCount === 0 && pg > 1) break
-          process.stdout.write(`\r  Bitget-F sort${sort} p${pg}: ${traders.size}`)
-          await sleep(300)
+          if (newCount === 0 && pg > 2) break
+          process.stdout.write(`\r  Bitget-F api sort${sort} p${pg}: ${traders.size}`)
+          await sleep(500)
         }
       }
     }
@@ -231,8 +282,24 @@ const PLATFORMS = {
     source: 'bitget_spot', market_type: 'spot',
     url: 'https://www.bitget.com/copy-trading/spot',
     apiReplay: async (page, traders) => {
+      // Click sort tabs to trigger API calls
+      const sortTabs = ['ROI', 'Profit', 'Copiers']
+      for (const tab of sortTabs) {
+        await page.evaluate((tabName) => {
+          const links = [...document.querySelectorAll('a, button, div[role="button"], span')]
+          const el = links.find(l => l.textContent?.trim() === tabName || l.textContent?.includes(tabName))
+          if (el) el.click()
+        }, tab).catch(() => {})
+        await sleep(5000)
+        for (let i = 0; i < 5; i++) {
+          await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight)).catch(()=>{})
+          await sleep(1500)
+        }
+        process.stdout.write(`\r  Bitget-S ${tab}: ${traders.size}`)
+      }
+      // Try API fetch for more pages
       for (const sort of [0, 1, 2]) {
-        for (let pg = 1; pg <= 30; pg++) {
+        for (let pg = 2; pg <= 15; pg++) {
           const result = await page.evaluate(async ({ pg, sort }) => {
             try {
               const r = await fetch('/v1/trigger/trace/public/traderViewV3', {
@@ -240,19 +307,19 @@ const PLATFORMS = {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ pageNo: pg, pageSize: 30, languageType: 7, sortType: sort, followType: 3 })
               })
-              return await r.json()
-            } catch(e) { return { _err: e.message } }
+              const text = await r.text()
+              try { return JSON.parse(text) } catch { return null }
+            } catch { return null }
           }, { pg, sort }).catch(() => null)
-          
-          if (!result || result._err) break
+          if (!result) break
           const arrays = findTraderArrays(result)
           let newCount = 0
           for (const arr of arrays) {
             for (const t of arr) { if (!traders.has(t.id)) { traders.set(t.id, t); newCount++ } }
           }
-          if (newCount === 0 && pg > 1) break
-          process.stdout.write(`\r  Bitget-S sort${sort} p${pg}: ${traders.size}`)
-          await sleep(300)
+          if (newCount === 0 && pg > 2) break
+          process.stdout.write(`\r  Bitget-S api sort${sort} p${pg}: ${traders.size}`)
+          await sleep(500)
         }
       }
     }
@@ -409,10 +476,20 @@ async function runPlatform(name) {
     console.log('  API 翻页...')
     await cfg.apiReplay(page, traders)
     console.log()
+    // Write checkpoint to file immediately after API phase to prevent data loss
+    if (traders.size > 50) {
+      const tmpFile = `/tmp/traders-${name}.json`
+      writeFileSync(tmpFile, JSON.stringify({ source: cfg.source, market_type: cfg.market_type, traders: [...traders.values()] }))
+      console.log(`  💾 Checkpoint: ${traders.size} traders`)
+    }
   }
   
-  // Try clicking pagination
-  for (let attempt = 0; attempt < 15; attempt++) {
+  // Skip DOM pagination if we already have plenty from API
+  if (traders.size >= 400) {
+    console.log(`  ⏭ 已有 ${traders.size} traders, 跳过翻页`)
+  }
+  // Try clicking pagination (only if under threshold)
+  for (let attempt = 0; attempt < 15 && traders.size < 400; attempt++) {
     const before = traders.size
     const clicked = await page.evaluate(() => {
       // Next page buttons
@@ -477,41 +554,64 @@ async function runPlatform(name) {
   }
   
   // Check data quality
-  const withRoi = [...traders.values()].filter(t => t.roi != null).length
-  const withPnl = [...traders.values()].filter(t => t.pnl != null).length
+  const traderArr = [...traders.values()]
+  const withRoi = traderArr.filter(t => t.roi != null).length
+  const withPnl = traderArr.filter(t => t.pnl != null).length
   console.log(`\n  数据: ${traders.size} traders (ROI: ${withRoi}, PnL: ${withPnl})`)
   
-  // Save
+  // Write final data to temp file
+  const tmpFile = `/tmp/traders-${name}.json`
   if (traders.size > 0) {
-    const saved = await save(cfg.source, traders, cfg.market_type)
-    console.log(`  ✅ ${saved} saved`)
-  } else {
-    console.log('  ❌ 0')
+    writeFileSync(tmpFile, JSON.stringify({ source: cfg.source, market_type: cfg.market_type, traders: traderArr }))
   }
   
-  await ctx.close()
+  // Close browser AND kill Chrome to free memory
+  traders.clear()
+  await ctx.close().catch(()=>{})
+  try { execSync(`pkill -9 -f "remote-debugging-port=${PORT}"`, { stdio: 'ignore' }) } catch {}
+  await sleep(3000)
 }
 
 async function main() {
   await fetch('http://127.0.0.1:9090/configs', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'global' }) }).catch(()=>{})
   await sleep(1000)
   
-  await launchChrome()
-  
   const target = process.argv[2]
   const platforms = target && !target.startsWith('-') ? [target] : 
-    ['xt','bitget_f','bitget_s','coinex','kucoin','bybit','mexc','bingx','phemex','weex','lbank']
+    ['bitget_f','bitget_s','coinex','kucoin','bybit','mexc','bingx','phemex','weex','lbank','xt']
   
   for (const name of platforms) {
     if (!PLATFORMS[name]) { console.log(`❌ unknown: ${name}`); continue }
+    const cfg = PLATFORMS[name]
     try {
+      // Launch fresh Chrome for each platform to prevent OOM
+      try { execSync(`pkill -9 -f "remote-debugging-port=${PORT}"`, { stdio: 'ignore' }) } catch {}
+      await sleep(3000)
+      await launchChrome()
       await runPlatform(name)
     } catch(e) {
       console.log(`  ❌ ${name}: ${e.message?.substring(0,60)}`)
     }
+    // Clean up Chrome
+    try { execSync(`pkill -9 -f "remote-debugging-port=${PORT}"`, { stdio: 'ignore' }) } catch {}
+    await sleep(3000)
+    
+    // Save from temp file (browser already closed)
+    const tmpFile = `/tmp/traders-${name}.json`
+    try {
+      const raw = readFileSync(tmpFile, 'utf8')
+      const { traders: loadedTraders, source, market_type } = JSON.parse(raw)
+      if (loadedTraders.length > 0) {
+        const tradersMap = new Map(loadedTraders.map(t => [t.id, t]))
+        const saved = await save(source, tradersMap, market_type)
+        console.log(`  ✅ ${saved} saved to DB`)
+      }
+      execSync(`rm ${tmpFile}`, { stdio: 'ignore' })
+    } catch(e) {
+      if (e.code !== 'ENOENT') console.log(`  ⚠ Save error: ${e.message?.substring(0,60)}`)
+    }
   }
   
-  try { execSync('pkill -f "remote-debugging-port=9338"', { stdio: 'ignore' }) } catch {}
   await fetch('http://127.0.0.1:9090/configs', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'direct' }) }).catch(()=>{})
 }
 

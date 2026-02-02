@@ -373,7 +373,7 @@ async function saveTraders(traders, period) {
 }
 
 async function main() {
-  const periods = getTargetPeriods(['30D'])
+  const periods = getTargetPeriods(['7D', '30D', '90D'])
   const startTime = Date.now()
 
   console.log('\n' + '='.repeat(60))
