@@ -150,29 +150,51 @@ async function refreshBinance(type) {
     : 'https://www.binance.com/bapi/futures/v1/friendly/future/spot-copy-trade/common/home-page-list'
   const source = isFutures ? 'binance_futures' : 'binance_spot'
   
-  // Run in subprocess to limit memory
   try {
-    const result = execSync(`node -e "
-      const{createClient}=require('@supabase/supabase-js');const{spawnSync}=require('child_process');
-      const sb=createClient(process.env.NEXT_PUBLIC_SUPABASE_URL,process.env.SUPABASE_SERVICE_ROLE_KEY);
-      const clip=(v,lo,hi)=>Math.max(lo,Math.min(hi,v));
-      function cs(r,p,d,w){if(r==null)return null;return clip(Math.round((Math.min(70,r>0?Math.log(1+r/100)*25:Math.max(-70,r/100*50))+(d!=null?Math.max(0,15*(1-d/100)):7.5)+(w!=null?Math.min(15,w/100*15):7.5))*10)/10,0,100)}
-      (async()=>{
-        const all=[];
-        for(let p=1;p<=25;p++){
-          const r=spawnSync('curl',['-s','-m','10','--compressed','-x','${PROXY}','-X','POST','${url}','-H','Content-Type: application/json','-H','User-Agent: Mozilla/5.0','-d',JSON.stringify(${isFutures ? '{pageNumber:p,pageSize:20,timeRange:\"30D\",dataType:\"ROI\",favoriteOnly:false}' : '{pageNumber:p,pageSize:20,timeRange:\"30D\",dataType:\"ROI\",order:\"DESC\",portfolioType:\"ALL\"}'})],{encoding:'utf8'});
-          try{const d=JSON.parse(r.stdout);const list=d.data?.list||[];if(!list.length)break;
-          for(const it of list)all.push({id:it.leadPortfolioId||'',n:it.nickname||'',roi:${isFutures ? 'it.roi!=null?parseFloat(it.roi)*100:null' : 'it.roi!=null?parseFloat(it.roi):null'},pnl:it.pnl!=null?parseFloat(it.pnl):null,wr:it.winRate!=null?parseFloat(it.winRate)*100:null,dd:${isFutures ? 'it.maxDrawDown!=null?parseFloat(it.maxDrawDown)*100:null' : 'it.mdd!=null?parseFloat(it.mdd):null'}})}catch{break}
+    const all = []
+    for (let p = 1; p <= 25; p++) {
+      const body = isFutures
+        ? { pageNumber: p, pageSize: 20, timeRange: '30D', dataType: 'ROI', favoriteOnly: false }
+        : { pageNumber: p, pageSize: 20, timeRange: '30D', dataType: 'ROI', order: 'DESC', portfolioType: 'ALL' }
+      
+      const raw = curl(url, {
+        proxy: PROXY, method: 'POST', timeout: 15,
+        headers: { 'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0' },
+        body: JSON.stringify(body),
+      })
+      
+      try {
+        const d = JSON.parse(raw)
+        const list = d.data?.list || []
+        if (!list.length) break
+        for (const it of list) {
+          all.push({
+            id: it.leadPortfolioId || '',
+            name: it.nickname || '',
+            roi: isFutures
+              ? (it.roi != null ? parseFloat(it.roi) * 100 : null)
+              : (it.roi != null ? parseFloat(it.roi) : null),
+            pnl: it.pnl != null ? parseFloat(it.pnl) : null,
+            wr: it.winRate != null ? parseFloat(it.winRate) * 100 : null,
+            dd: isFutures
+              ? (it.maxDrawDown != null ? parseFloat(it.maxDrawDown) * 100 : null)
+              : (it.mdd != null ? parseFloat(it.mdd) : null),
+          })
         }
-        const now=new Date().toISOString();let saved=0;
-        for(let i=0;i<all.length;i+=50)try{await sb.from('trader_sources').upsert(all.slice(i,i+50).map(t=>({source:'${source}',source_trader_id:t.id,handle:t.n||t.id,market_type:'${isFutures ? 'futures' : 'spot'}',is_active:true})),{onConflict:'source,source_trader_id'})}catch{}
-        for(let i=0;i<all.length;i+=30){const{error}=await sb.from('trader_snapshots').upsert(all.slice(i,i+30).map((t,j)=>({source:'${source}',source_trader_id:t.id,season_id:'30D',rank:i+j+1,roi:t.roi,pnl:t.pnl,win_rate:t.wr,max_drawdown:t.dd,arena_score:cs(t.roi,t.pnl,t.dd,t.wr),captured_at:now})),{onConflict:'source,source_trader_id,season_id'});if(!error)saved+=Math.min(30,all.length-i)}
-        console.log(saved)
-      })();
-    "`, { cwd: process.cwd(), encoding: 'utf8', timeout: 90000 })
-    const n = parseInt(result.trim())
+      } catch { break }
+    }
+    
+    const traders = all.filter(t => t.id).map(t => ({
+      id: t.id, name: t.name, roi: t.roi, pnl: t.pnl, wr: t.wr, dd: t.dd,
+      market: isFutures ? 'futures' : 'spot',
+    }))
+    
+    const n = await saveBatch(source, traders)
     return n > 0 ? `✅ ${n}` : '❌'
-  } catch { return '❌' }
+  } catch (e) {
+    console.log(`    Error: ${e.message?.substring(0, 80)}`)
+    return '❌'
+  }
 }
 
 // ============================================================
