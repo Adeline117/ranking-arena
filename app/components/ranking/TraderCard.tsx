@@ -161,8 +161,8 @@ export const TraderCard = memo(function TraderCard({
               </Text>
               {(() => {
                 const conf = trader.score_confidence ?? (
-                  trader.win_rate == null && trader.max_drawdown == null ? 'minimal' :
-                  trader.win_rate == null || trader.max_drawdown == null ? 'partial' : 'full'
+                  (!trader.win_rate) && (!trader.max_drawdown) ? 'minimal' :
+                  (!trader.win_rate) || (!trader.max_drawdown) ? 'partial' : 'full'
                 )
                 if (conf === 'full') return null
                 return (
@@ -194,7 +194,7 @@ export const TraderCard = memo(function TraderCard({
           {/* Win Rate */}
           <Box style={{ textAlign: 'center', padding: `${tokens.spacing[2]} 0`, background: tokens.glass.bg.light, borderRadius: tokens.radius.md }}>
             <Text size="xs" color="tertiary" style={{ marginBottom: 2, display: 'block', color: CARD_TEXT_TERTIARY }}>{language === 'zh' ? '胜率' : 'Win%'}</Text>
-            {trader.win_rate != null ? (
+            {trader.win_rate ? (
               <Text size="md" weight="semibold" style={{ color: trader.win_rate > 50 ? tokens.colors.accent.success : CARD_TEXT_TERTIARY }}>
                 {trader.win_rate.toFixed(0)}%
               </Text>
@@ -206,7 +206,7 @@ export const TraderCard = memo(function TraderCard({
           {/* Max Drawdown */}
           <Box style={{ textAlign: 'center', padding: `${tokens.spacing[2]} 0`, background: tokens.glass.bg.light, borderRadius: tokens.radius.md }}>
             <Text size="xs" color="tertiary" style={{ marginBottom: 2, display: 'block', color: CARD_TEXT_TERTIARY }}>MDD</Text>
-            {trader.max_drawdown != null ? (
+            {trader.max_drawdown ? (
               <Text size="md" weight="semibold" style={{ color: CARD_ACCENT_ERROR }}>
                 -{Math.abs(trader.max_drawdown).toFixed(0)}%
               </Text>

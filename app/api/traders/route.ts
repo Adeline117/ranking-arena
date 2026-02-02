@@ -396,9 +396,11 @@ async function fetchTradersData(
       yesterdayEnd.setHours(23, 59, 59, 999)
 
       // Get yesterday's snapshot trader IDs ordered by arena_score
+      // Must filter by same season_id (timeRange) to compare apples-to-apples
       const { data: yesterdaySnapshots } = await supabase
         .from('trader_snapshots')
         .select('source_trader_id, source, arena_score')
+        .eq('season_id', timeRange)
         .gte('captured_at', yesterdayStart.toISOString())
         .lte('captured_at', yesterdayEnd.toISOString())
         .order('arena_score', { ascending: false })

@@ -324,7 +324,8 @@ export function getScoreConfidence(
 ): ScoreConfidence {
   // DD=0 也视为缺失数据（通常是未提供而非真正零回撤）
   const hasMdd = maxDrawdown !== null && maxDrawdown !== undefined && maxDrawdown !== 0
-  const hasWr = winRate !== null && winRate !== undefined
+  // WR=0 也视为缺失数据（大多数交易所在没有数据时报 0%，而非真正 0% 胜率）
+  const hasWr = winRate !== null && winRate !== undefined && winRate !== 0
 
   if (hasMdd && hasWr) return 'full'
   if (hasMdd || hasWr) return 'partial'
