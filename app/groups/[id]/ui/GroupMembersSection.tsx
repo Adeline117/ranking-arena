@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
 import { ListSkeleton } from '@/app/components/ui/Skeleton'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 interface Group {
   id: string
@@ -30,11 +31,6 @@ interface GroupInfoModalProps {
   language: string
   onClose: () => void
   onShowMembers: () => void
-}
-
-// Shared bilingual text helper
-function t(zh: string, en: string, language: string): string {
-  return language === 'zh' ? zh : en
 }
 
 // Shared modal backdrop styles
@@ -137,10 +133,10 @@ function MemberAvatar({ avatarUrl, handle, size = 36 }: MemberAvatarProps): Reac
 // Role badge component
 interface RoleBadgeProps {
   role: string
-  language: string
 }
 
-function RoleBadge({ role, language }: RoleBadgeProps): React.ReactElement {
+function RoleBadge({ role }: RoleBadgeProps): React.ReactElement {
+  const { t } = useLanguage()
   const isOwner = role === 'owner'
   const isAdmin = role === 'admin'
   const isSpecial = isOwner || isAdmin
@@ -152,10 +148,10 @@ function RoleBadge({ role, language }: RoleBadgeProps): React.ReactElement {
       : tokens.colors.bg.tertiary || tokens.colors.bg.secondary
 
   const label = isOwner
-    ? t('组长', 'Owner', language)
+    ? t('owner')
     : isAdmin
-      ? t('管理员', 'Admin', language)
-      : t('成员', 'Member', language)
+      ? t('admin')
+      : t('groupMember')
 
   return (
     <span
@@ -174,6 +170,7 @@ function RoleBadge({ role, language }: RoleBadgeProps): React.ReactElement {
 }
 
 export function GroupInfoModal({ group, language, onClose, onShowMembers }: GroupInfoModalProps): React.ReactElement {
+  const { t } = useLanguage()
   const description = (language === 'en' && group.description_en) ? group.description_en : group.description
   // Use rules_json for bilingual rules, fallback to rules
   const rules = group.rules_json
@@ -185,7 +182,7 @@ export function GroupInfoModal({ group, language, onClose, onShowMembers }: Grou
         month: 'long',
         day: 'numeric',
       })
-    : t('未知', 'Unknown', language)
+    : t('unknown')
 
   return (
     <Box style={modalBackdropStyle} onClick={onClose}>
@@ -202,26 +199,26 @@ export function GroupInfoModal({ group, language, onClose, onShowMembers }: Grou
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        <ModalHeader title={t('小组信息', 'Group Info', language)} onClose={onClose} />
+        <ModalHeader title={t('groupInfo')} onClose={onClose} />
 
         <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}>
-          <InfoRow label={t('组长', 'Owner', language)}>
+          <InfoRow label={t('owner')}>
             <Text size="md">
               {group.owner_handle ? (
                 <Link href={`/u/${group.owner_handle}`} style={{ color: tokens.colors.accent?.primary || '#8b6fa8', textDecoration: 'none' }}>
                   @{group.owner_handle}
                 </Link>
-              ) : t('暂无', 'None', language)}
+              ) : t('none')}
             </Text>
           </InfoRow>
 
-          <InfoRow label={t('小组简介', 'Description', language)}>
+          <InfoRow label={t('groupDescription')}>
             <Text size="md" style={{ lineHeight: 1.6 }}>
-              {description || t('暂无简介', 'No description', language)}
+              {description || t('noDescription')}
             </Text>
           </InfoRow>
 
-          <InfoRow label={t('发言规则', 'Rules', language)}>
+          <InfoRow label={t('groupRules')}>
             {group.rules_json && group.rules_json.length > 0 ? (
               <Box as="ol" style={{ paddingLeft: tokens.spacing[4], margin: 0 }}>
                 {group.rules_json.map((rule, index) => (
@@ -234,29 +231,29 @@ export function GroupInfoModal({ group, language, onClose, onShowMembers }: Grou
               </Box>
             ) : (
               <Text size="md" style={{ lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
-                {rules || t('暂无规则', 'No rules set', language)}
+                {rules || t('noRulesSet')}
               </Text>
             )}
           </InfoRow>
 
-          <InfoRow label={t('创建时间', 'Created', language)}>
+          <InfoRow label={t('createdAt')}>
             <Text size="md">{createdDate}</Text>
           </InfoRow>
 
-          <InfoRow label={t('成员数', 'Members', language)}>
+          <InfoRow label={t('memberCount')}>
             <Text
               size="md"
               style={{ cursor: 'pointer', textDecoration: 'underline' }}
               onClick={() => { onClose(); onShowMembers() }}
             >
-              {group.member_count || 0} {t('位成员', 'members', language)}
+              {group.member_count || 0} {t('membersUnit')}
             </Text>
           </InfoRow>
         </Box>
 
         <Box style={{ marginTop: tokens.spacing[6], textAlign: 'right' }}>
           <Button variant="secondary" size="sm" onClick={onClose}>
-            {t('关闭', 'Close', language)}
+            {t('close')}
           </Button>
         </Box>
       </Box>
@@ -275,10 +272,9 @@ interface MembersListModalProps {
 // Member row component
 interface MemberRowProps {
   member: GroupMember
-  language: string
 }
 
-function MemberRow({ member, language }: MemberRowProps): React.ReactElement {
+function MemberRow({ member }: MemberRowProps): React.ReactElement {
   return (
     <Link
       href={`/u/${member.handle || member.user_id}`}
@@ -299,13 +295,14 @@ function MemberRow({ member, language }: MemberRowProps): React.ReactElement {
       <Box style={{ flex: 1 }}>
         <Text size="sm" weight="medium">@{member.handle || 'Unknown'}</Text>
       </Box>
-      <RoleBadge role={member.role} language={language} />
+      <RoleBadge role={member.role} />
     </Link>
   )
 }
 
 export function MembersListModal({ members, memberCount, loading, language, onClose }: MembersListModalProps): React.ReactElement {
-  const title = `${t('小组成员', 'Members', language)} (${memberCount})`
+  const { t } = useLanguage()
+  const title = `${t('groupMembers')} (${memberCount})`
 
   function renderContent(): React.ReactElement {
     if (loading) {
@@ -314,14 +311,14 @@ export function MembersListModal({ members, memberCount, loading, language, onCl
     if (members.length === 0) {
       return (
         <Text color="tertiary" style={{ textAlign: 'center', padding: tokens.spacing[4] }}>
-          {t('暂无成员', 'No members', language)}
+          {t('noMembersData')}
         </Text>
       )
     }
     return (
       <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
         {members.map((member) => (
-          <MemberRow key={member.user_id} member={member} language={language} />
+          <MemberRow key={member.user_id} member={member} />
         ))}
       </Box>
     )
@@ -346,7 +343,7 @@ export function MembersListModal({ members, memberCount, loading, language, onCl
         {renderContent()}
         <Box style={{ marginTop: tokens.spacing[4], textAlign: 'right' }}>
           <Button variant="secondary" size="sm" onClick={onClose}>
-            {t('关闭', 'Close', language)}
+            {t('close')}
           </Button>
         </Box>
       </Box>

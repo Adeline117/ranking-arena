@@ -59,119 +59,45 @@ const TESTIMONIALS = [
   {
     name: 'Alex T.',
     avatar: '🧑‍💻',
-    role: '全职交易员',
-    roleEn: 'Full-time Trader',
-    content: '风险预警功能帮我避免了一次大亏损，物超所值！',
-    contentEn: 'Risk alerts helped me avoid a major loss. Worth every penny!',
+    roleKey: 'testimonialRole1',
+    contentKey: 'testimonialContent1',
   },
   {
     name: 'Michael K.',
     avatar: '👨‍💼',
-    role: '投资顾问',
-    roleEn: 'Investment Advisor',
-    content: 'Arena Score 评分系统非常专业，让筛选交易员变得简单',
-    contentEn: 'Arena Score is very professional, makes screening traders easy',
+    roleKey: 'testimonialRole2',
+    contentKey: 'testimonialContent2',
   },
   {
     name: 'Sarah L.',
     avatar: '👩‍🦰',
-    role: '兼职跟单',
-    roleEn: 'Part-time Copier',
-    content: '对比功能很实用，省去了大量手动计算的时间',
-    contentEn: 'Comparison feature is very useful, saves a lot of manual calculation time',
+    roleKey: 'testimonialRole3',
+    contentKey: 'testimonialContent3',
   },
 ]
 
 // Free vs Pro 对比数据
-const getComparisonData = (language: string) => [
-  {
-    feature: language === 'zh' ? '排行榜浏览' : 'Leaderboard Access',
-    free: language === 'zh' ? '前 50 名' : 'Top 50',
-    pro: language === 'zh' ? '完整排行榜' : 'Full Leaderboard',
-  },
-  {
-    feature: language === 'zh' ? '基础筛选' : 'Basic Filters',
-    free: true,
-    pro: true,
-  },
-  {
-    feature: language === 'zh' ? '交易员详情' : 'Trader Details',
-    free: true,
-    pro: true,
-  },
-  {
-    feature: language === 'zh' ? '高级筛选' : 'Advanced Filters',
-    free: false,
-    pro: language === 'zh' ? '多条件叠加 + 保存复用' : 'Multi-filter + Save & Reuse',
-  },
-  {
-    feature: language === 'zh' ? 'CSV 数据导出' : 'CSV Data Export',
-    free: false,
-    pro: language === 'zh' ? '无限制' : 'Unlimited',
-  },
-  {
-    feature: language === 'zh' ? '实时数据更新' : 'Real-time Data',
-    free: language === 'zh' ? '每小时刷新' : 'Hourly refresh',
-    pro: language === 'zh' ? '实时推送' : 'Real-time push',
-  },
-  {
-    feature: language === 'zh' ? 'Smart Money 信号' : 'Smart Money Signals',
-    free: false,
-    pro: language === 'zh' ? '异常交易检测' : 'Anomaly detection',
-  },
-  {
-    feature: language === 'zh' ? '交易员对比' : 'Trader Comparison',
-    free: false,
-    pro: language === 'zh' ? '最多 10 个交易员' : 'Up to 10 traders',
-  },
-  {
-    feature: language === 'zh' ? '交易员变动提醒' : 'Trader Change Alerts',
-    free: false,
-    pro: language === 'zh' ? '站内 + 邮件 + 推送' : 'In-app + Email + Push',
-  },
-  {
-    feature: language === 'zh' ? 'Arena Score 评分' : 'Arena Score',
-    free: language === 'zh' ? '总分' : 'Total Score',
-    pro: language === 'zh' ? '子分数 + 同类分位' : 'Breakdown + Percentile',
-  },
-  {
-    feature: language === 'zh' ? '历史数据' : 'Historical Data',
-    free: language === 'zh' ? '7 天' : '7 days',
-    pro: language === 'zh' ? '1 年' : '1 year',
-  },
-  {
-    feature: language === 'zh' ? 'Pro 徽章 & 专属群组' : 'Pro Badge & Groups',
-    free: false,
-    pro: true,
-  },
+const getComparisonData = (t: (key: string) => string) => [
+  { feature: t('compFeatureLeaderboard'), free: t('compFreeTop50'), pro: t('compProFullLeaderboard') },
+  { feature: t('compFeatureBasicFilters'), free: true, pro: true },
+  { feature: t('compFeatureTraderDetails'), free: true, pro: true },
+  { feature: t('compFeatureAdvancedFilters'), free: false, pro: t('compProMultiFilter') },
+  { feature: t('compFeatureCsvExport'), free: false, pro: t('compProUnlimited') },
+  { feature: t('compFeatureRealtimeData'), free: t('compFreeHourlyRefresh'), pro: t('compProRealtimePush') },
+  { feature: t('compFeatureSmartMoney'), free: false, pro: t('compProAnomalyDetection') },
+  { feature: t('compFeatureTraderCompare'), free: false, pro: t('compProUpTo10Traders') },
+  { feature: t('compFeatureTraderAlerts'), free: false, pro: t('compProInAppEmailPush') },
+  { feature: t('compFeatureArenaScore'), free: t('compFreeTotalScore'), pro: t('compProBreakdownPercentile') },
+  { feature: t('compFeatureHistoricalData'), free: t('compFree7Days'), pro: t('compPro1Year') },
+  { feature: t('compFeatureProBadgeGroups'), free: false, pro: true },
 ]
 
 // FAQ 数据
-const getFaqData = (language: string) => [
-  {
-    q: language === 'zh' ? '可以随时取消订阅吗？' : 'Can I cancel anytime?',
-    a: language === 'zh' 
-      ? '是的，您可以随时取消订阅。取消后，您仍可享受 Pro 权益直到当前计费周期结束。'
-      : 'Yes, you can cancel anytime. After cancellation, you will still enjoy Pro benefits until the end of the current billing cycle.',
-  },
-  {
-    q: language === 'zh' ? '支持哪些支付方式？' : 'What payment methods are supported?',
-    a: language === 'zh'
-      ? '我们支持 Visa、Mastercard、支付宝、微信支付。付款由 Stripe 安全处理。'
-      : 'We support Visa, Mastercard, Alipay, and WeChat Pay. Payments are securely processed by Stripe.',
-  },
-  {
-    q: language === 'zh' ? '有退款政策吗？' : 'Is there a refund policy?',
-    a: language === 'zh' 
-      ? '首次订阅后7天内如不满意，可申请全额退款。请联系 support@arenafi.org。'
-      : 'Within 7 days of your first subscription, you can request a full refund if not satisfied. Contact support@arenafi.org.',
-  },
-  {
-    q: language === 'zh' ? '年付可以切换为月付吗？' : 'Can I switch from yearly to monthly?',
-    a: language === 'zh' 
-      ? '当前订阅到期后，您可以选择不同的计费周期续订。'
-      : 'After your current subscription expires, you can choose a different billing cycle to renew.',
-  },
+const getFaqData = (t: (key: string) => string) => [
+  { q: t('faqCancelQ'), a: t('faqCancelA') },
+  { q: t('faqPaymentQ'), a: t('faqPaymentA') },
+  { q: t('faqRefundQ'), a: t('faqRefundA') },
+  { q: t('faqSwitchPlanQ'), a: t('faqSwitchPlanA') },
 ]
 
 // 价格配置 - 与 Stripe 保持一致
@@ -218,7 +144,7 @@ export default function PricingPage() {
 
   const handleSubscribe = async () => {
     if (!isLoggedIn) {
-      showToast(language === 'zh' ? '请先登录后再订阅' : 'Please login first', 'info')
+      showToast(t('pleaseLoginFirst'), 'info')
       router.push('/login?redirect=/pricing')
       return
     }
@@ -236,7 +162,7 @@ export default function PricingPage() {
       }
 
       if (!session?.access_token) {
-        showToast(language === 'zh' ? '请重新登录' : 'Please login again', 'error')
+        showToast(t('pleaseLoginAgain'), 'error')
         router.push('/login?redirect=/pricing')
         return
       }
@@ -257,7 +183,7 @@ export default function PricingPage() {
       })
       
       if (!response.ok) {
-        let errorMsg = language === 'zh' ? '创建支付会话失败' : 'Failed to create checkout session'
+        let errorMsg = t('createCheckoutFailed')
         try {
           const errorData = await response.json()
           errorMsg = errorData.error || errorMsg
@@ -276,13 +202,10 @@ export default function PricingPage() {
       } else if (data.error) {
         showToast(data.error, 'error')
       } else {
-        showToast(
-          language === 'zh' ? '无法获取支付链接，请稍后重试' : 'Failed to get payment link, please try again',
-          'error'
-        )
+        showToast(t('getPaymentLinkFailed'), 'error')
       }
     } catch (_error) {
-      showToast(language === 'zh' ? '订阅失败，请稍后重试' : 'Subscription failed, please try again', 'error')
+      showToast(t('subscriptionFailed'), 'error')
     } finally {
       setLoading(false)
     }
@@ -352,10 +275,7 @@ export default function PricingPage() {
             {t('pricingSubtitle')}
           </Text>
           <Text size="md" color="secondary" style={{ maxWidth: 500, margin: '0 auto' }}>
-            {language === 'zh'
-              ? '专业的数据聚合与分析工具，全面了解交易员表现与风险'
-              : 'Professional data aggregation and analytics tools to understand trader performance and risks'
-            }
+            {t('pricingDescription')}
           </Text>
         </Box>
 
@@ -378,7 +298,7 @@ export default function PricingPage() {
             }}
           >
             <Text size="lg" weight="bold" style={{ marginBottom: tokens.spacing[5] }}>
-              {language === 'zh' ? 'Pro 会员专属功能' : 'Pro Member Exclusive Features'}
+              {t('proExclusiveFeatures')}
             </Text>
             
             <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}>
@@ -447,7 +367,7 @@ export default function PricingPage() {
               }}
             >
               <Text size="xs" weight="bold" style={{ color: '#fff' }}>
-                {language === 'zh' ? '限时优惠' : 'Limited Offer'}
+                {t('limitedOffer')}
               </Text>
             </Box>
 
@@ -521,7 +441,7 @@ export default function PricingPage() {
                     color: '#fff',
                   }}
                 >
-                  {language === 'zh' ? `省 ${yearlySavings}%` : `Save ${yearlySavings}%`}
+                  {t('savePercent').replace('{percent}', String(yearlySavings))}
                 </Box>
                 
                 <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -545,10 +465,7 @@ export default function PricingPage() {
                       </Text>
                     </Box>
                     <Text size="xs" color="tertiary">
-                      {language === 'zh' 
-                        ? `约 $${(PRICING.yearly.price / 12).toFixed(1)}/月`
-                        : `~$${(PRICING.yearly.price / 12).toFixed(1)}/month`
-                      }
+                      {t('approxPerMonth').replace('{price}', (PRICING.yearly.price / 12).toFixed(1))}
                     </Text>
                   </Box>
                 </Box>
@@ -573,7 +490,7 @@ export default function PricingPage() {
               {loading ? t('processing') : (
                 isLoggedIn 
                   ? `${t('startSubscription')} - $${selectedPlan === 'yearly' ? PRICING.yearly.price : PRICING.monthly.price}`
-                  : (language === 'zh' ? '登录后订阅' : 'Login to Subscribe')
+                  : t('loginToSubscribe')
               )}
             </Button>
 
@@ -624,7 +541,7 @@ export default function PricingPage() {
                 22
               </Text>
               <Text size="sm" color="secondary">
-                {language === 'zh' ? '交易所覆盖' : 'Exchanges Supported'}
+                {t('exchangesCovered')}
               </Text>
             </Box>
             <Box>
@@ -632,15 +549,15 @@ export default function PricingPage() {
                 26+
               </Text>
               <Text size="sm" color="secondary">
-                {language === 'zh' ? '数据源' : 'Data Sources'}
+                {t('dataSources')}
               </Text>
             </Box>
             <Box>
               <Text size="3xl" weight="black" style={{ color: 'var(--color-pro-gradient-start)' }}>
-                90{language === 'zh' ? '天' : 'D'}
+                {t('ninetyDays')}
               </Text>
               <Text size="sm" color="secondary">
-                {language === 'zh' ? '历史数据' : 'Historical Data'}
+                {t('historicalData')}
               </Text>
             </Box>
             <Box>
@@ -648,14 +565,14 @@ export default function PricingPage() {
                 24/7
               </Text>
               <Text size="sm" color="secondary">
-                {language === 'zh' ? '数据更新' : 'Data Updates'}
+                {t('dataUpdates')}
               </Text>
             </Box>
           </Box>
 
           {/* 用户评价 */}
           <Text size="lg" weight="bold" style={{ marginBottom: tokens.spacing[5] }}>
-            {language === 'zh' ? '用户评价' : 'What Our Users Say'}
+            {t('userTestimonials')}
           </Text>
           
           <Box
@@ -683,7 +600,7 @@ export default function PricingPage() {
                   <QuoteIcon size={24} />
                 </Box>
                 <Text size="sm" color="secondary" style={{ marginBottom: tokens.spacing[4], lineHeight: 1.6 }}>
-                  &ldquo;{language === 'zh' ? testimonial.content : testimonial.contentEn}&rdquo;
+                  &ldquo;{t(testimonial.contentKey)}&rdquo;
                 </Text>
                 <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3] }}>
                   <Box
@@ -703,7 +620,7 @@ export default function PricingPage() {
                   <Box>
                     <Text size="sm" weight="bold">{testimonial.name}</Text>
                     <Text size="xs" color="tertiary">
-                      {language === 'zh' ? testimonial.role : testimonial.roleEn}
+                      {t(testimonial.roleKey)}
                     </Text>
                   </Box>
                 </Box>
@@ -723,7 +640,7 @@ export default function PricingPage() {
           }}
         >
           <Text size="lg" weight="bold" style={{ textAlign: 'center', marginBottom: tokens.spacing[6] }}>
-            {language === 'zh' ? 'Free vs Pro 功能对比' : 'Free vs Pro Comparison'}
+            {t('freeVsProComparison')}
           </Text>
           
           <Box style={{ overflowX: 'auto' }}>
@@ -738,7 +655,7 @@ export default function PricingPage() {
                     fontSize: tokens.typography.fontSize.sm,
                     fontWeight: 600,
                   }}>
-                    {language === 'zh' ? '功能' : 'Feature'}
+                    {t('feature')}
                   </th>
                   <th style={{ 
                     textAlign: 'center', 
@@ -765,7 +682,7 @@ export default function PricingPage() {
                 </tr>
               </thead>
               <tbody>
-                {getComparisonData(language).map((row, index) => (
+                {getComparisonData(t).map((row, index) => (
                   <tr key={index}>
                     <td style={{ 
                       padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
@@ -823,11 +740,11 @@ export default function PricingPage() {
           }}
         >
           <Text size="lg" weight="bold" style={{ textAlign: 'center', marginBottom: tokens.spacing[6] }}>
-            {language === 'zh' ? '常见问题' : 'Frequently Asked Questions'}
+            {t('faq')}
           </Text>
           
           <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}>
-            {getFaqData(language).map((faq, index) => (
+            {getFaqData(t).map((faq, index) => (
               <Box
                 key={index}
                 style={{
@@ -851,16 +768,16 @@ export default function PricingPage() {
         {/* 底部 CTA */}
         <Box style={{ marginTop: tokens.spacing[10], textAlign: 'center' }}>
           <Text size="sm" color="tertiary">
-            {language === 'zh' ? '还有其他问题？' : 'Have more questions?'}
-            <Link 
-              href="/help" 
-              style={{ 
-                color: 'var(--color-pro-gradient-start)', 
+            {t('haveMoreQuestions')}
+            <Link
+              href="/help"
+              style={{
+                color: 'var(--color-pro-gradient-start)',
                 marginLeft: 4,
                 textDecoration: 'none',
               }}
             >
-              {language === 'zh' ? '联系我们' : 'Contact Us'}
+              {t('contactUs')}
             </Link>
           </Text>
         </Box>

@@ -93,11 +93,13 @@ function TraderContent(props: { params: { handle: string } | Promise<{ handle: s
   const pathname = usePathname()
   const { isPro } = useSubscription()
 
-  // Use refs to avoid unnecessary refetches when language/showToast changes
+  // Use refs to avoid unnecessary refetches when language/showToast/t changes
   const showToastRef = useRef(showToast)
   const languageRef = useRef(language)
+  const tRef = useRef(t)
   useEffect(() => { showToastRef.current = showToast }, [showToast])
   useEffect(() => { languageRef.current = language }, [language])
+  useEffect(() => { tRef.current = t }, [t])
 
   const [handle, setHandle] = useState<string>('')
   const [email, setEmail] = useState<string | null>(null)
@@ -188,7 +190,7 @@ function TraderContent(props: { params: { handle: string } | Promise<{ handle: s
   useEffect(() => {
     if (fetchError && !traderData) {
       showToastRef.current(
-        languageRef.current === 'zh' ? '加载失败，请稍后重试' : 'Failed to load, please try again',
+        tRef.current('loadFailedRetryMsg'),
         'error'
       )
     }
@@ -319,7 +321,7 @@ function TraderContent(props: { params: { handle: string } | Promise<{ handle: s
                     textAlign: 'center',
                   }}>
                     <Text size="sm" color="tertiary">
-                      {language === 'zh' ? '暂无绩效数据' : 'No performance data available'}
+                      {t('noPerformanceData')}
                     </Text>
                   </Box>
                 )}
@@ -380,7 +382,7 @@ function TraderContent(props: { params: { handle: string } | Promise<{ handle: s
                       textAlign: 'center',
                     }}>
                       <Text size="sm" color="tertiary">
-                        {language === 'zh' ? '暂无统计数据' : 'No statistics available'}
+                        {t('noStatsData')}
                       </Text>
                     </Box>
                   )

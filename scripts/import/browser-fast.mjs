@@ -145,7 +145,7 @@ async function run() {
     const batch = [...traderMap.values()]
     if (batch.length > totalSaved) {
       const newOnes = batch.slice(totalSaved)
-      const n = await saveBatch(SOURCES[platform], newOnes, 'current_30d')
+      const n = await saveBatch(SOURCES[platform], newOnes, '30D')
       totalSaved += n
       process.stdout.write(` 💾${totalSaved}`)
     }
@@ -236,7 +236,7 @@ async function run() {
     clearInterval(saveTimer)
     const batch = [...traderMap.values()]
     if (batch.length) {
-      const n = await saveBatch(SOURCES[platform], batch, 'current_30d')
+      const n = await saveBatch(SOURCES[platform], batch, '30D')
       console.log(`  紧急保存: ${n}`)
     }
   } finally {

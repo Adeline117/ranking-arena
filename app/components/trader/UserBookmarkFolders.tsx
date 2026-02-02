@@ -31,7 +31,7 @@ type UserBookmarkFoldersProps = {
  * 在用户主页右侧展示公开的收藏夹
  */
 export default function UserBookmarkFolders({ userId, isOwnProfile = false }: UserBookmarkFoldersProps) {
-  const { language } = useLanguage()
+  const { t } = useLanguage()
   const { showToast } = useToast()
   const router = useRouter()
   const { accessToken, userId: currentUserId } = useAuthSession()
@@ -137,11 +137,11 @@ export default function UserBookmarkFolders({ userId, isOwnProfile = false }: Us
       }
     } catch (err) {
       console.error('Error toggling subscription:', err)
-      showToast(language === 'zh' ? '操作失败，请重试' : 'Operation failed, please try again', 'error')
+      showToast(t('operationFailedRetry'), 'error')
     } finally {
       setSubscribing(prev => ({ ...prev, [folderId]: false }))
     }
-  }, [accessToken, subscriptions, router, showToast, language])
+  }, [accessToken, subscriptions, router, showToast, t])
 
   if (loading) {
     return null
@@ -158,7 +158,7 @@ export default function UserBookmarkFolders({ userId, isOwnProfile = false }: Us
   }
 
   return (
-    <Card title={language === 'zh' ? '收藏夹' : 'Bookmark Folders'}>
+    <Card title={t('bookmarkFoldersTitle')}>
       <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
         {folders.map((folder) => (
           <Link
@@ -223,14 +223,14 @@ export default function UserBookmarkFolders({ userId, isOwnProfile = false }: Us
                       borderRadius: tokens.radius.sm,
                     }}
                   >
-                    {language === 'zh' ? '私密' : 'Private'}
+                    {t('privateFolder')}
                   </span>
                 )}
               </Box>
               <Text size="xs" color="tertiary">
-                {folder.post_count} {language === 'zh' ? '个收藏' : 'bookmarks'}
+                {t('bookmarksCount').replace('{n}', String(folder.post_count))}
                 {!isOwnProfile && (folder.subscriber_count || 0) > 0 && (
-                  <> · {folder.subscriber_count} {language === 'zh' ? '人收藏' : 'subscribers'}</>
+                  <> · {t('subscriberCount').replace('{n}', String(folder.subscriber_count))}</>
                 )}
               </Text>
             </Box>
@@ -264,12 +264,12 @@ export default function UserBookmarkFolders({ userId, isOwnProfile = false }: Us
                 ) : subscriptions[folder.id] ? (
                   <>
                     <span>★</span>
-                    {language === 'zh' ? '已收藏' : 'Saved'}
+                    {t('saved')}
                   </>
                 ) : (
                   <>
                     <span>☆</span>
-                    {language === 'zh' ? '收藏' : 'Save'}
+                    {t('saveBookmark')}
                   </>
                 )}
               </button>
@@ -305,7 +305,7 @@ export default function UserBookmarkFolders({ userId, isOwnProfile = false }: Us
               e.currentTarget.style.background = 'transparent'
             }}
           >
-            {language === 'zh' ? '管理收藏夹' : 'Manage Folders'}
+            {t('manageFolders')}
           </Link>
         )}
       </Box>

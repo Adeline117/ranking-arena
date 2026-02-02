@@ -35,16 +35,16 @@ function getFeedItemHref(item: TraderFeedItem): string {
   return item.groupId ? `/groups/${item.groupId}` : `/posts/${postId}`
 }
 
-function formatRelativeTime(dateString: string, isZh: boolean): string {
+function formatRelativeTime(dateString: string, isZh: boolean, t: (key: string) => string): string {
   const date = new Date(dateString)
   const now = new Date()
   const diff = now.getTime() - date.getTime()
   const hours = Math.floor(diff / (1000 * 60 * 60))
   const days = Math.floor(hours / 24)
 
-  if (hours < 1) return isZh ? '刚刚' : 'Just now'
-  if (hours < 24) return isZh ? `${hours}小时前` : `${hours}h ago`
-  if (days < 7) return isZh ? `${days}天前` : `${days}d ago`
+  if (hours < 1) return t('justNow')
+  if (hours < 24) return t('hoursAgoShort').replace('{n}', String(hours))
+  if (days < 7) return t('daysAgoShort').replace('{n}', String(days))
   return date.toLocaleDateString(isZh ? 'zh-CN' : 'en-US', { month: 'short', day: 'numeric' })
 }
 
@@ -367,7 +367,7 @@ export default function TraderFeed({ items, title, showPostButton = false, onPos
                       </Box>
                     )}
                     <Text size="xs" color="tertiary">
-                      {formatRelativeTime(item.time, isZh)}
+                      {formatRelativeTime(item.time, isZh, t)}
                     </Text>
                   </Box>
                 </Box>

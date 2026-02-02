@@ -170,7 +170,7 @@ export default function PaymentSuccessPage() {
         await refreshPremium()
         setVerificationStatus('success')
         showToast(
-          language === 'zh' ? '会员已激活！' : 'Membership activated!',
+          t('membershipActivated'),
           'success'
         )
         return
@@ -200,7 +200,7 @@ export default function PaymentSuccessPage() {
           await refreshPremium()
           setVerificationStatus('success')
           showToast(
-            language === 'zh' ? '会员已激活！' : 'Membership activated!',
+            t('membershipActivated'),
             'success'
           )
           return
@@ -220,7 +220,7 @@ export default function PaymentSuccessPage() {
         await refreshPremium()
         setVerificationStatus('success')
         showToast(
-          language === 'zh' ? '会员已激活！' : 'Membership activated!',
+          t('membershipActivated'),
           'success'
         )
       } else {
@@ -311,10 +311,10 @@ export default function PaymentSuccessPage() {
               weight="black"
               style={{ marginBottom: tokens.spacing[3] }}
             >
-              {language === 'zh' ? '正在激活会员...' : 'Activating membership...'}
+              {t('activatingMembership')}
             </Text>
             <Text size="md" color="secondary">
-              {language === 'zh' ? '请稍候，正在同步您的订阅状态' : 'Please wait while we sync your subscription'}
+              {t('syncingSubscription')}
             </Text>
           </>
         )}
@@ -336,10 +336,7 @@ export default function PaymentSuccessPage() {
             </Text>
 
             <Text size="md" color="secondary" style={{ marginBottom: tokens.spacing[6] }}>
-              {language === 'zh'
-                ? '恭喜！你已成功升级为 Pro 会员'
-                : 'Congratulations! You are now a Pro member'
-              }
+              {t('congratsProMember')}
             </Text>
 
             {/* Pro 徽章 */}
@@ -373,15 +370,15 @@ export default function PaymentSuccessPage() {
               }}
             >
               <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[3] }}>
-                {language === 'zh' ? '现在你可以：' : 'Now you can:'}
+                {t('nowYouCan')}
               </Text>
               <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
                 {[
-                  language === 'zh' ? '按分类查看交易员排行' : 'View rankings by category',
-                  language === 'zh' ? '接收交易员变动提醒' : 'Get trader change alerts',
-                  language === 'zh' ? '查看详细评分分析' : 'View detailed score analysis',
-                  language === 'zh' ? '使用高级筛选功能' : 'Use advanced filters',
-                  language === 'zh' ? '对比多位交易员' : 'Compare multiple traders',
+                  t('proBenefit1'),
+                  t('proBenefit2'),
+                  t('proBenefit3'),
+                  t('proBenefit4'),
+                  t('proBenefit5'),
                 ].map((text, i) => (
                   <Box key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <Box
@@ -410,7 +407,7 @@ export default function PaymentSuccessPage() {
                     boxShadow: '0 4px 12px var(--color-pro-badge-shadow)',
                   }}
                 >
-                  {language === 'zh' ? '开始探索' : 'Start Exploring'}
+                  {t('startExploring')}
                 </Button>
               </Link>
               <Link href="/settings" style={{ textDecoration: 'none' }}>
@@ -424,10 +421,7 @@ export default function PaymentSuccessPage() {
             </Box>
 
             <Text size="xs" color="tertiary" style={{ marginTop: tokens.spacing[6] }}>
-              {language === 'zh'
-                ? `${countdown} 秒后自动返回首页...`
-                : `Redirecting to home in ${countdown} seconds...`
-              }
+              {t('redirectingCountdown').replace('{seconds}', String(countdown))}
             </Text>
           </>
         )}
@@ -450,21 +444,15 @@ export default function PaymentSuccessPage() {
               weight="black"
               style={{ marginBottom: tokens.spacing[3] }}
             >
-              {language === 'zh' ? '激活处理中' : 'Activation In Progress'}
+              {t('activationInProgress')}
             </Text>
 
             <Text size="md" color="secondary" style={{ marginBottom: tokens.spacing[4] }}>
-              {language === 'zh'
-                ? '您的付款已成功，会员正在激活中。这通常需要几秒钟，请稍后重试。'
-                : 'Your payment was successful. Membership activation is in progress. This usually takes a few seconds, please retry.'
-              }
+              {t('paymentSuccessActivating')}
             </Text>
 
             <Text size="sm" color="tertiary" style={{ marginBottom: tokens.spacing[6] }}>
-              {language === 'zh'
-                ? '如多次重试后仍未激活，请联系 support@arenafi.org'
-                : 'If it still fails after retrying, please contact support@arenafi.org'
-              }
+              {t('contactSupportIfFails')}
             </Text>
 
             <Box style={{ display: 'flex', gap: tokens.spacing[3], justifyContent: 'center' }}>
@@ -479,17 +467,14 @@ export default function PaymentSuccessPage() {
                   boxShadow: '0 4px 12px var(--color-pro-badge-shadow)',
                 }}
               >
-                {retrying
-                  ? (language === 'zh' ? '重试中...' : 'Retrying...')
-                  : (language === 'zh' ? '重新激活' : 'Retry Activation')
-                }
+                {retrying ? t('retrying') : t('retryActivation')}
               </Button>
               <Link href="/" style={{ textDecoration: 'none' }}>
                 <Button
                   variant="secondary"
                   style={{ padding: `${tokens.spacing[3]} ${tokens.spacing[6]}` }}
                 >
-                  {language === 'zh' ? '返回首页' : 'Back to Home'}
+                  {t('backToHome')}
                 </Button>
               </Link>
             </Box>

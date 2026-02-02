@@ -203,7 +203,7 @@ async function run() {
             }
             if (batch.length) {
               // Save immediately!
-              saveNow(cfg.source, batch, 'current_30d').then(n => {
+              saveNow(cfg.source, batch, '30D').then(n => {
                 totalSaved += n
                 process.stdout.write(`\r  拦截: ${traderMap.size} 💾${totalSaved}`)
               }).catch(() => {})

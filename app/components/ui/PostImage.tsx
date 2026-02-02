@@ -3,6 +3,7 @@
 import { useState, type CSSProperties } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 interface PostImageProps {
   src: string
@@ -27,6 +28,7 @@ export default function PostImage({
   maxHeight = 300,
   showErrorMessage = true,
 }: PostImageProps) {
+  const { t } = useLanguage()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
   const [retryCount, setRetryCount] = useState(0)
@@ -96,7 +98,7 @@ export default function PostImage({
         </Box>
         {showErrorMessage && (
           <Text size="xs" color="tertiary" style={{ textAlign: 'center' }}>
-            图片加载失败
+            {t('imageLoadFailed')}
           </Text>
         )}
       </Box>

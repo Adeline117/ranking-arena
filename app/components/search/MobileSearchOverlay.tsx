@@ -5,6 +5,7 @@ import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
 import { CloseIcon } from '../ui/icons'
 import SearchDropdown from './SearchDropdown'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 interface MobileSearchOverlayProps {
   open: boolean
@@ -17,6 +18,7 @@ interface MobileSearchOverlayProps {
  * Optimized for touch with larger tap targets
  */
 export default function MobileSearchOverlay({ open, onClose }: MobileSearchOverlayProps) {
+  const { t } = useLanguage()
   const [query, setQuery] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -73,7 +75,7 @@ export default function MobileSearchOverlay({ open, onClose }: MobileSearchOverl
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="搜索交易员、帖子、群组..."
+            placeholder={t('searchPlaceholder')}
             style={{
               width: '100%',
               padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
@@ -122,7 +124,7 @@ export default function MobileSearchOverlay({ open, onClose }: MobileSearchOverl
             justifyContent: 'center',
           }}
         >
-          <Text size="sm">取消</Text>
+          <Text size="sm">{t('cancel')}</Text>
         </button>
       </Box>
 

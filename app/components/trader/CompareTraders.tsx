@@ -6,6 +6,7 @@ import { X, TrendingUp, TrendingDown, Minus, ChevronUp, ChevronDown, BarChart3, 
 import { tokens } from '@/lib/design-tokens'
 import { formatCompact as formatNumber, formatPercent } from '@/lib/utils/format'
 import { Box, Text, Button } from '../base'
+import { useLanguage } from '../Providers/LanguageProvider'
 import type { Trader } from '../ranking/RankingTable'
 
 type CompareTradersProps = {
@@ -23,47 +24,49 @@ type CompareMetric = {
   colorize?: boolean
 }
 
-const COMPARE_METRICS: CompareMetric[] = [
-  {
-    key: 'roi',
-    label: 'ROI',
-    format: (v) => v != null ? formatPercent(v) : '—',
-    higherIsBetter: true,
-    colorize: true,
-  },
-  {
-    key: 'pnl',
-    label: '总盈亏',
-    format: (v) => v != null ? `$${formatNumber(v)}` : '—',
-    higherIsBetter: true,
-    colorize: true,
-  },
-  {
-    key: 'win_rate',
-    label: '胜率',
-    format: (v) => v != null ? `${Math.round(v)}%` : '—',
-    higherIsBetter: true,
-  },
-  {
-    key: 'max_drawdown',
-    label: '最大回撤',
-    format: (v) => v != null ? `${Math.abs(v).toFixed(1)}%` : '—',
-    higherIsBetter: false,
-    colorize: true,
-  },
-  {
-    key: 'arena_score',
-    label: 'Arena Score',
-    format: (v) => v != null ? v.toFixed(1) : '—',
-    higherIsBetter: true,
-  },
-  {
-    key: 'followers',
-    label: '粉丝数',
-    format: (v) => v != null ? formatNumber(v) : '—',
-    higherIsBetter: true,
-  },
-]
+function getCompareMetrics(t: (key: string) => string): CompareMetric[] {
+  return [
+    {
+      key: 'roi',
+      label: t('roi'),
+      format: (v) => v != null ? formatPercent(v) : '—',
+      higherIsBetter: true,
+      colorize: true,
+    },
+    {
+      key: 'pnl',
+      label: t('totalPnl'),
+      format: (v) => v != null ? `$${formatNumber(v)}` : '—',
+      higherIsBetter: true,
+      colorize: true,
+    },
+    {
+      key: 'win_rate',
+      label: t('winRate'),
+      format: (v) => v != null ? `${Math.round(v)}%` : '—',
+      higherIsBetter: true,
+    },
+    {
+      key: 'max_drawdown',
+      label: t('maxDrawdown'),
+      format: (v) => v != null ? `${Math.abs(v).toFixed(1)}%` : '—',
+      higherIsBetter: false,
+      colorize: true,
+    },
+    {
+      key: 'arena_score',
+      label: 'Arena Score',
+      format: (v) => v != null ? v.toFixed(1) : '—',
+      higherIsBetter: true,
+    },
+    {
+      key: 'followers',
+      label: t('compareFollowers'),
+      format: (v) => v != null ? formatNumber(v) : '—',
+      higherIsBetter: true,
+    },
+  ]
+}
 
 function getBestValue(traders: Trader[], metric: CompareMetric): number | null {
   const values = traders
@@ -116,10 +119,11 @@ function CompareFloatingBar({
   onClear,
   onExpand,
 }: CompareTradersProps & { onExpand: () => void }) {
+  const { t } = useLanguage()
   return (
     <Box
       role="region"
-      aria-label="交易员对比"
+      aria-label={t('compareTraders')}
       style={{
         position: 'fixed',
         bottom: 20,
@@ -140,7 +144,7 @@ function CompareFloatingBar({
         <Box style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <BarChart3 size={18} style={{ color: tokens.colors.accent?.primary || '#8b6fa8' }} />
           <Text size="sm" weight="bold">
-            对比 ({traders.length}/5)
+            {t('compare')} ({traders.length}/5)
           </Text>
         </Box>
         <Box style={{ display: 'flex', gap: 4 }}>
@@ -148,7 +152,7 @@ function CompareFloatingBar({
             variant="text"
             size="sm"
             onClick={onExpand}
-            aria-label="展开对比详情"
+            aria-label={t('expandAll')}
             style={{ padding: 6, borderRadius: 8 }}
           >
             <Maximize2 size={16} />
@@ -159,7 +163,7 @@ function CompareFloatingBar({
             onClick={onClear}
             style={{ padding: 6, borderRadius: 8, color: tokens.colors.text.tertiary }}
           >
-            清空
+            {t('clearAll')}
           </Button>
         </Box>
       </Box>
@@ -184,7 +188,7 @@ function CompareFloatingBar({
             </Text>
             <button
               onClick={() => onRemove(trader.id)}
-              aria-label={`移除 ${trader.handle || trader.id}`}
+              aria-label={`${t('removeTrader')} ${trader.handle || trader.id}`}
               style={{
                 width: 16,
                 height: 16,
@@ -211,7 +215,7 @@ function CompareFloatingBar({
           size="sm"
           style={{ width: '100%' }}
         >
-          查看详细对比
+          {t('compareViewDetail')}
         </Button>
       </Link>
     </Box>
@@ -219,6 +223,8 @@ function CompareFloatingBar({
 }
 
 function CompareDetailTable({ traders, onRemove }: { traders: Trader[]; onRemove: (id: string) => void }) {
+  const { t } = useLanguage()
+  const COMPARE_METRICS = useMemo(() => getCompareMetrics(t), [t])
   const [sortMetric, setSortMetric] = useState<keyof Trader>('roi')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
 
@@ -254,7 +260,7 @@ function CompareDetailTable({ traders, onRemove }: { traders: Trader[]; onRemove
               left: 0,
               zIndex: 1,
             }}>
-              <Text size="xs" weight="bold" color="secondary">交易员</Text>
+              <Text size="xs" weight="bold" color="secondary">{t('trader')}</Text>
             </th>
             {COMPARE_METRICS.map(metric => (
               <th
@@ -370,7 +376,7 @@ function CompareDetailTable({ traders, onRemove }: { traders: Trader[]; onRemove
                 }}>
                   <button
                     onClick={() => onRemove(trader.id)}
-                    aria-label={`移除 ${trader.handle || trader.id}`}
+                    aria-label={`${t('removeTrader')} ${trader.handle || trader.id}`}
                     style={{
                       width: 24,
                       height: 24,
@@ -397,6 +403,7 @@ function CompareDetailTable({ traders, onRemove }: { traders: Trader[]; onRemove
 }
 
 function CompareTraders({ traders, onRemove, onClear, maxTraders = 5 }: CompareTradersProps) {
+  const { t } = useLanguage()
   const [isExpanded, setIsExpanded] = useState(false)
 
   if (traders.length === 0) return null
@@ -406,7 +413,7 @@ function CompareTraders({ traders, onRemove, onClear, maxTraders = 5 }: CompareT
     return (
       <Box
         role="dialog"
-        aria-label="交易员详细对比"
+        aria-label={t('compareTraders')}
         style={{
           position: 'fixed',
           bottom: 20,
@@ -434,7 +441,7 @@ function CompareTraders({ traders, onRemove, onClear, maxTraders = 5 }: CompareT
           <Box style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <BarChart3 size={20} style={{ color: tokens.colors.accent?.primary || '#8b6fa8' }} />
             <Text size="md" weight="bold">
-              交易员对比 ({traders.length}/{maxTraders})
+              {t('compareTraders')} ({traders.length}/{maxTraders})
             </Text>
           </Box>
           <Box style={{ display: 'flex', gap: 8 }}>
@@ -446,11 +453,11 @@ function CompareTraders({ traders, onRemove, onClear, maxTraders = 5 }: CompareT
                 const url = `${window.location.origin}/compare?ids=${traders.map(t => t.id).join(',')}`
                 navigator.clipboard.writeText(url)
               }}
-              aria-label="分享对比"
+              aria-label={t('compareShare')}
               style={{ display: 'flex', alignItems: 'center', gap: 4 }}
             >
               <Share2 size={16} />
-              分享
+              {t('compareShare')}
             </Button>
             <Button
               variant="text"
@@ -458,13 +465,13 @@ function CompareTraders({ traders, onRemove, onClear, maxTraders = 5 }: CompareT
               onClick={onClear}
               style={{ color: tokens.colors.text.tertiary }}
             >
-              清空
+              {t('clearAll')}
             </Button>
             <Button
               variant="text"
               size="sm"
               onClick={() => setIsExpanded(false)}
-              aria-label="收起"
+              aria-label={t('collapse')}
             >
               <ChevronDown size={20} />
             </Button>
@@ -486,7 +493,7 @@ function CompareTraders({ traders, onRemove, onClear, maxTraders = 5 }: CompareT
         }}>
           <Link href={`/compare?ids=${traders.map(t => t.id).join(',')}`}>
             <Button variant="primary" size="sm">
-              查看完整对比页面
+              {t('compareViewFull')}
             </Button>
           </Link>
         </Box>

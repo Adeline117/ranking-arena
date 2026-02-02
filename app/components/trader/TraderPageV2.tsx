@@ -18,8 +18,7 @@ interface TraderPageV2Props {
 }
 
 export default function TraderPageV2({ platform, traderKey }: TraderPageV2Props) {
-  const { language } = useLanguage()
-  const isZh = language === 'zh'
+  const { t } = useLanguage()
   const {
     data,
     error,
@@ -97,15 +96,15 @@ export default function TraderPageV2({ platform, traderKey }: TraderPageV2Props)
             className="grid grid-cols-3 gap-4 p-4 rounded-xl"
             style={{ backgroundColor: tokens.colors.bg.secondary }}
           >
-            <StatItem label={isZh ? '跟单人数' : 'Copiers'} value={data.profile.copier_count} format="number" />
-            <StatItem label={isZh ? '关注者' : 'Followers'} value={data.profile.follower_count} format="number" />
-            <StatItem label={isZh ? '管理资金' : 'AUM'} value={data.profile.aum} format="currency" />
+            <StatItem label={t('copiers')} value={data.profile.copier_count} format="number" />
+            <StatItem label={t('followers')} value={data.profile.follower_count} format="number" />
+            <StatItem label={t('aumLabel')} value={data.profile.aum} format="currency" />
           </div>
 
           {/* Performance Snapshots */}
           <div className="space-y-4">
             <h2 className="text-lg font-semibold" style={{ color: tokens.colors.text.primary }}>
-              {isZh ? '绩效数据' : 'Performance'}
+              {t('performance')}
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <SnapshotCard window="7D" metrics={data.snapshots['7D']} />
@@ -118,7 +117,7 @@ export default function TraderPageV2({ platform, traderKey }: TraderPageV2Props)
           {data.timeseries.equity_curve && data.timeseries.equity_curve.length > 0 && (
             <div className="space-y-3">
               <h2 className="text-lg font-semibold" style={{ color: tokens.colors.text.primary }}>
-                {isZh ? '权益曲线' : 'Equity Curve'}
+                {t('equityCurve')}
               </h2>
               <div className="p-4 rounded-xl" style={{ backgroundColor: tokens.colors.bg.secondary }}>
                 <SimpleChart data={data.timeseries.equity_curve} />
@@ -175,15 +174,14 @@ function StatItem({ label, value, format }: {
 }
 
 function SnapshotCard({ window, metrics }: { window: SnapshotWindow; metrics: SnapshotMetrics | null }) {
-  const { language } = useLanguage()
-  const isZh = language === 'zh'
+  const { t } = useLanguage()
 
   if (!metrics) {
     return (
       <div className="p-4 rounded-xl opacity-60" style={{ backgroundColor: tokens.colors.bg.secondary }}>
         <div className="text-sm font-medium mb-3" style={{ color: tokens.colors.text.secondary }}>{window}</div>
         <div className="text-center py-4 text-xs" style={{ color: tokens.colors.text.tertiary }}>
-          {isZh ? '暂无数据' : 'No data'}
+          {t('noDataAvailable')}
         </div>
       </div>
     )
@@ -220,19 +218,19 @@ function SnapshotCard({ window, metrics }: { window: SnapshotWindow; metrics: Sn
         </div>
         {metrics.win_rate != null && (
           <div className="flex justify-between">
-            <span className="text-xs" style={{ color: tokens.colors.text.secondary }}>{isZh ? '胜率' : 'Win Rate'}</span>
+            <span className="text-xs" style={{ color: tokens.colors.text.secondary }}>{t('winRate')}</span>
             <span className="text-sm" style={{ color: tokens.colors.text.primary }}>{metrics.win_rate.toFixed(1)}%</span>
           </div>
         )}
         {metrics.max_drawdown != null && (
           <div className="flex justify-between">
-            <span className="text-xs" style={{ color: tokens.colors.text.secondary }}>{isZh ? '回撤' : 'MDD'}</span>
+            <span className="text-xs" style={{ color: tokens.colors.text.secondary }}>{t('mddLabel')}</span>
             <span className="text-sm" style={{ color: tokens.colors.accent.error }}>-{metrics.max_drawdown.toFixed(1)}%</span>
           </div>
         )}
         {metrics.trades_count != null && (
           <div className="flex justify-between">
-            <span className="text-xs" style={{ color: tokens.colors.text.secondary }}>{isZh ? '交易次数' : 'Trades'}</span>
+            <span className="text-xs" style={{ color: tokens.colors.text.secondary }}>{t('tradesLabel')}</span>
             <span className="text-sm" style={{ color: tokens.colors.text.primary }}>{metrics.trades_count}</span>
           </div>
         )}

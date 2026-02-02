@@ -181,7 +181,7 @@ export class ErrorBoundary extends Component<Props, State> {
                   onClick={(e) => { e.preventDefault(); this.toggleStack(); }}
                   style={{ cursor: 'pointer', marginBottom: 8, color: '#ff7c7c' }}
                 >
-                  错误详情 {this.state.showStack ? '▲' : '▼'}
+                  {t('errorDetails')} {this.state.showStack ? '▲' : '▼'}
                 </summary>
                 {this.state.showStack && (
                   <pre
@@ -203,7 +203,7 @@ export class ErrorBoundary extends Component<Props, State> {
             <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
               <button
                 onClick={this.handleReset}
-                aria-label="重试加载"
+                aria-label={t('retryLoad')}
                 style={{
                   padding: '12px 24px',
                   background: 'linear-gradient(135deg, #8b6fa8 0%, #6b4f88 100%)',
@@ -221,12 +221,12 @@ export class ErrorBoundary extends Component<Props, State> {
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
                 </svg>
-                重试
+                {t('retryButton')}
               </button>
 
               <Link
                 href="/"
-                aria-label="返回首页"
+                aria-label={t('backToHome')}
                 style={{
                   padding: '12px 24px',
                   background: 'transparent',
@@ -245,7 +245,7 @@ export class ErrorBoundary extends Component<Props, State> {
                   <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
                   <polyline points="9 22 9 12 15 12 15 22"/>
                 </svg>
-                返回首页
+                {t('backToHome')}
               </Link>
             </div>
           </div>
@@ -279,7 +279,7 @@ export function PageErrorBoundary({
  */
 export function SectionErrorBoundary({
   children,
-  fallbackMessage = '该区块加载失败'
+  fallbackMessage
 }: {
   children: ReactNode
   fallbackMessage?: string
@@ -315,7 +315,7 @@ export function SectionErrorBoundary({
             <line x1="12" y1="8" x2="12" y2="12" />
             <line x1="12" y1="16" x2="12.01" y2="16" />
           </svg>
-          <p style={{ color: '#A8A8B3', fontSize: 14 }}>{fallbackMessage}</p>
+          <p style={{ color: '#A8A8B3', fontSize: 14 }}>{fallbackMessage || t('sectionLoadFailed')}</p>
           <button
             onClick={() => window.location.reload()}
             style={{
@@ -329,7 +329,7 @@ export function SectionErrorBoundary({
               fontSize: 13,
             }}
           >
-            刷新页面
+            {t('refreshPage')}
           </button>
         </div>
       }
@@ -344,7 +344,7 @@ export function SectionErrorBoundary({
  */
 export function CompactErrorBoundary({
   children,
-  message = '加载失败',
+  message,
   onRetry
 }: {
   children: ReactNode
@@ -379,7 +379,7 @@ export function CompactErrorBoundary({
             <line x1="12" y1="8" x2="12" y2="12" />
             <line x1="12" y1="16" x2="12.01" y2="16" />
           </svg>
-          <span style={{ color: '#A8A8B3', fontSize: 13, flex: 1 }}>{message}</span>
+          <span style={{ color: '#A8A8B3', fontSize: 13, flex: 1 }}>{message || t('loadFailed')}</span>
           <button
             onClick={onRetry || (() => window.location.reload())}
             style={{
@@ -392,7 +392,7 @@ export function CompactErrorBoundary({
               fontSize: 12,
             }}
           >
-            重试
+            {t('retryButton')}
           </button>
         </div>
       }

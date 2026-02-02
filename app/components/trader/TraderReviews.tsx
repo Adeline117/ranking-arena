@@ -184,7 +184,7 @@ function TranslateButton({ reviewId, content, onTranslated }: {
   content: string
   onTranslated: (id: string, text: string | null) => void
 }) {
-  const { language } = useLanguage()
+  const { t, language } = useLanguage()
   const [loading, setLoading] = useState(false)
   const [translated, setTranslated] = useState(false)
 
@@ -244,7 +244,7 @@ function TranslateButton({ reviewId, content, onTranslated }: {
         <path d="m22 22-5-10-5 10" />
         <path d="M14 18h6" />
       </svg>
-      {loading ? '...' : translated ? (language === 'zh' ? '原文' : 'Original') : (language === 'zh' ? '翻译' : 'Translate')}
+      {loading ? '...' : translated ? t('originalText') : t('translateText')}
     </button>
   )
 }
@@ -292,7 +292,7 @@ function ReviewCard({
               href={review.author_handle ? `/u/${encodeURIComponent(review.author_handle)}` : '#'}
               style={{ fontSize: 13, fontWeight: 700, color: tokens.colors.text.primary, textDecoration: 'none' }}
             >
-              {review.author_handle || (language === 'zh' ? '匿名' : 'Anonymous')}
+              {review.author_handle || t('anonymous')}
             </Link>
             {showProBadge && (
               <Box style={{
@@ -393,15 +393,15 @@ function ReviewForm({
 
   const handleSubmit = async () => {
     if (!accessToken) {
-      showToast(language === 'zh' ? '请先登录' : 'Please sign in first', 'warning')
+      showToast(t('pleaseSignInFirst'), 'warning')
       return
     }
     if (rating === 0) {
-      showToast(language === 'zh' ? '请选择评分' : 'Please select a rating', 'warning')
+      showToast(t('pleaseSelectRating'), 'warning')
       return
     }
     if (!content.trim()) {
-      showToast(language === 'zh' ? '请输入评价内容' : 'Please write your review', 'warning')
+      showToast(t('pleaseWriteReview'), 'warning')
       return
     }
 
@@ -415,15 +415,15 @@ function ReviewForm({
       )
 
       if (ok && data?.success) {
-        showToast(language === 'zh' ? '评价已发布' : 'Review posted', 'success')
+        showToast(t('reviewPosted'), 'success')
         setRating(0)
         setContent('')
         onSubmitted()
       } else {
-        showToast(getHttpErrorMessage(status, data?.error || (language === 'zh' ? '发布失败' : 'Failed')), 'error')
+        showToast(getHttpErrorMessage(status, data?.error || t('publishFailed')), 'error')
       }
     } catch {
-      showToast(language === 'zh' ? '网络错误' : 'Network error', 'error')
+      showToast(t('networkError'), 'error')
     } finally {
       setSubmitting(false)
     }
@@ -454,7 +454,7 @@ function ReviewForm({
       <textarea
         value={content}
         onChange={(e) => setContent(e.target.value)}
-        placeholder={language === 'zh' ? '分享你对这位交易员的看法...' : 'Share your thoughts about this trader...'}
+        placeholder={t('reviewPlaceholder')}
         rows={3}
         maxLength={2000}
         style={{
@@ -566,7 +566,7 @@ export default function TraderReviews({ traderId, traderHandle }: TraderReviewsP
   // Like toggle
   const handleLike = async (reviewId: string) => {
     if (!accessToken) {
-      showToast(language === 'zh' ? '请先登录' : 'Please sign in first', 'warning')
+      showToast(t('pleaseSignInFirst'), 'warning')
       return
     }
     if (likeLoading[reviewId]) return
@@ -600,7 +600,7 @@ export default function TraderReviews({ traderId, traderHandle }: TraderReviewsP
   // Delete
   const handleDelete = async (reviewId: string) => {
     if (!accessToken) return
-    if (!confirm(language === 'zh' ? '确定删除这条评价？' : 'Delete this review?')) return
+    if (!confirm(t('confirmDeleteReview'))) return
 
     try {
       const { ok } = await authedFetch(
@@ -612,12 +612,12 @@ export default function TraderReviews({ traderId, traderHandle }: TraderReviewsP
 
       if (ok) {
         setReviews(prev => prev.filter(r => r.id !== reviewId))
-        showToast(language === 'zh' ? '已删除' : 'Deleted', 'success')
+        showToast(t('deleted'), 'success')
         // Refresh summary
         loadReviews(true)
       }
     } catch {
-      showToast(language === 'zh' ? '删除失败' : 'Delete failed', 'error')
+      showToast(t('deleteFailed'), 'error')
     }
   }
 
@@ -687,7 +687,7 @@ export default function TraderReviews({ traderId, traderHandle }: TraderReviewsP
       }}>
         {loading ? (
           <Box style={{ padding: tokens.spacing[6], textAlign: 'center' }}>
-            <Text size="sm" color="tertiary">{language === 'zh' ? '加载中...' : 'Loading...'}</Text>
+            <Text size="sm" color="tertiary">{t('loading')}</Text>
           </Box>
         ) : reviews.length === 0 ? (
           <Box style={{ padding: '40px 16px', textAlign: 'center' }}>
@@ -731,7 +731,7 @@ export default function TraderReviews({ traderId, traderHandle }: TraderReviewsP
                 >
                   {loadingMore
                     ? '...'
-                    : language === 'zh' ? '加载更多' : 'Load more'}
+                    : t('loadMore')}
                 </Button>
               </Box>
             )}
