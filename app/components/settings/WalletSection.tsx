@@ -15,6 +15,7 @@ import { useWallet } from '@/lib/web3/useWallet'
 import { usePremium } from '@/lib/premium/hooks'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 function shortenAddress(addr: string): string {
   return `${addr.slice(0, 6)}...${addr.slice(-4)}`
@@ -30,21 +31,22 @@ export function WalletSection({ onToast, onConfirm }: WalletSectionProps) {
   const { linkWallet, isLoading: linkLoading, error: siweError, clearError } = useSiweAuth()
   const { linkedAddress, hasNFT, isLoading: walletLoading, unlinkWallet, refresh } = useWallet()
   const { tier } = usePremium()
+  const { t } = useLanguage()
   const [unlinking, setUnlinking] = useState(false)
 
   const handleLinkWallet = async () => {
     clearError()
     const result = await linkWallet()
     if (result) {
-      onToast('Wallet linked successfully', 'success')
+      onToast(t('walletLinkedSuccess'), 'success')
       refresh()
     }
   }
 
   const handleUnlinkWallet = async () => {
     const confirmed = await onConfirm(
-      'Unlink Wallet',
-      'Are you sure you want to unlink your wallet? You will lose NFT membership benefits if applicable.'
+      t('walletUnlinkTitle'),
+      t('walletUnlinkConfirm')
     )
     if (!confirmed) return
 
@@ -53,9 +55,9 @@ export function WalletSection({ onToast, onConfirm }: WalletSectionProps) {
     setUnlinking(false)
 
     if (success) {
-      onToast('Wallet unlinked', 'success')
+      onToast(t('walletUnlinked'), 'success')
     } else {
-      onToast('Failed to unlink wallet', 'error')
+      onToast(t('walletUnlinkFailed'), 'error')
     }
   }
 
@@ -100,7 +102,7 @@ export function WalletSection({ onToast, onConfirm }: WalletSectionProps) {
               </Box>
               <Box>
                 <Text size="sm" weight="bold" style={{ marginBottom: 2 }}>
-                  Linked Wallet
+                  {t('walletLinkedHeading')}
                 </Text>
                 <Text size="xs" color="secondary" style={{ fontFamily: 'monospace' }}>
                   {shortenAddress(linkedAddress)}
@@ -122,7 +124,7 @@ export function WalletSection({ onToast, onConfirm }: WalletSectionProps) {
                 opacity: unlinking ? 0.5 : 1,
               }}
             >
-              {unlinking ? 'Unlinking...' : 'Unlink'}
+              {unlinking ? t('walletUnlinking') : t('walletUnlink')}
             </Button>
           </Box>
 
@@ -141,7 +143,7 @@ export function WalletSection({ onToast, onConfirm }: WalletSectionProps) {
                 gap: 4,
               }}
             >
-              View on BaseScan
+              {t('walletViewOnBasescan')}
               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
                 <polyline points="15 3 21 3 21 9" />
@@ -161,7 +163,7 @@ export function WalletSection({ onToast, onConfirm }: WalletSectionProps) {
           }}
         >
           <Text size="sm" color="tertiary" style={{ marginBottom: tokens.spacing[3] }}>
-            No wallet linked to your account.
+            {t('walletNoLinked')}
           </Text>
 
           {isConnected && connectedAddress ? (
@@ -181,8 +183,8 @@ export function WalletSection({ onToast, onConfirm }: WalletSectionProps) {
               }}
             >
               {linkLoading
-                ? 'Signing...'
-                : `Link Wallet (${shortenAddress(connectedAddress)})`
+                ? t('walletSigning')
+                : `${t('walletLinkButton')} (${shortenAddress(connectedAddress)})`
               }
             </Button>
           ) : (
@@ -201,7 +203,7 @@ export function WalletSection({ onToast, onConfirm }: WalletSectionProps) {
                     cursor: 'pointer',
                   }}
                 >
-                  Connect Wallet
+                  {t('walletConnectButton')}
                 </Button>
               )}
             </ConnectButton.Custom>
@@ -247,12 +249,12 @@ export function WalletSection({ onToast, onConfirm }: WalletSectionProps) {
             </Box>
             <Box>
               <Text size="sm" weight="bold" style={{ color: hasNFT ? '#2fe57d' : tokens.colors.text.secondary }}>
-                {hasNFT ? 'Pro Membership (NFT)' : 'No NFT Membership'}
+                {hasNFT ? t('walletProNft') : t('walletNoNft')}
               </Text>
               <Text size="xs" color="tertiary">
                 {hasNFT
-                  ? `Your account has Pro status via NFT. Tier: ${tier}`
-                  : 'Hold an Arena Pro NFT to unlock Pro features.'
+                  ? t('walletProStatus').replace('{tier}', tier)
+                  : t('walletHoldNft')
                 }
               </Text>
             </Box>
