@@ -227,7 +227,7 @@ export default function PaymentSuccessPage() {
         setVerificationStatus('error')
       }
     }
-  }, [searchParams, hasVerified, refreshPremium, showToast, language, checkSubscriptionDirect, getValidAccessToken])
+  }, [searchParams, hasVerified, refreshPremium, showToast, language, t, checkSubscriptionDirect, getValidAccessToken])
 
   // 手动重试 - 先刷新 session，再触发重新验证
   const handleRetry = useCallback(async () => {
