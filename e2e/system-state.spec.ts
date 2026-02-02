@@ -212,17 +212,20 @@ test.describe('B) Auth Boundaries', () => {
     await page.waitForLoadState('domcontentloaded')
     await page.waitForTimeout(5000) // Allow time for auth check and redirect
 
-    // Messages page may redirect to /inbox which then shows login prompt
-    // Or it might redirect to /login, or stay on /messages
+    // Messages page may redirect to login welcome screen, /inbox, or stay on /messages
     const url = page.url()
     const loginPrompt = page.locator('text=/请先登录|前往登录|登录|Please login|Login/i')
     const hasPrompt = await loginPrompt.count() > 0
     const isOnLoginPage = url.includes('/login')
     const isOnInbox = url.includes('/inbox')
     const isOnMessages = url.includes('/messages')
+    // Login welcome screen shows "继续" (Continue) and "欢迎来到 Arena"
+    const continueBtn = page.locator('button:has-text("继续")')
+    const welcomeText = page.locator(':text("欢迎来到")')
+    const hasWelcome = (await continueBtn.count() > 0) || (await welcomeText.count() > 0)
 
-    // Should either show login prompt, be on login page, inbox, or messages page
-    expect(hasPrompt || isOnLoginPage || isOnInbox || isOnMessages).toBeTruthy()
+    // Should either show login prompt, welcome screen, or be on expected page
+    expect(hasPrompt || isOnLoginPage || isOnInbox || isOnMessages || hasWelcome).toBeTruthy()
   })
 
   test('messages conversation page shows login prompt when not authenticated', async ({ page }) => {
@@ -314,6 +317,13 @@ test.describe('C) Routing & Navigation - URL Driven', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/hot')
     await page.waitForLoadState('domcontentloaded')
+    await page.waitForTimeout(1000)
+    // Dismiss cookie consent if visible
+    const acceptCookies = page.locator('button:has-text("接受全部"), button:has-text("Accept")')
+    if (await acceptCookies.first().isVisible({ timeout: 2000 }).catch(() => false)) {
+      await acceptCookies.first().click()
+      await page.waitForTimeout(500)
+    }
   })
 
   test('opening post updates URL with ?post=id', async ({ page }) => {

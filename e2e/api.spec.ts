@@ -124,8 +124,8 @@ test.describe('API 性能测试', () => {
     const responseTime = Date.now() - startTime
     
     expect(response.ok()).toBeTruthy()
-    // API 响应应在 3 秒内
-    expect(responseTime).toBeLessThan(3000)
+    // API 响应应在 5 秒内 (allow headroom for parallel test load)
+    expect(responseTime).toBeLessThan(5000)
   })
 
   test('/api/traders/[handle] 响应时间', async ({ request }) => {

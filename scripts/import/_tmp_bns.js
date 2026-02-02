@@ -16,6 +16,6 @@ function cs(r,d,w){if(r==null)return null;return clip(Math.round((Math.min(70,r>
   }
   const now=new Date().toISOString();let saved=0;
   for(let i=0;i<all.length;i+=50)try{await sb.from("trader_sources").upsert(all.slice(i,i+50).map(t=>({source:"binance_spot",source_trader_id:t.id,handle:t.n||t.id,market_type:"spot",is_active:true})),{onConflict:"source,source_trader_id"})}catch{}
-  for(let i=0;i<all.length;i+=30){const{error}=await sb.from("trader_snapshots").upsert(all.slice(i,i+30).map((t,j)=>({source:"binance_spot",source_trader_id:t.id,season_id:"current_30d",rank:i+j+1,roi:t.roi,pnl:t.pnl,win_rate:t.wr,max_drawdown:t.dd,arena_score:cs(t.roi,t.dd,t.wr),captured_at:now})),{onConflict:"source,source_trader_id,season_id"});if(!error)saved+=Math.min(30,all.length-i)}
+  for(let i=0;i<all.length;i+=30){const{error}=await sb.from("trader_snapshots").upsert(all.slice(i,i+30).map((t,j)=>({source:"binance_spot",source_trader_id:t.id,season_id:"30D",rank:i+j+1,roi:t.roi,pnl:t.pnl,win_rate:t.wr,max_drawdown:t.dd,arena_score:cs(t.roi,t.dd,t.wr),captured_at:now})),{onConflict:"source,source_trader_id,season_id"});if(!error)saved+=Math.min(30,all.length-i)}
   console.log(saved)
 })();

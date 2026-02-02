@@ -69,9 +69,9 @@ test.describe('认证流程', () => {
   test('空表单提交不会跳转走', async ({ page }) => {
     await navigateToLoginForm(page)
 
+    // Login button should be disabled when form is empty
     const loginButton = page.locator('button.login-button').or(page.getByRole('button', { name: '登录', exact: true }))
-    await loginButton.first().click()
-    await page.waitForTimeout(500)
+    await expect(loginButton.first()).toBeDisabled({ timeout: 5_000 })
 
     // Should stay on login page
     await expect(page).toHaveURL(/\/login/)
