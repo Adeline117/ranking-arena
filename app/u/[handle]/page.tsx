@@ -33,27 +33,18 @@ async function fetchUserProfile(handle: string): Promise<UserProfileData | null>
   const supabase = getSupabaseAdmin()
   const decodedHandle = decodeURIComponent(handle)
 
-  // Try by handle first
-  const { data: profileByHandle } = await supabase
-    .from('user_profiles')
-    .select('*, show_followers, show_following, uid, cover_url, social_twitter, social_telegram, social_discord, social_github, social_website, show_pro_badge, subscription_tier')
-    .eq('handle', decodedHandle)
-    .maybeSingle()
+  // Parallel lookup: by handle + by UUID (if applicable)
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+  const selectFields = '*, show_followers, show_following, uid, cover_url, social_twitter, social_telegram, social_discord, social_github, social_website, show_pro_badge, subscription_tier'
 
-  let userProfile = profileByHandle
+  const [handleResult, uuidResult] = await Promise.all([
+    supabase.from('user_profiles').select(selectFields).eq('handle', decodedHandle).maybeSingle(),
+    uuidRegex.test(handle)
+      ? supabase.from('user_profiles').select(selectFields).eq('id', handle).maybeSingle()
+      : Promise.resolve({ data: null }),
+  ])
 
-  // Fallback: try by UUID
-  if (!userProfile) {
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-    if (uuidRegex.test(handle)) {
-      const { data: profileById } = await supabase
-        .from('user_profiles')
-        .select('*, show_followers, show_following, uid, cover_url, social_twitter, social_telegram, social_discord, social_github, social_website, show_pro_badge, subscription_tier')
-        .eq('id', handle)
-        .maybeSingle()
-      userProfile = profileById
-    }
-  }
+  const userProfile = handleResult.data || uuidResult.data
 
   if (!userProfile) return null
 

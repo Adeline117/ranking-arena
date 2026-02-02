@@ -214,7 +214,7 @@ export function getResourceHints(): Array<{ rel: string; href: string; crossOrig
     { rel: 'preconnect', href: 'https://fonts.googleapis.com' },
     { rel: 'preconnect', href: 'https://fonts.gstatic.com', crossOrigin: 'anonymous' },
     // Supabase -- API calls on every page (rankings, auth, etc.)
-    { rel: 'preconnect', href: supabaseUrl },
+    { rel: 'preconnect', href: supabaseUrl, crossOrigin: 'anonymous' },
     { rel: 'dns-prefetch', href: supabaseUrl },
   ]
 

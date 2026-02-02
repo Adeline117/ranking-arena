@@ -234,6 +234,8 @@ export default function UserProfileClient({ handle, serverProfile }: UserProfile
             <img
               src={profile.cover_url}
               alt=""
+              width={1200}
+              height={200}
               fetchPriority="high"
               style={{
                 position: 'absolute',
@@ -321,7 +323,10 @@ export default function UserProfileClient({ handle, serverProfile }: UserProfile
                   <img
                     src={`/api/avatar?url=${encodeURIComponent(profile.avatar_url)}`}
                     alt={profile.handle}
-                    loading="lazy"
+                    width={72}
+                    height={72}
+                    loading="eager"
+                    fetchPriority="high"
                     style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                     onError={(e) => {
                       const img = e.target as HTMLImageElement
