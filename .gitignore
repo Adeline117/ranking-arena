@@ -83,3 +83,4 @@ cloudflare-worker/node_modules/
 # Local scripts (may contain sensitive data)
 scripts/local-scrape.mjs
 .env*.local
+ranking-arena.db

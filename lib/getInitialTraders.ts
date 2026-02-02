@@ -7,8 +7,10 @@ import { createClient } from '@supabase/supabase-js'
 import {
   calculateArenaScore,
   debouncedConfidence,
+  getScoreConfidence,
   ARENA_CONFIG,
   type Period,
+  type ScoreConfidence,
 } from '@/lib/utils/arena-score'
 import { SOURCE_TYPE_MAP, PRIORITY_SOURCES } from '@/lib/constants/exchanges'
 
@@ -25,6 +27,7 @@ export interface InitialTrader {
   source_type: 'futures' | 'spot' | 'web3'
   avatar_url: string | null
   arena_score: number
+  score_confidence: ScoreConfidence
 }
 
 export async function getInitialTraders(
@@ -156,6 +159,7 @@ export async function getInitialTraders(
         source_type: SOURCE_TYPE_MAP[snap.source] || 'futures' as const,
         avatar_url: info.avatar_url,
         arena_score: finalScore,
+        score_confidence: effectiveConfidence,
       }
     })
 

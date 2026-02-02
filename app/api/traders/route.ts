@@ -316,6 +316,7 @@ async function fetchTradersData(
           pnl_score: scoreResult.pnlScore,
           drawdown_score: scoreResult.drawdownScore,
           stability_score: scoreResult.stabilityScore,
+          score_confidence: effectiveConfidence,
         }
       })
       // 稳定排序：确保相同数据产生相同排名
