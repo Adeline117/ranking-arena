@@ -31,13 +31,22 @@ const CONTENT_MAX_LENGTH = 10000
 const DRAFT_KEY_PREFIX = 'post_draft_'
 
 // 投票持续时间选项
-const POLL_DURATION_OPTIONS = [
+const POLL_DURATION_OPTIONS_ZH = [
   { label: '1小时', value: 1 },
   { label: '6小时', value: 6 },
   { label: '12小时', value: 12 },
   { label: '1天', value: 24 },
   { label: '3天', value: 72 },
   { label: '7天', value: 168 },
+]
+
+const POLL_DURATION_OPTIONS_EN = [
+  { label: '1 hour', value: 1 },
+  { label: '6 hours', value: 6 },
+  { label: '12 hours', value: 12 },
+  { label: '1 day', value: 24 },
+  { label: '3 days', value: 72 },
+  { label: '7 days', value: 168 },
 ]
 
 // 解析视频链接
@@ -67,7 +76,7 @@ function VideoPlayer({ embedUrl, type }: { embedUrl: string; type: string }) {
         style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 'none' }}
         allowFullScreen
         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-        title={type === 'youtube' ? 'YouTube 视频' : 'Bilibili 视频'}
+        title={type === 'youtube' ? 'YouTube video' : 'Bilibili video'}
       />
     </div>
   )
@@ -76,10 +85,11 @@ function VideoPlayer({ embedUrl, type }: { embedUrl: string; type: string }) {
 // 链接解析函数（支持视频嵌入）
 // 带编辑控制的内容渲染（用于预览模式）
 function renderContentWithControls(
-  text: string, 
+  text: string,
   onMoveImage: (url: string, direction: 'up' | 'down') => void,
   onRemoveImage: (url: string) => void,
-  imageCount: number
+  imageCount: number,
+  t: (key: string) => string
 ) {
   if (!text) return null
   
@@ -210,7 +220,7 @@ function renderContentWithControls(
             <button
               onClick={(e) => { e.stopPropagation(); onMoveImage(part.url!, 'up') }}
               disabled={isFirst}
-              title="上移"
+              title={t('moveUp')}
               style={{
                 width: 24,
                 height: 24,
@@ -230,7 +240,7 @@ function renderContentWithControls(
             <button
               onClick={(e) => { e.stopPropagation(); onMoveImage(part.url!, 'down') }}
               disabled={isLast}
-              title="下移"
+              title={t('moveDown')}
               style={{
                 width: 24,
                 height: 24,
@@ -249,7 +259,7 @@ function renderContentWithControls(
             </button>
             <button
               onClick={(e) => { e.stopPropagation(); onRemoveImage(part.url!) }}
-              title="移除"
+              title={t('remove')}
               style={{
                 width: 24,
                 height: 24,
@@ -300,7 +310,8 @@ export default function NewPostPage() {
   const handle = params.handle as string
   const router = useRouter()
   const { showToast } = useToast()
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
+  const POLL_DURATION_OPTIONS = language === 'zh' ? POLL_DURATION_OPTIONS_ZH : POLL_DURATION_OPTIONS_EN
   const fileInputRef = useRef<HTMLInputElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const [cursorPosition, setCursorPosition] = useState<number | null>(null)
@@ -406,13 +417,13 @@ export default function NewPostPage() {
       // 验证文件类型
       const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp']
       if (!allowedTypes.includes(file.type)) {
-        showToast(`${file.name} 格式不支持`, 'error')
+        showToast(`${file.name} ${t('formatNotSupported')}`, 'error')
         continue
       }
 
       // 验证文件大小 (5MB)
       if (file.size > 5 * 1024 * 1024) {
-        showToast(`${file.name} 超过5MB`, 'error')
+        showToast(`${file.name} ${t('fileTooLarge')}`, 'error')
         continue
       }
 
@@ -432,7 +443,7 @@ export default function NewPostPage() {
         const data = await response.json()
 
         if (!response.ok) {
-          showToast(data.error || '上传失败', 'error')
+          showToast(data.error || t('uploadFailed'), 'error')
           continue
         }
 
@@ -442,13 +453,13 @@ export default function NewPostPage() {
         })
       } catch (error) {
         console.error('Upload error:', error)
-        showToast('上传失败', 'error')
+        showToast(t('uploadFailed'), 'error')
       }
     }
 
     if (newImages.length > 0) {
       setImages(prev => [...prev, ...newImages])
-      showToast(`成功上传 ${newImages.length} 张图片`, 'success')
+      showToast(t('uploadSuccess').replace('{count}', String(newImages.length)), 'success')
     }
 
     setUploading(false)
@@ -470,7 +481,7 @@ export default function NewPostPage() {
 
     // 最多上传1个视频
     if (videos.length >= 1) {
-      showToast('每篇帖子最多上传1个视频', 'warning')
+      showToast(t('maxOneVideo'), 'warning')
       return
     }
 
@@ -479,14 +490,14 @@ export default function NewPostPage() {
     // 验证文件类型
     const allowedTypes = ['video/mp4', 'video/webm', 'video/quicktime', 'video/x-msvideo', 'video/x-matroska']
     if (!allowedTypes.includes(file.type)) {
-      showToast('不支持的视频格式。支持: MP4, WebM, MOV, AVI, MKV', 'error')
+      showToast(t('unsupportedVideoFormat'), 'error')
       return
     }
 
     // 验证文件大小 (100MB)
     const maxSize = 100 * 1024 * 1024
     if (file.size > maxSize) {
-      showToast('视频文件过大，最大允许100MB', 'error')
+      showToast(t('videoTooLarge'), 'error')
       return
     }
 
@@ -515,20 +526,20 @@ export default function NewPostPage() {
               const data = JSON.parse(xhr.responseText)
               resolve(data)
             } catch {
-              reject(new Error('解析响应失败'))
+              reject(new Error(t('parseResponseFailed')))
             }
           } else {
             try {
               const error = JSON.parse(xhr.responseText)
-              reject(new Error(error.error || '上传失败'))
+              reject(new Error(error.error || t('uploadFailed')))
             } catch {
-              reject(new Error(`上传失败 (${xhr.status})`))
+              reject(new Error(`${t('uploadFailed')} (${xhr.status})`))
             }
           }
         })
 
         xhr.addEventListener('error', () => {
-          reject(new Error('网络错误，请稍后重试'))
+          reject(new Error(t('networkErrorRetry')))
         })
 
         xhr.open('POST', '/api/posts/upload-video')
@@ -551,13 +562,13 @@ export default function NewPostPage() {
       }])
 
       // 自动插入视频链接到内容
-      const videoMarkdown = `\n[视频](${data.url})\n`
+      const videoMarkdown = `\n[${t('video')}](${data.url})\n`
       setContent(prev => prev + videoMarkdown)
 
-      showToast('视频上传成功', 'success')
+      showToast(t('videoUploadSuccess'), 'success')
     } catch (error) {
       console.error('Video upload error:', error)
-      showToast(error instanceof Error ? error.message : '视频上传失败', 'error')
+      showToast(error instanceof Error ? error.message : t('videoUploadFailed'), 'error')
     } finally {
       setVideoUploading(false)
       setVideoUploadProgress(0)
@@ -571,8 +582,11 @@ export default function NewPostPage() {
   const removeVideo = () => {
     setVideos([])
     // 从内容中移除视频链接
-    setContent(prev => prev.replace(/\n?\[视频\]\([^)]+\)\n?/g, ''))
-    showToast('视频已移除', 'info')
+    setContent(prev => {
+      // Remove video links in both languages: [视频](url) or [Video](url)
+      return prev.replace(/\n?\[(?:视频|Video)\]\([^)]+\)\n?/g, '')
+    })
+    showToast(t('videoRemoved'), 'info')
   }
 
   // 移除图片
@@ -639,7 +653,7 @@ export default function NewPostPage() {
 
     const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1
     if (targetIndex < 0 || targetIndex >= matches.length) {
-      showToast(direction === 'up' ? '已在最顶部' : '已在最底部', 'info')
+      showToast(direction === 'up' ? t('alreadyAtTop') : t('alreadyAtBottom'), 'info')
       return
     }
 
@@ -668,14 +682,14 @@ export default function NewPostPage() {
     }
 
     setContent(newContent)
-    showToast(direction === 'up' ? '图片已上移' : '图片已下移', 'success')
+    showToast(direction === 'up' ? t('imageMovedUp') : t('imageMovedDown'), 'success')
   }
 
   // 从内容中移除图片
   const removeImageFromContent = (url: string) => {
     const imagePattern = new RegExp(`\\n?!\\[image\\]\\(${url.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\)\\n?`, 'g')
     setContent(prev => prev.replace(imagePattern, '\n').replace(/\n{3,}/g, '\n\n').trim())
-    showToast('图片已从内容中移除', 'info')
+    showToast(t('imageRemovedFromContent'), 'info')
   }
 
   // 检查图片是否已在内容中
@@ -732,7 +746,7 @@ export default function NewPostPage() {
       if (pollEnabled) {
         validPollOptions = pollOptions.filter(opt => opt.text.trim())
         if (validPollOptions.length < 2) {
-          showToast('请至少填写2个投票选项', 'warning')
+          showToast(t('pollMinOptions'), 'warning')
           setLoading(false)
           return
         }
@@ -754,7 +768,7 @@ export default function NewPostPage() {
 
       if (postError || !newPost) {
         console.error('创建帖子失败:', JSON.stringify(postError, null, 2))
-        showToast(postError?.message || '创建失败，请检查权限', 'error')
+        showToast(postError?.message || t('createPostFailed'), 'error')
         return
       }
 
@@ -785,7 +799,7 @@ export default function NewPostPage() {
         if (pollError) {
           console.error('创建投票失败:', JSON.stringify(pollError, null, 2))
           console.error('投票数据:', { post_id: newPost.id, question: title, type: pollType })
-          showToast(`投票创建失败: ${pollError.message || pollError.code || '未知错误'}`, 'warning')
+          showToast(`${t('pollCreateFailed')}: ${pollError.message || pollError.code || t('unknownError')}`, 'warning')
           // 投票创建失败，但帖子已创建，继续
         } else if (pollData) {
           // 更新帖子的 poll_id
@@ -801,7 +815,7 @@ export default function NewPostPage() {
       showToast(t('publishSuccess'), 'success')
       router.push(`/u/${encodeURIComponent(decodedHandle)}`)
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : '发布失败'
+      const errorMessage = error instanceof Error ? error.message : t('publishFailed')
       showToast(errorMessage, 'error')
     } finally {
       setLoading(false)
@@ -945,10 +959,11 @@ export default function NewPostPage() {
                   {t('previewMode')}
                 </Box>
                 {content ? renderContentWithControls(
-                  content, 
-                  moveImageInContent, 
+                  content,
+                  moveImageInContent,
                   removeImageFromContent,
-                  (content.match(/!\[image\]\([^)]+\)/g) || []).length
+                  (content.match(/!\[image\]\([^)]+\)/g) || []).length,
+                  t
                 ) : <Text color="tertiary">{t('previewPlaceholder')}</Text>}
               </Box>
             ) : (
@@ -1045,14 +1060,14 @@ export default function NewPostPage() {
                 {/* 投票选项 */}
                 <Box>
                   <Text size="xs" weight="bold" style={{ marginBottom: tokens.spacing[2], display: 'block' }}>
-                    投票选项（至少2个，最多6个）
+                    {t('pollOptionsLabel')}
                   </Text>
                   {pollOptions.map((option, index) => (
                     <Box key={index} style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], marginBottom: tokens.spacing[2] }}>
                       <Text size="xs" color="tertiary" style={{ width: 20 }}>{index + 1}.</Text>
                       <input
                         type="text"
-                        placeholder={`选项 ${index + 1}`}
+                        placeholder={`${t('pollOptionPlaceholder')} ${index + 1}`}
                         value={option.text}
                         onChange={(e) => {
                           const newOptions = [...pollOptions]
@@ -1103,7 +1118,7 @@ export default function NewPostPage() {
                         width: '100%',
                       }}
                     >
-                      + 添加选项
+                      + {t('addPollOption')}
                     </button>
                   )}
                 </Box>
@@ -1113,7 +1128,7 @@ export default function NewPostPage() {
                   {/* 投票类型 */}
                   <Box style={{ flex: 1, minWidth: 150 }}>
                     <Text size="xs" weight="bold" style={{ marginBottom: tokens.spacing[2], display: 'block' }}>
-                      投票类型
+                      {t('pollTypeLabel')}
                     </Text>
                     <Box style={{ display: 'flex', gap: tokens.spacing[2] }}>
                       <button
@@ -1130,7 +1145,7 @@ export default function NewPostPage() {
                           fontWeight: 600,
                         }}
                       >
-                        单选
+                        {t('singleChoice')}
                       </button>
                       <button
                         onClick={() => setPollType('multiple')}
@@ -1146,7 +1161,7 @@ export default function NewPostPage() {
                           fontWeight: 600,
                         }}
                       >
-                        多选
+                        {t('multipleChoice')}
                       </button>
                     </Box>
                   </Box>
@@ -1154,7 +1169,7 @@ export default function NewPostPage() {
                   {/* 持续时间 */}
                   <Box style={{ flex: 1, minWidth: 150 }}>
                     <Text size="xs" weight="bold" style={{ marginBottom: tokens.spacing[2], display: 'block' }}>
-                      投票持续时间
+                      {t('pollDurationLabel')}
                     </Text>
                     <select
                       value={pollDuration}
@@ -1179,7 +1194,7 @@ export default function NewPostPage() {
                 </Box>
 
                 <Text size="xs" color="tertiary">
-                  投票结果在用户投票后或截止时间后才会显示
+                  {t('pollResultsNote')}
                 </Text>
               </Box>
             )}
@@ -1188,7 +1203,7 @@ export default function NewPostPage() {
           {/* 图片上传区域 */}
           <Box>
             <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[2], display: 'block' }}>
-              图片（可选，最多9张）
+              {t('imagesOptional')}
             </Text>
             
             {/* 操作提示 */}
@@ -1202,15 +1217,15 @@ export default function NewPostPage() {
               }}
             >
               <Text size="xs" color="secondary" style={{ display: 'block', marginBottom: 4 }}>
-                <strong>如何插入图片到指定位置：</strong>
+                <strong>{t('imageInsertGuideTitle')}</strong>
               </Text>
               <Text size="xs" color="tertiary" style={{ display: 'block', lineHeight: 1.6 }}>
-                1. 在上方文字框中<strong>点击光标</strong>到想插入图片的位置<br />
-                2. 点击图片上的 <span style={{ background: '#8b6fa8', color: '#fff', padding: '0 4px', borderRadius: 3 }}>↵</span> 按钮插入<br />
-                3. 切换到<strong>预览模式</strong>，可用 ↑↓ 按钮调整图片顺序
+                {t('imageInsertStep1')}<br />
+                {t('imageInsertStep2')} <span style={{ background: '#8b6fa8', color: '#fff', padding: '0 4px', borderRadius: 3 }}>↵</span> {t('imageInsertStep2Suffix')}<br />
+                {t('imageInsertStep3')}
               </Text>
             </Box>
-            
+
             <input
               ref={fileInputRef}
               type="file"
@@ -1281,7 +1296,7 @@ export default function NewPostPage() {
                         padding: '2px 0',
                       }}
                     >
-                      已插入
+                      {t('inserted')}
                     </Box>
                   )}
                   <Box
@@ -1295,7 +1310,7 @@ export default function NewPostPage() {
                   >
                     <button
                       onClick={() => insertImageToContent(image.url)}
-                      title={inContent ? "再次插入到光标位置" : "插入到光标位置"}
+                      title={inContent ? t('reinsertAtCursor') : t('insertAtCursor')}
                       style={{
                         width: 24,
                         height: 24,
@@ -1313,7 +1328,7 @@ export default function NewPostPage() {
                     </button>
                     <button
                       onClick={() => removeImage(index)}
-                      title="删除"
+                      title={t('delete')}
                       style={{
                         width: 24,
                         height: 24,
@@ -1372,7 +1387,7 @@ export default function NewPostPage() {
           {/* 视频上传区域 */}
           <Box>
             <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[2], display: 'block' }}>
-              视频（可选，最多1个，100MB以内）
+              {t('videoOptional')}
             </Text>
 
             <input
@@ -1453,7 +1468,7 @@ export default function NewPostPage() {
                   {/* 删除按钮 */}
                   <button
                     onClick={removeVideo}
-                    title="删除视频"
+                    title={t('deleteVideo')}
                     style={{
                       position: 'absolute',
                       top: 4,
@@ -1497,7 +1512,7 @@ export default function NewPostPage() {
                 >
                   {videoUploading ? (
                     <Box style={{ textAlign: 'center' }}>
-                      <Text size="xs" color="secondary">上传中 {videoUploadProgress}%</Text>
+                      <Text size="xs" color="secondary">{t('uploadingImage')} {videoUploadProgress}%</Text>
                       {/* 进度条 */}
                       <Box
                         style={{
@@ -1522,7 +1537,7 @@ export default function NewPostPage() {
                   ) : (
                     <>
                       <Text size="2xl" color="secondary" style={{ lineHeight: 1 }}>🎬</Text>
-                      <Text size="xs" color="secondary" style={{ marginTop: 4 }}>添加视频</Text>
+                      <Text size="xs" color="secondary" style={{ marginTop: 4 }}>{t('addVideo')}</Text>
                       <Text size="xs" color="tertiary" style={{ marginTop: 2 }}>MP4, WebM, MOV</Text>
                     </>
                   )}
@@ -1531,7 +1546,7 @@ export default function NewPostPage() {
             </Box>
 
             <Text size="xs" color="tertiary">
-              支持 MP4、WebM、MOV、AVI、MKV 格式，最大 100MB
+              {t('videoFormatSupport')}
             </Text>
           </Box>
 

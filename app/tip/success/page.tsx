@@ -3,10 +3,12 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 export default function TipSuccessPage() {
   const searchParams = useSearchParams()
   const router = useRouter()
+  const { t } = useLanguage()
   const [countdown, setCountdown] = useState(5)
   const sessionId = searchParams.get('session_id')
 
@@ -49,11 +51,11 @@ export default function TipSuccessPage() {
         </div>
 
         <h1 className="text-2xl font-bold text-white mb-2">
-          打赏成功！🎉
+          {t('tipSuccess')}
         </h1>
-        
+
         <p className="text-gray-400 mb-6">
-          感谢你对创作者的支持，你的打赏已成功发送。
+          {t('tipSuccessMessage')}
         </p>
 
         <div className="space-y-3">
@@ -61,17 +63,17 @@ export default function TipSuccessPage() {
             href="/"
             className="block w-full rounded-lg bg-purple-600 py-3 text-sm font-medium text-white hover:bg-purple-700 transition-colors"
           >
-            返回首页
+            {t('backToHome')}
           </Link>
           
           <p className="text-sm text-gray-500">
-            {countdown} 秒后自动返回首页...
+            {t('redirectingCountdown').replace('{seconds}', String(countdown))}
           </p>
         </div>
 
         {sessionId && (
           <p className="mt-6 text-xs text-gray-600">
-            订单号: {sessionId.slice(0, 20)}...
+            {t('orderNumber')}: {sessionId.slice(0, 20)}...
           </p>
         )}
       </div>

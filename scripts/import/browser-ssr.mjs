@@ -259,7 +259,7 @@ async function main() {
       const now = new Date().toISOString()
       let saved = 0
       for (let i=0;i<traders.length;i+=50) try{await sb.from('trader_sources').upsert(traders.slice(i,i+50).map(t=>({source:cfg.source,source_trader_id:t.id,handle:t.name||t.id,market_type:'futures',is_active:true})),{onConflict:'source,source_trader_id'})}catch{}
-      for (let i=0;i<traders.length;i+=30){const{error}=await sb.from('trader_snapshots').upsert(traders.slice(i,i+30).map((t,j)=>({source:cfg.source,source_trader_id:t.id,season_id:'current_30d',rank:i+j+1,roi:t.roi,pnl:t.pnl,win_rate:t.wr,max_drawdown:t.dd,arena_score:cs(t.roi,t.pnl,t.dd,t.wr),captured_at:now})),{onConflict:'source,source_trader_id,season_id'});if(!error)saved+=Math.min(30,traders.length-i)}
+      for (let i=0;i<traders.length;i+=30){const{error}=await sb.from('trader_snapshots').upsert(traders.slice(i,i+30).map((t,j)=>({source:cfg.source,source_trader_id:t.id,season_id:'30D',rank:i+j+1,roi:t.roi,pnl:t.pnl,win_rate:t.wr,max_drawdown:t.dd,arena_score:cs(t.roi,t.pnl,t.dd,t.wr),captured_at:now})),{onConflict:'source,source_trader_id,season_id'});if(!error)saved+=Math.min(30,traders.length-i)}
       console.log(`✅ ${saved}`)
     } else {
       console.log('❌ 0')

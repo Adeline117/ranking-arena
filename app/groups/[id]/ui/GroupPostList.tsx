@@ -9,6 +9,7 @@ import MasonryGrid from '@/app/components/ui/MasonryGrid'
 import MasonryPostCard from '@/app/components/post/MasonryPostCard'
 import { renderContentWithLinks, ARENA_PURPLE } from '@/lib/utils/content'
 import { getAvatarGradient } from '@/lib/utils/avatar'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import type { Post, CommentWithAuthor } from '../hooks/useGroupPosts'
 
 interface GroupPostListProps {
@@ -82,6 +83,7 @@ interface GroupPostListProps {
 }
 
 export default function GroupPostList(props: GroupPostListProps) {
+  const { t } = useLanguage()
   const {
     groupId, language, userId, accessToken, userRole,
     isMember, joining, onJoin,
@@ -111,18 +113,18 @@ export default function GroupPostList(props: GroupPostListProps) {
         border: `1px solid ${tokens.colors.border.primary}`,
       }}>
         <Text size="lg" weight="bold" style={{ marginBottom: tokens.spacing[3] }}>
-          {language === 'zh' ? '加入小组查看帖子' : 'Join to view posts'}
+          {t('joinToViewPosts')}
         </Text>
         <Text size="sm" color="tertiary" style={{ marginBottom: tokens.spacing[4] }}>
-          {language === 'zh' ? '加入小组后可以查看帖子、评论和参与讨论' : 'Join the group to view posts, comments, and participate in discussions'}
+          {t('joinToViewPostsDesc')}
         </Text>
         {userId ? (
           <Button variant="primary" onClick={onJoin} disabled={joining}>
-            {joining ? (language === 'zh' ? '加入中...' : 'Joining...') : (language === 'zh' ? '加入小组' : 'Join Group')}
+            {joining ? t('joiningGroup') : t('joinGroup')}
           </Button>
         ) : (
           <Link href="/login">
-            <Button variant="primary">{language === 'zh' ? '登录后加入' : 'Login to join'}</Button>
+            <Button variant="primary">{t('loginToJoin')}</Button>
           </Link>
         )}
       </Box>
@@ -135,16 +137,16 @@ export default function GroupPostList(props: GroupPostListProps) {
       <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: tokens.spacing[4] }}>
         <Box style={{ display: 'flex', gap: tokens.spacing[2] }}>
           <Button variant={sortMode === 'latest' ? 'primary' : 'secondary'} size="sm" onClick={() => setSortMode('latest')}>
-            最新
+            {t('latest')}
           </Button>
           <Button variant={sortMode === 'hot' ? 'primary' : 'secondary'} size="sm" onClick={() => setSortMode('hot')}>
-            热门
+            {t('hot')}
           </Button>
         </Box>
         <Box style={{ display: 'flex', gap: tokens.spacing[1] }}>
           <button
             onClick={() => setViewMode('list')}
-            title="列表视图"
+            title={t('listView')}
             style={{
               padding: tokens.spacing[2],
               borderRadius: tokens.radius.md,
@@ -162,7 +164,7 @@ export default function GroupPostList(props: GroupPostListProps) {
           </button>
           <button
             onClick={() => setViewMode('masonry')}
-            title="瀑布流视图"
+            title={t('masonryView')}
             style={{
               padding: tokens.spacing[2],
               borderRadius: tokens.radius.md,
@@ -185,7 +187,7 @@ export default function GroupPostList(props: GroupPostListProps) {
       {viewMode === 'masonry' && sortedPosts.length > 0 && (
         <Box style={{ marginBottom: tokens.spacing[4] }}>
           <Text size="sm" color="tertiary" style={{ marginBottom: tokens.spacing[3] }}>
-            {language === 'zh' ? `帖子 (${sortedPosts.length})` : `Posts (${sortedPosts.length})`}
+            {t('posts')} ({sortedPosts.length})
           </Text>
           <MasonryGrid columns={{ mobile: 2, desktop: 3 }} gap="12px">
             {sortedPosts.map((post) => (
@@ -203,10 +205,10 @@ export default function GroupPostList(props: GroupPostListProps) {
 
       {/* List View */}
       {viewMode === 'list' && (
-        <Card title={language === 'zh' ? `帖子 (${sortedPosts.length})` : `Posts (${sortedPosts.length})`}>
+        <Card title={`${t('posts')} (${sortedPosts.length})`}>
           {sortedPosts.length === 0 ? (
             <Box style={{ color: tokens.colors.text.tertiary, padding: `${tokens.spacing[10]} ${tokens.spacing[5]}`, textAlign: 'center' }}>
-              <Text size="sm" color="tertiary">还没有帖子，成为第一个发帖的人吧！</Text>
+              <Text size="sm" color="tertiary">{t('noPostsYet')}  {t('beFirstToPost')}</Text>
             </Box>
           ) : (
             <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}>
@@ -274,7 +276,7 @@ export default function GroupPostList(props: GroupPostListProps) {
         <div ref={sentinelRef} style={{ padding: tokens.spacing[4], textAlign: 'center' }}>
           {loadingMore && (
             <Text size="sm" color="tertiary">
-              {language === 'zh' ? '加载更多...' : 'Loading more...'}
+              {t('loadingMore')}
             </Text>
           )}
         </div>
@@ -306,12 +308,12 @@ export default function GroupPostList(props: GroupPostListProps) {
             onClick={(e) => e.stopPropagation()}
           >
             <Text size="lg" weight="bold" style={{ marginBottom: tokens.spacing[4] }}>
-              {language === 'zh' ? '转发到主页' : 'Repost to Profile'}
+              {t('repostToFeed')}
             </Text>
             <textarea
               value={repostComment}
               onChange={(e) => setRepostComment(e.target.value)}
-              placeholder={language === 'zh' ? '添加评论（可选）...' : 'Add a comment (optional)...'}
+              placeholder={t('addCommentOptional')}
               style={{
                 width: '100%',
                 minHeight: 80,
@@ -328,7 +330,7 @@ export default function GroupPostList(props: GroupPostListProps) {
             />
             <Box style={{ display: 'flex', gap: tokens.spacing[3], justifyContent: 'flex-end' }}>
               <Button variant="secondary" size="sm" onClick={() => { setShowRepostModal(null); setRepostComment('') }}>
-                {language === 'zh' ? '取消' : 'Cancel'}
+                {t('cancel')}
               </Button>
               <Button
                 variant="primary"
@@ -337,8 +339,8 @@ export default function GroupPostList(props: GroupPostListProps) {
                 disabled={repostLoading[showRepostModal]}
               >
                 {repostLoading[showRepostModal]
-                  ? (language === 'zh' ? '转发中...' : 'Reposting...')
-                  : (language === 'zh' ? '转发' : 'Repost')}
+                  ? t('reposting')
+                  : t('repost')}
               </Button>
             </Box>
           </Box>
@@ -398,6 +400,7 @@ interface PostListItemProps {
 }
 
 function PostListItem(props: PostListItemProps) {
+  const { t } = useLanguage()
   const {
     post, language, userId, accessToken, userRole,
     editingPost, setEditingPost, editTitle, setEditTitle, editContent, setEditContent,
@@ -541,7 +544,7 @@ function PostListItem(props: PostListItemProps) {
             </Link>
           ) : (
             <Text size="xs" color="tertiary" style={{ fontStyle: 'italic' }}>
-              {language === 'zh' ? '已注销用户' : 'Deleted user'}
+              {t('deletedUser')}
             </Text>
           )}
         </Box>
@@ -566,10 +569,10 @@ function PostListItem(props: PostListItemProps) {
             />
             <Box style={{ display: 'flex', gap: tokens.spacing[2], marginTop: tokens.spacing[2] }}>
               <Button variant="primary" size="sm" onClick={() => handleSaveEdit(post.id)} disabled={savingEdit}>
-                {savingEdit ? (language === 'zh' ? '保存中...' : 'Saving...') : (language === 'zh' ? '保存' : 'Save')}
+                {savingEdit ? t('saving') : t('save')}
               </Button>
               <Button variant="secondary" size="sm" onClick={() => setEditingPost(null)}>
-                {language === 'zh' ? '取消' : 'Cancel'}
+                {t('cancel')}
               </Button>
             </Box>
           </Box>
@@ -594,9 +597,7 @@ function PostListItem(props: PostListItemProps) {
                   padding: 0,
                 }}
               >
-                {isExpanded
-                  ? (language === 'zh' ? '收起' : 'Show less')
-                  : (language === 'zh' ? '展开查看' : 'Show more')}
+                {isExpanded ? t('collapse') : t('showMore')}
               </button>
             )}
           </Box>
@@ -705,6 +706,7 @@ interface CommentsSectionProps {
 }
 
 function CommentsSection(props: CommentsSectionProps) {
+  const { t } = useLanguage()
   const {
     postId, language, accessToken,
     comments, newComment, setNewComment, commentLoading,
@@ -724,7 +726,7 @@ function CommentsSection(props: CommentsSectionProps) {
         <Box style={{ display: 'flex', gap: tokens.spacing[2], marginBottom: tokens.spacing[3] }}>
           <input
             type="text"
-            placeholder="写评论..."
+            placeholder={t('writeComment')}
             value={newComment}
             onChange={(e) => setNewComment(prev => ({ ...prev, [postId]: e.target.value }))}
             onKeyDown={(e) => e.key === 'Enter' && submitComment(postId)}
@@ -739,14 +741,14 @@ function CommentsSection(props: CommentsSectionProps) {
             }}
           />
           <Button variant="primary" size="sm" onClick={() => submitComment(postId)} disabled={commentLoading || !newComment.trim()}>
-            发送
+            {t('send')}
           </Button>
         </Box>
       )}
 
       {/* Comment list */}
       {commentLoading ? (
-        <Text size="xs" color="tertiary">{language === 'zh' ? '加载中...' : 'Loading...'}</Text>
+        <Text size="xs" color="tertiary">{t('loading')}</Text>
       ) : comments.length > 0 ? (
         <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
           {comments.map((comment) => (
@@ -776,7 +778,7 @@ function CommentsSection(props: CommentsSectionProps) {
                     </Link>
                   ) : (
                     <Text size="xs" weight="bold" color="secondary">
-                      @{language === 'zh' ? '匿名' : 'Anonymous'}
+                      @{t('anonymous')}
                     </Text>
                   )}
                   <Text size="xs" color="tertiary">
@@ -792,7 +794,7 @@ function CommentsSection(props: CommentsSectionProps) {
                     }))}
                     style={{ background: 'transparent', border: 'none', color: tokens.colors.text.tertiary, cursor: 'pointer', fontSize: 11, marginTop: tokens.spacing[1], padding: 0 }}
                   >
-                    {language === 'zh' ? '回复' : 'Reply'}
+                    {t('reply')}
                   </button>
                 )}
               </Box>
@@ -802,7 +804,7 @@ function CommentsSection(props: CommentsSectionProps) {
                 <Box style={{ marginLeft: tokens.spacing[4], marginTop: tokens.spacing[1], display: 'flex', gap: tokens.spacing[2] }}>
                   <input
                     type="text"
-                    placeholder={language === 'zh' ? `回复 @${comment.author_handle || '匿名'}...` : `Reply to @${comment.author_handle || 'Anonymous'}...`}
+                    placeholder={`${t('reply')} @${comment.author_handle || t('anonymous')}...`}
                     value={replyContent[comment.id] || ''}
                     onChange={(e) => setReplyContent(prev => ({ ...prev, [comment.id]: e.target.value }))}
                     onKeyDown={(e) => { if (e.key === 'Enter' && replyContent[comment.id]?.trim()) submitReply(postId, comment.id) }}
@@ -821,7 +823,7 @@ function CommentsSection(props: CommentsSectionProps) {
                     onClick={() => submitReply(postId, comment.id)}
                     style={{ fontSize: 11, padding: `${tokens.spacing[1]} ${tokens.spacing[2]}` }}
                   >
-                    {language === 'zh' ? '发送' : 'Send'}
+                    {t('send')}
                   </Button>
                 </Box>
               )}
@@ -855,7 +857,7 @@ function CommentsSection(props: CommentsSectionProps) {
                           </Link>
                         ) : (
                           <Text size="xs" weight="bold" color="secondary">
-                            @{language === 'zh' ? '匿名' : 'Anonymous'}
+                            @{t('anonymous')}
                           </Text>
                         )}
                         <Text size="xs" color="tertiary">
@@ -870,7 +872,7 @@ function CommentsSection(props: CommentsSectionProps) {
                       onClick={() => setExpandedReplies(prev => ({ ...prev, [comment.id]: true }))}
                       style={{ background: 'transparent', border: 'none', color: ARENA_PURPLE, cursor: 'pointer', fontSize: 11, padding: 0 }}
                     >
-                      {language === 'zh' ? `查看更多 (${comment.replies.length - 3})` : `Show more (${comment.replies.length - 3})`}
+                      {t('showMore')} ({comment.replies.length - 3})
                     </button>
                   )}
                 </Box>
@@ -879,7 +881,7 @@ function CommentsSection(props: CommentsSectionProps) {
           ))}
         </Box>
       ) : (
-        <Text size="xs" color="tertiary">{language === 'zh' ? '暂无评论' : 'No comments'}</Text>
+        <Text size="xs" color="tertiary">{t('noCommentsYet')}</Text>
       )}
     </Box>
   )

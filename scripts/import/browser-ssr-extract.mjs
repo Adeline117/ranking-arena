@@ -44,7 +44,7 @@ async function saveTraders(source, traders) {
   for (let i = 0; i < traders.length; i += 30) {
     const { error } = await supabase.from('trader_snapshots').upsert(
       traders.slice(i, i + 30).map((t, j) => ({
-        source, source_trader_id: t.id, season_id: 'current_30d', rank: i + j + 1,
+        source, source_trader_id: t.id, season_id: '30D', rank: i + j + 1,
         roi: t.roi, pnl: t.pnl, win_rate: t.wr, max_drawdown: t.dd,
         trades_count: t.trades, arena_score: cs(t.roi, t.pnl, t.dd, t.wr),
         captured_at: now,

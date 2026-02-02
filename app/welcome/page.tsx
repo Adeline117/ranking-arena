@@ -11,14 +11,14 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 type Step = 'welcome' | 'interests' | 'complete'
 
 const interests = [
-  { id: 'btc', label: 'BTC 交易', labelEn: 'BTC Trading', icon: '₿' },
-  { id: 'eth', label: 'ETH 交易', labelEn: 'ETH Trading', icon: 'Ξ' },
-  { id: 'altcoin', label: '山寨币', labelEn: 'Altcoins', icon: '◈' },
-  { id: 'futures', label: '合约/期货', labelEn: 'Futures', icon: '⟡' },
-  { id: 'spot', label: '现货交易', labelEn: 'Spot', icon: '◉' },
-  { id: 'defi', label: 'DeFi', labelEn: 'DeFi', icon: '⬡' },
-  { id: 'nft', label: 'NFT', labelEn: 'NFT', icon: '◇' },
-  { id: 'analysis', label: '技术分析', labelEn: 'Analysis', icon: '' },
+  { id: 'btc', labelKey: 'btcTrading', icon: '₿' },
+  { id: 'eth', labelKey: 'ethTrading', icon: 'Ξ' },
+  { id: 'altcoin', labelKey: 'altcoins', icon: '◈' },
+  { id: 'futures', labelKey: 'futuresTrading', icon: '⟡' },
+  { id: 'spot', labelKey: 'spotTrading', icon: '◉' },
+  { id: 'defi', labelKey: 'defi', icon: '⬡' },
+  { id: 'nft', labelKey: 'nft', icon: '◇' },
+  { id: 'analysis', labelKey: 'technicalAnalysis', icon: '' },
 ]
 
 // CSS keyframe animations
@@ -644,7 +644,7 @@ export default function WelcomePage() {
                         weight={isSelected ? "bold" : "medium"}
                         style={{ color: isSelected ? '#c9b8db' : '#9a9a9a' }}
                       >
-                        {language === 'en' ? interest.labelEn : interest.label}
+                        {t(interest.labelKey)}
                       </Text>
                     </Box>
                   )

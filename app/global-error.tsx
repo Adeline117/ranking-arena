@@ -6,6 +6,7 @@
  */
 
 import { useEffect, useState } from 'react'
+import { t } from '@/lib/i18n'
 
 const ARENA_PURPLE = '#8b6fa8'
 
@@ -238,7 +239,7 @@ export default function GlobalError({
                 animationDelay: '0.1s',
               }}
             >
-              严重错误
+              {t('globalErrorTitle')}
             </h1>
             
             {/* Description */}
@@ -252,7 +253,7 @@ export default function GlobalError({
                 animationDelay: '0.2s',
               }}
             >
-              应用发生了意外错误
+              {t('globalErrorDesc')}
             </p>
             <p
               className="content-section"
@@ -263,7 +264,7 @@ export default function GlobalError({
                 animationDelay: '0.25s',
               }}
             >
-              我们已经收到错误报告，正在处理中
+              {t('globalErrorReported')}
             </p>
             
             {/* Error digest */}
@@ -286,7 +287,7 @@ export default function GlobalError({
                     border: '1px solid rgba(255, 124, 124, 0.15)',
                   }}
                 >
-                  错误 ID: {error.digest}
+                  {t('globalErrorId')}: {error.digest}
                 </span>
               </div>
             )}
@@ -321,7 +322,7 @@ export default function GlobalError({
                     borderRadius: '50%',
                     animation: 'spin 1s linear infinite',
                   }} />
-                  重试中...
+                  {t('globalErrorRetrying')}
                 </>
               ) : (
                 <>
@@ -329,7 +330,7 @@ export default function GlobalError({
                     <polyline points="23 4 23 10 17 10"></polyline>
                     <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
                   </svg>
-                  重新加载
+                  {t('globalErrorReload')}
                 </>
               )}
             </button>
@@ -344,7 +345,7 @@ export default function GlobalError({
                 animationDelay: '0.4s',
               }}
             >
-              如果问题持续存在，请稍后再试
+              {t('errorPersist')}
             </p>
           </div>
         </div>

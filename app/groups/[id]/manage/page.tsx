@@ -63,7 +63,7 @@ type Rule = {
 }
 
 function ActivityLogSection({ groupId }: { groupId: string }) {
-  const { language } = useLanguage()
+  const { language, t } = useLanguage()
   const [activities, setActivities] = useState<Array<{ id: string; type: string; title: string; message: string; created_at: string; actor_id?: string }>>([])
   const [loading, setLoading] = useState(true)
 
@@ -84,8 +84,8 @@ function ActivityLogSection({ groupId }: { groupId: string }) {
     load()
   }, [groupId])
 
-  if (loading) return <Text size="sm" color="tertiary">{language === 'zh' ? '加载中...' : 'Loading...'}</Text>
-  if (activities.length === 0) return <Text size="sm" color="tertiary">{language === 'zh' ? '暂无活动' : 'No activity'}</Text>
+  if (loading) return <Text size="sm" color="tertiary">{t('loading')}</Text>
+  if (activities.length === 0) return <Text size="sm" color="tertiary">{t('noActivity')}</Text>
 
   return (
     <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
@@ -115,7 +115,7 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
     }
   }, [params])
 
-  const { language } = useLanguage()
+  const { language, t } = useLanguage()
   const { isPro } = useSubscription()
   const { showToast } = useToast()
   const { showDangerConfirm } = useDialog()
@@ -396,14 +396,14 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
         ))
         setShowMuteModal(null)
         setMuteReason('')
-        showToast(language === 'zh' ? '禁言成功' : 'Muted successfully', 'success')
+        showToast(t('mutedSuccessfully'), 'success')
       } else {
         const data = res.headers.get('content-type')?.includes('application/json') ? await res.json() : null
-        showToast(data?.error || (language === 'zh' ? '操作失败' : 'Operation failed'), 'error')
+        showToast(data?.error || (t('operationFailed')), 'error')
       }
     } catch (err) {
       console.error('Mute error:', err)
-      showToast(language === 'zh' ? '网络错误，请稍后重试' : 'Network error, please try again later', 'error')
+      showToast(t('networkErrorRetry'), 'error')
     }
   }
 
@@ -426,14 +426,14 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
             ? { ...m, muted_until: null, mute_reason: null }
             : m
         ))
-        showToast(language === 'zh' ? '已解除禁言' : 'Unmuted successfully', 'success')
+        showToast(t('unmutedSuccessfully'), 'success')
       } else {
         const data = res.headers.get('content-type')?.includes('application/json') ? await res.json() : null
-        showToast(data?.error || (language === 'zh' ? '操作失败' : 'Operation failed'), 'error')
+        showToast(data?.error || (t('operationFailed')), 'error')
       }
     } catch (err) {
       console.error('Unmute error:', err)
-      showToast(language === 'zh' ? '网络错误，请稍后重试' : 'Network error, please try again later', 'error')
+      showToast(t('networkErrorRetry'), 'error')
     }
   }
 
@@ -462,18 +462,16 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
         setNotifyTitle('')
         setNotifyMessage('')
         showToast(
-          language === 'zh'
-            ? `通知已发送给 ${data.notified} 位成员`
-            : `Notification sent to ${data.notified} members`,
+          t('notificationSentToMembers').replace('{count}', String(data.notified)),
           'success'
         )
       } else {
         const data = res.headers.get('content-type')?.includes('application/json') ? await res.json() : null
-        showToast(data?.error || (language === 'zh' ? '发送失败' : 'Send failed'), 'error')
+        showToast(data?.error || t('sendFailed'), 'error')
       }
     } catch (err) {
       console.error('Notify error:', err)
-      showToast(language === 'zh' ? '网络错误，请稍后重试' : 'Network error, please try again later', 'error')
+      showToast(t('networkErrorRetry'), 'error')
     } finally {
       setNotifySending(false)
     }
@@ -498,14 +496,14 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
         setMembers(prev => prev.map(m => 
           m.user_id === targetUserId ? { ...m, role: newRole } : m
         ))
-        showToast(language === 'zh' ? '角色更新成功' : 'Role updated successfully', 'success')
+        showToast(t('roleUpdatedSuccessfully'), 'success')
       } else {
         const data = await res.json()
-        showToast(data.error || (language === 'zh' ? '操作失败' : 'Operation failed'), 'error')
+        showToast(data.error || (t('operationFailed')), 'error')
       }
     } catch (err) {
       console.error('Set role error:', err)
-      showToast(language === 'zh' ? '网络错误，请稍后重试' : 'Network error, please try again later', 'error')
+      showToast(t('networkErrorRetry'), 'error')
     }
   }
 
@@ -513,8 +511,8 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
   const handleDeletePost = async (postId: string) => {
     if (!accessToken || !canManage) return
     const confirmed = await showDangerConfirm(
-      language === 'zh' ? '删除帖子' : 'Delete Post',
-      language === 'zh' ? '确定删除此帖子吗？' : 'Are you sure to delete this post?'
+      t('deletePost'),
+      t('confirmDeletePost')
     )
     if (!confirmed) return
 
@@ -531,14 +529,14 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
         setPosts(prev => prev.map(p => 
           p.id === postId ? { ...p, deleted_at: new Date().toISOString() } : p
         ))
-        showToast(language === 'zh' ? '帖子已删除' : 'Post deleted', 'success')
+        showToast(t('postDeleted'), 'success')
       } else {
         const data = await res.json()
-        showToast(data.error || (language === 'zh' ? '删除失败' : 'Delete failed'), 'error')
+        showToast(data.error || (t('deleteFailed')), 'error')
       }
     } catch (err) {
       console.error('Delete post error:', err)
-      showToast(language === 'zh' ? '网络错误，请稍后重试' : 'Network error, please try again later', 'error')
+      showToast(t('networkErrorRetry'), 'error')
     }
   }
 
@@ -546,8 +544,8 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
   const handleDeleteComment = async (commentId: string) => {
     if (!accessToken || !canManage) return
     const confirmed = await showDangerConfirm(
-      language === 'zh' ? '删除评论' : 'Delete Comment',
-      language === 'zh' ? '确定删除此评论吗？' : 'Are you sure to delete this comment?'
+      t('deleteComment'),
+      t('confirmDeleteComment')
     )
     if (!confirmed) return
 
@@ -564,14 +562,14 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
         setComments(prev => prev.map(c => 
           c.id === commentId ? { ...c, deleted_at: new Date().toISOString() } : c
         ))
-        showToast(language === 'zh' ? '评论已删除' : 'Comment deleted', 'success')
+        showToast(t('commentDeleted'), 'success')
       } else {
         const data = await res.json()
-        showToast(data.error || (language === 'zh' ? '删除失败' : 'Delete failed'), 'error')
+        showToast(data.error || (t('deleteFailed')), 'error')
       }
     } catch (err) {
       console.error('Delete comment error:', err)
-      showToast(language === 'zh' ? '网络错误，请稍后重试' : 'Network error, please try again later', 'error')
+      showToast(t('networkErrorRetry'), 'error')
     }
   }
 
@@ -656,14 +654,14 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
       const data = await res.json()
 
       if (res.ok) {
-        showToast(language === 'zh' ? '修改申请已提交，等待管理员审核' : 'Edit request submitted, pending admin review', 'success')
+        showToast(t('editRequestSubmitted'), 'success')
         setEditMode(false)
       } else {
-        showToast(data.error || (language === 'zh' ? '提交失败' : 'Submission failed'), 'error')
+        showToast(data.error || t('submissionFailed'), 'error')
       }
     } catch (err) {
       console.error('Submit edit error:', err)
-      showToast(language === 'zh' ? '网络错误，请稍后重试' : 'Network error, please try again later', 'error')
+      showToast(t('networkErrorRetry'), 'error')
     } finally {
       setSubmitting(false)
     }
@@ -733,7 +731,7 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
       <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
         <TopNav email={email} />
         <Box style={{ maxWidth: 900, margin: '0 auto', padding: tokens.spacing[6], textAlign: 'center' }}>
-          <Text color="tertiary">{language === 'zh' ? '加载中...' : 'Loading...'}</Text>
+          <Text color="tertiary">{t('loading')}</Text>
         </Box>
       </Box>
     )
@@ -744,9 +742,9 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
       <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
         <TopNav email={email} />
         <Box style={{ maxWidth: 900, margin: '0 auto', padding: tokens.spacing[6], textAlign: 'center' }}>
-          <Text color="tertiary">{language === 'zh' ? '您没有管理权限' : 'You do not have management permissions'}</Text>
+          <Text color="tertiary">{t('noManagePermission')}</Text>
           <Link href={`/groups/${groupId}`} style={{ color: '#8b6fa8', marginTop: tokens.spacing[4], display: 'inline-block' }}>
-            ← {language === 'zh' ? '返回小组' : 'Back to Group'}
+            ← {t('backToGroup')}
           </Link>
         </Box>
       </Box>
@@ -771,25 +769,25 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
             fontSize: tokens.typography.fontSize.sm,
           }}
         >
-          ← {language === 'zh' ? '返回小组' : 'Back to Group'}
+          ← {t('backToGroup')}
         </Link>
 
         {/* 标题 */}
         <Text size="2xl" weight="bold" style={{ marginBottom: tokens.spacing[6] }}>
-          {language === 'zh' ? '小组管理' : 'Group Management'} - {group?.name}
+          {t('groupManagement')} - {group?.name}
         </Text>
 
         {/* 标签页 */}
         <Box style={{ display: 'flex', gap: tokens.spacing[2], marginBottom: tokens.spacing[6] }}>
           <button style={tabStyle(activeTab === 'members')} onClick={() => setActiveTab('members')}>
-            {language === 'zh' ? '成员管理' : 'Members'}
+            {t('memberManagement')}
           </button>
           <button style={tabStyle(activeTab === 'content')} onClick={() => setActiveTab('content')}>
-            {language === 'zh' ? '内容管理' : 'Content'}
+            {t('contentManagement')}
           </button>
           {isOwner && (
             <button style={tabStyle(activeTab === 'settings')} onClick={() => setActiveTab('settings')}>
-              {language === 'zh' ? '小组设置' : 'Settings'}
+              {t('groupSettings')}
             </button>
           )}
             <button
@@ -806,13 +804,13 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
                 transition: `all ${tokens.transition.base}`,
               }}
             >
-              {language === 'zh' ? '活动日志' : 'Activity'}
+              {t('activityLog')}
             </button>
         </Box>
 
         {/* 成员管理 */}
         {activeTab === 'members' && (
-          <Card title={language === 'zh' ? `成员列表 (${members.length})` : `Members (${members.length})`}>
+          <Card title={`${t('memberList')} (${members.length})`}>
             {/* Member search + role filter + actions */}
             <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3], marginBottom: tokens.spacing[3] }}>
               <Box style={{ display: 'flex', gap: tokens.spacing[2], flexWrap: 'wrap' }}>
@@ -820,7 +818,7 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
                   type="text"
                   value={memberSearch}
                   onChange={(e) => setMemberSearch(e.target.value)}
-                  placeholder={language === 'zh' ? '搜索成员...' : 'Search members...'}
+                  placeholder={t('searchMembers')}
                   style={{
                     flex: 1,
                     minWidth: 120,
@@ -845,13 +843,13 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
                     cursor: 'pointer',
                   }}
                 >
-                  <option value="all">{language === 'zh' ? '全部角色' : 'All Roles'}</option>
-                  <option value="owner">{language === 'zh' ? '组长' : 'Owner'}</option>
-                  <option value="admin">{language === 'zh' ? '管理员' : 'Admin'}</option>
-                  <option value="member">{language === 'zh' ? '成员' : 'Member'}</option>
+                  <option value="all">{t('allRoles')}</option>
+                  <option value="owner">{t('owner')}</option>
+                  <option value="admin">{t('admin')}</option>
+                  <option value="member">{t('groupMember')}</option>
                 </select>
                 <Button variant="primary" size="sm" onClick={() => setShowNotifyModal(true)}>
-                  {language === 'zh' ? '通知成员' : 'Notify'}
+                  {t('notifyMembers')}
                 </Button>
                 <Button
                   variant="secondary"
@@ -870,22 +868,22 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
                           const fullUrl = `${window.location.origin}${data.invite_url}`
                           setInviteUrl(fullUrl)
                           await navigator.clipboard.writeText(fullUrl)
-                          showToast(language === 'zh' ? '邀请链接已复制' : 'Invite link copied', 'success')
+                          showToast(t('inviteLinkCopied'), 'success')
                         } else {
-                          showToast(language === 'zh' ? '生成失败' : 'Failed to generate', 'error')
+                          showToast(t('generateFailed'), 'error')
                         }
                       } else {
                         const data = res.headers.get('content-type')?.includes('application/json') ? await res.json() : null
-                        showToast(data?.error || (language === 'zh' ? '生成失败' : 'Failed to generate'), 'error')
+                        showToast(data?.error || (t('generateFailed')), 'error')
                       }
                     } catch {
-                      showToast(language === 'zh' ? '网络错误' : 'Network error', 'error')
+                      showToast(t('networkError'), 'error')
                     } finally {
                       setGeneratingInvite(false)
                     }
                   }}
                 >
-                  {generatingInvite ? '...' : (language === 'zh' ? '邀请链接' : 'Invite Link')}
+                  {generatingInvite ? '...' : t('inviteLink')}
                 </Button>
               </Box>
               {inviteUrl && (
@@ -897,7 +895,7 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
             <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
               {members.length === 0 && (
                 <Text color="tertiary" style={{ textAlign: 'center', padding: tokens.spacing[4] }}>
-                  {language === 'zh' ? '暂无成员数据' : 'No members data'}
+                  {t('noMembersData')}
                 </Text>
               )}
               {(() => {
@@ -912,7 +910,7 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
                   <>
                     {paginatedMembers.length === 0 && members.length > 0 && (
                       <Text color="tertiary" style={{ textAlign: 'center', padding: tokens.spacing[4] }}>
-                        {language === 'zh' ? '没有匹配的成员' : 'No matching members'}
+                        {t('noMatchingMembers')}
                       </Text>
                     )}
                     {paginatedMembers.map((member) => {
@@ -973,10 +971,10 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
                           }}
                         >
                           {memberIsOwner
-                            ? (language === 'zh' ? '组长' : 'Owner')
+                            ? t('owner')
                             : member.role === 'admin'
-                              ? (language === 'zh' ? '管理员' : 'Admin')
-                              : (language === 'zh' ? '成员' : 'Member')}
+                              ? t('admin')
+                              : t('groupMember')}
                         </span>
                         {isMuted && (
                           <span style={{ 
@@ -986,13 +984,13 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
                             padding: `2px ${tokens.spacing[2]}`,
                             borderRadius: tokens.radius.full,
                           }}>
-                            {language === 'zh' ? '已禁言' : 'Muted'}
+                            {t('memberMutedBadge')}
                           </span>
                         )}
                       </Box>
                       {isMuted && member.mute_reason && (
                         <Text size="xs" color="tertiary" style={{ marginTop: 4 }}>
-                          {language === 'zh' ? '原因' : 'Reason'}: {member.mute_reason}
+                          {t('muteReasonLabel')}: {member.mute_reason}
                         </Text>
                       )}
                     </Box>
@@ -1007,7 +1005,7 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
                             size="sm"
                             onClick={() => handleUnmute(member.user_id)}
                           >
-                            {language === 'zh' ? '解禁' : 'Unmute'}
+                            {t('unmute')}
                           </Button>
                         ) : (
                           <Button
@@ -1015,7 +1013,7 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
                             size="sm"
                             onClick={() => setShowMuteModal(member.user_id)}
                           >
-                            {language === 'zh' ? '禁言' : 'Mute'}
+                            {t('mute')}
                           </Button>
                         )}
 
@@ -1027,8 +1025,8 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
                             onClick={() => handleSetRole(member.user_id, member.role === 'admin' ? 'member' : 'admin')}
                           >
                             {member.role === 'admin' && !memberIsOwner
-                              ? (language === 'zh' ? '撤销管理员' : 'Remove Admin')
-                              : (language === 'zh' ? '设为管理员' : 'Make Admin')}
+                              ? t('removeAdmin')
+                              : t('makeAdmin')}
                           </Button>
                         )}
 
@@ -1038,8 +1036,8 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
                           size="sm"
                           onClick={async () => {
                             const confirmed = await showDangerConfirm(
-                              language === 'zh' ? '踢出成员' : 'Kick Member',
-                              language === 'zh' ? `确定将 @${member.handle || 'Unknown'} 移出小组吗？` : `Are you sure you want to kick @${member.handle || 'Unknown'}?`
+                              t('kickMember'),
+                              t('confirmKickMember').replace('{handle}', member.handle || 'Unknown')
                             )
                             if (!confirmed) return
                             try {
@@ -1049,18 +1047,18 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
                               })
                               if (res.ok) {
                                 setMembers(prev => prev.filter(m => m.user_id !== member.user_id))
-                                showToast(language === 'zh' ? '已踢出' : 'Kicked', 'success')
+                                showToast(t('kicked'), 'success')
                               } else {
                                 const data = res.headers.get('content-type')?.includes('application/json') ? await res.json() : null
-                                showToast(data?.error || (language === 'zh' ? '操作失败' : 'Failed'), 'error')
+                                showToast(data?.error || t('operationFailed'), 'error')
                               }
                             } catch {
-                              showToast(language === 'zh' ? '网络错误' : 'Network error', 'error')
+                              showToast(t('networkError'), 'error')
                             }
                           }}
                           style={{ color: '#ff6b6b' }}
                         >
-                          {language === 'zh' ? '踢出' : 'Kick'}
+                          {t('kick')}
                         </Button>
                       </Box>
                     )}
@@ -1076,12 +1074,10 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
                           disabled={memberPage === 0}
                           onClick={() => setMemberPage(p => Math.max(0, p - 1))}
                         >
-                          {language === 'zh' ? '上一页' : 'Prev'}
+                          {t('prevPage')}
                         </Button>
                         <Text size="sm" color="secondary">
-                          {language === 'zh'
-                            ? `第 ${memberPage + 1} / ${totalMemberPages} 页`
-                            : `Page ${memberPage + 1} of ${totalMemberPages}`}
+                          {t('pageOf').replace('{current}', String(memberPage + 1)).replace('{total}', String(totalMemberPages))}
                         </Text>
                         <Button
                           variant="secondary"
@@ -1089,7 +1085,7 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
                           disabled={memberPage >= totalMemberPages - 1}
                           onClick={() => setMemberPage(p => Math.min(totalMemberPages - 1, p + 1))}
                         >
-                          {language === 'zh' ? '下一页' : 'Next'}
+                          {t('nextPage')}
                         </Button>
                       </Box>
                     )}
@@ -1109,7 +1105,7 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
                 type="text"
                 value={contentSearch}
                 onChange={(e) => setContentSearch(e.target.value)}
-                placeholder={language === 'zh' ? '搜索帖子、评论或作者...' : 'Search posts, comments, or authors...'}
+                placeholder={t('searchPostsCommentsAuthors')}
                 style={{
                   ...inputStyle,
                   paddingLeft: tokens.spacing[10],
@@ -1155,7 +1151,7 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
             </Box>
 
             {/* 帖子 */}
-            <Card title={language === 'zh' ? `帖子 (${filteredPosts.length}${contentSearch ? `/${posts.length}` : ''})` : `Posts (${filteredPosts.length}${contentSearch ? `/${posts.length}` : ''})`}>
+            <Card title={`${t('posts')} (${filteredPosts.length}${contentSearch ? `/${posts.length}` : ''})`}>
               <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
                 {filteredPosts.map((post) => (
                   <Box
@@ -1177,7 +1173,7 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
                         </Text>
                         {post.deleted_at && (
                           <Text size="xs" style={{ color: '#ff6b6b', marginTop: 4 }}>
-                            {language === 'zh' ? '已被管理员删除' : 'Deleted by admin'}
+                            {t('deletedByAdmin')}
                           </Text>
                         )}
                       </Box>
@@ -1188,7 +1184,7 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
                           onClick={() => handleDeletePost(post.id)}
                           style={{ color: '#ff6b6b' }}
                         >
-                          {language === 'zh' ? '删除' : 'Delete'}
+                          {t('delete')}
                         </Button>
                       )}
                     </Box>
@@ -1197,8 +1193,8 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
                 {filteredPosts.length === 0 && (
                   <Text color="tertiary" style={{ textAlign: 'center', padding: tokens.spacing[4] }}>
                     {contentSearch
-                      ? (language === 'zh' ? '没有匹配的帖子' : 'No matching posts')
-                      : (language === 'zh' ? '暂无帖子' : 'No posts')}
+                      ? t('noMatchingPosts')
+                      : t('noPostsYet')}
                   </Text>
                 )}
                 {/* Load More button */}
@@ -1210,8 +1206,8 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
                       disabled={loadingMorePosts}
                     >
                       {loadingMorePosts
-                        ? (language === 'zh' ? '加载中...' : 'Loading...')
-                        : (language === 'zh' ? '加载更多' : 'Load More')}
+                        ? t('loading')
+                        : t('loadMore')}
                     </Button>
                   </Box>
                 )}
@@ -1219,7 +1215,7 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
             </Card>
 
             {/* 评论 */}
-            <Card title={language === 'zh' ? `评论 (${filteredComments.length}${contentSearch ? `/${comments.length}` : ''})` : `Comments (${filteredComments.length}${contentSearch ? `/${comments.length}` : ''})`}>
+            <Card title={`${t('comments')} (${filteredComments.length}${contentSearch ? `/${comments.length}` : ''})`}>
               <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
                 {filteredComments.slice(0, 50).map((comment) => (
                   <Box
@@ -1241,7 +1237,7 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
                         </Text>
                         {comment.deleted_at && (
                           <Text size="xs" style={{ color: '#ff6b6b', marginTop: 4 }}>
-                            {language === 'zh' ? '已被管理员删除' : 'Deleted by admin'}
+                            {t('deletedByAdmin')}
                           </Text>
                         )}
                       </Box>
@@ -1252,7 +1248,7 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
                           onClick={() => handleDeleteComment(comment.id)}
                           style={{ color: '#ff6b6b' }}
                         >
-                          {language === 'zh' ? '删除' : 'Delete'}
+                          {t('delete')}
                         </Button>
                       )}
                     </Box>
@@ -1261,8 +1257,8 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
                 {filteredComments.length === 0 && (
                   <Text color="tertiary" style={{ textAlign: 'center', padding: tokens.spacing[4] }}>
                     {contentSearch
-                      ? (language === 'zh' ? '没有匹配的评论' : 'No matching comments')
-                      : (language === 'zh' ? '暂无评论' : 'No comments')}
+                      ? t('noMatchingComments')
+                      : t('noCommentsYet')}
                   </Text>
                 )}
               </Box>
@@ -1272,11 +1268,9 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
 
         {/* 小组设置（仅组长） */}
         {activeTab === 'settings' && isOwner && (
-          <Card title={language === 'zh' ? '小组设置' : 'Group Settings'}>
+          <Card title={t('groupSettings')}>
             <Text size="sm" color="tertiary" style={{ marginBottom: tokens.spacing[4] }}>
-              {language === 'zh' 
-                ? '修改小组信息需要提交申请，经管理员审核后生效' 
-                : 'Changes to group info require admin approval'}
+              {t('editRequiresApproval')}
             </Text>
 
             <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[5] }}>
@@ -1314,7 +1308,7 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
                         setLangTab('en')
                       }}
                     >
-                      + {language === 'zh' ? '添加多语言' : 'Add Language'}
+                      + {t('addLanguage')}
                     </button>
                   )}
                 </Box>
@@ -1335,13 +1329,13 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
                   {/* 小组名称（中文） */}
                   <Box>
                     <label style={labelStyle}>
-                      小组名称 *
+                      {t('groupName')} *
                     </label>
                     <input
                       type="text"
                       value={editName}
                       onChange={(e) => setEditName(e.target.value)}
-                      placeholder="例如：BTC 交易讨论组"
+                      placeholder={t('groupNamePlaceholder')}
                       style={inputStyle}
                       disabled={!editMode}
                       maxLength={50}
@@ -1351,12 +1345,12 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
                   {/* 小组简介（中文） */}
                   <Box>
                     <label style={labelStyle}>
-                      小组简介
+                      {t('groupDescription')}
                     </label>
                     <textarea
                       value={editDescription}
                       onChange={(e) => setEditDescription(e.target.value)}
-                      placeholder="介绍一下你的小组..."
+                      placeholder={t('groupDescriptionPlaceholder')}
                       style={{ ...inputStyle, minHeight: 100, resize: 'vertical' }}
                       disabled={!editMode}
                       maxLength={500}
@@ -1379,7 +1373,7 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
                     }}
                   >
                     <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <Text size="sm" color="tertiary">English Version</Text>
+                      <Text size="sm" color="tertiary">{t('englishVersion')}</Text>
                       {editMode && (
                         <Button
                           type="button"
@@ -1393,7 +1387,7 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
                           }}
                           style={{ padding: 0, color: tokens.colors.text.tertiary }}
                         >
-                          {language === 'zh' ? '移除英文' : 'Remove English'}
+                          {t('removeEnglish')}
                         </Button>
                       )}
                     </Box>
@@ -1401,13 +1395,13 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
                     {/* 小组名称（英文） */}
                     <Box>
                       <label style={labelStyle}>
-                        Group Name
+                        {t('groupNameEn')}
                       </label>
                       <input
                         type="text"
                         value={editNameEn}
                         onChange={(e) => setEditNameEn(e.target.value)}
-                        placeholder="e.g., BTC Trading Discussion"
+                        placeholder={t('groupNameEnPlaceholder')}
                         style={inputStyle}
                         disabled={!editMode}
                         maxLength={50}
@@ -1417,12 +1411,12 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
                     {/* 小组简介（英文） */}
                     <Box>
                       <label style={labelStyle}>
-                        Group Description
+                        {t('groupDescriptionEn')}
                       </label>
                       <textarea
                         value={editDescriptionEn}
                         onChange={(e) => setEditDescriptionEn(e.target.value)}
-                        placeholder="Describe your group..."
+                        placeholder={t('groupDescriptionEnPlaceholder')}
                         style={{ ...inputStyle, minHeight: 100, resize: 'vertical' }}
                         disabled={!editMode}
                         maxLength={500}
@@ -1435,12 +1429,10 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
               {/* 小组规则 */}
               <Box>
                 <Text weight="bold" style={{ marginBottom: tokens.spacing[3] }}>
-                  {language === 'zh' ? '小组规则' : 'Group Rules'}
+                  {t('groupRules')}
                 </Text>
                 <Text size="sm" color="tertiary" style={{ marginBottom: tokens.spacing[3] }}>
-                  {language === 'zh' 
-                    ? '一条一条添加小组规则，成员需要遵守这些规则' 
-                    : 'Add rules one by one that members must follow'}
+                  {t('groupRulesDescription')}
                 </Text>
 
                 {/* 已添加的规则列表 */}
@@ -1458,7 +1450,7 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
                       >
                         <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: tokens.spacing[2] }}>
                           <Text size="sm" weight="bold" color="secondary">
-                            {language === 'zh' ? `规则 ${index + 1}` : `Rule ${index + 1}`}
+                            {t('ruleNumber').replace('{n}', String(index + 1))}
                           </Text>
                           {editMode && (
                             <Button
@@ -1468,7 +1460,7 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
                               onClick={() => removeRule(index)}
                               style={{ padding: 0, color: '#ff6b6b', fontSize: tokens.typography.fontSize.xs }}
                             >
-                              {language === 'zh' ? '删除' : 'Delete'}
+                              {t('delete')}
                             </Button>
                           )}
                         </Box>
@@ -1482,7 +1474,7 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
                                 value={rule.zh}
                                 onChange={(e) => updateRule(index, 'zh', e.target.value)}
                                 style={{ ...inputStyle, padding: tokens.spacing[2], fontSize: tokens.typography.fontSize.sm }}
-                                placeholder="规则内容（中文）"
+                                placeholder={t('ruleContentZhPlaceholder')}
                               />
                             </Box>
                             {showMultiLang && (
@@ -1493,7 +1485,7 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
                                   value={rule.en}
                                   onChange={(e) => updateRule(index, 'en', e.target.value)}
                                   style={{ ...inputStyle, padding: tokens.spacing[2], fontSize: tokens.typography.fontSize.sm }}
-                                  placeholder="Rule content (English)"
+                                  placeholder={t('ruleContentEnPlaceholder')}
                                 />
                               </Box>
                             )}
@@ -1520,7 +1512,7 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
                     }}
                   >
                     <Text size="sm" color="tertiary" style={{ marginBottom: tokens.spacing[2] }}>
-                      {language === 'zh' ? '添加新规则' : 'Add New Rule'}
+                      {t('addNewRule')}
                     </Text>
                     <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
                       <input
@@ -1528,7 +1520,7 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
                         value={newRuleZh}
                         onChange={(e) => setNewRuleZh(e.target.value)}
                         style={{ ...inputStyle, padding: tokens.spacing[2], fontSize: tokens.typography.fontSize.sm }}
-                        placeholder={language === 'zh' ? '输入规则内容（中文）' : 'Enter rule (Chinese)'}
+                        placeholder={t('enterRuleZh')}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') {
                             e.preventDefault()
@@ -1542,7 +1534,7 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
                           value={newRuleEn}
                           onChange={(e) => setNewRuleEn(e.target.value)}
                           style={{ ...inputStyle, padding: tokens.spacing[2], fontSize: tokens.typography.fontSize.sm }}
-                          placeholder="Enter rule (English)"
+                          placeholder={t('enterRuleEn')}
                           onKeyDown={(e) => {
                             if (e.key === 'Enter') {
                               e.preventDefault()
@@ -1559,7 +1551,7 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
                         disabled={!newRuleZh.trim() && !newRuleEn.trim()}
                         style={{ alignSelf: 'flex-start' }}
                       >
-                        + {language === 'zh' ? '添加规则' : 'Add Rule'}
+                        + {t('addRule')}
                       </Button>
                     </Box>
                   </Box>
@@ -1570,7 +1562,7 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
               {editMode && (
                 <Box>
                   <label style={labelStyle}>
-                    {language === 'zh' ? '小组头像 URL' : 'Group Avatar URL'}
+                    {t('groupAvatarUrl')}
                   </label>
                   <input
                     type="url"
@@ -1639,7 +1631,7 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
                     <Box style={{ flex: 1 }}>
                       <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], marginBottom: 4 }}>
                         <Text weight="bold" style={{ color: 'var(--color-pro-gradient-start)' }}>
-                          {language === 'zh' ? 'Pro 专属小组' : 'Pro Exclusive Group'}
+                          {t('proExclusiveGroup')}
                         </Text>
                         <Box
                           style={{
@@ -1655,9 +1647,7 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
                         </Box>
                       </Box>
                       <Text size="sm" color="secondary" style={{ lineHeight: 1.5 }}>
-                        {language === 'zh' 
-                          ? '开启后，只有 Pro 会员才能加入此小组。组长和组员都需要是 Pro 会员。' 
-                          : 'When enabled, only Pro members can join this group. Both the leader and members must be Pro members.'}
+                        {t('proExclusiveGroupDesc')}
                       </Text>
                     </Box>
                   </Box>
@@ -1668,31 +1658,29 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
               {editMode && (
                 <Box>
                   <Text weight="bold" style={{ marginBottom: tokens.spacing[3] }}>
-                    {language === 'zh' ? '角色称呼设置' : 'Role Names'}
+                    {t('roleNamesSettings')}
                   </Text>
                   <Text size="sm" color="tertiary" style={{ marginBottom: tokens.spacing[3] }}>
-                    {language === 'zh' 
-                      ? '自定义小组内角色的称呼（可选）' 
-                      : 'Customize role names for your group (optional)'}
+                    {t('roleNamesSettingsDesc')}
                   </Text>
 
                   <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}>
                     {/* 管理员 */}
                     <Box style={{ display: 'grid', gridTemplateColumns: '100px 1fr 1fr', gap: tokens.spacing[2], alignItems: 'center' }}>
                       <Text size="sm" color="secondary">
-                        {language === 'zh' ? '管理员' : 'Admin'}
+                        {t('admin')}
                       </Text>
                       <input
                         type="text"
                         value={editRoleNames?.admin?.zh || ''}
-                        onChange={(e) => setEditRoleNames({ 
-                          ...editRoleNames, 
-                          admin: { 
-                            ...(editRoleNames?.admin || { zh: '', en: '' }), 
-                            zh: e.target.value 
-                          } 
+                        onChange={(e) => setEditRoleNames({
+                          ...editRoleNames,
+                          admin: {
+                            ...(editRoleNames?.admin || { zh: '', en: '' }),
+                            zh: e.target.value
+                          }
                         })}
-                        placeholder="中文（如：掌门）"
+                        placeholder={t('adminRolePlaceholderZh')}
                         style={{ ...inputStyle, padding: tokens.spacing[2] }}
                         maxLength={20}
                       />
@@ -1706,7 +1694,7 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
                             en: e.target.value 
                           } 
                         })}
-                        placeholder="English (e.g., Leader)"
+                        placeholder={t('adminRolePlaceholderEn')}
                         style={{ ...inputStyle, padding: tokens.spacing[2] }}
                         maxLength={20}
                       />
@@ -1715,19 +1703,19 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
                     {/* 成员 */}
                     <Box style={{ display: 'grid', gridTemplateColumns: '100px 1fr 1fr', gap: tokens.spacing[2], alignItems: 'center' }}>
                       <Text size="sm" color="secondary">
-                        {language === 'zh' ? '成员' : 'Member'}
+                        {t('groupMember')}
                       </Text>
                       <input
                         type="text"
                         value={editRoleNames?.member?.zh || ''}
-                        onChange={(e) => setEditRoleNames({ 
-                          ...editRoleNames, 
-                          member: { 
-                            ...(editRoleNames?.member || { zh: '', en: '' }), 
-                            zh: e.target.value 
-                          } 
+                        onChange={(e) => setEditRoleNames({
+                          ...editRoleNames,
+                          member: {
+                            ...(editRoleNames?.member || { zh: '', en: '' }),
+                            zh: e.target.value
+                          }
                         })}
-                        placeholder="中文（如：弟子）"
+                        placeholder={t('memberRolePlaceholderZh')}
                         style={{ ...inputStyle, padding: tokens.spacing[2] }}
                         maxLength={20}
                       />
@@ -1741,7 +1729,7 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
                             en: e.target.value 
                           } 
                         })}
-                        placeholder="English (e.g., Disciple)"
+                        placeholder={t('memberRolePlaceholderEn')}
                         style={{ ...inputStyle, padding: tokens.spacing[2] }}
                         maxLength={20}
                       />
@@ -1785,17 +1773,17 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
                         setLangTab('zh')
                       }
                     }} disabled={submitting}>
-                      {language === 'zh' ? '取消' : 'Cancel'}
+                      {t('cancel')}
                     </Button>
                     <Button variant="primary" onClick={handleSubmitEdit} disabled={submitting}>
-                      {submitting 
-                        ? (language === 'zh' ? '提交中...' : 'Submitting...')
-                        : (language === 'zh' ? '提交修改申请' : 'Submit Changes')}
+                      {submitting
+                        ? t('submitting')
+                        : t('submitChanges')}
                     </Button>
                   </>
                 ) : (
                   <Button variant="primary" onClick={() => setEditMode(true)}>
-                    {language === 'zh' ? '编辑小组信息' : 'Edit Group Info'}
+                    {t('editGroupInfo')}
                   </Button>
                 )}
               </Box>
@@ -1805,7 +1793,7 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
 
         {/* Activity Log */}
         {activeTab === 'activity' && (
-          <Card title={language === 'zh' ? '活动日志' : 'Activity Log'}>
+          <Card title={t('activityLog')}>
             <ActivityLogSection groupId={groupId} />
           </Card>
         )}
@@ -1839,13 +1827,13 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
               onClick={(e) => e.stopPropagation()}
             >
               <Text size="lg" weight="bold" style={{ marginBottom: tokens.spacing[4] }}>
-                {language === 'zh' ? '禁言成员' : 'Mute Member'}
+                {t('muteMember')}
               </Text>
 
               {/* 禁言时长 */}
               <Box style={{ marginBottom: tokens.spacing[4] }}>
                 <Text size="sm" weight="bold" color="secondary" style={{ marginBottom: tokens.spacing[2] }}>
-                  {language === 'zh' ? '禁言时长' : 'Duration'}
+                  {t('muteDuration')}
                 </Text>
                 <Box style={{ display: 'flex', gap: tokens.spacing[2], flexWrap: 'wrap' }}>
                   {(['3h', '1d', '7d', 'permanent'] as const).map((d) => (
@@ -1855,7 +1843,7 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
                       size="sm"
                       onClick={() => setMuteDuration(d)}
                     >
-                      {d === '3h' ? '3小时' : d === '1d' ? '1天' : d === '7d' ? '7天' : '永久'}
+                      {d === '3h' ? t('duration3h') : d === '1d' ? t('duration1d') : d === '7d' ? t('duration7d') : t('durationPermanent')}
                     </Button>
                   ))}
                 </Box>
@@ -1864,22 +1852,22 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
               {/* 禁言原因 */}
               <Box style={{ marginBottom: tokens.spacing[4] }}>
                 <Text size="sm" weight="bold" color="secondary" style={{ marginBottom: tokens.spacing[2] }}>
-                  {language === 'zh' ? '禁言原因（可选）' : 'Reason (optional)'}
+                  {t('muteReasonOptional')}
                 </Text>
                 <textarea
                   value={muteReason}
                   onChange={(e) => setMuteReason(e.target.value)}
-                  placeholder={language === 'zh' ? '输入禁言原因...' : 'Enter reason...'}
+                  placeholder={t('enterMuteReason')}
                   style={{ ...inputStyle, minHeight: 80, resize: 'vertical' }}
                 />
               </Box>
 
               <Box style={{ display: 'flex', gap: tokens.spacing[3], justifyContent: 'flex-end' }}>
                 <Button variant="secondary" onClick={() => setShowMuteModal(null)}>
-                  {language === 'zh' ? '取消' : 'Cancel'}
+                  {t('cancel')}
                 </Button>
                 <Button variant="primary" onClick={() => handleMute(showMuteModal)}>
-                  {language === 'zh' ? '确认禁言' : 'Confirm Mute'}
+                  {t('confirmMute')}
                 </Button>
               </Box>
             </Box>
@@ -1915,19 +1903,19 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
               onClick={(e) => e.stopPropagation()}
             >
               <Text size="lg" weight="bold" style={{ marginBottom: tokens.spacing[4] }}>
-                {language === 'zh' ? '通知全体成员' : 'Notify All Members'}
+                {t('notifyAllMembers')}
               </Text>
 
               {/* 通知标题 */}
               <Box style={{ marginBottom: tokens.spacing[4] }}>
                 <Text size="sm" weight="bold" color="secondary" style={{ marginBottom: tokens.spacing[2] }}>
-                  {language === 'zh' ? '标题（可选）' : 'Title (optional)'}
+                  {t('notifyTitleOptional')}
                 </Text>
                 <input
                   type="text"
                   value={notifyTitle}
                   onChange={(e) => setNotifyTitle(e.target.value)}
-                  placeholder={language === 'zh' ? '通知标题...' : 'Notification title...'}
+                  placeholder={t('notifyTitlePlaceholder')}
                   style={inputStyle}
                   maxLength={50}
                 />
@@ -1936,12 +1924,12 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
               {/* 通知内容 */}
               <Box style={{ marginBottom: tokens.spacing[4] }}>
                 <Text size="sm" weight="bold" color="secondary" style={{ marginBottom: tokens.spacing[2] }}>
-                  {language === 'zh' ? '通知内容' : 'Message'} *
+                  {t('notifyContent')} *
                 </Text>
                 <textarea
                   value={notifyMessage}
                   onChange={(e) => setNotifyMessage(e.target.value)}
-                  placeholder={language === 'zh' ? '输入通知内容...' : 'Enter notification message...'}
+                  placeholder={t('notifyContentPlaceholder')}
                   style={{ ...inputStyle, minHeight: 120, resize: 'vertical' }}
                   maxLength={500}
                 />
@@ -1951,14 +1939,12 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
               </Box>
 
               <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[4] }}>
-                {language === 'zh'
-                  ? '通知将以私信和系统通知的形式发送给所有成员'
-                  : 'Notification will be sent as DM and system notification to all members'}
+                {t('notifyDeliveryNote')}
               </Text>
 
               <Box style={{ display: 'flex', gap: tokens.spacing[3], justifyContent: 'flex-end' }}>
                 <Button variant="secondary" onClick={() => setShowNotifyModal(false)} disabled={notifySending}>
-                  {language === 'zh' ? '取消' : 'Cancel'}
+                  {t('cancel')}
                 </Button>
                 <Button
                   variant="primary"
@@ -1966,8 +1952,8 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
                   disabled={notifySending || !notifyMessage.trim()}
                 >
                   {notifySending
-                    ? (language === 'zh' ? '发送中...' : 'Sending...')
-                    : (language === 'zh' ? '发送通知' : 'Send Notification')}
+                    ? t('sending')
+                    : t('sendNotification')}
                 </Button>
               </Box>
             </Box>

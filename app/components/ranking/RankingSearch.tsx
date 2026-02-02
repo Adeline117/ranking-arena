@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef, useCallback, memo } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 // ============ Types ============
 
@@ -89,7 +90,8 @@ const CloseSmallIcon = ({ size = 12 }: { size?: number }) => (
 
 // ============ Component ============
 
-function RankingSearchInner({ value, onChange, resultCount, language }: RankingSearchProps) {
+function RankingSearchInner({ value, onChange, resultCount, language: _language }: RankingSearchProps) {
+  const { t } = useLanguage()
   const [history, setHistory] = useState<string[]>([])
   const [showDropdown, setShowDropdown] = useState(false)
   const [activeIndex, setActiveIndex] = useState(-1)
@@ -260,8 +262,8 @@ function RankingSearchInner({ value, onChange, resultCount, language }: RankingS
           onChange={handleChange}
           onFocus={handleFocus}
           onKeyDown={handleKeyDown}
-          placeholder={language === 'zh' ? '搜索交易员...' : 'Search traders...'}
-          aria-label={language === 'zh' ? '搜索交易员' : 'Search traders'}
+          placeholder={t('searchTradersPlaceholder')}
+          aria-label={t('searchTradersLabel')}
           aria-expanded={isHistoryVisible}
           aria-haspopup="listbox"
           aria-autocomplete="list"
@@ -280,13 +282,13 @@ function RankingSearchInner({ value, onChange, resultCount, language }: RankingS
         />
         {showResultCount && (
           <Text size="xs" color="tertiary" style={{ flexShrink: 0 }}>
-            {resultCount} {language === 'zh' ? '条结果' : 'results'}
+            {resultCount} {t('resultsCount')}
           </Text>
         )}
         {hasValue && (
           <button
             onClick={handleClearInput}
-            aria-label={language === 'zh' ? '清除搜索' : 'Clear search'}
+            aria-label={t('clearSearch')}
             style={{
               background: 'none',
               border: 'none',
@@ -318,7 +320,7 @@ function RankingSearchInner({ value, onChange, resultCount, language }: RankingS
         <div
           ref={dropdownRef}
           role="listbox"
-          aria-label={language === 'zh' ? '搜索历史' : 'Search history'}
+          aria-label={t('searchHistory')}
           style={{
             position: 'absolute',
             top: '100%',
@@ -348,7 +350,7 @@ function RankingSearchInner({ value, onChange, resultCount, language }: RankingS
             <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1] }}>
               <ClockIcon size={11} />
               <Text size="xs" weight="bold" color="tertiary">
-                {language === 'zh' ? '搜索历史' : 'Recent Searches'}
+                {t('searchHistory')}
               </Text>
             </Box>
             <button
@@ -371,7 +373,7 @@ function RankingSearchInner({ value, onChange, resultCount, language }: RankingS
                 e.currentTarget.style.opacity = '0.7'
               }}
             >
-              {language === 'zh' ? '清除全部' : 'Clear All'}
+              {t('clearAll')}
             </button>
           </Box>
 
@@ -421,7 +423,7 @@ function RankingSearchInner({ value, onChange, resultCount, language }: RankingS
                 </Text>
                 <button
                   onClick={(e) => handleRemoveHistory(e, item)}
-                  aria-label={language === 'zh' ? `删除 "${item}"` : `Remove "${item}"`}
+                  aria-label={t('removeHistoryItem').replace('{item}', item)}
                   style={{
                     background: 'none',
                     border: 'none',

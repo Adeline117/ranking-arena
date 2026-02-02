@@ -9,6 +9,7 @@ import { tokens } from '@/lib/design-tokens'
 import { useToast } from '@/app/components/ui/Toast'
 import { RankingSkeleton } from '@/app/components/ui/Skeleton'
 import { getCsrfHeaders } from '@/lib/api/client'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 interface UploadedImage {
   url: string
@@ -20,10 +21,11 @@ const CONTENT_MAX_LENGTH = 10000
 
 // 带编辑控制的内容渲染（用于预览模式）
 function renderContentWithControls(
-  text: string, 
+  text: string,
   onMoveImage: (url: string, direction: 'up' | 'down') => void,
   onRemoveImage: (url: string) => void,
-  imageCount: number
+  imageCount: number,
+  t: (key: string) => string
 ) {
   if (!text) return null
   
@@ -140,7 +142,7 @@ function renderContentWithControls(
             <button
               onClick={(e) => { e.stopPropagation(); onMoveImage(part.url!, 'up') }}
               disabled={isFirst}
-              title="上移"
+              title={t('moveUp')}
               style={{
                 width: 24,
                 height: 24,
@@ -160,7 +162,7 @@ function renderContentWithControls(
             <button
               onClick={(e) => { e.stopPropagation(); onMoveImage(part.url!, 'down') }}
               disabled={isLast}
-              title="下移"
+              title={t('moveDown')}
               style={{
                 width: 24,
                 height: 24,
@@ -179,7 +181,7 @@ function renderContentWithControls(
             </button>
             <button
               onClick={(e) => { e.stopPropagation(); onRemoveImage(part.url!) }}
-              title="移除"
+              title={t('remove')}
               style={{
                 width: 24,
                 height: 24,
@@ -227,6 +229,7 @@ export default function EditPostPage() {
   const postId = params.id as string
   const router = useRouter()
   const { showToast } = useToast()
+  const { t } = useLanguage()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
@@ -266,14 +269,14 @@ export default function EditPostPage() {
 
         if (error) {
           console.error('Error loading post:', error)
-          showToast('加载帖子失败', 'error')
+          showToast(t('loadPostFailed'), 'error')
           router.push('/my-posts')
           return
         }
 
         // 验证所有权
         if (post.author_id !== userId) {
-          showToast('无权编辑此帖子', 'error')
+          showToast(t('noPermissionEditPost'), 'error')
           router.push('/my-posts')
           return
         }
@@ -286,7 +289,7 @@ export default function EditPostPage() {
         setImages(imageUrls.map((url: string) => ({ url, fileName: url.split('/').pop() || '' })))
       } catch (error) {
         console.error('Error loading post:', error)
-        showToast('加载帖子失败', 'error')
+        showToast(t('loadPostFailed'), 'error')
       } finally {
         setLoading(false)
       }
@@ -301,12 +304,12 @@ export default function EditPostPage() {
     if (!files || files.length === 0) return
 
     if (!userId) {
-      showToast('请先登录', 'warning')
+      showToast(t('pleaseLogin'), 'warning')
       return
     }
 
     if (images.length + files.length > 9) {
-      showToast('最多上传9张图片', 'warning')
+      showToast(t('maxImages'), 'warning')
       return
     }
 
@@ -316,12 +319,12 @@ export default function EditPostPage() {
     for (const file of Array.from(files)) {
       const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp']
       if (!allowedTypes.includes(file.type)) {
-        showToast(`${file.name} 格式不支持`, 'error')
+        showToast(`${file.name} ${t('formatNotSupported')}`, 'error')
         continue
       }
 
       if (file.size > 5 * 1024 * 1024) {
-        showToast(`${file.name} 超过5MB`, 'error')
+        showToast(`${file.name} ${t('fileTooLarge')}`, 'error')
         continue
       }
 
@@ -341,7 +344,7 @@ export default function EditPostPage() {
         const data = await response.json()
 
         if (!response.ok) {
-          showToast(data.error || '上传失败', 'error')
+          showToast(data.error || t('uploadFailed'), 'error')
           continue
         }
 
@@ -351,13 +354,13 @@ export default function EditPostPage() {
         })
       } catch (error) {
         console.error('Upload error:', error)
-        showToast('上传失败', 'error')
+        showToast(t('uploadFailed'), 'error')
       }
     }
 
     if (newImages.length > 0) {
       setImages(prev => [...prev, ...newImages])
-      showToast(`成功上传 ${newImages.length} 张图片`, 'success')
+      showToast(t('uploadSuccess').replace('{count}', String(newImages.length)), 'success')
     }
 
     setUploading(false)
@@ -385,7 +388,7 @@ export default function EditPostPage() {
     } else {
       setContent(prev => prev + imageMarkdown)
     }
-    showToast('图片已插入到内容', 'info')
+    showToast(t('imageInserted'), 'info')
   }
 
   // 移动图片在内容中的位置（上移或下移）
@@ -402,7 +405,7 @@ export default function EditPostPage() {
 
     const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1
     if (targetIndex < 0 || targetIndex >= matches.length) {
-      showToast(direction === 'up' ? '已在最顶部' : '已在最底部', 'info')
+      showToast(direction === 'up' ? t('alreadyAtTop') : t('alreadyAtBottom'), 'info')
       return
     }
 
@@ -428,14 +431,14 @@ export default function EditPostPage() {
     }
 
     setContent(newContent)
-    showToast(direction === 'up' ? '图片已上移' : '图片已下移', 'success')
+    showToast(direction === 'up' ? t('imageMovedUp') : t('imageMovedDown'), 'success')
   }
 
   // 从内容中移除图片
   const removeImageFromContent = (url: string) => {
     const imagePattern = new RegExp(`\\n?!\\[image\\]\\(${url.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\)\\n?`, 'g')
     setContent(prev => prev.replace(imagePattern, '\n').replace(/\n{3,}/g, '\n\n').trim())
-    showToast('图片已从内容中移除', 'info')
+    showToast(t('imageRemovedFromContent'), 'info')
   }
 
   // 检查图片是否已在内容中
@@ -476,12 +479,12 @@ export default function EditPostPage() {
   // 提交更新
   const handleSubmit = async () => {
     if (!title.trim()) {
-      showToast('请输入标题', 'warning')
+      showToast(t('pleaseEnterTitle'), 'warning')
       return
     }
 
     if (!userId || !originalPost) {
-      showToast('无法保存', 'error')
+      showToast(t('cannotSave'), 'error')
       return
     }
 
@@ -512,10 +515,10 @@ export default function EditPostPage() {
         return
       }
 
-      showToast('更新成功！', 'success')
+      showToast(t('updateSuccess'), 'success')
       router.push('/my-posts')
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : '更新失败'
+      const errorMessage = error instanceof Error ? error.message : t('updateFailed')
       showToast(errorMessage, 'error')
     } finally {
       setSaving(false)
@@ -538,7 +541,7 @@ export default function EditPostPage() {
       <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
         <TopNav email={email} />
         <Box style={{ maxWidth: 800, margin: '0 auto', padding: tokens.spacing[6], textAlign: 'center' }}>
-          <Text size="lg" color="secondary">帖子不存在或无权编辑</Text>
+          <Text size="lg" color="secondary">{t('postNotFoundOrNoPermission')}</Text>
         </Box>
       </Box>
     )
@@ -549,10 +552,10 @@ export default function EditPostPage() {
       <TopNav email={email} />
       <Box style={{ maxWidth: 800, margin: '0 auto', padding: tokens.spacing[6] }}>
         <Text size="2xl" weight="black" style={{ marginBottom: tokens.spacing[2] }}>
-          编辑帖子
+          {t('editPost')}
         </Text>
         <Text size="sm" color="secondary" style={{ marginBottom: tokens.spacing[6] }}>
-          修改你的帖子内容
+          {t('editPostDescription')}
         </Text>
 
         <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}>
@@ -560,7 +563,7 @@ export default function EditPostPage() {
           <Box>
             <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: tokens.spacing[2] }}>
               <Text size="sm" weight="bold">
-                标题
+                {t('titleLabel')}
               </Text>
               <Text 
                 size="xs" 
@@ -571,7 +574,7 @@ export default function EditPostPage() {
             </Box>
             <input
               type="text"
-              placeholder="输入标题..."
+              placeholder={t('enterTitle')}
               value={title}
               onChange={(e) => setTitle(e.target.value.slice(0, TITLE_MAX_LENGTH))}
               maxLength={TITLE_MAX_LENGTH}
@@ -594,7 +597,7 @@ export default function EditPostPage() {
             <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: tokens.spacing[2] }}>
               <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3] }}>
                 <Text size="sm" weight="bold">
-                  内容
+                  {t('contentLabel')}
                 </Text>
                 <Box style={{ display: 'flex', borderRadius: tokens.radius.md, overflow: 'hidden', border: `1px solid ${tokens.colors.border.primary}` }}>
                   <button
@@ -613,7 +616,7 @@ export default function EditPostPage() {
                       gap: 4,
                     }}
                   >
-                    编辑
+                    {t('edit')}
                   </button>
                   <button
                     type="button"
@@ -632,7 +635,7 @@ export default function EditPostPage() {
                       gap: 4,
                     }}
                   >
-                    预览
+                    {t('preview')}
                   </button>
                 </Box>
               </Box>
@@ -675,19 +678,20 @@ export default function EditPostPage() {
                     fontWeight: 700,
                   }}
                 >
-                  预览模式
+                  {t('previewMode')}
                 </Box>
                 {content ? renderContentWithControls(
                   content,
                   moveImageInContent,
                   removeImageFromContent,
-                  (content.match(/!\[image\]\([^)]+\)/g) || []).length
-                ) : <Text color="tertiary">预览内容将显示在这里...</Text>}
+                  (content.match(/!\[image\]\([^)]+\)/g) || []).length,
+                  t
+                ) : <Text color="tertiary">{t('previewPlaceholder')}</Text>}
               </Box>
             ) : (
               <textarea
                 ref={textareaRef}
-                placeholder="输入内容... (链接会自动变为可点击)"
+                placeholder={t('enterContent')}
                 value={content}
                 onChange={(e) => {
                   setContent(e.target.value.slice(0, CONTENT_MAX_LENGTH))
@@ -718,7 +722,7 @@ export default function EditPostPage() {
           {/* 图片上传区域 */}
           <Box>
             <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[2], display: 'block' }}>
-              图片（可选，最多9张）
+              {t('imagesOptional')}
             </Text>
             
             <input
@@ -741,12 +745,12 @@ export default function EditPostPage() {
               }}
             >
               <Text size="xs" color="secondary" style={{ display: 'block', marginBottom: 4 }}>
-                <strong>如何插入图片到指定位置：</strong>
+                <strong>{t('imageInsertGuideTitle')}</strong>
               </Text>
               <Text size="xs" color="tertiary" style={{ display: 'block', lineHeight: 1.6 }}>
-                1. 在上方文字框中<strong>点击光标</strong>到想插入图片的位置<br />
-                2. 点击图片上的 <span style={{ background: '#8b6fa8', color: '#fff', padding: '0 4px', borderRadius: 3 }}>↵</span> 按钮插入<br />
-                3. 切换到<strong>预览模式</strong>，可用 ↑↓ 按钮调整图片顺序
+                {t('imageInsertStep1')}<br />
+                {t('imageInsertStep2')} <span style={{ background: '#8b6fa8', color: '#fff', padding: '0 4px', borderRadius: 3 }}>↵</span> {t('imageInsertStep2Suffix')}<br />
+                {t('imageInsertStep3')}
               </Text>
             </Box>
             
@@ -797,7 +801,7 @@ export default function EditPostPage() {
                         padding: '2px 0',
                       }}
                     >
-                      已插入
+                      {t('inserted')}
                     </Box>
                   )}
                   <Box
@@ -825,7 +829,7 @@ export default function EditPostPage() {
                         alignItems: 'center',
                         justifyContent: 'center',
                       }}
-                      title={inContent ? "再次插入到光标位置" : "插入到光标位置"}
+                      title={inContent ? t('reinsertAtCursor') : t('insertAtCursor')}
                     >
                       ↵
                     </button>
@@ -845,7 +849,7 @@ export default function EditPostPage() {
                         alignItems: 'center',
                         justifyContent: 'center',
                       }}
-                      title="删除图片"
+                      title={t('deleteImage')}
                     >
                       ×
                     </button>
@@ -886,14 +890,14 @@ export default function EditPostPage() {
               onClick={() => router.push('/my-posts')}
               disabled={saving}
             >
-              取消
+              {t('cancel')}
             </Button>
             <Button
               variant="primary"
               onClick={handleSubmit}
               disabled={saving || !title.trim()}
             >
-              {saving ? '保存中...' : '保存更改'}
+              {saving ? t('savingChanges') : t('saveChanges')}
             </Button>
           </Box>
         </Box>

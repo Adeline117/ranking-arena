@@ -186,7 +186,7 @@ async function scrapeBitget() {
     console.log(`\n  总计: ${unique.length}`)
     
     if (unique.length) {
-      const saved = await save('bitget_futures', unique, 'current_30d')
+      const saved = await save('bitget_futures', unique, '30D')
       console.log(`  ✅ ${saved} 条已保存`)
     }
   } finally {
@@ -255,7 +255,7 @@ async function scrapeMEXC() {
     console.log(`\n  总计: ${unique.length}`)
     
     if (unique.length) {
-      const saved = await save('mexc', unique, 'current_30d')
+      const saved = await save('mexc', unique, '30D')
       console.log(`  ✅ ${saved} 条已保存`)
     }
     
@@ -335,7 +335,7 @@ async function scrapeKuCoin() {
     console.log(`\n  总计: ${unique.length}`)
     
     if (unique.length) {
-      const saved = await save('kucoin', unique, 'current_30d')
+      const saved = await save('kucoin', unique, '30D')
       console.log(`  ✅ ${saved} 条已保存`)
     }
     
@@ -403,7 +403,7 @@ async function scrapeCoinEx() {
     console.log(`\n  总计: ${unique.length}`)
     
     if (unique.length) {
-      const saved = await save('coinex', unique, 'current_30d')
+      const saved = await save('coinex', unique, '30D')
       console.log(`  ✅ ${saved} 条已保存`)
     }
     
@@ -472,7 +472,7 @@ async function scrapeBingX() {
     console.log(`\n  总计: ${unique.length}`)
     
     if (unique.length) {
-      const saved = await save('bingx', unique, 'current_30d')
+      const saved = await save('bingx', unique, '30D')
       console.log(`  ✅ ${saved} 条已保存`)
     }
     

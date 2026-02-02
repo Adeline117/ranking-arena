@@ -4,53 +4,7 @@ import { useState, useEffect, Suspense, useRef } from 'react'
 import { supabase } from "@/lib/supabase/client"
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-
-type Language = 'zh' | 'en'
-
-const translations = {
-  zh: {
-    title: '重置密码',
-    email: '邮箱',
-    sendResetLink: '发送重置链接',
-    sending: '发送中...',
-    newPassword: '新密码',
-    confirmPassword: '确认密码',
-    resetPassword: '重置密码',
-    resetting: '重置中...',
-    backToLogin: '返回登录',
-    emailSent: '重置链接已发送到您的邮箱，请查收',
-    emailRequired: '请输入邮箱',
-    passwordRequired: '请输入新密码',
-    passwordMinLength: '密码至少6位',
-    passwordMismatch: '两次输入的密码不一致',
-    resetSuccess: '密码重置成功，正在跳转登录页...',
-    countdown: '秒后可重发',
-    description: '输入您的注册邮箱，我们将发送密码重置链接',
-    setNewPassword: '设置新密码',
-    setNewPasswordDesc: '请输入您的新密码',
-  },
-  en: {
-    title: 'Reset Password',
-    email: 'Email',
-    sendResetLink: 'Send Reset Link',
-    sending: 'Sending...',
-    newPassword: 'New Password',
-    confirmPassword: 'Confirm Password',
-    resetPassword: 'Reset Password',
-    resetting: 'Resetting...',
-    backToLogin: 'Back to Login',
-    emailSent: 'Reset link has been sent to your email',
-    emailRequired: 'Please enter your email',
-    passwordRequired: 'Please enter new password',
-    passwordMinLength: 'Password must be at least 6 characters',
-    passwordMismatch: 'Passwords do not match',
-    resetSuccess: 'Password reset successful, redirecting to login...',
-    countdown: 's to resend',
-    description: 'Enter your email address and we\'ll send you a reset link',
-    setNewPassword: 'Set New Password',
-    setNewPasswordDesc: 'Please enter your new password',
-  },
-}
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 // CSS keyframe animations
 const injectStyles = () => {
@@ -216,24 +170,24 @@ const injectStyles = () => {
 }
 
 // Password strength indicator
-function getPasswordStrength(password: string): { level: 0 | 1 | 2 | 3 | 4; label: string; labelEn: string; color: string } {
-  if (!password) return { level: 0, label: '', labelEn: '', color: '' }
-  
+function getPasswordStrength(password: string): { level: 0 | 1 | 2 | 3 | 4; labelKey: string; color: string } {
+  if (!password) return { level: 0, labelKey: '', color: '' }
+
   let score = 0
   if (password.length >= 6) score++
   if (password.length >= 8) score++
   if (/[a-z]/.test(password) && /[A-Z]/.test(password)) score++
   if (/\d/.test(password)) score++
   if (/[^a-zA-Z0-9]/.test(password)) score++
-  
-  if (score <= 1) return { level: 1, label: '弱', labelEn: 'Weak', color: '#ff4d4d' }
-  if (score === 2) return { level: 2, label: '一般', labelEn: 'Fair', color: '#ffa500' }
-  if (score === 3) return { level: 3, label: '中等', labelEn: 'Good', color: '#ffc107' }
-  return { level: 4, label: '强', labelEn: 'Strong', color: '#2fe57d' }
+
+  if (score <= 1) return { level: 1, labelKey: 'loginPasswordWeak', color: '#ff4d4d' }
+  if (score === 2) return { level: 2, labelKey: 'loginPasswordFair', color: '#ffa500' }
+  if (score === 3) return { level: 3, labelKey: 'loginPasswordGood', color: '#ffc107' }
+  return { level: 4, labelKey: 'loginPasswordStrong', color: '#2fe57d' }
 }
 
 function ResetPasswordContent() {
-  const [lang, setLang] = useState<Language>('zh')
+  const { language: lang, setLanguage: setLang, t } = useLanguage()
   const [email, setEmail] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -249,18 +203,12 @@ function ResetPasswordContent() {
   const router = useRouter()
   const _searchParams = useSearchParams()
 
-  const t = translations[lang]
   const passwordStrength = getPasswordStrength(newPassword)
 
   useEffect(() => {
     injectStyles()
     setMounted(true)
-    
-    // Get language from localStorage
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('preferredLanguage')
-      if (saved === 'en' || saved === 'zh') setLang(saved)
-    }
+    // Language persistence is handled by LanguageProvider
   }, [])
 
   useEffect(() => {
@@ -303,7 +251,7 @@ function ResetPasswordContent() {
 
   const handleSendResetEmail = async () => {
     if (!email) {
-      setError(t.emailRequired)
+      setError(t('resetPasswordEmailRequired'))
       return
     }
 
@@ -321,10 +269,10 @@ function ResetPasswordContent() {
         return
       }
 
-      setSuccess(t.emailSent)
+      setSuccess(t('resetPasswordEmailSent'))
       setCountdown(60)
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : (lang === 'zh' ? '发送失败' : 'Failed to send'))
+      setError(err instanceof Error ? err.message : t('loginSendFailedShort'))
     } finally {
       setLoading(false)
     }
@@ -332,17 +280,17 @@ function ResetPasswordContent() {
 
   const handleResetPassword = async () => {
     if (!newPassword) {
-      setError(t.passwordRequired)
+      setError(t('resetPasswordPasswordRequired'))
       return
     }
 
     if (newPassword.length < 6) {
-      setError(t.passwordMinLength)
+      setError(t('resetPasswordPasswordMinLength'))
       return
     }
 
     if (newPassword !== confirmPassword) {
-      setError(t.passwordMismatch)
+      setError(t('resetPasswordMismatch'))
       return
     }
 
@@ -360,13 +308,13 @@ function ResetPasswordContent() {
         return
       }
 
-      setSuccess(t.resetSuccess)
-      
+      setSuccess(t('resetPasswordSuccess'))
+
       setTimeout(() => {
         router.push('/login')
       }, 3000)
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : (lang === 'zh' ? '重置失败' : 'Reset failed'))
+      setError(err instanceof Error ? err.message : t('loginResetFailed'))
     } finally {
       setLoading(false)
     }
@@ -446,7 +394,7 @@ function ResetPasswordContent() {
               fontSize: 13,
             }}
           >
-            中文
+            {t('chinese')}
           </button>
           <button
             className="lang-btn"
@@ -507,16 +455,16 @@ function ResetPasswordContent() {
           WebkitBackgroundClip: 'text',
           WebkitTextFillColor: 'transparent',
         }}>
-          {isResetMode ? t.setNewPassword : t.title}
+          {isResetMode ? t('resetPasswordSetNew') : t('resetPasswordTitle')}
         </h1>
-        
-        <p style={{ 
-          fontSize: 14, 
-          color: '#7a7a7a', 
+
+        <p style={{
+          fontSize: 14,
+          color: '#7a7a7a',
           marginBottom: 28,
           textAlign: 'center',
         }}>
-          {isResetMode ? t.setNewPasswordDesc : t.description}
+          {isResetMode ? t('resetPasswordSetNewDesc') : t('resetPasswordDescription')}
         </p>
 
         {!isResetMode ? (
@@ -524,7 +472,7 @@ function ResetPasswordContent() {
           <>
             <div style={{ marginBottom: 20 }}>
               <label style={{ display: 'block', marginBottom: 8, fontSize: 13, fontWeight: 600, color: '#b0b0b0' }}>
-                {t.email}
+                {t('resetPasswordEmail')}
               </label>
               <input
                 type="email"
@@ -574,7 +522,7 @@ function ResetPasswordContent() {
               }}
             >
               {loading && <Spinner />}
-              {loading ? t.sending : countdown > 0 ? `${countdown} ${t.countdown}` : t.sendResetLink}
+              {loading ? t('resetPasswordSending') : countdown > 0 ? `${countdown} ${t('resetPasswordCountdown')}` : t('resetPasswordSendLink')}
             </button>
           </>
         ) : (
@@ -582,7 +530,7 @@ function ResetPasswordContent() {
           <>
             <div style={{ marginBottom: 20 }}>
               <label style={{ display: 'block', marginBottom: 8, fontSize: 13, fontWeight: 600, color: '#b0b0b0' }}>
-                {t.newPassword}
+                {t('resetPasswordNewPassword')}
               </label>
               <div style={{ position: 'relative' }}>
                 <input
@@ -621,7 +569,7 @@ function ResetPasswordContent() {
                   }}
                   tabIndex={-1}
                 >
-                  {showPassword ? (lang === 'zh' ? '隐藏' : 'Hide') : (lang === 'zh' ? '显示' : 'Show')}
+                  {showPassword ? t('loginHide') : t('loginShow')}
                 </button>
               </div>
               
@@ -644,7 +592,7 @@ function ResetPasswordContent() {
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span style={{ fontSize: 11, color: passwordStrength.color, fontWeight: 500 }}>
-                      {lang === 'zh' ? `密码强度: ${passwordStrength.label}` : `Strength: ${passwordStrength.labelEn}`}
+                      {t('loginPasswordStrength').replace('{label}', t(passwordStrength.labelKey))}
                     </span>
                     <span style={{ fontSize: 11, color: newPassword.length >= 6 ? '#6a6a6a' : '#ff7c7c' }}>
                       {newPassword.length}/6
@@ -656,7 +604,7 @@ function ResetPasswordContent() {
 
             <div style={{ marginBottom: 20 }}>
               <label style={{ display: 'block', marginBottom: 8, fontSize: 13, fontWeight: 600, color: '#b0b0b0' }}>
-                {t.confirmPassword}
+                {t('resetPasswordConfirm')}
               </label>
               <div style={{ position: 'relative' }}>
                 <input
@@ -700,12 +648,12 @@ function ResetPasswordContent() {
                   }}
                   tabIndex={-1}
                 >
-                  {showConfirmPassword ? (lang === 'zh' ? '隐藏' : 'Hide') : (lang === 'zh' ? '显示' : 'Show')}
+                  {showConfirmPassword ? t('loginHide') : t('loginShow')}
                 </button>
               </div>
               {confirmPassword && confirmPassword === newPassword && (
                 <div style={{ marginTop: 6, fontSize: 12 }}>
-                  <span style={{ color: '#2fe57d' }}>✓ {lang === 'zh' ? '密码匹配' : 'Passwords match'}</span>
+                  <span style={{ color: '#2fe57d' }}>✓ {t('loginPasswordsMatch')}</span>
                 </div>
               )}
             </div>
@@ -734,7 +682,7 @@ function ResetPasswordContent() {
               }}
             >
               {loading && <Spinner />}
-              {loading ? t.resetting : t.resetPassword}
+              {loading ? t('resetPasswordResetting') : t('resetPasswordButton')}
             </button>
           </>
         )}
@@ -758,7 +706,7 @@ function ResetPasswordContent() {
             <line x1="19" y1="12" x2="5" y2="12"></line>
             <polyline points="12 19 5 12 12 5"></polyline>
           </svg>
-          {t.backToLogin}
+          {t('resetPasswordBackToLogin')}
         </Link>
 
         {/* Error message */}

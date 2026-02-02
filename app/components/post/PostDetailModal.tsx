@@ -37,7 +37,7 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
   const { t, language } = useLanguage()
   const { showToast } = useToast()
   const auth = useUnifiedAuth({
-    onUnauthenticated: () => showToast('请先登录', 'warning'),
+    onUnauthenticated: () => showToast(t('pleaseLogin'), 'warning'),
   })
 
   const [newComment, setNewComment] = useState('')
@@ -68,7 +68,7 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
         setNewComment('')
       }
     } catch {
-      showToast('评论失败，请重试', 'error')
+      showToast(t('commentFailedRetry'), 'error')
     } finally {
       setSubmittingComment(false)
     }
@@ -83,10 +83,10 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
     try {
       const result = await togglePostReaction(postId, reactionType, token)
       if (!result.success) {
-        showToast(result.error || '操作失败', 'error')
+        showToast(result.error || t('operationFailed'), 'error')
       }
     } catch {
-      showToast('操作失败，请重试', 'error')
+      showToast(t('operationFailedRetry'), 'error')
     } finally {
       setReacting(false)
     }
@@ -119,7 +119,7 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
             color: tokens.colors.text.secondary,
           }}
         >
-          加载中...
+          {t('loading')}
         </div>
       </div>
     )
@@ -181,10 +181,10 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
             onClick={(e) => e.stopPropagation()}
             style={{ fontSize: 12, color: ARENA_PURPLE, textDecoration: 'none' }}
           >
-            {post.group_name || '综合讨论'}
+            {post.group_name || t('generalDiscussion')}
           </Link>
         ) : (
-          <div style={{ fontSize: 12, color: ARENA_PURPLE }}>综合讨论</div>
+          <div style={{ fontSize: 12, color: ARENA_PURPLE }}>{t('generalDiscussion')}</div>
         )}
 
         {/* Title */}
@@ -206,7 +206,7 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
             onClick={(e) => e.stopPropagation()}
             style={{ color: tokens.colors.text.secondary, textDecoration: 'none', fontWeight: 600 }}
           >
-            {post.author_handle || '匿名'}
+            {post.author_handle || t('anonymous')}
           </Link>
           <span>&middot;</span>
           <span>{formatTimeAgo(post.created_at, language)}</span>
@@ -290,7 +290,7 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
             <textarea
               value={newComment}
               onChange={(e) => setNewComment(e.target.value)}
-              placeholder={auth.isAuthenticated ? t('writeComment') : '请先登录后发表评论'}
+              placeholder={auth.isAuthenticated ? t('writeComment') : t('loginBeforeComment')}
               disabled={!auth.isAuthenticated || submittingComment}
               style={{
                 width: '100%',
@@ -321,16 +321,16 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
                   cursor: newComment.trim() && !submittingComment ? 'pointer' : 'not-allowed',
                 }}
               >
-                {submittingComment ? '发送中...' : '发表评论'}
+                {submittingComment ? t('submittingComment') : t('postComment')}
               </button>
             )}
           </div>
 
           {/* Comment list */}
           {pagination?.loading ? (
-            <div style={{ color: tokens.colors.text.tertiary, fontSize: 13 }}>加载评论中...</div>
+            <div style={{ color: tokens.colors.text.tertiary, fontSize: 13 }}>{t('loadingComments')}</div>
           ) : comments.length === 0 ? (
-            <div style={{ color: tokens.colors.text.tertiary, fontSize: 13 }}>暂无评论，来发表第一条评论吧</div>
+            <div style={{ color: tokens.colors.text.tertiary, fontSize: 13 }}>{t('noCommentsBeFirst')}</div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {comments.filter(Boolean).map((comment) => (
@@ -354,7 +354,7 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
                       </Link>
                     ) : (
                       <span style={{ fontSize: 12, fontWeight: 700, color: tokens.colors.text.tertiary }}>
-                        匿名
+                        {t('anonymous')}
                       </span>
                     )}
                     <span style={{ fontSize: 11, color: tokens.colors.text.tertiary }}>
@@ -386,7 +386,7 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
                     marginTop: 4,
                   }}
                 >
-                  {pagination?.loadingMore ? '加载中...' : '加载更多评论'}
+                  {pagination?.loadingMore ? t('loading') : t('loadMoreComments')}
                 </button>
               )}
             </div>

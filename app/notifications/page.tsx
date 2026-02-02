@@ -35,15 +35,15 @@ interface Notification {
 // 时间格式化
 // ============================================
 
-function timeAgo(dateStr: string, lang: string): string {
+function timeAgo(dateStr: string, t: (key: string) => string): string {
   const now = Date.now()
   const then = new Date(dateStr).getTime()
   const diff = Math.floor((now - then) / 1000)
 
-  if (diff < 60) return lang === 'en' ? `${diff}s ago` : `${diff}秒前`
-  if (diff < 3600) return lang === 'en' ? `${Math.floor(diff / 60)}m ago` : `${Math.floor(diff / 60)}分钟前`
-  if (diff < 86400) return lang === 'en' ? `${Math.floor(diff / 3600)}h ago` : `${Math.floor(diff / 3600)}小时前`
-  return lang === 'en' ? `${Math.floor(diff / 86400)}d ago` : `${Math.floor(diff / 86400)}天前`
+  if (diff < 60) return t('timeSecondsAgo').replace('{n}', String(diff))
+  if (diff < 3600) return t('timeMinutesAgo').replace('{n}', String(Math.floor(diff / 60)))
+  if (diff < 86400) return t('timeHoursAgo').replace('{n}', String(Math.floor(diff / 3600)))
+  return t('timeDaysAgo').replace('{n}', String(Math.floor(diff / 86400)))
 }
 
 // ============================================
@@ -105,18 +105,18 @@ export default function NotificationsPage() {
         headers: { Authorization: `Bearer ${accessToken}` },
       })
       if (!res.ok) {
-        showToast(language === 'zh' ? '加载通知失败' : 'Failed to load notifications', 'error')
+        showToast(t('loadNotificationsFailed'), 'error')
         return
       }
       const result = await res.json()
       const data = result.data || result
       setNotifications(data.notifications || [])
     } catch {
-      showToast(language === 'zh' ? '加载通知失败' : 'Failed to load notifications', 'error')
+      showToast(t('loadNotificationsFailed'), 'error')
     } finally {
       setLoading(false)
     }
-  }, [accessToken, language, showToast])
+  }, [accessToken, t, showToast])
 
   useEffect(() => {
     if (accessToken) loadNotifications()
@@ -233,7 +233,7 @@ export default function NotificationsPage() {
           marginBottom: tokens.spacing[4],
         }}>
           <FilterTab
-            label={language === 'zh' ? '全部' : 'All'}
+            label={t('all')}
             count={notifications.length}
             active={filterType === 'all'}
             onClick={() => setFilterType('all')}
@@ -315,7 +315,7 @@ export default function NotificationsPage() {
                         {n.title}
                       </Text>
                       <Text size="xs" color="tertiary" style={{ flexShrink: 0, whiteSpace: 'nowrap' }}>
-                        {timeAgo(n.created_at, language)}
+                        {timeAgo(n.created_at, t)}
                       </Text>
                     </Box>
                     <Text size="xs" color="secondary" style={{
@@ -333,7 +333,7 @@ export default function NotificationsPage() {
                         color: tokens.colors.accent.brand,
                         marginTop: 4,
                       }}>
-                        {language === 'zh' ? '查看详情 →' : 'View Details →'}
+                        {t('viewDetails')} →
                       </Text>
                     )}
                   </Box>

@@ -66,7 +66,7 @@ function getCopyTradeUrl(source: string | undefined, traderId: string): string |
  * v2.0: 仅保留 4 个核心交易所
  */
 function getExchangeName(source: string | undefined): string {
-  if (!source) return '交易所'
+  if (!source) return 'Exchange'
 
   const nameMap: Record<string, string> = {
     // Binance
@@ -107,7 +107,7 @@ export default function CopyTradeButton({
   source,
   traderHandle,
 }: CopyTradeButtonProps) {
-  const { language } = useLanguage()
+  const { t } = useLanguage()
   const [showWarning, setShowWarning] = useState(false)
   const [acknowledged, setAcknowledged] = useState(false)
 
@@ -147,7 +147,7 @@ export default function CopyTradeButton({
           </svg>
         </Box>
         <Text size="sm" weight="bold" style={{ color: 'rgba(107, 114, 128, 0.9)', fontSize: 14 }}>
-          {language === 'zh' ? '暂不支持跟单' : 'Copy trading unavailable'}
+          {t('copyTradeUnavailable')}
         </Text>
       </Box>
     )
@@ -211,7 +211,7 @@ export default function CopyTradeButton({
           <ExternalLinkIcon size={14} />
         </Box>
         <span style={{ fontWeight: 800, fontSize: 14, letterSpacing: '0.3px', textShadow: '0 1px 2px rgba(0,0,0,0.2)' }}>
-          {language === 'zh' ? `去 ${exchangeName} 跟单` : `Copy on ${exchangeName}`}
+          {t('copyTradeOn').replace('{exchange}', exchangeName)}
         </span>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
           <path d="M5 12h14M12 5l7 7-7 7" />
@@ -262,7 +262,7 @@ export default function CopyTradeButton({
                   <WarningIcon size={24} />
                 </Box>
                 <Text size="md" weight="bold" style={{ color: tokens.colors.accent.warning }}>
-                  {language === 'zh' ? '风险提示' : 'Risk Warning'}
+                  {t('riskWarning')}
                 </Text>
               </Box>
               <button
@@ -283,37 +283,18 @@ export default function CopyTradeButton({
             {/* 内容 */}
             <Box style={{ padding: tokens.spacing[5] }}>
               <Text size="sm" color="secondary" style={{ lineHeight: 1.7, marginBottom: tokens.spacing[4] }}>
-                {language === 'zh' ? (
-                  <>
-                    您即将离开 Arena 前往 <strong>{exchangeName}</strong> 进行跟单操作
-                    {traderHandle && <>（交易员：<strong>{traderHandle}</strong>）</>}。
-                    <br /><br />
-                    <strong style={{ color: tokens.colors.accent.warning }}>请注意以下风险：</strong>
-                    <br />
-                    • 跟单交易存在重大风险，可能导致<strong>全部本金损失</strong>
-                    <br />
-                    • 过往业绩不代表未来表现
-                    <br />
-                    • Arena 仅提供数据展示，<strong>不对跟单结果负责</strong>
-                    <br />
-                    • 请根据自身风险承受能力谨慎决策
-                  </>
-                ) : (
-                  <>
-                    You are about to leave Arena and go to <strong>{exchangeName}</strong> for copy trading
-                    {traderHandle && <> (Trader: <strong>{traderHandle}</strong>)</>}.
-                    <br /><br />
-                    <strong style={{ color: tokens.colors.accent.warning }}>Please note the following risks:</strong>
-                    <br />
-                    • Copy trading involves significant risks and may result in <strong>total loss of principal</strong>
-                    <br />
-                    • Past performance does not guarantee future results
-                    <br />
-                    • Arena only provides data display and is <strong>not responsible for copy trading results</strong>
-                    <br />
-                    • Please make careful decisions based on your risk tolerance
-                  </>
-                )}
+                {t('riskWarningLeaving').replace('{exchange}', exchangeName)}
+                {traderHandle && <> ({t('trader')}: <strong>{traderHandle}</strong>)</>}
+                <br /><br />
+                <strong style={{ color: tokens.colors.accent.warning }}>{t('riskWarningNote')}</strong>
+                <br />
+                {t('riskWarningLoss')}
+                <br />
+                {t('riskWarningPast')}
+                <br />
+                {t('riskWarningArena')}
+                <br />
+                {t('riskWarningDecision')}
               </Text>
 
               {/* 确认勾选 */}
@@ -343,9 +324,7 @@ export default function CopyTradeButton({
                   }}
                 />
                 <Text size="sm" color="primary" style={{ lineHeight: 1.5 }}>
-                  {language === 'zh'
-                    ? '我已了解跟单风险，自愿前往交易所进行跟单操作'
-                    : 'I understand the risks and voluntarily proceed to the exchange for copy trading'}
+                  {t('riskWarningAcknowledge')}
                 </Text>
               </label>
             </Box>
@@ -368,7 +347,7 @@ export default function CopyTradeButton({
                   padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
                 }}
               >
-                {language === 'zh' ? '取消' : 'Cancel'}
+                {t('cancel')}
               </Button>
               <Button
                 variant="primary"
@@ -385,7 +364,7 @@ export default function CopyTradeButton({
                   cursor: acknowledged ? 'pointer' : 'not-allowed',
                 }}
               >
-                {language === 'zh' ? `前往 ${exchangeName}` : `Go to ${exchangeName}`}
+                {t('copyTradeGoTo').replace('{exchange}', exchangeName)}
               </Button>
             </Box>
           </Box>
