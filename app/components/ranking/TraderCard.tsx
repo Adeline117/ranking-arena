@@ -147,9 +147,10 @@ export const TraderCard = memo(function TraderCard({
             </Box>
           </Box>
 
-          {/* Arena Score */}
+          {/* Arena Score + Confidence */}
           {trader.arena_score != null && (
             <Box style={{
+              position: 'relative',
               minWidth: 50, height: 28, borderRadius: tokens.radius.md,
               background: trader.arena_score >= 60 ? tokens.gradient.successSubtle : trader.arena_score >= 40 ? tokens.gradient.warningSubtle : tokens.glass.bg.light,
               border: `1px solid ${trader.arena_score >= 60 ? `${tokens.colors.accent.success}50` : trader.arena_score >= 40 ? `${tokens.colors.accent.warning}40` : 'rgba(255, 255, 255, 0.15)'}`,
@@ -158,6 +159,24 @@ export const TraderCard = memo(function TraderCard({
               <Text size="sm" weight="black" style={{ color: trader.arena_score >= 60 ? tokens.colors.accent.success : trader.arena_score >= 40 ? tokens.colors.accent.warning : CARD_TEXT_TERTIARY, fontSize: '13px' }}>
                 {trader.arena_score.toFixed(0)}
               </Text>
+              {(() => {
+                const conf = trader.score_confidence ?? (
+                  trader.win_rate == null && trader.max_drawdown == null ? 'minimal' :
+                  trader.win_rate == null || trader.max_drawdown == null ? 'partial' : 'full'
+                )
+                if (conf === 'full') return null
+                return (
+                  <span
+                    title={conf === 'minimal' ? 'Incomplete data (-20%)' : 'Partial data (-8%)'}
+                    style={{
+                      position: 'absolute', top: -3, right: -3,
+                      width: 7, height: 7, borderRadius: '50%',
+                      background: conf === 'minimal' ? tokens.colors.accent.error ?? '#ff6b6b' : tokens.colors.accent.warning,
+                      border: '1px solid rgba(0,0,0,0.3)',
+                    }}
+                  />
+                )
+              })()}
             </Box>
           )}
         </Box>
@@ -175,17 +194,25 @@ export const TraderCard = memo(function TraderCard({
           {/* Win Rate */}
           <Box style={{ textAlign: 'center', padding: `${tokens.spacing[2]} 0`, background: tokens.glass.bg.light, borderRadius: tokens.radius.md }}>
             <Text size="xs" color="tertiary" style={{ marginBottom: 2, display: 'block', color: CARD_TEXT_TERTIARY }}>{language === 'zh' ? '胜率' : 'Win%'}</Text>
-            <Text size="md" weight="semibold" style={{ color: trader.win_rate != null && trader.win_rate > 50 ? tokens.colors.accent.success : CARD_TEXT_TERTIARY }}>
-              {trader.win_rate != null ? `${trader.win_rate.toFixed(0)}%` : '—'}
-            </Text>
+            {trader.win_rate != null ? (
+              <Text size="md" weight="semibold" style={{ color: trader.win_rate > 50 ? tokens.colors.accent.success : CARD_TEXT_TERTIARY }}>
+                {trader.win_rate.toFixed(0)}%
+              </Text>
+            ) : (
+              <Text size="sm" style={{ color: CARD_TEXT_TERTIARY, opacity: 0.35, fontSize: '11px' }}>N/A</Text>
+            )}
           </Box>
 
           {/* Max Drawdown */}
           <Box style={{ textAlign: 'center', padding: `${tokens.spacing[2]} 0`, background: tokens.glass.bg.light, borderRadius: tokens.radius.md }}>
             <Text size="xs" color="tertiary" style={{ marginBottom: 2, display: 'block', color: CARD_TEXT_TERTIARY }}>MDD</Text>
-            <Text size="md" weight="semibold" style={{ color: trader.max_drawdown != null ? CARD_ACCENT_ERROR : CARD_TEXT_TERTIARY }}>
-              {trader.max_drawdown != null ? `-${Math.abs(trader.max_drawdown).toFixed(0)}%` : '—'}
-            </Text>
+            {trader.max_drawdown != null ? (
+              <Text size="md" weight="semibold" style={{ color: CARD_ACCENT_ERROR }}>
+                -{Math.abs(trader.max_drawdown).toFixed(0)}%
+              </Text>
+            ) : (
+              <Text size="sm" style={{ color: CARD_TEXT_TERTIARY, opacity: 0.35, fontSize: '11px' }}>N/A</Text>
+            )}
           </Box>
         </Box>
       </Box>
@@ -198,6 +225,7 @@ export const TraderCard = memo(function TraderCard({
     prev.trader.arena_score === next.trader.arena_score &&
     prev.trader.win_rate === next.trader.win_rate &&
     prev.trader.max_drawdown === next.trader.max_drawdown &&
+    prev.trader.score_confidence === next.trader.score_confidence &&
     prev.trader.rank_change === next.trader.rank_change &&
     prev.trader.is_new === next.trader.is_new &&
     prev.rank === next.rank &&

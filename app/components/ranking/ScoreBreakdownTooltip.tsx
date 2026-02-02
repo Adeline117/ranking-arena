@@ -5,18 +5,20 @@ import type { Trader } from './RankingTable'
 /**
  * 置信度标签配置
  */
-const CONFIDENCE_LABELS: Record<string, { zh: string; en: string; color: string; icon: string }> = {
+const CONFIDENCE_LABELS: Record<string, { zh: string; en: string; color: string; icon: string; penalty: string }> = {
   partial: {
-    zh: '⚠ 部分数据缺失，使用了默认中位值',
-    en: '⚠ Partial data — defaults used for some metrics',
+    zh: '⚠ 部分数据缺失（分数 ×0.92）',
+    en: '⚠ Partial data — score ×0.92',
     color: tokens.colors.accent.warning,
     icon: '⚠',
+    penalty: '-8%',
   },
   minimal: {
-    zh: '⚠ 数据不完整，回撤与胜率均使用默认值',
-    en: '⚠ Incomplete data — drawdown & win rate are defaults',
+    zh: '⚠ 胜率和回撤均缺失（分数 ×0.80）',
+    en: '⚠ Win rate & drawdown missing — score ×0.80',
     color: tokens.colors.accent.error ?? tokens.colors.accent.warning,
     icon: '⚠',
+    penalty: '-20%',
   },
 }
 
@@ -60,8 +62,13 @@ export const ScoreBreakdownTooltip = memo(function ScoreBreakdownTooltip({
     return null
   }
 
-  const confidence = trader.score_confidence
-  const confidenceInfo = confidence && confidence !== 'full'
+  // Derive confidence from data if API didn't provide it
+  const confidence = trader.score_confidence ?? (
+    trader.win_rate == null && trader.max_drawdown == null ? 'minimal' :
+    trader.win_rate == null || trader.max_drawdown == null ? 'partial' :
+    'full'
+  )
+  const confidenceInfo = confidence !== 'full'
     ? CONFIDENCE_LABELS[confidence]
     : null
 
@@ -125,6 +132,14 @@ export const ScoreBreakdownTooltip = memo(function ScoreBreakdownTooltip({
               }}
             >
               {language === 'zh' ? confidenceInfo.zh : confidenceInfo.en}
+              {/* Show which fields are missing */}
+              <div style={{ marginTop: 2, opacity: 0.8, fontSize: '9px', color: tokens.colors.text.tertiary }}>
+                {language === 'zh' ? '缺失: ' : 'Missing: '}
+                {[
+                  trader.win_rate == null && (language === 'zh' ? '胜率' : 'Win Rate'),
+                  trader.max_drawdown == null && (language === 'zh' ? '回撤' : 'Drawdown'),
+                ].filter(Boolean).join(', ')}
+              </div>
             </div>
           )}
         </div>

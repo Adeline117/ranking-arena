@@ -175,7 +175,7 @@ export const TraderRow = memo(function TraderRow({
           </Box>
         </Box>
 
-        {/* Arena Score + Score Breakdown Tooltip */}
+        {/* Arena Score + Confidence + Score Breakdown Tooltip */}
         <Box className="col-score" style={{ textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
           <Box style={{
             position: 'relative', minWidth: 46, height: 24, borderRadius: tokens.radius.md,
@@ -189,6 +189,26 @@ export const TraderRow = memo(function TraderRow({
             <Text size="sm" weight="black" style={{ position: 'relative', color: trader.arena_score != null && trader.arena_score >= 60 ? tokens.colors.accent.success : trader.arena_score != null && trader.arena_score >= 40 ? tokens.colors.accent.warning : ROW_TEXT_TERTIARY, fontSize: '12px', lineHeight: 1 }}>
               {trader.arena_score != null ? trader.arena_score.toFixed(1) : '—'}
             </Text>
+            {/* Confidence dot: yellow=partial, red=minimal */}
+            {(() => {
+              const conf = trader.score_confidence ?? (
+                trader.win_rate == null && trader.max_drawdown == null ? 'minimal' :
+                trader.win_rate == null || trader.max_drawdown == null ? 'partial' : 'full'
+              )
+              if (conf === 'full') return null
+              return (
+                <span
+                  title={conf === 'minimal' ? 'Incomplete data (-20%)' : 'Partial data (-8%)'}
+                  style={{
+                    position: 'absolute', top: -2, right: -2,
+                    width: 6, height: 6, borderRadius: '50%',
+                    background: conf === 'minimal' ? tokens.colors.accent.error ?? '#ff6b6b' : tokens.colors.accent.warning,
+                    border: '1px solid rgba(0,0,0,0.3)',
+                    zIndex: 2,
+                  }}
+                />
+              )
+            })()}
           </Box>
           <ScoreBreakdownTooltip trader={trader} language={language} />
         </Box>
@@ -205,16 +225,24 @@ export const TraderRow = memo(function TraderRow({
 
         {/* Win% */}
         <Box className="col-winrate" style={{ textAlign: 'right', alignItems: 'center', justifyContent: 'flex-end' }}>
-          <Text size="sm" weight="semibold" style={{ color: trader.win_rate != null && trader.win_rate > 0.5 ? tokens.colors.accent.success : ROW_TEXT_TERTIARY, lineHeight: 1, fontSize: '13px' }}>
-            {trader.win_rate != null ? `${trader.win_rate.toFixed(0)}%` : '—'}
-          </Text>
+          {trader.win_rate != null ? (
+            <Text size="sm" weight="semibold" style={{ color: trader.win_rate > 50 ? tokens.colors.accent.success : ROW_TEXT_TERTIARY, lineHeight: 1, fontSize: '13px' }}>
+              {trader.win_rate.toFixed(0)}%
+            </Text>
+          ) : (
+            <span title="Not provided by exchange" style={{ fontSize: '11px', color: ROW_TEXT_TERTIARY, opacity: 0.4, letterSpacing: 1 }}>N/A</span>
+          )}
         </Box>
 
         {/* MDD */}
         <Box className="col-mdd" style={{ textAlign: 'right', alignItems: 'center', justifyContent: 'flex-end' }}>
-          <Text size="sm" weight="semibold" style={{ color: trader.max_drawdown != null ? ROW_ACCENT_ERROR : ROW_TEXT_TERTIARY, lineHeight: 1, fontSize: '13px', opacity: trader.max_drawdown != null ? 1 : 0.5 }}>
-            {trader.max_drawdown != null ? `-${Math.abs(trader.max_drawdown).toFixed(0)}%` : '—'}
-          </Text>
+          {trader.max_drawdown != null ? (
+            <Text size="sm" weight="semibold" style={{ color: ROW_ACCENT_ERROR, lineHeight: 1, fontSize: '13px' }}>
+              -{Math.abs(trader.max_drawdown).toFixed(0)}%
+            </Text>
+          ) : (
+            <span title="Not provided by exchange" style={{ fontSize: '11px', color: ROW_TEXT_TERTIARY, opacity: 0.4, letterSpacing: 1 }}>N/A</span>
+          )}
         </Box>
       </Box>
     </Link>
@@ -227,6 +255,7 @@ export const TraderRow = memo(function TraderRow({
     prev.trader.pnl === next.trader.pnl &&
     prev.trader.win_rate === next.trader.win_rate &&
     prev.trader.max_drawdown === next.trader.max_drawdown &&
+    prev.trader.score_confidence === next.trader.score_confidence &&
     prev.trader.rank_change === next.trader.rank_change &&
     prev.trader.is_new === next.trader.is_new &&
     prev.rank === next.rank &&
