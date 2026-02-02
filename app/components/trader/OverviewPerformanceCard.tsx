@@ -24,6 +24,9 @@ interface ExtendedPerformance extends TraderPerformance {
   // Per-period score breakdowns
   return_score_7d?: number
   return_score_30d?: number
+  pnl_score?: number
+  pnl_score_7d?: number
+  pnl_score_30d?: number
   drawdown_score_7d?: number
   drawdown_score_30d?: number
   stability_score_7d?: number
@@ -157,6 +160,7 @@ export default function OverviewPerformanceCard({
           winningPositions: performance.winning_positions_7d ?? performance.winning_positions,
           totalPositions: performance.total_positions_7d ?? performance.total_positions,
           returnScore: performance.return_score_7d,
+          pnlScore: performance.pnl_score_7d,
           drawdownScore: performance.drawdown_score_7d,
           stabilityScore: performance.stability_score_7d,
         }
@@ -171,6 +175,7 @@ export default function OverviewPerformanceCard({
           winningPositions: performance.winning_positions_30d ?? performance.winning_positions,
           totalPositions: performance.total_positions_30d ?? performance.total_positions,
           returnScore: performance.return_score_30d,
+          pnlScore: performance.pnl_score_30d,
           drawdownScore: performance.drawdown_score_30d,
           stabilityScore: performance.stability_score_30d,
         }
@@ -186,6 +191,7 @@ export default function OverviewPerformanceCard({
           winningPositions: performance.winning_positions,
           totalPositions: performance.total_positions,
           returnScore: performance.return_score ?? undefined,
+          pnlScore: performance.pnl_score ?? undefined,
           drawdownScore: performance.drawdown_score ?? undefined,
           stabilityScore: performance.stability_score ?? undefined,
         }
@@ -193,7 +199,7 @@ export default function OverviewPerformanceCard({
   }
 
   const data = getData()
-  const { roi, pnl, winRate, maxDrawdown, sharpeRatio, winningPositions, totalPositions, returnScore: periodReturnScore, drawdownScore: periodDrawdownScore, stabilityScore: periodStabilityScore } = data
+  const { roi, pnl, winRate, maxDrawdown, sharpeRatio, winningPositions, totalPositions, returnScore: periodReturnScore, pnlScore: periodPnlScore, drawdownScore: periodDrawdownScore, stabilityScore: periodStabilityScore } = data
   const periodArenaScore = data.arenaScore
 
   const formatPnl = (value: number | undefined) => {
@@ -519,6 +525,13 @@ export default function OverviewPerformanceCard({
                   maxScore={70}
                   isVisible={isVisible}
                   delay={500}
+                />
+                <ScoreBar
+                  label={language === 'zh' ? '盈亏分' : 'PnL Score'}
+                  score={periodPnlScore ?? null}
+                  maxScore={15}
+                  isVisible={isVisible}
+                  delay={550}
                 />
                 <ScoreBar
                   label={t('drawdownScore')}
