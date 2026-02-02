@@ -1,15 +1,14 @@
 /**
  * Pionex — Inline fetcher for Vercel serverless
- * APIs: Multiple endpoints at /kol-apis/tapi/v1/...
  * Original: scripts/import/import_pionex_v2.mjs (Playwright-based with CF bypass)
  *
- * Endpoints discovered from the original script (tried via page.evaluate):
+ * ⚠️  CF-PROTECTED: All API endpoints behind Cloudflare challenge.
+ * Endpoints discovered from original script (tried via page.evaluate inside browser):
  * 1. /kol-apis/tapi/v1/kol/list
  * 2. /kol-apis/tapi/v1/future/copy_trading/kol_list
- * 3. /kol-apis/tapi/v1/copy_trading_rank_list
- * 4. /kol-apis/tapi/v1/future/kol_rank_list
- * 5. /kol-apis/tapi/v1/copy/trader_list
- * 6. /kol-apis/tapi/v1/home_page/recommend_kol
+ * 3-6. Various other kol_rank, copy_trading paths
+ * All return CF challenge without browser session.
+ * Needs browser/proxy infrastructure to work.
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'

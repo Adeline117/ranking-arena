@@ -5,9 +5,12 @@
  * KuCoin copy trading page: https://www.kucoin.com/copytrading
  * The browser intercepts API responses containing 'leaderboard/query'.
  *
- * KuCoin API gateway: www.kucoin.com/_api/  (returns JSON 404 for unknown paths)
- * Also: api.kucoin.com, api-futures.kucoin.com
+ * ⚠️  BROWSER-ONLY: All known API endpoints return 404.
+ * The original script uses Puppeteer to browse the page and intercept internal API calls.
+ * The leaderboard/query endpoint is only accessible via browser context with session cookies.
+ * Needs browser/proxy infrastructure to work.
  *
+ * KuCoin API gateway: www.kucoin.com/_api/ (returns JSON 404 for all copy-trading paths)
  * Period config: Uses "days as lead" filter — 7D/30D/90D correspond to minimum days.
  */
 

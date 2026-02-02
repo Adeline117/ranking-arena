@@ -3,11 +3,10 @@
  * Original: scripts/import/import_mexc.mjs (589 lines, puppeteer + API interception)
  *
  * MEXC copy trading page: https://www.mexc.com/futures/copyTrade/home
- * API behind Akamai CDN — may work from Vercel datacenter IPs.
  *
- * Endpoints discovered from browser interception:
- * - contract.mexc.com/api/v1/private/copyTrade/traderRank/list (primary)
- * - contract.mexc.com/api/v1/private/copyTrade/trader/list (fallback)
+ * ⚠️  CDN-BLOCKED: API behind Akamai CDN, returns empty from US IPs.
+ * Endpoints: contract.mexc.com/api/v1/private/copyTrade/traderRank/list (primary)
+ * May work from Vercel datacenter IPs — needs testing on deployment.
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'

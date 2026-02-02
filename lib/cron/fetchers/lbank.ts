@@ -2,10 +2,10 @@
  * LBank — Inline fetcher for Vercel serverless
  * Original: scripts/import/import_lbank.mjs (Puppeteer-based with Stealth plugin)
  *
- * LBank's copy trading page: https://www.lbank.com/copy-trading
- * The original script intercepts XHR matching: copy, trader, leader, ranking, follow
- * LBank doesn't have documented public APIs for copy trading.
- * We try common internal API patterns.
+ * ⚠️  NO PUBLIC API: LBank doesn't have documented public APIs for copy trading.
+ * The website returns generic HTML pages for all API paths tested.
+ * Original script uses Puppeteer to browse and intercept internal API calls.
+ * Needs browser/proxy infrastructure to work.
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'
