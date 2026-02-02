@@ -28,7 +28,7 @@ const targets = process.argv.slice(2).length > 0
   : allPlatforms
 
 const results = []
-const periods = ['30D'] // Test with just 30D for speed
+const periods = ['7D', '30D', '90D'] // All periods for complete data
 
 console.log(`\n${'='.repeat(60)}`)
 console.log(`Testing ${targets.length} inline fetchers`)
@@ -48,18 +48,24 @@ for (const platform of targets) {
 
   try {
     const result = await fetcher(supabase, periods)
-    const p30 = result.periods['30D'] || {}
     const dur = ((Date.now() - start) / 1000).toFixed(1)
     
-    if (p30.total > 0) {
-      console.log(`✅ ${platform}: ${p30.saved}/${p30.total} saved (${dur}s)`)
-      results.push({ platform, status: 'OK', total: p30.total, saved: p30.saved, duration: dur })
-    } else if (p30.error) {
-      console.log(`⚠️  ${platform}: 0 results — ${p30.error} (${dur}s)`)
-      results.push({ platform, status: 'EMPTY', total: 0, saved: 0, duration: dur, error: p30.error })
+    let totalAll = 0, savedAll = 0
+    const periodDetails = []
+    for (const p of periods) {
+      const pd = result.periods[p] || {}
+      totalAll += pd.total || 0
+      savedAll += pd.saved || 0
+      periodDetails.push(`${p}:${pd.saved||0}/${pd.total||0}`)
+    }
+    
+    if (totalAll > 0) {
+      console.log(`✅ ${platform}: ${savedAll}/${totalAll} saved [${periodDetails.join(', ')}] (${dur}s)`)
+      results.push({ platform, status: 'OK', total: totalAll, saved: savedAll, duration: dur })
     } else {
-      console.log(`⚠️  ${platform}: 0 results (${dur}s)`)
-      results.push({ platform, status: 'EMPTY', total: 0, saved: 0, duration: dur })
+      const firstError = Object.values(result.periods).find(p => p.error)?.error
+      console.log(`⚠️  ${platform}: 0 results${firstError ? ' — ' + firstError : ''} (${dur}s)`)
+      results.push({ platform, status: 'EMPTY', total: 0, saved: 0, duration: dur, error: firstError })
     }
   } catch (e) {
     const dur = ((Date.now() - start) / 1000).toFixed(1)
