@@ -64,8 +64,8 @@ export const ScoreBreakdownTooltip = memo(function ScoreBreakdownTooltip({
 
   // Derive confidence from data if API didn't provide it
   const confidence = trader.score_confidence ?? (
-    trader.win_rate == null && trader.max_drawdown == null ? 'minimal' :
-    trader.win_rate == null || trader.max_drawdown == null ? 'partial' :
+    (!trader.win_rate) && (!trader.max_drawdown) ? 'minimal' :
+    (!trader.win_rate) || (!trader.max_drawdown) ? 'partial' :
     'full'
   )
   const confidenceInfo = confidence !== 'full'
@@ -113,11 +113,11 @@ export const ScoreBreakdownTooltip = memo(function ScoreBreakdownTooltip({
           <div>{language === 'zh' ? '盈亏' : 'PnL'}: <span style={{ color: tokens.colors.accent.success, fontWeight: 700 }}>{trader.pnl_score?.toFixed(1) ?? '—'}</span>/15</div>
           <div>
             {language === 'zh' ? '回撤' : 'Drawdown'}: <span style={{ color: tokens.colors.accent.warning, fontWeight: 700 }}>{trader.drawdown_score?.toFixed(1) ?? '—'}</span>/8
-            {trader.max_drawdown == null && <span style={{ opacity: 0.6, fontSize: '10px' }}> *</span>}
+            {!trader.max_drawdown && <span style={{ opacity: 0.6, fontSize: '10px' }}> *</span>}
           </div>
           <div>
             {language === 'zh' ? '稳定' : 'Stability'}: <span style={{ color: tokens.colors.accent.primary, fontWeight: 700 }}>{trader.stability_score?.toFixed(1) ?? '—'}</span>/7
-            {trader.win_rate == null && <span style={{ opacity: 0.6, fontSize: '10px' }}> *</span>}
+            {!trader.win_rate && <span style={{ opacity: 0.6, fontSize: '10px' }}> *</span>}
           </div>
           {confidenceInfo && (
             <div
@@ -136,8 +136,8 @@ export const ScoreBreakdownTooltip = memo(function ScoreBreakdownTooltip({
               <div style={{ marginTop: 2, opacity: 0.8, fontSize: '9px', color: tokens.colors.text.tertiary }}>
                 {language === 'zh' ? '缺失: ' : 'Missing: '}
                 {[
-                  trader.win_rate == null && (language === 'zh' ? '胜率' : 'Win Rate'),
-                  trader.max_drawdown == null && (language === 'zh' ? '回撤' : 'Drawdown'),
+                  !trader.win_rate && (language === 'zh' ? '胜率' : 'Win Rate'),
+                  !trader.max_drawdown && (language === 'zh' ? '回撤' : 'Drawdown'),
                 ].filter(Boolean).join(', ')}
               </div>
             </div>

@@ -7,6 +7,7 @@ import { tokens } from '@/lib/design-tokens'
 import { Box } from '../base'
 import { useToast } from '../ui/Toast'
 import { type Trader } from '../ranking/RankingTable'
+import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
 
 const RankingTable = dynamic(
   () => import('@/app/components/ranking/RankingTable').then(m => ({ default: m.RankingTable })),
@@ -598,10 +599,9 @@ export default function RankingSection({
                   background: tokens.colors.bg.secondary,
                   borderRadius: tokens.radius.sm,
                   fontWeight: tokens.typography.fontWeight.semibold,
-                  textTransform: 'capitalize',
                 }}
               >
-                {src}
+                {EXCHANGE_NAMES[src] || src.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
               </span>
             ))}
             {dataSources.length > 5 && (

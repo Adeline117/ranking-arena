@@ -192,8 +192,8 @@ export const TraderRow = memo(function TraderRow({
             {/* Confidence dot: yellow=partial, red=minimal */}
             {(() => {
               const conf = trader.score_confidence ?? (
-                trader.win_rate == null && trader.max_drawdown == null ? 'minimal' :
-                trader.win_rate == null || trader.max_drawdown == null ? 'partial' : 'full'
+                (!trader.win_rate) && (!trader.max_drawdown) ? 'minimal' :
+                (!trader.win_rate) || (!trader.max_drawdown) ? 'partial' : 'full'
               )
               if (conf === 'full') return null
               return (
@@ -223,9 +223,9 @@ export const TraderRow = memo(function TraderRow({
           </Text>
         </Box>
 
-        {/* Win% */}
+        {/* Win% — treat 0 as missing (exchanges report 0 when data unavailable) */}
         <Box className="col-winrate" style={{ textAlign: 'right', alignItems: 'center', justifyContent: 'flex-end' }}>
-          {trader.win_rate != null ? (
+          {trader.win_rate ? (
             <Text size="sm" weight="semibold" style={{ color: trader.win_rate > 50 ? tokens.colors.accent.success : ROW_TEXT_TERTIARY, lineHeight: 1, fontSize: '13px' }}>
               {trader.win_rate.toFixed(0)}%
             </Text>
@@ -234,9 +234,9 @@ export const TraderRow = memo(function TraderRow({
           )}
         </Box>
 
-        {/* MDD */}
+        {/* MDD — treat 0 as missing (exchanges report 0 when data unavailable) */}
         <Box className="col-mdd" style={{ textAlign: 'right', alignItems: 'center', justifyContent: 'flex-end' }}>
-          {trader.max_drawdown != null ? (
+          {trader.max_drawdown ? (
             <Text size="sm" weight="semibold" style={{ color: ROW_ACCENT_ERROR, lineHeight: 1, fontSize: '13px' }}>
               -{Math.abs(trader.max_drawdown).toFixed(0)}%
             </Text>
