@@ -12,6 +12,7 @@
 import { useState, useCallback } from 'react'
 import { useAccount, useSignTypedData } from 'wagmi'
 import { getArenaSpaceId } from '@/lib/web3/snapshot'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 interface VoteButtonProps {
   proposalId: string
@@ -56,6 +57,7 @@ export function VoteButton({
 }: VoteButtonProps) {
   const { address, isConnected } = useAccount()
   const { signTypedDataAsync } = useSignTypedData()
+  const { t } = useLanguage()
   const [isVoting, setIsVoting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [voted, setVoted] = useState(hasVoted)
@@ -67,7 +69,7 @@ export function VoteButton({
 
     // Validate proposalId is a valid bytes32 hex string
     if (!/^0x[0-9a-fA-F]{64}$/.test(proposalId)) {
-      setError('Invalid proposal ID')
+      setError(t('voteInvalidProposal'))
       return
     }
 
@@ -116,15 +118,15 @@ export function VoteButton({
 
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))
-        throw new Error(body.error?.message || body.error || 'Vote submission failed')
+        throw new Error(body.error?.message || body.error || t('voteSubmissionFailed'))
       }
 
       setVoted(true)
       onVoted?.()
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to vote'
+      const msg = err instanceof Error ? err.message : t('voteFailed')
       if (msg.includes('User rejected') || msg.includes('user rejected')) {
-        setError('Signature rejected')
+        setError(t('voteSignatureRejected'))
       } else {
         setError(msg)
       }
@@ -139,7 +141,7 @@ export function VoteButton({
         disabled
         className="w-full px-3 py-2 rounded-lg border border-white/[0.06] bg-white/[0.02] text-neutral-600 text-sm font-medium cursor-not-allowed"
       >
-        Connect wallet to vote
+        {t('voteConnectWallet')}
       </button>
     )
   }
@@ -153,7 +155,7 @@ export function VoteButton({
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
           <polyline points="20 6 9 17 4 12" />
         </svg>
-        Voted: {choiceLabel}
+        {t('voteVoted')}: {choiceLabel}
       </button>
     )
   }
@@ -169,7 +171,7 @@ export function VoteButton({
             : 'border-purple-500/30 bg-purple-500/10 text-purple-300 cursor-pointer hover:bg-purple-500/15 hover:border-purple-500/40'
         }`}
       >
-        {isVoting ? 'Signing...' : `Vote: ${choiceLabel}`}
+        {isVoting ? t('voteSigning') : `${t('voteLabel')}: ${choiceLabel}`}
       </button>
       {error && (
         <p className="mt-1 text-[11px] text-red-400">{error}</p>

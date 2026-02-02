@@ -2367,6 +2367,61 @@ const zh = {
     addOption: '添加选项',
     uploadingProgress: '上传中 {percent}%',
 
+    // Web3 - VoteButton
+    voteConnectWallet: '连接钱包以投票',
+    voteVoted: '已投票',
+    voteSigning: '签名中...',
+    voteLabel: '投票',
+    voteInvalidProposal: '无效的提案 ID',
+    voteSubmissionFailed: '投票提交失败',
+    voteSignatureRejected: '签名被拒绝',
+
+    // Web3 - NFTBadge
+    nftBadgeTitle: '通过 Arena NFT 获得 Pro 会员',
+    nftBadgePro: 'Pro',
+
+    // Web3 - OnChainBadge
+    onChainVerified: '链上验证',
+    onChainAttestedOnBase: 'Arena Score 已在 Base 链上认证',
+    onChainScore: '分数',
+    onChainPublished: '发布于',
+    onChainUid: 'UID',
+
+    // Web3 - WalletSection
+    walletLinkedSuccess: '钱包绑定成功',
+    walletUnlinkTitle: '解绑钱包',
+    walletUnlinkConfirm: '确定要解绑钱包吗？如果适用，您将失去 NFT 会员权益。',
+    walletUnlinked: '钱包已解绑',
+    walletUnlinkFailed: '解绑钱包失败',
+    walletLinkedHeading: '已绑定钱包',
+    walletUnlinking: '解绑中...',
+    walletUnlink: '解绑',
+    walletViewOnBasescan: '在 BaseScan 查看',
+    walletNoLinked: '您的账户尚未绑定钱包。',
+    walletSigning: '签名中...',
+    walletLinkButton: '绑定钱包',
+    walletConnectButton: '连接钱包',
+    walletProNft: 'Pro 会员 (NFT)',
+    walletNoNft: '无 NFT 会员',
+    walletProStatus: '您的账户已通过 NFT 获得 Pro 状态。等级：{tier}',
+    walletHoldNft: '持有 Arena Pro NFT 即可解锁 Pro 功能。',
+
+    // Web3 - useSiweAuth
+    siweRejected: '签名请求被拒绝。请在钱包中批准签名以登录。',
+    siweExpired: '会话已过期，请重试。',
+    siweNetworkError: '网络错误，请检查您的连接后重试。',
+    siweNoWallet: '未连接钱包。请先连接您的钱包。',
+    siweAlreadyLinked: '该钱包已绑定到其他账户。',
+    siweSignInFailed: '登录失败',
+    siweStatement: '使用您的钱包登录 Arena。',
+    siweFetchNonceFailed: '获取 nonce 失败',
+    siweVerificationFailed: '验证失败',
+    siweNotAuthenticated: '未认证',
+    siweLinkFailed: '绑定钱包失败',
+
+    // Login - Web3 divider
+    loginOrDivider: '或',
+
 } as const
 
 export default zh

@@ -1340,7 +1340,7 @@ export default function LoginPage() {
           margin: '20px 0',
         }}>
           <div style={{ flex: 1, height: 1, background: 'rgba(255, 255, 255, 0.1)' }} />
-          <span style={{ fontSize: 12, color: '#5a5a5a' }}>or</span>
+          <span style={{ fontSize: 12, color: '#5a5a5a' }}>{t('loginOrDivider')}</span>
           <div style={{ flex: 1, height: 1, background: 'rgba(255, 255, 255, 0.1)' }} />
         </div>
 

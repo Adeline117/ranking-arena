@@ -4,7 +4,7 @@ import { cookies } from 'next/headers'
 import { isAddress } from 'viem'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 
-const EXPECTED_CHAIN_ID = 1 // Ethereum mainnet
+const EXPECTED_CHAIN_ID = 8453 // Base mainnet (must match client's chainId)
 
 /**
  * POST /api/auth/siwe/verify
@@ -43,10 +43,13 @@ export async function POST(request: NextRequest) {
     // Validate domain, URI, and chainId to prevent cross-site signature relay
     const requestHost = request.headers.get('host')
     const requestOrigin = request.headers.get('origin')
+    if (!requestHost || !requestOrigin) {
+      return NextResponse.json({ error: 'Missing required Host or Origin header' }, { status: 400 })
+    }
     if (
-      (requestHost && fields.domain !== requestHost) ||
-      (requestOrigin && fields.uri !== requestOrigin) ||
-      (fields.chainId && fields.chainId !== EXPECTED_CHAIN_ID)
+      fields.domain !== requestHost ||
+      fields.uri !== requestOrigin ||
+      fields.chainId !== EXPECTED_CHAIN_ID
     ) {
       return NextResponse.json({ error: 'Domain or chain mismatch' }, { status: 400 })
     }

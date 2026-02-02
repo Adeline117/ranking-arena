@@ -8,6 +8,7 @@
  */
 
 import { useState, useEffect } from 'react'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 interface OnChainBadgeProps {
   traderHandle: string
@@ -27,6 +28,7 @@ const SIZE_CONFIG = {
 } as const
 
 export function OnChainBadge({ traderHandle, size = 'md' }: OnChainBadgeProps) {
+  const { t } = useLanguage()
   const [attestation, setAttestation] = useState<AttestationInfo | null>(null)
   const [showTooltip, setShowTooltip] = useState(false)
 
@@ -78,20 +80,20 @@ export function OnChainBadge({ traderHandle, size = 'md' }: OnChainBadgeProps) {
       </svg>
 
       <span className={`${s.text} font-semibold text-[#2fe57d] whitespace-nowrap`}>
-        On-chain Verified
+        {t('onChainVerified')}
       </span>
 
       {showTooltip && (
         <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3.5 py-2.5 bg-[rgba(15,15,20,0.95)] border border-[rgba(47,229,125,0.2)] rounded-[10px] text-xs text-neutral-300 whitespace-nowrap z-50 shadow-[0_4px_20px_rgba(0,0,0,0.4)]">
           <div className="font-semibold text-[#2fe57d] mb-1">
-            Arena Score Attested on Base
+            {t('onChainAttestedOnBase')}
           </div>
           {attestation.arena_score != null && (
-            <div>Score: {attestation.arena_score}</div>
+            <div>{t('onChainScore')}: {attestation.arena_score}</div>
           )}
-          <div>Published: {publishedDate}</div>
+          <div>{t('onChainPublished')}: {publishedDate}</div>
           <div className="mt-1 text-[11px] text-neutral-500">
-            UID: {attestation.attestation_uid.slice(0, 10)}...
+            {t('onChainUid')}: {attestation.attestation_uid.slice(0, 10)}...
           </div>
         </div>
       )}

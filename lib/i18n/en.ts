@@ -2367,6 +2367,61 @@ const en = {
     addOption: 'Add option',
     uploadingProgress: 'Uploading {percent}%',
 
+    // Web3 - VoteButton
+    voteConnectWallet: 'Connect wallet to vote',
+    voteVoted: 'Voted',
+    voteSigning: 'Signing...',
+    voteLabel: 'Vote',
+    voteInvalidProposal: 'Invalid proposal ID',
+    voteSubmissionFailed: 'Vote submission failed',
+    voteSignatureRejected: 'Signature rejected',
+
+    // Web3 - NFTBadge
+    nftBadgeTitle: 'Pro membership via Arena NFT',
+    nftBadgePro: 'Pro',
+
+    // Web3 - OnChainBadge
+    onChainVerified: 'On-chain Verified',
+    onChainAttestedOnBase: 'Arena Score Attested on Base',
+    onChainScore: 'Score',
+    onChainPublished: 'Published',
+    onChainUid: 'UID',
+
+    // Web3 - WalletSection
+    walletLinkedSuccess: 'Wallet linked successfully',
+    walletUnlinkTitle: 'Unlink Wallet',
+    walletUnlinkConfirm: 'Are you sure you want to unlink your wallet? You will lose NFT membership benefits if applicable.',
+    walletUnlinked: 'Wallet unlinked',
+    walletUnlinkFailed: 'Failed to unlink wallet',
+    walletLinkedHeading: 'Linked Wallet',
+    walletUnlinking: 'Unlinking...',
+    walletUnlink: 'Unlink',
+    walletViewOnBasescan: 'View on BaseScan',
+    walletNoLinked: 'No wallet linked to your account.',
+    walletSigning: 'Signing...',
+    walletLinkButton: 'Link Wallet',
+    walletConnectButton: 'Connect Wallet',
+    walletProNft: 'Pro Membership (NFT)',
+    walletNoNft: 'No NFT Membership',
+    walletProStatus: 'Your account has Pro status via NFT. Tier: {tier}',
+    walletHoldNft: 'Hold an Arena Pro NFT to unlock Pro features.',
+
+    // Web3 - useSiweAuth
+    siweRejected: 'Signature request was rejected. Please approve the signature in your wallet to sign in.',
+    siweExpired: 'Session expired. Please try again.',
+    siweNetworkError: 'Network error. Please check your connection and try again.',
+    siweNoWallet: 'No wallet connected. Please connect your wallet first.',
+    siweAlreadyLinked: 'This wallet is already linked to another account.',
+    siweSignInFailed: 'Sign in failed',
+    siweStatement: 'Sign in to Arena with your wallet.',
+    siweFetchNonceFailed: 'Failed to fetch nonce',
+    siweVerificationFailed: 'Verification failed',
+    siweNotAuthenticated: 'Not authenticated',
+    siweLinkFailed: 'Failed to link wallet',
+
+    // Login - Web3 divider
+    loginOrDivider: 'or',
+
 } as const
 
 export default en

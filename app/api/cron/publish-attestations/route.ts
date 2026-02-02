@@ -94,16 +94,16 @@ export async function POST(request: NextRequest) {
       try {
         const dataHash = createDataHash({
           handle: trader.handle,
-          score: trader.arena_score || 0,
-          roi: trader.roi || 0,
-          pnl: trader.pnl || 0,
+          score: trader.arena_score ?? 0,
+          roi: trader.roi ?? 0,
+          pnl: trader.pnl ?? 0,
           timestamp: now,
         })
 
         const { uid, txHash } = await publishAttestation(recipient, {
           traderHandle: trader.handle,
-          arenaScore: trader.arena_score || 0,
-          exchange: trader.exchange || 'unknown',
+          arenaScore: trader.arena_score ?? 0,
+          exchange: trader.exchange ?? 'unknown',
           snapshotTimestamp: now,
           dataHash,
         })
