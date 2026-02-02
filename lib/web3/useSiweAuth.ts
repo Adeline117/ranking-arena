@@ -19,6 +19,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAccount, useSignMessage } from 'wagmi'
 import { SiweMessage } from 'siwe'
 import { supabase } from '@/lib/supabase/client'
+import { useLanguage, type TranslationFunction } from '@/app/components/Providers/LanguageProvider'
 
 interface SiweAuthResult {
   action: 'existing_user' | 'new_user'
@@ -40,7 +41,7 @@ interface UseSiweAuthReturn {
 /**
  * Normalise wallet errors into user-friendly messages.
  */
-function normaliseWalletError(err: unknown): string {
+function normaliseWalletError(err: unknown, t: TranslationFunction): string {
   const msg = err instanceof Error ? err.message : String(err)
 
   // User rejected the signature request
@@ -50,35 +51,36 @@ function normaliseWalletError(err: unknown): string {
     msg.includes('ACTION_REJECTED') ||
     msg.includes('UserRejectedRequestError')
   ) {
-    return 'Signature request was rejected. Please approve the signature in your wallet to sign in.'
+    return t('siweRejected')
   }
 
   // Nonce expired
   if (msg.includes('Nonce expired') || msg.includes('nonce')) {
-    return 'Session expired. Please try again.'
+    return t('siweExpired')
   }
 
   // Network / RPC errors
   if (msg.includes('network') || msg.includes('timeout') || msg.includes('ETIMEDOUT')) {
-    return 'Network error. Please check your connection and try again.'
+    return t('siweNetworkError')
   }
 
   // Wallet not connected
   if (msg.includes('No wallet connected') || msg.includes('Connector not connected')) {
-    return 'No wallet connected. Please connect your wallet first.'
+    return t('siweNoWallet')
   }
 
   // Already linked
   if (msg.includes('already linked')) {
-    return 'This wallet is already linked to another account.'
+    return t('siweAlreadyLinked')
   }
 
-  return msg || 'Sign in failed'
+  return msg || t('siweSignInFailed')
 }
 
 export function useSiweAuth(): UseSiweAuthReturn {
   const { address, chainId, isConnected } = useAccount()
   const { signMessageAsync } = useSignMessage()
+  const { t } = useLanguage()
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -128,28 +130,28 @@ export function useSiweAuth(): UseSiweAuthReturn {
     const message = new SiweMessage({
       domain: window.location.host,
       address: address!,
-      statement: 'Sign in to Arena with your wallet.',
+      statement: t('siweStatement'),
       uri: window.location.origin,
       version: '1',
       chainId: chainId || 8453, // Base mainnet
       nonce,
     })
     return message.prepareMessage()
-  }, [address, chainId])
+  }, [address, chainId, t])
 
   const fetchNonce = useCallback(async (signal?: AbortSignal): Promise<string> => {
     const res = await fetch('/api/auth/siwe/nonce', { signal })
-    if (!res.ok) throw new Error('Failed to fetch nonce')
+    if (!res.ok) throw new Error(t('siweFetchNonceFailed'))
     const { nonce } = await res.json()
     return nonce
-  }, [])
+  }, [t])
 
   /**
    * Sign in with SIWE — creates or finds a user account linked to the wallet.
    */
   const signIn = useCallback(async (): Promise<SiweAuthResult | null> => {
     if (!address) {
-      setError('No wallet connected. Please connect your wallet first.')
+      setError(t('siweNoWallet'))
       return null
     }
     if (inFlightRef.current) return null
@@ -175,7 +177,7 @@ export function useSiweAuth(): UseSiweAuthReturn {
 
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))
-        throw new Error(body.error || 'Verification failed')
+        throw new Error(body.error || t('siweVerificationFailed'))
       }
 
       const result: SiweAuthResult = await res.json()
@@ -196,20 +198,20 @@ export function useSiweAuth(): UseSiweAuthReturn {
       return result
     } catch (err) {
       if ((err as Error).name === 'AbortError') return null
-      setError(normaliseWalletError(err))
+      setError(normaliseWalletError(err, t))
       return null
     } finally {
       inFlightRef.current = false
       setIsLoading(false)
     }
-  }, [address, fetchNonce, createSiweMessage, signMessageAsync])
+  }, [address, fetchNonce, createSiweMessage, signMessageAsync, t])
 
   /**
    * Link wallet to an existing authenticated account.
    */
   const linkWallet = useCallback(async (): Promise<{ walletAddress: string } | null> => {
     if (!address) {
-      setError('No wallet connected. Please connect your wallet first.')
+      setError(t('siweNoWallet'))
       return null
     }
     if (inFlightRef.current) return null
@@ -229,7 +231,7 @@ export function useSiweAuth(): UseSiweAuthReturn {
       // Get current access token
       const { data: { session } } = await supabase.auth.getSession()
       if (!session?.access_token) {
-        throw new Error('Not authenticated')
+        throw new Error(t('siweNotAuthenticated'))
       }
 
       const res = await fetch('/api/auth/siwe/link', {
@@ -244,20 +246,20 @@ export function useSiweAuth(): UseSiweAuthReturn {
 
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))
-        throw new Error(body.error || 'Failed to link wallet')
+        throw new Error(body.error || t('siweLinkFailed'))
       }
 
       const result = await res.json()
       return { walletAddress: result.walletAddress }
     } catch (err) {
       if ((err as Error).name === 'AbortError') return null
-      setError(normaliseWalletError(err))
+      setError(normaliseWalletError(err, t))
       return null
     } finally {
       inFlightRef.current = false
       setIsLoading(false)
     }
-  }, [address, fetchNonce, createSiweMessage, signMessageAsync])
+  }, [address, fetchNonce, createSiweMessage, signMessageAsync, t])
 
   return { signIn, linkWallet, isLoading, error, clearError }
 }
