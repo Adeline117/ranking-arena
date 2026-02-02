@@ -3,13 +3,12 @@
  * Original: scripts/import/import_phemex.mjs (317 lines, Playwright + API interception)
  *
  * Phemex copy trading page: https://phemex.com/copy-trading
- * Note: Original script comments say "API 端点返回 403" — CloudFront blocking.
- * May work from Vercel datacenter IPs (different from residential IPs).
  *
+ * ⚠️  CLOUDFRONT-BLOCKED: All API endpoints return 403 (CloudFront geo-restriction).
+ * Original script uses Playwright to browse the page and intercept internal API calls.
  * The browser intercepted API calls with 'copy', 'trader', 'leader', 'rank', 'copyTrad' in URL.
  * Phemex uses E8 scaling for PnL values (divide by 1e8).
- *
- * Period tabs: 7D/30D/90D — select via tabTexts on the page.
+ * May work from Vercel datacenter IPs — needs testing on deployment.
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'
