@@ -367,6 +367,7 @@ const en = {
     scoreBreakdownDesc: 'View Arena Score sub-scores and percentile rankings',
     overallScore: 'Overall Score',
     returnScore: 'Return Score',
+    pnlScore: 'PnL Score',
     drawdownScore: 'Drawdown Score',
     stabilityScore: 'Stability Score',
     percentile: 'Percentile',
@@ -467,6 +468,10 @@ const en = {
     markAllAsRead: 'Mark all as read',
     noNotifications: 'No notifications',
     noMessages: 'No messages',
+    authenticationFailed: 'Authentication failed, please log in again',
+    failedToLoadConversations: 'Failed to load conversations',
+    failedToLoadNotifications: 'Failed to load notifications',
+    unexpectedError: 'An unexpected error occurred',
     startChat: 'Start chat',
     yesterday: 'Yesterday',
     daysAgo: '{days} days ago',
@@ -1967,6 +1972,9 @@ const en = {
     // useGroupPosts hook
     unpinned: 'Unpinned',
     loadCommentsFailed: 'Failed to load comments',
+    loadingComments: 'Loading comments...',
+    loadMoreComments: 'Load more comments',
+    postComment: 'Post Comment',
     postCommentFailed: 'Failed to post comment',
 
     // ErrorBoundary

@@ -1,16 +1,11 @@
 import React, { memo } from 'react'
 import Link from 'next/link'
-import Image from 'next/image'
 import dynamic from 'next/dynamic'
 import { tokens } from '@/lib/design-tokens'
 import { RankingBadge } from '../ui/icons'
 import { Box, Text } from '../base'
 import { getAvatarGradient, getAvatarInitial, getTraderAvatarUrl } from '@/lib/utils/avatar'
-import {
-  getImageLoadingStrategy,
-  handleImageError,
-  IMAGE_PLACEHOLDER,
-} from '@/lib/performance/image-optimization'
+import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
 import type { Trader } from './RankingTable'
 import type { SourceInfo } from './utils'
 import { formatPnL, formatROI, formatDisplayName } from './utils'
@@ -117,23 +112,14 @@ export const TraderRow = memo(function TraderRow({
               const proxyAvatarUrl = getTraderAvatarUrl(trader.avatar_url)
               if (!proxyAvatarUrl) return null
 
-              const rowIndex = rank - 1
-              const loadingStrategy = getImageLoadingStrategy(rowIndex, 'above')
-              const isPriority = rowIndex < 3
-
               return (
-                <Image
+                <img
                   src={proxyAvatarUrl}
                   alt={displayName}
-                  width={36}
-                  height={36}
-                  quality={85}
-                  priority={isPriority}
-                  loading={loadingStrategy.loading}
-                  placeholder="blur"
-                  blurDataURL={IMAGE_PLACEHOLDER.avatar}
+                  loading={rank <= 3 ? 'eager' : 'lazy'}
+                  decoding="async"
                   style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', inset: 0, zIndex: 1 }}
-                  onError={handleImageError}
+                  onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
                 />
               )
             })()}
@@ -168,7 +154,7 @@ export const TraderRow = memo(function TraderRow({
               {/* Also on other exchanges */}
               {trader.also_on && trader.also_on.length > 0 && (
                 <Text size="xs" style={{ fontSize: '9px', color: ROW_TEXT_TERTIARY, lineHeight: 1.2 }}>
-                  also on: {trader.also_on.map(s => s.split('_')[0]).filter((v, i, a) => a.indexOf(v) === i).join(', ')}
+                  also on: {trader.also_on.map(s => EXCHANGE_NAMES[s] || s.split('_')[0]).filter((v, i, a) => a.indexOf(v) === i).join(', ')}
                 </Text>
               )}
             </Box>

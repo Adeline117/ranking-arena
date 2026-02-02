@@ -527,7 +527,7 @@ export default function OverviewPerformanceCard({
                   delay={500}
                 />
                 <ScoreBar
-                  label={language === 'zh' ? '盈亏分' : 'PnL Score'}
+                  label={t('pnlScore')}
                   score={periodPnlScore ?? null}
                   maxScore={15}
                   isVisible={isVisible}
