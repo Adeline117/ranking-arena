@@ -2422,6 +2422,10 @@ const en = {
     // Login - Web3 divider
     loginOrDivider: 'or',
 
+    // Common UI text (reduce hardcoding)
+    viewLiveLeaderboard: 'View Live Leaderboard',
+    popularTraders: 'Popular Traders',
+
 } as const
 
 export default en

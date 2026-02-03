@@ -2,14 +2,20 @@ import React, { memo } from 'react'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
 import { tokens } from '@/lib/design-tokens'
-import { RankingBadge } from '../ui/icons'
 import { Box, Text } from '../base'
-import { getAvatarGradient, getAvatarInitial, getTraderAvatarUrl } from '@/lib/utils/avatar'
 import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
 import type { Trader } from './RankingTable'
 import type { SourceInfo } from './utils'
 import { formatPnL, formatROI, formatDisplayName } from './utils'
 import { HighlightedName } from './RankingSearch'
+import {
+  TRADER_TEXT_TERTIARY,
+  TRADER_ACCENT_ERROR,
+  RankDisplay,
+  TraderAvatar,
+  ArenaScoreBadge,
+  areTraderPropsEqual,
+} from './shared/trader-display'
 
 const ScoreBreakdownTooltip = dynamic(
   () => import('./ScoreBreakdownTooltip').then(m => ({ default: m.ScoreBreakdownTooltip })),
@@ -30,13 +36,6 @@ export interface TraderRowProps {
   getPnLTooltipFn: (source: string, lang: string) => string
 }
 
-// Brighter tertiary color for text on ranking-row card backgrounds (#3d3b45, #2d2a35)
-// where the global tertiary (#898998) does not meet WCAG AA 4.5:1 contrast
-const ROW_TEXT_TERTIARY = '#b0b0be'
-// Brighter error color for negative ROI/MDD on card backgrounds
-// #ff4d4d only achieves 3.36:1 on #3d3b45; #ff8080 achieves ~5.0:1
-const ROW_ACCENT_ERROR = '#ff8080'
-
 export const TraderRow = memo(function TraderRow({
   trader,
   rank,
@@ -50,6 +49,7 @@ export const TraderRow = memo(function TraderRow({
   const traderHandle = trader.handle || trader.id
   const href = `/trader/${encodeURIComponent(traderHandle)}`
   const displayName = formatDisplayName(traderHandle)
+  const sourceInfo = parseSourceInfo(trader.source || source || '')
 
   return (
     <Link
@@ -72,60 +72,23 @@ export const TraderRow = memo(function TraderRow({
           minHeight: 72,
         }}
       >
-        {/* 排名 + Rank Change */}
-        <Box style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2 }}>
-          {rank <= 3 ? (
-            <Box className={getMedalGlowClass(rank)} style={{ transform: 'scale(1.1)' }}>
-              <RankingBadge rank={rank as 1 | 2 | 3} size={28} />
-            </Box>
-          ) : (
-            <Text size="sm" weight="bold" color="tertiary" style={{ fontSize: '14px', color: ROW_TEXT_TERTIARY }}>
-              #{rank}
-            </Text>
-          )}
-          {trader.is_new ? (
-            <span style={{ fontSize: '9px', fontWeight: 700, color: tokens.colors.accent.primary, lineHeight: 1 }}>NEW</span>
-          ) : trader.rank_change != null && trader.rank_change !== 0 ? (
-            <span style={{ fontSize: '9px', fontWeight: 700, color: trader.rank_change > 0 ? tokens.colors.accent.success : ROW_ACCENT_ERROR, lineHeight: 1 }}>
-              {trader.rank_change > 0 ? `+${trader.rank_change}` : trader.rank_change}
-            </span>
-          ) : null}
-        </Box>
+        {/* Rank */}
+        <RankDisplay
+          rank={rank}
+          rankChange={trader.rank_change}
+          isNew={trader.is_new}
+          glowClass={getMedalGlowClass(rank)}
+        />
 
-        {/* 交易员 */}
+        {/* Trader Info */}
         <Box style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 10, flexWrap: 'nowrap', minWidth: 0 }}>
-          <div
-            className="trader-avatar"
-            style={{
-              width: '36px', height: '36px', minWidth: '36px', minHeight: '36px',
-              borderRadius: '50%', background: getAvatarGradient(trader.id),
-              border: '2px solid var(--color-border-primary)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              overflow: 'hidden', flexShrink: 0, position: 'relative',
-              boxShadow: rank <= 3 ? `0 0 12px ${rank === 1 ? 'rgba(255, 215, 0, 0.4)' : rank === 2 ? 'rgba(192, 192, 192, 0.4)' : 'rgba(205, 127, 50, 0.4)'}` : 'none',
-            }}
-          >
-            <span style={{ color: '#ffffff', fontSize: '14px', fontWeight: 900, lineHeight: 1, textShadow: '0 1px 3px rgba(0,0,0,0.8)' }}>
-              {getAvatarInitial(displayName)}
-            </span>
-            {(() => {
-              const proxyAvatarUrl = getTraderAvatarUrl(trader.avatar_url)
-              if (!proxyAvatarUrl) return null
-
-              return (
-                <img
-                  src={proxyAvatarUrl}
-                  alt={displayName}
-                  width={36}
-                  height={36}
-                  loading={rank <= 3 ? 'eager' : 'lazy'}
-                  decoding="async"
-                  style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', inset: 0, zIndex: 1 }}
-                  onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
-                />
-              )
-            })()}
-          </div>
+          <TraderAvatar
+            traderId={trader.id}
+            displayName={displayName}
+            avatarUrl={trader.avatar_url}
+            rank={rank}
+            size={36}
+          />
           <Box style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0, flex: 1 }}>
             <Box style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <Text size="sm" weight="bold" style={{ color: tokens.colors.text.primary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '14px' }}>
@@ -136,26 +99,20 @@ export const TraderRow = memo(function TraderRow({
                 <span className="mobile-score-badge" style={{ display: 'inline-flex', alignItems: 'center', gap: 3, flexShrink: 0 }}>
                   <span style={{
                     width: 6, height: 6, borderRadius: '50%',
-                    background: trader.arena_score >= 60 ? tokens.colors.accent.success : trader.arena_score >= 40 ? tokens.colors.accent.warning : ROW_TEXT_TERTIARY,
+                    background: trader.arena_score >= 60 ? tokens.colors.accent.success : trader.arena_score >= 40 ? tokens.colors.accent.warning : TRADER_TEXT_TERTIARY,
                   }} />
-                  <span style={{ fontSize: '11px', fontWeight: 700, color: ROW_TEXT_TERTIARY }}>{trader.arena_score.toFixed(0)}</span>
+                  <span style={{ fontSize: '11px', fontWeight: 700, color: TRADER_TEXT_TERTIARY }}>{trader.arena_score.toFixed(0)}</span>
                 </span>
               )}
             </Box>
             <Box style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-              {(() => {
-                const info = parseSourceInfo(trader.source || source || '')
-                return (
-                  <Box className="source-tag" style={{ background: `${info.typeColor}15`, border: `1px solid ${info.typeColor}30` }}>
-                    <Text size="xs" weight="bold" style={{ color: info.typeColor, fontSize: '10px', lineHeight: 1.2 }}>
-                      {info.type}
-                    </Text>
-                  </Box>
-                )
-              })()}
-              {/* Also on other exchanges */}
+              <Box className="source-tag" style={{ background: `${sourceInfo.typeColor}15`, border: `1px solid ${sourceInfo.typeColor}30` }}>
+                <Text size="xs" weight="bold" style={{ color: sourceInfo.typeColor, fontSize: '10px', lineHeight: 1.2 }}>
+                  {sourceInfo.type}
+                </Text>
+              </Box>
               {trader.also_on && trader.also_on.length > 0 && (
-                <Text size="xs" style={{ fontSize: '9px', color: ROW_TEXT_TERTIARY, lineHeight: 1.2 }}>
+                <Text size="xs" style={{ fontSize: '9px', color: TRADER_TEXT_TERTIARY, lineHeight: 1.2 }}>
                   also on: {trader.also_on.map(s => EXCHANGE_NAMES[s] || s.split('_')[0]).filter((v, i, a) => a.indexOf(v) === i).join(', ')}
                 </Text>
               )}
@@ -163,91 +120,44 @@ export const TraderRow = memo(function TraderRow({
           </Box>
         </Box>
 
-        {/* Arena Score + Confidence + Score Breakdown Tooltip */}
+        {/* Arena Score */}
         <Box className="col-score" style={{ textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
-          <Box style={{
-            position: 'relative', minWidth: 46, height: 24, borderRadius: tokens.radius.md,
-            background: trader.arena_score != null && trader.arena_score >= 60 ? tokens.gradient.successSubtle : trader.arena_score != null && trader.arena_score >= 40 ? tokens.gradient.warningSubtle : tokens.glass.bg.light,
-            border: `1px solid ${trader.arena_score != null && trader.arena_score >= 60 ? `${tokens.colors.accent.success}50` : trader.arena_score != null && trader.arena_score >= 40 ? `${tokens.colors.accent.warning}40` : 'rgba(255, 255, 255, 0.15)'}`,
-            display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
-          }}>
-            {trader.arena_score != null && (
-              <Box style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${trader.arena_score}%`, background: trader.arena_score >= 60 ? `${tokens.colors.accent.success}20` : trader.arena_score >= 40 ? `${tokens.colors.accent.warning}20` : `${tokens.colors.accent.primary}15`, transition: 'width 0.3s ease' }} />
-            )}
-            <Text size="sm" weight="black" style={{ position: 'relative', color: trader.arena_score != null && trader.arena_score >= 60 ? tokens.colors.accent.success : trader.arena_score != null && trader.arena_score >= 40 ? tokens.colors.accent.warning : ROW_TEXT_TERTIARY, fontSize: '12px', lineHeight: 1 }}>
-              {trader.arena_score != null ? trader.arena_score.toFixed(1) : '—'}
-            </Text>
-            {/* Confidence dot: yellow=partial, red=minimal */}
-            {(() => {
-              const conf = trader.score_confidence ?? (
-                (!trader.win_rate) && (!trader.max_drawdown) ? 'minimal' :
-                (!trader.win_rate) || (!trader.max_drawdown) ? 'partial' : 'full'
-              )
-              if (conf === 'full') return null
-              return (
-                <span
-                  title={conf === 'minimal' ? 'Incomplete data (-20%)' : 'Partial data (-8%)'}
-                  style={{
-                    position: 'absolute', top: -2, right: -2,
-                    width: 6, height: 6, borderRadius: '50%',
-                    background: conf === 'minimal' ? tokens.colors.accent.error ?? '#ff6b6b' : tokens.colors.accent.warning,
-                    border: '1px solid rgba(0,0,0,0.3)',
-                    zIndex: 2,
-                  }}
-                />
-              )
-            })()}
-          </Box>
+          <ArenaScoreBadge score={trader.arena_score} showConfidence trader={trader} />
           <ScoreBreakdownTooltip trader={trader} language={language} />
         </Box>
 
         {/* ROI */}
         <Box className="roi-cell" style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
-          <Text size="md" weight="black" className="roi-value" style={{ color: (trader.roi || 0) >= 0 ? tokens.colors.accent.success : ROW_ACCENT_ERROR, lineHeight: 1.2, fontSize: '16px', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis' }} title={`${(trader.roi || 0) >= 0 ? '+' : ''}${(trader.roi || 0).toFixed(2)}%`}>
+          <Text size="md" weight="black" className="roi-value" style={{ color: (trader.roi || 0) >= 0 ? tokens.colors.accent.success : TRADER_ACCENT_ERROR, lineHeight: 1.2, fontSize: '16px', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis' }} title={`${(trader.roi || 0) >= 0 ? '+' : ''}${(trader.roi || 0).toFixed(2)}%`}>
             {formatROI(trader.roi || 0)}
           </Text>
-          <Text size="xs" weight="semibold" className="pnl-value" style={{ color: trader.pnl != null ? (trader.pnl >= 0 ? tokens.colors.accent.success : ROW_ACCENT_ERROR) : ROW_TEXT_TERTIARY, lineHeight: 1.2, fontSize: '12px', opacity: trader.pnl != null ? 0.85 : 0.5, cursor: trader.pnl != null ? 'help' : 'default' }} title={trader.pnl != null ? getPnLTooltipFn(trader.source || source || '', language) : undefined}>
+          <Text size="xs" weight="semibold" className="pnl-value" style={{ color: trader.pnl != null ? (trader.pnl >= 0 ? tokens.colors.accent.success : TRADER_ACCENT_ERROR) : TRADER_TEXT_TERTIARY, lineHeight: 1.2, fontSize: '12px', opacity: trader.pnl != null ? 0.85 : 0.5, cursor: trader.pnl != null ? 'help' : 'default' }} title={trader.pnl != null ? getPnLTooltipFn(trader.source || source || '', language) : undefined}>
             {trader.pnl != null ? `${trader.pnl >= 0 ? '+' : ''}${formatPnL(trader.pnl)}` : '—'}
           </Text>
         </Box>
 
-        {/* Win% — treat 0 as missing (exchanges report 0 when data unavailable) */}
+        {/* Win% */}
         <Box className="col-winrate" style={{ textAlign: 'right', alignItems: 'center', justifyContent: 'flex-end' }}>
           {trader.win_rate ? (
-            <Text size="sm" weight="semibold" style={{ color: trader.win_rate > 50 ? tokens.colors.accent.success : ROW_TEXT_TERTIARY, lineHeight: 1, fontSize: '13px' }}>
+            <Text size="sm" weight="semibold" style={{ color: trader.win_rate > 50 ? tokens.colors.accent.success : TRADER_TEXT_TERTIARY, lineHeight: 1, fontSize: '13px' }}>
               {trader.win_rate.toFixed(0)}%
             </Text>
           ) : (
-            <span title="Not provided by exchange" style={{ fontSize: '11px', color: ROW_TEXT_TERTIARY, opacity: 0.4, letterSpacing: 1 }}>N/A</span>
+            <span title="Not provided by exchange" style={{ fontSize: '11px', color: TRADER_TEXT_TERTIARY, opacity: 0.4, letterSpacing: 1 }}>N/A</span>
           )}
         </Box>
 
-        {/* MDD — treat 0 as missing (exchanges report 0 when data unavailable) */}
+        {/* MDD */}
         <Box className="col-mdd" style={{ textAlign: 'right', alignItems: 'center', justifyContent: 'flex-end' }}>
           {trader.max_drawdown ? (
-            <Text size="sm" weight="semibold" style={{ color: ROW_ACCENT_ERROR, lineHeight: 1, fontSize: '13px' }}>
+            <Text size="sm" weight="semibold" style={{ color: TRADER_ACCENT_ERROR, lineHeight: 1, fontSize: '13px' }}>
               -{Math.abs(trader.max_drawdown).toFixed(0)}%
             </Text>
           ) : (
-            <span title="Not provided by exchange" style={{ fontSize: '11px', color: ROW_TEXT_TERTIARY, opacity: 0.4, letterSpacing: 1 }}>N/A</span>
+            <span title="Not provided by exchange" style={{ fontSize: '11px', color: TRADER_TEXT_TERTIARY, opacity: 0.4, letterSpacing: 1 }}>N/A</span>
           )}
         </Box>
       </Box>
     </Link>
   )
-}, (prev, next) => {
-  return (
-    prev.trader.id === next.trader.id &&
-    prev.trader.roi === next.trader.roi &&
-    prev.trader.arena_score === next.trader.arena_score &&
-    prev.trader.pnl === next.trader.pnl &&
-    prev.trader.win_rate === next.trader.win_rate &&
-    prev.trader.max_drawdown === next.trader.max_drawdown &&
-    prev.trader.score_confidence === next.trader.score_confidence &&
-    prev.trader.rank_change === next.trader.rank_change &&
-    prev.trader.is_new === next.trader.is_new &&
-    prev.rank === next.rank &&
-    prev.language === next.language &&
-    prev.searchQuery === next.searchQuery
-  )
-})
+}, (prev, next) => areTraderPropsEqual(prev, next) && prev.source === next.source)
