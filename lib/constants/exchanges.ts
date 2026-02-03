@@ -279,3 +279,58 @@ export const EXCHANGE_NAMES: Record<string, string> = {
   dune_uniswap: 'Uniswap (Dune)',
   dune_defi: 'DeFi (Dune)',
 }
+
+// ---------------------------------------------------------------------------
+// SOURCE_RELIABILITY – data reliability scores for each platform (0-100)
+// Used by data-quality scoring system
+// ---------------------------------------------------------------------------
+
+export const SOURCE_RELIABILITY: Record<string, number> = {
+  // ⭐⭐⭐⭐⭐ 稳定平台 (90-100) - 纯 API，无反爬
+  okx_futures: 95,
+  okx_web3: 90,
+  okx_wallet: 90,
+  htx_futures: 95,
+  gains: 95,
+  hyperliquid: 95,
+  gmx: 95,
+  dydx: 90,
+  kwenta: 88,
+  mux: 88,
+  vertex: 85,
+  drift: 85,
+  jupiter_perps: 85,
+  aevo: 85,
+  synthetix: 85,
+  
+  // ⭐⭐⭐⭐ 需代理但稳定 (80-89)
+  binance_futures: 88,
+  binance_spot: 88,
+  binance_web3: 85,
+  
+  // ⭐⭐⭐ 需浏览器/有限制 (60-79)
+  mexc: 75,
+  kucoin: 72,
+  coinex: 72,
+  weex: 70,
+  phemex: 70,
+  bitget_futures: 68,
+  bitget_spot: 65,
+  bitmart: 65,
+  gateio: 68,
+  xt: 55,
+  pionex: 60,
+  
+  // ⭐⭐ 不稳定/数据少 (40-59)
+  bybit: 45,
+  bybit_spot: 45,
+  bingx: 40,
+  blofin: 40,
+  lbank: 35,
+  
+  // Dune 数据源
+  dune_gmx: 90,
+  dune_hyperliquid: 90,
+  dune_uniswap: 85,
+  dune_defi: 80,
+}
