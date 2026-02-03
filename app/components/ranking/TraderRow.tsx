@@ -25,6 +25,18 @@ const ScoreBreakdownTooltip = dynamic(
   }
 )
 
+// Reusable N/A indicator for missing data
+function NaIndicator() {
+  return (
+    <span
+      title="Not provided by exchange"
+      style={{ fontSize: '11px', color: TRADER_TEXT_TERTIARY, opacity: 0.4, letterSpacing: 1 }}
+    >
+      N/A
+    </span>
+  )
+}
+
 export interface TraderRowProps {
   trader: Trader
   rank: number
@@ -127,14 +139,41 @@ export const TraderRow = memo(function TraderRow({
         </Box>
 
         {/* ROI */}
-        <Box className="roi-cell" style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
-          <Text size="md" weight="black" className="roi-value" style={{ color: (trader.roi || 0) >= 0 ? tokens.colors.accent.success : TRADER_ACCENT_ERROR, lineHeight: 1.2, fontSize: '16px', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis' }} title={`${(trader.roi || 0) >= 0 ? '+' : ''}${(trader.roi || 0).toFixed(2)}%`}>
-            {formatROI(trader.roi || 0)}
-          </Text>
-          <Text size="xs" weight="semibold" className="pnl-value" style={{ color: trader.pnl != null ? (trader.pnl >= 0 ? tokens.colors.accent.success : TRADER_ACCENT_ERROR) : TRADER_TEXT_TERTIARY, lineHeight: 1.2, fontSize: '12px', opacity: trader.pnl != null ? 0.85 : 0.5, cursor: trader.pnl != null ? 'help' : 'default' }} title={trader.pnl != null ? getPnLTooltipFn(trader.source || source || '', language) : undefined}>
-            {trader.pnl != null ? `${trader.pnl >= 0 ? '+' : ''}${formatPnL(trader.pnl)}` : '—'}
-          </Text>
-        </Box>
+        {(() => {
+          const roi = trader.roi || 0
+          const roiColor = roi >= 0 ? tokens.colors.accent.success : TRADER_ACCENT_ERROR
+          const pnl = trader.pnl
+          const hasPnl = pnl != null
+          const pnlColor = hasPnl
+            ? (pnl >= 0 ? tokens.colors.accent.success : TRADER_ACCENT_ERROR)
+            : TRADER_TEXT_TERTIARY
+          const pnlText = hasPnl
+            ? `${pnl >= 0 ? '+' : ''}${formatPnL(pnl)}`
+            : '—'
+
+          return (
+            <Box className="roi-cell" style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
+              <Text
+                size="md"
+                weight="black"
+                className="roi-value"
+                style={{ color: roiColor, lineHeight: 1.2, fontSize: '16px', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                title={`${roi >= 0 ? '+' : ''}${roi.toFixed(2)}%`}
+              >
+                {formatROI(roi)}
+              </Text>
+              <Text
+                size="xs"
+                weight="semibold"
+                className="pnl-value"
+                style={{ color: pnlColor, lineHeight: 1.2, fontSize: '12px', opacity: hasPnl ? 0.85 : 0.5, cursor: hasPnl ? 'help' : 'default' }}
+                title={hasPnl ? getPnLTooltipFn(trader.source || source || '', language) : undefined}
+              >
+                {pnlText}
+              </Text>
+            </Box>
+          )
+        })()}
 
         {/* Win% */}
         <Box className="col-winrate" style={{ textAlign: 'right', alignItems: 'center', justifyContent: 'flex-end' }}>
@@ -143,7 +182,7 @@ export const TraderRow = memo(function TraderRow({
               {trader.win_rate.toFixed(0)}%
             </Text>
           ) : (
-            <span title="Not provided by exchange" style={{ fontSize: '11px', color: TRADER_TEXT_TERTIARY, opacity: 0.4, letterSpacing: 1 }}>N/A</span>
+            <NaIndicator />
           )}
         </Box>
 
@@ -154,7 +193,7 @@ export const TraderRow = memo(function TraderRow({
               -{Math.abs(trader.max_drawdown).toFixed(0)}%
             </Text>
           ) : (
-            <span title="Not provided by exchange" style={{ fontSize: '11px', color: TRADER_TEXT_TERTIARY, opacity: 0.4, letterSpacing: 1 }}>N/A</span>
+            <NaIndicator />
           )}
         </Box>
       </Box>
