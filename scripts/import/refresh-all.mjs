@@ -107,6 +107,14 @@ async function refreshGains() {
   } catch { return '❌' }
 }
 
+async function refreshDYDX() {
+  console.log('  dYdX...')
+  try {
+    execSync('node scripts/import/import_dydx_enhanced.mjs 30D', { cwd: process.cwd(), stdio: 'pipe', timeout: 120000 })
+    return '✅'
+  } catch { return '❌' }
+}
+
 async function refreshHyperliquid() {
   console.log('  Hyperliquid...')
   curl('https://stats-data.hyperliquid.xyz/Mainnet/leaderboard', { proxy: PROXY, timeout: 30, output: '/tmp/hl.json' })
@@ -370,6 +378,7 @@ async function main() {
     results.okx = await refreshOKX()
     results.htx = await refreshHTX()
     results.gains = await refreshGains()
+    results.dydx = await refreshDYDX()
     results.hyperliquid = await refreshHyperliquid()
     results.gmx = await refreshGMX()
     results.binance_futures = await refreshBinance('futures')
