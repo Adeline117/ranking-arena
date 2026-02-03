@@ -1,0 +1,66 @@
+# Ranking Arena Worker Service - Docker Compose
+# 
+# Usage:
+#   docker-compose up -d              # Start worker
+#   docker-compose logs -f worker     # View logs
+#   docker-compose down               # Stop worker
+
+version: '3.8'
+
+services:
+  worker:
+    build:
+      context: ..
+      dockerfile: worker/Dockerfile
+    container_name: ranking-arena-worker
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - THEGRAPH_API_KEY=${THEGRAPH_API_KEY}
+      - DRIFT_API_KEY=${DRIFT_API_KEY}
+      # Proxy settings (optional)
+      - CLASH_API_URL=http://host.docker.internal:9090
+      - CLASH_API_SECRET=${CLASH_API_SECRET}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command: ["npx", "tsx", "worker/src/index.ts", "--daemon"]
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # One-shot DeFi fetcher
+  worker-defi:
+    build:
+      context: ..
+      dockerfile: worker/Dockerfile
+    container_name: ranking-arena-worker-defi
+    environment:
+      - NODE_ENV=production
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - THEGRAPH_API_KEY=${THEGRAPH_API_KEY}
+    command: ["npx", "tsx", "worker/src/index.ts", "--defi"]
+    profiles:
+      - defi
+
+  # CEX platforms only (requires proxy)
+  worker-cex:
+    build:
+      context: ..
+      dockerfile: worker/Dockerfile
+    container_name: ranking-arena-worker-cex
+    environment:
+      - NODE_ENV=production
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - CLASH_API_URL=http://host.docker.internal:9090
+      - CLASH_API_SECRET=${CLASH_API_SECRET}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command: ["npx", "tsx", "worker/src/index.ts", "--category", "cex-api"]
+    profiles:
+      - cex

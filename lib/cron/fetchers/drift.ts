@@ -1,16 +1,20 @@
 /**
  * Drift Protocol (Solana) — Inline fetcher for Vercel serverless
- * API: https://mainnet-beta.api.drift.trade
- * Drift is Solana's largest perps DEX.
- *
- * The Drift API requires authentication for most endpoints.
- * This fetcher tries multiple public endpoints:
- * 1. /leaderboard — public leaderboard (may require auth)
- * 2. /users — paginated user list
- * 3. Drift historical data S3 bucket as fallback
- *
- * Note: If all public endpoints require auth, this fetcher will return
- * an error until a DRIFT_API_KEY env var is provided.
+ * 
+ * STATUS: Requires API key
+ * 
+ * Drift is Solana's largest perps DEX. The leaderboard API requires authentication.
+ * Set DRIFT_API_KEY environment variable to enable this fetcher.
+ * 
+ * API Base: https://mainnet-beta.api.drift.trade
+ * 
+ * Endpoints:
+ * - /leaderboard?resolution=7d|30d|allTime - requires auth
+ * - Public DLOB server at dlob.drift.trade - limited data
+ * 
+ * To get an API key:
+ * 1. Contact Drift team or check developer docs
+ * 2. Register for API access at drift.trade
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -27,8 +31,6 @@ const SOURCE = 'drift'
 const API_BASE = 'https://mainnet-beta.api.drift.trade'
 const DLOB_BASE = 'https://dlob.drift.trade'
 const TARGET = 500
-
-const WINDOW_DAYS: Record<string, number> = { '7D': 7, '30D': 30, '90D': 90 }
 
 // Map our periods to Drift's resolution params
 const RESOLUTION_MAP: Record<string, string> = {
@@ -89,6 +91,16 @@ async function fetchLeaderboardData(
   const resolution = RESOLUTION_MAP[period] || 'allTime'
   const headers = getApiHeaders()
 
+  // Check if API key is available
+  if (!process.env.DRIFT_API_KEY) {
+    return {
+      entries: [],
+      error:
+        'Drift API requires authentication. Set DRIFT_API_KEY environment variable. ' +
+        'Contact Drift team or check docs at drift.trade/developers for API access.',
+    }
+  }
+
   // Attempt 1: Direct leaderboard endpoint
   try {
     const data = await fetchJson<DriftLeaderboardResponse>(
@@ -98,8 +110,9 @@ async function fetchLeaderboardData(
     const entries =
       data?.data || data?.leaderboard || data?.result || data?.users || []
     if (entries.length > 0) return { entries }
-  } catch {
+  } catch (err) {
     // Continue to next attempt
+    console.warn('[Drift] Main API failed:', err)
   }
 
   // Attempt 2: DLOB server leaderboard
@@ -111,8 +124,8 @@ async function fetchLeaderboardData(
     const entries =
       data?.data || data?.leaderboard || data?.result || data?.users || []
     if (entries.length > 0) return { entries }
-  } catch {
-    // Continue to next attempt
+  } catch (err) {
+    console.warn('[Drift] DLOB API failed:', err)
   }
 
   // Attempt 3: Users endpoint with PnL sorting
@@ -124,13 +137,13 @@ async function fetchLeaderboardData(
     const entries =
       data?.data || data?.leaderboard || data?.result || data?.users || []
     if (entries.length > 0) return { entries }
-  } catch {
-    // All attempts failed
+  } catch (err) {
+    console.warn('[Drift] Users API failed:', err)
   }
 
   return {
     entries: [],
-    error: 'Drift API requires authentication. Set DRIFT_API_KEY env var.',
+    error: 'Drift API returned no data. Check API key validity or try again later.',
   }
 }
 
