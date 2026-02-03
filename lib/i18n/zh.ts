@@ -2422,6 +2422,10 @@ const zh = {
     // Login - Web3 divider
     loginOrDivider: '或',
 
+    // 通用 UI 文本（减少硬编码）
+    viewLiveLeaderboard: '查看实时排行榜',
+    popularTraders: '热门交易员',
+
 } as const
 
 export default zh
