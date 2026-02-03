@@ -4,6 +4,7 @@ import dynamic from 'next/dynamic'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
 import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
+import { getPlatformNote, platformHasWinRate, platformHasMaxDrawdown } from '@/lib/constants/platform-metrics'
 import type { Trader } from './RankingTable'
 import type { SourceInfo } from './utils'
 import { formatPnL, formatROI, formatDisplayName } from './utils'
@@ -25,12 +26,24 @@ const ScoreBreakdownTooltip = dynamic(
   }
 )
 
-// Reusable N/A indicator for missing data
-function NaIndicator() {
+// Reusable N/A indicator for missing data with platform-specific tooltip
+function NaIndicator({ source, metricType }: { source?: string; metricType: 'winRate' | 'drawdown' }) {
+  // Get platform-specific note or use default
+  const platformNote = source ? getPlatformNote(source) : undefined
+  const defaultNote = metricType === 'winRate' 
+    ? 'Win rate not provided by this platform' 
+    : 'Drawdown not provided by this platform'
+  
   return (
     <span
-      title="Not provided by exchange"
-      style={{ fontSize: '11px', color: TRADER_TEXT_TERTIARY, opacity: 0.4, letterSpacing: 1 }}
+      title={platformNote || defaultNote}
+      style={{ 
+        fontSize: '11px', 
+        color: TRADER_TEXT_TERTIARY, 
+        opacity: 0.4, 
+        letterSpacing: 1,
+        cursor: 'help',
+      }}
     >
       N/A
     </span>
@@ -182,7 +195,7 @@ export const TraderRow = memo(function TraderRow({
               {trader.win_rate.toFixed(0)}%
             </Text>
           ) : (
-            <NaIndicator />
+            <NaIndicator source={trader.source || source} metricType="winRate" />
           )}
         </Box>
 
@@ -193,7 +206,7 @@ export const TraderRow = memo(function TraderRow({
               -{Math.abs(trader.max_drawdown).toFixed(0)}%
             </Text>
           ) : (
-            <NaIndicator />
+            <NaIndicator source={trader.source || source} metricType="drawdown" />
           )}
         </Box>
       </Box>
