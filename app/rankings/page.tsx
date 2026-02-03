@@ -15,6 +15,7 @@ import { useRankingsV2 } from '@/lib/hooks/useRankingsV2'
 import TopNav from '@/app/components/layout/TopNav'
 import MobileBottomNav from '@/app/components/layout/MobileBottomNav'
 import DataStateWrapper from '@/app/components/ui/DataStateWrapper'
+import DataFreshnessIndicator from '@/app/components/ranking/DataFreshnessIndicator'
 import { RankingSkeleton } from '@/app/components/ui/Skeleton'
 import { Box } from '@/app/components/base'
 import { getAvatarGradient, getAvatarInitial } from '@/lib/utils/avatar'
@@ -251,11 +252,7 @@ function RankingsContent() {
                 {isZh ? '数据更新中' : 'Data updating'}
               </span>
             )}
-            {data?.as_of && (
-              <span className="text-xs" style={{ color: tokens.colors.text.tertiary }}>
-                {new Date(data.as_of).toLocaleTimeString()}
-              </span>
-            )}
+            <DataFreshnessIndicator />
           </div>
         </div>
 

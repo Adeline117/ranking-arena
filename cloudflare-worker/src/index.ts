@@ -228,26 +228,51 @@ async function handleBinanceCopyTrading(request: Request, url: URL): Promise<Res
 }
 
 async function handleBybitCopyTrading(request: Request, url: URL): Promise<Response> {
-  const period = url.searchParams.get('period') || '90';
-  const page = parseInt(url.searchParams.get('page') || '1');
+  const period = url.searchParams.get('period') || 'DATA_DURATION_NINETY_DAY';
+  const pageNo = parseInt(url.searchParams.get('pageNo') || url.searchParams.get('page') || '1');
+  const pageSize = parseInt(url.searchParams.get('pageSize') || '50');
 
-  const apiUrl = `https://api2.bybit.com/fapi/beehive/public/v1/common/leader-list`;
+  // Bybit public copy trading API - correct endpoint
+  // dataDuration: DATA_DURATION_SEVEN_DAY | DATA_DURATION_THIRTY_DAY | DATA_DURATION_NINETY_DAY
+  const periodMap: Record<string, string> = {
+    '7': 'DATA_DURATION_SEVEN_DAY',
+    '7D': 'DATA_DURATION_SEVEN_DAY',
+    '30': 'DATA_DURATION_THIRTY_DAY',
+    '30D': 'DATA_DURATION_THIRTY_DAY',
+    '90': 'DATA_DURATION_NINETY_DAY',
+    '90D': 'DATA_DURATION_NINETY_DAY',
+  };
+
+  const dataDuration = periodMap[period] || period;
+  const apiUrl = `https://www.bybit.com/x-api/fapi/beehive/public/v1/common/dynamic-leader-list?pageNo=${pageNo}&pageSize=${pageSize}&dataDuration=${dataDuration}&sortField=LEADER_SORT_FIELD_SORT_ROI`;
 
   try {
     const response = await fetch(apiUrl, {
-      method: 'POST',
+      method: 'GET',
       headers: {
-        'Content-Type': 'application/json',
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+        'Accept': 'application/json, text/plain, */*',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Referer': 'https://www.bybit.com/copyTrade',
+        'Origin': 'https://www.bybit.com',
       },
-      body: JSON.stringify({
-        pageNo: page,
-        pageSize: 20,
-        timeRange: period,
-        sortField: 'ROI',
-        sortType: 'DESC',
-      }),
     });
+
+    // Check if we got HTML (WAF block) instead of JSON
+    const contentType = response.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) {
+      const text = await response.text();
+      if (text.includes('Access Denied') || text.includes('<!DOCTYPE') || text.includes('<html')) {
+        return Response.json({
+          error: 'Bybit API error',
+          details: 'WAF blocked - received HTML instead of JSON. Bybit may be blocking Cloudflare IPs.',
+          status: response.status,
+        }, {
+          status: 502,
+          headers: { 'Access-Control-Allow-Origin': '*' },
+        });
+      }
+    }
 
     const data = await response.json();
 
@@ -266,34 +291,85 @@ async function handleBybitCopyTrading(request: Request, url: URL): Promise<Respo
 }
 
 async function handleBitgetCopyTrading(request: Request, url: URL): Promise<Response> {
-  const period = url.searchParams.get('period') || '90';
-  const page = parseInt(url.searchParams.get('page') || '1');
+  const period = url.searchParams.get('period') || 'THIRTY_DAYS';
+  const pageNo = parseInt(url.searchParams.get('pageNo') || url.searchParams.get('page') || '1');
+  const pageSize = parseInt(url.searchParams.get('pageSize') || '20');
   const type = url.searchParams.get('type') || 'futures'; // futures or spot
 
-  const apiPath = type === 'spot' ? 'spot' : 'mix';
-  const apiUrl = `https://www.bitget.com/v1/copy/${apiPath}/trader/list?pageNo=${page}&pageSize=20&orderBy=ROI&sortBy=DESC&timeRange=${period}D`;
+  // Period mapping for Bitget V2 API
+  const periodMap: Record<string, string> = {
+    '7': 'SEVEN_DAYS',
+    '7D': 'SEVEN_DAYS',
+    '30': 'THIRTY_DAYS',
+    '30D': 'THIRTY_DAYS',
+    '90': 'NINETY_DAYS',
+    '90D': 'NINETY_DAYS',
+  };
 
-  try {
-    const response = await fetch(apiUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
-      },
-    });
+  const bitgetPeriod = periodMap[period] || period;
 
-    const data = await response.json();
+  // Try multiple endpoints - Bitget frequently changes their API
+  const endpoints = [
+    // V2 public endpoints (may return 404)
+    `https://api.bitget.com/api/v2/copy/mix-trader/trader-profit-ranking?period=${bitgetPeriod}&pageNo=${pageNo}&pageSize=${pageSize}`,
+    `https://api.bitget.com/api/v2/copy/mix-trader/query-trader-list?period=${bitgetPeriod}&pageNo=${pageNo}&pageSize=${pageSize}`,
+    // V1 web endpoint (CF protected)
+    `https://www.bitget.com/v1/trigger/trace/public/traderViewV3?pageNo=${pageNo}&pageSize=${pageSize}`,
+  ];
 
-    return Response.json(data, {
-      headers: { 'Access-Control-Allow-Origin': '*' },
-    });
-  } catch (error) {
-    return Response.json({
-      error: 'Bitget API error',
-      details: error instanceof Error ? error.message : 'Unknown'
-    }, {
-      status: 500,
-      headers: { 'Access-Control-Allow-Origin': '*' },
-    });
+  for (const apiUrl of endpoints) {
+    try {
+      const response = await fetch(apiUrl, {
+        method: 'GET',
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+          'Accept': 'application/json',
+          'Accept-Language': 'en-US,en;q=0.9',
+          'Referer': 'https://www.bitget.com/',
+          'Origin': 'https://www.bitget.com',
+        },
+      });
+
+      const contentType = response.headers.get('content-type') || '';
+      
+      // Skip if we get HTML (CF challenge)
+      if (!contentType.includes('application/json')) {
+        continue;
+      }
+
+      const data = await response.json();
+      
+      // Check for valid response
+      if (data.code === '00000' || data.code === 0 || data.code === '0') {
+        return Response.json(data, {
+          headers: { 'Access-Control-Allow-Origin': '*' },
+        });
+      }
+      
+      // If we get a proper error response (like 40404), try next endpoint
+      if (data.code === '40404' || data.msg?.includes('NOT FOUND')) {
+        continue;
+      }
+
+      // Return whatever we got
+      return Response.json(data, {
+        headers: { 'Access-Control-Allow-Origin': '*' },
+      });
+    } catch (err) {
+      // Try next endpoint
+      continue;
+    }
   }
+
+  // All endpoints failed
+  return Response.json({
+    error: 'Bitget API error',
+    details: 'All Bitget API endpoints failed. V1 is deprecated, V2 requires authentication, web endpoints are CF protected.',
+    suggestion: 'Consider using authenticated broker API with BITGET_API_KEY',
+  }, {
+    status: 502,
+    headers: { 'Access-Control-Allow-Origin': '*' },
+  });
 }
 
 async function handleKuCoinCopyTrading(request: Request, url: URL): Promise<Response> {
