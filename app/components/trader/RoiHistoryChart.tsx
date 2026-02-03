@@ -67,11 +67,31 @@ export default function RoiHistoryChart({
   const [period, setPeriod] = useState<TimePeriod>(initialPeriod)
   const [mounted, setMounted] = useState(false)
   const [hoveredPoint, setHoveredPoint] = useState<HistoryDataPoint | null>(null)
+  const [isFullscreen, setIsFullscreen] = useState(false)
   const chartRef = useRef<HTMLDivElement>(null)
   
   useEffect(() => {
     setMounted(true)
   }, [])
+  
+  // Handle ESC key to exit fullscreen
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isFullscreen) {
+        setIsFullscreen(false)
+      }
+    }
+    if (isFullscreen) {
+      document.addEventListener('keydown', handleKeyDown)
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+    }
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+      document.body.style.overflow = ''
+    }
+  }, [isFullscreen])
   
   // 如果没有外部数据，从 API 获取
   const shouldFetch = !externalData
@@ -117,8 +137,20 @@ export default function RoiHistoryChart({
     }
   }, [currentData, hasData, dataType])
 
+  const fullscreenStyles = isFullscreen ? {
+    position: 'fixed' as const,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 9999,
+    borderRadius: 0,
+    padding: tokens.spacing[6],
+    background: tokens.colors.bg.primary,
+  } : {}
+
   return (
-    <Box
+    <div
       className="roi-history-chart glass-card"
       style={{
         background: `linear-gradient(145deg, ${tokens.colors.bg.secondary}F8 0%, ${tokens.colors.bg.primary}F0 100%)`,
@@ -128,7 +160,8 @@ export default function RoiHistoryChart({
         boxShadow: `0 4px 24px rgba(0, 0, 0, 0.08)`,
         opacity: mounted ? 1 : 0,
         transform: mounted ? 'translateY(0)' : 'translateY(20px)',
-        transition: 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
+        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+        ...fullscreenStyles,
       }}
     >
       {/* Header */}
@@ -172,10 +205,48 @@ export default function RoiHistoryChart({
           )}
         </Box>
         
-        {/* Period Selector */}
-        {showPeriodSelector && (
-          <PeriodSelector value={period} onChange={setPeriod} />
-        )}
+        <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
+          {/* Period Selector */}
+          {showPeriodSelector && (
+            <PeriodSelector value={period} onChange={setPeriod} />
+          )}
+          
+          {/* Fullscreen Toggle Button */}
+          <button
+            onClick={() => setIsFullscreen(!isFullscreen)}
+            title={isFullscreen ? (language === 'zh' ? '退出全屏' : 'Exit Fullscreen') : (language === 'zh' ? '全屏' : 'Fullscreen')}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 32,
+              height: 32,
+              borderRadius: tokens.radius.md,
+              border: `1px solid ${tokens.colors.border.primary}`,
+              background: tokens.colors.bg.tertiary,
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = tokens.colors.bg.secondary
+              e.currentTarget.style.borderColor = tokens.colors.accent.primary
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = tokens.colors.bg.tertiary
+              e.currentTarget.style.borderColor = tokens.colors.border.primary
+            }}
+          >
+            {isFullscreen ? (
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={tokens.colors.text.secondary} strokeWidth="2">
+                <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3" />
+              </svg>
+            ) : (
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={tokens.colors.text.secondary} strokeWidth="2">
+                <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
+              </svg>
+            )}
+          </button>
+        </Box>
       </Box>
       
       {/* Loading State */}
@@ -225,7 +296,7 @@ export default function RoiHistoryChart({
       {/* Chart */}
       {!isLoading && !error && hasData && (
         <>
-          <Box ref={chartRef} style={{ height, position: 'relative' }}>
+          <div ref={chartRef} style={{ height: isFullscreen ? 'calc(100vh - 200px)' : height, position: 'relative' }}>
             <InteractiveLineChart 
               data={currentData} 
               dataType={dataType}
@@ -233,7 +304,7 @@ export default function RoiHistoryChart({
               onHover={setHoveredPoint}
               hoveredPoint={hoveredPoint}
             />
-          </Box>
+          </div>
           
           {/* Hover Tooltip */}
           {hoveredPoint && (
@@ -332,7 +403,7 @@ export default function RoiHistoryChart({
           to { transform: rotate(360deg); }
         }
       `}</style>
-    </Box>
+    </div>
   )
 }
 
@@ -484,7 +555,7 @@ function InteractiveLineChart({
   const hoveredPointCoords = hoveredIndex >= 0 ? points[hoveredIndex] : null
 
   return (
-    <Box 
+    <div 
       ref={containerRef}
       style={{ 
         height: '100%', 
@@ -635,7 +706,7 @@ function InteractiveLineChart({
           {data[data.length - 1]?.date ? new Date(data[data.length - 1].date).toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' }) : ''}
         </Text>
       </Box>
-    </Box>
+    </div>
   )
 }
 
