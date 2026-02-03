@@ -6,7 +6,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { getCachedTraderHistory, cacheTraderHistory } from '@/lib/cache/redis-layer'
 
 export const runtime = 'edge'
@@ -57,7 +57,7 @@ export async function GET(
   }
   
   try {
-    const supabase = await createClient()
+    const supabase = getSupabaseAdmin()
     
     // 计算时间范围
     const now = new Date()
