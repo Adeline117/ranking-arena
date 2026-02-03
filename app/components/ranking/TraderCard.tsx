@@ -14,6 +14,7 @@ import {
   ScoreConfidenceIndicator,
   MetricStat,
   areTraderPropsEqual,
+  getScoreStyle,
 } from './shared/trader-display'
 
 export interface TraderCardProps {
@@ -101,20 +102,23 @@ export const TraderCard = memo(function TraderCard({
           </Box>
 
           {/* Arena Score */}
-          {trader.arena_score != null && (
-            <Box style={{
-              position: 'relative',
-              minWidth: 50, height: 28, borderRadius: tokens.radius.md,
-              background: trader.arena_score >= 60 ? tokens.gradient.successSubtle : trader.arena_score >= 40 ? tokens.gradient.warningSubtle : tokens.glass.bg.light,
-              border: `1px solid ${trader.arena_score >= 60 ? `${tokens.colors.accent.success}50` : trader.arena_score >= 40 ? `${tokens.colors.accent.warning}40` : 'rgba(255, 255, 255, 0.15)'}`,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}>
-              <Text size="sm" weight="black" style={{ color: trader.arena_score >= 60 ? tokens.colors.accent.success : trader.arena_score >= 40 ? tokens.colors.accent.warning : TRADER_TEXT_TERTIARY, fontSize: '13px' }}>
-                {trader.arena_score.toFixed(0)}
-              </Text>
-              <ScoreConfidenceIndicator trader={trader} />
-            </Box>
-          )}
+          {trader.arena_score != null && (() => {
+            const { bgGradient, borderColor, textColor } = getScoreStyle(trader.arena_score)
+            return (
+              <Box style={{
+                position: 'relative',
+                minWidth: 50, height: 28, borderRadius: tokens.radius.md,
+                background: bgGradient,
+                border: `1px solid ${borderColor}`,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                <Text size="sm" weight="black" style={{ color: textColor, fontSize: '13px' }}>
+                  {trader.arena_score.toFixed(0)}
+                </Text>
+                <ScoreConfidenceIndicator trader={trader} />
+              </Box>
+            )
+          })()}
         </Box>
 
         {/* Stats row */}
