@@ -204,6 +204,37 @@ export const PRIORITY_SOURCES: TraderSource[] = [
 ]
 
 // ---------------------------------------------------------------------------
+// SOURCES_WITH_DATA – platforms with significant data (>50 records)
+// Used to filter UI platform options. Updated based on actual DB counts.
+// ---------------------------------------------------------------------------
+
+export const SOURCES_WITH_DATA: TraderSource[] = [
+  // CEX futures
+  'binance_futures',
+  'bitget_futures',
+  'htx_futures',
+  'okx_futures',
+  'mexc',
+  'kucoin',
+  'bybit',
+  'coinex',
+  'xt',
+  'weex',
+  // CEX spot
+  'binance_spot',
+  'bitget_spot',
+  'bybit_spot',
+  // Web3 / DEX
+  'gmx',
+  'hyperliquid',
+  'gains',
+  'okx_web3',
+  'aevo',
+  'dydx',
+  'binance_web3',
+]
+
+// ---------------------------------------------------------------------------
 // EXCHANGE_NAMES – human-readable display names for UI badges
 // ---------------------------------------------------------------------------
 
