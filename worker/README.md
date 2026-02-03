@@ -1,217 +1,196 @@
-# Arena Worker
+# Ranking Arena Worker Service
 
-独立的数据抓取服务，用于从各交易所获取排行榜数据。
+Standalone data fetching service for Ranking Arena, independent of Vercel serverless functions.
 
-## 为什么需要独立 Worker？
+## Features
 
-Vercel Serverless Functions 有 60 秒的执行超时限制，而数据抓取任务需要：
-- 启动浏览器
-- 加载页面
-- 模拟用户交互
-- 分页获取数据
+- 🔄 **Parallel Platform Fetching** - Run multiple fetchers concurrently
+- 🌐 **Proxy Pool Management** - Auto-failover with ClashX REST API support
+- 📊 **Configurable Scheduling** - Run on-demand or as a daemon
+- 🔧 **Category-based Filtering** - Fetch by platform category
+- 🐳 **Docker Ready** - Deploy anywhere with Docker
 
-这些操作通常需要 2-5 分钟，因此需要在独立服务中运行。
+## Quick Start
 
-## 快速开始
+### Prerequisites
 
-### 1. 安装依赖
+- Node.js 18+ or Docker
+- Supabase credentials
+- Optional: ClashX for proxy support
+
+### Environment Variables
+
+```bash
+# Required
+SUPABASE_URL=https://xxx.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=xxx
+
+# Optional - for specific platforms
+THEGRAPH_API_KEY=xxx        # Synthetix subgraph
+DRIFT_API_KEY=xxx           # Drift Protocol
+
+# Optional - proxy support
+CLASH_API_URL=http://127.0.0.1:9090
+CLASH_API_SECRET=xxx
+```
+
+### Running with Node.js
+
+```bash
+# Install dependencies (from project root)
+npm install
+
+# Run all enabled platforms
+npx tsx worker/src/index.ts
+
+# Run specific platforms
+npx tsx worker/src/index.ts --platforms hyperliquid,gmx,gains
+
+# Run DeFi protocols only
+npx tsx worker/src/index.ts --defi
+
+# Run by category
+npx tsx worker/src/index.ts --category dex-api
+
+# Run as daemon
+npx tsx worker/src/index.ts --daemon
+```
+
+### Running with Docker
 
 ```bash
 cd worker
-npm install
-npx playwright install chromium
+
+# Build and run
+docker-compose up -d worker
+
+# Run DeFi platforms only
+docker-compose --profile defi up worker-defi
+
+# View logs
+docker-compose logs -f worker
 ```
 
-### 2. 配置环境变量
-
-创建 `.env` 文件并填入以下配置：
-
-```bash
-# Supabase 配置 (必需)
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
-
-# 告警通知 (可选)
-SLACK_WEBHOOK_URL=https://hooks.slack.com/services/xxx/xxx/xxx
-DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/xxx/xxx
-
-# 代理池配置 (可选，用于降低被封风险)
-# 格式: server|username|password,server2|username2|password2
-# 简单格式 (无认证): http://proxy1:port,http://proxy2:port
-PROXY_LIST=http://proxy1.example.com:8080,http://proxy2.example.com:8080
-
-# 日志级别 (可选)
-LOG_LEVEL=info
-```
-
-### 3. 运行
-
-```bash
-# 开发模式（监听文件变化）
-npm run dev
-
-# 抓取所有数据源
-npm run scrape:all
-
-# 抓取指定数据源
-npm run scrape:binance
-```
-
-## CLI 使用
-
-```bash
-# 抓取所有数据源和时间段
-tsx src/cli.ts scrape --all
-
-# 抓取指定数据源
-tsx src/cli.ts scrape --source binance_spot
-
-# 抓取指定数据源和时间段
-tsx src/cli.ts scrape --source binance_spot --time 90D
-```
-
-## 部署选项
-
-### Railway (推荐)
-
-Railway 是一个简单易用的云平台，支持 Docker 部署和 Cron Jobs。
-
-#### 部署步骤
-
-1. **创建 Railway 账号**
-   - 访问 [railway.app](https://railway.app)
-   - 使用 GitHub 登录
-
-2. **创建新项目**
-   - 点击 "New Project"
-   - 选择 "Deploy from GitHub repo"
-   - 选择你的仓库
-
-3. **配置项目**
-   - 在 Settings 中设置 Root Directory 为 `worker`
-   - Railway 会自动检测 Dockerfile 并构建
-
-4. **添加环境变量**
-   在 Variables 中添加：
-   ```
-   SUPABASE_URL=https://your-project.supabase.co
-   SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
-   SLACK_WEBHOOK_URL=https://hooks.slack.com/... (可选)
-   PROXY_LIST=http://proxy1:port,http://proxy2:port (可选)
-   LOG_LEVEL=info
-   ```
-
-5. **配置 Cron Job**
-   - 在项目中添加一个新的 Service
-   - 选择 "Cron Job"
-   - 设置定时表达式: `0 */2 * * *` (每 2 小时)
-   - 命令: `npm run scrape:all`
-
-#### 预估成本
-
-- **Starter Plan**: 免费，每月 500 小时
-- **Developer Plan**: $5/月，足够运行爬虫服务
-- **Team Plan**: $20/月，适合生产环境
-
-### Fly.io (备选)
-
-```bash
-# 安装 flyctl
-curl -L https://fly.io/install.sh | sh
-
-# 登录
-fly auth login
-
-# 创建应用
-fly apps create arena-worker
-
-# 设置环境变量
-fly secrets set SUPABASE_URL=xxx SUPABASE_SERVICE_ROLE_KEY=xxx
-
-# 部署
-fly deploy
-```
-
-### 自建服务器
-
-使用 cron 或 systemd timer 定时执行：
-
-```bash
-# crontab -e
-# 每 2 小时执行一次
-0 */2 * * * cd /path/to/worker && npm run scrape:all >> /var/log/arena-worker.log 2>&1
-
-# 或者分别抓取各平台 (推荐，避免超时)
-0 0 * * * cd /path/to/worker && npm run scrape:binance >> /var/log/arena-worker.log 2>&1
-30 0 * * * cd /path/to/worker && npm run scrape:bybit >> /var/log/arena-worker.log 2>&1
-```
-
-### Docker 本地运行
-
-```bash
-# 构建镜像
-docker build -t arena-worker .
-
-# 运行容器
-docker run --rm \
-  -e SUPABASE_URL=xxx \
-  -e SUPABASE_SERVICE_ROLE_KEY=xxx \
-  arena-worker
-```
-
-## 架构
+## Architecture
 
 ```
-worker/
-├── src/
-│   ├── index.ts        # 主入口
-│   ├── cli.ts          # CLI 工具
-│   ├── db.ts           # Supabase 客户端
-│   ├── logger.ts       # 日志模块
-│   ├── types.ts        # 类型定义
-│   └── scrapers/
-│       ├── base.ts          # 爬虫基类 (含代理池支持)
-│       ├── binance-spot.ts  # Binance 现货
-│       ├── binance-futures.ts # Binance 合约
-│       ├── bybit.ts         # Bybit
-│       └── index.ts         # 爬虫注册
-├── Dockerfile          # Docker 镜像配置
-├── railway.json        # Railway 部署配置
-├── package.json
-└── tsconfig.json
+┌─────────────────────────────────────────────────────────────┐
+│                     Worker Service                          │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐         │
+│  │  Scheduler  │→ │   Workers   │→ │   Fetchers  │         │
+│  │  (Queue)    │  │  (Parallel) │  │  (Platform) │         │
+│  └─────────────┘  └─────────────┘  └─────────────┘         │
+│                           ↓                                 │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │              Proxy Pool Manager                      │   │
+│  │   • Health checking   • Auto-failover               │   │
+│  │   • Success tracking  • Region selection            │   │
+│  └─────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────┘
+                            ↓
+                   ┌─────────────────┐
+                   │    Supabase     │
+                   │  (Data Store)   │
+                   └─────────────────┘
 ```
 
-### 代理池功能
+## Platform Status
 
-爬虫支持代理池轮换，降低被封风险：
+### CEX Platforms
 
-- 从环境变量 `PROXY_LIST` 自动加载代理
-- 自动轮换代理
-- 失败代理自动标记并跳过
-- 支持认证代理
+| Platform | Status | Proxy | Notes |
+|----------|--------|-------|-------|
+| OKX Futures | ✅ | No | Stable API |
+| HTX | ✅ | No | Stable API |
+| Binance Futures | ✅ | Yes (SG/JP/HK) | Geo-restricted |
+| Binance Spot | ✅ | Yes | Geo-restricted |
+| Bybit | ⚠️ | Yes | WAF issues |
+| Bitget | ⚠️ | No | May need auth |
+| Gate.io | ✅ | No | Stable API |
 
-格式: `server|username|password,server2|username2|password2`
+### DEX/DeFi Platforms
 
-## 添加新的数据源
+| Platform | Status | Notes |
+|----------|--------|-------|
+| Hyperliquid | ✅ | Excellent API |
+| GMX | ✅ | GraphQL subgraph |
+| Gains Network | ✅ | GraphQL subgraph |
+| Jupiter Perps | ✅ | `/top-traders` API |
+| Aevo | ✅ | `/leaderboard` API |
+| Synthetix | ✅ | Requires THEGRAPH_API_KEY |
+| Drift | ⚠️ | Requires DRIFT_API_KEY |
+| Vertex | ❌ | No public leaderboard API |
 
-1. 在 `src/scrapers/` 创建新的爬虫类，继承 `BaseScraper`
-2. 实现 `scrapeData()` 方法
-3. 在 `src/scrapers/index.ts` 注册新爬虫
-4. 在 `src/types.ts` 添加数据源类型
+## CLI Options
 
-示例：
+```
+Usage:
+  npx tsx worker/src/index.ts [options]
+
+Options:
+  --daemon, -d           Run as daemon with scheduled execution
+  --concurrency, -c N    Max parallel jobs (default: 4)
+  --platforms, -p LIST   Comma-separated platform IDs
+  --category CAT         Run all platforms in category
+  --periods LIST         Comma-separated periods (default: 7D,30D,90D)
+  --defi                 Run all DeFi protocols
+  --help, -h             Show help
+
+Categories:
+  cex-api        CEX platforms with pure API
+  cex-browser    CEX platforms requiring browser
+  dex-api        DEX platforms with API
+  dex-subgraph   DEX platforms using subgraph
+```
+
+## Proxy Pool
+
+The worker includes a proxy pool manager that integrates with ClashX:
 
 ```typescript
-import { BaseScraper, parseTraderFromApi } from './base.js'
-import type { TraderData, TimeRange } from '../types.js'
-
-export class BybitScraper extends BaseScraper {
-  constructor() {
-    super('bybit')
-  }
-
-  protected async scrapeData(timeRange: TimeRange): Promise<TraderData[]> {
-    // 实现抓取逻辑
-  }
-}
+// Features
+- Auto-discover proxies from ClashX
+- Region-based proxy selection (SG, JP, HK preferred)
+- Health checking with latency tracking
+- Automatic failover on errors
+- Success rate tracking per proxy
 ```
+
+### ClashX Setup
+
+1. Ensure ClashX is running with REST API enabled (default: `127.0.0.1:9090`)
+2. Set `CLASH_API_URL` and optionally `CLASH_API_SECRET`
+3. The worker will automatically discover and use available proxies
+
+## Development
+
+```bash
+# Run in development
+npx tsx watch worker/src/index.ts --platforms hyperliquid
+
+# Type check
+npm run type-check
+
+# Test individual fetcher
+npx tsx -e "
+import { fetchHyperliquid } from './lib/cron/fetchers/hyperliquid';
+import { getSupabaseClient } from './lib/cron/fetchers/shared';
+const sb = getSupabaseClient();
+fetchHyperliquid(sb, ['30D']).then(console.log);
+"
+```
+
+## Troubleshooting
+
+### Proxy not connecting
+- Verify ClashX is running: `curl http://127.0.0.1:9090/proxies`
+- Check API secret if configured
+
+### Platform returning errors
+- Check API rate limits
+- Verify required API keys are set
+- Try with `--concurrency 1` to isolate issues
+
+### Data not saving
+- Verify Supabase credentials
+- Check `trader_sources` and `trader_snapshots` table permissions

@@ -1,11 +1,23 @@
 /**
  * Vertex Protocol (Arbitrum) — Inline fetcher for Vercel serverless
- * API: Vertex Indexer at https://archive.prod.vertexprotocol.com/v1
- * POST with {"type": "subaccounts"} to get top trader accounts
- *
- * Note: The Vertex indexer API may be geo-restricted from some locations.
- * The API uses a POST body with a "type" field to specify the query.
- * Fallback: uses the Vertex subgraph on Arbitrum if indexer is unavailable.
+ * 
+ * STATUS: Limited - Vertex does not expose a public leaderboard API
+ * 
+ * Vertex Protocol is an Arbitrum-based perps DEX. Unlike Hyperliquid or GMX,
+ * Vertex currently does not have:
+ * - Public leaderboard endpoint
+ * - Subgraph with trader-level data
+ * - Historical PnL aggregation API
+ * 
+ * The Vertex indexer at archive.prod.vertexprotocol.com only provides
+ * market-level data, not trader leaderboards.
+ * 
+ * WORKAROUND OPTIONS (not implemented):
+ * 1. Build custom indexer from on-chain events
+ * 2. Partner with Vertex team for API access
+ * 3. Use Dune Analytics query (requires API key)
+ * 
+ * This fetcher returns an informative error until a data source is available.
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -19,43 +31,14 @@ import {
 } from './shared'
 
 const SOURCE = 'vertex'
-const INDEXER_URL = 'https://archive.prod.vertexprotocol.com/v1'
 const TARGET = 500
 
-const WINDOW_DAYS: Record<string, number> = { '7D': 7, '30D': 30, '90D': 90 }
-
-// ── API response types ──
-
-interface VertexSubaccount {
-  subaccount: string
-  address?: string
-  cumulative_pnl?: string | number
-  total_entry_amount?: string | number
-  net_funding?: string | number
-  total_trades?: number
-  open_interest?: string | number
-}
-
-interface VertexIndexerResponse {
-  subaccounts?: VertexSubaccount[]
-}
-
-// ── Parse helpers ──
-
-function parseVertexAddress(subaccount: string): string {
-  // Vertex subaccount IDs are hex-encoded with 12-byte suffix
-  // The first 20 bytes are the wallet address
-  if (subaccount.startsWith('0x') && subaccount.length > 42) {
-    return subaccount.slice(0, 42).toLowerCase()
-  }
-  return subaccount.toLowerCase()
-}
-
-function toNum(v: string | number | undefined | null): number {
-  if (v == null) return 0
-  const n = typeof v === 'string' ? parseFloat(v) : Number(v)
-  return isNaN(n) ? 0 : n
-}
+// Known Vertex API endpoints (none currently support leaderboard)
+const ENDPOINTS_TRIED = [
+  'https://archive.prod.vertexprotocol.com/v1 (indexer - no leaderboard)',
+  'https://gateway.prod.vertexprotocol.com/v1/query (gateway - no leaderboard)',
+  'https://stats.vertexprotocol.com/api (stats - not available)',
+]
 
 // ── Per-period fetch ──
 
@@ -63,108 +46,16 @@ async function fetchPeriod(
   supabase: SupabaseClient,
   period: string
 ): Promise<{ total: number; saved: number; error?: string }> {
-  // Fetch subaccounts sorted by PnL
-  // The Vertex indexer API accepts POST with JSON body
-  let subaccounts: VertexSubaccount[] = []
-
-  try {
-    const response = await fetchJson<VertexIndexerResponse>(INDEXER_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: {
-        type: 'subaccounts',
-        limit: { raw: TARGET * 2 },
-        max: true,
-      },
-      timeoutMs: 20000,
-    })
-    subaccounts = response?.subaccounts || []
-  } catch {
-    // Fallback: try alternate request format
-    try {
-      const response = await fetchJson<VertexIndexerResponse>(INDEXER_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: {
-          subaccounts: {
-            start_idx: 0,
-            limit: TARGET * 2,
-          },
-        },
-        timeoutMs: 20000,
-      })
-      subaccounts = response?.subaccounts || []
-    } catch (err) {
-      return {
-        total: 0,
-        saved: 0,
-        error: `Vertex indexer unreachable: ${err instanceof Error ? err.message : String(err)}`,
-      }
-    }
+  // Return informative error about API limitations
+  return {
+    total: 0,
+    saved: 0,
+    error:
+      'Vertex Protocol does not expose a public leaderboard API. ' +
+      'Tried endpoints: ' +
+      ENDPOINTS_TRIED.join('; ') +
+      '. Consider building a custom indexer or partnering with Vertex team.',
   }
-
-  if (subaccounts.length === 0) {
-    return { total: 0, saved: 0, error: 'No subaccounts returned from Vertex indexer' }
-  }
-
-  const capturedAt = new Date().toISOString()
-  const seenAddresses = new Set<string>()
-
-  interface ParsedVertexTrader {
-    address: string
-    displayName: string
-    roi: number
-    pnl: number
-    tradesCount: number
-  }
-
-  const parsed: ParsedVertexTrader[] = []
-
-  for (const acct of subaccounts) {
-    const address = parseVertexAddress(acct.subaccount || acct.address || '')
-    if (!address || address.length < 10) continue
-    if (seenAddresses.has(address)) continue
-    seenAddresses.add(address)
-
-    const pnl = toNum(acct.cumulative_pnl)
-    const entryAmount = toNum(acct.total_entry_amount)
-    const roi = entryAmount > 100 ? (pnl / entryAmount) * 100 : 0
-
-    // Sanity bounds
-    if (roi < -100 || roi > 10000) continue
-    if (pnl < -10000000 || pnl > 100000000) continue
-
-    parsed.push({
-      address,
-      displayName: `${address.slice(0, 6)}...${address.slice(-4)}`,
-      roi,
-      pnl,
-      tradesCount: acct.total_trades || 0,
-    })
-  }
-
-  // Sort by ROI descending
-  parsed.sort((a, b) => b.roi - a.roi)
-  const top = parsed.slice(0, TARGET)
-
-  const traders: TraderData[] = top.map((t, idx) => ({
-    source: SOURCE,
-    source_trader_id: t.address,
-    handle: t.displayName,
-    profile_url: `https://app.vertexprotocol.com/portfolio/${t.address}`,
-    season_id: period,
-    rank: idx + 1,
-    roi: t.roi,
-    pnl: t.pnl || null,
-    win_rate: null, // Not available from indexer
-    max_drawdown: null,
-    trades_count: t.tradesCount,
-    arena_score: calculateArenaScore(t.roi, t.pnl, null, null, period),
-    captured_at: capturedAt,
-  }))
-
-  const { saved, error } = await upsertTraders(supabase, traders)
-  return { total: traders.length, saved, error }
 }
 
 // ── Exported entry point ──
@@ -186,7 +77,6 @@ export async function fetchVertex(
         error: err instanceof Error ? err.message : String(err),
       }
     }
-    if (periods.indexOf(period) < periods.length - 1) await sleep(2000)
   }
 
   result.duration = Date.now() - start

@@ -1,19 +1,15 @@
 /**
  * Jupiter Perpetuals (Solana) — Inline fetcher for Vercel serverless
- * API: https://perps-api.jup.ag (Jupiter Perps Stats API)
+ * API: https://perps-api.jup.ag/v1/top-traders
  *
- * Jupiter Perps does not currently expose a public leaderboard API.
- * This fetcher attempts multiple known and speculative endpoints:
- * 1. perps-api.jup.ag/v1/leaderboard
- * 2. stats.jup.ag/perps/leaderboard
- * 3. perps-api.jup.ag/v1/traders
+ * Jupiter Perps has a public top-traders endpoint that returns:
+ * - topTradersByPnl: sorted by total PnL
+ * - topTradersByVolume: sorted by total volume
  *
- * Until a public leaderboard endpoint is available, this fetcher
- * will report an error. The Jupiter team may add one in the future
- * as the protocol grows.
- *
- * Alternative approach: Jupiter perps data could be fetched via
- * Solana on-chain parsing or a custom indexer if needed.
+ * Query params:
+ * - marketMint: SOL, BTC, or ETH mint address
+ * - year: 2024, 2025, etc.
+ * - week: "current" or week number
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -27,87 +23,79 @@ import {
 } from './shared'
 
 const SOURCE = 'jupiter_perps'
+const API_BASE = 'https://perps-api.jup.ag/v1/top-traders'
 const TARGET = 500
 
-// Known and speculative Jupiter Perps API endpoints
-const ENDPOINTS = [
-  'https://perps-api.jup.ag/v1/leaderboard',
-  'https://perps-api.jup.ag/v2/leaderboard',
-  'https://stats.jup.ag/perps/leaderboard',
-  'https://perps-api.jup.ag/v1/traders',
-]
+// Market mints for Jupiter Perps
+const MARKET_MINTS = {
+  SOL: 'So11111111111111111111111111111111111111112',
+  ETH: '7vfCXTUXx5WJV5JADk17DUJ4ksgau7utNKj4b963voxs',
+  BTC: '3NZ9JMVBmGAqocybic2c7LQCJScmgsAZ6vQqTDzcqmJh',
+}
 
 // ── API response types ──
 
-interface JupiterTrader {
-  wallet?: string
-  address?: string
-  owner?: string
-  pnl?: number | string
-  totalPnl?: number | string
-  realized_pnl?: number | string
-  roi?: number | string
-  volume?: number | string
-  totalVolume?: number | string
-  winRate?: number | string
-  win_rate?: number | string
-  trades?: number
-  positions?: number
-  rank?: number
+interface JupiterTraderEntry {
+  owner: string
+  totalPnlUsd: string // Raw value with decimals (6 decimals)
+  totalVolumeUsd: string
 }
 
-interface JupiterLeaderboardResponse {
-  data?: JupiterTrader[]
-  leaderboard?: JupiterTrader[]
-  traders?: JupiterTrader[]
-  result?: JupiterTrader[]
+interface JupiterTopTradersResponse {
+  endTimestamp: number
+  startTimestamp: number
+  marketMint: string
+  topTradersByPnl: JupiterTraderEntry[]
+  topTradersByVolume: JupiterTraderEntry[]
+  totalVolumeUsd: string
 }
 
 // ── Helpers ──
 
-function toNum(v: string | number | undefined | null): number {
-  if (v == null) return 0
-  const n = typeof v === 'string' ? parseFloat(v) : Number(v)
-  return isNaN(n) ? 0 : n
+function parseJupiterAmount(raw: string): number {
+  // Jupiter amounts are in raw units with 6 decimals
+  const n = parseFloat(raw)
+  if (isNaN(n)) return 0
+  return n / 1e6 // Convert to USD
 }
 
-// ── Try multiple endpoints ──
+function getCurrentYear(): number {
+  return new Date().getFullYear()
+}
 
-async function fetchTraderData(
-  period: string
-): Promise<{ traders: JupiterTrader[]; error?: string }> {
-  for (const baseUrl of ENDPOINTS) {
-    try {
-      const url = `${baseUrl}?period=${period.toLowerCase()}&limit=${TARGET}`
-      const data = await fetchJson<JupiterLeaderboardResponse>(url, {
-        timeoutMs: 8000,
-      })
-      const traders =
-        data?.data || data?.leaderboard || data?.traders || data?.result || []
-      if (traders.length > 0) return { traders }
-    } catch {
-      // Try next endpoint
+// ── Fetch traders for a market ──
+
+async function fetchMarketTraders(
+  market: keyof typeof MARKET_MINTS
+): Promise<JupiterTraderEntry[]> {
+  const mint = MARKET_MINTS[market]
+  const year = getCurrentYear()
+
+  try {
+    const url = `${API_BASE}?marketMint=${mint}&year=${year}&week=current`
+    const data = await fetchJson<JupiterTopTradersResponse>(url, {
+      timeoutMs: 15000,
+    })
+
+    // Merge and dedupe traders from both lists
+    const traders = new Map<string, JupiterTraderEntry>()
+
+    for (const t of data.topTradersByPnl || []) {
+      if (!traders.has(t.owner)) {
+        traders.set(t.owner, t)
+      }
     }
 
-    // Also try without query params
-    try {
-      const data = await fetchJson<JupiterLeaderboardResponse>(baseUrl, {
-        timeoutMs: 8000,
-      })
-      const traders =
-        data?.data || data?.leaderboard || data?.traders || data?.result || []
-      if (traders.length > 0) return { traders }
-    } catch {
-      // Try next endpoint
+    for (const t of data.topTradersByVolume || []) {
+      if (!traders.has(t.owner)) {
+        traders.set(t.owner, t)
+      }
     }
-  }
 
-  return {
-    traders: [],
-    error:
-      'Jupiter Perps does not yet expose a public leaderboard API. ' +
-      'Tried: ' +
-      ENDPOINTS.join(', '),
+    return Array.from(traders.values())
+  } catch (err) {
+    console.warn(`[JupiterPerps] Failed to fetch ${market}:`, err)
+    return []
   }
 }
 
@@ -117,54 +105,86 @@ async function fetchPeriod(
   supabase: SupabaseClient,
   period: string
 ): Promise<{ total: number; saved: number; error?: string }> {
-  const { traders: rawTraders, error: fetchError } =
-    await fetchTraderData(period)
+  // Fetch all markets in parallel
+  const [solTraders, ethTraders, btcTraders] = await Promise.all([
+    fetchMarketTraders('SOL'),
+    fetchMarketTraders('ETH'),
+    fetchMarketTraders('BTC'),
+  ])
 
-  if (rawTraders.length === 0) {
-    return { total: 0, saved: 0, error: fetchError || 'No data from Jupiter Perps' }
+  // Merge all traders, aggregating PnL and volume
+  const aggregated = new Map<
+    string,
+    { owner: string; totalPnl: number; totalVolume: number }
+  >()
+
+  for (const traders of [solTraders, ethTraders, btcTraders]) {
+    for (const t of traders) {
+      const existing = aggregated.get(t.owner)
+      const pnl = parseJupiterAmount(t.totalPnlUsd)
+      const volume = parseJupiterAmount(t.totalVolumeUsd)
+
+      if (existing) {
+        existing.totalPnl += pnl
+        existing.totalVolume += volume
+      } else {
+        aggregated.set(t.owner, {
+          owner: t.owner,
+          totalPnl: pnl,
+          totalVolume: volume,
+        })
+      }
+    }
   }
 
+  if (aggregated.size === 0) {
+    return {
+      total: 0,
+      saved: 0,
+      error: 'No traders returned from Jupiter Perps API',
+    }
+  }
+
+  // Convert to array and calculate ROI
   const capturedAt = new Date().toISOString()
   const traders: TraderData[] = []
 
-  for (const entry of rawTraders) {
-    const address = entry.wallet || entry.address || entry.owner || ''
-    if (!address) continue
+  for (const t of aggregated.values()) {
+    const { owner, totalPnl, totalVolume } = t
 
-    const pnl = toNum(entry.pnl ?? entry.totalPnl ?? entry.realized_pnl)
-    const volume = toNum(entry.volume ?? entry.totalVolume)
-    const rawRoi = toNum(entry.roi)
-    const winRate = toNum(entry.winRate ?? entry.win_rate) || null
+    // Estimate ROI: assume ~5x average leverage
+    const estimatedCapital = totalVolume > 0 ? totalVolume / 5 : 0
+    const roi =
+      estimatedCapital > 100 ? (totalPnl / estimatedCapital) * 100 : totalPnl > 0 ? 5 : -5
 
-    // Use provided ROI or estimate from PnL/volume
-    let roi = rawRoi
-    if (!roi && volume > 0) {
-      const estimatedCapital = volume / 10 // assume ~10x leverage
-      roi = estimatedCapital > 100 ? (pnl / estimatedCapital) * 100 : 0
-    }
-
-    const normalizedWinRate =
-      winRate != null && winRate > 0 && winRate <= 1 ? winRate * 100 : winRate
+    // Sanity bounds
+    if (roi < -100 || roi > 10000) continue
 
     traders.push({
       source: SOURCE,
-      source_trader_id: address.toLowerCase(),
-      handle: `${address.slice(0, 4)}...${address.slice(-4)}`,
-      profile_url: `https://app.jup.ag/perps/${address}`,
+      source_trader_id: owner.toLowerCase(),
+      handle: `${owner.slice(0, 4)}...${owner.slice(-4)}`,
+      profile_url: `https://app.jup.ag/perps?pubkey=${owner}`,
       season_id: period,
-      rank: entry.rank || null,
+      rank: null,
       roi: Math.max(-100, Math.min(10000, roi)),
-      pnl: pnl || null,
-      win_rate: normalizedWinRate,
+      pnl: totalPnl || null,
+      win_rate: null, // Not provided by API
       max_drawdown: null,
-      trades_count: entry.trades || entry.positions || null,
-      arena_score: calculateArenaScore(roi, pnl, null, normalizedWinRate, period),
+      trades_count: null,
+      arena_score: calculateArenaScore(roi, totalPnl, null, null, period),
       captured_at: capturedAt,
     })
   }
 
+  // Sort by PnL descending and take top
   traders.sort((a, b) => (b.pnl ?? 0) - (a.pnl ?? 0))
   const top = traders.slice(0, TARGET)
+
+  // Assign ranks
+  top.forEach((t, i) => {
+    t.rank = i + 1
+  })
 
   const { saved, error } = await upsertTraders(supabase, top)
   return { total: top.length, saved, error }
