@@ -20,9 +20,9 @@ const SOURCE = 'hyperliquid'
 const STATS_API = 'https://stats-data.hyperliquid.xyz/Mainnet'
 const INFO_API = 'https://api.hyperliquid.xyz/info'
 const TARGET = 500
-const ENRICH_LIMIT = 150 // Limit enrichment for serverless timeouts
-const CONCURRENCY = 5
-const DELAY_MS = 150
+const ENRICH_LIMIT = 300 // Increased for better field coverage (local cron can handle more)
+const CONCURRENCY = 8
+const DELAY_MS = 100
 
 const WINDOW_MAP: Record<string, string> = {
   '7D': 'week',
