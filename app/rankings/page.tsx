@@ -21,6 +21,7 @@ import { getAvatarGradient, getAvatarInitial } from '@/lib/utils/avatar'
 import { formatROI, formatPnL } from '@/app/components/ranking/utils'
 import type { SnapshotWindow, RankedTraderV2, Platform } from '@/lib/types/trading-platform'
 import { EXCHANGE_NAMES, SOURCE_TYPE_MAP } from '@/lib/constants/exchanges'
+import { getPlatformNote } from '@/lib/constants/platform-metrics'
 
 const WINDOWS: SnapshotWindow[] = ['7D', '30D', '90D']
 
@@ -375,12 +376,24 @@ function TraderRow({ trader }: { trader: RankedTraderV2 }) {
         {formatPnL(metrics.pnl)}
       </div>
 
-      <div className="text-right text-sm col-winrate" style={{ color: tokens.colors.text.secondary }}>
-        {metrics.win_rate != null ? `${metrics.win_rate.toFixed(1)}%` : '--'}
+      <div 
+        className="text-right text-sm col-winrate" 
+        style={{ color: metrics.win_rate != null ? tokens.colors.text.secondary : tokens.colors.text.tertiary }}
+        title={metrics.win_rate == null ? (getPlatformNote(trader.platform) || 'Win rate not provided by this platform') : undefined}
+      >
+        {metrics.win_rate != null ? `${metrics.win_rate.toFixed(1)}%` : (
+          <span style={{ opacity: 0.5, cursor: 'help' }}>N/A</span>
+        )}
       </div>
 
-      <div className="text-right text-sm col-mdd" style={{ color: tokens.colors.accent.error + 'cc' }}>
-        {metrics.max_drawdown != null ? `-${metrics.max_drawdown.toFixed(1)}%` : '--'}
+      <div 
+        className="text-right text-sm col-mdd" 
+        style={{ color: metrics.max_drawdown != null ? (tokens.colors.accent.error + 'cc') : tokens.colors.text.tertiary }}
+        title={metrics.max_drawdown == null ? (getPlatformNote(trader.platform) || 'Drawdown not provided by this platform') : undefined}
+      >
+        {metrics.max_drawdown != null ? `-${metrics.max_drawdown.toFixed(1)}%` : (
+          <span style={{ opacity: 0.5, cursor: 'help' }}>N/A</span>
+        )}
       </div>
 
       <div className="text-right col-score">
