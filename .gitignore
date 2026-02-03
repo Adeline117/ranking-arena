@@ -85,3 +85,5 @@ cloudflare-worker/node_modules/
 scripts/local-scrape.mjs
 .env*.local
 ranking-arena.db
+logs/
+scripts/monitoring/reports/

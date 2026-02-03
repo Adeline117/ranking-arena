@@ -154,16 +154,11 @@ async function fetchPeriod(
     }
   }
 
-  // Sort: full-data first, then by ROI / trade count
+  // Sort: ONLY include traders with full data (from leaderboard)
+  // Open-trades traders without stats are not useful for rankings
   const sorted = Array.from(tradersMap.values())
-    .filter((t) => t.hasFullData || t.tradesCount > 0)
-    .sort((a, b) => {
-      if (a.hasFullData && !b.hasFullData) return -1
-      if (!a.hasFullData && b.hasFullData) return 1
-      return (
-        (b.roi || 0) - (a.roi || 0) || (b.tradesCount || 0) - (a.tradesCount || 0)
-      )
-    })
+    .filter((t) => t.hasFullData && t.roi != null)
+    .sort((a, b) => (b.roi || 0) - (a.roi || 0))
     .slice(0, TARGET)
 
   const capturedAt = new Date().toISOString()
