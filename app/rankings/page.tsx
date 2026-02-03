@@ -6,7 +6,7 @@
  * Pure DB read, fast rendering, stale indicators.
  */
 
-import { Suspense } from 'react'
+import { Suspense, useState, useRef, useEffect } from 'react'
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
@@ -20,32 +20,134 @@ import { Box } from '@/app/components/base'
 import { getAvatarGradient, getAvatarInitial } from '@/lib/utils/avatar'
 import { formatROI, formatPnL } from '@/app/components/ranking/utils'
 import type { SnapshotWindow, RankedTraderV2, Platform } from '@/lib/types/trading-platform'
+import { EXCHANGE_NAMES, SOURCE_TYPE_MAP } from '@/lib/constants/exchanges'
 
 const WINDOWS: SnapshotWindow[] = ['7D', '30D', '90D']
 
-const PLATFORM_LABELS: Record<string, string> = {
-  // CEX 合约
-  binance_futures: 'Binance 合约',
-  bybit: 'Bybit',
-  bitget_futures: 'Bitget 合约',
-  okx_futures: 'OKX 合约',
-  mexc: 'MEXC',
-  htx_futures: 'HTX',
-  weex: 'Weex',
-  kucoin: 'KuCoin',
-  coinex: 'CoinEx',
-  // CEX 现货
-  binance_spot: 'Binance 现货',
-  bitget_spot: 'Bitget 现货',
-  // 链上/DEX
-  binance_web3: 'Binance Web3',
-  okx_web3: 'OKX Web3',
-  gmx: 'GMX',
-  hyperliquid: 'Hyperliquid',
-  dydx: 'dYdX',
+// Category presets for quick filtering
+type CategoryPreset = 'all' | 'cex_futures' | 'cex_spot' | 'onchain_dex'
+
+const CATEGORY_LABELS: Record<CategoryPreset, { zh: string; en: string }> = {
+  all: { zh: '全部', en: 'All' },
+  cex_futures: { zh: 'CEX合约', en: 'CEX Futures' },
+  cex_spot: { zh: 'CEX现货', en: 'CEX Spot' },
+  onchain_dex: { zh: '链上DEX', en: 'On-chain DEX' },
 }
 
-const FILTER_PLATFORMS = Object.keys(PLATFORM_LABELS)
+// Platforms grouped by category (only include platforms with actual data)
+const PLATFORMS_BY_CATEGORY: Record<Exclude<CategoryPreset, 'all'>, string[]> = {
+  cex_futures: ['binance_futures', 'bybit', 'bitget_futures', 'okx_futures', 'mexc', 'htx_futures', 'kucoin', 'coinex', 'weex'],
+  cex_spot: ['binance_spot', 'bitget_spot'],
+  onchain_dex: ['gmx', 'hyperliquid', 'dydx', 'gains', 'aevo'],
+}
+
+// Platform dropdown component
+function PlatformDropdown({ 
+  activePlatform, 
+  activeCategory,
+  onPlatformChange, 
+  isZh 
+}: { 
+  activePlatform: string | undefined
+  activeCategory: CategoryPreset
+  onPlatformChange: (p: string | undefined) => void
+  isZh: boolean 
+}) {
+  const [isOpen, setIsOpen] = useState(false)
+  const dropdownRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  // Get platforms based on active category
+  const availablePlatforms = activeCategory === 'all' 
+    ? Object.values(PLATFORMS_BY_CATEGORY).flat()
+    : PLATFORMS_BY_CATEGORY[activeCategory] || []
+
+  const selectedLabel = activePlatform 
+    ? (EXCHANGE_NAMES[activePlatform] || activePlatform)
+    : (isZh ? '选择平台' : 'Select Platform')
+
+  return (
+    <div ref={dropdownRef} style={{ position: 'relative', display: 'inline-block' }}>
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="flex items-center gap-2 px-3 py-2 rounded-md text-xs font-medium transition-all"
+        style={{
+          backgroundColor: activePlatform ? tokens.colors.accent.brand + '20' : tokens.colors.bg.tertiary,
+          color: activePlatform ? tokens.colors.accent.brand : tokens.colors.text.secondary,
+          border: activePlatform ? `1px solid ${tokens.colors.accent.brand}50` : `1px solid ${tokens.colors.border.primary}`,
+        }}
+      >
+        <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <rect x="3" y="3" width="18" height="18" rx="2" />
+          <path d="M9 12h6M12 9v6" />
+        </svg>
+        {selectedLabel}
+        <svg 
+          width={10} height={10} 
+          viewBox="0 0 24 24" 
+          fill="none" 
+          stroke="currentColor" 
+          strokeWidth="2"
+          style={{ transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}
+        >
+          <path d="M6 9l6 6 6-6" />
+        </svg>
+      </button>
+
+      {isOpen && (
+        <div
+          style={{
+            position: 'absolute',
+            top: '100%',
+            left: 0,
+            marginTop: 4,
+            minWidth: 180,
+            maxHeight: 320,
+            overflowY: 'auto',
+            background: tokens.colors.bg.secondary,
+            border: `1px solid ${tokens.colors.border.primary}`,
+            borderRadius: 8,
+            boxShadow: tokens.shadow.lg,
+            zIndex: 100,
+          }}
+        >
+          <button
+            onClick={() => { onPlatformChange(undefined); setIsOpen(false) }}
+            className="w-full px-3 py-2 text-left text-xs font-medium transition-all"
+            style={{
+              color: !activePlatform ? tokens.colors.accent.brand : tokens.colors.text.primary,
+              background: !activePlatform ? `${tokens.colors.accent.brand}10` : 'transparent',
+            }}
+          >
+            {isZh ? '全部平台' : 'All Platforms'}
+          </button>
+          {availablePlatforms.map(p => (
+            <button
+              key={p}
+              onClick={() => { onPlatformChange(p); setIsOpen(false) }}
+              className="w-full px-3 py-2 text-left text-xs font-medium transition-all hover:bg-gray-100 dark:hover:bg-gray-800"
+              style={{
+                color: activePlatform === p ? tokens.colors.accent.brand : tokens.colors.text.primary,
+                background: activePlatform === p ? `${tokens.colors.accent.brand}10` : 'transparent',
+              }}
+            >
+              {EXCHANGE_NAMES[p] || p}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
 function RankingsContent() {
   const { language } = useLanguage()
@@ -56,6 +158,7 @@ function RankingsContent() {
 
   const activeWindow = (searchParams.get('window') as SnapshotWindow) || '90D'
   const activePlatform = searchParams.get('platform') || undefined
+  const activeCategory = (searchParams.get('category') as CategoryPreset) || 'all'
 
   const { data, error, isLoading, isStale } = useRankingsV2({
     window: activeWindow,
@@ -68,6 +171,18 @@ function RankingsContent() {
     router.replace(`${pathname}?${params.toString()}`, { scroll: false })
   }
 
+  const handleCategoryChange = (cat: CategoryPreset) => {
+    const params = new URLSearchParams(searchParams.toString())
+    if (cat === 'all') {
+      params.delete('category')
+    } else {
+      params.set('category', cat)
+    }
+    // Clear platform when category changes
+    params.delete('platform')
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false })
+  }
+
   const handlePlatformChange = (p: string | undefined) => {
     const params = new URLSearchParams(searchParams.toString())
     if (p) {
@@ -77,6 +192,20 @@ function RankingsContent() {
     }
     router.replace(`${pathname}?${params.toString()}`, { scroll: false })
   }
+
+  // Filter data by category if no specific platform selected
+  const filteredData = data ? {
+    ...data,
+    traders: activeCategory !== 'all' && !activePlatform
+      ? data.traders.filter(t => {
+          const sourceType = SOURCE_TYPE_MAP[t.platform]
+          if (activeCategory === 'cex_futures') return sourceType === 'futures'
+          if (activeCategory === 'cex_spot') return sourceType === 'spot'
+          if (activeCategory === 'onchain_dex') return sourceType === 'web3'
+          return true
+        })
+      : data.traders,
+  } : null
 
   return (
     <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
@@ -106,6 +235,7 @@ function RankingsContent() {
           </div>
         </div>
 
+        {/* Time range selector */}
         <div className="flex flex-wrap gap-2 mb-4">
           {WINDOWS.map(w => (
             <button
@@ -122,42 +252,44 @@ function RankingsContent() {
           ))}
         </div>
 
-        <div className="flex flex-wrap gap-2 mb-6">
-          <button
-            onClick={() => handlePlatformChange(undefined)}
-            className="px-3 py-2 rounded-md text-xs font-medium transition-all touch-target-sm"
-            style={{
-              backgroundColor: !activePlatform ? tokens.colors.accent.brand + '30' : tokens.colors.bg.tertiary,
-              color: !activePlatform ? tokens.colors.accent.brand : tokens.colors.text.tertiary,
-              border: !activePlatform ? `1px solid ${tokens.colors.accent.brand}50` : `1px solid transparent`,
-            }}
-          >
-            {isZh ? '全部' : 'All'}
-          </button>
-          {FILTER_PLATFORMS.map(p => (
+        {/* Category presets + Platform dropdown - compact layout */}
+        <div className="flex flex-wrap items-center gap-2 mb-6">
+          {/* Category presets */}
+          {(Object.keys(CATEGORY_LABELS) as CategoryPreset[]).map(cat => (
             <button
-              key={p}
-              onClick={() => handlePlatformChange(p)}
-              className="px-3 py-2 rounded-md text-xs font-medium transition-all touch-target-sm"
+              key={cat}
+              onClick={() => handleCategoryChange(cat)}
+              className="px-3 py-2 rounded-full text-xs font-medium transition-all"
               style={{
-                backgroundColor: activePlatform === p ? tokens.colors.accent.brand + '30' : tokens.colors.bg.tertiary,
-                color: activePlatform === p ? tokens.colors.accent.brand : tokens.colors.text.tertiary,
-                border: activePlatform === p ? `1px solid ${tokens.colors.accent.brand}50` : `1px solid transparent`,
+                backgroundColor: activeCategory === cat ? tokens.colors.accent.brand : tokens.colors.bg.tertiary,
+                color: activeCategory === cat ? '#fff' : tokens.colors.text.secondary,
+                border: activeCategory === cat ? `1px solid ${tokens.colors.accent.brand}` : `1px solid ${tokens.colors.border.primary}`,
               }}
             >
-              {PLATFORM_LABELS[p]}
+              {isZh ? CATEGORY_LABELS[cat].zh : CATEGORY_LABELS[cat].en}
             </button>
           ))}
+          
+          {/* Divider */}
+          <div style={{ width: 1, height: 24, background: tokens.colors.border.primary, margin: '0 4px' }} />
+          
+          {/* Platform dropdown */}
+          <PlatformDropdown
+            activePlatform={activePlatform}
+            activeCategory={activeCategory}
+            onPlatformChange={handlePlatformChange}
+            isZh={isZh}
+          />
         </div>
 
         <DataStateWrapper
           isLoading={isLoading}
           error={error}
-          isEmpty={!data?.traders?.length}
+          isEmpty={!filteredData?.traders?.length}
           emptyMessage={isZh ? '暂无排行榜数据' : 'No ranking data available'}
           loadingComponent={<RankingSkeleton />}
         >
-          {data && data.traders.length > 0 && (
+          {filteredData && filteredData.traders.length > 0 && (
             <div className="rounded-xl overflow-x-auto" style={{ backgroundColor: tokens.colors.bg.secondary }}>
               <div>
                 <div
@@ -173,15 +305,15 @@ function RankingsContent() {
                   <div className="text-right col-score">Score</div>
                 </div>
 
-                {data.traders.map((trader) => (
-                  <TraderRow key={`${trader.platform}:${trader.trader_key}`} trader={trader} />
+                {filteredData.traders.map((trader, index) => (
+                  <TraderRow key={`${trader.platform}:${trader.trader_key}`} trader={{ ...trader, rank: index + 1 }} />
                 ))}
 
                 <div
                   className="px-4 py-3 text-xs text-center border-t"
                   style={{ color: tokens.colors.text.tertiary, borderColor: tokens.colors.border.primary }}
                 >
-                  {isZh ? `共 ${data.total_count} 名交易员` : `${data.total_count} traders total`}
+                  {isZh ? `共 ${filteredData.traders.length} 名交易员` : `${filteredData.traders.length} traders total`}
                 </div>
               </div>
             </div>

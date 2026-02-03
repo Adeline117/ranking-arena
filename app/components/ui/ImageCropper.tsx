@@ -136,7 +136,7 @@ export function ImageCropper({
         left: 0,
         right: 0,
         bottom: 0,
-        zIndex: 1000,
+        zIndex: tokens.zIndex.modal,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',

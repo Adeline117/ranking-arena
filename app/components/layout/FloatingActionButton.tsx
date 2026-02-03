@@ -45,7 +45,7 @@ export default function FloatingActionButton() {
         position: 'fixed',
         bottom: 80,
         right: 20,
-        zIndex: 40,
+        zIndex: tokens.zIndex.dropdown,
       }}
     >
       {/* Popup menu */}

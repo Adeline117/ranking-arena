@@ -169,7 +169,7 @@ export default function ChatSettingsDrawer({
           position: 'fixed',
           inset: 0,
           background: 'rgba(0, 0, 0, 0.5)',
-          zIndex: 1000,
+          zIndex: tokens.zIndex.overlay,
           transition: 'opacity 0.2s',
         }}
       />
@@ -184,7 +184,7 @@ export default function ChatSettingsDrawer({
           width: '100%',
           maxWidth: 360,
           background: tokens.colors.bg.primary,
-          zIndex: 1001,
+          zIndex: tokens.zIndex.modal,
           display: 'flex',
           flexDirection: 'column',
           boxShadow: '-4px 0 20px rgba(0, 0, 0, 0.3)',

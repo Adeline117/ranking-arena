@@ -52,7 +52,7 @@ export default function InboxPanel(): React.ReactElement | null {
         background: tokens.colors.bg.primary,
         borderLeft: `1px solid ${tokens.colors.border.primary}`,
         boxShadow: tokens.shadow.xl,
-        zIndex: 45,
+        zIndex: tokens.zIndex.overlay,
         display: 'flex',
         flexDirection: 'column',
         overflowY: 'auto',
