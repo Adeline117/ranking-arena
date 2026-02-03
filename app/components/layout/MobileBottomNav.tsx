@@ -213,7 +213,7 @@ export default function MobileBottomNav(): React.ReactElement {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-around',
-          zIndex: 50,
+          zIndex: tokens.zIndex.sticky,
           paddingBottom: 'env(safe-area-inset-bottom, 0)',
           transform: isVisible ? 'translateY(0)' : 'translateY(100%)',
           transition: 'transform 0.3s ease',

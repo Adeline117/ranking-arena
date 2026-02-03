@@ -104,7 +104,7 @@ export default function ShareCompareButton({ traderIds, comparisonRef }: ShareCo
         <>
           {/* Backdrop */}
           <div
-            style={{ position: 'fixed', inset: 0, zIndex: 99 }}
+            style={{ position: 'fixed', inset: 0, zIndex: tokens.zIndex.overlay }}
             onClick={() => setShowMenu(false)}
           />
           {/* Menu */}
@@ -120,7 +120,7 @@ export default function ShareCompareButton({ traderIds, comparisonRef }: ShareCo
               borderRadius: tokens.radius.lg,
               padding: 4,
               minWidth: 180,
-              zIndex: 100,
+              zIndex: tokens.zIndex.modal,
               boxShadow: tokens.shadow.lg,
             }}
           >

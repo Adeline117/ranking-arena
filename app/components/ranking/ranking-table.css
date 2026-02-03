@@ -160,19 +160,10 @@
   filter: brightness(1.3);
 }
 
-/* Score breakdown tooltip – CSS :hover */
+/* Score breakdown tooltip */
 .score-tooltip-trigger {
   position: relative;
   display: inline-flex;
-}
-
-.score-tooltip-content {
-  display: none;
-}
-
-.score-tooltip-trigger:hover .score-tooltip-content,
-.score-tooltip-content.score-tooltip-visible {
-  display: block;
 }
 
 /* ============================================================
