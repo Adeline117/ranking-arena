@@ -6,8 +6,10 @@
  * metricValues: [ROI, Drawdown, followerProfit, WinRate, PLRatio, SharpeRatio]
  *
  * ⚠️  WAF-BLOCKED from US residential IPs (Akamai "Access Denied").
- * Verified correct endpoint from scripts/import/import_bybit_spot.mjs.
- * Should work from Vercel Japan/Singapore datacenters.
+ * Strategy:
+ * 1. Try direct API (works from Vercel SG/JP regions)
+ * 2. Fall back to Cloudflare Worker proxy
+ * 3. Return appropriate error if all methods fail
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -23,8 +25,9 @@ import {
 } from './shared'
 
 const SOURCE = 'bybit'
-const API_URL =
+const DIRECT_API_URL =
   'https://www.bybit.com/x-api/fapi/beehive/public/v1/common/dynamic-leader-list'
+const PROXY_URL = process.env.CLOUDFLARE_PROXY_URL || 'https://ranking-arena-proxy.broosbook.workers.dev'
 const TARGET = 500
 const PAGE_SIZE = 50
 
@@ -68,6 +71,48 @@ interface BybitApiResponse {
 }
 
 // ---------------------------------------------------------------------------
+// Fetch helpers with proxy fallback
+// ---------------------------------------------------------------------------
+
+async function fetchBybitPage(
+  pageNo: number,
+  pageSize: number,
+  duration: string
+): Promise<BybitApiResponse | null> {
+  const directUrl =
+    `${DIRECT_API_URL}?pageNo=${pageNo}&pageSize=${pageSize}` +
+    `&dataDuration=${duration}` +
+    `&sortField=LEADER_SORT_FIELD_SORT_ROI`
+
+  const proxyUrl =
+    `${PROXY_URL}/bybit/copy-trading?pageNo=${pageNo}&pageSize=${pageSize}&period=${duration}`
+
+  // Strategy 1: Try direct API first (works from non-US IPs)
+  try {
+    const data = await fetchJson<BybitApiResponse>(directUrl)
+    if (data?.result?.leaderDetails && data.result.leaderDetails.length > 0) {
+      console.log(`[bybit] Direct API success, page ${pageNo}`)
+      return data
+    }
+  } catch (err) {
+    console.log(`[bybit] Direct API failed: ${err instanceof Error ? err.message : err}`)
+  }
+
+  // Strategy 2: Try Cloudflare Worker proxy
+  try {
+    const data = await fetchJson<BybitApiResponse>(proxyUrl)
+    if (data?.result?.leaderDetails && data.result.leaderDetails.length > 0) {
+      console.log(`[bybit] Proxy success, page ${pageNo}`)
+      return data
+    }
+  } catch (err) {
+    console.log(`[bybit] Proxy failed: ${err instanceof Error ? err.message : err}`)
+  }
+
+  return null
+}
+
+// ---------------------------------------------------------------------------
 // Period fetcher
 // ---------------------------------------------------------------------------
 
@@ -78,35 +123,31 @@ async function fetchPeriod(
   const duration = PERIOD_MAP[period] || PERIOD_MAP['30D']
   const maxPages = Math.ceil(TARGET / PAGE_SIZE)
   const allTraders = new Map<string, BybitLeaderDetail>()
+  let lastError: string | undefined
 
   for (let pageNo = 1; pageNo <= maxPages; pageNo++) {
-    try {
-      const url =
-        `${API_URL}?pageNo=${pageNo}&pageSize=${PAGE_SIZE}` +
-        `&dataDuration=${duration}` +
-        `&sortField=LEADER_SORT_FIELD_SORT_ROI`
-
-      const data = await fetchJson<BybitApiResponse>(url)
-
-      const details = data?.result?.leaderDetails || []
-      if (details.length === 0) break
-
-      for (const item of details) {
-        const id = String(item.leaderUserId || item.leaderMark || '')
-        if (!id || allTraders.has(id)) continue
-        allTraders.set(id, item)
-      }
-
-      if (details.length < PAGE_SIZE || allTraders.size >= TARGET) break
-      await sleep(500)
-    } catch (err) {
-      // Akamai WAF returns HTML "Access Denied" from US IPs
-      const msg = err instanceof Error ? err.message : String(err)
-      if (msg.includes('403') || msg.includes('Access Denied')) {
-        return { total: 0, saved: 0, error: 'WAF-blocked from this IP (deploy to Vercel Japan/SG)' }
-      }
+    const data = await fetchBybitPage(pageNo, PAGE_SIZE, duration)
+    
+    if (!data) {
+      lastError = 'WAF-blocked from both direct API and proxy'
       break
     }
+
+    const details = data.result?.leaderDetails || []
+    if (details.length === 0) break
+
+    for (const item of details) {
+      const id = String(item.leaderUserId || item.leaderMark || '')
+      if (!id || allTraders.has(id)) continue
+      allTraders.set(id, item)
+    }
+
+    if (details.length < PAGE_SIZE || allTraders.size >= TARGET) break
+    await sleep(500)
+  }
+
+  if (allTraders.size === 0) {
+    return { total: 0, saved: 0, error: lastError || 'No data retrieved' }
   }
 
   // Map to TraderData

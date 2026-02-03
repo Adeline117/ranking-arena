@@ -33,6 +33,7 @@ import { createHmac } from 'crypto'
 const SOURCE = 'bitget_futures'
 const TARGET = 500
 const PAGE_SIZE = 50
+const PROXY_URL = process.env.CLOUDFLARE_PROXY_URL || 'https://ranking-arena-proxy.broosbook.workers.dev'
 
 /** Bitget API period values */
 const PERIOD_MAP: Record<string, string> = {
@@ -210,6 +211,7 @@ async function fetchPublic(period: string): Promise<BitgetTrader[]> {
   const maxPages = Math.ceil(TARGET / PAGE_SIZE)
   const periodParam = PERIOD_MAP[period] || period
 
+  // Strategy 1: Try direct public API endpoints
   for (const apiUrl of PUBLIC_API_URLS) {
     if (allTraders.length > 0) break
 
@@ -233,6 +235,35 @@ async function fetchPublic(period: string): Promise<BitgetTrader[]> {
         if (list.length < PAGE_SIZE || allTraders.length >= TARGET) break
         await sleep(300)
       } catch {
+        break
+      }
+    }
+  }
+
+  // Strategy 2: Try Cloudflare Worker proxy if direct APIs failed
+  if (allTraders.length === 0) {
+    console.log('[bitget-futures] Trying Cloudflare Worker proxy...')
+    for (let page = 1; page <= maxPages; page++) {
+      try {
+        const proxyUrl = `${PROXY_URL}/bitget/copy-trading?period=${periodParam}&pageNo=${page}&pageSize=${PAGE_SIZE}&type=futures`
+        const data = await fetchJson<BitgetResponse>(proxyUrl)
+
+        // Check if proxy returned an error object
+        if ((data as unknown as { error?: string }).error) {
+          console.log(`[bitget-futures] Proxy error: ${(data as unknown as { error: string }).error}`)
+          break
+        }
+
+        if (data.code !== '00000' && data.code !== 0 && data.code !== '0') break
+
+        const list = data.data?.traderList || data.data?.list || []
+        if (list.length === 0) break
+
+        allTraders.push(...list)
+        if (list.length < PAGE_SIZE || allTraders.length >= TARGET) break
+        await sleep(300)
+      } catch (err) {
+        console.log(`[bitget-futures] Proxy fetch error: ${err}`)
         break
       }
     }
