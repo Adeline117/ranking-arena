@@ -223,10 +223,54 @@ export class BaseImporter {
   }
 
   /**
-   * 通过 Puppeteer 获取数据（需要子类实现或使用通用逻辑）
+   * Extract trader data from API response item
+   */
+  extractTraderData(item, extractors) {
+    const traderId = extractors.traderId?.(item) || item.uid || item.id
+    if (!traderId) return null
+
+    return {
+      traderId: String(traderId),
+      nickname: extractors.nickname?.(item) || item.nickName || null,
+      avatar: extractors.avatar?.(item) || item.avatar || null,
+      roi: extractors.roi?.(item) || 0,
+      pnl: extractors.pnl?.(item) || null,
+      winRate: extractors.winRate?.(item) || null,
+      maxDrawdown: extractors.maxDrawdown?.(item) || null,
+      followers: extractors.followers?.(item) || 0,
+    }
+  }
+
+  /**
+   * Create response handler for browser-based scraping
+   */
+  createResponseHandler(traders, extractors, apiPatterns) {
+    return async (response) => {
+      const url = response.url()
+      const matchesPattern = apiPatterns.some(p => url.includes(p))
+      if (!matchesPattern) return
+
+      try {
+        const json = await response.json()
+        const list = json.result?.list || json.data?.list || json.result || []
+        if (!Array.isArray(list) || list.length === 0) return
+
+        log.info(`拦截到 API 数据: ${list.length} 条`)
+
+        for (const item of list) {
+          const trader = this.extractTraderData(item, extractors)
+          if (trader && !traders.has(trader.traderId)) {
+            traders.set(trader.traderId, trader)
+          }
+        }
+      } catch {}
+    }
+  }
+
+  /**
+   * 通过 Puppeteer 获取数据
    */
   async fetchViaPuppeteer(period) {
-    // 动态导入 puppeteer
     const { default: puppeteer } = await import('puppeteer-extra')
     const { default: StealthPlugin } = await import('puppeteer-extra-plugin-stealth')
     puppeteer.use(StealthPlugin())
@@ -244,43 +288,12 @@ export class BaseImporter {
       await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36')
 
       const { apiPatterns = [], extractors = {} } = this.config
-
-      // 监听 API 响应
-      page.on('response', async (response) => {
-        const url = response.url()
-        const matchesPattern = apiPatterns.some(p => url.includes(p))
-        if (!matchesPattern) return
-
-        try {
-          const json = await response.json()
-          const list = json.result?.list || json.data?.list || json.result || []
-          if (!Array.isArray(list) || list.length === 0) return
-
-          log.info(`拦截到 API 数据: ${list.length} 条`)
-
-          for (const item of list) {
-            const traderId = extractors.traderId?.(item) || item.uid || item.id
-            if (!traderId || traders.has(traderId)) continue
-
-            traders.set(traderId, {
-              traderId: String(traderId),
-              nickname: extractors.nickname?.(item) || item.nickName || null,
-              avatar: extractors.avatar?.(item) || item.avatar || null,
-              roi: extractors.roi?.(item) || 0,
-              pnl: extractors.pnl?.(item) || null,
-              winRate: extractors.winRate?.(item) || null,
-              maxDrawdown: extractors.maxDrawdown?.(item) || null,
-              followers: extractors.followers?.(item) || 0,
-            })
-          }
-        } catch {}
-      })
+      page.on('response', this.createResponseHandler(traders, extractors, apiPatterns))
 
       log.info('访问页面...')
       await page.goto(this.config.url, { waitUntil: 'networkidle2', timeout: 30000 })
       await sleep(3000)
 
-      // 滚动加载更多
       let scrollCount = 0
       while (traders.size < this.targetCount && scrollCount < 20) {
         await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight))
@@ -288,7 +301,6 @@ export class BaseImporter {
         scrollCount++
         log.progress(traders.size, this.targetCount, `滚动 ${scrollCount} 次`)
       }
-
     } finally {
       await browser.close()
     }
@@ -308,35 +320,10 @@ export class BaseImporter {
     try {
       const page = await browser.newPage()
       const { apiPatterns = [], extractors = {} } = this.config
-
-      page.on('response', async (response) => {
-        const url = response.url()
-        const matchesPattern = apiPatterns.some(p => url.includes(p))
-        if (!matchesPattern) return
-
-        try {
-          const json = await response.json()
-          const list = json.result?.list || json.data?.list || json.result || []
-          if (!Array.isArray(list)) return
-
-          for (const item of list) {
-            const traderId = extractors.traderId?.(item) || item.uid
-            if (!traderId || traders.has(traderId)) continue
-            traders.set(traderId, {
-              traderId: String(traderId),
-              nickname: extractors.nickname?.(item) || null,
-              roi: extractors.roi?.(item) || 0,
-              pnl: extractors.pnl?.(item) || null,
-              winRate: extractors.winRate?.(item) || null,
-              maxDrawdown: extractors.maxDrawdown?.(item) || null,
-            })
-          }
-        } catch {}
-      })
+      page.on('response', this.createResponseHandler(traders, extractors, apiPatterns))
 
       await page.goto(this.config.url, { waitUntil: 'networkidle' })
       await sleep(5000)
-
     } finally {
       await browser.close()
     }

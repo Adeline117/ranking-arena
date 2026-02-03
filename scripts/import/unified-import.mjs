@@ -27,11 +27,8 @@ const PLATFORM_GROUPS = {
   spot: getPlatformsByMarketType('spot'),
 }
 
-async function main() {
-  const arg = process.argv[2]?.toLowerCase()
-
-  if (!arg || arg === '--help' || arg === '-h') {
-    console.log(`
+function showHelp() {
+  console.log(`
 统一导入脚本
 
 用法:
@@ -55,58 +52,73 @@ async function main() {
   node scripts/import/unified-import.mjs all
   node scripts/import/unified-import.mjs cex 7D
 `)
+}
+
+function printSummary(results) {
+  console.log('\n' + '='.repeat(60))
+  console.log('导入汇总')
+  console.log('='.repeat(60))
+
+  for (const [platform, result] of Object.entries(results)) {
+    if (result.error) {
+      console.log(`❌ ${platform}: ${result.error}`)
+      continue
+    }
+
+    const counts = Object.entries(result)
+      .filter(([, v]) => v.success)
+      .map(([k, v]) => `${k}:${v.count}`)
+      .join(', ')
+    console.log(`✅ ${platform}: ${counts || 'no data'}`)
+  }
+}
+
+async function importPlatformGroup(groupName, platforms, periods) {
+  log.info(`\n${'='.repeat(60)}`)
+  log.info(`批量导入: ${groupName} (${platforms.length} 个平台)`)
+  log.info(`平台: ${platforms.join(', ')}`)
+  log.info(`时间段: ${periods.join(', ')}`)
+  log.info(`${'='.repeat(60)}\n`)
+
+  const results = {}
+
+  for (let i = 0; i < platforms.length; i++) {
+    const platform = platforms[i]
+    try {
+      log.info(`\n>>> 开始 ${platform} <<<`)
+      const importer = new BaseImporter(platform)
+      results[platform] = await importer.run(periods)
+    } catch (error) {
+      log.error(`${platform}: ${error.message}`)
+      results[platform] = { error: error.message }
+    }
+
+    const isLastPlatform = i === platforms.length - 1
+    if (!isLastPlatform) {
+      await sleep(5000)
+    }
+  }
+
+  printSummary(results)
+}
+
+async function main() {
+  const arg = process.argv[2]?.toLowerCase()
+
+  if (!arg || arg === '--help' || arg === '-h') {
+    showHelp()
     process.exit(0)
   }
 
   const periods = getTargetPeriods()
 
-  // 检查是否是平台组
+  // Handle platform group
   if (PLATFORM_GROUPS[arg]) {
-    const platforms = PLATFORM_GROUPS[arg]
-    log.info(`\n${'='.repeat(60)}`)
-    log.info(`批量导入: ${arg} (${platforms.length} 个平台)`)
-    log.info(`平台: ${platforms.join(', ')}`)
-    log.info(`时间段: ${periods.join(', ')}`)
-    log.info(`${'='.repeat(60)}\n`)
-
-    const results = {}
-
-    for (const platform of platforms) {
-      try {
-        log.info(`\n>>> 开始 ${platform} <<<`)
-        const importer = new BaseImporter(platform)
-        results[platform] = await importer.run(periods)
-      } catch (error) {
-        log.error(`${platform}: ${error.message}`)
-        results[platform] = { error: error.message }
-      }
-
-      // 平台之间休息
-      if (platforms.indexOf(platform) < platforms.length - 1) {
-        await sleep(5000)
-      }
-    }
-
-    // 打印汇总
-    console.log('\n' + '='.repeat(60))
-    console.log('导入汇总')
-    console.log('='.repeat(60))
-    for (const [platform, result] of Object.entries(results)) {
-      if (result.error) {
-        console.log(`❌ ${platform}: ${result.error}`)
-      } else {
-        const counts = Object.entries(result)
-          .filter(([, v]) => v.success)
-          .map(([k, v]) => `${k}:${v.count}`)
-          .join(', ')
-        console.log(`✅ ${platform}: ${counts || 'no data'}`)
-      }
-    }
-
+    await importPlatformGroup(arg, PLATFORM_GROUPS[arg], periods)
     return
   }
 
-  // 单个平台
+  // Handle single platform
   const config = getPlatformConfig(arg)
   if (!config) {
     log.error(`未知平台: ${arg}`)

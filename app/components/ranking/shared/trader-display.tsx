@@ -33,6 +33,23 @@ export function areTraderPropsEqual(
   )
 }
 
+// Rank change indicator below the rank badge
+function RankChangeIndicator({ rankChange, isNew }: { rankChange?: number | null; isNew?: boolean }) {
+  const indicatorStyle = { fontSize: '9px', fontWeight: 700, lineHeight: 1 } as const
+
+  if (isNew) {
+    return <span style={{ ...indicatorStyle, color: tokens.colors.accent.primary }}>NEW</span>
+  }
+
+  if (rankChange != null && rankChange !== 0) {
+    const color = rankChange > 0 ? tokens.colors.accent.success : TRADER_ACCENT_ERROR
+    const text = rankChange > 0 ? `+${rankChange}` : String(rankChange)
+    return <span style={{ ...indicatorStyle, color }}>{text}</span>
+  }
+
+  return null
+}
+
 // Rank badge with optional rank change indicator
 export function RankDisplay({ rank, rankChange, isNew, glowClass }: {
   rank: number
@@ -40,9 +57,11 @@ export function RankDisplay({ rank, rankChange, isNew, glowClass }: {
   isNew?: boolean
   glowClass?: string
 }) {
+  const isTopThree = rank <= 3
+
   return (
     <Box style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2 }}>
-      {rank <= 3 ? (
+      {isTopThree ? (
         <Box className={glowClass} style={{ transform: 'scale(1.1)' }}>
           <RankingBadge rank={rank as 1 | 2 | 3} size={28} />
         </Box>
@@ -51,13 +70,7 @@ export function RankDisplay({ rank, rankChange, isNew, glowClass }: {
           #{rank}
         </Text>
       )}
-      {isNew ? (
-        <span style={{ fontSize: '9px', fontWeight: 700, color: tokens.colors.accent.primary, lineHeight: 1 }}>NEW</span>
-      ) : rankChange != null && rankChange !== 0 ? (
-        <span style={{ fontSize: '9px', fontWeight: 700, color: rankChange > 0 ? tokens.colors.accent.success : TRADER_ACCENT_ERROR, lineHeight: 1 }}>
-          {rankChange > 0 ? `+${rankChange}` : rankChange}
-        </span>
-      ) : null}
+      <RankChangeIndicator rankChange={rankChange} isNew={isNew} />
     </Box>
   )
 }
@@ -112,26 +125,63 @@ export function TraderAvatar({ traderId, displayName, avatarUrl, rank, size = 36
   )
 }
 
+// Determine score confidence level based on available data
+function getScoreConfidence(trader: Trader): 'full' | 'partial' | 'minimal' {
+  if (trader.score_confidence) return trader.score_confidence
+  if (!trader.win_rate && !trader.max_drawdown) return 'minimal'
+  if (!trader.win_rate || !trader.max_drawdown) return 'partial'
+  return 'full'
+}
+
 // Score confidence indicator
 export function ScoreConfidenceIndicator({ trader }: { trader: Trader }) {
-  const conf = trader.score_confidence ?? (
-    (!trader.win_rate) && (!trader.max_drawdown) ? 'minimal' :
-    (!trader.win_rate) || (!trader.max_drawdown) ? 'partial' : 'full'
-  )
-  if (conf === 'full') return null
+  const confidence = getScoreConfidence(trader)
+  if (confidence === 'full') return null
+
+  const isMinimal = confidence === 'minimal'
+  const title = isMinimal ? 'Incomplete data (-20%)' : 'Partial data (-8%)'
+  const background = isMinimal
+    ? (tokens.colors.accent.error ?? '#ff6b6b')
+    : tokens.colors.accent.warning
 
   return (
     <span
-      title={conf === 'minimal' ? 'Incomplete data (-20%)' : 'Partial data (-8%)'}
+      title={title}
       style={{
         position: 'absolute', top: -2, right: -2,
         width: 6, height: 6, borderRadius: '50%',
-        background: conf === 'minimal' ? tokens.colors.accent.error ?? '#ff6b6b' : tokens.colors.accent.warning,
+        background,
         border: '1px solid rgba(0,0,0,0.3)',
         zIndex: 2,
       }}
     />
   )
+}
+
+// Get styling for arena score based on score value (exported for TraderCard)
+export function getScoreStyle(score: number): { bgGradient: string; borderColor: string; textColor: string; fillColor: string } {
+  if (score >= 60) {
+    return {
+      bgGradient: tokens.gradient.successSubtle,
+      borderColor: `${tokens.colors.accent.success}50`,
+      textColor: tokens.colors.accent.success,
+      fillColor: `${tokens.colors.accent.success}20`,
+    }
+  }
+  if (score >= 40) {
+    return {
+      bgGradient: tokens.gradient.warningSubtle,
+      borderColor: `${tokens.colors.accent.warning}40`,
+      textColor: tokens.colors.accent.warning,
+      fillColor: `${tokens.colors.accent.warning}20`,
+    }
+  }
+  return {
+    bgGradient: tokens.glass.bg.light,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
+    textColor: TRADER_TEXT_TERTIARY,
+    fillColor: `${tokens.colors.accent.primary}15`,
+  }
 }
 
 // Arena score badge
@@ -142,9 +192,7 @@ export function ArenaScoreBadge({ score, showConfidence, trader }: {
 }) {
   if (score == null) return null
 
-  const bgGradient = score >= 60 ? tokens.gradient.successSubtle : score >= 40 ? tokens.gradient.warningSubtle : tokens.glass.bg.light
-  const borderColor = score >= 60 ? `${tokens.colors.accent.success}50` : score >= 40 ? `${tokens.colors.accent.warning}40` : 'rgba(255, 255, 255, 0.15)'
-  const textColor = score >= 60 ? tokens.colors.accent.success : score >= 40 ? tokens.colors.accent.warning : TRADER_TEXT_TERTIARY
+  const { bgGradient, borderColor, textColor, fillColor } = getScoreStyle(score)
 
   return (
     <Box style={{
@@ -156,7 +204,7 @@ export function ArenaScoreBadge({ score, showConfidence, trader }: {
       <Box style={{
         position: 'absolute', left: 0, top: 0, bottom: 0,
         width: `${score}%`,
-        background: score >= 60 ? `${tokens.colors.accent.success}20` : score >= 40 ? `${tokens.colors.accent.warning}20` : `${tokens.colors.accent.primary}15`,
+        background: fillColor,
         transition: 'width 0.3s ease'
       }} />
       <Text size="sm" weight="black" style={{

@@ -1,62 +1,77 @@
 /**
- * 日期格式化工具 - 统一处理多语言日期显示
+ * Date formatting utilities for multi-language date display
  */
 
 import type { Language } from '../i18n'
 
 /**
- * 获取日期格式化的 locale
+ * Convert date input to Date object
+ */
+function toDate(date: Date | string): Date {
+  return typeof date === 'string' ? new Date(date) : date
+}
+
+/**
+ * Get locale string for date formatting
  */
 export function getDateLocale(language: Language): string {
   return language === 'zh' ? 'zh-CN' : 'en-US'
 }
 
+const DEFAULT_DATE_OPTIONS: Intl.DateTimeFormatOptions = {
+  year: 'numeric',
+  month: 'short',
+  day: 'numeric',
+}
+
+const DEFAULT_DATETIME_OPTIONS: Intl.DateTimeFormatOptions = {
+  ...DEFAULT_DATE_OPTIONS,
+  hour: '2-digit',
+  minute: '2-digit',
+}
+
+const DEFAULT_TIME_OPTIONS: Intl.DateTimeFormatOptions = {
+  hour: '2-digit',
+  minute: '2-digit',
+}
+
 /**
- * 格式化日期（短格式）
+ * Format date (short format)
  */
 export function formatDate(
   date: Date | string,
   language: Language,
   options?: Intl.DateTimeFormatOptions
 ): string {
-  const d = typeof date === 'string' ? new Date(date) : date
-  const defaultOptions: Intl.DateTimeFormatOptions = {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  }
-  return d.toLocaleDateString(getDateLocale(language), options || defaultOptions)
+  return toDate(date).toLocaleDateString(
+    getDateLocale(language),
+    options || DEFAULT_DATE_OPTIONS
+  )
 }
 
 /**
- * 格式化日期时间
+ * Format date and time
  */
 export function formatDateTime(
   date: Date | string,
   language: Language,
   options?: Intl.DateTimeFormatOptions
 ): string {
-  const d = typeof date === 'string' ? new Date(date) : date
-  const defaultOptions: Intl.DateTimeFormatOptions = {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  }
-  return d.toLocaleString(getDateLocale(language), options || defaultOptions)
+  return toDate(date).toLocaleString(
+    getDateLocale(language),
+    options || DEFAULT_DATETIME_OPTIONS
+  )
 }
 
 /**
- * 格式化相对时间（如"3分钟前"）
+ * Format relative time (e.g., "3 minutes ago")
  */
 export function formatRelativeTime(
   date: Date | string,
   language: Language
 ): string {
-  const d = typeof date === 'string' ? new Date(date) : date
-  const now = new Date()
-  const diffMs = now.getTime() - d.getTime()
+  const d = toDate(date)
+  const diffMs = Date.now() - d.getTime()
   const diffSec = Math.floor(diffMs / 1000)
   const diffMin = Math.floor(diffSec / 60)
   const diffHour = Math.floor(diffMin / 60)
@@ -77,20 +92,18 @@ export function formatRelativeTime(
     return isZh ? `${diffDay}天前` : `${diffDay}d ago`
   }
 
-  // 超过一周显示具体日期
   return formatDate(d, language)
 }
 
 /**
- * 格式化时间（仅时间部分）
+ * Format time only
  */
 export function formatTime(
   date: Date | string,
   language: Language
 ): string {
-  const d = typeof date === 'string' ? new Date(date) : date
-  return d.toLocaleTimeString(getDateLocale(language), {
-    hour: '2-digit',
-    minute: '2-digit',
-  })
+  return toDate(date).toLocaleTimeString(
+    getDateLocale(language),
+    DEFAULT_TIME_OPTIONS
+  )
 }
