@@ -18,6 +18,7 @@ import { useLanguage } from '../Providers/LanguageProvider'
 import type { FilterConfig, SavedFilter } from '../premium/AdvancedFilter'
 import FilterPresets, { type PresetId, PRESETS } from '../ranking/FilterPresets'
 import ExchangeFilter from '../ranking/ExchangeFilter'
+import { SOURCE_TYPE_MAP } from '@/lib/constants/exchanges'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { getCsrfHeaders } from '@/lib/api/client'
 
@@ -379,12 +380,12 @@ export default function RankingSection({
     ? categoryFiltered.filter(t => t.source === selectedExchange)
     : categoryFiltered
 
-  // Feature 6: Apply preset filter
-  const presetFiltered = activePreset
+  // Feature 6: Apply preset filter (now source-type based)
+  const presetFiltered = activePreset && activePreset !== 'all'
     ? (() => {
         const presetConfig = PRESETS.find(p => p.id === activePreset)
         return presetConfig
-          ? exchangeFiltered.filter(t => presetConfig.filter(t))
+          ? exchangeFiltered.filter(t => presetConfig.filter({ source: t.source }))
           : exchangeFiltered
       })()
     : exchangeFiltered
@@ -413,7 +414,7 @@ export default function RankingSection({
         minWidth: 0,
       }}
     >
-      {/* 紧凑工具栏 */}
+      {/* 紧凑工具栏 - 所有筛选器整合在一行 */}
       <Box
         className="ranking-toolbar"
         style={{
@@ -421,17 +422,27 @@ export default function RankingSection({
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          gap: tokens.spacing[1],
+          gap: tokens.spacing[2],
+          flexWrap: 'wrap',
         }}
       >
-        <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1], flexWrap: 'wrap', flex: 1, minWidth: 0 }}>
+        {/* 左侧: 时间选择 + 类型预设 + 平台下拉 */}
+        <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], flexWrap: 'wrap', flex: 1, minWidth: 0 }}>
           <TimeRangeSelector
             activeRange={activeTimeRange}
             onChange={onTimeRangeChange}
             disabled={loading}
           />
           <FilterPresets activePreset={activePreset} onPresetChange={handlePresetChange} />
+          {!loading && dataSources.length > 1 && (
+            <ExchangeFilter
+              availableSources={dataSources}
+              selectedExchange={selectedExchange}
+              onExchangeChange={handleExchangeChange}
+            />
+          )}
         </Box>
+        {/* 右侧: 操作按钮 */}
         <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1], flexShrink: 0 }}>
           {!loading && filteredTraders.length > 0 && (
             <ShareTop10Button
@@ -474,17 +485,6 @@ export default function RankingSection({
           )}
         </Box>
       </Box>
-
-      {/* 交易所筛选（所有用户可用） */}
-      {!loading && dataSources.length > 1 && (
-        <Box style={{ marginBottom: tokens.spacing[2] }}>
-          <ExchangeFilter
-            availableSources={dataSources}
-            selectedExchange={selectedExchange}
-            onExchangeChange={handleExchangeChange}
-          />
-        </Box>
-      )}
 
       {/* 高级筛选面板 */}
       {showAdvancedFilter && isPro && (

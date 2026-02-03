@@ -112,7 +112,7 @@ export default function ReportModal({
           position: 'fixed',
           inset: 0,
           background: 'rgba(0, 0, 0, 0.6)',
-          zIndex: 2000,
+          zIndex: tokens.zIndex.modal,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',

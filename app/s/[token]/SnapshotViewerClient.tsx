@@ -223,7 +223,7 @@ export default function SnapshotViewerClient({ snapshot, traders }: SnapshotView
         style={{
           position: 'sticky',
           top: 0,
-          zIndex: 100,
+          zIndex: tokens.zIndex.sticky,
           background: tokens.glass.bg.heavy,
           backdropFilter: tokens.glass.blur.lg,
           borderBottom: `1px solid ${tokens.colors.border.primary}`,

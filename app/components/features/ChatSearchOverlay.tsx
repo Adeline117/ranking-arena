@@ -170,7 +170,7 @@ export default function ChatSearchOverlay({
         right: 0,
         bottom: 0,
         background: tokens.colors.bg.primary,
-        zIndex: 100,
+        zIndex: tokens.zIndex.overlay,
         display: 'flex',
         flexDirection: 'column',
       }}
