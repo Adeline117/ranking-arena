@@ -35,11 +35,34 @@ const CATEGORY_LABELS: Record<CategoryPreset, { zh: string; en: string }> = {
   onchain_dex: { zh: '链上DEX', en: 'On-chain DEX' },
 }
 
-// Platforms grouped by category (only include platforms with actual data)
+// Platforms grouped by category (only include platforms with actual data, sorted by data count)
 const PLATFORMS_BY_CATEGORY: Record<Exclude<CategoryPreset, 'all'>, string[]> = {
-  cex_futures: ['binance_futures', 'bybit', 'bitget_futures', 'okx_futures', 'mexc', 'htx_futures', 'kucoin', 'coinex', 'weex'],
-  cex_spot: ['binance_spot', 'bitget_spot'],
-  onchain_dex: ['gmx', 'hyperliquid', 'dydx', 'gains', 'aevo'],
+  cex_futures: [
+    'binance_futures',  // 2500
+    'bitget_futures',   // 1203
+    'htx_futures',      // 1099
+    'okx_futures',      // 855
+    'mexc',             // 860
+    'kucoin',           // 537
+    'bybit',            // 489
+    'coinex',           // 650
+    'weex',             // 69
+    'xt',               // 158
+  ],
+  cex_spot: [
+    'binance_spot',     // 943
+    'bitget_spot',      // 701
+    'bybit_spot',       // 500
+  ],
+  onchain_dex: [
+    'gmx',              // 2366
+    'hyperliquid',      // 2119
+    'gains',            // 1911
+    'okx_web3',         // 1429
+    'aevo',             // 1208
+    'dydx',             // 164
+    'binance_web3',     // 52
+  ],
 }
 
 // Platform dropdown component
