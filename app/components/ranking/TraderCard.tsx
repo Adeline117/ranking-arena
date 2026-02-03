@@ -1,20 +1,20 @@
 import React, { memo } from 'react'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
-import { RankingBadge } from '../ui/icons'
 import { Box, Text } from '../base'
-import { getAvatarGradient, getAvatarInitial, getTraderAvatarUrl } from '@/lib/utils/avatar'
 import type { Trader } from './RankingTable'
 import type { SourceInfo } from './utils'
 import { formatROI, formatDisplayName } from './utils'
 import { HighlightedName } from './RankingSearch'
-
-// Brighter tertiary color for text on ranking card backgrounds
-// where the global tertiary (#898998) does not meet WCAG AA 4.5:1 contrast
-const CARD_TEXT_TERTIARY = '#b0b0be'
-// Brighter error color for negative ROI/MDD on card backgrounds
-// #ff4d4d only achieves 3.36:1 on card bg; #ff8080 achieves ~5.0:1
-const CARD_ACCENT_ERROR = '#ff8080'
+import {
+  TRADER_TEXT_TERTIARY,
+  TRADER_ACCENT_ERROR,
+  RankDisplay,
+  TraderAvatar,
+  ScoreConfidenceIndicator,
+  MetricStat,
+  areTraderPropsEqual,
+} from './shared/trader-display'
 
 export interface TraderCardProps {
   trader: Trader
@@ -63,55 +63,23 @@ export const TraderCard = memo(function TraderCard({
         {/* Top row: Rank + Avatar + Name */}
         <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3] }}>
           {/* Rank */}
-          <Box style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, minWidth: 32 }}>
-            {rank <= 3 ? (
-              <Box className={getMedalGlowClass(rank)} style={{ transform: 'scale(1.1)' }}>
-                <RankingBadge rank={rank as 1 | 2 | 3} size={28} />
-              </Box>
-            ) : (
-              <Text size="sm" weight="bold" color="tertiary" style={{ fontSize: '14px', color: CARD_TEXT_TERTIARY }}>
-                #{rank}
-              </Text>
-            )}
-            {trader.is_new ? (
-              <span style={{ fontSize: '9px', fontWeight: 700, color: tokens.colors.accent.primary, lineHeight: 1 }}>NEW</span>
-            ) : trader.rank_change != null && trader.rank_change !== 0 ? (
-              <span style={{ fontSize: '9px', fontWeight: 700, color: trader.rank_change > 0 ? tokens.colors.accent.success : CARD_ACCENT_ERROR, lineHeight: 1 }}>
-                {trader.rank_change > 0 ? `+${trader.rank_change}` : trader.rank_change}
-              </span>
-            ) : null}
+          <Box style={{ minWidth: 32 }}>
+            <RankDisplay
+              rank={rank}
+              rankChange={trader.rank_change}
+              isNew={trader.is_new}
+              glowClass={getMedalGlowClass(rank)}
+            />
           </Box>
 
           {/* Avatar */}
-          <div
-            style={{
-              width: '44px', height: '44px', minWidth: '44px',
-              borderRadius: '50%', background: getAvatarGradient(trader.id),
-              border: '2px solid var(--color-border-primary)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              overflow: 'hidden', flexShrink: 0, position: 'relative',
-              boxShadow: rank <= 3 ? `0 0 12px ${rank === 1 ? 'rgba(255, 215, 0, 0.4)' : rank === 2 ? 'rgba(192, 192, 192, 0.4)' : 'rgba(205, 127, 50, 0.4)'}` : 'none',
-            }}
-          >
-            <span style={{ color: '#ffffff', fontSize: '16px', fontWeight: 900, lineHeight: 1, textShadow: '0 1px 3px rgba(0,0,0,0.8)' }}>
-              {getAvatarInitial(displayName)}
-            </span>
-            {(() => {
-              const proxyAvatarUrl = getTraderAvatarUrl(trader.avatar_url)
-              if (!proxyAvatarUrl) return null
-
-              return (
-                <img
-                  src={proxyAvatarUrl}
-                  alt={displayName}
-                  loading={rank <= 3 ? 'eager' : 'lazy'}
-                  decoding="async"
-                  style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', inset: 0, zIndex: 1 }}
-                  onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
-                />
-              )
-            })()}
-          </div>
+          <TraderAvatar
+            traderId={trader.id}
+            displayName={displayName}
+            avatarUrl={trader.avatar_url}
+            rank={rank}
+            size={44}
+          />
 
           {/* Name + Source */}
           <Box style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -125,14 +93,14 @@ export const TraderCard = memo(function TraderCard({
                 </Text>
               </Box>
               {trader.also_on && trader.also_on.length > 0 && (
-                <Text size="xs" style={{ fontSize: '9px', color: CARD_TEXT_TERTIARY }}>
+                <Text size="xs" style={{ fontSize: '9px', color: TRADER_TEXT_TERTIARY }}>
                   +{trader.also_on.length}
                 </Text>
               )}
             </Box>
           </Box>
 
-          {/* Arena Score + Confidence */}
+          {/* Arena Score */}
           {trader.arena_score != null && (
             <Box style={{
               position: 'relative',
@@ -141,80 +109,33 @@ export const TraderCard = memo(function TraderCard({
               border: `1px solid ${trader.arena_score >= 60 ? `${tokens.colors.accent.success}50` : trader.arena_score >= 40 ? `${tokens.colors.accent.warning}40` : 'rgba(255, 255, 255, 0.15)'}`,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}>
-              <Text size="sm" weight="black" style={{ color: trader.arena_score >= 60 ? tokens.colors.accent.success : trader.arena_score >= 40 ? tokens.colors.accent.warning : CARD_TEXT_TERTIARY, fontSize: '13px' }}>
+              <Text size="sm" weight="black" style={{ color: trader.arena_score >= 60 ? tokens.colors.accent.success : trader.arena_score >= 40 ? tokens.colors.accent.warning : TRADER_TEXT_TERTIARY, fontSize: '13px' }}>
                 {trader.arena_score.toFixed(0)}
               </Text>
-              {(() => {
-                const conf = trader.score_confidence ?? (
-                  (!trader.win_rate) && (!trader.max_drawdown) ? 'minimal' :
-                  (!trader.win_rate) || (!trader.max_drawdown) ? 'partial' : 'full'
-                )
-                if (conf === 'full') return null
-                return (
-                  <span
-                    title={conf === 'minimal' ? 'Incomplete data (-20%)' : 'Partial data (-8%)'}
-                    style={{
-                      position: 'absolute', top: -3, right: -3,
-                      width: 7, height: 7, borderRadius: '50%',
-                      background: conf === 'minimal' ? tokens.colors.accent.error ?? '#ff6b6b' : tokens.colors.accent.warning,
-                      border: '1px solid rgba(0,0,0,0.3)',
-                    }}
-                  />
-                )
-              })()}
+              <ScoreConfidenceIndicator trader={trader} />
             </Box>
           )}
         </Box>
 
         {/* Stats row */}
         <Box style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: tokens.spacing[2] }}>
-          {/* ROI */}
-          <Box style={{ textAlign: 'center', padding: `${tokens.spacing[2]} 0`, background: tokens.glass.bg.light, borderRadius: tokens.radius.md }}>
-            <Text size="xs" color="tertiary" style={{ marginBottom: 2, display: 'block', color: CARD_TEXT_TERTIARY }}>ROI</Text>
-            <Text size="md" weight="black" style={{ color: (trader.roi || 0) >= 0 ? tokens.colors.accent.success : CARD_ACCENT_ERROR }}>
-              {formatROI(trader.roi || 0)}
-            </Text>
-          </Box>
-
-          {/* Win Rate */}
-          <Box style={{ textAlign: 'center', padding: `${tokens.spacing[2]} 0`, background: tokens.glass.bg.light, borderRadius: tokens.radius.md }}>
-            <Text size="xs" color="tertiary" style={{ marginBottom: 2, display: 'block', color: CARD_TEXT_TERTIARY }}>{language === 'zh' ? '胜率' : 'Win%'}</Text>
-            {trader.win_rate ? (
-              <Text size="md" weight="semibold" style={{ color: trader.win_rate > 50 ? tokens.colors.accent.success : CARD_TEXT_TERTIARY }}>
-                {trader.win_rate.toFixed(0)}%
-              </Text>
-            ) : (
-              <Text size="sm" style={{ color: CARD_TEXT_TERTIARY, opacity: 0.35, fontSize: '11px' }}>N/A</Text>
-            )}
-          </Box>
-
-          {/* Max Drawdown */}
-          <Box style={{ textAlign: 'center', padding: `${tokens.spacing[2]} 0`, background: tokens.glass.bg.light, borderRadius: tokens.radius.md }}>
-            <Text size="xs" color="tertiary" style={{ marginBottom: 2, display: 'block', color: CARD_TEXT_TERTIARY }}>MDD</Text>
-            {trader.max_drawdown ? (
-              <Text size="md" weight="semibold" style={{ color: CARD_ACCENT_ERROR }}>
-                -{Math.abs(trader.max_drawdown).toFixed(0)}%
-              </Text>
-            ) : (
-              <Text size="sm" style={{ color: CARD_TEXT_TERTIARY, opacity: 0.35, fontSize: '11px' }}>N/A</Text>
-            )}
-          </Box>
+          <MetricStat
+            label="ROI"
+            value={formatROI(trader.roi || 0)}
+            color={(trader.roi || 0) >= 0 ? tokens.colors.accent.success : TRADER_ACCENT_ERROR}
+          />
+          <MetricStat
+            label={language === 'zh' ? '胜率' : 'Win%'}
+            value={trader.win_rate ? `${trader.win_rate.toFixed(0)}%` : 'N/A'}
+            color={trader.win_rate && trader.win_rate > 50 ? tokens.colors.accent.success : undefined}
+          />
+          <MetricStat
+            label="MDD"
+            value={trader.max_drawdown ? `-${Math.abs(trader.max_drawdown).toFixed(0)}%` : 'N/A'}
+            color={trader.max_drawdown ? TRADER_ACCENT_ERROR : undefined}
+          />
         </Box>
       </Box>
     </Link>
   )
-}, (prev, next) => {
-  return (
-    prev.trader.id === next.trader.id &&
-    prev.trader.roi === next.trader.roi &&
-    prev.trader.arena_score === next.trader.arena_score &&
-    prev.trader.win_rate === next.trader.win_rate &&
-    prev.trader.max_drawdown === next.trader.max_drawdown &&
-    prev.trader.score_confidence === next.trader.score_confidence &&
-    prev.trader.rank_change === next.trader.rank_change &&
-    prev.trader.is_new === next.trader.is_new &&
-    prev.rank === next.rank &&
-    prev.language === next.language &&
-    prev.searchQuery === next.searchQuery
-  )
-})
+}, areTraderPropsEqual)

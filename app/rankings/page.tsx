@@ -18,6 +18,7 @@ import DataStateWrapper from '@/app/components/ui/DataStateWrapper'
 import { RankingSkeleton } from '@/app/components/ui/Skeleton'
 import { Box } from '@/app/components/base'
 import { getAvatarGradient, getAvatarInitial } from '@/lib/utils/avatar'
+import { formatROI, formatPnL } from '@/app/components/ranking/utils'
 import type { SnapshotWindow, RankedTraderV2, Platform } from '@/lib/types/trading-platform'
 
 const WINDOWS: SnapshotWindow[] = ['7D', '30D', '90D']
@@ -235,7 +236,7 @@ function TraderRow({ trader }: { trader: RankedTraderV2 }) {
       </div>
 
       <div className="text-right text-sm font-semibold" style={{ color: roiColor }}>
-        {metrics.roi >= 0 ? '+' : ''}{formatROI(metrics.roi)}
+        {formatROI(metrics.roi)}
       </div>
 
       <div className="text-right text-sm col-pnl" style={{ color: tokens.colors.text.primary }}>
@@ -264,21 +265,6 @@ function TraderRow({ trader }: { trader: RankedTraderV2 }) {
       </div>
     </Link>
   )
-}
-
-function formatROI(roi: number): string {
-  const abs = Math.abs(roi)
-  if (abs >= 10000) return `${(roi / 1000).toFixed(0)}K%`
-  if (abs >= 1000) return `${roi.toFixed(0)}%`
-  return `${roi.toFixed(1)}%`
-}
-
-function formatPnL(pnl: number): string {
-  const abs = Math.abs(pnl)
-  const sign = pnl >= 0 ? '' : '-'
-  if (abs >= 1000000) return `${sign}$${(abs / 1000000).toFixed(2)}M`
-  if (abs >= 1000) return `${sign}$${(abs / 1000).toFixed(1)}K`
-  return `${sign}$${abs.toFixed(0)}`
 }
 
 export default function RankingsPage() {
