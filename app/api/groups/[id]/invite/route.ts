@@ -4,7 +4,7 @@ import crypto from 'crypto'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-const INVITE_SECRET = process.env.INVITE_SECRET || supabaseServiceKey.slice(0, 32)
+const INVITE_SECRET = process.env.INVITE_SECRET || (supabaseServiceKey?.slice(0, 32) ?? 'default-invite-secret-for-build')
 
 type RouteContext = { params: Promise<{ id: string }> }
 
