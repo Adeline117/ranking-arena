@@ -277,7 +277,7 @@ async function fetchPeriod(
     let statsSaved = 0
     for (const t of top.slice(0, 50)) {
       const stats: StatsDetail = {
-        totalTrades: t.tradesCount,
+        totalTrades: t.tradesCount ?? null,
         profitableTradesPct: t.winRate,
         avgHoldingTimeHours: null,
         avgProfit: null,
@@ -292,7 +292,7 @@ async function fetchPeriod(
         copiersPnl: null,
         aum: null,
         winningPositions: null,
-        totalPositions: t.tradesCount,
+        totalPositions: t.tradesCount ?? null,
       }
       const { saved: s } = await upsertStatsDetail(supabase, SOURCE, t.owner, period, stats)
       if (s) statsSaved++
