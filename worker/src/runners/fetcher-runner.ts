@@ -287,7 +287,8 @@ export async function executeFetcherJob(job: Job): Promise<JobResult> {
   console.log(`[FetcherRunner] Executing ${platform} for periods: ${periods.join(', ')}`)
 
   try {
-    const result = await fetcher(supabase, periods)
+    // Cast to any to handle type mismatch between worker and main app supabase versions
+    const result = await fetcher(supabase as any, periods)
     
     return {
       platform,

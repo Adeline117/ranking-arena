@@ -11,7 +11,7 @@
  * 5. Consistent across all entry points (hot, groups, feed)
  */
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import { ThumbsUpIcon, ThumbsDownIcon, CommentIcon } from '../ui/icons'
@@ -44,6 +44,10 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
   const [submittingComment, setSubmittingComment] = useState(false)
   const [reacting, setReacting] = useState(false)
 
+  // Prevent duplicate submissions
+  const commentPendingRef = useRef(false)
+  const reactionPendingRef = useRef(false)
+
   // Read from canonical store
   const post = usePostStore(s => s.posts[postId])
   const comments = usePostStore(s => s.comments[postId] || [])
@@ -55,10 +59,14 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
   }, [postId])
 
   const handleSubmitComment = useCallback(async () => {
+    // Prevent duplicate submissions
+    if (commentPendingRef.current) return
+
     const token = auth.requireAuth()
     if (!token) return
     if (!newComment.trim()) return
 
+    commentPendingRef.current = true
     setSubmittingComment(true)
     try {
       const result = await submitPostComment(postId, newComment.trim(), token)
@@ -71,14 +79,18 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
       showToast(t('commentFailedRetry'), 'error')
     } finally {
       setSubmittingComment(false)
+      commentPendingRef.current = false
     }
-  }, [postId, newComment, auth, showToast])
+  }, [postId, newComment, auth, showToast, t])
 
   const handleReaction = useCallback(async (reactionType: 'up' | 'down') => {
+    // Prevent duplicate reactions
+    if (reactionPendingRef.current || reacting) return
+
     const token = auth.requireAuth()
     if (!token) return
-    if (reacting) return
 
+    reactionPendingRef.current = true
     setReacting(true)
     try {
       const result = await togglePostReaction(postId, reactionType, token)
@@ -89,8 +101,9 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
       showToast(t('operationFailedRetry'), 'error')
     } finally {
       setReacting(false)
+      reactionPendingRef.current = false
     }
-  }, [postId, auth, showToast, reacting])
+  }, [postId, auth, showToast, reacting, t])
 
   const handleLoadMore = useCallback(() => {
     loadMorePostComments(postId)

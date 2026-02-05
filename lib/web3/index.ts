@@ -37,3 +37,35 @@ export {
   getProposalUrl,
   getSpaceUrl,
 } from './snapshot'
+
+// Copy trading contract types and utilities
+export {
+  COPY_TRADING_ABI,
+  COPY_TRADING_ADDRESSES,
+  isCopyTradingAvailable,
+  getCopyTradingAddress,
+  calculateNetPnl,
+  formatPosition,
+  type CopyTradeStatus,
+  type CopyTradeStrategy,
+  type CopyTradePosition,
+  type CopyTradeSubscription,
+  type CopyTradeConfig,
+} from './copy-trading'
+
+// Multi-chain support
+export {
+  CHAIN_IDS,
+  CHAIN_CONFIGS,
+  getPublicClient,
+  getDefaultChain,
+  getSupportedChains,
+  getProductionChains,
+  isChainSupported,
+  getChainConfig,
+  getTxExplorerUrl,
+  getAddressExplorerUrl,
+  formatChainName,
+  type SupportedChainId,
+  type ChainConfig,
+} from './multi-chain'

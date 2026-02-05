@@ -1,7 +1,7 @@
 /**
  * Cron 任务共享工具
  * 提供认证、日志、脚本执行等共享功能
- * 集成熔断器、重试机制和告警通知
+ * 集成熔断器、重试机制、遥测和告警通知
  */
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
@@ -15,6 +15,8 @@ import {
   getAllCircuitBreakerStats,
 } from '@/lib/utils/circuit-breaker'
 import { createLogger } from '@/lib/utils/logger'
+import { recordScrapeMetrics, type ScrapeMetrics } from '@/lib/scraper/telemetry'
+import { getPlatformConfig } from '@/lib/scraper/config'
 
 const execAsync = promisify(exec)
 const cronLogger = createLogger('Cron')
@@ -247,14 +249,21 @@ async function executeScriptInternal(
 
 /**
  * 执行单个抓取脚本
- * 带有重试和熔断器保护
+ * 带有重试、熔断器保护和遥测记录
  */
 export async function executeScript(
   scriptConfig: { name: string; script: string; args: string[] },
   env: Record<string, string>
 ): Promise<ScriptResult> {
-  const { name } = scriptConfig
+  const { name, args } = scriptConfig
   const startTime = Date.now()
+  let retryCount = 0
+
+  // 解析平台和时间窗口
+  const [platform] = name.split('_').slice(0, -1).length > 0
+    ? [name.replace(/_\d+[dD]$/, '')]
+    : [name]
+  const timeWindow = args[0] || '7D'
 
   try {
     cronLogger.info(`开始执行 ${name}...`)
@@ -270,6 +279,7 @@ export async function executeScript(
           return isTransientError(error)
         },
         onRetry: (attempt, error, delay) => {
+          retryCount = attempt
           cronLogger.warn(`${name} 第 ${attempt} 次重试，等待 ${Math.round(delay)}ms`)
         },
       }
@@ -277,6 +287,23 @@ export async function executeScript(
 
     const duration = Date.now() - startTime
     cronLogger.info(`${name} 完成，耗时 ${duration}ms`)
+
+    // 解析输出获取交易员数量（如果有）
+    const traderCountMatch = (stdout || '').match(/(?:imported|updated|count)[:\s]*(\d+)/i)
+    const traderCount = traderCountMatch ? parseInt(traderCountMatch[1], 10) : 0
+
+    // 记录遥测指标
+    const config = getPlatformConfig(platform)
+    await recordScrapeMetrics({
+      platform,
+      timeWindow,
+      timestamp: Date.now(),
+      duration,
+      success: true,
+      traderCount,
+      method: config?.scrape.method || 'api',
+      retryCount,
+    })
 
     return {
       name,
@@ -289,6 +316,24 @@ export async function executeScript(
     const errorMessage = error instanceof Error ? error.message : String(error)
     cronLogger.error(`${name} 失败:`, errorMessage)
 
+    // 分类错误类型
+    const errorType = classifyError(error)
+
+    // 记录失败遥测
+    const config = getPlatformConfig(platform)
+    await recordScrapeMetrics({
+      platform,
+      timeWindow,
+      timestamp: Date.now(),
+      duration,
+      success: false,
+      traderCount: 0,
+      errorType,
+      errorMessage: errorMessage.substring(0, 200),
+      method: config?.scrape.method || 'api',
+      retryCount,
+    })
+
     return {
       name,
       success: false,
@@ -296,6 +341,37 @@ export async function executeScript(
       duration,
     }
   }
+}
+
+/**
+ * 分类错误类型
+ */
+function classifyError(error: unknown): string {
+  const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase()
+
+  if (message.includes('timeout') || message.includes('timed out')) {
+    return 'timeout'
+  }
+  if (message.includes('network') || message.includes('econnrefused') || message.includes('enotfound')) {
+    return 'network'
+  }
+  if (message.includes('rate limit') || message.includes('429') || message.includes('too many')) {
+    return 'rate_limit'
+  }
+  if (message.includes('403') || message.includes('forbidden') || message.includes('blocked')) {
+    return 'blocked'
+  }
+  if (message.includes('401') || message.includes('unauthorized')) {
+    return 'auth'
+  }
+  if (message.includes('parse') || message.includes('json') || message.includes('unexpected token')) {
+    return 'parse_error'
+  }
+  if (message.includes('validation') || message.includes('invalid')) {
+    return 'validation'
+  }
+
+  return 'unknown'
 }
 
 /**

@@ -250,13 +250,13 @@ export async function sendScraperAlert(
   if (criticalPlatforms.length === 0 && stalePlatforms.length === 0) {
     return { sent: false, channels: [] }
   }
-  
+
   const isCritical = criticalPlatforms.length > 0
   const level = isCritical ? 'critical' : 'warning'
-  
+
   const criticalList = criticalPlatforms.map(p => platformNames[p] || p).join(', ')
   const staleList = stalePlatforms.map(p => platformNames[p] || p).join(', ')
-  
+
   let message = ''
   if (criticalPlatforms.length > 0) {
     message += `严重过期 (>24h): ${criticalList}\n`
@@ -264,7 +264,7 @@ export async function sendScraperAlert(
   if (stalePlatforms.length > 0) {
     message += `数据陈旧 (>12h): ${staleList}`
   }
-  
+
   return sendAlert({
     title: isCritical ? '爬虫数据严重过期告警' : '爬虫数据陈旧告警',
     message: message.trim(),
@@ -273,6 +273,205 @@ export async function sendScraperAlert(
       '严重过期平台数': criticalPlatforms.length,
       '陈旧平台数': stalePlatforms.length,
       '检查时间': new Date().toLocaleString('zh-CN'),
+    },
+  })
+}
+
+// ============================================
+// 智能告警聚合
+// ============================================
+
+interface AggregatedAlert {
+  key: string
+  count: number
+  firstSeen: number
+  lastSeen: number
+  payload: AlertPayload
+}
+
+const alertBuffer: Map<string, AggregatedAlert> = new Map()
+let flushTimer: ReturnType<typeof setTimeout> | null = null
+
+const FLUSH_INTERVAL = 60000 // 1 分钟聚合窗口
+const MIN_AGGREGATE_COUNT = 3 // 最少聚合数量才发送
+
+/**
+ * 智能告警 - 自动聚合相似告警
+ */
+export async function sendSmartAlert(
+  payload: AlertPayload,
+  aggregateKey?: string
+): Promise<void> {
+  const key = aggregateKey || `${payload.level}:${payload.title}`
+
+  const existing = alertBuffer.get(key)
+  if (existing) {
+    existing.count++
+    existing.lastSeen = Date.now()
+    existing.payload = payload // 更新为最新内容
+  } else {
+    alertBuffer.set(key, {
+      key,
+      count: 1,
+      firstSeen: Date.now(),
+      lastSeen: Date.now(),
+      payload,
+    })
+  }
+
+  // 启动定时刷新
+  if (!flushTimer) {
+    flushTimer = setTimeout(flushAlertBuffer, FLUSH_INTERVAL)
+  }
+}
+
+/**
+ * 刷新告警缓冲区
+ */
+async function flushAlertBuffer(): Promise<void> {
+  flushTimer = null
+
+  const now = Date.now()
+  const toSend: AggregatedAlert[] = []
+
+  for (const [key, alert] of alertBuffer.entries()) {
+    // 只发送聚合后的告警，或者超过时间窗口的单个告警
+    if (alert.count >= MIN_AGGREGATE_COUNT || now - alert.firstSeen >= FLUSH_INTERVAL) {
+      toSend.push(alert)
+      alertBuffer.delete(key)
+    }
+  }
+
+  // 批量发送
+  for (const alert of toSend) {
+    const aggregatedPayload: AlertPayload = {
+      ...alert.payload,
+      title: alert.count > 1
+        ? `${alert.payload.title} (x${alert.count})`
+        : alert.payload.title,
+      details: {
+        ...alert.payload.details,
+        '聚合数量': alert.count,
+        '首次发生': new Date(alert.firstSeen).toLocaleString('zh-CN'),
+        '最后发生': new Date(alert.lastSeen).toLocaleString('zh-CN'),
+      },
+    }
+
+    await sendAlert(aggregatedPayload)
+  }
+
+  // 如果还有待发送的告警，继续定时
+  if (alertBuffer.size > 0 && !flushTimer) {
+    flushTimer = setTimeout(flushAlertBuffer, FLUSH_INTERVAL)
+  }
+}
+
+/**
+ * 立即刷新所有待发送告警（用于进程退出前）
+ */
+export async function flushAllAlerts(): Promise<void> {
+  if (flushTimer) {
+    clearTimeout(flushTimer)
+    flushTimer = null
+  }
+
+  for (const [key, alert] of alertBuffer.entries()) {
+    const aggregatedPayload: AlertPayload = {
+      ...alert.payload,
+      title: alert.count > 1
+        ? `${alert.payload.title} (x${alert.count})`
+        : alert.payload.title,
+    }
+    await sendAlert(aggregatedPayload)
+    alertBuffer.delete(key)
+  }
+}
+
+// ============================================
+// 告警限流
+// ============================================
+
+const rateLimitCache: Map<string, number> = new Map()
+
+/**
+ * 带限流的告警发送
+ * @param payload 告警内容
+ * @param rateLimitKey 限流 key
+ * @param rateLimitMs 限流时间窗口 (ms)
+ */
+export async function sendRateLimitedAlert(
+  payload: AlertPayload,
+  rateLimitKey: string,
+  rateLimitMs: number = 300000 // 默认 5 分钟
+): Promise<{ sent: boolean; rateLimited: boolean; channels: string[] }> {
+  const now = Date.now()
+  const lastSent = rateLimitCache.get(rateLimitKey)
+
+  if (lastSent && now - lastSent < rateLimitMs) {
+    return { sent: false, rateLimited: true, channels: [] }
+  }
+
+  const result = await sendAlert(payload)
+
+  if (result.sent) {
+    rateLimitCache.set(rateLimitKey, now)
+
+    // 清理过期的缓存
+    for (const [key, time] of rateLimitCache.entries()) {
+      if (now - time > rateLimitMs * 2) {
+        rateLimitCache.delete(key)
+      }
+    }
+  }
+
+  return { ...result, rateLimited: false }
+}
+
+// ============================================
+// 批量执行摘要告警
+// ============================================
+
+export interface ScrapeBatchSummary {
+  totalPlatforms: number
+  successPlatforms: number
+  failedPlatforms: string[]
+  totalDuration: number
+  platformResults: Array<{
+    platform: string
+    success: boolean
+    duration: number
+    traderCount?: number
+    error?: string
+  }>
+}
+
+/**
+ * 发送抓取批量执行摘要
+ */
+export async function sendScrapeBatchSummary(summary: ScrapeBatchSummary): Promise<void> {
+  const { totalPlatforms, successPlatforms, failedPlatforms, totalDuration, platformResults } = summary
+
+  const failureRate = failedPlatforms.length / totalPlatforms
+  const level: AlertPayload['level'] = failureRate > 0.3 ? 'critical' : failureRate > 0.1 ? 'warning' : 'info'
+
+  // 只在有失败或严重降级时发送
+  if (level === 'info' && failedPlatforms.length === 0) {
+    return
+  }
+
+  const failedDetails = platformResults
+    .filter(r => !r.success)
+    .map(r => `${r.platform}: ${r.error?.substring(0, 50) || '未知错误'}`)
+    .join('\n')
+
+  await sendAlert({
+    title: `抓取批量执行${level === 'critical' ? '严重失败' : level === 'warning' ? '部分失败' : '完成'}`,
+    message: `成功: ${successPlatforms}/${totalPlatforms} 平台\n耗时: ${Math.round(totalDuration / 1000)}s\n\n${failedDetails || '无失败'}`,
+    level,
+    details: {
+      '成功率': `${((successPlatforms / totalPlatforms) * 100).toFixed(1)}%`,
+      '失败平台': failedPlatforms.join(', ') || '无',
+      '总耗时': `${Math.round(totalDuration / 1000)}s`,
     },
   })
 }

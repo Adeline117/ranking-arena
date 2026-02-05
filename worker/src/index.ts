@@ -171,8 +171,10 @@ async function runWorker(config: WorkerConfig): Promise<void> {
   })
 
   scheduler.on('job:completed', ({ job, result }) => {
-    const totalSaved = Object.values(result.periods).reduce((a, p) => a + p.saved, 0)
-    const errors = Object.entries(result.periods)
+    type PeriodResult = { saved: number; error?: string }
+    const periods = result.periods as Record<string, PeriodResult>
+    const totalSaved = Object.values(periods).reduce((a, p) => a + p.saved, 0)
+    const errors = Object.entries(periods)
       .filter(([_, p]) => p.error)
       .map(([period, p]) => `${period}: ${p.error}`)
 
