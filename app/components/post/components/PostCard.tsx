@@ -23,7 +23,7 @@ interface PostCardProps {
 }
 
 // 投票标签
-function pollLabel(choice: PollChoice | 'tie', t: (key: any) => string) {
+function pollLabel(choice: PollChoice | 'tie', t: (key: string) => string) {
   if (choice === 'bull') return t('bullish')
   if (choice === 'bear') return t('bearish')
   return t('wait')

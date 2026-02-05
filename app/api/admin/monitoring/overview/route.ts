@@ -25,7 +25,7 @@ export const runtime = 'nodejs'
 /**
  * Fetch data from internal API endpoint
  */
-async function fetchInternalAPI(path: string): Promise<any> {
+async function fetchInternalAPI(path: string): Promise<Record<string, unknown> | null> {
   try {
     const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
     const response = await fetch(`${baseUrl}${path}`, {
@@ -50,7 +50,7 @@ async function fetchInternalAPI(path: string): Promise<any> {
  * Calculate system health score (0-100)
  */
 function calculateHealthScore(metrics: {
-  scraperHealth: { fresh: number; stale: number; critical: number }
+  scraperHealth: { fresh?: number; stale?: number; critical?: number }
   overdueTraders: number
   totalTraders: number
   pendingAnomalies: number
@@ -60,10 +60,13 @@ function calculateHealthScore(metrics: {
   let score = 100
 
   // Scraper health impact (max -30 points)
-  const totalScrapers = scraperHealth.fresh + scraperHealth.stale + scraperHealth.critical
+  const fresh = scraperHealth.fresh ?? 0
+  const stale = scraperHealth.stale ?? 0
+  const critical = scraperHealth.critical ?? 0
+  const totalScrapers = fresh + stale + critical
   if (totalScrapers > 0) {
-    const stalePercent = (scraperHealth.stale / totalScrapers) * 100
-    const criticalPercent = (scraperHealth.critical / totalScrapers) * 100
+    const stalePercent = (stale / totalScrapers) * 100
+    const criticalPercent = (critical / totalScrapers) * 100
     score -= Math.min(30, stalePercent * 0.2 + criticalPercent * 0.5)
   }
 
@@ -108,13 +111,54 @@ function getHealthStatus(score: number): {
   }
 }
 
+interface SchedulerStats {
+  ok?: boolean
+  enabled?: boolean
+  dataFreshness?: { overdueTraders?: number; lastTierUpdate?: string }
+  tierDistribution?: { total?: number; [key: string]: unknown }
+  apiEfficiency?: Record<string, unknown>
+}
+
+interface AnomalyStats {
+  ok?: boolean
+  enabled?: boolean
+  stats?: {
+    bySeverity?: { critical?: number; high?: number; [key: string]: unknown }
+    byStatus?: { pending?: number; [key: string]: unknown }
+    byType?: Record<string, number>
+    total?: number
+  }
+  recentAnomalies?: Array<{
+    id: string
+    trader_id: string
+    platform: string
+    anomaly_type: string
+    field_name: string
+    severity: string
+    status: string
+    detected_at: string
+  }>
+}
+
+interface GeneralStats {
+  ok?: boolean
+  stats?: {
+    scraperHealth?: { fresh?: number; stale?: number; critical?: number }
+    users?: { total: number; newToday: number; newYesterday: number; banned: number }
+    posts?: { total: number; newToday: number; newYesterday: number }
+    comments?: { total: number; newToday: number }
+    reports?: { pending: number; thisWeek: number }
+    groups?: { total: number; pendingApplications: number }
+  }
+}
+
 /**
  * Generate alerts based on metrics
  */
 function generateAlerts(data: {
-  schedulerStats: any
-  anomalyStats: any
-  generalStats: any
+  schedulerStats: SchedulerStats | null
+  anomalyStats: AnomalyStats | null
+  generalStats: GeneralStats | null
 }): Array<{
   id: string
   severity: 'info' | 'warning' | 'critical'
@@ -210,11 +254,15 @@ export async function GET(req: NextRequest) {
     }
 
     // Fetch data from all monitoring endpoints in parallel
-    const [generalStats, schedulerStats, anomalyStats] = await Promise.all([
+    const [generalStatsRaw, schedulerStatsRaw, anomalyStatsRaw] = await Promise.all([
       fetchInternalAPI('/api/admin/stats'),
       fetchInternalAPI('/api/admin/scheduler/stats'),
       fetchInternalAPI('/api/admin/anomalies/stats'),
     ])
+
+    const generalStats = generalStatsRaw as GeneralStats | null
+    const schedulerStats = schedulerStatsRaw as SchedulerStats | null
+    const anomalyStats = anomalyStatsRaw as AnomalyStats | null
 
     // Calculate system health
     const healthMetrics = {
@@ -277,7 +325,7 @@ export async function GET(req: NextRequest) {
       },
 
       // General system stats
-      system: generalStats?.ok ? {
+      system: generalStats?.ok && generalStats.stats ? {
         users: generalStats.stats.users,
         content: {
           posts: generalStats.stats.posts,

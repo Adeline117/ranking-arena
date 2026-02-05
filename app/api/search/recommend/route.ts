@@ -277,7 +277,7 @@ export async function GET(req: NextRequest) {
 
     const supabase = getSupabaseClient()
 
-    let recommendations: any[] = []
+    let recommendations: Array<{ type: string; [key: string]: unknown }> = []
 
     // Get different types of recommendations
     if (type === 'all' || type === 'trending') {
