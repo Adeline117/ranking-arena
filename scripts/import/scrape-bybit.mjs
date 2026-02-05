@@ -6,7 +6,10 @@
  */
 
 import { config } from 'dotenv'
-config({ path: '.env.local' })
+import { dirname, join } from 'path'
+import { fileURLToPath } from 'url'
+const __dirname = dirname(fileURLToPath(import.meta.url))
+config({ path: join(__dirname, '../../.env.local') })
 
 import { createClient } from '@supabase/supabase-js'
 import { chromium } from 'playwright'

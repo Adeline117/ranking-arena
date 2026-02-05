@@ -58,7 +58,6 @@ export const TraderCard = memo(function TraderCard({
           display: 'flex',
           flexDirection: 'column',
           gap: tokens.spacing[3],
-          minHeight: 140,
         }}
       >
         {/* Top row: Rank + Avatar + Name */}
