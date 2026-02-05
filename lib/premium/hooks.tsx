@@ -11,7 +11,28 @@ import {
   type FeatureCheckResult,
   type SubscriptionTier,
   type PremiumFeatureId,
+  SUBSCRIPTION_PLANS,
 } from './index'
+
+// ============================================
+// Feature Limits Export (for UI display)
+// ============================================
+
+const freePlan = SUBSCRIPTION_PLANS.find(p => p.id === 'free')!
+const proPlan = SUBSCRIPTION_PLANS.find(p => p.id === 'pro')!
+
+export const FEATURE_LIMITS = {
+  free: {
+    maxFollows: freePlan.limits.followLimit,
+    historicalDays: freePlan.limits.historicalDataDays,
+    apiCallsPerDay: freePlan.limits.apiCallsPerDay,
+  },
+  pro: {
+    maxFollows: proPlan.limits.followLimit,
+    historicalDays: proPlan.limits.historicalDataDays,
+    apiCallsPerDay: proPlan.limits.apiCallsPerDay,
+  },
+} as const
 
 // ============================================
 // Context

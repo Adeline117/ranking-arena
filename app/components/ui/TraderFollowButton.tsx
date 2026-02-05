@@ -197,7 +197,7 @@ export default function TraderFollowButton({ traderId, userId, initialFollowing 
     const newState = !following
     expectedStateRef.current = newState
 
-    // 超时保护：10秒后自动解锁，防止永久锁定
+    // 超时保护：5秒后自动解锁，防止永久锁定
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current)
     }
@@ -211,7 +211,7 @@ export default function TraderFollowButton({ traderId, userId, initialFollowing 
         }
         showToast(t('timeoutRetry'), 'warning')
       }
-    }, 10000)
+    }, 5000)
 
     // 乐观更新 UI
     setFollowing(newState)
@@ -267,6 +267,9 @@ export default function TraderFollowButton({ traderId, userId, initialFollowing 
     <button
       onClick={handleToggle}
       disabled={isLoading}
+      aria-label={following ? t('unfollowTrader') : t('followTrader')}
+      aria-pressed={following}
+      aria-busy={isLoading}
       style={{
         width: '100%',
         padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,

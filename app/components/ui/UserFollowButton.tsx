@@ -1,8 +1,9 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useToast } from './Toast'
+import { ButtonSpinner } from './LoadingSpinner'
 import { tokens } from '@/lib/design-tokens'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -39,6 +40,16 @@ export default function UserFollowButton({
   const [loading, setLoading] = useState(false)
   const [initialLoading, setInitialLoading] = useState(true) // 初始加载状态
   const pendingRef = useRef(false)
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  // 清理超时计时器
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current)
+      }
+    }
+  }, [])
 
   useEffect(() => {
     if (!currentUserId || currentUserId === targetUserId) {
@@ -77,7 +88,7 @@ export default function UserFollowButton({
     }
   }, [currentUserId, targetUserId, getAuthHeadersAsync])
 
-  const handleToggle = async () => {
+  const handleToggle = useCallback(async () => {
     if (!currentUserId) {
       showToast(t('pleaseLogin'), 'warning')
       router.push('/login')
@@ -90,9 +101,22 @@ export default function UserFollowButton({
     }
 
     // Prevent double-click
-    if (pendingRef.current) return
+    if (pendingRef.current || loading) return
     pendingRef.current = true
     setLoading(true)
+
+    // Timeout protection: 5 seconds
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current)
+    }
+    timeoutRef.current = setTimeout(() => {
+      if (pendingRef.current) {
+        pendingRef.current = false
+        setLoading(false)
+        showToast(t('timeoutRetry'), 'warning')
+      }
+    }, 5000)
+
     try {
       const authHeaders = await getAuthHeadersAsync()
       const response = await fetch('/api/users/follow', {
@@ -106,6 +130,12 @@ export default function UserFollowButton({
           action: following ? 'unfollow' : 'follow',
         }),
       })
+
+      // Clear timeout on success
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current)
+        timeoutRef.current = null
+      }
 
       const result = await response.json()
 
@@ -125,13 +155,18 @@ export default function UserFollowButton({
         showToast(errorMsg, 'error')
       }
     } catch (error) {
+      // Clear timeout on error
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current)
+        timeoutRef.current = null
+      }
       console.error('Toggle follow error:', error)
       showToast(t('operationFailedRetry'), 'error')
     } finally {
       setLoading(false)
       pendingRef.current = false
     }
-  }
+  }, [currentUserId, targetUserId, following, loading, getAuthHeadersAsync, showToast, router, t, onFollowChange])
 
   const sizeStyles = {
     sm: { padding: '10px 16px', fontSize: '13px', borderRadius: '8px', minHeight: '44px' },
@@ -170,6 +205,8 @@ export default function UserFollowButton({
     return (
       <button
         disabled
+        aria-busy="true"
+        aria-label={t('loading')}
         style={{
           ...sizeStyles[size],
           width: fullWidth ? '100%' : 'auto',
@@ -179,9 +216,12 @@ export default function UserFollowButton({
           fontWeight: 700,
           cursor: 'not-allowed',
           opacity: 0.6,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
         }}
       >
-        ...
+        <ButtonSpinner size="xs" />
       </button>
     )
   }
@@ -190,6 +230,9 @@ export default function UserFollowButton({
     <button
       onClick={handleToggle}
       disabled={loading}
+      aria-label={following ? t('unfollowUser') : t('followUser')}
+      aria-pressed={following}
+      aria-busy={loading}
       style={{
         ...sizeStyles[size],
         width: fullWidth ? '100%' : 'auto',
@@ -203,14 +246,14 @@ export default function UserFollowButton({
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        gap: '4px',
+        gap: '6px',
       }}
     >
-      {loading ? '...' : (
-        <>
-          {following ? (isMutual ? t('mutualFollow') : t('unfollow')) : (followedBy ? t('followBack') : t('follow'))}
-        </>
-      )}
+      {loading && <ButtonSpinner size="xs" />}
+      {loading
+        ? (following ? t('unfollowingAction') : t('followingAction'))
+        : (following ? (isMutual ? t('mutualFollow') : t('unfollow')) : (followedBy ? t('followBack') : t('follow')))
+      }
     </button>
   )
 }

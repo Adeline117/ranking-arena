@@ -16,6 +16,14 @@ export { useSubmit, useDebounceClick } from './useSubmit'
 export { useCsrf, getCsrfToken, createCsrfHeaders } from './useCsrf'
 export { useDebounce, useDebouncedCallback } from './useDebounce'
 
+// Async Action (Unified loading, error handling, duplicate prevention)
+export { useAsyncAction, useLoadingAction } from './useAsyncAction'
+export type { AsyncActionOptions, AsyncActionReturn } from './useAsyncAction'
+
+// Touch Gestures (Mobile)
+export { useSwipeGesture, useSwipeNavigation } from './useSwipeGesture'
+export type { SwipeDirection } from './useSwipeGesture'
+
 // 实时更新
 export {
   useRealtime,
