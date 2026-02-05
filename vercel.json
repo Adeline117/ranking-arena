@@ -73,7 +73,14 @@
     { "path": "/api/cron/discover-rankings",   "schedule": "58 */4 * * *" },
     { "path": "/api/scrape/proxy?period=all",  "schedule": "0 2,6,10,14,18,22 * * *" },
     { "path": "/api/cron/subscription-expiry",  "schedule": "0 0 * * *" },
-    { "path": "/api/cron/publish-attestations",  "schedule": "0 1 * * *" }
+    { "path": "/api/cron/publish-attestations",  "schedule": "0 1 * * *" },
+    { "path": "/api/cron/enrich?platform=binance_futures&period=90D&limit=100", "schedule": "10 0,4,8,12,16,20 * * *" },
+    { "path": "/api/cron/enrich?platform=bybit&period=90D&limit=100", "schedule": "15 0,4,8,12,16,20 * * *" },
+    { "path": "/api/cron/enrich?platform=okx_futures&period=90D&limit=150", "schedule": "20 0,4,8,12,16,20 * * *" },
+    { "path": "/api/cron/enrich?platform=binance_futures&period=30D&limit=50", "schedule": "25 0,8,16 * * *" },
+    { "path": "/api/cron/enrich?platform=bybit&period=30D&limit=50", "schedule": "30 0,8,16 * * *" },
+    { "path": "/api/cron/enrich?platform=binance_futures&period=7D&limit=30", "schedule": "35 0,12 * * *" },
+    { "path": "/api/cron/enrich?platform=bybit&period=7D&limit=30", "schedule": "40 0,12 * * *" }
   ],
   "headers": [
     {

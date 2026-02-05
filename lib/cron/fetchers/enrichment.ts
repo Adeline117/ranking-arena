@@ -732,6 +732,165 @@ export async function upsertPortfolio(
 }
 
 // ============================================
+// Phase 4: Derived Metrics Calculation
+// ============================================
+
+/**
+ * Calculate volatility from equity curve (standard deviation of daily returns)
+ * @param curve Equity curve data points
+ * @returns Volatility as a percentage, or null if insufficient data
+ */
+export function calculateVolatility(curve: EquityCurvePoint[]): number | null {
+  if (curve.length < 3) return null
+
+  // Calculate daily returns
+  const returns: number[] = []
+  for (let i = 1; i < curve.length; i++) {
+    const prevRoi = curve[i - 1].roi
+    const currRoi = curve[i].roi
+    // Daily return = change in ROI from previous day
+    const dailyReturn = currRoi - prevRoi
+    returns.push(dailyReturn)
+  }
+
+  if (returns.length < 2) return null
+
+  // Calculate mean return
+  const meanReturn = returns.reduce((sum, r) => sum + r, 0) / returns.length
+
+  // Calculate variance
+  const variance = returns.reduce((sum, r) => sum + Math.pow(r - meanReturn, 2), 0) / returns.length
+
+  // Standard deviation (volatility)
+  const volatility = Math.sqrt(variance)
+
+  // Return as annualized volatility estimate (approximate)
+  return volatility > 0 && volatility < 200 ? volatility : null
+}
+
+/**
+ * Calculate current drawdown from equity curve
+ * @param curve Equity curve data points
+ * @returns Current drawdown as a percentage, or null if insufficient data
+ */
+export function calculateCurrentDrawdown(curve: EquityCurvePoint[]): number | null {
+  if (curve.length < 2) return null
+
+  // Find peak ROI
+  let peakRoi = curve[0].roi
+  for (const point of curve) {
+    if (point.roi > peakRoi) {
+      peakRoi = point.roi
+    }
+  }
+
+  // Current value is the last point
+  const currentRoi = curve[curve.length - 1].roi
+
+  // Current drawdown (distance from peak)
+  // Since we're dealing with ROI percentages, calculate relative drawdown
+  if (peakRoi <= 0) return null
+
+  const drawdown = peakRoi - currentRoi
+  return drawdown > 0 ? drawdown : 0
+}
+
+/**
+ * Calculate max drawdown from equity curve
+ * @param curve Equity curve data points
+ * @returns Max drawdown as a percentage, or null if insufficient data
+ */
+export function calculateMaxDrawdown(curve: EquityCurvePoint[]): number | null {
+  if (curve.length < 2) return null
+
+  let peakRoi = curve[0].roi
+  let maxDD = 0
+
+  for (const point of curve) {
+    if (point.roi > peakRoi) {
+      peakRoi = point.roi
+    }
+    const dd = peakRoi - point.roi
+    if (dd > maxDD) {
+      maxDD = dd
+    }
+  }
+
+  return maxDD > 0 && maxDD < 200 ? maxDD : null
+}
+
+/**
+ * Calculate Sharpe ratio from equity curve (simplified version)
+ * Uses risk-free rate of 0 for simplicity
+ * @param curve Equity curve data points
+ * @param period Period for annualization ('7D', '30D', '90D')
+ * @returns Sharpe ratio, or null if insufficient data
+ */
+export function calculateSharpeRatio(curve: EquityCurvePoint[], period: string): number | null {
+  if (curve.length < 7) return null
+
+  // Calculate daily returns
+  const returns: number[] = []
+  for (let i = 1; i < curve.length; i++) {
+    const dailyReturn = curve[i].roi - curve[i - 1].roi
+    returns.push(dailyReturn)
+  }
+
+  if (returns.length < 5) return null
+
+  // Mean daily return
+  const meanReturn = returns.reduce((sum, r) => sum + r, 0) / returns.length
+
+  // Standard deviation of daily returns
+  const variance = returns.reduce((sum, r) => sum + Math.pow(r - meanReturn, 2), 0) / returns.length
+  const stdDev = Math.sqrt(variance)
+
+  if (stdDev === 0) return null
+
+  // Annualize (approximate - assume 365 trading days)
+  const annualizationFactor = Math.sqrt(365)
+  const sharpe = (meanReturn / stdDev) * annualizationFactor
+
+  // Sanity check
+  return sharpe > -10 && sharpe < 10 ? Math.round(sharpe * 100) / 100 : null
+}
+
+/**
+ * Enhance stats detail with derived metrics from equity curve
+ * @param stats Existing stats detail
+ * @param curve Equity curve data points
+ * @param period Period for calculations
+ * @returns Enhanced stats detail
+ */
+export function enhanceStatsWithDerivedMetrics(
+  stats: StatsDetail,
+  curve: EquityCurvePoint[],
+  period: string
+): StatsDetail {
+  // Only calculate if we don't already have the values
+  if (!stats.volatility && curve.length >= 3) {
+    stats.volatility = calculateVolatility(curve)
+  }
+
+  if (!stats.currentDrawdown && curve.length >= 2) {
+    stats.currentDrawdown = calculateCurrentDrawdown(curve)
+  }
+
+  if (!stats.maxDrawdown && curve.length >= 2) {
+    const calculatedMdd = calculateMaxDrawdown(curve)
+    if (calculatedMdd) {
+      stats.maxDrawdown = calculatedMdd
+    }
+  }
+
+  if (!stats.sharpeRatio && curve.length >= 7) {
+    stats.sharpeRatio = calculateSharpeRatio(curve, period)
+  }
+
+  return stats
+}
+
+// ============================================
 // Asset Breakdown Calculation from Position History
 // ============================================
 

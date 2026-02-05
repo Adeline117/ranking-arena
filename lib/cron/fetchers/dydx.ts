@@ -220,40 +220,38 @@ async function fetchPeriod(
   // Enrich with historical PnL and equity
   await enrichTraders(topTraders)
 
-  // Save equity curves and stats_detail for 90D
-  if (period === '90D') {
-    console.warn(`[${SOURCE}] Saving equity curves and stats details...`)
-    let curvesSaved = 0
-    let statsSaved = 0
-    for (const trader of topTraders.slice(0, ENRICH_LIMIT)) {
-      if (trader.equityCurve.length > 0) {
-        await upsertEquityCurve(supabase, SOURCE, trader.address, period, trader.equityCurve)
-        curvesSaved++
-      }
-      // Save stats_detail
-      const stats: StatsDetail = {
-        totalTrades: null,
-        profitableTradesPct: null,
-        avgHoldingTimeHours: null,
-        avgProfit: null,
-        avgLoss: null,
-        largestWin: null,
-        largestLoss: null,
-        sharpeRatio: null,
-        maxDrawdown: trader.maxDrawdown,
-        currentDrawdown: null,
-        volatility: null,
-        copiersCount: null,
-        copiersPnl: null,
-        aum: trader.equity,
-        winningPositions: null,
-        totalPositions: null,
-      }
-      const { saved: s } = await upsertStatsDetail(supabase, SOURCE, trader.address, period, stats)
-      if (s) statsSaved++
+  // Phase 3: Save equity curves and stats_detail for ALL periods (extended from 90D only)
+  console.warn(`[${SOURCE}] Saving equity curves and stats details for ${period}...`)
+  let curvesSaved = 0
+  let statsSaved = 0
+  for (const trader of topTraders.slice(0, ENRICH_LIMIT)) {
+    if (trader.equityCurve.length > 0) {
+      await upsertEquityCurve(supabase, SOURCE, trader.address, period, trader.equityCurve)
+      curvesSaved++
     }
-    console.warn(`[${SOURCE}] Saved ${curvesSaved} equity curves, ${statsSaved} stats details`)
+    // Save stats_detail
+    const stats: StatsDetail = {
+      totalTrades: null,
+      profitableTradesPct: null,
+      avgHoldingTimeHours: null,
+      avgProfit: null,
+      avgLoss: null,
+      largestWin: null,
+      largestLoss: null,
+      sharpeRatio: null,
+      maxDrawdown: trader.maxDrawdown,
+      currentDrawdown: null,
+      volatility: null,
+      copiersCount: null,
+      copiersPnl: null,
+      aum: trader.equity,
+      winningPositions: null,
+      totalPositions: null,
+    }
+    const { saved: s } = await upsertStatsDetail(supabase, SOURCE, trader.address, period, stats)
+    if (s) statsSaved++
   }
+  console.warn(`[${SOURCE}] Saved ${curvesSaved} curves, ${statsSaved} stats for ${period}`)
 
   // Build TraderData
   const capturedAt = new Date().toISOString()
