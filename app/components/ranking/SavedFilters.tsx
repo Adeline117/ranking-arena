@@ -382,7 +382,7 @@ export default function SavedFilters({
           language={language}
         />
       )}
-    </Box>
+    </div>
   )
 }
 
@@ -628,6 +628,6 @@ function SaveFilterModal({
           </button>
         </Box>
       </Box>
-    </div>
+    </Box>
   )
 }
