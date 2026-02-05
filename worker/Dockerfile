@@ -1,20 +1,15 @@
 # Ranking Arena Worker Service
-# Standalone data fetching service
-# Build context: repository root (specified in railway.json)
+# Build context: repository root
 
-FROM node:20-alpine AS base
+FROM node:20-alpine
 
 WORKDIR /app
 
-# Copy worker package files and install dependencies
-COPY worker/package.json worker/package-lock.json* ./worker/
-WORKDIR /app/worker
-RUN npm ci --omit=dev && npm install -D tsx typescript @types/node
+# Copy worker package.json and install dependencies
+COPY worker/package*.json ./worker/
+RUN cd worker && npm ci && npm cache clean --force
 
-# Switch back to app root
-WORKDIR /app
-
-# Copy shared library files needed by worker
+# Copy shared lib (required by worker imports: ../../../lib/cron/fetchers)
 COPY lib/cron/fetchers/ ./lib/cron/fetchers/
 
 # Copy worker source and config
@@ -25,11 +20,8 @@ COPY worker/tsconfig.json ./worker/
 ENV NODE_ENV=production
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD node -e "console.log('healthy')" || exit 1
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s CMD node -e "process.exit(0)"
 
-# Run from /app/worker directory where node_modules exists
+# Run from worker directory
 WORKDIR /app/worker
-
-# Default command: run all enabled platforms
 CMD ["npx", "tsx", "src/index.ts"]
