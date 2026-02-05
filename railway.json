@@ -3,6 +3,7 @@
   "build": {
     "builder": "DOCKERFILE",
     "dockerfilePath": "worker/Dockerfile",
+    "buildContextPath": ".",
     "watchPatterns": ["worker/**", "lib/cron/fetchers/**"]
   },
   "deploy": {
