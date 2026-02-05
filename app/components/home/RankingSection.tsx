@@ -100,6 +100,15 @@ export default function RankingSection({
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedExchange, setSelectedExchange] = useState<string | null>(null)
 
+  // Reset pagination when time range changes
+  const prevTimeRange = useRef(activeTimeRange)
+  useEffect(() => {
+    if (prevTimeRange.current !== activeTimeRange) {
+      setCurrentPage(1)
+      prevTimeRange.current = activeTimeRange
+    }
+  }, [activeTimeRange])
+
   // 从 URL 恢复筛选状态 + Feature 8: sort/page/search/preset
   useEffect(() => {
     const config: FilterConfig = {}
