@@ -212,7 +212,7 @@ async function fetchPeriod(
     for (const trader of top.slice(0, 50)) {
       const stats: StatsDetail = {
         totalTrades: trader.trades_count,
-        profitableTradesPct: trader.win_rate,
+        profitableTradesPct: trader.win_rate ?? null,
         avgHoldingTimeHours: null,
         avgProfit: null,
         avgLoss: null,
