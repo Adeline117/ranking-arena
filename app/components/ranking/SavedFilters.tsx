@@ -136,7 +136,7 @@ export default function SavedFilters({
   const activeFilter = savedFilters.find(f => f.id === activeFilterId)
 
   return (
-    <Box ref={dropdownRef} style={{ position: 'relative' }}>
+    <div ref={dropdownRef} style={{ position: 'relative' }}>
       {/* 主按钮 */}
       <Box style={{ display: 'flex', gap: tokens.spacing[2] }}>
         {/* 保存当前筛选按钮 */}
@@ -628,6 +628,6 @@ function SaveFilterModal({
           </button>
         </Box>
       </Box>
-    </Box>
+    </div>
   )
 }
