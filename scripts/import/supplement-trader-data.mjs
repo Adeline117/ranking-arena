@@ -423,6 +423,80 @@ async function fetchHyperliquidTraderDetails(address) {
 }
 
 // ============================================
+// OKX API
+// ============================================
+
+const OKX_API = 'https://www.okx.com/api/v5/copytrading'
+
+// Cache OKX traders to avoid repeated API calls
+let okxTradersCache = null
+let okxTradersCacheTime = 0
+const OKX_CACHE_TTL = 60000 // 1 minute
+
+async function fetchOkxAllTraders() {
+  const now = Date.now()
+  if (okxTradersCache && now - okxTradersCacheTime < OKX_CACHE_TTL) {
+    return okxTradersCache
+  }
+
+  try {
+    const response = await fetch(`${OKX_API}/public-lead-traders?instType=SWAP`)
+    if (!response.ok) return []
+
+    const json = await response.json()
+    if (json.code !== '0') return []
+
+    okxTradersCache = json.data?.[0]?.ranks || []
+    okxTradersCacheTime = now
+    return okxTradersCache
+  } catch (e) {
+    console.log(`    ⚠️ OKX fetch error: ${e.message}`)
+    return []
+  }
+}
+
+async function fetchOkxTraderDetails(traderId) {
+  await rateLimit()
+
+  const ranks = await fetchOkxAllTraders()
+
+  // Try multiple matching strategies
+  const traderIdLower = traderId.toLowerCase()
+  const trader = ranks.find(t => {
+    // Match by uniqueName
+    if (t.uniqueName === traderId) return true
+    // Match by nickName (exact)
+    if (t.nickName === traderId) return true
+    // Match by nickName (case-insensitive)
+    if (t.nickName?.toLowerCase() === traderIdLower) return true
+    // Match by base64 encoded nickName (OKX sometimes uses this)
+    try {
+      const decoded = Buffer.from(traderId, 'base64').toString('utf-8')
+      if (t.nickName === decoded) return true
+    } catch {}
+    // Match uniqueName case-insensitive
+    if (t.uniqueName?.toLowerCase() === traderIdLower) return true
+    return false
+  })
+
+  return trader || null
+}
+
+async function fetchOkxTraderPerformance(traderId) {
+  // Use the same fetch function which uses the cache
+  const trader = await fetchOkxTraderDetails(traderId)
+  if (!trader) return null
+
+  // Extract pnlRatios as equity curve
+  const pnlRatios = trader.pnlRatios || []
+  return pnlRatios.map(p => ({
+    date: new Date(parseInt(p.beginTs)).toISOString().split('T')[0],
+    roi: parseFloat(p.pnlRatio || 0) * 100,
+    pnl: 0,
+  }))
+}
+
+// ============================================
 // GMX API (Subgraph)
 // ============================================
 
@@ -635,6 +709,32 @@ async function processTrader(source, traderId) {
         status: 'closed',
       }))
       totalSaved += await savePositionHistory(source, traderId, formattedPositions)
+    }
+
+  } else if (source === 'okx_futures' || source === 'okx_web3') {
+    // Fetch trader data from OKX
+    const trader = await fetchOkxTraderDetails(traderId)
+    if (trader) {
+      // Update profile
+      const profileSaved = await updateTraderProfile(source, traderId, {
+        nickName: trader.nickName,
+        profileUrl: `https://www.okx.com/copy-trading/account?uniqueName=${trader.uniqueName}`,
+      })
+      totalSaved += profileSaved
+
+      // Save stats detail
+      const winRatio = parseFloat(trader.winRatio || 0)
+      const stats = {
+        copiersCount: parseInt(trader.copyTraderNum || 0),
+        aum: parseFloat(trader.aum || 0),
+      }
+      totalSaved += await saveStatsDetail(source, traderId, stats, '90D')
+    }
+
+    // Fetch and save equity curve
+    const equityCurve = await fetchOkxTraderPerformance(traderId)
+    if (equityCurve && equityCurve.length > 0) {
+      totalSaved += await saveEquityCurve(source, traderId, equityCurve, '90D')
     }
 
   } else if (source === 'bybit') {
