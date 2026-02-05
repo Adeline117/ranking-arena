@@ -31,11 +31,15 @@ export default function HomePageClient({
   const {
     traders,
     loading,
+    error,
     activeTimeRange,
     changeTimeRange,
     lastUpdated,
     availableSources,
     refresh,
+    deferredFetchFailed,
+    retryDeferredFetch,
+    isChangingTimeRange,
   } = useTraderData({
     initialTraders: initialTraders as Trader[] | undefined,
     initialLastUpdated,
@@ -82,11 +86,13 @@ export default function HomePageClient({
         {/* 排名榜区域 - 单栏布局，侧边栏由父组件处理 */}
         <RankingSection
           traders={traders}
-          loading={loading}
+          loading={loading || isChangingTimeRange}
           isLoggedIn={isLoggedIn}
           activeTimeRange={activeTimeRange}
           onTimeRangeChange={handleTimeRangeChange}
           lastUpdated={lastUpdated}
+          error={error || (deferredFetchFailed ? '数据加载不完整，点击重试' : null)}
+          onRetry={deferredFetchFailed ? retryDeferredFetch : refresh}
           onRefresh={refresh}
           availableSources={availableSources}
         />
