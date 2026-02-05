@@ -78,10 +78,11 @@ export async function GET(
     }
 
     // 如果有请求者ID，检查请求者是否关注了这些人
+    type FollowingRow = { following?: { id?: string; handle?: string; bio?: string; avatar_url?: string }; created_at?: string }
     let followStatus: Record<string, boolean> = {}
     if (requesterId && following && following.length > 0) {
-      const followingIds = following.map((f: any) => f.following?.id).filter(Boolean)
-      
+      const followingIds = (following as FollowingRow[]).map((f) => f.following?.id).filter(Boolean) as string[]
+
       const { data: myFollows } = await supabase
         .from('user_follows')
         .select('following_id')
@@ -89,21 +90,21 @@ export async function GET(
         .in('following_id', followingIds)
 
       if (myFollows) {
-        followStatus = myFollows.reduce((acc: Record<string, boolean>, f: any) => {
+        followStatus = myFollows.reduce((acc: Record<string, boolean>, f: { following_id: string }) => {
           acc[f.following_id] = true
           return acc
         }, {})
       }
     }
 
-    const formattedFollowing = (following || []).map((f: any) => ({
+    const formattedFollowing = ((following || []) as FollowingRow[]).map((f) => ({
       id: f.following?.id,
       handle: f.following?.handle,
       bio: f.following?.bio,
       avatar_url: f.following?.avatar_url,
       followed_at: f.created_at,
-      is_following: followStatus[f.following?.id] || false
-    })).filter((f: any) => f.id)
+      is_following: followStatus[f.following?.id || ''] || false
+    })).filter((f) => f.id)
 
     return NextResponse.json({
       following: formattedFollowing,

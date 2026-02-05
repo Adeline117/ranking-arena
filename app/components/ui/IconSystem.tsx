@@ -2,11 +2,8 @@
 
 import React from 'react'
 
-export interface IconProps {
+export interface IconProps extends Omit<React.SVGProps<SVGSVGElement>, 'ref'> {
   size?: number
-  style?: React.CSSProperties
-  className?: string
-  [key: string]: any
 }
 
 // Trophy Icon

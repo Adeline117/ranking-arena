@@ -659,14 +659,14 @@ async function getTraderDetails(
       pnlPct: item.pnl_pct || 0,
       status: item.status || 'closed',
     })),
-    feed: posts.map((post: any) => ({
+    feed: posts.map((post: { id: string; title?: string; content?: string; created_at: string; group_id?: string; like_count?: number; is_pinned?: boolean; groups?: { name?: string }[] }) => ({
       id: post.id,
       type: post.group_id ? 'group_post' : 'post',
       title: post.title,
       content: post.content || '',
       time: post.created_at,
       groupId: post.group_id,
-      groupName: (post.groups as { name?: string } | null)?.name,
+      groupName: post.groups?.[0]?.name,
       like_count: post.like_count || 0,
       is_pinned: post.is_pinned || false,
     })),

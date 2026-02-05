@@ -14,6 +14,71 @@ import SchedulerMetrics from './components/SchedulerMetrics'
 import AnomalyMetrics from './components/AnomalyMetrics'
 import SystemMetrics from './components/SystemMetrics'
 
+interface SchedulerData {
+  enabled: boolean
+  tierDistribution?: Record<string, { count: number; percentage: string; refreshInterval: string }>
+  apiEfficiency?: Record<string, unknown>
+  dataFreshness?: { overdueTraders: number; lastTierUpdate?: string }
+  error?: string
+}
+
+interface AnomalyData {
+  enabled: boolean
+  stats?: {
+    total: number
+    byStatus: Record<string, number>
+    bySeverity: Record<string, number>
+    byType: Record<string, number>
+  }
+  recentAnomalies?: Array<{
+    id: string
+    trader_id: string
+    platform: string
+    anomaly_type: string
+    field_name: string
+    severity: string
+    status: string
+    detected_at: string
+  }>
+  error?: string
+}
+
+interface SystemData {
+  users?: {
+    total: number
+    newToday: number
+    newYesterday: number
+    banned: number
+  }
+  content?: {
+    posts: {
+      total: number
+      newToday: number
+      newYesterday: number
+    }
+    comments: {
+      total: number
+      newToday: number
+    }
+  }
+  moderation?: {
+    reports: {
+      pending: number
+      thisWeek: number
+    }
+    groups: {
+      total: number
+      pendingApplications: number
+    }
+  }
+  scraperHealth?: {
+    fresh: number
+    stale: number
+    critical: number
+  }
+  error?: string
+}
+
 interface MonitoringData {
   ok: boolean
   timestamp: string
@@ -35,9 +100,9 @@ interface MonitoringData {
       timestamp: string
     }>
   }
-  scheduler: any
-  anomalyDetection: any
-  system: any
+  scheduler: SchedulerData
+  anomalyDetection: AnomalyData
+  system: SystemData
 }
 
 export default function MonitoringPage() {
