@@ -9,7 +9,11 @@ import { createClient } from '@supabase/supabase-js'
 import { execSync, spawn } from 'child_process'
 import { chromium } from 'playwright'
 
-try { for (const l of readFileSync('.env.local','utf8').split('\n')) {
+import { dirname, join } from 'path'
+import { fileURLToPath } from 'url'
+const __dirname = dirname(fileURLToPath(import.meta.url))
+const envPath = join(__dirname, '../../.env.local')
+try { for (const l of readFileSync(envPath,'utf8').split('\n')) {
   const m=l.match(/^([^#=]+)=["']?(.+?)["']?$/); if(m&&!process.env[m[1]]) process.env[m[1]]=m[2]
 }} catch{}
 const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
