@@ -28,7 +28,8 @@ const API_URL =
 const TARGET = 500
 const PAGE_SIZE = 20
 
-const PERIOD_MAP: Record<string, number> = { '7D': 7, '30D': 30, '90D': 90 }
+// Futures API may use either number or string format - trying both
+const PERIOD_MAP: Record<string, string> = { '7D': '7D', '30D': '30D', '90D': '90D' }
 
 const HEADERS: Record<string, string> = {
   'Content-Type': 'application/json',
@@ -73,7 +74,7 @@ async function fetchPeriod(
   supabase: SupabaseClient,
   period: string
 ): Promise<{ total: number; saved: number; error?: string }> {
-  const timeRange = PERIOD_MAP[period] || 90
+  const timeRange = PERIOD_MAP[period] || '90D'
   const maxPages = Math.ceil(TARGET / PAGE_SIZE) + 1
   const allTraders: BinanceTrader[] = []
   const seen = new Set<string>()
@@ -89,6 +90,7 @@ async function fetchPeriod(
         hideFull: false,
         nickname: '',
         order: 'DESC',
+        portfolioType: 'ALL',
       }
 
       let data: BinanceApiResponse
