@@ -34,6 +34,47 @@ import { sleep } from '@/lib/cron/fetchers/shared'
 import { captureMessage } from '@/lib/utils/logger'
 import { sendRateLimitedAlert } from '@/lib/alerts/send-alert'
 
+// Retry configuration
+const RETRY_CONFIG = {
+  maxAttempts: 3,
+  baseDelayMs: 1000,
+  maxDelayMs: 10000,
+}
+
+/**
+ * Execute a function with exponential backoff retry
+ */
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  context: string,
+  options = RETRY_CONFIG
+): Promise<T> {
+  let lastError: Error | undefined
+
+  for (let attempt = 1; attempt <= options.maxAttempts; attempt++) {
+    try {
+      return await fn()
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error))
+
+      if (attempt === options.maxAttempts) {
+        console.error(`[enrich] ${context} failed after ${attempt} attempts:`, lastError.message)
+        throw lastError
+      }
+
+      // Exponential backoff with jitter
+      const delay = Math.min(
+        options.baseDelayMs * Math.pow(2, attempt - 1) + Math.random() * 500,
+        options.maxDelayMs
+      )
+      console.warn(`[enrich] ${context} attempt ${attempt} failed, retrying in ${Math.round(delay)}ms...`)
+      await sleep(delay)
+    }
+  }
+
+  throw lastError
+}
+
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -175,23 +216,35 @@ async function handleEnrichment(req: Request) {
           try {
             let curve: EquityCurvePoint[] = []
 
-            // Fetch and save equity curve
+            // Fetch and save equity curve with retry
             if (config.fetchEquityCurve) {
-              curve = await config.fetchEquityCurve(traderId, days)
+              curve = await withRetry(
+                () => config.fetchEquityCurve!(traderId, days),
+                `${platformKey}:${traderId} equity curve`
+              )
               if (curve.length > 0) {
-                await upsertEquityCurve(supabase, platformKey, traderId, period, curve)
+                await withRetry(
+                  () => upsertEquityCurve(supabase, platformKey, traderId, period, curve),
+                  `${platformKey}:${traderId} save equity curve`
+                )
               }
             }
 
-            // Fetch and save stats detail
+            // Fetch and save stats detail with retry
             if (config.fetchStatsDetail) {
-              let stats = await config.fetchStatsDetail(traderId)
+              let stats = await withRetry(
+                () => config.fetchStatsDetail!(traderId),
+                `${platformKey}:${traderId} stats detail`
+              )
               if (stats) {
                 // Phase 4: Enhance stats with derived metrics from equity curve
                 if (curve.length > 0) {
                   stats = enhanceStatsWithDerivedMetrics(stats, curve, period)
                 }
-                await upsertStatsDetail(supabase, platformKey, traderId, period, stats)
+                await withRetry(
+                  () => upsertStatsDetail(supabase, platformKey, traderId, period, stats!),
+                  `${platformKey}:${traderId} save stats detail`
+                )
               }
             }
 

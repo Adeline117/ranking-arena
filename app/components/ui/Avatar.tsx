@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, type ReactElement } from 'react'
+import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
 import {
@@ -84,12 +85,12 @@ export default function Avatar({
               </Text>
             </Box>
           )}
-          <img
+          <Image
             src={finalAvatarUrl}
             alt={name || userId || 'Avatar'}
-            loading="lazy"
-            decoding="async"
-            referrerPolicy="origin-when-cross-origin"
+            width={size}
+            height={size}
+            unoptimized={finalAvatarUrl.includes('bgstatic.com')}
             style={{
               width: '100%',
               height: '100%',
@@ -99,23 +100,7 @@ export default function Avatar({
             onLoad={() => {
               setImageLoading(false)
             }}
-            onError={(e) => {
-              const img = e.target as HTMLImageElement
-              const currentSrc = img?.src || finalAvatarUrl || ''
-              
-              // Bitget URL 可能需要添加扩展名
-              const hasExtension = currentSrc && /\.(jpg|jpeg|png|gif|webp|svg|ico)(\?|$|#)/i.test(currentSrc)
-              const isBitgetUrl = currentSrc.includes('bgstatic.com')
-              
-              // 如果是 Bitget URL 且没有扩展名，尝试添加扩展名
-              if (isBitgetUrl && !hasExtension && currentSrc && !currentSrc.includes('?')) {
-                const urlWithJpg = `${currentSrc}.jpg`
-                if (img && img.src === currentSrc) {
-                  img.src = urlWithJpg
-                  return
-                }
-              }
-              
+            onError={() => {
               setImageError(true)
               setImageLoading(false)
             }}

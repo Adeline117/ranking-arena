@@ -8,6 +8,13 @@ import { Box, Text } from '../base'
 import { CloseIcon } from '../ui/icons'
 import { supabase } from '@/lib/supabase/client'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import {
+  initializeHistory,
+  addToHistory,
+  removeFromHistory,
+  clearHistory,
+} from '@/lib/services/search-history'
+import { useAuthSession } from '@/lib/hooks/useAuthSession'
 
 interface SearchDropdownProps {
   open: boolean
@@ -44,6 +51,7 @@ interface SearchResult {
 export default function SearchDropdown({ open, query, onClose }: SearchDropdownProps) {
   const router = useRouter()
   const { language } = useLanguage()
+  const { userId, isLoggedIn, authChecked } = useAuthSession()
   const [searchHistory, setSearchHistory] = useState<string[]>([])
   const [hotPosts, setHotPosts] = useState<HotPost[]>([])
   const [loading, setLoading] = useState(false)
@@ -55,20 +63,17 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
   const abortControllerRef = useRef<AbortController | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
-  // 加载搜索历史
+  // 加载搜索历史 - 当认证状态确定后加载
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const stored = localStorage.getItem('ranking-arena-recent-searches')
-      if (stored) {
-        try {
-          setSearchHistory(JSON.parse(stored))
-        } catch {
-          // Silently handle corrupted localStorage data
-          localStorage.removeItem('ranking-arena-recent-searches')
-        }
-      }
+    if (!authChecked) return
+
+    const loadHistory = async () => {
+      const history = await initializeHistory(userId ?? undefined)
+      setSearchHistory(history)
     }
-  }, [])
+
+    loadHistory()
+  }, [authChecked, userId, isLoggedIn])
 
   // 从数据库加载热榜帖子
   const loadHotPosts = useCallback(async () => {
@@ -282,7 +287,14 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
         abortControllerRef.current.abort()
       }
     }
-  }, [query, open])
+  }, [query, open, language])
+
+  // 保存搜索到历史记录
+  const saveToHistory = useCallback(async (searchQuery: string) => {
+    if (!searchQuery.trim()) return
+    const newHistory = await addToHistory(searchQuery, userId ?? undefined)
+    setSearchHistory(newHistory)
+  }, [userId])
 
   // Keyboard navigation
   useEffect(() => {
@@ -319,42 +331,22 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
 
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [open, searchResults, selectedIndex, query, onClose, router])
+  }, [open, searchResults, selectedIndex, query, onClose, router, saveToHistory])
 
   // 删除单个历史记录
-  const handleDeleteHistory = (term: string, e: React.MouseEvent) => {
+  const handleDeleteHistory = async (term: string, e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
-    const newHistory = searchHistory.filter((item) => item !== term)
+    const newHistory = await removeFromHistory(term, userId ?? undefined)
     setSearchHistory(newHistory)
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('ranking-arena-recent-searches', JSON.stringify(newHistory))
-    }
   }
 
   // 清空所有历史记录
-  const handleClearAllHistory = (e: React.MouseEvent) => {
+  const handleClearAllHistory = async (e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
+    await clearHistory(userId ?? undefined)
     setSearchHistory([])
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('ranking-arena-recent-searches')
-    }
-  }
-
-  // 保存搜索到历史记录
-  const saveToHistory = (searchQuery: string) => {
-    if (!searchQuery.trim()) return
-
-    const newHistory = [
-      searchQuery.trim(),
-      ...searchHistory.filter(item => item !== searchQuery.trim())
-    ].slice(0, 10)
-
-    setSearchHistory(newHistory)
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('ranking-arena-recent-searches', JSON.stringify(newHistory))
-    }
   }
 
   // 点击搜索结果时保存到历史
