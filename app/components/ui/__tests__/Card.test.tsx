@@ -35,7 +35,7 @@ jest.mock('@/lib/design-tokens', () => ({
 }))
 
 // Mock Box and Text components
-jest.mock('../../Base', () => ({
+jest.mock('../../base', () => ({
   Box: ({ children, className, style, onClick, onMouseEnter, onMouseLeave, ...props }: React.HTMLAttributes<HTMLDivElement> & { p?: number; radius?: string }) => (
     <div className={className} style={style} onClick={onClick} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave} {...props}>
       {children}
