@@ -23,9 +23,11 @@ const mockGet = jest.fn().mockReturnValue({ value: STORED_NONCE })
 const mockCookies = jest.fn().mockResolvedValue({ get: mockGet, delete: mockDelete })
 jest.mock('next/headers', () => ({ cookies: () => mockCookies() }))
 
+import { isAddress } from 'viem'
 jest.mock('viem', () => ({
   isAddress: jest.fn((addr: string) => /^0x[0-9a-fA-F]{40}$/.test(addr)),
 }))
+const mockIsAddress = isAddress as jest.Mock
 
 const mockVerify = jest.fn()
 jest.mock('siwe', () => ({
@@ -115,8 +117,7 @@ describe('POST /api/auth/siwe/link', () => {
       success: true,
       data: { address: 'not-an-address' },
     })
-    const { isAddress } = require('viem')
-    ;(isAddress as jest.Mock).mockReturnValueOnce(false)
+    mockIsAddress.mockReturnValueOnce(false)
 
     const res = await POST(makeRequest({ message: 'hello', signature: '0xabc' }, 'token'))
     expect(res.status).toBe(400)
