@@ -14,6 +14,7 @@ const KeyboardShortcuts = dynamic(() => import("./components/Providers/KeyboardS
 const GlobalProgress = dynamic(() => import("./components/ui/GlobalProgress").then(m => ({ default: m.GlobalProgress })));
 const ServiceWorkerRegistration = dynamic(() => import("./components/Providers/ServiceWorkerRegistration").then(m => ({ default: m.ServiceWorkerRegistration })));
 const CookieConsent = dynamic(() => import("./components/ui/CookieConsent"));
+const WelcomeGuide = dynamic(() => import("./components/ui/WelcomeGuide"));
 const WebVitals = dynamic(() => import("./components/Providers/WebVitals").then(m => ({ default: m.WebVitals })));
 const SpeedInsights = dynamic(() => import("@vercel/speed-insights/next").then(m => ({ default: m.SpeedInsights })));
 import { getCriticalCss, getResourceHints } from "@/lib/performance/critical-css";
@@ -143,6 +144,7 @@ export default function RootLayout({
               {children}
             </main>
             <CookieConsent />
+            <WelcomeGuide />
           </CapacitorProvider>
         </Providers>
       </body>

@@ -10,8 +10,20 @@
       "schedule": "0 */3 * * *"
     },
     {
-      "path": "/api/cron/fetch-details?concurrency=50&limit=300",
-      "schedule": "30 */2 * * *"
+      "path": "/api/cron/fetch-details?tier=hot&concurrency=50&limit=100",
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cron/fetch-details?tier=active&concurrency=40&limit=200",
+      "schedule": "15 * * * *"
+    },
+    {
+      "path": "/api/cron/fetch-details?tier=normal&concurrency=30&limit=300",
+      "schedule": "30 */4 * * *"
+    },
+    {
+      "path": "/api/cron/fetch-details?tier=dormant&concurrency=20&limit=500",
+      "schedule": "30 3 * * *"
     },
     {
       "path": "/api/cron/run-worker",
@@ -81,7 +93,8 @@
     { "path": "/api/cron/enrich?platform=bybit&period=30D&limit=50", "schedule": "30 0,8,16 * * *" },
     { "path": "/api/cron/enrich?platform=binance_futures&period=7D&limit=30", "schedule": "35 0,12 * * *" },
     { "path": "/api/cron/enrich?platform=bybit&period=7D&limit=30", "schedule": "40 0,12 * * *" },
-    { "path": "/api/cron/check-enrichment-freshness", "schedule": "45 */6 * * *" }
+    { "path": "/api/cron/check-enrichment-freshness", "schedule": "45 */6 * * *" },
+    { "path": "/api/cron/detect-anomalies", "schedule": "0 3 * * *" }
   ],
   "headers": [
     {
