@@ -54,10 +54,12 @@ export interface TraderData {
 export interface TraderSourceRow {
   source: DataSource
   source_trader_id: string
+  source_type?: string
   handle: string | null
   profile_url: string | null
-  avatar_url: string | null
-  market_type: string | null
+  avatar_url?: string | null
+  market_type?: string | null
+  is_active?: boolean
   created_at?: string
   updated_at?: string
 }
@@ -66,13 +68,14 @@ export interface TraderSnapshotRow {
   source: DataSource
   source_trader_id: string
   season_id: string
+  rank?: number | null
   roi: number | null
   pnl: number | null
   win_rate: number | null
   max_drawdown: number | null
   trades_count: number | null
   followers: number | null
-  arena_score: number | null
+  arena_score?: number | null
   captured_at: string
 }
 
