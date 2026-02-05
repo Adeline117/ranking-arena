@@ -1,15 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthUser } from '@/lib/supabase/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
-import { checkNFTMembership } from '@/lib/web3/nft'
+import { checkNFTMembership, getTokenExpiry } from '@/lib/web3/nft'
+import { getUserTokenId } from '@/lib/web3/mint'
 
 /**
  * GET /api/membership/nft
  *
  * Check if the authenticated user has a valid NFT membership.
- * Looks up wallet_address from user_profiles, then checks on-chain.
+ * Returns detailed NFT info including tokenId and expiry date.
  *
- * Response: { hasNFT: boolean, walletAddress: string | null }
+ * Response: { hasNft: boolean, tokenId?: string, walletAddress?: string, expiresAt?: string }
  */
 export async function GET(request: NextRequest) {
   try {
@@ -27,15 +28,28 @@ export async function GET(request: NextRequest) {
 
     if (!profile?.wallet_address) {
       return NextResponse.json({
-        hasNFT: false,
+        hasNft: false,
         walletAddress: null,
       })
     }
 
-    const hasNFT = await checkNFTMembership(profile.wallet_address)
+    const hasNft = await checkNFTMembership(profile.wallet_address)
 
-    // If user has NFT but their subscription_tier is not pro, update it
-    if (hasNFT) {
+    // Get detailed NFT info if user has one
+    let tokenId: string | undefined
+    let expiresAt: string | undefined
+
+    if (hasNft) {
+      const tokenIdBigInt = await getUserTokenId(profile.wallet_address)
+      if (tokenIdBigInt !== null) {
+        tokenId = tokenIdBigInt.toString()
+        const expiry = await getTokenExpiry(tokenIdBigInt)
+        if (expiry) {
+          expiresAt = expiry.toISOString()
+        }
+      }
+
+      // If user has NFT but their subscription_tier is not pro, update it
       await supabase
         .from('user_profiles')
         .update({ subscription_tier: 'pro' })
@@ -44,8 +58,10 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.json({
-      hasNFT,
+      hasNft,
+      tokenId,
       walletAddress: profile.wallet_address,
+      expiresAt,
     })
   } catch (err) {
     console.error('[NFT check] Error:', err)

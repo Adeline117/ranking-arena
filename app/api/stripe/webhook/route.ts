@@ -4,6 +4,7 @@ import Stripe from 'stripe'
 import { stripe, constructWebhookEvent, SUBSCRIPTION_STATUS_MAP } from '@/lib/stripe'
 import { joinProOfficialGroup, leaveProOfficialGroup } from '@/app/api/pro-official-group/route'
 import { createLogger } from '@/lib/utils/logger'
+import { mintMembershipNFT, isMintingConfigured } from '@/lib/web3/mint'
 
 // 懒加载 Supabase Admin 客户端
 let _supabase: SupabaseClient | null = null
@@ -269,6 +270,9 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
     } catch (joinError) {
       logger.error('Error joining Pro official group', { error: joinError })
     }
+
+    // 自动铸造 NFT 会员证
+    await mintNFTForUser(userId, plan || 'monthly')
 
     logger.info(`Checkout completed for user ${userId}`, { plan, subscriptionId })
   } catch (err: unknown) {
@@ -677,6 +681,91 @@ async function handleRefundUpdated(refund: Stripe.Refund) {
   // 如果退款失败，可以在这里处理
   if (refund.status === 'failed') {
     logger.warn('Refund failed', { refundId: refund.id, reason: refund.failure_reason })
+  }
+}
+
+// 自动铸造 NFT 给用户
+async function mintNFTForUser(userId: string, plan: string) {
+  // 检查 NFT 铸造是否配置
+  if (!isMintingConfigured()) {
+    logger.info('NFT minting not configured, skipping', { userId })
+    return
+  }
+
+  try {
+    // 获取用户钱包地址
+    const { data: profile } = await getSupabase()
+      .from('user_profiles')
+      .select('wallet_address')
+      .eq('id', userId)
+      .single()
+
+    if (!profile?.wallet_address) {
+      logger.info('User has no wallet address, NFT minting skipped', { userId })
+      // 发送通知提醒用户链接钱包
+      await getSupabase()
+        .from('notifications')
+        .insert({
+          user_id: userId,
+          type: 'nft_pending',
+          title: '链接钱包领取 NFT 会员证',
+          body: '您已成功订阅 Pro 会员！链接钱包后即可获得 NFT 会员证明。',
+          data: { plan },
+        })
+      return
+    }
+
+    // 铸造 NFT
+    const mintPlan = plan === 'yearly' ? 'yearly' : 'monthly'
+    const result = await mintMembershipNFT(profile.wallet_address, mintPlan)
+
+    if (result.success) {
+      logger.info('NFT minted successfully', {
+        userId,
+        walletAddress: profile.wallet_address,
+        tokenId: result.tokenId?.toString(),
+        txHash: result.txHash,
+      })
+
+      // 记录 NFT 铸造信息
+      await getSupabase()
+        .from('user_profiles')
+        .update({
+          nft_token_id: result.tokenId?.toString(),
+          nft_minted_at: new Date().toISOString(),
+        })
+        .eq('id', userId)
+
+      // 发送成功通知
+      await getSupabase()
+        .from('notifications')
+        .insert({
+          user_id: userId,
+          type: 'nft_minted',
+          title: 'NFT 会员证已铸造',
+          body: `您的 Arena Pro NFT 会员证已成功铸造到钱包 ${profile.wallet_address.slice(0, 6)}...${profile.wallet_address.slice(-4)}`,
+          data: {
+            tokenId: result.tokenId?.toString(),
+            txHash: result.txHash,
+            plan,
+          },
+        })
+    } else {
+      logger.error('NFT minting failed', { userId, error: result.error })
+      // 记录失败，稍后可以重试
+      await getSupabase()
+        .from('nft_mint_queue')
+        .upsert({
+          user_id: userId,
+          wallet_address: profile.wallet_address,
+          plan: mintPlan,
+          status: 'pending',
+          error: result.error,
+          created_at: new Date().toISOString(),
+        }, { onConflict: 'user_id', ignoreDuplicates: true })
+    }
+  } catch (err) {
+    logger.error('Error in mintNFTForUser', { userId, error: err })
   }
 }
 
