@@ -1,4 +1,5 @@
 {
+  "regions": ["sin1"],
   "crons": [
     {
       "path": "/api/cron/fetch-followed-traders",
@@ -69,7 +70,9 @@
     { "path": "/api/cron/fetch-traders/synthetix",      "schedule": "16 1,5,9,13,17,21 * * *" },
     { "path": "/api/cron/discover-traders",    "schedule": "56 */4 * * *" },
     { "path": "/api/cron/discover-rankings",   "schedule": "58 */4 * * *" },
-    { "path": "/api/scrape/proxy?period=all",  "schedule": "0 2,6,10,14,18,22 * * *" }
+    { "path": "/api/scrape/proxy?period=all",  "schedule": "0 2,6,10,14,18,22 * * *" },
+    { "path": "/api/cron/subscription-expiry",  "schedule": "0 0 * * *" },
+    { "path": "/api/cron/publish-attestations",  "schedule": "0 1 * * *" }
   ],
   "headers": [
     {
