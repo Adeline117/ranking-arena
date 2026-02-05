@@ -156,12 +156,13 @@ export const COPY_TRADING_ABI = [
 ] as const
 
 // ── Contract Addresses (per chain) ──
+// Update these after deployment - see contracts/DEPLOYMENT.md
 
 export const COPY_TRADING_ADDRESSES: Record<number, Address | undefined> = {
-  8453: undefined, // Base mainnet - not deployed
-  84532: undefined, // Base Sepolia - not deployed
-  42161: undefined, // Arbitrum - not deployed
-  10: undefined, // Optimism - not deployed
+  8453: process.env.NEXT_PUBLIC_COPY_TRADING_BASE as Address | undefined, // Base mainnet
+  84532: process.env.NEXT_PUBLIC_COPY_TRADING_BASE_SEPOLIA as Address | undefined, // Base Sepolia
+  42161: process.env.NEXT_PUBLIC_COPY_TRADING_ARBITRUM as Address | undefined, // Arbitrum
+  10: process.env.NEXT_PUBLIC_COPY_TRADING_OPTIMISM as Address | undefined, // Optimism
 }
 
 // ── Utility Functions ──

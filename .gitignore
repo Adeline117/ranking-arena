@@ -93,3 +93,9 @@ lib/cron/fetchers/*.js
 lib/cron/fetchers/*.js.map
 lib/cron/fetchers/*.d.ts
 lib/cron/fetchers/*.d.ts.map
+
+# Foundry (Smart Contract Development)
+/broadcast/
+/cache/
+/contracts/out/
+foundry.lock
