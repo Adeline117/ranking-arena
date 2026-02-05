@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '../base'
 import { useLanguage } from '../Providers/LanguageProvider'
+import { useToast } from '../ui/Toast'
 import { useTraderAlerts, TraderAlert } from '@/lib/hooks/useTraderAlerts'
 
 interface TraderAlertButtonProps {
@@ -13,40 +14,59 @@ interface TraderAlertButtonProps {
 }
 
 export default function TraderAlertButton({ traderId, platform, traderName }: TraderAlertButtonProps) {
-  const { language } = useLanguage()
+  const { language, t } = useLanguage()
+  const { showToast } = useToast()
   const { alerts, addAlert, removeAlert, hasAlert, getAlertsForTrader } = useTraderAlerts()
   const [showModal, setShowModal] = useState(false)
   const [alertType, setAlertType] = useState<TraderAlert['alertType']>('roi_change')
   const [threshold, setThreshold] = useState(10)
+  const [loading, setLoading] = useState(false)
 
   const traderAlerts = getAlertsForTrader(traderId, platform)
   const isWatched = hasAlert(traderId, platform)
 
-  const handleAddAlert = () => {
-    addAlert({
-      traderId,
-      platform,
-      traderName,
-      alertType,
-      threshold,
-      enabled: true,
-    })
-    setShowModal(false)
+  const handleAddAlert = async () => {
+    if (loading) return
+    setLoading(true)
+    try {
+      addAlert({
+        traderId,
+        platform,
+        traderName,
+        alertType,
+        threshold,
+        enabled: true,
+      })
+      showToast(language === 'zh' ? '提醒已添加' : 'Alert added', 'success')
+      setShowModal(false)
+    } catch {
+      showToast(language === 'zh' ? '添加失败' : 'Failed to add alert', 'error')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleRemoveAlert = (alertId: string) => {
+    removeAlert(alertId)
+    showToast(language === 'zh' ? '提醒已删除' : 'Alert removed', 'success')
   }
 
   const handleRemoveAll = () => {
     traderAlerts.forEach(a => removeAlert(a.id))
+    showToast(language === 'zh' ? '所有提醒已删除' : 'All alerts removed', 'success')
   }
 
   return (
     <>
       <button
+        className="btn-press"
         onClick={() => setShowModal(true)}
         style={{
           display: 'flex',
           alignItems: 'center',
           gap: tokens.spacing[2],
           padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
+          minHeight: 44,
           borderRadius: tokens.radius.lg,
           border: `1px solid ${isWatched ? tokens.colors.accent.warning : tokens.colors.border.primary}`,
           background: isWatched ? `${tokens.colors.accent.warning}15` : tokens.colors.bg.secondary,
@@ -129,13 +149,16 @@ export default function TraderAlertButton({ traderId, platform, traderName }: Tr
                       {alert.alertType === 'drawdown' && `DD > ${alert.threshold}%`}
                     </Text>
                     <button
-                      onClick={() => removeAlert(alert.id)}
+                      className="btn-press"
+                      onClick={() => handleRemoveAlert(alert.id)}
                       style={{
                         background: 'none',
                         border: 'none',
                         color: tokens.colors.accent.error,
                         cursor: 'pointer',
-                        padding: tokens.spacing[1],
+                        padding: tokens.spacing[2],
+                        minWidth: 32,
+                        minHeight: 32,
                       }}
                     >
                       ✕
@@ -210,9 +233,13 @@ export default function TraderAlertButton({ traderId, platform, traderName }: Tr
               <Button
                 variant="primary"
                 onClick={handleAddAlert}
+                disabled={loading}
                 style={{ flex: 1 }}
               >
-                {language === 'zh' ? '添加提醒' : 'Add Alert'}
+                {loading
+                  ? (language === 'zh' ? '添加中...' : 'Adding...')
+                  : (language === 'zh' ? '添加提醒' : 'Add Alert')
+                }
               </Button>
             </Box>
           </div>

@@ -496,7 +496,7 @@ export default function TopNav({ email }: { email: string | null }) {
                 alignItems: 'center',
                 justifyContent: 'center',
                 minWidth: 72,
-                height: 36,
+                height: 44,
                 border: 'none',
                 boxShadow: `0 4px 12px ${tokens.colors.accent.primary}40`,
               }}
@@ -758,7 +758,7 @@ export default function TopNav({ email }: { email: string | null }) {
                 alignItems: 'center',
                 justifyContent: 'center',
                 minWidth: 72,
-                height: 36,
+                height: 44,
                 border: 'none',
                 boxShadow: `0 4px 12px ${tokens.colors.accent.primary}40`,
               }}
