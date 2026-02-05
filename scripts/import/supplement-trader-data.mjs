@@ -423,6 +423,87 @@ async function fetchHyperliquidTraderDetails(address) {
 }
 
 // ============================================
+// GMX API (Subgraph)
+// ============================================
+
+const GMX_SUBGRAPH = 'https://gmx.squids.live/gmx-synthetics-arbitrum:prod/api/graphql'
+
+async function fetchGmxTraderDetails(address) {
+  await rateLimit()
+
+  try {
+    const query = `{
+      accountStats(where: {id_containsInsensitive: "${address}"}, limit: 1) {
+        id
+        wins
+        losses
+        realizedPnl
+        maxCapital
+        closedCount
+        volume
+      }
+    }`
+
+    const response = await fetch(GMX_SUBGRAPH, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query }),
+    })
+
+    if (!response.ok) return null
+
+    const data = await response.json()
+    const stats = data?.data?.accountStats?.[0]
+
+    if (!stats) return null
+
+    return stats
+  } catch (e) {
+    console.log(`    ⚠️ GMX fetch error: ${e.message}`)
+    return null
+  }
+}
+
+async function fetchGmxPositionHistory(address) {
+  await rateLimit()
+
+  try {
+    const query = `{
+      positionDecreases(
+        where: {account_containsInsensitive: "${address}"}
+        orderBy: timestamp_DESC
+        limit: 100
+      ) {
+        id
+        account
+        market
+        collateralToken
+        sizeInUsd
+        sizeDeltaUsd
+        isLong
+        timestamp
+        basePnlUsd
+        priceImpactUsd
+      }
+    }`
+
+    const response = await fetch(GMX_SUBGRAPH, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query }),
+    })
+
+    if (!response.ok) return []
+
+    const data = await response.json()
+    return data?.data?.positionDecreases || []
+  } catch (e) {
+    console.log(`    ⚠️ GMX positions fetch error: ${e.message}`)
+    return []
+  }
+}
+
+// ============================================
 // Main processing
 // ============================================
 
@@ -507,6 +588,53 @@ async function processTrader(source, traderId) {
         }
         totalSaved += await saveStatsDetail(source, traderId, stats, period)
       }
+    }
+
+  } else if (source === 'gmx') {
+    // Fetch trader stats from GMX subgraph
+    const trader = await fetchGmxTraderDetails(traderId)
+    if (trader) {
+      // Update profile
+      const profileSaved = await updateTraderProfile(source, traderId, {
+        nickName: traderId.slice(0, 10) + '...',
+        profileUrl: `https://app.gmx.io/#/leaderboard`,
+      })
+      totalSaved += profileSaved
+
+      // Calculate win rate and save stats
+      const wins = parseInt(trader.wins || 0)
+      const losses = parseInt(trader.losses || 0)
+      const closedCount = parseInt(trader.closedCount || 0)
+      const realizedPnl = parseFloat(trader.realizedPnl || 0) / 1e30
+      const maxCapital = parseFloat(trader.maxCapital || 0) / 1e30
+
+      const stats = {
+        winningPositions: wins,
+        totalPositions: closedCount,
+        copiersPnl: realizedPnl,
+      }
+      totalSaved += await saveStatsDetail(source, traderId, stats, '90D')
+    }
+
+    // Fetch position history
+    const positions = await fetchGmxPositionHistory(traderId)
+    if (positions.length > 0) {
+      const formattedPositions = positions.map(pos => ({
+        symbol: pos.market || 'UNKNOWN',
+        direction: pos.isLong ? 'long' : 'short',
+        positionType: 'perpetual',
+        marginMode: 'cross',
+        openTime: null,
+        closeTime: new Date(parseInt(pos.timestamp) * 1000).toISOString(),
+        entryPrice: null,
+        exitPrice: null,
+        maxPositionSize: parseFloat(pos.sizeInUsd || 0) / 1e30,
+        closedSize: parseFloat(pos.sizeDeltaUsd || 0) / 1e30,
+        pnl: parseFloat(pos.basePnlUsd || 0) / 1e30,
+        pnlPct: null,
+        status: 'closed',
+      }))
+      totalSaved += await savePositionHistory(source, traderId, formattedPositions)
     }
 
   } else if (source === 'bybit') {
