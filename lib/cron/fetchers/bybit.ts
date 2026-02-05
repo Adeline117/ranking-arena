@@ -23,7 +23,7 @@ import {
   parseNum,
   normalizeWinRate,
 } from './shared'
-import { fetchBybitEquityCurve, fetchBybitStatsDetail, upsertEquityCurve, upsertStatsDetail } from './enrichment'
+import { fetchBybitEquityCurve, fetchBybitStatsDetail, upsertEquityCurve, upsertStatsDetail, enhanceStatsWithDerivedMetrics, type EquityCurvePoint } from './enrichment'
 
 const SOURCE = 'bybit'
 const DIRECT_API_URL =
@@ -32,10 +32,10 @@ const PROXY_URL = process.env.CLOUDFLARE_PROXY_URL || 'https://ranking-arena-pro
 const TARGET = 500
 const PAGE_SIZE = 50
 
-// Phase 2: Enrichment settings
-const ENRICH_LIMIT = 50
-const ENRICH_CONCURRENCY = 3
-const ENRICH_DELAY_MS = 1500
+// Phase 2: Enrichment settings - increased coverage from 50 to 100
+const ENRICH_LIMIT = 100
+const ENRICH_CONCURRENCY = 5 // Increased concurrency
+const ENRICH_DELAY_MS = 1000
 
 const PERIOD_MAP: Record<string, string> = {
   '7D': 'DATA_DURATION_SEVEN_DAY',
@@ -193,9 +193,14 @@ async function fetchPeriod(
   const { saved, error } = await upsertTraders(supabase, top)
 
   // Phase 2: Enrich top traders with equity curve and stats detail
-  if (saved > 0 && period === '90D') {
+  // Extended to all periods (not just 90D)
+  if (saved > 0) {
     const toEnrich = top.slice(0, ENRICH_LIMIT)
-    console.warn(`[${SOURCE}] Enriching ${toEnrich.length} traders...`)
+    console.warn(`[${SOURCE}] Enriching ${toEnrich.length} traders for ${period}...`)
+
+    // Map period to days for equity curve API
+    const daysMap: Record<string, number> = { '7D': 7, '30D': 30, '90D': 90 }
+    const days = daysMap[period] || 90
 
     let enrichedCount = 0
     for (let i = 0; i < toEnrich.length; i += ENRICH_CONCURRENCY) {
@@ -204,15 +209,20 @@ async function fetchPeriod(
         batch.map(async (trader) => {
           try {
             // Equity curve
-            const curve = await fetchBybitEquityCurve(trader.source_trader_id, 90)
+            let curve: EquityCurvePoint[] = []
+            curve = await fetchBybitEquityCurve(trader.source_trader_id, days)
             if (curve.length > 0) {
-              await upsertEquityCurve(supabase, SOURCE, trader.source_trader_id, '90D', curve)
+              await upsertEquityCurve(supabase, SOURCE, trader.source_trader_id, period, curve)
             }
 
-            // Stats detail
-            const stats = await fetchBybitStatsDetail(trader.source_trader_id)
+            // Stats detail with derived metrics
+            let stats = await fetchBybitStatsDetail(trader.source_trader_id)
             if (stats) {
-              await upsertStatsDetail(supabase, SOURCE, trader.source_trader_id, '90D', stats)
+              // Phase 4: Enhance with derived metrics from equity curve
+              if (curve.length > 0) {
+                stats = enhanceStatsWithDerivedMetrics(stats, curve, period)
+              }
+              await upsertStatsDetail(supabase, SOURCE, trader.source_trader_id, period, stats)
               enrichedCount++
             }
           } catch (err) {
@@ -224,7 +234,7 @@ async function fetchPeriod(
         await sleep(ENRICH_DELAY_MS)
       }
     }
-    console.warn(`[${SOURCE}] Enrichment complete: ${enrichedCount} stats details saved`)
+    console.warn(`[${SOURCE}] Enrichment complete for ${period}: ${enrichedCount} stats details saved`)
   }
 
   return { total: top.length, saved, error }

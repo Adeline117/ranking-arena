@@ -30,6 +30,8 @@ import {
   upsertStatsDetail,
   upsertAssetBreakdown,
   calculateAssetBreakdown,
+  enhanceStatsWithDerivedMetrics,
+  type EquityCurvePoint,
 } from './enrichment'
 
 const SOURCE = 'binance_futures'
@@ -38,10 +40,10 @@ const API_URL =
 const TARGET = 500
 const PAGE_SIZE = 20
 
-// Phase 2: Enrichment settings
-const ENRICH_LIMIT = 50 // Top N traders to enrich with equity curve/position history
-const ENRICH_CONCURRENCY = 3
-const ENRICH_DELAY_MS = 1500
+// Phase 2: Enrichment settings - increased coverage from 50 to 100
+const ENRICH_LIMIT = 100 // Top N traders to enrich with equity curve/position history
+const ENRICH_CONCURRENCY = 5 // Increased concurrency
+const ENRICH_DELAY_MS = 1000
 
 // Futures API may use either number or string format - trying both
 const PERIOD_MAP: Record<string, string> = { '7D': '7D', '30D': '30D', '90D': '90D' }
@@ -197,9 +199,10 @@ async function fetchPeriod(
   const { saved, error } = await upsertTraders(supabase, top)
 
   // Phase 2: Enrich top traders with equity curve, position history, and stats detail
-  if (saved > 0 && period === '90D') {
+  // Extended to all periods (not just 90D)
+  if (saved > 0) {
     const toEnrich = top.slice(0, ENRICH_LIMIT)
-    console.warn(`[${SOURCE}] Enriching ${toEnrich.length} traders...`)
+    console.warn(`[${SOURCE}] Enriching ${toEnrich.length} traders for ${period}...`)
 
     let enrichedCount = 0
     for (let i = 0; i < toEnrich.length; i += ENRICH_CONCURRENCY) {
@@ -207,28 +210,43 @@ async function fetchPeriod(
       await Promise.all(
         batch.map(async (trader) => {
           try {
+            // Map period to Binance time range
+            const timeRangeMap: Record<string, 'WEEKLY' | 'MONTHLY' | 'QUARTERLY'> = {
+              '7D': 'WEEKLY',
+              '30D': 'MONTHLY',
+              '90D': 'QUARTERLY',
+            }
+            const timeRange = timeRangeMap[period] || 'QUARTERLY'
+
             // Fetch and save equity curve
-            const curve = await fetchBinanceEquityCurve(trader.source_trader_id, 'QUARTERLY')
+            let curve: EquityCurvePoint[] = []
+            curve = await fetchBinanceEquityCurve(trader.source_trader_id, timeRange)
             if (curve.length > 0) {
-              await upsertEquityCurve(supabase, SOURCE, trader.source_trader_id, '90D', curve)
+              await upsertEquityCurve(supabase, SOURCE, trader.source_trader_id, period, curve)
             }
 
-            // Fetch and save position history + asset breakdown
-            const positions = await fetchBinancePositionHistory(trader.source_trader_id, 50)
-            if (positions.length > 0) {
-              await upsertPositionHistory(supabase, SOURCE, trader.source_trader_id, positions)
+            // Fetch and save position history + asset breakdown (only for 90D to avoid redundant data)
+            if (period === '90D') {
+              const positions = await fetchBinancePositionHistory(trader.source_trader_id, 50)
+              if (positions.length > 0) {
+                await upsertPositionHistory(supabase, SOURCE, trader.source_trader_id, positions)
 
-              // Calculate and save asset breakdown from positions
-              const assetBreakdown = calculateAssetBreakdown(positions)
-              if (assetBreakdown.length > 0) {
-                await upsertAssetBreakdown(supabase, SOURCE, trader.source_trader_id, '90D', assetBreakdown)
+                // Calculate and save asset breakdown from positions
+                const assetBreakdown = calculateAssetBreakdown(positions)
+                if (assetBreakdown.length > 0) {
+                  await upsertAssetBreakdown(supabase, SOURCE, trader.source_trader_id, period, assetBreakdown)
+                }
               }
             }
 
-            // Fetch and save stats detail
-            const stats = await fetchBinanceStatsDetail(trader.source_trader_id)
+            // Fetch and save stats detail with derived metrics
+            let stats = await fetchBinanceStatsDetail(trader.source_trader_id)
             if (stats) {
-              await upsertStatsDetail(supabase, SOURCE, trader.source_trader_id, '90D', stats)
+              // Phase 4: Enhance with derived metrics from equity curve
+              if (curve.length > 0) {
+                stats = enhanceStatsWithDerivedMetrics(stats, curve, period)
+              }
+              await upsertStatsDetail(supabase, SOURCE, trader.source_trader_id, period, stats)
               enrichedCount++
             }
           } catch (err) {
@@ -240,7 +258,7 @@ async function fetchPeriod(
         await sleep(ENRICH_DELAY_MS)
       }
     }
-    console.warn(`[${SOURCE}] Enrichment complete: ${enrichedCount} stats details saved`)
+    console.warn(`[${SOURCE}] Enrichment complete for ${period}: ${enrichedCount} stats details saved`)
   }
 
   return { total: top.length, saved, error }

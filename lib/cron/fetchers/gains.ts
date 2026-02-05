@@ -105,6 +105,11 @@ async function fetchPeriod(
     winRate: number | null
     tradesCount: number
     hasFullData: boolean
+    // Phase 1: Additional fields for stats_detail
+    avgWin: number | null
+    avgLoss: number | null
+    wins: number | null
+    losses: number | null
   }
 
   const tradersMap = new Map<string, MergedTrader>()
@@ -114,6 +119,7 @@ async function fetchPeriod(
     const addr = t.address.toLowerCase()
     const totalTrades = parseInt(String(t.count || 0))
     const wins = parseInt(String(t.count_win || 0))
+    const losses = parseInt(String(t.count_loss || 0))
     const totalPnl = parseFloat(String(t.total_pnl_usd || t.total_pnl || 0))
     const avgWin = parseFloat(String(t.avg_win || 0))
     const avgLoss = Math.abs(parseFloat(String(t.avg_loss || 0)))
@@ -133,6 +139,11 @@ async function fetchPeriod(
       winRate,
       tradesCount: totalTrades,
       hasFullData: true,
+      // Phase 1: Save avg_win/avg_loss from API
+      avgWin: avgWin > 0 ? avgWin : null,
+      avgLoss: avgLoss > 0 ? avgLoss : null,
+      wins: wins > 0 ? wins : null,
+      losses: losses > 0 ? losses : null,
     })
   }
 
@@ -151,6 +162,10 @@ async function fetchPeriod(
         winRate: null,
         tradesCount: t.openPositions,
         hasFullData: false,
+        avgWin: null,
+        avgLoss: null,
+        wins: null,
+        losses: null,
       })
     }
   }
@@ -187,17 +202,18 @@ async function fetchPeriod(
 
   const { saved, error } = await upsertTraders(supabase, traders)
 
-  // Save stats_detail for 90D period
-  if (saved > 0 && period === '90D') {
-    console.warn(`[${SOURCE}] Saving stats details for top ${Math.min(sorted.length, 50)} traders...`)
+  // Save stats_detail for all periods (Phase 1: extended from 90D only)
+  if (saved > 0) {
+    console.warn(`[${SOURCE}] Saving stats details for top ${Math.min(sorted.length, 100)} traders (${period})...`)
     let statsSaved = 0
-    for (const t of sorted.slice(0, 50)) {
+    for (const t of sorted.slice(0, 100)) {
       const stats: StatsDetail = {
         totalTrades: t.tradesCount ?? null,
         profitableTradesPct: t.winRate,
         avgHoldingTimeHours: null,
-        avgProfit: null,
-        avgLoss: null,
+        // Phase 1: Save avg_win/avg_loss from API
+        avgProfit: t.avgWin,
+        avgLoss: t.avgLoss,
         largestWin: null,
         largestLoss: null,
         sharpeRatio: null,
@@ -207,13 +223,14 @@ async function fetchPeriod(
         copiersCount: null,
         copiersPnl: null,
         aum: null,
-        winningPositions: null,
+        // Phase 1: Save wins/losses count
+        winningPositions: t.wins,
         totalPositions: t.tradesCount ?? null,
       }
       const { saved: s } = await upsertStatsDetail(supabase, SOURCE, t.traderId, period, stats)
       if (s) statsSaved++
     }
-    console.warn(`[${SOURCE}] Saved ${statsSaved} stats details`)
+    console.warn(`[${SOURCE}] Saved ${statsSaved} stats details for ${period}`)
   }
 
   return { total: traders.length, saved, error }
