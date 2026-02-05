@@ -27,16 +27,25 @@ const LS_KEY_SORT_COLUMN = 'ranking-sort-column'
 const LS_KEY_SORT_DIR = 'ranking-sort-dir'
 const LS_KEY_PRESET = 'ranking-preset'
 const LS_KEY_EXCHANGE = 'ranking-exchange'
+const LS_KEY_FILTER_CONFIG = 'ranking-filter-config'
 
 // Helper to get stored preferences
 function getStoredPreferences() {
   if (typeof window === 'undefined') return {}
   try {
+    let filterConfig: FilterConfig | null = null
+    const storedFilterConfig = localStorage.getItem(LS_KEY_FILTER_CONFIG)
+    if (storedFilterConfig) {
+      try {
+        filterConfig = JSON.parse(storedFilterConfig)
+      } catch { /* invalid JSON */ }
+    }
     return {
       sortColumn: localStorage.getItem(LS_KEY_SORT_COLUMN) as 'score' | 'roi' | 'winrate' | 'mdd' | null,
       sortDir: localStorage.getItem(LS_KEY_SORT_DIR) as 'asc' | 'desc' | null,
       preset: localStorage.getItem(LS_KEY_PRESET) as PresetId | null,
       exchange: localStorage.getItem(LS_KEY_EXCHANGE),
+      filterConfig,
     }
   } catch {
     return {}
@@ -154,13 +163,18 @@ export default function RankingSection({
     if (exchange) config.exchange = exchange.split(',')
     if (fcat) config.category = fcat.split(',')
 
-    if (Object.keys(config).length > 0) {
-      setFilterConfig(config)
-      setShowAdvancedFilter(true)
-    }
-
     // Get stored preferences (fallback if no URL params)
     const storedPrefs = getStoredPreferences()
+
+    if (Object.keys(config).length > 0) {
+      // URL filter params exist, use them
+      setFilterConfig(config)
+      setShowAdvancedFilter(true)
+    } else if (storedPrefs.filterConfig && Object.keys(storedPrefs.filterConfig).length > 0) {
+      // No URL params, fall back to localStorage
+      setFilterConfig(storedPrefs.filterConfig)
+      setShowAdvancedFilter(true)
+    }
 
     // Feature 8: Restore sort/page/search/preset from URL (with localStorage fallback)
     const urlSort = searchParams.get('sort') as typeof sortColumn | null
@@ -274,6 +288,14 @@ export default function RankingSection({
   const handleFilterChange = useCallback((config: FilterConfig) => {
     setFilterConfig(config)
     syncFilterToUrl(config)
+    // Persist to localStorage
+    try {
+      if (Object.keys(config).length > 0) {
+        localStorage.setItem(LS_KEY_FILTER_CONFIG, JSON.stringify(config))
+      } else {
+        localStorage.removeItem(LS_KEY_FILTER_CONFIG)
+      }
+    } catch { /* ignore */ }
   }, [syncFilterToUrl])
 
   // Feature 8: Sort/page/search change handlers with localStorage persistence
