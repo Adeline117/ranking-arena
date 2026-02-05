@@ -27,34 +27,36 @@ export async function GET(
 
   const supabase = getSupabaseAdmin()
 
-  // Fetch trader data
-  const { data: trader, error } = await supabase
-    .from('traders')
+  // Fetch trader data from trader_snapshots (90D period for comprehensive stats)
+  const { data: snapshot, error } = await supabase
+    .from('trader_snapshots')
     .select(`
-      handle,
-      arena_score,
+      source_trader_id,
       roi,
-      roi_7d,
-      roi_30d,
-      roi_90d,
+      pnl,
       win_rate,
       max_drawdown,
-      aum,
-      copiers,
-      created_at
+      followers,
+      arena_score,
+      source,
+      captured_at
     `)
-    .eq('handle', handle)
+    .eq('source_trader_id', handle)
+    .eq('season_id', '90D')
+    .order('captured_at', { ascending: false })
+    .limit(1)
     .maybeSingle()
 
-  if (error || !trader) {
+  if (error || !snapshot) {
     return NextResponse.json({ badges: [] })
   }
 
-  // Get global rank
+  // Get global rank by counting traders with higher arena_score
   const { count: rankBefore } = await supabase
-    .from('traders')
+    .from('trader_snapshots')
     .select('*', { count: 'exact', head: true })
-    .gt('arena_score', trader.arena_score ?? 0)
+    .eq('season_id', '90D')
+    .gt('arena_score', snapshot.arena_score ?? 0)
 
   const rank = (rankBefore ?? 0) + 1
 
@@ -86,17 +88,15 @@ export async function GET(
 
   // Calculate badges
   const badges: EarnedBadge[] = calculateBadges({
-    handle: trader.handle,
+    handle: snapshot.source_trader_id,
     rank,
-    arenaScore: trader.arena_score,
-    roi: trader.roi,
-    roi30d: trader.roi_30d,
-    roi90d: trader.roi_90d,
-    winRate: trader.win_rate,
-    maxDrawdown: trader.max_drawdown,
-    aum: trader.aum,
-    copiers: trader.copiers,
-    startDate: trader.created_at,
+    arenaScore: snapshot.arena_score,
+    roi: snapshot.roi,
+    roi90d: snapshot.roi,
+    winRate: snapshot.win_rate,
+    maxDrawdown: snapshot.max_drawdown,
+    copiers: snapshot.followers,
+    startDate: snapshot.captured_at,
     hasOnChainAttestation: !!attestation,
     hasNft,
   })
