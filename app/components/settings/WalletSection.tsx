@@ -5,6 +5,7 @@
  *
  * Settings section for managing Web3 wallet connection.
  * Allows users to link/unlink their wallet and view NFT membership status.
+ * Includes chain indicator for network awareness.
  */
 
 import { useState } from 'react'
@@ -16,6 +17,7 @@ import { usePremium } from '@/lib/premium/hooks'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { ChainIndicator } from '@/app/components/web3/ChainIndicator'
 
 function shortenAddress(addr: string): string {
   return `${addr.slice(0, 6)}...${addr.slice(-4)}`
@@ -71,6 +73,26 @@ export function WalletSection({ onToast, onConfirm }: WalletSectionProps) {
 
   return (
     <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}>
+      {/* Chain Indicator - Shows current network */}
+      {isConnected && (
+        <Box
+          style={{
+            padding: tokens.spacing[3],
+            borderRadius: tokens.radius.lg,
+            background: tokens.colors.bg.tertiary,
+            border: `1px solid ${tokens.colors.border.primary}`,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+          }}
+        >
+          <Text size="sm" color="secondary">
+            {t('connectedTo') || 'Connected to'}
+          </Text>
+          <ChainIndicator size="md" showName={true} />
+        </Box>
+      )}
+
       {/* Linked Wallet Status */}
       {linkedAddress ? (
         <Box

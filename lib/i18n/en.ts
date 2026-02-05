@@ -2426,6 +2426,30 @@ const en = {
     // Login - Web3 divider
     loginOrDivider: 'or',
 
+    // Web3 - ChainIndicator
+    switchToBase: 'Switch to Base Network',
+    switching: 'Switching...',
+    wrongNetwork: 'Wrong Network',
+    selectNetwork: 'Select Network',
+    connectedTo: 'Connected to',
+    networkBase: 'Base',
+    networkArbitrum: 'Arbitrum',
+    networkOptimism: 'Optimism',
+    networkPolygon: 'Polygon',
+
+    // Web3 - OnChainCopyTrading
+    onChainCopyTrading: 'On-Chain Copy Trading',
+    onChainCopyTradingDesc: 'Automatically copy trading strategies via smart contracts',
+    onChainCopyTradingComingSoon: 'Coming Soon',
+    onChainCopyTradingComingSoonDesc: 'On-chain copy trading is under development. Stay tuned!',
+    subscribeToTrader: 'Subscribe to Trader',
+    allocation: 'Allocation',
+    maxPositionSize: 'Max Position Size',
+    stopLoss: 'Stop Loss',
+    leverage: 'Leverage',
+    currentStatus: 'Current Status',
+    unrealizedPnl: 'Unrealized PnL',
+
     // Common UI text (reduce hardcoding)
     viewLiveLeaderboard: 'View Live Leaderboard',
     popularTraders: 'Popular Traders',

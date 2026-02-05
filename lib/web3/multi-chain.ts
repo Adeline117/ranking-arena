@@ -58,6 +58,7 @@ export const CHAIN_CONFIGS: Record<SupportedChainId, ChainConfig> = {
     isSupported: true,
     contracts: {
       membershipNFT: process.env.NEXT_PUBLIC_MEMBERSHIP_NFT_ADDRESS as `0x${string}` | undefined,
+      copyTrading: process.env.NEXT_PUBLIC_COPY_TRADING_BASE as `0x${string}` | undefined,
     },
   },
   [CHAIN_IDS.BASE_SEPOLIA]: {
@@ -72,6 +73,7 @@ export const CHAIN_CONFIGS: Record<SupportedChainId, ChainConfig> = {
     isSupported: !isProduction,
     contracts: {
       membershipNFT: process.env.NEXT_PUBLIC_MEMBERSHIP_NFT_ADDRESS as `0x${string}` | undefined,
+      copyTrading: process.env.NEXT_PUBLIC_COPY_TRADING_BASE_SEPOLIA as `0x${string}` | undefined,
     },
   },
   [CHAIN_IDS.ARBITRUM]: {
@@ -84,7 +86,9 @@ export const CHAIN_CONFIGS: Record<SupportedChainId, ChainConfig> = {
     nativeCurrency: { name: 'Ethereum', symbol: 'ETH', decimals: 18 },
     isTestnet: false,
     isSupported: false, // Not deployed yet
-    contracts: {},
+    contracts: {
+      copyTrading: process.env.NEXT_PUBLIC_COPY_TRADING_ARBITRUM as `0x${string}` | undefined,
+    },
   },
   [CHAIN_IDS.OPTIMISM]: {
     id: CHAIN_IDS.OPTIMISM,
@@ -96,7 +100,9 @@ export const CHAIN_CONFIGS: Record<SupportedChainId, ChainConfig> = {
     nativeCurrency: { name: 'Ethereum', symbol: 'ETH', decimals: 18 },
     isTestnet: false,
     isSupported: false, // Not deployed yet
-    contracts: {},
+    contracts: {
+      copyTrading: process.env.NEXT_PUBLIC_COPY_TRADING_OPTIMISM as `0x${string}` | undefined,
+    },
   },
   [CHAIN_IDS.POLYGON]: {
     id: CHAIN_IDS.POLYGON,
