@@ -314,6 +314,7 @@ export default function NewPostPage() {
   const POLL_DURATION_OPTIONS = language === 'zh' ? POLL_DURATION_OPTIONS_ZH : POLL_DURATION_OPTIONS_EN
   const fileInputRef = useRef<HTMLInputElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const submitRef = useRef(false)
   const [cursorPosition, setCursorPosition] = useState<number | null>(null)
 
   const [email, setEmail] = useState<string | null>(null)
@@ -705,14 +706,20 @@ export default function NewPostPage() {
   }
 
   const handleSubmit = async () => {
+    // Prevent double submission
+    if (submitRef.current || loading) return
+    submitRef.current = true
+
     if (!title.trim()) {
       showToast(t('pleaseEnterTitle'), 'warning')
+      submitRef.current = false
       return
     }
 
     if (!userId) {
       showToast(t('pleaseLogin'), 'warning')
       router.push('/login')
+      submitRef.current = false
       return
     }
 
@@ -727,6 +734,7 @@ export default function NewPostPage() {
     const decodedHandle = decodeURIComponent(handle)
     if (!profile || profile.handle !== decodedHandle) {
       showToast(t('noPermission'), 'error')
+      submitRef.current = false
       return
     }
 
@@ -748,6 +756,7 @@ export default function NewPostPage() {
         if (validPollOptions.length < 2) {
           showToast(t('pollMinOptions'), 'warning')
           setLoading(false)
+          submitRef.current = false
           return
         }
       }
@@ -799,8 +808,10 @@ export default function NewPostPage() {
         if (pollError) {
           console.error('创建投票失败:', JSON.stringify(pollError, null, 2))
           console.error('投票数据:', { post_id: newPost.id, question: title, type: pollType })
-          showToast(`${t('pollCreateFailed')}: ${pollError.message || pollError.code || t('unknownError')}`, 'warning')
-          // 投票创建失败，但帖子已创建，继续
+          // Poll creation failed - delete the post to maintain consistency
+          await supabase.from('posts').delete().eq('id', newPost.id)
+          showToast(`${t('pollCreateFailed')}: ${pollError.message || pollError.code || t('unknownError')}`, 'error')
+          return // Don't redirect - let user fix and retry
         } else if (pollData) {
           // 更新帖子的 poll_id
           await supabase
@@ -819,6 +830,7 @@ export default function NewPostPage() {
       showToast(errorMessage, 'error')
     } finally {
       setLoading(false)
+      submitRef.current = false
     }
   }
 

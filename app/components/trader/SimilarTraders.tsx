@@ -8,8 +8,14 @@ import { getAvatarGradient, getAvatarInitial } from '@/lib/utils/avatar'
 import type { TraderProfile } from '@/lib/data/trader'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
+// Extended type for similar traders with performance metrics
+interface SimilarTraderWithMetrics extends TraderProfile {
+  roi_90d?: number
+  arena_score?: number
+}
+
 interface SimilarTradersProps {
-  traders: TraderProfile[]
+  traders: SimilarTraderWithMetrics[]
 }
 
 /**
@@ -184,8 +190,8 @@ export default function SimilarTraders({ traders }: SimilarTradersProps) {
                 size={40}
               />
               <Box style={{ flex: 1, minWidth: 0 }}>
-                <Text 
-                  size="sm" 
+                <Text
+                  size="sm"
                   weight="bold"
                   style={{
                     color: tokens.colors.text.primary,
@@ -203,15 +209,60 @@ export default function SimilarTraders({ traders }: SimilarTradersProps) {
                     return handle
                   })()}
                 </Text>
-                <Text
-                  size="xs"
-                  color="tertiary"
-                  style={{
-                    fontWeight: tokens.typography.fontWeight.medium,
-                  }}
-                >
-                  {trader.followers?.toLocaleString() || 0} {t('fans')}
-                </Text>
+                <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], flexWrap: 'wrap' }}>
+                  {/* ROI Badge */}
+                  {trader.roi_90d != null && (
+                    <Box
+                      style={{
+                        background: trader.roi_90d >= 0 ? `${tokens.colors.accent.success}15` : `${tokens.colors.accent.error}15`,
+                        padding: `1px ${tokens.spacing[1]}`,
+                        borderRadius: tokens.radius.sm,
+                      }}
+                    >
+                      <Text
+                        size="xs"
+                        weight="bold"
+                        style={{
+                          color: trader.roi_90d >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error,
+                          fontSize: '10px',
+                        }}
+                      >
+                        {trader.roi_90d >= 0 ? '+' : ''}{trader.roi_90d.toFixed(1)}%
+                      </Text>
+                    </Box>
+                  )}
+                  {/* Arena Score Badge */}
+                  {trader.arena_score != null && (
+                    <Box
+                      style={{
+                        background: `${tokens.colors.accent.primary}15`,
+                        padding: `1px ${tokens.spacing[1]}`,
+                        borderRadius: tokens.radius.sm,
+                      }}
+                    >
+                      <Text
+                        size="xs"
+                        weight="bold"
+                        style={{
+                          color: tokens.colors.accent.primary,
+                          fontSize: '10px',
+                        }}
+                      >
+                        {trader.arena_score.toFixed(0)}
+                      </Text>
+                    </Box>
+                  )}
+                  {/* Followers */}
+                  <Text
+                    size="xs"
+                    color="tertiary"
+                    style={{
+                      fontWeight: tokens.typography.fontWeight.medium,
+                    }}
+                  >
+                    {trader.followers?.toLocaleString() || 0} {t('fans')}
+                  </Text>
+                </Box>
               </Box>
               
               {/* Arrow indicator */}

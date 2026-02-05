@@ -5,6 +5,7 @@ import useSWR from 'swr'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
 import { useLanguage } from '../Providers/LanguageProvider'
+import { Skeleton } from '../ui/Skeleton'
 
 // ============================================
 // 类型定义
@@ -148,6 +149,28 @@ export default function RoiHistoryChart({
     padding: tokens.spacing[6],
     background: tokens.colors.bg.primary,
   } : {}
+
+  // Show skeleton during loading
+  if (isLoading && shouldFetch) {
+    return (
+      <div
+        className="roi-history-chart glass-card"
+        style={{
+          background: `linear-gradient(145deg, ${tokens.colors.bg.secondary}F8 0%, ${tokens.colors.bg.primary}F0 100%)`,
+          borderRadius: tokens.radius.xl,
+          border: `1px solid ${tokens.colors.border.primary}60`,
+          padding: tokens.spacing[5],
+          boxShadow: `0 4px 24px rgba(0, 0, 0, 0.08)`,
+        }}
+      >
+        <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: tokens.spacing[4] }}>
+          <Skeleton width={150} height={24} />
+          <Skeleton width={200} height={32} />
+        </Box>
+        <Skeleton width="100%" height={height} style={{ borderRadius: tokens.radius.lg }} />
+      </div>
+    )
+  }
 
   return (
     <div

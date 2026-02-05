@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '../base'
 import { useLanguage } from '../Providers/LanguageProvider'
+import { useToast } from '../ui/Toast'
 
 // 外部链接图标
 const ExternalLinkIcon = ({ size = 16 }: { size?: number }) => (
@@ -108,6 +109,7 @@ export default function CopyTradeButton({
   traderHandle,
 }: CopyTradeButtonProps) {
   const { t } = useLanguage()
+  const { showToast } = useToast()
   const [showWarning, setShowWarning] = useState(false)
   const [acknowledged, setAcknowledged] = useState(false)
 
@@ -154,10 +156,19 @@ export default function CopyTradeButton({
   }
 
   const handleConfirm = () => {
-    if (acknowledged) {
-      window.open(copyTradeUrl, '_blank', 'noopener,noreferrer')
-      setShowWarning(false)
-      setAcknowledged(false)
+    if (acknowledged && copyTradeUrl) {
+      try {
+        const newWindow = window.open(copyTradeUrl, '_blank', 'noopener,noreferrer')
+        if (!newWindow || newWindow.closed || typeof newWindow.closed === 'undefined') {
+          // Popup was blocked
+          showToast(t('popupBlocked') || 'Popup blocked. Please allow popups for this site.', 'warning')
+          return
+        }
+        setShowWarning(false)
+        setAcknowledged(false)
+      } catch {
+        showToast(t('openLinkFailed') || 'Failed to open link', 'error')
+      }
     }
   }
 

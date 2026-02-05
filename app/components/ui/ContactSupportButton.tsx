@@ -64,24 +64,29 @@ export default function ContactSupportButton({
   }, [])
 
   const handleClick = async () => {
+    // Check pending state FIRST to prevent race conditions
+    if (pendingRef.current || loading) return
+    pendingRef.current = true
+
     if (!currentUserId) {
       showToast(t('pleaseLoginToContactSupport'), 'warning')
       router.push('/login?redirect=/help')
+      pendingRef.current = false
       return
     }
 
     if (!supportUserId) {
       showToast(t('supportUnavailable'), 'error')
+      pendingRef.current = false
       return
     }
 
     if (currentUserId === supportUserId) {
       showToast(t('youAreSupport'), 'info')
+      pendingRef.current = false
       return
     }
 
-    if (pendingRef.current) return
-    pendingRef.current = true
     setLoading(true)
     try {
       const { data: { session } } = await supabase.auth.getSession()
