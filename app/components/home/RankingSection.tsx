@@ -16,11 +16,32 @@ import { CategoryType, filterByCategory } from '../ranking/CategoryRankingTabs'
 import { useSubscription } from './hooks/useSubscription'
 import { useLanguage } from '../Providers/LanguageProvider'
 import type { FilterConfig, SavedFilter } from '../premium/AdvancedFilter'
-import FilterPresets, { type PresetId, PRESETS } from '../ranking/FilterPresets'
+import FilterPresets, { type PresetId, PRESETS, isValidPresetId } from '../ranking/FilterPresets'
 import ExchangeFilter from '../ranking/ExchangeFilter'
 import { SOURCE_TYPE_MAP } from '@/lib/constants/exchanges'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { getCsrfHeaders } from '@/lib/api/client'
+
+// localStorage keys for user preferences
+const LS_KEY_SORT_COLUMN = 'ranking-sort-column'
+const LS_KEY_SORT_DIR = 'ranking-sort-dir'
+const LS_KEY_PRESET = 'ranking-preset'
+const LS_KEY_EXCHANGE = 'ranking-exchange'
+
+// Helper to get stored preferences
+function getStoredPreferences() {
+  if (typeof window === 'undefined') return {}
+  try {
+    return {
+      sortColumn: localStorage.getItem(LS_KEY_SORT_COLUMN) as 'score' | 'roi' | 'winrate' | 'mdd' | null,
+      sortDir: localStorage.getItem(LS_KEY_SORT_DIR) as 'asc' | 'desc' | null,
+      preset: localStorage.getItem(LS_KEY_PRESET) as PresetId | null,
+      exchange: localStorage.getItem(LS_KEY_EXCHANGE),
+    }
+  } catch {
+    return {}
+  }
+}
 
 // Lazy load heavy components to reduce initial bundle
 const AdvancedFilter = dynamic(() => import('../premium/AdvancedFilter'), {
@@ -110,6 +131,7 @@ export default function RankingSection({
   }, [activeTimeRange])
 
   // 从 URL 恢复筛选状态 + Feature 8: sort/page/search/preset
+  // URL params take priority over localStorage preferences
   useEffect(() => {
     const config: FilterConfig = {}
     const roiMin = searchParams.get('roi_min')
@@ -137,20 +159,44 @@ export default function RankingSection({
       setShowAdvancedFilter(true)
     }
 
-    // Feature 8: Restore sort/page/search/preset from URL
+    // Get stored preferences (fallback if no URL params)
+    const storedPrefs = getStoredPreferences()
+
+    // Feature 8: Restore sort/page/search/preset from URL (with localStorage fallback)
     const urlSort = searchParams.get('sort') as typeof sortColumn | null
     const urlOrder = searchParams.get('order') as 'asc' | 'desc' | null
     const urlPage = searchParams.get('page')
     const urlQ = searchParams.get('q')
     const urlPreset = searchParams.get('preset') as PresetId | null
+    const urlEx = searchParams.get('ex')
 
-    if (urlSort && ['score', 'roi', 'winrate', 'mdd'].includes(urlSort)) setSortColumn(urlSort)
-    if (urlOrder && ['asc', 'desc'].includes(urlOrder)) setSortDir(urlOrder)
+    // URL takes priority, then localStorage
+    if (urlSort && ['score', 'roi', 'winrate', 'mdd'].includes(urlSort)) {
+      setSortColumn(urlSort)
+    } else if (storedPrefs.sortColumn && ['score', 'roi', 'winrate', 'mdd'].includes(storedPrefs.sortColumn)) {
+      setSortColumn(storedPrefs.sortColumn)
+    }
+
+    if (urlOrder && ['asc', 'desc'].includes(urlOrder)) {
+      setSortDir(urlOrder)
+    } else if (storedPrefs.sortDir && ['asc', 'desc'].includes(storedPrefs.sortDir)) {
+      setSortDir(storedPrefs.sortDir)
+    }
+
     if (urlPage) setCurrentPage(Math.max(1, parseInt(urlPage, 10) || 1))
     if (urlQ) setSearchQuery(urlQ)
-    if (urlPreset && PRESETS.some(p => p.id === urlPreset)) setActivePreset(urlPreset)
-    const urlEx = searchParams.get('ex')
-    if (urlEx) setSelectedExchange(urlEx)
+
+    if (urlPreset && isValidPresetId(urlPreset)) {
+      setActivePreset(urlPreset)
+    } else if (isValidPresetId(storedPrefs.preset)) {
+      setActivePreset(storedPrefs.preset)
+    }
+
+    if (urlEx) {
+      setSelectedExchange(urlEx)
+    } else if (storedPrefs.exchange) {
+      setSelectedExchange(storedPrefs.exchange)
+    }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Saved filters feature removed - filters are session-only
@@ -230,12 +276,17 @@ export default function RankingSection({
     syncFilterToUrl(config)
   }, [syncFilterToUrl])
 
-  // Feature 8: Sort/page/search change handlers
+  // Feature 8: Sort/page/search change handlers with localStorage persistence
   const handleSortChange = useCallback((col: 'score' | 'roi' | 'winrate' | 'mdd', dir: 'asc' | 'desc') => {
     setSortColumn(col)
     setSortDir(dir)
     setCurrentPage(1)
     syncStateToUrl({ sort: col, order: dir, page: 1 })
+    // Save to localStorage
+    try {
+      localStorage.setItem(LS_KEY_SORT_COLUMN, col)
+      localStorage.setItem(LS_KEY_SORT_DIR, dir)
+    } catch { /* ignore */ }
   }, [syncStateToUrl])
 
   const handlePageChange = useCallback((page: number) => {
@@ -249,18 +300,34 @@ export default function RankingSection({
     syncStateToUrl({ q, page: 1 })
   }, [syncStateToUrl])
 
-  // Feature 6: Preset change handler
+  // Feature 6: Preset change handler with localStorage persistence
   const handlePresetChange = useCallback((preset: PresetId | null) => {
     setActivePreset(preset)
     setCurrentPage(1)
     syncStateToUrl({ preset, page: 1 })
+    // Save to localStorage
+    try {
+      if (preset) {
+        localStorage.setItem(LS_KEY_PRESET, preset)
+      } else {
+        localStorage.removeItem(LS_KEY_PRESET)
+      }
+    } catch { /* ignore */ }
   }, [syncStateToUrl])
 
-  // Exchange filter change handler
+  // Exchange filter change handler with localStorage persistence
   const handleExchangeChange = useCallback((exchange: string | null) => {
     setSelectedExchange(exchange)
     setCurrentPage(1)
     syncStateToUrl({ ex: exchange, page: 1 })
+    // Save to localStorage
+    try {
+      if (exchange) {
+        localStorage.setItem(LS_KEY_EXCHANGE, exchange)
+      } else {
+        localStorage.removeItem(LS_KEY_EXCHANGE)
+      }
+    } catch { /* ignore */ }
   }, [syncStateToUrl])
 
   // 客户端高级筛选函数

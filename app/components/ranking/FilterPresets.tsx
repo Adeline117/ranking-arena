@@ -20,6 +20,12 @@ const getSourceType = (source: string | undefined): SourceType | undefined => {
   return SOURCE_TYPE_MAP[source]
 }
 
+// Validation helper for preset IDs
+export function isValidPresetId(id: string | null | undefined): id is PresetId {
+  if (!id) return false
+  return ['all', 'cex_futures', 'cex_spot', 'onchain_dex'].includes(id)
+}
+
 export const PRESETS: PresetConfig[] = [
   {
     id: 'all',
