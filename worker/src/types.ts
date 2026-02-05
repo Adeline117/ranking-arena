@@ -3,6 +3,96 @@
  */
 
 // ============================================
+// Data Source Types
+// ============================================
+
+export type DataSource =
+  | 'binance'
+  | 'binance_spot'
+  | 'binance_web3'
+  | 'bybit'
+  | 'bybit_spot'
+  | 'bitget'
+  | 'bitget_spot'
+  | 'mexc'
+  | 'kucoin'
+  | 'coinex'
+  | 'bingx'
+  | 'phemex'
+  | 'okx_futures'
+  | 'okx_web3'
+  | 'htx_futures'
+  | 'gmx'
+  | 'hyperliquid'
+  | 'dydx'
+  | 'gains'
+  | 'kwenta'
+  | 'mux'
+  | 'aevo'
+  | 'jupiter_perps'
+
+export type TimeRange = '7D' | '30D' | '90D'
+
+// ============================================
+// Trader Data Types
+// ============================================
+
+export interface TraderData {
+  traderId: string
+  nickname: string | null
+  avatar: string | null
+  roi: number
+  pnl: number
+  winRate: number | null
+  maxDrawdown: number | null
+  followers: number
+  aum: number | null
+  tradesCount: number | null
+  rank: number
+}
+
+export interface TraderSourceRow {
+  source: DataSource
+  source_trader_id: string
+  handle: string | null
+  profile_url: string | null
+  avatar_url: string | null
+  market_type: string | null
+  created_at?: string
+  updated_at?: string
+}
+
+export interface TraderSnapshotRow {
+  source: DataSource
+  source_trader_id: string
+  season_id: string
+  roi: number | null
+  pnl: number | null
+  win_rate: number | null
+  max_drawdown: number | null
+  trades_count: number | null
+  followers: number | null
+  arena_score: number | null
+  captured_at: string
+}
+
+export interface ScrapeResult {
+  source: DataSource
+  timeRange: TimeRange
+  traders: TraderData[]
+  scrapedAt: string
+  duration: number
+  success: boolean
+  error?: string
+}
+
+export interface ScraperOptions {
+  headless?: boolean
+  timeout?: number
+  retries?: number
+}
+
+// ============================================
 // Job Types
 // ============================================
 
