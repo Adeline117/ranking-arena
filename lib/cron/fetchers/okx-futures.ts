@@ -13,7 +13,7 @@ import {
   fetchJson,
   sleep,
 } from './shared'
-import { type EquityCurvePoint, upsertEquityCurve, fetchOkxStatsDetail, upsertStatsDetail } from './enrichment'
+import { type EquityCurvePoint, type StatsDetail, upsertEquityCurve, fetchOkxStatsDetail, upsertStatsDetail } from './enrichment'
 
 const SOURCE = 'okx_futures'
 const API_URL = 'https://www.okx.com/api/v5/copytrading/public-lead-traders'
@@ -21,8 +21,8 @@ const TARGET = 500
 const PAGE_SIZE = 10
 const MAX_PAGES = 50
 
-// Phase 2: Enrichment settings
-const ENRICH_LIMIT = 100 // OKX already has pnlRatios data, no extra API calls needed
+// Phase 2: Enrichment settings - increased coverage from 100 to 150
+const ENRICH_LIMIT = 150 // OKX already has pnlRatios data, no extra API calls needed
 
 const WINDOW_DAYS: Record<string, number> = { '7D': 7, '30D': 30, '90D': 90 }
 
@@ -42,6 +42,15 @@ interface OkxRank {
   winRatio?: string
   copyTraderNum?: string
   pnlRatios?: OkxPnlRatio[]
+  // Phase 1: Additional fields from API
+  sharpeRatio?: string
+  mdd?: string
+  avgHoldingTime?: string
+  avgProfitRatio?: string
+  avgLossRatio?: string
+  maxProfit?: string
+  maxLoss?: string
+  tradeCount?: string
 }
 
 interface OkxApiResponse {
@@ -180,6 +189,8 @@ async function fetchPeriod(
     const totalPnl = parseFloat(item.pnl || '0')
     const winRate = item.winRatio != null ? parseFloat(item.winRatio) * 100 : null
     const followers = parseInt(item.copyTraderNum || '0') || null
+    // Phase 1: Extract sharpe_ratio from API response
+    const sharpeRatio = item.sharpeRatio != null ? parseFloat(item.sharpeRatio) : null
 
     // Period-specific metrics from pnlRatios history
     const metrics = computePeriodMetrics(item.pnlRatios || [], period)
@@ -199,6 +210,8 @@ async function fetchPeriod(
       win_rate: winRate,
       max_drawdown: maxDrawdown,
       followers,
+      // Phase 1: Save sharpe_ratio to trader_snapshots
+      sharpe_ratio: sharpeRatio,
       arena_score: calculateArenaScore(roi, totalPnl, maxDrawdown, winRate, period),
       captured_at: capturedAt,
     })
@@ -208,11 +221,11 @@ async function fetchPeriod(
   const top = traders.slice(0, TARGET)
   const { saved, error } = await upsertTraders(supabase, top)
 
-  // Phase 2: Save equity curves and stats detail
-  if (saved > 0 && period === '90D') {
+  // Phase 2: Save equity curves and stats detail for ALL periods (not just 90D)
+  if (saved > 0) {
     const tradersArray = Array.from(allTraders.entries())
     const toEnrich = tradersArray.slice(0, ENRICH_LIMIT)
-    console.warn(`[${SOURCE}] Enriching ${toEnrich.length} traders...`)
+    console.warn(`[${SOURCE}] Enriching ${toEnrich.length} traders for ${period}...`)
 
     let curvesSaved = 0
     let statsSaved = 0
@@ -227,21 +240,39 @@ async function fetchPeriod(
         }
       }
 
-      // Fetch and save stats detail
-      try {
-        const stats = await fetchOkxStatsDetail(id)
-        if (stats) {
-          await upsertStatsDetail(supabase, SOURCE, id, period, stats)
-          statsSaved++
-        }
-      } catch {
-        // Ignore individual failures
+      // Phase 1: Build stats_detail from already-fetched API data (no extra API call)
+      const parseNum = (v: string | undefined): number | null => {
+        if (v == null) return null
+        const n = parseFloat(v)
+        return isNaN(n) ? null : n
+      }
+      const winRateVal = parseNum(item.winRatio)
+      const stats: StatsDetail = {
+        totalTrades: item.tradeCount ? parseInt(item.tradeCount) : null,
+        profitableTradesPct: winRateVal != null ? winRateVal * 100 : null,
+        avgHoldingTimeHours: item.avgHoldingTime ? parseFloat(item.avgHoldingTime) / 3600 : null,
+        avgProfit: parseNum(item.avgProfitRatio),
+        avgLoss: parseNum(item.avgLossRatio),
+        largestWin: parseNum(item.maxProfit),
+        largestLoss: parseNum(item.maxLoss),
+        sharpeRatio: parseNum(item.sharpeRatio),
+        maxDrawdown: parseNum(item.mdd),
+        currentDrawdown: null,
+        volatility: null,
+        copiersCount: item.copyTraderNum ? parseInt(item.copyTraderNum) : null,
+        copiersPnl: null,
+        aum: null,
+        winningPositions: null,
+        totalPositions: null,
       }
 
-      // Rate limit
-      await sleep(200)
+      // Only save if we have meaningful data
+      if (stats.totalTrades || stats.sharpeRatio || stats.avgProfit != null) {
+        const { saved: s } = await upsertStatsDetail(supabase, SOURCE, id, period, stats)
+        if (s) statsSaved++
+      }
     }
-    console.warn(`[${SOURCE}] Enrichment complete: ${curvesSaved} curves, ${statsSaved} stats`)
+    console.warn(`[${SOURCE}] Enrichment complete for ${period}: ${curvesSaved} curves, ${statsSaved} stats`)
   }
 
   return { total: top.length, saved, error }

@@ -57,15 +57,20 @@ interface FillEntry {
 
 // ── Win rate & trades count enrichment ──
 
-interface WinRateResult {
+// Phase 3: Enhanced stats result with avgProfit/avgLoss
+interface EnrichedStatsResult {
   winRate: number | null
   tradesCount: number | null
+  avgProfit: number | null
+  avgLoss: number | null
+  totalWins: number | null
+  totalLosses: number | null
 }
 
-async function fetchWinRateAndTrades(
+async function fetchEnrichedStats(
   address: string,
   period: string
-): Promise<WinRateResult> {
+): Promise<EnrichedStatsResult> {
   try {
     const days = WINDOW_DAYS[period] || 30
     const startTime = Date.now() - days * 24 * 60 * 60 * 1000
@@ -78,7 +83,7 @@ async function fetchWinRateAndTrades(
     })
 
     if (!Array.isArray(fills) || fills.length === 0) {
-      return { winRate: null, tradesCount: null }
+      return { winRate: null, tradesCount: null, avgProfit: null, avgLoss: null, totalWins: null, totalLosses: null }
     }
 
     const closed = fills.filter((f) => {
@@ -87,16 +92,40 @@ async function fetchWinRateAndTrades(
     })
 
     if (closed.length === 0) {
-      return { winRate: null, tradesCount: fills.length > 0 ? fills.length : null }
+      return {
+        winRate: null,
+        tradesCount: fills.length > 0 ? fills.length : null,
+        avgProfit: null,
+        avgLoss: null,
+        totalWins: null,
+        totalLosses: null,
+      }
     }
 
+    // Phase 3: Calculate avgProfit and avgLoss
     const wins = closed.filter((f) => parseFloat(f.closedPnl || '0') > 0)
+    const losses = closed.filter((f) => parseFloat(f.closedPnl || '0') < 0)
+
+    let totalProfit = 0
+    for (const w of wins) {
+      totalProfit += parseFloat(w.closedPnl || '0')
+    }
+
+    let totalLoss = 0
+    for (const l of losses) {
+      totalLoss += Math.abs(parseFloat(l.closedPnl || '0'))
+    }
+
     return {
       winRate: (wins.length / closed.length) * 100,
-      tradesCount: closed.length, // Phase 1: 返回交易数量
+      tradesCount: closed.length,
+      avgProfit: wins.length > 0 ? totalProfit / wins.length : null,
+      avgLoss: losses.length > 0 ? totalLoss / losses.length : null,
+      totalWins: wins.length,
+      totalLosses: losses.length,
     }
   } catch {
-    return { winRate: null, tradesCount: null }
+    return { winRate: null, tradesCount: null, avgProfit: null, avgLoss: null, totalWins: null, totalLosses: null }
   }
 }
 
@@ -159,10 +188,15 @@ interface EnrichableTrader {
   displayName: string
   roi: number
   pnl: number
-  aum: number | null // Phase 1: 添加 AUM
+  aum: number | null
   winRate: number | null
   maxDrawdown: number | null
-  tradesCount: number | null // Phase 1: 添加交易数
+  tradesCount: number | null
+  // Phase 3: Additional enrichment fields
+  avgProfit: number | null
+  avgLoss: number | null
+  totalWins: number | null
+  totalLosses: number | null
 }
 
 async function enrichTraders(
@@ -175,12 +209,17 @@ async function enrichTraders(
     const batch = toEnrich.slice(i, i + CONCURRENCY)
     await Promise.all(
       batch.map(async (trader) => {
-        const [winRateResult, maxDrawdown] = await Promise.all([
-          fetchWinRateAndTrades(trader.address, period),
+        // Phase 3: Use enhanced stats fetch
+        const [statsResult, maxDrawdown] = await Promise.all([
+          fetchEnrichedStats(trader.address, period),
           fetchMaxDrawdown(trader.address, period),
         ])
-        trader.winRate = winRateResult.winRate
-        trader.tradesCount = winRateResult.tradesCount // Phase 1: 保存交易数
+        trader.winRate = statsResult.winRate
+        trader.tradesCount = statsResult.tradesCount
+        trader.avgProfit = statsResult.avgProfit
+        trader.avgLoss = statsResult.avgLoss
+        trader.totalWins = statsResult.totalWins
+        trader.totalLosses = statsResult.totalLosses
         trader.maxDrawdown = maxDrawdown
       })
     )
@@ -238,10 +277,15 @@ async function fetchPeriod(
         `${item.ethAddress.slice(0, 6)}...${item.ethAddress.slice(-4)}`,
       roi,
       pnl,
-      aum: accountValue > 0 ? accountValue : null, // Phase 1: 保存 AUM
+      aum: accountValue > 0 ? accountValue : null,
       winRate: null,
       maxDrawdown: null,
-      tradesCount: null, // Phase 1: 在 enrichment 时填充
+      tradesCount: null,
+      // Phase 3: Initialize new fields
+      avgProfit: null,
+      avgLoss: null,
+      totalWins: null,
+      totalLosses: null,
     })
   }
 
@@ -252,34 +296,34 @@ async function fetchPeriod(
   // Enrich with win rate + MDD (limited for serverless)
   await enrichTraders(topTraders, period)
 
-  // Save stats_detail for 90D period
-  if (period === '90D') {
-    console.warn(`[${SOURCE}] Saving stats details for ${Math.min(topTraders.length, ENRICH_LIMIT)} traders...`)
-    let statsSaved = 0
-    for (const trader of topTraders.slice(0, ENRICH_LIMIT)) {
-      const stats: StatsDetail = {
-        totalTrades: trader.tradesCount,
-        profitableTradesPct: trader.winRate,
-        avgHoldingTimeHours: null,
-        avgProfit: null,
-        avgLoss: null,
-        largestWin: null,
-        largestLoss: null,
-        sharpeRatio: null,
-        maxDrawdown: trader.maxDrawdown,
-        currentDrawdown: null,
-        volatility: null,
-        copiersCount: null,
-        copiersPnl: null,
-        aum: trader.aum,
-        winningPositions: null,
-        totalPositions: trader.tradesCount,
-      }
-      const { saved } = await upsertStatsDetail(supabase, SOURCE, trader.address, period, stats)
-      if (saved) statsSaved++
+  // Phase 3: Save stats_detail for ALL periods (extended from 90D only)
+  console.warn(`[${SOURCE}] Saving stats details for ${Math.min(topTraders.length, ENRICH_LIMIT)} traders (${period})...`)
+  let statsSaved = 0
+  for (const trader of topTraders.slice(0, ENRICH_LIMIT)) {
+    const stats: StatsDetail = {
+      totalTrades: trader.tradesCount,
+      profitableTradesPct: trader.winRate,
+      avgHoldingTimeHours: null,
+      // Phase 3: Save avgProfit and avgLoss from fills data
+      avgProfit: trader.avgProfit,
+      avgLoss: trader.avgLoss,
+      largestWin: null,
+      largestLoss: null,
+      sharpeRatio: null,
+      maxDrawdown: trader.maxDrawdown,
+      currentDrawdown: null,
+      volatility: null,
+      copiersCount: null,
+      copiersPnl: null,
+      aum: trader.aum,
+      // Phase 3: Save winning positions count
+      winningPositions: trader.totalWins,
+      totalPositions: trader.tradesCount,
     }
-    console.warn(`[${SOURCE}] Saved ${statsSaved} stats details`)
+    const { saved } = await upsertStatsDetail(supabase, SOURCE, trader.address, period, stats)
+    if (saved) statsSaved++
   }
+  console.warn(`[${SOURCE}] Saved ${statsSaved} stats details for ${period}`)
 
   const capturedAt = new Date().toISOString()
   const traders: TraderData[] = topTraders.map((t, idx) => ({
