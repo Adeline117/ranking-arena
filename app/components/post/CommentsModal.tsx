@@ -224,6 +224,8 @@ export default function CommentsModal({
     const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>): void => {
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault()
+        // Prevent double-submission
+        if (submittingReply || !replyContent.trim()) return
         onSubmitReply(postId, comment.id)
       }
     }
@@ -364,6 +366,8 @@ export default function CommentsModal({
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
               e.preventDefault()
+              // Prevent double-submission
+              if (submittingComment || !newComment.trim()) return
               onSubmitComment(postId)
             }
           }}

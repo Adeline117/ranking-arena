@@ -850,6 +850,9 @@ const en = {
     backupCodesTitle: 'Backup Recovery Codes',
     backupCodesDesc: 'Save these recovery codes. Each can only be used once. Use them if you lose access to your authenticator.',
     copied: 'Copied',
+    linkCopied: 'Link copied to clipboard',
+    copyFilterLink: 'Copy filter link',
+    copyFailed: 'Failed to copy',
     iHaveSavedCodes: 'I have saved the codes',
     disable2FAConfirm: 'Disable 2FA',
     disable2FAWarning: 'After disabling, you will no longer need a verification code to login. Please enter your password to confirm.',
@@ -1986,6 +1989,7 @@ const en = {
     retryLoad: 'Retry loading',
     retryButton: 'Retry',
     sectionLoadFailed: 'This section failed to load',
+    dataLoadIncomplete: 'Data load incomplete, tap to retry',
 
     // PostImage
     imageLoadFailed: 'Image failed to load',

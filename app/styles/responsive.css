@@ -868,6 +868,20 @@
   }
 }
 
+/* Very narrow screens (iPhone SE, etc.) */
+@media (max-width: 375px) {
+  .ranking-table-grid {
+    grid-template-columns: 32px 1fr 65px !important;
+    gap: 4px !important;
+    padding-left: 8px !important;
+    padding-right: 8px !important;
+  }
+
+  .ranking-table-header {
+    padding: 8px !important;
+  }
+}
+
 /* ============================================
    时间选择器移动端优化
    ============================================ */

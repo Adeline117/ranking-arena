@@ -850,6 +850,9 @@ const zh = {
     backupCodesTitle: '备用恢复码',
     backupCodesDesc: '请妥善保存以下恢复码，每个只能使用一次。如果丢失验证器，可以使用恢复码登录。',
     copied: '已复制',
+    linkCopied: '链接已复制到剪贴板',
+    copyFilterLink: '复制筛选链接',
+    copyFailed: '复制失败',
     iHaveSavedCodes: '我已保存恢复码',
     disable2FAConfirm: '关闭两步验证',
     disable2FAWarning: '关闭后，登录时将不再需要验证码。为了安全，请输入账号密码确认操作。',
@@ -1986,6 +1989,7 @@ const zh = {
     retryLoad: '重试加载',
     retryButton: '重试',
     sectionLoadFailed: '该区块加载失败',
+    dataLoadIncomplete: '数据加载不完整，点击重试',
 
     // PostImage
     imageLoadFailed: '图片加载失败',

@@ -1,12 +1,14 @@
 'use client'
 
 import Link from 'next/link'
+import { useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
 import Card from '@/app/components/ui/Card'
 import { ThumbsUpIcon, CommentIcon } from '@/app/components/ui/icons'
 import MasonryGrid from '@/app/components/ui/MasonryGrid'
 import MasonryPostCard from '@/app/components/post/MasonryPostCard'
+import ReportModal from '@/app/components/ui/ReportModal'
 import { renderContentWithLinks, ARENA_PURPLE } from '@/lib/utils/content'
 import { getAvatarGradient } from '@/lib/utils/avatar'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -101,6 +103,9 @@ export default function GroupPostList(props: GroupPostListProps) {
     handleSaveEdit, handlePinPost, toggleComments, submitComment, submitReply,
     getHeatColor,
   } = props
+
+  // Report modal state
+  const [reportingPost, setReportingPost] = useState<{ id: string; title: string } | null>(null)
 
   // Non-member gate
   if (!isMember) {
@@ -257,6 +262,7 @@ export default function GroupPostList(props: GroupPostListProps) {
                   getHeatColor={getHeatColor}
                   setShowRepostModal={setShowRepostModal}
                   showToast={() => {}} // handled by repost modal
+                  onReport={accessToken ? (id, title) => setReportingPost({ id, title }) : undefined}
                 />
               ))}
             </Box>
@@ -346,6 +352,18 @@ export default function GroupPostList(props: GroupPostListProps) {
           </Box>
         </Box>
       )}
+
+      {/* Report Modal */}
+      {reportingPost && accessToken && (
+        <ReportModal
+          isOpen={true}
+          onClose={() => setReportingPost(null)}
+          contentType="post"
+          contentId={reportingPost.id}
+          accessToken={accessToken}
+          targetName={reportingPost.title}
+        />
+      )}
     </Box>
   )
 }
@@ -397,6 +415,7 @@ interface PostListItemProps {
   getHeatColor: (count: number) => string
   setShowRepostModal: (id: string | null) => void
   showToast: (msg: string, type: 'success' | 'error' | 'warning') => void
+  onReport?: (postId: string, postTitle: string) => void
 }
 
 function PostListItem(props: PostListItemProps) {
@@ -412,7 +431,7 @@ function PostListItem(props: PostListItemProps) {
     expandedPosts, setExpandedPosts, translatedPosts,
     handleLike, handleBookmark, handleDeletePost,
     handleSaveEdit, handlePinPost, toggleComments, submitComment, submitReply,
-    getHeatColor, setShowRepostModal,
+    getHeatColor, setShowRepostModal, onReport,
   } = props
 
   const displayContent = translatedPosts[post.id]?.content || post.content || ''
@@ -656,6 +675,21 @@ function PostListItem(props: PostListItemProps) {
               {post.repost_count || 0}
             </Text>
           </Button>
+
+          {/* Report button - only show if user is logged in and not the author */}
+          {onReport && post.author_id !== userId && (
+            <Button
+              variant="text" size="sm"
+              onClick={() => onReport(post.id, post.title)}
+              style={{ padding: 0, minWidth: 'auto', marginLeft: 'auto' }}
+              title={t('report')}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={tokens.colors.text.tertiary} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
+                <line x1="4" y1="22" x2="4" y2="15" />
+              </svg>
+            </Button>
+          )}
         </Box>
 
         {/* Comments section */}

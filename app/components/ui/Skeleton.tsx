@@ -5,19 +5,27 @@ import { tokens } from '@/lib/design-tokens'
 import { Box } from '../base'
 
 interface SkeletonProps {
-  width?: string
-  height?: string
+  width?: string | number
+  height?: string | number
   variant?: 'text' | 'circular' | 'rectangular' | 'rounded'
   animation?: 'pulse' | 'shimmer' | 'none'
   className?: string
+  style?: React.CSSProperties
 }
 
-export function Skeleton({ 
-  width = '100%', 
+// Helper to convert number to px string
+const toPx = (value: string | number): string => {
+  if (typeof value === 'number') return `${value}px`
+  return value
+}
+
+export function Skeleton({
+  width = '100%',
   height = '16px',
   variant = 'rounded',
   animation = 'shimmer',
   className = '',
+  style,
 }: SkeletonProps) {
   const getBorderRadius = () => {
     switch (variant) {
@@ -60,16 +68,17 @@ export function Skeleton({
     <div
       className={`skeleton ${className}`}
       style={{
-        width,
-        height,
+        width: toPx(width),
+        height: toPx(height),
         borderRadius: getBorderRadius(),
         ...getAnimationStyle(),
+        ...style,
       }}
     />
   )
 }
 
-export function SkeletonLine({ width = '100%', height = '16px' }: { width?: string; height?: string }) {
+export function SkeletonLine({ width = '100%', height = '16px' }: { width?: string | number; height?: string | number }) {
   return <Skeleton width={width} height={height} variant="rounded" animation="shimmer" />
 }
 

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
@@ -59,6 +59,7 @@ export default function UserProfileClient({ handle, serverProfile }: UserProfile
   const [avatarHovered, setAvatarHovered] = useState(false)
   const [modalType, setModalType] = useState<'followers' | 'following' | null>(null)
   const [followersCount, setFollowersCount] = useState(serverProfile?.followers || 0)
+  const profileCreationRef = useRef(false) // Prevent race condition in profile creation
 
   // Auth check - lightweight, runs once
   useEffect(() => {
@@ -81,6 +82,10 @@ export default function UserProfileClient({ handle, serverProfile }: UserProfile
   }, [])
 
   async function handleOwnProfileCreation(userId: string, emailHandle?: string) {
+    // Prevent race condition - only one profile creation at a time
+    if (profileCreationRef.current) return
+    profileCreationRef.current = true
+
     try {
       // Check if profile exists by user ID
       const { data: existingProfile } = await supabase
@@ -91,7 +96,7 @@ export default function UserProfileClient({ handle, serverProfile }: UserProfile
 
       if (existingProfile) {
         if (existingProfile.handle && existingProfile.handle !== handle) {
-          window.location.href = `/u/${encodeURIComponent(existingProfile.handle)}`
+          router.replace(`/u/${encodeURIComponent(existingProfile.handle)}`)
           return
         }
         setProfile({
@@ -115,7 +120,7 @@ export default function UserProfileClient({ handle, serverProfile }: UserProfile
 
         if (newProfile && !createError) {
           if (newProfile.handle && newProfile.handle !== handle) {
-            window.location.href = `/u/${encodeURIComponent(newProfile.handle)}`
+            router.replace(`/u/${encodeURIComponent(newProfile.handle)}`)
             return
           }
           setProfile({

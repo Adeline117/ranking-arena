@@ -31,6 +31,7 @@ type Post = {
   author_handle?: string | null
   created_at: string
   deleted_at?: string | null
+  is_pinned?: boolean | null
 }
 
 type Comment = {
@@ -169,6 +170,9 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
   const [hasMorePosts, setHasMorePosts] = useState(false)
   const [loadingMorePosts, setLoadingMorePosts] = useState(false)
   const POSTS_PER_PAGE = 20
+
+  // Pin loading state
+  const [pinningPost, setPinningPost] = useState<string | null>(null)
 
   // Invite link
   const [inviteUrl, setInviteUrl] = useState<string | null>(null)
@@ -314,8 +318,9 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
         // 获取帖子 (paginated)
         const { data: postsData, error: postsError } = await supabase
           .from('posts')
-          .select('id, title, content, author_handle, created_at')
+          .select('id, title, content, author_handle, created_at, is_pinned')
           .eq('group_id', groupId)
+          .order('is_pinned', { ascending: false, nullsFirst: false })
           .order('created_at', { ascending: false })
           .limit(POSTS_PER_PAGE)
 
@@ -552,14 +557,14 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
     try {
       const res = await fetch(`/api/groups/${groupId}/comments/${commentId}/delete`, {
         method: 'POST',
-        headers: { 
+        headers: {
           Authorization: `Bearer ${accessToken}`,
           ...getCsrfHeaders()
         }
       })
 
       if (res.ok) {
-        setComments(prev => prev.map(c => 
+        setComments(prev => prev.map(c =>
           c.id === commentId ? { ...c, deleted_at: new Date().toISOString() } : c
         ))
         showToast(t('commentDeleted'), 'success')
@@ -573,6 +578,42 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
     }
   }
 
+  // 置顶/取消置顶帖子
+  const handlePinPost = async (postId: string) => {
+    if (!accessToken || !canManage || pinningPost) return
+
+    setPinningPost(postId)
+    try {
+      const res = await fetch(`/api/posts/${postId}/pin`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          ...getCsrfHeaders()
+        }
+      })
+
+      if (res.ok) {
+        const data = await res.json()
+        const newPinnedState = data.data?.is_pinned ?? data.is_pinned
+        setPosts(prev => prev.map(p => {
+          if (p.id === postId) return { ...p, is_pinned: newPinnedState }
+          // 如果新状态是置顶，取消其他帖子的置顶状态
+          if (newPinnedState) return { ...p, is_pinned: false }
+          return p
+        }))
+        showToast(newPinnedState ? t('pinned') : t('unpinned'), 'success')
+      } else {
+        const data = res.headers.get('content-type')?.includes('application/json') ? await res.json() : null
+        showToast(data?.error || t('operationFailed'), 'error')
+      }
+    } catch (err) {
+      console.error('Pin post error:', err)
+      showToast(t('networkErrorRetry'), 'error')
+    } finally {
+      setPinningPost(null)
+    }
+  }
+
   // 加载更多帖子
   const loadMorePosts = async () => {
     if (loadingMorePosts || !hasMorePosts || posts.length === 0) return
@@ -581,7 +622,7 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
       const lastPost = posts[posts.length - 1]
       const { data } = await supabase
         .from('posts')
-        .select('id, title, content, author_handle, created_at')
+        .select('id, title, content, author_handle, created_at, is_pinned')
         .eq('group_id', groupId)
         .lt('created_at', lastPost.created_at)
         .order('created_at', { ascending: false })
@@ -1158,16 +1199,45 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
                     key={post.id}
                     style={{
                       padding: tokens.spacing[3],
-                      background: post.deleted_at ? 'rgba(255, 107, 107, 0.1)' : tokens.colors.bg.secondary,
+                      background: post.deleted_at
+                        ? 'rgba(255, 107, 107, 0.1)'
+                        : post.is_pinned
+                          ? `linear-gradient(135deg, ${tokens.colors.accent?.primary || '#8b6fa8'}15 0%, ${tokens.colors.bg.secondary} 100%)`
+                          : tokens.colors.bg.secondary,
                       borderRadius: tokens.radius.lg,
-                      border: `1px solid ${post.deleted_at ? 'rgba(255, 107, 107, 0.3)' : tokens.colors.border.primary}`,
+                      border: `1px solid ${
+                        post.deleted_at
+                          ? 'rgba(255, 107, 107, 0.3)'
+                          : post.is_pinned
+                            ? `${tokens.colors.accent?.primary || '#8b6fa8'}50`
+                            : tokens.colors.border.primary
+                      }`,
                     }}
                   >
                     <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                      <Box>
-                        <Text weight="bold" style={{ textDecoration: post.deleted_at ? 'line-through' : 'none' }}>
-                          {post.title}
-                        </Text>
+                      <Box style={{ flex: 1, minWidth: 0 }}>
+                        <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], flexWrap: 'wrap' }}>
+                          {post.is_pinned && (
+                            <span
+                              style={{
+                                fontSize: tokens.typography.fontSize.xs,
+                                padding: `2px ${tokens.spacing[2]}`,
+                                borderRadius: tokens.radius.full,
+                                background: `${tokens.colors.accent?.primary || '#8b6fa8'}20`,
+                                color: tokens.colors.accent?.primary || '#8b6fa8',
+                                fontWeight: tokens.typography.fontWeight.bold,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 4,
+                              }}
+                            >
+                              📌 {t('pinnedLabel')}
+                            </span>
+                          )}
+                          <Text weight="bold" style={{ textDecoration: post.deleted_at ? 'line-through' : 'none' }}>
+                            {post.title}
+                          </Text>
+                        </Box>
                         <Text size="xs" color="tertiary">
                           @{post.author_handle} · {new Date(post.created_at).toLocaleString(language === 'zh' ? 'zh-CN' : 'en-US')}
                         </Text>
@@ -1178,14 +1248,31 @@ export default function GroupManagePage({ params }: { params: { id: string } | P
                         )}
                       </Box>
                       {!post.deleted_at && (
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          onClick={() => handleDeletePost(post.id)}
-                          style={{ color: '#ff6b6b' }}
-                        >
-                          {t('delete')}
-                        </Button>
+                        <Box style={{ display: 'flex', gap: tokens.spacing[2], flexShrink: 0 }}>
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => handlePinPost(post.id)}
+                            disabled={pinningPost === post.id}
+                            style={{
+                              color: post.is_pinned ? tokens.colors.accent?.primary || '#8b6fa8' : tokens.colors.text.secondary,
+                            }}
+                          >
+                            {pinningPost === post.id
+                              ? '...'
+                              : post.is_pinned
+                                ? t('unpin')
+                                : t('pin')}
+                          </Button>
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => handleDeletePost(post.id)}
+                            style={{ color: '#ff6b6b' }}
+                          >
+                            {t('delete')}
+                          </Button>
+                        </Box>
                       )}
                     </Box>
                   </Box>

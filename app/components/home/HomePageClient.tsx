@@ -6,6 +6,7 @@ import { Box } from '../base'
 import RankingSection from './RankingSection'
 import PullToRefresh from '../ui/PullToRefresh'
 import { useTraderData, useAuth } from './hooks'
+import { useLanguage } from '../Providers/LanguageProvider'
 import type { Trader } from '../ranking/RankingTable'
 import type { TimeRange } from './hooks/useTraderData'
 import type { InitialTrader } from '@/lib/getInitialTraders'
@@ -24,6 +25,7 @@ export default function HomePageClient({
   initialLastUpdated,
 }: HomePageClientProps) {
   const { isLoggedIn } = useAuth()
+  const { t } = useLanguage()
   const searchParams = useSearchParams()
   const router = useRouter()
 
@@ -91,7 +93,7 @@ export default function HomePageClient({
           activeTimeRange={activeTimeRange}
           onTimeRangeChange={handleTimeRangeChange}
           lastUpdated={lastUpdated}
-          error={error || (deferredFetchFailed ? '数据加载不完整，点击重试' : null)}
+          error={error || (deferredFetchFailed ? t('dataLoadIncomplete') : null)}
           onRetry={deferredFetchFailed ? retryDeferredFetch : refresh}
           onRefresh={refresh}
           availableSources={availableSources}

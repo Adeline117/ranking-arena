@@ -543,7 +543,7 @@ function RankingTableInner(props: {
         </Box>
       ) : viewMode === 'card' ? (
         <>
-          <Box style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: tokens.spacing[3], padding: tokens.spacing[4] }}>
+          <Box style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(280px, 100%), 1fr))', gap: tokens.spacing[3], padding: tokens.spacing[4] }}>
             {sortedTraders.slice(0, cardVisibleCount).map((trader, idx) => {
               const rank = idx + 1
               return (

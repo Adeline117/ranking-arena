@@ -250,8 +250,9 @@ export default function LoginPage() {
   const { showToast } = useToast()
 
   // Get returnUrl from query params for post-login redirect
+  // Support both 'returnUrl' and 'redirect' parameters for compatibility
   const getRedirectUrl = (userHandle?: string | null, userEmail?: string | null): string => {
-    const returnUrl = searchParams.get('returnUrl')
+    const returnUrl = searchParams.get('returnUrl') || searchParams.get('redirect')
     if (returnUrl && returnUrl.startsWith('/')) {
       return returnUrl
     }
