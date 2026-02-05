@@ -31,6 +31,8 @@ import {
   type EquityCurvePoint,
 } from '@/lib/cron/fetchers/enrichment'
 import { sleep } from '@/lib/cron/fetchers/shared'
+import { captureMessage } from '@/lib/utils/logger'
+import { sendRateLimitedAlert } from '@/lib/alerts/send-alert'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -216,6 +218,47 @@ async function handleEnrichment(req: Request) {
   const totalFailed = Object.values(results).reduce((sum, r) => sum + r.failed, 0)
 
   console.warn(`[enrich] Completed in ${duration}ms: ${totalEnriched} enriched, ${totalFailed} failed`)
+
+  // Alert if failure rate is too high (>30%)
+  const total = totalEnriched + totalFailed
+  const failureRate = total > 0 ? totalFailed / total : 0
+
+  if (failureRate > 0.3 && totalFailed >= 5) {
+    // Log to Sentry
+    await captureMessage(
+      `[Enrichment] High failure rate: ${(failureRate * 100).toFixed(0)}% (${totalFailed}/${total})`,
+      'error',
+      {
+        period,
+        platforms: platforms.join(', '),
+        failureRate: failureRate.toFixed(2),
+        totalFailed,
+        totalEnriched,
+        errors: Object.entries(results)
+          .filter(([, r]) => r.failed > 0)
+          .map(([p, r]) => `${p}: ${r.errors.slice(0, 2).join('; ')}`)
+          .join(' | '),
+      }
+    )
+
+    // Send alert (rate limited to 1 per 10 minutes per platform)
+    await sendRateLimitedAlert(
+      {
+        title: 'Enrichment 失败率过高',
+        message: `${period} 周期 enrichment 失败率 ${(failureRate * 100).toFixed(0)}%\n失败: ${totalFailed}/${total}`,
+        level: failureRate > 0.5 ? 'critical' : 'warning',
+        details: {
+          '周期': period,
+          '平台': platforms.join(', '),
+          '成功': totalEnriched,
+          '失败': totalFailed,
+          '失败率': `${(failureRate * 100).toFixed(1)}%`,
+        },
+      },
+      `enrichment:${period}`,
+      600000 // 10 minutes
+    )
+  }
 
   return NextResponse.json({
     ok: totalFailed === 0,
