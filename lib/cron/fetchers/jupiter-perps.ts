@@ -21,6 +21,7 @@ import {
   fetchJson,
   sleep,
 } from './shared'
+import { type StatsDetail, upsertStatsDetail } from './enrichment'
 
 const SOURCE = 'jupiter_perps'
 const API_BASE = 'https://perps-api.jup.ag/v1/top-traders'
@@ -187,6 +188,36 @@ async function fetchPeriod(
   })
 
   const { saved, error } = await upsertTraders(supabase, top)
+
+  // Save stats_detail for 90D period
+  if (saved > 0 && period === '90D') {
+    console.warn(`[${SOURCE}] Saving stats details for top ${Math.min(top.length, 50)} traders...`)
+    let statsSaved = 0
+    for (const trader of top.slice(0, 50)) {
+      const stats: StatsDetail = {
+        totalTrades: null,
+        profitableTradesPct: null,
+        avgHoldingTimeHours: null,
+        avgProfit: null,
+        avgLoss: null,
+        largestWin: null,
+        largestLoss: null,
+        sharpeRatio: null,
+        maxDrawdown: null,
+        currentDrawdown: null,
+        volatility: null,
+        copiersCount: null,
+        copiersPnl: null,
+        aum: null,
+        winningPositions: null,
+        totalPositions: null,
+      }
+      const { saved: s } = await upsertStatsDetail(supabase, SOURCE, trader.source_trader_id, period, stats)
+      if (s) statsSaved++
+    }
+    console.warn(`[${SOURCE}] Saved ${statsSaved} stats details`)
+  }
+
   return { total: top.length, saved, error }
 }
 

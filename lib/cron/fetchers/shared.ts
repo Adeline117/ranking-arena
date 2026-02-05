@@ -24,6 +24,9 @@ export interface TraderData {
   trades_count?: number | null
   arena_score: number | null
   captured_at: string
+  // Phase 1 扩展字段
+  sharpe_ratio?: number | null
+  aum?: number | null
 }
 
 export interface FetchResult {
@@ -164,6 +167,9 @@ export async function upsertTraders(
       trades_count: t.trades_count || null,
       arena_score: t.arena_score,
       captured_at: t.captured_at,
+      // Phase 1 扩展字段
+      sharpe_ratio: t.sharpe_ratio ?? null,
+      aum: t.aum ?? null,
     }))
 
     const { error: snapErr } = await supabase

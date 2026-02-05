@@ -15,6 +15,7 @@ import {
   fetchJson,
   sleep,
 } from './shared'
+import { type StatsDetail, upsertStatsDetail } from './enrichment'
 
 const SOURCE = 'hyperliquid'
 const STATS_API = 'https://stats-data.hyperliquid.xyz/Mainnet'
@@ -54,12 +55,17 @@ interface FillEntry {
   closedPnl?: string
 }
 
-// ── Win rate enrichment ──
+// ── Win rate & trades count enrichment ──
 
-async function fetchWinRate(
+interface WinRateResult {
+  winRate: number | null
+  tradesCount: number | null
+}
+
+async function fetchWinRateAndTrades(
   address: string,
   period: string
-): Promise<number | null> {
+): Promise<WinRateResult> {
   try {
     const days = WINDOW_DAYS[period] || 30
     const startTime = Date.now() - days * 24 * 60 * 60 * 1000
@@ -71,18 +77,26 @@ async function fetchWinRate(
       timeoutMs: 8000,
     })
 
-    if (!Array.isArray(fills) || fills.length === 0) return null
+    if (!Array.isArray(fills) || fills.length === 0) {
+      return { winRate: null, tradesCount: null }
+    }
 
     const closed = fills.filter((f) => {
       const pnl = parseFloat(f.closedPnl || '0')
       return pnl !== 0
     })
-    if (closed.length === 0) return null
+
+    if (closed.length === 0) {
+      return { winRate: null, tradesCount: fills.length > 0 ? fills.length : null }
+    }
 
     const wins = closed.filter((f) => parseFloat(f.closedPnl || '0') > 0)
-    return (wins.length / closed.length) * 100
+    return {
+      winRate: (wins.length / closed.length) * 100,
+      tradesCount: closed.length, // Phase 1: 返回交易数量
+    }
   } catch {
-    return null
+    return { winRate: null, tradesCount: null }
   }
 }
 
@@ -145,8 +159,10 @@ interface EnrichableTrader {
   displayName: string
   roi: number
   pnl: number
+  aum: number | null // Phase 1: 添加 AUM
   winRate: number | null
   maxDrawdown: number | null
+  tradesCount: number | null // Phase 1: 添加交易数
 }
 
 async function enrichTraders(
@@ -159,11 +175,12 @@ async function enrichTraders(
     const batch = toEnrich.slice(i, i + CONCURRENCY)
     await Promise.all(
       batch.map(async (trader) => {
-        const [winRate, maxDrawdown] = await Promise.all([
-          fetchWinRate(trader.address, period),
+        const [winRateResult, maxDrawdown] = await Promise.all([
+          fetchWinRateAndTrades(trader.address, period),
           fetchMaxDrawdown(trader.address, period),
         ])
-        trader.winRate = winRate
+        trader.winRate = winRateResult.winRate
+        trader.tradesCount = winRateResult.tradesCount // Phase 1: 保存交易数
         trader.maxDrawdown = maxDrawdown
       })
     )
@@ -221,8 +238,10 @@ async function fetchPeriod(
         `${item.ethAddress.slice(0, 6)}...${item.ethAddress.slice(-4)}`,
       roi,
       pnl,
+      aum: accountValue > 0 ? accountValue : null, // Phase 1: 保存 AUM
       winRate: null,
       maxDrawdown: null,
+      tradesCount: null, // Phase 1: 在 enrichment 时填充
     })
   }
 
@@ -232,6 +251,35 @@ async function fetchPeriod(
 
   // Enrich with win rate + MDD (limited for serverless)
   await enrichTraders(topTraders, period)
+
+  // Save stats_detail for 90D period
+  if (period === '90D') {
+    console.warn(`[${SOURCE}] Saving stats details for ${Math.min(topTraders.length, ENRICH_LIMIT)} traders...`)
+    let statsSaved = 0
+    for (const trader of topTraders.slice(0, ENRICH_LIMIT)) {
+      const stats: StatsDetail = {
+        totalTrades: trader.tradesCount,
+        profitableTradesPct: trader.winRate,
+        avgHoldingTimeHours: null,
+        avgProfit: null,
+        avgLoss: null,
+        largestWin: null,
+        largestLoss: null,
+        sharpeRatio: null,
+        maxDrawdown: trader.maxDrawdown,
+        currentDrawdown: null,
+        volatility: null,
+        copiersCount: null,
+        copiersPnl: null,
+        aum: trader.aum,
+        winningPositions: null,
+        totalPositions: trader.tradesCount,
+      }
+      const { saved } = await upsertStatsDetail(supabase, SOURCE, trader.address, period, stats)
+      if (saved) statsSaved++
+    }
+    console.warn(`[${SOURCE}] Saved ${statsSaved} stats details`)
+  }
 
   const capturedAt = new Date().toISOString()
   const traders: TraderData[] = topTraders.map((t, idx) => ({
@@ -243,8 +291,10 @@ async function fetchPeriod(
     rank: idx + 1,
     roi: t.roi,
     pnl: t.pnl || null,
+    aum: t.aum, // Phase 1: 保存 AUM
     win_rate: t.winRate,
     max_drawdown: t.maxDrawdown,
+    trades_count: t.tradesCount, // Phase 1: 保存交易数
     arena_score: calculateArenaScore(t.roi, t.pnl, t.maxDrawdown, t.winRate, period),
     captured_at: capturedAt,
   }))

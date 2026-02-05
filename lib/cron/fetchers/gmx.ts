@@ -13,6 +13,7 @@ import {
   fetchJson,
   sleep,
 } from './shared'
+import { type EquityCurvePoint, type StatsDetail, upsertEquityCurve, upsertStatsDetail } from './enrichment'
 
 const SOURCE = 'gmx'
 const SUBSQUID_URL =
@@ -66,12 +67,19 @@ function bigToNum(val: string | undefined | null): number {
   }
 }
 
-// ── MDD enrichment via positionChanges ──
+// ── MDD and equity curve enrichment via positionChanges ──
 
-async function fetchMaxDrawdown(
+interface EnrichmentResult {
+  maxDrawdown: number | null
+  equityCurve: EquityCurvePoint[]
+}
+
+async function fetchEnrichmentData(
   originalAddress: string,
   period: string
-): Promise<number | null> {
+): Promise<EnrichmentResult> {
+  const emptyResult: EnrichmentResult = { maxDrawdown: null, equityCurve: [] }
+
   try {
     const days = WINDOW_DAYS[period] || 90
     const windowStart = Math.floor(
@@ -117,25 +125,29 @@ async function fetchMaxDrawdown(
       changes = result?.data?.positionChanges
     }
 
-    if (!changes || changes.length < 2) return null
+    if (!changes || changes.length < 2) return emptyResult
 
     // Filter to closing changes (non-zero basePnlUsd)
     const closing = changes.filter((c) => {
-      const pnl = c.basePnlUsd ? bigToNum(c.basePnlUsd) * VALUE_SCALE : 0
-      // Re-scale — basePnlUsd is already in the raw BigInt space
       return c.basePnlUsd ? Number(BigInt(c.basePnlUsd)) / VALUE_SCALE !== 0 : false
     })
 
-    if (closing.length < 2) return null
+    if (closing.length < 2) return emptyResult
 
-    // Cumulative equity curve for MDD
+    // Build equity curve and calculate MDD
     let cumulativePnl = 0
     let peakEquity = 0
     let maxDD = 0
+    const equityCurve: EquityCurvePoint[] = []
+    const dailyPnl = new Map<string, number>()
 
     for (const change of closing) {
       const pnl = bigToNum(change.basePnlUsd)
       cumulativePnl += pnl
+
+      // Group by date for equity curve
+      const date = new Date(change.timestamp * 1000).toISOString().split('T')[0]
+      dailyPnl.set(date, (dailyPnl.get(date) || 0) + pnl)
 
       if (cumulativePnl > peakEquity) peakEquity = cumulativePnl
       if (peakEquity > 0) {
@@ -144,9 +156,25 @@ async function fetchMaxDrawdown(
       }
     }
 
-    return maxDD > 0 && maxDD < 200 ? maxDD : null
+    // Convert daily PnL to equity curve with cumulative ROI
+    let cumPnl = 0
+    const initialCapital = peakEquity > 0 ? peakEquity : 10000 // Estimate initial capital
+    for (const [date, dayPnl] of Array.from(dailyPnl.entries()).sort()) {
+      cumPnl += dayPnl
+      const roi = initialCapital > 0 ? (cumPnl / initialCapital) * 100 : 0
+      equityCurve.push({
+        date,
+        roi,
+        pnl: cumPnl,
+      })
+    }
+
+    return {
+      maxDrawdown: maxDD > 0 && maxDD < 200 ? maxDD : null,
+      equityCurve,
+    }
   } catch {
-    return null
+    return emptyResult
   }
 }
 
@@ -161,6 +189,7 @@ interface ParsedGmxTrader {
   winRate: number | null
   maxDrawdown: number | null
   tradesCount: number
+  equityCurve: EquityCurvePoint[]
 }
 
 async function fetchPeriod(
@@ -217,25 +246,63 @@ async function fetchPeriod(
       winRate,
       maxDrawdown: null,
       tradesCount: item.closedCount || totalTrades,
+      equityCurve: [],
     })
   }
 
   parsed.sort((a, b) => b.roi - a.roi)
   const topTraders = parsed.slice(0, TARGET)
 
-  // Enrich top traders with MDD (limited for serverless)
+  // Enrich top traders with MDD and equity curve (limited for serverless)
   const toEnrich = topTraders.slice(0, ENRICH_LIMIT)
   for (let i = 0; i < toEnrich.length; i += CONCURRENCY) {
     const batch = toEnrich.slice(i, i + CONCURRENCY)
     await Promise.all(
       batch.map(async (trader) => {
-        trader.maxDrawdown = await fetchMaxDrawdown(
+        const enrichment = await fetchEnrichmentData(
           trader.originalAddress,
           period
         )
+        trader.maxDrawdown = enrichment.maxDrawdown
+        trader.equityCurve = enrichment.equityCurve
       })
     )
     await sleep(DELAY_MS)
+  }
+
+  // Save equity curves and stats_detail for 90D period
+  if (period === '90D') {
+    console.warn(`[${SOURCE}] Saving equity curves and stats details for enriched traders...`)
+    let curvesSaved = 0
+    let statsSaved = 0
+    for (const trader of toEnrich) {
+      if (trader.equityCurve.length > 0) {
+        await upsertEquityCurve(supabase, SOURCE, trader.address, period, trader.equityCurve)
+        curvesSaved++
+      }
+      // Save stats_detail
+      const stats: StatsDetail = {
+        totalTrades: trader.tradesCount,
+        profitableTradesPct: trader.winRate,
+        avgHoldingTimeHours: null,
+        avgProfit: null,
+        avgLoss: null,
+        largestWin: null,
+        largestLoss: null,
+        sharpeRatio: null,
+        maxDrawdown: trader.maxDrawdown,
+        currentDrawdown: null,
+        volatility: null,
+        copiersCount: null,
+        copiersPnl: null,
+        aum: null,
+        winningPositions: null,
+        totalPositions: trader.tradesCount,
+      }
+      const { saved: s } = await upsertStatsDetail(supabase, SOURCE, trader.address, period, stats)
+      if (s) statsSaved++
+    }
+    console.warn(`[${SOURCE}] Saved ${curvesSaved} equity curves, ${statsSaved} stats details`)
   }
 
   const capturedAt = new Date().toISOString()
