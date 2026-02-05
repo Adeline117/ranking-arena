@@ -395,6 +395,15 @@ function SearchContent() {
     ? results.filter(r => r.type === filterType)
     : results
 
+  // Calculate counts for each tab
+  const resultCounts = {
+    all: results.length,
+    users: results.filter(r => r.type === 'user').length,
+    traders: results.filter(r => r.type === 'trader').length,
+    posts: results.filter(r => r.type === 'post').length,
+    groups: results.filter(r => r.type === 'group').length,
+  }
+
   const getHref = (result: SearchResult) => {
     if (result.type === 'user') return `/u/${encodeURIComponent(result.title)}`
     if (result.type === 'trader') return `/trader/${encodeURIComponent(result.id)}`
@@ -497,6 +506,18 @@ function SearchContent() {
                 }}
               >
                 {{ all: t('all'), users: t('users'), traders: t('traders'), posts: t('posts'), groups: t('groups') }[tab]}
+                {resultCounts[tab] > 0 && (
+                  <span style={{
+                    marginLeft: '6px',
+                    padding: '2px 6px',
+                    borderRadius: tokens.radius.sm,
+                    background: activeTab === tab ? 'rgba(255,255,255,0.2)' : 'rgba(139, 111, 168, 0.15)',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                  }}>
+                    {resultCounts[tab] > 99 ? '99+' : resultCounts[tab]}
+                  </span>
+                )}
               </button>
             ))}
           </div>
