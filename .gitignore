@@ -87,3 +87,9 @@ scripts/local-scrape.mjs
 ranking-arena.db
 logs/
 scripts/monitoring/reports/
+
+# Compiled fetchers
+lib/cron/fetchers/*.js
+lib/cron/fetchers/*.js.map
+lib/cron/fetchers/*.d.ts
+lib/cron/fetchers/*.d.ts.map
