@@ -4,14 +4,15 @@
 [profile.default]
 src = "contracts"
 out = "contracts/out"
-libs = ["node_modules"]
+libs = ["node_modules", "lib"]
 solc = "0.8.20"
 optimizer = true
 optimizer_runs = 200
 
-# Remappings for OpenZeppelin
+# Remappings for OpenZeppelin and Forge-std
 remappings = [
     "@openzeppelin/=node_modules/@openzeppelin/",
+    "forge-std/=lib/forge-std/src/",
 ]
 
 [rpc_endpoints]

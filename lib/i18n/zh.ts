@@ -2426,6 +2426,30 @@ const zh = {
     // Login - Web3 divider
     loginOrDivider: '或',
 
+    // Web3 - ChainIndicator
+    switchToBase: '切换到 Base 网络',
+    switching: '切换中...',
+    wrongNetwork: '网络错误',
+    selectNetwork: '选择网络',
+    connectedTo: '已连接',
+    networkBase: 'Base',
+    networkArbitrum: 'Arbitrum',
+    networkOptimism: 'Optimism',
+    networkPolygon: 'Polygon',
+
+    // Web3 - OnChainCopyTrading
+    onChainCopyTrading: '链上跟单',
+    onChainCopyTradingDesc: '通过智能合约自动复制交易策略',
+    onChainCopyTradingComingSoon: '即将推出',
+    onChainCopyTradingComingSoonDesc: '链上跟单功能正在开发中，敬请期待！',
+    subscribeToTrader: '订阅交易员',
+    allocation: '分配金额',
+    maxPositionSize: '最大持仓',
+    stopLoss: '止损比例',
+    leverage: '杠杆倍数',
+    currentStatus: '当前状态',
+    unrealizedPnl: '未实现盈亏',
+
     // 通用 UI 文本（减少硬编码）
     viewLiveLeaderboard: '查看实时排行榜',
     popularTraders: '热门交易员',
