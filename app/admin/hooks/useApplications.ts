@@ -14,7 +14,7 @@ export interface GroupApplication {
   description?: string | null
   description_en?: string | null
   avatar_url?: string | null
-  role_names?: any
+  role_names?: { admin?: { zh?: string; en?: string }; member?: { zh?: string; en?: string } } | null
   status: string
   reject_reason?: string | null
   created_at: string
@@ -34,9 +34,9 @@ export interface GroupEditApplication {
   description?: string | null
   description_en?: string | null
   avatar_url?: string | null
-  rules_json?: any
+  rules_json?: Record<string, unknown> | null
   rules?: string | null
-  role_names?: any
+  role_names?: { admin?: { zh?: string; en?: string }; member?: { zh?: string; en?: string } } | null
   status: string
   reject_reason?: string | null
   created_at: string

@@ -4,12 +4,37 @@ import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
 import Card from '@/app/components/ui/Card'
 
+interface TierInfo {
+  count: number
+  percentage: string
+  refreshInterval: string
+}
+
+interface TierDistribution {
+  hot?: TierInfo
+  active?: TierInfo
+  normal?: TierInfo
+  dormant?: TierInfo
+}
+
+interface ApiEfficiency {
+  currentSystem?: { callsPerDay: number }
+  smartScheduler?: { callsPerDay: number }
+  reduction?: { percentage: string; callsSaved: number }
+  costSavings?: { perDay: string; perMonth: string; perYear: string }
+}
+
+interface DataFreshness {
+  overdueTraders: number
+  lastTierUpdate?: string
+}
+
 interface SchedulerMetricsProps {
   data: {
     enabled: boolean
-    tierDistribution?: any
-    apiEfficiency?: any
-    dataFreshness?: any
+    tierDistribution?: TierDistribution
+    apiEfficiency?: ApiEfficiency
+    dataFreshness?: DataFreshness
     error?: string
   }
 }
@@ -177,7 +202,7 @@ export default function SchedulerMetrics({ data }: SchedulerMetricsProps) {
               <Text size="sm" color="secondary">
                 Overdue Traders
               </Text>
-              <Text size="sm" weight="bold" style={{ color: dataFreshness?.overdueTraders > 0 ? '#FFD700' : '#7CFFB2' }}>
+              <Text size="sm" weight="bold" style={{ color: (dataFreshness?.overdueTraders ?? 0) > 0 ? '#FFD700' : '#7CFFB2' }}>
                 {dataFreshness?.overdueTraders || 0}
               </Text>
             </Box>

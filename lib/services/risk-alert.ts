@@ -8,7 +8,7 @@
  * - roi_change: ROI 大幅变动预警 - 当 ROI 变动超过阈值时触发
  */
 
-import { createClient } from '@supabase/supabase-js'
+import { createClient, SupabaseClient } from '@supabase/supabase-js'
 
 // ============================================
 // 类型定义
@@ -27,7 +27,7 @@ export interface RiskAlert {
   severity: AlertSeverity
   threshold: number
   currentValue: number
-  previousValue: number
+  previousValue?: number
   message: string
   createdAt: Date
   isRead: boolean
@@ -170,8 +170,8 @@ function formatAlertMessage(
 // ============================================
 
 export class RiskAlertService {
-   
-  private supabase: any // Database types not generated for these tables
+
+  private supabase: SupabaseClient
 
   constructor(supabaseUrl: string, supabaseKey: string) {
     this.supabase = createClient(supabaseUrl, supabaseKey, {
@@ -343,7 +343,8 @@ export class RiskAlertService {
     }
 
      
-    return (data || []).map((row: any) => ({
+    type ConfigRow = { id: string; user_id: string; trader_id: string; trader_handle: string; alert_type: AlertType; threshold: number; enabled: boolean; created_at: string; updated_at: string }
+    return (data || []).map((row: ConfigRow) => ({
       id: row.id,
       userId: row.user_id,
       traderId: row.trader_id,
@@ -429,7 +430,8 @@ export class RiskAlertService {
     }
 
      
-    return (data || []).map((row: any) => ({
+    type AlertRow = { id: string; user_id: string; trader_id: string; trader_handle: string; alert_type: AlertType; severity: AlertSeverity; threshold: number; current_value: number; previous_value?: number; message: string; created_at: string; is_read: boolean }
+    return (data || []).map((row: AlertRow) => ({
       id: row.id,
       userId: row.user_id,
       traderId: row.trader_id,

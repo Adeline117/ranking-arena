@@ -154,7 +154,20 @@ export class ScheduleManager {
     }
 
     // Flatten and extract rank from metrics
-    return (data || []).map((row: any) => {
+    type TraderRow = {
+      id: string
+      platform: string
+      trader_key: string
+      handle: string
+      last_seen_at?: string | null
+      activity_tier?: ActivityTier | null
+      next_refresh_at?: string | null
+      last_refreshed_at?: string | null
+      refresh_priority?: number | null
+      trader_snapshots_v2?: Array<{ metrics?: { rank?: string | number; [key: string]: unknown } }>
+      trader_profiles?: Array<{ follower_count?: number; [key: string]: unknown }>
+    }
+    return (data || []).map((row: TraderRow) => {
       const metrics = row.trader_snapshots_v2?.[0]?.metrics || {}
       const profile = row.trader_profiles?.[0] || {}
 
@@ -163,13 +176,13 @@ export class ScheduleManager {
         platform: row.platform,
         trader_key: row.trader_key,
         handle: row.handle,
-        last_seen_at: row.last_seen_at,
-        activity_tier: row.activity_tier,
-        next_refresh_at: row.next_refresh_at,
-        last_refreshed_at: row.last_refreshed_at,
-        refresh_priority: row.refresh_priority,
-        rank: metrics.rank ? parseInt(metrics.rank, 10) : undefined,
-        follower_count: profile.follower_count,
+        last_seen_at: row.last_seen_at ?? undefined,
+        activity_tier: row.activity_tier ?? null,
+        next_refresh_at: row.next_refresh_at ?? null,
+        last_refreshed_at: row.last_refreshed_at ?? null,
+        refresh_priority: row.refresh_priority ?? null,
+        rank: metrics.rank ? parseInt(String(metrics.rank), 10) : undefined,
+        follower_count: profile.follower_count ?? undefined,
       }
     })
   }

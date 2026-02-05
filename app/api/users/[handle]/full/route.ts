@@ -65,7 +65,7 @@ export async function GET(
     }
 
     // 获取相似交易员
-    let similarTraders: any[] = []
+    let similarTraders: Array<{ id: string; handle: string; source: string; roi_90d?: number; followers?: number }> = []
     if (profile.source) {
       const { data: similar } = await getSupabase()
         .from('traders')

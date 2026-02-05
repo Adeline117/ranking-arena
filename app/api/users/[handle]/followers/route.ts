@@ -78,10 +78,11 @@ export async function GET(
     }
 
     // 如果有请求者ID，检查请求者是否关注了这些粉丝
+    type FollowerRow = { follower?: { id?: string; handle?: string; bio?: string; avatar_url?: string }; created_at?: string }
     let followStatus: Record<string, boolean> = {}
     if (requesterId && followers && followers.length > 0) {
-      const followerIds = followers.map((f: any) => f.follower?.id).filter(Boolean)
-      
+      const followerIds = (followers as FollowerRow[]).map((f) => f.follower?.id).filter(Boolean) as string[]
+
       const { data: myFollows } = await supabase
         .from('user_follows')
         .select('following_id')
@@ -89,21 +90,21 @@ export async function GET(
         .in('following_id', followerIds)
 
       if (myFollows) {
-        followStatus = myFollows.reduce((acc: Record<string, boolean>, f: any) => {
+        followStatus = myFollows.reduce((acc: Record<string, boolean>, f: { following_id: string }) => {
           acc[f.following_id] = true
           return acc
         }, {})
       }
     }
 
-    const formattedFollowers = (followers || []).map((f: any) => ({
+    const formattedFollowers = ((followers || []) as FollowerRow[]).map((f) => ({
       id: f.follower?.id,
       handle: f.follower?.handle,
       bio: f.follower?.bio,
       avatar_url: f.follower?.avatar_url,
       followed_at: f.created_at,
-      is_following: followStatus[f.follower?.id] || false
-    })).filter((f: any) => f.id)
+      is_following: followStatus[f.follower?.id || ''] || false
+    })).filter((f) => f.id)
 
     return NextResponse.json({
       followers: formattedFollowers,
