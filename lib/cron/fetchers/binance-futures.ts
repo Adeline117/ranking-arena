@@ -107,6 +107,12 @@ async function fetchPeriod(
         throw err
       }
 
+      // Binance may return HTTP 200 with geo-block message in JSON body
+      const errMsg = data?.msg || data?.message || ''
+      if (errMsg.includes('restricted location') || errMsg.includes('unavailable')) {
+        return { total: 0, saved: 0, error: `Geo-blocked: ${errMsg}` }
+      }
+
       const list = data?.data?.list || []
       if (list.length === 0) break
 
