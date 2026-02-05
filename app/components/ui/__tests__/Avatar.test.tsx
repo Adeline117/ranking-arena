@@ -30,7 +30,7 @@ jest.mock('@/lib/utils/avatar', () => ({
 }))
 
 // Mock Box and Text components
-jest.mock('../../Base', () => ({
+jest.mock('../../base', () => ({
   Box: ({ children, className, style, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
     <div className={className} style={style} data-testid="avatar-box" {...props}>
       {children}
