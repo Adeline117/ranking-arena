@@ -173,12 +173,13 @@ async function enrichTraders(traders: EnrichableTrader[]): Promise<void> {
 
         // Calculate MDD from equity curve
         if (curve.length >= 2) {
-          let peak = curve[0].pnl
+          let peak = curve[0].pnl ?? 0
           let maxDD = 0
           for (const point of curve) {
-            if (point.pnl > peak) peak = point.pnl
+            const pnl = point.pnl ?? 0
+            if (pnl > peak) peak = pnl
             if (peak > 0) {
-              const dd = ((peak - point.pnl) / peak) * 100
+              const dd = ((peak - pnl) / peak) * 100
               if (dd > maxDD) maxDD = dd
             }
           }
