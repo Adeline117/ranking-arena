@@ -588,7 +588,7 @@ async function getTraderDetails(
           : undefined,
         avgProfit: statsDetail90d?.avg_profit ?? undefined,
         avgLoss: statsDetail90d?.avg_loss ?? undefined,
-        trackedSince: trackedSince 
+        activeSince: trackedSince
           ? new Date(trackedSince).toLocaleDateString('zh-CN', { year: 'numeric', month: 'short', day: 'numeric' })
           : undefined,
         maxDrawdown: snapshot?.max_drawdown ?? undefined,
@@ -845,7 +845,7 @@ async function getTraderDetailsFromSnapshots(
     stats: {
       additionalStats: {
         tradesCount: snapshot?.trades_count ?? undefined,
-        trackedSince: trackedSince
+        activeSince: trackedSince
           ? new Date(trackedSince).toLocaleDateString('zh-CN', { year: 'numeric', month: 'short', day: 'numeric' })
           : undefined,
         maxDrawdown: snapshot?.max_drawdown ?? undefined,
