@@ -94,24 +94,16 @@ function isAuthorized(req: Request): boolean {
   return false
 }
 
-export async function GET() {
-  return NextResponse.json({
-    ok: true,
-    message: 'Enrichment cron endpoint',
-    platforms: Object.keys(PLATFORM_CONFIGS),
-    usage: {
-      method: 'POST',
-      params: {
-        platform: 'binance_futures|bybit|okx_futures (optional, default: all)',
-        period: '7D|30D|90D (optional, default: 90D)',
-        limit: 'number (optional, default: 50)',
-        offset: 'number (optional, default: 0)',
-      },
-    },
-  })
+export async function GET(req: Request) {
+  // Support GET requests from Vercel cron
+  return handleEnrichment(req)
 }
 
 export async function POST(req: Request) {
+  return handleEnrichment(req)
+}
+
+async function handleEnrichment(req: Request) {
   const startTime = Date.now()
 
   // 1) Authorize
@@ -169,7 +161,7 @@ export async function POST(req: Request) {
       continue
     }
 
-    console.log(`[enrich] Processing ${traders.length} ${platformKey} traders for ${period}`)
+    console.warn(`[enrich] Processing ${traders.length} ${platformKey} traders for ${period}`)
 
     // Process in batches
     for (let i = 0; i < traders.length; i += config.concurrency) {
@@ -223,7 +215,7 @@ export async function POST(req: Request) {
   const totalEnriched = Object.values(results).reduce((sum, r) => sum + r.enriched, 0)
   const totalFailed = Object.values(results).reduce((sum, r) => sum + r.failed, 0)
 
-  console.log(`[enrich] Completed in ${duration}ms: ${totalEnriched} enriched, ${totalFailed} failed`)
+  console.warn(`[enrich] Completed in ${duration}ms: ${totalEnriched} enriched, ${totalFailed} failed`)
 
   return NextResponse.json({
     ok: totalFailed === 0,
