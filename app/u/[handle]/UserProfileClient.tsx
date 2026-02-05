@@ -17,8 +17,6 @@ import UserFollowButton from '@/app/components/ui/UserFollowButton'
 import MessageButton from '@/app/components/ui/MessageButton'
 import { getAvatarGradient, getAvatarInitial } from '@/lib/utils/avatar'
 import { ProBadgeOverlay } from '@/app/components/ui/ProBadge'
-import { WalletAddress } from '@/app/components/web3/WalletAddress'
-import { NFTBadge } from '@/app/components/web3/NFTBadge'
 
 const PostFeed = dynamic(() => import('@/app/components/post/PostFeed'), {
   ssr: false,
@@ -34,25 +32,15 @@ const PostFeed = dynamic(() => import('@/app/components/post/PostFeed'), {
 interface ServerProfile {
   id: string
   handle: string
-  uid?: number
   bio?: string
   avatar_url?: string
-  cover_url?: string
   show_followers?: boolean
   show_following?: boolean
   followers: number
   following: number
   followingTraders: number
   isRegistered: boolean
-  socialLinks: {
-    twitter?: string
-    telegram?: string
-    discord?: string
-    github?: string
-    website?: string
-  }
   proBadgeTier: 'pro' | null
-  walletAddress?: string
 }
 
 interface UserProfileClientProps {
@@ -97,7 +85,7 @@ export default function UserProfileClient({ handle, serverProfile }: UserProfile
       // Check if profile exists by user ID
       const { data: existingProfile } = await supabase
         .from('user_profiles')
-        .select('*, uid, cover_url')
+        .select('id, handle, bio, avatar_url, show_followers, show_following, subscription_tier')
         .eq('id', userId)
         .maybeSingle()
 
@@ -109,15 +97,12 @@ export default function UserProfileClient({ handle, serverProfile }: UserProfile
         setProfile({
           id: existingProfile.id,
           handle: existingProfile.handle || handle,
-          uid: existingProfile.uid || undefined,
           bio: existingProfile.bio || undefined,
           avatar_url: existingProfile.avatar_url || undefined,
-          cover_url: existingProfile.cover_url || undefined,
           followers: 0,
           following: 0,
           followingTraders: 0,
           isRegistered: true,
-          socialLinks: {},
           proBadgeTier: null,
         })
       } else {
@@ -125,7 +110,7 @@ export default function UserProfileClient({ handle, serverProfile }: UserProfile
         const { data: newProfile, error: createError } = await supabase
           .from('user_profiles')
           .upsert({ id: userId, handle: defaultHandle }, { onConflict: 'id' })
-          .select('*, uid, cover_url')
+          .select('id, handle, bio, avatar_url')
           .single()
 
         if (newProfile && !createError) {
@@ -136,15 +121,12 @@ export default function UserProfileClient({ handle, serverProfile }: UserProfile
           setProfile({
             id: newProfile.id,
             handle: newProfile.handle || handle,
-            uid: newProfile.uid || undefined,
             bio: newProfile.bio || undefined,
             avatar_url: newProfile.avatar_url || undefined,
-            cover_url: newProfile.cover_url || undefined,
             followers: 0,
             following: 0,
             followingTraders: 0,
             isRegistered: true,
-            socialLinks: {},
             proBadgeTier: null,
           })
         }
@@ -201,7 +183,6 @@ export default function UserProfileClient({ handle, serverProfile }: UserProfile
   }
 
   const isOwnProfile = currentUserId === profile.id
-  const hasCover = Boolean(profile.cover_url)
   const followingCount = (profile.following || 0) + (profile.followingTraders || 0)
 
   return (
@@ -224,63 +205,32 @@ export default function UserProfileClient({ handle, serverProfile }: UserProfile
             boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.05)',
             position: 'relative',
             overflow: 'hidden',
-            background: hasCover
-              ? tokens.colors.bg.secondary
-              : `linear-gradient(135deg, ${tokens.colors.bg.secondary}F8 0%, ${tokens.colors.bg.primary}E8 100%)`,
+            background: `linear-gradient(135deg, ${tokens.colors.bg.secondary}F8 0%, ${tokens.colors.bg.primary}E8 100%)`,
           }}
         >
-          {/* Cover image as real <img> for better LCP */}
-          {hasCover && (
-            <img
-              src={profile.cover_url}
-              alt=""
-              width={1200}
-              height={200}
-              fetchPriority="high"
-              style={{
-                position: 'absolute',
-                inset: 0,
-                width: '100%',
-                height: '100%',
-                objectFit: 'cover',
-              }}
-            />
-          )}
-          {hasCover && (
-            <div
-              style={{
-                position: 'absolute',
-                inset: 0,
-                background: 'linear-gradient(to bottom, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0.6) 100%)',
-              }}
-            />
-          )}
-
           {/* Decorative background */}
-          {!hasCover && (
-            <Box style={{ position: 'absolute', inset: 0, overflow: 'hidden', borderRadius: tokens.radius.xl, pointerEvents: 'none' }}>
-              <Box
-                style={{
-                  position: 'absolute',
-                  top: -100,
-                  left: -100,
-                  width: 300,
-                  height: 300,
-                  background: `radial-gradient(circle, ${tokens.colors.accent.primary}08 0%, transparent 70%)`,
-                }}
-              />
-              <Box
-                style={{
-                  position: 'absolute',
-                  bottom: -80,
-                  right: -80,
-                  width: 200,
-                  height: 200,
-                  background: `radial-gradient(circle, ${tokens.colors.accent.brand}06 0%, transparent 70%)`,
-                }}
-              />
-            </Box>
-          )}
+          <Box style={{ position: 'absolute', inset: 0, overflow: 'hidden', borderRadius: tokens.radius.xl, pointerEvents: 'none' }}>
+            <Box
+              style={{
+                position: 'absolute',
+                top: -100,
+                left: -100,
+                width: 300,
+                height: 300,
+                background: `radial-gradient(circle, ${tokens.colors.accent.primary}08 0%, transparent 70%)`,
+              }}
+            />
+            <Box
+              style={{
+                position: 'absolute',
+                bottom: -80,
+                right: -80,
+                width: 200,
+                height: 200,
+                background: `radial-gradient(circle, ${tokens.colors.accent.brand}06 0%, transparent 70%)`,
+              }}
+            />
+          </Box>
 
           {/* Avatar + Info */}
           <Box
@@ -350,30 +300,12 @@ export default function UserProfileClient({ handle, serverProfile }: UserProfile
                   size="2xl"
                   weight="black"
                   style={{
-                    color: hasCover ? '#ffffff' : tokens.colors.text.primary,
-                    textShadow: hasCover ? '0 2px 8px rgba(0,0,0,0.5)' : undefined,
+                    color: tokens.colors.text.primary,
+                    textShadow: undefined,
                   }}
                 >
                   {profile.handle}
                 </Text>
-
-                {profile.uid && (
-                  <Box
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      padding: `3px ${tokens.spacing[2]}`,
-                      background: `${tokens.colors.accent.primary}18`,
-                      borderRadius: tokens.radius.full,
-                      border: `1px solid ${tokens.colors.accent.primary}40`,
-                    }}
-                    title={t('userNumber')}
-                  >
-                    <Text size="xs" weight="bold" style={{ color: tokens.colors.accent.primary, fontFamily: 'monospace' }}>
-                      #{profile.uid.toString().padStart(6, '0')}
-                    </Text>
-                  </Box>
-                )}
 
                 {profile.isRegistered && (
                   <Box
@@ -401,8 +333,8 @@ export default function UserProfileClient({ handle, serverProfile }: UserProfile
                 <Text
                   size="sm"
                   style={{
-                    color: hasCover ? 'rgba(255,255,255,0.85)' : tokens.colors.text.secondary,
-                    textShadow: hasCover ? '0 1px 4px rgba(0,0,0,0.3)' : undefined,
+                    color: tokens.colors.text.secondary,
+                    textShadow: undefined,
                     marginBottom: tokens.spacing[3],
                     maxWidth: 500,
                   }}
@@ -424,8 +356,8 @@ export default function UserProfileClient({ handle, serverProfile }: UserProfile
                     borderRadius: tokens.radius.md,
                   }}
                 >
-                  <Text size="sm" style={{ color: hasCover ? 'rgba(255,255,255,0.8)' : tokens.colors.text.secondary }}>
-                    <Text as="span" weight="bold" style={{ color: hasCover ? '#fff' : tokens.colors.text.primary, marginRight: 4 }}>
+                  <Text size="sm" style={{ color: tokens.colors.text.secondary }}>
+                    <Text as="span" weight="bold" style={{ color: tokens.colors.text.primary, marginRight: 4 }}>
                       {followingCount}
                     </Text>
                     {t('following')}
@@ -447,8 +379,8 @@ export default function UserProfileClient({ handle, serverProfile }: UserProfile
                     borderRadius: tokens.radius.md,
                   }}
                 >
-                  <Text size="sm" style={{ color: hasCover ? 'rgba(255,255,255,0.8)' : tokens.colors.text.secondary }}>
-                    <Text as="span" weight="bold" style={{ color: hasCover ? '#fff' : tokens.colors.text.primary, marginRight: 4 }}>
+                  <Text size="sm" style={{ color: tokens.colors.text.secondary }}>
+                    <Text as="span" weight="bold" style={{ color: tokens.colors.text.primary, marginRight: 4 }}>
                       {followersCount}
                     </Text>
                     {t('followers')}
@@ -456,67 +388,6 @@ export default function UserProfileClient({ handle, serverProfile }: UserProfile
                 </Box>
               </Box>
 
-              {/* Social links */}
-              {Object.values(profile.socialLinks).some(Boolean) && (
-                <Box style={{ display: 'flex', gap: tokens.spacing[2], marginTop: tokens.spacing[3], flexWrap: 'wrap' }}>
-                  {profile.socialLinks.twitter && (
-                    <a
-                      href={`https://x.com/${profile.socialLinks.twitter}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={{
-                        padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
-                        borderRadius: tokens.radius.md,
-                        background: `${tokens.colors.bg.tertiary}80`,
-                        color: tokens.colors.text.secondary,
-                        fontSize: tokens.typography.fontSize.xs,
-                        textDecoration: 'none',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 4,
-                      }}
-                    >
-                      <span style={{ fontSize: 11 }}>𝕏</span>
-                      <span>@{profile.socialLinks.twitter}</span>
-                    </a>
-                  )}
-                  {profile.socialLinks.telegram && (
-                    <a
-                      href={`https://t.me/${profile.socialLinks.telegram}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={{
-                        padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
-                        borderRadius: tokens.radius.md,
-                        background: `${tokens.colors.bg.tertiary}80`,
-                        color: tokens.colors.text.secondary,
-                        fontSize: tokens.typography.fontSize.xs,
-                        textDecoration: 'none',
-                      }}
-                    >
-                      TG @{profile.socialLinks.telegram}
-                    </a>
-                  )}
-                </Box>
-              )}
-
-              {/* Wallet address + NFT badge */}
-              {profile.walletAddress && (
-                <Box style={{ display: 'flex', gap: tokens.spacing[2], marginTop: tokens.spacing[2], flexWrap: 'wrap', alignItems: 'center' }}>
-                  <Box
-                    style={{
-                      padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
-                      borderRadius: tokens.radius.md,
-                      background: `${tokens.colors.bg.tertiary}80`,
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                    }}
-                  >
-                    <WalletAddress address={profile.walletAddress} showCopy={false} />
-                  </Box>
-                  {profile.proBadgeTier === 'pro' && <NFTBadge size="sm" />}
-                </Box>
-              )}
             </Box>
           </Box>
 
