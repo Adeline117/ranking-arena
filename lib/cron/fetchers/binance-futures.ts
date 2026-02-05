@@ -113,8 +113,19 @@ async function fetchPeriod(
         return { total: 0, saved: 0, error: `Geo-blocked: ${errMsg}` }
       }
 
+      // Check for API success status
+      if (data?.success === false || (data?.code && data.code !== '000000')) {
+        return { total: 0, saved: 0, error: `Binance API error: code=${data?.code}, msg=${errMsg}` }
+      }
+
       const list = data?.data?.list || []
-      if (list.length === 0) break
+      if (list.length === 0) {
+        // First page empty = no data or blocked
+        if (page === 1) {
+          return { total: 0, saved: 0, error: `No data returned (page 1 empty). Response: ${JSON.stringify(data).slice(0, 200)}` }
+        }
+        break
+      }
 
       for (const t of list) {
         const id = t.portfolioId || t.leadPortfolioId || ''
