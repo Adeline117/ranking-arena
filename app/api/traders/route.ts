@@ -238,14 +238,19 @@ async function fetchTradersData(
         })
         .map(item => {
           const info = handleMap.get(item.source_trader_id) || { handle: null, avatar_url: null }
-          // 标准化 win_rate 为百分比形式
-          const normalizedWinRate = item.win_rate != null
-            ? (item.win_rate <= 1 ? item.win_rate * 100 : item.win_rate)
-            : null
+          // 标准化 win_rate 为百分比形式，并验证范围 (0-100)
+          let normalizedWinRate: number | null = null
+          if (item.win_rate != null && !isNaN(item.win_rate)) {
+            const wr = item.win_rate <= 1 ? item.win_rate * 100 : item.win_rate
+            normalizedWinRate = Math.max(0, Math.min(100, wr))
+          }
+
+          // Handle 优先使用数据库值，空字符串或 null 时回退到 trader ID
+          const displayHandle = (info.handle && info.handle.trim()) || item.source_trader_id
 
           return {
             id: item.source_trader_id,
-            handle: info.handle || item.source_trader_id,
+            handle: displayHandle,
             roi: item.roi ?? 0,
             pnl: item.pnl ?? 0,
             win_rate: normalizedWinRate,

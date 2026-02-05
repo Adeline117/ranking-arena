@@ -71,7 +71,7 @@ export async function getInitialTraders(
         .gt('arena_score', 0)
         .lte('roi', ROI_FILTER_CAP) // Filter out extreme ROI values
         .order('arena_score', { ascending: false, nullsFirst: false })
-        .limit(limit * 4), // Fetch 4x to account for dedup + platform diversity filtering
+        .limit(limit * 2), // Fetch 2x to account for dedup
 
       supabase
         .from('trader_snapshots')
@@ -96,7 +96,7 @@ export async function getInitialTraders(
       if (seen.has(key)) return false
       seen.add(key)
       return true
-    }).slice(0, limit * 3)
+    }).slice(0, limit * 2)
 
     // Get handles from trader_sources - parallelize with other work if needed
     const traderIds = uniqueSnapshots.map(s => s.source_trader_id)
@@ -118,10 +118,15 @@ export async function getInitialTraders(
       const key = `${snap.source}:${snap.source_trader_id}`
       const info = handleMap.get(key) || { handle: null, avatar_url: null }
 
-      // Normalize win_rate
-      const normalizedWinRate = snap.win_rate != null
-        ? (snap.win_rate <= 1 ? snap.win_rate * 100 : snap.win_rate)
-        : null
+      // Normalize win_rate and validate range (0-100)
+      let normalizedWinRate: number | null = null
+      if (snap.win_rate != null && !isNaN(snap.win_rate)) {
+        const wr = snap.win_rate <= 1 ? snap.win_rate * 100 : snap.win_rate
+        normalizedWinRate = Math.max(0, Math.min(100, wr))
+      }
+
+      // Handle: prefer database value, fallback to trader ID for empty/null
+      const displayHandle = (info.handle && info.handle.trim()) || snap.source_trader_id
 
       const scoreResult = calculateArenaScore(
         {
@@ -149,7 +154,7 @@ export async function getInitialTraders(
 
       return {
         id: snap.source_trader_id,
-        handle: info.handle || snap.source_trader_id,
+        handle: displayHandle,
         roi: snap.roi ?? 0,
         pnl: snap.pnl ?? 0,
         win_rate: normalizedWinRate,
@@ -166,33 +171,10 @@ export async function getInitialTraders(
     // Sort by recalculated arena_score descending
     traders.sort((a, b) => b.arena_score - a.arena_score)
 
-    // Platform diversity: prevent any single platform from dominating the list.
-    // Without this, top results are often 40-50% one platform (e.g. hyperliquid or binance_futures).
-    // Rule: no platform takes more than MAX_PLATFORM_SHARE of the final list.
-    const MAX_PLATFORM_SHARE = 0.30 // 30%
-    const maxPerPlatform = Math.max(3, Math.ceil(limit * MAX_PLATFORM_SHARE))
-    const platformCounts = new Map<string, number>()
-    const diverseTraders: InitialTrader[] = []
-    const overflow: InitialTrader[] = []
-
-    for (const trader of traders) {
-      const count = platformCounts.get(trader.source) || 0
-      if (count < maxPerPlatform) {
-        diverseTraders.push(trader)
-        platformCounts.set(trader.source, count + 1)
-      } else {
-        overflow.push(trader)
-      }
-    }
-
-    // If we have fewer than limit after diversity filter, backfill from overflow
-    let finalTraders = diverseTraders.slice(0, limit)
-    if (finalTraders.length < limit && overflow.length > 0) {
-      finalTraders = [...finalTraders, ...overflow.slice(0, limit - finalTraders.length)]
-    }
-
+    // Strict ranking by arena_score — no platform diversity filtering
+    // Return top traders purely based on calculated score
     return {
-      traders: finalTraders,
+      traders: traders.slice(0, limit),
       lastUpdated: latestSnapshot?.captured_at || null,
     }
   } catch (err) {

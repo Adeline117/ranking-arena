@@ -32,6 +32,8 @@ interface UseTraderDataOptions {
 
 // 全局请求去重 Map（跨组件实例共享，避免并发重复请求）
 const pendingRequests = new Map<string, Promise<CachedData>>()
+// AbortController Map for request cancellation
+const abortControllers = new Map<string, AbortController>()
 
 export function useTraderData(options: UseTraderDataOptions = {}) {
   // Feature 4: Default 5 min refresh when visible (reduced from 10 min)
@@ -59,6 +61,7 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
   const [lastUpdated, setLastUpdated] = useState<string | null>(initialLastUpdated || null)
   const [availableSources, setAvailableSources] = useState<string[]>([])
   const [deferredFetchFailed, setDeferredFetchFailed] = useState(false)
+  const [isChangingTimeRange, setIsChangingTimeRange] = useState(false)
 
   // 多窗口同步
   const { broadcast, on } = useTraderDataSync()
@@ -112,6 +115,14 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
       return pendingRequests.get(cacheKey)!
     }
 
+    // Cancel any existing request for this time range
+    const existingController = abortControllers.get(timeRange)
+    if (existingController) {
+      existingController.abort()
+    }
+    const controller = new AbortController()
+    abortControllers.set(timeRange, controller)
+
     const requestPromise = (async (): Promise<CachedData> => {
       try {
         // Feature 1: Include sort params in fetch URL
@@ -121,13 +132,22 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
         if (sortBy && sortBy !== 'arena_score') {
           url += `&sortBy=${sortBy}&order=${sortOrder || 'desc'}`
         }
-        const response = await fetch(url)
+        const response = await fetch(url, { signal: controller.signal })
         if (!response.ok) {
           const errorMsg = `${tRef.current('loadFailed')} (${response.status})`
           setError(errorMsg)
           return tradersCache.current.get(timeRange) || { traders: [], lastUpdated: null, fetchedAt: 0 }
         }
-        const data = await response.json()
+
+        // Safe JSON parsing
+        let data
+        try {
+          data = await response.json()
+        } catch (parseError) {
+          const errorMsg = tRef.current('errorDataFormat') || '数据格式错误'
+          setError(errorMsg)
+          return tradersCache.current.get(timeRange) || { traders: [], lastUpdated: null, fetchedAt: 0 }
+        }
         const cached: CachedData = {
           traders: data.traders || [],
           lastUpdated: data.lastUpdated || null,
@@ -148,12 +168,17 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
 
         return cached
       } catch (err) {
+        // Don't set error for aborted requests
+        if (err instanceof Error && err.name === 'AbortError') {
+          return tradersCache.current.get(timeRange) || { traders: [], lastUpdated: null, fetchedAt: 0 }
+        }
         const errorMsg = err instanceof Error ? err.message : tRef.current('errorNetworkFailed')
         setError(errorMsg)
         return tradersCache.current.get(timeRange) || { traders: [], lastUpdated: null, fetchedAt: 0 }
       } finally {
-        // 请求完成后移除 pending 标记
+        // 请求完成后移除 pending 标记和 AbortController
         pendingRequests.delete(cacheKey)
+        abortControllers.delete(timeRange)
       }
     })()
 
@@ -171,13 +196,17 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
       setLastUpdated(cached.lastUpdated)
       setAvailableSources(cached.availableSources || [])
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : tRef.current('loadFailed')
-      setError(errorMsg)
-      setCurrentTraders([])
-      setLastUpdated(null)
-      setAvailableSources([])
+      // Don't show error for aborted requests
+      if (!(err instanceof Error && err.name === 'AbortError')) {
+        const errorMsg = err instanceof Error ? err.message : tRef.current('loadFailed')
+        setError(errorMsg)
+        setCurrentTraders([])
+        setLastUpdated(null)
+        setAvailableSources([])
+      }
     } finally {
       setLoading(false)
+      setIsChangingTimeRange(false)
     }
   }, [activeTimeRange, loadTimeRange])
 
@@ -314,8 +343,11 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
 
   // 切换时间段
   const changeTimeRange = useCallback((range: TimeRange) => {
+    if (range !== activeTimeRange) {
+      setIsChangingTimeRange(true)
+    }
     setActiveTimeRange(range)
-  }, [])
+  }, [activeTimeRange])
 
   // 刷新数据
   const refresh = useCallback(() => {
@@ -353,5 +385,6 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
     clearCache,
     deferredFetchFailed,
     retryDeferredFetch,
+    isChangingTimeRange,
   }
 }
