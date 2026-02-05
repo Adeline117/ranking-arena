@@ -23,6 +23,7 @@ import {
   parseNum,
   normalizeWinRate,
 } from './shared'
+import { fetchBybitEquityCurve, fetchBybitStatsDetail, upsertEquityCurve, upsertStatsDetail } from './enrichment'
 
 const SOURCE = 'bybit'
 const DIRECT_API_URL =
@@ -30,6 +31,11 @@ const DIRECT_API_URL =
 const PROXY_URL = process.env.CLOUDFLARE_PROXY_URL || 'https://ranking-arena-proxy.broosbook.workers.dev'
 const TARGET = 500
 const PAGE_SIZE = 50
+
+// Phase 2: Enrichment settings
+const ENRICH_LIMIT = 50
+const ENRICH_CONCURRENCY = 3
+const ENRICH_DELAY_MS = 1500
 
 const PERIOD_MAP: Record<string, string> = {
   '7D': 'DATA_DURATION_SEVEN_DAY',
@@ -163,7 +169,8 @@ async function fetchPeriod(
     const maxDrawdown = parsePercent(mv[1])
     const pnl = parseNum(mv[2])
     const winRate = normalizeWinRate(parsePercent(mv[3]))
-    const followers = parseInt(String(item.currentFollowerCount || '0'), 10) || null
+    // mv[4] = PLRatio (盈亏比)
+    const sharpeRatio = parsePercent(mv[5]) // Phase 1: 提取 Sharpe Ratio
 
     traders.push({
       source: SOURCE,
@@ -175,7 +182,7 @@ async function fetchPeriod(
       pnl,
       win_rate: winRate,
       max_drawdown: maxDrawdown != null ? Math.abs(maxDrawdown) : null,
-      followers,
+      sharpe_ratio: sharpeRatio, // Phase 1: 保存 Sharpe Ratio
       arena_score: calculateArenaScore(roi, pnl, maxDrawdown, winRate, period),
       captured_at: capturedAt,
     })
@@ -184,6 +191,42 @@ async function fetchPeriod(
   traders.sort((a, b) => (b.roi ?? 0) - (a.roi ?? 0))
   const top = traders.slice(0, TARGET)
   const { saved, error } = await upsertTraders(supabase, top)
+
+  // Phase 2: Enrich top traders with equity curve and stats detail
+  if (saved > 0 && period === '90D') {
+    const toEnrich = top.slice(0, ENRICH_LIMIT)
+    console.warn(`[${SOURCE}] Enriching ${toEnrich.length} traders...`)
+
+    let enrichedCount = 0
+    for (let i = 0; i < toEnrich.length; i += ENRICH_CONCURRENCY) {
+      const batch = toEnrich.slice(i, i + ENRICH_CONCURRENCY)
+      await Promise.all(
+        batch.map(async (trader) => {
+          try {
+            // Equity curve
+            const curve = await fetchBybitEquityCurve(trader.source_trader_id, 90)
+            if (curve.length > 0) {
+              await upsertEquityCurve(supabase, SOURCE, trader.source_trader_id, '90D', curve)
+            }
+
+            // Stats detail
+            const stats = await fetchBybitStatsDetail(trader.source_trader_id)
+            if (stats) {
+              await upsertStatsDetail(supabase, SOURCE, trader.source_trader_id, '90D', stats)
+              enrichedCount++
+            }
+          } catch (err) {
+            console.warn(`[${SOURCE}] Enrichment failed for ${trader.source_trader_id}: ${err}`)
+          }
+        })
+      )
+      if (i + ENRICH_CONCURRENCY < toEnrich.length) {
+        await sleep(ENRICH_DELAY_MS)
+      }
+    }
+    console.warn(`[${SOURCE}] Enrichment complete: ${enrichedCount} stats details saved`)
+  }
+
   return { total: top.length, saved, error }
 }
 

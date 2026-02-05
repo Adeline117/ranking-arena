@@ -40,6 +40,7 @@ import { fetchDrift } from './drift'
 import { fetchJupiterPerps } from './jupiter-perps'
 import { fetchAevo } from './aevo'
 import { fetchSynthetix } from './synthetix'
+import { fetchDydx } from './dydx'
 
 export const INLINE_FETCHERS: Record<string, PlatformFetcher> = {
   // CEX Futures
@@ -77,6 +78,7 @@ export const INLINE_FETCHERS: Record<string, PlatformFetcher> = {
   jupiter_perps: fetchJupiterPerps,
   aevo: fetchAevo,
   synthetix: fetchSynthetix,
+  dydx: fetchDydx,
 }
 
 export function getInlineFetcher(platform: string): PlatformFetcher | undefined {

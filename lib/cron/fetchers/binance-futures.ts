@@ -21,12 +21,27 @@ import {
   parseNum,
   normalizeWinRate,
 } from './shared'
+import {
+  fetchBinanceEquityCurve,
+  fetchBinancePositionHistory,
+  fetchBinanceStatsDetail,
+  upsertEquityCurve,
+  upsertPositionHistory,
+  upsertStatsDetail,
+  upsertAssetBreakdown,
+  calculateAssetBreakdown,
+} from './enrichment'
 
 const SOURCE = 'binance_futures'
 const API_URL =
   'https://www.binance.com/bapi/futures/v1/friendly/future/copy-trade/home-page/query-list'
 const TARGET = 500
 const PAGE_SIZE = 20
+
+// Phase 2: Enrichment settings
+const ENRICH_LIMIT = 50 // Top N traders to enrich with equity curve/position history
+const ENRICH_CONCURRENCY = 3
+const ENRICH_DELAY_MS = 1500
 
 // Futures API may use either number or string format - trying both
 const PERIOD_MAP: Record<string, string> = { '7D': '7D', '30D': '30D', '90D': '90D' }
@@ -180,6 +195,54 @@ async function fetchPeriod(
   traders.sort((a, b) => (b.roi ?? 0) - (a.roi ?? 0))
   const top = traders.slice(0, TARGET)
   const { saved, error } = await upsertTraders(supabase, top)
+
+  // Phase 2: Enrich top traders with equity curve, position history, and stats detail
+  if (saved > 0 && period === '90D') {
+    const toEnrich = top.slice(0, ENRICH_LIMIT)
+    console.warn(`[${SOURCE}] Enriching ${toEnrich.length} traders...`)
+
+    let enrichedCount = 0
+    for (let i = 0; i < toEnrich.length; i += ENRICH_CONCURRENCY) {
+      const batch = toEnrich.slice(i, i + ENRICH_CONCURRENCY)
+      await Promise.all(
+        batch.map(async (trader) => {
+          try {
+            // Fetch and save equity curve
+            const curve = await fetchBinanceEquityCurve(trader.source_trader_id, 'QUARTERLY')
+            if (curve.length > 0) {
+              await upsertEquityCurve(supabase, SOURCE, trader.source_trader_id, '90D', curve)
+            }
+
+            // Fetch and save position history + asset breakdown
+            const positions = await fetchBinancePositionHistory(trader.source_trader_id, 50)
+            if (positions.length > 0) {
+              await upsertPositionHistory(supabase, SOURCE, trader.source_trader_id, positions)
+
+              // Calculate and save asset breakdown from positions
+              const assetBreakdown = calculateAssetBreakdown(positions)
+              if (assetBreakdown.length > 0) {
+                await upsertAssetBreakdown(supabase, SOURCE, trader.source_trader_id, '90D', assetBreakdown)
+              }
+            }
+
+            // Fetch and save stats detail
+            const stats = await fetchBinanceStatsDetail(trader.source_trader_id)
+            if (stats) {
+              await upsertStatsDetail(supabase, SOURCE, trader.source_trader_id, '90D', stats)
+              enrichedCount++
+            }
+          } catch (err) {
+            console.warn(`[${SOURCE}] Enrichment failed for ${trader.source_trader_id}: ${err}`)
+          }
+        })
+      )
+      if (i + ENRICH_CONCURRENCY < toEnrich.length) {
+        await sleep(ENRICH_DELAY_MS)
+      }
+    }
+    console.warn(`[${SOURCE}] Enrichment complete: ${enrichedCount} stats details saved`)
+  }
+
   return { total: top.length, saved, error }
 }
 

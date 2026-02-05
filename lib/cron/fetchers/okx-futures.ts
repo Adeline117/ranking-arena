@@ -13,12 +13,16 @@ import {
   fetchJson,
   sleep,
 } from './shared'
+import { type EquityCurvePoint, upsertEquityCurve, fetchOkxStatsDetail, upsertStatsDetail } from './enrichment'
 
 const SOURCE = 'okx_futures'
 const API_URL = 'https://www.okx.com/api/v5/copytrading/public-lead-traders'
 const TARGET = 500
 const PAGE_SIZE = 10
 const MAX_PAGES = 50
+
+// Phase 2: Enrichment settings
+const ENRICH_LIMIT = 100 // OKX already has pnlRatios data, no extra API calls needed
 
 const WINDOW_DAYS: Record<string, number> = { '7D': 7, '30D': 30, '90D': 90 }
 
@@ -47,6 +51,39 @@ interface OkxApiResponse {
     totalPage?: string
     ranks?: OkxRank[]
   }>
+}
+
+// ── Phase 2: Convert pnlRatios to equity curve ──
+
+function convertPnlRatiosToEquityCurve(
+  pnlRatios: OkxPnlRatio[],
+  period: string
+): EquityCurvePoint[] {
+  if (!Array.isArray(pnlRatios) || pnlRatios.length === 0) return []
+
+  const sorted = [...pnlRatios].sort(
+    (a, b) => parseInt(a.beginTs) - parseInt(b.beginTs)
+  )
+  const days = WINDOW_DAYS[period] || 90
+  const relevant = sorted.slice(-days)
+
+  if (relevant.length === 0) return []
+
+  // Get the base ratio (first point) to compute period-relative ROI
+  const baseRatio = 1 + parseFloat(relevant[0].pnlRatio)
+
+  return relevant.map((r) => {
+    const timestamp = parseInt(r.beginTs)
+    const date = new Date(timestamp).toISOString().split('T')[0]
+    const currentRatio = 1 + parseFloat(r.pnlRatio)
+    const periodRoi = ((currentRatio / baseRatio) - 1) * 100
+
+    return {
+      date,
+      roi: isFinite(periodRoi) ? periodRoi : 0,
+      pnl: null, // OKX doesn't provide daily PnL
+    }
+  })
 }
 
 // ── Period metric helpers ──
@@ -170,6 +207,43 @@ async function fetchPeriod(
   traders.sort((a, b) => (b.roi ?? 0) - (a.roi ?? 0))
   const top = traders.slice(0, TARGET)
   const { saved, error } = await upsertTraders(supabase, top)
+
+  // Phase 2: Save equity curves and stats detail
+  if (saved > 0 && period === '90D') {
+    const tradersArray = Array.from(allTraders.entries())
+    const toEnrich = tradersArray.slice(0, ENRICH_LIMIT)
+    console.warn(`[${SOURCE}] Enriching ${toEnrich.length} traders...`)
+
+    let curvesSaved = 0
+    let statsSaved = 0
+
+    for (const [id, item] of toEnrich) {
+      // Save equity curve from pnlRatios (no extra API call)
+      if (item.pnlRatios && item.pnlRatios.length > 0) {
+        const curve = convertPnlRatiosToEquityCurve(item.pnlRatios, period)
+        if (curve.length > 0) {
+          await upsertEquityCurve(supabase, SOURCE, id, period, curve)
+          curvesSaved++
+        }
+      }
+
+      // Fetch and save stats detail
+      try {
+        const stats = await fetchOkxStatsDetail(id)
+        if (stats) {
+          await upsertStatsDetail(supabase, SOURCE, id, period, stats)
+          statsSaved++
+        }
+      } catch {
+        // Ignore individual failures
+      }
+
+      // Rate limit
+      await sleep(200)
+    }
+    console.warn(`[${SOURCE}] Enrichment complete: ${curvesSaved} curves, ${statsSaved} stats`)
+  }
+
   return { total: top.length, saved, error }
 }
 
