@@ -432,6 +432,12 @@ export class Scheduler extends EventEmitter {
         // Update retry stats
         this.stats.totalRetries++
 
+        // Calculate retry delay with exponential backoff and jitter
+        // This prevents thundering herd when multiple jobs fail simultaneously
+        const baseDelay = this.config.retryDelayMs * Math.pow(2, job.retryCount - 1)
+        const jitter = Math.random() * baseDelay * 0.3 // 30% jitter
+        const retryDelay = Math.min(baseDelay + jitter, 60000) // Max 60 seconds
+
         // Re-enqueue with delay
         setTimeout(() => {
           if (this.running) {
@@ -439,10 +445,10 @@ export class Scheduler extends EventEmitter {
             this.jobQueue.splice(insertIndex, 0, job)
             this.emit('job:retry', { job, attempt: job.retryCount })
             console.log(
-              `[Scheduler] Retrying job ${job.id} (attempt ${job.retryCount}/${job.maxRetries})`
+              `[Scheduler] Retrying job ${job.id} (attempt ${job.retryCount}/${job.maxRetries}) in ${Math.round(retryDelay)}ms`
             )
           }
-        }, this.config.retryDelayMs * job.retryCount)
+        }, retryDelay)
 
         this.activeJobs.delete(job.id)
       } else {
