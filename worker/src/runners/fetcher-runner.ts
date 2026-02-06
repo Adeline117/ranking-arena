@@ -5,10 +5,10 @@
  */
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
-import type { Job, JobResult, PlatformConfig } from '../types'
+import type { Job, JobResult, PlatformConfig } from '../types.js'
 
 // Import existing fetchers (copied into worker for standalone builds)
-import { INLINE_FETCHERS } from '../lib/fetchers'
+import { INLINE_FETCHERS } from '../lib/fetchers/index.js'
 
 // ============================================
 // Platform Configurations

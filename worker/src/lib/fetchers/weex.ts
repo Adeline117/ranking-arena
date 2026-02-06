@@ -28,8 +28,8 @@ import {
   sleep,
   parseNum,
   normalizeWinRate,
-} from './shared'
-import { type StatsDetail, upsertStatsDetail } from './enrichment'
+} from './shared.js'
+import { type StatsDetail, upsertStatsDetail } from './enrichment.js'
 
 const SOURCE = 'weex'
 const TARGET = 500

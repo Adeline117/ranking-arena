@@ -12,8 +12,8 @@ import {
   upsertTraders,
   fetchJson,
   sleep,
-} from './shared'
-import { type StatsDetail, upsertStatsDetail } from './enrichment'
+} from './shared.js'
+import { type StatsDetail, upsertStatsDetail } from './enrichment.js'
 
 const SOURCE = 'aevo'
 const API_URL = 'https://api.aevo.xyz/leaderboard'

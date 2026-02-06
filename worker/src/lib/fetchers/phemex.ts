@@ -21,8 +21,8 @@ import {
   sleep,
   parseNum,
   normalizeWinRate,
-} from './shared'
-import { type StatsDetail, upsertStatsDetail } from './enrichment'
+} from './shared.js'
+import { type StatsDetail, upsertStatsDetail } from './enrichment.js'
 
 const SOURCE = 'phemex'
 const TARGET = 500

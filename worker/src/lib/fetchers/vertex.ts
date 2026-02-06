@@ -28,7 +28,7 @@ import {
   upsertTraders,
   fetchJson,
   sleep,
-} from './shared'
+} from './shared.js'
 
 const SOURCE = 'vertex'
 const TARGET = 500

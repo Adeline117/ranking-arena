@@ -9,7 +9,7 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { fetchJson, sleep } from './shared'
+import { fetchJson, sleep } from './shared.js'
 
 // ============================================
 // Types

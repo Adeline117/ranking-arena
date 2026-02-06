@@ -15,8 +15,8 @@
  *   npx tsx worker/src/index.ts --daemon           # Run as daemon with scheduling
  */
 
-import { Scheduler } from './scheduler'
-import { ProxyPoolManager } from './proxy-pool'
+import { Scheduler } from './scheduler/index.js'
+import { ProxyPoolManager } from './proxy-pool/index.js'
 import {
   executeFetcherJob,
   getEnabledPlatforms,
@@ -24,8 +24,8 @@ import {
   getPlatformsByCategory,
   getDeFiPlatforms,
   PLATFORM_CONFIGS,
-} from './runners/fetcher-runner'
-import type { PlatformConfig } from './types'
+} from './runners/fetcher-runner.js'
+import type { PlatformConfig } from './types.js'
 
 // ============================================
 // Configuration

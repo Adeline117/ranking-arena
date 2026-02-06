@@ -25,8 +25,8 @@ import {
   upsertTraders,
   fetchJson,
   sleep,
-} from './shared'
-import { type StatsDetail, upsertStatsDetail } from './enrichment'
+} from './shared.js'
+import { type StatsDetail, upsertStatsDetail } from './enrichment.js'
 
 const SOURCE = 'drift'
 const API_BASE = 'https://mainnet-beta.api.drift.trade'

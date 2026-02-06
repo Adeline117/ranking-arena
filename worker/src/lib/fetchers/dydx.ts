@@ -16,8 +16,8 @@ import {
   upsertTraders,
   fetchJson,
   sleep,
-} from './shared'
-import { type EquityCurvePoint, type StatsDetail, upsertEquityCurve, upsertStatsDetail } from './enrichment'
+} from './shared.js'
+import { type EquityCurvePoint, type StatsDetail, upsertEquityCurve, upsertStatsDetail } from './enrichment.js'
 
 const SOURCE = 'dydx'
 const PROXY_URL = process.env.CLOUDFLARE_PROXY_URL || 'https://ranking-arena-proxy.broosbook.workers.dev'
