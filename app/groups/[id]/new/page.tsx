@@ -470,6 +470,15 @@ export default function NewGroupPostPage(): React.ReactElement {
       return
     }
 
+    // Validate poll options BEFORE setting loading state
+    if (pollEnabled) {
+      const validOptions = pollOptions.filter(opt => opt.text.trim())
+      if (validOptions.length < 2) {
+        showToast(t('pollMinOptions'), 'warning')
+        return
+      }
+    }
+
     submitRef.current = true
     setLoading(true)
     try {
@@ -486,12 +495,6 @@ export default function NewGroupPostPage(): React.ReactElement {
       let pollId = null
       if (pollEnabled) {
         const validOptions = pollOptions.filter(opt => opt.text.trim())
-        if (validOptions.length < 2) {
-          showToast(t('pollMinOptions'), 'warning')
-          setLoading(false)
-          submitRef.current = false
-          return
-        }
 
         const endAt = new Date(Date.now() + pollDuration * 60 * 60 * 1000)
 
