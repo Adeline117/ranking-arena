@@ -16,7 +16,7 @@ import {
   TraderAvatar,
   ArenaScoreBadge,
   areTraderPropsEqual,
-} from './shared/trader-display'
+} from './shared/TraderDisplay'
 import AddCompareButton from '../trader/AddCompareButton'
 
 const ScoreBreakdownTooltip = dynamic(
