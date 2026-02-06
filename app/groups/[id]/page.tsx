@@ -71,7 +71,7 @@ function PageWrapper({ email, children }: PageWrapperProps): React.ReactElement 
   )
 }
 
-export default function GroupDetailPage({ params }: { params: { id: string } | Promise<{ id: string }> }) {
+export default function GroupDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const [groupId, setGroupId] = useState<string>('')
   const abortControllerRef = useRef<AbortController | null>(null)
 

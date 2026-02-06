@@ -246,7 +246,7 @@ export default function TraderFollowButton({ traderId, userId, initialFollowing 
   if (!userId) {
     return (
       <button
-        onClick={() => router.push('/login?returnUrl=' + encodeURIComponent(typeof window !== 'undefined' ? window.location.pathname : '/'))}
+        onClick={() => router.push('/login?redirect=' + encodeURIComponent(typeof window !== 'undefined' ? window.location.pathname : '/'))}
         style={{
           padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
           borderRadius: tokens.radius.md,

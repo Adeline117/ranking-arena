@@ -245,6 +245,7 @@ export default function LoginPage() {
   }>({ email: false, password: false, handle: false })
   
   const errorRef = useRef<HTMLDivElement>(null)
+  const submittingRef = useRef(false) // Prevent double submissions
   const router = useRouter()
   const searchParams = useSearchParams()
   const { showToast } = useToast()
@@ -335,11 +336,13 @@ export default function LoginPage() {
   }, [countdown])
 
   const handleSendCode = async () => {
+    if (submittingRef.current || sendingCode) return
     if (!email) {
       setError(t('loginPleaseEnterEmail'))
       return
     }
 
+    submittingRef.current = true
     setError(null)
     setSendingCode(true)
 
@@ -372,6 +375,7 @@ export default function LoginPage() {
       setError((err instanceof Error ? err.message : undefined) || t('loginSendFailedNetwork'))
     } finally {
       setSendingCode(false)
+      submittingRef.current = false
     }
   }
 
@@ -381,11 +385,13 @@ export default function LoginPage() {
   }
 
   const handleSendLoginCode = async () => {
+    if (submittingRef.current || sendingCode) return
     if (!email) {
       setError(t('loginPleaseEnterEmail'))
       return
     }
 
+    submittingRef.current = true
     setError(null)
     setSendingCode(true)
 
@@ -414,15 +420,18 @@ export default function LoginPage() {
       setError((err instanceof Error ? err.message : undefined) || t('loginSendFailedSimple'))
     } finally {
       setSendingCode(false)
+      submittingRef.current = false
     }
   }
 
   const handleVerifyCode = async () => {
+    if (submittingRef.current || loading) return
     if (!code) {
       setError(t('loginPleaseEnterCode'))
       return
     }
 
+    submittingRef.current = true
     setError(null)
     setLoading(true)
 
@@ -467,6 +476,7 @@ export default function LoginPage() {
       }
     } finally {
       setLoading(false)
+      submittingRef.current = false
     }
   }
 
@@ -505,6 +515,7 @@ export default function LoginPage() {
   }
 
   const handleSetPassword = async () => {
+    if (submittingRef.current || loading) return
     if (!password || password.length < 6) {
       setError(t('loginPasswordMinLength'))
       return
@@ -515,6 +526,7 @@ export default function LoginPage() {
       return
     }
 
+    submittingRef.current = true
     setError(null)
     setLoading(true)
 
@@ -558,10 +570,14 @@ export default function LoginPage() {
       setError((err instanceof Error ? err.message : undefined) || t('loginSetupFailed'))
     } finally {
       setLoading(false)
+      submittingRef.current = false
     }
   }
 
   const handleLogin = async () => {
+    if (submittingRef.current || loading) return
+
+    submittingRef.current = true
     setError(null)
     setLoading(true)
 
@@ -593,6 +609,7 @@ export default function LoginPage() {
       setError((err instanceof Error ? err.message : undefined) || t('loginFailed'))
     } finally {
       setLoading(false)
+      submittingRef.current = false
     }
   }
 

@@ -758,6 +758,7 @@ function SettingsContent() {
   const [handleAvailable, setHandleAvailable] = useState<boolean | null>(null)
   const [checkingHandle, setCheckingHandle] = useState(false)
   const handleCheckTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const submittingRef = useRef(false) // Prevent double submissions
 
   // Debounced handle uniqueness check
   useEffect(() => {
@@ -1063,6 +1064,7 @@ function SettingsContent() {
   }
 
   const handleSaveProfile = async () => {
+    if (submittingRef.current || saving) return
     if (!userId) return
 
     // Validate handle before saving
@@ -1075,6 +1077,7 @@ function SettingsContent() {
       return
     }
 
+    submittingRef.current = true
     setSaving(true)
     try {
       const { data: currentProfile } = await supabase
@@ -1186,6 +1189,7 @@ function SettingsContent() {
       showToast(t('saveFailedRetry'), 'error')
     } finally {
       setSaving(false)
+      submittingRef.current = false
     }
   }
 
@@ -1198,11 +1202,13 @@ function SettingsContent() {
   }, [resetCountdown])
 
   const handleSendResetCode = async () => {
+    if (submittingRef.current || sendingResetCode) return
     if (!email) {
       showToast(t('cannotGetEmail'), 'error')
       return
     }
 
+    submittingRef.current = true
     setSendingResetCode(true)
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
@@ -1222,10 +1228,12 @@ function SettingsContent() {
       showToast(msg, 'error')
     } finally {
       setSendingResetCode(false)
+      submittingRef.current = false
     }
   }
 
   const handleChangePassword = async () => {
+    if (submittingRef.current || savingPassword) return
     if (!currentPassword) {
       showToast(t('enterCurrentPasswordFirst'), 'warning')
       return
@@ -1239,6 +1247,7 @@ function SettingsContent() {
       return
     }
 
+    submittingRef.current = true
     setSavingPassword(true)
     try {
       if (!email) {
@@ -1275,15 +1284,18 @@ function SettingsContent() {
       showToast(msg, 'error')
     } finally {
       setSavingPassword(false)
+      submittingRef.current = false
     }
   }
 
   const handleChangeEmail = async () => {
+    if (submittingRef.current || savingEmail) return
     if (!newEmail || !newEmailValidation.valid) {
       showToast(t('enterValidEmail'), 'warning')
       return
     }
 
+    submittingRef.current = true
     setSavingEmail(true)
     try {
       const { error } = await supabase.auth.updateUser({
@@ -1303,12 +1315,15 @@ function SettingsContent() {
       showToast(msg, 'error')
     } finally {
       setSavingEmail(false)
+      submittingRef.current = false
     }
   }
 
   // Save notification preferences
   const handleSaveNotifications = async () => {
+    if (submittingRef.current || savingNotifications) return
     if (!userId) return
+    submittingRef.current = true
     setSavingNotifications(true)
 
     try {
@@ -1333,11 +1348,14 @@ function SettingsContent() {
       showToast(t('saveFailed'), 'error')
     } finally {
       setSavingNotifications(false)
+      submittingRef.current = false
     }
   }
 
   // ===== 2FA Handlers =====
   const handleSetup2FA = async () => {
+    if (submittingRef.current || twoFALoading) return
+    submittingRef.current = true
     setTwoFALoading(true)
     try {
       const { data: { session } } = await supabase.auth.getSession()
@@ -1360,14 +1378,17 @@ function SettingsContent() {
       showToast(t('networkError'), 'error')
     } finally {
       setTwoFALoading(false)
+      submittingRef.current = false
     }
   }
 
   const handleVerify2FA = async () => {
+    if (submittingRef.current || twoFALoading) return
     if (!twoFACode || twoFACode.length !== 6) {
       showToast(t('enter6DigitCode'), 'warning')
       return
     }
+    submittingRef.current = true
     setTwoFALoading(true)
     try {
       const { data: { session } } = await supabase.auth.getSession()
@@ -1398,14 +1419,17 @@ function SettingsContent() {
       showToast(t('networkError'), 'error')
     } finally {
       setTwoFALoading(false)
+      submittingRef.current = false
     }
   }
 
   const handleDisable2FA = async () => {
+    if (submittingRef.current || twoFALoading) return
     if (!disablePassword) {
       showToast(t('enterPassword'), 'warning')
       return
     }
+    submittingRef.current = true
     setTwoFALoading(true)
     try {
       const { data: { session } } = await supabase.auth.getSession()
@@ -1436,6 +1460,7 @@ function SettingsContent() {
       showToast(t('networkError'), 'error')
     } finally {
       setTwoFALoading(false)
+      submittingRef.current = false
     }
   }
 
