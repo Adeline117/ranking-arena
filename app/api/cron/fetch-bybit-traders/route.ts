@@ -13,6 +13,8 @@ import { createClient } from '@supabase/supabase-js'
 import { BybitAdapter } from '@/lib/adapters/bybit-adapter'
 import { ExchangeRateLimiters } from '@/lib/ratelimit/exchange-limiter'
 import { logger } from '@/lib/logger'
+import { calculateArenaScore } from '@/lib/utils/arena-score'
+import type { Period } from '@/lib/utils/arena-score'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300 // 5 minutes
@@ -126,27 +128,43 @@ export async function POST(request: NextRequest) {
             }
           }
 
+          // Calculate Arena Score
+          const period: Period = trader.periodDays === 30 ? '30D' : '7D'
+          const arenaScore = calculateArenaScore(
+            {
+              roi: trader.roi,
+              pnl: trader.pnl,
+              maxDrawdown: trader.maxDrawdown,
+              winRate: trader.winRate,
+            },
+            period
+          )
+
           // Insert/update snapshot
+          // Note: Using season_id (uppercase) to match /api/rankings query
           const { error: snapshotError } = await supabase
             .from('trader_snapshots')
             .upsert(
               {
                 source: 'bybit',
                 source_trader_id: trader.traderId,
-                window: trader.periodDays === 30 ? '30d' : '7d',
+                season_id: period,
                 roi: trader.roi,
                 pnl: trader.pnl,
-                aum: trader.aum,
                 followers: trader.followers,
+                copiers: trader.followers, // Bybit uses followers as copiers
                 trades_count: trader.tradesCount,
                 win_rate: trader.winRate,
                 max_drawdown: trader.maxDrawdown,
-                sharpe_ratio: trader.sharpeRatio,
+                arena_score: arenaScore.totalScore,
+                return_score: arenaScore.returnScore,
+                pnl_score: arenaScore.pnlScore,
+                drawdown_score: arenaScore.drawdownScore,
+                stability_score: arenaScore.stabilityScore,
                 captured_at: new Date().toISOString(),
-                data_source: 'api',
               },
               {
-                onConflict: 'source,source_trader_id,window',
+                onConflict: 'source,source_trader_id,season_id',
               }
             )
 
