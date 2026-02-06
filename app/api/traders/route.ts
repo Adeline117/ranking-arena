@@ -29,6 +29,7 @@ import {
 } from '@/lib/constants/exchanges'
 import { createLogger } from '@/lib/utils/logger'
 import { getOrSetWithLock, CacheKey } from '@/lib/cache'
+import { logger as productionLogger } from '@/lib/logger'
 
 const logger = createLogger('traders-api')
 
@@ -181,7 +182,7 @@ async function fetchTradersData(
           .range(dbPage * pageSize, (dbPage + 1) * pageSize - 1)
 
         if (error) {
-          console.error(`[Traders API] ${source} 查询错误:`, error.message)
+          productionLogger.dbError('fetch-trader-snapshots', error, { source })
           break
         }
 

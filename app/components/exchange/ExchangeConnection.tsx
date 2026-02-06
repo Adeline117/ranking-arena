@@ -31,6 +31,7 @@ export default function ExchangeConnectionManager({ userId }: ExchangeConnection
   const { showConfirm } = useDialog()
   const [connections, setConnections] = useState<ExchangeConnection[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [syncing, setSyncing] = useState<string | null>(null)
 
   useEffect(() => {
@@ -41,11 +42,12 @@ export default function ExchangeConnectionManager({ userId }: ExchangeConnection
   const loadConnections = async () => {
     try {
       setLoading(true)
-      
+      setError(null)
+
       // 检查用户是否已登录
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) {
-        console.warn('[ExchangeConnection] 用户未登录')
+        setError(t('pleaseLogin'))
         setConnections([])
         return
       }
@@ -53,7 +55,7 @@ export default function ExchangeConnectionManager({ userId }: ExchangeConnection
       // 确保使用正确的用户ID
       const actualUserId = user.id
       if (userId !== actualUserId) {
-        console.warn('[ExchangeConnection] 用户ID不匹配:', { provided: userId, actual: actualUserId })
+        console.warn('[ExchangeConnection] User ID mismatch - using actual user ID')
       }
 
       const { data, error: fetchError } = await supabase
@@ -63,23 +65,22 @@ export default function ExchangeConnectionManager({ userId }: ExchangeConnection
         .order('created_at', { ascending: false })
 
       if (fetchError) {
-        console.error('[ExchangeConnection] 加载连接失败:', {
-          error: fetchError,
-          message: fetchError.message,
-          details: fetchError.details,
-          hint: fetchError.hint,
-          code: fetchError.code,
-          userId: actualUserId,
-        })
-        // 即使出错也设置空数组，避免显示错误状态
+        const errorMsg = fetchError.code === 'PGRST301'
+          ? t('serviceTemporarilyUnavailable')
+          : t('loadConnectionsFailed')
+        setError(errorMsg)
         setConnections([])
+        showToast(errorMsg, 'error')
         return
       }
 
       setConnections(data || [])
-    } catch (_err) {
-      // 静默处理错误，设置空数组
+      setError(null)
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : t('loadConnectionsFailed')
+      setError(errorMsg)
       setConnections([])
+      showToast(errorMsg, 'error')
     } finally {
       setLoading(false)
     }
@@ -173,6 +174,21 @@ export default function ExchangeConnectionManager({ userId }: ExchangeConnection
     )
   }
 
+  if (error) {
+    return (
+      <Box style={{ padding: tokens.spacing[4], display: 'flex', flexDirection: 'column', gap: tokens.spacing[3], alignItems: 'center' }}>
+        <Text style={{ textAlign: 'center', color: tokens.colors.accent.error }}>{error}</Text>
+        <Button
+          onClick={loadConnections}
+          size="sm"
+          style={{ marginTop: tokens.spacing[2] }}
+        >
+          {t('retry')}
+        </Button>
+      </Box>
+    )
+  }
+
   return (
     <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}>
       <Text size="lg" weight="black">
@@ -203,14 +219,30 @@ export default function ExchangeConnectionManager({ userId }: ExchangeConnection
                     style={{
                       padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
                       borderRadius: tokens.radius.sm,
-                      background: tokens.colors.bg.tertiary,
+                      background: connection.last_sync_status === 'success' ? `${tokens.colors.accent.success}15` :
+                                  connection.last_sync_status === 'error' ? `${tokens.colors.accent.error}15` :
+                                  tokens.colors.bg.tertiary,
                       fontSize: tokens.typography.fontSize.xs,
-                      color: tokens.colors.text.secondary,
+                      color: connection.last_sync_status === 'success' ? tokens.colors.accent.success :
+                             connection.last_sync_status === 'error' ? tokens.colors.accent.error :
+                             tokens.colors.text.secondary,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4,
                     }}
                   >
-                    {connection.last_sync_status === 'success' ? `✅ ${t('connected')}` : 
-                     connection.last_sync_status === 'error' ? `❌ ${t('syncFailed')}` : 
-                     connection.last_sync_status === 'pending' ? `⏳ ${t('syncing')}` : t('connected')}
+                    {connection.last_sync_status === 'success' && (
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="20 6 9 17 4 12"/></svg>
+                    )}
+                    {connection.last_sync_status === 'error' && (
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+                    )}
+                    {connection.last_sync_status === 'pending' && (
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                    )}
+                    {connection.last_sync_status === 'success' ? t('connected') :
+                     connection.last_sync_status === 'error' ? t('syncFailed') :
+                     connection.last_sync_status === 'pending' ? t('syncing') : t('connected')}
                   </Box>
                 )}
               </Box>

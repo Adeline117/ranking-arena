@@ -1,12 +1,19 @@
 // Jest setup file
-import '@testing-library/jest-dom'
 
 // Polyfill for Web APIs (needed for Next.js API routes)
 import { TextEncoder, TextDecoder } from 'util'
 global.TextEncoder = TextEncoder
 global.TextDecoder = TextDecoder
 
-// Mock Request/Response for API route tests
+import '@testing-library/jest-dom'
+
+// Node.js 18+ has native fetch, no polyfill needed
+// Just ensure globals are set
+if (typeof globalThis.fetch === 'undefined') {
+  console.warn('Warning: fetch not available, some tests may fail')
+}
+
+// Mock Request/Response for API route tests (fallback)
 if (typeof Request === 'undefined') {
   global.Request = class Request {
     constructor(url, init = {}) {
@@ -111,5 +118,3 @@ if (typeof window !== 'undefined') {
     })),
   })
 }
-
-

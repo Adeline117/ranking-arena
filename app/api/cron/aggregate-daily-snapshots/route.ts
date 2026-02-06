@@ -15,6 +15,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { logger } from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300 // 5 minutes
@@ -52,7 +53,7 @@ export async function POST(request: NextRequest) {
       .not('source_trader_id', 'is', null)
 
     if (fetchError) {
-      console.error('[Aggregate Daily Snapshots] Error fetching traders:', fetchError)
+      logger.dbError('fetch-traders-for-aggregation', fetchError, {})
       return NextResponse.json(
         { error: 'Failed to fetch traders', details: fetchError.message },
         { status: 500 }
@@ -89,7 +90,10 @@ export async function POST(request: NextRequest) {
             .limit(1)
 
           if (snapshotError) {
-            console.error(`[Aggregate Daily Snapshots] Error fetching snapshot for ${trader.source}:${trader.source_trader_id}:`, snapshotError)
+            logger.dbError('fetch-trader-snapshot', snapshotError, {
+              source: trader.source,
+              traderId: trader.source_trader_id
+            })
             errors++
             continue
           }
@@ -113,7 +117,10 @@ export async function POST(request: NextRequest) {
             .limit(1)
 
           if (prevDayError) {
-            console.error(`[Aggregate Daily Snapshots] Error fetching previous day for ${trader.source}:${trader.source_trader_id}:`, prevDayError)
+            logger.dbError('fetch-previous-day-snapshot', prevDayError, {
+              source: trader.source,
+              traderId: trader.source_trader_id
+            })
           }
 
           // Calculate daily return percentage
@@ -149,7 +156,10 @@ export async function POST(request: NextRequest) {
             )
 
           if (upsertError) {
-            console.error(`[Aggregate Daily Snapshots] Error upserting snapshot for ${trader.source}:${trader.source_trader_id}:`, upsertError)
+            logger.dbError('upsert-daily-snapshot', upsertError, {
+              source: trader.source,
+              traderId: trader.source_trader_id
+            })
             errors++
           } else {
             inserted++
@@ -157,7 +167,10 @@ export async function POST(request: NextRequest) {
 
           processed++
         } catch (error) {
-          console.error(`[Aggregate Daily Snapshots] Unexpected error processing trader ${trader.source}:${trader.source_trader_id}:`, error)
+          logger.error('Error processing trader in daily aggregation', {
+            source: trader.source,
+            traderId: trader.source_trader_id
+          }, error instanceof Error ? error : new Error(String(error)))
           errors++
           processed++
         }
@@ -178,7 +191,7 @@ export async function POST(request: NextRequest) {
       duration: `${duration}ms`,
     })
   } catch (error) {
-    console.error('[Aggregate Daily Snapshots] Fatal error:', error)
+    logger.apiError('/api/cron/aggregate-daily-snapshots', error, {})
     return NextResponse.json(
       {
         error: 'Internal server error',

@@ -7,6 +7,7 @@ import { Box, Text } from '../base'
 import Avatar from './Avatar'
 import UserFollowButton from './UserFollowButton'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { useToast } from './Toast'
 
 type FollowUser = {
   id: string
@@ -38,6 +39,7 @@ export default function FollowListModal({
 }: FollowListModalProps) {
   const router = useRouter()
   const { t } = useLanguage()
+  const { showToast } = useToast()
   const [users, setUsers] = useState<FollowUser[]>([])
   const [loading, setLoading] = useState(true)
   const [hidden, setHidden] = useState(false)
@@ -76,24 +78,37 @@ export default function FollowListModal({
       const response = await fetch(url, {
         signal: abortControllerRef.current.signal,
       })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))
+        throw new Error(errorData.error || t('loadFailed'))
+      }
+
       const data = await response.json()
 
-      if (response.ok) {
-        if (data.hidden) {
-          setHidden(true)
-          setHiddenMessage(data.message || t('userHiddenList'))
-          setUsers([])
-        } else {
-          setHidden(false)
-          setUsers(data.followers || data.following || [])
-        }
-      } else {
-        console.error('Load failed:', data.error)
+      // Validate response data structure
+      if (typeof data !== 'object' || data === null) {
+        throw new Error(t('invalidResponse'))
+      }
+
+      if (data.hidden) {
+        setHidden(true)
+        setHiddenMessage(data.message || t('userHiddenList'))
         setUsers([])
+      } else {
+        setHidden(false)
+        // Validate that the data contains an array
+        const userList = data.followers || data.following
+        if (Array.isArray(userList)) {
+          setUsers(userList)
+        } else {
+          setUsers([])
+        }
       }
     } catch (error) {
       if ((error as Error).name !== 'AbortError') {
-        console.error('Load failed:', error)
+        const errorMsg = error instanceof Error ? error.message : t('loadFailed')
+        showToast(errorMsg, 'error')
         setUsers([])
       }
     } finally {

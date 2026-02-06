@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import crypto from 'crypto'
+import { logger } from '@/lib/logger'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -154,7 +155,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       expires_at: new Date(expiresAt).toISOString(),
     })
   } catch (error: unknown) {
-    console.error('Generate invite error:', error)
+    logger.apiError('/api/groups/[id]/invite', error, {})
     return NextResponse.json({ error: '服务器错误' }, { status: 500 })
   }
 }

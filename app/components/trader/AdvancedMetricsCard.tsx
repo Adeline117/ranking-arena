@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useState, useEffect } from 'react'
+import React, { useRef, useState, useEffect } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
 import { useLanguage } from '../Providers/LanguageProvider'
@@ -199,7 +199,7 @@ export default function AdvancedMetricsCard({
         <SecondaryBadge
           label={t('maxConsecWins') || 'Max Wins'}
           value={metrics.max_consecutive_wins?.toString() ?? '—'}
-          icon="🔥"
+          icon={<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>}
           highlight={metrics.max_consecutive_wins !== null && metrics.max_consecutive_wins >= 5}
         />
 
@@ -207,7 +207,7 @@ export default function AdvancedMetricsCard({
         <SecondaryBadge
           label={t('maxConsecLosses') || 'Max Losses'}
           value={metrics.max_consecutive_losses?.toString() ?? '—'}
-          icon="📉"
+          icon={<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/><polyline points="17 18 23 18 23 12"/></svg>}
           negative={metrics.max_consecutive_losses !== null && metrics.max_consecutive_losses >= 5}
         />
 
@@ -215,14 +215,14 @@ export default function AdvancedMetricsCard({
         <SecondaryBadge
           label={t('avgHolding') || 'Avg Hold'}
           value={formatHours(metrics.avg_holding_hours)}
-          icon="⏱"
+          icon={<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>}
         />
 
         {/* Volatility */}
         <SecondaryBadge
           label={t('volatility') || 'Volatility'}
           value={metrics.volatility_pct !== null ? `${metrics.volatility_pct.toFixed(1)}%` : '—'}
-          icon="📊"
+          icon={<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 3v18h18"/><path d="M18.7 8l-5.1 5.2-2.8-2.7L7 14.3"/></svg>}
           negative={metrics.volatility_pct !== null && metrics.volatility_pct > 50}
         />
 
@@ -231,7 +231,7 @@ export default function AdvancedMetricsCard({
           <SecondaryBadge
             label={t('downsideVol') || 'Downside Vol'}
             value={`${metrics.downside_volatility_pct.toFixed(1)}%`}
-            icon="⬇️"
+            icon={<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>}
             negative={metrics.downside_volatility_pct > 30}
           />
         )}
@@ -311,7 +311,7 @@ function SecondaryBadge({
 }: {
   label: string
   value: string
-  icon?: string
+  icon?: React.ReactNode
   highlight?: boolean
   negative?: boolean
 }) {
@@ -336,7 +336,7 @@ function SecondaryBadge({
         border: `1px solid ${highlight ? tokens.colors.accent.success + '30' : negative ? tokens.colors.accent.error + '20' : tokens.colors.border.primary}`,
       }}
     >
-      {icon && <span style={{ fontSize: 12 }}>{icon}</span>}
+      {icon && <span style={{ display: 'flex', alignItems: 'center', color: tokens.colors.text.tertiary }}>{icon}</span>}
       <Text style={{ fontSize: 11, color: tokens.colors.text.tertiary, fontWeight: 500 }}>
         {label}
       </Text>

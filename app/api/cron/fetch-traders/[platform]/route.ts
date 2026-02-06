@@ -12,6 +12,7 @@ import {
   createSupabaseAdmin,
   getSupabaseEnv,
 } from '@/lib/cron/utils'
+import { logger } from '@/lib/logger'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -74,7 +75,7 @@ export async function GET(request: Request, { params }: Params) {
     })
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : String(error)
-    console.error(`[Cron] ${platform} inline fetch failed:`, msg)
+    logger.apiError(`/api/cron/fetch-traders/${platform}`, error, { platform })
 
     return NextResponse.json(
       { ok: false, platform, error: msg },

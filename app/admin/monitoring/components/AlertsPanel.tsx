@@ -1,5 +1,6 @@
 'use client'
 
+import React from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
 import Card from '@/app/components/ui/Card'
@@ -25,19 +26,19 @@ const SEVERITY_CONFIG = {
   critical: {
     color: '#FF7C7C',
     bgColor: '#FF7C7C20',
-    icon: '🔴',
+    icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="#FF7C7C" stroke="none"><circle cx="12" cy="12" r="10"/></svg>,
     label: 'Critical',
   },
   warning: {
     color: '#FFD700',
     bgColor: '#FFD70020',
-    icon: '⚠️',
+    icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FFD700" strokeWidth="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>,
     label: 'Warning',
   },
   info: {
     color: '#7CFFB2',
     bgColor: '#7CFFB220',
-    icon: 'ℹ️',
+    icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7CFFB2" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>,
     label: 'Info',
   },
 }
@@ -122,9 +123,9 @@ export default function AlertsPanel({ alerts }: AlertsPanelProps) {
                 borderRadius: tokens.radius.md,
               }}
             >
-              <Text size="lg" style={{ marginBottom: tokens.spacing[2] }}>
-                ✅
-              </Text>
+              <Box style={{ display: 'flex', justifyContent: 'center', marginBottom: tokens.spacing[2], color: tokens.colors.accent.success }}>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+              </Box>
               <Text size="sm" color="secondary">
                 No active alerts
               </Text>
@@ -146,7 +147,7 @@ export default function AlertsPanel({ alerts }: AlertsPanelProps) {
                   }}
                 >
                   <Box style={{ display: 'flex', alignItems: 'flex-start', gap: tokens.spacing[2] }}>
-                    <Text size="md">{config.icon}</Text>
+                    <span style={{ display: 'flex', alignItems: 'center' }}>{config.icon}</span>
                     <Box style={{ flex: 1 }}>
                       <Box
                         style={{

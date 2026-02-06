@@ -1,5 +1,6 @@
 'use client'
 
+import React from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
 import { useLanguage } from '../Providers/LanguageProvider'
@@ -14,7 +15,6 @@ export interface TradingStyleBadgeProps {
 }
 
 interface StyleConfig {
-  icon: string
   label: string
   labelZh: string
   color: string
@@ -23,9 +23,25 @@ interface StyleConfig {
   descriptionZh: string
 }
 
+// SVG icon components for each trading style
+function getStyleIcon(style: TradingStyle, size: number = 14): React.ReactNode {
+  const props = { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2 }
+  switch (style) {
+    case 'hft':
+      return <svg {...props}><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+    case 'scalping':
+      return <svg {...props}><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>
+    case 'day_trader':
+      return <svg {...props}><path d="M3 3v18h18"/><path d="M18.7 8l-5.1 5.2-2.8-2.7L7 14.3"/></svg>
+    case 'swing':
+      return <svg {...props}><path d="M2 12c0-3.5 2.5-6 6-6 4.5 0 4.5 6 9 6 3.5 0 5-2.5 5-6"/><path d="M2 18c0-3.5 2.5-6 6-6 4.5 0 4.5 6 9 6 3.5 0 5-2.5 5-6"/></svg>
+    case 'trend':
+      return <svg {...props}><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+  }
+}
+
 const STYLE_CONFIGS: Record<TradingStyle, StyleConfig> = {
   hft: {
-    icon: '⚡',
     label: 'HFT',
     labelZh: '高频交易',
     color: '#FF6B6B',
@@ -34,7 +50,6 @@ const STYLE_CONFIGS: Record<TradingStyle, StyleConfig> = {
     descriptionZh: '高频交易者，持仓时间极短',
   },
   scalping: {
-    icon: '🎯',
     label: 'Scalper',
     labelZh: '剥头皮',
     color: '#4ECDC4',
@@ -43,7 +58,6 @@ const STYLE_CONFIGS: Record<TradingStyle, StyleConfig> = {
     descriptionZh: '快速交易，获取小额稳定利润',
   },
   day_trader: {
-    icon: '📊',
     label: 'Day Trader',
     labelZh: '日内交易',
     color: '#45B7D1',
@@ -52,7 +66,6 @@ const STYLE_CONFIGS: Record<TradingStyle, StyleConfig> = {
     descriptionZh: '日内持仓，当日平仓',
   },
   swing: {
-    icon: '🌊',
     label: 'Swing Trader',
     labelZh: '波段交易',
     color: '#96CEB4',
@@ -61,7 +74,6 @@ const STYLE_CONFIGS: Record<TradingStyle, StyleConfig> = {
     descriptionZh: '中长期持仓，数天到数周',
   },
   trend: {
-    icon: '📈',
     label: 'Trend Follower',
     labelZh: '趋势跟随',
     color: '#DDA0DD',
@@ -132,7 +144,7 @@ export default function TradingStyleBadge({
       }}
       title={showTooltip ? description : undefined}
     >
-      <span style={{ fontSize: s.iconSize }}>{config.icon}</span>
+      <span style={{ display: 'flex', alignItems: 'center', color: config.color }}>{getStyleIcon(style)}</span>
       <Text
         style={{
           fontSize: s.fontSize,
@@ -210,11 +222,13 @@ export function TradingStyleIcon({ style }: { style: TradingStyle | null }) {
     <span
       title={config.label}
       style={{
-        fontSize: 16,
+        display: 'inline-flex',
+        alignItems: 'center',
+        color: config.color,
         cursor: 'help',
       }}
     >
-      {config.icon}
+      {getStyleIcon(style, 16)}
     </span>
   )
 }
@@ -265,7 +279,7 @@ export function TradingStyleCard({
     >
       <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: tokens.spacing[3] }}>
         <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
-          <span style={{ fontSize: 24 }}>{config.icon}</span>
+          <span style={{ display: 'flex', alignItems: 'center', color: config.color }}>{getStyleIcon(style, 24)}</span>
           <Box>
             <Text size="lg" weight="bold" style={{ color: config.color }}>
               {language === 'zh' ? config.labelZh : config.label}

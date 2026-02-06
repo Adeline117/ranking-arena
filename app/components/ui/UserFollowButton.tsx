@@ -105,17 +105,21 @@ export default function UserFollowButton({
     pendingRef.current = true
     setLoading(true)
 
-    // Timeout protection: 5 seconds
+    // Create AbortController for request cancellation
+    const abortController = new AbortController()
+
+    // Timeout protection: 10 seconds (increased from 5s for slow networks)
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current)
     }
     timeoutRef.current = setTimeout(() => {
       if (pendingRef.current) {
+        abortController.abort()
         pendingRef.current = false
         setLoading(false)
         showToast(t('timeoutRetry'), 'warning')
       }
-    }, 5000)
+    }, 10000)
 
     try {
       const authHeaders = await getAuthHeadersAsync()
@@ -129,9 +133,10 @@ export default function UserFollowButton({
           followingId: targetUserId,
           action: following ? 'unfollow' : 'follow',
         }),
+        signal: abortController.signal,
       })
 
-      // Clear timeout on success
+      // Clear timeout on response
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current)
         timeoutRef.current = null
@@ -141,7 +146,6 @@ export default function UserFollowButton({
 
       if (response.ok && result.success !== false) {
         setFollowing(result.following)
-        // 根据 API 返回的 mutual 状态更新 followedBy（互关时对方也关注了我）
         if (result.mutual !== undefined) {
           setFollowedBy(result.mutual)
         }
@@ -151,7 +155,6 @@ export default function UserFollowButton({
         showToast(t('followFeatureComingSoon'), 'warning')
       } else {
         const errorMsg = result.error || t('operationFailedRetry')
-        console.error('Toggle follow error:', errorMsg)
         showToast(errorMsg, 'error')
       }
     } catch (error) {
@@ -160,7 +163,12 @@ export default function UserFollowButton({
         clearTimeout(timeoutRef.current)
         timeoutRef.current = null
       }
-      console.error('Toggle follow error:', error)
+
+      // Handle abort errors silently (user already notified via timeout)
+      if (error instanceof Error && error.name === 'AbortError') {
+        return
+      }
+
       showToast(t('operationFailedRetry'), 'error')
     } finally {
       setLoading(false)
