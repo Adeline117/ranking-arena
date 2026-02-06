@@ -36,15 +36,18 @@ import { getPnLTooltip, parseSourceInfo as parseSourceInfoUtil, getMedalGlowClas
 import { useRankingTableStyles } from './useRankingTableStyles'
 
 // Column customization types
-export type ColumnKey = 'score' | 'roi' | 'winrate' | 'mdd'
+export type ColumnKey = 'score' | 'roi' | 'winrate' | 'mdd' | 'sortino' | 'alpha' | 'style'
 
-const ALL_TOGGLEABLE_COLUMNS: ColumnKey[] = ['score', 'roi', 'winrate', 'mdd']
+const ALL_TOGGLEABLE_COLUMNS: ColumnKey[] = ['score', 'roi', 'winrate', 'mdd', 'sortino', 'alpha', 'style']
 const DEFAULT_VISIBLE_COLUMNS: ColumnKey[] = ['score', 'roi', 'winrate', 'mdd']
 const COLUMN_LABELS: Record<ColumnKey, { zh: string; en: string }> = {
   score: { zh: 'Arena Score', en: 'Arena Score' },
   roi: { zh: 'ROI', en: 'ROI' },
   winrate: { zh: '胜率', en: 'Win Rate' },
   mdd: { zh: '最大回撤', en: 'Max Drawdown' },
+  sortino: { zh: 'Sortino', en: 'Sortino' },
+  alpha: { zh: 'Alpha', en: 'Alpha' },
+  style: { zh: '交易风格', en: 'Style' },
 }
 const LS_KEY_COLUMNS = 'ranking-visible-columns'
 const LS_KEY_VIEW_MODE = 'ranking-view-mode'
@@ -101,6 +104,13 @@ export interface Trader {
   rank_change?: number | null
   is_new?: boolean
   also_on?: string[]
+  // V3 Advanced Metrics
+  sortino_ratio?: number | null
+  calmar_ratio?: number | null
+  alpha?: number | null
+  arena_score_v3?: number | null
+  trading_style?: 'hft' | 'day_trader' | 'swing' | 'trend' | 'scalping' | null
+  style_confidence?: number | null
 }
 
 // Debounce hook
@@ -130,11 +140,11 @@ function RankingTableInner(props: {
   hasActiveFilters?: boolean
   error?: string | null
   onRetry?: () => void
-  controlledSortColumn?: 'score' | 'roi' | 'winrate' | 'mdd'
+  controlledSortColumn?: 'score' | 'roi' | 'winrate' | 'mdd' | 'sortino' | 'alpha'
   controlledSortDir?: 'asc' | 'desc'
   controlledPage?: number
   controlledSearchQuery?: string
-  onSortChange?: (column: 'score' | 'roi' | 'winrate' | 'mdd', dir: 'asc' | 'desc') => void
+  onSortChange?: (column: 'score' | 'roi' | 'winrate' | 'mdd' | 'sortino' | 'alpha', dir: 'asc' | 'desc') => void
   onPageChange?: (page: number) => void
   onSearchChange?: (query: string) => void
 }) {
@@ -152,7 +162,7 @@ function RankingTableInner(props: {
   const [internalPage, setInternalPage] = useState(1)
   const [showRules, setShowRules] = useState(false)
   const [showScoreRulesModal, setShowScoreRulesModal] = useState(false)
-  const [internalSortColumn, setInternalSortColumn] = useState<'score' | 'roi' | 'winrate' | 'mdd'>('score')
+  const [internalSortColumn, setInternalSortColumn] = useState<'score' | 'roi' | 'winrate' | 'mdd' | 'sortino' | 'alpha'>('score')
   const [internalSortDir, setInternalSortDir] = useState<'asc' | 'desc'>('desc')
   const [justSortedColumn, setJustSortedColumn] = useState<string | null>(null)
   const [sortAnimationKey, setSortAnimationKey] = useState(0)
@@ -252,11 +262,14 @@ function RankingTableInner(props: {
     if (visibleColumns.includes('roi')) template += ' 90px'
     if (visibleColumns.includes('winrate')) template += ' 70px'
     if (visibleColumns.includes('mdd')) template += ' 70px'
+    if (visibleColumns.includes('sortino')) template += ' 70px'
+    if (visibleColumns.includes('alpha')) template += ' 70px'
+    if (visibleColumns.includes('style')) template += ' 80px'
     return template
   }, [visibleColumns])
 
 
-  const handleSort = (col: 'score' | 'roi' | 'winrate' | 'mdd') => {
+  const handleSort = (col: 'score' | 'roi' | 'winrate' | 'mdd' | 'sortino' | 'alpha') => {
     const newDir = sortColumn === col ? (sortDir === 'desc' ? 'asc' : 'desc') : 'desc'
     setJustSortedColumn(col)
     setSortAnimationKey(prev => prev + 1)
@@ -290,6 +303,8 @@ function RankingTableInner(props: {
         case 'roi': aVal = a.roi ?? 0; bVal = b.roi ?? 0; break
         case 'winrate': aVal = a.win_rate ?? 0; bVal = b.win_rate ?? 0; break
         case 'mdd': aVal = Math.abs(a.max_drawdown ?? 0); bVal = Math.abs(b.max_drawdown ?? 0); break
+        case 'sortino': aVal = a.sortino_ratio ?? 0; bVal = b.sortino_ratio ?? 0; break
+        case 'alpha': aVal = a.alpha ?? 0; bVal = b.alpha ?? 0; break
       }
       return sortDir === 'desc' ? bVal - aVal : aVal - bVal
     })
@@ -325,6 +340,9 @@ function RankingTableInner(props: {
         ${!visibleColumns.includes('winrate') ? '.ranking-table-grid-custom .col-winrate { display: none !important; }' : ''}
         ${!visibleColumns.includes('mdd') ? '.ranking-table-grid-custom .col-mdd { display: none !important; }' : ''}
         ${!visibleColumns.includes('roi') ? '.ranking-table-grid-custom .roi-cell { display: none !important; }' : ''}
+        ${!visibleColumns.includes('sortino') ? '.ranking-table-grid-custom .col-sortino { display: none !important; }' : ''}
+        ${!visibleColumns.includes('alpha') ? '.ranking-table-grid-custom .col-alpha { display: none !important; }' : ''}
+        ${!visibleColumns.includes('style') ? '.ranking-table-grid-custom .col-style { display: none !important; }' : ''}
       }
     `}</style>
     <Box
@@ -477,6 +495,23 @@ function RankingTableInner(props: {
         <Box className={`col-mdd sort-header sort-header-end${sortColumn === 'mdd' ? ' sort-header-active' : ''} ${justSortedColumn === 'mdd' ? 'just-sorted' : ''}`} as="button" onClick={() => handleSort('mdd')} title={t('mddTooltip')} data-sortable>
           MDD <SortIndicator active={sortColumn === 'mdd'} dir={sortDir} />
         </Box>
+        {visibleColumns.includes('sortino') && (
+          <Box className={`col-sortino sort-header sort-header-end${sortColumn === 'sortino' ? ' sort-header-active' : ''} ${justSortedColumn === 'sortino' ? 'just-sorted' : ''}`} as="button" onClick={() => handleSort('sortino')} title={t('sortinoTooltip') || 'Sortino Ratio'} data-sortable>
+            Sortino <SortIndicator active={sortColumn === 'sortino'} dir={sortDir} />
+          </Box>
+        )}
+        {visibleColumns.includes('alpha') && (
+          <Box className={`col-alpha sort-header sort-header-end${sortColumn === 'alpha' ? ' sort-header-active' : ''} ${justSortedColumn === 'alpha' ? 'just-sorted' : ''}`} as="button" onClick={() => handleSort('alpha')} title={t('alphaTooltip') || 'Alpha (excess return)'} data-sortable>
+            Alpha <SortIndicator active={sortColumn === 'alpha'} dir={sortDir} />
+          </Box>
+        )}
+        {visibleColumns.includes('style') && (
+          <Box className="col-style" style={{ textAlign: 'center' }}>
+            <Text size="sm" weight="bold" color="tertiary" style={{ textTransform: 'uppercase', letterSpacing: '0.5px', fontSize: '12px' }}>
+              {t('tradingStyle') || 'Style'}
+            </Text>
+          </Box>
+        )}
       </Box>
       )}
 

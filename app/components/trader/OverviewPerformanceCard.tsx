@@ -32,6 +32,21 @@ interface ExtendedPerformance extends TraderPerformance {
   stability_score_7d?: number
   stability_score_30d?: number
   score_confidence?: string
+  // V3 Advanced Metrics
+  sortino_ratio?: number
+  sortino_ratio_7d?: number
+  sortino_ratio_30d?: number
+  calmar_ratio?: number
+  calmar_ratio_7d?: number
+  calmar_ratio_30d?: number
+  alpha?: number
+  alpha_7d?: number
+  alpha_30d?: number
+  arena_score_v3?: number
+  arena_score_v3_7d?: number
+  arena_score_v3_30d?: number
+  trading_style?: string
+  style_confidence?: number
 }
 
 export interface OverviewPerformanceCardProps {
@@ -163,6 +178,11 @@ export default function OverviewPerformanceCard({
           pnlScore: performance.pnl_score_7d,
           drawdownScore: performance.drawdown_score_7d,
           stabilityScore: performance.stability_score_7d,
+          // V3 Metrics
+          sortinoRatio: performance.sortino_ratio_7d,
+          calmarRatio: performance.calmar_ratio_7d,
+          alpha: performance.alpha_7d,
+          arenaScoreV3: performance.arena_score_v3_7d,
         }
       case '30D':
         return {
@@ -178,6 +198,11 @@ export default function OverviewPerformanceCard({
           pnlScore: performance.pnl_score_30d,
           drawdownScore: performance.drawdown_score_30d,
           stabilityScore: performance.stability_score_30d,
+          // V3 Metrics
+          sortinoRatio: performance.sortino_ratio_30d,
+          calmarRatio: performance.calmar_ratio_30d,
+          alpha: performance.alpha_30d,
+          arenaScoreV3: performance.arena_score_v3_30d,
         }
       case '90D':
       default:
@@ -194,12 +219,17 @@ export default function OverviewPerformanceCard({
           pnlScore: performance.pnl_score ?? undefined,
           drawdownScore: performance.drawdown_score ?? undefined,
           stabilityScore: performance.stability_score ?? undefined,
+          // V3 Metrics
+          sortinoRatio: performance.sortino_ratio,
+          calmarRatio: performance.calmar_ratio,
+          alpha: performance.alpha,
+          arenaScoreV3: performance.arena_score_v3,
         }
     }
   }
 
   const data = getData()
-  const { roi, pnl, winRate, maxDrawdown, sharpeRatio, winningPositions, totalPositions, returnScore: periodReturnScore, pnlScore: periodPnlScore, drawdownScore: periodDrawdownScore, stabilityScore: periodStabilityScore } = data
+  const { roi, pnl, winRate, maxDrawdown, sharpeRatio, winningPositions, totalPositions, returnScore: periodReturnScore, pnlScore: periodPnlScore, drawdownScore: periodDrawdownScore, stabilityScore: periodStabilityScore, sortinoRatio, calmarRatio, alpha, arenaScoreV3 } = data
   const periodArenaScore = data.arenaScore
 
   const formatPnl = (value: number | undefined) => {
@@ -467,6 +497,32 @@ export default function OverviewPerformanceCard({
               value={winningPositions !== undefined && totalPositions !== undefined ? `${winningPositions}/${totalPositions}` : '—'}
               tooltip={winningPositions === undefined ? t('positionStatsNotAvailable') : undefined}
             />
+            {/* V3 Advanced Metrics */}
+            {sortinoRatio !== undefined && (
+              <MetricBadge
+                label="Sortino"
+                value={sortinoRatio.toFixed(2)}
+                highlight={sortinoRatio >= 2}
+                tooltip={t('sortinoTooltip') || 'Risk-adjusted return using downside volatility'}
+              />
+            )}
+            {calmarRatio !== undefined && (
+              <MetricBadge
+                label="Calmar"
+                value={calmarRatio.toFixed(2)}
+                highlight={calmarRatio >= 3}
+                tooltip={t('calmarTooltip') || 'Annualized return / max drawdown'}
+              />
+            )}
+            {alpha !== undefined && (
+              <MetricBadge
+                label="Alpha"
+                value={`${alpha >= 0 ? '+' : ''}${alpha.toFixed(2)}%`}
+                highlight={alpha > 0}
+                negative={alpha < 0}
+                tooltip={t('alphaTooltip') || 'Excess return vs market benchmark'}
+              />
+            )}
           </Box>
 
           {/* 评分详情 - 免费展示 (period-specific) */}
@@ -489,32 +545,58 @@ export default function OverviewPerformanceCard({
                   {t('scoreBreakdown')}
                 </Text>
                 {/* Arena Score 总分 */}
-                {periodArenaScore != null && (
-                  <Box
-                    style={{
-                      marginLeft: 'auto',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: tokens.spacing[2],
-                      padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
-                      background: `${getScoreColor(periodArenaScore, 100)}15`,
-                      borderRadius: tokens.radius.full,
-                      border: `1px solid ${getScoreColor(periodArenaScore, 100)}30`,
-                    }}
-                  >
-                    <Text size="xs" color="secondary" weight="bold">Arena Score</Text>
-                    <Text
-                      size="sm"
-                      weight="black"
+                <Box style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
+                  {arenaScoreV3 != null && (
+                    <Box
                       style={{
-                        color: getScoreColor(periodArenaScore, 100),
-                        fontFamily: tokens.typography.fontFamily.mono.join(', '),
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: tokens.spacing[2],
+                        padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
+                        background: `${tokens.colors.accent.success}15`,
+                        borderRadius: tokens.radius.full,
+                        border: `1px solid ${tokens.colors.accent.success}30`,
                       }}
                     >
-                      {periodArenaScore.toFixed(0)}
-                    </Text>
-                  </Box>
-                )}
+                      <Text size="xs" style={{ color: tokens.colors.accent.success, fontWeight: 600 }}>V3</Text>
+                      <Text
+                        size="sm"
+                        weight="black"
+                        style={{
+                          color: tokens.colors.accent.success,
+                          fontFamily: tokens.typography.fontFamily.mono.join(', '),
+                        }}
+                      >
+                        {arenaScoreV3.toFixed(0)}
+                      </Text>
+                    </Box>
+                  )}
+                  {periodArenaScore != null && (
+                    <Box
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: tokens.spacing[2],
+                        padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
+                        background: `${getScoreColor(periodArenaScore, 100)}15`,
+                        borderRadius: tokens.radius.full,
+                        border: `1px solid ${getScoreColor(periodArenaScore, 100)}30`,
+                      }}
+                    >
+                      <Text size="xs" color="secondary" weight="bold">Arena Score</Text>
+                      <Text
+                        size="sm"
+                        weight="black"
+                        style={{
+                          color: getScoreColor(periodArenaScore, 100),
+                          fontFamily: tokens.typography.fontFamily.mono.join(', '),
+                        }}
+                      >
+                        {periodArenaScore.toFixed(0)}
+                      </Text>
+                    </Box>
+                  )}
+                </Box>
               </Box>
 
               {/* 分数条 */}

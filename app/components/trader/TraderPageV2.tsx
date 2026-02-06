@@ -10,7 +10,11 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useTraderDetailV2 } from '@/lib/hooks/useTraderDetailV2'
 import TraderRefreshButton from './TraderRefreshButton'
 import DataStateWrapper from '@/app/components/ui/DataStateWrapper'
+import AdvancedMetricsCard from './AdvancedMetricsCard'
+import MarketCorrelationCard from './MarketCorrelationCard'
+import TradingStyleBadge from './TradingStyleBadge'
 import type { SnapshotWindow, SnapshotMetrics } from '@/lib/types/trading-platform'
+import type { TraderAdvancedMetrics, TraderMarketCorrelation, TradingStyle } from '@/lib/types/trader'
 
 interface TraderPageV2Props {
   platform: string
@@ -113,6 +117,58 @@ export default function TraderPageV2({ platform, traderKey }: TraderPageV2Props)
             </div>
           </div>
 
+          {/* Trading Style Badge */}
+          {(() => {
+            const snapshot = data.snapshots['90D'] || data.snapshots['30D'] || data.snapshots['7D']
+            if (snapshot?.trading_style) {
+              return (
+                <div className="flex items-center gap-2">
+                  <TradingStyleBadge
+                    style={snapshot.trading_style as TradingStyle}
+                    confidence={snapshot.style_confidence}
+                    size="lg"
+                  />
+                </div>
+              )
+            }
+            return null
+          })()}
+
+          {/* Advanced Metrics Card */}
+          {(() => {
+            const snapshot = data.snapshots['90D'] || data.snapshots['30D'] || data.snapshots['7D']
+            if (snapshot && (snapshot.sortino_ratio != null || snapshot.calmar_ratio != null)) {
+              const advancedMetrics: TraderAdvancedMetrics = {
+                sortino_ratio: snapshot.sortino_ratio ?? null,
+                calmar_ratio: snapshot.calmar_ratio ?? null,
+                profit_factor: snapshot.profit_factor ?? null,
+                recovery_factor: snapshot.recovery_factor ?? null,
+                max_consecutive_wins: snapshot.max_consecutive_wins ?? null,
+                max_consecutive_losses: snapshot.max_consecutive_losses ?? null,
+                avg_holding_hours: snapshot.avg_holding_hours ?? null,
+                volatility_pct: snapshot.volatility_pct ?? null,
+                downside_volatility_pct: snapshot.downside_volatility_pct ?? null,
+              }
+              return <AdvancedMetricsCard metrics={advancedMetrics} />
+            }
+            return null
+          })()}
+
+          {/* Market Correlation Card */}
+          {(() => {
+            const snapshot = data.snapshots['90D'] || data.snapshots['30D'] || data.snapshots['7D']
+            if (snapshot && (snapshot.beta_btc != null || snapshot.alpha != null)) {
+              const correlation: TraderMarketCorrelation = {
+                beta_btc: snapshot.beta_btc ?? null,
+                beta_eth: snapshot.beta_eth ?? null,
+                alpha: snapshot.alpha ?? null,
+                market_condition_performance: { bull: null, bear: null, sideways: null },
+              }
+              return <MarketCorrelationCard correlation={correlation} />
+            }
+            return null
+          })()}
+
           {/* Equity Curve */}
           {data.timeseries.equity_curve && data.timeseries.equity_curve.length > 0 && (
             <div className="space-y-3">
@@ -193,14 +249,24 @@ function SnapshotCard({ window, metrics }: { window: SnapshotWindow; metrics: Sn
     <div className="p-4 rounded-xl" style={{ backgroundColor: tokens.colors.bg.secondary }}>
       <div className="flex items-center justify-between mb-3">
         <span className="text-sm font-medium" style={{ color: tokens.colors.text.secondary }}>{window}</span>
-        {metrics.arena_score != null && (
-          <span
-            className="text-xs font-bold px-2 py-0.5 rounded"
-            style={{ backgroundColor: tokens.colors.accent.brand + '20', color: tokens.colors.accent.brand }}
-          >
-            Score: {metrics.arena_score.toFixed(1)}
-          </span>
-        )}
+        <div className="flex items-center gap-2">
+          {metrics.arena_score_v3 != null && (
+            <span
+              className="text-xs font-bold px-2 py-0.5 rounded"
+              style={{ backgroundColor: tokens.colors.accent.success + '20', color: tokens.colors.accent.success }}
+            >
+              V3: {metrics.arena_score_v3.toFixed(1)}
+            </span>
+          )}
+          {metrics.arena_score != null && (
+            <span
+              className="text-xs font-bold px-2 py-0.5 rounded"
+              style={{ backgroundColor: tokens.colors.accent.brand + '20', color: tokens.colors.accent.brand }}
+            >
+              Score: {metrics.arena_score.toFixed(1)}
+            </span>
+          )}
+        </div>
       </div>
 
       <div className="space-y-2">
@@ -232,6 +298,22 @@ function SnapshotCard({ window, metrics }: { window: SnapshotWindow; metrics: Sn
           <div className="flex justify-between">
             <span className="text-xs" style={{ color: tokens.colors.text.secondary }}>{t('tradesLabel')}</span>
             <span className="text-sm" style={{ color: tokens.colors.text.primary }}>{metrics.trades_count}</span>
+          </div>
+        )}
+        {metrics.sortino_ratio != null && (
+          <div className="flex justify-between">
+            <span className="text-xs" style={{ color: tokens.colors.text.secondary }}>Sortino</span>
+            <span className="text-sm" style={{ color: metrics.sortino_ratio >= 2 ? tokens.colors.accent.success : tokens.colors.text.primary }}>
+              {metrics.sortino_ratio.toFixed(2)}
+            </span>
+          </div>
+        )}
+        {metrics.alpha != null && (
+          <div className="flex justify-between">
+            <span className="text-xs" style={{ color: tokens.colors.text.secondary }}>Alpha</span>
+            <span className="text-sm" style={{ color: metrics.alpha >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error }}>
+              {metrics.alpha >= 0 ? '+' : ''}{metrics.alpha.toFixed(2)}%
+            </span>
           </div>
         )}
       </div>
