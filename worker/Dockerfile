@@ -36,9 +36,9 @@ RUN cd worker && npx playwright install chromium
 # Copy shared lib (required by worker imports: ../../../lib/cron/fetchers)
 COPY lib/cron/fetchers/ ./lib/cron/fetchers/
 
-# Copy worker source and config
+# Copy worker source and all config files (tsconfig, etc.)
 COPY worker/src/ ./worker/src/
-COPY worker/tsconfig.json ./worker/
+COPY worker/*.json ./worker/
 
 # Environment
 ENV NODE_ENV=production
