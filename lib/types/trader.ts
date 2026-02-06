@@ -25,8 +25,11 @@ export type ExchangeWithWeb3 = typeof EXCHANGES_WITH_WEB3[number]
 /** 时间范围 */
 export type TimeRange = '7D' | '30D' | '90D' | '1Y' | '2Y' | 'All'
 
-/** 交易风格标签 */
-export type TradingStyle = 'high_frequency' | 'swing' | 'trend' | 'scalping' | 'position'
+/** 交易风格标签 (V2 - aligned with classification module) */
+export type TradingStyle = 'hft' | 'day_trader' | 'swing' | 'trend' | 'scalping'
+
+/** Legacy trading style mapping */
+export type TradingStyleLegacy = 'high_frequency' | 'swing' | 'trend' | 'scalping' | 'position'
 
 /** 风险等级 */
 export type RiskLevel = 1 | 2 | 3 | 4 | 5
@@ -264,16 +267,34 @@ export interface RankedTrader {
   followers: number | null
   source: string
   avatar_url: string | null
-  /** Arena Score (0-100) - 核心排名指标 */
+  /** Arena Score V2 (0-100) - 核心排名指标 */
   arena_score?: number
-  /** 收益分 (0-85) */
+  /** Arena Score V3 (0-100) - 新版排名指标 */
+  arena_score_v3?: number
+  /** 收益分 (V2: 0-70, V3: 0-55) */
   return_score?: number
+  /** PnL 分 (V2: 0-15, V3: 0-12) */
+  pnl_score?: number
   /** 回撤分 (0-8) */
   drawdown_score?: number
-  /** 稳定分 (0-7) */
+  /** 稳定分 (V2: 0-7, V3: 0-5) */
   stability_score?: number
-  /** 风险调整得分（旧版兼容） */
+  /** Alpha 分 (V3 only: 0-5) */
+  alpha_score?: number
+  /** 风险调整分 (V3 only: 0-10) */
+  risk_adjusted_score_v3?: number
+  /** 一致性分 (V3 only: 0-5) */
+  consistency_score?: number
+  /** 风险调整得分（V1旧版兼容） */
   risk_adjusted_score?: number
+  /** Sortino Ratio */
+  sortino_ratio?: number | null
+  /** Calmar Ratio */
+  calmar_ratio?: number | null
+  /** Alpha (超额收益) */
+  alpha?: number | null
+  /** 交易风格 */
+  trading_style?: TradingStyle | null
   /** 是否可疑 */
   is_suspicious?: boolean
   /** 可疑原因 */
@@ -286,7 +307,16 @@ export interface RankingQueryParams {
   exchange?: Exchange
   minPnl?: number
   minTrades?: number
-  sortBy?: 'roi' | 'pnl' | 'win_rate' | 'risk_adjusted' | 'arena_score'
+  /** 排序字段 */
+  sortBy?: 'roi' | 'pnl' | 'win_rate' | 'risk_adjusted' | 'arena_score' | 'arena_score_v3' | 'sortino' | 'calmar' | 'alpha'
+  /** 交易风格过滤 */
+  tradingStyle?: TradingStyle
+  /** 最小 Alpha 阈值 */
+  minAlpha?: number
+  /** 最小 Sharpe Ratio 阈值 */
+  minSharpe?: number
+  /** 最小 Sortino Ratio 阈值 */
+  minSortino?: number
   limit?: number
   offset?: number
 }
@@ -332,6 +362,132 @@ export interface RiskMetrics {
   rewardRiskRatio: number | null
   riskLevel: RiskLevel
   riskLevelDescription: string
+}
+
+// ============================================
+// Advanced Metrics (V3)
+// ============================================
+
+/** 高级交易指标 */
+export interface TraderAdvancedMetrics {
+  /** Sortino Ratio - 下行风险调整收益 */
+  sortino_ratio: number | null
+  /** Calmar Ratio - 年化收益/最大回撤 */
+  calmar_ratio: number | null
+  /** Profit Factor - 总盈利/总亏损 */
+  profit_factor: number | null
+  /** Recovery Factor - 净利润/最大回撤 */
+  recovery_factor: number | null
+  /** 最大连续盈利次数 */
+  max_consecutive_wins: number | null
+  /** 最大连续亏损次数 */
+  max_consecutive_losses: number | null
+  /** 平均持仓时间（小时） */
+  avg_holding_hours: number | null
+  /** 收益波动率 (%) */
+  volatility_pct: number | null
+  /** 下行波动率 (%) */
+  downside_volatility_pct: number | null
+}
+
+/** 市场条件类型 */
+export type MarketCondition = 'bull' | 'bear' | 'sideways'
+
+/** 市场相关性指标 */
+export interface TraderMarketCorrelation {
+  /** BTC Beta - 与BTC的相关系数 */
+  beta_btc: number | null
+  /** ETH Beta - 与ETH的相关系数 */
+  beta_eth: number | null
+  /** Alpha - 超额收益（Jensen's Alpha） */
+  alpha: number | null
+  /** 不同市场条件下的表现 */
+  market_condition_performance: Record<MarketCondition, number | null>
+}
+
+/** 交易员分类信息 */
+export interface TraderClassification {
+  /** 交易风格 */
+  trading_style: TradingStyle | null
+  /** 偏好资产列表 */
+  asset_preference: string[]
+  /** 风格分类置信度 (0-100) */
+  style_confidence: number | null
+}
+
+/** 实时持仓数据 */
+export interface TraderPositionLive {
+  id: string
+  platform: string
+  market_type: string
+  trader_key: string
+  symbol: string
+  side: 'long' | 'short'
+  entry_price: number
+  current_price: number | null
+  mark_price: number | null
+  quantity: number
+  leverage: number
+  margin: number | null
+  unrealized_pnl: number | null
+  unrealized_pnl_pct: number | null
+  liquidation_price: number | null
+  opened_at: string | null
+  updated_at: string
+}
+
+/** 跟单情报信息 */
+export interface CopyTradingIntel {
+  /** 预估滑点 (%) */
+  slippage_estimate_pct: number | null
+  /** 流动性评分 (0-100) */
+  liquidity_score: number | null
+  /** 建议仓位大小 (USD) */
+  recommended_position_size: number | null
+  /** 最大建议资金 (USD) */
+  max_recommended_capital: number | null
+  /** 警告信息 */
+  warnings: string[]
+}
+
+/** Arena Score V3 组件 */
+export interface ArenaScoreV3Components {
+  /** 收益分 (0-55) */
+  return_score: number
+  /** PnL 分 (0-12) */
+  pnl_score: number
+  /** 回撤分 (0-8) */
+  drawdown_score: number
+  /** 稳定分 (0-5) */
+  stability_score: number
+  /** Alpha 分 (0-5) */
+  alpha_score: number
+  /** 风险调整分 (0-10) */
+  risk_adjusted_score: number
+  /** 一致性分 (0-5) */
+  consistency_score: number
+  /** 总分 (0-100) */
+  total_score: number
+}
+
+/** 扩展的交易员详情响应 */
+export interface TraderDetailResponseV2 {
+  profile: TraderProfile
+  performance: TraderPerformance
+  stats: TraderStats
+  riskMetrics?: RiskMetrics
+  /** V3 高级指标 */
+  advanced_metrics?: TraderAdvancedMetrics
+  /** 市场相关性 */
+  market_correlation?: TraderMarketCorrelation
+  /** 交易员分类 */
+  classification?: TraderClassification
+  /** 跟单情报 */
+  copy_trading_intel?: CopyTradingIntel
+  /** 实时持仓（仅Pro用户） */
+  live_positions?: TraderPositionLive[]
+  /** Arena Score V3 详情 */
+  arena_score_v3?: ArenaScoreV3Components
 }
 
 // ============================================
