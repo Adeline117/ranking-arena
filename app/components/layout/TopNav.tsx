@@ -226,11 +226,22 @@ export default function TopNav({ email }: { email: string | null }) {
     if (trimmedQuery) {
       // 保存搜索历史
       if (typeof window !== 'undefined') {
-        const stored = localStorage.getItem('ranking-arena-recent-searches')
-        const history: string[] = stored ? JSON.parse(stored) : []
-        const filtered = history.filter((item) => item !== trimmedQuery)
-        const updated = [trimmedQuery, ...filtered].slice(0, 10)
-        localStorage.setItem('ranking-arena-recent-searches', JSON.stringify(updated))
+        try {
+          const stored = localStorage.getItem('ranking-arena-recent-searches')
+          const history: string[] = stored ? JSON.parse(stored) : []
+          const filtered = history.filter((item) => item !== trimmedQuery)
+          const updated = [trimmedQuery, ...filtered].slice(0, 10)
+          localStorage.setItem('ranking-arena-recent-searches', JSON.stringify(updated))
+        } catch (error) {
+          // If quota exceeded or localStorage unavailable, try to clear and save just current search
+          try {
+            localStorage.removeItem('ranking-arena-recent-searches')
+            localStorage.setItem('ranking-arena-recent-searches', JSON.stringify([trimmedQuery]))
+          } catch {
+            // If still failing (e.g., private mode), silently fail
+            console.warn('[TopNav] localStorage unavailable')
+          }
+        }
       }
       router.push(`/search?q=${encodeURIComponent(trimmedQuery)}`)
     }

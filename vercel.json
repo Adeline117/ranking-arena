@@ -94,7 +94,11 @@
     { "path": "/api/cron/enrich?platform=binance_futures&period=7D&limit=30", "schedule": "35 0,12 * * *" },
     { "path": "/api/cron/enrich?platform=bybit&period=7D&limit=30", "schedule": "40 0,12 * * *" },
     { "path": "/api/cron/check-enrichment-freshness", "schedule": "45 */6 * * *" },
-    { "path": "/api/cron/detect-anomalies", "schedule": "0 3 * * *" }
+    { "path": "/api/cron/detect-anomalies", "schedule": "0 3 * * *" },
+    { "path": "/api/cron/fetch-market-data?type=prices", "schedule": "0 */1 * * *" },
+    { "path": "/api/cron/calculate-advanced-metrics", "schedule": "30 */4 * * *" },
+    { "path": "/api/cron/calculate-market-correlation", "schedule": "0 2 * * *" },
+    { "path": "/api/cron/aggregate-daily-snapshots", "schedule": "5 0 * * *" }
   ],
   "headers": [
     {
