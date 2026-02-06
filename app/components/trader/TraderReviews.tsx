@@ -185,6 +185,7 @@ function TranslateButton({ reviewId, content, onTranslated }: {
   onTranslated: (id: string, text: string | null) => void
 }) {
   const { t, language } = useLanguage()
+  const { showToast } = useToast()
   const [loading, setLoading] = useState(false)
   const [translated, setTranslated] = useState(false)
 
@@ -214,7 +215,7 @@ function TranslateButton({ reviewId, content, onTranslated }: {
         setTranslated(true)
       }
     } catch {
-      // ignore
+      showToast(t('translateFailed') || 'Translation failed', 'error')
     } finally {
       setLoading(false)
     }
@@ -552,7 +553,7 @@ export default function TraderReviews({ traderId, traderHandle }: TraderReviewsP
         offsetRef.current = offset + data.data.reviews.length
       }
     } catch {
-      // ignore
+      showToast(t('loadReviewsFailed') || 'Failed to load reviews', 'error')
     } finally {
       setLoading(false)
       setLoadingMore(false)
@@ -591,7 +592,7 @@ export default function TraderReviews({ traderId, traderHandle }: TraderReviewsP
         ))
       }
     } catch {
-      // ignore
+      showToast(t('operationFailed') || 'Operation failed', 'error')
     } finally {
       setLikeLoading(prev => ({ ...prev, [reviewId]: false }))
     }
