@@ -1370,20 +1370,31 @@ function SettingsContent() {
   }
 
   // ===== 2FA Handlers =====
+  const getFreshToken = async (): Promise<string | null> => {
+    // Refresh session first to avoid stale/expired tokens
+    const { data: { session }, error } = await supabase.auth.refreshSession()
+    if (error || !session?.access_token) {
+      // Fallback to getSession
+      const { data } = await supabase.auth.getSession()
+      return data.session?.access_token || null
+    }
+    return session.access_token
+  }
+
   const handleSetup2FA = async () => {
     if (submittingRef.current || twoFALoading) return
     submittingRef.current = true
     setTwoFALoading(true)
     try {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session?.access_token) {
+      const token = await getFreshToken()
+      if (!token) {
         showToast(t('pleaseLoginFirst'), 'error')
         return
       }
 
       const res = await fetch('/api/settings/2fa/setup', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${session.access_token}` },
+        headers: { Authorization: `Bearer ${token}` },
       })
       const data = await res.json()
       if (!res.ok) {
@@ -1408,8 +1419,8 @@ function SettingsContent() {
     submittingRef.current = true
     setTwoFALoading(true)
     try {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session?.access_token) {
+      const token = await getFreshToken()
+      if (!token) {
         showToast(t('pleaseLoginFirst'), 'error')
         return
       }
@@ -1418,7 +1429,7 @@ function SettingsContent() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`,
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ code: twoFACode }),
       })
@@ -1449,8 +1460,8 @@ function SettingsContent() {
     submittingRef.current = true
     setTwoFALoading(true)
     try {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session?.access_token) {
+      const token = await getFreshToken()
+      if (!token) {
         showToast(t('pleaseLoginFirst'), 'error')
         return
       }
@@ -1459,7 +1470,7 @@ function SettingsContent() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`,
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ password: disablePassword }),
       })
