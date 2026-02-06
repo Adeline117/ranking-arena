@@ -7,7 +7,7 @@ import { RankingSkeleton } from '../ui/Skeleton'
 import { Box, Text } from '../base'
 import { useLanguage } from '../Providers/LanguageProvider'
 import dynamic from 'next/dynamic'
-import { DynamicScoreRulesModal as ScoreRulesModal } from '../ui/dynamic'
+import { DynamicScoreRulesModal as ScoreRulesModal } from '../ui/Dynamic'
 import CategoryRankingTabs, { CategoryType } from './CategoryRankingTabs'
 import { ProLabel } from '../premium/PremiumGate'
 
@@ -27,7 +27,7 @@ import { AvatarPreload } from '../ui/AvatarPreload'
 import {
   FilterIcon, CompareIcon, SortIndicator, LockIconSmall,
   SearchIcon, TableViewIcon, CardViewIcon, SettingsIcon,
-} from './icons'
+} from './Icons'
 import { getPnLTooltip, parseSourceInfo as parseSourceInfoUtil, getMedalGlowClass } from './utils'
 
 // CSS animations loaded async to avoid render-blocking (medal glow, hover effects, pagination)
