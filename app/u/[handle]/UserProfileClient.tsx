@@ -10,7 +10,6 @@ import { supabase } from '@/lib/supabase/client'
 import TopNav from '@/app/components/layout/TopNav'
 import JoinedGroups from '@/app/components/trader/JoinedGroups'
 import UserBookmarkFolders from '@/app/components/trader/UserBookmarkFolders'
-import DashboardQuickStats from '@/app/components/user/DashboardQuickStats'
 import { Box, Text } from '@/app/components/base'
 import { useToast } from '@/app/components/ui/Toast'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -514,9 +513,8 @@ export default function UserProfileClient({ handle, serverProfile }: UserProfile
             </Box>
           </Box>
 
-          {/* Sidebar - dashboard (own profile) + joined groups + bookmarks */}
+          {/* Sidebar - joined groups + bookmarks */}
           <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[6] }}>
-            {isOwnProfile && <DashboardQuickStats userId={profile.id} />}
             <JoinedGroups userId={profile.id} />
             <UserBookmarkFolders userId={profile.id} isOwnProfile={isOwnProfile} />
           </Box>

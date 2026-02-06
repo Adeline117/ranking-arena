@@ -99,7 +99,8 @@
     { "path": "/api/cron/calculate-advanced-metrics", "schedule": "30 */4 * * *" },
     { "path": "/api/cron/calculate-market-correlation", "schedule": "0 2 * * *" },
     { "path": "/api/cron/aggregate-daily-snapshots", "schedule": "5 0 * * *" },
-    { "path": "/api/cron/fetch-bybit-traders", "schedule": "*/15 * * * *" }
+    { "path": "/api/cron/fetch-bybit-traders", "schedule": "*/15 * * * *" },
+    { "path": "/api/trader/sync", "schedule": "*/5 * * * *" }
   ],
   "headers": [
     {
