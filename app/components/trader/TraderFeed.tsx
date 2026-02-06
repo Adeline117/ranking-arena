@@ -281,7 +281,7 @@ export default function TraderFeed({ items, title, showPostButton = false, onPos
                     <Text size="xs" color="tertiary">
                       {t('repostFromLabel')}{' '}
                       <Link
-                        href={`/u/${item.original_author_handle}`}
+                        href={`/u/${encodeURIComponent(item.original_author_handle || '')}`}
                         onClick={(e) => e.stopPropagation()}
                         style={{ color: tokens.colors.accent.primary, textDecoration: 'none', fontWeight: 600 }}
                       >

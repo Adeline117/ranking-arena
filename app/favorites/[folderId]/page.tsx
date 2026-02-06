@@ -380,8 +380,8 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
           {/* 帖子元信息 */}
           <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3], marginBottom: tokens.spacing[4] }}>
             {selectedPost.author_handle && (
-              <Link 
-                href={`/u/${selectedPost.author_handle}`}
+              <Link
+                href={`/u/${encodeURIComponent(selectedPost.author_handle)}`}
                 style={{ color: tokens.colors.accent?.primary, textDecoration: 'none', fontSize: 14 }}
               >
                 @{selectedPost.author_handle}
@@ -645,8 +645,8 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
                   {folder.owner_handle && (
                     <>
                       {' · '}
-                      <Link 
-                        href={`/u/${folder.owner_handle}`}
+                      <Link
+                        href={`/u/${encodeURIComponent(folder.owner_handle)}`}
                         style={{ color: tokens.colors.text.tertiary, textDecoration: 'none' }}
                       >
                         @{folder.owner_handle}

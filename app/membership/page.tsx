@@ -51,7 +51,7 @@ export default function MembershipPage() {
     if (authLoading) return
 
     if (!isLoggedIn) {
-      router.push('/login?returnUrl=/membership')
+      router.push('/login?redirect=/membership')
       return
     }
 

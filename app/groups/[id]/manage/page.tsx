@@ -103,7 +103,7 @@ function ActivityLogSection({ groupId }: { groupId: string }) {
   )
 }
 
-export default function GroupManagePage({ params }: { params: { id: string } | Promise<{ id: string }> }) {
+export default function GroupManagePage({ params }: { params: Promise<{ id: string }> }) {
   const [groupId, setGroupId] = useState<string>('')
   
   useEffect(() => {

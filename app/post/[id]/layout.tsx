@@ -3,7 +3,7 @@ import { getSupabaseAdmin } from '@/lib/supabase/server'
 
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'
 
-export async function generateMetadata({ params }: { params: { id: string } | Promise<{ id: string }> }): Promise<Metadata> {
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
   const resolvedParams = await params
   const postId = resolvedParams.id
   const canonicalUrl = `${BASE_URL}/post/${postId}`

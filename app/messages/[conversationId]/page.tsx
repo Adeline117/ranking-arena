@@ -101,7 +101,7 @@ function updateMessageStatus(
   })
 }
 
-export default function ConversationPage({ params }: { params: { conversationId: string } | Promise<{ conversationId: string }> }) {
+export default function ConversationPage({ params }: { params: Promise<{ conversationId: string }> }) {
   const router = useRouter()
   const { showToast } = useToast()
   const { t, language } = useLanguage()

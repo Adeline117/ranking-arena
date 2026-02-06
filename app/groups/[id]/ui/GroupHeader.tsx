@@ -124,7 +124,7 @@ export default function GroupHeader({
                 <Text size="xs" color="tertiary" style={{ marginTop: tokens.spacing[1] }}>
                   {language === 'zh' ? '组长' : 'Owner'}:
                   <Link
-                    href={`/u/${group.owner_handle}`}
+                    href={`/u/${encodeURIComponent(group.owner_handle)}`}
                     style={{
                       color: tokens.colors.accent?.primary || '#8b6fa8',
                       textDecoration: 'none',
