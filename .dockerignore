@@ -1,0 +1,50 @@
+# Git
+.git
+.gitignore
+
+# Dependencies (will be installed in container)
+node_modules
+worker/node_modules
+
+# Build outputs
+.next
+worker/dist
+
+# Test files
+**/__tests__
+**/*.test.ts
+**/*.test.tsx
+**/*.spec.ts
+coverage
+
+# Development files
+.env.local
+.env.development
+*.log
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Documentation (not needed in container)
+docs
+*.md
+!README.md
+
+# Storybook
+stories
+.storybook
+
+# E2E tests
+e2e
+playwright-report
+
+# Other
+.vercel
+.turbo
