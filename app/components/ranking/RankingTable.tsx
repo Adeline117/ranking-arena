@@ -23,6 +23,7 @@ const RankingSearch = dynamic(() => import('./RankingSearch'), { ssr: false })
 // Extracted components — keep TraderRow/TraderCard static (LCP-critical)
 import { TraderRow } from './TraderRow'
 import { TraderCard } from './TraderCard'
+import { AvatarPreload } from '../ui/AvatarPreload'
 import {
   FilterIcon, CompareIcon, SortIndicator, LockIconSmall,
   SearchIcon, TableViewIcon, CardViewIcon, SettingsIcon,
@@ -309,6 +310,11 @@ function RankingTableInner(props: {
 
   return (
     <>
+    {/* Preload top trader avatars for faster LCP */}
+    <AvatarPreload
+      avatarUrls={traders.slice(0, 10).map(t => t.avatar_url)}
+      maxPreload={10}
+    />
     {/* Dynamic grid template override */}
     <style>{`
       @media (min-width: 768px) {

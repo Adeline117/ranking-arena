@@ -9,6 +9,7 @@ import { useToast } from '@/app/components/ui/Toast'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
+import { TraderSearchFilter, type TraderFilterConfig } from '@/app/components/search/TraderSearchFilter'
 
 type SearchResult = {
   type: 'trader' | 'post' | 'group' | 'user'
@@ -48,6 +49,10 @@ function SearchContent() {
   const [offsets, setOffsets] = useState<Record<string, number>>({ users: PAGE_SIZE, traders: PAGE_SIZE, posts: PAGE_SIZE, groups: PAGE_SIZE })
   const [hasMore, setHasMore] = useState<Record<string, boolean>>({ users: true, traders: true, posts: true, groups: true })
   const [loadingMore, setLoadingMore] = useState<Record<string, boolean>>({ users: false, traders: false, posts: false, groups: false })
+
+  // Advanced filter state for traders
+  const [traderFilter, setTraderFilter] = useState<TraderFilterConfig>({})
+  const [isFilterVisible, setIsFilterVisible] = useState(false)
 
   const setActiveTab = useCallback((tab: TabType) => {
     const params = new URLSearchParams(searchParams.toString())
@@ -170,17 +175,35 @@ function SearchContent() {
         }
 
         // 处理交易员结果 - 批量获取快照数据
-        const traders = tradersData.data?.slice(0, PAGE_SIZE) ?? null
+        let traders = tradersData.data?.slice(0, PAGE_SIZE * 2) ?? null // Fetch more to account for filtering
+
+        // Apply exchange filter
+        if (traders && traderFilter.exchange?.length) {
+          traders = traders.filter(t =>
+            traderFilter.exchange!.some(ex =>
+              (t.source || '').toLowerCase().includes(ex.toLowerCase())
+            )
+          )
+        }
+
         if (traders && traders.length > 0) {
           const traderKeys = traders.map(t => t.source_trader_id)
-          const { data: allSnapshots } = await supabase
+
+          // Build snapshot query with period filter
+          let snapshotQuery = supabase
             .from('trader_snapshots')
             .select('source_trader_id, season_id, roi, arena_score, captured_at')
             .in('source_trader_id', traderKeys)
             .not('arena_score', 'is', null)
-            .order('captured_at', { ascending: false })
 
-          // 构建映射（优先 90D > 30D > 7D）
+          // Apply period filter if set
+          if (traderFilter.period) {
+            snapshotQuery = snapshotQuery.eq('season_id', traderFilter.period)
+          }
+
+          const { data: allSnapshots } = await snapshotQuery.order('captured_at', { ascending: false })
+
+          // 构建映射（优先 90D > 30D > 7D，除非指定了周期）
           const snapshotMap = new Map<string, { season_id: string; roi: number; arena_score: number }>()
           const windowPriority: Record<string, number> = { '90D': 3, '30D': 2, '7D': 1 }
 
@@ -198,6 +221,17 @@ function SearchContent() {
 
           for (const trader of traders) {
             const latest = snapshotMap.get(trader.source_trader_id)
+
+            // Apply ROI and score filters
+            if (latest) {
+              if (traderFilter.roi_min != null && latest.roi < traderFilter.roi_min) continue
+              if (traderFilter.roi_max != null && latest.roi > traderFilter.roi_max) continue
+              if (traderFilter.min_score != null && latest.arena_score < traderFilter.min_score) continue
+            } else if (traderFilter.roi_min != null || traderFilter.roi_max != null || traderFilter.min_score != null) {
+              // Skip traders without snapshot data if filters are active
+              continue
+            }
+
             const platformLabel = (trader.source || '').replace(/_/g, ' ').toUpperCase()
             const subtitle = latest
               ? `${latest.season_id}: ROI ${latest.roi?.toFixed(1)}% • Score ${latest.arena_score?.toFixed(1)}`
@@ -209,6 +243,9 @@ function SearchContent() {
               subtitle,
               meta: platformLabel || undefined,
             })
+
+            // Limit to PAGE_SIZE after filtering
+            if (results.filter(r => r.type === 'trader').length >= PAGE_SIZE) break
           }
         }
 
@@ -253,7 +290,7 @@ function SearchContent() {
     const timeout = setTimeout(search, 300)
     return () => clearTimeout(timeout)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, t])
+  }, [query, t, traderFilter])
 
   const loadMore = useCallback(async (type: 'users' | 'traders' | 'posts' | 'groups') => {
     if (!query.trim() || loadingMore[type] || !hasMore[type]) return
@@ -290,20 +327,38 @@ function SearchContent() {
           })
         }
       } else if (type === 'traders') {
-        const { data } = await supabase.from('trader_sources').select('source_trader_id, handle, source').or(`handle.ilike.%${sanitizedQuery}%,source_trader_id.ilike.%${sanitizedQuery}%`).range(offset, offset + PAGE_SIZE)
+        const { data } = await supabase.from('trader_sources').select('source_trader_id, handle, source').or(`handle.ilike.%${sanitizedQuery}%,source_trader_id.ilike.%${sanitizedQuery}%`).range(offset, offset + PAGE_SIZE * 2)
         if (data) {
-          if (data.length <= PAGE_SIZE) {
+          let traders = data
+
+          // Apply exchange filter
+          if (traderFilter.exchange?.length) {
+            traders = traders.filter(t =>
+              traderFilter.exchange!.some(ex =>
+                (t.source || '').toLowerCase().includes(ex.toLowerCase())
+              )
+            )
+          }
+
+          if (traders.length <= PAGE_SIZE) {
             setHasMore(prev => ({ ...prev, traders: false }))
           }
-          const traders = data.slice(0, PAGE_SIZE)
+
           if (traders.length > 0) {
             const traderKeys = traders.map(t => t.source_trader_id)
-            const { data: allSnapshots } = await supabase
+
+            // Build snapshot query with period filter
+            let snapshotQuery = supabase
               .from('trader_snapshots')
               .select('source_trader_id, season_id, roi, arena_score, captured_at')
               .in('source_trader_id', traderKeys)
               .not('arena_score', 'is', null)
-              .order('captured_at', { ascending: false })
+
+            if (traderFilter.period) {
+              snapshotQuery = snapshotQuery.eq('season_id', traderFilter.period)
+            }
+
+            const { data: allSnapshots } = await snapshotQuery.order('captured_at', { ascending: false })
 
             const snapshotMap = new Map<string, { season_id: string; roi: number; arena_score: number }>()
             const windowPriority: Record<string, number> = { '90D': 3, '30D': 2, '7D': 1 }
@@ -321,6 +376,16 @@ function SearchContent() {
 
             for (const trader of traders) {
               const latest = snapshotMap.get(trader.source_trader_id)
+
+              // Apply ROI and score filters
+              if (latest) {
+                if (traderFilter.roi_min != null && latest.roi < traderFilter.roi_min) continue
+                if (traderFilter.roi_max != null && latest.roi > traderFilter.roi_max) continue
+                if (traderFilter.min_score != null && latest.arena_score < traderFilter.min_score) continue
+              } else if (traderFilter.roi_min != null || traderFilter.roi_max != null || traderFilter.min_score != null) {
+                continue
+              }
+
               const platformLabel = (trader.source || '').replace(/_/g, ' ').toUpperCase()
               const subtitle = latest
                 ? `${latest.season_id}: ROI ${latest.roi?.toFixed(1)}% • Score ${latest.arena_score?.toFixed(1)}`
@@ -332,6 +397,8 @@ function SearchContent() {
                 subtitle,
                 meta: platformLabel || undefined,
               })
+
+              if (newResults.length >= PAGE_SIZE) break
             }
           }
         }
@@ -380,7 +447,7 @@ function SearchContent() {
     } finally {
       setLoadingMore(prev => ({ ...prev, [type]: false }))
     }
-  }, [query, offsets, hasMore, loadingMore, showToast, t])
+  }, [query, offsets, hasMore, loadingMore, showToast, t, traderFilter])
 
   const TAB_TYPE_MAP: Record<TabType, SearchResult['type'] | null> = {
     all: null,
@@ -521,6 +588,16 @@ function SearchContent() {
               </button>
             ))}
           </div>
+        )}
+
+        {/* Advanced filter for traders tab */}
+        {query && activeTab === 'traders' && (
+          <TraderSearchFilter
+            filter={traderFilter}
+            onFilterChange={setTraderFilter}
+            isVisible={isFilterVisible}
+            onToggle={() => setIsFilterVisible(prev => !prev)}
+          />
         )}
 
         {loading ? (
