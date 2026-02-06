@@ -34,6 +34,7 @@ export default function ApplyGroupPage() {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
   const [uploading, setUploading] = useState(false)
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
 
   // 当前编辑的语言标签
   const [activeTab, setActiveTab] = useState<'zh' | 'en'>('zh')
@@ -71,6 +72,24 @@ export default function ApplyGroupPage() {
       fetchMyApplications(accessToken)
     }
   }, [accessToken])
+
+  // Field-level validation
+  const validateField = (fieldName: string, value: string) => {
+    const newErrors = { ...fieldErrors }
+
+    if (fieldName === 'nameZh' || fieldName === 'nameEn') {
+      // At least one name (Chinese or English) is required
+      if (!nameZh.trim() && !nameEn.trim()) {
+        newErrors['name'] = language === 'zh'
+          ? '请至少填写一个小组名称（中文或英文）'
+          : 'Please enter at least one group name (Chinese or English)'
+      } else {
+        delete newErrors['name']
+      }
+    }
+
+    setFieldErrors(newErrors)
+  }
 
   const fetchMyApplications = async (token: string) => {
     try {
@@ -180,20 +199,31 @@ export default function ApplyGroupPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    
+
     if (!accessToken) {
       setError(language === 'zh' ? '请先登录' : 'Please login first')
       return
     }
 
-    // 至少需要填写中文或英文名称
+    // Validate all fields before submitting
+    const newErrors: Record<string, string> = {}
+
+    // At least one name is required
     if (!nameZh.trim() && !nameEn.trim()) {
-      setError(language === 'zh' ? '请填写小组名称（中文或英文）' : 'Please enter group name (Chinese or English)')
+      newErrors['name'] = language === 'zh'
+        ? '请至少填写一个小组名称（中文或英文）'
+        : 'Please enter at least one group name (Chinese or English)'
+    }
+
+    if (Object.keys(newErrors).length > 0) {
+      setFieldErrors(newErrors)
+      setError(language === 'zh' ? '请修正表单错误' : 'Please fix the form errors')
       return
     }
 
     setLoading(true)
     setError(null)
+    setFieldErrors({})
 
     try {
       const res = await fetch('/api/groups/apply', {
@@ -509,10 +539,20 @@ export default function ApplyGroupPage() {
                       type="text"
                       value={nameZh}
                       onChange={(e) => setNameZh(e.target.value)}
+                      onBlur={() => validateField('nameZh', nameZh)}
                       placeholder="例如：BTC 交易讨论组"
-                      style={inputStyle}
+                      style={{
+                        ...inputStyle,
+                        borderColor: fieldErrors.name ? '#DC2626' : tokens.colors.border.primary
+                      }}
+                      aria-invalid={!!fieldErrors.name}
                       maxLength={50}
                     />
+                    {fieldErrors.name && (
+                      <Text size="xs" style={{ color: '#DC2626', marginTop: tokens.spacing[1] }}>
+                        {fieldErrors.name}
+                      </Text>
+                    )}
                   </Box>
 
                   {/* 小组简介（中文） */}
@@ -571,10 +611,20 @@ export default function ApplyGroupPage() {
                         type="text"
                         value={nameEn}
                         onChange={(e) => setNameEn(e.target.value)}
+                        onBlur={() => validateField('nameEn', nameEn)}
                         placeholder="e.g., BTC Trading Discussion"
-                        style={inputStyle}
+                        style={{
+                          ...inputStyle,
+                          borderColor: fieldErrors.name ? '#DC2626' : tokens.colors.border.primary
+                        }}
+                        aria-invalid={!!fieldErrors.name}
                         maxLength={50}
                       />
+                      {fieldErrors.name && (
+                        <Text size="xs" style={{ color: '#DC2626', marginTop: tokens.spacing[1] }}>
+                          {fieldErrors.name}
+                        </Text>
+                      )}
                     </Box>
 
                     {/* 小组简介（英文） */}
