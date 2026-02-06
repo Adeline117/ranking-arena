@@ -272,6 +272,7 @@ export async function del(key: string): Promise<boolean> {
 
 /**
  * 批量删除缓存（按模式）
+ * 使用 SCAN 替代 KEYS 避免阻塞 Redis
  */
 export async function delByPattern(pattern: string): Promise<number> {
   const redis = await getRedis()
@@ -284,11 +285,26 @@ export async function delByPattern(pattern: string): Promise<number> {
   // 删除 Redis 缓存
   if (redis) {
     try {
-      const keys = await redis.keys(pattern)
-      if (keys.length > 0) {
-        await redis.del(...keys)
-        return keys.length
-      }
+      // 使用 SCAN 迭代删除，避免 KEYS 阻塞
+      let totalDeleted = 0
+      let cursor = 0
+
+      do {
+        // Upstash Redis scan 返回 [cursor, keys]
+        const [nextCursor, keys] = await redis.scan(cursor, {
+          match: pattern,
+          count: 100, // 每次扫描 100 个键
+        })
+
+        cursor = Number(nextCursor)
+
+        if (keys.length > 0) {
+          await redis.del(...keys)
+          totalDeleted += keys.length
+        }
+      } while (cursor !== 0)
+
+      return totalDeleted
     } catch (error) {
       handleRedisError(error)
       dataLogger.error('Upstash Redis 批量删除失败:', { pattern, error })
@@ -351,15 +367,31 @@ export async function getOrSet<T>(
 }
 
 /**
- * 带锁的获取或设置（防止缓存击穿）
+ * 带锁的获取或设置（防止缓存击穿/雪崩）
+ *
+ * 改进:
+ * - 指数退避重试获取锁
+ * - TTL 抖动防止同时过期
+ * - 最大等待时间限制
  */
 export async function getOrSetWithLock<T>(
   key: string,
   fetcher: () => Promise<T>,
-  options: CacheOptions & { lockTtl?: number } = {}
+  options: CacheOptions & {
+    lockTtl?: number
+    maxWaitMs?: number
+    retryDelayMs?: number
+    ttlJitter?: boolean
+  } = {}
 ): Promise<T> {
   const redis = await getRedis()
-  const { ttl = 60, lockTtl = 5 } = options
+  const {
+    ttl = 60,
+    lockTtl = 10,
+    maxWaitMs = 5000,
+    retryDelayMs = 50,
+    ttlJitter = true,
+  } = options
 
   // 尝试从缓存获取
   const cached = await get<T>(key)
@@ -367,40 +399,78 @@ export async function getOrSetWithLock<T>(
     return cached
   }
 
+  // 计算实际 TTL（添加抖动防止雪崩）
+  const actualTtl = ttlJitter ? addTtlJitter(ttl) : ttl
+
   // 如果 Redis 不可用，直接获取数据并缓存到内存
   if (!redis) {
     const data = await fetcher()
-    await set(key, data, { ttl })
+    await set(key, data, { ...options, ttl: actualTtl })
     return data
   }
 
-  // 尝试获取锁（使用 NX 选项）
   const lockKey = `lock:${key}`
-  const lockAcquired = await redis.set(lockKey, '1', {
-    ex: lockTtl,
-    nx: true,
-  })
+  const startTime = Date.now()
+  let attempt = 0
 
-  if (!lockAcquired) {
-    // 未获得锁，等待并重试获取缓存
-    await new Promise(resolve => setTimeout(resolve, 100))
+  // 指数退避尝试获取锁
+  while (Date.now() - startTime < maxWaitMs) {
+    attempt++
+
+    // 尝试获取锁（使用 NX 选项）
+    const lockAcquired = await redis.set(lockKey, '1', {
+      ex: lockTtl,
+      nx: true,
+    })
+
+    if (lockAcquired) {
+      try {
+        // 双重检查：获得锁后再次检查缓存
+        const doubleCheck = await get<T>(key)
+        if (doubleCheck !== null) {
+          return doubleCheck
+        }
+
+        // 获得锁，获取数据
+        const data = await fetcher()
+        await set(key, data, { ...options, ttl: actualTtl })
+        return data
+      } finally {
+        // 释放锁
+        await redis.del(lockKey).catch(() => {
+          // 忽略锁释放失败
+        })
+      }
+    }
+
+    // 未获得锁，检查缓存是否已被其他进程填充
     const retryCache = await get<T>(key)
     if (retryCache !== null) {
       return retryCache
     }
-    // 仍然没有，直接获取（避免死锁）
-    return await fetcher()
+
+    // 指数退避等待
+    const backoffMs = Math.min(retryDelayMs * Math.pow(2, attempt - 1), 1000)
+    const jitter = Math.random() * backoffMs * 0.3 // 30% 抖动
+    await new Promise(resolve => setTimeout(resolve, backoffMs + jitter))
   }
 
-  try {
-    // 获得锁，获取数据
-    const data = await fetcher()
-    await set(key, data, { ttl })
-    return data
-  } finally {
-    // 释放锁
-    await redis.del(lockKey)
-  }
+  // 超时：执行兜底获取（避免完全失败）
+  dataLogger.warn(`[Cache] Lock timeout for ${key}, executing without lock`)
+  const data = await fetcher()
+  // 异步缓存，不阻塞返回
+  set(key, data, { ...options, ttl: actualTtl }).catch(() => {})
+  return data
+}
+
+/**
+ * 添加 TTL 抖动，防止大量缓存同时过期
+ * 在原 TTL 基础上增加 ±10% 的随机偏移
+ */
+function addTtlJitter(ttl: number): number {
+  const jitterRange = Math.floor(ttl * 0.1) // 10% 抖动
+  const jitter = Math.floor(Math.random() * jitterRange * 2) - jitterRange
+  return Math.max(ttl + jitter, 1)
 }
 
 /**
