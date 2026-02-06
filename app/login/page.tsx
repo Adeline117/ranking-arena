@@ -4,9 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { supabase } from "@/lib/supabase/client"
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useToast } from '@/app/components/ui/Toast'
-import { ConnectButton } from '@rainbow-me/rainbowkit'
-import { useAccount } from 'wagmi'
-import { useSiweAuth } from '@/lib/web3/useSiweAuth'
+import { OneClickWalletButton } from '@/app/components/web3/OneClickWalletButton'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 // 密码强度计算函数
@@ -262,9 +260,6 @@ export default function LoginPage() {
     return '/'
   }
 
-  // Web3 wallet auth
-  const { address: walletAddress, isConnected: isWalletConnected } = useAccount()
-  const { signIn: siweSignIn, isLoading: siweLoading, error: siweError, clearError: clearSiweError } = useSiweAuth()
 
   const passwordStrength = getPasswordStrength(password)
   
@@ -1362,84 +1357,16 @@ export default function LoginPage() {
           <div style={{ flex: 1, height: 1, background: 'rgba(255, 255, 255, 0.1)' }} />
         </div>
 
-        {/* Wallet Connect Section */}
+        {/* One-Click Wallet Sign-In */}
         <div style={{ marginBottom: 16 }}>
-          {!isWalletConnected ? (
-            <div style={{ display: 'flex', justifyContent: 'center' }}>
-              <ConnectButton.Custom>
-                {({ openConnectModal }) => (
-                  <button
-                    onClick={openConnectModal}
-                    className="login-button"
-                    style={{
-                      width: '100%',
-                      padding: '14px 16px',
-                      borderRadius: 12,
-                      border: '1px solid rgba(139, 111, 168, 0.3)',
-                      background: 'rgba(139, 111, 168, 0.08)',
-                      color: '#c9b8db',
-                      fontWeight: 700,
-                      fontSize: 15,
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: 10,
-                    }}
-                  >
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <rect x="2" y="6" width="20" height="12" rx="2" />
-                      <path d="M22 10H18a2 2 0 0 0-2 2 2 2 0 0 0 2 2h4" />
-                    </svg>
-                    {t('loginConnectWallet')}
-                  </button>
-                )}
-              </ConnectButton.Custom>
-            </div>
-          ) : (
-            <button
-              onClick={async () => {
-                clearSiweError()
-                const result = await siweSignIn()
-                if (result) {
-                  showToast(t('loginWalletSignInSuccess'), 'success')
-                  router.push(getRedirectUrl(result.handle))
-                }
-                // Error is shown via siweError state from the hook
-              }}
-              disabled={siweLoading}
-              className="login-button"
-              style={{
-                width: '100%',
-                padding: '14px 16px',
-                borderRadius: 12,
-                border: 'none',
-                background: siweLoading
-                  ? 'rgba(139, 111, 168, 0.2)'
-                  : 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
-                color: '#fff',
-                fontWeight: 700,
-                fontSize: 15,
-                cursor: siweLoading ? 'not-allowed' : 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 10,
-              }}
-            >
-              {siweLoading && <Spinner />}
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="2" y="6" width="20" height="12" rx="2" />
-                <path d="M22 10H18a2 2 0 0 0-2 2 2 2 0 0 0 2 2h4" />
-              </svg>
-              {siweLoading ? t('loginWalletConnecting') : `${t('loginWalletSignIn')} (${walletAddress?.slice(0, 6)}...${walletAddress?.slice(-4)})`}
-            </button>
-          )}
-          {siweError && (
-            <div style={{ marginTop: 8, fontSize: 12, color: '#ff7c7c' }}>
-              {siweError}
-            </div>
-          )}
+          <OneClickWalletButton
+            fullWidth
+            size="md"
+            onSuccess={(result) => {
+              showToast(t('loginWalletSignInSuccess'), 'success')
+              router.push(getRedirectUrl(result.handle))
+            }}
+          />
         </div>
 
         {/* Switch login/register */}

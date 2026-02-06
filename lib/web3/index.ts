@@ -15,6 +15,7 @@ export { CONTRACT_ADDRESSES, ARENA_SCORE_SCHEMA_UID, basePublicClient, baseChain
 export { wagmiConfig, targetChain } from './config'
 export { Web3Provider } from './provider'
 export { useSiweAuth } from './useSiweAuth'
+export { useOneClickSiwe, type OneClickStatus } from './useOneClickSiwe'
 export { useWallet } from './useWallet'
 
 // Server-safe utilities
