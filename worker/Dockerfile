@@ -26,19 +26,17 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-# Copy worker package.json and install dependencies
-COPY worker/package*.json ./worker/
-RUN cd worker && npm ci && npm cache clean --force
+# Copy shared lib first (required by worker imports)
+COPY lib/cron/fetchers/ /app/lib/cron/fetchers/
+
+# Copy entire worker directory
+COPY worker/ /app/worker/
+
+# Install dependencies
+RUN cd /app/worker && npm ci && npm cache clean --force
 
 # Install Playwright browsers (chromium only to reduce size)
-RUN cd worker && npx playwright install chromium
-
-# Copy shared lib (required by worker imports: ../../../lib/cron/fetchers)
-COPY lib/cron/fetchers ./lib/cron/fetchers
-
-# Copy worker source and config files
-COPY worker/src ./worker/src
-COPY worker/tsconfig.json ./worker/
+RUN cd /app/worker && npx playwright install chromium
 
 # Environment
 ENV NODE_ENV=production
