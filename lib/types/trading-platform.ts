@@ -96,6 +96,25 @@ export interface SnapshotMetrics {
   stability_score: number | null
   score_confidence?: 'full' | 'partial' | 'minimal' | null
   rank: number | null
+  // V3 Advanced Metrics
+  sortino_ratio?: number | null
+  calmar_ratio?: number | null
+  profit_factor?: number | null
+  recovery_factor?: number | null
+  max_consecutive_wins?: number | null
+  max_consecutive_losses?: number | null
+  avg_holding_hours?: number | null
+  volatility_pct?: number | null
+  downside_volatility_pct?: number | null
+  // Market Correlation
+  beta_btc?: number | null
+  beta_eth?: number | null
+  alpha?: number | null
+  // Classification
+  trading_style?: 'hft' | 'day_trader' | 'swing' | 'trend' | 'scalping' | null
+  style_confidence?: number | null
+  // Arena Score V3
+  arena_score_v3?: number | null
 }
 
 export interface QualityFlags {
