@@ -21,9 +21,9 @@ export const lightTokens = {
     // Text hierarchy (WCAG AA contrast ratios on #FFFFFF)
     text: {
       primary: '#1A1A1A',      // Almost black text (16.6:1)
-      secondary: '#666666',    // Secondary text (5.7:1)
-      tertiary: '#737380',     // Muted text (4.7:1)
-      disabled: '#CCCCCC',     // Disabled text
+      secondary: '#525260',    // Secondary text (7.1:1) - improved contrast
+      tertiary: '#5C5C6B',     // Muted text (5.5:1) - improved from 4.7:1
+      disabled: '#9E9E9E',     // Disabled text (3.5:1)
     },
     
     // Border colors

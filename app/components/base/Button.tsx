@@ -8,6 +8,7 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
   size?: 'sm' | 'md' | 'lg'
   fullWidth?: boolean
   loading?: boolean
+  error?: boolean | string  // true for error state, or error message string
   icon?: React.ReactNode
   iconPosition?: 'left' | 'right'
 }
@@ -17,6 +18,7 @@ export default function Button({
   size = 'md',
   fullWidth = false,
   loading = false,
+  error = false,
   icon,
   iconPosition = 'left',
   style,
@@ -48,6 +50,8 @@ export default function Button({
   }, [])
 
   const isDisabled = props.disabled || loading
+  const hasError = Boolean(error)
+  const errorMessage = typeof error === 'string' ? error : undefined
 
   const baseStyle: React.CSSProperties = {
     display: 'inline-flex',
@@ -67,9 +71,9 @@ export default function Button({
   const variantStyles: Record<string, React.CSSProperties> = {
     primary: {
       background: tokens.gradient.primary,
-      color: '#FFFFFF',
+      color: tokens.colors.white,
       border: 'none',
-      boxShadow: `0 4px 12px ${tokens.colors.accent?.primary || '#8b6fa8'}40`,
+      boxShadow: `0 4px 12px ${tokens.colors.accent.brand}40`,
     },
     secondary: {
       background: tokens.glass.bg.light,
@@ -91,13 +95,13 @@ export default function Button({
     },
     success: {
       background: tokens.gradient.success,
-      color: '#FFFFFF',
+      color: tokens.colors.white,
       border: 'none',
       boxShadow: `0 4px 12px ${tokens.colors.accent.success}40`,
     },
     danger: {
       background: tokens.gradient.error,
-      color: '#FFFFFF',
+      color: tokens.colors.white,
       border: 'none',
       boxShadow: `0 4px 12px ${tokens.colors.accent.error}40`,
     },
@@ -124,10 +128,18 @@ export default function Button({
   // 自动生成aria-label（如果未提供）
   const ariaLabel = props['aria-label'] || (typeof children === 'string' ? children : undefined) || 'Button'
 
+  // Error state styles
+  const errorStyles: React.CSSProperties = hasError ? {
+    borderColor: tokens.colors.accent.error,
+    boxShadow: `0 0 0 2px ${tokens.colors.accent.error}30`,
+    animation: 'shake 0.5s ease-in-out',
+  } : {}
+
   // Build CSS class string: btn-base handles transition, hover, and active via CSS
   const btnClassName = [
     'btn-base',
     `btn-${variant}`,
+    hasError && 'btn-error',
     className,
   ].filter(Boolean).join(' ')
 
@@ -138,6 +150,7 @@ export default function Button({
         ...baseStyle,
         ...variantStyles[variant],
         ...sizeStyles[size],
+        ...errorStyles,
         ...style,
       }}
       onMouseDown={(e) => {
@@ -156,6 +169,8 @@ export default function Button({
       }}
       aria-label={ariaLabel}
       aria-busy={loading}
+      aria-invalid={hasError}
+      aria-errormessage={errorMessage}
       role={props.role || 'button'}
       tabIndex={isDisabled ? -1 : 0}
       disabled={isDisabled}

@@ -83,7 +83,7 @@ function NotificationBadge({ count, ariaLabel }: NotificationBadgeProps): React.
         height: 16,
         padding: '0 4px',
         borderRadius: 8,
-        background: tokens.colors.accent?.error || '#ff4d4d',
+        background: tokens.colors.accent.error,
         color: '#fff',
         fontSize: 10,
         fontWeight: 700,
@@ -331,7 +331,7 @@ function HighlightDot(): React.ReactElement {
         width: 6,
         height: 6,
         borderRadius: 3,
-        background: tokens.colors.accent?.error || '#ff4d4d',
+        background: tokens.colors.accent.error,
       }}
       aria-hidden="true"
     />

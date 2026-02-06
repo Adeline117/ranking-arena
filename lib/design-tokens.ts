@@ -254,6 +254,31 @@ export const tokens = {
     xl: '1280px',
     '2xl': '1536px',
   },
+
+  // Icon sizes (standardized)
+  iconSize: {
+    xs: 12,
+    sm: 16,
+    md: 20,
+    lg: 24,
+    xl: 32,
+    '2xl': 40,
+  },
+
+  // Touch targets (minimum sizes for accessibility)
+  touchTarget: {
+    min: 44,       // Minimum touch target size (Apple HIG)
+    comfortable: 48,
+    large: 56,
+  },
+
+  // Focus ring styles
+  focusRing: {
+    width: '2px',
+    offset: '2px',
+    color: 'var(--focus-ring-color, rgba(139, 111, 168, 0.5))',
+    style: '2px solid var(--focus-ring-color, rgba(139, 111, 168, 0.5))',
+  },
   
   // Animation keyframe names (reference for CSS)
   keyframes: {
