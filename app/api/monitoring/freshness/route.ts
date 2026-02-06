@@ -74,13 +74,24 @@ export async function GET(request: NextRequest) {
     process.env.SUPABASE_SERVICE_ROLE_KEY || ''
   )
 
-  const { data, error } = await supabase
-    .from('trader_snapshots')
-    .select('source, captured_at, roi, win_rate, max_drawdown')
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+  // Fetch all snapshots (paginated to avoid 1000 row default limit)
+  let allData: Array<{ source: string; captured_at: string; roi: number | null; win_rate: number | null; max_drawdown: number | null }> = []
+  let page = 0
+  const PAGE_SIZE = 5000
+  while (true) {
+    const { data: batch, error: batchErr } = await supabase
+      .from('trader_snapshots')
+      .select('source, captured_at, roi, win_rate, max_drawdown')
+      .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)
+    if (batchErr) {
+      return NextResponse.json({ error: batchErr.message }, { status: 500 })
+    }
+    allData = allData.concat(batch || [])
+    if (!batch || batch.length < PAGE_SIZE) break
+    page++
   }
+
+  const data = allData
 
   // Aggregate by source
   const platformData: Record<string, {

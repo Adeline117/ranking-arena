@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
-import ProBadge from '@/app/components/ui/ProBadge'
+import { ProBadgeOverlay } from '@/app/components/ui/ProBadge'
 
 interface AvatarLinkProps {
   handle?: string | null
@@ -31,40 +31,40 @@ export function AvatarLink({ handle, avatarUrl, isPro, showProBadge = true }: Av
       }}
       title="进入交易者主页"
     >
-      <span
-        style={{
-          width: 24,
-          height: 24,
-          borderRadius: tokens.radius.md,
-          display: 'grid',
-          placeItems: 'center',
-          background: tokens.colors.bg.secondary,
-          border: `1px solid ${tokens.colors.border.primary}`,
-          fontWeight: tokens.typography.fontWeight.black,
-          fontSize: tokens.typography.fontSize.xs,
-          transition: `all ${tokens.transition.base}`,
-          overflow: 'hidden',
-        }}
-      >
-        {avatarUrl ? (
-          <Image
-            src={avatarUrl}
-            alt={handle}
-            width={24}
-            height={24}
-            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-            unoptimized={avatarUrl?.startsWith('data:')}
-          />
-        ) : (
-          (handle?.[0] || 'U').toUpperCase()
-        )}
+      <span style={{ position: 'relative', flexShrink: 0 }}>
+        <span
+          style={{
+            width: 24,
+            height: 24,
+            borderRadius: tokens.radius.md,
+            display: 'grid',
+            placeItems: 'center',
+            background: tokens.colors.bg.secondary,
+            border: `1px solid ${tokens.colors.border.primary}`,
+            fontWeight: tokens.typography.fontWeight.black,
+            fontSize: tokens.typography.fontSize.xs,
+            transition: `all ${tokens.transition.base}`,
+            overflow: 'hidden',
+          }}
+        >
+          {avatarUrl ? (
+            <Image
+              src={avatarUrl}
+              alt={handle}
+              width={24}
+              height={24}
+              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+              unoptimized={avatarUrl?.startsWith('data:')}
+            />
+          ) : (
+            (handle?.[0] || 'U').toUpperCase()
+          )}
+        </span>
+        {shouldShowBadge && <ProBadgeOverlay position="bottom-right" />}
       </span>
       <span style={{ fontWeight: 850, fontSize: 12, color: tokens.colors.text.secondary }}>
         {handle}
       </span>
-      {shouldShowBadge && (
-        <ProBadge size="sm" showLabel={false} />
-      )}
     </Link>
   )
 }

@@ -173,6 +173,7 @@ const en = {
     activeYears: 'y',
     activeDaysUnit: 'd',
     verifiedUser: 'Verified User',
+    verifiedTrader: 'Verified Ranked Trader',
     userNumber: 'User Number',
     userReviews: 'reviews',
     // Claim trader
@@ -998,6 +999,7 @@ const en = {
     alertTraderRoi30dMsg: '{handle} 30D ROI changed from {old} to {new}',
     alertTraderScoreMsg: '{handle} Arena Score changed from {old} to {new}',
     traderMovementAlerts: 'Trader Alerts',
+    viewAll: 'View All',
     viewAllAlerts: 'View All',
     noMovementAlerts: 'No Alerts',
     noMovementAlertsDesc: 'Follow traders and get notified when their performance changes significantly',
@@ -1083,7 +1085,7 @@ const en = {
     sortTop: 'Top',
 
     // Image Cropper
-    cropSuccess: 'Crop successful! Click Save to upload.',
+    cropSuccess: 'Saved successfully',
     cropFailed: 'Failed to crop image. Please try again.',
     noCropAreaSelected: 'Please select an area to crop',
 
@@ -1175,6 +1177,11 @@ const en = {
     reportNotice: 'Reports will be reviewed by admins. Malicious reports may result in account restrictions.',
     reportSubmitting: 'Submitting...',
     reportSubmit: 'Submit Report',
+    reportMinDescription: 'Report reason must be at least 15 characters',
+    reportNeedImage: 'Please upload at least one screenshot as evidence',
+    reportScreenshot: 'Screenshot Evidence',
+    reportMinChars: 'min chars',
+    adminReportEvidence: 'Screenshot Evidence',
     reportSubmitted: 'Report submitted, we will review it soon',
     reportFailed: 'Report failed',
 

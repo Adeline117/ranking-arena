@@ -27,7 +27,7 @@ async function fetchUserProfile(handle: string): Promise<UserProfileData | null>
   // Parallel lookup: by handle + by UUID (if applicable)
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
   // Only select columns that actually exist in user_profiles table
-  const selectFields = 'id, handle, bio, avatar_url, cover_url, show_followers, show_following, subscription_tier'
+  const selectFields = 'id, handle, bio, avatar_url, cover_url, show_followers, show_following, subscription_tier, show_pro_badge'
 
   const [handleResult, uuidResult] = await Promise.all([
     supabase.from('user_profiles').select(selectFields).eq('handle', decodedHandle).maybeSingle(),
@@ -45,18 +45,21 @@ async function fetchUserProfile(handle: string): Promise<UserProfileData | null>
   let following = 0
   let tradersCount = 0
   let hasPro = userProfile.subscription_tier === 'pro'
+  let hasClaimedTrader = false
 
   try {
-    const [followersRes, followingRes, tradersRes, subscriptionData] = await Promise.all([
+    const [followersRes, followingRes, tradersRes, subscriptionData, claimedTraderRes] = await Promise.all([
       supabase.from('user_follows').select('*', { count: 'exact', head: true }).eq('following_id', userProfile.id),
       supabase.from('user_follows').select('*', { count: 'exact', head: true }).eq('follower_id', userProfile.id),
       supabase.from('trader_follows').select('*', { count: 'exact', head: true }).eq('user_id', userProfile.id),
       supabase.from('subscriptions').select('tier, status').eq('user_id', userProfile.id).in('status', ['active', 'trialing']).order('created_at', { ascending: false }).limit(1).maybeSingle(),
+      supabase.from('trader_authorizations').select('id', { count: 'exact', head: true }).eq('user_id', userProfile.id).eq('status', 'active'),
     ])
     followers = followersRes.count || 0
     following = followingRes.count || 0
     tradersCount = tradersRes.count || 0
     hasPro = hasPro || subscriptionData?.data?.tier === 'pro'
+    hasClaimedTrader = (claimedTraderRes.count || 0) > 0
   } catch (err) {
     console.error('[UserProfile] Failed to fetch counts:', err)
   }
@@ -73,7 +76,8 @@ async function fetchUserProfile(handle: string): Promise<UserProfileData | null>
     following,
     followingTraders: tradersCount,
     isRegistered: true,
-    proBadgeTier: hasPro ? 'pro' : null,
+    isVerifiedTrader: hasClaimedTrader,
+    proBadgeTier: hasPro && userProfile.show_pro_badge !== false ? 'pro' : null,
   }
 }
 

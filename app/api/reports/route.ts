@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
     const auth = { userId: user.id }
 
     const body = await req.json()
-    const { content_type, content_id, reason, description } = body
+    const { content_type, content_id, reason, description, images } = body
 
     // Validate content_type
     if (!content_type || !VALID_CONTENT_TYPES.includes(content_type as ContentType)) {
@@ -60,9 +60,20 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // Validate description length
-    if (description && typeof description === 'string' && description.length > 1000) {
+    // Validate description: required, min 15 chars, max 1000
+    if (!description || typeof description !== 'string' || description.trim().length < 15) {
+      return NextResponse.json({ error: '举报理由至少15个字符' }, { status: 400 })
+    }
+    if (description.length > 1000) {
       return NextResponse.json({ error: '举报说明最多1000字符' }, { status: 400 })
+    }
+
+    // Validate images: at least 1 required
+    if (!images || !Array.isArray(images) || images.length === 0) {
+      return NextResponse.json({ error: '请至少上传一张截图作为证据' }, { status: 400 })
+    }
+    if (images.length > 4) {
+      return NextResponse.json({ error: '最多上传4张截图' }, { status: 400 })
     }
 
     const supabase = getSupabaseAdmin()
@@ -124,6 +135,7 @@ export async function POST(req: NextRequest) {
         content_id,
         reason,
         description: description?.trim() || null,
+        images: images || [],
         status: 'pending',
       })
       .select()

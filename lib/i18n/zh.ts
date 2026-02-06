@@ -173,6 +173,7 @@ const zh = {
     activeYears: '年',
     activeDaysUnit: '天',
     verifiedUser: '已认证用户',
+    verifiedTrader: '已认领的榜上交易员',
     userNumber: '用户编号',
     userReviews: '条用户评价',
     // 认领交易员
@@ -998,6 +999,7 @@ const zh = {
     alertTraderRoi30dMsg: '你关注的 {handle} 30日 ROI 从 {old} 变为 {new}',
     alertTraderScoreMsg: '你关注的 {handle} Arena Score 从 {old} 变为 {new}',
     traderMovementAlerts: '交易员异动',
+    viewAll: '查看全部',
     viewAllAlerts: '查看全部',
     noMovementAlerts: '暂无异动通知',
     noMovementAlertsDesc: '关注交易员后，当他们的表现出现大幅变动时，会在这里通知你',
@@ -1084,7 +1086,7 @@ const zh = {
     sortTop: '最热',
 
     // Image Cropper
-    cropSuccess: '裁剪成功！点击保存按钮上传',
+    cropSuccess: '保存成功',
     cropFailed: '裁剪失败，请重试',
     noCropAreaSelected: '请先选择裁剪区域',
 
@@ -1176,6 +1178,11 @@ const zh = {
     reportNotice: '举报将由管理员审核。恶意举报可能导致账号受限。',
     reportSubmitting: '提交中...',
     reportSubmit: '提交举报',
+    reportMinDescription: '举报理由至少15个字符',
+    reportNeedImage: '请至少上传一张截图作为证据',
+    reportScreenshot: '截图证据',
+    reportMinChars: '字符最少',
+    adminReportEvidence: '截图证据',
     reportSubmitted: '举报已提交，我们会尽快处理',
     reportFailed: '举报失败',
 

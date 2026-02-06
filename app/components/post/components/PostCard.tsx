@@ -111,7 +111,7 @@ export function PostCard({
           fontSize: tokens.typography.fontSize.xs,
           color: tokens.colors.text.tertiary,
         }}>
-          <AvatarLink handle={post.author_handle} avatarUrl={post.author_avatar_url} />
+          <AvatarLink handle={post.author_handle} avatarUrl={post.author_avatar_url} isPro={post.author_is_pro} showProBadge={post.author_show_pro_badge} />
           
           <div style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
             {/* 投票结果指示器 */}
@@ -172,7 +172,7 @@ export function PostCard({
     >
       {/* 头部 */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <AvatarLink handle={post.author_handle} avatarUrl={post.author_avatar_url} />
+        <AvatarLink handle={post.author_handle} avatarUrl={post.author_avatar_url} isPro={post.author_is_pro} showProBadge={post.author_show_pro_badge} />
         
         <div style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
           {post.group_name && post.group_id && (
