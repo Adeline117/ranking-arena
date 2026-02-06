@@ -248,24 +248,7 @@ function RankingsContent() {
           ))}
         </div>
 
-        {/* Category presets + Platform dropdown - compact layout */}
-        <div className="flex flex-wrap items-center gap-2 mb-6">
-          {/* Category presets */}
-          {(Object.keys(CATEGORY_LABELS) as CategoryPreset[]).map(cat => (
-            <button
-              key={cat}
-              onClick={() => handleCategoryChange(cat)}
-              className="px-3 py-2 rounded-full text-xs font-medium transition-all"
-              style={{
-                backgroundColor: activeCategory === cat ? tokens.colors.accent.brand : tokens.colors.bg.tertiary,
-                color: activeCategory === cat ? '#fff' : tokens.colors.text.secondary,
-                border: activeCategory === cat ? `1px solid ${tokens.colors.accent.brand}` : `1px solid ${tokens.colors.border.primary}`,
-              }}
-            >
-              {isZh ? CATEGORY_LABELS[cat].zh : CATEGORY_LABELS[cat].en}
-            </button>
-          ))}
-        </div>
+        {/* Filters removed - use filter panel instead */}
 
         <DataStateWrapper
           isLoading={isLoading}
