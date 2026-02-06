@@ -332,8 +332,40 @@ export class AntiManipulationDetector {
       }
     }
 
-    // TODO: 持久化到数据库
-    // await this.persistAlert(alert)
+    // Persist alert to database
+    await this.persistAlert(alert)
+  }
+
+  /**
+   * Persist alert to database via admin API
+   */
+  private async persistAlert(alert: ManipulationAlert): Promise<void> {
+    try {
+      const response = await fetch('/api/admin/manipulation/alerts', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.CRON_SECRET}`,
+        },
+        body: JSON.stringify({
+          alert_type: alert.type,
+          severity: alert.severity,
+          traders: alert.traderIds,
+          evidence: alert.evidence,
+          auto_action: alert.autoAction,
+        }),
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        logger.error('Failed to persist manipulation alert', { alert, error })
+      } else {
+        const data = await response.json()
+        logger.info('Manipulation alert persisted', { alertId: data.alert?.id, type: alert.type })
+      }
+    } catch (error) {
+      logger.error('Error persisting manipulation alert', { alert }, error instanceof Error ? error : new Error(String(error)))
+    }
   }
 
   /**
