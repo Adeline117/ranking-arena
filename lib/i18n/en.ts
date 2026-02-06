@@ -1042,7 +1042,6 @@ const en = {
     removeFromCompare: 'Remove from compare',
     inCompare: 'In Compare',
     viewComparison: 'View Comparison',
-    clearAll: 'Clear All',
     // Phase 3 - Portfolio Suggestions
     portfolioSuggestions: 'Portfolio Suggestions',
     portfolioDesc: 'AI-powered diversified trader portfolio recommendations',

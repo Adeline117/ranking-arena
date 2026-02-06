@@ -2,6 +2,23 @@ import React from 'react'
 import { render, screen, fireEvent } from '@testing-library/react'
 import Avatar, { SimpleAvatar } from '../Avatar'
 
+// Mock next/image to render a simple img element
+jest.mock('next/image', () => ({
+  __esModule: true,
+  default: ({ src, alt, onLoad, onError, style, unoptimized: _unoptimized, ...props }: React.ImgHTMLAttributes<HTMLImageElement> & { onLoad?: () => void; onError?: () => void; unoptimized?: boolean }) => (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={src as string}
+      alt={alt}
+      style={style}
+      onLoad={onLoad}
+      onError={onError}
+      data-testid="avatar-image"
+      {...props}
+    />
+  ),
+}))
+
 // Mock design tokens
 jest.mock('@/lib/design-tokens', () => ({
   tokens: {
