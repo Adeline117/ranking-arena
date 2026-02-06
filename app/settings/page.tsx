@@ -1719,11 +1719,13 @@ function SettingsContent() {
   }, [])
 
   // Load sessions when security section becomes active
+  const [sessionsLoaded, setSessionsLoaded] = useState(false)
   useEffect(() => {
-    if (activeSection === 'security' && sessions.length === 0 && !loadingSessions) {
+    if (activeSection === 'security' && !sessionsLoaded && !loadingSessions) {
+      setSessionsLoaded(true)
       loadSessions()
     }
-  }, [activeSection, sessions.length, loadingSessions, loadSessions])
+  }, [activeSection, sessionsLoaded, loadingSessions, loadSessions])
 
   // Load blocked users when privacy section becomes active
   const [blockedUsersLoaded, setBlockedUsersLoaded] = useState(false)
