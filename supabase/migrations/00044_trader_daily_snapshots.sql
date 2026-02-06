@@ -31,7 +31,7 @@ ALTER TABLE trader_snapshots
   ADD COLUMN IF NOT EXISTS metrics_quality TEXT CHECK (metrics_quality IN ('high', 'medium', 'low', 'insufficient')),
   ADD COLUMN IF NOT EXISTS metrics_data_points INTEGER;
 
--- Comment on the table
+-- Comment on the tables and columns
 COMMENT ON TABLE trader_daily_snapshots IS 'Daily end-of-day snapshots of trader performance metrics for historical analysis and advanced metrics calculation';
-COMMENT ON COLUMN trader_daily_snapshots.metrics_quality IS 'Quality indicator for metrics based on data availability: high (>90% data), medium (50-90%), low (10-50%), insufficient (<10%)';
-COMMENT ON COLUMN trader_daily_snapshots.metrics_data_points IS 'Number of data points used for metrics calculation';
+COMMENT ON COLUMN trader_snapshots.metrics_quality IS 'Quality indicator for metrics based on data availability: high (>90% data), medium (50-90%), low (10-50%), insufficient (<10%)';
+COMMENT ON COLUMN trader_snapshots.metrics_data_points IS 'Number of data points used for metrics calculation';
