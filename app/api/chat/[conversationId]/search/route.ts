@@ -13,7 +13,7 @@ export const dynamic = 'force-dynamic'
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { conversationId: string } | Promise<{ conversationId: string }> }
+  { params }: { params: Promise<{ conversationId: string }> }
 ) {
   try {
     // Authenticate user

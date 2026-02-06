@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { formatTimeAgo } from '@/lib/utils/date'
@@ -270,7 +271,7 @@ export default function NotificationsList() {
                     }}
                   >
                     {notif.actor_avatar_url ? (
-                      <img src={notif.actor_avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      <Image src={notif.actor_avatar_url} alt="" width={32} height={32} style={{ width: '100%', height: '100%', objectFit: 'cover' }} unoptimized />
                     ) : (
                       getIcon(notif.type)
                     )}

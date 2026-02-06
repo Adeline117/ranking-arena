@@ -1,6 +1,6 @@
 'use client'
 
-import React from 'react'
+import React, { forwardRef } from 'react'
 import { tokens } from '@/lib/design-tokens'
 
 export interface BoxProps extends React.HTMLAttributes<HTMLDivElement> {
@@ -25,30 +25,33 @@ export interface BoxProps extends React.HTMLAttributes<HTMLDivElement> {
   border?: 'primary' | 'secondary' | 'focus' | 'none'
 }
 
-export default function Box({
-  as: Component = 'div',
-  p,
-  px,
-  py,
-  pt,
-  pr,
-  pb,
-  pl,
-  m,
-  mx,
-  my,
-  mt,
-  mr,
-  mb,
-  ml,
-  gap,
-  bg,
-  radius,
-  border = 'none',
-  style,
-  children,
-  ...props
-}: BoxProps) {
+const Box = forwardRef<HTMLDivElement, BoxProps>(function Box(
+  {
+    as: Component = 'div',
+    p,
+    px,
+    py,
+    pt,
+    pr,
+    pb,
+    pl,
+    m,
+    mx,
+    my,
+    mt,
+    mr,
+    mb,
+    ml,
+    gap,
+    bg,
+    radius,
+    border = 'none',
+    style,
+    children,
+    ...props
+  },
+  ref
+) {
   const styles: React.CSSProperties = {
     ...(p && { padding: tokens.spacing[p] }),
     ...(px && { paddingLeft: tokens.spacing[px], paddingRight: tokens.spacing[px] }),
@@ -74,9 +77,10 @@ export default function Box({
   }
 
   return (
-    <Component style={styles} {...(props as any)}>
+    <Component ref={ref} style={styles} {...(props as React.HTMLAttributes<HTMLElement>)}>
       {children}
     </Component>
   )
-}
+})
 
+export default Box

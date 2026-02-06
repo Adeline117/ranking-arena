@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import Image from 'next/image'
 import { useEffect, useState, Suspense, lazy, useCallback } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
@@ -64,7 +65,7 @@ function GroupAvatar({ avatarUrl, name, size = 32 }: GroupAvatarProps): React.Re
       }}
     >
       {avatarUrl ? (
-        <img src={avatarUrl} alt={name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+        <Image src={avatarUrl} alt={name} width={size} height={size} style={{ width: '100%', height: '100%', objectFit: 'cover' }} unoptimized />
       ) : (
         <Text size="xs" weight="bold" style={{ color: '#c9b8db' }}>
           {name.charAt(0).toUpperCase()}

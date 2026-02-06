@@ -9,6 +9,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
+import { logger } from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
 
@@ -40,7 +41,7 @@ async function verifyMembership(supabase: ReturnType<typeof getSupabaseAdmin>, c
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { conversationId: string } | Promise<{ conversationId: string }> }
+  { params }: { params: Promise<{ conversationId: string }> }
 ) {
   try {
     const user = await getAuthUser(request)
@@ -79,14 +80,14 @@ export async function GET(
       }
     })
   } catch (error: unknown) {
-    console.error('[Chat Settings GET] Error:', error)
+    logger.apiError('/api/chat/[conversationId]/settings', error, { method: 'GET' })
     return NextResponse.json({ error: '服务器错误' }, { status: 500 })
   }
 }
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { conversationId: string } | Promise<{ conversationId: string }> }
+  { params }: { params: Promise<{ conversationId: string }> }
 ) {
   try {
     const user = await getAuthUser(request)
@@ -145,7 +146,7 @@ export async function PATCH(
         .single()
 
       if (error) {
-        console.error('[Chat Settings PATCH] Update error:', error)
+        logger.dbError('update-chat-settings', error, { conversationId })
         return NextResponse.json({ error: '更新设置失败' }, { status: 500 })
       }
       result = data
@@ -169,7 +170,7 @@ export async function PATCH(
         .single()
 
       if (error) {
-        console.error('[Chat Settings PATCH] Insert error:', error)
+        logger.dbError('insert-chat-settings', error, { conversationId })
         return NextResponse.json({ error: '保存设置失败' }, { status: 500 })
       }
       result = data
@@ -177,7 +178,7 @@ export async function PATCH(
 
     return NextResponse.json({ settings: result })
   } catch (error: unknown) {
-    console.error('[Chat Settings PATCH] Error:', error)
+    logger.apiError('/api/chat/[conversationId]/settings', error, { method: 'PATCH' })
     return NextResponse.json({ error: '服务器错误' }, { status: 500 })
   }
 }

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, type ReactElement } from 'react'
+import React, { useState, useEffect, type ReactElement } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
 import { useLanguage } from '../Providers/LanguageProvider'
@@ -12,7 +12,7 @@ interface WelcomeStep {
   titleEn: string
   description: string
   descriptionEn: string
-  icon: string
+  icon: React.ReactNode
 }
 
 const WELCOME_STEPS: WelcomeStep[] = [
@@ -21,28 +21,28 @@ const WELCOME_STEPS: WelcomeStep[] = [
     titleEn: 'Leaderboard',
     description: '按 Arena Score 排名的顶级交易员，支持按交易所、时间范围筛选',
     descriptionEn: 'Top traders ranked by Arena Score, filterable by exchange and time range',
-    icon: '📊',
+    icon: <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M3 3v18h18"/><path d="M18.7 8l-5.1 5.2-2.8-2.7L7 14.3"/></svg>,
   },
   {
     title: '搜索交易员',
     titleEn: 'Search Traders',
     description: '使用顶部搜索栏快速查找交易员，支持按名称或代号搜索',
     descriptionEn: 'Quickly find traders using the search bar at the top',
-    icon: '🔍',
+    icon: <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>,
   },
   {
     title: '关注与跟单',
     titleEn: 'Follow & Copy Trade',
     description: '关注心仪的交易员，跳转至交易所开始跟单',
     descriptionEn: 'Follow traders you like and start copy trading on the exchange',
-    icon: '⭐',
+    icon: <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M12 1L9 9H1l6 5-2 9 7-5 7 5-2-9 6-5h-8z"/></svg>,
   },
   {
     title: '社区讨论',
     titleEn: 'Community',
     description: '加入小组，与其他交易者讨论策略和经验',
     descriptionEn: 'Join groups to discuss strategies with other traders',
-    icon: '💬',
+    icon: <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>,
   },
 ]
 
@@ -154,8 +154,9 @@ export function WelcomeGuide(): ReactElement | null {
         {/* Icon */}
         <Box
           style={{
-            fontSize: 48,
-            textAlign: 'center',
+            display: 'flex',
+            justifyContent: 'center',
+            color: tokens.colors.accent.brand,
             marginBottom: tokens.spacing[4],
           }}
         >

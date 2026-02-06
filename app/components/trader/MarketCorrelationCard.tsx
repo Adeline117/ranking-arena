@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useState, useEffect } from 'react'
+import React, { useRef, useState, useEffect } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
 import { useLanguage } from '../Providers/LanguageProvider'
@@ -84,11 +84,27 @@ export default function MarketCorrelationCard({
     return tokens.colors.accent.error
   }
 
-  const getConditionIcon = (condition: MarketCondition): string => {
+  const getConditionIcon = (condition: MarketCondition): React.ReactNode => {
+    const iconProps = { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2 }
     switch (condition) {
-      case 'bull': return '📈'
-      case 'bear': return '📉'
-      case 'sideways': return '➡️'
+      case 'bull': return (
+        <svg {...iconProps} style={{ color: tokens.colors.accent.success }}>
+          <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
+          <polyline points="17 6 23 6 23 12" />
+        </svg>
+      )
+      case 'bear': return (
+        <svg {...iconProps} style={{ color: tokens.colors.accent.error }}>
+          <polyline points="23 18 13.5 8.5 8.5 13.5 1 6" />
+          <polyline points="17 18 23 18 23 12" />
+        </svg>
+      )
+      case 'sideways': return (
+        <svg {...iconProps} style={{ color: tokens.colors.text.tertiary }}>
+          <line x1="5" y1="12" x2="19" y2="12" />
+          <polyline points="12 5 19 12 12 19" />
+        </svg>
+      )
     }
   }
 
@@ -296,7 +312,7 @@ export default function MarketCorrelationCard({
                     gap: 8,
                   }}
                 >
-                  <span style={{ fontSize: 16 }}>{getConditionIcon(condition)}</span>
+                  <span style={{ display: 'flex', alignItems: 'center' }}>{getConditionIcon(condition)}</span>
                   <Box>
                     <Text size="xs" color="tertiary" style={{ fontSize: 10 }}>
                       {getConditionLabel(condition)}

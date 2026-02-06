@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import { tokens } from '@/lib/design-tokens'
@@ -10,7 +11,7 @@ import TopNav from '@/app/components/layout/TopNav'
 import JoinedGroups from '@/app/components/trader/JoinedGroups'
 import UserBookmarkFolders from '@/app/components/trader/UserBookmarkFolders'
 import DashboardQuickStats from '@/app/components/user/DashboardQuickStats'
-import { Box, Text, Button } from '@/app/components/base'
+import { Box, Text } from '@/app/components/base'
 import { useToast } from '@/app/components/ui/Toast'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { DynamicFollowListModal as FollowListModal } from '@/app/components/ui/Dynamic'
@@ -196,25 +197,24 @@ export default function UserProfileClient({ handle, serverProfile }: UserProfile
       <TopNav email={email} />
 
       <Box className="page-container" style={{ maxWidth: 1200, margin: '0 auto', padding: tokens.spacing[6], paddingBottom: 100 }}>
-        {/* Profile Header */}
+        {/* Profile Header - matching trader page style */}
         <Box
           className="profile-header"
           style={{
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'flex-start',
-            minHeight: 200,
             marginBottom: tokens.spacing[6],
             padding: tokens.spacing[6],
+            background: `linear-gradient(135deg, ${tokens.colors.bg.secondary}F8 0%, ${tokens.colors.bg.primary}E8 100%)`,
             borderRadius: tokens.radius.xl,
             border: `1px solid ${tokens.colors.border.primary}50`,
             boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.05)',
             position: 'relative',
-            overflow: 'hidden',
-            background: `linear-gradient(135deg, ${tokens.colors.bg.secondary}F8 0%, ${tokens.colors.bg.primary}E8 100%)`,
+            overflow: 'visible',
           }}
         >
-          {/* Decorative background */}
+          {/* Decorative background elements */}
           <Box style={{ position: 'absolute', inset: 0, overflow: 'hidden', borderRadius: tokens.radius.xl, pointerEvents: 'none' }}>
             <Box
               style={{
@@ -238,7 +238,7 @@ export default function UserProfileClient({ handle, serverProfile }: UserProfile
             />
           </Box>
 
-          {/* Avatar + Info */}
+          {/* Profile Info */}
           <Box
             className="profile-header-info"
             style={{
@@ -250,7 +250,7 @@ export default function UserProfileClient({ handle, serverProfile }: UserProfile
               zIndex: 1,
             }}
           >
-            {/* Avatar */}
+            {/* Avatar with Pro Badge wrapper */}
             <Box
               style={{ position: 'relative', flexShrink: 0 }}
               onMouseEnter={() => setAvatarHovered(true)}
@@ -266,6 +266,9 @@ export default function UserProfileClient({ handle, serverProfile }: UserProfile
                   border: `3px solid ${avatarHovered ? tokens.colors.accent.primary : tokens.colors.border.primary}`,
                   display: 'grid',
                   placeItems: 'center',
+                  fontWeight: tokens.typography.fontWeight.black,
+                  fontSize: tokens.typography.fontSize.xl,
+                  color: '#ffffff',
                   overflow: 'hidden',
                   boxShadow: avatarHovered
                     ? `0 8px 32px rgba(139, 111, 168, 0.4), 0 0 0 4px ${tokens.colors.accent.primary}20`
@@ -276,21 +279,30 @@ export default function UserProfileClient({ handle, serverProfile }: UserProfile
                 }}
               >
                 {profile.avatar_url ? (
-                  <img
+                  <Image
                     src={`/api/avatar?url=${encodeURIComponent(profile.avatar_url)}`}
                     alt={profile.handle}
                     width={72}
                     height={72}
-                    loading="eager"
-                    fetchPriority="high"
+                    priority
                     style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                     onError={(e) => {
                       const img = e.target as HTMLImageElement
                       img.style.display = 'none'
                     }}
+                    unoptimized
                   />
                 ) : (
-                  <Text size="2xl" weight="black" style={{ color: '#fff', fontSize: 32, textShadow: '0 2px 8px rgba(0,0,0,0.4)' }}>
+                  <Text
+                    size="2xl"
+                    weight="black"
+                    style={{
+                      color: '#ffffff',
+                      textShadow: '0 2px 8px rgba(0, 0, 0, 0.4)',
+                      fontSize: '32px',
+                      lineHeight: '1',
+                    }}
+                  >
                     {getAvatarInitial(profile.handle)}
                   </Text>
                 )}
@@ -300,14 +312,13 @@ export default function UserProfileClient({ handle, serverProfile }: UserProfile
 
             {/* Info */}
             <Box style={{ flex: 1, minWidth: 0 }}>
-              {/* Username + verified badge */}
               <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3], marginBottom: tokens.spacing[2] }}>
                 <Text
                   size="2xl"
                   weight="black"
                   style={{
                     color: tokens.colors.text.primary,
-                    textShadow: undefined,
+                    lineHeight: tokens.typography.lineHeight.tight,
                   }}
                 >
                   {profile.handle}
@@ -321,7 +332,7 @@ export default function UserProfileClient({ handle, serverProfile }: UserProfile
                       justifyContent: 'center',
                       width: 22,
                       height: 22,
-                      background: tokens.gradient.success,
+                      background: `linear-gradient(135deg, ${tokens.colors.accent.success}, #00D4AA)`,
                       borderRadius: tokens.radius.full,
                       boxShadow: `0 2px 8px ${tokens.colors.accent.success}40`,
                     }}
@@ -340,7 +351,6 @@ export default function UserProfileClient({ handle, serverProfile }: UserProfile
                   size="sm"
                   style={{
                     color: tokens.colors.text.secondary,
-                    textShadow: undefined,
                     marginBottom: tokens.spacing[3],
                     maxWidth: 500,
                   }}
@@ -349,8 +359,8 @@ export default function UserProfileClient({ handle, serverProfile }: UserProfile
                 </Text>
               )}
 
-              {/* Following / Followers */}
-              <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[4], flexWrap: 'wrap' }}>
+              {/* Stats row */}
+              <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3], flexWrap: 'wrap' }}>
                 <Box
                   onClick={() => isOwnProfile && router.push('/following')}
                   style={{
@@ -393,40 +403,45 @@ export default function UserProfileClient({ handle, serverProfile }: UserProfile
                   </Text>
                 </Box>
               </Box>
-
             </Box>
           </Box>
 
           {/* Action buttons */}
           <Box
-            className="profile-header-actions"
+            className="profile-header-actions action-buttons"
             style={{
               display: 'flex',
               alignItems: 'center',
               gap: tokens.spacing[2],
               flexShrink: 0,
+              flexWrap: 'wrap',
               position: 'relative',
               zIndex: 1,
             }}
           >
             {isOwnProfile ? (
-              <Button
-                variant="ghost"
-                size="sm"
+              <button
                 onClick={() => router.push('/settings')}
                 style={{
                   color: tokens.colors.text.primary,
+                  fontSize: tokens.typography.fontSize.sm,
+                  padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+                  borderRadius: tokens.radius.lg,
                   background: `${tokens.colors.accent.primary}15`,
                   border: `1px solid ${tokens.colors.accent.primary}40`,
-                  borderRadius: tokens.radius.lg,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: tokens.spacing[2],
+                  fontWeight: tokens.typography.fontWeight.medium,
                 }}
               >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 6 }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
                   <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
                 </svg>
                 {t('editProfile')}
-              </Button>
+              </button>
             ) : profile.isRegistered && currentUserId ? (
               <>
                 <UserFollowButton
@@ -445,9 +460,21 @@ export default function UserProfileClient({ handle, serverProfile }: UserProfile
               </>
             ) : null}
 
-            <Button variant="ghost" size="sm" onClick={() => router.push('/')}>
-              ← {t('back')}
-            </Button>
+            <button
+              onClick={() => router.push('/')}
+              style={{
+                color: tokens.colors.text.tertiary,
+                fontSize: tokens.typography.fontSize.sm,
+                padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+                borderRadius: tokens.radius.lg,
+                background: tokens.colors.bg.tertiary,
+                border: `1px solid ${tokens.colors.border.primary}`,
+                cursor: 'pointer',
+                fontWeight: tokens.typography.fontWeight.medium,
+              }}
+            >
+              {t('back')}
+            </button>
           </Box>
         </Box>
 

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { logger } from '@/lib/logger'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -44,7 +45,7 @@ export async function GET(request: NextRequest) {
     const { data: groups, error } = await query
 
     if (error) {
-      console.error('Error fetching groups:', error)
+      logger.dbError('fetch-groups', error, {})
       return NextResponse.json(
         { success: false, error: 'Failed to fetch groups' },
         { status: 500 }
@@ -69,7 +70,7 @@ export async function GET(request: NextRequest) {
       },
     })
   } catch (error: unknown) {
-    console.error('Groups API error:', error)
+    logger.apiError('/api/groups', error, {})
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
       { status: 500 }

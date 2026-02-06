@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '../Providers/LanguageProvider'
@@ -234,7 +235,7 @@ export default function GroupsFeedPage() {
                     >
                       <Box style={{ width: 40, height: 40, borderRadius: tokens.radius.lg, background: 'linear-gradient(135deg, rgba(139,111,168,0.2), rgba(139,111,168,0.1))', border: `1px solid ${tokens.colors.border.primary}`, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
                         {group.avatar_url ? (
-                          <img src={group.avatar_url} alt={group.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} referrerPolicy="no-referrer" onError={(e) => { e.currentTarget.style.display = 'none' }} />
+                          <Image src={group.avatar_url} alt={group.name} width={40} height={40} style={{ width: '100%', height: '100%', objectFit: 'cover' }} unoptimized onError={(e) => { e.currentTarget.style.display = 'none' }} />
                         ) : (
                           <Text size="sm" weight="bold" style={{ color: '#c9b8db' }}>
                             {group.name.charAt(0).toUpperCase()}

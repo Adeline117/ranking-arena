@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
 import ProBadge from '@/app/components/ui/ProBadge'
 
@@ -46,10 +47,13 @@ export function AvatarLink({ handle, avatarUrl, isPro, showProBadge = true }: Av
         }}
       >
         {avatarUrl ? (
-          <img
+          <Image
             src={avatarUrl}
             alt={handle}
+            width={24}
+            height={24}
             style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+            unoptimized={avatarUrl?.startsWith('data:')}
           />
         ) : (
           (handle?.[0] || 'U').toUpperCase()

@@ -6,6 +6,7 @@ import dynamic from "next/dynamic";
 import Providers from "./components/Providers";
 import CapacitorProvider from "./components/Providers/CapacitorProvider";
 import { SkipLink } from "./components/Providers/Accessibility";
+import { PageErrorBoundary } from "./components/utils/ErrorBoundary";
 
 // Defer non-critical layout components via dynamic import (code-split)
 // Note: ssr:false not allowed in Server Components; these are 'use client' components
@@ -141,9 +142,11 @@ export default function RootLayout({
               <GlobalProgress />
             </Suspense>
             <KeyboardShortcuts />
-            <main id="main-content" tabIndex={-1}>
-              {children}
-            </main>
+            <PageErrorBoundary>
+              <main id="main-content" tabIndex={-1}>
+                {children}
+              </main>
+            </PageErrorBoundary>
             <CookieConsent />
             <WelcomeGuide />
             <CompareFloatingBar />

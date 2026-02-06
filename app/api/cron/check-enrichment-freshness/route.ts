@@ -14,6 +14,7 @@ import { createClient } from '@supabase/supabase-js'
 import { isAuthorized, getSupabaseEnv } from '@/lib/cron/utils'
 import { sendRateLimitedAlert } from '@/lib/alerts/send-alert'
 import { captureMessage } from '@/lib/utils/logger'
+import { logger } from '@/lib/logger'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -69,7 +70,7 @@ export async function GET(req: Request) {
             .maybeSingle()
 
           if (error) {
-            console.error(`[EnrichmentFreshness] Query error for ${table}/${source}/${period}:`, error)
+            logger.dbError('query-enrichment-freshness', error, { table, source, period })
           }
 
           // Get count
@@ -106,7 +107,7 @@ export async function GET(req: Request) {
             status,
           })
         } catch (error) {
-          console.error(`[EnrichmentFreshness] Error checking ${table}/${source}/${period}:`, error)
+          logger.error('Error checking enrichment freshness', { table, source, period }, error instanceof Error ? error : new Error(String(error)))
           results.push({
             table,
             source,

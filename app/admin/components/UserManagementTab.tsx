@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
 import Card from '@/app/components/ui/Card'
@@ -145,10 +146,13 @@ export default function UserManagementTab({ accessToken }: UserManagementTabProp
                           }}
                         >
                           {user.avatar_url ? (
-                            <img
+                            <Image
                               src={user.avatar_url}
                               alt=""
+                              width={32}
+                              height={32}
                               style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                              unoptimized={user.avatar_url?.startsWith('data:')}
                             />
                           ) : (
                             <Box
