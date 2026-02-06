@@ -25,6 +25,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import type { RankingWindow, TradingCategory, Platform, GranularPlatform, RankingsQuery, RankedTraderRow } from '@/lib/types/leaderboard';
 import { GRANULAR_PLATFORMS, PLATFORM_CATEGORY } from '@/lib/types/leaderboard';
 import { getSupabaseAdmin } from '@/lib/supabase/server';
+import { checkRateLimit, setRateLimitHeaders, getClientIp } from '@/lib/middleware/rate-limit';
 
 const VALID_WINDOWS: RankingWindow[] = ['7d', '30d', '90d'];
 const VALID_CATEGORIES: TradingCategory[] = ['futures', 'spot', 'onchain'];
@@ -35,6 +36,19 @@ const ROI_ANOMALY_THRESHOLD = 10000; // 10000% = 100x
 
 export async function GET(request: NextRequest) {
   try {
+    // Rate limit check
+    const clientIp = getClientIp(request)
+    const rateLimit = checkRateLimit(`rankings:${clientIp}`, { limit: 60, windowSec: 60 })
+    if (!rateLimit.success) {
+      const res = NextResponse.json(
+        { error: 'Rate limit exceeded. Please try again later.' },
+        { status: 429 }
+      )
+      setRateLimitHeaders(res.headers, rateLimit)
+      res.headers.set('Retry-After', String(Math.ceil((rateLimit.resetAt - Date.now()) / 1000)))
+      return res
+    }
+
     const { searchParams } = new URL(request.url);
 
     // Parse & validate window (required)
@@ -95,11 +109,13 @@ export async function GET(request: NextRequest) {
     // LeaderboardService queries trader_snapshots_v2 which is empty
     const result = await getRankingsFallback(query);
 
-    return NextResponse.json(result, {
+    const res = NextResponse.json(result, {
       headers: {
         'Cache-Control': 's-maxage=60, stale-while-revalidate=300',
       },
     });
+    setRateLimitHeaders(res.headers, rateLimit);
+    return res;
   } catch (error: unknown) {
     console.error('[API /rankings] Error:', error);
     return NextResponse.json(

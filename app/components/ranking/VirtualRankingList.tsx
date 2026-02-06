@@ -11,8 +11,6 @@
 
 import React, {
   memo,
-  useCallback,
-  useEffect,
   useRef,
   useState,
   useMemo,
@@ -23,7 +21,7 @@ import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import { useVirtualScroll, FastScrollPlaceholder } from '@/lib/hooks/useVirtualScroll'
 import { useROIMemo, useArenaScoreMemo } from '@/lib/hooks/useTraderDataDiff'
-import { useNetworkStatus, getSkeletonState, type SkeletonState } from '@/lib/hooks/useRankingsWithCache'
+import { useNetworkStatus, type SkeletonState } from '@/lib/hooks/useRankingsWithCache'
 
 // ============================================
 // 类型定义
@@ -534,7 +532,7 @@ export const VirtualRankingList = forwardRef<VirtualRankingListRef, VirtualRanki
           }}
         >
           <div style={{ fontSize: 48, opacity: 0.5 }}>
-            {isOnline ? '⚠️' : '📡'}
+            {isOnline ? '!' : 'X'}
           </div>
           <div style={{ color: tokens.colors.text.secondary, textAlign: 'center' }}>
             {isOnline
@@ -578,7 +576,7 @@ export const VirtualRankingList = forwardRef<VirtualRankingListRef, VirtualRanki
             backgroundColor: tokens.colors.bg.primary,
           }}
         >
-          {language === 'zh' ? '暂无数据' : 'No data'}
+          {language === 'zh' ? '暂无排行榜数据' : 'No leaderboard data'}
         </div>
       )
     }

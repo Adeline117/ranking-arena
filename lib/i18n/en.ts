@@ -755,6 +755,7 @@ const en = {
     coverRemoveHint: 'Cover image marked for removal, please save to confirm',
     coverSizeHint: 'Max 10MB, recommended 1200×400',
     username: 'Username',
+    currentUsername: 'Current username',
     setUsername: 'Set your username',
     checking: 'Checking...',
     usernameAvailable: 'Username available',
@@ -2451,6 +2452,7 @@ const en = {
     siweOneClickVerifying: 'Verifying...',
     siweOneClickSuccess: 'Signed in!',
     siweOneClickSignIn: 'Sign in',
+    siweOneClickSwitch: 'Switch account',
     siweModalClosed: 'Wallet connection cancelled.',
     siweRetry: 'Retry',
 
