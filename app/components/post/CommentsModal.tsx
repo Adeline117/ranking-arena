@@ -9,6 +9,7 @@ import { formatTimeAgo } from '@/lib/utils/date'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { CompactErrorBoundary } from '../utils/ErrorBoundary'
 import type { Comment } from './hooks/usePostComments'
+import { ProBadgeOverlay } from '../ui/ProBadge'
 
 const REPLIES_PREVIEW_COUNT = 2
 
@@ -164,12 +165,12 @@ function ProBadge({ size = 14 }: { size?: number }): React.ReactNode {
 }
 
 // Avatar component for comments
-function CommentAvatar({ handle, avatarUrl, isReply }: { handle?: string | null; avatarUrl?: string | null; isReply: boolean }): React.ReactNode {
+function CommentAvatar({ handle, avatarUrl, isReply, isPro, showProBadge }: { handle?: string | null; avatarUrl?: string | null; isReply: boolean; isPro?: boolean; showProBadge?: boolean }): React.ReactNode {
   const size = isReply ? 24 : 32
   const href = handle ? `/u/${encodeURIComponent(handle)}` : '#'
 
   return (
-    <Link href={href} onClick={(e) => e.stopPropagation()} style={{ textDecoration: 'none', flexShrink: 0 }}>
+    <Link href={href} onClick={(e) => e.stopPropagation()} style={{ textDecoration: 'none', flexShrink: 0, position: 'relative' }}>
       {avatarUrl ? (
         <img src={avatarUrl} alt="" style={styles.avatar(size)} />
       ) : (
@@ -177,6 +178,7 @@ function CommentAvatar({ handle, avatarUrl, isReply }: { handle?: string | null;
           {(handle?.[0] || 'A').toUpperCase()}
         </div>
       )}
+      {isPro && showProBadge !== false && <ProBadgeOverlay position="bottom-right" />}
     </Link>
   )
 }
@@ -248,7 +250,7 @@ export default function CommentsModal({
         }}
       >
         <div style={{ display: 'flex', gap: 10 }}>
-          <CommentAvatar handle={comment.author_handle} avatarUrl={comment.author_avatar_url} isReply={isReply} />
+          <CommentAvatar handle={comment.author_handle} avatarUrl={comment.author_avatar_url} isReply={isReply} isPro={comment.author_is_pro} showProBadge={comment.author_show_pro_badge} />
 
           <div style={{ flex: 1, minWidth: 0 }}>
             {/* Author info */}

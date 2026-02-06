@@ -17,7 +17,21 @@ const PRO_CONFIG = {
   labelZh: 'Pro',
   gradient: 'var(--color-pro-badge-bg)',
   glow: 'var(--color-pro-badge-shadow)',
-  iconColor: '#fff',
+  iconColor: '#FFD700',
+}
+
+// 淡淡发光动画样式（注入一次）
+const glowKeyframes = `
+@keyframes proBadgeGlow {
+  0%, 100% { box-shadow: 0 2px 8px var(--color-pro-badge-shadow), 0 0 12px rgba(212, 168, 71, 0.3); }
+  50% { box-shadow: 0 2px 12px var(--color-pro-badge-shadow), 0 0 20px rgba(212, 168, 71, 0.5); }
+}
+`
+if (typeof document !== 'undefined' && !document.getElementById('pro-badge-glow')) {
+  const style = document.createElement('style')
+  style.id = 'pro-badge-glow'
+  style.textContent = glowKeyframes
+  document.head.appendChild(style)
 }
 
 // 尺寸配置
@@ -51,7 +65,8 @@ export default function ProBadge({ size = 'md', showLabel = true, style }: ProBa
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          boxShadow: `0 2px 8px ${config.glow}`,
+          boxShadow: `0 2px 8px ${config.glow}, 0 0 12px rgba(212, 168, 71, 0.3)`,
+          animation: 'proBadgeGlow 3s ease-in-out infinite',
           flexShrink: 0,
           ...style,
         }}
@@ -70,7 +85,8 @@ export default function ProBadge({ size = 'md', showLabel = true, style }: ProBa
         padding: sizeConfig.padding,
         borderRadius: tokens.radius.full,
         background: config.gradient,
-        boxShadow: `0 2px 8px ${config.glow}`,
+        boxShadow: `0 2px 8px ${config.glow}, 0 0 12px rgba(212, 168, 71, 0.3)`,
+        animation: 'proBadgeGlow 3s ease-in-out infinite',
         ...style,
       }}
     >
@@ -118,7 +134,8 @@ export function ProBadgeOverlay({
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        boxShadow: `0 2px 6px ${config.glow}, 0 0 0 2px var(--color-bg-primary)`,
+        boxShadow: `0 2px 6px ${config.glow}, 0 0 10px rgba(212, 168, 71, 0.3), 0 0 0 2px var(--color-bg-primary)`,
+        animation: 'proBadgeGlow 3s ease-in-out infinite',
         zIndex: 10,
       }}
     >

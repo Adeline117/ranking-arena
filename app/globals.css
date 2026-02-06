@@ -67,8 +67,8 @@
   /* Pro/Premium colors - Dark */
   --color-pro-gradient-start: #8b6fa8;
   --color-pro-gradient-end: #6B5B95;
-  --color-pro-badge-bg: linear-gradient(135deg, #8b6fa8 0%, #6B5B95 100%);
-  --color-pro-badge-shadow: rgba(139, 111, 168, 0.4);
+  --color-pro-badge-bg: linear-gradient(135deg, #9b6dd7 0%, #7c4dbd 40%, #d4a847 100%);
+  --color-pro-badge-shadow: rgba(180, 140, 60, 0.5);
   --color-pro-glow: rgba(139, 111, 168, 0.3);
   --color-elite-gradient-start: #FFD700;
   --color-elite-gradient-end: #FFA500;
@@ -123,8 +123,8 @@
   /* Pro/Premium colors - Light */
   --color-pro-gradient-start: #7B5F98;
   --color-pro-gradient-end: #5B4575;
-  --color-pro-badge-bg: linear-gradient(135deg, #7B5F98 0%, #5B4575 100%);
-  --color-pro-badge-shadow: rgba(123, 95, 152, 0.35);
+  --color-pro-badge-bg: linear-gradient(135deg, #8b5ecf 0%, #6b3faf 40%, #c99a35 100%);
+  --color-pro-badge-shadow: rgba(160, 120, 50, 0.45);
   --color-pro-glow: rgba(123, 95, 152, 0.2);
   --color-elite-gradient-start: #DAA520;
   --color-elite-gradient-end: #CD853F;

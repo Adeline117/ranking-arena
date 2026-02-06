@@ -17,7 +17,7 @@ import { DynamicFollowListModal as FollowListModal } from '@/app/components/ui/D
 import UserFollowButton from '@/app/components/ui/UserFollowButton'
 import MessageButton from '@/app/components/ui/MessageButton'
 import { getAvatarGradient, getAvatarInitial } from '@/lib/utils/avatar'
-import { ProBadgeOverlay } from '@/app/components/ui/ProBadge'
+import ProBadge, { ProBadgeOverlay } from '@/app/components/ui/ProBadge'
 
 const PostFeed = dynamic(() => import('@/app/components/post/PostFeed'), {
   ssr: false,
@@ -42,6 +42,7 @@ interface ServerProfile {
   following: number
   followingTraders: number
   isRegistered: boolean
+  isVerifiedTrader?: boolean
   proBadgeTier: 'pro' | null
 }
 
@@ -350,7 +351,7 @@ export default function UserProfileClient({ handle, serverProfile }: UserProfile
                   {profile.handle}
                 </Text>
 
-                {profile.isRegistered && (
+                {profile.isVerifiedTrader && (
                   <Box
                     style={{
                       display: 'inline-flex',
@@ -362,12 +363,16 @@ export default function UserProfileClient({ handle, serverProfile }: UserProfile
                       borderRadius: tokens.radius.full,
                       boxShadow: `0 2px 8px ${tokens.colors.accent.success}40`,
                     }}
-                    title={t('verifiedUser')}
+                    title={t('verifiedTrader') || t('verifiedUser')}
                   >
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                       <polyline points="20 6 9 17 4 12" />
                     </svg>
                   </Box>
+                )}
+
+                {profile.proBadgeTier === 'pro' && (
+                  <ProBadge size="sm" showLabel={true} />
                 )}
               </Box>
 

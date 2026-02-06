@@ -321,10 +321,8 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
           membershipConfirmed = !!membership
         }
 
-        // Load posts eagerly to avoid race with isMember state update (cold-start fix)
-        if (membershipConfirmed) {
-          postsHook.loadPosts(true)
-        }
+        // Load posts for all visitors (non-members can browse read-only)
+        postsHook.loadPosts(true)
       } catch (err) {
         if (controller.signal.aborted) return
         const errorMsg = err instanceof Error ? err.message : t('loadFailed')
@@ -346,7 +344,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
 
   // Fallback: Load posts when membership state changes (for non-cold-start cases)
   useEffect(() => {
-    if (isMember && groupId && !loading && postsHook.posts.length === 0 && !postsHook.loadingMore) {
+    if (groupId && !loading && postsHook.posts.length === 0 && !postsHook.loadingMore) {
       postsHook.loadPosts(true)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

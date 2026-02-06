@@ -107,37 +107,34 @@ export default function GroupPostList(props: GroupPostListProps) {
   // Report modal state
   const [reportingPost, setReportingPost] = useState<{ id: string; title: string } | null>(null)
 
-  // Non-member gate
-  if (!isMember) {
-    return (
-      <Box style={{
-        padding: `${tokens.spacing[10]} ${tokens.spacing[5]}`,
-        textAlign: 'center',
-        background: tokens.colors.bg.secondary,
-        borderRadius: tokens.radius.xl,
-        border: `1px solid ${tokens.colors.border.primary}`,
-      }}>
-        <Text size="lg" weight="bold" style={{ marginBottom: tokens.spacing[3] }}>
-          {t('joinToViewPosts')}
-        </Text>
-        <Text size="sm" color="tertiary" style={{ marginBottom: tokens.spacing[4] }}>
-          {t('joinToViewPostsDesc')}
-        </Text>
-        {userId ? (
-          <Button variant="primary" onClick={onJoin} disabled={joining}>
-            {joining ? t('joiningGroup') : t('joinGroup')}
-          </Button>
-        ) : (
-          <Link href="/login">
-            <Button variant="primary">{t('loginToJoin')}</Button>
-          </Link>
-        )}
-      </Box>
-    )
-  }
+  // Non-member banner (show posts read-only below)
+  const nonMemberBanner = !isMember ? (
+    <Box style={{
+      padding: `${tokens.spacing[4]} ${tokens.spacing[5]}`,
+      textAlign: 'center',
+      background: tokens.colors.bg.secondary,
+      borderRadius: tokens.radius.xl,
+      border: `1px solid ${tokens.colors.border.primary}`,
+      marginBottom: tokens.spacing[4],
+    }}>
+      <Text size="sm" color="tertiary" style={{ marginBottom: tokens.spacing[3] }}>
+        {t('joinToViewPostsDesc')}
+      </Text>
+      {userId ? (
+        <Button variant="primary" size="sm" onClick={onJoin} disabled={joining}>
+          {joining ? t('joiningGroup') : t('joinGroup')}
+        </Button>
+      ) : (
+        <Link href="/login">
+          <Button variant="primary" size="sm">{t('loginToJoin')}</Button>
+        </Link>
+      )}
+    </Box>
+  ) : null;
 
   return (
     <Box style={{ position: 'relative' }}>
+      {nonMemberBanner}
       {/* Sort Tabs + View Toggle */}
       <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: tokens.spacing[4] }}>
         <Box style={{ display: 'flex', gap: tokens.spacing[2] }}>
@@ -263,6 +260,7 @@ export default function GroupPostList(props: GroupPostListProps) {
                   setShowRepostModal={setShowRepostModal}
                   showToast={() => {}} // handled by repost modal
                   onReport={accessToken ? (id, title) => setReportingPost({ id, title }) : undefined}
+                  isMember={isMember}
                 />
               ))}
             </Box>
@@ -416,6 +414,7 @@ interface PostListItemProps {
   setShowRepostModal: (id: string | null) => void
   showToast: (msg: string, type: 'success' | 'error' | 'warning') => void
   onReport?: (postId: string, postTitle: string) => void
+  isMember?: boolean
 }
 
 function PostListItem(props: PostListItemProps) {
@@ -431,7 +430,7 @@ function PostListItem(props: PostListItemProps) {
     expandedPosts, setExpandedPosts, translatedPosts,
     handleLike, handleBookmark, handleDeletePost,
     handleSaveEdit, handlePinPost, toggleComments, submitComment, submitReply,
-    getHeatColor, setShowRepostModal, onReport,
+    getHeatColor, setShowRepostModal, onReport, isMember,
   } = props
 
   const displayContent = translatedPosts[post.id]?.content || post.content || ''
@@ -710,6 +709,7 @@ function PostListItem(props: PostListItemProps) {
             setExpandedReplies={setExpandedReplies}
             submitComment={submitComment}
             submitReply={submitReply}
+            readOnly={!isMember}
           />
         )}
       </Box>
@@ -737,6 +737,7 @@ interface CommentsSectionProps {
   setExpandedReplies: (fn: (prev: Record<string, boolean>) => Record<string, boolean>) => void
   submitComment: (postId: string) => void
   submitReply: (postId: string, commentId: string) => void
+  readOnly?: boolean
 }
 
 function CommentsSection(props: CommentsSectionProps) {
@@ -747,6 +748,7 @@ function CommentsSection(props: CommentsSectionProps) {
     replyingTo, setReplyingTo, replyContent, setReplyContent,
     expandedReplies, setExpandedReplies,
     submitComment, submitReply,
+    readOnly,
   } = props
 
   return (
@@ -756,7 +758,7 @@ function CommentsSection(props: CommentsSectionProps) {
       borderTop: `1px solid ${tokens.colors.border.primary}`,
     }}>
       {/* Comment input */}
-      {accessToken && (
+      {accessToken && !readOnly && (
         <Box style={{ display: 'flex', gap: tokens.spacing[2], marginBottom: tokens.spacing[3] }}>
           <input
             type="text"
