@@ -383,17 +383,6 @@ function RankingsContent() {
               {isZh ? CATEGORY_LABELS[cat].zh : CATEGORY_LABELS[cat].en}
             </button>
           ))}
-          
-          {/* Divider */}
-          <div style={{ width: 1, height: 24, background: tokens.colors.border.primary, margin: '0 4px' }} />
-          
-          {/* Platform dropdown */}
-          <PlatformDropdown
-            activePlatform={activePlatform}
-            activeCategory={activeCategory}
-            onPlatformChange={handlePlatformChange}
-            isZh={isZh}
-          />
         </div>
 
         <DataStateWrapper
