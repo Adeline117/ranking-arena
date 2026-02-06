@@ -3,6 +3,12 @@
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
+interface EmptyAction {
+  label: string
+  onClick: () => void
+  variant?: 'primary' | 'secondary'
+}
+
 interface DataStateWrapperProps {
   isLoading: boolean
   error: Error | string | null | undefined
@@ -10,6 +16,7 @@ interface DataStateWrapperProps {
   children: React.ReactNode
   loadingComponent?: React.ReactNode
   emptyMessage?: string
+  emptyActions?: EmptyAction[]
   onRetry?: () => void
 }
 
@@ -24,6 +31,7 @@ export default function DataStateWrapper({
   children,
   loadingComponent,
   emptyMessage,
+  emptyActions,
   onRetry,
 }: DataStateWrapperProps) {
   const { t } = useLanguage()
@@ -95,6 +103,27 @@ export default function DataStateWrapper({
           <p className="text-sm" style={{ color: tokens.colors.text.secondary }}>
             {emptyMessage || t('noDataAvailable')}
           </p>
+          {emptyActions && emptyActions.length > 0 && (
+            <div className="flex gap-2 mt-2">
+              {emptyActions.map((action, i) => (
+                <button
+                  key={i}
+                  onClick={action.onClick}
+                  className="px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+                  style={{
+                    backgroundColor: action.variant === 'primary' 
+                      ? tokens.colors.accent.brand 
+                      : tokens.colors.accent.brand + '15',
+                    color: action.variant === 'primary' 
+                      ? '#fff' 
+                      : tokens.colors.accent.brand,
+                  }}
+                >
+                  {action.label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     )

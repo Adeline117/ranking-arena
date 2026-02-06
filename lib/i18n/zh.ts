@@ -755,6 +755,7 @@ const zh = {
     coverRemoveHint: '背景图已标记移除，请点击保存按钮确认',
     coverSizeHint: '最大 10MB，建议 1200×400',
     username: '用户名',
+    currentUsername: '当前用户名',
     setUsername: '设置你的用户名',
     checking: '检查中...',
     usernameAvailable: '用户名可用',
@@ -2452,6 +2453,7 @@ const zh = {
     siweOneClickVerifying: '验证中...',
     siweOneClickSuccess: '登录成功!',
     siweOneClickSignIn: '登录',
+    siweOneClickSwitch: '切换账户',
     siweModalClosed: '钱包连接已取消。',
     siweRetry: '重试',
 
