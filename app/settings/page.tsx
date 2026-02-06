@@ -1726,11 +1726,13 @@ function SettingsContent() {
   }, [activeSection, sessions.length, loadingSessions, loadSessions])
 
   // Load blocked users when privacy section becomes active
+  const [blockedUsersLoaded, setBlockedUsersLoaded] = useState(false)
   useEffect(() => {
-    if (activeSection === 'privacy' && userId && blockedUsers.length === 0 && !loadingBlockedUsers) {
+    if (activeSection === 'privacy' && userId && !blockedUsersLoaded && !loadingBlockedUsers) {
+      setBlockedUsersLoaded(true)
       loadBlockedUsers(userId)
     }
-  }, [activeSection, userId, blockedUsers.length, loadingBlockedUsers, loadBlockedUsers])
+  }, [activeSection, userId, blockedUsersLoaded, loadingBlockedUsers, loadBlockedUsers])
 
   // Show auth-required state if not logged in (after initial check)
   if (!loading && !userId) {
