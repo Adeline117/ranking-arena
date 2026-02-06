@@ -558,7 +558,7 @@ export default function TraderReviews({ traderId, traderHandle }: TraderReviewsP
       setLoading(false)
       setLoadingMore(false)
     }
-  }, [traderHandle, sortMode, accessToken])
+  }, [traderHandle, sortMode, accessToken, showToast, t])
 
   useEffect(() => {
     loadReviews(true)
