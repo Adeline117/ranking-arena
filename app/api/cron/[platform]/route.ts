@@ -1,0 +1,313 @@
+/**
+ * Dynamic Cron Route for Platform Data Refresh
+ * 
+ * 统一的平台数据刷新 API
+ * 由 QStash 或手动触发
+ */
+
+import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
+import { verifyQStashSignature } from '@/lib/cron/qstash-client'
+import { createLogger } from '@/lib/utils/logger'
+import { circuitBreakerManager } from '@/lib/connectors/circuit-breaker'
+
+const logger = createLogger('CronRoute')
+
+// Edge Runtime for better performance
+export const runtime = 'edge'
+export const maxDuration = 30 // 30 seconds max
+
+// 平台抓取函数映射
+const PLATFORM_FETCHERS: Record<string, () => Promise<PlatformData[]>> = {
+  'hyperliquid': fetchHyperliquid,
+  'gmx': fetchGMX,
+  'gains': fetchGains,
+  'okx-futures': fetchOKXFutures,
+  'htx-futures': fetchHTXFutures,
+  // 更多平台...
+}
+
+interface PlatformData {
+  trader_key: string
+  nickname?: string
+  avatar_url?: string
+  roi: number
+  pnl: number
+  win_rate?: number
+  max_drawdown?: number
+  copiers_count?: number
+}
+
+export async function POST(
+  request: NextRequest,
+  { params }: { params: { platform: string } }
+) {
+  const platform = params.platform
+  const startTime = Date.now()
+
+  try {
+    // 1. 验证请求来源
+    const signature = request.headers.get('upstash-signature')
+    const body = await request.text()
+    
+    if (signature) {
+      const isValid = await verifyQStashSignature(signature, body)
+      if (!isValid) {
+        logger.warn(`Invalid QStash signature for ${platform}`)
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      }
+    } else if (process.env.NODE_ENV === 'production') {
+      // 生产环境要求签名
+      const authHeader = request.headers.get('authorization')
+      if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      }
+    }
+
+    // 2. 检查熔断器
+    const circuitBreaker = circuitBreakerManager.get(platform)
+    if (circuitBreaker.getState() === 'OPEN') {
+      logger.warn(`Circuit breaker OPEN for ${platform}, skipping`)
+      return NextResponse.json({
+        success: false,
+        platform,
+        message: 'Circuit breaker open',
+        retryAfter: circuitBreaker.getStats().remainingCooldown,
+      }, { status: 503 })
+    }
+
+    // 3. 获取抓取函数
+    const fetcher = PLATFORM_FETCHERS[platform]
+    if (!fetcher) {
+      return NextResponse.json({
+        error: `Unknown platform: ${platform}`,
+        availablePlatforms: Object.keys(PLATFORM_FETCHERS),
+      }, { status: 400 })
+    }
+
+    // 4. 执行抓取
+    const data = await circuitBreaker.execute(fetcher)
+    
+    if (!data || data.length === 0) {
+      logger.warn(`No data returned for ${platform}`)
+      return NextResponse.json({
+        success: true,
+        platform,
+        count: 0,
+        message: 'No data available',
+        durationMs: Date.now() - startTime,
+      })
+    }
+
+    // 5. 写入数据库
+    const supabase = createClient(
+      process.env.SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    )
+
+    const { error: upsertError } = await supabase
+      .from('trader_snapshots')
+      .upsert(
+        data.map((trader: PlatformData) => ({
+          platform,
+          trader_key: trader.trader_key,
+          nickname: trader.nickname,
+          avatar_url: trader.avatar_url,
+          season_id: '90D',
+          roi: trader.roi,
+          pnl: trader.pnl,
+          win_rate: trader.win_rate,
+          max_drawdown: trader.max_drawdown,
+          copiers_count: trader.copiers_count,
+          updated_at: new Date().toISOString(),
+        })),
+        { onConflict: 'platform,trader_key,season_id' }
+      )
+
+    if (upsertError) {
+      throw upsertError
+    }
+
+    const durationMs = Date.now() - startTime
+    logger.info(`✅ ${platform} refresh complete: ${data.length} traders in ${durationMs}ms`)
+
+    return NextResponse.json({
+      success: true,
+      platform,
+      count: data.length,
+      durationMs,
+    })
+
+  } catch (error) {
+    const durationMs = Date.now() - startTime
+    logger.error(`❌ ${platform} refresh failed after ${durationMs}ms:`, error)
+
+    return NextResponse.json({
+      success: false,
+      platform,
+      error: error instanceof Error ? error.message : 'Unknown error',
+      durationMs,
+    }, { status: 500 })
+  }
+}
+
+// ===== 平台抓取函数 =====
+
+async function fetchHyperliquid(): Promise<PlatformData[]> {
+  const response = await fetch('https://api.hyperliquid.xyz/info', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ type: 'leaderboard' }),
+  })
+
+  if (!response.ok) {
+    throw new Error(`Hyperliquid API error: ${response.status}`)
+  }
+
+  const data = await response.json()
+  
+  return data.leaderboardRows?.slice(0, 500).map((row: {
+    ethAddress: string
+    displayName?: string
+    accountValue: number
+    pnl: number
+    roi: number
+  }) => ({
+    trader_key: row.ethAddress,
+    nickname: row.displayName || row.ethAddress.slice(0, 8),
+    roi: row.roi * 100,
+    pnl: row.pnl,
+  })) || []
+}
+
+async function fetchGMX(): Promise<PlatformData[]> {
+  // GMX GraphQL endpoint
+  const query = `
+    query {
+      tradingStats(first: 500, orderBy: volume, orderDirection: desc) {
+        account
+        volume
+        realisedPnl
+        wins
+        losses
+      }
+    }
+  `
+
+  const response = await fetch('https://api.thegraph.com/subgraphs/name/gmx-io/gmx-stats', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query }),
+  })
+
+  if (!response.ok) {
+    throw new Error(`GMX API error: ${response.status}`)
+  }
+
+  const data = await response.json()
+  
+  return data.data?.tradingStats?.map((stat: {
+    account: string
+    realisedPnl: string
+    wins: number
+    losses: number
+  }) => {
+    const pnl = parseFloat(stat.realisedPnl) / 1e30
+    const winRate = stat.wins + stat.losses > 0 
+      ? (stat.wins / (stat.wins + stat.losses)) * 100 
+      : null
+
+    return {
+      trader_key: stat.account,
+      nickname: stat.account.slice(0, 8),
+      pnl,
+      roi: 0, // GMX 没有直接的 ROI
+      win_rate: winRate,
+    }
+  }) || []
+}
+
+async function fetchGains(): Promise<PlatformData[]> {
+  const response = await fetch('https://backend-arbitrum.gains.trade/api/leaderboard', {
+    headers: { 'Accept': 'application/json' },
+  })
+
+  if (!response.ok) {
+    throw new Error(`Gains API error: ${response.status}`)
+  }
+
+  const data = await response.json()
+  
+  return data.slice(0, 500).map((trader: {
+    address: string
+    pnl: number
+    roi: number
+    winRate: number
+  }) => ({
+    trader_key: trader.address,
+    nickname: trader.address.slice(0, 8),
+    pnl: trader.pnl,
+    roi: trader.roi * 100,
+    win_rate: trader.winRate * 100,
+  }))
+}
+
+async function fetchOKXFutures(): Promise<PlatformData[]> {
+  const response = await fetch('https://www.okx.com/api/v5/copytrading/public-lead-traders?instType=SWAP', {
+    headers: { 'Accept': 'application/json' },
+  })
+
+  if (!response.ok) {
+    throw new Error(`OKX API error: ${response.status}`)
+  }
+
+  const data = await response.json()
+  
+  return data.data?.slice(0, 500).map((trader: {
+    uniqueName: string
+    nickName: string
+    portrait: string
+    pnlRatio: string
+    pnl: string
+    winRatio: string
+    copyTraderNum: string
+  }) => ({
+    trader_key: trader.uniqueName,
+    nickname: trader.nickName,
+    avatar_url: trader.portrait,
+    roi: parseFloat(trader.pnlRatio) * 100,
+    pnl: parseFloat(trader.pnl),
+    win_rate: parseFloat(trader.winRatio) * 100,
+    copiers_count: parseInt(trader.copyTraderNum),
+  })) || []
+}
+
+async function fetchHTXFutures(): Promise<PlatformData[]> {
+  const response = await fetch('https://api.huobi.pro/v2/copy-trading/leaders?limit=500', {
+    headers: { 'Accept': 'application/json' },
+  })
+
+  if (!response.ok) {
+    throw new Error(`HTX API error: ${response.status}`)
+  }
+
+  const data = await response.json()
+  
+  return data.data?.list?.map((trader: {
+    leaderId: string
+    nickname: string
+    avatar: string
+    totalRoi: number
+    totalPnl: number
+    winRate: number
+    followerCount: number
+  }) => ({
+    trader_key: trader.leaderId,
+    nickname: trader.nickname,
+    avatar_url: trader.avatar,
+    roi: trader.totalRoi,
+    pnl: trader.totalPnl,
+    win_rate: trader.winRate,
+    copiers_count: trader.followerCount,
+  })) || []
+}

@@ -27,6 +27,15 @@ const nextConfig: NextConfig = {
         fs: false,
       }
     }
+
+    // Ignore optional wagmi/web3 peer dependencies we don't use
+    // These are for wallet connectors (MetaMask RN, Gemini, Porto) not needed in our app
+    config.plugins.push(
+      new (require('webpack').IgnorePlugin)({
+        resourceRegExp: /^(@react-native-async-storage\/async-storage|@gemini-wallet\/core|porto|porto\/internal)$/,
+      })
+    )
+
     return config
   },
   
