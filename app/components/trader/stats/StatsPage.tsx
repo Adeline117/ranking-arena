@@ -483,15 +483,16 @@ function PeriodSelector({
 }
 
 // Simple Line Chart
-function SimpleLineChart({ 
-  data, 
+function SimpleLineChart({
+  data,
   dataKey,
   period,
-}: { 
+}: {
   data: Array<{ date: string; roi: number; pnl: number }>
   dataKey: 'roi' | 'pnl'
   period: string
 }) {
+  const { language } = useLanguage()
   if (data.length === 0) {
     return (
       <Box style={{ 
@@ -502,7 +503,7 @@ function SimpleLineChart({
         background: tokens.colors.bg.primary,
         borderRadius: tokens.radius.lg,
       }}>
-        <Text size="sm" color="tertiary">暂无 {period} 数据</Text>
+        <Text size="sm" color="tertiary">{language === 'zh' ? `该时段 (${period}) 暂无链上记录` : `No on-chain activity for ${period}`}</Text>
       </Box>
     )
   }
@@ -618,16 +619,16 @@ function SimpleLineChart({
 }
 
 // Compare Portfolio Section
-function ComparePortfolioSection({ 
-  traderHandle, 
+function ComparePortfolioSection({
+  traderHandle,
   equityCurve,
-  delay 
-}: { 
+  delay
+}: {
   traderHandle: string
   equityCurve?: EquityCurveData
-  delay: number 
+  delay: number
 }) {
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
   const [period, setPeriod] = useState<'7D' | '30D' | '90D'>('90D')
   const [compareWith, setCompareWith] = useState<'BTC' | 'SPX500'>('BTC')
   const [mounted, setMounted] = useState(false)
@@ -710,10 +711,10 @@ function ComparePortfolioSection({
           borderRadius: tokens.radius.lg,
         }}>
           <Text size="sm" color="tertiary">
-            暂无对比数据
+            {language === 'zh' ? '暂无对比数据' : 'No comparison data'}
           </Text>
           <Text size="xs" color="tertiary" style={{ marginTop: tokens.spacing[2] }}>
-            需要更多历史收益数据才能生成对比图表
+            {language === 'zh' ? '需要更多链上历史数据才能生成对比图表' : 'More on-chain history needed to generate comparison chart'}
           </Text>
         </Box>
       )}
