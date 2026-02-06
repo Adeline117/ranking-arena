@@ -34,6 +34,14 @@ export {
   usePresence,
 } from './useRealtime'
 
+// 交易员实时持仓
+export {
+  useTraderPositionsRealtime,
+  useTraderAllPositions,
+  useSymbolPositions,
+  useTraderPositionSummary,
+} from './useTraderPositionsRealtime'
+
 // ============================================
 // SWR 数据获取 - 推荐使用
 // ============================================

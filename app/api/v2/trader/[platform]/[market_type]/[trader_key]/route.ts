@@ -146,6 +146,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       if (w && WINDOWS.includes(w) && !seen.has(w)) {
         seen.add(w)
         const metrics: SnapshotMetrics = s.metrics || {
+          // Core metrics
           roi: s.roi ? parseFloat(s.roi) : null,
           pnl: s.pnl ? parseFloat(s.pnl) : null,
           win_rate: s.win_rate ? parseFloat(s.win_rate) : null,
@@ -157,11 +158,56 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           copiers: s.copiers,
           aum: s.aum ? parseFloat(s.aum) : null,
           platform_rank: s.platform_rank || s.rank,
+          // Arena Score V2
           arena_score: s.arena_score ? parseFloat(s.arena_score) : null,
           return_score: s.return_score ? parseFloat(s.return_score) : null,
           drawdown_score: s.drawdown_score ? parseFloat(s.drawdown_score) : null,
           stability_score: s.stability_score ? parseFloat(s.stability_score) : null,
+          // Extended metrics (V3)
+          volatility_pct: s.volatility_pct ? parseFloat(s.volatility_pct) : null,
+          avg_holding_hours: s.avg_holding_hours ? parseFloat(s.avg_holding_hours) : null,
+          profit_factor: s.profit_factor ? parseFloat(s.profit_factor) : null,
         }
+
+        // V3 Advanced metrics extension
+        const advancedMetrics = {
+          sortino_ratio: s.sortino_ratio ? parseFloat(s.sortino_ratio) : null,
+          calmar_ratio: s.calmar_ratio ? parseFloat(s.calmar_ratio) : null,
+          profit_factor: s.profit_factor ? parseFloat(s.profit_factor) : null,
+          recovery_factor: s.recovery_factor ? parseFloat(s.recovery_factor) : null,
+          max_consecutive_wins: s.max_consecutive_wins ?? null,
+          max_consecutive_losses: s.max_consecutive_losses ?? null,
+          avg_holding_hours: s.avg_holding_hours ? parseFloat(s.avg_holding_hours) : null,
+          volatility_pct: s.volatility_pct ? parseFloat(s.volatility_pct) : null,
+          downside_volatility_pct: s.downside_volatility_pct ? parseFloat(s.downside_volatility_pct) : null,
+        }
+
+        // Market correlation
+        const marketCorrelation = {
+          beta_btc: s.beta_btc ? parseFloat(s.beta_btc) : null,
+          beta_eth: s.beta_eth ? parseFloat(s.beta_eth) : null,
+          alpha: s.alpha ? parseFloat(s.alpha) : null,
+          market_condition_performance: s.market_condition_tags || { bull: null, bear: null, sideways: null },
+        }
+
+        // Trader classification
+        const classification = {
+          trading_style: s.trading_style || null,
+          asset_preference: s.asset_preference || [],
+          style_confidence: s.style_confidence ? parseFloat(s.style_confidence) : null,
+        }
+
+        // Arena Score V3
+        const arenaScoreV3 = s.arena_score_v3 ? {
+          return_score: s.return_score ? parseFloat(s.return_score) : 0,
+          pnl_score: s.pnl_score ? parseFloat(s.pnl_score) : 0,
+          drawdown_score: s.drawdown_score ? parseFloat(s.drawdown_score) : 0,
+          stability_score: s.stability_score ? parseFloat(s.stability_score) : 0,
+          alpha_score: s.alpha_score ? parseFloat(s.alpha_score) : 0,
+          risk_adjusted_score: s.risk_adjusted_score_v3 ? parseFloat(s.risk_adjusted_score_v3) : 0,
+          consistency_score: s.consistency_score ? parseFloat(s.consistency_score) : 0,
+          total_score: parseFloat(s.arena_score_v3),
+        } : null
 
         const qualityFlags: QualityFlags = s.quality_flags || {
           missing_fields: [],
@@ -179,6 +225,16 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           metrics,
           quality_flags: qualityFlags,
           updated_at: s.captured_at || s.created_at,
+          // V3 Extensions (attached to snapshot for per-window access)
+          advanced_metrics: advancedMetrics,
+          market_correlation: marketCorrelation,
+          classification,
+          arena_score_v3: arenaScoreV3,
+        } as TraderSnapshot & {
+          advanced_metrics: typeof advancedMetrics
+          market_correlation: typeof marketCorrelation
+          classification: typeof classification
+          arena_score_v3: typeof arenaScoreV3
         }
       }
     }

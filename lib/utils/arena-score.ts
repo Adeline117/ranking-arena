@@ -486,3 +486,300 @@ export function rankByArenaScore<T extends TraderScoreInput & { id: string }>(
 
   return scored
 }
+
+// ============================================
+// Arena Score V3
+// ============================================
+
+/**
+ * Arena Score V3 权重配置
+ *
+ * V2 -> V3 权重变化:
+ * | Component         | V2  | V3  |
+ * |-------------------|-----|-----|
+ * | Return Score      | 70  | 55  |
+ * | PnL Score         | 15  | 12  |
+ * | Drawdown Score    |  8  |  8  |
+ * | Stability Score   |  7  |  5  |
+ * | Alpha Score       |  -  |  5  |
+ * | Risk-Adjusted     |  -  | 10  |
+ * | Consistency Score |  -  |  5  |
+ */
+export const ARENA_V3_CONFIG = {
+  // 分数权重
+  MAX_RETURN_SCORE: 55,
+  MAX_PNL_SCORE: 12,
+  MAX_DRAWDOWN_SCORE: 8,
+  MAX_STABILITY_SCORE: 5,
+  MAX_ALPHA_SCORE: 5,
+  MAX_RISK_ADJUSTED_SCORE: 10,
+  MAX_CONSISTENCY_SCORE: 5,
+
+  // Alpha 计算参数
+  ALPHA_PARAMS: {
+    '7D': { threshold: 5, maxAlpha: 50 },   // 5% alpha threshold, max 50%
+    '30D': { threshold: 10, maxAlpha: 100 }, // 10% alpha threshold
+    '90D': { threshold: 20, maxAlpha: 200 }, // 20% alpha threshold
+  },
+
+  // Risk-Adjusted 计算参数 (基于 Sortino Ratio)
+  RISK_ADJUSTED_PARAMS: {
+    sortinoThreshold: 2,   // Sortino >= 2 获得满分
+    calmarWeight: 0.3,     // Calmar Ratio 权重
+    sortinoWeight: 0.7,    // Sortino Ratio 权重
+  },
+
+  // Consistency 计算参数 (基于连续盈亏)
+  CONSISTENCY_PARAMS: {
+    maxConsecutiveWinsBonus: 10,   // 超过10次连续盈利获得满分
+    maxConsecutiveLossesPenalty: 5, // 超过5次连续亏损获得0分
+  },
+} as const
+
+export interface TraderScoreInputV3 extends TraderScoreInput {
+  /** Alpha (超额收益，百分比) */
+  alpha: number | null
+  /** Sortino Ratio */
+  sortinoRatio: number | null
+  /** Calmar Ratio */
+  calmarRatio: number | null
+  /** 最大连续盈利次数 */
+  maxConsecutiveWins: number | null
+  /** 最大连续亏损次数 */
+  maxConsecutiveLosses: number | null
+}
+
+export interface ArenaScoreV3Result {
+  totalScore: number
+  returnScore: number
+  pnlScore: number
+  drawdownScore: number
+  stabilityScore: number
+  alphaScore: number
+  riskAdjustedScore: number
+  consistencyScore: number
+  scoreConfidence: ScoreConfidence
+}
+
+/**
+ * 计算 Alpha 分 (0-5)
+ *
+ * @param alpha Alpha 值（百分比）
+ * @param period 时间段
+ */
+export function calculateAlphaScore(alpha: number | null, period: Period): number {
+  if (alpha === null || alpha === undefined) return 0
+
+  const params = ARENA_V3_CONFIG.ALPHA_PARAMS[period]
+
+  // 负 Alpha = 0分
+  if (alpha <= 0) return 0
+
+  // 线性映射到 0-5，超过阈值获得满分
+  const score = ARENA_V3_CONFIG.MAX_ALPHA_SCORE * Math.min(1, alpha / params.threshold)
+
+  return clip(score, 0, ARENA_V3_CONFIG.MAX_ALPHA_SCORE)
+}
+
+/**
+ * 计算风险调整分 (0-10)
+ *
+ * 基于 Sortino Ratio 和 Calmar Ratio 的加权平均
+ */
+export function calculateRiskAdjustedScoreV3(
+  sortinoRatio: number | null,
+  calmarRatio: number | null
+): number {
+  const params = ARENA_V3_CONFIG.RISK_ADJUSTED_PARAMS
+
+  // 计算 Sortino 分数
+  let sortinoScore = 0
+  if (sortinoRatio !== null && sortinoRatio > 0) {
+    sortinoScore = Math.min(1, sortinoRatio / params.sortinoThreshold)
+  }
+
+  // 计算 Calmar 分数
+  let calmarScore = 0
+  if (calmarRatio !== null && calmarRatio > 0) {
+    calmarScore = Math.min(1, calmarRatio / 2) // Calmar >= 2 获得满分
+  }
+
+  // 加权平均
+  const weightedScore = params.sortinoWeight * sortinoScore + params.calmarWeight * calmarScore
+  const score = ARENA_V3_CONFIG.MAX_RISK_ADJUSTED_SCORE * weightedScore
+
+  return clip(score, 0, ARENA_V3_CONFIG.MAX_RISK_ADJUSTED_SCORE)
+}
+
+/**
+ * 计算一致性分 (0-5)
+ *
+ * 基于连续盈亏表现
+ */
+export function calculateConsistencyScore(
+  maxConsecutiveWins: number | null,
+  maxConsecutiveLosses: number | null
+): number {
+  const params = ARENA_V3_CONFIG.CONSISTENCY_PARAMS
+
+  // 连续盈利加分
+  let winsScore = 0
+  if (maxConsecutiveWins !== null && maxConsecutiveWins > 0) {
+    winsScore = Math.min(1, maxConsecutiveWins / params.maxConsecutiveWinsBonus)
+  }
+
+  // 连续亏损减分
+  let lossesPenalty = 0
+  if (maxConsecutiveLosses !== null && maxConsecutiveLosses > 0) {
+    lossesPenalty = Math.min(1, maxConsecutiveLosses / params.maxConsecutiveLossesPenalty)
+  }
+
+  // 最终分数 = 盈利分数 - 亏损惩罚 * 0.5
+  const score = ARENA_V3_CONFIG.MAX_CONSISTENCY_SCORE * Math.max(0, winsScore - lossesPenalty * 0.5)
+
+  return clip(score, 0, ARENA_V3_CONFIG.MAX_CONSISTENCY_SCORE)
+}
+
+/**
+ * 计算 V3 收益分 (0-55)
+ *
+ * 与 V2 相同的计算逻辑，但最大分数从 70 降到 55
+ */
+export function calculateReturnScoreV3(roi: number, period: Period): number {
+  const params = ARENA_CONFIG.PARAMS[period]
+  const cappedRoi = Math.min(roi, ARENA_CONFIG.ROI_CAP)
+  const intensity = calculateRoiIntensity(cappedRoi, period)
+  const r0 = Math.tanh(params.tanhCoeff * intensity)
+
+  if (r0 <= 0) return 0
+
+  const score = ARENA_V3_CONFIG.MAX_RETURN_SCORE * Math.pow(r0, params.roiExponent)
+  return clip(score, 0, ARENA_V3_CONFIG.MAX_RETURN_SCORE)
+}
+
+/**
+ * 计算 V3 PnL 分 (0-12)
+ */
+export function calculatePnlScoreV3(pnl: number | null, period: Period): number {
+  if (pnl === null || pnl === undefined || pnl <= 0) return 0
+
+  const params = ARENA_CONFIG.PNL_PARAMS[period]
+  const logArg = 1 + pnl / params.base
+  if (logArg <= 0) return 0
+
+  const score = ARENA_V3_CONFIG.MAX_PNL_SCORE * Math.tanh(params.coeff * Math.log(logArg))
+  return clip(score, 0, ARENA_V3_CONFIG.MAX_PNL_SCORE)
+}
+
+/**
+ * 计算 V3 回撤分 (0-8)
+ * 与 V2 相同
+ */
+export function calculateDrawdownScoreV3(maxDrawdown: number | null, period: Period): number {
+  return calculateDrawdownScore(maxDrawdown, period)
+}
+
+/**
+ * 计算 V3 稳定分 (0-5)
+ */
+export function calculateStabilityScoreV3(winRate: number | null, period: Period): number {
+  const effectiveWinRate = (winRate === null || winRate === undefined)
+    ? ARENA_CONFIG.DEFAULTS.WIN_RATE
+    : winRate
+
+  const normalizedWinRate = effectiveWinRate <= 1 && effectiveWinRate >= 0
+    ? effectiveWinRate * 100
+    : effectiveWinRate
+
+  const cap = ARENA_CONFIG.PARAMS[period].winRateCap
+  const baseline = ARENA_CONFIG.WIN_RATE_BASELINE
+
+  const score = ARENA_V3_CONFIG.MAX_STABILITY_SCORE * clip((normalizedWinRate - baseline) / (cap - baseline), 0, 1)
+  return clip(score, 0, ARENA_V3_CONFIG.MAX_STABILITY_SCORE)
+}
+
+/**
+ * 计算 Arena Score V3（单个时间段）
+ *
+ * @param input 交易员数据（包含高级指标）
+ * @param period 时间段
+ * @returns Arena Score V3 结果
+ */
+export function calculateArenaScoreV3(
+  input: TraderScoreInputV3,
+  period: Period
+): ArenaScoreV3Result {
+  const {
+    roi,
+    pnl,
+    maxDrawdown,
+    winRate,
+    alpha,
+    sortinoRatio,
+    calmarRatio,
+    maxConsecutiveWins,
+    maxConsecutiveLosses,
+  } = input
+
+  // 判断数据完整性
+  const scoreConfidence = getScoreConfidence(maxDrawdown, winRate)
+
+  // 计算各项分数
+  const returnScore = calculateReturnScoreV3(roi, period)
+  const pnlScore = calculatePnlScoreV3(pnl, period)
+  const drawdownScore = calculateDrawdownScoreV3(maxDrawdown, period)
+  const stabilityScore = calculateStabilityScoreV3(winRate, period)
+  const alphaScore = calculateAlphaScore(alpha, period)
+  const riskAdjustedScore = calculateRiskAdjustedScoreV3(sortinoRatio, calmarRatio)
+  const consistencyScore = calculateConsistencyScore(maxConsecutiveWins, maxConsecutiveLosses)
+
+  // 原始总分
+  const rawTotal = returnScore + pnlScore + drawdownScore + stabilityScore +
+                   alphaScore + riskAdjustedScore + consistencyScore
+
+  // 数据完整性惩罚
+  const confidenceMultiplier = ARENA_CONFIG.CONFIDENCE_MULTIPLIER[scoreConfidence]
+  const totalScore = clip(rawTotal * confidenceMultiplier, 0, 100)
+
+  return {
+    totalScore: Math.round(totalScore * 100) / 100,
+    returnScore: Math.round(returnScore * 100) / 100,
+    pnlScore: Math.round(pnlScore * 100) / 100,
+    drawdownScore: Math.round(drawdownScore * 100) / 100,
+    stabilityScore: Math.round(stabilityScore * 100) / 100,
+    alphaScore: Math.round(alphaScore * 100) / 100,
+    riskAdjustedScore: Math.round(riskAdjustedScore * 100) / 100,
+    consistencyScore: Math.round(consistencyScore * 100) / 100,
+    scoreConfidence,
+  }
+}
+
+/**
+ * 批量计算 Arena Score V3（用于排行榜）
+ */
+export function rankByArenaScoreV3<T extends TraderScoreInputV3 & { id: string }>(
+  traders: T[],
+  period: Period
+): (T & { arena_score_v3: number; score_details_v3: ArenaScoreV3Result })[] {
+  const scored = traders.map(trader => {
+    const result = calculateArenaScoreV3(trader, period)
+    return {
+      ...trader,
+      arena_score_v3: result.totalScore,
+      score_details_v3: result,
+    }
+  })
+
+  // 按分数降序排序
+  scored.sort((a, b) => {
+    if (b.arena_score_v3 !== a.arena_score_v3) {
+      return b.arena_score_v3 - a.arena_score_v3
+    }
+    // 次排序：回撤小的优先
+    const mddA = Math.abs(a.maxDrawdown ?? Infinity)
+    const mddB = Math.abs(b.maxDrawdown ?? Infinity)
+    return mddA - mddB
+  })
+
+  return scored
+}
