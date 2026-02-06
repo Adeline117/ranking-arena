@@ -118,9 +118,17 @@ class RealtimeChannelPool {
 
       // Configure the channel with Supabase realtime postgres_changes
       const supabaseEvent = eventToSupabaseEvent[event]
-      channel
+      // Cast to unknown first to bypass overly strict Supabase types
+      const channelAny = channel as unknown as {
+        on: (
+          type: string,
+          filter: Record<string, unknown>,
+          callback: (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => void
+        ) => { subscribe: (callback: (status: string) => void) => void }
+      }
+      channelAny
         .on(
-          REALTIME_LISTEN_TYPES.POSTGRES_CHANGES,
+          'postgres_changes',
           {
             event: supabaseEvent,
             schema,
