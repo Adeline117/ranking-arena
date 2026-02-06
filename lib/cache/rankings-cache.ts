@@ -276,9 +276,10 @@ class RankingsCache {
       const allMembers = await redis.zrange(key, 0, -1, { rev: true })
 
       for (let i = 0; i < allMembers.length; i++) {
-        const member = typeof allMembers[i] === 'string'
-          ? JSON.parse(allMembers[i])
-          : allMembers[i]
+        const rawMember = allMembers[i]
+        const member = typeof rawMember === 'string'
+          ? JSON.parse(rawMember)
+          : rawMember
         if (member.trader_key === traderKey) {
           return i + 1 // Rank is 1-indexed
         }
@@ -365,15 +366,18 @@ class RankingsCache {
     const key = getSortedSetKey(window, platform)
 
     try {
-      const results = await redis.zrangebyscore(key, minScore, maxScore, {
-        limit: { offset: 0, count: limit },
+      // Use zrange with byScore option (zrangebyscore was deprecated)
+      const results = await redis.zrange(key, minScore, maxScore, {
+        byScore: true,
+        count: limit,
+        offset: 0,
       })
 
       if (!results || results.length === 0) {
         return []
       }
 
-      return results.map((item) => {
+      return results.map((item: unknown) => {
         return typeof item === 'string' ? JSON.parse(item) : item
       })
     } catch (error) {
