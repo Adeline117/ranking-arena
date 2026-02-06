@@ -176,7 +176,7 @@ export default function UserProfileClient({ handle, serverProfile }: UserProfile
           <Link
             href="/"
             style={{
-              color: tokens.colors.accent?.primary || '#8b6fa8',
+              color: tokens.colors.accent.brand,
               textDecoration: 'none',
               fontSize: tokens.typography.fontSize.sm,
             }}
@@ -321,7 +321,7 @@ export default function UserProfileClient({ handle, serverProfile }: UserProfile
                       justifyContent: 'center',
                       width: 22,
                       height: 22,
-                      background: `linear-gradient(135deg, ${tokens.colors.accent.success}, #00D4AA)`,
+                      background: tokens.gradient.success,
                       borderRadius: tokens.radius.full,
                       boxShadow: `0 2px 8px ${tokens.colors.accent.success}40`,
                     }}
@@ -473,7 +473,7 @@ export default function UserProfileClient({ handle, serverProfile }: UserProfile
                       borderRadius: tokens.radius.md,
                       border: 'none',
                       background: tokens.colors.accent.brand,
-                      color: '#FFFFFF',
+                      color: tokens.colors.white,
                       fontSize: tokens.typography.fontSize.sm,
                       fontWeight: tokens.typography.fontWeight.black,
                       cursor: 'pointer',
