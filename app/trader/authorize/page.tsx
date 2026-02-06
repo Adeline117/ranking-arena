@@ -5,10 +5,10 @@
  * Allow traders to authorize their exchange accounts for real-time data display
  */
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
-import { useAuth } from '@/app/components/Providers/AuthProvider'
+import { supabase } from '@/lib/supabase/client'
 import TopNav from '@/app/components/layout/TopNav'
 import MobileBottomNav from '@/app/components/layout/MobileBottomNav'
 import { Box } from '@/app/components/base'
@@ -31,9 +31,9 @@ const SYNC_FREQUENCIES = [
 
 export default function TraderAuthorizePage() {
   const { t, language } = useLanguage()
-  const { user, getAuthHeaders } = useAuth()
   const router = useRouter()
 
+  const [user, setUser] = useState<any>(null)
   const [platform, setPlatform] = useState('bybit')
   const [apiKey, setApiKey] = useState('')
   const [apiSecret, setApiSecret] = useState('')
@@ -43,6 +43,12 @@ export default function TraderAuthorizePage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      setUser(data.user)
+    })
+  }, [])
 
   const selectedPlatform = PLATFORMS.find((p) => p.value === platform)
 
@@ -58,13 +64,13 @@ export default function TraderAuthorizePage() {
     setError(null)
 
     try {
-      const authHeaders = await getAuthHeaders()
+      const { data: { session } } = await supabase.auth.getSession()
 
       const response = await fetch('/api/trader/authorize', {
         method: 'POST',
         headers: {
-          ...authHeaders,
           'Content-Type': 'application/json',
+          'Authorization': session?.access_token ? `Bearer ${session.access_token}` : '',
         },
         body: JSON.stringify({
           platform,
