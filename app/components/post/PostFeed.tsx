@@ -3,7 +3,6 @@
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState, useRef, useCallback } from 'react'
-import { createPortal } from 'react-dom'
 import { tokens } from '@/lib/design-tokens'
 import { ThumbsUpIcon, ThumbsDownIcon, CommentIcon } from '../ui/icons'
 import { useLanguage } from '../Providers/LanguageProvider'
@@ -21,6 +20,8 @@ import { usePostComments, type Comment } from './hooks/usePostComments'
 import { SectionErrorBoundary } from '../utils/ErrorBoundary'
 import { PostSkeleton } from '../ui/Skeleton'
 import { SortButtons, type SortType, AvatarLink, ReactButton, Action, PostModal } from './components'
+import { PostListItem } from './PostList'
+import { EditPostModal, RepostModal } from './Modals'
 
 // 本地类型（扩展后端类型）
 type Post = PostWithUserState
@@ -1398,370 +1399,23 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
           if (a.is_pinned && !b.is_pinned) return -1
           if (!a.is_pinned && b.is_pinned) return 1
           return 0
-        }) : posts).map((p) => {
-          const isMasonry = props.layout === 'masonry'
-
-          return (
-            <div
-              key={p.id}
-              onClick={(e: React.MouseEvent) => {
-                // Don't hijack clicks on interactive elements (links, buttons, etc.)
-                if ((e.target as HTMLElement).closest('a, button, [role="button"], input, textarea, select')) return
-                handleOpenPost(p)
-              }}
-              style={isMasonry ? {
-                breakInside: 'avoid',
-                marginBottom: 10,
-                padding: tokens.spacing[2],
-                borderRadius: tokens.radius.lg,
-                background: tokens.colors.bg.secondary,
-                border: `1px solid ${tokens.colors.border.primary}`,
-                cursor: 'pointer',
-                color: tokens.colors.text.primary,
-                transition: 'transform 0.2s ease, box-shadow 0.2s ease',
-              } : {
-                width: '100%',
-                textAlign: 'left',
-                border: 'none',
-                background: 'transparent',
-                padding: `${tokens.spacing[3]} 0`,
-                borderBottom: `1px solid ${tokens.colors.border.primary}`,
-                cursor: 'pointer',
-                color: tokens.colors.text.primary,
-                transition: `background-color ${tokens.transition.base}`,
-              }}
-              onMouseEnter={(e) => {
-                if (isMasonry) {
-                  e.currentTarget.style.transform = 'translateY(-2px)'
-                  e.currentTarget.style.boxShadow = '0 6px 20px rgba(139,111,168,0.15)'
-                } else {
-                  e.currentTarget.style.background = tokens.colors.bg.secondary
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (isMasonry) {
-                  e.currentTarget.style.transform = 'translateY(0)'
-                  e.currentTarget.style.boxShadow = 'none'
-                } else {
-                  e.currentTarget.style.background = 'transparent'
-                }
-              }}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'nowrap', minWidth: 0 }}>
-                {p.group_id ? (
-                  <Link
-                    href={`/groups/${p.group_id}`}
-                    onClick={(e) => e.stopPropagation()}
-                    style={{
-                      fontSize: 12,
-                      color: ARENA_PURPLE,
-                      textDecoration: 'none',
-                      cursor: 'pointer',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                      flexShrink: 1,
-                      minWidth: 0,
-                    }}
-                  >
-                    {language === 'zh' ? (p.group_name || t('group')) : (p.group_name_en || p.group_name || t('group'))}
-                  </Link>
-                ) : null}
-                <AvatarLink handle={p.author_handle} avatarUrl={p.author_avatar_url} isPro={p.author_is_pro} showProBadge={p.author_show_pro_badge} />
-              </div>
-
-              <div style={{ marginTop: 6, fontWeight: 950, lineHeight: 1.25, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                <span style={{ color: translatedListPosts[p.id]?.title ? tokens.colors.accent.translated : tokens.colors.text.primary }}>
-                  {translatedListPosts[p.id]?.title || p.title}
-                </span>
-                {/* 自定义投票标识 */}
-                {p.poll_id && (
-                  <span
-                    style={{
-                      fontSize: 11,
-                      color: ARENA_PURPLE,
-                      fontWeight: 700,
-                      border: `1px solid ${tokens.colors.border.primary}`,
-                      padding: '2px 8px',
-                      borderRadius: 999,
-                      background: 'rgba(139,111,168,0.1)',
-                    }}
-                  >
-                    {t('poll')}
-                  </span>
-                )}
-                {/* 图片标识 */}
-                {p.images && p.images.length > 0 && (
-                  <span
-                    style={{
-                      fontSize: 11,
-                      color: tokens.colors.text.tertiary,
-                      fontWeight: 600,
-                    }}
-                  >
-                    {p.images.length} {t('img')}
-                  </span>
-                )}
-              </div>
-
-              {/* 内容预览 - 移除图片 Markdown 语法 */}
-              {p.content && (
-                <div style={{ 
-                  marginTop: 8, 
-                  fontSize: 13, 
-                  color: translatedListPosts[p.id]?.body ? tokens.colors.accent.translated : tokens.colors.text.secondary, 
-                  lineHeight: 1.5,
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  display: '-webkit-box',
-                  WebkitLineClamp: 2,
-                  WebkitBoxOrient: 'vertical',
-                }}>
-                  {removeImagesFromContent(translatedListPosts[p.id]?.body || p.content).slice(0, 150)}
-                </div>
-              )}
-
-              {/* 图片预览 - 最多显示4张 */}
-              {p.images && p.images.length > 0 && (
-                <div style={{ 
-                  marginTop: 10, 
-                  display: 'flex', 
-                  gap: 8,
-                  flexWrap: 'wrap',
-                }}>
-                  {p.images.slice(0, 4).map((imgUrl, idx) => (
-                    <div
-                      key={idx}
-                      style={{
-                        width: p.images!.length === 1 ? 200 : 80,
-                        height: p.images!.length === 1 ? 150 : 80,
-                        borderRadius: 8,
-                        overflow: 'hidden',
-                        position: 'relative',
-                      }}
-                    >
-                      <img
-                        src={imgUrl}
-                        alt={`Image ${idx + 1}`}
-                        style={{
-                          width: '100%',
-                          height: '100%',
-                          objectFit: 'cover',
-                        }}
-                      />
-                      {idx === 3 && p.images!.length > 4 && (
-                        <div style={{
-                          position: 'absolute',
-                          inset: 0,
-                          background: 'rgba(0,0,0,0.5)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          color: '#fff',
-                          fontSize: 14,
-                          fontWeight: 700,
-                        }}>
-                          +{p.images!.length - 4}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* 原始帖子引用卡片（转发时显示） */}
-              {p.original_post && (
-                <div 
-                  style={{ 
-                    marginTop: 10,
-                    padding: 12,
-                    background: tokens.colors.bg.tertiary,
-                    borderRadius: tokens.radius.md,
-                    border: `1px solid ${tokens.colors.border.primary}`,
-                  }}
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <div style={{ marginBottom: 8 }}>
-                    <AvatarLink handle={p.original_post.author_handle} avatarUrl={p.original_post.author_avatar_url} isPro={p.original_post.author_is_pro} showProBadge={p.original_post.author_show_pro_badge} />
-                  </div>
-                  {p.original_post.title && (
-                    <div style={{ 
-                      fontSize: 13, 
-                      color: tokens.colors.text.primary,
-                      fontWeight: 600,
-                      marginBottom: 4,
-                    }}>
-                      {p.original_post.title}
-                    </div>
-                  )}
-                  <div style={{ 
-                    fontSize: 12, 
-                    color: tokens.colors.text.secondary,
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    display: '-webkit-box',
-                    WebkitLineClamp: 2,
-                    WebkitBoxOrient: 'vertical',
-                  }}>
-                    {removeImagesFromContent(p.original_post.content).slice(0, 100)}
-                  </div>
-                  {/* 原始帖子图片预览 */}
-                  {p.original_post.images && p.original_post.images.length > 0 && (
-                    <div style={{ 
-                      marginTop: 8, 
-                      display: 'flex', 
-                      gap: 4,
-                    }}>
-                      {p.original_post.images.slice(0, 3).map((imgUrl, idx) => (
-                        <div
-                          key={idx}
-                          style={{
-                            width: 48,
-                            height: 48,
-                            borderRadius: 4,
-                            overflow: 'hidden',
-                          }}
-                        >
-                          <img
-                            src={imgUrl}
-                            alt=""
-                            style={{
-                              width: '100%',
-                              height: '100%',
-                              objectFit: 'cover',
-                            }}
-                          />
-                        </div>
-                      ))}
-                      {p.original_post.images.length > 3 && (
-                        <span style={{ fontSize: 11, color: tokens.colors.text.tertiary, alignSelf: 'center' }}>
-                          +{p.original_post.images.length - 3}
-                        </span>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              <div style={{ marginTop: 10, display: 'flex', gap: 10, flexWrap: 'wrap', color: tokens.colors.text.secondary, fontSize: 12, alignItems: 'center' }}>
-                <ReactButton
-                  onClick={(e) => {
-                    e.preventDefault()
-                    e.stopPropagation()
-                    toggleReaction(p.id, 'up')
-                  }}
-                  active={p.user_reaction === 'up'}
-                  icon={<ThumbsUpIcon size={14} />}
-                  count={p.like_count}
-                  showCount={true}
-                />
-                <ReactButton
-                  onClick={(e) => {
-                    e.preventDefault()
-                    e.stopPropagation()
-                    toggleReaction(p.id, 'down')
-                  }}
-                  active={p.user_reaction === 'down'}
-                  icon={<ThumbsDownIcon size={14} />}
-                  count={p.dislike_count}
-                  showCount={false}
-                />
-                <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <CommentIcon size={14} /> {p.comment_count}
-                </span>
-                <span style={{ color: tokens.colors.text.tertiary }}>
-                  {formatTimeAgo(p.created_at, language)}
-                </span>
-                
-                {/* 置顶标识 */}
-                {p.is_pinned && (
-                  <span style={{
-                    fontSize: 11,
-                    color: ARENA_PURPLE,
-                    fontWeight: 700,
-                    padding: '2px 6px',
-                    background: 'rgba(139,111,168,0.1)',
-                    borderRadius: 4,
-                  }}>
-                    {t('pinned')}
-                  </span>
-                )}
-                
-                {/* 置顶/编辑/删除按钮 - 仅作者可见 */}
-                {currentUserId && p.author_id === currentUserId && (
-                  <span style={{ display: 'flex', gap: 8, marginLeft: 'auto' }}>
-                    <button
-                      onClick={(e) => handleTogglePin(p, e)}
-                      style={{
-                        background: p.is_pinned ? 'rgba(139,111,168,0.1)' : 'transparent',
-                        border: 'none',
-                        color: p.is_pinned ? ARENA_PURPLE : tokens.colors.text.tertiary,
-                        cursor: 'pointer',
-                        fontSize: 12,
-                        padding: '2px 6px',
-                        borderRadius: 4,
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.color = ARENA_PURPLE
-                        e.currentTarget.style.background = 'rgba(139,111,168,0.1)'
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.color = p.is_pinned ? ARENA_PURPLE : tokens.colors.text.tertiary
-                        e.currentTarget.style.background = p.is_pinned ? 'rgba(139,111,168,0.1)' : 'transparent'
-                      }}
-                    >
-                      {p.is_pinned ? t('unpin') : t('pin')}
-                    </button>
-                    <button
-                      onClick={(e) => handleStartEdit(p, e)}
-                      style={{
-                        background: 'transparent',
-                        border: 'none',
-                        color: tokens.colors.text.tertiary,
-                        cursor: 'pointer',
-                        fontSize: 12,
-                        padding: '2px 6px',
-                        borderRadius: 4,
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.color = '#8b6fa8'
-                        e.currentTarget.style.background = 'rgba(139,111,168,0.1)'
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.color = tokens.colors.text.tertiary
-                        e.currentTarget.style.background = 'transparent'
-                      }}
-                    >
-                      {t('edit')}
-                    </button>
-                    <button
-                      onClick={(e) => handleDeletePost(p, e)}
-                      style={{
-                        background: 'transparent',
-                        border: 'none',
-                        color: tokens.colors.text.tertiary,
-                        cursor: 'pointer',
-                        fontSize: 12,
-                        padding: '2px 6px',
-                        borderRadius: 4,
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.color = '#ff4d4d'
-                        e.currentTarget.style.background = 'rgba(255,77,77,0.1)'
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.color = tokens.colors.text.tertiary
-                        e.currentTarget.style.background = 'transparent'
-                      }}
-                    >
-                      {t('delete')}
-                    </button>
-                  </span>
-                )}
-              </div>
-            </div>
-          )
-        })}
+        }) : posts).map((p) => (
+          <PostListItem
+            key={p.id}
+            post={p}
+            isMasonry={props.layout === 'masonry'}
+            language={language}
+            currentUserId={currentUserId}
+            translatedListPosts={translatedListPosts}
+            onOpenPost={handleOpenPost}
+            onToggleReaction={toggleReaction}
+            onTogglePin={handleTogglePin}
+            onStartEdit={handleStartEdit}
+            onDeletePost={handleDeletePost}
+            removeImagesFromContent={removeImagesFromContent}
+            t={t}
+          />
+        ))}
       </div>
 
       {/* Infinite scroll trigger */}
@@ -2277,207 +1931,32 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
 
       {/* 编辑帖子弹窗 */}
       {editingPost && (
-        <div
-          onClick={() => setEditingPost(null)}
-          style={{
-            position: 'fixed',
-            inset: 0,
-            background: 'rgba(0, 0, 0, 0.65)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: 20,
-            zIndex: tokens.zIndex.modal, // 使用 design tokens (400)
-          }}
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              width: '100%',
-              maxWidth: 500,
-              background: tokens.colors.bg.secondary,
-              border: `1px solid ${tokens.colors.border.primary}`,
-              borderRadius: 16,
-              padding: 24,
-            }}
-          >
-            <h2 style={{ fontSize: 18, fontWeight: 900, marginBottom: 20, color: tokens.colors.text.primary }}>{t('editPost')}</h2>
-            
-            <div style={{ marginBottom: 16 }}>
-              <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 800, color: tokens.colors.text.primary }}>
-                {t('title')}
-              </label>
-              <input
-                type="text"
-                value={editTitle}
-                onChange={(e) => setEditTitle(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: 12,
-                  borderRadius: 12,
-                  border: `1px solid ${tokens.colors.border.primary}`,
-                  background: tokens.colors.bg.primary,
-                  color: tokens.colors.text.primary,
-                  fontSize: 14,
-                  outline: 'none',
-                }}
-              />
-            </div>
-
-            <div style={{ marginBottom: 20 }}>
-              <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 800, color: tokens.colors.text.primary }}>
-                {t('content')}
-              </label>
-              <textarea
-                value={editContent}
-                onChange={(e) => setEditContent(e.target.value)}
-                rows={8}
-                style={{
-                  width: '100%',
-                  padding: 12,
-                  borderRadius: 12,
-                  border: `1px solid ${tokens.colors.border.primary}`,
-                  background: tokens.colors.bg.primary,
-                  color: tokens.colors.text.primary,
-                  fontSize: 14,
-                  outline: 'none',
-                  resize: 'vertical',
-                  lineHeight: 1.6,
-                }}
-              />
-            </div>
-
-            <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
-              <button
-                onClick={() => setEditingPost(null)}
-                disabled={savingEdit}
-                style={{
-                  padding: '10px 20px',
-                  borderRadius: 10,
-                  border: `1px solid ${tokens.colors.border.primary}`,
-                  background: 'transparent',
-                  color: tokens.colors.text.secondary,
-                  fontWeight: 700,
-                  fontSize: 14,
-                  cursor: savingEdit ? 'not-allowed' : 'pointer',
-                }}
-              >
-                {t('cancel')}
-              </button>
-              <button
-                onClick={handleSaveEdit}
-                disabled={savingEdit || !editTitle.trim()}
-                style={{
-                  padding: '10px 20px',
-                  borderRadius: 10,
-                  border: 'none',
-                  background: savingEdit || !editTitle.trim() ? 'rgba(139,111,168,0.3)' : '#8b6fa8',
-                  color: '#fff',
-                  fontWeight: 900,
-                  fontSize: 14,
-                  cursor: savingEdit || !editTitle.trim() ? 'not-allowed' : 'pointer',
-                }}
-              >
-                {savingEdit ? t('saving') : t('save')}
-              </button>
-            </div>
-          </div>
-        </div>
+        <EditPostModal
+          title={editTitle}
+          content={editContent}
+          onTitleChange={setEditTitle}
+          onContentChange={setEditContent}
+          onSave={handleSaveEdit}
+          onCancel={() => setEditingPost(null)}
+          saving={savingEdit}
+          t={t}
+        />
       )}
 
-      {/* 转发弹窗 - 使用 Portal 渲染到 body */}
-      {showRepostModal && typeof document !== 'undefined' && createPortal(
-        <div
-          onClick={() => {
+      {/* 转发弹窗 */}
+      {showRepostModal && (
+        <RepostModal
+          postId={showRepostModal}
+          comment={repostComment}
+          onCommentChange={setRepostComment}
+          onRepost={handleRepost}
+          onCancel={() => {
             setShowRepostModal(null)
             setRepostComment('')
           }}
-          style={{
-            position: 'fixed',
-            inset: 0,
-            background: 'rgba(0, 0, 0, 0.65)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: 20,
-            zIndex: tokens.zIndex.modal, // 使用 design tokens (400)
-          }}
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              width: '100%',
-              maxWidth: 400,
-              background: tokens.colors.bg.secondary,
-              border: `1px solid ${tokens.colors.border.primary}`,
-              borderRadius: 16,
-              padding: 24,
-              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
-            }}
-          >
-            <h2 style={{ fontSize: 18, fontWeight: 900, marginBottom: 16, color: tokens.colors.text.primary }}>
-              {t('repostToFeed')}
-            </h2>
-
-            <textarea
-              value={repostComment}
-              onChange={(e) => setRepostComment(e.target.value)}
-              placeholder={t('addCommentOptional')}
-              style={{
-                width: '100%',
-                minHeight: 80,
-                padding: 12,
-                borderRadius: 12,
-                border: `1px solid ${tokens.colors.border.primary}`,
-                background: tokens.colors.bg.primary,
-                color: tokens.colors.text.primary,
-                fontSize: 14,
-                resize: 'vertical',
-                marginBottom: 16,
-                outline: 'none',
-              }}
-              maxLength={280}
-            />
-            
-            <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
-              <button
-                onClick={() => {
-                  setShowRepostModal(null)
-                  setRepostComment('')
-                }}
-                style={{
-                  padding: '10px 20px',
-                  borderRadius: 10,
-                  border: `1px solid ${tokens.colors.border.primary}`,
-                  background: 'transparent',
-                  color: tokens.colors.text.secondary,
-                  fontWeight: 700,
-                  fontSize: 14,
-                  cursor: 'pointer',
-                }}
-              >
-                {t('cancel')}
-              </button>
-              <button
-                onClick={() => handleRepost(showRepostModal, repostComment)}
-                disabled={repostLoading[showRepostModal]}
-                style={{
-                  padding: '10px 20px',
-                  borderRadius: 10,
-                  border: 'none',
-                  background: repostLoading[showRepostModal] ? 'rgba(139,111,168,0.3)' : '#8b6fa8',
-                  color: '#fff',
-                  fontWeight: 900,
-                  fontSize: 14,
-                  cursor: repostLoading[showRepostModal] ? 'not-allowed' : 'pointer',
-                }}
-              >
-                {repostLoading[showRepostModal] ? t('reposting') : t('repost')}
-              </button>
-            </div>
-          </div>
-        </div>,
-        document.body
+          loading={repostLoading[showRepostModal] || false}
+          t={t}
+        />
       )}
 
       {/* 收藏夹选择弹窗 */}
