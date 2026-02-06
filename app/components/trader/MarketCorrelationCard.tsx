@@ -133,7 +133,7 @@ export default function MarketCorrelationCard({
   const ethInterpretation = getBetaInterpretation(correlation.beta_eth)
 
   return (
-    <Box
+    <div
       ref={cardRef}
       style={{
         background: `linear-gradient(145deg, ${tokens.colors.bg.secondary} 0%, ${tokens.colors.bg.primary}90 100%)`,
@@ -318,6 +318,6 @@ export default function MarketCorrelationCard({
           </Box>
         </Box>
       )}
-    </Box>
+    </div>
   )
 }
