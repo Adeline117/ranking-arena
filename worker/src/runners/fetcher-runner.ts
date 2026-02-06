@@ -7,9 +7,8 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import type { Job, JobResult, PlatformConfig } from '../types'
 
-// Import existing fetchers from the main app
-// These are designed to be serverless-compatible and work perfectly in our worker
-import { INLINE_FETCHERS } from '../../../lib/cron/fetchers'
+// Import existing fetchers (copied into worker for standalone builds)
+import { INLINE_FETCHERS } from '../lib/fetchers'
 
 // ============================================
 // Platform Configurations
