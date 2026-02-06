@@ -26,7 +26,6 @@ const StatsPage = dynamic(() => import('@/app/components/trader/stats/StatsPage'
 const PortfolioTable = dynamic(() => import('@/app/components/trader/PortfolioTable'), {
   loading: () => <RankingSkeleton />,
 })
-import TraderReviews from '@/app/components/trader/TraderReviews'
 import { Box, Text } from '@/app/components/base'
 import { useSubscription } from '@/app/components/home/hooks/useSubscription'
 import type {
@@ -44,7 +43,7 @@ import {
   combineSchemas,
 } from '@/lib/seo'
 
-type TabKey = 'overview' | 'reviews' | 'stats' | 'portfolio'
+type TabKey = 'overview' | 'stats' | 'portfolio'
 
 interface AssetBreakdownData {
   '90D': Array<{ symbol: string; weightPct: number }>
@@ -141,7 +140,7 @@ function TraderContent({ handle, serverData }: { handle: string; serverData: Tra
   // Read tab from URL, default to 'overview'
   const urlTab = searchParams.get('tab') as TabKey | null
   const [activeTab, setActiveTab] = useState<TabKey>(
-    urlTab && ['overview', 'reviews', 'stats', 'portfolio'].includes(urlTab) ? urlTab : 'overview'
+    urlTab && ['overview', 'stats', 'portfolio'].includes(urlTab) ? urlTab : 'overview'
   )
 
   // Update URL when tab changes — wrap state update in startTransition
@@ -163,7 +162,7 @@ function TraderContent({ handle, serverData }: { handle: string; serverData: Tra
   // Sync with URL changes (allow all users to view stats/portfolio with blurred data)
   useEffect(() => {
     const tab = searchParams.get('tab') as TabKey | null
-    if (tab && ['overview', 'reviews', 'stats', 'portfolio'].includes(tab)) {
+    if (tab && ['overview', 'stats', 'portfolio'].includes(tab)) {
       setActiveTab(tab)
     } else if (!tab) {
       setActiveTab('overview')
@@ -334,10 +333,6 @@ function TraderContent({ handle, serverData }: { handle: string; serverData: Tra
                 {similarTraders.length > 0 && <SimilarTraders traders={similarTraders} />}
               </Box>
             </Box>
-          )}
-
-          {activeTab === 'reviews' && (
-            <TraderReviews traderId={profile.id} traderHandle={profile.handle} />
           )}
 
           {(() => {

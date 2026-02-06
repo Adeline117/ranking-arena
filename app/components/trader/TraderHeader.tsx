@@ -7,7 +7,6 @@ import { supabase } from '@/lib/supabase/client'
 import { Box, Text, Button } from '../base'
 import ClaimTraderButton from './ClaimTraderButton'
 import CopyTradeButton from './CopyTradeButton'
-import AddCompareButton from './AddCompareButton'
 import { getAvatarGradient, getAvatarInitial } from '@/lib/utils/avatar'
 import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
 import { ProBadgeOverlay } from '../ui/ProBadge'
@@ -637,19 +636,6 @@ export default function TraderHeader({
           <CopyTradeSection isPro={isPro} traderId={traderId} source={source} handle={handle} router={router} t={t} />
         )}
 
-        {/* Compare button - add trader to comparison */}
-        {!isOwnProfile && (
-          <AddCompareButton
-            trader={{
-              id: traderId,
-              handle: handle,
-              source: source || '',
-              avatarUrl: avatarUrl,
-            }}
-            variant="text"
-            size="md"
-          />
-        )}
 
         <ActionButton onClick={() => router.push('/')} variant="ghost">
           ← {t('back')}
