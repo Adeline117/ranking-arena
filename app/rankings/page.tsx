@@ -6,7 +6,7 @@
  * Pure DB read, fast rendering, stale indicators.
  */
 
-import { Suspense, useState, useRef, useEffect } from 'react'
+import { Suspense, useState, useRef, useEffect, useCallback } from 'react'
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
@@ -25,6 +25,34 @@ import { EXCHANGE_NAMES, SOURCE_TYPE_MAP } from '@/lib/constants/exchanges'
 import { getPlatformNote } from '@/lib/constants/platform-metrics'
 
 const WINDOWS: SnapshotWindow[] = ['7D', '30D', '90D']
+
+// LocalStorage key for filter preferences
+const FILTER_PREFS_KEY = 'arena_ranking_filters'
+
+interface FilterPrefs {
+  window?: SnapshotWindow
+  category?: CategoryPreset
+  platform?: string
+}
+
+function loadFilterPrefs(): FilterPrefs {
+  if (typeof window === 'undefined') return {}
+  try {
+    const stored = localStorage.getItem(FILTER_PREFS_KEY)
+    return stored ? JSON.parse(stored) : {}
+  } catch {
+    return {}
+  }
+}
+
+function saveFilterPrefs(prefs: FilterPrefs): void {
+  if (typeof window === 'undefined') return
+  try {
+    localStorage.setItem(FILTER_PREFS_KEY, JSON.stringify(prefs))
+  } catch {
+    // Ignore storage errors
+  }
+}
 
 // Category presets for quick filtering
 type CategoryPreset = 'all' | 'cex_futures' | 'cex_spot' | 'onchain_dex'
@@ -180,6 +208,27 @@ function RankingsContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const pathname = usePathname()
+  const [hasRestoredPrefs, setHasRestoredPrefs] = useState(false)
+
+  // Restore preferences from localStorage on first load if no URL params
+  useEffect(() => {
+    if (hasRestoredPrefs) return
+
+    const hasUrlParams = searchParams.has('window') || searchParams.has('category') || searchParams.has('platform')
+    if (!hasUrlParams) {
+      const prefs = loadFilterPrefs()
+      if (prefs.window || prefs.category || prefs.platform) {
+        const params = new URLSearchParams()
+        if (prefs.window && prefs.window !== '90D') params.set('window', prefs.window)
+        if (prefs.category && prefs.category !== 'all') params.set('category', prefs.category)
+        if (prefs.platform) params.set('platform', prefs.platform)
+        if (params.toString()) {
+          router.replace(`${pathname}?${params.toString()}`, { scroll: false })
+        }
+      }
+    }
+    setHasRestoredPrefs(true)
+  }, [hasRestoredPrefs, searchParams, router, pathname])
 
   const activeWindow = (searchParams.get('window') as SnapshotWindow) || '90D'
   const activePlatform = searchParams.get('platform') || undefined
@@ -189,6 +238,21 @@ function RankingsContent() {
     window: activeWindow,
     platform: activePlatform as Platform | undefined,
   })
+
+  // Save preferences to localStorage when they change
+  const saveCurrentPrefs = useCallback(() => {
+    saveFilterPrefs({
+      window: activeWindow,
+      category: activeCategory,
+      platform: activePlatform,
+    })
+  }, [activeWindow, activeCategory, activePlatform])
+
+  useEffect(() => {
+    if (hasRestoredPrefs) {
+      saveCurrentPrefs()
+    }
+  }, [hasRestoredPrefs, saveCurrentPrefs])
 
   const handleWindowChange = (w: SnapshotWindow) => {
     const params = new URLSearchParams(searchParams.toString())
