@@ -35,6 +35,7 @@ interface ServerProfile {
   handle: string
   bio?: string
   avatar_url?: string
+  cover_url?: string
   show_followers?: boolean
   show_following?: boolean
   followers: number
@@ -91,7 +92,7 @@ export default function UserProfileClient({ handle, serverProfile }: UserProfile
       // Check if profile exists by user ID
       const { data: existingProfile } = await supabase
         .from('user_profiles')
-        .select('id, handle, bio, avatar_url, show_followers, show_following, subscription_tier')
+        .select('id, handle, bio, avatar_url, cover_url, show_followers, show_following, subscription_tier')
         .eq('id', userId)
         .maybeSingle()
 
@@ -105,6 +106,7 @@ export default function UserProfileClient({ handle, serverProfile }: UserProfile
           handle: existingProfile.handle || handle,
           bio: existingProfile.bio || undefined,
           avatar_url: existingProfile.avatar_url || undefined,
+          cover_url: existingProfile.cover_url || undefined,
           followers: 0,
           following: 0,
           followingTraders: 0,
@@ -116,7 +118,7 @@ export default function UserProfileClient({ handle, serverProfile }: UserProfile
         const { data: newProfile, error: createError } = await supabase
           .from('user_profiles')
           .upsert({ id: userId, handle: defaultHandle }, { onConflict: 'id' })
-          .select('id, handle, bio, avatar_url')
+          .select('id, handle, bio, avatar_url, cover_url')
           .single()
 
         if (newProfile && !createError) {
@@ -129,6 +131,7 @@ export default function UserProfileClient({ handle, serverProfile }: UserProfile
             handle: newProfile.handle || handle,
             bio: newProfile.bio || undefined,
             avatar_url: newProfile.avatar_url || undefined,
+            cover_url: newProfile.cover_url || undefined,
             followers: 0,
             following: 0,
             followingTraders: 0,
@@ -213,28 +216,52 @@ export default function UserProfileClient({ handle, serverProfile }: UserProfile
             overflow: 'visible',
           }}
         >
-          {/* Decorative background elements */}
+          {/* Background: cover image or decorative gradient */}
           <Box style={{ position: 'absolute', inset: 0, overflow: 'hidden', borderRadius: tokens.radius.xl, pointerEvents: 'none' }}>
-            <Box
-              style={{
-                position: 'absolute',
-                top: -100,
-                left: -100,
-                width: 300,
-                height: 300,
-                background: `radial-gradient(circle, ${tokens.colors.accent.primary}08 0%, transparent 70%)`,
-              }}
-            />
-            <Box
-              style={{
-                position: 'absolute',
-                bottom: -80,
-                right: -80,
-                width: 200,
-                height: 200,
-                background: `radial-gradient(circle, ${tokens.colors.accent.brand}06 0%, transparent 70%)`,
-              }}
-            />
+            {profile.cover_url ? (
+              <>
+                <img
+                  src={profile.cover_url}
+                  alt=""
+                  style={{
+                    position: 'absolute',
+                    inset: 0,
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'cover',
+                  }}
+                />
+                {/* Dark overlay for text readability */}
+                <Box style={{
+                  position: 'absolute',
+                  inset: 0,
+                  background: 'linear-gradient(135deg, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0.3) 100%)',
+                }} />
+              </>
+            ) : (
+              <>
+                <Box
+                  style={{
+                    position: 'absolute',
+                    top: -100,
+                    left: -100,
+                    width: 300,
+                    height: 300,
+                    background: `radial-gradient(circle, ${tokens.colors.accent.primary}08 0%, transparent 70%)`,
+                  }}
+                />
+                <Box
+                  style={{
+                    position: 'absolute',
+                    bottom: -80,
+                    right: -80,
+                    width: 200,
+                    height: 200,
+                    background: `radial-gradient(circle, ${tokens.colors.accent.brand}06 0%, transparent 70%)`,
+                  }}
+                />
+              </>
+            )}
           </Box>
 
           {/* Profile Info */}
