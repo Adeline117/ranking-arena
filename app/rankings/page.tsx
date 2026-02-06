@@ -115,114 +115,6 @@ const PLATFORMS_BY_CATEGORY: Record<Exclude<CategoryPreset, 'all'>, string[]> = 
   ],
 }
 
-// Platform dropdown component
-function PlatformDropdown({ 
-  activePlatform, 
-  activeCategory,
-  onPlatformChange, 
-  isZh 
-}: { 
-  activePlatform: string | undefined
-  activeCategory: CategoryPreset
-  onPlatformChange: (p: string | undefined) => void
-  isZh: boolean 
-}) {
-  const [isOpen, setIsOpen] = useState(false)
-  const dropdownRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsOpen(false)
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [])
-
-  // Get platforms based on active category
-  const availablePlatforms = activeCategory === 'all' 
-    ? Object.values(PLATFORMS_BY_CATEGORY).flat()
-    : PLATFORMS_BY_CATEGORY[activeCategory] || []
-
-  const selectedLabel = activePlatform 
-    ? (EXCHANGE_NAMES[activePlatform] || activePlatform)
-    : (isZh ? '选择平台' : 'Select Platform')
-
-  return (
-    <div ref={dropdownRef} style={{ position: 'relative', display: 'inline-block' }}>
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 px-3 py-2 rounded-md text-xs font-medium transition-all"
-        style={{
-          backgroundColor: activePlatform ? tokens.colors.accent.brand + '20' : tokens.colors.bg.tertiary,
-          color: activePlatform ? tokens.colors.accent.brand : tokens.colors.text.secondary,
-          border: activePlatform ? `1px solid ${tokens.colors.accent.brand}50` : `1px solid ${tokens.colors.border.primary}`,
-        }}
-      >
-        <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <rect x="3" y="3" width="18" height="18" rx="2" />
-          <path d="M9 12h6M12 9v6" />
-        </svg>
-        {selectedLabel}
-        <svg 
-          width={10} height={10} 
-          viewBox="0 0 24 24" 
-          fill="none" 
-          stroke="currentColor" 
-          strokeWidth="2"
-          style={{ transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}
-        >
-          <path d="M6 9l6 6 6-6" />
-        </svg>
-      </button>
-
-      {isOpen && (
-        <div
-          style={{
-            position: 'absolute',
-            top: '100%',
-            left: 0,
-            marginTop: 4,
-            minWidth: 180,
-            maxHeight: 320,
-            overflowY: 'auto',
-            background: tokens.colors.bg.secondary,
-            border: `1px solid ${tokens.colors.border.primary}`,
-            borderRadius: 8,
-            boxShadow: tokens.shadow.lg,
-            zIndex: 100,
-          }}
-        >
-          <button
-            onClick={() => { onPlatformChange(undefined); setIsOpen(false) }}
-            className="w-full px-3 py-2 text-left text-xs font-medium transition-all"
-            style={{
-              color: !activePlatform ? tokens.colors.accent.brand : tokens.colors.text.primary,
-              background: !activePlatform ? `${tokens.colors.accent.brand}10` : 'transparent',
-            }}
-          >
-            {isZh ? '全部平台' : 'All Platforms'}
-          </button>
-          {availablePlatforms.map(p => (
-            <button
-              key={p}
-              onClick={() => { onPlatformChange(p); setIsOpen(false) }}
-              className="w-full px-3 py-2 text-left text-xs font-medium transition-all hover:bg-gray-100 dark:hover:bg-gray-800"
-              style={{
-                color: activePlatform === p ? tokens.colors.accent.brand : tokens.colors.text.primary,
-                background: activePlatform === p ? `${tokens.colors.accent.brand}10` : 'transparent',
-              }}
-            >
-              {EXCHANGE_NAMES[p] || p}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
 function RankingsContent() {
   const { language } = useLanguage()
   const isZh = language === 'zh'
@@ -290,16 +182,6 @@ function RankingsContent() {
     }
     // Clear platform when category changes
     params.delete('platform')
-    router.replace(`${pathname}?${params.toString()}`, { scroll: false })
-  }
-
-  const handlePlatformChange = (p: string | undefined) => {
-    const params = new URLSearchParams(searchParams.toString())
-    if (p) {
-      params.set('platform', p)
-    } else {
-      params.delete('platform')
-    }
     router.replace(`${pathname}?${params.toString()}`, { scroll: false })
   }
 
