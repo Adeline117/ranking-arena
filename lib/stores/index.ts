@@ -522,5 +522,98 @@ export const selectFilteredTraders = (state: RankingState) => {
 }
 
 // 检查是否关注了某个交易员
-export const selectIsFollowing = (traderId: string) => (state: UserState) => 
+export const selectIsFollowing = (traderId: string) => (state: UserState) =>
   state.followedTraders.includes(traderId)
+
+// ============================================
+// 交易员对比状态
+// ============================================
+
+const MAX_COMPARE_TRADERS = 5
+
+export interface CompareTrader {
+  id: string
+  handle: string
+  source: string
+  avatarUrl?: string
+}
+
+interface ComparisonState {
+  // 选中的交易员列表 (最多5个)
+  selectedTraders: CompareTrader[]
+
+  // UI 状态
+  isBarExpanded: boolean
+
+  // 操作
+  addTrader: (trader: CompareTrader) => boolean
+  removeTrader: (traderId: string) => void
+  clearAll: () => void
+  toggleBar: () => void
+  setBarExpanded: (expanded: boolean) => void
+
+  // 查询
+  isSelected: (traderId: string) => boolean
+  canAddMore: () => boolean
+  getCompareUrl: () => string
+}
+
+export const useComparisonStore = create<ComparisonState>()(
+  persist(
+    (set, get) => ({
+      selectedTraders: [],
+      isBarExpanded: true,
+
+      addTrader: (trader) => {
+        const state = get()
+        if (state.selectedTraders.length >= MAX_COMPARE_TRADERS) {
+          return false // 已达上限
+        }
+        if (state.selectedTraders.some(t => t.id === trader.id)) {
+          return false // 已选中
+        }
+        set({ selectedTraders: [...state.selectedTraders, trader] })
+        return true
+      },
+
+      removeTrader: (traderId) => {
+        set((state) => ({
+          selectedTraders: state.selectedTraders.filter(t => t.id !== traderId)
+        }))
+      },
+
+      clearAll: () => {
+        set({ selectedTraders: [] })
+      },
+
+      toggleBar: () => {
+        set((state) => ({ isBarExpanded: !state.isBarExpanded }))
+      },
+
+      setBarExpanded: (expanded) => {
+        set({ isBarExpanded: expanded })
+      },
+
+      isSelected: (traderId) => {
+        return get().selectedTraders.some(t => t.id === traderId)
+      },
+
+      canAddMore: () => {
+        return get().selectedTraders.length < MAX_COMPARE_TRADERS
+      },
+
+      getCompareUrl: () => {
+        const ids = get().selectedTraders.map(t => t.id).join(',')
+        return `/compare?ids=${encodeURIComponent(ids)}`
+      },
+    }),
+    {
+      name: 'ranking-arena-comparison',
+      storage: createJSONStorage(() => safeStorage),
+      partialize: (state) => ({
+        selectedTraders: state.selectedTraders,
+        isBarExpanded: state.isBarExpanded,
+      }),
+    }
+  )
+)
