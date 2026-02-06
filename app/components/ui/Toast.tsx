@@ -13,10 +13,27 @@ interface Toast {
   type: ToastType
   duration: number
   createdAt: number
+  txHash?: string
+  chainId?: number
+}
+
+// Block explorer URLs by chain ID
+const EXPLORER_URLS: Record<number, string> = {
+  1: 'https://etherscan.io/tx/',
+  8453: 'https://basescan.org/tx/',
+  42161: 'https://arbiscan.io/tx/',
+  10: 'https://optimistic.etherscan.io/tx/',
+  137: 'https://polygonscan.com/tx/',
+  56: 'https://bscscan.com/tx/',
+}
+
+function getTxExplorerUrl(txHash: string, chainId?: number): string {
+  const base = EXPLORER_URLS[chainId || 8453] || EXPLORER_URLS[8453]
+  return `${base}${txHash}`
 }
 
 interface ToastContextType {
-  showToast: (message: string | { message?: string; code?: string } | unknown, type?: ToastType, duration?: number) => void
+  showToast: (message: string | { message?: string; code?: string; txHash?: string; chainId?: number } | unknown, type?: ToastType, duration?: number) => void
   hideToast: (id: string) => void
 }
 
@@ -47,7 +64,7 @@ const getToastConfig = (type: ToastType) => {
         borderColor: `${tokens.colors.accent.error}50`,
         iconBg: tokens.gradient.error,
         textColor: tokens.colors.accent.error,
-        icon: '✕',
+        icon: 'X',
         progressColor: tokens.colors.accent.error,
       }
     case 'warning':
@@ -56,7 +73,7 @@ const getToastConfig = (type: ToastType) => {
         borderColor: `${tokens.colors.accent.warning}50`,
         iconBg: tokens.gradient.warning,
         textColor: tokens.colors.accent.warning,
-        icon: '⚠',
+        icon: '!',
         progressColor: tokens.colors.accent.warning,
       }
     case 'info':
@@ -66,7 +83,7 @@ const getToastConfig = (type: ToastType) => {
         borderColor: `${tokens.colors.accent.primary}50`,
         iconBg: tokens.gradient.primary,
         textColor: tokens.colors.accent.primary,
-        icon: 'ℹ',
+        icon: 'i',
         progressColor: tokens.colors.accent.primary,
       }
   }
@@ -158,15 +175,33 @@ function ToastItem({ toast, onClose }: { toast: Toast; onClose: () => void }) {
         </div>
         
         {/* Message */}
-        <span style={{ 
-          flex: 1, 
-          color: tokens.colors.text.primary,
-          fontSize: tokens.typography.fontSize.sm,
-          fontWeight: tokens.typography.fontWeight.semibold,
-          lineHeight: 1.4,
-        }}>
-          {toast.message}
-        </span>
+        <div style={{ flex: 1 }}>
+          <span style={{ 
+            color: tokens.colors.text.primary,
+            fontSize: tokens.typography.fontSize.sm,
+            fontWeight: tokens.typography.fontWeight.semibold,
+            lineHeight: 1.4,
+          }}>
+            {toast.message}
+          </span>
+          {toast.txHash && (
+            <a
+              href={getTxExplorerUrl(toast.txHash, toast.chainId)}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: 'block',
+                fontSize: '11px',
+                color: tokens.colors.accent.brand,
+                marginTop: 4,
+                textDecoration: 'none',
+                opacity: 0.85,
+              }}
+            >
+              Tx: {toast.txHash.slice(0, 6)}...{toast.txHash.slice(-4)} ↗
+            </a>
+          )}
+        </div>
         
         {/* Close Button */}
         <button
@@ -263,8 +298,17 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       finalMessage = String(message || t('unknownError'))
     }
 
+    // Extract txHash if present
+    let txHash: string | undefined
+    let chainId: number | undefined
+    if (message && typeof message === 'object') {
+      const msgObj = message as Record<string, unknown>
+      if (typeof msgObj.txHash === 'string') txHash = msgObj.txHash
+      if (typeof msgObj.chainId === 'number') chainId = msgObj.chainId
+    }
+
     const id = `toast-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-    const newToast: Toast = { id, message: finalMessage, type, duration, createdAt: Date.now() }
+    const newToast: Toast = { id, message: finalMessage, type, duration, createdAt: Date.now(), txHash, chainId }
 
     setToasts((prev) => [...prev.slice(-4), newToast]) // Keep max 5 toasts
 

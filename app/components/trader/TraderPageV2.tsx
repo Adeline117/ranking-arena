@@ -8,11 +8,14 @@
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useTraderDetailV2 } from '@/lib/hooks/useTraderDetailV2'
+import dynamic from 'next/dynamic'
 import TraderRefreshButton from './TraderRefreshButton'
 import DataStateWrapper from '@/app/components/ui/DataStateWrapper'
-import AdvancedMetricsCard from './AdvancedMetricsCard'
-import MarketCorrelationCard from './MarketCorrelationCard'
 import TradingStyleBadge from './TradingStyleBadge'
+
+// Lazy load heavy below-the-fold components
+const AdvancedMetricsCard = dynamic(() => import('./AdvancedMetricsCard'), { ssr: false })
+const MarketCorrelationCard = dynamic(() => import('./MarketCorrelationCard'), { ssr: false })
 import type { SnapshotWindow, SnapshotMetrics } from '@/lib/types/trading-platform'
 import type { TraderAdvancedMetrics, TraderMarketCorrelation, TradingStyle } from '@/lib/types/trader'
 

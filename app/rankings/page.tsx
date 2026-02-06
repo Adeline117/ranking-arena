@@ -6,7 +6,7 @@
  * Pure DB read, fast rendering, stale indicators.
  */
 
-import { Suspense, useState, useRef, useEffect, useCallback } from 'react'
+import { Suspense, useState, useRef, useEffect, useCallback, useMemo, useDeferredValue } from 'react'
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
@@ -20,9 +20,30 @@ import { RankingSkeleton } from '@/app/components/ui/Skeleton'
 import { Box } from '@/app/components/base'
 import { getAvatarGradient, getAvatarInitial } from '@/lib/utils/avatar'
 import { formatROI, formatPnL } from '@/app/components/ranking/utils'
+import { VirtualLeaderboard, type TraderRow as VirtualTraderRow } from '@/app/components/ranking/VirtualLeaderboard'
+import { MetricTooltip } from '@/app/components/ui/MetricTooltip'
 import type { SnapshotWindow, RankedTraderV2, Platform } from '@/lib/types/trading-platform'
 import { EXCHANGE_NAMES, SOURCE_TYPE_MAP } from '@/lib/constants/exchanges'
 import { getPlatformNote } from '@/lib/constants/platform-metrics'
+
+// Threshold for using virtual scrolling (for large datasets)
+const VIRTUAL_SCROLL_THRESHOLD = 50
+
+// Convert RankedTraderV2 to VirtualLeaderboard's TraderRow format
+function toVirtualRow(trader: RankedTraderV2, rank: number): VirtualTraderRow {
+  return {
+    id: `${trader.platform}:${trader.trader_key}`,
+    rank,
+    name: trader.display_name || trader.trader_key.slice(0, 8),
+    avatar: trader.avatar_url || undefined,
+    roi: trader.metrics.roi,
+    pnl: trader.metrics.pnl,
+    winRate: trader.metrics.win_rate ?? undefined,
+    drawdown: trader.metrics.max_drawdown ?? undefined,
+    followers: trader.metrics.followers ?? undefined,
+    source: EXCHANGE_NAMES[trader.platform] || trader.platform,
+  }
+}
 
 const WINDOWS: SnapshotWindow[] = ['7D', '30D', '90D']
 
@@ -283,17 +304,25 @@ function RankingsContent() {
   }
 
   // Filter data by category if no specific platform selected
+  const filteredTraders = useMemo(() => {
+    if (!data) return []
+    if (activeCategory === 'all' || activePlatform) return data.traders
+    return data.traders.filter(t => {
+      const sourceType = SOURCE_TYPE_MAP[t.platform]
+      if (activeCategory === 'cex_futures') return sourceType === 'futures'
+      if (activeCategory === 'cex_spot') return sourceType === 'spot'
+      if (activeCategory === 'onchain_dex') return sourceType === 'web3'
+      return true
+    })
+  }, [data, activeCategory, activePlatform])
+  
+  // Defer expensive list rendering to keep UI responsive during filter changes
+  const deferredTraders = useDeferredValue(filteredTraders)
+  const isFiltering = deferredTraders !== filteredTraders
+  
   const filteredData = data ? {
     ...data,
-    traders: activeCategory !== 'all' && !activePlatform
-      ? data.traders.filter(t => {
-          const sourceType = SOURCE_TYPE_MAP[t.platform]
-          if (activeCategory === 'cex_futures') return sourceType === 'futures'
-          if (activeCategory === 'cex_spot') return sourceType === 'spot'
-          if (activeCategory === 'onchain_dex') return sourceType === 'web3'
-          return true
-        })
-      : data.traders,
+    traders: deferredTraders,
   } : null
 
   return (
@@ -375,38 +404,128 @@ function RankingsContent() {
           loadingComponent={<RankingSkeleton />}
         >
           {filteredData && filteredData.traders.length > 0 && (
-            <div className="rounded-xl overflow-x-auto" style={{ backgroundColor: tokens.colors.bg.secondary }}>
-              <div>
-                <div
-                  className="grid ranking-table-grid gap-2 px-4 py-3 text-xs font-medium border-b"
-                  style={{ color: tokens.colors.text.secondary, borderColor: tokens.colors.border.primary }}
-                >
-                  <div>#</div>
-                  <div>{isZh ? '交易员' : 'Trader'}</div>
-                  <div className="text-right">ROI</div>
-                  <div className="text-right col-pnl">PnL</div>
-                  <div className="text-right col-winrate">{isZh ? '胜率' : 'Win%'}</div>
-                  <div className="text-right col-mdd">{isZh ? '回撤' : 'MDD'}</div>
-                  <div className="text-right col-score">Score</div>
-                </div>
-
-                {filteredData.traders.map((trader, index) => (
-                  <TraderRow key={`${trader.platform}:${trader.trader_key}`} trader={{ ...trader, rank: index + 1 }} />
-                ))}
-
-                <div
-                  className="px-4 py-3 text-xs text-center border-t"
-                  style={{ color: tokens.colors.text.tertiary, borderColor: tokens.colors.border.primary }}
-                >
-                  {isZh ? `共 ${filteredData.traders.length} 名交易员` : `${filteredData.traders.length} traders total`}
-                </div>
-              </div>
+            <div style={{ position: 'relative' }}>
+              {isFiltering && (
+                <div 
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    height: 2,
+                    background: `linear-gradient(90deg, transparent, ${tokens.colors.accent.brand}, transparent)`,
+                    animation: 'shimmer 1s ease-in-out infinite',
+                    zIndex: 10,
+                  }}
+                />
+              )}
+              <TraderList 
+                traders={filteredData.traders} 
+                isZh={isZh} 
+                isLoading={isLoading || isFiltering}
+              />
             </div>
           )}
         </DataStateWrapper>
       </div>
       <MobileBottomNav />
     </Box>
+  )
+}
+
+/**
+ * TraderList - Renders trader list with automatic virtual scrolling
+ * Uses VirtualLeaderboard when there are many traders for performance
+ */
+function TraderList({ 
+  traders, 
+  isZh, 
+  isLoading 
+}: { 
+  traders: RankedTraderV2[]
+  isZh: boolean
+  isLoading: boolean
+}) {
+  const router = useRouter()
+  
+  // Convert traders to virtual row format
+  const virtualRows = useMemo(() => 
+    traders.map((t, i) => toVirtualRow(t, i + 1)),
+    [traders]
+  )
+  
+  const handleRowClick = useCallback((row: VirtualTraderRow) => {
+    const [platform, traderKey] = row.id.split(':')
+    router.push(`/trader/${encodeURIComponent(traderKey)}?platform=${platform}`)
+  }, [router])
+  
+  // Use virtual scrolling for large datasets
+  const useVirtual = traders.length > VIRTUAL_SCROLL_THRESHOLD
+  
+  if (useVirtual) {
+    return (
+      <div 
+        className="rounded-xl overflow-hidden" 
+        style={{ 
+          backgroundColor: tokens.colors.bg.secondary,
+          height: 'calc(100vh - 280px)',
+          minHeight: 400,
+        }}
+      >
+        <VirtualLeaderboard
+          data={virtualRows}
+          onRowClick={handleRowClick}
+          isLoading={isLoading}
+        />
+        <div
+          className="px-4 py-3 text-xs text-center border-t"
+          style={{ color: tokens.colors.text.tertiary, borderColor: tokens.colors.border.primary }}
+        >
+          {isZh ? `共 ${traders.length} 名交易员 (虚拟滚动)` : `${traders.length} traders (virtual scroll)`}
+        </div>
+      </div>
+    )
+  }
+  
+  // Regular rendering for small datasets
+  return (
+    <div className="rounded-xl overflow-x-auto" style={{ backgroundColor: tokens.colors.bg.secondary }}>
+      <div>
+        <div
+          className="grid ranking-table-grid gap-2 px-4 py-3 text-xs font-medium border-b"
+          style={{ color: tokens.colors.text.secondary, borderColor: tokens.colors.border.primary }}
+        >
+          <div>#</div>
+          <div>{isZh ? '交易员' : 'Trader'}</div>
+          <div className="text-right flex items-center justify-end gap-1">
+            ROI <MetricTooltip metric="roi" language={isZh ? 'zh' : 'en'} />
+          </div>
+          <div className="text-right col-pnl flex items-center justify-end gap-1">
+            PnL <MetricTooltip metric="pnl" language={isZh ? 'zh' : 'en'} />
+          </div>
+          <div className="text-right col-winrate flex items-center justify-end gap-1">
+            {isZh ? '胜率' : 'Win%'} <MetricTooltip metric="winRate" language={isZh ? 'zh' : 'en'} />
+          </div>
+          <div className="text-right col-mdd flex items-center justify-end gap-1">
+            {isZh ? '回撤' : 'MDD'} <MetricTooltip metric="maxDrawdown" language={isZh ? 'zh' : 'en'} />
+          </div>
+          <div className="text-right col-score flex items-center justify-end gap-1">
+            Score <MetricTooltip metric="arenaScore" language={isZh ? 'zh' : 'en'} />
+          </div>
+        </div>
+
+        {traders.map((trader, index) => (
+          <TraderRow key={`${trader.platform}:${trader.trader_key}`} trader={{ ...trader, rank: index + 1 }} />
+        ))}
+
+        <div
+          className="px-4 py-3 text-xs text-center border-t"
+          style={{ color: tokens.colors.text.tertiary, borderColor: tokens.colors.border.primary }}
+        >
+          {isZh ? `共 ${traders.length} 名交易员` : `${traders.length} traders total`}
+        </div>
+      </div>
+    </div>
   )
 }
 
