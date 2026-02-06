@@ -49,7 +49,12 @@ export default function ReportModal({
   const { showToast } = useToast()
   const [reason, setReason] = useState<ReportReason | null>(null)
   const [description, setDescription] = useState('')
+  const [images, setImages] = useState<string[]>([])
+  const [uploading, setUploading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+
+  const MIN_DESC_LENGTH = 15
+  const MAX_IMAGES = 4
 
   const contentTypeLabel = t(CONTENT_TYPE_KEYS[contentType] as keyof typeof import('@/lib/i18n/en').default)
 
@@ -59,8 +64,13 @@ export default function ReportModal({
       return
     }
 
-    if (reason === 'other' && !description.trim()) {
-      showToast(t('describeOtherReason'), 'warning')
+    if (!description.trim() || description.trim().length < MIN_DESC_LENGTH) {
+      showToast(t('reportMinDescription') || `举报理由至少${MIN_DESC_LENGTH}个字符`, 'warning')
+      return
+    }
+
+    if (images.length === 0) {
+      showToast(t('reportNeedImage') || '请至少上传一张截图作为证据', 'warning')
       return
     }
 
@@ -78,6 +88,7 @@ export default function ReportModal({
           content_id: contentId,
           reason,
           description: description.trim() || null,
+          images,
         }),
       })
 
@@ -93,6 +104,7 @@ export default function ReportModal({
       // Reset form
       setReason(null)
       setDescription('')
+      setImages([])
     } catch (error) {
       console.error('Report error:', error)
       showToast(t('networkError'), 'error')
@@ -255,8 +267,7 @@ export default function ReportModal({
             {/* Description */}
             <Box style={{ marginBottom: tokens.spacing[4] }}>
               <Text size="sm" weight="semibold" style={{ marginBottom: tokens.spacing[2] }}>
-                {t('reportDetailsLabel')}
-                {reason === 'other' && <span style={{ color: '#f44336' }}> *</span>}
+                {t('reportDetailsLabel')} <span style={{ color: '#f44336' }}>*</span>
               </Text>
               <textarea
                 value={description}
@@ -284,9 +295,85 @@ export default function ReportModal({
                   e.target.style.borderColor = tokens.colors.border.primary
                 }}
               />
-              <Text size="xs" color="tertiary" style={{ marginTop: 4, textAlign: 'right' }}>
-                {description.length}/1000
+              <Text size="xs" style={{ marginTop: 4, textAlign: 'right', color: description.trim().length < MIN_DESC_LENGTH ? '#f44336' : tokens.colors.text.tertiary }}>
+                {description.trim().length}/{MIN_DESC_LENGTH} {t('reportMinChars') || '字符最少'} · {description.length}/1000
               </Text>
+            </Box>
+
+            {/* Image Upload */}
+            <Box style={{ marginBottom: tokens.spacing[4] }}>
+              <Text size="sm" weight="semibold" style={{ marginBottom: tokens.spacing[2] }}>
+                {t('reportScreenshot') || '截图证据'} <span style={{ color: '#f44336' }}>*</span>
+                <span style={{ fontWeight: 400, color: tokens.colors.text.tertiary, marginLeft: 4, fontSize: 12 }}>
+                  ({images.length}/{MAX_IMAGES})
+                </span>
+              </Text>
+
+              <Box style={{ display: 'flex', gap: tokens.spacing[2], flexWrap: 'wrap' }}>
+                {images.map((img, i) => (
+                  <Box key={i} style={{ position: 'relative', width: 72, height: 72, borderRadius: tokens.radius.md, overflow: 'hidden', border: `1px solid ${tokens.colors.border.primary}` }}>
+                    <img src={img} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    <button
+                      onClick={() => setImages(prev => prev.filter((_, j) => j !== i))}
+                      style={{
+                        position: 'absolute', top: 2, right: 2, width: 20, height: 20,
+                        borderRadius: '50%', background: 'rgba(0,0,0,0.7)', border: 'none',
+                        color: '#fff', fontSize: 12, cursor: 'pointer', display: 'flex',
+                        alignItems: 'center', justifyContent: 'center',
+                      }}
+                    >✕</button>
+                  </Box>
+                ))}
+
+                {images.length < MAX_IMAGES && (
+                  <label style={{
+                    width: 72, height: 72, borderRadius: tokens.radius.md,
+                    border: `2px dashed ${tokens.colors.border.secondary}`,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    cursor: uploading ? 'wait' : 'pointer', opacity: uploading ? 0.5 : 1,
+                    flexDirection: 'column', gap: 2,
+                  }}>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={tokens.colors.text.tertiary} strokeWidth="2">
+                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                      <circle cx="8.5" cy="8.5" r="1.5"/>
+                      <polyline points="21 15 16 10 5 21"/>
+                    </svg>
+                    <span style={{ fontSize: 10, color: tokens.colors.text.tertiary }}>{uploading ? '...' : t('upload') || '上传'}</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      style={{ display: 'none' }}
+                      disabled={uploading}
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0]
+                        if (!file) return
+                        if (file.size > 5 * 1024 * 1024) {
+                          showToast(t('fileTooLarge') || '图片不超过5MB', 'warning')
+                          return
+                        }
+                        setUploading(true)
+                        try {
+                          // Convert to base64 data URL for simplicity
+                          const reader = new FileReader()
+                          reader.onload = () => {
+                            setImages(prev => [...prev, reader.result as string])
+                            setUploading(false)
+                          }
+                          reader.onerror = () => {
+                            showToast(t('uploadFailed') || '上传失败', 'error')
+                            setUploading(false)
+                          }
+                          reader.readAsDataURL(file)
+                        } catch {
+                          showToast(t('uploadFailed') || '上传失败', 'error')
+                          setUploading(false)
+                        }
+                        e.target.value = ''
+                      }}
+                    />
+                  </label>
+                )}
+              </Box>
             </Box>
 
             {/* Notice */}
@@ -324,17 +411,17 @@ export default function ReportModal({
               </button>
               <button
                 onClick={handleSubmit}
-                disabled={submitting || !reason}
+                disabled={submitting || !reason || description.trim().length < MIN_DESC_LENGTH || images.length === 0}
                 style={{
                   flex: 1,
                   padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
-                  background: reason ? '#f44336' : tokens.colors.bg.tertiary,
+                  background: reason && description.trim().length >= MIN_DESC_LENGTH && images.length > 0 ? '#f44336' : tokens.colors.bg.tertiary,
                   border: 'none',
                   borderRadius: tokens.radius.md,
-                  color: reason ? '#fff' : tokens.colors.text.tertiary,
+                  color: reason && description.trim().length >= MIN_DESC_LENGTH && images.length > 0 ? '#fff' : tokens.colors.text.tertiary,
                   fontSize: tokens.typography.fontSize.sm,
                   fontWeight: 600,
-                  cursor: submitting || !reason ? 'not-allowed' : 'pointer',
+                  cursor: submitting || !reason || description.trim().length < MIN_DESC_LENGTH || images.length === 0 ? 'not-allowed' : 'pointer',
                   opacity: submitting ? 0.6 : 1,
                   transition: 'all 0.2s',
                 }}

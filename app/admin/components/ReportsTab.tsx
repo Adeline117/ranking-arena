@@ -183,6 +183,31 @@ export default function ReportsTab({ accessToken }: ReportsTabProps) {
                   </Box>
                 )}
 
+                {/* Evidence Images */}
+                {report.images && report.images.length > 0 && (
+                  <Box style={{ marginBottom: tokens.spacing[3] }}>
+                    <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[1] }}>
+                      {t('adminReportEvidence') || '截图证据'} ({report.images.length})
+                    </Text>
+                    <Box style={{ display: 'flex', gap: tokens.spacing[2], flexWrap: 'wrap' }}>
+                      {report.images.map((img: string, i: number) => (
+                        <a key={i} href={img} target="_blank" rel="noopener noreferrer" style={{ display: 'block' }}>
+                          <img
+                            src={img}
+                            alt={`Evidence ${i + 1}`}
+                            style={{
+                              width: 120, height: 90, objectFit: 'cover',
+                              borderRadius: tokens.radius.md,
+                              border: `1px solid ${tokens.colors.border.primary}`,
+                              cursor: 'pointer',
+                            }}
+                          />
+                        </a>
+                      ))}
+                    </Box>
+                  </Box>
+                )}
+
                 {/* Actions */}
                 {report.status === 'pending' && (
                   <Box style={{ display: 'flex', gap: tokens.spacing[2] }}>
