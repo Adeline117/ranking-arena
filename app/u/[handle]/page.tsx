@@ -10,6 +10,7 @@ interface UserProfileData {
   handle: string
   bio?: string
   avatar_url?: string
+  cover_url?: string
   show_followers?: boolean
   show_following?: boolean
   followers: number
@@ -26,7 +27,7 @@ async function fetchUserProfile(handle: string): Promise<UserProfileData | null>
   // Parallel lookup: by handle + by UUID (if applicable)
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
   // Only select columns that actually exist in user_profiles table
-  const selectFields = 'id, handle, bio, avatar_url, show_followers, show_following, subscription_tier'
+  const selectFields = 'id, handle, bio, avatar_url, cover_url, show_followers, show_following, subscription_tier'
 
   const [handleResult, uuidResult] = await Promise.all([
     supabase.from('user_profiles').select(selectFields).eq('handle', decodedHandle).maybeSingle(),
@@ -65,6 +66,7 @@ async function fetchUserProfile(handle: string): Promise<UserProfileData | null>
     handle: userProfile.handle || decodedHandle,
     bio: userProfile.bio || undefined,
     avatar_url: userProfile.avatar_url || undefined,
+    cover_url: userProfile.cover_url || undefined,
     show_followers: userProfile.show_followers,
     show_following: userProfile.show_following,
     followers,
