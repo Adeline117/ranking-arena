@@ -22,8 +22,8 @@ import {
   sleep,
   parseNum,
   normalizeWinRate,
-} from './shared'
-import { fetchBybitEquityCurve, fetchBybitStatsDetail, upsertEquityCurve, upsertStatsDetail, enhanceStatsWithDerivedMetrics, type EquityCurvePoint } from './enrichment'
+} from './shared.js'
+import { fetchBybitEquityCurve, fetchBybitStatsDetail, upsertEquityCurve, upsertStatsDetail, enhanceStatsWithDerivedMetrics, type EquityCurvePoint } from './enrichment.js'
 
 const SOURCE = 'bybit'
 const DIRECT_API_URL =

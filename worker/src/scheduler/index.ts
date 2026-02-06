@@ -16,8 +16,8 @@ import type {
   SchedulerConfig,
   SchedulerState,
   PlatformConfig,
-} from '../types'
-import { ProxyPoolManager, proxyPool } from '../proxy-pool'
+} from '../types.js'
+import { ProxyPoolManager, proxyPool } from '../proxy-pool/index.js'
 
 const DEFAULT_CONFIG: SchedulerConfig = {
   maxConcurrency: 4,

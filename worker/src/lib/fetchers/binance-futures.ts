@@ -20,7 +20,7 @@ import {
   sleep,
   parseNum,
   normalizeWinRate,
-} from './shared'
+} from './shared.js'
 import {
   fetchBinanceEquityCurve,
   fetchBinancePositionHistory,
@@ -32,7 +32,7 @@ import {
   calculateAssetBreakdown,
   enhanceStatsWithDerivedMetrics,
   type EquityCurvePoint,
-} from './enrichment'
+} from './enrichment.js'
 
 const SOURCE = 'binance_futures'
 const API_URL =

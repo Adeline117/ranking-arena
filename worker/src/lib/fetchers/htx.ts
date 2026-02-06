@@ -11,8 +11,8 @@ import {
   upsertTraders,
   fetchJson,
   sleep,
-} from './shared'
-import { type StatsDetail, upsertStatsDetail } from './enrichment'
+} from './shared.js'
+import { type StatsDetail, upsertStatsDetail } from './enrichment.js'
 
 const SOURCE = 'htx_futures'
 const API_URL = 'https://futures.htx.com/-/x/hbg/v1/futures/copytrading/rank'
