@@ -60,7 +60,6 @@ export default function MessageButton({
             showToast(t('msgLimitWarning').replace('{remaining}', String(remaining)), 'info')
           }
         }
-        router.push(`/messages/${data.conversation_id}`)
       },
       onError: (error) => {
         if (error.message === '该用户已关闭私信功能' || error.message === 'User has disabled direct messages') {
@@ -74,7 +73,7 @@ export default function MessageButton({
     }
   )
 
-  const handleClick = () => {
+  const handleClick = async () => {
     if (!currentUserId) {
       showToast(t('pleaseLogin'), 'warning')
       router.push('/login')
@@ -86,7 +85,10 @@ export default function MessageButton({
       return
     }
 
-    mutate()
+    const data = await mutate()
+    if (data?.conversation_id) {
+      router.push(`/messages/${data.conversation_id}`)
+    }
   }
 
   const sizeStyles = {

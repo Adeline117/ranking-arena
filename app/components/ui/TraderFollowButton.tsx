@@ -76,6 +76,27 @@ export default function TraderFollowButton({ traderId, userId, initialFollowing 
   // Loading state for follow action
   const [isLoading, setIsLoading] = useState(false)
 
+  // 刷新关注状态（从服务器获取真实状态）
+  const refreshFollowState = useCallback(async () => {
+    if (!userId) return
+
+    try {
+      const authHeaders = await getAuthHeadersAsync()
+      const response = await fetch(`/api/follow?traderId=${traderId}`, {
+        headers: authHeaders,
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        const actualFollowing = data.following || data.data?.following
+        setFollowing(actualFollowing)
+        onFollowChange?.(actualFollowing)
+      }
+    } catch (error) {
+      console.warn('[TraderFollowButton] Failed to refresh follow state:', error)
+    }
+  }, [userId, traderId, getAuthHeadersAsync, onFollowChange])
+
   // 执行关注/取消关注操作
   const executeFollow = useCallback(async (action: 'follow' | 'unfollow') => {
     setIsLoading(true)
@@ -204,11 +225,9 @@ export default function TraderFollowButton({ traderId, userId, initialFollowing 
     timeoutRef.current = setTimeout(() => {
       if (pendingRef.current) {
         pendingRef.current = false
-        // 回滚乐观更新
-        if (expectedStateRef.current !== null) {
-          setFollowing(!expectedStateRef.current)
-          expectedStateRef.current = null
-        }
+        expectedStateRef.current = null
+        // 获取服务器的真实状态而不是简单回滚
+        refreshFollowState()
         showToast(t('timeoutRetry'), 'warning')
       }
     }, 5000)
@@ -217,7 +236,7 @@ export default function TraderFollowButton({ traderId, userId, initialFollowing 
     setFollowing(newState)
 
     executeFollow(newState ? 'follow' : 'unfollow')
-  }, [userId, following, isLoading, executeFollow, showToast])
+  }, [userId, following, isLoading, executeFollow, showToast, refreshFollowState, t])
 
   // 功能未开放时显示禁用状态
   if (featureDisabled) {
