@@ -26,6 +26,7 @@ import {
   MAX_BIO_LENGTH,
   MAX_HANDLE_LENGTH,
 } from './validation'
+import { isHapticSupported, haptic } from '@/lib/utils/haptics'
 
 // Section IDs for navigation
 type SectionId = 'profile' | 'security' | 'wallet' | 'exchanges' | 'alerts' | 'notifications' | 'privacy' | 'account'
@@ -641,7 +642,7 @@ function SettingsContent() {
   const searchParams = useSearchParams()
   const { showToast } = useToast()
   const { showConfirm } = useDialog()
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
   const [email, setEmail] = useState<string | null>(null)
   const [userId, setUserId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -700,6 +701,7 @@ function SettingsContent() {
   const [notifyComment, setNotifyComment] = useState(true)
   const [notifyMention, setNotifyMention] = useState(true)
   const [notifyMessage, setNotifyMessage] = useState(true)
+  const [hapticEnabled, setHapticEnabled] = useState(true) // 震动反馈
   const [savingNotifications, setSavingNotifications] = useState(false)
 
   // Privacy settings
@@ -2613,6 +2615,44 @@ function SettingsContent() {
                 </Box>
               ))}
             </Box>
+
+            {/* ===== Haptic Feedback Section ===== */}
+            {isHapticSupported() && (
+              <Box style={{ marginTop: tokens.spacing[5], paddingTop: tokens.spacing[5], borderTop: `1px solid ${tokens.colors.border.primary}` }}>
+                <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>
+                  {language === 'zh' ? '震动反馈' : 'Haptic Feedback'}
+                </Text>
+                <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[3] }}>
+                  {language === 'zh' 
+                    ? '当关注的交易员开仓时，手机会有特定节奏的震动' 
+                    : 'Feel vibrations when followed traders open positions'}
+                </Text>
+                <Box
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: `${tokens.spacing[3]} ${tokens.spacing[3]}`,
+                    borderRadius: tokens.radius.md,
+                    background: tokens.colors.bg.primary,
+                  }}
+                >
+                  <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
+                    <span style={{ fontSize: 20 }}>📳</span>
+                    <Text size="sm" weight="medium">
+                      {language === 'zh' ? '交易提醒震动' : 'Trade Alert Vibration'}
+                    </Text>
+                  </Box>
+                  <ToggleSwitch
+                    checked={hapticEnabled}
+                    onChange={(v) => {
+                      setHapticEnabled(v)
+                      if (v) haptic('success') // 测试震动
+                    }}
+                  />
+                </Box>
+              </Box>
+            )}
 
             {/* ===== Email Digest Section ===== */}
             <Box style={{ marginTop: tokens.spacing[5], paddingTop: tokens.spacing[5], borderTop: `1px solid ${tokens.colors.border.primary}` }}>
