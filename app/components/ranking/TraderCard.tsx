@@ -16,6 +16,7 @@ import {
   areTraderPropsEqual,
   getScoreStyle,
 } from './shared/trader-display'
+import AddCompareButton from '../trader/AddCompareButton'
 
 export interface TraderCardProps {
   trader: Trader
@@ -136,6 +137,20 @@ export const TraderCard = memo(function TraderCard({
             label="MDD"
             value={trader.max_drawdown ? `-${Math.abs(trader.max_drawdown).toFixed(0)}%` : 'N/A'}
             color={trader.max_drawdown ? TRADER_ACCENT_ERROR : undefined}
+          />
+        </Box>
+
+        {/* Compare button */}
+        <Box style={{ display: 'flex', justifyContent: 'flex-end', marginTop: tokens.spacing[2] }}>
+          <AddCompareButton
+            trader={{
+              id: trader.id,
+              handle: trader.handle || trader.id,
+              source: trader.source || source || '',
+              avatarUrl: trader.avatar_url || undefined,
+            }}
+            variant="compact"
+            size="sm"
           />
         </Box>
       </Box>
