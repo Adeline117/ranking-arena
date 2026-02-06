@@ -161,13 +161,13 @@ export default function DataFreshnessIndicator() {
               {/* Summary */}
               <div className="flex gap-3 mt-2">
                 <span className="text-xs" style={{ color: STATUS_COLORS.healthy }}>
-                  ✓ {data.summary.healthy}
+                  OK: {data.summary.healthy}
                 </span>
                 <span className="text-xs" style={{ color: STATUS_COLORS.warning }}>
-                  ⚠ {data.summary.warning}
+                  WARN: {data.summary.warning}
                 </span>
                 <span className="text-xs" style={{ color: STATUS_COLORS.critical }}>
-                  ✕ {data.summary.critical}
+                  ERR: {data.summary.critical}
                 </span>
               </div>
             </div>

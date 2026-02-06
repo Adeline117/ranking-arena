@@ -4,6 +4,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { logger } from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
 
@@ -12,7 +13,7 @@ const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { handle: string } | Promise<{ handle: string }> }
+  { params }: { params: Promise<{ handle: string }> }
 ) {
   try {
     const resolvedParams = await Promise.resolve(params)
@@ -73,7 +74,7 @@ export async function GET(
       if (followingError.message?.includes('Could not find')) {
         return NextResponse.json({ following: [], count: 0 })
       }
-      console.error('[Following API] 查询错误:', followingError)
+      logger.dbError('Fetch following', followingError, { handle, targetUserId: targetUser.id })
       return NextResponse.json({ error: followingError.message }, { status: 500 })
     }
 
@@ -111,7 +112,7 @@ export async function GET(
       count: formattedFollowing.length
     })
   } catch (error: unknown) {
-    console.error('[Following API] 错误:', error)
+    logger.apiError('/api/users/[handle]/following', error, { handle: (await params).handle })
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

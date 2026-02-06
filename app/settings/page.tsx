@@ -1,6 +1,7 @@
 'use client'
 
 import React, { Suspense, useEffect, useState, useCallback, useRef } from 'react'
+import Image from 'next/image'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
@@ -1179,11 +1180,27 @@ function SettingsContent() {
       setAvatarFile(null)
       setCoverFile(null)
 
+      // Revalidate profile page cache
+      try {
+        const { data: { session } } = await supabase.auth.getSession()
+        if (session?.access_token) {
+          await fetch('/api/revalidate/profile', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${session.access_token}` },
+          })
+        }
+      } catch (revalidateError) {
+        console.warn('[Settings] Failed to revalidate profile cache:', revalidateError)
+      }
+
       if (uploadFailed) {
         showToast(t('settingsPartialSaved'), 'warning')
       } else {
         showToast(t('settingsSaved'), 'success')
       }
+
+      // Refresh the page to reflect changes immediately
+      router.refresh()
     } catch (error) {
       uiLogger.error('Error saving:', error)
       showToast(t('saveFailedRetry'), 'error')
@@ -2032,6 +2049,25 @@ function SettingsContent() {
               <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>
                 {t('username')}
               </Text>
+              {/* Show current username */}
+              {initialValuesRef.current?.handle && (
+                <Box
+                  style={{
+                    marginBottom: tokens.spacing[2],
+                    padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+                    borderRadius: tokens.radius.md,
+                    background: tokens.colors.bg.primary,
+                    border: `1px solid ${tokens.colors.border.primary}`,
+                  }}
+                >
+                  <Text size="xs" color="tertiary" style={{ marginBottom: 2 }}>
+                    {t('currentUsername') || 'Current username'}
+                  </Text>
+                  <Text size="sm" weight="bold">
+                    @{initialValuesRef.current.handle}
+                  </Text>
+                </Box>
+              )}
               <input
                 type="text"
                 value={handle}
@@ -2320,9 +2356,11 @@ function SettingsContent() {
                     {t('scanQRCodeDesc')}
                   </Text>
                   <Box style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: tokens.spacing[3] }}>
-                    <img
+                    <Image
                       src={twoFASetupData.qrCodeDataUrl}
                       alt="2FA QR Code"
+                      width={180}
+                      height={180}
                       style={{
                         width: 180,
                         height: 180,
@@ -2331,6 +2369,7 @@ function SettingsContent() {
                         background: '#fff',
                         padding: tokens.spacing[2],
                       }}
+                      unoptimized
                     />
                     <Box style={{
                       padding: tokens.spacing[3],

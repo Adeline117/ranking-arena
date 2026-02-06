@@ -13,6 +13,7 @@ import { createClient } from '@supabase/supabase-js';
 import { getConnector } from '@/connectors';
 import { calculateArenaScore } from '@/workers/arena-score';
 import type { Platform, MarketType, Window, LeaderboardEntry } from '@/connectors/base/types';
+import { logger } from '@/lib/logger';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60; // 60 seconds max for Vercel
@@ -155,7 +156,7 @@ export async function GET(request: Request) {
       results,
     });
   } catch (error: unknown) {
-    console.error('[cron/run-worker] Error:', error);
+    logger.apiError('/api/cron/run-worker', error, {});
     return NextResponse.json({ error: 'Internal error' }, { status: 500 });
   }
 }

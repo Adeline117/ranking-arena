@@ -1,0 +1,103 @@
+// Arena Ranking Protocol Buffer Schema
+// 用于 WebSocket 二进制数据传输，比 JSON 减少 60% 体积
+
+syntax = "proto3";
+
+package arena;
+
+// 交易员更新消息
+message TraderUpdate {
+  string trader_id = 1;
+  string source = 2;
+  int64 timestamp = 3;
+  
+  // 使用 sint32 减少负数占用空间 (收益可能为负)
+  sint32 roi_bps = 4;          // ROI in basis points (1 bps = 0.01%)
+  sint64 pnl_cents = 5;        // PnL in cents
+  uint32 win_rate_bps = 6;     // Win rate in basis points
+  uint32 drawdown_bps = 7;     // Max drawdown in basis points
+  uint32 rank = 8;
+  uint32 followers = 9;
+  
+  // 可选字段
+  string name = 10;
+  string avatar_url = 11;
+}
+
+// 批量更新消息
+message BatchUpdate {
+  enum UpdateType {
+    FULL = 0;       // 全量更新
+    DELTA = 1;      // 增量更新
+  }
+  
+  UpdateType type = 1;
+  int64 timestamp = 2;
+  repeated TraderUpdate updates = 3;
+  repeated string removed_ids = 4;
+  
+  // 统计信息
+  uint32 total_traders = 5;
+  uint32 update_count = 6;
+}
+
+// 订阅请求
+message SubscribeRequest {
+  repeated string sources = 1;      // 订阅的交易所
+  string period = 2;                // 时间周期: 7D, 30D, 90D
+  uint32 top_n = 3;                 // 只订阅 top N
+  bool delta_only = 4;              // 是否只接收增量
+}
+
+// 订阅响应
+message SubscribeResponse {
+  bool success = 1;
+  string message = 2;
+  repeated string subscribed_sources = 3;
+}
+
+// 连接状态
+message ConnectionStatus {
+  string source = 1;
+  
+  enum Status {
+    CONNECTED = 0;
+    RECONNECTING = 1;
+    DEGRADED = 2;
+    MAINTENANCE = 3;
+    DISCONNECTED = 4;
+  }
+  
+  Status status = 2;
+  int64 last_update = 3;
+  string message = 4;
+}
+
+// 心跳
+message Heartbeat {
+  int64 timestamp = 1;
+  int64 server_time = 2;
+}
+
+// 顶层消息包装
+message Message {
+  enum Type {
+    HEARTBEAT = 0;
+    SUBSCRIBE = 1;
+    SUBSCRIBE_RESPONSE = 2;
+    BATCH_UPDATE = 3;
+    CONNECTION_STATUS = 4;
+    ERROR = 5;
+  }
+  
+  Type type = 1;
+  
+  oneof payload {
+    Heartbeat heartbeat = 2;
+    SubscribeRequest subscribe = 3;
+    SubscribeResponse subscribe_response = 4;
+    BatchUpdate batch_update = 5;
+    ConnectionStatus connection_status = 6;
+    string error = 7;
+  }
+}

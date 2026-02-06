@@ -1,43 +1,32 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { tokens } from '@/lib/design-tokens'
-import { useAutoFocusTrap } from '@/lib/hooks/useFocusTrap'
 
-interface ModalProps {
+interface PostModalProps {
   children: React.ReactNode
   onClose: () => void
 }
 
-export function Modal({ children, onClose }: ModalProps) {
+/**
+ * Modal overlay for post interactions
+ * Manages body scroll lock and portal rendering
+ */
+export function PostModal({ children, onClose }: PostModalProps) {
   const [mounted, setMounted] = useState(false)
-  const modalRef = useAutoFocusTrap<HTMLDivElement>(mounted)
 
   useEffect(() => {
     setMounted(true)
-    // 打开弹窗时禁止背景滚动
     document.body.style.overflow = 'hidden'
-
-    // Escape key closes modal
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose()
-      }
-    }
-    document.addEventListener('keydown', handleKeyDown)
-
     return () => {
       document.body.style.overflow = ''
-      document.removeEventListener('keydown', handleKeyDown)
     }
-  }, [onClose])
+  }, [])
 
   const modalContent = (
     <div
       onClick={onClose}
-      role="dialog"
-      aria-modal="true"
       style={{
         position: 'fixed',
         inset: 0,
@@ -50,7 +39,6 @@ export function Modal({ children, onClose }: ModalProps) {
       }}
     >
       <div
-        ref={modalRef}
         onClick={(e) => e.stopPropagation()}
         style={{
           width: 'min(760px, 100%)',
@@ -65,19 +53,12 @@ export function Modal({ children, onClose }: ModalProps) {
         <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
           <button
             onClick={onClose}
-            aria-label="关闭"
             style={{
               border: 'none',
               background: 'transparent',
               color: tokens.colors.text.secondary,
               cursor: 'pointer',
               fontSize: 20,
-              width: 44,
-              height: 44,
-              borderRadius: 8,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
             }}
           >
             ×
@@ -88,8 +69,6 @@ export function Modal({ children, onClose }: ModalProps) {
     </div>
   )
 
-  // 使用 Portal 将弹窗渲染到 body 层级，脱离 sticky 父容器的层叠上下文
   if (!mounted) return null
   return createPortal(modalContent, document.body)
 }
-

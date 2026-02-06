@@ -28,7 +28,7 @@ interface PercentileData {
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { handle: string } | Promise<{ handle: string }> }
+  { params }: { params: Promise<{ handle: string }> }
 ) {
   try {
     const user = await requireAuth(request)

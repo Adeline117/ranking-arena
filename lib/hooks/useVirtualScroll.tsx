@@ -70,8 +70,8 @@ export function useVirtualScroll(options: VirtualScrollOptions): VirtualScrollRe
   const lastScrollTopRef = useRef(0)
   const containerRef = useRef<HTMLElement | null>(null)
 
-  // 动态行高缓存 (用于非固定行高场景)
-  const itemHeightCache = useRef<Map<number, number>>(new Map())
+  // 动态行高缓存 (用于非固定行高场景，预留扩展)
+  const _itemHeightCache = useRef<Map<number, number>>(new Map())
 
   const itemHeight = fixedItemHeight || estimatedItemHeight
   const totalHeight = itemCount * itemHeight
@@ -195,7 +195,7 @@ export function useVirtualScroll(options: VirtualScrollOptions): VirtualScrollRe
  */
 export function FastScrollPlaceholder({
   style,
-  index
+  index: _index
 }: {
   style: React.CSSProperties
   index: number

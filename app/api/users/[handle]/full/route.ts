@@ -18,7 +18,7 @@ function getSupabase() {
 
 export async function GET(
   request: NextRequest,
-  context: { params: { handle: string } | Promise<{ handle: string }> }
+  context: { params: Promise<{ handle: string }> }
 ) {
   try {
     // 解析 params

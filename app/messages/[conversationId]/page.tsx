@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import Image from 'next/image'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/layout/TopNav'
@@ -1112,9 +1113,11 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
                   >
                     {/* Media content */}
                     {msg.media_url && msg.media_type === 'image' && (
-                      <img
+                      <Image
                         src={msg.media_url}
                         alt=""
+                        width={400}
+                        height={300}
                         onClick={() => setPreviewOpen({ type: 'image', url: msg.media_url! })}
                         style={{
                           maxWidth: '100%',
@@ -1122,7 +1125,9 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
                           borderRadius: 14,
                           cursor: 'pointer',
                           display: 'block',
+                          objectFit: 'contain',
                         }}
+                        unoptimized
                       />
                     )}
                     {msg.media_url && msg.media_type === 'video' && (
@@ -1422,9 +1427,11 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
             </svg>
           </button>
           {previewOpen.type === 'image' ? (
-            <img
+            <Image
               src={previewOpen.url}
               alt=""
+              width={1200}
+              height={900}
               onClick={(e) => e.stopPropagation()}
               style={{
                 maxWidth: '90vw',
@@ -1432,6 +1439,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
                 objectFit: 'contain',
                 borderRadius: 8,
               }}
+              unoptimized
             />
           ) : (
             <video
@@ -1480,9 +1488,11 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
             gap: 10,
           }}>
             {pendingAttachment.type === 'image' ? (
-              <img
+              <Image
                 src={pendingAttachment.url}
                 alt=""
+                width={60}
+                height={60}
                 style={{
                   width: 60,
                   height: 60,
@@ -1491,6 +1501,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
                   cursor: 'pointer',
                 }}
                 onClick={() => setPreviewOpen({ type: 'image', url: pendingAttachment.url })}
+                unoptimized
               />
             ) : pendingAttachment.type === 'video' ? (
               <Box

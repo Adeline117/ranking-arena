@@ -44,6 +44,6 @@ export const DynamicPostDetailModal = dynamic(
 
 // Post Create/Edit Modal (named export)
 export const DynamicPostModal = dynamic(
-  () => import('../post/components/PostModal').then(mod => ({ default: mod.Modal })),
+  () => import('../post/components/PostModal').then(mod => ({ default: mod.PostModal })),
   { ssr: false }
 )

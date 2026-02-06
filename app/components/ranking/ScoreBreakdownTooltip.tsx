@@ -8,17 +8,17 @@ import type { Trader } from './RankingTable'
  */
 const CONFIDENCE_LABELS: Record<string, { zh: string; en: string; color: string; icon: string; penalty: string }> = {
   partial: {
-    zh: '⚠ 部分数据缺失（分数 ×0.92）',
-    en: '⚠ Partial data — score ×0.92',
+    zh: '部分数据缺失（分数 ×0.92）',
+    en: 'Partial data — score ×0.92',
     color: tokens.colors.accent.warning,
-    icon: '⚠',
+    icon: '!',
     penalty: '-8%',
   },
   minimal: {
-    zh: '⚠ 胜率和回撤均缺失（分数 ×0.80）',
-    en: '⚠ Win rate & drawdown missing — score ×0.80',
+    zh: '胜率和回撤均缺失（分数 ×0.80）',
+    en: 'Win rate & drawdown missing — score ×0.80',
     color: tokens.colors.accent.error ?? tokens.colors.accent.warning,
-    icon: '⚠',
+    icon: '!',
     penalty: '-20%',
   },
 }

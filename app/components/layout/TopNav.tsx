@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import Image from 'next/image'
 import { useEffect, useState, useRef } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import dynamic from 'next/dynamic'
@@ -600,7 +601,7 @@ export default function TopNav({ email }: { email: string | null }) {
                 }}
               >
                 {myAvatarUrl ? (
-                  <img
+                  <Image
                     src={myAvatarUrl}
                     alt={t('avatar')}
                     width={36}
@@ -612,6 +613,7 @@ export default function TopNav({ email }: { email: string | null }) {
                       border: `1px solid ${tokens.colors.border.primary}`,
                       objectFit: 'cover',
                     }}
+                    unoptimized={myAvatarUrl?.startsWith('data:')}
                   />
                 ) : (
                   <Box

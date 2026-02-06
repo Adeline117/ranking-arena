@@ -15,6 +15,7 @@ import { createClient } from '@supabase/supabase-js'
 import { isAuthorized, getSupabaseEnv, getSupportedPlatforms } from '@/lib/cron/utils'
 import { sendScraperAlert } from '@/lib/alerts/send-alert'
 import { captureMessage } from '@/lib/utils/logger'
+import { logger } from '@/lib/logger'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -110,7 +111,7 @@ export async function buildFreshnessReport(): Promise<FreshnessReport> {
         .single()
 
       if (error && error.code !== 'PGRST116') {
-        console.error(`[DataFreshness] 查询 ${platform} 失败:`, error)
+        logger.dbError('query-platform-freshness', error, { platform })
       }
 
       // 获取记录数量
@@ -149,7 +150,7 @@ export async function buildFreshnessReport(): Promise<FreshnessReport> {
         recordCount: count || 0,
       })
     } catch (error: unknown) {
-      console.error(`[DataFreshness] 处理 ${platform} 时出错:`, error)
+      logger.error('Error processing platform freshness', { platform }, error instanceof Error ? error : new Error(String(error)))
       results.push({
         platform,
         displayName: PLATFORM_NAMES[platform] || platform,
@@ -211,9 +212,9 @@ export async function GET(req: Request) {
           summary: report.summary,
         }
       )
-      console.error(
-        `[DataFreshness] 数据严重过期: ${names} - 超过 24 小时未更新`
-      )
+      logger.error(`Data severely stale: ${names} - not updated in 24h`, {
+        criticalPlatforms: criticalPlatforms.map((p) => p.platform)
+      }, new Error('Data severely stale'))
     } else if (stalePlatforms.length > 0) {
       const names = stalePlatforms.map((p) => p.displayName).join(', ')
       await captureMessage(
@@ -225,9 +226,9 @@ export async function GET(req: Request) {
           summary: report.summary,
         }
       )
-      console.warn(
-        `[DataFreshness] 数据过期: ${names} - 超过 8 小时未更新`
-      )
+      logger.warn(`Data stale: ${names} - not updated in 8h`, {
+        stalePlatforms: stalePlatforms.map((p) => p.platform)
+      })
     }
 
     // ── 外部告警通知（Slack / 飞书等）────────────────────────
@@ -244,7 +245,7 @@ export async function GET(req: Request) {
           )
         }
       } catch (error: unknown) {
-        console.error('[DataFreshness] 发送报警失败:', error)
+        logger.error('Failed to send freshness alert', {}, error instanceof Error ? error : new Error(String(error)))
       }
     }
 

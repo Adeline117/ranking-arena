@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/layout/TopNav'
 import Card from '@/app/components/ui/Card'
@@ -787,9 +788,11 @@ export default function ApplyGroupPage() {
                         display: 'inline-block',
                       }}
                     >
-                      <img
+                      <Image
                         src={avatarUrl}
                         alt="Avatar preview"
+                        width={120}
+                        height={120}
                         style={{
                           width: 120,
                           height: 120,
@@ -800,6 +803,7 @@ export default function ApplyGroupPage() {
                         onError={(e) => {
                           (e.target as HTMLImageElement).style.display = 'none'
                         }}
+                        unoptimized
                       />
                       <Button
                         type="button"

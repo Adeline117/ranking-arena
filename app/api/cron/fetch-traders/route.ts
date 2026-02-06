@@ -26,6 +26,7 @@ import {
   sendScrapeSummaryAlert,
   type ScriptResult,
 } from '@/lib/cron/utils'
+import { logger } from '@/lib/logger'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -116,7 +117,7 @@ export async function POST(req: Request) {
         }
       } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : String(error)
-        console.error(`[Cron] 平台 ${platform} 执行失败:`, errorMessage)
+        logger.error(`Platform ${platform} fetch failed`, { platform }, error instanceof Error ? error : new Error(errorMessage))
         allResults.push({
           platform,
           results: [{ name: platform, success: false, error: errorMessage }],
@@ -161,7 +162,7 @@ export async function POST(req: Request) {
     })
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : String(error)
-    console.error('[Cron] 执行失败:', errorMessage)
+    logger.apiError('/api/cron/fetch-traders', error, {})
 
     return NextResponse.json(
       { ok: false, error: errorMessage },

@@ -33,6 +33,7 @@ import {
 import { sleep } from '@/lib/cron/fetchers/shared'
 import { captureMessage } from '@/lib/utils/logger'
 import { sendRateLimitedAlert } from '@/lib/alerts/send-alert'
+import { logger } from '@/lib/logger'
 
 // Retry configuration
 const RETRY_CONFIG = {
@@ -58,7 +59,7 @@ async function withRetry<T>(
       lastError = error instanceof Error ? error : new Error(String(error))
 
       if (attempt === options.maxAttempts) {
-        console.error(`[enrich] ${context} failed after ${attempt} attempts:`, lastError.message)
+        logger.error(`Enrichment ${context} failed after retries`, { attempts: attempt }, lastError)
         throw lastError
       }
 
@@ -67,7 +68,7 @@ async function withRetry<T>(
         options.baseDelayMs * Math.pow(2, attempt - 1) + Math.random() * 500,
         options.maxDelayMs
       )
-      console.warn(`[enrich] ${context} attempt ${attempt} failed, retrying in ${Math.round(delay)}ms...`)
+      logger.warn(`Enrichment ${context} attempt ${attempt} failed, retrying`, { delay: Math.round(delay) })
       await sleep(delay)
     }
   }

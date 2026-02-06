@@ -10,7 +10,7 @@
  * 4. channelPool - WebSocket 连接池管理
  */
 
-import { useRef, useCallback, useEffect, useState, useMemo } from 'react'
+import { useRef, useCallback, useEffect, useMemo } from 'react'
 import { VirtualRankingList, VirtualRankingListRef, VirtualTrader } from './VirtualRankingList'
 import { useRankingsWithCache, useNetworkStatus, getSkeletonState } from '@/lib/hooks/useRankingsWithCache'
 import { useTraderDataDiff, TraderData } from '@/lib/hooks/useTraderDataDiff'

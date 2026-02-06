@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
+import Image from 'next/image'
 import { supabase } from '@/lib/supabase/client'
 import TopNav from '@/app/components/layout/TopNav'
 import { Box, Text, Button } from '@/app/components/base'
@@ -191,20 +192,24 @@ function renderContentWithControls(
       const isLast = part.imageIndex === imageCount - 1
       return (
         <span key={index} style={{ position: 'relative', display: 'inline-block', margin: '4px 6px' }}>
-          <img
-            src={part.url}
+          <Image
+            src={part.url || ''}
             alt={part.content || 'image'}
+            width={400}
+            height={300}
             style={{
               maxWidth: '100%',
               maxHeight: 300,
               borderRadius: 8,
               cursor: 'pointer',
               display: 'block',
+              objectFit: 'contain',
             }}
             onClick={(e) => {
               e.stopPropagation()
               window.open(part.url, '_blank')
             }}
+            unoptimized
           />
           {/* 图片控制栏 */}
           <div style={{

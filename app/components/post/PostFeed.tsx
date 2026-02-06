@@ -20,114 +20,11 @@ import { renderContentWithLinks, ARENA_PURPLE } from '@/lib/utils/content'
 import { usePostComments, type Comment } from './hooks/usePostComments'
 import { SectionErrorBoundary } from '../utils/ErrorBoundary'
 import { PostSkeleton } from '../ui/Skeleton'
+import { SortButtons, type SortType, AvatarLink, ReactButton, Action, PostModal } from './components'
 
 // 本地类型（扩展后端类型）
 type Post = PostWithUserState
 
-
-
-// Sort buttons component to avoid duplication
-function SortButtons({ sortType, setSortType, t }: {
-  sortType: SortType
-  setSortType: (type: SortType) => void
-  t: (key: string) => string
-}): React.ReactNode {
-  const getSortButtonStyle = (isActive: boolean) => ({
-    padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
-    borderRadius: tokens.radius.md,
-    border: `1px solid ${isActive ? ARENA_PURPLE : tokens.colors.border.primary}`,
-    background: isActive ? 'rgba(139, 111, 168, 0.15)' : tokens.colors.bg.primary,
-    color: isActive ? tokens.colors.text.primary : tokens.colors.text.secondary,
-    fontSize: tokens.typography.fontSize.xs,
-    fontWeight: isActive ? 700 : 400,
-    cursor: 'pointer',
-  })
-
-  return (
-    <div style={{ display: 'flex', gap: tokens.spacing[2], marginBottom: tokens.spacing[3] }}>
-      <button onClick={() => setSortType('time')} style={getSortButtonStyle(sortType === 'time')}>
-        {t('latest')}
-      </button>
-      <button onClick={() => setSortType('likes')} style={getSortButtonStyle(sortType === 'likes')}>
-        {t('hot')}
-      </button>
-    </div>
-  )
-}
-
-function AvatarLink({ handle, avatarUrl, isPro, showProBadge = true }: { handle?: string | null; avatarUrl?: string | null; isPro?: boolean; showProBadge?: boolean }) {
-  const { t } = useLanguage()
-  if (!handle) return null
-  const href = `/u/${encodeURIComponent(handle)}`
-  const shouldShowBadge = isPro && showProBadge
-  return (
-    <Link
-      href={href}
-      onClick={(e) => e.stopPropagation()}
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: 6,
-        textDecoration: 'none',
-        color: tokens.colors.text.primary,
-        flexShrink: 0,
-        maxWidth: 120,
-      }}
-      title={t('goToTraderPage')}
-    >
-      <span
-        style={{
-          width: 24,
-          height: 24,
-          borderRadius: tokens.radius.md,
-          display: 'grid',
-          placeItems: 'center',
-          background: tokens.colors.bg.secondary,
-          border: `1px solid ${tokens.colors.border.primary}`,
-          fontWeight: tokens.typography.fontWeight.black,
-          fontSize: tokens.typography.fontSize.xs,
-          transition: `all ${tokens.transition.base}`,
-          overflow: 'hidden',
-        }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.transform = 'scale(1.1)'
-          e.currentTarget.style.boxShadow = tokens.shadow.sm
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.transform = 'scale(1)'
-          e.currentTarget.style.boxShadow = tokens.shadow.none
-        }}
-      >
-        {avatarUrl ? (
-          <img src={avatarUrl} alt={handle} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-        ) : (
-          (handle?.[0] || 'U').toUpperCase()
-        )}
-      </span>
-      <span style={{ fontWeight: 850, fontSize: 12, color: tokens.colors.text.secondary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{handle}</span>
-      {shouldShowBadge && (
-        <span
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            width: 16,
-            height: 16,
-            borderRadius: '50%',
-            background: 'var(--color-pro-badge-bg)',
-            boxShadow: '0 0 4px var(--color-pro-badge-shadow)',
-          }}
-        >
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="#fff">
-            <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
-          </svg>
-        </span>
-      )}
-    </Link>
-  )
-}
-
-type SortType = 'time' | 'likes'
 
 interface PostFeedProps {
   variant?: 'compact' | 'full'
@@ -1918,7 +1815,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
       )}
 
       {openPost && (
-        <Modal onClose={() => setOpenPost(null)}>
+        <PostModal onClose={() => setOpenPost(null)}>
           {openPost.group_name && (
             openPost.group_id ? (
               <Link
@@ -2196,11 +2093,11 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
                             <span>
                               {customPoll.type === 'multiple' && (
                                 <span style={{ marginRight: 8 }}>
-                                  {isSelected ? '☑' : '☐'}
+                                  {isSelected ? '[x]' : '[ ]'}
                                 </span>
                               )}
                               {option.text}
-                              {hasVoted && ' ✓'}
+                              {hasVoted && ' (voted)'}
                             </span>
                             {customPoll.showResults && option.votes !== null && (
                               <span style={{ fontSize: 12, color: tokens.colors.text.secondary }}>
@@ -2375,7 +2272,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
               translatedComments={translatedComments}
             />
           </div>
-        </Modal>
+        </PostModal>
       )}
 
       {/* 编辑帖子弹窗 */}
@@ -2595,187 +2492,4 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
       />
     </SectionErrorBoundary>
   )
-}
-
-function ReactButton({ onClick, active, icon, count, showCount = true }: { onClick: (e: React.MouseEvent) => void; active: boolean; icon: React.ReactNode; count: number; showCount?: boolean }) {
-  const [isPressed, setIsPressed] = useState(false)
-  const [isAnimating, setIsAnimating] = useState(false)
-  const processingRef = useRef(false)
-
-  const handleClick = (e: React.MouseEvent) => {
-    if (processingRef.current) return
-    processingRef.current = true
-
-    e.preventDefault()
-    e.stopPropagation()
-
-    setIsAnimating(true)
-    setTimeout(() => {
-      setIsAnimating(false)
-      processingRef.current = false
-    }, 300)
-
-    onClick(e)
-  }
-
-  return (
-    <button
-      onClick={handleClick}
-      onMouseDown={() => setIsPressed(true)}
-      onMouseUp={() => setIsPressed(false)}
-      style={{
-        background: active ? 'rgba(139, 111, 168, 0.15)' : 'transparent',
-        border: 'none',
-        color: active ? tokens.colors.accent.primary : tokens.colors.text.secondary,
-        cursor: 'pointer',
-        display: 'flex',
-        alignItems: 'center',
-        gap: 4,
-        padding: '2px 6px',
-        borderRadius: 6,
-        transition: 'all 0.2s ease',
-        transform: isPressed ? 'scale(0.9)' : 'scale(1)',
-        fontWeight: active ? 900 : 400,
-        boxShadow: active ? '0 0 0 1px rgba(139, 111, 168, 0.2)' : 'none',
-      }}
-      onMouseEnter={(e) => {
-        if (!active) {
-          e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)'
-          e.currentTarget.style.color = '#d6d6d6'
-        }
-      }}
-      onMouseLeave={(e) => {
-        setIsPressed(false)
-        if (!active) {
-          e.currentTarget.style.background = 'transparent'
-          e.currentTarget.style.color = '#a9a9a9'
-        }
-      }}
-    >
-      <span
-        style={{
-          display: 'inline-flex',
-          transition: 'transform 0.2s ease',
-          transform: active ? 'scale(1.15)' : isAnimating ? 'scale(1.3)' : 'scale(1)',
-        }}
-      >
-        {icon}
-      </span>
-      {showCount && count}
-    </button>
-  )
-}
-
-function Action(props: { icon?: React.ReactNode; text: string; onClick: (e?: React.MouseEvent) => void; active?: boolean; count?: number; showCount?: boolean }) {
-  const [isPressed, setIsPressed] = useState(false)
-  const [isAnimating, setIsAnimating] = useState(false)
-
-  const handleClick = (e: React.MouseEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    setIsAnimating(true)
-    setTimeout(() => setIsAnimating(false), 300)
-    props.onClick(e)
-  }
-
-  return (
-    <button
-      onClick={handleClick}
-      onMouseDown={() => setIsPressed(true)}
-      onMouseUp={() => setIsPressed(false)}
-      style={{
-        border: 'none',
-        background: props.active ? 'rgba(139, 111, 168, 0.15)' : 'transparent',
-        color: props.active ? '#8b6fa8' : '#a9a9a9',
-        cursor: 'pointer',
-        padding: '6px 12px',
-        fontSize: 13,
-        fontWeight: props.active ? 950 : 700,
-        display: 'flex',
-        alignItems: 'center',
-        gap: 6,
-        borderRadius: 8,
-        transition: 'all 0.2s ease',
-        transform: isPressed ? 'scale(0.95)' : 'scale(1)',
-        boxShadow: props.active ? '0 0 0 1px rgba(139, 111, 168, 0.3)' : 'none',
-      }}
-      onMouseEnter={(e) => {
-        if (!props.active) {
-          e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)'
-          e.currentTarget.style.color = '#d6d6d6'
-        }
-      }}
-      onMouseLeave={(e) => {
-        setIsPressed(false)
-        if (!props.active) {
-          e.currentTarget.style.background = 'transparent'
-          e.currentTarget.style.color = '#a9a9a9'
-        }
-      }}
-    >
-      <span
-        style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          transition: 'transform 0.2s ease',
-          transform: props.active ? 'scale(1.1)' : isAnimating ? 'scale(1.2)' : 'scale(1)',
-        }}
-      >
-        {props.icon}
-      </span>
-      {props.text}
-      {props.showCount && props.count !== undefined && ` ${props.count}`}
-    </button>
-  )
-}
-
-function Modal(props: { children: React.ReactNode; onClose: () => void }) {
-  const [mounted, setMounted] = useState(false)
-
-  useEffect(() => {
-    setMounted(true)
-    document.body.style.overflow = 'hidden'
-    return () => {
-      document.body.style.overflow = ''
-    }
-  }, [])
-
-  const modalContent = (
-    <div
-      onClick={props.onClose}
-      style={{
-        position: 'fixed',
-        inset: 0,
-        background: 'rgba(0,0,0,0.65)',
-        display: 'grid',
-        placeItems: 'center',
-        padding: 16,
-        zIndex: tokens.zIndex.modal,
-        overflowY: 'auto',
-      }}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        style={{
-          width: 'min(760px, 100%)',
-          maxHeight: '90vh',
-          overflowY: 'auto',
-          border: `1px solid ${tokens.colors.border.primary}`,
-          borderRadius: 16,
-          background: tokens.colors.bg.secondary,
-          padding: 16,
-        }}
-      >
-        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-          <button onClick={props.onClose} style={{ border: 'none', background: 'transparent', color: tokens.colors.text.secondary, cursor: 'pointer', fontSize: 20 }}>
-            ×
-          </button>
-        </div>
-        {props.children}
-      </div>
-    </div>
-  )
-
-  if (!mounted) return null
-  return createPortal(modalContent, document.body)
 }

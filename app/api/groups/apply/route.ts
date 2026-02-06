@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { validateCsrfToken, CSRF_COOKIE_NAME, CSRF_HEADER_NAME } from '@/lib/utils/csrf'
+import { logger } from '@/lib/logger'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -126,7 +127,7 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (insertError) {
-      console.error('Error creating application:', insertError)
+      logger.dbError('create-group-application', insertError, { userId: user.id, groupName: name })
       return NextResponse.json({ error: '申请提交失败' }, { status: 500 })
     }
 
@@ -137,7 +138,7 @@ export async function POST(request: NextRequest) {
     })
 
   } catch (error: unknown) {
-    console.error('Error in group application:', error)
+    logger.apiError('/api/groups/apply', error, {})
     return NextResponse.json({ error: '服务器错误' }, { status: 500 })
   }
 }
@@ -166,14 +167,14 @@ export async function GET(request: NextRequest) {
       .order('created_at', { ascending: false })
 
     if (error) {
-      console.error('Error fetching applications:', error)
+      logger.dbError('fetch-group-applications', error, { userId: user.id })
       return NextResponse.json({ error: '获取申请列表失败' }, { status: 500 })
     }
 
     return NextResponse.json({ applications })
 
   } catch (error: unknown) {
-    console.error('Error fetching applications:', error)
+    logger.apiError('/api/groups/apply', error, {})
     return NextResponse.json({ error: '服务器错误' }, { status: 500 })
   }
 }

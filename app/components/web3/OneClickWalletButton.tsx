@@ -10,6 +10,7 @@
  */
 
 import { useOneClickSiwe, type OneClickStatus } from '@/lib/web3/useOneClickSiwe'
+import { useAccountModal } from '@rainbow-me/rainbowkit'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 // ============================================
@@ -85,6 +86,26 @@ function CheckIcon({ size = 18 }: { size?: number }) {
       strokeLinejoin="round"
     >
       <polyline points="20 6 9 17 4 12" />
+    </svg>
+  )
+}
+
+function SwitchIcon({ size = 14 }: { size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M16 3l4 4-4 4" />
+      <path d="M20 7H4" />
+      <path d="M8 21l-4-4 4-4" />
+      <path d="M4 17h16" />
     </svg>
   )
 }
@@ -171,7 +192,8 @@ export function OneClickWalletButton({
   disabled = false,
 }: OneClickWalletButtonProps) {
   const { t } = useLanguage()
-  const { signIn, status, isLoading, error, reset, address } = useOneClickSiwe({
+  const { openAccountModal } = useAccountModal()
+  const { signIn, status, isLoading, error, reset, address, isConnected } = useOneClickSiwe({
     autoSign: true,
     onSuccess,
     onError,
@@ -191,6 +213,13 @@ export function OneClickWalletButton({
     await signIn()
   }
 
+  const handleSwitchAccount = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (openAccountModal) {
+      openAccountModal()
+    }
+  }
+
   // Determine button appearance based on status
   const getButtonStyles = (): React.CSSProperties => {
     const baseStyles: React.CSSProperties = {
@@ -204,7 +233,6 @@ export function OneClickWalletButton({
       borderRadius: sizeConfig.borderRadius,
       cursor: isDisabled ? 'not-allowed' : 'pointer',
       transition: 'all 0.2s ease',
-      width: fullWidth ? '100%' : 'auto',
       border: 'none',
       ...style,
     }
@@ -269,15 +297,40 @@ export function OneClickWalletButton({
         `}
       </style>
 
-      <button
-        onClick={handleClick}
-        disabled={isDisabled}
-        className={`one-click-wallet-btn ${className}`}
-        style={getButtonStyles()}
-      >
-        {getStatusIcon(status, address, sizeConfig.iconSize)}
-        <span>{getStatusText(status, address, t)}</span>
-      </button>
+      <div style={{ display: 'flex', gap: 8, width: fullWidth ? '100%' : 'auto' }}>
+        <button
+          onClick={handleClick}
+          disabled={isDisabled}
+          className={`one-click-wallet-btn ${className}`}
+          style={{ ...getButtonStyles(), flex: 1 }}
+        >
+          {getStatusIcon(status, address, sizeConfig.iconSize)}
+          <span>{getStatusText(status, address, t)}</span>
+        </button>
+
+        {/* Switch account button - only show when connected and idle */}
+        {isConnected && address && status === 'idle' && openAccountModal && (
+          <button
+            onClick={handleSwitchAccount}
+            className="one-click-wallet-btn"
+            title={t('siweOneClickSwitch')}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: sizeConfig.padding.split(' ')[0],
+              borderRadius: sizeConfig.borderRadius,
+              background: 'rgba(139, 111, 168, 0.08)',
+              border: '1px solid rgba(139, 111, 168, 0.3)',
+              color: '#c9b8db',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+            }}
+          >
+            <SwitchIcon size={sizeConfig.iconSize} />
+          </button>
+        )}
+      </div>
 
       {/* Error message */}
       {error && status === 'error' && (

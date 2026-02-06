@@ -20,6 +20,7 @@ import {
   calculateDownsideVolatility,
 } from '@/lib/utils/advanced-metrics'
 import { calculateArenaScoreV3, type Period } from '@/lib/utils/arena-score'
+import { logger } from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300 // 5 minutes
@@ -161,7 +162,7 @@ export async function POST(request: NextRequest) {
             .eq('id', snapshot.id)
 
           if (updateError) {
-            console.error(`[AdvancedMetrics] Update error for ${snapshot.id}:`, updateError)
+            logger.dbError('update-advanced-metrics', updateError, { snapshotId: snapshot.id })
             errors++
           } else {
             updated++
@@ -170,7 +171,7 @@ export async function POST(request: NextRequest) {
 
         processed++
       } catch (err) {
-        console.error(`[AdvancedMetrics] Error processing trader:`, err)
+        logger.error('Error processing trader in advanced metrics', {}, err instanceof Error ? err : new Error(String(err)))
         errors++
       }
     }
@@ -185,7 +186,7 @@ export async function POST(request: NextRequest) {
       duration,
     })
   } catch (err) {
-    console.error('[AdvancedMetrics] Job failed:', err)
+    logger.apiError('/api/cron/calculate-advanced-metrics', err, {})
     return NextResponse.json(
       { error: err instanceof Error ? err.message : 'Unknown error' },
       { status: 500 }
