@@ -15,7 +15,7 @@ import {
   MetricStat,
   areTraderPropsEqual,
   getScoreStyle,
-} from './shared/trader-display'
+} from './shared/TraderDisplay'
 import AddCompareButton from '../trader/AddCompareButton'
 
 export interface TraderCardProps {

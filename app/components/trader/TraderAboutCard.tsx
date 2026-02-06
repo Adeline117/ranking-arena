@@ -9,7 +9,7 @@ import { Box, Text, Button } from '../base'
 import TraderFollowButton from '../ui/TraderFollowButton'
 import UserFollowButton from '../ui/UserFollowButton'
 import MessageButton from '../ui/MessageButton'
-import { DynamicFollowListModal as FollowListModal } from '../ui/dynamic'
+import { DynamicFollowListModal as FollowListModal } from '../ui/Dynamic'
 import { getAvatarGradient, getAvatarInitial } from '@/lib/utils/avatar'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
