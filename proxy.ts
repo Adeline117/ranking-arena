@@ -1,8 +1,6 @@
 /**
- * Next.js 16 全局代理
+ * Next.js 16 Proxy
  * 实现统一的认证、CORS、安全头、CSRF 保护、请求追踪
- * 
- * 注意：Next.js 16 已将 middleware 约定弃用，改用 proxy
  */
 
 import { NextResponse, type NextRequest } from 'next/server'
@@ -66,7 +64,7 @@ const SKIP_ROUTES = [
 ]
 
 // ============================================
-// Rate Limiting (从 middleware.ts 合并)
+// Rate Limiting
 // ============================================
 
 let ratelimit: Ratelimit | null = null
@@ -388,7 +386,6 @@ function hasSessionCookie(request: NextRequest): boolean {
 
 /**
  * Next.js 16 Proxy 函数
- * 替代原来的 middleware
  */
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
