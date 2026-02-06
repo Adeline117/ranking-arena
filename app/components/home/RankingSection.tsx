@@ -124,7 +124,7 @@ export default function RankingSection({
   const [activePreset, setActivePreset] = useState<PresetId | null>(null)
 
   // Feature 8: Lifted sort/page/search state for URL sync
-  const [sortColumn, setSortColumn] = useState<'score' | 'roi' | 'winrate' | 'mdd'>('score')
+  const [sortColumn, setSortColumn] = useState<'score' | 'roi' | 'winrate' | 'mdd' | 'sortino' | 'alpha'>('score')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
   const [currentPage, setCurrentPage] = useState(1)
   const [searchQuery, setSearchQuery] = useState('')
@@ -299,7 +299,7 @@ export default function RankingSection({
   }, [syncFilterToUrl])
 
   // Feature 8: Sort/page/search change handlers with localStorage persistence
-  const handleSortChange = useCallback((col: 'score' | 'roi' | 'winrate' | 'mdd', dir: 'asc' | 'desc') => {
+  const handleSortChange = useCallback((col: 'score' | 'roi' | 'winrate' | 'mdd' | 'sortino' | 'alpha', dir: 'asc' | 'desc') => {
     setSortColumn(col)
     setSortDir(dir)
     setCurrentPage(1)
