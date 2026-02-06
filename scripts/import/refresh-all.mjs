@@ -76,7 +76,7 @@ function curl(url, opts = {}) {
   } catch { return null }
 }
 
-const PROXY = 'http://127.0.0.1:7890'
+const PROXY = process.env.HTTP_PROXY || null
 
 // ============================================================
 // API PLATFORMS (no browser needed)
