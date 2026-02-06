@@ -10,16 +10,7 @@ import { useEffect, useRef, useCallback, useState } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import { channelPool } from '@/lib/realtime/channel-pool'
 import type { RealtimeChannel, RealtimePostgresChangesPayload } from '@supabase/supabase-js'
-import { REALTIME_LISTEN_TYPES, REALTIME_POSTGRES_CHANGES_LISTEN_EVENT } from '@supabase/realtime-js'
 import { realtimeLogger } from '@/lib/utils/logger'
-
-// Map event types to Supabase's enum
-const eventToSupabaseEvent = {
-  '*': REALTIME_POSTGRES_CHANGES_LISTEN_EVENT.ALL,
-  'INSERT': REALTIME_POSTGRES_CHANGES_LISTEN_EVENT.INSERT,
-  'UPDATE': REALTIME_POSTGRES_CHANGES_LISTEN_EVENT.UPDATE,
-  'DELETE': REALTIME_POSTGRES_CHANGES_LISTEN_EVENT.DELETE,
-} as const
 
 // ============================================
 // 类型定义
@@ -299,19 +290,9 @@ function useRealtimeDirect<T extends Record<string, unknown>>(
     const channelName = `direct:${schema}:${table}:${filter || 'all'}`
     const channel = supabase.channel(channelName)
 
-    const supabaseEvent = eventToSupabaseEvent[event]
-
     channel
-      .on(
-        REALTIME_LISTEN_TYPES.POSTGRES_CHANGES,
-        {
-          event: supabaseEvent,
-          schema,
-          table,
-          ...(filter ? { filter } : {}),
-        },
-        handleChange as (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => void
-      )
+      // @ts-expect-error Supabase realtime types are overly strict for postgres_changes
+      .on('postgres_changes', { event, schema, table, ...(filter ? { filter } : {}) }, handleChange)
       .subscribe((subscribeStatus: string) => {
         if (subscribeStatus === 'SUBSCRIBED') {
           setStatus('connected')
@@ -428,15 +409,15 @@ function useRealtimeDirect<T extends Record<string, unknown>>(
 export function useRealtime<T extends Record<string, unknown>>(
   config: RealtimeConfig<T>
 ): UseRealtimeReturn {
-  const { usePool = true } = config
+  const { usePool = true, enabled = true } = config
 
-  // Use pooled connection by default
-  if (usePool) {
-    return useRealtimePooled(config)
-  }
+  // Always call both hooks unconditionally to satisfy React's rules of hooks
+  // Only one will actually be enabled based on usePool
+  const pooledResult = useRealtimePooled({ ...config, enabled: enabled && usePool })
+  const directResult = useRealtimeDirect({ ...config, enabled: enabled && !usePool })
 
-  // Fall back to direct connection if explicitly requested
-  return useRealtimeDirect(config)
+  // Return the appropriate result based on usePool preference
+  return usePool ? pooledResult : directResult
 }
 
 // ============================================
