@@ -12,8 +12,8 @@ import {
   upsertTraders,
   fetchJson,
   sleep,
-} from './shared'
-import { type EquityCurvePoint, type StatsDetail, upsertEquityCurve, fetchOkxStatsDetail, upsertStatsDetail } from './enrichment'
+} from './shared.js'
+import { type EquityCurvePoint, type StatsDetail, upsertEquityCurve, fetchOkxStatsDetail, upsertStatsDetail } from './enrichment.js'
 
 const SOURCE = 'okx_futures'
 const API_URL = 'https://www.okx.com/api/v5/copytrading/public-lead-traders'

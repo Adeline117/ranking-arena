@@ -8,7 +8,7 @@
  * - Region-based proxy selection
  */
 
-import type { ProxyNode, ProxyPoolConfig, ProxyStatus } from '../types'
+import type { ProxyNode, ProxyPoolConfig, ProxyStatus } from '../types.js'
 
 const DEFAULT_CONFIG: ProxyPoolConfig = {
   clashApiUrl: 'http://127.0.0.1:9090',

@@ -12,8 +12,8 @@ import {
   upsertTraders,
   fetchJson,
   sleep,
-} from './shared'
-import { type EquityCurvePoint, type StatsDetail, upsertEquityCurve, upsertStatsDetail } from './enrichment'
+} from './shared.js'
+import { type EquityCurvePoint, type StatsDetail, upsertEquityCurve, upsertStatsDetail } from './enrichment.js'
 
 const SOURCE = 'gmx'
 const SUBSQUID_URL =

@@ -31,8 +31,8 @@ import {
   fetchJson,
   sleep,
   parseNum,
-} from './shared'
-import { type StatsDetail, upsertStatsDetail } from './enrichment'
+} from './shared.js'
+import { type StatsDetail, upsertStatsDetail } from './enrichment.js'
 
 const SOURCE = 'okx_web3'
 const TARGET = 500
