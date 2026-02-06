@@ -1,5 +1,6 @@
 # Ranking Arena Worker Service
-# Build context: repository root
+# Build context: repository root (see railway.json buildContextPath)
+# Last updated: 2026-02-06
 
 FROM node:20-slim
 
