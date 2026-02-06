@@ -10,7 +10,10 @@
  *   market_type: string (default: 'futures')
  *   limit: number (default: 100, max: 500)
  *   offset: number (default: 0)
- *   sort: 'arena_score' | 'roi' | 'pnl' (default: 'arena_score')
+ *   sort: 'arena_score' | 'arena_score_v3' | 'roi' | 'pnl' | 'sortino' | 'calmar' | 'alpha' (default: 'arena_score')
+ *   trading_style: 'hft' | 'day_trader' | 'swing' | 'trend' | 'scalping' (optional filter)
+ *   min_alpha: number (optional minimum alpha threshold)
+ *   min_sortino: number (optional minimum sortino threshold)
  *
  * Response includes:
  *   - traders: RankingEntry[]
@@ -36,6 +39,11 @@ export async function GET(request: NextRequest) {
   const offset = parseInt(searchParams.get('offset') || '0', 10)
   const sort = searchParams.get('sort') || 'arena_score'
 
+  // V3 filters
+  const tradingStyle = searchParams.get('trading_style')
+  const minAlpha = searchParams.get('min_alpha') ? parseFloat(searchParams.get('min_alpha')!) : null
+  const minSortino = searchParams.get('min_sortino') ? parseFloat(searchParams.get('min_sortino')!) : null
+
   // Validation
   if (!window || !WINDOWS.includes(window)) {
     return NextResponse.json(
@@ -51,10 +59,18 @@ export async function GET(request: NextRequest) {
     )
   }
 
-  const validSorts = ['arena_score', 'roi', 'pnl']
+  const validSorts = ['arena_score', 'arena_score_v3', 'roi', 'pnl', 'sortino', 'calmar', 'alpha']
   if (!validSorts.includes(sort)) {
     return NextResponse.json(
       { error: `Invalid sort. Must be one of: ${validSorts.join(', ')}` },
+      { status: 400 }
+    )
+  }
+
+  const validStyles = ['hft', 'day_trader', 'swing', 'trend', 'scalping']
+  if (tradingStyle && !validStyles.includes(tradingStyle)) {
+    return NextResponse.json(
+      { error: `Invalid trading_style. Must be one of: ${validStyles.join(', ')}` },
       { status: 400 }
     )
   }
@@ -73,6 +89,17 @@ export async function GET(request: NextRequest) {
     .eq('window', window)
     .not('arena_score', 'is', null)
 
+  // V3 Filters
+  if (tradingStyle) {
+    query = query.eq('trading_style', tradingStyle)
+  }
+  if (minAlpha !== null) {
+    query = query.gte('alpha', minAlpha)
+  }
+  if (minSortino !== null) {
+    query = query.gte('sortino_ratio', minSortino)
+  }
+
   // Sort
   switch (sort) {
     case 'roi':
@@ -80,6 +107,18 @@ export async function GET(request: NextRequest) {
       break
     case 'pnl':
       query = query.order('pnl', { ascending: false, nullsFirst: false })
+      break
+    case 'arena_score_v3':
+      query = query.order('arena_score_v3', { ascending: false, nullsFirst: false })
+      break
+    case 'sortino':
+      query = query.order('sortino_ratio', { ascending: false, nullsFirst: false })
+      break
+    case 'calmar':
+      query = query.order('calmar_ratio', { ascending: false, nullsFirst: false })
+      break
+    case 'alpha':
+      query = query.order('alpha', { ascending: false, nullsFirst: false })
       break
     default:
       query = query.order('arena_score', { ascending: false, nullsFirst: false })
@@ -144,33 +183,58 @@ export async function GET(request: NextRequest) {
   const stalenessSeconds = Math.floor((Date.now() - latestUpdate.getTime()) / 1000)
 
   // Build response
-  const traders: RankingEntry[] = (snapshots || []).map(s => ({
-    platform: s.source as LeaderboardPlatform,
-    market_type: s.market_type,
-    trader_key: s.source_trader_id,
-    display_name: profiles[s.source_trader_id]?.display_name || s.source_trader_id,
-    avatar_url: profiles[s.source_trader_id]?.avatar_url || null,
-    window: s.window as Window,
-    metrics: s.metrics || {
-      roi: s.roi ? parseFloat(s.roi) : null,
-      pnl: s.pnl ? parseFloat(s.pnl) : null,
-      win_rate: s.win_rate ? parseFloat(s.win_rate) : null,
-      max_drawdown: s.max_drawdown ? parseFloat(s.max_drawdown) : null,
-      sharpe_ratio: s.sharpe_ratio ? parseFloat(s.sharpe_ratio) : null,
+  const traders: RankingEntry[] = (snapshots || []).map(s => {
+    const baseEntry = {
+      platform: s.source as LeaderboardPlatform,
+      market_type: s.market_type,
+      trader_key: s.source_trader_id,
+      display_name: profiles[s.source_trader_id]?.display_name || s.source_trader_id,
+      avatar_url: profiles[s.source_trader_id]?.avatar_url || null,
+      window: s.window as Window,
+      metrics: s.metrics || {
+        roi: s.roi ? parseFloat(s.roi) : null,
+        pnl: s.pnl ? parseFloat(s.pnl) : null,
+        win_rate: s.win_rate ? parseFloat(s.win_rate) : null,
+        max_drawdown: s.max_drawdown ? parseFloat(s.max_drawdown) : null,
+        sharpe_ratio: s.sharpe_ratio ? parseFloat(s.sharpe_ratio) : null,
+        sortino_ratio: s.sortino_ratio ? parseFloat(s.sortino_ratio) : null,
+        trades_count: s.trades_count,
+        followers: s.followers,
+        copiers: s.copiers,
+        aum: s.aum ? parseFloat(s.aum) : null,
+        platform_rank: s.platform_rank || s.rank,
+        arena_score: s.arena_score ? parseFloat(s.arena_score) : null,
+        return_score: s.return_score ? parseFloat(s.return_score) : null,
+        drawdown_score: s.drawdown_score ? parseFloat(s.drawdown_score) : null,
+        stability_score: s.stability_score ? parseFloat(s.stability_score) : null,
+        // V3 metrics
+        volatility_pct: s.volatility_pct ? parseFloat(s.volatility_pct) : null,
+        avg_holding_hours: s.avg_holding_hours ? parseFloat(s.avg_holding_hours) : null,
+        profit_factor: s.profit_factor ? parseFloat(s.profit_factor) : null,
+      },
+      quality_flags: s.quality_flags || { missing_fields: [], non_standard_fields: {}, window_native: true, notes: [] },
+      updated_at: s.captured_at || s.created_at,
+    }
+
+    // Add V3 extended fields (optional - only if available)
+    return {
+      ...baseEntry,
+      // V3 Arena Score
+      arena_score_v3: s.arena_score_v3 ? parseFloat(s.arena_score_v3) : null,
+      // Advanced metrics summary
       sortino_ratio: s.sortino_ratio ? parseFloat(s.sortino_ratio) : null,
-      trades_count: s.trades_count,
-      followers: s.followers,
-      copiers: s.copiers,
-      aum: s.aum ? parseFloat(s.aum) : null,
-      platform_rank: s.platform_rank || s.rank,
-      arena_score: s.arena_score ? parseFloat(s.arena_score) : null,
-      return_score: s.return_score ? parseFloat(s.return_score) : null,
-      drawdown_score: s.drawdown_score ? parseFloat(s.drawdown_score) : null,
-      stability_score: s.stability_score ? parseFloat(s.stability_score) : null,
-    },
-    quality_flags: s.quality_flags || { missing_fields: [], non_standard_fields: {}, window_native: true, notes: [] },
-    updated_at: s.captured_at || s.created_at,
-  }))
+      calmar_ratio: s.calmar_ratio ? parseFloat(s.calmar_ratio) : null,
+      alpha: s.alpha ? parseFloat(s.alpha) : null,
+      // Classification
+      trading_style: s.trading_style || null,
+    } as RankingEntry & {
+      arena_score_v3: number | null
+      sortino_ratio: number | null
+      calmar_ratio: number | null
+      alpha: number | null
+      trading_style: string | null
+    }
+  })
 
   const response: RankingsResponse = {
     traders,
