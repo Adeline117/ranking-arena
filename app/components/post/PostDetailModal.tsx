@@ -215,7 +215,7 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
           gap: 6,
         }}>
           <Link
-            href={`/u/${post.author_handle}`}
+            href={`/u/${encodeURIComponent(post.author_handle)}`}
             onClick={(e) => e.stopPropagation()}
             style={{ color: tokens.colors.text.secondary, textDecoration: 'none', fontWeight: 600 }}
           >
@@ -359,7 +359,7 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                     {comment.author_handle ? (
                       <Link
-                        href={`/u/${comment.author_handle}`}
+                        href={`/u/${encodeURIComponent(comment.author_handle)}`}
                         onClick={(e) => e.stopPropagation()}
                         style={{ fontSize: 12, fontWeight: 700, color: tokens.colors.text.secondary, textDecoration: 'none' }}
                       >

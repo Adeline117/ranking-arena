@@ -175,7 +175,7 @@ export default function FavoritesPage() {
             description={t('loginToViewFavorites')}
             action={
               <Link
-                href="/login?returnUrl=/favorites"
+                href="/login?redirect=/favorites"
                 style={{
                   padding: '12px 24px',
                   background: tokens.colors.accent.primary,

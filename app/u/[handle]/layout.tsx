@@ -10,7 +10,7 @@ const publicSupabase = supabaseUrl && supabaseKey
   ? createClient(supabaseUrl, supabaseKey, { auth: { persistSession: false } })
   : null
 
-export async function generateMetadata({ params }: { params: { handle: string } | Promise<{ handle: string }> }): Promise<Metadata> {
+export async function generateMetadata({ params }: { params: Promise<{ handle: string }> }): Promise<Metadata> {
   const resolvedParams = await params
   const handle = decodeURIComponent(resolvedParams.handle)
   

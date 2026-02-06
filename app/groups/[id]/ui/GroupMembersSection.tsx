@@ -205,7 +205,7 @@ export function GroupInfoModal({ group, language, onClose, onShowMembers }: Grou
           <InfoRow label={t('owner')}>
             <Text size="md">
               {group.owner_handle ? (
-                <Link href={`/u/${group.owner_handle}`} style={{ color: tokens.colors.accent?.primary || '#8b6fa8', textDecoration: 'none' }}>
+                <Link href={`/u/${encodeURIComponent(group.owner_handle)}`} style={{ color: tokens.colors.accent?.primary || '#8b6fa8', textDecoration: 'none' }}>
                   @{group.owner_handle}
                 </Link>
               ) : t('none')}
@@ -277,7 +277,7 @@ interface MemberRowProps {
 function MemberRow({ member }: MemberRowProps): React.ReactElement {
   return (
     <Link
-      href={`/u/${member.handle || member.user_id}`}
+      href={`/u/${encodeURIComponent(member.handle || member.user_id)}`}
       style={{
         display: 'flex',
         alignItems: 'center',
