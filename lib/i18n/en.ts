@@ -20,7 +20,7 @@ const en = {
     guest: 'Guest',
     roi: 'ROI',
     winRate: 'Win Rate',
-    noData: 'No data',
+    noData: 'No on-chain data',
     loading: 'Loading...',
     loadingShort: 'Loading',
     noResults: 'No results found',
@@ -1264,7 +1264,13 @@ const en = {
     noPermissionToAccess: 'No permission to access this conversation',
 
     // DataStateWrapper
-    noDataAvailable: 'No data available',
+    noDataAvailable: 'No on-chain activity for this period',
+    noDataGeneric: 'No data available',
+    noOnChainActivity: 'No on-chain activity for this period',
+    noTradingActivity: 'No trading activity for this period',
+    noPositionData: 'No position data available',
+    connectWalletToView: 'Connect wallet to view data',
+    dataLoadingFromChain: 'Syncing data from chain...',
 
     // FloatingActionButton
     postToGroup: 'Post to Group',
@@ -2437,6 +2443,16 @@ const en = {
     siweVerificationFailed: 'Verification failed',
     siweNotAuthenticated: 'Not authenticated',
     siweLinkFailed: 'Failed to link wallet',
+
+    // Web3 - One-Click SIWE
+    siweOneClickButton: 'Sign in with Wallet',
+    siweOneClickConnecting: 'Connecting wallet...',
+    siweOneClickSigning: 'Sign message in wallet...',
+    siweOneClickVerifying: 'Verifying...',
+    siweOneClickSuccess: 'Signed in!',
+    siweOneClickSignIn: 'Sign in',
+    siweModalClosed: 'Wallet connection cancelled.',
+    siweRetry: 'Retry',
 
     // Login - Web3 divider
     loginOrDivider: 'or',

@@ -20,7 +20,7 @@ const zh = {
     guest: '游客模式',
     roi: 'ROI',
     winRate: '胜率',
-    noData: '暂无数据',
+    noData: '暂无链上数据',
     loading: '加载中...',
     loadingShort: '加载中',
     noResults: '未找到结果',
@@ -55,7 +55,7 @@ const zh = {
     winRate90d: '胜率 (90D)',
     volume90d: '交易量 (90D)',
     avgBuy90d: '平均买入 (90D)',
-    noTraderData: '暂无交易者数据',
+    noTraderData: '暂无交易者链上记录',
     prevPage: '上一页',
     nextPage: '下一页',
     unknownSource: '未知来源',
@@ -199,7 +199,7 @@ const zh = {
     historyOrders: '历史订单',
     currentPositions: '当前持仓',
     noPositions: '暂无持仓',
-    noHistory: '暂无历史数据',
+    noHistory: '暂无历史链上记录',
     // 交易统计
     additionalStats: '更多数据',
     tradesPerWeek: '周交易次数',
@@ -1265,7 +1265,13 @@ const zh = {
     noPermissionToAccess: '无权访问此会话',
 
     // DataStateWrapper
-    noDataAvailable: '暂无数据',
+    noDataAvailable: '该时段暂无链上活动记录',
+    noDataGeneric: '暂无数据',
+    noOnChainActivity: '该时段暂无链上活动',
+    noTradingActivity: '该时段暂无交易记录',
+    noPositionData: '暂无持仓数据',
+    connectWalletToView: '连接钱包以查看数据',
+    dataLoadingFromChain: '正在从链上同步数据...',
 
     // FloatingActionButton
     postToGroup: '发帖到小组',
@@ -2438,6 +2444,16 @@ const zh = {
     siweVerificationFailed: '验证失败',
     siweNotAuthenticated: '未认证',
     siweLinkFailed: '绑定钱包失败',
+
+    // Web3 - One-Click SIWE
+    siweOneClickButton: '使用钱包登录',
+    siweOneClickConnecting: '连接钱包中...',
+    siweOneClickSigning: '请在钱包中签名...',
+    siweOneClickVerifying: '验证中...',
+    siweOneClickSuccess: '登录成功!',
+    siweOneClickSignIn: '登录',
+    siweModalClosed: '钱包连接已取消。',
+    siweRetry: '重试',
 
     // Login - Web3 divider
     loginOrDivider: '或',
