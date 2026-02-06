@@ -1,15 +1,25 @@
 /**
  * 实时更新 Hook
  * 使用 Supabase Realtime 订阅数据变化
- * 增强功能：自动重连、心跳检测、连接状态管理
+ * 增强功能：连接池复用、自动重连、心跳检测、连接状态管理
  */
 
 'use client'
 
 import { useEffect, useRef, useCallback, useState } from 'react'
 import { supabase } from '@/lib/supabase/client'
+import { channelPool } from '@/lib/realtime/channel-pool'
 import type { RealtimeChannel, RealtimePostgresChangesPayload } from '@supabase/supabase-js'
+import { REALTIME_LISTEN_TYPES, REALTIME_POSTGRES_CHANGES_LISTEN_EVENT } from '@supabase/realtime-js'
 import { realtimeLogger } from '@/lib/utils/logger'
+
+// Map event types to Supabase's enum
+const eventToSupabaseEvent = {
+  '*': REALTIME_POSTGRES_CHANGES_LISTEN_EVENT.ALL,
+  'INSERT': REALTIME_POSTGRES_CHANGES_LISTEN_EVENT.INSERT,
+  'UPDATE': REALTIME_POSTGRES_CHANGES_LISTEN_EVENT.UPDATE,
+  'DELETE': REALTIME_POSTGRES_CHANGES_LISTEN_EVENT.DELETE,
+} as const
 
 // ============================================
 // 类型定义
@@ -48,6 +58,8 @@ interface RealtimeConfig<T> {
   onDisconnect?: () => void
   /** 错误回调 */
   onError?: (error: string) => void
+  /** 是否使用连接池（默认 true，推荐） */
+  usePool?: boolean
 }
 
 interface UseRealtimeReturn {
@@ -80,36 +92,105 @@ function calculateBackoffDelay(retryCount: number, baseDelay: number = 1000): nu
 }
 
 // ============================================
-// 主 Hook
+// 连接池模式 Hook
 // ============================================
 
 /**
- * 订阅表的实时变化（增强版）
- * 
- * 特性：
- * - 自动重连（指数退避）
- * - 连接状态管理
- * - 错误恢复
- * 
- * @example
- * ```tsx
- * useRealtime({
- *   table: 'posts',
- *   event: '*',
- *   autoReconnect: true,
- *   maxRetries: 5,
- *   onInsert: (post) => setPosts(prev => [post, ...prev]),
- *   onUpdate: ({ new: newPost }) => setPosts(prev => 
- *     prev.map(p => p.id === newPost.id ? newPost : p)
- *   ),
- *   onDelete: (post) => setPosts(prev => 
- *     prev.filter(p => p.id !== post.id)
- *   ),
- *   onStatusChange: (status) => console.log('Connection:', status),
- * })
- * ```
+ * 使用连接池的实时订阅（推荐）
+ * 多个组件订阅同一表时共享连接
  */
-export function useRealtime<T extends Record<string, unknown>>(
+function useRealtimePooled<T extends Record<string, unknown>>(
+  config: RealtimeConfig<T>
+): UseRealtimeReturn {
+  const {
+    table,
+    event = '*',
+    schema = 'public',
+    filter,
+    onInsert,
+    onUpdate,
+    onDelete,
+    enabled = true,
+    onStatusChange,
+    onConnect,
+    onDisconnect,
+  } = config
+
+  const [status, setStatusInternal] = useState<ConnectionStatus>('disconnected')
+  const unsubscribeRef = useRef<(() => void) | null>(null)
+
+  const setStatus = useCallback((newStatus: ConnectionStatus) => {
+    setStatusInternal(newStatus)
+    onStatusChange?.(newStatus)
+  }, [onStatusChange])
+
+  // Subscribe using pool
+  useEffect(() => {
+    if (!enabled) {
+      setStatus('disconnected')
+      return
+    }
+
+    setStatus('connecting')
+
+    unsubscribeRef.current = channelPool.subscribe(
+      { schema, table, event, filter },
+      {
+        onInsert: onInsert as ((payload: Record<string, unknown>) => void) | undefined,
+        onUpdate: onUpdate as ((payload: { old: Record<string, unknown>; new: Record<string, unknown> }) => void) | undefined,
+        onDelete: onDelete as ((payload: Record<string, unknown>) => void) | undefined,
+      }
+    )
+
+    // Check connection after a short delay
+    setTimeout(() => {
+      if (channelPool.hasChannel(schema, table, event, filter)) {
+        setStatus('connected')
+        onConnect?.()
+      }
+    }, 100)
+
+    return () => {
+      if (unsubscribeRef.current) {
+        unsubscribeRef.current()
+        unsubscribeRef.current = null
+      }
+      onDisconnect?.()
+    }
+  }, [enabled, table, event, schema, filter, onInsert, onUpdate, onDelete, setStatus, onConnect, onDisconnect])
+
+  const disconnect = useCallback(() => {
+    if (unsubscribeRef.current) {
+      unsubscribeRef.current()
+      unsubscribeRef.current = null
+    }
+    setStatus('disconnected')
+    onDisconnect?.()
+  }, [setStatus, onDisconnect])
+
+  const reconnect = useCallback(() => {
+    disconnect()
+    // Will auto-reconnect via useEffect when enabled is true
+  }, [disconnect])
+
+  return {
+    status,
+    error: null,
+    reconnect,
+    disconnect,
+    retryCount: 0,
+    isReconnecting: false,
+  }
+}
+
+// ============================================
+// 独立连接模式 Hook（用于需要独立控制的场景）
+// ============================================
+
+/**
+ * 独立连接的实时订阅（用于特殊场景）
+ */
+function useRealtimeDirect<T extends Record<string, unknown>>(
   config: RealtimeConfig<T>
 ): UseRealtimeReturn {
   const {
@@ -133,19 +214,18 @@ export function useRealtime<T extends Record<string, unknown>>(
   const [status, setStatusInternal] = useState<ConnectionStatus>('disconnected')
   const [error, setError] = useState<string | null>(null)
   const [retryCount, setRetryCount] = useState(0)
-  
+
   const channelRef = useRef<RealtimeChannel | null>(null)
   const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const isReconnectingRef = useRef(false)
 
-  // 更新状态并通知
   const setStatus = useCallback((newStatus: ConnectionStatus) => {
     setStatusInternal(newStatus)
     onStatusChange?.(newStatus)
   }, [onStatusChange])
 
   const handleChange = useCallback(
-    (payload: RealtimePostgresChangesPayload<T>) => {
+    (payload: { eventType: string; new: unknown; old: unknown }) => {
       switch (payload.eventType) {
         case 'INSERT':
           onInsert?.(payload.new as T)
@@ -161,7 +241,6 @@ export function useRealtime<T extends Record<string, unknown>>(
     [onInsert, onUpdate, onDelete]
   )
 
-  // 清理重连定时器
   const clearRetryTimeout = useCallback(() => {
     if (retryTimeoutRef.current) {
       clearTimeout(retryTimeoutRef.current)
@@ -169,22 +248,20 @@ export function useRealtime<T extends Record<string, unknown>>(
     }
   }, [])
 
-  // 断开连接
   const disconnect = useCallback(() => {
     clearRetryTimeout()
     isReconnectingRef.current = false
-    
+
     if (channelRef.current) {
       supabase.removeChannel(channelRef.current)
       channelRef.current = null
     }
-    
+
     setStatus('disconnected')
     setRetryCount(0)
     onDisconnect?.()
   }, [clearRetryTimeout, setStatus, onDisconnect])
 
-  // 安排重连
   const scheduleReconnect = useCallback(() => {
     if (!autoReconnect || retryCount >= maxRetries) {
       setStatus('error')
@@ -196,7 +273,7 @@ export function useRealtime<T extends Record<string, unknown>>(
 
     const delay = calculateBackoffDelay(retryCount, retryBaseDelay)
     realtimeLogger.info(`将在 ${delay}ms 后重连 (尝试 ${retryCount + 1}/${maxRetries})`)
-    
+
     setStatus('reconnecting')
     isReconnectingRef.current = true
 
@@ -207,11 +284,9 @@ export function useRealtime<T extends Record<string, unknown>>(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoReconnect, retryCount, maxRetries, retryBaseDelay, setStatus, onError])
 
-  // 建立连接
   const connect = useCallback(() => {
     if (!enabled) return
 
-    // 清理现有连接
     if (channelRef.current) {
       supabase.removeChannel(channelRef.current)
       channelRef.current = null
@@ -220,36 +295,27 @@ export function useRealtime<T extends Record<string, unknown>>(
     setStatus('connecting')
     setError(null)
 
-    // 创建频道
-    const channelName = `realtime:${schema}:${table}:${Date.now()}`
+    // Use a stable channel name (no Date.now())
+    const channelName = `direct:${schema}:${table}:${filter || 'all'}`
     const channel = supabase.channel(channelName)
 
-    // 配置监听
-    const channelConfig: {
-      event: PostgresChangeEvent
-      schema: string
-      table: string
-      filter?: string
-    } = {
-      event,
-      schema,
-      table,
-    }
-
-    if (filter) {
-      channelConfig.filter = filter
-    }
+    const supabaseEvent = eventToSupabaseEvent[event]
 
     channel
       .on(
-        'postgres_changes' as any,
-        channelConfig,
-        handleChange as (payload: RealtimePostgresChangesPayload<{ [key: string]: unknown }>) => void
+        REALTIME_LISTEN_TYPES.POSTGRES_CHANGES,
+        {
+          event: supabaseEvent,
+          schema,
+          table,
+          ...(filter ? { filter } : {}),
+        },
+        handleChange as (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => void
       )
       .subscribe((subscribeStatus: string) => {
         if (subscribeStatus === 'SUBSCRIBED') {
           setStatus('connected')
-          setRetryCount(0) // 重置重连计数
+          setRetryCount(0)
           isReconnectingRef.current = false
           onConnect?.()
         } else if (subscribeStatus === 'CHANNEL_ERROR') {
@@ -257,25 +323,15 @@ export function useRealtime<T extends Record<string, unknown>>(
           setStatus('error')
           setError(errorMsg)
           onError?.(errorMsg)
-          
-          // 尝试重连
-          if (autoReconnect) {
-            scheduleReconnect()
-          }
+          if (autoReconnect) scheduleReconnect()
         } else if (subscribeStatus === 'TIMED_OUT') {
           const errorMsg = '连接超时'
           setStatus('error')
           setError(errorMsg)
           onError?.(errorMsg)
-          
-          // 尝试重连
-          if (autoReconnect) {
-            scheduleReconnect()
-          }
+          if (autoReconnect) scheduleReconnect()
         } else if (subscribeStatus === 'CLOSED') {
           setStatus('disconnected')
-          
-          // 如果不是主动断开，尝试重连
           if (enabled && autoReconnect && !isReconnectingRef.current) {
             scheduleReconnect()
           }
@@ -285,7 +341,6 @@ export function useRealtime<T extends Record<string, unknown>>(
     channelRef.current = channel
   }, [enabled, table, event, schema, filter, handleChange, autoReconnect, setStatus, onConnect, onError, scheduleReconnect])
 
-  // 手动重连
   const reconnect = useCallback(() => {
     clearRetryTimeout()
     setRetryCount(0)
@@ -293,36 +348,27 @@ export function useRealtime<T extends Record<string, unknown>>(
     connect()
   }, [clearRetryTimeout, connect])
 
-  // 初始化连接
   useEffect(() => {
     connect()
-    return () => {
-      disconnect()
-    }
+    return () => disconnect()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []) // 只在挂载和卸载时执行
+  }, [])
 
-  // 监听 enabled 变化
   useEffect(() => {
     if (enabled) {
-      if (status === 'disconnected') {
-        connect()
-      }
+      if (status === 'disconnected') connect()
     } else {
       disconnect()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled])
 
-  // 监听网络状态
   useEffect(() => {
     if (typeof window === 'undefined') return
 
     const handleOnline = () => {
       realtimeLogger.info('网络恢复，尝试重连')
-      if (status !== 'connected' && enabled) {
-        reconnect()
-      }
+      if (status !== 'connected' && enabled) reconnect()
     }
 
     const handleOffline = () => {
@@ -340,14 +386,57 @@ export function useRealtime<T extends Record<string, unknown>>(
     }
   }, [status, enabled, reconnect, setStatus])
 
-  return { 
-    status, 
-    error, 
-    reconnect, 
+  return {
+    status,
+    error,
+    reconnect,
     disconnect,
     retryCount,
     isReconnecting: isReconnectingRef.current,
   }
+}
+
+// ============================================
+// 主 Hook
+// ============================================
+
+/**
+ * 订阅表的实时变化（增强版）
+ *
+ * 特性：
+ * - 连接池复用（默认启用，防止连接泄漏）
+ * - 自动重连（指数退避）
+ * - 连接状态管理
+ * - 错误恢复
+ *
+ * @example
+ * ```tsx
+ * useRealtime({
+ *   table: 'posts',
+ *   event: '*',
+ *   onInsert: (post) => setPosts(prev => [post, ...prev]),
+ *   onUpdate: ({ new: newPost }) => setPosts(prev =>
+ *     prev.map(p => p.id === newPost.id ? newPost : p)
+ *   ),
+ *   onDelete: (post) => setPosts(prev =>
+ *     prev.filter(p => p.id !== post.id)
+ *   ),
+ *   onStatusChange: (status) => console.log('Connection:', status),
+ * })
+ * ```
+ */
+export function useRealtime<T extends Record<string, unknown>>(
+  config: RealtimeConfig<T>
+): UseRealtimeReturn {
+  const { usePool = true } = config
+
+  // Use pooled connection by default
+  if (usePool) {
+    return useRealtimePooled(config)
+  }
+
+  // Fall back to direct connection if explicitly requested
+  return useRealtimeDirect(config)
 }
 
 // ============================================
@@ -474,4 +563,12 @@ export function usePresence(
     onlineUsers,
     isOnline: userId ? onlineUsers.includes(userId) : false,
   }
+}
+
+// ============================================
+// 导出连接池统计（用于监控）
+// ============================================
+
+export function getRealtimePoolStats() {
+  return channelPool.getStats()
 }

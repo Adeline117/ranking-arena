@@ -6,6 +6,7 @@
  * - Priority queue
  * - Automatic retries
  * - Platform-specific rate limiting
+ * - Memory-safe job history (automatic cleanup)
  */
 
 import { EventEmitter } from 'events'
@@ -19,6 +20,10 @@ import type {
 } from '../types.js'
 import { ProxyPoolManager, proxyPool } from '../proxy-pool/index.js'
 
+// ============================================
+// Configuration
+// ============================================
+
 const DEFAULT_CONFIG: SchedulerConfig = {
   maxConcurrency: 4,
   jobTimeoutMs: 120000, // 2 minutes
@@ -27,21 +32,60 @@ const DEFAULT_CONFIG: SchedulerConfig = {
   pollingIntervalMs: 1000,
 }
 
+// Memory management configuration
+const MEMORY_CONFIG = {
+  maxCompletedJobs: 100,    // Keep last 100 completed jobs
+  maxFailedJobs: 50,        // Keep last 50 failed jobs
+  cleanupInterval: 60000,   // Run cleanup every 60 seconds
+  cleanupThreshold: 10,     // Trigger cleanup when exceeding limit by this amount
+}
+
 type JobExecutor = (job: Job) => Promise<JobResult>
+
+// ============================================
+// Scheduler Stats
+// ============================================
+
+interface SchedulerStats {
+  totalJobsProcessed: number
+  totalJobsFailed: number
+  totalRetries: number
+  averageJobDuration: number
+  memoryUsage: {
+    completedJobs: number
+    failedJobs: number
+    activeJobs: number
+    queuedJobs: number
+  }
+  uptime: number
+}
+
+// ============================================
+// Scheduler Class
+// ============================================
 
 export class Scheduler extends EventEmitter {
   private config: SchedulerConfig
   private proxyPool: ProxyPoolManager
   private executor: JobExecutor | null = null
-  
+
   private jobQueue: Job[] = []
   private activeJobs: Map<string, Job> = new Map()
   private completedJobs: Map<string, Job> = new Map()
   private failedJobs: Map<string, Job> = new Map()
-  
+
   private running = false
   private processTimer: NodeJS.Timeout | null = null
+  private cleanupTimer: NodeJS.Timeout | null = null
   private startedAt?: Date
+
+  // Statistics tracking
+  private stats = {
+    totalJobsProcessed: 0,
+    totalJobsFailed: 0,
+    totalRetries: 0,
+    totalDuration: 0,
+  }
 
   constructor(config?: Partial<SchedulerConfig>, proxyPoolInstance?: ProxyPoolManager) {
     super()
@@ -76,6 +120,12 @@ export class Scheduler extends EventEmitter {
       this.config.pollingIntervalMs
     )
 
+    // Start cleanup timer for memory management
+    this.cleanupTimer = setInterval(
+      () => this.cleanupJobMaps(),
+      MEMORY_CONFIG.cleanupInterval
+    )
+
     this.emit('scheduler:started', { timestamp: this.startedAt })
     console.log('[Scheduler] Scheduler started')
   }
@@ -89,6 +139,11 @@ export class Scheduler extends EventEmitter {
     if (this.processTimer) {
       clearInterval(this.processTimer)
       this.processTimer = null
+    }
+
+    if (this.cleanupTimer) {
+      clearInterval(this.cleanupTimer)
+      this.cleanupTimer = null
     }
 
     // Wait for active jobs to complete (with timeout)
@@ -111,6 +166,106 @@ export class Scheduler extends EventEmitter {
       failedJobs: this.failedJobs.size,
       startedAt: this.startedAt,
     }
+  }
+
+  /**
+   * Get detailed scheduler statistics
+   */
+  getStats(): SchedulerStats {
+    const avgDuration = this.stats.totalJobsProcessed > 0
+      ? this.stats.totalDuration / this.stats.totalJobsProcessed
+      : 0
+
+    return {
+      totalJobsProcessed: this.stats.totalJobsProcessed,
+      totalJobsFailed: this.stats.totalJobsFailed,
+      totalRetries: this.stats.totalRetries,
+      averageJobDuration: Math.round(avgDuration),
+      memoryUsage: {
+        completedJobs: this.completedJobs.size,
+        failedJobs: this.failedJobs.size,
+        activeJobs: this.activeJobs.size,
+        queuedJobs: this.jobQueue.length,
+      },
+      uptime: this.startedAt ? Date.now() - this.startedAt.getTime() : 0,
+    }
+  }
+
+  // ============================================
+  // Memory Management
+  // ============================================
+
+  /**
+   * Clean up old completed and failed jobs to prevent memory leaks
+   * Keeps the most recent jobs based on completedAt timestamp
+   */
+  private cleanupJobMaps(): void {
+    const completedSize = this.completedJobs.size
+    const failedSize = this.failedJobs.size
+
+    // Clean up completed jobs if exceeding threshold
+    if (completedSize > MEMORY_CONFIG.maxCompletedJobs + MEMORY_CONFIG.cleanupThreshold) {
+      this.pruneJobMap(
+        this.completedJobs,
+        MEMORY_CONFIG.maxCompletedJobs,
+        'completed'
+      )
+    }
+
+    // Clean up failed jobs if exceeding threshold
+    if (failedSize > MEMORY_CONFIG.maxFailedJobs + MEMORY_CONFIG.cleanupThreshold) {
+      this.pruneJobMap(
+        this.failedJobs,
+        MEMORY_CONFIG.maxFailedJobs,
+        'failed'
+      )
+    }
+  }
+
+  /**
+   * Prune a job map to keep only the most recent N entries
+   */
+  private pruneJobMap(
+    jobMap: Map<string, Job>,
+    maxSize: number,
+    type: 'completed' | 'failed'
+  ): void {
+    const entries = Array.from(jobMap.entries())
+
+    // Sort by completedAt (newest first)
+    entries.sort((a, b) => {
+      const timeA = a[1].completedAt?.getTime() || 0
+      const timeB = b[1].completedAt?.getTime() || 0
+      return timeB - timeA
+    })
+
+    // Remove old entries
+    const toRemove = entries.slice(maxSize)
+    for (const [id] of toRemove) {
+      jobMap.delete(id)
+    }
+
+    if (toRemove.length > 0) {
+      console.log(
+        `[Scheduler] Cleaned up ${toRemove.length} old ${type} jobs ` +
+        `(kept ${jobMap.size}/${maxSize})`
+      )
+    }
+  }
+
+  /**
+   * Force cleanup of all job history (for manual memory management)
+   */
+  clearHistory(): void {
+    const completedCount = this.completedJobs.size
+    const failedCount = this.failedJobs.size
+
+    this.completedJobs.clear()
+    this.failedJobs.clear()
+
+    console.log(
+      `[Scheduler] Cleared job history: ${completedCount} completed, ${failedCount} failed`
+    )
   }
 
   // ============================================
@@ -166,6 +321,26 @@ export class Scheduler extends EventEmitter {
     return Array.from(this.activeJobs.values())
   }
 
+  getRecentCompletedJobs(limit: number = 10): Job[] {
+    return Array.from(this.completedJobs.values())
+      .sort((a, b) => {
+        const timeA = a.completedAt?.getTime() || 0
+        const timeB = b.completedAt?.getTime() || 0
+        return timeB - timeA
+      })
+      .slice(0, limit)
+  }
+
+  getRecentFailedJobs(limit: number = 10): Job[] {
+    return Array.from(this.failedJobs.values())
+      .sort((a, b) => {
+        const timeA = a.completedAt?.getTime() || 0
+        const timeB = b.completedAt?.getTime() || 0
+        return timeB - timeA
+      })
+      .slice(0, limit)
+  }
+
   // ============================================
   // Queue Processing
   // ============================================
@@ -212,13 +387,17 @@ export class Scheduler extends EventEmitter {
     try {
       // Execute with timeout
       const result = await this.executeWithTimeout(job)
-      
+
       job.status = 'completed'
       job.completedAt = new Date()
       job.result = result
 
       this.activeJobs.delete(job.id)
       this.completedJobs.set(job.id, job)
+
+      // Update stats
+      this.stats.totalJobsProcessed++
+      this.stats.totalDuration += result.duration
 
       // Record success for proxy
       if (job.proxyId) {
@@ -230,6 +409,11 @@ export class Scheduler extends EventEmitter {
         `[Scheduler] Job ${job.id} completed in ${result.duration}ms - ` +
           `${Object.values(result.periods).reduce((a, p) => a + p.saved, 0)} records saved`
       )
+
+      // Check if cleanup is needed (every 10 completed jobs)
+      if (this.stats.totalJobsProcessed % 10 === 0) {
+        this.cleanupJobMaps()
+      }
     } catch (err) {
       // Record failure for proxy
       if (job.proxyId) {
@@ -244,6 +428,9 @@ export class Scheduler extends EventEmitter {
         job.retryCount++
         job.status = 'pending'
         job.error = errorMsg
+
+        // Update retry stats
+        this.stats.totalRetries++
 
         // Re-enqueue with delay
         setTimeout(() => {
@@ -265,6 +452,9 @@ export class Scheduler extends EventEmitter {
 
         this.activeJobs.delete(job.id)
         this.failedJobs.set(job.id, job)
+
+        // Update failure stats
+        this.stats.totalJobsFailed++
 
         this.emit('job:failed', { job, error: errorMsg })
       }
