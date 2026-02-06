@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import { authedFetch, getHttpErrorMessage } from '@/lib/api/client'
 import { usePostStore, type CommentData } from '@/lib/stores/postStore'
 
@@ -57,6 +57,10 @@ export function usePostComments({
   const [expandedReplies, setExpandedReplies] = useState<Record<string, boolean>>({})
   const [deletingCommentId, setDeletingCommentId] = useState<string | null>(null)
 
+  // Ref-based guards to prevent double submissions
+  const submittingCommentRef = useRef(false)
+  const submittingReplyRef = useRef(false)
+
   // Auth guard helper
   const requireAuth = useCallback((): boolean => {
     if (!accessToken) {
@@ -84,7 +88,9 @@ export function usePostComments({
 
   const submitComment = useCallback(async (postId: string): Promise<void> => {
     if (!requireAuth() || !newComment.trim()) return
+    if (submittingCommentRef.current) return // Prevent double submission
 
+    submittingCommentRef.current = true
     setSubmittingComment(true)
     try {
       const { ok, status, data } = await authedFetch<{ success: boolean; error?: string; data?: { comment: Comment } }>(
@@ -111,6 +117,7 @@ export function usePostComments({
     } catch {
       showToast('网络异常，请重试', 'error')
     } finally {
+      submittingCommentRef.current = false
       setSubmittingComment(false)
     }
   }, [accessToken, newComment, requireAuth, showToast, onCommentCountChange])
@@ -150,7 +157,9 @@ export function usePostComments({
 
   const submitReply = useCallback(async (postId: string, parentId: string): Promise<void> => {
     if (!requireAuth() || !replyContent.trim()) return
+    if (submittingReplyRef.current) return // Prevent double submission
 
+    submittingReplyRef.current = true
     setSubmittingReply(true)
     try {
       const { ok, data } = await authedFetch<{ success: boolean; error?: string; data?: { comment: Comment } }>(
@@ -176,6 +185,7 @@ export function usePostComments({
     } catch {
       showToast('回复失败', 'error')
     } finally {
+      submittingReplyRef.current = false
       setSubmittingReply(false)
     }
   }, [accessToken, replyContent, requireAuth, showToast, onCommentCountChange])
