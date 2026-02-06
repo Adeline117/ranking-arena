@@ -19,7 +19,7 @@ import { renderContentWithLinks, ARENA_PURPLE } from '@/lib/utils/content'
 import { usePostComments, type Comment } from './hooks/usePostComments'
 import { SectionErrorBoundary } from '../utils/ErrorBoundary'
 import { PostSkeleton } from '../ui/Skeleton'
-import { SortButtons, type SortType, AvatarLink, ReactButton, Action, PostModal } from './components'
+import { SortButtons, type SortType, AvatarLink, ReactButton, Action, PostModal, CustomPollCard, PostDetailActions } from './components'
 import { PostListItem } from './PostList'
 import { EditPostModal, RepostModal } from './Modals'
 
@@ -1660,245 +1660,46 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
 
           {/* 自定义投票组件 */}
           {openPost.poll_id && (
-            <div style={{ 
-              marginTop: 16, 
-              padding: 16, 
-              background: tokens.colors.bg.secondary, 
-              borderRadius: 12,
-              border: `1px solid ${tokens.colors.border.primary}`,
-            }}>
-              {loadingCustomPoll ? (
-                <div style={{ color: tokens.colors.text.tertiary, fontSize: 13 }}>{t('loadingPoll')}</div>
-              ) : customPoll ? (
-                <>
-                  <div style={{ fontWeight: 700, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
-                    {customPoll.question || t('poll')}
-                    {customPoll.endAt && (
-                      <span style={{ 
-                        fontSize: 11, 
-                        color: customPoll.isExpired ? '#ff6b6b' : tokens.colors.text.tertiary,
-                        fontWeight: 400,
-                      }}>
-                        {customPoll.isExpired
-                          ? t('pollEnded')
-                          : t('pollDeadline').replace('{date}', new Date(customPoll.endAt).toLocaleString(language === 'zh' ? 'zh-CN' : 'en-US'))
-                        }
-                      </span>
-                    )}
-                    {!customPoll.endAt && (
-                      <span style={{ fontSize: 11, color: ARENA_PURPLE, fontWeight: 400 }}>{t('pollPermanent')}</span>
-                    )}
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    {customPoll.options.map((option, index) => {
-                      const isSelected = selectedPollOptions.includes(index)
-                      const hasVoted = customPollUserVotes.includes(index)
-                      const votePercentage = customPoll.showResults && customPoll.totalVotes && option.votes !== null
-                        ? Math.round((option.votes / customPoll.totalVotes) * 100)
-                        : 0
-                      
-                      return (
-                        <button
-                          key={index}
-                          onClick={() => {
-                            if (customPoll.isExpired) return
-                            if (customPoll.type === 'single') {
-                              setSelectedPollOptions([index])
-                            } else {
-                              setSelectedPollOptions(prev => 
-                                prev.includes(index) 
-                                  ? prev.filter(i => i !== index)
-                                  : [...prev, index]
-                              )
-                            }
-                          }}
-                          disabled={customPoll.isExpired}
-                          style={{
-                            position: 'relative',
-                            padding: '10px 14px',
-                            borderRadius: 8,
-                            border: isSelected || hasVoted
-                              ? `2px solid ${ARENA_PURPLE}`
-                              : `1px solid ${tokens.colors.border.primary}`,
-                            background: tokens.colors.bg.primary,
-                            color: tokens.colors.text.primary,
-                            cursor: customPoll.isExpired ? 'default' : 'pointer',
-                            textAlign: 'left',
-                            fontSize: 13,
-                            fontWeight: hasVoted ? 600 : 400,
-                            overflow: 'hidden',
-                          }}
-                        >
-                          {/* 投票结果进度条 */}
-                          {customPoll.showResults && (
-                            <div style={{
-                              position: 'absolute',
-                              left: 0,
-                              top: 0,
-                              bottom: 0,
-                              width: `${votePercentage}%`,
-                              background: hasVoted 
-                                ? 'rgba(139, 111, 168, 0.2)' 
-                                : 'rgba(139, 111, 168, 0.1)',
-                              transition: 'width 0.3s ease',
-                            }} />
-                          )}
-                          <div style={{ position: 'relative', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <span>
-                              {customPoll.type === 'multiple' && (
-                                <span style={{ marginRight: 8 }}>
-                                  {isSelected ? '[x]' : '[ ]'}
-                                </span>
-                              )}
-                              {option.text}
-                              {hasVoted && ' (voted)'}
-                            </span>
-                            {customPoll.showResults && option.votes !== null && (
-                              <span style={{ fontSize: 12, color: tokens.colors.text.secondary }}>
-                                {t('votes').replace('{n}', String(option.votes)).replace('{pct}', String(votePercentage))}
-                              </span>
-                            )}
-                          </div>
-                        </button>
-                      )
-                    })}
-                  </div>
-                  {/* 投票按钮 */}
-                  {!customPoll.isExpired && customPollUserVotes.length === 0 && (
-                    <button
-                      onClick={() => submitCustomPollVote(openPost.id)}
-                      disabled={selectedPollOptions.length === 0 || votingCustomPoll}
-                      style={{
-                        marginTop: 12,
-                        padding: '8px 16px',
-                        background: selectedPollOptions.length > 0 && !votingCustomPoll 
-                          ? ARENA_PURPLE 
-                          : 'rgba(139, 111, 168, 0.3)',
-                        color: '#fff',
-                        border: 'none',
-                        borderRadius: 8,
-                        cursor: selectedPollOptions.length > 0 && !votingCustomPoll ? 'pointer' : 'not-allowed',
-                        fontWeight: 600,
-                        fontSize: 13,
-                      }}
-                    >
-                      {votingCustomPoll ? t('submittingVote') : t('submitVote')}
-                    </button>
-                  )}
-                  {/* 总票数 */}
-                  {customPoll.showResults && customPoll.totalVotes !== null && (
-                    <div style={{ marginTop: 10, fontSize: 12, color: tokens.colors.text.tertiary }}>
-                      {t('totalVoters').replace('{n}', String(customPoll.totalVotes))}
-                    </div>
-                  )}
-                  {/* 未投票提示 */}
-                  {!customPoll.showResults && !customPoll.isExpired && (
-                    <div style={{ marginTop: 10, fontSize: 12, color: tokens.colors.text.tertiary }}>
-                      {t('voteToSeeResults')}
-                    </div>
-                  )}
-                </>
-              ) : (
-                <div style={{ color: tokens.colors.text.tertiary, fontSize: 13 }}>{t('noPoll')}</div>
-              )}
-            </div>
+            <CustomPollCard
+              poll={customPoll}
+              loading={loadingCustomPoll}
+              userVotes={customPollUserVotes}
+              selectedOptions={selectedPollOptions}
+              onSelectOption={(index) => {
+                if (customPoll?.type === 'single') {
+                  setSelectedPollOptions([index])
+                } else {
+                  setSelectedPollOptions(prev =>
+                    prev.includes(index)
+                      ? prev.filter(i => i !== index)
+                      : [...prev, index]
+                  )
+                }
+              }}
+              onSubmitVote={() => submitCustomPollVote(openPost.id)}
+              votingInProgress={votingCustomPoll}
+              language={language}
+              t={t}
+            />
           )}
 
-          <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${tokens.colors.border.secondary}`, display: 'flex', gap: 14, flexWrap: 'wrap' }}>
-            <Action
-              icon={<ThumbsUpIcon size={14} />}
-              text={t('upvote')}
-              onClick={(e) => {
-                if (e) {
-                  e.preventDefault()
-                  e.stopPropagation()
-                }
-                toggleReaction(openPost.id, 'up')
-              }}
-              active={openPost.user_reaction === 'up'}
-              count={openPost.like_count}
-              showCount={true}
-            />
-            <Action
-              icon={<ThumbsDownIcon size={14} />}
-              text={t('downvote')}
-              onClick={(e) => {
-                if (e) {
-                  e.preventDefault()
-                  e.stopPropagation()
-                }
-                toggleReaction(openPost.id, 'down')
-              }}
-              active={openPost.user_reaction === 'down'}
-              count={openPost.dislike_count}
-              showCount={false}
-            />
-            {/* 收藏 */}
-            <Action
-              icon={<span style={{ fontSize: 14 }}>{userBookmarks[openPost.id] ? '★' : '☆'}</span>}
-              text={userBookmarks[openPost.id] ? t('bookmarked') : t('save')}
-              onClick={(e) => {
-                if (e) {
-                  e.preventDefault()
-                  e.stopPropagation()
-                }
-                handleBookmark(openPost.id)
-              }}
-              active={userBookmarks[openPost.id]}
-              count={bookmarkCounts[openPost.id] || 0}
-              showCount={true}
-            />
-            {/* 选择收藏夹 - 仅在已登录时显示 */}
-            {accessToken && (
-              <button
-                onClick={(e) => {
-                  e.preventDefault()
-                  e.stopPropagation()
-                  openBookmarkFolderModal(openPost.id)
-                }}
-                style={{
-                  background: 'transparent',
-                  border: 'none',
-                  color: tokens.colors.text.tertiary,
-                  cursor: 'pointer',
-                  padding: '6px 8px',
-                  fontSize: 12,
-                  borderRadius: 6,
-                  transition: 'all 0.2s ease',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)'
-                  e.currentTarget.style.color = tokens.colors.text.secondary
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'transparent'
-                  e.currentTarget.style.color = tokens.colors.text.tertiary
-                }}
-                title={t('selectFolder')}
-              >
-                ▼
-              </button>
-            )}
-            {/* 转发 */}
-            <Action
-              icon={<span style={{ fontSize: 14 }}>↗</span>}
-              text={t('repost')}
-              onClick={(e) => {
-                if (e) {
-                  e.preventDefault()
-                  e.stopPropagation()
-                }
-                if (openPost.author_id === currentUserId) {
-                  showToast(t('cannotRepostOwn'), 'warning')
-                  return
-                }
-                setShowRepostModal(openPost.id)
-              }}
-              active={false}
-              count={0}
-              showCount={false}
-            />
-          </div>
+          <PostDetailActions
+            postId={openPost.id}
+            authorId={openPost.author_id}
+            currentUserId={currentUserId}
+            userReaction={openPost.user_reaction}
+            likeCount={openPost.like_count}
+            dislikeCount={openPost.dislike_count}
+            isBookmarked={userBookmarks[openPost.id] || false}
+            bookmarkCount={bookmarkCounts[openPost.id] || 0}
+            accessToken={accessToken}
+            onToggleReaction={toggleReaction}
+            onBookmark={handleBookmark}
+            onOpenBookmarkFolder={openBookmarkFolderModal}
+            onRepost={(id) => setShowRepostModal(id)}
+            showToast={showToast}
+            t={t}
+          />
 
           {/* 评论区 */}
           <div style={{ marginTop: 16, borderTop: `1px solid ${tokens.colors.border.secondary}`, paddingTop: 16 }}>
