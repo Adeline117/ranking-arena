@@ -76,3 +76,59 @@ export class CircuitBreakerOpenError extends Error {
     this.name = 'CircuitBreakerOpenError'
   }
 }
+
+/**
+ * Circuit Breaker Manager for managing multiple breakers by key
+ */
+class CircuitBreakerManager {
+  private breakers = new Map<string, ManagedCircuitBreaker>()
+  private readonly defaultConfig = {
+    failureThreshold: 5,
+    recoveryTimeMs: 60000,
+    halfOpenSuccessThreshold: 2,
+  }
+
+  get(key: string): ManagedCircuitBreaker {
+    if (!this.breakers.has(key)) {
+      this.breakers.set(key, new ManagedCircuitBreaker(
+        this.defaultConfig.failureThreshold,
+        this.defaultConfig.recoveryTimeMs,
+        this.defaultConfig.halfOpenSuccessThreshold
+      ))
+    }
+    return this.breakers.get(key)!
+  }
+}
+
+/**
+ * Managed Circuit Breaker with additional methods for the cron API
+ */
+class ManagedCircuitBreaker extends SimpleCircuitBreaker {
+  private openTime = 0
+
+  getState(): 'CLOSED' | 'OPEN' | 'HALF_OPEN' {
+    const state = this.state
+    if (state === 'closed') return 'CLOSED'
+    if (state === 'open') return 'OPEN'
+    return 'HALF_OPEN'
+  }
+
+  getStats(): { remainingCooldown: number } {
+    if (this.getState() === 'OPEN') {
+      const elapsed = Date.now() - this.openTime
+      const remaining = Math.max(0, 60000 - elapsed)
+      return { remainingCooldown: remaining }
+    }
+    return { remainingCooldown: 0 }
+  }
+
+  recordFailure(): void {
+    super.recordFailure()
+    if (this.state === 'open') {
+      this.openTime = Date.now()
+    }
+  }
+}
+
+// Export singleton manager
+export const circuitBreakerManager = new CircuitBreakerManager()
