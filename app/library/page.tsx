@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import TopNav from '@/app/components/layout/TopNav'
 import MobileBottomNav from '@/app/components/layout/MobileBottomNav'
@@ -24,9 +24,20 @@ export default function LibraryPage() {
   const [items, setItems] = useState<LibraryItem[]>([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [searchInput, setSearchInput] = useState(searchParams.get('search') || '')
   const [search, setSearch] = useState(searchParams.get('search') || '')
   const [category, setCategory] = useState(searchParams.get('category') || 'all')
   const [page, setPage] = useState(parseInt(searchParams.get('page') || '1'))
+  const debounceRef = useRef<NodeJS.Timeout>()
+
+  // Debounce search input
+  useEffect(() => {
+    debounceRef.current = setTimeout(() => {
+      setSearch(searchInput)
+      setPage(1)
+    }, 400)
+    return () => clearTimeout(debounceRef.current)
+  }, [searchInput])
 
   const fetchItems = useCallback(async () => {
     setLoading(true)
@@ -71,8 +82,8 @@ export default function LibraryPage() {
         <div style={{ marginBottom: 16 }}>
           <input
             type="text"
-            value={search}
-            onChange={e => { setSearch(e.target.value); setPage(1) }}
+            value={searchInput}
+            onChange={e => setSearchInput(e.target.value)}
             placeholder={isZh ? '搜索标题、作者、描述...' : 'Search titles, authors, descriptions...'}
             style={{
               width: '100%', maxWidth: 500, padding: '10px 14px',
@@ -114,7 +125,10 @@ export default function LibraryPage() {
           </div>
         ) : items.length === 0 ? (
           <div style={{ textAlign: 'center', padding: 60, color: tokens.colors.text.secondary }}>
-            {isZh ? '暂无内容，请先运行收集脚本' : 'No items yet. Run collection scripts first.'}
+            {search
+              ? (isZh ? `未找到与"${search}"相关的内容，试试其他关键词` : `No results for "${search}". Try different keywords.`)
+              : (isZh ? '该分类暂无内容' : 'No items in this category yet.')
+            }
           </div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 16 }}>
