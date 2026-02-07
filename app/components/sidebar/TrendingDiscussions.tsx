@@ -28,7 +28,7 @@ export default function TrendingDiscussions() {
       const { data } = await supabase
         .from('posts')
         .select('id, title, author_handle, comment_count, like_count, created_at, group_id')
-        .eq('status', 'published')
+        .eq('status', 'active')
         .order('hot_score', { ascending: false })
         .limit(20)
       setPosts((data as TrendingPost[]) || [])
