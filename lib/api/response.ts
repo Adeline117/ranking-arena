@@ -34,7 +34,7 @@ import type {
 /**
  * 标准成功响应
  */
-export function success<T>(data: T, status = 200): NextResponse<ApiSuccessResponse<T>> {
+export function success<T>(data: T, status = 200, headers?: Record<string, string>): NextResponse<ApiSuccessResponse<T>> {
   return NextResponse.json(
     {
       success: true as const,
@@ -43,7 +43,7 @@ export function success<T>(data: T, status = 200): NextResponse<ApiSuccessRespon
         timestamp: new Date().toISOString(),
       },
     },
-    { status }
+    { status, headers }
   )
 }
 

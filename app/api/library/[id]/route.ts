@@ -72,6 +72,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       },
       userStatus,
       userRating,
+    }, {
+      headers: { 'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600' }
     })
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 })
