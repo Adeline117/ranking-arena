@@ -39,7 +39,7 @@ export default function FollowingFeed() {
           .from('posts')
           .select('*')
           .in('author_id', ids)
-          .eq('status', 'published')
+          .eq('status', 'active')
           .order('created_at', { ascending: false })
           .limit(30)
 
