@@ -116,10 +116,10 @@ export function ProBadgeOverlay({
   const config = PRO_CONFIG
   
   const positionStyles: Record<string, React.CSSProperties> = {
-    'top-right': { top: -3, right: -3 },
-    'bottom-right': { bottom: -3, right: -3 },
-    'top-left': { top: -3, left: -3 },
-    'bottom-left': { bottom: -3, left: -3 },
+    'top-right': { top: -2, right: -2 },
+    'bottom-right': { bottom: 0, right: 0 },
+    'top-left': { top: -2, left: -2 },
+    'bottom-left': { bottom: 0, left: 0 },
   }
 
   return (
