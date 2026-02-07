@@ -185,7 +185,7 @@ export async function POST(request: NextRequest) {
 
         // Determine expiration based on severity
         let expiresAt: string | null = null
-        if (flagStatus === 'flagged') {
+        if (flagStatus === 'flag') {
           // Flagged expires after 30 days
           const expireDate = new Date()
           expireDate.setDate(expireDate.getDate() + 30)

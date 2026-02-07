@@ -82,9 +82,9 @@ export function usePostActions(options: UsePostActionsOptions): UsePostActionsRe
       // Update post with new counts
       if (onPostUpdate) {
         onPostUpdate(postId, {
-          up_count: data.up_count,
-          down_count: data.down_count,
-          user_vote_type: data.user_vote_type,
+          like_count: data.up_count ?? data.like_count,
+          dislike_count: data.down_count ?? data.dislike_count,
+          user_reaction: data.user_vote_type ?? data.user_reaction,
         })
       }
     } catch (err: any) {
@@ -131,9 +131,9 @@ export function usePostActions(options: UsePostActionsOptions): UsePostActionsRe
       // Update post with new counts
       if (onPostUpdate) {
         onPostUpdate(postId, {
-          up_count: data.up_count,
-          down_count: data.down_count,
-          user_vote_type: data.user_vote_type,
+          like_count: data.up_count ?? data.like_count,
+          dislike_count: data.down_count ?? data.dislike_count,
+          user_reaction: data.user_vote_type ?? data.user_reaction,
         })
       }
     } catch (err: any) {

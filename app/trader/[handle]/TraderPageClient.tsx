@@ -43,7 +43,7 @@ import {
   combineSchemas,
 } from '@/lib/seo'
 
-type TabKey = 'overview' | 'stats' | 'portfolio'
+type TabKey = 'overview' | 'reviews' | 'stats' | 'portfolio'
 
 interface AssetBreakdownData {
   '90D': Array<{ symbol: string; weightPct: number }>

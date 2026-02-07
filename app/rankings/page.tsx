@@ -100,17 +100,18 @@ const PLATFORMS_BY_CATEGORY: Record<Exclude<CategoryPreset, 'all'>, string[]> = 
     'xt',               // 158
   ],
   cex_spot: [
-    'binance_spot',     // 943
-    'bitget_spot',      // 701
+    'binance_spot',     // 1968
+    'bitget_spot',      // 785
     'bybit_spot',       // 500
   ],
   onchain_dex: [
-    'gmx',              // 2366
-    'hyperliquid',      // 2119
-    'gains',            // 1911
-    'okx_web3',         // 1429
-    'aevo',             // 1208
-    'dydx',             // 164
+    'hyperliquid',      // 3433
+    'gmx',              // 2575
+    'aevo',             // 1519
+    'okx_web3',         // 1531
+    'gains',            // 1407
+    'jupiter_perps',    // 1134
+    'dydx',             // 196
     'binance_web3',     // 52
   ],
 }
