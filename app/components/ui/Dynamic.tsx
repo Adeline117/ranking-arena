@@ -42,6 +42,12 @@ export const DynamicPostDetailModal = dynamic(
   { ssr: false }
 )
 
+// Report Modal - Only shown when reporting content
+export const DynamicReportModal = dynamic(
+  () => import('./ReportModal'),
+  { ssr: false }
+)
+
 // Post Create/Edit Modal (named export)
 export const DynamicPostModal = dynamic(
   () => import('../post/components/PostModal').then(mod => ({ default: mod.PostModal })),

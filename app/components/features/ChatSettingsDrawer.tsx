@@ -7,7 +7,8 @@ import Avatar from '@/app/components/ui/Avatar'
 import { useToast } from '@/app/components/ui/Toast'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { getProfileUrl } from '@/lib/utils/profile-navigation'
-import ReportModal from '@/app/components/ui/ReportModal'
+import dynamic from 'next/dynamic'
+const ReportModal = dynamic(() => import('@/app/components/ui/ReportModal'), { ssr: false })
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 type ChatSettings = {
