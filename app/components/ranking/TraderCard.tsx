@@ -16,7 +16,7 @@ import {
   areTraderPropsEqual,
   getScoreStyle,
 } from './shared/TraderDisplay'
-import AddCompareButton from '../trader/AddCompareButton'
+// AddCompareButton removed — compare accessible via toolbar only
 
 export interface TraderCardProps {
   trader: Trader
@@ -140,19 +140,6 @@ export const TraderCard = memo(function TraderCard({
           />
         </Box>
 
-        {/* Compare button */}
-        <Box style={{ display: 'flex', justifyContent: 'flex-end', marginTop: tokens.spacing[2] }}>
-          <AddCompareButton
-            trader={{
-              id: trader.id,
-              handle: trader.handle || trader.id,
-              source: trader.source || source || '',
-              avatarUrl: trader.avatar_url || undefined,
-            }}
-            variant="compact"
-            size="sm"
-          />
-        </Box>
       </Box>
     </Link>
   )
