@@ -4,45 +4,37 @@
  * Web3Provider
  *
  * Wraps the app with wagmi + RainbowKit + TanStack Query providers.
- * Must be placed inside the Next.js client boundary.
+ * Uses dynamic import with ssr:false to prevent @walletconnect/core
+ * from calling localStorage during SSR.
  */
 
-import { ReactNode } from 'react'
-import { WagmiProvider } from 'wagmi'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { RainbowKitProvider, darkTheme } from '@rainbow-me/rainbowkit'
-import { wagmiConfig } from './config'
-
-import '@rainbow-me/rainbowkit/styles.css'
-
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 60_000,
-      retry: 1,
-    },
-  },
-})
+import { ReactNode, useState, useEffect } from 'react'
 
 interface Web3ProviderProps {
   children: ReactNode
 }
 
+// Lazy-load the actual provider to avoid SSR localStorage crash
+function Web3ProviderInner({ children }: Web3ProviderProps) {
+  const [mounted, setMounted] = useState(false)
+  const [Provider, setProvider] = useState<React.ComponentType<{ children: ReactNode }> | null>(null)
+
+  useEffect(() => {
+    setMounted(true)
+    // Dynamic import only on client
+    import('./Web3ProviderClient').then(mod => {
+      setProvider(() => mod.Web3ProviderClient)
+    })
+  }, [])
+
+  if (!mounted || !Provider) {
+    // Render children without web3 context during SSR / loading
+    return <>{children}</>
+  }
+
+  return <Provider>{children}</Provider>
+}
+
 export function Web3Provider({ children }: Web3ProviderProps) {
-  return (
-    <WagmiProvider config={wagmiConfig}>
-      <QueryClientProvider client={queryClient}>
-        <RainbowKitProvider
-          theme={darkTheme({
-            accentColor: '#8B5CF6',
-            accentColorForeground: 'white',
-            borderRadius: 'medium',
-          })}
-          locale="en"
-        >
-          {children}
-        </RainbowKitProvider>
-      </QueryClientProvider>
-    </WagmiProvider>
-  )
+  return <Web3ProviderInner>{children}</Web3ProviderInner>
 }
