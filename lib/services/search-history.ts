@@ -10,8 +10,8 @@
 
 import { supabase } from '@/lib/supabase/client'
 
-const STORAGE_KEY = 'ranking-arena-recent-searches'
-const MAX_HISTORY_ITEMS = 20
+const STORAGE_KEY = 'arena_search_history'
+const MAX_HISTORY_ITEMS = 10
 
 export interface SearchHistoryItem {
   query: string

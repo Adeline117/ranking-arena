@@ -846,39 +846,52 @@ function HotContent() {
                           <Box
                             key={p.id}
                             className="hot-post-item"
-                            bg="primary"
-                            p={4}
-                            radius="md"
-                            border="primary"
                             style={{
                               cursor: 'pointer',
+                              padding: tokens.spacing[4],
+                              borderRadius: tokens.radius.lg,
+                              background: tokens.colors.bg.secondary,
+                              border: `1px solid ${tokens.colors.border.primary}`,
+                              boxShadow: tokens.shadow.sm,
+                              transition: `all 0.2s ease`,
                             }}
                             onClick={(e: React.MouseEvent) => {
                               if ((e.target as HTMLElement).closest('a, button, [role="button"], input, textarea, select')) return
                               handleOpenPost(p)
                             }}
                             onMouseEnter={(e) => {
-                              e.currentTarget.style.background = tokens.colors.bg.secondary
+                              e.currentTarget.style.boxShadow = `0 4px 16px rgba(139, 111, 168, 0.12)`
+                              e.currentTarget.style.borderColor = `${ARENA_PURPLE}40`
+                              e.currentTarget.style.transform = 'translateY(-1px)'
                             }}
                             onMouseLeave={(e) => {
-                              e.currentTarget.style.background = tokens.colors.bg.primary
+                              e.currentTarget.style.boxShadow = tokens.shadow.sm
+                              e.currentTarget.style.borderColor = tokens.colors.border.primary
+                              e.currentTarget.style.transform = 'translateY(0)'
                             }}
                           >
-                            <Box className="hot-post-meta" style={{ display: 'flex', gap: tokens.spacing[2], marginBottom: tokens.spacing[2], flexWrap: 'wrap', alignItems: 'center' }}>
-                              <Text className="hot-post-rank" size="sm" weight="black" style={{ color: rank <= 3 ? tokens.colors.accent.warning : tokens.colors.text.secondary }}>
+                            {/* Top row: rank + badges + group */}
+                            <Box className="hot-post-meta" style={{ display: 'flex', gap: tokens.spacing[2], marginBottom: tokens.spacing[3], flexWrap: 'wrap', alignItems: 'center' }}>
+                              <Text className="hot-post-rank" size="sm" weight="black" style={{
+                                color: rank <= 3 ? tokens.colors.accent.warning : tokens.colors.text.tertiary,
+                                fontSize: rank <= 3 ? '15px' : '13px',
+                                minWidth: 28,
+                              }}>
                                 #{rank}
                               </Text>
                               {(() => {
                                 const tag = getHotTag(p, rank)
                                 return tag ? (
                                   <span style={{
-                                    fontSize: 11,
+                                    fontSize: 10,
                                     fontWeight: 800,
                                     color: '#fff',
                                     background: tag.color,
-                                    padding: '1px 6px',
-                                    borderRadius: 4,
-                                    lineHeight: '18px',
+                                    padding: '2px 8px',
+                                    borderRadius: 999,
+                                    lineHeight: '16px',
+                                    letterSpacing: '0.5px',
+                                    textTransform: 'uppercase',
                                   }}>
                                     {tag.label}
                                   </span>
@@ -892,24 +905,34 @@ function HotContent() {
                                     fontSize: tokens.typography.fontSize.xs,
                                     color: ARENA_PURPLE,
                                     textDecoration: 'none',
-                                    padding: '1px 6px',
-                                    background: `${ARENA_PURPLE}15`,
-                                    borderRadius: tokens.radius.sm,
+                                    padding: '2px 10px',
+                                    background: `${ARENA_PURPLE}12`,
+                                    borderRadius: 999,
+                                    fontWeight: 600,
+                                    transition: 'background 0.15s ease',
                                   }}
                                 >
                                   {language === 'zh' ? p.group : (p.group_en || p.group)}
                                 </Link>
                               ) : (
-                                <Text size="xs" color="secondary">{language === 'zh' ? p.group : (p.group_en || p.group)}</Text>
+                                <Text size="xs" color="secondary" style={{ padding: '2px 10px', background: `${tokens.colors.text.tertiary}10`, borderRadius: 999 }}>
+                                  {language === 'zh' ? p.group : (p.group_en || p.group)}
+                                </Text>
                               )}
-                              <Text size="xs" color="tertiary">{(p.views ?? 0).toLocaleString()} {t('views')}</Text>
                             </Box>
-                            <Text className="hot-post-title" size="base" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>
+
+                            {/* Title */}
+                            <Text className="hot-post-title" size="base" weight="bold" style={{
+                              marginBottom: tokens.spacing[2],
+                              lineHeight: 1.4,
+                              fontSize: '15px',
+                            }}>
                               {translatedListPosts[p.id]?.title || p.title}
                             </Text>
+
+                            {/* Body preview */}
                             {(() => {
                               const isExpanded = expandedPosts[p.id]
-                              // Use translated body if available
                               const displayBody = translatedListPosts[p.id]?.body || p.body
                               const isLongContent = displayBody.length > 100
                               const contentToShow = isExpanded || !isLongContent
@@ -917,7 +940,12 @@ function HotContent() {
                                 : displayBody.slice(0, 100) + '...'
                               return (
                                 <>
-                                  <Text className="hot-post-body" size="sm" color="secondary" style={{ marginBottom: tokens.spacing[2], lineHeight: 1.5, color: translatedListPosts[p.id]?.body ? tokens.colors.accent.translated : undefined }}>
+                                  <Text className="hot-post-body" size="sm" color="secondary" style={{
+                                    marginBottom: tokens.spacing[2],
+                                    lineHeight: 1.6,
+                                    fontSize: '13px',
+                                    color: translatedListPosts[p.id]?.body ? tokens.colors.accent.translated : tokens.colors.text.secondary,
+                                  }}>
                                     {renderContentWithLinks(contentToShow)}
                                   </Text>
                                   {isLongContent && (
@@ -932,6 +960,7 @@ function HotContent() {
                                         color: ARENA_PURPLE,
                                         cursor: 'pointer',
                                         fontSize: 12,
+                                        fontWeight: 600,
                                         marginBottom: tokens.spacing[2],
                                         padding: 0,
                                       }}
@@ -942,7 +971,19 @@ function HotContent() {
                                 </>
                               )
                             })()}
-                            <Box className="hot-post-footer" style={{ display: 'flex', gap: tokens.spacing[3], fontSize: tokens.typography.fontSize.xs, color: tokens.colors.text.tertiary, flexWrap: 'wrap', alignItems: 'center' }}>
+
+                            {/* Footer: author, time, stats */}
+                            <Box className="hot-post-footer" style={{
+                              display: 'flex',
+                              gap: tokens.spacing[3],
+                              fontSize: tokens.typography.fontSize.xs,
+                              color: tokens.colors.text.tertiary,
+                              flexWrap: 'wrap',
+                              alignItems: 'center',
+                              marginTop: tokens.spacing[2],
+                              paddingTop: tokens.spacing[2],
+                              borderTop: `1px solid ${tokens.colors.border.primary}`,
+                            }}>
                               {p.author_handle ? (
                                 <Link
                                   href={`/u/${encodeURIComponent(p.author_handle)}`}
@@ -951,7 +992,7 @@ function HotContent() {
                                     fontSize: tokens.typography.fontSize.xs,
                                     color: tokens.colors.text.secondary,
                                     textDecoration: 'none',
-                                    fontWeight: 600,
+                                    fontWeight: 700,
                                   }}
                                 >
                                   @{p.author}
@@ -960,12 +1001,15 @@ function HotContent() {
                                 <Text size="xs" color="tertiary">{p.author}</Text>
                               )}
                               <Text size="xs" color="tertiary">{p.time}</Text>
-                              <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                              <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: tokens.colors.text.tertiary }}>
                                 <CommentIcon size={12} /> {p.comments}
                               </span>
-                              <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                              <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: tokens.colors.text.tertiary }}>
                                 <ThumbsUpIcon size={12} /> {p.likes}
                               </span>
+                              <Text size="xs" color="tertiary" style={{ marginLeft: 'auto' }}>
+                                {(p.views ?? 0).toLocaleString()} {t('views')}
+                              </Text>
                             </Box>
                           </Box>
                         )

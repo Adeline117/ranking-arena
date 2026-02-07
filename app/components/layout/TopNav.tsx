@@ -237,16 +237,16 @@ export default function TopNav({ email = null }: { email?: string | null }) {
       // 保存搜索历史
       if (typeof window !== 'undefined') {
         try {
-          const stored = localStorage.getItem('ranking-arena-recent-searches')
+          const stored = localStorage.getItem('arena_search_history')
           const history: string[] = stored ? JSON.parse(stored) : []
           const filtered = history.filter((item) => item !== trimmedQuery)
           const updated = [trimmedQuery, ...filtered].slice(0, 10)
-          localStorage.setItem('ranking-arena-recent-searches', JSON.stringify(updated))
+          localStorage.setItem('arena_search_history', JSON.stringify(updated))
         } catch (error) {
           // If quota exceeded or localStorage unavailable, try to clear and save just current search
           try {
-            localStorage.removeItem('ranking-arena-recent-searches')
-            localStorage.setItem('ranking-arena-recent-searches', JSON.stringify([trimmedQuery]))
+            localStorage.removeItem('arena_search_history')
+            localStorage.setItem('arena_search_history', JSON.stringify([trimmedQuery]))
           } catch {
             // If still failing (e.g., private mode), silently fail
             console.warn('[TopNav] localStorage unavailable')
@@ -558,15 +558,23 @@ export default function TopNav({ email = null }: { email?: string | null }) {
                   <Box
                     style={{
                       position: 'absolute',
-                      top: 4,
-                      right: 4,
-                      width: 8,
-                      height: 8,
-                      borderRadius: '50%',
+                      top: 0,
+                      right: -2,
+                      minWidth: 16,
+                      height: 16,
+                      borderRadius: 8,
                       background: '#ef4444',
                       border: `1.5px solid ${tokens.colors.bg.primary}`,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      padding: '0 4px',
                     }}
-                  />
+                  >
+                    <span style={{ fontSize: 10, fontWeight: 700, color: '#fff', lineHeight: 1 }}>
+                      {totalUnread > 99 ? '99+' : totalUnread}
+                    </span>
+                  </Box>
                 )}
               </button>
               <Box
