@@ -270,7 +270,7 @@ export default function TopNav({ email = null }: { email?: string | null }) {
         height: 56,
         backdropFilter: tokens.glass.blur.lg,
         WebkitBackdropFilter: tokens.glass.blur.lg,
-        boxShadow: `${tokens.shadow.sm}, 0 0 0 1px rgba(255, 255, 255, 0.05)`,
+        boxShadow: 'var(--shadow-card), var(--shadow-border-glow), var(--shadow-inset-subtle)',
       }}
     >
       <Box

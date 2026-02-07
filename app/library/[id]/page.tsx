@@ -230,7 +230,7 @@ export default function BookDetailPage() {
               width: '100%', aspectRatio: '2/3',
               borderRadius: tokens.radius.xl,
               overflow: 'hidden',
-              boxShadow: `${tokens.shadow.xl}, 0 0 0 1px ${tokens.colors.border.primary}`,
+              boxShadow: '4px 4px 12px rgba(0,0,0,0.3), 8px 8px 24px rgba(0,0,0,0.15), -1px 0 2px rgba(0,0,0,0.1), 0 0 0 1px var(--glass-border-light)',
             }}>
               <BookCover
                 title={book.title}

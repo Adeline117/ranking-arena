@@ -97,6 +97,16 @@ html.theme-transition *::after {
   --shadow-color: rgba(0, 0, 0, 0.25);
   --overlay-hover: rgba(255, 255, 255, 0.05);
   
+  /* Layered card shadows - Dark */
+  --shadow-card: 0 2px 8px rgba(0,0,0,0.3), 0 1px 2px rgba(0,0,0,0.2);
+  --shadow-card-hover: 0 8px 24px rgba(0,0,0,0.4), 0 2px 4px rgba(0,0,0,0.3);
+  --shadow-elevated: 0 12px 40px rgba(0,0,0,0.5), 0 4px 12px rgba(0,0,0,0.3);
+  --shadow-inset-subtle: inset 0 1px 0 rgba(255,255,255,0.06);
+  --shadow-border-glow: 0 0 0 1px rgba(255,255,255,0.06);
+  
+  /* Input focus glow - Dark */
+  --shadow-input-focus: 0 0 0 3px rgba(139,111,168,0.2), 0 0 12px rgba(139,111,168,0.1);
+  
   /* Pro/Premium colors - Dark */
   --color-pro-gradient-start: #8b6fa8;
   --color-pro-gradient-end: #6B5B95;
@@ -152,6 +162,16 @@ html.theme-transition *::after {
   /* Overlay and shadow colors - Light */
   --shadow-color: rgba(0, 0, 0, 0.1);
   --overlay-hover: rgba(0, 0, 0, 0.03);
+  
+  /* Layered card shadows - Light */
+  --shadow-card: 0 2px 8px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-card-hover: 0 8px 24px rgba(0,0,0,0.12), 0 2px 4px rgba(0,0,0,0.06);
+  --shadow-elevated: 0 12px 40px rgba(0,0,0,0.15), 0 4px 12px rgba(0,0,0,0.08);
+  --shadow-inset-subtle: inset 0 1px 0 rgba(255,255,255,0.8);
+  --shadow-border-glow: 0 0 0 1px rgba(0,0,0,0.06);
+  
+  /* Input focus glow - Light */
+  --shadow-input-focus: 0 0 0 3px rgba(123,95,152,0.15), 0 0 12px rgba(123,95,152,0.08);
   
   /* Pro/Premium colors - Light */
   --color-pro-gradient-start: #7B5F98;
@@ -363,8 +383,8 @@ body {
   }
 
   .hover-lift:hover {
-    transform: translateY(-2px) translateZ(0); /* Add translateZ for GPU */
-    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+    transform: translateY(-2px) translateZ(0);
+    box-shadow: var(--shadow-card-hover);
   }
 
   .press-effect {
@@ -631,21 +651,26 @@ body {
 }
 
 /* Variant-specific hover shadows */
-.btn-base.btn-primary:not(:disabled):hover {
-  box-shadow: 0 0 20px rgba(139, 111, 168, 0.3);
+.btn-base.btn-primary:not(:disabled) {
+  box-shadow: var(--shadow-card), var(--shadow-inset-subtle);
   background: linear-gradient(135deg, #9d84b5 0%, #8b6fa8 100%);
 }
 
+.btn-base.btn-primary:not(:disabled):hover {
+  box-shadow: 0 0 20px rgba(139, 111, 168, 0.3), var(--shadow-card-hover), var(--shadow-inset-subtle);
+  background: linear-gradient(135deg, #a891be 0%, #9d84b5 100%);
+}
+
 .btn-base.btn-secondary:not(:disabled):hover {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  box-shadow: var(--shadow-card-hover);
 }
 
 .btn-base.btn-ghost:not(:disabled):hover {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  box-shadow: var(--shadow-card);
 }
 
 .btn-base.btn-text:not(:disabled):hover {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  box-shadow: var(--shadow-card);
 }
 
 .btn-base.btn-success:not(:disabled):hover {
@@ -705,7 +730,7 @@ body {
 .top-nav-search-input:focus {
   border-color: var(--color-accent-primary) !important;
   background: var(--glass-bg-medium) !important;
-  box-shadow: 0 0 0 3px rgba(139, 111, 168, 0.125);
+  box-shadow: var(--shadow-input-focus);
   transform: scale(1.02);
 }
 
@@ -825,11 +850,12 @@ body {
 
 /* Card hover lift pattern */
 .card-hover {
+  box-shadow: var(--shadow-card), var(--shadow-border-glow);
   transition: transform 200ms cubic-bezier(0.4, 0, 0.2, 1), box-shadow 200ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 .card-hover:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 12px 24px var(--shadow-color);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-card-hover), var(--shadow-border-glow);
 }
 
 /* Ranking row hover - CSS-only (replaces JS style mutations) */
@@ -861,4 +887,62 @@ body {
   .card-hover:hover {
     transform: none;
   }
+}
+
+/* ============================================
+   Depth & Texture Utilities
+   ============================================ */
+
+/* Subtle noise texture overlay for premium feel */
+.texture-noise::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  opacity: 0.03;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  pointer-events: none;
+  border-radius: inherit;
+  z-index: 0;
+}
+.texture-noise { position: relative; }
+
+/* Elevated card - stronger depth for important elements */
+.depth-elevated {
+  box-shadow: var(--shadow-elevated), var(--shadow-border-glow);
+}
+
+/* Book cover 3D shadow */
+.book-shadow {
+  box-shadow:
+    4px 4px 12px rgba(0,0,0,0.3),
+    8px 8px 24px rgba(0,0,0,0.15),
+    -1px 0 2px rgba(0,0,0,0.1);
+  transition: box-shadow 300ms cubic-bezier(0.4, 0, 0.2, 1), transform 300ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.book-shadow:hover {
+  box-shadow:
+    6px 6px 16px rgba(0,0,0,0.35),
+    12px 12px 32px rgba(0,0,0,0.2),
+    -1px 0 3px rgba(0,0,0,0.12);
+  transform: translateY(-2px);
+}
+
+/* Ranking top-3 highlight card */
+.rank-highlight {
+  box-shadow: var(--shadow-card), var(--shadow-border-glow), var(--shadow-inset-subtle);
+  border: 1px solid var(--glass-border-medium);
+}
+
+/* Glass card with refined depth */
+.glass-card {
+  background: var(--glass-bg-primary);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--glass-border-light);
+  box-shadow: var(--shadow-card), var(--shadow-inset-subtle);
+  transition: box-shadow 200ms cubic-bezier(0.4, 0, 0.2, 1), transform 200ms cubic-bezier(0.4, 0, 0.2, 1), border-color 200ms ease;
+}
+.glass-card:hover {
+  box-shadow: var(--shadow-card-hover), var(--shadow-inset-subtle);
+  border-color: var(--glass-border-medium);
 }
