@@ -36,6 +36,7 @@ const MENU_LINK_STYLE: React.CSSProperties = {
   textDecoration: 'none',
   fontSize: tokens.typography.fontSize.base,
   fontWeight: tokens.typography.fontWeight.bold,
+  minHeight: 44,
 }
 
 export default function TopNav({ email = null }: { email?: string | null }) {
@@ -387,6 +388,9 @@ export default function TopNav({ email = null }: { email?: string | null }) {
                     fontWeight: isActive ? 800 : 600,
                     fontSize: tokens.typography.fontSize.sm,
                     background: isActive ? tokens.colors.bg.secondary : 'transparent',
+                    minHeight: 44,
+                    display: 'inline-flex',
+                    alignItems: 'center',
                   }}
                 >
                   {label}
@@ -596,6 +600,8 @@ export default function TopNav({ email = null }: { email?: string | null }) {
                   border: 'none',
                   fontFamily: 'inherit',
                   color: 'inherit',
+                  minWidth: 44,
+                  minHeight: 44,
                 }}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' || e.key === ' ') {
