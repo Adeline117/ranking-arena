@@ -206,6 +206,17 @@ export default function BookDetailPage() {
           }}>
             {book.cover_url ? (
               <Image src={book.cover_url} alt={book.title} fill style={{ objectFit: 'cover' }} unoptimized />
+            ) : book.category === 'event' ? (
+              <div style={{ textAlign: 'center' }}>
+                <span style={{ fontSize: 48 }}>
+                  {book.subcategory === 'hack' ? '🔓' : book.subcategory === 'regulation' ? '⚖️' : book.subcategory === 'quote' ? '💬' : '📅'}
+                </span>
+                {book.publish_date && (
+                  <div style={{ marginTop: 8, fontSize: 14, fontWeight: 700, color: tokens.colors.accent.brand }}>
+                    {book.publish_date}
+                  </div>
+                )}
+              </div>
             ) : (
               <span style={{ fontSize: 64 }}>📖</span>
             )}

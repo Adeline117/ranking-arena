@@ -15,6 +15,7 @@ const CATEGORIES = [
   { key: 'research', en: 'Research', zh: '研报' },
   { key: 'book', en: 'Books', zh: '书籍' },
   { key: 'paper', en: 'Papers', zh: '论文' },
+  { key: 'event', en: 'Events', zh: '事件' },
 ]
 
 export default function LibraryPage() {
@@ -153,6 +154,17 @@ export default function LibraryPage() {
                 }}>
                   {item.cover_url ? (
                     <Image src={item.cover_url} alt={item.title || ''} fill style={{ objectFit: 'cover' }} unoptimized />
+                  ) : item.category === 'event' ? (
+                    <div style={{ textAlign: 'center' }}>
+                      <span style={{ fontSize: 36 }}>
+                        {item.subcategory === 'hack' ? '🔓' : item.subcategory === 'regulation' ? '⚖️' : item.subcategory === 'quote' ? '💬' : item.subcategory === 'milestone' ? '🏆' : '📅'}
+                      </span>
+                      {item.publish_date && (
+                        <div style={{ marginTop: 4, fontSize: 11, fontWeight: 700, color: tokens.colors.accent.brand }}>
+                          {item.publish_date}
+                        </div>
+                      )}
+                    </div>
                   ) : (
                     <span style={{ fontSize: 40 }}>
                       {item.category === 'whitepaper' ? '📄' : item.category === 'book' ? '📖' : item.category === 'paper' ? '📝' : '📊'}
@@ -170,6 +182,15 @@ export default function LibraryPage() {
                     }}>
                       {item.category}
                     </span>
+                    {item.category === 'event' && item.subcategory && (
+                      <span style={{
+                        fontSize: 10, padding: '2px 8px', borderRadius: 10, fontWeight: 600,
+                        background: item.subcategory === 'hack' ? '#ef444422' : item.subcategory === 'regulation' ? '#8b5cf622' : item.subcategory === 'quote' ? '#06b6d422' : '#10b98122',
+                        color: item.subcategory === 'hack' ? '#ef4444' : item.subcategory === 'regulation' ? '#8b5cf6' : item.subcategory === 'quote' ? '#06b6d4' : '#10b981',
+                      }}>
+                        {item.subcategory === 'hack' ? (isZh ? '安全事件' : 'Hack') : item.subcategory === 'regulation' ? (isZh ? '监管' : 'Regulation') : item.subcategory === 'quote' ? (isZh ? '人物发言' : 'Quote') : item.subcategory === 'milestone' ? (isZh ? '里程碑' : 'Milestone') : item.subcategory}
+                      </span>
+                    )}
                     {!item.is_free && (
                       <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 10, background: '#f59e0b22', color: '#f59e0b', fontWeight: 600 }}>
                         💰 Paid
