@@ -26,6 +26,7 @@ import type { RankingWindow, TradingCategory, Platform, GranularPlatform, Rankin
 import { GRANULAR_PLATFORMS, PLATFORM_CATEGORY } from '@/lib/types/leaderboard';
 import { getSupabaseAdmin } from '@/lib/supabase/server';
 import { checkRateLimit, setRateLimitHeaders, getClientIp } from '@/lib/middleware/rate-limit';
+import { tieredGetOrSet } from '@/lib/cache/redis-layer';
 
 const VALID_WINDOWS: RankingWindow[] = ['7d', '30d', '90d'];
 const VALID_CATEGORIES: TradingCategory[] = ['futures', 'spot', 'onchain'];
@@ -105,9 +106,14 @@ export async function GET(request: NextRequest) {
       min_trades: minTrades,
     };
 
-    // Use Supabase fallback directly as it queries trader_snapshots (with actual data)
-    // LeaderboardService queries trader_snapshots_v2 which is empty
-    const result = await getRankingsFallback(query);
+    // Use tiered cache (memory → Redis → DB) for rankings
+    const cacheKey = `api:rankings:${window}:${category || 'all'}:${platform || 'all'}:${sortBy}:${sortDir}:${limit}:${offset}:${minPnl || ''}:${minTrades || ''}`
+    const result = await tieredGetOrSet(
+      cacheKey,
+      () => getRankingsFallback(query),
+      'hot',
+      ['rankings']
+    );
 
     const res = NextResponse.json(result, {
       headers: {
