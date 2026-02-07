@@ -191,7 +191,7 @@ function RankingsContent() {
               onClick={() => handleWindowChange(w)}
               className="px-4 py-2 rounded-lg text-sm font-medium transition-all"
               style={{
-                backgroundColor: activeWindow === w ? tokens.colors.accent.brand : tokens.colors.bg.secondary,
+                background: activeWindow === w ? tokens.gradient.purpleGold : tokens.colors.bg.secondary,
                 color: activeWindow === w ? '#fff' : tokens.colors.text.secondary,
               }}
             >
