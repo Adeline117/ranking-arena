@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '../base'
 import { supabase } from '@/lib/supabase/client'
@@ -158,7 +159,7 @@ function ReviewAvatar({ handle, avatarUrl }: { handle?: string; avatarUrl?: stri
   return (
     <Link href={handle ? `/u/${encodeURIComponent(handle)}` : '#'} style={{ textDecoration: 'none', flexShrink: 0 }}>
       {avatarUrl ? (
-        <img src={avatarUrl} alt="" style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover' }} />
+        <Image src={avatarUrl} alt="" width={size} height={size} style={{ borderRadius: '50%', objectFit: 'cover' }} unoptimized />
       ) : (
         <Box style={{
           width: size,

@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
+import Image from 'next/image'
 import TopNav from '@/app/components/layout/TopNav'
 import MobileBottomNav from '@/app/components/layout/MobileBottomNav'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -79,7 +80,7 @@ export default function BookDetailPage() {
     supabase.auth.getSession().then(({ data }) => setSession(data.session))
   }, [])
 
-  const getAuthHeaders = useCallback(() => {
+  const getAuthHeaders = useCallback((): Record<string, string> => {
     if (!session?.access_token) return {}
     return { Authorization: `Bearer ${session.access_token}` }
   }, [session])
@@ -200,11 +201,11 @@ export default function BookDetailPage() {
           <div style={{
             width: 200, minHeight: 280, borderRadius: 12, overflow: 'hidden', flexShrink: 0,
             background: `linear-gradient(135deg, ${tokens.colors.accent.brand}22, ${tokens.colors.accent.brand}44)`,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' as const,
             border: `1px solid ${tokens.colors.border.primary}`,
           }}>
             {book.cover_url ? (
-              <img src={book.cover_url} alt={book.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              <Image src={book.cover_url} alt={book.title} fill style={{ objectFit: 'cover' }} unoptimized />
             ) : (
               <span style={{ fontSize: 64 }}>📖</span>
             )}
@@ -456,10 +457,10 @@ export default function BookDetailPage() {
                   >
                     <div style={{
                       height: 180, background: `linear-gradient(135deg, ${tokens.colors.accent.brand}22, ${tokens.colors.accent.brand}44)`,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', position: 'relative' as const,
                     }}>
                       {item.cover_url ? (
-                        <img src={item.cover_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        <Image src={item.cover_url} alt={item.title || ''} fill style={{ objectFit: 'cover' }} unoptimized />
                       ) : (
                         <span style={{ fontSize: 32 }}>📖</span>
                       )}

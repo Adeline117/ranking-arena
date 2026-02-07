@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, type CSSProperties } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
 import { ThumbsUpIcon, ThumbsDownIcon } from '../ui/icons'
 import { renderContentWithLinks, ARENA_PURPLE } from '@/lib/utils/content'
@@ -174,7 +175,7 @@ function CommentAvatar({ handle, avatarUrl, isReply, isPro, showProBadge }: { ha
   return (
     <Link href={href} onClick={(e) => e.stopPropagation()} style={{ textDecoration: 'none', flexShrink: 0, position: 'relative' }}>
       {avatarUrl ? (
-        <img src={avatarUrl} alt="" style={styles.avatar(size)} />
+        <Image src={avatarUrl} alt="" width={size} height={size} style={styles.avatar(size)} unoptimized />
       ) : (
         <div style={styles.avatarPlaceholder(size)}>
           {(handle?.[0] || 'A').toUpperCase()}

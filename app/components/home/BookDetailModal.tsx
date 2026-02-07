@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
@@ -22,7 +23,7 @@ function MetaRow({ label, value }: { label: string; value: string | null | undef
   )
 }
 
-function langLabel(lang: string | null) {
+function langLabel(lang: string | null | undefined) {
   if (!lang) return null
   if (lang === 'zh') return '中文'
   if (lang === 'en') return 'English'
@@ -102,10 +103,10 @@ export default function BookDetailModal({ item, onClose }: BookDetailModalProps)
           <div style={{
             width: 140, height: 190, flexShrink: 0, borderRadius: 8, overflow: 'hidden',
             background: `linear-gradient(135deg, ${tokens.colors.accent.brand}22, ${tokens.colors.accent.brand}44)`,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' as const,
           }}>
             {item.cover_url ? (
-              <img src={item.cover_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              <Image src={item.cover_url} alt={item.title || ''} fill style={{ objectFit: 'cover' }} unoptimized />
             ) : (
               <span style={{ fontSize: 48 }}>
                 {item.category === 'book' ? '📖' : item.category === 'whitepaper' ? '📄' : item.category === 'paper' ? '📝' : '📊'}

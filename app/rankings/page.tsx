@@ -9,6 +9,7 @@
 import { Suspense, useState, useRef, useEffect, useCallback, useMemo, useDeferredValue } from 'react'
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
+import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useRankingsV2 } from '@/lib/hooks/useRankingsV2'
@@ -411,7 +412,7 @@ function TraderRow({ trader }: { trader: RankedTraderV2 }) {
           style={{ background: trader.avatar_url ? undefined : getAvatarGradient(trader.trader_key) }}
         >
           {trader.avatar_url ? (
-            <img src={trader.avatar_url} alt="" className="w-full h-full object-cover" />
+            <Image src={trader.avatar_url} alt="" width={32} height={32} className="w-full h-full object-cover" unoptimized />
           ) : (
             <span className="text-white">{getAvatarInitial(trader.display_name || trader.trader_key)}</span>
           )}
