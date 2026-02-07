@@ -221,13 +221,13 @@ export default function BookDetailPage() {
         </Link>
 
         {/* ===== Top Section: Cover + Info ===== */}
-        <div style={{ display: 'flex', gap: 28, marginBottom: 36, flexWrap: 'wrap' }}>
+        <div className="book-detail-top" style={{ display: 'flex', gap: 28, marginBottom: 36, flexWrap: 'wrap' }}>
           {/* Cover with shadow */}
-          <div style={{
-            width: 220, flexShrink: 0,
+          <div className="book-detail-cover" style={{
+            width: 180, flexShrink: 0,
           }}>
             <div style={{
-              width: 220, aspectRatio: '2/3',
+              width: '100%', aspectRatio: '2/3',
               borderRadius: tokens.radius.xl,
               overflow: 'hidden',
               boxShadow: `${tokens.shadow.xl}, 0 0 0 1px ${tokens.colors.border.primary}`,
@@ -407,9 +407,8 @@ export default function BookDetailPage() {
               lineHeight: tokens.typography.lineHeight.relaxed,
               color: tokens.colors.text.secondary,
               whiteSpace: 'pre-wrap', margin: 0,
-              maxHeight: descExpanded || !descLong ? 'none' : 120,
-              overflow: 'hidden',
-              position: 'relative',
+              maxHeight: descExpanded || !descLong ? undefined : 120,
+              overflow: descExpanded || !descLong ? undefined : 'hidden',
             }}>
               {book.description}
             </p>
