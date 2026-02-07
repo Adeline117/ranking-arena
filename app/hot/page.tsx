@@ -1023,11 +1023,11 @@ function HotContent() {
                             return (
                               <Box
                                 key={`blur-${p.id}`}
-                                bg="primary"
-                                p={4}
-                                radius="md"
-                                border="primary"
                                 style={{
+                                  padding: tokens.spacing[4],
+                                  borderRadius: tokens.radius.lg,
+                                  background: tokens.colors.bg.secondary,
+                                  border: `1px solid ${tokens.colors.border.primary}`,
                                   filter: 'blur(6px)',
                                   pointerEvents: 'none',
                                   opacity: 0.5,
@@ -1106,17 +1106,25 @@ function HotContent() {
                       {groups.map((group, idx) => (
                         <Box
                           key={group.id}
-                          bg="primary"
-                          p={4}
-                          radius="md"
-                          border="primary"
-                          style={{ cursor: 'pointer' }}
+                          style={{
+                            padding: tokens.spacing[4],
+                            borderRadius: tokens.radius.lg,
+                            background: tokens.colors.bg.secondary,
+                            border: `1px solid ${tokens.colors.border.primary}`,
+                            boxShadow: tokens.shadow.sm,
+                            cursor: 'pointer',
+                            transition: 'all 0.2s ease',
+                          }}
                           onClick={() => router.push(`/groups/${group.id}`)}
                           onMouseEnter={(e) => {
-                            e.currentTarget.style.background = tokens.colors.bg.secondary
+                            e.currentTarget.style.boxShadow = `0 4px 16px rgba(139, 111, 168, 0.12)`
+                            e.currentTarget.style.borderColor = `${ARENA_PURPLE}40`
+                            e.currentTarget.style.transform = 'translateY(-1px)'
                           }}
                           onMouseLeave={(e) => {
-                            e.currentTarget.style.background = tokens.colors.bg.primary
+                            e.currentTarget.style.boxShadow = tokens.shadow.sm
+                            e.currentTarget.style.borderColor = tokens.colors.border.primary
+                            e.currentTarget.style.transform = 'translateY(0)'
                           }}
                         >
                           <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
