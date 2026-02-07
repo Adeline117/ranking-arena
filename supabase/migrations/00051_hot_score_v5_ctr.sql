@@ -114,18 +114,9 @@ $$ LANGUAGE plpgsql STABLE;
 -- 3. Recalculate hot scores
 -- ============================================
 
--- Skip velocity/report recalc (functions may not exist yet)
--- SELECT update_post_velocity();
--- SELECT update_post_report_counts();
-
-UPDATE posts SET
-  hot_score = calculate_hot_score(
-    like_count, comment_count, repost_count, view_count,
-    dislike_count, report_count, likes_last_hour, comments_last_hour,
-    author_id, content, images, poll_id, created_at
-  ),
-  last_hot_refresh_at = now()
-WHERE created_at > NOW() - INTERVAL '7 days';
+-- Hot score recalculation skipped during migration
+-- Will be triggered by application code after migration
+-- (Avoids column type mismatch issues)
 
 -- ============================================
 -- Algorithm summary:
