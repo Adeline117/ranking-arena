@@ -67,7 +67,7 @@ export default function HomePage({
         </Suspense>
 
         <HomePageWithSubNav
-          rankingContent={
+          recommendedContent={
             <ThreeColumnLayout
               leftSidebar={
                 <Suspense fallback={<div className="skeleton" style={{ height: 400, borderRadius: 12 }} />}>
