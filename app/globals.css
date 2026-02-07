@@ -781,3 +781,72 @@ body {
 @media (max-width: 767px) {
   .hide-mobile { display: none !important; }
 }
+
+/* ============================================
+   Global interactive refinements
+   ============================================ */
+
+/* Smooth scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-border-primary);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-border-secondary);
+}
+
+/* Category pill / filter chip shared hover */
+.filter-chip {
+  transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.filter-chip:hover:not([data-active="true"]) {
+  background: var(--color-bg-tertiary);
+  border-color: var(--color-border-secondary);
+}
+
+/* Card hover lift pattern */
+.card-hover {
+  transition: transform 200ms cubic-bezier(0.4, 0, 0.2, 1), box-shadow 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.card-hover:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 12px 24px var(--shadow-color);
+}
+
+/* Ranking row hover - CSS-only (replaces JS style mutations) */
+.ranking-row-hover {
+  transition: background-color 150ms ease;
+}
+.ranking-row-hover:hover {
+  background-color: var(--color-bg-tertiary);
+}
+
+/* Empty state styling */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 64px 24px;
+  color: var(--color-text-secondary);
+  text-align: center;
+}
+
+/* Top 3 rank badge animation */
+@keyframes rankGlow {
+  0%, 100% { box-shadow: 0 0 6px rgba(255, 215, 0, 0.3); }
+  50% { box-shadow: 0 0 12px rgba(255, 215, 0, 0.5); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card-hover:hover {
+    transform: none;
+  }
+}
