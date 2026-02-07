@@ -49,11 +49,9 @@ export const TraderCard = memo(function TraderCard({
       aria-label={`#${rank} ${displayName}, ROI ${(trader.roi || 0) >= 0 ? '+' : ''}${(trader.roi || 0).toFixed(2)}%`}
     >
       <Box
-        className="ranking-row trader-card-contained"
+        className="ranking-row trader-card-contained glass-card"
         style={{
           padding: tokens.spacing[4],
-          background: tokens.glass.bg.light,
-          border: `1px solid var(--glass-border-light)`,
           borderRadius: tokens.radius.lg,
           cursor: 'pointer',
           display: 'flex',
