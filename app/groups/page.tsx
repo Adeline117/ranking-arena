@@ -185,7 +185,7 @@ function GroupsWaterfall() {
 
         let query = supabase
           .from('groups')
-          .select('id, name, name_en, avatar_url, member_count, description, description_en')
+          .select('id, name, name_en, avatar_url, cover_url, member_count, description, description_en')
           .order('member_count', { ascending: false, nullsFirst: false })
           .limit(40)
 
