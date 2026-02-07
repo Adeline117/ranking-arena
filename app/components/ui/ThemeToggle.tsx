@@ -1,69 +1,82 @@
 'use client'
 
-import { useState, useEffect, useTransition } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
-/**
- * Apply theme with smooth transition
- * Uses View Transition API (Chrome 111+) with CSS class fallback
- */
-function applyThemeWithTransition(newTheme: 'dark' | 'light') {
-  const doc = document.documentElement
-
-  const apply = () => {
-    doc.setAttribute('data-theme', newTheme)
-    localStorage.setItem('theme', newTheme)
-    window.dispatchEvent(new CustomEvent('themeChange', { detail: newTheme }))
-  }
-
-  // Modern: View Transition API
-  if ('startViewTransition' in document && typeof (document as any).startViewTransition === 'function') {
-    (document as any).startViewTransition(() => {
-      apply()
-    })
-    return
-  }
-
-  // Fallback: CSS transition class
-  doc.classList.add('theme-transition')
-  apply()
-  // Remove transition class after animation completes to avoid perf overhead
-  setTimeout(() => {
-    doc.classList.remove('theme-transition')
-  }, 450)
-}
-
 export default function ThemeToggle() {
   const [theme, setTheme] = useState<'dark' | 'light'>('dark')
-  const [isPending, startTransition] = useTransition()
+  const [animating, setAnimating] = useState(false)
+  const btnRef = useRef<HTMLButtonElement>(null)
   const { t } = useLanguage()
 
   useEffect(() => {
-    const savedTheme = localStorage.getItem('theme') as 'dark' | 'light' | null
-    if (savedTheme) {
-      setTheme(savedTheme)
-      document.documentElement.setAttribute('data-theme', savedTheme)
-    } else {
-      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
-      const defaultTheme = prefersDark ? 'dark' : 'light'
-      setTheme(defaultTheme)
-      document.documentElement.setAttribute('data-theme', defaultTheme)
-    }
+    const saved = localStorage.getItem('theme') as 'dark' | 'light' | null
+    const initial = saved || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+    setTheme(initial)
+    document.documentElement.setAttribute('data-theme', initial)
   }, [])
 
   const toggleTheme = () => {
+    if (animating) return
     const newTheme = theme === 'dark' ? 'light' : 'dark'
+    const btn = btnRef.current
 
-    applyThemeWithTransition(newTheme)
+    // Try View Transition API with circular clip-path animation
+    if (btn && 'startViewTransition' in document && typeof (document as any).startViewTransition === 'function') {
+      const rect = btn.getBoundingClientRect()
+      const x = rect.left + rect.width / 2
+      const y = rect.top + rect.height / 2
+      // Calculate max radius to cover entire viewport
+      const maxRadius = Math.hypot(
+        Math.max(x, window.innerWidth - x),
+        Math.max(y, window.innerHeight - y)
+      )
 
-    startTransition(() => {
-      setTheme(newTheme)
-    })
+      setAnimating(true)
+
+      const transition = (document as any).startViewTransition(() => {
+        document.documentElement.setAttribute('data-theme', newTheme)
+        localStorage.setItem('theme', newTheme)
+        setTheme(newTheme)
+      })
+
+      transition.ready.then(() => {
+        document.documentElement.animate(
+          {
+            clipPath: [
+              `circle(0px at ${x}px ${y}px)`,
+              `circle(${maxRadius}px at ${x}px ${y}px)`,
+            ],
+          },
+          {
+            duration: 500,
+            easing: 'ease-in-out',
+            pseudoElement: '::view-transition-new(root)',
+          }
+        )
+      }).catch(() => {
+        // Animation failed, theme still applied
+      })
+
+      transition.finished.then(() => {
+        setAnimating(false)
+      }).catch(() => {
+        setAnimating(false)
+      })
+
+      return
+    }
+
+    // Fallback: instant switch, no animation
+    document.documentElement.setAttribute('data-theme', newTheme)
+    localStorage.setItem('theme', newTheme)
+    setTheme(newTheme)
   }
 
   return (
     <button
+      ref={btnRef}
       onClick={toggleTheme}
       aria-label={theme === 'dark' ? t('lightMode') : t('darkMode')}
       title={theme === 'dark' ? t('lightMode') : t('darkMode')}
@@ -78,9 +91,9 @@ export default function ThemeToggle() {
         border: `1px solid ${tokens.colors.border.primary}`,
         borderRadius: tokens.radius.md,
         color: tokens.colors.text.secondary,
-        cursor: isPending ? 'wait' : 'pointer',
+        cursor: animating ? 'wait' : 'pointer',
         transition: `all ${tokens.transition.fast}`,
-        opacity: isPending ? 0.6 : 1,
+        opacity: animating ? 0.7 : 1,
       }}
     >
       {theme === 'dark' ? (
