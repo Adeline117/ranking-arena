@@ -43,7 +43,7 @@ import {
   combineSchemas,
 } from '@/lib/seo'
 
-type TabKey = 'overview' | 'reviews' | 'stats' | 'portfolio'
+type TabKey = 'overview' | 'stats' | 'portfolio'
 
 interface AssetBreakdownData {
   '90D': Array<{ symbol: string; weightPct: number }>
@@ -140,7 +140,7 @@ function TraderContent({ handle, serverData }: { handle: string; serverData: Tra
   // Read tab from URL, default to 'overview'
   const urlTab = searchParams.get('tab') as TabKey | null
   const [activeTab, setActiveTab] = useState<TabKey>(
-    urlTab && ['overview', 'stats', 'portfolio'].includes(urlTab) ? urlTab : 'overview'
+    urlTab && ['overview', 'stats', 'portfolio'].includes(urlTab) ? urlTab as TabKey : 'overview'
   )
 
   // Update URL when tab changes — wrap state update in startTransition
