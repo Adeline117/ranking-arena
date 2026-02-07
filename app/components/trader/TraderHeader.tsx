@@ -14,12 +14,6 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { OnChainBadge } from './OnChainBadge'
 import { BadgeDisplay } from './BadgeDisplay'
 
-interface CommunityScore {
-  avg_rating: number
-  review_count: number
-  recommend_rate: number
-}
-
 interface TraderHeaderProps {
   handle: string
   traderId: string
@@ -32,7 +26,6 @@ interface TraderHeaderProps {
   aum?: number
   isOwnProfile?: boolean
   source?: string
-  communityScore?: CommunityScore | null
   proBadgeTier?: 'pro' | null
   isPro?: boolean
   activeSince?: string
@@ -199,17 +192,17 @@ function CopyTradeSection({ isPro, traderId, source, handle, router, t }: CopyTr
         size="sm"
         onClick={() => router.push('/pricing')}
         style={{
-          color: tokens.colors.text.tertiary,
+          color: '#fff',
           fontSize: tokens.typography.fontSize.sm,
-          padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+          padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
           borderRadius: tokens.radius.lg,
-          background: tokens.colors.bg.tertiary,
-          border: `1px solid ${tokens.colors.border.primary}`,
+          background: tokens.gradient.primary,
+          border: 'none',
           transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
           display: 'flex',
           alignItems: 'center',
           gap: tokens.spacing[2],
-          opacity: 0.7,
+          boxShadow: tokens.shadow.glow,
         }}
       >
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -296,7 +289,6 @@ export default function TraderHeader({
   aum,
   isOwnProfile = false,
   source,
-  communityScore,
   proBadgeTier,
   isPro = false,
   activeSince,
@@ -525,19 +517,7 @@ export default function TraderHeader({
 
             <BadgeDisplay traderHandle={handle} size="sm" maxDisplay={3} />
 
-            {communityScore && communityScore.review_count > 0 && (
-              <Badge color="#FFD700" title={`${communityScore.review_count} ${t('userReviews')}`} style={{ gap: tokens.spacing[1] }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="#FFD700" stroke="#FFD700" strokeWidth="1">
-                  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-                </svg>
-                <Text size="xs" weight="bold" style={{ color: '#FFD700' }}>
-                  {communityScore.avg_rating.toFixed(1)}
-                </Text>
-                <Text size="xs" style={{ color: 'rgba(255, 215, 0, 0.7)' }}>
-                  ({communityScore.review_count})
-                </Text>
-              </Badge>
-            )}
+
           </Box>
           
           {/* Stats row */}
