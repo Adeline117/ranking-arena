@@ -37,7 +37,7 @@ const MENU_LINK_STYLE: React.CSSProperties = {
   fontWeight: tokens.typography.fontWeight.bold,
 }
 
-export default function TopNav({ email }: { email: string | null }) {
+export default function TopNav({ email = null }: { email?: string | null }) {
   const { t } = useLanguage()
   const pathname = usePathname()
   const router = useRouter()
