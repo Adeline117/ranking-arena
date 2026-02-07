@@ -14,7 +14,6 @@ export default function robots(): MetadataRoute.Robots {
           "/inbox",
           "/messages",
           "/my-posts",
-          "/dashboard",
           "/logout",
           "/onboarding",
           "/offline",

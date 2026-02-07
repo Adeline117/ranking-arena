@@ -23,6 +23,10 @@ export async function GET(req: NextRequest) {
     query = query.eq('category', category)
   }
 
+  if (lang) {
+    query = query.eq('language', lang)
+  }
+
   if (search) {
     query = query.or(`title.ilike.%${search}%,description.ilike.%${search}%,author.ilike.%${search}%`)
   }

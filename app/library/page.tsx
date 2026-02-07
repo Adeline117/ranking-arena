@@ -139,9 +139,7 @@ export default function LibraryPage() {
             {items.map(item => (
               <a
                 key={item.id}
-                href={item.pdf_url || item.source_url || item.buy_url || '#'}
-                target="_blank"
-                rel="noopener noreferrer"
+                href={`/library/${item.id}`}
                 style={{
                   borderRadius: 12, overflow: 'hidden', textDecoration: 'none',
                   background: tokens.colors.bg.secondary, border: `1px solid ${tokens.colors.border.primary}`,
