@@ -2500,7 +2500,7 @@ const zh = {
     recommendedTab: '推荐',
     bookshelfTab: '书架',
     loginToSeeFollowing: '登录后查看关注动态',
-    noFollowing: '你还没有关注任何人',
+    noFollowingYet: '你还没有关注任何人',
     discoverTraders: '去排行榜发现有趣的交易员吧',
     noFollowingPosts: '关注的人还没有发布内容',
     rateThisBook: '评价这本书',

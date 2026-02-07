@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
 import { useLanguage } from '../Providers/LanguageProvider'
@@ -88,16 +89,15 @@ export default function PinnedPost({ item }: PinnedPostProps) {
                   borderRadius: tokens.radius.md,
                   overflow: 'hidden',
                   background: tokens.colors.bg.tertiary,
+                  position: 'relative',
                 }}
               >
-                <img 
+                <Image 
                   src={url} 
                   alt={`${t('imageAlt')} ${idx + 1}`}
-                  style={{
-                    width: '100%',
-                    height: '100%',
-                    objectFit: 'cover',
-                  }}
+                  fill
+                  style={{ objectFit: 'cover' }}
+                  unoptimized
                 />
               </Box>
             ))}

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
 import { supabase } from '@/lib/supabase/client'
@@ -71,17 +72,12 @@ function AnimatedAvatar({
       />
       {/* 头像图片 */}
       {avatarUrl && !imageError && (
-        <img 
+        <Image 
           src={avatarUrl} 
           alt={handle} 
-          referrerPolicy="origin-when-cross-origin"
-          loading="lazy"
+          fill
+          unoptimized
           style={{ 
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            width: '100%', 
-            height: '100%', 
             objectFit: 'cover',
             opacity: imageLoaded ? 1 : 0,
             transition: 'opacity 0.4s ease',

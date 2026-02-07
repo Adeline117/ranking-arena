@@ -89,6 +89,7 @@ export async function getWeightedPosts(
   let query = supabase
     .from('posts')
     .select(selectFields)
+    // @ts-expect-error -- custom join not in Supabase types
     .join('user_profiles', { column: 'author_id', on: 'id', type: 'left' })
     .join('groups', { column: 'group_id', on: 'id', type: 'left' })
     .range(offset, offset + limit - 1)
@@ -120,7 +121,7 @@ export async function getWeightedPosts(
   if (!postsData || postsData.length === 0) return []
 
   // 计算权重增强的排序分数
-  const postsWithWeightedScore = postsData.map((post: any) => {
+  const postsWithWeightedScore = (postsData as any[]).map((post: any) => {
     const baseScore = post.hot_score || 0
     const authorWeight = post.author_weight || 0
     
@@ -141,7 +142,7 @@ export async function getWeightedPosts(
   })
 
   // 按权重增强分数排序
-  postsWithWeightedScore.sort((a, b) => {
+  postsWithWeightedScore.sort((a: any, b: any) => {
     if (sort_order === 'asc') {
       return a.weighted_score - b.weighted_score
     } else {
@@ -150,8 +151,8 @@ export async function getWeightedPosts(
   })
 
   // 转换为标准格式并获取作者信息
-  const authorIds = [...new Set(postsWithWeightedScore.map(p => p.author_id).filter(Boolean))]
-  const originalPostIds = [...new Set(postsWithWeightedScore.map(p => p.original_post_id).filter((id): id is string => !!id))]
+  const authorIds = [...new Set(postsWithWeightedScore.map((p: any) => p.author_id).filter(Boolean))]
+  const originalPostIds = [...new Set(postsWithWeightedScore.map((p: any) => p.original_post_id).filter((id: any): id is string => !!id))]
 
   const [profilesResult, originalPostsResult] = await Promise.all([
     authorIds.length > 0

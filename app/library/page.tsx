@@ -5,6 +5,7 @@ import { useSearchParams, useRouter } from 'next/navigation'
 import TopNav from '@/app/components/layout/TopNav'
 import MobileBottomNav from '@/app/components/layout/MobileBottomNav'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
 import type { LibraryItem } from '@/lib/types/library'
 
@@ -28,7 +29,7 @@ export default function LibraryPage() {
   const [search, setSearch] = useState(searchParams.get('search') || '')
   const [category, setCategory] = useState(searchParams.get('category') || 'all')
   const [page, setPage] = useState(parseInt(searchParams.get('page') || '1'))
-  const debounceRef = useRef<NodeJS.Timeout>()
+  const debounceRef = useRef<NodeJS.Timeout>(undefined)
 
   // Debounce search input
   useEffect(() => {
@@ -148,10 +149,10 @@ export default function LibraryPage() {
                 {/* Cover */}
                 <div style={{
                   height: 140, background: `linear-gradient(135deg, ${tokens.colors.accent.brand}22, ${tokens.colors.accent.brand}44)`,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', position: 'relative' as const,
                 }}>
                   {item.cover_url ? (
-                    <img src={item.cover_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    <Image src={item.cover_url} alt={item.title || ''} fill style={{ objectFit: 'cover' }} unoptimized />
                   ) : (
                     <span style={{ fontSize: 40 }}>
                       {item.category === 'whitepaper' ? '📄' : item.category === 'book' ? '📖' : item.category === 'paper' ? '📝' : '📊'}

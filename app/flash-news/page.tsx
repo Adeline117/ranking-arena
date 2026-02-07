@@ -194,16 +194,16 @@ export default function FlashNewsPage() {
         style={{ 
           maxWidth: '800px', 
           margin: '0 auto', 
-          padding: `${tokens.spacing.lg} ${tokens.spacing.md}` 
+          padding: `${tokens.spacing[4]} ${tokens.spacing[3]}` 
         }}
       >
         {/* 标题区域 */}
-        <Box style={{ marginBottom: tokens.spacing.xl }}>
+        <Box style={{ marginBottom: tokens.spacing[5] }}>
           <Text 
             style={{ 
               fontSize: '28px', 
               fontWeight: '700',
-              marginBottom: tokens.spacing.sm 
+              marginBottom: tokens.spacing[2] 
             }}
           >
             {language === 'zh' ? '快讯中心' : 'Flash News'}
@@ -219,10 +219,10 @@ export default function FlashNewsPage() {
         {/* 分类筛选 */}
         <Box 
           style={{ 
-            marginBottom: tokens.spacing.lg,
+            marginBottom: tokens.spacing[4],
             display: 'flex',
             flexWrap: 'wrap',
-            gap: tokens.spacing.sm,
+            gap: tokens.spacing[2],
           }}
         >
           {CATEGORIES.map((category) => (
@@ -251,7 +251,7 @@ export default function FlashNewsPage() {
           <Box 
             style={{ 
               textAlign: 'center', 
-              padding: tokens.spacing.xl,
+              padding: tokens.spacing[5],
               color: tokens.colors.text.secondary 
             }}
           >
@@ -261,7 +261,7 @@ export default function FlashNewsPage() {
           <Box 
             style={{ 
               textAlign: 'center', 
-              padding: tokens.spacing.xl,
+              padding: tokens.spacing[5],
               color: tokens.colors.text.secondary 
             }}
           >
@@ -270,7 +270,7 @@ export default function FlashNewsPage() {
         ) : (
           <Box>
             {/* 新闻列表 */}
-            <Box style={{ marginBottom: tokens.spacing.xl }}>
+            <Box style={{ marginBottom: tokens.spacing[5] }}>
               {news.map((newsItem, index) => {
                 const importanceConfig = IMPORTANCE_CONFIG[newsItem.importance]
                 const categoryColor = CATEGORY_COLORS[newsItem.category] || tokens.colors.text.secondary
@@ -280,9 +280,9 @@ export default function FlashNewsPage() {
                     key={newsItem.id}
                     style={{
                       display: 'flex',
-                      marginBottom: tokens.spacing.lg,
+                      marginBottom: tokens.spacing[4],
                       borderLeft: index === 0 ? 'none' : `2px solid ${tokens.colors.border.primary}`,
-                      paddingLeft: index === 0 ? '0' : tokens.spacing.md,
+                      paddingLeft: index === 0 ? '0' : tokens.spacing[3],
                       position: 'relative',
                     }}
                   >
@@ -292,7 +292,7 @@ export default function FlashNewsPage() {
                         style={{
                           position: 'absolute',
                           left: '-6px',
-                          top: tokens.spacing.sm,
+                          top: tokens.spacing[2],
                           width: '10px',
                           height: '10px',
                           borderRadius: '50%',
@@ -305,7 +305,7 @@ export default function FlashNewsPage() {
                     <Box style={{ flex: 1 }}>
                       <Card 
                         style={{ 
-                          padding: tokens.spacing.md,
+                          padding: tokens.spacing[3],
                           background: tokens.colors.bg.secondary,
                           border: `1px solid ${tokens.colors.border.primary}`,
                           borderRadius: tokens.radius.md,
@@ -322,7 +322,7 @@ export default function FlashNewsPage() {
                               left: 0,
                               background: importanceConfig.color,
                               color: 'white',
-                              padding: `${tokens.spacing.xs} ${tokens.spacing.sm}`,
+                              padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
                               fontSize: '12px',
                               fontWeight: '600',
                               borderRadius: `0 0 ${tokens.radius.sm} 0`,
@@ -333,14 +333,14 @@ export default function FlashNewsPage() {
                         )}
 
                         {/* 新闻内容 */}
-                        <Box style={{ paddingTop: newsItem.importance !== 'normal' ? tokens.spacing.lg : '0' }}>
+                        <Box style={{ paddingTop: newsItem.importance !== 'normal' ? tokens.spacing[4] : '0' }}>
                           {/* 时间和分类 */}
                           <Box 
                             style={{ 
                               display: 'flex', 
                               alignItems: 'center', 
                               justifyContent: 'space-between',
-                              marginBottom: tokens.spacing.sm,
+                              marginBottom: tokens.spacing[2],
                             }}
                           >
                             <Text 
@@ -353,12 +353,12 @@ export default function FlashNewsPage() {
                               {formatPublishedTime(newsItem.published_at)}
                             </Text>
                             
-                            <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing.xs }}>
+                            <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1] }}>
                               <Box
                                 style={{
                                   background: categoryColor,
                                   color: 'white',
-                                  padding: `${tokens.spacing.xs} ${tokens.spacing.sm}`,
+                                  padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
                                   borderRadius: tokens.radius.sm,
                                   fontSize: '12px',
                                   fontWeight: '600',
@@ -375,7 +375,7 @@ export default function FlashNewsPage() {
                               fontSize: '16px',
                               fontWeight: '600',
                               lineHeight: '1.5',
-                              marginBottom: tokens.spacing.sm,
+                              marginBottom: tokens.spacing[2],
                               color: tokens.colors.text.primary,
                             }}
                           >
@@ -388,7 +388,7 @@ export default function FlashNewsPage() {
                               style={{ 
                                 color: tokens.colors.text.secondary,
                                 lineHeight: '1.5',
-                                marginBottom: tokens.spacing.sm,
+                                marginBottom: tokens.spacing[2],
                                 fontSize: '14px',
                               }}
                             >
@@ -403,16 +403,16 @@ export default function FlashNewsPage() {
                               alignItems: 'center',
                               justifyContent: 'space-between',
                               flexWrap: 'wrap',
-                              gap: tokens.spacing.sm,
+                              gap: tokens.spacing[2],
                             }}
                           >
-                            <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing.xs }}>
+                            <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1] }}>
                               <Text style={{ 
                                 color: tokens.colors.text.tertiary, 
                                 fontSize: '12px',
                                 fontWeight: '500',
                               }}>
-                                来源:
+                                {language === 'zh' ? '来源:' : 'Source:'}
                               </Text>
                               {newsItem.source_url ? (
                                 <a 
@@ -441,15 +441,15 @@ export default function FlashNewsPage() {
 
                             {/* 标签 */}
                             {newsItem.tags && newsItem.tags.length > 0 && (
-                              <Box style={{ display: 'flex', gap: tokens.spacing.xs, flexWrap: 'wrap' }}>
+                              <Box style={{ display: 'flex', gap: tokens.spacing[1], flexWrap: 'wrap' }}>
                                 {newsItem.tags.slice(0, 3).map((tag, tagIndex) => (
                                   <Box
                                     key={tagIndex}
                                     style={{
                                       background: tokens.colors.bg.tertiary,
                                       color: tokens.colors.text.tertiary,
-                                      padding: `2px ${tokens.spacing.xs}`,
-                                      borderRadius: tokens.radius.xs,
+                                      padding: `2px ${tokens.spacing[1]}`,
+                                      borderRadius: tokens.radius.sm,
                                       fontSize: '10px',
                                       fontWeight: '500',
                                     }}
@@ -474,8 +474,6 @@ export default function FlashNewsPage() {
                 currentPage={currentPage}
                 totalPages={pagination.totalPages}
                 onPageChange={handlePageChange}
-                hasNext={pagination.hasNext}
-                hasPrev={pagination.hasPrev}
               />
             )}
           </Box>

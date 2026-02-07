@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, lazy, Suspense } from 'react'
+import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import StarRating from '@/app/components/ui/StarRating'
@@ -152,10 +153,10 @@ export default function BookshelfTab() {
               {/* Cover */}
               <div style={{
                 height: 130, background: `linear-gradient(135deg, ${tokens.colors.accent.brand}22, ${tokens.colors.accent.brand}44)`,
-                display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', position: 'relative' as const,
               }}>
                 {item.cover_url ? (
-                  <img src={item.cover_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  <Image src={item.cover_url} alt={item.title || ''} fill style={{ objectFit: 'cover' }} unoptimized />
                 ) : (
                   <span style={{ fontSize: 36 }}>{categoryEmoji(item.category)}</span>
                 )}

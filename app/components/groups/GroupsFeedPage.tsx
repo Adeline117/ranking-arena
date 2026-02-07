@@ -339,9 +339,9 @@ export default function GroupsFeedPage() {
                         e.currentTarget.style.transform = 'translateX(0)'
                       }}
                     >
-                      <Box style={{ width: 44, height: 44, borderRadius: tokens.radius.lg, background: 'linear-gradient(135deg, rgba(139,111,168,0.2), rgba(139,111,168,0.1))', border: `1px solid ${tokens.colors.border.primary}`, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 }}>
+                      <Box style={{ width: 44, height: 44, borderRadius: tokens.radius.lg, background: 'linear-gradient(135deg, rgba(139,111,168,0.2), rgba(139,111,168,0.1))', border: `1px solid ${tokens.colors.border.primary}`, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0, position: 'relative' }}>
                         {group.avatar_url ? (
-                          <img src={group.avatar_url} alt={group.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} referrerPolicy="no-referrer" onError={(e) => { e.currentTarget.style.display = 'none' }} />
+                          <Image src={group.avatar_url} alt={group.name} fill style={{ objectFit: 'cover' }} unoptimized onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
                         ) : (
                           <Text size="base" weight="bold" style={{ color: '#c9b8db' }}>
                             {group.name.charAt(0).toUpperCase()}

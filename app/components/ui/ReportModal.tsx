@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
 import { useToast } from './Toast'
@@ -312,7 +313,7 @@ export default function ReportModal({
               <Box style={{ display: 'flex', gap: tokens.spacing[2], flexWrap: 'wrap' }}>
                 {images.map((img, i) => (
                   <Box key={i} style={{ position: 'relative', width: 72, height: 72, borderRadius: tokens.radius.md, overflow: 'hidden', border: `1px solid ${tokens.colors.border.primary}` }}>
-                    <img src={img} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    <Image src={img} alt="" fill style={{ objectFit: 'cover' }} unoptimized />
                     <button
                       onClick={() => setImages(prev => prev.filter((_, j) => j !== i))}
                       style={{
