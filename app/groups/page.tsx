@@ -264,26 +264,36 @@ function GroupsWaterfall() {
       {loading ? (
         <div className="waterfall-grid">
           {[1, 2, 3, 4, 5, 6].map(i => (
-            <div key={i} style={{
+            <div key={i} className="skeleton" style={{
               borderRadius: tokens.radius.xl,
-              background: tokens.colors.bg.secondary,
               height: 120 + (i % 3) * 40,
-              animation: 'pulse 1.5s ease-in-out infinite',
             }} />
           ))}
         </div>
       ) : groups.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: tokens.spacing[12] }}>
-          <Text size="md" color="tertiary">
+        <div className="empty-state" style={{ padding: '80px 24px' }}>
+          <div className="empty-state-icon">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />
+            </svg>
+          </div>
+          <p className="empty-state-title">
             {debouncedQuery
               ? (language === 'zh' ? '未找到匹配的小组' : 'No groups found')
               : activeTab === 'mine'
-                ? (language === 'zh' ? '还未加入任何小组' : 'Not joined any groups')
+                ? (language === 'zh' ? '还未加入任何小组' : 'You haven\'t joined any groups')
                 : (language === 'zh' ? '暂无小组' : 'No groups available')}
-          </Text>
+          </p>
+          <p className="empty-state-message">
+            {debouncedQuery
+              ? (language === 'zh' ? '试试其他关键词' : 'Try different keywords')
+              : activeTab === 'mine'
+                ? (language === 'zh' ? '浏览并加入感兴趣的小组' : 'Browse and join groups that interest you')
+                : ''}
+          </p>
         </div>
       ) : (
-        <div className="waterfall-grid">
+        <div className="waterfall-grid stagger-fade">
           {groups.map(group => (
             <GroupWaterfallCard key={group.id} group={group} language={language} />
           ))}

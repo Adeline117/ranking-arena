@@ -297,6 +297,11 @@ body {
   100% { background-position: 200% 0; }
 }
 
+@keyframes skeletonPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
 @keyframes ripple {
   from {
     transform: scale(0);
@@ -349,19 +354,39 @@ body {
   animation: scaleIn 0.2s ease-out forwards;
 }
 
-/* 卡片交错进入动画 - uses CSS custom property instead of :nth-child selectors */
+/* Component mount fade-in */
+.fade-in {
+  animation: fadeIn 0.25s ease-out both;
+}
+
+/* Stagger children fade-in with nth-child delay */
 @media (prefers-reduced-motion: no-preference) {
   .stagger-enter > * {
     opacity: 0;
     animation: pageEnter 0.3s ease-out both;
     animation-delay: calc(var(--stagger-index, 0) * 20ms);
   }
+
+  .stagger-fade > *:nth-child(1) { animation: pageEnter 0.3s ease-out 0ms both; }
+  .stagger-fade > *:nth-child(2) { animation: pageEnter 0.3s ease-out 40ms both; }
+  .stagger-fade > *:nth-child(3) { animation: pageEnter 0.3s ease-out 80ms both; }
+  .stagger-fade > *:nth-child(4) { animation: pageEnter 0.3s ease-out 120ms both; }
+  .stagger-fade > *:nth-child(5) { animation: pageEnter 0.3s ease-out 160ms both; }
+  .stagger-fade > *:nth-child(6) { animation: pageEnter 0.3s ease-out 200ms both; }
+  .stagger-fade > *:nth-child(7) { animation: pageEnter 0.3s ease-out 240ms both; }
+  .stagger-fade > *:nth-child(8) { animation: pageEnter 0.3s ease-out 280ms both; }
+  .stagger-fade > *:nth-child(n+9) { animation: pageEnter 0.3s ease-out 300ms both; }
+  .stagger-fade > * { opacity: 0; }
 }
 
 /* No stagger animation for reduced motion */
 @media (prefers-reduced-motion: reduce) {
-  .stagger-enter > * {
+  .stagger-enter > *,
+  .stagger-fade > * {
     opacity: 1;
+    animation: none;
+  }
+  .fade-in {
     animation: none;
   }
 }
@@ -851,7 +876,9 @@ body {
 /* Card hover lift pattern */
 .card-hover {
   box-shadow: var(--shadow-card), var(--shadow-border-glow);
-  transition: transform 200ms cubic-bezier(0.4, 0, 0.2, 1), box-shadow 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  transition: transform 250ms cubic-bezier(0.4, 0, 0.2, 1),
+              box-shadow 250ms cubic-bezier(0.4, 0, 0.2, 1),
+              border-color 250ms ease;
 }
 .card-hover:hover {
   transform: translateY(-2px);
@@ -860,7 +887,7 @@ body {
 
 /* Ranking row hover - CSS-only (replaces JS style mutations) */
 .ranking-row-hover {
-  transition: background-color 150ms ease;
+  transition: background-color 150ms ease, box-shadow 150ms ease;
 }
 .ranking-row-hover:hover {
   background-color: var(--color-bg-tertiary);
@@ -875,6 +902,31 @@ body {
   padding: 64px 24px;
   color: var(--color-text-secondary);
   text-align: center;
+  gap: 16px;
+}
+.empty-state-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: var(--color-bg-tertiary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-tertiary);
+  margin-bottom: 8px;
+}
+.empty-state-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin: 0;
+}
+.empty-state-message {
+  font-size: 14px;
+  color: var(--color-text-tertiary);
+  max-width: 320px;
+  line-height: 1.5;
+  margin: 0;
 }
 
 /* Top 3 rank badge animation */
@@ -983,6 +1035,57 @@ body {
     max-width: 100%;
     overflow: hidden;
   }
+}
+
+/* ============================================
+   Tab indicator slide
+   ============================================ */
+
+.tab-bar {
+  position: relative;
+}
+.tab-indicator {
+  position: absolute;
+  bottom: 0;
+  height: 2px;
+  background: var(--color-accent-primary);
+  border-radius: 1px;
+  transition: left 250ms cubic-bezier(0.4, 0, 0.2, 1),
+              width 250ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ============================================
+   Interactive feedback
+   ============================================ */
+
+/* Button active press feedback */
+@media (prefers-reduced-motion: no-preference) {
+  button:not(:disabled):active,
+  [role="button"]:not(:disabled):active {
+    transform: scale(0.98);
+  }
+  
+  a.interactive-link {
+    transition: color 150ms ease, opacity 150ms ease;
+  }
+  a.interactive-link:hover {
+    opacity: 0.85;
+  }
+}
+
+/* Sidebar card polish */
+.sidebar-card {
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border-primary);
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: var(--shadow-card), var(--shadow-inset-subtle);
+  transition: box-shadow 200ms cubic-bezier(0.4, 0, 0.2, 1),
+              border-color 200ms ease;
+}
+.sidebar-card:hover {
+  border-color: var(--color-border-secondary);
+  box-shadow: var(--shadow-card-hover), var(--shadow-inset-subtle);
 }
 
 /* Waterfall / Masonry Grid for groups */

@@ -35,7 +35,7 @@ export default function Card({
     lg: 6,
   }[padding] as 3 | 4 | 6
 
-  const getVariantStyles = () => {
+  const getVariantStyles = (): React.CSSProperties => {
     switch (variant) {
       case 'glass':
         return {
@@ -52,48 +52,35 @@ export default function Card({
       case 'elevated':
         return {
           background: tokens.colors.bg.secondary,
-          boxShadow: tokens.shadow.lg,
+          boxShadow: 'var(--shadow-elevated), var(--shadow-inset-subtle)',
           border: 'none',
         }
       default:
         return {
           background: tokens.colors.bg.secondary,
           border: `1px solid ${tokens.colors.border.primary}`,
+          boxShadow: 'var(--shadow-card), var(--shadow-inset-subtle)',
         }
     }
   }
 
-  const baseClassName = variant === 'glass' ? 'glass-card-hover' : 'card-hover-lift'
+  const hoverClass = hoverable
+    ? variant === 'glass' ? 'glass-card' : 'card-hover'
+    : ''
 
   return (
     <Box
-      className={`${hoverable ? baseClassName : ''} ${className}`}
+      className={`${hoverClass} ${className}`}
       p={paddingValue}
       radius="xl"
       style={{
         ...getVariantStyles(),
-        boxShadow: variant !== 'elevated' ? tokens.shadow.sm : tokens.shadow.lg,
-        transition: tokens.transition.all,
         cursor: onClick ? 'pointer' : undefined,
         position: 'relative',
         overflow: 'hidden',
         ...style,
       }}
       onClick={onClick}
-      onMouseEnter={(e) => {
-        if (hoverable) {
-          e.currentTarget.style.boxShadow = tokens.shadow.cardHover
-          if (variant !== 'glass') {
-            e.currentTarget.style.transform = 'translateY(-4px)'
-          }
-        }
-      }}
-      onMouseLeave={(e) => {
-        if (hoverable) {
-          e.currentTarget.style.boxShadow = variant === 'elevated' ? tokens.shadow.lg : tokens.shadow.sm
-          e.currentTarget.style.transform = 'translateY(0)'
-        }
-      }}
     >
       {/* Accent top border */}
       {accent && (
@@ -114,7 +101,7 @@ export default function Card({
       {(title || subtitle) && (
         <div style={{ marginBottom: tokens.spacing[4] }}>
           {title && (
-            <Text size="lg" weight="black" style={{ marginBottom: subtitle ? tokens.spacing[1] : 0 }}>
+            <Text size="md" weight="semibold" style={{ marginBottom: subtitle ? tokens.spacing[1] : 0 }}>
               {title}
             </Text>
           )}

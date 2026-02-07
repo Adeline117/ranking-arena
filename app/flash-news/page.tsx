@@ -276,9 +276,15 @@ export default function FlashNewsPage() {
               <Text>{language === 'zh' ? '加载中...' : 'Loading...'}</Text>
             </Box>
           ) : news.length === 0 ? (
-            <Box style={{ textAlign: 'center', padding: tokens.spacing[5], color: tokens.colors.text.secondary }}>
-              <Text>{language === 'zh' ? '暂无快讯' : 'No news available'}</Text>
-            </Box>
+            <div className="empty-state" style={{ padding: '80px 24px' }}>
+              <div className="empty-state-icon">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+                </svg>
+              </div>
+              <p className="empty-state-title">{language === 'zh' ? '暂无快讯' : 'No news yet'}</p>
+              <p className="empty-state-message">{language === 'zh' ? '快讯将在有新消息时自动更新' : 'News will appear here as they come in'}</p>
+            </div>
           ) : (
             <Box>
               <Box style={{ marginBottom: tokens.spacing[5] }}>
