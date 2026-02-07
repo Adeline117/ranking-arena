@@ -357,6 +357,17 @@ export default function FlashNewsPage() {
                                 lineHeight: '1.5', marginBottom: tokens.spacing[2], fontSize: '14px',
                               }}>
                                 {content}
+                                {translatedContent[item.id] && (
+                                  <span style={{
+                                    fontSize: 10, fontWeight: 500, marginLeft: 6,
+                                    padding: '1px 6px', borderRadius: '4px',
+                                    background: `${tokens.colors.accent?.translated || '#6b7280'}15`,
+                                    color: tokens.colors.accent?.translated || '#6b7280',
+                                    verticalAlign: 'middle',
+                                  }}>
+                                    {language === 'zh' ? '自动翻译' : 'Auto-translated'}
+                                  </span>
+                                )}
                               </Text>
                             )}
 
