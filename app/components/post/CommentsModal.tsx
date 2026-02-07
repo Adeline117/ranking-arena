@@ -236,7 +236,7 @@ export default function CommentsModal({
     const showProBadge = comment.author_is_pro && comment.author_show_pro_badge !== false
     const authorHref = comment.author_handle ? `/u/${encodeURIComponent(comment.author_handle)}` : '#'
 
-    const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>): void => {
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>): void => {
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault()
         // Prevent double-submission
@@ -518,7 +518,7 @@ export default function CommentsModal({
                       <button
                         key={emoji}
                         onClick={() => {
-                          setNewComment(prev => prev + emoji)
+                          setNewComment(newComment + emoji)
                           setShowEmojiPicker(false)
                           commentInputRef.current?.focus()
                         }}
@@ -545,7 +545,7 @@ export default function CommentsModal({
               <button
                 type="button"
                 onClick={() => {
-                  setNewComment(prev => prev + '@')
+                  setNewComment(newComment + '@')
                   commentInputRef.current?.focus()
                 }}
                 style={{

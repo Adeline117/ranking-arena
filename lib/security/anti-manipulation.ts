@@ -350,7 +350,7 @@ export class AntiManipulationDetector {
         body: JSON.stringify({
           alert_type: alert.type,
           severity: alert.severity,
-          traders: alert.traderIds,
+          traders: alert.traders,
           evidence: alert.evidence,
           auto_action: alert.autoAction,
         }),

@@ -111,7 +111,7 @@ export default function TraderAuthorizePage() {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
         <TopNav />
-        <Box padding={tokens.spacing.xl}>
+        <Box style={{ padding: tokens.spacing[6] }}>
           <h1>{language === 'zh' ? '请先登录' : 'Please Login'}</h1>
           <p>
             {language === 'zh'
@@ -128,12 +128,12 @@ export default function TraderAuthorizePage() {
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
       <TopNav />
 
-      <Box padding={tokens.spacing.xl} style={{ maxWidth: '800px', margin: '0 auto', width: '100%' }}>
-        <h1 style={{ fontSize: tokens.fontSize.xxl, marginBottom: tokens.spacing.md }}>
+      <Box style={{ padding: tokens.spacing[6], maxWidth: '800px', margin: '0 auto', width: '100%' }}>
+        <h1 style={{ fontSize: tokens.typography.fontSize['2xl'], marginBottom: tokens.spacing[3] }}>
           {language === 'zh' ? '授权展示实盘数据' : 'Authorize Real Trading Data'}
         </h1>
 
-        <p style={{ color: tokens.colors.text.secondary, marginBottom: tokens.spacing.xl }}>
+        <p style={{ color: tokens.colors.text.secondary, marginBottom: tokens.spacing[6] }}>
           {language === 'zh'
             ? '授权后，您的实盘交易数据将实时展示在排行榜中，获得更高的可信度和关注度。'
             : 'After authorization, your real trading data will be displayed on the leaderboard in real-time with higher credibility.'}
@@ -141,17 +141,17 @@ export default function TraderAuthorizePage() {
 
         {/* Benefits */}
         <Box
-          padding={tokens.spacing.lg}
           style={{
-            backgroundColor: tokens.colors.background.secondary,
-            borderRadius: tokens.borderRadius.lg,
-            marginBottom: tokens.spacing.xl,
+            padding: tokens.spacing[5],
+            backgroundColor: tokens.colors.bg.secondary,
+            borderRadius: tokens.radius.lg,
+            marginBottom: tokens.spacing[6],
           }}
         >
-          <h3 style={{ marginBottom: tokens.spacing.md }}>
+          <h3 style={{ marginBottom: tokens.spacing[3] }}>
             {language === 'zh' ? '授权后可享受：' : 'Benefits:'}
           </h3>
-          <ul style={{ paddingLeft: tokens.spacing.lg, lineHeight: 1.8 }}>
+          <ul style={{ paddingLeft: tokens.spacing[5], lineHeight: 1.8 }}>
             <li>{language === 'zh' ? '实时持仓展示' : 'Real-time position display'}</li>
             <li>{language === 'zh' ? '更高排行榜权重' : 'Higher ranking weight'}</li>
             <li>{language === 'zh' ? '官方认证标识' : 'Official verification badge'}</li>
@@ -161,15 +161,15 @@ export default function TraderAuthorizePage() {
 
         {success && (
           <Box
-            padding={tokens.spacing.md}
             style={{
-              backgroundColor: tokens.colors.status.success + '20',
-              border: `1px solid ${tokens.colors.status.success}`,
-              borderRadius: tokens.borderRadius.md,
-              marginBottom: tokens.spacing.lg,
+              padding: tokens.spacing[3],
+              backgroundColor: tokens.colors.accent.success + '20',
+              border: `1px solid ${tokens.colors.accent.success}`,
+              borderRadius: tokens.radius.md,
+              marginBottom: tokens.spacing[5],
             }}
           >
-            <p style={{ color: tokens.colors.status.success, margin: 0 }}>
+            <p style={{ color: tokens.colors.accent.success, margin: 0 }}>
               {language === 'zh'
                 ? '授权成功！正在跳转到设置页面...'
                 : 'Authorization successful! Redirecting to settings...'}
@@ -179,26 +179,26 @@ export default function TraderAuthorizePage() {
 
         {error && (
           <Box
-            padding={tokens.spacing.md}
             style={{
-              backgroundColor: tokens.colors.status.error + '20',
-              border: `1px solid ${tokens.colors.status.error}`,
-              borderRadius: tokens.borderRadius.md,
-              marginBottom: tokens.spacing.lg,
+              padding: tokens.spacing[3],
+              backgroundColor: tokens.colors.accent.error + '20',
+              border: `1px solid ${tokens.colors.accent.error}`,
+              borderRadius: tokens.radius.md,
+              marginBottom: tokens.spacing[5],
             }}
           >
-            <p style={{ color: tokens.colors.status.error, margin: 0 }}>{error}</p>
+            <p style={{ color: tokens.colors.accent.error, margin: 0 }}>{error}</p>
           </Box>
         )}
 
         <form onSubmit={handleSubmit}>
           {/* Platform Selection */}
-          <Box marginBottom={tokens.spacing.lg}>
+          <Box style={{ marginBottom: tokens.spacing[5] }}>
             <label
               htmlFor="platform"
               style={{
                 display: 'block',
-                marginBottom: tokens.spacing.sm,
+                marginBottom: tokens.spacing[2],
                 fontWeight: 500,
               }}
             >
@@ -210,11 +210,11 @@ export default function TraderAuthorizePage() {
               onChange={(e) => setPlatform(e.target.value)}
               style={{
                 width: '100%',
-                padding: tokens.spacing.md,
-                fontSize: tokens.fontSize.md,
-                borderRadius: tokens.borderRadius.md,
-                border: `1px solid ${tokens.colors.border}`,
-                backgroundColor: tokens.colors.background.primary,
+                padding: tokens.spacing[3],
+                fontSize: tokens.typography.fontSize.md,
+                borderRadius: tokens.radius.md,
+                border: `1px solid ${tokens.colors.border.primary}`,
+                backgroundColor: tokens.colors.bg.primary,
                 color: tokens.colors.text.primary,
               }}
             >
@@ -227,12 +227,12 @@ export default function TraderAuthorizePage() {
           </Box>
 
           {/* API Key */}
-          <Box marginBottom={tokens.spacing.lg}>
+          <Box style={{ marginBottom: tokens.spacing[5] }}>
             <label
               htmlFor="apiKey"
               style={{
                 display: 'block',
-                marginBottom: tokens.spacing.sm,
+                marginBottom: tokens.spacing[2],
                 fontWeight: 500,
               }}
             >
@@ -247,23 +247,23 @@ export default function TraderAuthorizePage() {
               placeholder={language === 'zh' ? '请输入API Key' : 'Enter API Key'}
               style={{
                 width: '100%',
-                padding: tokens.spacing.md,
-                fontSize: tokens.fontSize.md,
-                borderRadius: tokens.borderRadius.md,
-                border: `1px solid ${tokens.colors.border}`,
-                backgroundColor: tokens.colors.background.primary,
+                padding: tokens.spacing[3],
+                fontSize: tokens.typography.fontSize.md,
+                borderRadius: tokens.radius.md,
+                border: `1px solid ${tokens.colors.border.primary}`,
+                backgroundColor: tokens.colors.bg.primary,
                 color: tokens.colors.text.primary,
               }}
             />
           </Box>
 
           {/* API Secret */}
-          <Box marginBottom={tokens.spacing.lg}>
+          <Box style={{ marginBottom: tokens.spacing[5] }}>
             <label
               htmlFor="apiSecret"
               style={{
                 display: 'block',
-                marginBottom: tokens.spacing.sm,
+                marginBottom: tokens.spacing[2],
                 fontWeight: 500,
               }}
             >
@@ -278,11 +278,11 @@ export default function TraderAuthorizePage() {
               placeholder={language === 'zh' ? '请输入API Secret' : 'Enter API Secret'}
               style={{
                 width: '100%',
-                padding: tokens.spacing.md,
-                fontSize: tokens.fontSize.md,
-                borderRadius: tokens.borderRadius.md,
-                border: `1px solid ${tokens.colors.border}`,
-                backgroundColor: tokens.colors.background.primary,
+                padding: tokens.spacing[3],
+                fontSize: tokens.typography.fontSize.md,
+                borderRadius: tokens.radius.md,
+                border: `1px solid ${tokens.colors.border.primary}`,
+                backgroundColor: tokens.colors.bg.primary,
                 color: tokens.colors.text.primary,
               }}
             />
@@ -290,12 +290,12 @@ export default function TraderAuthorizePage() {
 
           {/* Passphrase (if required) */}
           {selectedPlatform?.requiresPassphrase && (
-            <Box marginBottom={tokens.spacing.lg}>
+            <Box style={{ marginBottom: tokens.spacing[5] }}>
               <label
                 htmlFor="passphrase"
                 style={{
                   display: 'block',
-                  marginBottom: tokens.spacing.sm,
+                  marginBottom: tokens.spacing[2],
                   fontWeight: 500,
                 }}
               >
@@ -310,11 +310,11 @@ export default function TraderAuthorizePage() {
                 placeholder={language === 'zh' ? '请输入密码短语' : 'Enter Passphrase'}
                 style={{
                   width: '100%',
-                  padding: tokens.spacing.md,
-                  fontSize: tokens.fontSize.md,
-                  borderRadius: tokens.borderRadius.md,
-                  border: `1px solid ${tokens.colors.border}`,
-                  backgroundColor: tokens.colors.background.primary,
+                  padding: tokens.spacing[3],
+                  fontSize: tokens.typography.fontSize.md,
+                  borderRadius: tokens.radius.md,
+                  border: `1px solid ${tokens.colors.border.primary}`,
+                  backgroundColor: tokens.colors.bg.primary,
                   color: tokens.colors.text.primary,
                 }}
               />
@@ -322,12 +322,12 @@ export default function TraderAuthorizePage() {
           )}
 
           {/* Label */}
-          <Box marginBottom={tokens.spacing.lg}>
+          <Box style={{ marginBottom: tokens.spacing[5] }}>
             <label
               htmlFor="label"
               style={{
                 display: 'block',
-                marginBottom: tokens.spacing.sm,
+                marginBottom: tokens.spacing[2],
                 fontWeight: 500,
               }}
             >
@@ -341,23 +341,23 @@ export default function TraderAuthorizePage() {
               placeholder={language === 'zh' ? '例如：主账户' : 'e.g., Main Account'}
               style={{
                 width: '100%',
-                padding: tokens.spacing.md,
-                fontSize: tokens.fontSize.md,
-                borderRadius: tokens.borderRadius.md,
-                border: `1px solid ${tokens.colors.border}`,
-                backgroundColor: tokens.colors.background.primary,
+                padding: tokens.spacing[3],
+                fontSize: tokens.typography.fontSize.md,
+                borderRadius: tokens.radius.md,
+                border: `1px solid ${tokens.colors.border.primary}`,
+                backgroundColor: tokens.colors.bg.primary,
                 color: tokens.colors.text.primary,
               }}
             />
           </Box>
 
           {/* Sync Frequency */}
-          <Box marginBottom={tokens.spacing.xl}>
+          <Box style={{ marginBottom: tokens.spacing[6] }}>
             <label
               htmlFor="syncFrequency"
               style={{
                 display: 'block',
-                marginBottom: tokens.spacing.sm,
+                marginBottom: tokens.spacing[2],
                 fontWeight: 500,
               }}
             >
@@ -369,11 +369,11 @@ export default function TraderAuthorizePage() {
               onChange={(e) => setSyncFrequency(e.target.value)}
               style={{
                 width: '100%',
-                padding: tokens.spacing.md,
-                fontSize: tokens.fontSize.md,
-                borderRadius: tokens.borderRadius.md,
-                border: `1px solid ${tokens.colors.border}`,
-                backgroundColor: tokens.colors.background.primary,
+                padding: tokens.spacing[3],
+                fontSize: tokens.typography.fontSize.md,
+                borderRadius: tokens.radius.md,
+                border: `1px solid ${tokens.colors.border.primary}`,
+                backgroundColor: tokens.colors.bg.primary,
                 color: tokens.colors.text.primary,
               }}
             >
@@ -387,15 +387,15 @@ export default function TraderAuthorizePage() {
 
           {/* Security Notice */}
           <Box
-            padding={tokens.spacing.md}
             style={{
-              backgroundColor: tokens.colors.status.warning + '20',
-              border: `1px solid ${tokens.colors.status.warning}`,
-              borderRadius: tokens.borderRadius.md,
-              marginBottom: tokens.spacing.xl,
+              padding: tokens.spacing[3],
+              backgroundColor: tokens.colors.accent.warning + '20',
+              border: `1px solid ${tokens.colors.accent.warning}`,
+              borderRadius: tokens.radius.md,
+              marginBottom: tokens.spacing[6],
             }}
           >
-            <p style={{ fontSize: tokens.fontSize.sm, margin: 0, lineHeight: 1.6 }}>
+            <p style={{ fontSize: tokens.typography.fontSize.sm, margin: 0, lineHeight: 1.6 }}>
               {language === 'zh'
                 ? '您的API凭证将使用AES-256加密存储，仅用于读取交易数据，我们无法进行任何交易操作。建议创建只读权限的API Key。'
                 : 'Your API credentials will be encrypted with AES-256 and used only to read trading data. We cannot perform any trading operations. We recommend creating read-only API keys.'}
@@ -408,12 +408,12 @@ export default function TraderAuthorizePage() {
             disabled={loading || success}
             style={{
               width: '100%',
-              padding: tokens.spacing.md,
-              fontSize: tokens.fontSize.md,
+              padding: tokens.spacing[3],
+              fontSize: tokens.typography.fontSize.md,
               fontWeight: 600,
-              borderRadius: tokens.borderRadius.md,
+              borderRadius: tokens.radius.md,
               border: 'none',
-              backgroundColor: loading || success ? tokens.colors.text.tertiary : tokens.colors.primary,
+              backgroundColor: loading || success ? tokens.colors.text.tertiary : tokens.colors.accent.primary,
               color: '#fff',
               cursor: loading || success ? 'not-allowed' : 'pointer',
               opacity: loading || success ? 0.6 : 1,
@@ -434,11 +434,11 @@ export default function TraderAuthorizePage() {
         </form>
 
         {/* How to Get API Key */}
-        <Box marginTop={tokens.spacing.xxl}>
-          <h3 style={{ marginBottom: tokens.spacing.md }}>
+        <Box style={{ marginTop: tokens.spacing[8] }}>
+          <h3 style={{ marginBottom: tokens.spacing[3] }}>
             {language === 'zh' ? '如何获取API Key?' : 'How to Get API Key?'}
           </h3>
-          <ol style={{ paddingLeft: tokens.spacing.lg, lineHeight: 1.8 }}>
+          <ol style={{ paddingLeft: tokens.spacing[5], lineHeight: 1.8 }}>
             <li>
               {language === 'zh'
                 ? '登录交易所账户，进入API管理页面'
