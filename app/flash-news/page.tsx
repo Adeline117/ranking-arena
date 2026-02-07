@@ -89,14 +89,18 @@ export default function FlashNewsPage() {
       const response = await fetch(`/api/flash-news?${params}`)
       if (!response.ok) throw new Error('Failed to fetch news')
 
-      const data: FlashNewsResponse = await response.json()
+      const raw = await response.json()
+      // API wraps in { success, data: { news, pagination } }
+      const data: FlashNewsResponse = raw.data || raw
+      const newsList = data.news || []
+      const pag = data.pagination || { page: 1, limit: 20, total: 0, totalPages: 0, hasNext: false, hasPrev: false }
       if (append) {
-        setNews(prev => [...prev, ...data.news])
+        setNews(prev => [...prev, ...newsList])
       } else {
-        setNews(data.news)
+        setNews(newsList)
       }
-      setPagination(data.pagination)
-      setHasMore(data.pagination.hasNext)
+      setPagination(pag)
+      setHasMore(pag.hasNext)
     } catch {
       showToast(language === 'zh' ? '获取快讯失败' : 'Failed to load news', 'error')
     } finally {
