@@ -25,6 +25,9 @@ import ChatSearchOverlay from '@/app/components/features/ChatSearchOverlay'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import VoiceRecorder from '@/app/components/chat/VoiceRecorder'
 import VoiceMessage from '@/app/components/chat/VoiceMessage'
+import { renderWithStickers, hasStickers } from '@/app/components/ui/StickerRenderer'
+import { DynamicStickerPicker } from '@/app/components/ui/Dynamic'
+import type { Sticker } from '@/lib/stickers'
 
 type MessageStatus = 'sending' | 'sent' | 'failed'
 
@@ -171,6 +174,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
   const [pendingAttachment, setPendingAttachment] = useState<MediaAttachment | null>(null)
   const [uploading, setUploading] = useState(false)
   const [previewOpen, setPreviewOpen] = useState<{ type: 'image' | 'video' | 'file'; url: string; fileName?: string } | null>(null)
+  const [showStickerPicker, setShowStickerPicker] = useState(false)
 
   // 注入 spin 动画样式
   useEffect(() => {
@@ -1308,7 +1312,9 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
                           padding: msg.media_url && msg.media_type !== 'file' ? '0 10px 6px' : 0,
                         }}
                       >
-                        {renderTextWithLinks(msg.content, isMine ? '#e0d4f5' : '#90caf9')}
+                        {hasStickers(msg.content)
+                          ? renderWithStickers(msg.content, 64)
+                          : renderTextWithLinks(msg.content, isMine ? '#e0d4f5' : '#90caf9')}
                       </Text>
                     )}
                     {/* Show text for messages without media */}
@@ -1321,7 +1327,9 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
                           lineHeight: 1.5,
                         }}
                       >
-                        {renderTextWithLinks(msg.content, isMine ? '#e0d4f5' : '#90caf9')}
+                        {hasStickers(msg.content)
+                          ? renderWithStickers(msg.content, 64)
+                          : renderTextWithLinks(msg.content, isMine ? '#e0d4f5' : '#90caf9')}
                       </Text>
                     )}
                   </Box>
@@ -1770,6 +1778,41 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
           border: `1px solid ${tokens.colors.border.primary}`,
           transition: 'border-color 0.2s, box-shadow 0.2s',
         }}>
+          {/* Sticker button */}
+          <div style={{ position: 'relative' }}>
+            <button
+              onClick={() => setShowStickerPicker(prev => !prev)}
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: '50%',
+                border: 'none',
+                background: 'transparent',
+                color: showStickerPicker ? tokens.colors.accent.brand : tokens.colors.text.tertiary,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+                transition: 'all 0.2s',
+              }}
+              title={language === 'zh' ? '贴纸' : 'Stickers'}
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M15.5 3H5a2 2 0 0 0-2 2v14c0 1.1.9 2 2 2h14a2 2 0 0 0 2-2V8.5L15.5 3Z" />
+                <path d="M14 3v4a2 2 0 0 0 2 2h4" />
+              </svg>
+            </button>
+            <DynamicStickerPicker
+              isOpen={showStickerPicker}
+              onClose={() => setShowStickerPicker(false)}
+              onSelect={(sticker: Sticker) => {
+                setNewMessage(prev => prev + `[sticker:${sticker.id}]`)
+                setShowStickerPicker(false)
+                inputRef.current?.focus()
+              }}
+            />
+          </div>
           {/* File upload button */}
           <button
             onClick={() => fileInputRef.current?.click()}
