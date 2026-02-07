@@ -4,6 +4,7 @@ const en = {
     rankings: 'Rankings',
     groups: 'Groups',
     hot: 'Hot',
+    flashNews: 'Flash News',
     library: 'Library',
     search: 'Search',
     login: 'Login',
