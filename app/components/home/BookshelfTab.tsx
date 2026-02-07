@@ -62,7 +62,7 @@ export default function BookshelfTab() {
       {/* Header */}
       <div style={{ marginBottom: 16 }}>
         <p style={{ color: tokens.colors.text.secondary, fontSize: 13 }}>
-          {isZh ? `${total.toLocaleString()} 篇白皮书、研报、书籍与论文` : `${total.toLocaleString()} whitepapers, research reports, books & papers`}
+          {isZh ? `${total.toLocaleString()} 篇白皮书、研报、书籍、论文与事件` : `${total.toLocaleString()} whitepapers, research, books, papers & events`}
         </p>
       </div>
 
