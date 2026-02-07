@@ -9,7 +9,6 @@ import { tokens } from '@/lib/design-tokens'
 import type { LibraryItem } from '@/lib/types/library'
 import BookCard from './BookCard'
 import BookCover from './BookCover'
-import Image from 'next/image'
 
 const CATEGORIES = [
   { key: 'all', en: 'All', zh: '全部' },
@@ -300,22 +299,10 @@ export default function LibraryPage() {
             gap: 20,
           }}>
             {Array.from({ length: 12 }).map((_, i) => (
-              <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                <div style={{
-                  aspectRatio: '2/3', borderRadius: tokens.radius.lg,
-                  background: tokens.colors.bg.secondary,
-                  animation: 'pulse 1.5s ease-in-out infinite',
-                }} />
-                <div style={{
-                  height: 14, borderRadius: 4, width: '80%',
-                  background: tokens.colors.bg.secondary,
-                  animation: 'pulse 1.5s ease-in-out infinite',
-                }} />
-                <div style={{
-                  height: 12, borderRadius: 4, width: '50%',
-                  background: tokens.colors.bg.secondary,
-                  animation: 'pulse 1.5s ease-in-out infinite',
-                }} />
+              <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 8, animationDelay: `${i * 50}ms` }}>
+                <div className="skeleton" style={{ aspectRatio: '2/3' }} />
+                <div className="skeleton" style={{ height: 14, width: '80%' }} />
+                <div className="skeleton" style={{ height: 12, width: '50%' }} />
               </div>
             ))}
           </div>

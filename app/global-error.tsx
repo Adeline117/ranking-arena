@@ -8,7 +8,7 @@
 import { useEffect, useState } from 'react'
 import { t } from '@/lib/i18n'
 
-const ARENA_PURPLE = '#8b6fa8'
+const ARENA_PURPLE = 'var(--color-accent-brand, #8b6fa8)'
 
 export default function GlobalError({
   error,
@@ -147,7 +147,7 @@ export default function GlobalError({
             alignItems: 'center',
             justifyContent: 'center',
             padding: '1.5rem',
-            color: '#EDEDED',
+            color: 'var(--color-text-primary, #EDEDED)',
             fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
             position: 'relative',
             overflow: 'hidden',
@@ -259,7 +259,7 @@ export default function GlobalError({
               className="content-section"
               style={{
                 fontSize: '0.85rem',
-                color: '#6a6a6a',
+                color: 'var(--color-text-tertiary, #6a6a6a)',
                 marginBottom: '1.25rem',
                 animationDelay: '0.25s',
               }}
@@ -301,7 +301,7 @@ export default function GlobalError({
                 padding: '14px 32px',
                 fontSize: '0.95rem',
                 fontWeight: 600,
-                color: '#EDEDED',
+                color: 'var(--color-text-primary, #EDEDED)',
                 background: `linear-gradient(135deg, ${ARENA_PURPLE} 0%, #6b4f88 100%)`,
                 border: 'none',
                 borderRadius: '12px',
@@ -340,7 +340,7 @@ export default function GlobalError({
               className="content-section"
               style={{
                 fontSize: '0.75rem',
-                color: '#5a5a5a',
+                color: 'var(--color-text-tertiary, #5a5a5a)',
                 marginTop: '20px',
                 animationDelay: '0.4s',
               }}

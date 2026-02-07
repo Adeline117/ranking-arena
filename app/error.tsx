@@ -4,7 +4,7 @@ import { useEffect, useState } from "react"
 import Link from "next/link"
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
-const ARENA_PURPLE = '#8b6fa8'
+const ARENA_PURPLE = 'var(--color-accent-brand, #8b6fa8)'
 
 // CSS styles
 const injectStyles = () => {
@@ -187,7 +187,7 @@ export default function Error({
     return (
       <div style={{ 
         minHeight: '100vh',
-        background: '#0a0a0f',
+        background: 'var(--color-bg-primary, #0a0a0f)',
       }} />
     )
   }
@@ -200,7 +200,7 @@ export default function Error({
       alignItems: 'center',
       justifyContent: 'center',
       padding: 24, 
-      color: '#EDEDED', 
+      color: 'var(--color-text-primary, #EDEDED)', 
       fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
       position: 'relative',
       overflow: 'hidden',
@@ -399,7 +399,7 @@ export default function Error({
             style={{ 
               padding: '14px 28px', 
               background: 'transparent',
-              color: '#EDEDED', 
+              color: 'var(--color-text-primary, #EDEDED)', 
               borderRadius: 12,
               border: '1px solid rgba(255,255,255,0.15)',
               textDecoration: 'none',
@@ -424,7 +424,7 @@ export default function Error({
           style={{
             animationDelay: '0.5s',
             fontSize: 13,
-            color: '#5a5a5a',
+            color: 'var(--color-text-tertiary, #5a5a5a)',
           }}
         >
           {t('errorPersist')}
