@@ -15,26 +15,16 @@ const BookCard = memo(function BookCard({ item, isZh }: BookCardProps) {
   return (
     <a
       href={`/library/${item.id}`}
+      className="card-hover"
       style={{
         borderRadius: tokens.radius.lg,
         overflow: 'hidden',
         textDecoration: 'none',
         background: tokens.colors.bg.secondary,
         border: `1px solid ${tokens.colors.border.primary}`,
-        transition: `transform ${tokens.transition.base}, box-shadow ${tokens.transition.base}`,
         cursor: 'pointer',
         display: 'flex',
         flexDirection: 'column',
-      }}
-      onMouseEnter={e => {
-        const el = e.currentTarget as HTMLElement
-        el.style.transform = 'translateY(-4px)'
-        el.style.boxShadow = tokens.shadow.cardHover
-      }}
-      onMouseLeave={e => {
-        const el = e.currentTarget as HTMLElement
-        el.style.transform = 'translateY(0)'
-        el.style.boxShadow = 'none'
       }}
     >
       {/* Cover - 2:3 aspect ratio */}

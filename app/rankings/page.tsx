@@ -343,10 +343,8 @@ function TraderRow({ trader }: { trader: RankedTraderV2 }) {
   return (
     <Link
       href={traderUrl}
-      className="grid ranking-table-grid gap-2 px-4 py-3 items-center transition-all border-b last:border-b-0"
-      style={{ borderColor: tokens.colors.border.primary + '40' }}
-      onMouseEnter={(e) => { e.currentTarget.style.background = tokens.colors.bg.tertiary }}
-      onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+      className="grid ranking-table-grid gap-2 px-4 py-3 items-center border-b last:border-b-0 ranking-row-hover"
+      style={{ borderColor: tokens.colors.border.primary + '40', textDecoration: 'none' }}
     >
       <div className="text-sm font-medium" style={{ color: tokens.colors.text.secondary }}>
         {trader.rank <= 3 ? (
