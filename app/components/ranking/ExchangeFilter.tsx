@@ -10,9 +10,11 @@ interface ExchangeFilterProps {
   availableSources: string[]
   selectedExchange: string | null
   onExchangeChange: (exchange: string | null) => void
+  isPro?: boolean
+  onProRequired?: () => void
 }
 
-export default function ExchangeFilter({ availableSources, selectedExchange, onExchangeChange }: ExchangeFilterProps) {
+export default function ExchangeFilter({ availableSources, selectedExchange, onExchangeChange, isPro = true, onProRequired }: ExchangeFilterProps) {
   const { t, language } = useLanguage()
   const [isOpen, setIsOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
@@ -52,7 +54,13 @@ export default function ExchangeFilter({ availableSources, selectedExchange, onE
   return (
     <div ref={dropdownRef} style={{ position: 'relative', display: 'inline-block' }}>
       <button
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={() => {
+          if (!isPro && onProRequired) {
+            onProRequired()
+            return
+          }
+          setIsOpen(!isOpen)
+        }}
         style={{
           display: 'flex',
           alignItems: 'center',
