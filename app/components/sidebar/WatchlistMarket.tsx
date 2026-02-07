@@ -1,41 +1,9 @@
 'use client'
 
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import SidebarCard from './SidebarCard'
-
-const STORAGE_KEY = 'watchlist_coins'
-
-const DEFAULT_COINS = ['bitcoin', 'ethereum', 'solana', 'binancecoin']
-
-// CoinGecko id -> display symbol
-const COIN_MAP: Record<string, string> = {
-  bitcoin: 'BTC',
-  ethereum: 'ETH',
-  solana: 'SOL',
-  binancecoin: 'BNB',
-  ripple: 'XRP',
-  dogecoin: 'DOGE',
-  cardano: 'ADA',
-  polkadot: 'DOT',
-  avalanche: 'AVAX',
-  'matic-network': 'MATIC',
-  chainlink: 'LINK',
-  tron: 'TRX',
-  litecoin: 'LTC',
-  uniswap: 'UNI',
-  'shiba-inu': 'SHIB',
-  'the-open-network': 'TON',
-  sui: 'SUI',
-  aptos: 'APT',
-  near: 'NEAR',
-  arbitrum: 'ARB',
-  optimism: 'OP',
-  celestia: 'TIA',
-  jupiter: 'JUP',
-  render: 'RNDR',
-}
 
 type CoinPrice = {
   id: string
@@ -44,7 +12,28 @@ type CoinPrice = {
   change24h: number
 }
 
-function getStoredWatchlist(): string[] {
+const DEFAULT_COINS = ['bitcoin', 'ethereum', 'solana', 'binancecoin']
+const STORAGE_KEY = 'arena_watchlist'
+
+const COIN_OPTIONS: { id: string; symbol: string; name: string }[] = [
+  { id: 'bitcoin', symbol: 'BTC', name: 'Bitcoin' },
+  { id: 'ethereum', symbol: 'ETH', name: 'Ethereum' },
+  { id: 'solana', symbol: 'SOL', name: 'Solana' },
+  { id: 'binancecoin', symbol: 'BNB', name: 'BNB' },
+  { id: 'ripple', symbol: 'XRP', name: 'XRP' },
+  { id: 'dogecoin', symbol: 'DOGE', name: 'Dogecoin' },
+  { id: 'cardano', symbol: 'ADA', name: 'Cardano' },
+  { id: 'avalanche-2', symbol: 'AVAX', name: 'Avalanche' },
+  { id: 'polkadot', symbol: 'DOT', name: 'Polkadot' },
+  { id: 'chainlink', symbol: 'LINK', name: 'Chainlink' },
+  { id: 'sui', symbol: 'SUI', name: 'Sui' },
+  { id: 'toncoin', symbol: 'TON', name: 'Toncoin' },
+  { id: 'near', symbol: 'NEAR', name: 'NEAR' },
+  { id: 'litecoin', symbol: 'LTC', name: 'Litecoin' },
+  { id: 'aptos', symbol: 'APT', name: 'Aptos' },
+]
+
+function getWatchlist(): string[] {
   if (typeof window === 'undefined') return DEFAULT_COINS
   try {
     const stored = localStorage.getItem(STORAGE_KEY)
@@ -63,254 +52,180 @@ function saveWatchlist(ids: string[]) {
 export default function WatchlistMarket() {
   const { language } = useLanguage()
   const isZh = language === 'zh'
-  const [watchlist, setWatchlist] = useState<string[]>(() => getStoredWatchlist())
-  const [prices, setPrices] = useState<Record<string, { usd: number; usd_24h_change: number }>>({})
+  const [watchIds, setWatchIds] = useState<string[]>(DEFAULT_COINS)
+  const [coins, setCoins] = useState<CoinPrice[]>([])
   const [loading, setLoading] = useState(true)
-  const [showSearch, setShowSearch] = useState(false)
-  const [searchQuery, setSearchQuery] = useState('')
-  const searchRef = useRef<HTMLInputElement>(null)
+  const [showPicker, setShowPicker] = useState(false)
+  const [search, setSearch] = useState('')
+
+  useEffect(() => {
+    setWatchIds(getWatchlist())
+  }, [])
 
   const fetchPrices = useCallback(async (ids: string[]) => {
-    if (ids.length === 0) { setPrices({}); setLoading(false); return }
+    if (ids.length === 0) { setCoins([]); setLoading(false); return }
     try {
       const res = await fetch(
         `https://api.coingecko.com/api/v3/simple/price?ids=${ids.join(',')}&vs_currencies=usd&include_24hr_change=true`
       )
-      if (res.ok) {
-        const data = await res.json()
-        setPrices(data)
-      }
-    } catch { /* silent */ }
-    setLoading(false)
+      if (!res.ok) throw new Error('fetch failed')
+      const data = await res.json()
+      const results: CoinPrice[] = ids
+        .filter(id => data[id])
+        .map(id => {
+          const opt = COIN_OPTIONS.find(c => c.id === id)
+          return {
+            id,
+            symbol: opt?.symbol || id.toUpperCase(),
+            price: data[id].usd || 0,
+            change24h: data[id].usd_24h_change || 0,
+          }
+        })
+      setCoins(results)
+    } catch {
+      // silent fail, keep old data
+    } finally {
+      setLoading(false)
+    }
   }, [])
 
   useEffect(() => {
-    fetchPrices(watchlist)
-    const interval = setInterval(() => fetchPrices(watchlist), 60000)
+    fetchPrices(watchIds)
+    const interval = setInterval(() => fetchPrices(watchIds), 60000) // refresh every 60s
     return () => clearInterval(interval)
-  }, [watchlist, fetchPrices])
+  }, [watchIds, fetchPrices])
 
-  useEffect(() => {
-    if (showSearch && searchRef.current) searchRef.current.focus()
-  }, [showSearch])
-
-  const addCoin = (id: string) => {
-    if (watchlist.includes(id)) return
-    const next = [...watchlist, id]
-    setWatchlist(next)
-    saveWatchlist(next)
-    setShowSearch(false)
-    setSearchQuery('')
+  const toggleCoin = (coinId: string) => {
+    setWatchIds(prev => {
+      const next = prev.includes(coinId)
+        ? prev.filter(id => id !== coinId)
+        : [...prev, coinId]
+      saveWatchlist(next)
+      return next
+    })
   }
 
-  const removeCoin = (id: string) => {
-    const next = watchlist.filter(c => c !== id)
-    setWatchlist(next)
-    saveWatchlist(next)
-  }
-
-  const coins: CoinPrice[] = watchlist.map(id => {
-    const p = prices[id]
-    return {
-      id,
-      symbol: COIN_MAP[id] || id.toUpperCase().slice(0, 5),
-      price: p?.usd ?? 0,
-      change24h: p?.usd_24h_change ?? 0,
-    }
-  })
-
-  const searchResults = Object.entries(COIN_MAP)
-    .filter(([id, sym]) =>
-      !watchlist.includes(id) &&
-      (id.includes(searchQuery.toLowerCase()) || sym.toLowerCase().includes(searchQuery.toLowerCase()))
-    )
-    .slice(0, 6)
-
-  const formatPrice = (price: number) => {
-    if (price >= 1) return price.toLocaleString(undefined, { maximumFractionDigits: 2 })
-    if (price >= 0.01) return price.toFixed(4)
-    return price.toFixed(6)
-  }
+  const filteredOptions = COIN_OPTIONS.filter(c =>
+    c.symbol.toLowerCase().includes(search.toLowerCase()) ||
+    c.name.toLowerCase().includes(search.toLowerCase())
+  )
 
   return (
     <SidebarCard title={isZh ? '自选行情' : 'Watchlist'}>
-      {loading && coins.length === 0 ? (
+      {loading ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {[1, 2, 3, 4].map(i => (
             <div key={i} className="skeleton" style={{ height: 40, borderRadius: tokens.radius.md }} />
           ))}
         </div>
-      ) : coins.length === 0 ? (
-        <div
-          style={{
-            padding: '16px 0',
-            textAlign: 'center',
-            color: tokens.colors.text.tertiary,
-            fontSize: tokens.typography.fontSize.sm,
-            cursor: 'pointer',
-          }}
-          onClick={() => setShowSearch(true)}
-        >
-          {isZh ? '点击添加自选币种' : 'Click to add coins'}
-        </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-          {coins.map((coin, idx) => (
-            <div
-              key={coin.id}
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                padding: '8px 6px',
-                borderBottom: idx < coins.length - 1 ? `1px solid ${tokens.colors.border.primary}` : 'none',
-                borderRadius: tokens.radius.sm,
-                transition: `background ${tokens.transition.fast}`,
-                cursor: 'pointer',
-                position: 'relative',
-              }}
-              onMouseEnter={e => (e.currentTarget.style.background = tokens.colors.bg.tertiary)}
-              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-            >
-              <span
+        <>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+            {coins.map((coin, idx) => (
+              <div
+                key={coin.id}
                 style={{
-                  fontSize: tokens.typography.fontSize.sm,
-                  fontWeight: tokens.typography.fontWeight.semibold,
-                  color: tokens.colors.text.primary,
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  padding: '8px 4px',
+                  borderBottom: idx < coins.length - 1 ? `1px solid ${tokens.colors.border.primary}` : 'none',
+                  borderRadius: tokens.radius.sm,
+                  transition: `background ${tokens.transition.fast}`,
+                  cursor: 'pointer',
                 }}
+                onMouseEnter={e => (e.currentTarget.style.background = tokens.colors.bg.tertiary)}
+                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
               >
-                {coin.symbol}
-              </span>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: tokens.colors.text.primary }}>
+                  {coin.symbol}
+                </span>
                 <div style={{ textAlign: 'right' }}>
-                  <div
-                    style={{
-                      fontSize: tokens.typography.fontSize.sm,
-                      fontWeight: tokens.typography.fontWeight.medium,
-                      color: tokens.colors.text.primary,
-                    }}
-                  >
-                    ${formatPrice(coin.price)}
+                  <div style={{ fontSize: 13, fontWeight: 500, color: tokens.colors.text.primary }}>
+                    ${coin.price.toLocaleString(undefined, { maximumFractionDigits: coin.price < 1 ? 4 : 2 })}
                   </div>
-                  <div
-                    style={{
-                      fontSize: tokens.typography.fontSize.xs,
-                      fontWeight: tokens.typography.fontWeight.semibold,
-                      color: coin.change24h >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error,
-                    }}
-                  >
+                  <div style={{
+                    fontSize: 11, fontWeight: 600,
+                    color: coin.change24h >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error,
+                  }}>
                     {coin.change24h >= 0 ? '+' : ''}{coin.change24h.toFixed(2)}%
                   </div>
                 </div>
-                {/* Remove button */}
-                <button
-                  onClick={e => { e.stopPropagation(); removeCoin(coin.id) }}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                    color: tokens.colors.text.tertiary,
-                    fontSize: tokens.typography.fontSize.xs,
-                    padding: '2px 4px',
-                    borderRadius: tokens.radius.sm,
-                    transition: `color ${tokens.transition.fast}`,
-                    opacity: 0.4,
-                    lineHeight: 1,
-                  }}
-                  onMouseEnter={e => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.color = tokens.colors.accent.error }}
-                  onMouseLeave={e => { e.currentTarget.style.opacity = '0.4'; e.currentTarget.style.color = tokens.colors.text.tertiary }}
-                  title={isZh ? '移除' : 'Remove'}
-                >
-                  x
-                </button>
+              </div>
+            ))}
+          </div>
+
+          {/* Add/Edit button */}
+          <button
+            onClick={() => setShowPicker(!showPicker)}
+            style={{
+              width: '100%', marginTop: 8, padding: '8px 0',
+              background: 'transparent',
+              border: `1px dashed ${tokens.colors.border.primary}`,
+              borderRadius: tokens.radius.md,
+              color: tokens.colors.text.secondary,
+              fontSize: 12, fontWeight: 500,
+              cursor: 'pointer',
+              transition: `all ${tokens.transition.fast}`,
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.borderColor = tokens.colors.accent.brand
+              e.currentTarget.style.color = tokens.colors.accent.brand
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.borderColor = tokens.colors.border.primary
+              e.currentTarget.style.color = tokens.colors.text.secondary
+            }}
+          >
+            {showPicker
+              ? (isZh ? '收起' : 'Close')
+              : (isZh ? '+ 管理自选' : '+ Manage Watchlist')
+            }
+          </button>
+
+          {/* Coin picker */}
+          {showPicker && (
+            <div style={{ marginTop: 8 }}>
+              <input
+                type="text"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder={isZh ? '搜索币种...' : 'Search coins...'}
+                style={{
+                  width: '100%', padding: '6px 10px', marginBottom: 8,
+                  borderRadius: tokens.radius.md,
+                  border: `1px solid ${tokens.colors.border.primary}`,
+                  background: tokens.colors.bg.primary,
+                  color: tokens.colors.text.primary,
+                  fontSize: 12,
+                  outline: 'none',
+                  boxSizing: 'border-box',
+                }}
+              />
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {filteredOptions.map(opt => {
+                  const selected = watchIds.includes(opt.id)
+                  return (
+                    <button
+                      key={opt.id}
+                      onClick={() => toggleCoin(opt.id)}
+                      style={{
+                        padding: '4px 10px',
+                        borderRadius: tokens.radius.full,
+                        border: selected ? 'none' : `1px solid ${tokens.colors.border.primary}`,
+                        background: selected ? tokens.colors.accent.brand : 'transparent',
+                        color: selected ? '#fff' : tokens.colors.text.secondary,
+                        fontSize: 11, fontWeight: 500,
+                        cursor: 'pointer',
+                        transition: `all ${tokens.transition.fast}`,
+                      }}
+                    >
+                      {opt.symbol}
+                    </button>
+                  )
+                })}
               </div>
             </div>
-          ))}
-        </div>
-      )}
-
-      {/* Add button / search */}
-      {showSearch ? (
-        <div style={{ marginTop: 8 }}>
-          <input
-            ref={searchRef}
-            type="text"
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            placeholder={isZh ? '搜索币种...' : 'Search coin...'}
-            style={{
-              width: '100%',
-              padding: '6px 10px',
-              fontSize: tokens.typography.fontSize.sm,
-              background: tokens.colors.bg.tertiary,
-              border: `1px solid ${tokens.colors.border.primary}`,
-              borderRadius: tokens.radius.md,
-              color: tokens.colors.text.primary,
-              outline: 'none',
-              boxSizing: 'border-box',
-            }}
-            onKeyDown={e => { if (e.key === 'Escape') { setShowSearch(false); setSearchQuery('') } }}
-          />
-          {searchResults.length > 0 && (
-            <div style={{ marginTop: 4, display: 'flex', flexDirection: 'column', gap: 0 }}>
-              {searchResults.map(([id, sym]) => (
-                <div
-                  key={id}
-                  onClick={() => addCoin(id)}
-                  style={{
-                    padding: '6px 10px',
-                    fontSize: tokens.typography.fontSize.sm,
-                    color: tokens.colors.text.primary,
-                    cursor: 'pointer',
-                    borderRadius: tokens.radius.sm,
-                    transition: `background ${tokens.transition.fast}`,
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                  }}
-                  onMouseEnter={e => (e.currentTarget.style.background = tokens.colors.bg.tertiary)}
-                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                >
-                  <span style={{ fontWeight: tokens.typography.fontWeight.medium }}>{sym}</span>
-                  <span style={{ fontSize: tokens.typography.fontSize.xs, color: tokens.colors.text.tertiary }}>
-                    {id}
-                  </span>
-                </div>
-              ))}
-            </div>
           )}
-          {searchQuery && searchResults.length === 0 && (
-            <div style={{ padding: '8px 10px', fontSize: tokens.typography.fontSize.xs, color: tokens.colors.text.tertiary }}>
-              {isZh ? '未找到匹配币种' : 'No matching coins'}
-            </div>
-          )}
-        </div>
-      ) : (
-        <button
-          onClick={() => setShowSearch(true)}
-          style={{
-            marginTop: 8,
-            width: '100%',
-            padding: '6px 0',
-            fontSize: tokens.typography.fontSize.sm,
-            fontWeight: tokens.typography.fontWeight.medium,
-            color: tokens.colors.text.secondary,
-            background: 'none',
-            border: `1px dashed ${tokens.colors.border.primary}`,
-            borderRadius: tokens.radius.md,
-            cursor: 'pointer',
-            transition: `all ${tokens.transition.fast}`,
-          }}
-          onMouseEnter={e => {
-            e.currentTarget.style.borderColor = tokens.colors.accent.brand
-            e.currentTarget.style.color = tokens.colors.accent.brand
-          }}
-          onMouseLeave={e => {
-            e.currentTarget.style.borderColor = tokens.colors.border.primary
-            e.currentTarget.style.color = tokens.colors.text.secondary
-          }}
-        >
-          + {isZh ? '添加' : 'Add'}
-        </button>
+        </>
       )}
     </SidebarCard>
   )
