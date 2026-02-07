@@ -257,8 +257,7 @@ function processNewsItem(item, source) {
       category: source.category,
       importance: importance,
       tags: tags,
-      published_at: publishedAt,
-      content_hash: contentHash
+      published_at: publishedAt
     }
   } catch (error) {
     console.error('处理新闻项失败:', error)
