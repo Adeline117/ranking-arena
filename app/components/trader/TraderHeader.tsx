@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
 import { supabase } from '@/lib/supabase/client'
@@ -408,12 +409,12 @@ export default function TraderHeader({
             }}
           >
             {avatarUrl ? (
-              <img
+              <Image
                 src={`/api/avatar?url=${encodeURIComponent(avatarUrl)}`}
                 alt={handle}
                 width={72}
                 height={72}
-                loading="eager"
+                priority
                 style={{
                   width: '100%',
                   height: '100%',

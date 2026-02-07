@@ -475,7 +475,7 @@ function SearchContent() {
           textDecoration: 'none',
           color: 'inherit',
           transition: tokens.transition.base,
-          borderBottom: `1px solid ${tokens.colors.border?.subtle || 'var(--glass-border-light)'}`,
+          borderBottom: `1px solid ${tokens.colors.border.primary}`,
           position: 'relative',
         }}
         onMouseEnter={(e) => {
@@ -656,7 +656,7 @@ function SearchContent() {
             top: 0,
             zIndex: 10,
             background: tokens.colors.bg.primary,
-            borderBottom: `1px solid ${tokens.colors.border?.subtle || 'var(--glass-border-light)'}`,
+            borderBottom: `1px solid ${tokens.colors.border.primary}`,
             marginLeft: `-${tokens.spacing[4]}`,
             marginRight: `-${tokens.spacing[4]}`,
             paddingLeft: tokens.spacing[4],
@@ -734,7 +734,7 @@ function SearchContent() {
                 alignItems: 'flex-start',
                 gap: tokens.spacing[3],
                 padding: `${tokens.spacing[4]} ${tokens.spacing[4]}`,
-                borderBottom: `1px solid ${tokens.colors.border?.subtle || 'var(--glass-border-light)'}`,
+                borderBottom: `1px solid ${tokens.colors.border.primary}`,
               }}>
                 <div style={{
                   width: 48,

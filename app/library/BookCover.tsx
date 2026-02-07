@@ -85,6 +85,7 @@ interface BookCoverProps {
   height?: number | string
   fontSize?: 'sm' | 'md' | 'lg'
   showCategory?: boolean
+  priority?: boolean
   style?: React.CSSProperties
 }
 
@@ -103,6 +104,7 @@ const BookCover = memo(function BookCover({
   height = '100%',
   fontSize = 'md',
   showCategory = true,
+  priority = false,
   style,
 }: BookCoverProps) {
   const [imgError, setImgError] = useState(false)
@@ -125,9 +127,9 @@ const BookCover = memo(function BookCover({
           src={coverUrl}
           alt={title}
           fill
-          loading="lazy"
+          loading={priority ? 'eager' : 'lazy'}
+          priority={priority}
           style={{ objectFit: 'cover' }}
-          unoptimized
           sizes="(max-width: 768px) 50vw, 200px"
           onError={() => setImgError(true)}
         />

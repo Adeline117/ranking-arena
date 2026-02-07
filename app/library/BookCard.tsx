@@ -9,9 +9,10 @@ import StarRating from '@/app/components/ui/StarRating'
 interface BookCardProps {
   item: LibraryItem
   isZh: boolean
+  priority?: boolean
 }
 
-const BookCard = memo(function BookCard({ item, isZh }: BookCardProps) {
+const BookCard = memo(function BookCard({ item, isZh, priority = false }: BookCardProps) {
   return (
     <a
       href={`/library/${item.id}`}
@@ -41,6 +42,7 @@ const BookCard = memo(function BookCard({ item, isZh }: BookCardProps) {
           category={item.category}
           coverUrl={item.cover_url}
           fontSize="md"
+          priority={priority}
         />
       </div>
 

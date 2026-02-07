@@ -2568,9 +2568,6 @@ const en = {
     // Search
     noRelatedResults: 'No related results found',
 
-    // Groups
-    noPostsYet: 'No posts yet. Be the first to post!',
-
 } as const
 
 export default en

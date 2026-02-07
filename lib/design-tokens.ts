@@ -178,6 +178,9 @@ export const tokens = {
     
     // Border gradients (for pseudo-elements)
     borderGlow: 'linear-gradient(135deg, rgba(139, 111, 168, 0.5) 0%, rgba(124, 58, 237, 0.3) 100%)',
+    
+    // Special
+    purpleGold: 'linear-gradient(135deg, #8B5CF6 0%, #D4AF37 100%)',
   },
   
   // Animation timing functions
