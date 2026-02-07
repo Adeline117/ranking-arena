@@ -11,28 +11,29 @@ export function ToggleSwitch({ checked, onChange }: { checked: boolean; onChange
       aria-checked={checked}
       onClick={() => onChange(!checked)}
       style={{
-        width: 40,
-        height: 22,
-        borderRadius: 11,
+        width: 44,
+        height: 24,
+        borderRadius: 12,
         padding: 2,
         border: 'none',
-        background: checked ? '#8b6fa8' : tokens.colors.bg.tertiary,
+        background: checked ? tokens.colors.accent.brand : tokens.colors.bg.tertiary,
         cursor: 'pointer',
-        transition: 'background 0.2s ease',
+        transition: `background ${tokens.transition.fast}, box-shadow ${tokens.transition.fast}`,
         position: 'relative',
         flexShrink: 0,
+        boxShadow: checked ? tokens.shadow.glow : tokens.shadow.inner,
       }}
     >
       <span
         style={{
           display: 'block',
-          width: 18,
-          height: 18,
+          width: 20,
+          height: 20,
           borderRadius: '50%',
           background: '#fff',
-          transform: checked ? 'translateX(18px)' : 'translateX(0)',
-          transition: 'transform 0.2s ease',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+          transform: checked ? 'translateX(20px)' : 'translateX(0)',
+          transition: `transform ${tokens.transition.fast}`,
+          boxShadow: tokens.shadow.sm,
         }}
       />
     </button>
@@ -58,9 +59,11 @@ export function SectionCard({
       style={{
         marginBottom: tokens.spacing[6],
         padding: tokens.spacing[6],
-        borderRadius: tokens.radius.xl,
+        borderRadius: tokens.radius['2xl'],
         background: tokens.colors.bg.secondary,
         border: `1px solid ${variant === 'danger' ? tokens.colors.accent.error + '30' : tokens.colors.border.primary}`,
+        boxShadow: variant === 'danger' ? tokens.shadow.glowError : tokens.shadow.sm,
+        transition: `box-shadow ${tokens.transition.fast}`,
       }}
     >
       <Text
@@ -87,13 +90,14 @@ export function getInputStyle(hasError = false): React.CSSProperties {
   return {
     width: '100%',
     padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
-    borderRadius: tokens.radius.md,
+    borderRadius: tokens.radius.lg,
     border: `1px solid ${hasError ? tokens.colors.accent.error : tokens.colors.border.primary}`,
     background: tokens.colors.bg.primary,
     color: tokens.colors.text.primary,
     fontSize: tokens.typography.fontSize.sm,
     outline: 'none',
-    transition: 'border-color 0.2s ease',
+    transition: `border-color ${tokens.transition.fast}, box-shadow ${tokens.transition.fast}`,
+    boxShadow: tokens.shadow.inner,
   }
 }
 
