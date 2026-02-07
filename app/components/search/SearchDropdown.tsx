@@ -22,7 +22,7 @@ interface SearchDropdownProps {
   onClose: () => void
 }
 
-// Search history is stored as a simple string[] in localStorage under 'ranking-arena-recent-searches'
+// Search history is stored as a simple string[] in localStorage under 'arena_search_history'
 
 interface HotPost {
   id: string
