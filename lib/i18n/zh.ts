@@ -4,6 +4,7 @@ const zh = {
     rankings: '排名',
     groups: '小组',
     hot: '热榜',
+    flashNews: '快讯',
     library: '书库',
     search: '搜索',
     login: '登录',
