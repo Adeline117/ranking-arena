@@ -125,6 +125,7 @@ const BookCover = memo(function BookCover({
           src={coverUrl}
           alt={title}
           fill
+          loading="lazy"
           style={{ objectFit: 'cover' }}
           unoptimized
           sizes="(max-width: 768px) 50vw, 200px"

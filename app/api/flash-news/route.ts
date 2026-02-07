@@ -14,6 +14,7 @@ import {
   checkRateLimit,
   RateLimitPresets,
 } from '@/lib/api'
+import { tieredGetOrSet } from '@/lib/cache/redis-layer'
 
 export const runtime = 'nodejs'
 
@@ -54,40 +55,50 @@ export async function GET(request: NextRequest) {
     const importance = searchParams.get('importance')
     const offset = (page - 1) * limit
 
-    // 构建查询
-    let query = supabase
-      .from('flash_news')
-      .select('*', { count: 'exact' })
-      .order('published_at', { ascending: false })
-      .range(offset, offset + limit - 1)
+    // Use tiered cache (memory → Redis → DB)
+    const cacheKey = `api:flash-news:${page}:${limit}:${category || 'all'}:${importance || 'all'}`
+    const result = await tieredGetOrSet(
+      cacheKey,
+      async () => {
+        // 构建查询
+        let query = supabase
+          .from('flash_news')
+          .select('*', { count: 'exact' })
+          .order('published_at', { ascending: false })
+          .range(offset, offset + limit - 1)
 
-    // 添加筛选条件
-    if (category && ['crypto', 'macro', 'defi', 'regulation', 'market'].includes(category)) {
-      query = query.eq('category', category)
-    }
+        // 添加筛选条件
+        if (category && ['crypto', 'macro', 'defi', 'regulation', 'market'].includes(category)) {
+          query = query.eq('category', category)
+        }
 
-    if (importance && ['breaking', 'important', 'normal'].includes(importance)) {
-      query = query.eq('importance', importance)
-    }
+        if (importance && ['breaking', 'important', 'normal'].includes(importance)) {
+          query = query.eq('importance', importance)
+        }
 
-    const { data, error: queryError, count } = await query
+        const { data, error: queryError, count } = await query
 
-    if (queryError) {
-      console.error('[flash-news] 查询失败:', queryError)
-      return error('获取快讯失败', 500)
-    }
+        if (queryError) {
+          throw new Error(queryError.message)
+        }
 
-    return success({
-      news: data || [],
-      pagination: {
-        page,
-        limit,
-        total: count || 0,
-        totalPages: Math.ceil((count || 0) / limit),
-        hasNext: count ? (page * limit) < count : false,
-        hasPrev: page > 1,
-      }
-    }, 200, { 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=120' })
+        return {
+          news: data || [],
+          pagination: {
+            page,
+            limit,
+            total: count || 0,
+            totalPages: Math.ceil((count || 0) / limit),
+            hasNext: count ? (page * limit) < count : false,
+            hasPrev: page > 1,
+          }
+        }
+      },
+      'hot',
+      ['flash-news']
+    )
+
+    return success(result, 200, { 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=120' })
   } catch (err: unknown) {
     return handleError(err)
   }

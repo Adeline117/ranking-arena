@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+import { tieredGetOrSet } from '@/lib/cache/redis-layer'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '',
@@ -20,6 +21,27 @@ export async function GET(req: NextRequest) {
   const limit = Math.min(Math.max(1, parseInt(searchParams.get('limit') || '24') || 24), 100)
   const offset = (page - 1) * limit
 
+  // Use tiered cache (memory → Redis → DB)
+  const cacheKey = `api:library:${category}:${search}:${lang}:${page}:${limit}`
+  const result = await tieredGetOrSet(
+    cacheKey,
+    () => fetchLibraryData({ category, search, lang, page, limit, offset }),
+    search ? 'warm' : 'cold',
+    ['library']
+  )
+
+  return NextResponse.json(result, {
+    headers: { 'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600' }
+  })
+  } catch (e) {
+    console.error('Library API error:', e)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}
+
+async function fetchLibraryData({ category, search, lang, page, limit, offset }: {
+  category: string; search: string; lang: string; page: number; limit: number; offset: number
+}) {
   // Use RPC for language-priority sorting when user has a language preference
   if (lang && !search) {
     // Preferred language items first, then others, both sorted by view_count
@@ -31,23 +53,20 @@ export async function GET(req: NextRequest) {
       p_offset: offset,
     })
 
-    if (error) {
-      // Fallback to simple query if RPC doesn't exist
-      console.warn('RPC fallback:', error.message)
-    } else {
+    if (!error) {
       // Get total count separately
       let countQuery = supabase.from('library_items').select('*', { count: 'exact', head: true })
       if (category && category !== 'all') countQuery = countQuery.eq('category', category)
       const { count: total } = await countQuery
-      return NextResponse.json({
+      return {
         items: data || [],
         total: total || 0,
         page,
         totalPages: Math.ceil((total || 0) / limit),
-      }, {
-        headers: { 'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600' }
-      })
+      }
     }
+    // Fallback to simple query if RPC doesn't exist
+    console.warn('RPC fallback:', error.message)
   }
 
   let query = supabase
@@ -68,19 +87,13 @@ export async function GET(req: NextRequest) {
   const { data, error, count } = await query
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new Error(error.message)
   }
 
-  return NextResponse.json({
+  return {
     items: data || [],
     total: count || 0,
     page,
     totalPages: Math.ceil((count || 0) / limit),
-  }, {
-    headers: { 'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600' }
-  })
-  } catch (e) {
-    console.error('Library API error:', e)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
