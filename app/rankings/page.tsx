@@ -31,11 +31,25 @@ import { getPlatformNote } from '@/lib/constants/platform-metrics'
 const VIRTUAL_SCROLL_THRESHOLD = 50
 
 // Convert RankedTraderV2 to VirtualLeaderboard's TraderRow format
+/** Get a readable trader name — skip pure-numeric IDs */
+function getTraderDisplayName(trader: { display_name: string | null; trader_key: string; platform: string }): string {
+  const name = trader.display_name
+  // If name is null, empty, or a long numeric ID, use a friendlier format
+  if (!name || (name.length > 10 && /^\d+$/.test(name))) {
+    const platformLabel = EXCHANGE_NAMES[trader.platform as keyof typeof EXCHANGE_NAMES] || trader.platform
+    const shortId = trader.trader_key.length > 10 
+      ? `${trader.trader_key.slice(0, 4)}...${trader.trader_key.slice(-4)}`
+      : trader.trader_key
+    return `${platformLabel} #${shortId}`
+  }
+  return name
+}
+
 function toVirtualRow(trader: RankedTraderV2, rank: number): VirtualTraderRow {
   return {
     id: `${trader.platform}:${trader.trader_key}`,
     rank,
-    name: trader.display_name || trader.trader_key.slice(0, 8),
+    name: getTraderDisplayName(trader),
     avatar: trader.avatar_url || undefined,
     roi: trader.metrics.roi,
     pnl: trader.metrics.pnl,
@@ -350,12 +364,12 @@ function TraderRow({ trader }: { trader: RankedTraderV2 }) {
           {trader.avatar_url ? (
             <Image src={trader.avatar_url} alt="" width={32} height={32} className="w-full h-full object-cover" unoptimized />
           ) : (
-            <span className="text-white">{getAvatarInitial(trader.display_name || trader.trader_key)}</span>
+            <span className="text-white">{getAvatarInitial(getTraderDisplayName(trader))}</span>
           )}
         </div>
         <div className="min-w-0">
           <div className="text-sm font-medium truncate" style={{ color: tokens.colors.text.primary }}>
-            {trader.display_name || trader.trader_key.slice(0, 12)}
+            {getTraderDisplayName(trader)}
           </div>
           <div className="text-xs" style={{ color: tokens.colors.text.tertiary }}>
             {trader.platform.replace('_', ' ')}
