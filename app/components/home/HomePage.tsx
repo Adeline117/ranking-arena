@@ -8,7 +8,7 @@ import { JsonLd } from '../Providers/JsonLd'
 import { generateWebSiteSchema, generateOrganizationSchema, combineSchemas } from '@/lib/seo'
 import StatsBar from './StatsBar'
 import HomePageClient from './HomePageClient'
-import HomePageWithSubNav from './HomePageWithSubNav'
+// HomePageWithSubNav removed from homepage - only used in groups page
 import type { InitialTrader } from '@/lib/getInitialTraders'
 
 // Lazy-load sidebar widgets
@@ -66,38 +66,34 @@ export default function HomePage({
           <StatsBar />
         </Suspense>
 
-        <HomePageWithSubNav
-          recommendedContent={
-            <ThreeColumnLayout
-              leftSidebar={
-                <Suspense fallback={<div className="skeleton" style={{ height: 400, borderRadius: 12 }} />}>
-                  <TrendingDiscussions />
-                </Suspense>
-              }
-              rightSidebar={
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-                  <Suspense fallback={<div className="skeleton" style={{ height: 200, borderRadius: 12 }} />}>
-                    <WatchlistMarket />
-                  </Suspense>
-                  <Suspense fallback={<div className="skeleton" style={{ height: 300, borderRadius: 12 }} />}>
-                    <NewsFlash />
-                  </Suspense>
-                </div>
-              }
-            >
-              <Suspense fallback={
-                <Box style={{ minHeight: '60vh' }}>
-                  <div className="skeleton" style={{ height: 400, borderRadius: 12 }} />
-                </Box>
-              }>
-                <HomePageClient
-                  initialTraders={initialTraders}
-                  initialLastUpdated={initialLastUpdated}
-                />
-              </Suspense>
-            </ThreeColumnLayout>
+        <ThreeColumnLayout
+          leftSidebar={
+            <Suspense fallback={<div className="skeleton" style={{ height: 400, borderRadius: 12 }} />}>
+              <TrendingDiscussions />
+            </Suspense>
           }
-        />
+          rightSidebar={
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+              <Suspense fallback={<div className="skeleton" style={{ height: 200, borderRadius: 12 }} />}>
+                <WatchlistMarket />
+              </Suspense>
+              <Suspense fallback={<div className="skeleton" style={{ height: 300, borderRadius: 12 }} />}>
+                <NewsFlash />
+              </Suspense>
+            </div>
+          }
+        >
+          <Suspense fallback={
+            <Box style={{ minHeight: '60vh' }}>
+              <div className="skeleton" style={{ height: 400, borderRadius: 12 }} />
+            </Box>
+          }>
+            <HomePageClient
+              initialTraders={initialTraders}
+              initialLastUpdated={initialLastUpdated}
+            />
+          </Suspense>
+        </ThreeColumnLayout>
       </Box>
 
       <MobileBottomNav />
