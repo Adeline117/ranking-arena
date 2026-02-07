@@ -38,7 +38,8 @@ import { useRankingTableStyles } from './useRankingTableStyles'
 // Column customization types
 export type ColumnKey = 'score' | 'roi' | 'winrate' | 'mdd' | 'sortino' | 'alpha' | 'style'
 
-const ALL_TOGGLEABLE_COLUMNS: ColumnKey[] = ['score', 'roi', 'winrate', 'mdd', 'sortino', 'alpha', 'style']
+// sortino, alpha, style removed — no data in DB yet
+const ALL_TOGGLEABLE_COLUMNS: ColumnKey[] = ['score', 'roi', 'winrate', 'mdd']
 const DEFAULT_VISIBLE_COLUMNS: ColumnKey[] = ['score', 'roi', 'winrate', 'mdd']
 const COLUMN_LABELS: Record<ColumnKey, { zh: string; en: string }> = {
   score: { zh: 'Arena Score', en: 'Arena Score' },
