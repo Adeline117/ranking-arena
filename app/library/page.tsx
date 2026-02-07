@@ -307,19 +307,18 @@ export default function LibraryPage() {
             ))}
           </div>
         ) : items.length === 0 ? (
-          <div style={{
-            textAlign: 'center', padding: '80px 20px',
-            color: tokens.colors.text.secondary,
-          }}>
-            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke={tokens.colors.text.tertiary} strokeWidth="1.5" style={{ marginBottom: 16, opacity: 0.5 }}>
-              <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
-            </svg>
-            <p style={{ fontSize: tokens.typography.fontSize.md, fontWeight: 500 }}>
+          <div className="empty-state" style={{ padding: '80px 24px' }}>
+            <div className="empty-state-icon">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+              </svg>
+            </div>
+            <p className="empty-state-title">
               {search
                 ? (isZh ? `未找到与"${search}"相关的内容` : `No results for "${search}"`)
                 : (isZh ? '该分类暂无内容' : 'No items in this category yet')}
             </p>
-            <p style={{ fontSize: tokens.typography.fontSize.sm, marginTop: 6 }}>
+            <p className="empty-state-message">
               {search
                 ? (isZh ? '试试其他关键词' : 'Try different keywords')
                 : ''}

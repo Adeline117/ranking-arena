@@ -1,5 +1,4 @@
 'use client'
-import { tokens } from '@/lib/design-tokens'
 
 interface SidebarCardProps {
   title: string
@@ -8,20 +7,16 @@ interface SidebarCardProps {
 
 export default function SidebarCard({ title, children }: SidebarCardProps) {
   return (
-    <div style={{
-      background: tokens.colors.bg.secondary,
-      border: `1px solid ${tokens.colors.border.primary}`,
-      borderRadius: tokens.radius.lg,
-      padding: tokens.spacing[4],
-    }}>
+    <div className="sidebar-card">
       <h3 style={{
-        fontSize: 14,
-        fontWeight: 700,
-        color: tokens.colors.text.primary,
-        marginBottom: tokens.spacing[3],
-        paddingBottom: tokens.spacing[2],
-        borderBottom: `1px solid ${tokens.colors.border.primary}`,
-        letterSpacing: '-0.01em',
+        fontSize: 13,
+        fontWeight: 600,
+        color: 'var(--color-text-secondary)',
+        marginBottom: 12,
+        paddingBottom: 8,
+        borderBottom: '1px solid var(--color-border-primary)',
+        letterSpacing: '0.02em',
+        textTransform: 'uppercase' as const,
       }}>
         {title}
       </h3>
