@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, memo } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
 import { getAvatarGradient, getAvatarInitial } from '@/lib/utils/avatar'
@@ -62,17 +63,12 @@ const AnimatedAvatar = memo(function AnimatedAvatar({
       onMouseLeave={handleMouseLeave}
     >
       {avatarUrl && !imageError && (
-        <img 
+        <Image 
           src={avatarUrl} 
           alt={handle} 
-          referrerPolicy="origin-when-cross-origin"
-          loading="lazy"
+          fill
+          unoptimized
           style={{ 
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            width: '100%', 
-            height: '100%', 
             objectFit: 'cover',
             opacity: imageLoaded ? 1 : 0,
             transition: 'opacity 0.3s ease',

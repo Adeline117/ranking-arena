@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import Image from 'next/image'
 import { useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
@@ -551,7 +552,7 @@ function PostListItem(props: PostListItemProps) {
                 overflow: 'hidden', position: 'relative',
               }}>
                 {post.author_avatar_url ? (
-                  <img src={post.author_avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} referrerPolicy="no-referrer" />
+                  <Image src={post.author_avatar_url} alt="" fill style={{ objectFit: 'cover' }} unoptimized />
                 ) : (
                   <span style={{ color: '#fff', fontSize: 10, fontWeight: 700 }}>
                     {(post.author_handle || 'U').charAt(0).toUpperCase()}
@@ -800,10 +801,10 @@ function CommentsSection(props: CommentsSectionProps) {
                         width: 18, height: 18, borderRadius: '50%', flexShrink: 0,
                         background: comment.author_avatar_url ? undefined : getAvatarGradient(comment.user_id || comment.author_handle),
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        overflow: 'hidden',
+                        overflow: 'hidden', position: 'relative' as const,
                       }}>
                         {comment.author_avatar_url ? (
-                          <img src={comment.author_avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} referrerPolicy="no-referrer" />
+                          <Image src={comment.author_avatar_url} alt="" fill style={{ objectFit: 'cover' }} unoptimized />
                         ) : (
                           <span style={{ color: '#fff', fontSize: 9, fontWeight: 700 }}>
                             {(comment.author_handle || 'U').charAt(0).toUpperCase()}
@@ -879,10 +880,10 @@ function CommentsSection(props: CommentsSectionProps) {
                               width: 16, height: 16, borderRadius: '50%', flexShrink: 0,
                               background: reply.author_avatar_url ? undefined : getAvatarGradient(reply.user_id || reply.author_handle),
                               display: 'flex', alignItems: 'center', justifyContent: 'center',
-                              overflow: 'hidden',
+                              overflow: 'hidden', position: 'relative' as const,
                             }}>
                               {reply.author_avatar_url ? (
-                                <img src={reply.author_avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} referrerPolicy="no-referrer" />
+                                <Image src={reply.author_avatar_url} alt="" fill style={{ objectFit: 'cover' }} unoptimized />
                               ) : (
                                 <span style={{ color: '#fff', fontSize: 8, fontWeight: 700 }}>
                                   {reply.author_handle.charAt(0).toUpperCase()}

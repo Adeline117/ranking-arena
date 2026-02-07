@@ -16,6 +16,7 @@ import React, {
   useMemo,
   memo
 } from 'react'
+import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
@@ -89,16 +90,16 @@ const DefaultRow = memo(({ trader, style, onClick }: RowProps) => {
         minWidth: 0,
       }}>
         {trader.avatar ? (
-          <img 
+          <Image 
             src={trader.avatar} 
             alt={trader.name}
+            width={32}
+            height={32}
             style={{ 
-              width: 32, 
-              height: 32, 
               borderRadius: '50%',
               objectFit: 'cover',
             }}
-            loading="lazy"
+            unoptimized
           />
         ) : (
           <div style={{

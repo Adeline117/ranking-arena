@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
 import { ThumbsUpIcon, ThumbsDownIcon, CommentIcon } from '../../ui/icons'
 import { formatTimeAgo, type Locale } from '@/lib/utils/date'
@@ -238,8 +239,8 @@ export function PostListItem({
           {p.original_post.images && p.original_post.images.length > 0 && (
             <div style={{ marginTop: 8, display: 'flex', gap: 4 }}>
               {p.original_post.images.slice(0, 3).map((imgUrl, idx) => (
-                <div key={idx} style={{ width: 48, height: 48, borderRadius: 4, overflow: 'hidden' }}>
-                  <img src={imgUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                <div key={idx} style={{ width: 48, height: 48, borderRadius: 4, overflow: 'hidden', position: 'relative' }}>
+                  <Image src={imgUrl} alt="" fill style={{ objectFit: 'cover' }} unoptimized />
                 </div>
               ))}
               {p.original_post.images.length > 3 && (

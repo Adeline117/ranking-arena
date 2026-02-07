@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import Image from 'next/image'
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
@@ -985,10 +986,11 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
                         justifyContent: 'center',
                         overflow: 'hidden',
                         flexShrink: 0,
+                        position: 'relative',
                       }}
                     >
                       {member.avatar_url ? (
-                        <img src={member.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        <Image src={member.avatar_url} alt="" fill style={{ objectFit: 'cover' }} unoptimized />
                       ) : (
                         <Text size="sm" color="tertiary">{(member.handle || 'U').charAt(0).toUpperCase()}</Text>
                       )}
