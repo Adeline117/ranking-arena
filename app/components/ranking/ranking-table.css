@@ -48,6 +48,18 @@
 
 .ranking-row:hover {
   background: var(--glass-bg-light) !important;
+  box-shadow: var(--shadow-card), var(--shadow-inset-subtle);
+}
+
+/* Top 3 rows get subtle depth treatment */
+.ranking-row:nth-child(-n+3) {
+  background: var(--glass-bg-light);
+  box-shadow: var(--shadow-border-glow), var(--shadow-inset-subtle);
+}
+
+.ranking-row:nth-child(-n+3):hover {
+  background: var(--glass-bg-medium) !important;
+  box-shadow: var(--shadow-card), var(--shadow-inset-subtle);
 }
 
 /* Pagination hover effects (CSS-only, no JS onMouseEnter/Leave) */

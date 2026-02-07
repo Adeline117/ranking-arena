@@ -159,7 +159,7 @@ export default function LibraryPage() {
                 }}
                 onFocus={e => {
                   e.currentTarget.style.borderColor = tokens.colors.accent.brand
-                  e.currentTarget.style.boxShadow = tokens.shadow.glow
+                  e.currentTarget.style.boxShadow = 'var(--shadow-input-focus)'
                 }}
                 onBlur={e => {
                   e.currentTarget.style.borderColor = tokens.colors.border.primary
@@ -202,7 +202,7 @@ export default function LibraryPage() {
                   <div style={{
                     width: 150, height: 225, borderRadius: tokens.radius.lg,
                     overflow: 'hidden',
-                    boxShadow: tokens.shadow.lg,
+                    boxShadow: '4px 4px 12px rgba(0,0,0,0.3), 8px 8px 24px rgba(0,0,0,0.15), -1px 0 2px rgba(0,0,0,0.1)',
                     marginBottom: 8,
                   }}>
                     <BookCover
