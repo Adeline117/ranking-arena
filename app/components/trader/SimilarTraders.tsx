@@ -97,7 +97,7 @@ const AnimatedAvatar = memo(function AnimatedAvatar({
   )
 })
 
-export default function SimilarTraders({ traders }: SimilarTradersProps) {
+function SimilarTradersInner({ traders }: SimilarTradersProps) {
   const [mounted, setMounted] = useState(false)
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null)
   const { t } = useLanguage()
@@ -293,3 +293,6 @@ export default function SimilarTraders({ traders }: SimilarTradersProps) {
     </Box>
   )
 }
+
+const SimilarTraders = memo(SimilarTradersInner)
+export default SimilarTraders
