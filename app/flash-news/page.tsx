@@ -246,7 +246,8 @@ export default function FlashNewsPage() {
         </Box>
 
         {/* 新闻时间线 */}
-        {loading ? (
+        <div style={{ transition: 'opacity 0.3s ease', opacity: loading ? 0.5 : 1 }}>
+        {loading && news.length === 0 ? (
           <Box 
             style={{ 
               textAlign: 'center', 
@@ -479,6 +480,7 @@ export default function FlashNewsPage() {
             )}
           </Box>
         )}
+        </div>
       </Box>
     </Box>
   )
