@@ -1,0 +1,90 @@
+'use client'
+
+import { useEffect, useRef, type CSSProperties } from 'react'
+import Image from 'next/image'
+import { tokens } from '@/lib/design-tokens'
+import { STICKERS, type Sticker } from '@/lib/stickers'
+import { useLanguage } from '../Providers/LanguageProvider'
+
+interface StickerPickerProps {
+  onSelect: (sticker: Sticker) => void
+  isOpen: boolean
+  onClose: () => void
+}
+
+export default function StickerPicker({ onSelect, isOpen, onClose }: StickerPickerProps) {
+  const { language } = useLanguage()
+  const panelRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!isOpen) return
+    const handler = (e: MouseEvent) => {
+      if (panelRef.current && !panelRef.current.contains(e.target as Node)) {
+        onClose()
+      }
+    }
+    const timer = setTimeout(() => document.addEventListener('mousedown', handler), 0)
+    return () => { clearTimeout(timer); document.removeEventListener('mousedown', handler) }
+  }, [isOpen, onClose])
+
+  if (!isOpen) return null
+
+  const containerStyle: CSSProperties = {
+    position: 'absolute',
+    bottom: 36,
+    left: 0,
+    background: tokens.colors.bg.secondary,
+    border: `1px solid ${tokens.colors.border.primary}`,
+    borderRadius: 12,
+    padding: 8,
+    zIndex: 100,
+    boxShadow: tokens.shadow.lg,
+    width: 240,
+    maxHeight: 280,
+    overflowY: 'auto',
+  }
+
+  const gridStyle: CSSProperties = {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(4, 1fr)',
+    gap: 4,
+  }
+
+  const itemStyle: CSSProperties = {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 6,
+    borderRadius: 8,
+    cursor: 'pointer',
+    background: 'transparent',
+    border: 'none',
+    transition: 'background 0.15s',
+  }
+
+  return (
+    <div ref={panelRef} style={containerStyle}>
+      <div style={gridStyle}>
+        {STICKERS.map((sticker) => (
+          <button
+            key={sticker.id}
+            onClick={() => { onSelect(sticker); onClose() }}
+            title={language === 'zh' ? sticker.name_zh : sticker.name_en}
+            style={itemStyle}
+            onMouseEnter={(e) => { e.currentTarget.style.background = tokens.colors.bg.tertiary }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+          >
+            <Image
+              src={sticker.path}
+              alt={language === 'zh' ? sticker.name_zh : sticker.name_en}
+              width={48}
+              height={48}
+              unoptimized
+              style={{ objectFit: 'contain' }}
+            />
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}

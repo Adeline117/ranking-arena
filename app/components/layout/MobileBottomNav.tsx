@@ -201,7 +201,6 @@ export default function MobileBottomNav(): React.ReactElement {
     { href: '/', labelKey: 'home', Icon: HomeIcon },
     { href: '/rankings', labelKey: 'rankings', Icon: TrophyIcon },
     { href: '/groups', labelKey: 'groups', Icon: GroupsIcon },
-    { href: '/flash-news', labelKey: 'flashNews', Icon: NewsIcon },
     { href: userHandle ? `/u/${encodeURIComponent(userHandle)}` : '/settings', labelKey: 'me', Icon: UserIcon },
   ], [userHandle])
 
