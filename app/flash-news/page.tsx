@@ -183,7 +183,7 @@ export default function FlashNewsPage() {
   return (
     <Box
       style={{
-        background: tokens.colors.background.primary,
+        background: tokens.colors.bg.primary,
         minHeight: '100vh',
         color: tokens.colors.text.primary,
       }}
@@ -296,7 +296,7 @@ export default function FlashNewsPage() {
                           height: '10px',
                           borderRadius: '50%',
                           background: importanceConfig.color,
-                          border: `2px solid ${tokens.colors.background.primary}`,
+                          border: `2px solid ${tokens.colors.bg.primary}`,
                         }}
                       />
                     )}
@@ -305,7 +305,7 @@ export default function FlashNewsPage() {
                       <Card 
                         style={{ 
                           padding: tokens.spacing.md,
-                          background: tokens.colors.background.secondary,
+                          background: tokens.colors.bg.secondary,
                           border: `1px solid ${tokens.colors.border.primary}`,
                           borderRadius: tokens.radius.md,
                           position: 'relative',
@@ -445,7 +445,7 @@ export default function FlashNewsPage() {
                                   <Box
                                     key={tagIndex}
                                     style={{
-                                      background: tokens.colors.background.tertiary,
+                                      background: tokens.colors.bg.tertiary,
                                       color: tokens.colors.text.tertiary,
                                       padding: `2px ${tokens.spacing.xs}`,
                                       borderRadius: tokens.radius.xs,
