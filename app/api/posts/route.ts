@@ -26,6 +26,7 @@ import {
   RateLimitPresets,
 } from '@/lib/api'
 import { getPosts, createPost, getUserPostReactions, getUserPostVotes } from '@/lib/data/posts'
+import { getWeightedPosts } from '@/lib/data/posts-weighted'
 import { getServerCache, setServerCache, deleteServerCacheByPrefix, CacheTTL } from '@/lib/utils/server-cache'
 import { get as cacheGet, set as cacheSet } from '@/lib/cache'
 
@@ -40,8 +41,10 @@ function getCacheKey(params: {
   author_handle?: string
   sort_by: string
   sort_order: string
+  enable_weight?: boolean
+  weight_factor?: number
 }): string {
-  return `${POSTS_CACHE_PREFIX}${params.sort_by}:${params.sort_order}:${params.limit}:${params.offset}:${params.group_id || ''}:${params.author_handle || ''}`
+  return `${POSTS_CACHE_PREFIX}${params.sort_by}:${params.sort_order}:${params.limit}:${params.offset}:${params.group_id || ''}:${params.author_handle || ''}:${params.enable_weight || false}:${params.weight_factor || 0}`
 }
 
 export async function GET(request: NextRequest) {
@@ -66,12 +69,25 @@ export async function GET(request: NextRequest) {
       searchParams.get('sort_order'),
       ['asc', 'desc'] as const
     ) ?? 'desc'
+    
+    // 权重增强排序参数
+    const enable_weight = searchParams.get('enable_weight') === 'true'
+    const weight_factor = validateNumber(searchParams.get('weight_factor'), { min: 0, max: 1 }) ?? 0.3
 
     // 检查用户登录状态
     const user = await getAuthUser(request)
     
     // 生成缓存键
-    const cacheKey = getCacheKey({ limit, offset, group_id: group_id || (group_ids ? group_ids.join(',') : undefined), author_handle, sort_by, sort_order })
+    const cacheKey = getCacheKey({ 
+      limit, 
+      offset, 
+      group_id: group_id || (group_ids ? group_ids.join(',') : undefined), 
+      author_handle, 
+      sort_by, 
+      sort_order,
+      enable_weight,
+      weight_factor
+    })
     
     // For hot posts (first page, no filters), check Redis cache first
     const isHotQuery = sort_by === 'hot_score' && offset === 0 && !group_id && !author_handle
@@ -97,15 +113,31 @@ export async function GET(request: NextRequest) {
 
     if (!posts) {
       // Cache miss, fetch from database
-      posts = await getPosts(supabase, {
-        limit: isHotQuery ? 50 : limit, // Fetch more for hot posts to populate Redis cache
-        offset,
-        group_id,
-        group_ids,
-        author_handle,
-        sort_by,
-        sort_order,
-      })
+      if (enable_weight && sort_by === 'hot_score') {
+        // Use weighted posts for enhanced sorting
+        posts = await getWeightedPosts(supabase, {
+          limit: isHotQuery ? 50 : limit, // Fetch more for hot posts to populate Redis cache
+          offset,
+          group_id,
+          group_ids,
+          author_handle,
+          sort_by,
+          sort_order,
+          enable_weight,
+          weight_factor,
+        })
+      } else {
+        // Use standard posts query
+        posts = await getPosts(supabase, {
+          limit: isHotQuery ? 50 : limit, // Fetch more for hot posts to populate Redis cache
+          offset,
+          group_id,
+          group_ids,
+          author_handle,
+          sort_by,
+          sort_order,
+        })
+      }
 
       // Cache in server memory (1 minute)
       setServerCache(cacheKey, posts, CacheTTL.SHORT)
