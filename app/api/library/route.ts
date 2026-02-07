@@ -40,6 +40,8 @@ export async function GET(req: NextRequest) {
         total: total || 0,
         page,
         totalPages: Math.ceil((total || 0) / limit),
+      }, {
+        headers: { 'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600' }
       })
     }
   }
@@ -70,6 +72,8 @@ export async function GET(req: NextRequest) {
     total: count || 0,
     page,
     totalPages: Math.ceil((count || 0) / limit),
+  }, {
+    headers: { 'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600' }
   })
   } catch (e) {
     console.error('Library API error:', e)
